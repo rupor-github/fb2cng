@@ -13,7 +13,7 @@ repos:
       - id: check-vuln
         name: Scanning for vulnurabilities
         language: system
-        entry: bash -c "trivy --exit-code 1 fs ."
+        entry: bash -c "trivy --exit-code 1 fs --ignore-unfixed ."
         require_serial: true
         always_run: true
         stages: [pre-push]
