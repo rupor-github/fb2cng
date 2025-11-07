@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- edited with XMLSpy v2011 rel. 2 (http://www.altova.com) by TeaM DJiNN (TeaM DJiNN) -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:fb="http://www.gribuser.ru/xml/fictionbook/2.0" xmlns="http://www.gribuser.ru/xml/fictionbook/2.0/markup" targetNamespace="http://www.gribuser.ru/xml/fictionbook/2.0/markup" elementFormDefault="qualified" attributeFormDefault="unqualified">
+	<xs:import namespace="http://www.gribuser.ru/xml/fictionbook/2.0" schemaLocation="FictionBook.xsd"/>
+	<xs:element name="FictionBookMarkup">
+		<xs:annotation>
+			<xs:documentation>Root element for notes/selections/etc</xs:documentation>
+		</xs:annotation>
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element name="Selection" type="SelectionType" minOccurs="0" maxOccurs="unbounded"/>
+			</xs:sequence>
+			<xs:attribute name="lock-id" type="UUIDType">
+				<xs:annotation>
+					<xs:documentation>Используемый при синхронизации с сервером атрибут - ID блокировки, пользуясь которым можно осуществлять запись данных без угрозы конфликтов между несколькими клиентами, работающими от имени одного пользователя. В offline-режиме бесполезен и ненужен</xs:documentation>
+				</xs:annotation>
+			</xs:attribute>
+		</xs:complexType>
+	</xs:element>
+	<xs:complexType name="SelectionType">
+		<xs:annotation>
+			<xs:documentation>Корневой элемент для единичного блока выделения</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="Note" minOccurs="0" maxOccurs="unbounded">
+				<xs:annotation>
+					<xs:documentation>"Заметки на полях", оформление на самом базовом уровне. При формировании исходите из того, что многие клиентские приложения превратят заметку в plain-text, разбитый на абзацы)</xs:documentation>
+				</xs:annotation>
+				<xs:complexType>
+					<xs:choice minOccurs="0" maxOccurs="unbounded">
+						<xs:element name="p" type="fb:pType"/>
+						<xs:element name="empty-line"/>
+					</xs:choice>
+				</xs:complexType>
+			</xs:element>
+			<xs:element name="Extract" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Фрагмент оригинального fb2, из которого было взято выделение. Несет двоякую функцию: Во-первых позволяет работать с закладками в отсутствие оригинального файла. Во-вторых позволяет отыскивать место выделения даже в новой версии файла, где блоки смещены относительно оригинального выделения. Рекомендуется иметь по одному блоку до и после узлов, попавших под выделение</xs:documentation>
+				</xs:annotation>
+				<xs:complexType>
+					<xs:choice minOccurs="0" maxOccurs="unbounded">
+						<xs:element name="p" type="fb:pType"/>
+						<xs:element name="image" type="fb:imageType"/>
+						<xs:element name="poem" type="fb:poemType"/>
+						<xs:element name="subtitle" type="fb:pType"/>
+						<xs:element name="cite" type="fb:citeType"/>
+						<xs:element name="empty-line"/>
+						<xs:element name="table" type="fb:tableType"/>
+					</xs:choice>
+					<xs:attribute name="original-location" type="XPointer" use="required">
+						<xs:annotation>
+							<xs:documentation>Указатель на место, начиная с которого была произведена "выемка" контента в оригинальном файле. В идеальном случае по этому адресу должен располагаться первый из имеющихся в Extract узлов</xs:documentation>
+						</xs:annotation>
+					</xs:attribute>
+					<xs:attribute name="selection-text" type="xs:string" use="optional">
+						<xs:annotation>
+							<xs:documentation>plain-text версия выделения.</xs:documentation>
+						</xs:annotation>
+					</xs:attribute>
+					<xs:attribute name="selection" use="optional">
+						<xs:annotation>
+							<xs:documentation>xpointer-выражение, описывающее оригинальное выделение применительно к имеющемуся фрагменту</xs:documentation>
+						</xs:annotation>
+						<xs:simpleType>
+							<xs:restriction base="xs:string">
+								<xs:pattern value="xpointer\(point\(here\(\)(/[0-9]+)+\.[0-9]+\)/range-to\(point\(here\(\)(/[0-9]+)+\.[0-9]+\)\)\)">
+									<xs:annotation>
+										<xs:documentation>Пример выделение: xpointer(point(here()/2.184)/range-to(point(here()/3.30))), пример закладки: xpointer(point(here()/2.184). Обратите внимание, что адресация осуществляется в текущем документе, относительно узла Extract, с соответствующими смещениями и т.п.</xs:documentation>
+									</xs:annotation>
+								</xs:pattern>
+							</xs:restriction>
+						</xs:simpleType>
+					</xs:attribute>
+				</xs:complexType>
+			</xs:element>
+		</xs:sequence>
+		<xs:attribute name="id" type="UUIDType" use="required">
+			<xs:annotation>
+				<xs:documentation>ID для идентификации выделения</xs:documentation>
+			</xs:annotation>
+		</xs:attribute>
+		<xs:attribute name="selection" type="XRange" use="required">
+			<xs:annotation>
+				<xs:documentation>xpointer-указатель на выделенное место в файле. Начало указателя для fb2-файла будет, по сути, фиксировано:
+fb2#xpointer(point(/1/2/ - это указатель на /FictionBook/body в целевом fb2-файле. Далее следует путь к целевому узлу и после точки - позиция. Если это не просто указатель на точку в документе, а выделение, далее следует блок /range-to(point(/1/2... - аналогично.
+Содержимое абзаца можно рассматривать как plain-text, игнорируя вложенные non-block теги, что, является нарушением стандарта xpointer но в нашем случае оправдано.
+Ссылки должны указывать на один из блоков v|p|subtitle|td|text-author|image. Т.е. указатель не должен (!) ссылаться на «контейнеры» типа section или quote, но исключительно на перечисленные, содержащие текст элементы</xs:documentation>
+			</xs:annotation>
+		</xs:attribute>
+		<xs:attribute name="art-id" type="xs:token" use="required">
+			<xs:annotation>
+				<xs:documentation>fb2-ID книги (/FictionBook/description/document-info/id)</xs:documentation>
+			</xs:annotation>
+		</xs:attribute>
+		<xs:attribute name="group" use="required">
+			<xs:annotation>
+				<xs:documentation>"Группа" выделения. Принимает значения 0-9, характеризует "базовые" классы выделения.
+0 - текущая позиция в тексте
+1 - закладка
+2 - важная закладка
+3 - стандартная заметка
+4 - важная заметка
+5 - выделение
+6 - важное выделение
+7 - задано приложением I
+8 - задано приложением II
+9 - прочее</xs:documentation>
+			</xs:annotation>
+			<xs:simpleType>
+				<xs:restriction base="xs:byte">
+					<xs:minInclusive value="0">
+						<xs:annotation>
+							<xs:documentation>0=9, напрмер, выделение группы 0 будет давать красный цвет маркера.</xs:documentation>
+						</xs:annotation>
+					</xs:minInclusive>
+					<xs:maxInclusive value="9"/>
+				</xs:restriction>
+			</xs:simpleType>
+		</xs:attribute>
+		<xs:attribute name="last-update" type="xs:dateTime" use="required">
+			<xs:annotation>
+				<xs:documentation>Время последней модификации записи</xs:documentation>
+			</xs:annotation>
+		</xs:attribute>
+		<xs:attribute name="class" use="optional">
+			<xs:annotation>
+				<xs:documentation>Расширение атрибута group.
+Если приложению не хватает 9-и предопределенных групп, можно "надстраивать" расширенную классификацию</xs:documentation>
+			</xs:annotation>
+			<xs:simpleType>
+				<xs:restriction base="xs:Name">
+					<xs:minLength value="1"/>
+					<xs:maxLength value="30"/>
+				</xs:restriction>
+			</xs:simpleType>
+		</xs:attribute>
+		<xs:attribute name="title" use="optional">
+			<xs:annotation>
+				<xs:documentation>Название (заголовок) закладки/выделения</xs:documentation>
+			</xs:annotation>
+			<xs:simpleType>
+				<xs:restriction base="xs:normalizedString">
+					<xs:minLength value="1">
+						<xs:annotation>
+							<xs:documentation>Название закладки/заметки не должно превышать 100 знаков и не должно быть пустым (вместо пустого title просто опустите атрибут)</xs:documentation>
+						</xs:annotation>
+					</xs:minLength>
+					<xs:maxLength value="100"/>
+				</xs:restriction>
+			</xs:simpleType>
+		</xs:attribute>
+		<xs:attribute name="percent">
+			<xs:annotation>
+				<xs:documentation>Процент в общей длинне произведения, к которому относится данное выделение с т.з. приложения. Отправка закладки group=0 с процентом 100 расценивается сервером как событие "окончание чтения"</xs:documentation>
+			</xs:annotation>
+			<xs:simpleType>
+				<xs:restriction base="xs:byte">
+					<xs:minInclusive value="0"/>
+					<xs:maxInclusive value="100"/>
+				</xs:restriction>
+			</xs:simpleType>
+		</xs:attribute>
+	</xs:complexType>
+	<xs:simpleType name="UUIDType">
+		<xs:annotation>
+			<xs:documentation xml:lang="ru">Текстовое представление UUID, проверяется регэкспом</xs:documentation>
+		</xs:annotation>
+		<xs:restriction base="xs:token">
+			<xs:pattern value="[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}">
+				<xs:annotation>
+					<xs:documentation>Стандартный UUID</xs:documentation>
+				</xs:annotation>
+			</xs:pattern>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="XPointer">
+		<xs:annotation>
+			<xs:documentation>Адрес в документе, например: fb2#xpointer(/1/2/3/1/13). Всегда точка</xs:documentation>
+		</xs:annotation>
+		<xs:restriction base="xs:string">
+			<xs:pattern value="fb2#xpointer\(/1/[23](/[0-9]+)+\)"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="XRange">
+		<xs:annotation>
+			<xs:documentation>Диапазон в документе, может быть точкой. Пример для закладки: fb2#xpointer(point(/1/2/3/1/13.184),
+Пример для выделения фрагмента: fb2#xpointer(point(/1/2/3/1/13.184)/range-to(point(/1/2/3/1/14.30)))</xs:documentation>
+		</xs:annotation>
+		<xs:restriction base="xs:string">
+			<xs:pattern value="fb2#xpointer\(point\(/1/[23](/[0-9]+)+\.[0-9]+\)(/range-to\(point\(/1/[23](/[0-9]+)+\.[0-9]+\)\))?\)"/>
+		</xs:restriction>
+	</xs:simpleType>
+</xs:schema>

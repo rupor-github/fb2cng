@@ -1,0 +1,20 @@
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.out
+*.test
+*.prof
+*.mprof
+*.log
+*.zip
+*.syso
+*.conf
+
+# build specific
+build/
+build_*/
+release/
+release_*/
+misc/version.go

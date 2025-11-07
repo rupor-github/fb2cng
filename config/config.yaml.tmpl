@@ -1,0 +1,129 @@
+# Content should be UTF-8!
+version: 1
+
+# Some fields must be specified using go template language: https://pkg.go.dev/text/template#pkg-overview
+# additional functions from slim-sprig package are available for processing: https://go-task.github.io/slim-sprig
+# List of variables always available (additional variables could be specified for a particular field):
+# - .Context (string) - name of the template field, uniquely defines processing context
+# - .Title (string) - book title as specified in fb2 metainformation
+# - .Series (array of { .Name (string), .Number (integer) }) - series as specified in fb2 metainformation.
+#     NOTE: according to fictionbook schema series could be hierarhical (series
+#     contain series and so on). Hierarhy is competely ignored - anything below
+#     first level is dropped.
+# - .Language (string) - cannonical string representation of a language as specified in fb2 metainformation
+# - .Date (string) - date as specified in fb2 metainformation.
+#     NOTE: If valid xs:date "value" attribute is provided - it will be used, otherwide just text as defined 
+# - .Authors (array of { .FirstName (string), .MiddleName (string), .LastName (string)}) as specified in fb2 metainformation
+# - .Format (string) - string representing requested conversion (ex: epub, azw3, kepub...)
+# - .SourceFile (string) - base part of the source file name (no path, no extension)
+# - .BookID (string) - book UUID as specified by fb2 metainformation or assigned by converter
+# - .Genres (array of strings) - genres names as specified by fb2 metainformation
+
+document:
+  # Some programs (CoolReader and some versions of FBReader) expect "old" zip
+  # format which does not have data descriptor. if you ever encounter
+  # unreadable epub/kepub files - turn this off
+  fix_zip: true
+
+  #---- When file_name_format is set output file will have name created using FB2 metainformation
+  #---- NOTE: watch out for path separators, directories will be created!
+  output_name_template: |
+    {{- $all := "" -}}
+    {{- if gt (len .Authors) 0 -}}
+    {{-   with first .Authors -}}
+    {{-     $all = .LastName -}}
+    {{-     if .FirstName }}{{ $all = (cat $all .FirstName) }}{{- end -}}
+    {{-     if .MiddleName }}{{ $all = (cat $all .MiddleName) }}{{- end -}}
+    {{-   end -}}
+    {{-   if gt (len .Authors) 1 -}}
+    {{-     if eq .Language "ru" }}{{ $all = (cat $all "и др") }}{{- else -}}{{ $all = (printf "%s%s" $all ", et al") }}{{- end -}}
+    {{-   end -}}
+    {{-   $all = cat $all "-" -}}
+    {{- end -}}
+    {{- if $all -}}
+    {{-   cat $all .Title -}}
+    {{- else -}}
+    {{-   .Title -}}
+    {{- end -}}
+
+  #---- Slugify/transliterate output file name - after all other processing on file name is completed
+  file_name_transliterate: false
+
+  images:
+    # Do not skip images which cannot be decoded by program. Use them without
+    # any processing, allowing reader to decide what to do.
+    use_broken: false
+    # Kindle eInc devices do not handle transparent PNG images well
+    remove_png_transparency: false
+    # Resize all images (but cover) with specified ratio
+    scale_factor: 1.0
+    # Recompress all supported images (presently JPEG, PNG). For JPEG quality
+    # respects "jpeg_quality_level": if detected level for an image is higher
+    # than requested image will be re-encoded. For PNG best compression_level
+    # is always specified.
+    optimize: false
+    # JPEG quality level to use, percentage points (40% - 100%)
+    jpeq_quality_level: 75
+
+    cover:
+      # When book does not have cover image supply one. For Amazon formats always true
+      generate: false
+      # What image to use as default cover when default one is needed. If
+      # required but not specified program will use internal resource
+      # default_image_path = "default_cover.jpeg"
+
+      # How to process cover image
+      # "none"    - do nothing
+      # "keepAR"  - when image height is less than specified, resize to specified height keeping aspect ratio
+      # "stretch" - when one of image dimentions is less than specified, resize to specified width and height
+      resize: "keepAR"
+      # Reader screen size so cover image could be adjusted properly
+      width: 1264
+      height: 1680
+
+  footnotes:
+    # How to render footnotes in the book
+    # "default"    - no special processing, footnotes are just regular links
+    # "inline"     - footnote is shown "in-place" in the text flow
+    # "block"      - footnotes are shown "in-place" at the paragraph end
+    # "float"      - pop up footnotes (result depends on reader support).
+    # Actual generated content will follow output format requrements
+    # for example with pop-up footnotes
+    #   for epub2 and kepub simple "bi-directional links" method (A -> B and
+    #   B -> A) will be selected.
+    #   for epub3 and kindle formats it will be <aside> and <epub> recommended
+    #   by Amazon publishing guidelines
+    mode: "default"
+    # Names of the bodies in fb2 document to consider for footnotes processing
+    # if required by mode
+    bodies: ["notes", "comments", "примечания", "комментарии"]
+
+logging:
+  # controls terminal (stdout, stderr) output
+  console:
+    # logging level
+    # "none"   - suppress all console logging
+    # "normal" - messages INFO level and higher are outputted
+    # "debug"  - all log messages are outputted
+    level: normal
+  #---- controls logging to a file (could duplicate CONSOLE messages)
+  file:
+    # path to the log file, could be relative to current working directory
+    destination: fb2cng.log
+    # logging level
+    # "none"   - suppress file logging
+    # "normal" - messages INFO level and higher are printed
+    # "debug"  - all log output is printed
+    level: debug
+    # how to handle output file during consecutive program runs
+    # "append"    - keep all old log messages, append new ones at the end
+    # "overwrite" - keep only messages from the last run, log is overwritten
+    #mode: append
+    mode: overwrite
+
+# when program runs with "debug" option report file is produced at the specified destination
+# it contains full debug log and other artifacts to help with troubleshooting
+reporting:
+  # could be relative to current working directory.
+  destination: fb2cng-report.zip
+  # vim: set filetype=yaml:

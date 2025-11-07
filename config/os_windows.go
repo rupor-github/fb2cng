@@ -1,0 +1,22 @@
+//go:build windows
+
+package config
+
+import (
+	"os"
+	"strings"
+)
+
+// CleanFileName removes not allowed characters form file name.
+func CleanFileName(in string) string {
+	out := strings.Map(func(sym rune) rune {
+		if strings.ContainsRune(`<>":/\|?*`+string(os.PathSeparator)+string(os.PathListSeparator), sym) {
+			return -1
+		}
+		return sym
+	}, in)
+	if len(out) == 0 {
+		out = "_bad_file_name_"
+	}
+	return out
+}

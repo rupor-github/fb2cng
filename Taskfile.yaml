@@ -1,0 +1,332 @@
+version: '3'
+
+output: 'group'
+silent: true
+
+# we are assuming that dev host os is always Linux
+
+vars:
+  GO_VERSION_FULL: {sh: GOTOOLCHAIN=local+path go version}
+  GO_VERSION: '{{regexFind "[0-9]+\\.[0-9]+\\.?[0-9]*" (regexFind "go version go[0-9]+\\.[0-9]+\\.?[0-9]*[a-zA-Z0-9]* [^/]+/.*" .GO_VERSION_FULL)}}'
+
+  PRJ_NAME: 'fbc'
+  DEV_BUILD_DIR: 'build'
+  REL_BUILD_DIR: 'release'
+
+  REF_VER: '{{regexFind "refs/tags/v[0-9]+\\.[0-9]+\\.?[0-9]*[-a-zA-Z0-9+]*" (env "GITHUB_REF")}}'
+
+  TARGET_RELEASES: [linux-amd64]
+
+  TATN: {sh: '{{if (env "TERM")}}tput setaf 4{{end}}'}
+  TOFF: {sh: '{{if (env "TERM")}}tput sgr0{{end}}'}
+
+env:
+  GOPATH: '{{default (joinPath (default "/tmp" (env "TEMP")) "gopkg_fb2cng") (env "GOPATH")}}'
+  GOTOOLCHAIN: 'local+path'
+
+tasks:
+
+  default:
+    desc: Builds development version for host OS
+    aliases: [debug]
+    platforms: [linux]
+    deps:
+      - task: pre-commit-install
+      - task: generate-project-version
+      - task: generate-enums
+    cmds:
+      - task: go-build
+        vars: {FLAGS: 'debug', PACKAGE: './cmd/{{.PRJ_NAME}}', TARGET: '{{.DEV_BUILD_DIR}}/{{.PRJ_NAME}}'}
+      - task: compile-all-tests
+      - task: lint
+
+  test:
+    desc: |
+      Runs available tests.
+      When invoked as usual runs tests for all packages where it can find "*_test.go" files, for example: "task test".
+      You can specify what tests to run by using PACKAGES environment variable, for example: "PACKAGES='./module1,./module2' task test".
+      You can pass any additional parameters supported by "go test", for example: "PACKAGES='./module' task test -- -run=TestFuncPattern".
+    platforms: [linux]
+    deps: [generate-project-version, generate-enums]
+    vars:
+      TEST_DIR: "{{.ROOT_DIR}}/{{.DEV_BUILD_DIR}}/tests_results"
+      DIRS_WITH_TESTS:
+        sh: find -name '*_test.go' -printf "%h\n" | sort -u
+      PACKAGES: '{{default .DIRS_WITH_TESTS (replace "," "\n" (env "PACKAGES"))}}'
+    cmds:
+      - mkdir -p {{.TEST_DIR}}
+      - for: {var: PACKAGES}
+        cmd: |
+          echo
+          echo "{{.TATN}}{{clean .ITEM}} tests...{{.TOFF}}"
+          echo
+          go test -mod=mod -v -coverprofile='{{.TEST_DIR}}/test_{{replace "/" "_" (clean .ITEM)}}_coverage.out' {{.CLI_ARGS}} '{{.ITEM}}'
+
+  bench:
+    desc: |
+      Runs available benchmarks.
+      When invoked as usual runs benchmarks for all packages where it can find "*_test.go" files, for example: "task bench".
+      You can specify what packages to benchmark by using PACKAGES environment variable, for example: "PACKAGES='./module1,./module2' task bench".
+      You can pass any additional parameters supported by "go test", for example: "PACKAGES='./module1' task bench -- -bench=BenchmarkFuncPattern -benchmem".
+    platforms: [linux]
+    deps: [generate-project-version, generate-enums]
+    vars:
+      TEST_DIR: "{{.ROOT_DIR}}/{{.DEV_BUILD_DIR}}/tests_results"
+      DIRS_WITH_TESTS:
+        sh: find -name '*_test.go' -printf "%h\n" | sort -u
+      PACKAGES: '{{default .DIRS_WITH_TESTS (replace "," "\n" (env "PACKAGES"))}}'
+    cmds:
+      - mkdir -p {{.TEST_DIR}}
+      - for: {var: PACKAGES}
+        cmd: |
+          echo
+          echo "{{.TATN}}{{clean .ITEM}} benchmarks...{{.TOFF}}"
+          echo
+          go test -mod=mod -run=XXX_no_tests_XXX {{default "-bench=." .CLI_ARGS}} '{{.ITEM}}'
+
+  escape:
+    desc: |
+      Runs escape analisys on specified package.
+      You could specify anything in the project, for example "task escape -- ./module1".
+      If no package is specified assumes "./cmd/{{.PRJ_NAME}}".
+    platforms: [linux]
+    deps: [generate-project-version, generate-enums]
+    cmds:
+      - echo "{{.TATN}}Building binary with escape analisys enabled{{.TOFF}}"
+      - go build -mod=mod -gcflags 'all=-m' -o /dev/null {{default (joinPath "./cmd/" .PRJ_NAME) .CLI_ARGS}}
+    method: none
+
+  release:
+    desc: Cross-builds release for all supported platforms
+    platforms: [linux]
+    deps: [generate-project-version, generate-enums]
+    cmds:
+      - mkdir -p '{{.REL_BUILD_DIR}}'
+      - for:
+          var: TARGET_RELEASES
+        task: release-for-platform-{{with $arch := split "-" .ITEM}}{{$arch._0}}{{end}}
+        vars:
+          GOOS: '{{with $arch := split "-" .ITEM}}{{$arch._0}}{{end}}'
+          GOARCH: '{{with $arch := split "-" .ITEM}}{{$arch._1}}{{end}}'
+          SUFFIX: '{{with $arch := split "-" .ITEM}}{{$arch._2}}{{end}}'
+
+  release-for-platform-windows:
+    internal: true
+    desc: Builds release for specified platform
+    requires:
+      vars: [GOOS, GOARCH, SUFFIX]
+    label: release-for-platform-windows-{{.GOOS}}-{{.GOARCH}}
+    vars:
+      BUILD_DIR: '{{.REL_BUILD_DIR}}_{{.GOOS}}_{{.GOARCH}}'
+      REL_NAME: '{{.REL_BUILD_DIR}}/{{.PRJ_NAME}}-{{.GOOS}}-{{.GOARCH}}'
+    env:
+      CGO_ENABLED: '0'
+    cmds:
+      - mkdir -p {{.BUILD_DIR}}
+      - defer: rm -rf {{.BUILD_DIR}}
+      - task: go-build
+        vars: {GOOS: '{{.GOOS}}', GOARCH: '{{.GOARCH}}', FLAGS: 'release', PACKAGE: './cmd/{{.PRJ_NAME}}', TARGET: '{{.BUILD_DIR}}/{{.PRJ_NAME}}{{.SUFFIX}}'}
+      - echo "{{.TATN}}Archiving release \"{{.REL_NAME}}.zip\"{{.TOFF}}"
+      - 7z a -r -bd -bso0 -tzip {{.REL_NAME}} ./{{.BUILD_DIR}}/*
+    status:
+      - test -f '{{.REL_NAME}}.zip'
+
+  release-for-platform-linux:
+    internal: true
+    desc: Builds release for specified platform
+    requires:
+      vars: [GOOS, GOARCH, SUFFIX]
+    label: release-for-platform-linux-{{.GOOS}}-{{.GOARCH}}
+    vars:
+      BUILD_DIR: '{{.REL_BUILD_DIR}}_{{.GOOS}}_{{.GOARCH}}'
+      REL_NAME: '{{.REL_BUILD_DIR}}/{{.PRJ_NAME}}-{{.GOOS}}-{{.GOARCH}}'
+    cmds:
+      - mkdir -p {{.BUILD_DIR}}
+      - defer: rm -rf {{.BUILD_DIR}}
+      - task: go-build
+        vars: {GOOS: '{{.GOOS}}', GOARCH: '{{.GOARCH}}', FLAGS: 'release', PACKAGE: './cmd/{{.PRJ_NAME}}', TARGET: '{{.BUILD_DIR}}/{{.PRJ_NAME}}'}
+      - echo "{{.TATN}}Archiving release \"{{.REL_NAME}}.zip\"{{.TOFF}}"
+      - 7z a -r -bd -bso0 -tzip {{.REL_NAME}} ./{{.BUILD_DIR}}/*
+    status:
+      - test -f '{{.REL_NAME}}.zip'
+
+  generate-enums:
+    internal: true
+    desc: Generates code for specified enum types
+    cmds:
+      - echo "{{.TATN}}Generating enums{{.TOFF}}"
+      - |
+        go tool go-enum --output-suffix _code --file config/enums.go \
+          --names \
+          --nocase \
+          --marshal \
+          --mustparse
+    sources:
+      - config/enums.go
+    generates:
+      - config/enums_code.go
+
+  lint:
+    desc: Lints the whole project
+    platforms: [linux]
+    cmds:
+      - echo "{{.TATN}}Linting project{{.TOFF}}"
+      - go tool staticcheck -f stylish -tests=true ./...
+    sources:
+      - ./Taskfile.yaml
+      - ./**/*.go
+
+  compile-all-tests:
+    internal: true
+    desc: Makes sure that tests could be compiled successfully
+    env:
+      # We have some tests where CGO is being used
+      CGO_ENABLED: '1'
+    vars:
+      DIRS_WITH_TESTS:
+        sh: find -name '*_test.go' -printf "%h\n" | sort -u
+    cmds:
+      - echo "{{.TATN}}Check compiling all availble tests{{.TOFF}}"
+      - for: {var: DIRS_WITH_TESTS, as: DIR}
+        cmd: go test -mod=mod -c -o /dev/null '{{.DIR}}'
+    sources:
+      - ./**/*.go
+
+  go-build:
+    internal: true
+    run: when_changed
+    desc: Builds binary using go toolchain
+    requires:
+      vars: [PACKAGE, TARGET, FLAGS]
+    label: go-build-{{.PACKAGE}}-{{.TARGET}}-{{.FLAGS}}
+    env: {GOOS: '{{default "linux" .GOOS}}', GOARCH: '{{default "amd64" .GOARCH}}'}
+    # in case you need completely unoptimized build: -gcflags 'all=-N -l'
+    vars:
+      GOARGS: |
+        {{- if eq .FLAGS "debug" -}}
+          -mod=mod -trimpath
+        {{- else if eq .FLAGS "release" -}}
+          -mod=vendor -trimpath
+        {{- else -}}
+        {{fail "go build flags could be \"debug\" or \"release\" only!"}}
+        {{- end -}}
+    cmds:
+      - echo "{{.TATN}}Building \"{{base .TARGET}}\" binary for \"$GOOS:$GOARCH\" from \"{{.PACKAGE}}\"{{.TOFF}}"
+      - go build {{.GOARGS}} -o '{{.TARGET}}' '{{.PACKAGE}}'
+    sources:
+      - ./**/*.go
+      - ./**/*.mod
+      - ./**/*.sum
+      - ./**/*.yaml.tmpl
+    generates:
+      - '{{.TARGET}}'
+
+  generate-project-version:
+    internal: true
+    desc: Generates "misc/version.go" file with version info to be used on runtime.
+    run: when_changed
+    vars:
+      VER: '{{if .REF_VER}}{{regexFind "[0-9]+\\.[0-9]+\\.?[0-9]*[-a-zA-Z0-9+]*" .REF_VER}}{{else}}1.0.0-dev{{end}}'
+      DIR: '{{.ROOT_DIR}}/misc'
+      FILE: '{{.ROOT_DIR}}/misc/version.go'
+      NAME: '{{.PRJ_NAME}}'
+      GIT_HASH:
+        sh: git rev-list -1 HEAD || true
+      GIT_STATUS:
+        sh: git diff --shortstat
+    cmds:
+      - echo "{{.TATN}}Version {{.VER}} {{.GIT_HASH}}{{if .GIT_STATUS}}*{{end}}{{.TOFF}}"
+      - mkdir -p {{.DIR}}
+      - |
+        cat << EOF > {{.FILE}}
+        package misc
+
+        func GetAppName() string {
+            return "{{.NAME}}"
+        }
+
+        func GetVersion() string {
+            return "{{.VER}}"
+        }
+
+        func GetGitHash() string {
+            return "{{.GIT_HASH}}{{if .GIT_STATUS}}*{{end}}"
+        }
+        EOF
+      - gofmt -w {{.FILE}}
+    sources:
+      - .git/index
+    generates:
+      - '{{.FILE}}'
+
+  go-modinit:
+    desc: Using current toolchain (re)initializes go.mod with provided module name, gets latest versions and runs tidy
+    aliases: [modinit]
+    prompt: This will replace your existing go.mod and go.sum if you have any. Do you want to continue?
+    requires:
+      vars: [GO_VERSION]
+    cmds:
+      - echo "{{.TATN}}Running go mod init for \"{{.PRJ_NAME}}\" with {{.GO_VERSION}}{{.TOFF}}"
+      - |
+        [ -f {{.ROOT_DIR}}/go.mod ] && rm {{.ROOT_DIR}}/go.mod || true
+        [ -f {{.ROOT_DIR}}/go.sum ] && rm {{.ROOT_DIR}}/go.sum || true
+      - go mod init {{.PRJ_NAME}}
+      - go mod edit -go {{.GO_VERSION}} -toolchain go{{.GO_VERSION}}
+      # - go get -tool golang.org/x/tools/cmd/stringer
+      - go get -tool github.com/abice/go-enum
+      - go get -tool honnef.co/go/tools/cmd/staticcheck
+      - go get -u ./...
+      - go mod tidy {{.CLI_ARGS}}
+
+  go-tidy:
+    desc: Tidy Go modules for the project.
+    platforms: [linux]
+    aliases: [tidy]
+    requires:
+      vars: [GO_VERSION]
+    cmds:
+      - for:
+          var: TARGET_RELEASES
+        cmd: |
+          echo "Tidying with {{with $arch := split "-" .ITEM}}{{$arch._0}}{{end}} GOARCH={{with $arch := split "-" .ITEM}}{{$arch._1}}{{end}}"
+          GOOS={{with $arch := split "-" .ITEM}}{{$arch._0}}{{end}} GOARCH={{with $arch := split "-" .ITEM}}{{$arch._1}}{{end}} go mod tidy -go={{.GO_VERSION}} {{.CLI_ARGS}}
+
+  go-vendor:
+    desc: Creates vendor directory for release build
+    platforms: [linux]
+    aliases: [vendor]
+    cmds:
+      - for:
+          var: TARGET_RELEASES
+        cmd: |
+          echo "Vendoring with {{with $arch := split "-" .ITEM}}{{$arch._0}}{{end}} GOARCH={{with $arch := split "-" .ITEM}}{{$arch._1}}{{end}}"
+          GOOS={{with $arch := split "-" .ITEM}}{{$arch._0}}{{end}} GOARCH={{with $arch := split "-" .ITEM}}{{$arch._1}}{{end}} go mod vendor {{.CLI_ARGS}}
+
+  clean:
+    desc: Cleans all build release aritfacts
+    platforms: [linux]
+    cmds:
+      - rm -rfv {{.REL_BUILD_DIR}}
+      - rm -rfv {{.DEV_BUILD_DIR}}
+      - rm -fv .task/checksum/*
+      - rm -fv .task/timestamp/*
+      - rm -fv misc/version.go
+      - rm -fv convert/*_enum.go
+      - rm -fv {{.ROOT_DIR}}/.git/hooks/pre-commit
+      - rm -fv {{.ROOT_DIR}}/.git/hooks/pre-push
+
+  pre-commit-install:
+    internal: true
+    desc: Installs pre-commit hooks for git
+    platforms: [linux]
+    preconditions:
+      - sh: 'command -v "pre-commit" &> /dev/null'
+        msg: "pre-commit is not available - either not installed or python venv is not set properly"
+    cmds:
+      - pre-commit install -f
+    sources:
+      - ./.pre-commit-config.yaml
+    status:
+      - test -f '{{.ROOT_DIR}}/.git/hooks/pre-commit'
+      - test -f '{{.ROOT_DIR}}/.git/hooks/pre-push'
+

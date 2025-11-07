@@ -1,0 +1,299 @@
+package fb2
+
+import (
+	"bytes"
+	"encoding/binary"
+	"fmt"
+	"image"
+	"image/color"
+	"image/draw"
+	_ "image/gif"
+	_ "image/jpeg"
+	"image/png"
+	"mime"
+	"strings"
+
+	"github.com/disintegration/imaging"
+	"go.uber.org/zap"
+	_ "golang.org/x/image/bmp"
+	_ "golang.org/x/image/tiff"
+	_ "golang.org/x/image/webp"
+
+	"fbc/config"
+	"fbc/jpegquality"
+)
+
+// Image processing functions for FictionBook.
+
+// PrepareImages processes all binary objects in the FictionBook creating
+// actual image and building image index
+func (fb *FictionBook) PrepareImages(kindle bool, cfg *config.ImagesConfig, log *zap.Logger) (BookImages, error) {
+	index := make(BookImages)
+
+	for i := range fb.Binaries {
+		if _, exists := index[fb.Binaries[i].ID]; exists {
+			log.Debug("Duplicate binary ID found, skipping", zap.String("id", fb.Binaries[i].ID))
+			continue
+		}
+		cover := len(fb.Description.TitleInfo.Coverpage) > 0 && strings.HasSuffix(fb.Description.TitleInfo.Coverpage[0].Href, fb.Binaries[i].ID)
+		bi, err := fb.Binaries[i].PrepareImage(kindle, cover, cfg, log)
+		if err != nil {
+			return index, err
+		}
+		index[fb.Binaries[i].ID] = bi
+	}
+	return index, nil
+}
+
+// isImageSupported returns true if image is supported and does not need
+// conversion. Kindle devices support only GIF, BMP, JPEG and PNG formats.
+func isImageSupported(format string) bool {
+	imgType := strings.TrimPrefix(format, ".")
+	for _, t := range [...]string{"gif", "bmp", "jpeg", "png"} {
+		if strings.EqualFold(t, imgType) {
+			return true
+		}
+	}
+	return false
+}
+
+// JpegDPIType specifyes type of the DPI units
+type jpegDPIType uint8
+
+// DPI units type values
+const (
+	dpiNoUnits jpegDPIType = iota
+	dpiPxPerInch
+	dpiPxPerSm
+)
+
+// setJpegDPI creates JFIF APP0 with provided DPI if segment is missing in image.
+// This is specific to go - when encoding jpeg standard encoder does not create
+// JFIF APP0 segment and Kindles do not like it.
+func setJpegDPI(buf *bytes.Buffer, dpit jpegDPIType, xdensity, ydensity int16) (*bytes.Buffer, bool) {
+
+	var (
+		marker = []byte{0xFF, 0xE0}                               // APP0 segment marker
+		jfif   = []byte{0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x02} // jfif + version
+	)
+
+	data := buf.Bytes()
+
+	// If JFIF APP0 segment is there - do not do anything
+	if bytes.Equal(data[2:4], marker) {
+		return buf, false
+	}
+
+	var newbuf = new(bytes.Buffer)
+
+	newbuf.Write(data[:2])
+	newbuf.Write(marker)
+	binary.Write(newbuf, binary.BigEndian, uint16(0x10)) // length
+	newbuf.Write(jfif)
+	binary.Write(newbuf, binary.BigEndian, uint8(dpit))
+	binary.Write(newbuf, binary.BigEndian, uint16(xdensity))
+	binary.Write(newbuf, binary.BigEndian, uint16(ydensity))
+	binary.Write(newbuf, binary.BigEndian, uint16(0)) // no thumbnail segment
+	newbuf.Write(data[2:])
+
+	return newbuf, true
+}
+
+func (bo *BinaryObject) handleDecodingError(bi *BookImage, err error, cfg *config.ImagesConfig, log *zap.Logger) (*BookImage, error) {
+	log.Warn("Unable to decode image", zap.String("id", bo.ID),
+		zap.String("content-type", bo.ContentType), zap.Error(err))
+
+	if !cfg.UseBroken {
+		return nil, fmt.Errorf("unable to decode image ID %s: %w", bo.ID, err)
+	}
+	return bi, nil
+}
+
+func (bo *BinaryObject) handleResizeError(bi *BookImage, cfg *config.ImagesConfig, log *zap.Logger) (*BookImage, error) {
+	if !cfg.UseBroken {
+		return nil, fmt.Errorf("unable to resize image: ID - %s", bo.ID)
+	}
+	log.Warn("Unable to resize image, using as is", zap.String("id", bo.ID), zap.String("content-type", bo.ContentType))
+	return bi, nil
+}
+
+func (bo *BinaryObject) encodeImage(img image.Image, imgType string, cfg *config.ImagesConfig, log *zap.Logger) ([]byte, error) {
+	var buf = new(bytes.Buffer)
+	var err error
+
+	switch imgType {
+	case "png":
+		err = imaging.Encode(buf, img, imaging.PNG, imaging.PNGCompressionLevel(png.BestCompression))
+		if err != nil {
+			return nil, fmt.Errorf("unable to encode processed PNG, ID - %s: %w", bo.ID, err)
+		}
+		return buf.Bytes(), nil
+	case "jpeg":
+		err = imaging.Encode(buf, img, imaging.JPEG, imaging.JPEGQuality(cfg.JPEGQuality))
+		if err != nil {
+			return nil, fmt.Errorf("unable to encode processed JPEG, ID - %s: %w", bo.ID, err)
+		}
+		newbuf, added := setJpegDPI(buf, dpiPxPerInch, 300, 300)
+		if added {
+			log.Debug("Inserting jpeg JFIF APP0 marker segment", zap.String("id", bo.ID))
+		}
+		return newbuf.Bytes(), nil
+	default:
+		log.Warn("Unable to process image - unsupported format, skipping", zap.String("id", bo.ID), zap.String("type", imgType))
+		return nil, nil
+	}
+}
+
+// PrepareImage performs required image modifications leaving original data
+// intact if no changes where requested. If image is decodable it will always
+// attemt to normalize mime type.
+func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfig, log *zap.Logger) (*BookImage, error) {
+
+	bi := &BookImage{
+		MimeType: bo.ContentType,
+		Data:     bo.Data,
+	}
+
+	// Special case - do not touch SVG
+	if strings.HasSuffix(strings.ToLower(bo.ContentType), "svg") {
+		bi.MimeType = "image/svg+xml"
+		return bi, nil
+	}
+
+	imageChanged := false
+	img, imgType, imgDecodingErr := image.Decode(bytes.NewReader(bo.Data))
+	if imgDecodingErr == nil {
+		bi.MimeType = mime.TypeByExtension("." + imgType)
+	}
+
+	// Scaling cover image
+	if cover {
+		if imgDecodingErr != nil {
+			return bo.handleDecodingError(bi, imgDecodingErr, cfg, log)
+		}
+
+		w, h := cfg.Cover.Width, cfg.Cover.Height
+		switch cfg.Cover.Resize {
+		case config.ImageResizeModeNone:
+		case config.ImageResizeModeKeepAR:
+			if img.Bounds().Dy() >= h {
+				break
+			}
+			w = 0
+			fallthrough
+		case config.ImageResizeModeStretch:
+			if img.Bounds().Dy() >= h && w != 0 && img.Bounds().Dx() >= w {
+				break
+			}
+			resizedImg := imaging.Resize(img, w, h, imaging.Lanczos)
+			if resizedImg == nil {
+				return bo.handleResizeError(bi, cfg, log)
+			}
+			img = resizedImg
+			imageChanged = true
+		}
+	}
+
+	// Scaling non-cover images
+	if !cover && cfg.ScaleFactor > 0.0 && cfg.ScaleFactor != 1.0 {
+		if imgDecodingErr != nil {
+			return bo.handleDecodingError(bi, imgDecodingErr, cfg, log)
+		}
+
+		if imgType == "png" || imgType == "jpeg" {
+			resizedImg := imaging.Resize(img, 0, int(float64(img.Bounds().Dy())*cfg.ScaleFactor), imaging.Linear)
+			if resizedImg == nil {
+				return bo.handleResizeError(bi, cfg, log)
+			}
+			img = resizedImg
+			imageChanged = true
+		}
+	}
+
+	// PNG transparency
+	if cfg.RemovePNGTransparency {
+		if imgDecodingErr != nil {
+			return bo.handleDecodingError(bi, imgDecodingErr, cfg, log)
+		}
+
+		if imgType == "png" {
+			opaque := func(im image.Image) bool {
+				if oimg, ok := im.(interface{ Opaque() bool }); ok {
+					return oimg.Opaque()
+				}
+				return true
+			}(img)
+
+			if !opaque {
+				log.Debug("Removing PNG transparency", zap.String("id", bo.ID))
+				opaqueImg := image.NewRGBA(img.Bounds())
+				draw.Draw(opaqueImg, img.Bounds(), &image.Uniform{color.RGBA{255, 255, 255, 255}}, image.Point{}, draw.Src)
+				draw.Draw(opaqueImg, img.Bounds(), img, image.Point{}, draw.Over)
+				img = opaqueImg
+				imageChanged = true
+			}
+		}
+	}
+
+	// Compression & image quality
+	if cfg.Optimize {
+		if imgDecodingErr != nil {
+			return bo.handleDecodingError(bi, imgDecodingErr, cfg, log)
+		}
+
+		switch imgType {
+		case "jpeg":
+			jr, err := jpegquality.NewWithBytes(bo.Data)
+			if err != nil {
+				log.Warn("Unable to detect JPEG quality level, skipping...", zap.String("id", bo.ID), zap.Error(err))
+				break
+			}
+
+			q := jr.Quality()
+			if q <= cfg.JPEGQuality {
+				log.Debug("JPEG quality level already lower than requested, skipping...",
+					zap.String("id", bo.ID), zap.Int("detected", q), zap.Int("requested", cfg.JPEGQuality))
+				break
+			}
+
+			log.Debug("JPEG quality level higher than requested, reencoding...",
+				zap.String("id", bo.ID), zap.Int("detected", q), zap.Int("requested", cfg.JPEGQuality))
+
+			imageChanged = true
+		case "png":
+			imageChanged = true
+		}
+	}
+
+	// Kindle compatibility
+	if kindle {
+		if imgDecodingErr != nil {
+			return bo.handleDecodingError(bi, imgDecodingErr, cfg, log)
+		}
+
+		if isImageSupported(imgType) && imgType != "jpeg" {
+			log.Warn("Image type is not supported by target device, converting to jpeg",
+				zap.String("id", bo.ID),
+				zap.String("type", imgType))
+			bi.MimeType = mime.TypeByExtension(".jpeg")
+			imageChanged = true
+		}
+	}
+
+	if !imageChanged {
+		return bi, nil
+	}
+
+	data, err := bo.encodeImage(img, imgType, cfg, log)
+	if err != nil {
+		if !cfg.UseBroken {
+			return nil, err
+		}
+		return bi, nil
+	}
+	if data != nil {
+		bi.Data = data
+	}
+
+	return bi, nil
+}
