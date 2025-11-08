@@ -38,7 +38,7 @@ type Content struct {
 
 	Splitter *text.Splitter
 	Hyphen   *text.Hyphenator
-	TmpDir   string
+	WorkDir  string
 }
 
 // Prepare reads, parses, and prepares FB2 content for conversion.
@@ -171,7 +171,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 		ImagesIndex:    imagesIndex,
 		IDsIndex:       ids,
 		LinksRevIndex:  links,
-		TmpDir:         tmpDir,
+		WorkDir:        tmpDir,
 	}
 
 	if env.Cfg.Document.InsertSoftHyphen {

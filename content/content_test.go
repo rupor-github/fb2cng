@@ -68,7 +68,7 @@ func setupTestContent(t *testing.T) (*Content, context.Context) {
 	tmpDir := t.TempDir()
 
 	doc := etree.NewDocument()
-	return &Content{TmpDir: tmpDir, Doc: doc}, ctx
+	return &Content{WorkDir: tmpDir, Doc: doc}, ctx
 }
 
 func TestContent_GetCoverID_WithCoverpage(t *testing.T) {
