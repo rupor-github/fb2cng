@@ -21,7 +21,6 @@ type LocalEnv struct {
 	// used by convert subcommand
 	NoDirs       bool
 	Overwrite    bool
-	OutputFormat config.OutputFmt
 	CodePage     encoding.Encoding
 	DefaultCover []byte
 	//

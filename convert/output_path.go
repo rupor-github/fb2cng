@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"fbc/config"
+	"fbc/content"
 	"fbc/state"
 )
 
@@ -19,39 +20,39 @@ import (
 // template and takes into account whether to preserve source directory
 // structure on the output. If cleans up path and if requested transliterates
 // it
-func (c *Content) buildOutputPath(src, dst string, env *state.LocalEnv) string {
-	outDir := c.determineOutputDir(src, dst, env)
-	defaultFile := c.buildDefaultFileName(src, env)
+func buildOutputPath(c *content.Content, src, dst string, env *state.LocalEnv) string {
+	outDir := determineOutputDir(src, dst, env)
+	defaultFile := buildDefaultFileName(src, c.OutputFormat, env)
 
 	if env.Cfg.Document.OutputNameTemplate == "" {
 		return filepath.Join(outDir, defaultFile)
 	}
 
-	expandedName := c.expandOutputNameTemplate(env)
+	expandedName := expandOutputNameTemplate(c, env)
 	if expandedName == "" {
 		// fallback to default name if template expansion failed
 		return filepath.Join(outDir, defaultFile)
 	}
 
-	return c.buildPathFromTemplate(outDir, expandedName, env)
+	return assemblePathWithSubdirs(outDir, expandedName, c.OutputFormat, env)
 }
 
-func (c *Content) determineOutputDir(src, dst string, env *state.LocalEnv) string {
+func determineOutputDir(src, dst string, env *state.LocalEnv) string {
 	if env.NoDirs {
 		return dst
 	}
 	return filepath.Join(dst, filepath.Dir(src))
 }
 
-func (c *Content) buildDefaultFileName(src string, env *state.LocalEnv) string {
+func buildDefaultFileName(src string, format config.OutputFmt, env *state.LocalEnv) string {
 	baseName := strings.TrimSuffix(filepath.Base(src), filepath.Ext(src))
 	if env.Cfg.Document.FileNameTransliterate {
 		baseName = slug.Make(baseName)
 	}
-	return config.CleanFileName(baseName) + c.getFileExtension(env.OutputFormat)
+	return config.CleanFileName(baseName) + getFileExtension(format)
 }
 
-func (c *Content) getFileExtension(format config.OutputFmt) string {
+func getFileExtension(format config.OutputFmt) string {
 	switch format {
 	case config.OutputFmtKfx:
 		return ".kfx"
@@ -65,8 +66,8 @@ func (c *Content) getFileExtension(format config.OutputFmt) string {
 	}
 }
 
-func (c *Content) expandOutputNameTemplate(env *state.LocalEnv) string {
-	expandedName, err := c.expandTemplate(config.OutputNameTemplateFieldName, env.Cfg.Document.OutputNameTemplate, env.OutputFormat)
+func expandOutputNameTemplate(c *content.Content, env *state.LocalEnv) string {
+	expandedName, err := expandTemplate(c, config.OutputNameTemplateFieldName, env.Cfg.Document.OutputNameTemplate, c.OutputFormat)
 	if err != nil {
 		env.Log.Warn("Unable to prepare output filename", zap.Error(err))
 		return ""
@@ -74,27 +75,30 @@ func (c *Content) expandOutputNameTemplate(env *state.LocalEnv) string {
 	return filepath.FromSlash(expandedName)
 }
 
-func (c *Content) buildPathFromTemplate(outDir, expandedName string, env *state.LocalEnv) string {
-	outExt := c.getFileExtension(env.OutputFormat)
-	pathSegments := c.splitAndCleanPath(expandedName)
+// assemblePathWithSubdirs takes an expanded template name (which may contain
+// path separators for subdirectories) and assembles it into a full output path,
+// cleaning and transliterating segments as needed
+func assemblePathWithSubdirs(outDir, expandedName string, format config.OutputFmt, env *state.LocalEnv) string {
+	outExt := getFileExtension(format)
+	pathSegments := splitAndCleanPath(expandedName)
 
 	if len(pathSegments) == 0 {
 		return outDir
 	}
 
-	fileName := c.cleanPathSegment(pathSegments[len(pathSegments)-1], env) + outExt
+	fileName := cleanPathSegment(pathSegments[len(pathSegments)-1], env) + outExt
 	dirParts := make([]string, 0, len(pathSegments)+1)
 	dirParts = append(dirParts, outDir)
 
 	for _, segment := range pathSegments[:len(pathSegments)-1] {
-		dirParts = append(dirParts, c.cleanPathSegment(segment, env))
+		dirParts = append(dirParts, cleanPathSegment(segment, env))
 	}
 
 	dirParts = append(dirParts, fileName)
 	return filepath.Join(dirParts...)
 }
 
-func (c *Content) splitAndCleanPath(path string) []string {
+func splitAndCleanPath(path string) []string {
 	path = strings.TrimSuffix(path, string(os.PathSeparator))
 	segments := make([]string, 0, 8)
 
@@ -110,7 +114,7 @@ func (c *Content) splitAndCleanPath(path string) []string {
 	return segments
 }
 
-func (c *Content) cleanPathSegment(segment string, env *state.LocalEnv) string {
+func cleanPathSegment(segment string, env *state.LocalEnv) string {
 	if env.Cfg.Document.FileNameTransliterate {
 		segment = slug.Make(segment)
 	}

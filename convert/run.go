@@ -19,6 +19,9 @@ import (
 
 	"fbc/archive"
 	"fbc/config"
+	"fbc/content"
+	"fbc/convert/epub"
+	"fbc/convert/kfx"
 	"fbc/state"
 )
 
@@ -60,10 +63,9 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 		log.Warn("Unknown output format requested, switching to epub2", zap.Error(err))
 		format = config.OutputFmtEpub2
 	}
-	env.OutputFormat = format
 
 	// Amazon formats must always have valid cover page
-	if env.OutputFormat.ForKindle() {
+	if format.ForKindle() {
 		env.Cfg.Document.Images.Cover.Generate = true
 		if env.Cfg.Document.Images.Cover.Resize == config.ImageResizeModeNone {
 			env.Cfg.Document.Images.Cover.Resize = config.ImageResizeModeKeepAR
@@ -103,13 +105,13 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 		log.Info("Processing completed", zap.Duration("elapsed", time.Since(start)))
 	}(time.Now())
 
-	return process(ctx, src, dst, log)
+	return process(ctx, src, dst, format, log)
 }
 
 // process handles the core conversion logic independently of CLI framework. It
 // determines the input type (directory, archive, or single file) and processes
 // accordingly.
-func process(ctx context.Context, src, dst string, log *zap.Logger) error {
+func process(ctx context.Context, src, dst string, format config.OutputFmt, log *zap.Logger) error {
 	var head, tail string
 	for head = src; len(head) != 0; head, tail = filepath.Split(head) {
 		if err := ctx.Err(); err != nil {
@@ -129,7 +131,7 @@ func process(ctx context.Context, src, dst string, log *zap.Logger) error {
 				// directory cannot have tail - it would be simple file
 				return fmt.Errorf("input source was not found (%s) => (%s)", head, strings.TrimPrefix(src, head))
 			}
-			if err := processDir(ctx, head, dst, log); err != nil {
+			if err := processDir(ctx, head, dst, format, log); err != nil {
 				return errors.New("unable to process directory")
 			}
 			break
@@ -147,7 +149,7 @@ func process(ctx context.Context, src, dst string, log *zap.Logger) error {
 		if archive {
 			// we need to look inside to see if path makes sense
 			tail = strings.TrimPrefix(strings.TrimPrefix(src, head), string(filepath.Separator))
-			if err := processArchive(ctx, head, tail, "", dst, log); err != nil {
+			if err := processArchive(ctx, head, tail, "", dst, format, log); err != nil {
 				return fmt.Errorf("unable to process archive: %w", err)
 			}
 			break
@@ -166,7 +168,7 @@ func process(ctx context.Context, src, dst string, log *zap.Logger) error {
 				log.Error("Unable to process file", zap.String("file", head), zap.Error(err))
 			} else {
 				defer file.Close()
-				if err := processBook(ctx, selectReader(file, enc), filepath.Base(head), dst, log); err != nil {
+				if err := processBook(ctx, selectReader(file, enc), filepath.Base(head), dst, format, log); err != nil {
 					log.Error("Unable to process file", zap.String("file", head), zap.Error(err))
 				}
 			}
@@ -182,7 +184,7 @@ func process(ctx context.Context, src, dst string, log *zap.Logger) error {
 }
 
 // processDir walks directory tree finding fb2 files and processes them.
-func processDir(ctx context.Context, dir, dst string, log *zap.Logger) (err error) {
+func processDir(ctx context.Context, dir, dst string, format config.OutputFmt, log *zap.Logger) (err error) {
 	count := 0
 	defer func() {
 		if err == nil && count == 0 {
@@ -210,7 +212,7 @@ func processDir(ctx context.Context, dir, dst string, log *zap.Logger) (err erro
 			return nil
 		}
 		if archive {
-			if err := processArchive(ctx, path, "", filepath.Dir(strings.TrimPrefix(path, dir)), dst, log); err != nil {
+			if err := processArchive(ctx, path, "", filepath.Dir(strings.TrimPrefix(path, dir)), dst, format, log); err != nil {
 				log.Error("Unable to process archive", zap.String("file", path), zap.Error(err))
 			}
 			return nil
@@ -236,7 +238,7 @@ func processDir(ctx context.Context, dir, dst string, log *zap.Logger) (err erro
 		defer file.Close()
 
 		src := strings.TrimPrefix(strings.TrimPrefix(path, dir), string(filepath.Separator))
-		if err := processBook(ctx, selectReader(file, enc), src, dst, log); err != nil {
+		if err := processBook(ctx, selectReader(file, enc), src, dst, format, log); err != nil {
 			log.Error("Unable to process file", zap.String("file", path), zap.Error(err))
 		}
 		return nil
@@ -246,7 +248,7 @@ func processDir(ctx context.Context, dir, dst string, log *zap.Logger) (err erro
 
 // processArchive walks all files inside archive, finds fb2 files under
 // "pathIn" and processes them.
-func processArchive(ctx context.Context, path, pathIn, pathOut, dst string, log *zap.Logger) (err error) {
+func processArchive(ctx context.Context, path, pathIn, pathOut, dst string, format config.OutputFmt, log *zap.Logger) (err error) {
 	count := 0
 	defer func() {
 		if err == nil && count == 0 {
@@ -293,7 +295,7 @@ func processArchive(ctx context.Context, path, pathIn, pathOut, dst string, log 
 					zap.String("charset", n), zap.String("path", pathInArchive), zap.Error(err))
 			}
 		}
-		if err := processBook(ctx, selectReader(r, enc), filepath.Join(pathOut, pathInArchive), dst, log); err != nil {
+		if err := processBook(ctx, selectReader(r, enc), filepath.Join(pathOut, pathInArchive), dst, format, log); err != nil {
 			log.Error("Unable to process file in archive",
 				zap.String("archive", archive), zap.String("file", f.FileHeader.Name), zap.Error(err))
 		}
@@ -308,7 +310,7 @@ func processArchive(ctx context.Context, path, pathIn, pathOut, dst string, log 
 // inside archive or directory it will be relative path inside archive or
 // directory (including base file name). "dst" is the destination directory
 // where the converted file should be written.
-func processBook(ctx context.Context, r io.Reader, src string, dst string, log *zap.Logger) (rerr error) {
+func processBook(ctx context.Context, r io.Reader, src string, dst string, format config.OutputFmt, log *zap.Logger) (rerr error) {
 	env := state.EnvFromContext(ctx)
 
 	var refID, outputName string
@@ -326,19 +328,26 @@ func processBook(ctx context.Context, r io.Reader, src string, dst string, log *
 		}
 	}(time.Now())
 
-	content, err := prepareContent(ctx, r, src, env.OutputFormat.ForKindle(), log)
+	c, err := content.Prepare(ctx, r, src, format, log)
 	if err != nil {
 		return fmt.Errorf("unable to parse fb2 source (%s): %w", src, err)
 	}
 
-	refID = content.book.Description.DocumentInfo.ID
+	refID = c.Book.Description.DocumentInfo.ID
 
 	// Determine output file name and path based on input and configuration.
-	outputName = content.buildOutputPath(src, dst, env)
+	outputName = buildOutputPath(c, src, dst, env)
 
 	// Generate output in the requested format
-	if err := content.WriteTo(ctx, env.OutputFormat, outputName, log); err != nil {
-		return fmt.Errorf("unable to generate output: %w", err)
+	switch c.OutputFormat {
+	case config.OutputFmtEpub2, config.OutputFmtEpub3, config.OutputFmtKepub:
+		if err := epub.Generate(ctx, c, outputName, log); err != nil {
+			return fmt.Errorf("unable to generate output: %w", err)
+		}
+	case config.OutputFmtKfx:
+		if err := kfx.Generate(ctx, c, outputName, log); err != nil {
+			return fmt.Errorf("unable to generate output: %w", err)
+		}
 	}
 
 	// Store conversion result for debugging

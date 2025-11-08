@@ -157,7 +157,7 @@ tasks:
     run: once
     desc: Get dictionary rules for all supported languages
     vars:
-      DIR: 'convert/text/dictionaries'
+      DIR: 'content/text/dictionaries'
     dir: '{{.DIR}}'
     cmds:
       - rm -f *.txt
@@ -173,7 +173,7 @@ tasks:
     run: once
     desc: Get NLTK training data
     vars:
-      DIR: 'convert/text/sentences'
+      DIR: 'content/text/sentences'
     dir: '{{.DIR}}'
     cmds:
       - rm -f *.json
@@ -258,8 +258,8 @@ tasks:
       - ./**/*.yaml.tmpl
       - ./**/*.jpeg
       - ./**/*.png
-      - ./convert/text/dictionaries/*.gz
-      - ./convert/text/sentences/*.gz
+      - ./content/text/dictionaries/*.gz
+      - ./content/text/sentences/*.gz
     generates:
       - '{{.TARGET}}'
 

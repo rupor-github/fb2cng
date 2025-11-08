@@ -18,9 +18,9 @@ build_*/
 release/
 release_*/
 misc/version.go
-convert/text/dictionaries/*.txt.gz
-convert/text/sentences/*.json.gz
-!convert/text/sentences/russian.json.gz
-!convert/text/sentences/hungarian.json.gz
-!convert/text/sentences/icelandic.json.gz
-!convert/text/sentences/korean.json.gz
+content/text/dictionaries/*.txt.gz
+content/text/sentences/*.json.gz
+!content/text/sentences/russian.json.gz
+!content/text/sentences/hungarian.json.gz
+!content/text/sentences/icelandic.json.gz
+!content/text/sentences/korean.json.gz

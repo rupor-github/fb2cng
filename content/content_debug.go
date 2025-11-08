@@ -1,4 +1,4 @@
-package convert
+package content
 
 import (
 	"maps"
@@ -22,60 +22,60 @@ func (c *Content) String() string {
 		return "<nil Content>"
 	}
 
-	out := c.book.String()
+	out := c.Book.String()
 
-	if len(c.footnotesIndex) > 0 {
+	if len(c.FootnotesIndex) > 0 {
 		tw := treeWriter{debug.NewTreeWriter()}
 
-		tw.Line(0, "Footnotes index: %d", len(c.footnotesIndex))
-		keys := slices.Collect(maps.Keys(c.footnotesIndex))
+		tw.Line(0, "Footnotes index: %d", len(c.FootnotesIndex))
+		keys := slices.Collect(maps.Keys(c.FootnotesIndex))
 		sort.Sort(natural.StringSlice(keys))
 		for _, k := range keys {
-			ref := c.footnotesIndex[k]
+			ref := c.FootnotesIndex[k]
 			tw.Line(1, "Reference[%q] body[%d] section[%d]", k, ref.BodyIdx, ref.SectionIdx)
 		}
 		out += "\n" + tw.String()
 	}
 
-	if len(c.imagesIndex) > 0 {
+	if len(c.ImagesIndex) > 0 {
 		tw := treeWriter{debug.NewTreeWriter()}
 
-		tw.Line(0, "Book cover ID: %q", c.coverID)
-		tw.Line(0, "Images index: %d", len(c.imagesIndex))
-		keys := slices.Collect(maps.Keys(c.imagesIndex))
+		tw.Line(0, "Book cover ID: %q", c.CoverID)
+		tw.Line(0, "Images index: %d", len(c.ImagesIndex))
+		keys := slices.Collect(maps.Keys(c.ImagesIndex))
 		sort.Sort(natural.StringSlice(keys))
 		for _, k := range keys {
-			img := c.imagesIndex[k]
+			img := c.ImagesIndex[k]
 			tw.Line(1, "Image[%q] mime[%q] size[%d]", k, img.MimeType, len(img.Data))
 		}
 		out += "\n" + tw.String()
 	}
 
-	if len(c.idsIndex) > 0 {
+	if len(c.IDsIndex) > 0 {
 		tw := debug.NewTreeWriter()
-		tw.Line(0, "IDIndex (%d entries)", len(c.idsIndex))
-		keys := slices.Collect(maps.Keys(c.idsIndex))
+		tw.Line(0, "IDIndex (%d entries)", len(c.IDsIndex))
+		keys := slices.Collect(maps.Keys(c.IDsIndex))
 		sort.Sort(natural.StringSlice(keys))
 		for _, k := range keys {
-			ref := c.idsIndex[k]
+			ref := c.IDsIndex[k]
 			tw.Line(1, "ID=%q type=%q", k, ref.Type)
 			tw.Line(2, "Location Path: %s", fb2.FormatRefPath(ref.Path))
 		}
 		out += "\n" + tw.String()
 	}
 
-	if len(c.linksRevIndex) > 0 {
+	if len(c.LinksRevIndex) > 0 {
 		tw := debug.NewTreeWriter()
 		totalLinks := 0
-		for _, refs := range c.linksRevIndex {
+		for _, refs := range c.LinksRevIndex {
 			totalLinks += len(refs)
 		}
-		tw.Line(0, "ReverseLinkIndex (%d targets, %d total links)", len(c.linksRevIndex), totalLinks)
+		tw.Line(0, "ReverseLinkIndex (%d targets, %d total links)", len(c.LinksRevIndex), totalLinks)
 
-		keys := slices.Collect(maps.Keys(c.linksRevIndex))
+		keys := slices.Collect(maps.Keys(c.LinksRevIndex))
 		sort.Sort(natural.StringSlice(keys))
 		for _, k := range keys {
-			refs := c.linksRevIndex[k]
+			refs := c.LinksRevIndex[k]
 			tw.Line(1, "Target=%q (%d links)", k, len(refs))
 			for i, ref := range refs {
 				tw.Line(2, "Link[%d] type=%q", i, ref.Type)

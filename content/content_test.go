@@ -1,4 +1,4 @@
-package convert
+package content
 
 import (
 	"bytes"
@@ -68,7 +68,7 @@ func setupTestContent(t *testing.T) (*Content, context.Context) {
 	tmpDir := t.TempDir()
 
 	doc := etree.NewDocument()
-	return &Content{tmpDir: tmpDir, doc: doc}, ctx
+	return &Content{TmpDir: tmpDir, Doc: doc}, ctx
 }
 
 func TestContent_GetCoverID_WithCoverpage(t *testing.T) {
@@ -77,7 +77,7 @@ func TestContent_GetCoverID_WithCoverpage(t *testing.T) {
 
 	jpegData := createTestJPEG(t, 100, 150, 90)
 
-	c.book = &fb2.FictionBook{
+	c.Book = &fb2.FictionBook{
 		Description: fb2.Description{
 			TitleInfo: fb2.TitleInfo{
 				Coverpage: []fb2.InlineImage{
@@ -90,23 +90,23 @@ func TestContent_GetCoverID_WithCoverpage(t *testing.T) {
 		},
 	}
 
-	imagesIndex, err := c.book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
+	imagesIndex, err := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
 	if err != nil {
 		t.Fatalf("PrepareImages failed: %v", err)
 	}
-	c.imagesIndex = imagesIndex
+	c.ImagesIndex = imagesIndex
 
 	// Parse cover ID
-	if len(c.book.Description.TitleInfo.Coverpage) > 0 {
-		href := c.book.Description.TitleInfo.Coverpage[0].Href
-		c.coverID = parseImageRef(href)
+	if len(c.Book.Description.TitleInfo.Coverpage) > 0 {
+		href := c.Book.Description.TitleInfo.Coverpage[0].Href
+		c.CoverID = parseImageRef(href)
 	}
 
-	if c.coverID != "cover-image" {
-		t.Errorf("expected coverID 'cover-image', got %q", c.coverID)
+	if c.CoverID != "cover-image" {
+		t.Errorf("expected coverID 'cover-image', got %q", c.CoverID)
 	}
 
-	if _, exists := c.imagesIndex[c.coverID]; !exists {
+	if _, exists := c.ImagesIndex[c.CoverID]; !exists {
 		t.Error("cover image should exist in images index")
 	}
 }
@@ -115,7 +115,7 @@ func TestContent_GetCoverID_NoCoverpage(t *testing.T) {
 	c, ctx := setupTestContent(t)
 	env := state.EnvFromContext(ctx)
 
-	c.book = &fb2.FictionBook{
+	c.Book = &fb2.FictionBook{
 		Description: fb2.Description{
 			TitleInfo: fb2.TitleInfo{
 				Coverpage: []fb2.InlineImage{},
@@ -124,18 +124,18 @@ func TestContent_GetCoverID_NoCoverpage(t *testing.T) {
 		Binaries: []fb2.BinaryObject{},
 	}
 
-	imagesIndex, err := c.book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
+	imagesIndex, err := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
 	if err != nil {
 		t.Fatalf("PrepareImages failed: %v", err)
 	}
-	c.imagesIndex = imagesIndex
+	c.ImagesIndex = imagesIndex
 
-	if len(c.book.Description.TitleInfo.Coverpage) > 0 {
-		c.coverID = parseImageRef(c.book.Description.TitleInfo.Coverpage[0].Href)
+	if len(c.Book.Description.TitleInfo.Coverpage) > 0 {
+		c.CoverID = parseImageRef(c.Book.Description.TitleInfo.Coverpage[0].Href)
 	}
 
-	if c.coverID != "" {
-		t.Errorf("expected empty coverID when no coverpage, got %q", c.coverID)
+	if c.CoverID != "" {
+		t.Errorf("expected empty coverID when no coverpage, got %q", c.CoverID)
 	}
 }
 
@@ -146,7 +146,7 @@ func TestContent_MultipleCoverpageImages(t *testing.T) {
 	jpegData1 := createTestJPEG(t, 100, 150, 90)
 	jpegData2 := createTestJPEG(t, 200, 300, 90)
 
-	c.book = &fb2.FictionBook{
+	c.Book = &fb2.FictionBook{
 		Description: fb2.Description{
 			TitleInfo: fb2.TitleInfo{
 				Coverpage: []fb2.InlineImage{
@@ -161,19 +161,19 @@ func TestContent_MultipleCoverpageImages(t *testing.T) {
 		},
 	}
 
-	imagesIndex, err := c.book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
+	imagesIndex, err := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
 	if err != nil {
 		t.Fatalf("PrepareImages failed: %v", err)
 	}
-	c.imagesIndex = imagesIndex
+	c.ImagesIndex = imagesIndex
 
 	// Should use first coverpage image
-	if len(c.book.Description.TitleInfo.Coverpage) > 0 {
-		c.coverID = parseImageRef(c.book.Description.TitleInfo.Coverpage[0].Href)
+	if len(c.Book.Description.TitleInfo.Coverpage) > 0 {
+		c.CoverID = parseImageRef(c.Book.Description.TitleInfo.Coverpage[0].Href)
 	}
 
-	if c.coverID != "cover1" {
-		t.Errorf("expected first cover 'cover1', got %q", c.coverID)
+	if c.CoverID != "cover1" {
+		t.Errorf("expected first cover 'cover1', got %q", c.CoverID)
 	}
 }
 
@@ -189,7 +189,7 @@ func TestContent_CoverImageProcessing_Resize(t *testing.T) {
 	// Small cover that should be resized
 	jpegData := createTestJPEG(t, 100, 150, 90)
 
-	c.book = &fb2.FictionBook{
+	c.Book = &fb2.FictionBook{
 		Description: fb2.Description{
 			TitleInfo: fb2.TitleInfo{
 				Coverpage: []fb2.InlineImage{{Href: "#small-cover"}},
@@ -200,7 +200,7 @@ func TestContent_CoverImageProcessing_Resize(t *testing.T) {
 		},
 	}
 
-	imagesIndex, err := c.book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
+	imagesIndex, err := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
 	if err != nil {
 		t.Fatalf("PrepareImages failed: %v", err)
 	}
@@ -230,7 +230,7 @@ func TestContent_CoverImageProcessing_NoResize(t *testing.T) {
 	originalWidth, originalHeight := 100, 150
 	jpegData := createTestJPEG(t, originalWidth, originalHeight, 90)
 
-	c.book = &fb2.FictionBook{
+	c.Book = &fb2.FictionBook{
 		Description: fb2.Description{
 			TitleInfo: fb2.TitleInfo{
 				Coverpage: []fb2.InlineImage{{Href: "#orig-cover"}},
@@ -241,7 +241,7 @@ func TestContent_CoverImageProcessing_NoResize(t *testing.T) {
 		},
 	}
 
-	imagesIndex, err := c.book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
+	imagesIndex, err := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
 	if err != nil {
 		t.Fatalf("PrepareImages failed: %v", err)
 	}
@@ -263,7 +263,7 @@ func TestContent_MissingCoverImage(t *testing.T) {
 	c, ctx := setupTestContent(t)
 	env := state.EnvFromContext(ctx)
 
-	c.book = &fb2.FictionBook{
+	c.Book = &fb2.FictionBook{
 		Description: fb2.Description{
 			TitleInfo: fb2.TitleInfo{
 				Coverpage: []fb2.InlineImage{{Href: "#missing-cover"}},
@@ -274,15 +274,15 @@ func TestContent_MissingCoverImage(t *testing.T) {
 		},
 	}
 
-	imagesIndex, err := c.book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
+	imagesIndex, err := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
 	if err != nil {
 		t.Fatalf("PrepareImages failed: %v", err)
 	}
-	c.imagesIndex = imagesIndex
+	c.ImagesIndex = imagesIndex
 
-	c.coverID = "missing-cover"
+	c.CoverID = "missing-cover"
 
-	if _, exists := c.imagesIndex[c.coverID]; exists {
+	if _, exists := c.ImagesIndex[c.CoverID]; exists {
 		t.Error("missing cover should not exist in images index")
 	}
 }
@@ -295,7 +295,7 @@ func TestContent_ImageIndexBuild(t *testing.T) {
 	jpegData2 := createTestJPEG(t, 50, 50, 90)
 	pngData := createTestPNG(t, 75, 75)
 
-	c.book = &fb2.FictionBook{
+	c.Book = &fb2.FictionBook{
 		Binaries: []fb2.BinaryObject{
 			{ID: "img1", ContentType: "image/jpeg", Data: jpegData1},
 			{ID: "img2", ContentType: "image/jpeg", Data: jpegData2},
@@ -303,7 +303,7 @@ func TestContent_ImageIndexBuild(t *testing.T) {
 		},
 	}
 
-	imagesIndex, err := c.book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
+	imagesIndex, err := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
 	if err != nil {
 		t.Fatalf("PrepareImages failed: %v", err)
 	}
@@ -325,14 +325,14 @@ func TestContent_KindleImageConversion(t *testing.T) {
 
 	pngData := createTestPNG(t, 100, 100)
 
-	c.book = &fb2.FictionBook{
+	c.Book = &fb2.FictionBook{
 		Binaries: []fb2.BinaryObject{
 			{ID: "png-img", ContentType: "image/png", Data: pngData},
 		},
 	}
 
 	// Process for Kindle (should convert PNG to JPEG)
-	imagesIndex, err := c.book.PrepareImages(true, &env.Cfg.Document.Images, env.Log)
+	imagesIndex, err := c.Book.PrepareImages(true, &env.Cfg.Document.Images, env.Log)
 	if err != nil {
 		t.Fatalf("PrepareImages failed: %v", err)
 	}
@@ -352,7 +352,7 @@ func TestContent_DefaultCoverFallback(t *testing.T) {
 	env := state.EnvFromContext(ctx)
 
 	// Book with no cover
-	c.book = &fb2.FictionBook{
+	c.Book = &fb2.FictionBook{
 		Description: fb2.Description{
 			TitleInfo: fb2.TitleInfo{
 				Coverpage: []fb2.InlineImage{},
@@ -361,11 +361,11 @@ func TestContent_DefaultCoverFallback(t *testing.T) {
 		Binaries: []fb2.BinaryObject{},
 	}
 
-	imagesIndex, err := c.book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
+	imagesIndex, err := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
 	if err != nil {
 		t.Fatalf("PrepareImages failed: %v", err)
 	}
-	c.imagesIndex = imagesIndex
+	c.ImagesIndex = imagesIndex
 
 	// Check if default cover exists
 	defaultCoverPath := "./default_cover.jpeg"
@@ -413,13 +413,13 @@ func TestContent_ImageScaling(t *testing.T) {
 
 	jpegData := createTestJPEG(t, 200, 200, 90)
 
-	c.book = &fb2.FictionBook{
+	c.Book = &fb2.FictionBook{
 		Binaries: []fb2.BinaryObject{
 			{ID: "scaled-img", ContentType: "image/jpeg", Data: jpegData},
 		},
 	}
 
-	imagesIndex, err := c.book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
+	imagesIndex, err := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
 	if err != nil {
 		t.Fatalf("PrepareImages failed: %v", err)
 	}
@@ -455,13 +455,13 @@ func TestContent_PNGTransparencyRemoval(t *testing.T) {
 		t.Fatalf("failed to create test PNG: %v", err)
 	}
 
-	c.book = &fb2.FictionBook{
+	c.Book = &fb2.FictionBook{
 		Binaries: []fb2.BinaryObject{
 			{ID: "trans-png", ContentType: "image/png", Data: buf.Bytes()},
 		},
 	}
 
-	imagesIndex, err := c.book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
+	imagesIndex, err := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
 	if err != nil {
 		t.Fatalf("PrepareImages failed: %v", err)
 	}
@@ -491,13 +491,13 @@ func TestContent_ImageOptimization(t *testing.T) {
 	highQualityData := createTestJPEG(t, 100, 100, 95)
 	originalSize := len(highQualityData)
 
-	c.book = &fb2.FictionBook{
+	c.Book = &fb2.FictionBook{
 		Binaries: []fb2.BinaryObject{
 			{ID: "hq-img", ContentType: "image/jpeg", Data: highQualityData},
 		},
 	}
 
-	imagesIndex, err := c.book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
+	imagesIndex, err := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
 	if err != nil {
 		t.Fatalf("PrepareImages failed: %v", err)
 	}

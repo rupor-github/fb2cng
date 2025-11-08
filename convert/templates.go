@@ -10,6 +10,7 @@ import (
 	sprig "github.com/go-task/slim-sprig/v3"
 
 	"fbc/config"
+	"fbc/content"
 	"fbc/fb2"
 )
 
@@ -88,7 +89,7 @@ func buildAuthors(authors []fb2.Author) []AuthorDefinition {
 	return result
 }
 
-func (c *Content) expandTemplate(name config.TemplateFieldName, field string, format config.OutputFmt) (string, error) {
+func expandTemplate(c *content.Content, name config.TemplateFieldName, field string, format config.OutputFmt) (string, error) {
 	funcMap := sprig.FuncMap()
 
 	tmpl, err := template.New(string(name)).Funcs(funcMap).Parse(field)
@@ -98,15 +99,15 @@ func (c *Content) expandTemplate(name config.TemplateFieldName, field string, fo
 
 	values := Values{
 		Context:    string(name),
-		Title:      c.book.Description.TitleInfo.BookTitle.Value,
-		Series:     buildSequences(c.book.Description.TitleInfo.Sequences),
-		Language:   c.book.Description.TitleInfo.Lang.String(),
-		Date:       buildDate(c.book.Description.TitleInfo.Date),
-		Authors:    buildAuthors(c.book.Description.TitleInfo.Authors),
+		Title:      c.Book.Description.TitleInfo.BookTitle.Value,
+		Series:     buildSequences(c.Book.Description.TitleInfo.Sequences),
+		Language:   c.Book.Description.TitleInfo.Lang.String(),
+		Date:       buildDate(c.Book.Description.TitleInfo.Date),
+		Authors:    buildAuthors(c.Book.Description.TitleInfo.Authors),
 		Format:     format.String(),
-		SourceFile: strings.TrimSuffix(filepath.Base(c.srcName), filepath.Ext(c.srcName)),
-		BookID:     c.book.Description.DocumentInfo.ID,
-		Genres:     buildGenres(c.book.Description.TitleInfo.Genres),
+		SourceFile: strings.TrimSuffix(filepath.Base(c.SrcName), filepath.Ext(c.SrcName)),
+		BookID:     c.Book.Description.DocumentInfo.ID,
+		Genres:     buildGenres(c.Book.Description.TitleInfo.Genres),
 	}
 
 	buf := new(bytes.Buffer)

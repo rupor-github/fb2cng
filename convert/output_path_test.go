@@ -10,6 +10,7 @@ import (
 	"golang.org/x/text/language"
 
 	"fbc/config"
+	"fbc/content"
 	"fbc/fb2"
 	"fbc/state"
 )
@@ -25,21 +26,21 @@ func setupTestEnvForOutputPath(t *testing.T, noDirs bool, transliterate bool, fo
 	cfg.Document.OutputNameTemplate = template
 
 	env := &state.LocalEnv{
-		Log:          logger,
-		Cfg:          cfg,
-		NoDirs:       noDirs,
-		OutputFormat: format,
+		Log:    logger,
+		Cfg:    cfg,
+		NoDirs: noDirs,
 	}
 	return env
 }
 
-func setupTestContentForPath(t *testing.T) *Content {
+func setupTestContentForPath(t *testing.T, format config.OutputFmt) *content.Content {
 	t.Helper()
 	doc := etree.NewDocument()
-	return &Content{
-		doc:     doc,
-		srcName: "testbook.fb2",
-		book: &fb2.FictionBook{
+	return &content.Content{
+		Doc:          doc,
+		SrcName:      "testbook.fb2",
+		OutputFormat: format,
+		Book: &fb2.FictionBook{
 			Description: fb2.Description{
 				TitleInfo: fb2.TitleInfo{
 					BookTitle: fb2.TextField{Value: "Test Book"},
@@ -57,10 +58,10 @@ func setupTestContentForPath(t *testing.T) *Content {
 }
 
 func TestBuildOutputPath_SimpleCase_NoDirs(t *testing.T) {
-	c := setupTestContentForPath(t)
+	c := setupTestContentForPath(t, config.OutputFmtEpub3)
 	env := setupTestEnvForOutputPath(t, true, false, config.OutputFmtEpub3, "")
 
-	result := c.buildOutputPath("books/author/book.fb2", "/output", env)
+	result := buildOutputPath(c, "books/author/book.fb2", "/output", env)
 	expected := filepath.Join("/output", "book.epub")
 
 	if result != expected {
@@ -69,10 +70,10 @@ func TestBuildOutputPath_SimpleCase_NoDirs(t *testing.T) {
 }
 
 func TestBuildOutputPath_SimpleCase_WithDirs(t *testing.T) {
-	c := setupTestContentForPath(t)
+	c := setupTestContentForPath(t, config.OutputFmtEpub3)
 	env := setupTestEnvForOutputPath(t, false, false, config.OutputFmtEpub3, "")
 
-	result := c.buildOutputPath("books/author/book.fb2", "/output", env)
+	result := buildOutputPath(c, "books/author/book.fb2", "/output", env)
 	expected := filepath.Join("/output", "books", "author", "book.epub")
 
 	if result != expected {
@@ -94,10 +95,10 @@ func TestBuildOutputPath_DifferentFormats(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := setupTestContentForPath(t)
+			c := setupTestContentForPath(t, tt.format)
 			env := setupTestEnvForOutputPath(t, true, false, tt.format, "")
 
-			result := c.buildOutputPath("book.fb2", "/output", env)
+			result := buildOutputPath(c, "book.fb2", "/output", env)
 			expected := filepath.Join("/output", "book"+tt.ext)
 
 			if result != expected {
@@ -108,10 +109,10 @@ func TestBuildOutputPath_DifferentFormats(t *testing.T) {
 }
 
 func TestBuildOutputPath_Transliterate(t *testing.T) {
-	c := setupTestContentForPath(t)
+	c := setupTestContentForPath(t, config.OutputFmtEpub3)
 	env := setupTestEnvForOutputPath(t, true, true, config.OutputFmtEpub3, "")
 
-	result := c.buildOutputPath("Книга.fb2", "/output", env)
+	result := buildOutputPath(c, "Книга.fb2", "/output", env)
 	expected := filepath.Join("/output", "kniga.epub")
 
 	if result != expected {
@@ -120,10 +121,9 @@ func TestBuildOutputPath_Transliterate(t *testing.T) {
 }
 
 func TestDetermineOutputDir_NoDirs(t *testing.T) {
-	c := setupTestContentForPath(t)
 	env := setupTestEnvForOutputPath(t, true, false, config.OutputFmtEpub3, "")
 
-	result := c.determineOutputDir("books/author/book.fb2", "/output", env)
+	result := determineOutputDir("books/author/book.fb2", "/output", env)
 	expected := "/output"
 
 	if result != expected {
@@ -132,10 +132,9 @@ func TestDetermineOutputDir_NoDirs(t *testing.T) {
 }
 
 func TestDetermineOutputDir_WithDirs(t *testing.T) {
-	c := setupTestContentForPath(t)
 	env := setupTestEnvForOutputPath(t, false, false, config.OutputFmtEpub3, "")
 
-	result := c.determineOutputDir("books/author/book.fb2", "/output", env)
+	result := determineOutputDir("books/author/book.fb2", "/output", env)
 	expected := filepath.Join("/output", "books", "author")
 
 	if result != expected {
@@ -160,10 +159,9 @@ func TestBuildDefaultFileName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := setupTestContentForPath(t)
 			env := setupTestEnvForOutputPath(t, true, tt.transliterate, tt.format, "")
 
-			result := c.buildDefaultFileName(tt.src, env)
+			result := buildDefaultFileName(tt.src, tt.format, env)
 			if result != tt.expected {
 				t.Errorf("buildDefaultFileName() = %q, want %q", result, tt.expected)
 			}
@@ -183,10 +181,9 @@ func TestGetFileExtension(t *testing.T) {
 		{"KFX", config.OutputFmtKfx, ".kfx"},
 	}
 
-	c := setupTestContentForPath(t)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := c.getFileExtension(tt.format)
+			result := getFileExtension(tt.format)
 			if result != tt.want {
 				t.Errorf("getFileExtension() = %q, want %q", result, tt.want)
 			}
@@ -201,8 +198,7 @@ func TestGetFileExtension_Panic(t *testing.T) {
 		}
 	}()
 
-	c := setupTestContentForPath(t)
-	_ = c.getFileExtension(config.OutputFmt(999))
+	_ = getFileExtension(config.OutputFmt(999))
 }
 
 func TestSplitAndCleanPath(t *testing.T) {
@@ -218,10 +214,9 @@ func TestSplitAndCleanPath(t *testing.T) {
 		{"empty path", "", []string{}},
 	}
 
-	c := setupTestContentForPath(t)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := c.splitAndCleanPath(tt.path)
+			result := splitAndCleanPath(tt.path)
 			if len(result) != len(tt.expected) {
 				t.Errorf("splitAndCleanPath() length = %d, want %d", len(result), len(tt.expected))
 				return
@@ -250,10 +245,9 @@ func TestCleanPathSegment(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := setupTestContentForPath(t)
 			env := setupTestEnvForOutputPath(t, true, tt.transliterate, config.OutputFmtEpub3, "")
 
-			result := c.cleanPathSegment(tt.segment, env)
+			result := cleanPathSegment(tt.segment, env)
 			if result != tt.expected {
 				t.Errorf("cleanPathSegment() = %q, want %q", result, tt.expected)
 			}
@@ -306,25 +300,23 @@ func TestBuildPathFromTemplate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := setupTestContentForPath(t)
 			env := setupTestEnvForOutputPath(t, true, tt.transliterate, tt.format, "")
 
-			result := c.buildPathFromTemplate(tt.outDir, tt.expandedName, env)
+			result := assemblePathWithSubdirs(tt.outDir, tt.expandedName, tt.format, env)
 			if result != tt.expected {
-				t.Errorf("buildPathFromTemplate() = %q, want %q", result, tt.expected)
+				t.Errorf("assemblePathWithSubdirs() = %q, want %q", result, tt.expected)
 			}
 		})
 	}
 }
 
 func TestBuildPathFromTemplate_EmptyPath(t *testing.T) {
-	c := setupTestContentForPath(t)
 	env := setupTestEnvForOutputPath(t, true, false, config.OutputFmtEpub3, "")
 
-	result := c.buildPathFromTemplate("/output", "", env)
+	result := assemblePathWithSubdirs("/output", "", config.OutputFmtEpub3, env)
 	expected := "/output"
 
 	if result != expected {
-		t.Errorf("buildPathFromTemplate() with empty path = %q, want %q", result, expected)
+		t.Errorf("assemblePathWithSubdirs() with empty path = %q, want %q", result, expected)
 	}
 }

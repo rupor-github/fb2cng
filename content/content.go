@@ -1,4 +1,4 @@
-package convert
+package content
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"golang.org/x/net/html/charset"
 
 	"fbc/config"
-	"fbc/convert/text"
+	"fbc/content/text"
 	"fbc/fb2"
 	"fbc/misc"
 	"fbc/state"
@@ -25,40 +25,24 @@ import (
 // schemas. https://github.com/gribuser/fb2.git commit
 // 4d3740e319039911c30d291abb0c8b26ec99703b
 type Content struct {
-	srcName string
-	doc     *etree.Document
+	SrcName      string
+	Doc          *etree.Document
+	OutputFormat config.OutputFmt
 
-	book           *fb2.FictionBook
-	coverID        string
-	footnotesIndex fb2.FootnoteRefs
-	imagesIndex    fb2.BookImages
-	idsIndex       fb2.IDIndex
-	linksRevIndex  fb2.ReverseLinkIndex
+	Book           *fb2.FictionBook
+	CoverID        string
+	FootnotesIndex fb2.FootnoteRefs
+	ImagesIndex    fb2.BookImages
+	IDsIndex       fb2.IDIndex
+	LinksRevIndex  fb2.ReverseLinkIndex
 
-	splitter *text.Splitter
-	hyphen   *text.Hyphenator
-	tmpDir   string
+	Splitter *text.Splitter
+	Hyphen   *text.Hyphenator
+	TmpDir   string
 }
 
-// Accessor methods to expose Content fields to avoid cyclic imports in
-// generator packages
-
-func (c *Content) Book() *fb2.FictionBook { return c.book }
-
-func (c *Content) CoverID() string { return c.coverID }
-
-func (c *Content) FootnotesIndex() fb2.FootnoteRefs { return c.footnotesIndex }
-
-func (c *Content) ImagesIndex() fb2.BookImages { return c.imagesIndex }
-
-func (c *Content) IDsIndex() fb2.IDIndex { return c.idsIndex }
-
-func (c *Content) LinksRevIndex() fb2.ReverseLinkIndex { return c.linksRevIndex }
-
-func (c *Content) WorkDir() string { return c.tmpDir }
-
-// prepareContent reads, parses, and prepares FB2 content for conversion.
-func prepareContent(ctx context.Context, r io.Reader, srcName string, kindle bool, log *zap.Logger) (*Content, error) {
+// Prepare reads, parses, and prepares FB2 content for conversion.
+func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat config.OutputFmt, log *zap.Logger) (*Content, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -169,7 +153,7 @@ func prepareContent(ctx context.Context, r io.Reader, srcName string, kindle boo
 
 	// Process all binary objects creating actual images and reference index
 	// This happens after NormalizeLinks so the not-found image binary is included
-	allImages, err := book.PrepareImages(kindle, &env.Cfg.Document.Images, log)
+	allImages, err := book.PrepareImages(outputFormat.ForKindle(), &env.Cfg.Document.Images, log)
 	if err != nil {
 		return nil, fmt.Errorf("unable to prepare images: %w", err)
 	}
@@ -177,36 +161,37 @@ func prepareContent(ctx context.Context, r io.Reader, srcName string, kindle boo
 	// Filter images to only include those that are actually referenced
 	imagesIndex := filterReferencedImages(allImages, links, coverID, log)
 
-	content := &Content{
-		srcName:        srcName,
-		doc:            doc,
-		book:           book,
-		coverID:        coverID,
-		footnotesIndex: footnotes,
-		imagesIndex:    imagesIndex,
-		idsIndex:       ids,
-		linksRevIndex:  links,
-		tmpDir:         tmpDir,
+	c := &Content{
+		SrcName:        srcName,
+		Doc:            doc,
+		OutputFormat:   outputFormat,
+		Book:           book,
+		CoverID:        coverID,
+		FootnotesIndex: footnotes,
+		ImagesIndex:    imagesIndex,
+		IDsIndex:       ids,
+		LinksRevIndex:  links,
+		TmpDir:         tmpDir,
 	}
 
 	if env.Cfg.Document.InsertSoftHyphen {
-		content.hyphen = text.NewHyphenator(book.Description.TitleInfo.Lang, log)
+		c.Hyphen = text.NewHyphenator(book.Description.TitleInfo.Lang, log)
 	}
 
 	// TODO: old converter only turned on sentences tokenizer for kepub (where
 	// actual sentences are used), should I keep the same logic?
-	if env.OutputFormat == config.OutputFmtKepub {
-		content.splitter = text.NewSplitter(book.Description.TitleInfo.Lang, log)
+	if outputFormat == config.OutputFmtKepub {
+		c.Splitter = text.NewSplitter(book.Description.TitleInfo.Lang, log)
 	}
 
 	// Save prepared document to file for debugging
 	if env.Rpt != nil {
-		if err := os.WriteFile(filepath.Join(tmpDir, baseSrcName+"_prepared"), []byte(content.String()), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(tmpDir, baseSrcName+"_prepared"), []byte(c.String()), 0644); err != nil {
 			return nil, fmt.Errorf("unable to write prepared doc for debugging: %w", err)
 		}
 	}
 
-	return content, nil
+	return c, nil
 }
 
 // filterReferencedImages returns only images that are actually referenced in the book
