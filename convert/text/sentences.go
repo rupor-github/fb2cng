@@ -6,7 +6,6 @@ import (
 	"embed"
 	"io"
 	"iter"
-	"os"
 	"strings"
 	"unicode"
 
@@ -17,72 +16,69 @@ import (
 )
 
 //go:embed sentences/*.gz
-var dataFiles embed.FS
+var modelFiles embed.FS
 
 type Splitter struct {
 	*sentences.DefaultSentenceTokenizer
 }
 
-func getCompressedData(name string) ([]byte, error) {
-	data, err := dataFiles.ReadFile(name)
+func getCompressedModelData(name string) ([]byte, error) {
+	data, err := modelFiles.ReadFile(name)
 	if err != nil {
-		if !os.IsNotExist(err) {
-			return nil, err
-		}
-		return nil, nil
+		return nil, err
 	}
-	return data, nil
-}
-
-func uncompressData(data []byte) ([]byte, error) {
 	r, err := gzip.NewReader(bytes.NewBuffer(data))
 	if err != nil {
 		return nil, err
 	}
-	buf := new(bytes.Buffer)
-	if _, err := io.Copy(buf, r); err != nil {
+	defer r.Close()
+	return io.ReadAll(r)
+}
+
+func tryLoadModel(name string) ([]byte, error) {
+	fileName := "sentences/" + name + ".json.gz"
+	data, err := getCompressedModelData(fileName)
+	if err != nil {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+	return data, nil
 }
 
 func NewSplitter(lang language.Tag, log *zap.Logger) *Splitter {
+	var data []byte
+	var err error
 
-	fileName := "sentences/" + strings.ToLower(display.English.Languages().Name(lang)) + ".json.gz"
-	data, err := getCompressedData(fileName)
-	if err != nil {
-		log.Warn("Unable to read sentence tokenizer data", zap.Stringer("tag", lang),
-			zap.String("file name", fileName), zap.Error(err))
-		return nil
-	}
-
-	if len(data) == 0 {
-		base, confidence := lang.Base()
-		if confidence == language.No {
-			log.Warn("Unable to determine language base", zap.Stringer("tag", lang), zap.Stringer("base", base))
-			return nil
-		}
-		fileName = "sentences/" + strings.ToLower(base.String()) + ".json.gz"
-		data, err = getCompressedData(fileName)
+	// Try language tag using display name
+	name := strings.ToLower(display.English.Languages().Name(lang))
+	data, err = tryLoadModel(name)
+	if err == nil {
+		model, err := sentences.LoadTraining(data)
 		if err != nil {
-			log.Warn("Unable to read sentence tokenizer data", zap.Stringer("tag", lang), zap.Stringer("base", base),
-				zap.String("file name", fileName), zap.Error(err))
+			log.Warn("Unable to load sentences tokenizer data", zap.Stringer("tag", lang), zap.Error(err))
 			return nil
 		}
+		return &Splitter{sentences.NewSentenceTokenizer(model)}
 	}
 
-	data, err = uncompressData(data)
-	if err != nil {
-		log.Warn("Unable to uncompress sentences tokenizer data", zap.Stringer("tag", lang), zap.Error(err))
-		return nil
+	// Try base language tag
+	base, confidence := lang.Base()
+	if confidence != language.No {
+		name = strings.ToLower(base.String())
+		data, err = tryLoadModel(name)
+		if err == nil {
+			model, err := sentences.LoadTraining(data)
+			if err != nil {
+				log.Warn("Unable to load sentences tokenizer data", zap.Stringer("tag", lang), zap.Error(err))
+				return nil
+			}
+			return &Splitter{sentences.NewSentenceTokenizer(model)}
+		}
+	} else {
+		log.Warn("Unable to determine language base", zap.Stringer("tag", lang), zap.Stringer("base", base))
 	}
 
-	model, err := sentences.LoadTraining(data)
-	if err != nil {
-		log.Warn("Unable to load sentences tokenizer data", zap.Stringer("tag", lang), zap.Error(err))
-		return nil
-	}
-	return &Splitter{sentences.NewSentenceTokenizer(model)}
+	log.Warn("Unable to find suitable sentence tokenizer model, turning off sentence splitting", zap.Stringer("language", lang))
+	return nil
 }
 
 // Split returns slice of sentences.
