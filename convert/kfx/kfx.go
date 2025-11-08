@@ -23,6 +23,7 @@ type contentReader interface {
 	FootnotesIndex() fb2.FootnoteRefs
 	IDsIndex() fb2.IDIndex
 	LinksRevIndex() fb2.ReverseLinkIndex
+	WorkDir() string
 }
 
 // New creates a new KFX generator.

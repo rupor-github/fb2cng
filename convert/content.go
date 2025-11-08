@@ -55,6 +55,8 @@ func (c *Content) IDsIndex() fb2.IDIndex { return c.idsIndex }
 
 func (c *Content) LinksRevIndex() fb2.ReverseLinkIndex { return c.linksRevIndex }
 
+func (c *Content) WorkDir() string { return c.tmpDir }
+
 // prepareContent reads, parses, and prepares FB2 content for conversion.
 func prepareContent(ctx context.Context, r io.Reader, srcName string, kindle bool, log *zap.Logger) (*Content, error) {
 	if err := ctx.Err(); err != nil {
@@ -184,7 +186,7 @@ func prepareContent(ctx context.Context, r io.Reader, srcName string, kindle boo
 		imagesIndex:    imagesIndex,
 		idsIndex:       ids,
 		linksRevIndex:  links,
-		tmpDir:         tmpDir, // do we need to keep it here?
+		tmpDir:         tmpDir,
 	}
 
 	if env.Cfg.Document.InsertSoftHyphen {
