@@ -166,7 +166,7 @@ tasks:
       - wget -q -r -l1 --no-parent -nd -A.hyp.txt http://ctan.math.utah.edu/ctan/tex-archive/language/hyph-utf8/tex/patterns/txt
       - gzip -q -f hyph-*.txt
     status:
-      - find -type f -name 'hyph-*.txt.gz' | grep -q .
+      - find -type f -name 'hyph-*.txt.gz' | read
 
   get-sentences:
     internal: true
@@ -178,7 +178,7 @@ tasks:
     cmds:
       - rm -f *.json
       - echo "{{.TATN}}Downloading NLTK training data from \"neurosnap/sentences\"{{.TOFF}}"
-      - curl -s -L https://api.github.com/repos/neurosnap/sentences/tarball | tar xz --wildcards '*/data/*.json' --strip-components=2
+      - wget -q -O - https://api.github.com/repos/neurosnap/sentences/tarball | tar xz --wildcards '*/data/*.json' --strip-components=2
       - gzip -q -f *.json
     status:
       - |
@@ -186,7 +186,7 @@ tasks:
           -not -name 'russian.json.gz' \
           -not -name 'icelandic.json.gz' \
           -not -name 'korean.json.gz' \
-          -not -name 'hungarian.json.gz' | grep -q .
+          -not -name 'hungarian.json.gz' | read
 
   generate-enums:
     internal: true
