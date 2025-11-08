@@ -26,7 +26,7 @@ func TestBuildFictionBookFromSample(t *testing.T) {
 	if len(book.Description.TitleInfo.Authors) != 3 {
 		t.Fatalf("expected 3 authors, got %d", len(book.Description.TitleInfo.Authors))
 	}
-	if book.Description.TitleInfo.Lang != "ru" {
+	if book.Description.TitleInfo.Lang.String() != "ru" {
 		t.Fatalf("expected title-info lang ru, got %q", book.Description.TitleInfo.Lang)
 	}
 	if book.Description.TitleInfo.BookTitle.Value == "" {

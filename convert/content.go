@@ -13,6 +13,8 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/net/html/charset"
 
+	"fbc/config"
+	"fbc/convert/text"
 	"fbc/fb2"
 	"fbc/misc"
 	"fbc/state"
@@ -33,7 +35,9 @@ type Content struct {
 	idsIndex       fb2.IDIndex
 	linksRevIndex  fb2.ReverseLinkIndex
 
-	tmpDir string
+	splitter *text.Splitter
+	hyphen   *text.Hyphenator
+	tmpDir   string
 }
 
 // Accessor methods to expose Content fields to avoid cyclic imports in
@@ -181,6 +185,16 @@ func prepareContent(ctx context.Context, r io.Reader, srcName string, kindle boo
 		idsIndex:       ids,
 		linksRevIndex:  links,
 		tmpDir:         tmpDir, // do we need to keep it here?
+	}
+
+	if env.Cfg.Document.InsertSoftHyphen {
+		content.hyphen = text.NewHyphenator(book.Description.TitleInfo.Lang, log)
+	}
+
+	// TODO: old converter only turned on sentences tokenizer for kepub (where
+	// actual sentences are used), should I keep the same logic?
+	if env.OutputFormat == config.OutputFmtKepub {
+		content.splitter = text.NewSplitter(book.Description.TitleInfo.Lang, log)
 	}
 
 	// Save prepared document to file for debugging

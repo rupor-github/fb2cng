@@ -12,7 +12,7 @@ version: 1
 #     first level is dropped.
 # - .Language (string) - cannonical string representation of a language as specified in fb2 metainformation
 # - .Date (string) - date as specified in fb2 metainformation.
-#     NOTE: If valid xs:date "value" attribute is provided - it will be used, otherwide just text as defined 
+#     NOTE: If valid xs:date "value" attribute is provided - it will be used, otherwide just text as defined
 # - .Authors (array of { .FirstName (string), .MiddleName (string), .LastName (string)}) as specified in fb2 metainformation
 # - .Format (string) - string representing requested conversion (ex: epub, azw3, kepub...)
 # - .SourceFile (string) - base part of the source file name (no path, no extension)
@@ -48,6 +48,11 @@ document:
 
   #---- Slugify/transliterate output file name - after all other processing on file name is completed
   file_name_transliterate: false
+
+  # Insert soft hyphen symbols '\u00AD' inside words - for devices which do not support proper hyphenation
+  # NOTE: it may conflict with built-in viewer hyphenation, for example modern day Kindles always have
+  # hyphenation turned on for Russian language (and off for English)
+  insert_soft_hyphen: false
 
   images:
     # Do not skip images which cannot be decoded by program. Use them without

@@ -67,7 +67,7 @@ func (tw treeWriter) titleInfo(depth int, label string, info *TitleInfo) {
 	if info == nil {
 		return
 	}
-	tw.Line(depth, "%s lang=%q srcLang=%q", label, info.Lang, info.SrcLang)
+	tw.Line(depth, "%s lang=%q srcLang=%q", label, info.Lang.String(), info.SrcLang.String())
 	for i := range info.Genres {
 		g := info.Genres[i]
 		tw.Line(depth+1, "Genre[%d] value=%q match=%d", i, g.Value, g.Match)

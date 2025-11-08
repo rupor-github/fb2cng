@@ -43,6 +43,7 @@ type (
 		FixZip                bool            `yaml:"fix_zip"`
 		OutputNameTemplate    string          `yaml:"output_name_template"`
 		FileNameTransliterate bool            `yaml:"file_name_transliterate"`
+		InsertSoftHyphen      bool            `yaml:"insert_soft_hyphen"`
 		Images                ImagesConfig    `yaml:"images"`
 		Footnotes             FootnotesConfig `yaml:"footnotes"`
 	}

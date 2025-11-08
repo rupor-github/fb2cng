@@ -100,7 +100,7 @@ func (c *Content) expandTemplate(name config.TemplateFieldName, field string, fo
 		Context:    string(name),
 		Title:      c.book.Description.TitleInfo.BookTitle.Value,
 		Series:     buildSequences(c.book.Description.TitleInfo.Sequences),
-		Language:   c.book.Description.TitleInfo.Lang,
+		Language:   c.book.Description.TitleInfo.Lang.String(),
 		Date:       buildDate(c.book.Description.TitleInfo.Date),
 		Authors:    buildAuthors(c.book.Description.TitleInfo.Authors),
 		Format:     format.String(),

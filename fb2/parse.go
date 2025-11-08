@@ -11,6 +11,8 @@ import (
 
 	"github.com/beevik/etree"
 	"go.uber.org/zap"
+	"golang.org/x/text/language"
+	"golang.org/x/text/language/display"
 )
 
 // XML parsing functions for FictionBook2 format.
@@ -171,9 +173,9 @@ func parseTitleInfo(el *etree.Element, log *zap.Logger) (TitleInfo, error) {
 				info.Coverpage = append(info.Coverpage, parseInlineImage(img, log))
 			}
 		case "lang":
-			info.Lang = strings.TrimSpace(child.Text())
+			info.Lang = parseBookLang(child.Text(), log)
 		case "src-lang":
-			info.SrcLang = strings.TrimSpace(child.Text())
+			info.SrcLang = parseBookLang(child.Text(), log)
 		case "translator":
 			info.Translators = append(info.Translators, parseAuthor(child, log))
 		case "sequence":
@@ -182,6 +184,27 @@ func parseTitleInfo(el *etree.Element, log *zap.Logger) (TitleInfo, error) {
 		}
 	}
 	return info, nil
+}
+
+func parseBookLang(in string, log *zap.Logger) language.Tag {
+	lang := strings.TrimSpace(in)
+	if lang == "" {
+		return language.Und
+	}
+
+	tag, err := language.Parse(lang)
+	if err == nil {
+		return tag
+	}
+
+	// last resort - try names directly
+	for _, supportedTag := range display.Supported.Tags() {
+		if strings.EqualFold(display.Self.Name(supportedTag), lang) {
+			return supportedTag
+		}
+	}
+	log.Warn("Unable to parse book language", zap.String("lang", lang))
+	return language.Und
 }
 
 func parseAuthor(el *etree.Element, _ *zap.Logger) Author {

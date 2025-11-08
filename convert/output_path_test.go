@@ -7,6 +7,7 @@ import (
 	"github.com/beevik/etree"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
+	"golang.org/x/text/language"
 
 	"fbc/config"
 	"fbc/fb2"
@@ -42,7 +43,7 @@ func setupTestContentForPath(t *testing.T) *Content {
 			Description: fb2.Description{
 				TitleInfo: fb2.TitleInfo{
 					BookTitle: fb2.TextField{Value: "Test Book"},
-					Lang:      "en",
+					Lang:      language.MustParse("en"),
 					Authors: []fb2.Author{
 						{FirstName: "John", LastName: "Doe"},
 					},

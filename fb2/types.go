@@ -2,6 +2,8 @@ package fb2
 
 import (
 	"time"
+
+	"golang.org/x/text/language"
 )
 
 // Type definitions for FictionBook2 format structures.
@@ -63,8 +65,8 @@ type TitleInfo struct {
 	Keywords    *TextField
 	Date        *Date
 	Coverpage   []InlineImage
-	Lang        string
-	SrcLang     string
+	Lang        language.Tag
+	SrcLang     language.Tag
 	Translators []Author
 	Sequences   []Sequence
 }

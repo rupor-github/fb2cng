@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/beevik/etree"
+	"golang.org/x/text/language"
 
 	"fbc/config"
 	"fbc/fb2"
@@ -18,7 +19,7 @@ func setupTestContentForTemplate(t *testing.T, book *fb2.FictionBook, srcName st
 			Description: fb2.Description{
 				TitleInfo: fb2.TitleInfo{
 					BookTitle: fb2.TextField{Value: "Test Book"},
-					Lang:      "en",
+					Lang:      language.MustParse("en"),
 				},
 				DocumentInfo: fb2.DocumentInfo{
 					ID: "test-id",
@@ -153,7 +154,7 @@ func TestExpandTemplate_Language(t *testing.T) {
 		Description: fb2.Description{
 			TitleInfo: fb2.TitleInfo{
 				BookTitle: fb2.TextField{Value: "Book"},
-				Lang:      "ru",
+				Lang:      language.MustParse("ru"),
 			},
 			DocumentInfo: fb2.DocumentInfo{
 				ID: "test-id",
@@ -255,7 +256,7 @@ func TestExpandTemplate_ComplexTemplate(t *testing.T) {
 				Sequences: []fb2.Sequence{
 					{Name: "Epic Series", Number: &num},
 				},
-				Lang: "en",
+				Lang: language.MustParse("en"),
 			},
 			DocumentInfo: fb2.DocumentInfo{
 				ID: "test-id",
