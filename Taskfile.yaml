@@ -256,6 +256,10 @@ tasks:
       - ./**/*.mod
       - ./**/*.sum
       - ./**/*.yaml.tmpl
+      - ./**/*.jpeg
+      - ./**/*.png
+      - ./convert/text/dictionaries/*.gz
+      - ./convert/text/sentences/*.gz
     generates:
       - '{{.TARGET}}'
 
