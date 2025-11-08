@@ -33,6 +33,8 @@ tasks:
     deps:
       - task: pre-commit-install
       - task: generate-project-version
+      - task: get-dictionaries
+      - task: get-sentences
       - task: generate-enums
     cmds:
       - task: go-build
@@ -47,7 +49,7 @@ tasks:
       You can specify what tests to run by using PACKAGES environment variable, for example: "PACKAGES='./module1,./module2' task test".
       You can pass any additional parameters supported by "go test", for example: "PACKAGES='./module' task test -- -run=TestFuncPattern".
     platforms: [linux]
-    deps: [generate-project-version, generate-enums]
+    deps: [generate-project-version, get-dictionaries, get-sentences, generate-enums]
     vars:
       TEST_DIR: "{{.ROOT_DIR}}/{{.DEV_BUILD_DIR}}/tests_results"
       DIRS_WITH_TESTS:
@@ -60,7 +62,7 @@ tasks:
           echo
           echo "{{.TATN}}{{clean .ITEM}} tests...{{.TOFF}}"
           echo
-          go test -mod=mod -v -coverprofile='{{.TEST_DIR}}/test_{{replace "/" "_" (clean .ITEM)}}_coverage.out' {{.CLI_ARGS}} '{{.ITEM}}'
+          go test -mod=mod -coverprofile='{{.TEST_DIR}}/test_{{replace "/" "_" (clean .ITEM)}}_coverage.out' {{.CLI_ARGS}} '{{.ITEM}}'
 
   bench:
     desc: |
@@ -69,7 +71,7 @@ tasks:
       You can specify what packages to benchmark by using PACKAGES environment variable, for example: "PACKAGES='./module1,./module2' task bench".
       You can pass any additional parameters supported by "go test", for example: "PACKAGES='./module1' task bench -- -bench=BenchmarkFuncPattern -benchmem".
     platforms: [linux]
-    deps: [generate-project-version, generate-enums]
+    deps: [generate-project-version, get-dictionaries, get-sentences, generate-enums]
     vars:
       TEST_DIR: "{{.ROOT_DIR}}/{{.DEV_BUILD_DIR}}/tests_results"
       DIRS_WITH_TESTS:
@@ -90,7 +92,7 @@ tasks:
       You could specify anything in the project, for example "task escape -- ./module1".
       If no package is specified assumes "./cmd/{{.PRJ_NAME}}".
     platforms: [linux]
-    deps: [generate-project-version, generate-enums]
+    deps: [generate-project-version, get-dictionaries, get-sentences, generate-enums]
     cmds:
       - echo "{{.TATN}}Building binary with escape analisys enabled{{.TOFF}}"
       - go build -mod=mod -gcflags 'all=-m' -o /dev/null {{default (joinPath "./cmd/" .PRJ_NAME) .CLI_ARGS}}
@@ -99,7 +101,7 @@ tasks:
   release:
     desc: Cross-builds release for all supported platforms
     platforms: [linux]
-    deps: [generate-project-version, generate-enums]
+    deps: [generate-project-version, get-dictionaries, get-sentences, generate-enums]
     cmds:
       - mkdir -p '{{.REL_BUILD_DIR}}'
       - for:
@@ -149,6 +151,42 @@ tasks:
       - 7z a -r -bd -bso0 -tzip {{.REL_NAME}} ./{{.BUILD_DIR}}/*
     status:
       - test -f '{{.REL_NAME}}.zip'
+
+  get-dictionaries:
+    internal: true
+    run: once
+    desc: Get dictionary rules for all supported languages
+    vars:
+      DIR: 'convert/text/dictionaries'
+    dir: '{{.DIR}}'
+    cmds:
+      - rm -f *.txt
+      - echo "{{.TATN}}Downloading dictionary patterns from \"ctan.math.utah.edu\"{{.TOFF}}"
+      - wget -q -r -l1 --no-parent -nd -A.pat.txt http://ctan.math.utah.edu/ctan/tex-archive/language/hyph-utf8/tex/patterns/txt
+      - wget -q -r -l1 --no-parent -nd -A.hyp.txt http://ctan.math.utah.edu/ctan/tex-archive/language/hyph-utf8/tex/patterns/txt
+      - gzip -q -f hyph-*.txt
+    status:
+      - find -type f -name 'hyph-*.txt.gz' | grep -q .
+
+  get-sentences:
+    internal: true
+    run: once
+    desc: Get NLTK training data
+    vars:
+      DIR: 'convert/text/sentences'
+    dir: '{{.DIR}}'
+    cmds:
+      - rm -f *.json
+      - echo "{{.TATN}}Downloading NLTK training data from \"neurosnap/sentences\"{{.TOFF}}"
+      - curl -s -L https://api.github.com/repos/neurosnap/sentences/tarball | tar xz --wildcards '*/data/*.json' --strip-components=2
+      - gzip -q -f *.json
+    status:
+      - |
+        find -type f -name '*.json.gz' \
+          -not -name 'russian.json.gz' \
+          -not -name 'icelandic.json.gz' \
+          -not -name 'korean.json.gz' \
+          -not -name 'hungarian.json.gz' | grep -q .
 
   generate-enums:
     internal: true

@@ -15,6 +15,7 @@ require (
 	github.com/gosimple/slug v1.15.0
 	github.com/h2non/filetype v1.1.3
 	github.com/maruel/natural v1.2.1
+	github.com/neurosnap/sentences v1.1.2
 	github.com/rupor-github/gencfg v1.0.11
 	github.com/urfave/cli/v3 v3.5.0
 	go.uber.org/multierr v1.11.0
