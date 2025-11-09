@@ -21,9 +21,9 @@ import (
 // structure on the output. If cleans up path and if requested transliterates
 // it
 func buildOutputPath(c *content.Content, src, dst string, env *state.LocalEnv) string {
-	outDir := determineOutputDir(src, dst, env)
-	defaultFile := buildDefaultFileName(src, c.OutputFormat, env)
+	outDir := makeOutputDir(src, dst, env)
 
+	defaultFile := makeDefaultFileName(src, c.OutputFormat, env)
 	if env.Cfg.Document.OutputNameTemplate == "" {
 		return filepath.Join(outDir, defaultFile)
 	}
@@ -34,36 +34,22 @@ func buildOutputPath(c *content.Content, src, dst string, env *state.LocalEnv) s
 		return filepath.Join(outDir, defaultFile)
 	}
 
-	return assemblePathWithSubdirs(outDir, expandedName, c.OutputFormat, env)
+	return makeFullPath(outDir, expandedName, c.OutputFormat, env)
 }
 
-func determineOutputDir(src, dst string, env *state.LocalEnv) string {
+func makeOutputDir(src, dst string, env *state.LocalEnv) string {
 	if env.NoDirs {
 		return dst
 	}
 	return filepath.Join(dst, filepath.Dir(src))
 }
 
-func buildDefaultFileName(src string, format config.OutputFmt, env *state.LocalEnv) string {
+func makeDefaultFileName(src string, format config.OutputFmt, env *state.LocalEnv) string {
 	baseName := strings.TrimSuffix(filepath.Base(src), filepath.Ext(src))
 	if env.Cfg.Document.FileNameTransliterate {
 		baseName = slug.Make(baseName)
 	}
-	return config.CleanFileName(baseName) + getFileExtension(format)
-}
-
-func getFileExtension(format config.OutputFmt) string {
-	switch format {
-	case config.OutputFmtKfx:
-		return ".kfx"
-	case config.OutputFmtEpub2, config.OutputFmtEpub3:
-		return ".epub"
-	case config.OutputFmtKepub:
-		return ".kepub.epub"
-	default:
-		// this should never happen
-		panic("unsupported format requested")
-	}
+	return config.CleanFileName(baseName) + format.Ext()
 }
 
 func expandOutputNameTemplate(c *content.Content, env *state.LocalEnv) string {
@@ -75,30 +61,27 @@ func expandOutputNameTemplate(c *content.Content, env *state.LocalEnv) string {
 	return filepath.FromSlash(expandedName)
 }
 
-// assemblePathWithSubdirs takes an expanded template name (which may contain
+// makeFullPath takes an expanded template name (which may contain
 // path separators for subdirectories) and assembles it into a full output path,
 // cleaning and transliterating segments as needed
-func assemblePathWithSubdirs(outDir, expandedName string, format config.OutputFmt, env *state.LocalEnv) string {
-	outExt := getFileExtension(format)
-	pathSegments := splitAndCleanPath(expandedName)
-
+func makeFullPath(outDir, expandedName string, format config.OutputFmt, env *state.LocalEnv) string {
+	pathSegments := splitPathSegments(expandedName)
 	if len(pathSegments) == 0 {
 		return outDir
 	}
 
-	fileName := cleanPathSegment(pathSegments[len(pathSegments)-1], env) + outExt
-	dirParts := make([]string, 0, len(pathSegments)+1)
-	dirParts = append(dirParts, outDir)
+	fileName := cleanPathSegment(pathSegments[len(pathSegments)-1], env) + format.Ext()
 
+	dirParts := append(make([]string, 0, len(pathSegments)+1), outDir)
 	for _, segment := range pathSegments[:len(pathSegments)-1] {
 		dirParts = append(dirParts, cleanPathSegment(segment, env))
 	}
-
 	dirParts = append(dirParts, fileName)
+
 	return filepath.Join(dirParts...)
 }
 
-func splitAndCleanPath(path string) []string {
+func splitPathSegments(path string) []string {
 	path = strings.TrimSuffix(path, string(os.PathSeparator))
 	segments := make([]string, 0, 8)
 

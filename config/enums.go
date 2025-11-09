@@ -15,3 +15,17 @@ type OutputFmt int
 func (o OutputFmt) ForKindle() bool {
 	return o == OutputFmtKfx
 }
+
+func (o OutputFmt) Ext() string {
+	switch o {
+	case OutputFmtKfx:
+		return ".kfx"
+	case OutputFmtEpub2, OutputFmtEpub3:
+		return ".epub"
+	case OutputFmtKepub:
+		return ".kepub.epub"
+	default:
+		// this should never happen
+		panic("unsupported format requested")
+	}
+}

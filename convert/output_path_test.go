@@ -123,7 +123,7 @@ func TestBuildOutputPath_Transliterate(t *testing.T) {
 func TestDetermineOutputDir_NoDirs(t *testing.T) {
 	env := setupTestEnvForOutputPath(t, true, false, config.OutputFmtEpub3, "")
 
-	result := determineOutputDir("books/author/book.fb2", "/output", env)
+	result := makeOutputDir("books/author/book.fb2", "/output", env)
 	expected := "/output"
 
 	if result != expected {
@@ -134,7 +134,7 @@ func TestDetermineOutputDir_NoDirs(t *testing.T) {
 func TestDetermineOutputDir_WithDirs(t *testing.T) {
 	env := setupTestEnvForOutputPath(t, false, false, config.OutputFmtEpub3, "")
 
-	result := determineOutputDir("books/author/book.fb2", "/output", env)
+	result := makeOutputDir("books/author/book.fb2", "/output", env)
 	expected := filepath.Join("/output", "books", "author")
 
 	if result != expected {
@@ -161,7 +161,7 @@ func TestBuildDefaultFileName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			env := setupTestEnvForOutputPath(t, true, tt.transliterate, tt.format, "")
 
-			result := buildDefaultFileName(tt.src, tt.format, env)
+			result := makeDefaultFileName(tt.src, tt.format, env)
 			if result != tt.expected {
 				t.Errorf("buildDefaultFileName() = %q, want %q", result, tt.expected)
 			}
@@ -169,39 +169,7 @@ func TestBuildDefaultFileName(t *testing.T) {
 	}
 }
 
-func TestGetFileExtension(t *testing.T) {
-	tests := []struct {
-		name   string
-		format config.OutputFmt
-		want   string
-	}{
-		{"EPUB2", config.OutputFmtEpub2, ".epub"},
-		{"EPUB3", config.OutputFmtEpub3, ".epub"},
-		{"KEPUB", config.OutputFmtKepub, ".kepub.epub"},
-		{"KFX", config.OutputFmtKfx, ".kfx"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := getFileExtension(tt.format)
-			if result != tt.want {
-				t.Errorf("getFileExtension() = %q, want %q", result, tt.want)
-			}
-		})
-	}
-}
-
-func TestGetFileExtension_Panic(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Errorf("getFileExtension() did not panic for unsupported format")
-		}
-	}()
-
-	_ = getFileExtension(config.OutputFmt(999))
-}
-
-func TestSplitAndCleanPath(t *testing.T) {
+func TestSplitPath(t *testing.T) {
 	tests := []struct {
 		name     string
 		path     string
@@ -216,7 +184,7 @@ func TestSplitAndCleanPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := splitAndCleanPath(tt.path)
+			result := splitPathSegments(tt.path)
 			if len(result) != len(tt.expected) {
 				t.Errorf("splitAndCleanPath() length = %d, want %d", len(result), len(tt.expected))
 				return
@@ -302,7 +270,7 @@ func TestBuildPathFromTemplate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			env := setupTestEnvForOutputPath(t, true, tt.transliterate, tt.format, "")
 
-			result := assemblePathWithSubdirs(tt.outDir, tt.expandedName, tt.format, env)
+			result := makeFullPath(tt.outDir, tt.expandedName, tt.format, env)
 			if result != tt.expected {
 				t.Errorf("assemblePathWithSubdirs() = %q, want %q", result, tt.expected)
 			}
@@ -313,7 +281,7 @@ func TestBuildPathFromTemplate(t *testing.T) {
 func TestBuildPathFromTemplate_EmptyPath(t *testing.T) {
 	env := setupTestEnvForOutputPath(t, true, false, config.OutputFmtEpub3, "")
 
-	result := assemblePathWithSubdirs("/output", "", config.OutputFmtEpub3, env)
+	result := makeFullPath("/output", "", config.OutputFmtEpub3, env)
 	expected := "/output"
 
 	if result != expected {
