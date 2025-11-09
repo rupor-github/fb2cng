@@ -11,6 +11,7 @@
 *.zip
 *.syso
 *.conf
+*.epub
 
 # build specific
 build/

@@ -26,6 +26,10 @@ type FootnoteRefs map[string]FootnoteRef
 type BookImage struct {
 	MimeType string
 	Data     []byte
+	Dim      struct {
+		Width  int
+		Height int
+	}
 }
 
 type BookImages map[string]*BookImage

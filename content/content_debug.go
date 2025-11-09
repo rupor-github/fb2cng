@@ -46,7 +46,7 @@ func (c *Content) String() string {
 		sort.Sort(natural.StringSlice(keys))
 		for _, k := range keys {
 			img := c.ImagesIndex[k]
-			tw.Line(1, "Image[%q] mime[%q] size[%d]", k, img.MimeType, len(img.Data))
+			tw.Line(1, "Image[%q] mime[%q] size[%d] dim[%dx%d]", k, img.MimeType, len(img.Data), img.Dim.Width, img.Dim.Height)
 		}
 		out += "\n" + tw.String()
 	}

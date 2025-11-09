@@ -5,12 +5,13 @@ import (
 
 	"go.uber.org/zap"
 
+	"fbc/config"
 	"fbc/content"
 )
 
 // Generate creates the KFX output file.
 // KFX is Amazon's proprietary format for Kindle devices.
-func Generate(ctx context.Context, c *content.Content, outputPath string, log *zap.Logger) error {
+func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *config.DocumentConfig, log *zap.Logger) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -24,6 +25,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, log *z
 
 	_ = c.Book
 	_ = c.CoverID
+	_ = cfg
 
 	return nil
 }

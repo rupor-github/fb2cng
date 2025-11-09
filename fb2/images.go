@@ -164,6 +164,8 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 	img, imgType, imgDecodingErr := image.Decode(bytes.NewReader(bo.Data))
 	if imgDecodingErr == nil {
 		bi.MimeType = mime.TypeByExtension("." + imgType)
+		bi.Dim.Width = img.Bounds().Dx()
+		bi.Dim.Height = img.Bounds().Dy()
 	}
 
 	// Scaling cover image
@@ -179,17 +181,22 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 			if img.Bounds().Dy() >= h {
 				break
 			}
-			w = 0
-			fallthrough
-		case config.ImageResizeModeStretch:
-			if img.Bounds().Dy() >= h && w != 0 && img.Bounds().Dx() >= w {
-				break
+			resizedImg := imaging.Resize(img, 0, h, imaging.Lanczos)
+			if resizedImg == nil {
+				return bo.handleResizeError(bi, cfg, log)
 			}
+			img = resizedImg
+			bi.Dim.Width = img.Bounds().Dx()
+			bi.Dim.Height = img.Bounds().Dy()
+			imageChanged = true
+		case config.ImageResizeModeStretch:
 			resizedImg := imaging.Resize(img, w, h, imaging.Lanczos)
 			if resizedImg == nil {
 				return bo.handleResizeError(bi, cfg, log)
 			}
 			img = resizedImg
+			bi.Dim.Width = img.Bounds().Dx()
+			bi.Dim.Height = img.Bounds().Dy()
 			imageChanged = true
 		}
 	}
@@ -206,6 +213,8 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 				return bo.handleResizeError(bi, cfg, log)
 			}
 			img = resizedImg
+			bi.Dim.Width = img.Bounds().Dx()
+			bi.Dim.Height = img.Bounds().Dy()
 			imageChanged = true
 		}
 	}

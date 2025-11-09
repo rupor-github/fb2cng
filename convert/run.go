@@ -341,18 +341,18 @@ func processBook(ctx context.Context, r io.Reader, src string, dst string, forma
 	// Generate output in the requested format
 	switch c.OutputFormat {
 	case config.OutputFmtEpub2, config.OutputFmtEpub3, config.OutputFmtKepub:
-		if err := epub.Generate(ctx, c, outputName, log); err != nil {
+		if err := epub.Generate(ctx, c, outputName, &env.Cfg.Document, log); err != nil {
 			return fmt.Errorf("unable to generate output: %w", err)
 		}
 	case config.OutputFmtKfx:
-		if err := kfx.Generate(ctx, c, outputName, log); err != nil {
+		if err := kfx.Generate(ctx, c, outputName, &env.Cfg.Document, log); err != nil {
 			return fmt.Errorf("unable to generate output: %w", err)
 		}
 	}
 
 	// Store conversion result for debugging
 	if env.Rpt != nil {
-		env.Rpt.Store(fmt.Sprintf("fb2c-%s/%s", refID, filepath.Base(outputName)), outputName)
+		env.Rpt.Store(fmt.Sprintf("result-%s%s", refID, filepath.Ext(outputName)), outputName)
 	}
 
 	return nil
