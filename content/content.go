@@ -35,10 +35,9 @@ type Content struct {
 	ImagesIndex    fb2.BookImages
 	IDsIndex       fb2.IDIndex
 	LinksRevIndex  fb2.ReverseLinkIndex
-
-	Splitter *text.Splitter
-	Hyphen   *text.Hyphenator
-	WorkDir  string
+	Splitter       *text.Splitter
+	Hyphen         *text.Hyphenator
+	WorkDir        string
 }
 
 // Prepare reads, parses, and prepares FB2 content for conversion.
@@ -178,8 +177,8 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 		c.Hyphen = text.NewHyphenator(book.Description.TitleInfo.Lang, log)
 	}
 
-	// TODO: old converter only turned on sentences tokenizer for kepub (where
-	// actual sentences are used), should I keep the same logic?
+	// TODO: old converter only used sentences tokenizer for kepub (where
+	// actual sentences are necessary), should I keep the same logic?
 	if outputFormat == config.OutputFmtKepub {
 		c.Splitter = text.NewSplitter(book.Description.TitleInfo.Lang, log)
 	}

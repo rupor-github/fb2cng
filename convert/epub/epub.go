@@ -11,6 +11,10 @@ import (
 // Generate creates the EPUB output file.
 // It handles epub2, epub3, and kepub variants based on content.OutputFormat.
 func Generate(ctx context.Context, c *content.Content, outputPath string, log *zap.Logger) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	log.Info("Generating EPUB", zap.Stringer("format", c.OutputFormat), zap.String("output", outputPath))
 
 	// TODO: Implement EPUB generation logic

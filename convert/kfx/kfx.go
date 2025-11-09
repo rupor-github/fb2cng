@@ -11,6 +11,10 @@ import (
 // Generate creates the KFX output file.
 // KFX is Amazon's proprietary format for Kindle devices.
 func Generate(ctx context.Context, c *content.Content, outputPath string, log *zap.Logger) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	log.Info("Generating KFX", zap.String("output", outputPath))
 
 	// TODO: Implement KFX generation logic
