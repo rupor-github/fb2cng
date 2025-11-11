@@ -29,7 +29,11 @@ type chapterData struct {
 	Filename string
 	Title    string
 	Doc      *etree.Document
+	Section  *fb2.Section // Reference to source section for TOC hierarchy
 }
+
+// idToFileMap maps element IDs to the chapter filename containing them
+type idToFileMap map[string]string
 
 // Generate creates the EPUB output file.
 // It handles epub2, epub3, and kepub variants based on content.OutputFormat.
@@ -61,10 +65,13 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		return fmt.Errorf("unable to write container: %w", err)
 	}
 
-	chapters, err := convertToXHTML(ctx, c, log)
+	chapters, idToFile, err := convertToXHTML(ctx, c, log)
 	if err != nil {
 		return fmt.Errorf("unable to convert content: %w", err)
 	}
+
+	// Fix internal links to include chapter filenames
+	fixInternalLinks(chapters, idToFile, log)
 
 	for _, chapter := range chapters {
 		if err := writeXHTMLChapter(zw, &chapter, log); err != nil {
@@ -132,65 +139,149 @@ func writeContainer(zw *zip.Writer) error {
 	return writeXMLToZip(zw, "META-INF/container.xml", doc)
 }
 
-func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([]chapterData, error) {
+func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([]chapterData, idToFileMap, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var chapters []chapterData
 	chapterNum := 0
+	idToFile := make(idToFileMap)
+	var footnoteBodies []*fb2.Body
 
-	for _, body := range c.Book.Bodies {
-		if !body.Main() {
-			continue
-		}
+	for i := range c.Book.Bodies {
+		body := &c.Book.Bodies[i]
+		// Process main and other bodies (not footnotes)
+		if !body.Footnotes() {
+			// If body has title, create a chapter for body intro content
+			if body.Title != nil {
+				chapterNum++
+				chapterID := fmt.Sprintf("index%05d", chapterNum)
+				filename := fmt.Sprintf("%s.xhtml", chapterID)
 
-		for _, section := range body.Sections {
-			if err := ctx.Err(); err != nil {
-				return nil, err
+				var title string
+				for _, item := range body.Title.Items {
+					if item.Paragraph != nil {
+						title = paragraphToPlainText(item.Paragraph)
+						break
+					}
+				}
+				if title == "" {
+					title = "Untitled"
+				}
+
+				doc, err := bodyIntroToXHTML(c, body, title, log)
+				if err != nil {
+					log.Error("Unable to convert body intro", zap.Error(err))
+				} else {
+					chapters = append(chapters, chapterData{
+						ID:       chapterID,
+						Filename: filename,
+						Title:    title,
+						Doc:      doc,
+					})
+					collectIDsFromBody(body, filename, idToFile)
+				}
 			}
 
-			collectChapters(&section, &chapters, &chapterNum, c, log)
+			// Process only top-level sections as chapters
+			for i := range body.Sections {
+				section := &body.Sections[i]
+				if err := ctx.Err(); err != nil {
+					return nil, nil, err
+				}
+
+				chapterNum++
+				chapterID := fmt.Sprintf("index%05d", chapterNum)
+				filename := fmt.Sprintf("%s.xhtml", chapterID)
+				title := extractTitle(section)
+
+				doc, err := sectionToXHTML(c, section, title, log)
+				if err != nil {
+					log.Error("Unable to convert section", zap.Error(err))
+					continue
+				}
+
+				chapters = append(chapters, chapterData{
+					ID:       chapterID,
+					Filename: filename,
+					Title:    title,
+					Doc:      doc,
+					Section:  section,
+				})
+				collectIDsFromSection(section, filename, idToFile)
+			}
+		} else {
+			// Collect footnote bodies for later processing
+			footnoteBodies = append(footnoteBodies, body)
 		}
 	}
 
-	return chapters, nil
-}
+	// Process all footnote bodies as a single chapter
+	if len(footnoteBodies) > 0 {
+		if err := ctx.Err(); err != nil {
+			return nil, nil, err
+		}
 
-func collectChapters(section *fb2.Section, chapters *[]chapterData, chapterNum *int, c *content.Content, log *zap.Logger) {
-	if section.Title != nil {
-		*chapterNum++
-		chapterID := fmt.Sprintf("index%05d", *chapterNum)
-		filename := fmt.Sprintf("%s.xhtml", chapterID)
-		title := extractTitle(section)
+		chapterNum++
+		chapterID := fmt.Sprintf("index%05d", chapterNum)
+		filename := "footnotes.xhtml"
+		
+		// Extract title from first footnote body
+		var title string
+		if footnoteBodies[0].Title != nil {
+			for _, item := range footnoteBodies[0].Title.Items {
+				if item.Paragraph != nil {
+					title = paragraphToPlainText(item.Paragraph)
+					break
+				}
+			}
+		}
+		if title == "" {
+			title = "Notes"
+		}
 
-		doc, err := sectionToXHTML(c, section, title, log)
+		doc, err := footnotesBodiesToXHTML(c, footnoteBodies, title, log)
 		if err != nil {
-			log.Error("Unable to convert section", zap.Error(err))
-			return
+			log.Error("Unable to convert footnotes", zap.Error(err))
+		} else {
+			chapters = append(chapters, chapterData{
+				ID:       chapterID,
+				Filename: filename,
+				Title:    title,
+				Doc:      doc,
+			})
+			// Collect IDs from all footnote bodies
+			for _, body := range footnoteBodies {
+				for i := range body.Sections {
+					collectIDsFromSection(&body.Sections[i], filename, idToFile)
+				}
+			}
 		}
-
-		*chapters = append(*chapters, chapterData{
-			ID:       chapterID,
-			Filename: filename,
-			Title:    title,
-			Doc:      doc,
-		})
 	}
 
-	for _, item := range section.Content {
-		if item.Kind == fb2.FlowSection && item.Section != nil {
-			collectChapters(item.Section, chapters, chapterNum, c, log)
-		}
-	}
+	return chapters, idToFile, nil
 }
+
+
 
 func extractTitle(section *fb2.Section) string {
 	if section.Title != nil {
+		var buf strings.Builder
 		for _, item := range section.Title.Items {
 			if item.Paragraph != nil {
-				return paragraphToPlainText(item.Paragraph)
+				text := paragraphToPlainText(item.Paragraph)
+				if text != "" {
+					if buf.Len() > 0 {
+						buf.WriteString(" ")
+					}
+					buf.WriteString(text)
+				}
 			}
+		}
+		title := strings.TrimSpace(buf.String())
+		if title != "" {
+			return title
 		}
 	}
 	return "Chapter"
@@ -205,12 +296,48 @@ func paragraphToPlainText(p *fb2.Paragraph) string {
 }
 
 func inlineSegmentToText(seg *fb2.InlineSegment) string {
+	// Skip link elements completely for TOC text
+	if seg.Kind == fb2.InlineLink {
+		return ""
+	}
+
 	var buf strings.Builder
 	buf.WriteString(seg.Text)
 	for _, child := range seg.Children {
 		buf.WriteString(inlineSegmentToText(&child))
 	}
 	return buf.String()
+}
+
+func bodyIntroToXHTML(c *content.Content, body *fb2.Body, title string, log *zap.Logger) (*etree.Document, error) {
+	doc := etree.NewDocument()
+	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
+
+	html := doc.CreateElement("html")
+	html.CreateAttr("xmlns", "http://www.w3.org/1999/xhtml")
+	html.CreateAttr("xmlns:epub", "http://www.idpf.org/2007/ops")
+
+	head := html.CreateElement("head")
+
+	meta := head.CreateElement("meta")
+	meta.CreateAttr("http-equiv", "Content-Type")
+	meta.CreateAttr("content", "text/html; charset=utf-8")
+
+	link := head.CreateElement("link")
+	link.CreateAttr("rel", "stylesheet")
+	link.CreateAttr("type", "text/css")
+	link.CreateAttr("href", "stylesheet.css")
+
+	titleElem := head.CreateElement("title")
+	titleElem.SetText(title)
+
+	bodyElem := html.CreateElement("body")
+
+	if err := writeBodyIntroContent(bodyElem, c, body, log); err != nil {
+		return nil, err
+	}
+
+	return doc, nil
 }
 
 func sectionToXHTML(c *content.Content, section *fb2.Section, title string, log *zap.Logger) (*etree.Document, error) {
@@ -236,12 +363,121 @@ func sectionToXHTML(c *content.Content, section *fb2.Section, title string, log 
 	titleElem.SetText(title)
 
 	body := html.CreateElement("body")
+	// Add section ID to body element so it can be a link target
+	if section.ID != "" {
+		body.CreateAttr("id", section.ID)
+	}
 
 	if err := writeSectionContent(body, c, section, false, log); err != nil {
 		return nil, err
 	}
 
 	return doc, nil
+}
+
+func footnotesBodiesToXHTML(c *content.Content, bodies []*fb2.Body, title string, log *zap.Logger) (*etree.Document, error) {
+	doc := etree.NewDocument()
+	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
+
+	html := doc.CreateElement("html")
+	html.CreateAttr("xmlns", "http://www.w3.org/1999/xhtml")
+	html.CreateAttr("xmlns:epub", "http://www.idpf.org/2007/ops")
+
+	head := html.CreateElement("head")
+
+	meta := head.CreateElement("meta")
+	meta.CreateAttr("http-equiv", "Content-Type")
+	meta.CreateAttr("content", "text/html; charset=utf-8")
+
+	link := head.CreateElement("link")
+	link.CreateAttr("rel", "stylesheet")
+	link.CreateAttr("type", "text/css")
+	link.CreateAttr("href", "stylesheet.css")
+
+	titleElem := head.CreateElement("title")
+	titleElem.SetText(title)
+
+	bodyElem := html.CreateElement("body")
+
+	// Process all footnote bodies
+	for _, body := range bodies {
+		// Write body intro content if it has a title
+		if body.Title != nil {
+			if err := writeBodyIntroContent(bodyElem, c, body, log); err != nil {
+				return nil, err
+			}
+		}
+
+		// Write all sections from this body
+		for i := range body.Sections {
+			section := &body.Sections[i]
+			// Create a div wrapper for each footnote section to preserve structure
+			div := bodyElem.CreateElement("div")
+			div.CreateAttr("class", "section")
+			if section.ID != "" {
+				div.CreateAttr("id", section.ID)
+			}
+			if section.Lang != "" {
+				div.CreateAttr("xml:lang", section.Lang)
+			}
+
+			if err := writeSectionContent(div, c, section, false, log); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return doc, nil
+}
+
+func writeBodyIntroContent(parent *etree.Element, c *content.Content, body *fb2.Body, log *zap.Logger) error {
+	if body.Title != nil {
+		titleDiv := parent.CreateElement("div")
+		titleDiv.CreateAttr("class", "title")
+		firstParagraph := true
+		for _, item := range body.Title.Items {
+			if item.Paragraph != nil {
+				p := titleDiv.CreateElement("p")
+				if item.Paragraph.ID != "" {
+					p.CreateAttr("id", item.Paragraph.ID)
+				}
+				var class string
+				if firstParagraph {
+					class = "title-first"
+					firstParagraph = false
+				} else {
+					class = "title-next"
+				}
+				if item.Paragraph.Style != "" {
+					class = class + " " + item.Paragraph.Style
+				}
+				p.CreateAttr("class", class)
+				writeParagraphInline(p, c, item.Paragraph)
+			} else if item.EmptyLine {
+				br := titleDiv.CreateElement("br")
+				br.CreateAttr("class", "title")
+			}
+		}
+	}
+
+	for _, epigraph := range body.Epigraphs {
+		div := parent.CreateElement("div")
+		div.CreateAttr("class", "epigraph")
+		if err := writeFlowContent(div, c, &epigraph.Flow, log); err != nil {
+			return err
+		}
+		for _, ta := range epigraph.TextAuthors {
+			p := div.CreateElement("p")
+			p.CreateAttr("class", "text-author")
+			writeParagraphInline(p, c, &ta)
+		}
+	}
+
+	if body.Image != nil {
+		writeImageElement(parent, body.Image)
+	}
+
+	return nil
 }
 
 func writeSectionContent(parent *etree.Element, c *content.Content, section *fb2.Section, skipTitle bool, log *zap.Logger) error {
@@ -319,6 +555,9 @@ func writeFlowItems(parent *etree.Element, c *content.Content, items []fb2.FlowI
 				if item.Paragraph.ID != "" {
 					p.CreateAttr("id", item.Paragraph.ID)
 				}
+				if item.Paragraph.Lang != "" {
+					p.CreateAttr("xml:lang", item.Paragraph.Lang)
+				}
 				if item.Paragraph.Style != "" {
 					p.CreateAttr("class", item.Paragraph.Style)
 				}
@@ -335,6 +574,9 @@ func writeFlowItems(parent *etree.Element, c *content.Content, items []fb2.FlowI
 				p := parent.CreateElement("p")
 				if item.Subtitle.ID != "" {
 					p.CreateAttr("id", item.Subtitle.ID)
+				}
+				if item.Subtitle.Lang != "" {
+					p.CreateAttr("xml:lang", item.Subtitle.Lang)
 				}
 				class := "sub-title"
 				if item.Subtitle.Style != "" {
@@ -362,6 +604,12 @@ func writeFlowItems(parent *etree.Element, c *content.Content, items []fb2.FlowI
 				}
 				div := parent.CreateElement("div")
 				div.CreateAttr("class", "section")
+				if item.Section.ID != "" {
+					div.CreateAttr("id", item.Section.ID)
+				}
+				if item.Section.Lang != "" {
+					div.CreateAttr("xml:lang", item.Section.Lang)
+				}
 				if err := writeSectionContent(div, c, item.Section, false, log); err != nil {
 					return err
 				}
@@ -428,9 +676,22 @@ func writeInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inli
 		a := parent.CreateElement("a")
 		if seg.Href != "" {
 			a.CreateAttr("href", seg.Href)
-		}
-		if seg.LinkType != "" {
-			a.CreateAttr("type", seg.LinkType)
+
+			// Determine link type and apply appropriate class
+			var linkClass string
+			if strings.HasPrefix(seg.Href, "#") {
+				// Internal link
+				linkID := strings.TrimPrefix(seg.Href, "#")
+				if _, isFootnote := c.FootnotesIndex[linkID]; isFootnote {
+					linkClass = "footnote-link"
+				} else {
+					linkClass = "internal-link"
+				}
+			} else {
+				// External link
+				linkClass = "external-link"
+			}
+			a.CreateAttr("class", linkClass)
 		}
 		for _, child := range seg.Children {
 			writeInlineSegment(a, c, &child)
@@ -471,6 +732,9 @@ func writePoemElement(parent *etree.Element, c *content.Content, poem *fb2.Poem,
 	if poem.ID != "" {
 		div.CreateAttr("id", poem.ID)
 	}
+	if poem.Lang != "" {
+		div.CreateAttr("xml:lang", poem.Lang)
+	}
 
 	if poem.Title != nil {
 		titleDiv := div.CreateElement("div")
@@ -500,9 +764,63 @@ func writePoemElement(parent *etree.Element, c *content.Content, poem *fb2.Poem,
 		}
 	}
 
+	for _, epigraph := range poem.Epigraphs {
+		epigraphDiv := div.CreateElement("div")
+		epigraphDiv.CreateAttr("class", "epigraph")
+		if err := writeFlowContent(epigraphDiv, c, &epigraph.Flow, log); err != nil {
+			log.Warn("Error writing poem epigraph content", zap.Error(err))
+		}
+		for _, ta := range epigraph.TextAuthors {
+			p := epigraphDiv.CreateElement("p")
+			p.CreateAttr("class", "text-author")
+			writeParagraphInline(p, c, &ta)
+		}
+	}
+
+	for _, subtitle := range poem.Subtitles {
+		p := div.CreateElement("p")
+		p.CreateAttr("class", "sub-title")
+		if subtitle.ID != "" {
+			p.CreateAttr("id", subtitle.ID)
+		}
+		writeParagraphInline(p, c, &subtitle)
+	}
+
 	for _, stanza := range poem.Stanzas {
 		stanzaDiv := div.CreateElement("div")
 		stanzaDiv.CreateAttr("class", "stanza")
+		if stanza.Lang != "" {
+			stanzaDiv.CreateAttr("xml:lang", stanza.Lang)
+		}
+
+		if stanza.Title != nil {
+			stanzaTitleDiv := stanzaDiv.CreateElement("div")
+			stanzaTitleDiv.CreateAttr("class", "stanza-title")
+			for _, item := range stanza.Title.Items {
+				if item.Paragraph != nil {
+					p := stanzaTitleDiv.CreateElement("p")
+					if item.Paragraph.ID != "" {
+						p.CreateAttr("id", item.Paragraph.ID)
+					}
+					if item.Paragraph.Style != "" {
+						p.CreateAttr("class", item.Paragraph.Style)
+					}
+					writeParagraphInline(p, c, item.Paragraph)
+				} else if item.EmptyLine {
+					stanzaTitleDiv.CreateElement("br")
+				}
+			}
+		}
+
+		if stanza.Subtitle != nil {
+			p := stanzaDiv.CreateElement("p")
+			p.CreateAttr("class", "stanza-subtitle")
+			if stanza.Subtitle.ID != "" {
+				p.CreateAttr("id", stanza.Subtitle.ID)
+			}
+			writeParagraphInline(p, c, stanza.Subtitle)
+		}
+
 		for _, verse := range stanza.Verses {
 			p := stanzaDiv.CreateElement("p")
 			p.CreateAttr("class", "verse")
@@ -515,12 +833,25 @@ func writePoemElement(parent *etree.Element, c *content.Content, poem *fb2.Poem,
 		p.CreateAttr("class", "text-author")
 		writeParagraphInline(p, c, &ta)
 	}
+
+	if poem.Date != nil {
+		p := div.CreateElement("p")
+		p.CreateAttr("class", "date")
+		if poem.Date.Display != "" {
+			p.SetText(poem.Date.Display)
+		} else if !poem.Date.Value.IsZero() {
+			p.SetText(poem.Date.Value.Format("2006-01-02"))
+		}
+	}
 }
 
 func writeCiteElement(parent *etree.Element, c *content.Content, cite *fb2.Cite, log *zap.Logger) {
 	blockquote := parent.CreateElement("blockquote")
 	if cite.ID != "" {
 		blockquote.CreateAttr("id", cite.ID)
+	}
+	if cite.Lang != "" {
+		blockquote.CreateAttr("xml:lang", cite.Lang)
 	}
 	blockquote.CreateAttr("class", "cite")
 
@@ -698,12 +1029,18 @@ br.title { display: block; margin: 0.5em 0; }
 .annotation { font-size: 80%; text-align: center; margin: 2em 1em 1em 1em; }
 .poem { text-indent: 0; font-style: italic; margin: 0 0 0 3em; }
 .stanza { margin: 0.5em 0; }
+.stanza-title { text-align: center; font-weight: bold; text-indent: 0; margin: 0.5em 0; }
+.stanza-subtitle { text-align: center; text-indent: 0; margin: 0.25em 0; }
 .verse { margin: 0.25em 0 0.25em 2em; text-indent: 0; }
 .cite, blockquote.cite { margin: 1em 2em; }
-.text-author { text-align: right; font-style: italic; text-indent: 0; }
+.text-author { text-align: right; font-style: italic; text-indent: 0; page-break-before: avoid; font-weight: bold; }
+.date { text-align: right; text-indent: 0; margin: 0.5em 0; }
 .section { margin: 1em 0; }
 table { border-collapse: collapse; margin: 1em auto; }
 td, th { border: 1px solid #ccc; padding: 0.5em; }
+a.external-link { text-decoration: underline; }
+a.internal-link { text-decoration: none; }
+a.footnote-link { text-decoration: none; font-style: normal; font-size: 0.8em; vertical-align: super; }
 `
 
 	for _, style := range c.Book.Stylesheets {
@@ -838,9 +1175,20 @@ func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, log *z
 	metaUID.CreateAttr("name", "dtb:uid")
 	metaUID.CreateAttr("content", c.Book.Description.DocumentInfo.ID)
 
+	// Calculate TOC depth
+	maxDepth := 1
+	for _, chapter := range chapters {
+		if chapter.Section != nil {
+			depth := calculateSectionDepth(chapter.Section, 1)
+			if depth > maxDepth {
+				maxDepth = depth
+			}
+		}
+	}
+
 	metaDepth := head.CreateElement("meta")
 	metaDepth.CreateAttr("name", "dtb:depth")
-	metaDepth.CreateAttr("content", "1")
+	metaDepth.CreateAttr("content", fmt.Sprintf("%d", maxDepth))
 
 	metaTotal := head.CreateElement("meta")
 	metaTotal.CreateAttr("name", "dtb:totalPageCount")
@@ -856,10 +1204,12 @@ func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, log *z
 
 	navMap := ncx.CreateElement("navMap")
 
-	for i, chapter := range chapters {
+	playOrder := 0
+	for _, chapter := range chapters {
+		playOrder++
 		navPoint := navMap.CreateElement("navPoint")
 		navPoint.CreateAttr("id", chapter.ID)
-		navPoint.CreateAttr("playOrder", fmt.Sprintf("%d", i+1))
+		navPoint.CreateAttr("playOrder", fmt.Sprintf("%d", playOrder))
 
 		navLabel := navPoint.CreateElement("navLabel")
 		labelText := navLabel.CreateElement("text")
@@ -867,10 +1217,53 @@ func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, log *z
 
 		navContent := navPoint.CreateElement("content")
 		navContent.CreateAttr("src", chapter.Filename)
+
+		// Add nested sections to TOC
+		if chapter.Section != nil {
+			buildNCXNavPoints(navPoint, chapter.Section, chapter.Filename, &playOrder)
+		}
 	}
 
 	doc.Indent(2)
 	return writeXMLToZip(zw, oebpsDir+"/toc.ncx", doc)
+}
+
+func calculateSectionDepth(section *fb2.Section, currentDepth int) int {
+	maxDepth := currentDepth
+	for _, item := range section.Content {
+		if item.Kind == fb2.FlowSection && item.Section != nil && item.Section.Title != nil {
+			depth := calculateSectionDepth(item.Section, currentDepth+1)
+			if depth > maxDepth {
+				maxDepth = depth
+			}
+		}
+	}
+	return maxDepth
+}
+
+func buildNCXNavPoints(parent *etree.Element, section *fb2.Section, filename string, playOrder *int) {
+	for _, item := range section.Content {
+		if item.Kind == fb2.FlowSection && item.Section != nil && item.Section.Title != nil {
+			*playOrder++
+			navPoint := parent.CreateElement("navPoint")
+			navPoint.CreateAttr("id", fmt.Sprintf("navpoint-%s", item.Section.ID))
+			navPoint.CreateAttr("playOrder", fmt.Sprintf("%d", *playOrder))
+
+			navLabel := navPoint.CreateElement("navLabel")
+			labelText := navLabel.CreateElement("text")
+			labelText.SetText(extractTitle(item.Section))
+
+			navContent := navPoint.CreateElement("content")
+			if item.Section.ID != "" {
+				navContent.CreateAttr("src", filename+"#"+item.Section.ID)
+			} else {
+				navContent.CreateAttr("src", filename)
+			}
+
+			// Recursively process nested sections
+			buildNCXNavPoints(navPoint, item.Section, filename, playOrder)
+		}
+	}
 }
 
 func writeNav(zw *zip.Writer, c *content.Content, chapters []chapterData, log *zap.Logger) error {
@@ -901,10 +1294,37 @@ func writeNav(zw *zip.Writer, c *content.Content, chapters []chapterData, log *z
 		a := li.CreateElement("a")
 		a.CreateAttr("href", chapter.Filename)
 		a.SetText(chapter.Title)
+
+		// Add nested sections to TOC
+		if chapter.Section != nil {
+			buildNavOL(li, chapter.Section, chapter.Filename)
+		}
 	}
 
 	doc.Indent(2)
 	return writeXMLToZip(zw, oebpsDir+"/nav.xhtml", doc)
+}
+
+func buildNavOL(parent *etree.Element, section *fb2.Section, filename string) {
+	var nestedOL *etree.Element
+	for _, item := range section.Content {
+		if item.Kind == fb2.FlowSection && item.Section != nil && item.Section.Title != nil {
+			if nestedOL == nil {
+				nestedOL = parent.CreateElement("ol")
+			}
+			li := nestedOL.CreateElement("li")
+			a := li.CreateElement("a")
+			if item.Section.ID != "" {
+				a.CreateAttr("href", filename+"#"+item.Section.ID)
+			} else {
+				a.CreateAttr("href", filename)
+			}
+			a.SetText(extractTitle(item.Section))
+
+			// Recursively process nested sections
+			buildNavOL(li, item.Section, filename)
+		}
+	}
 }
 
 func writeXMLToZip(zw *zip.Writer, name string, doc *etree.Document) error {
@@ -922,4 +1342,122 @@ func writeDataToZip(zw *zip.Writer, name string, data []byte) error {
 	}
 	_, err = w.Write(data)
 	return err
+}
+
+// collectIDsFromBody collects all IDs from a body and maps them to the given filename
+func collectIDsFromBody(body *fb2.Body, filename string, idToFile idToFileMap) {
+	if body.Image != nil && body.Image.ID != "" {
+		idToFile[body.Image.ID] = filename
+	}
+	for i := range body.Sections {
+		collectIDsFromSection(&body.Sections[i], filename, idToFile)
+	}
+}
+
+// collectIDsFromSection recursively collects all IDs from a section and its content
+func collectIDsFromSection(section *fb2.Section, filename string, idToFile idToFileMap) {
+	if section.ID != "" {
+		idToFile[section.ID] = filename
+	}
+	if section.Image != nil && section.Image.ID != "" {
+		idToFile[section.Image.ID] = filename
+	}
+	if section.Title != nil {
+		for i := range section.Title.Items {
+			if section.Title.Items[i].Paragraph != nil && section.Title.Items[i].Paragraph.ID != "" {
+				idToFile[section.Title.Items[i].Paragraph.ID] = filename
+			}
+		}
+	}
+	for i := range section.Content {
+		collectIDsFromFlowItem(&section.Content[i], filename, idToFile)
+	}
+}
+
+// collectIDsFromFlowItem recursively collects IDs from flow items
+func collectIDsFromFlowItem(item *fb2.FlowItem, filename string, idToFile idToFileMap) {
+	switch item.Kind {
+	case fb2.FlowParagraph:
+		if item.Paragraph != nil && item.Paragraph.ID != "" {
+			idToFile[item.Paragraph.ID] = filename
+		}
+	case fb2.FlowSubtitle:
+		if item.Subtitle != nil && item.Subtitle.ID != "" {
+			idToFile[item.Subtitle.ID] = filename
+		}
+	case fb2.FlowImage:
+		if item.Image != nil && item.Image.ID != "" {
+			idToFile[item.Image.ID] = filename
+		}
+	case fb2.FlowPoem:
+		if item.Poem != nil && item.Poem.ID != "" {
+			idToFile[item.Poem.ID] = filename
+		}
+	case fb2.FlowCite:
+		if item.Cite != nil {
+			if item.Cite.ID != "" {
+				idToFile[item.Cite.ID] = filename
+			}
+			for i := range item.Cite.Items {
+				collectIDsFromFlowItem(&item.Cite.Items[i], filename, idToFile)
+			}
+		}
+	case fb2.FlowTable:
+		if item.Table != nil {
+			if item.Table.ID != "" {
+				idToFile[item.Table.ID] = filename
+			}
+			for i := range item.Table.Rows {
+				for j := range item.Table.Rows[i].Cells {
+					if item.Table.Rows[i].Cells[j].ID != "" {
+						idToFile[item.Table.Rows[i].Cells[j].ID] = filename
+					}
+				}
+			}
+		}
+	case fb2.FlowSection:
+		if item.Section != nil {
+			collectIDsFromSection(item.Section, filename, idToFile)
+		}
+	}
+}
+
+// fixInternalLinks updates internal links to include chapter filenames when needed
+func fixInternalLinks(chapters []chapterData, idToFile idToFileMap, log *zap.Logger) {
+	for i := range chapters {
+		currentFile := chapters[i].Filename
+		fixLinksInDocument(chapters[i].Doc, currentFile, idToFile, log)
+	}
+}
+
+// fixLinksInDocument traverses the XHTML document and fixes internal links
+func fixLinksInDocument(doc *etree.Document, currentFile string, idToFile idToFileMap, log *zap.Logger) {
+	root := doc.Root()
+	if root == nil {
+		return
+	}
+	fixLinksInElement(root, currentFile, idToFile, log)
+}
+
+// fixLinksInElement recursively fixes links in an element and its children
+func fixLinksInElement(elem *etree.Element, currentFile string, idToFile idToFileMap, log *zap.Logger) {
+	// Fix links in this element
+	if elem.Tag == "a" {
+		href := elem.SelectAttrValue("href", "")
+		if href != "" && strings.HasPrefix(href, "#") {
+			targetID := strings.TrimPrefix(href, "#")
+			if targetFile, exists := idToFile[targetID]; exists && targetFile != currentFile {
+				// Link points to different file, update href
+				newHref := targetFile + "#" + targetID
+				elem.RemoveAttr("href")
+				elem.CreateAttr("href", newHref)
+				log.Debug("Fixed internal link", zap.String("from", currentFile), zap.String("to", targetFile), zap.String("id", targetID))
+			}
+		}
+	}
+
+	// Recursively process children
+	for _, child := range elem.ChildElements() {
+		fixLinksInElement(child, currentFile, idToFile, log)
+	}
 }
