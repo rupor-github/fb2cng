@@ -144,6 +144,9 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 		return nil, nil, err
 	}
 
+	// First pass: assign sequential IDs to all sections without IDs
+	assignSectionIDs(c)
+
 	var chapters []chapterData
 	chapterNum := 0
 	idToFile := make(idToFileMap)
@@ -185,8 +188,9 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 			}
 
 			// Process only top-level sections as chapters
-			for i := range body.Sections {
-				section := &body.Sections[i]
+			// Unwrap sections without titles (grouping sections)
+			topSections := collectTopSections(body.Sections)
+			for _, section := range topSections {
 				if err := ctx.Err(); err != nil {
 					return nil, nil, err
 				}
@@ -263,7 +267,73 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 	return chapters, idToFile, nil
 }
 
+// assignSectionIDs assigns sequential IDs to all sections that don't have IDs
+func assignSectionIDs(c *content.Content) {
+	counter := 0
+	for i := range c.Book.Bodies {
+		assignBodySectionIDs(&c.Book.Bodies[i], c.GeneratedIDs, &counter)
+	}
+}
 
+// assignBodySectionIDs recursively assigns IDs to sections in a body
+func assignBodySectionIDs(body *fb2.Body, idMap map[*fb2.Section]string, counter *int) {
+	for i := range body.Sections {
+		assignSectionIDRecursive(&body.Sections[i], idMap, counter)
+	}
+}
+
+// assignSectionIDRecursive recursively assigns IDs to a section and its children
+func assignSectionIDRecursive(section *fb2.Section, idMap map[*fb2.Section]string, counter *int) {
+	// Only assign ID if section doesn't have one
+	if section.ID == "" {
+		*counter++
+		idMap[section] = fmt.Sprintf("sect_%d", *counter)
+	}
+	
+	// Process child sections
+	for i := range section.Content {
+		if section.Content[i].Kind == fb2.FlowSection && section.Content[i].Section != nil {
+			assignSectionIDRecursive(section.Content[i].Section, idMap, counter)
+		}
+	}
+}
+
+// collectTopSections recursively unwraps sections without titles (grouping sections)
+// and returns only sections with titles that should become chapters
+func collectTopSections(sections []fb2.Section) []*fb2.Section {
+	var result []*fb2.Section
+	for i := range sections {
+		section := &sections[i]
+		if section.Title != nil {
+			// This section has a title, it's a real chapter
+			result = append(result, section)
+		} else {
+			// This section has no title, it's a grouping section
+			// Look for nested sections inside it
+			nestedSections := extractNestedSections(section)
+			result = append(result, nestedSections...)
+		}
+	}
+	return result
+}
+
+// extractNestedSections extracts sections from within a section's content
+func extractNestedSections(section *fb2.Section) []*fb2.Section {
+	var result []*fb2.Section
+	for i := range section.Content {
+		if section.Content[i].Kind == fb2.FlowSection && section.Content[i].Section != nil {
+			nested := section.Content[i].Section
+			if nested.Title != nil {
+				// Found a section with title
+				result = append(result, nested)
+			} else {
+				// Recursively unwrap this section too
+				result = append(result, extractNestedSections(nested)...)
+			}
+		}
+	}
+	return result
+}
 
 func extractTitle(section *fb2.Section) string {
 	if section.Title != nil {
@@ -535,7 +605,7 @@ func writeSectionContent(parent *etree.Element, c *content.Content, section *fb2
 		}
 	}
 
-	if err := writeFlowItems(parent, c, section.Content, true, log); err != nil {
+	if err := writeFlowItems(parent, c, section.Content, false, log); err != nil {
 		return err
 	}
 
@@ -544,6 +614,37 @@ func writeSectionContent(parent *etree.Element, c *content.Content, section *fb2
 
 func writeFlowContent(parent *etree.Element, c *content.Content, flow *fb2.Flow, log *zap.Logger) error {
 	return writeFlowItems(parent, c, flow.Items, false, log)
+}
+
+// getSectionID returns the ID for a section, using the generated ID if the section doesn't have one
+func getSectionID(section *fb2.Section, generatedIDs map[*fb2.Section]string) string {
+	if section.ID != "" {
+		return section.ID
+	}
+	if id, exists := generatedIDs[section]; exists {
+		return id
+	}
+	// Should not happen if assignSectionIDs was called, but provide fallback
+	return "section-unknown"
+}
+
+// isGroupingSection checks if a section is a pure grouping container
+// (no content except nested sections)
+func isGroupingSection(section *fb2.Section) bool {
+	if section.Title != nil || section.Image != nil || section.Annotation != nil || len(section.Epigraphs) > 0 {
+		return false
+	}
+	// Must have at least one section child
+	if len(section.Content) == 0 {
+		return false
+	}
+	// Check if all content items are sections
+	for _, item := range section.Content {
+		if item.Kind != fb2.FlowSection {
+			return false
+		}
+	}
+	return true
 }
 
 func writeFlowItems(parent *etree.Element, c *content.Content, items []fb2.FlowItem, skipNestedChapters bool, log *zap.Logger) error {
@@ -602,16 +703,25 @@ func writeFlowItems(parent *etree.Element, c *content.Content, items []fb2.FlowI
 				if skipNestedChapters && item.Section.Title != nil {
 					continue
 				}
-				div := parent.CreateElement("div")
-				div.CreateAttr("class", "section")
-				if item.Section.ID != "" {
-					div.CreateAttr("id", item.Section.ID)
-				}
-				if item.Section.Lang != "" {
-					div.CreateAttr("xml:lang", item.Section.Lang)
-				}
-				if err := writeSectionContent(div, c, item.Section, false, log); err != nil {
-					return err
+				// Check if this is a pure grouping section (no title, no content except nested sections)
+				if item.Section.Title == nil && isGroupingSection(item.Section) {
+					// Transparent grouping - write children directly without wrapper
+					if err := writeFlowItems(parent, c, item.Section.Content, skipNestedChapters, log); err != nil {
+						return err
+					}
+				} else {
+					// Regular section - create wrapper div
+					div := parent.CreateElement("div")
+					div.CreateAttr("class", "section")
+					// Always add an ID for sections so TOC links work
+					sectionID := getSectionID(item.Section, c.GeneratedIDs)
+					div.CreateAttr("id", sectionID)
+					if item.Section.Lang != "" {
+						div.CreateAttr("xml:lang", item.Section.Lang)
+					}
+					if err := writeSectionContent(div, c, item.Section, false, log); err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -1220,7 +1330,7 @@ func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, log *z
 
 		// Add nested sections to TOC
 		if chapter.Section != nil {
-			buildNCXNavPoints(navPoint, chapter.Section, chapter.Filename, &playOrder)
+			buildNCXNavPoints(navPoint, chapter.Section, chapter.Filename, &playOrder, c.GeneratedIDs)
 		}
 	}
 
@@ -1241,27 +1351,39 @@ func calculateSectionDepth(section *fb2.Section, currentDepth int) int {
 	return maxDepth
 }
 
-func buildNCXNavPoints(parent *etree.Element, section *fb2.Section, filename string, playOrder *int) {
+func buildNCXNavPoints(parent *etree.Element, section *fb2.Section, filename string, playOrder *int, generatedIDs map[*fb2.Section]string) {
+	var lastNavPoint *etree.Element
+	
 	for _, item := range section.Content {
-		if item.Kind == fb2.FlowSection && item.Section != nil && item.Section.Title != nil {
-			*playOrder++
-			navPoint := parent.CreateElement("navPoint")
-			navPoint.CreateAttr("id", fmt.Sprintf("navpoint-%s", item.Section.ID))
-			navPoint.CreateAttr("playOrder", fmt.Sprintf("%d", *playOrder))
+		if item.Kind == fb2.FlowSection && item.Section != nil {
+			if item.Section.Title != nil {
+				// Section with title - add to TOC
+				*playOrder++
+				// Use section ID or generated ID
+				sectionID := getSectionID(item.Section, generatedIDs)
+				navPoint := parent.CreateElement("navPoint")
+				navPoint.CreateAttr("id", fmt.Sprintf("navpoint-%s", sectionID))
+				navPoint.CreateAttr("playOrder", fmt.Sprintf("%d", *playOrder))
 
-			navLabel := navPoint.CreateElement("navLabel")
-			labelText := navLabel.CreateElement("text")
-			labelText.SetText(extractTitle(item.Section))
+				navLabel := navPoint.CreateElement("navLabel")
+				labelText := navLabel.CreateElement("text")
+				labelText.SetText(extractTitle(item.Section))
 
-			navContent := navPoint.CreateElement("content")
-			if item.Section.ID != "" {
-				navContent.CreateAttr("src", filename+"#"+item.Section.ID)
+				navContent := navPoint.CreateElement("content")
+				navContent.CreateAttr("src", filename+"#"+sectionID)
+
+				// Recursively process nested sections
+				buildNCXNavPoints(navPoint, item.Section, filename, playOrder, generatedIDs)
+				lastNavPoint = navPoint
 			} else {
-				navContent.CreateAttr("src", filename)
+				// Section without title (grouping) - process its children
+				// If there's a previous sibling with title, nest under it; otherwise at current level
+				if lastNavPoint != nil {
+					buildNCXNavPoints(lastNavPoint, item.Section, filename, playOrder, generatedIDs)
+				} else {
+					buildNCXNavPoints(parent, item.Section, filename, playOrder, generatedIDs)
+				}
 			}
-
-			// Recursively process nested sections
-			buildNCXNavPoints(navPoint, item.Section, filename, playOrder)
 		}
 	}
 }
@@ -1297,7 +1419,7 @@ func writeNav(zw *zip.Writer, c *content.Content, chapters []chapterData, log *z
 
 		// Add nested sections to TOC
 		if chapter.Section != nil {
-			buildNavOL(li, chapter.Section, chapter.Filename)
+			buildNavOL(li, chapter.Section, chapter.Filename, c.GeneratedIDs)
 		}
 	}
 
@@ -1305,24 +1427,36 @@ func writeNav(zw *zip.Writer, c *content.Content, chapters []chapterData, log *z
 	return writeXMLToZip(zw, oebpsDir+"/nav.xhtml", doc)
 }
 
-func buildNavOL(parent *etree.Element, section *fb2.Section, filename string) {
+func buildNavOL(parent *etree.Element, section *fb2.Section, filename string, generatedIDs map[*fb2.Section]string) {
 	var nestedOL *etree.Element
+	var lastLI *etree.Element
+	
 	for _, item := range section.Content {
-		if item.Kind == fb2.FlowSection && item.Section != nil && item.Section.Title != nil {
-			if nestedOL == nil {
-				nestedOL = parent.CreateElement("ol")
-			}
-			li := nestedOL.CreateElement("li")
-			a := li.CreateElement("a")
-			if item.Section.ID != "" {
-				a.CreateAttr("href", filename+"#"+item.Section.ID)
-			} else {
-				a.CreateAttr("href", filename)
-			}
-			a.SetText(extractTitle(item.Section))
+		if item.Kind == fb2.FlowSection && item.Section != nil {
+			if item.Section.Title != nil {
+				// Section with title - add to TOC
+				if nestedOL == nil {
+					nestedOL = parent.CreateElement("ol")
+				}
+				li := nestedOL.CreateElement("li")
+				a := li.CreateElement("a")
+				// Use section ID or generated ID
+				sectionID := getSectionID(item.Section, generatedIDs)
+				a.CreateAttr("href", filename+"#"+sectionID)
+				a.SetText(extractTitle(item.Section))
 
-			// Recursively process nested sections
-			buildNavOL(li, item.Section, filename)
+				// Recursively process nested sections
+				buildNavOL(li, item.Section, filename, generatedIDs)
+				lastLI = li
+			} else {
+				// Section without title (grouping) - process its children
+				// If there's a previous sibling with title, nest under it; otherwise at current level
+				if lastLI != nil {
+					buildNavOL(lastLI, item.Section, filename, generatedIDs)
+				} else {
+					buildNavOL(parent, item.Section, filename, generatedIDs)
+				}
+			}
 		}
 	}
 }

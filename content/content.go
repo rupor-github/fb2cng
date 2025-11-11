@@ -29,15 +29,16 @@ type Content struct {
 	Doc          *etree.Document
 	OutputFormat config.OutputFmt
 
-	Book           *fb2.FictionBook
-	CoverID        string
-	FootnotesIndex fb2.FootnoteRefs
-	ImagesIndex    fb2.BookImages
-	IDsIndex       fb2.IDIndex
-	LinksRevIndex  fb2.ReverseLinkIndex
-	Splitter       *text.Splitter
-	Hyphen         *text.Hyphenator
-	WorkDir        string
+	Book            *fb2.FictionBook
+	CoverID         string
+	FootnotesIndex  fb2.FootnoteRefs
+	ImagesIndex     fb2.BookImages
+	IDsIndex        fb2.IDIndex
+	LinksRevIndex   fb2.ReverseLinkIndex
+	GeneratedIDs    map[*fb2.Section]string // Map sections without IDs to generated IDs
+	Splitter        *text.Splitter
+	Hyphen          *text.Hyphenator
+	WorkDir         string
 }
 
 // Prepare reads, parses, and prepares FB2 content for conversion.
@@ -170,6 +171,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 		ImagesIndex:    imagesIndex,
 		IDsIndex:       ids,
 		LinksRevIndex:  links,
+		GeneratedIDs:   make(map[*fb2.Section]string),
 		WorkDir:        tmpDir,
 	}
 
