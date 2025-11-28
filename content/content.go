@@ -22,23 +22,23 @@ import (
 
 // Content encapsulates both the raw FB2 XML document and the structured
 // normalized internal representation derived from the official FictionBook 2.0
-// schemas. https://github.com/gribuser/fb2.git commit
-// 4d3740e319039911c30d291abb0c8b26ec99703b
+// schemas. https://github.com/gribuser/fb2.git commit 4d3740e319039911c30d291abb0c8b26ec99703b
 type Content struct {
 	SrcName      string
 	Doc          *etree.Document
 	OutputFormat config.OutputFmt
 
-	Book            *fb2.FictionBook
-	CoverID         string
-	FootnotesIndex  fb2.FootnoteRefs
-	ImagesIndex     fb2.BookImages
-	IDsIndex        fb2.IDIndex
-	LinksRevIndex   fb2.ReverseLinkIndex
-	GeneratedIDs    map[*fb2.Section]string // Map sections without IDs to generated IDs
-	Splitter        *text.Splitter
-	Hyphen          *text.Hyphenator
-	WorkDir         string
+	Book           *fb2.FictionBook
+	CoverID        string
+	FootnotesIndex fb2.FootnoteRefs
+	ImagesIndex    fb2.BookImages
+	IDsIndex       fb2.IDIndex
+	LinksRevIndex  fb2.ReverseLinkIndex
+	GeneratedIDs   map[*fb2.Section]string // Map sections without IDs to generated IDs
+
+	Splitter *text.Splitter
+	Hyphen   *text.Hyphenator
+	WorkDir  string
 }
 
 // Prepare reads, parses, and prepares FB2 content for conversion.
@@ -85,6 +85,9 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 		}
 		log.Warn("Book has invalid ID, correcting", zap.String("old_id", book.Description.DocumentInfo.ID), zap.Stringer("new_id", refID))
 	}
+	if refID != uuid.Nil {
+		book.Description.DocumentInfo.ID = refID.String()
+	}
 
 	tmpDir, err := os.MkdirTemp("", misc.GetAppName()+"-")
 	if err != nil {
@@ -102,10 +105,6 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 		if err := os.WriteFile(filepath.Join(tmpDir, baseSrcName+"_pristine"), []byte(book.String()), 0644); err != nil {
 			return nil, fmt.Errorf("unable to write parsed doc for debugging: %w", err)
 		}
-	}
-
-	if refID != uuid.Nil {
-		book.Description.DocumentInfo.ID = refID.String()
 	}
 
 	// Handle cover image before normalization

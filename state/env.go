@@ -18,12 +18,13 @@ type LocalEnv struct {
 	Cfg *config.Config
 	Rpt *config.Report
 	Log *zap.Logger
+
 	// used by convert subcommand
 	NoDirs       bool
 	Overwrite    bool
 	CodePage     encoding.Encoding
 	DefaultCover []byte
-	//
+
 	start         time.Time
 	restoreStdLog func()
 }

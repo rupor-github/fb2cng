@@ -12,6 +12,7 @@
 *.syso
 *.conf
 *.epub
+*.fb2
 
 # build specific
 build/
@@ -25,3 +26,4 @@ content/text/sentences/*.json.gz
 !content/text/sentences/hungarian.json.gz
 !content/text/sentences/icelandic.json.gz
 !content/text/sentences/korean.json.gz
+!testdata/*.fb2

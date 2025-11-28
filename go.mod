@@ -14,6 +14,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gosimple/slug v1.15.0
 	github.com/h2non/filetype v1.1.3
+	github.com/hidez8891/zip v1.11.0
 	github.com/maruel/natural v1.2.1
 	github.com/neurosnap/sentences v1.1.2
 	github.com/rupor-github/gencfg v1.0.11

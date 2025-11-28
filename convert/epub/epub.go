@@ -11,11 +11,13 @@ import (
 	"strings"
 
 	"github.com/beevik/etree"
+	fixzip "github.com/hidez8891/zip"
 	"go.uber.org/zap"
 
 	"fbc/config"
 	"fbc/content"
 	"fbc/fb2"
+	"fbc/state"
 )
 
 const (
@@ -41,14 +43,32 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	env := state.EnvFromContext(ctx)
+
+	if _, err := os.Stat(outputPath); err == nil {
+		if !env.Overwrite {
+			return fmt.Errorf("output file already exists: %s", outputPath)
+		}
+		log.Warn("Overwriting existing file", zap.String("file", outputPath))
+		if err = os.Remove(outputPath); err != nil {
+			return err
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	} else if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+		return fmt.Errorf("unable to create output directory: %w", err)
+	}
 
 	log.Info("Generating EPUB", zap.Stringer("format", c.OutputFormat), zap.String("output", outputPath))
+
+	_, tmpName := filepath.Split(outputPath)
+	tmpName = filepath.Join(c.WorkDir, tmpName)
 
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
 		return fmt.Errorf("unable to create output directory: %w", err)
 	}
 
-	f, err := os.Create(outputPath)
+	f, err := os.Create(tmpName)
 	if err != nil {
 		return fmt.Errorf("unable to create output file: %w", err)
 	}
@@ -108,6 +128,72 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		}
 	}
 
+	// make sure buffers are flushed before continuing
+	if err := zw.Close(); err != nil {
+		return fmt.Errorf("unable to close output archive: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("unable to finalize output file: %w", err)
+	}
+	// clean temporary file
+	defer os.Remove(tmpName)
+
+	if cfg.FixZip {
+		return copyZipWithoutDataDescriptors(tmpName, outputPath)
+	}
+	return copyFile(tmpName, outputPath)
+}
+
+func copyZipWithoutDataDescriptors(from, to string) error {
+
+	out, err := os.Create(to)
+	if err != nil {
+		return fmt.Errorf("unable to create target file (%s): %w", to, err)
+	}
+	defer out.Close()
+
+	r, err := fixzip.OpenReader(from)
+	if err != nil {
+		return fmt.Errorf("unable to read archive file (%s): %w", from, err)
+	}
+	defer r.Close()
+
+	w := fixzip.NewWriter(out)
+	defer w.Close()
+
+	for _, file := range r.File {
+		// unset data descriptor flag.
+		file.Flags &= ^fixzip.FlagDataDescriptor
+
+		// copy zip entry
+		if err := w.CopyFile(file); err != nil {
+			return fmt.Errorf("unable to write target file (%s): %w", to, err)
+		}
+	}
+	return nil
+}
+
+func copyFile(src, dst string) error {
+
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("failed to open source file: %w", err)
+	}
+	defer sourceFile.Close()
+
+	destinationFile, err := os.Create(dst)
+	if err != nil {
+		return fmt.Errorf("failed to create destination file: %w", err)
+	}
+	defer destinationFile.Close()
+
+	if _, err = io.Copy(destinationFile, sourceFile); err != nil {
+		return fmt.Errorf("failed to copy file contents: %w", err)
+	}
+
+	if err = destinationFile.Close(); err != nil {
+		return fmt.Errorf("failed to close destination file: %w", err)
+	}
 	return nil
 }
 
@@ -230,7 +316,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 		chapterNum++
 		chapterID := fmt.Sprintf("index%05d", chapterNum)
 		filename := "footnotes.xhtml"
-		
+
 		// Extract title from first footnote body
 		var title string
 		if footnoteBodies[0].Title != nil {
@@ -289,7 +375,7 @@ func assignSectionIDRecursive(section *fb2.Section, idMap map[*fb2.Section]strin
 		*counter++
 		idMap[section] = fmt.Sprintf("sect_%d", *counter)
 	}
-	
+
 	// Process child sections
 	for i := range section.Content {
 		if section.Content[i].Kind == fb2.FlowSection && section.Content[i].Section != nil {
@@ -1353,7 +1439,7 @@ func calculateSectionDepth(section *fb2.Section, currentDepth int) int {
 
 func buildNCXNavPoints(parent *etree.Element, section *fb2.Section, filename string, playOrder *int, generatedIDs map[*fb2.Section]string) {
 	var lastNavPoint *etree.Element
-	
+
 	for _, item := range section.Content {
 		if item.Kind == fb2.FlowSection && item.Section != nil {
 			if item.Section.Title != nil {
@@ -1430,7 +1516,7 @@ func writeNav(zw *zip.Writer, c *content.Content, chapters []chapterData, log *z
 func buildNavOL(parent *etree.Element, section *fb2.Section, filename string, generatedIDs map[*fb2.Section]string) {
 	var nestedOL *etree.Element
 	var lastLI *etree.Element
-	
+
 	for _, item := range section.Content {
 		if item.Kind == fb2.FlowSection && item.Section != nil {
 			if item.Section.Title != nil {
