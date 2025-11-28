@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -219,7 +220,7 @@ func writeContainer(zw *zip.Writer) error {
 
 	rootfiles := container.CreateElement("rootfiles")
 	rootfile := rootfiles.CreateElement("rootfile")
-	rootfile.CreateAttr("full-path", "OEBPS/content.opf")
+	rootfile.CreateAttr("full-path", path.Join(oebpsDir, "content.opf"))
 	rootfile.CreateAttr("media-type", "application/oebps-package+xml")
 
 	return writeXMLToZip(zw, "META-INF/container.xml", doc)
@@ -875,9 +876,7 @@ func writeInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inli
 
 			// Determine link type and apply appropriate class
 			var linkClass string
-			if strings.HasPrefix(seg.Href, "#") {
-				// Internal link
-				linkID := strings.TrimPrefix(seg.Href, "#")
+			if linkID, internalLink := strings.CutPrefix(seg.Href, "#"); internalLink {
 				if _, isFootnote := c.FootnotesIndex[linkID]; isFootnote {
 					linkClass = "footnote-link"
 				} else {
@@ -897,9 +896,9 @@ func writeInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inli
 			img := parent.CreateElement("img")
 			imgID := strings.TrimPrefix(seg.Image.Href, "#")
 			if imgData, ok := c.ImagesIndex[imgID]; ok {
-				img.CreateAttr("src", "images/"+imgData.Filename)
+				img.CreateAttr("src", path.Join(imagesDir, imgData.Filename))
 			} else {
-				img.CreateAttr("src", "images/"+imgID)
+				img.CreateAttr("src", path.Join(imagesDir, imgID))
 			}
 			if seg.Image.Alt != "" {
 				img.CreateAttr("alt", seg.Image.Alt)
@@ -1126,7 +1125,7 @@ func writeXHTMLChapter(zw *zip.Writer, chapter *chapterData, log *zap.Logger) er
 
 func writeImages(zw *zip.Writer, images fb2.BookImages, log *zap.Logger) error {
 	for id, img := range images {
-		filename := fmt.Sprintf("%s/%s", imagesDir, img.Filename)
+		filename := path.Join(imagesDir, img.Filename)
 
 		if err := writeDataToZip(zw, filename, img.Data); err != nil {
 			return fmt.Errorf("unable to write image %s: %w", id, err)
@@ -1217,8 +1216,6 @@ func writeCoverPage(zw *zip.Writer, c *content.Content, cfg *config.DocumentConf
 	return writeXMLToZip(zw, oebpsDir+"/cover.xhtml", doc)
 }
 
-//.title { text-align: center; margin: 1em 0 2em 0; font-weight: bold; }
-
 func writeStylesheet(zw *zip.Writer, c *content.Content) error {
 	css := `p { text-indent: 1em; text-align: justify; margin: 0 0 0.3em 0; }
 .title { margin: 2em 0 1em 0; page-break-before: always; }
@@ -1256,7 +1253,7 @@ a.footnote-link { text-decoration: none; font-style: normal; font-size: 0.8em; v
 	return writeDataToZip(zw, oebpsDir+"/stylesheet.css", []byte(css))
 }
 
-func writeOPF(zw *zip.Writer, c *content.Content, chapters []chapterData, log *zap.Logger) error {
+func writeOPF(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap.Logger) error {
 	doc := etree.NewDocument()
 	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
 
@@ -1270,7 +1267,6 @@ func writeOPF(zw *zip.Writer, c *content.Content, chapters []chapterData, log *z
 	case config.OutputFmtEpub3:
 		pkg.CreateAttr("version", "3.0")
 	}
-
 	metadata := pkg.CreateElement("metadata")
 	metadata.CreateAttr("xmlns:dc", "http://purl.org/dc/elements/1.1/")
 	metadata.CreateAttr("xmlns:opf", "http://www.idpf.org/2007/opf")
@@ -1300,12 +1296,13 @@ func writeOPF(zw *zip.Writer, c *content.Content, chapters []chapterData, log *z
 
 	manifest := pkg.CreateElement("manifest")
 
-	if c.OutputFormat == config.OutputFmtEpub2 || c.OutputFormat == config.OutputFmtKepub {
+	switch c.OutputFormat {
+	case config.OutputFmtEpub2, config.OutputFmtKepub:
 		item := manifest.CreateElement("item")
 		item.CreateAttr("id", "ncx")
 		item.CreateAttr("href", "toc.ncx")
 		item.CreateAttr("media-type", "application/x-dtbncx+xml")
-	} else if c.OutputFormat == config.OutputFmtEpub3 {
+	case config.OutputFmtEpub3:
 		item := manifest.CreateElement("item")
 		item.CreateAttr("id", "nav")
 		item.CreateAttr("href", "nav.xhtml")
@@ -1365,7 +1362,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, chapters []chapterData, log *z
 	return writeXMLToZip(zw, oebpsDir+"/content.opf", doc)
 }
 
-func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, log *zap.Logger) error {
+func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap.Logger) error {
 	doc := etree.NewDocument()
 	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
 
@@ -1482,7 +1479,7 @@ func buildNCXNavPoints(parent *etree.Element, section *fb2.Section, filename str
 	}
 }
 
-func writeNav(zw *zip.Writer, c *content.Content, chapters []chapterData, log *zap.Logger) error {
+func writeNav(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap.Logger) error {
 	doc := etree.NewDocument()
 	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
 
