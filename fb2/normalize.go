@@ -8,7 +8,7 @@ import (
 )
 
 //go:embed not_found.png
-var notFoundImage []byte
+var notFoundImagePNG []byte
 
 // NotFoundImageID is the ID used for the placeholder image when broken image links are found
 const NotFoundImageID = "fbc-not-found-image"
@@ -383,6 +383,6 @@ func (fb *FictionBook) ensureNotFoundImageBinary() {
 	fb.Binaries = append(fb.Binaries, BinaryObject{
 		ID:          NotFoundImageID,
 		ContentType: "image/png",
-		Data:        notFoundImage,
+		Data:        notFoundImagePNG,
 	})
 }

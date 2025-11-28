@@ -131,27 +131,18 @@ func setJpegDPI(buf *bytes.Buffer, dpit jpegDPIType, xdensity, ydensity int16) (
 	return newbuf, true
 }
 
-func (bo *BinaryObject) handleDecodingError(bi *BookImage, err error, cfg *config.ImagesConfig, log *zap.Logger) *BookImage {
-	log.Warn("Unable to decode image", zap.String("id", bo.ID),
-		zap.String("content-type", bo.ContentType), zap.Error(err))
-
-	if !cfg.UseBroken {
-		// Use embedded broken.png placeholder instead of broken data
-		bi.Data = brokenImagePNG
-		bi.MimeType = "image/png"
-		// Decode the placeholder to get dimensions
-		if img, _, decErr := image.Decode(bytes.NewReader(brokenImagePNG)); decErr == nil {
-			bi.Dim.Width = img.Bounds().Dx()
-			bi.Dim.Height = img.Bounds().Dy()
-		}
+// handleImageError is a unified error handler for all image processing failures.
+// It logs the error and optionally substitutes the image with a placeholder.
+func (bo *BinaryObject) handleImageError(bi *BookImage, operation string, err error, cfg *config.ImagesConfig, log *zap.Logger) *BookImage {
+	// Log warning with appropriate context
+	if err != nil {
+		log.Warn("Unable to "+operation+" image", zap.String("id", bo.ID), zap.String("content-type", bo.ContentType), zap.Error(err))
+	} else {
+		log.Warn("Unable to "+operation+" image", zap.String("id", bo.ID), zap.String("content-type", bo.ContentType))
 	}
-	return bi
-}
-
-func (bo *BinaryObject) handleResizeError(bi *BookImage, cfg *config.ImagesConfig, log *zap.Logger) *BookImage {
-	log.Warn("Unable to resize image", zap.String("id", bo.ID), zap.String("content-type", bo.ContentType))
 
 	if !cfg.UseBroken {
+		log.Debug("Substituting image with broken.png", zap.String("id", bo.ID))
 		// Use embedded broken.png placeholder instead of broken data
 		bi.Data = brokenImagePNG
 		bi.MimeType = "image/png"
@@ -210,7 +201,7 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 	imageChanged := false
 	img, imgType, imgDecodingErr := image.Decode(bytes.NewReader(bo.Data))
 	if imgDecodingErr != nil {
-		return bo.handleDecodingError(bi, imgDecodingErr, cfg, log)
+		return bo.handleImageError(bi, "decode", imgDecodingErr, cfg, log)
 	}
 	bi.MimeType = mime.TypeByExtension("." + imgType)
 	bi.Dim.Width = img.Bounds().Dx()
@@ -227,7 +218,7 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 			}
 			resizedImg := imaging.Resize(img, 0, h, imaging.Lanczos)
 			if resizedImg == nil {
-				return bo.handleResizeError(bi, cfg, log)
+				return bo.handleImageError(bi, "resize", nil, cfg, log)
 			}
 			img = resizedImg
 			bi.Dim.Width = img.Bounds().Dx()
@@ -236,7 +227,7 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 		case config.ImageResizeModeStretch:
 			resizedImg := imaging.Resize(img, w, h, imaging.Lanczos)
 			if resizedImg == nil {
-				return bo.handleResizeError(bi, cfg, log)
+				return bo.handleImageError(bi, "resize", nil, cfg, log)
 			}
 			img = resizedImg
 			bi.Dim.Width = img.Bounds().Dx()
@@ -250,7 +241,7 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 		if imgType == "png" || imgType == "jpeg" {
 			resizedImg := imaging.Resize(img, 0, int(float64(img.Bounds().Dy())*cfg.ScaleFactor), imaging.Linear)
 			if resizedImg == nil {
-				return bo.handleResizeError(bi, cfg, log)
+				return bo.handleImageError(bi, "resize", nil, cfg, log)
 			}
 			img = resizedImg
 			bi.Dim.Width = img.Bounds().Dx()
@@ -323,18 +314,7 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 
 	data, err := bo.encodeImage(img, imgType, cfg, log)
 	if err != nil {
-		log.Warn("Unable to encode image", zap.String("id", bo.ID), zap.Error(err))
-		if !cfg.UseBroken {
-			// Use embedded broken.png placeholder instead of returning error
-			bi.Data = brokenImagePNG
-			bi.MimeType = "image/png"
-			// Decode the placeholder to get dimensions
-			if plImg, _, decErr := image.Decode(bytes.NewReader(brokenImagePNG)); decErr == nil {
-				bi.Dim.Width = plImg.Bounds().Dx()
-				bi.Dim.Height = plImg.Bounds().Dy()
-			}
-		}
-		return bi
+		return bo.handleImageError(bi, "encode", err, cfg, log)
 	}
 	if data != nil {
 		bi.Data = data
