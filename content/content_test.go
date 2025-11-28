@@ -90,10 +90,7 @@ func TestContent_GetCoverID_WithCoverpage(t *testing.T) {
 		},
 	}
 
-	imagesIndex, err := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
-	if err != nil {
-		t.Fatalf("PrepareImages failed: %v", err)
-	}
+	imagesIndex := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
 	c.ImagesIndex = imagesIndex
 
 	// Parse cover ID
@@ -124,10 +121,7 @@ func TestContent_GetCoverID_NoCoverpage(t *testing.T) {
 		Binaries: []fb2.BinaryObject{},
 	}
 
-	imagesIndex, err := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
-	if err != nil {
-		t.Fatalf("PrepareImages failed: %v", err)
-	}
+	imagesIndex := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
 	c.ImagesIndex = imagesIndex
 
 	if len(c.Book.Description.TitleInfo.Coverpage) > 0 {
@@ -161,10 +155,7 @@ func TestContent_MultipleCoverpageImages(t *testing.T) {
 		},
 	}
 
-	imagesIndex, err := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
-	if err != nil {
-		t.Fatalf("PrepareImages failed: %v", err)
-	}
+	imagesIndex := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
 	c.ImagesIndex = imagesIndex
 
 	// Should use first coverpage image
@@ -200,10 +191,7 @@ func TestContent_CoverImageProcessing_Resize(t *testing.T) {
 		},
 	}
 
-	imagesIndex, err := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
-	if err != nil {
-		t.Fatalf("PrepareImages failed: %v", err)
-	}
+	imagesIndex := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
 
 	coverImage := imagesIndex["small-cover"]
 	if coverImage == nil {
@@ -241,10 +229,7 @@ func TestContent_CoverImageProcessing_NoResize(t *testing.T) {
 		},
 	}
 
-	imagesIndex, err := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
-	if err != nil {
-		t.Fatalf("PrepareImages failed: %v", err)
-	}
+	imagesIndex := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
 
 	coverImage := imagesIndex["orig-cover"]
 	img, _, err := image.Decode(bytes.NewReader(coverImage.Data))
@@ -274,10 +259,7 @@ func TestContent_MissingCoverImage(t *testing.T) {
 		},
 	}
 
-	imagesIndex, err := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
-	if err != nil {
-		t.Fatalf("PrepareImages failed: %v", err)
-	}
+	imagesIndex := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
 	c.ImagesIndex = imagesIndex
 
 	c.CoverID = "missing-cover"
@@ -303,10 +285,7 @@ func TestContent_ImageIndexBuild(t *testing.T) {
 		},
 	}
 
-	imagesIndex, err := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
-	if err != nil {
-		t.Fatalf("PrepareImages failed: %v", err)
-	}
+	imagesIndex := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
 
 	if len(imagesIndex) != 3 {
 		t.Errorf("expected 3 images in index, got %d", len(imagesIndex))
@@ -332,10 +311,7 @@ func TestContent_KindleImageConversion(t *testing.T) {
 	}
 
 	// Process for Kindle (should convert PNG to JPEG)
-	imagesIndex, err := c.Book.PrepareImages(true, &env.Cfg.Document.Images, env.Log)
-	if err != nil {
-		t.Fatalf("PrepareImages failed: %v", err)
-	}
+	imagesIndex := c.Book.PrepareImages(true, &env.Cfg.Document.Images, env.Log)
 
 	img := imagesIndex["png-img"]
 	if img == nil {
@@ -361,10 +337,7 @@ func TestContent_DefaultCoverFallback(t *testing.T) {
 		Binaries: []fb2.BinaryObject{},
 	}
 
-	imagesIndex, err := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
-	if err != nil {
-		t.Fatalf("PrepareImages failed: %v", err)
-	}
+	imagesIndex := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
 	c.ImagesIndex = imagesIndex
 
 	// Check if default cover exists
@@ -419,10 +392,7 @@ func TestContent_ImageScaling(t *testing.T) {
 		},
 	}
 
-	imagesIndex, err := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
-	if err != nil {
-		t.Fatalf("PrepareImages failed: %v", err)
-	}
+	imagesIndex := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
 
 	img := imagesIndex["scaled-img"]
 	decoded, _, err := image.Decode(bytes.NewReader(img.Data))
@@ -461,10 +431,7 @@ func TestContent_PNGTransparencyRemoval(t *testing.T) {
 		},
 	}
 
-	imagesIndex, err := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
-	if err != nil {
-		t.Fatalf("PrepareImages failed: %v", err)
-	}
+	imagesIndex := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
 
 	resultImg := imagesIndex["trans-png"]
 	decoded, _, err := image.Decode(bytes.NewReader(resultImg.Data))
@@ -497,10 +464,7 @@ func TestContent_ImageOptimization(t *testing.T) {
 		},
 	}
 
-	imagesIndex, err := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
-	if err != nil {
-		t.Fatalf("PrepareImages failed: %v", err)
-	}
+	imagesIndex := c.Book.PrepareImages(false, &env.Cfg.Document.Images, env.Log)
 
 	optimizedImg := imagesIndex["hq-img"]
 	optimizedSize := len(optimizedImg.Data)

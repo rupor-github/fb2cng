@@ -69,10 +69,7 @@ func TestBinaryObject_PrepareImage_BasicJPEG(t *testing.T) {
 		Data:        jpegData,
 	}
 
-	bi, err := bo.PrepareImage(false, false, cfg, log)
-	if err != nil {
-		t.Fatalf("PrepareImage failed: %v", err)
-	}
+	bi := bo.PrepareImage(false, false, cfg, log)
 	if bi == nil {
 		t.Fatal("expected non-nil BookImage")
 	}
@@ -102,10 +99,7 @@ func TestBinaryObject_PrepareImage_BasicPNG(t *testing.T) {
 		Data:        pngData,
 	}
 
-	bi, err := bo.PrepareImage(false, false, cfg, log)
-	if err != nil {
-		t.Fatalf("PrepareImage failed: %v", err)
-	}
+	bi := bo.PrepareImage(false, false, cfg, log)
 	if bi.MimeType != "image/png" {
 		t.Errorf("expected mime type image/png, got %s", bi.MimeType)
 	}
@@ -130,10 +124,7 @@ func TestBinaryObject_PrepareImage_CoverResizeKeepAR(t *testing.T) {
 		Data:        jpegData,
 	}
 
-	bi, err := bo.PrepareImage(false, true, cfg, log)
-	if err != nil {
-		t.Fatalf("PrepareImage failed: %v", err)
-	}
+	bi := bo.PrepareImage(false, true, cfg, log)
 
 	// Decode and verify dimensions
 	img, _, err := image.Decode(bytes.NewReader(bi.Data))
@@ -170,10 +161,7 @@ func TestBinaryObject_PrepareImage_CoverResizeStretch(t *testing.T) {
 		Data:        jpegData,
 	}
 
-	bi, err := bo.PrepareImage(false, true, cfg, log)
-	if err != nil {
-		t.Fatalf("PrepareImage failed: %v", err)
-	}
+	bi := bo.PrepareImage(false, true, cfg, log)
 
 	img, _, err := image.Decode(bytes.NewReader(bi.Data))
 	if err != nil {
@@ -205,10 +193,7 @@ func TestBinaryObject_PrepareImage_CoverNoResize(t *testing.T) {
 		Data:        jpegData,
 	}
 
-	bi, err := bo.PrepareImage(false, true, cfg, log)
-	if err != nil {
-		t.Fatalf("PrepareImage failed: %v", err)
-	}
+	bi := bo.PrepareImage(false, true, cfg, log)
 
 	img, _, err := image.Decode(bytes.NewReader(bi.Data))
 	if err != nil {
@@ -239,10 +224,7 @@ func TestBinaryObject_PrepareImage_ScaleFactor(t *testing.T) {
 		Data:        jpegData,
 	}
 
-	bi, err := bo.PrepareImage(false, false, cfg, log)
-	if err != nil {
-		t.Fatalf("PrepareImage failed: %v", err)
-	}
+	bi := bo.PrepareImage(false, false, cfg, log)
 
 	img, _, err := image.Decode(bytes.NewReader(bi.Data))
 	if err != nil {
@@ -274,10 +256,7 @@ func TestBinaryObject_PrepareImage_RemovePNGTransparency(t *testing.T) {
 		Data:        pngData,
 	}
 
-	bi, err := bo.PrepareImage(false, false, cfg, log)
-	if err != nil {
-		t.Fatalf("PrepareImage failed: %v", err)
-	}
+	bi := bo.PrepareImage(false, false, cfg, log)
 
 	img, _, err := image.Decode(bytes.NewReader(bi.Data))
 	if err != nil {
@@ -313,10 +292,7 @@ func TestBinaryObject_PrepareImage_JPEGQualityOptimization(t *testing.T) {
 		Data:        jpegData,
 	}
 
-	bi, err := bo.PrepareImage(false, false, cfg, log)
-	if err != nil {
-		t.Fatalf("PrepareImage failed: %v", err)
-	}
+	bi := bo.PrepareImage(false, false, cfg, log)
 
 	// Optimized image should be smaller
 	if len(bi.Data) >= originalSize {
@@ -343,10 +319,7 @@ func TestBinaryObject_PrepareImage_KindleConversion(t *testing.T) {
 		Data:        pngData,
 	}
 
-	bi, err := bo.PrepareImage(true, false, cfg, log)
-	if err != nil {
-		t.Fatalf("PrepareImage failed: %v", err)
-	}
+	bi := bo.PrepareImage(true, false, cfg, log)
 
 	if bi.MimeType != "image/jpeg" {
 		t.Errorf("expected conversion to JPEG for Kindle, got %s", bi.MimeType)
@@ -371,10 +344,7 @@ func TestBinaryObject_PrepareImage_SVGPreservation(t *testing.T) {
 		Data:        svgData,
 	}
 
-	bi, err := bo.PrepareImage(true, true, cfg, log)
-	if err != nil {
-		t.Fatalf("PrepareImage failed: %v", err)
-	}
+	bi := bo.PrepareImage(true, true, cfg, log)
 
 	// SVG should be normalized to image/svg+xml
 	if bi.MimeType != "image/svg+xml" {
@@ -402,12 +372,19 @@ func TestBinaryObject_PrepareImage_InvalidImage(t *testing.T) {
 		Data:        []byte("not a valid image"),
 	}
 
-	bi, err := bo.PrepareImage(false, true, cfg, log)
-	if err == nil {
-		t.Fatal("expected error for invalid image data")
+	bi := bo.PrepareImage(false, true, cfg, log)
+	if bi == nil {
+		t.Fatal("expected non-nil BookImage with placeholder")
 	}
-	if bi != nil {
-		t.Error("expected nil BookImage on error")
+	// Should return placeholder PNG, not original broken data
+	if bytes.Equal(bi.Data, bo.Data) {
+		t.Fatal("expected placeholder image, got original broken data")
+	}
+	if bi.MimeType != "image/png" {
+		t.Errorf("expected MimeType to be image/png, got %s", bi.MimeType)
+	}
+	if bi.Dim.Width == 0 || bi.Dim.Height == 0 {
+		t.Error("expected placeholder image to have dimensions")
 	}
 }
 
@@ -428,10 +405,7 @@ func TestBinaryObject_PrepareImage_UseBrokenFlag(t *testing.T) {
 		Data:        []byte("not a valid image"),
 	}
 
-	bi, err := bo.PrepareImage(false, true, cfg, log)
-	if err != nil {
-		t.Fatalf("expected no error with UseBroken=true, got %v", err)
-	}
+	bi := bo.PrepareImage(false, true, cfg, log)
 	if bi == nil {
 		t.Fatal("expected non-nil BookImage with UseBroken=true")
 	}
@@ -467,10 +441,7 @@ func TestFictionBook_PrepareImages(t *testing.T) {
 		},
 	}
 
-	index, err := fb.PrepareImages(false, cfg, log)
-	if err != nil {
-		t.Fatalf("PrepareImages failed: %v", err)
-	}
+	index := fb.PrepareImages(false, cfg, log)
 
 	if len(index) != 2 {
 		t.Errorf("expected 2 images in index, got %d", len(index))
@@ -505,10 +476,7 @@ func TestFictionBook_PrepareImages_DuplicateIDs(t *testing.T) {
 		},
 	}
 
-	index, err := fb.PrepareImages(false, cfg, log)
-	if err != nil {
-		t.Fatalf("PrepareImages failed: %v", err)
-	}
+	index := fb.PrepareImages(false, cfg, log)
 
 	// Should skip duplicate
 	if len(index) != 2 {
@@ -543,10 +511,7 @@ func TestFictionBook_PrepareImages_CoverDetection(t *testing.T) {
 		},
 	}
 
-	index, err := fb.PrepareImages(false, cfg, log)
-	if err != nil {
-		t.Fatalf("PrepareImages failed: %v", err)
-	}
+	index := fb.PrepareImages(false, cfg, log)
 
 	// Cover should be resized
 	coverImage := index["cover-id"]

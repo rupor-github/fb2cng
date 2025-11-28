@@ -2,6 +2,7 @@ package fb2
 
 import (
 	"bytes"
+	_ "embed"
 	"encoding/binary"
 	"fmt"
 	"image"
@@ -23,26 +24,57 @@ import (
 	"fbc/jpegquality"
 )
 
+//go:embed broken.png
+var brokenImagePNG []byte
+
 // Image processing functions for FictionBook.
 
+// mimeToExt returns file extension for common image MIME types
+func mimeToExt(mimeType string) string {
+	// Handle common types directly to prefer standard extensions
+	switch strings.ToLower(mimeType) {
+	case "image/jpeg":
+		return "jpg"
+	case "image/png":
+		return "png"
+	case "image/gif":
+		return "gif"
+	case "image/bmp":
+		return "bmp"
+	case "image/svg+xml":
+		return "svg"
+	case "image/webp":
+		return "webp"
+	case "image/tiff":
+		return "tiff"
+	}
+	// Fallback to mime package for other types
+	exts, err := mime.ExtensionsByType(mimeType)
+	if err == nil && len(exts) > 0 {
+		return strings.TrimPrefix(exts[0], ".")
+	}
+	return "img"
+}
+
 // PrepareImages processes all binary objects in the FictionBook creating
-// actual image and building image index
-func (fb *FictionBook) PrepareImages(kindle bool, cfg *config.ImagesConfig, log *zap.Logger) (BookImages, error) {
+// actual image and building image index. Never returns an error - uses placeholder for broken images.
+func (fb *FictionBook) PrepareImages(kindle bool, cfg *config.ImagesConfig, log *zap.Logger) BookImages {
 	index := make(BookImages)
 
+	imgNum := 1
 	for i := range fb.Binaries {
 		if _, exists := index[fb.Binaries[i].ID]; exists {
 			log.Debug("Duplicate binary ID found, skipping", zap.String("id", fb.Binaries[i].ID))
 			continue
 		}
 		cover := len(fb.Description.TitleInfo.Coverpage) > 0 && strings.HasSuffix(fb.Description.TitleInfo.Coverpage[0].Href, fb.Binaries[i].ID)
-		bi, err := fb.Binaries[i].PrepareImage(kindle, cover, cfg, log)
-		if err != nil {
-			return index, err
-		}
+		bi := fb.Binaries[i].PrepareImage(kindle, cover, cfg, log)
+		ext := mimeToExt(bi.MimeType)
+		bi.Filename = fmt.Sprintf("img%05d.%s", imgNum, ext)
+		imgNum++
 		index[fb.Binaries[i].ID] = bi
 	}
-	return index, nil
+	return index
 }
 
 // isImageSupported returns true if image is supported and does not need
@@ -99,22 +131,37 @@ func setJpegDPI(buf *bytes.Buffer, dpit jpegDPIType, xdensity, ydensity int16) (
 	return newbuf, true
 }
 
-func (bo *BinaryObject) handleDecodingError(bi *BookImage, err error, cfg *config.ImagesConfig, log *zap.Logger) (*BookImage, error) {
+func (bo *BinaryObject) handleDecodingError(bi *BookImage, err error, cfg *config.ImagesConfig, log *zap.Logger) *BookImage {
 	log.Warn("Unable to decode image", zap.String("id", bo.ID),
 		zap.String("content-type", bo.ContentType), zap.Error(err))
 
 	if !cfg.UseBroken {
-		return nil, fmt.Errorf("unable to decode image ID %s: %w", bo.ID, err)
+		// Use embedded broken.png placeholder instead of broken data
+		bi.Data = brokenImagePNG
+		bi.MimeType = "image/png"
+		// Decode the placeholder to get dimensions
+		if img, _, decErr := image.Decode(bytes.NewReader(brokenImagePNG)); decErr == nil {
+			bi.Dim.Width = img.Bounds().Dx()
+			bi.Dim.Height = img.Bounds().Dy()
+		}
 	}
-	return bi, nil
+	return bi
 }
 
-func (bo *BinaryObject) handleResizeError(bi *BookImage, cfg *config.ImagesConfig, log *zap.Logger) (*BookImage, error) {
+func (bo *BinaryObject) handleResizeError(bi *BookImage, cfg *config.ImagesConfig, log *zap.Logger) *BookImage {
+	log.Warn("Unable to resize image", zap.String("id", bo.ID), zap.String("content-type", bo.ContentType))
+
 	if !cfg.UseBroken {
-		return nil, fmt.Errorf("unable to resize image: ID - %s", bo.ID)
+		// Use embedded broken.png placeholder instead of broken data
+		bi.Data = brokenImagePNG
+		bi.MimeType = "image/png"
+		// Decode the placeholder to get dimensions
+		if img, _, decErr := image.Decode(bytes.NewReader(brokenImagePNG)); decErr == nil {
+			bi.Dim.Width = img.Bounds().Dx()
+			bi.Dim.Height = img.Bounds().Dy()
+		}
 	}
-	log.Warn("Unable to resize image, using as is", zap.String("id", bo.ID), zap.String("content-type", bo.ContentType))
-	return bi, nil
+	return bi
 }
 
 func (bo *BinaryObject) encodeImage(img image.Image, imgType string, cfg *config.ImagesConfig, log *zap.Logger) ([]byte, error) {
@@ -146,8 +193,8 @@ func (bo *BinaryObject) encodeImage(img image.Image, imgType string, cfg *config
 
 // PrepareImage performs required image modifications leaving original data
 // intact if no changes where requested. If image is decodable it will always
-// attemt to normalize mime type.
-func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfig, log *zap.Logger) (*BookImage, error) {
+// attempt to normalize mime type. Never returns an error - uses placeholder for broken images.
+func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfig, log *zap.Logger) *BookImage {
 
 	bi := &BookImage{
 		MimeType: bo.ContentType,
@@ -157,23 +204,20 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 	// Special case - do not touch SVG
 	if strings.HasSuffix(strings.ToLower(bo.ContentType), "svg") {
 		bi.MimeType = "image/svg+xml"
-		return bi, nil
+		return bi
 	}
 
 	imageChanged := false
 	img, imgType, imgDecodingErr := image.Decode(bytes.NewReader(bo.Data))
-	if imgDecodingErr == nil {
-		bi.MimeType = mime.TypeByExtension("." + imgType)
-		bi.Dim.Width = img.Bounds().Dx()
-		bi.Dim.Height = img.Bounds().Dy()
+	if imgDecodingErr != nil {
+		return bo.handleDecodingError(bi, imgDecodingErr, cfg, log)
 	}
+	bi.MimeType = mime.TypeByExtension("." + imgType)
+	bi.Dim.Width = img.Bounds().Dx()
+	bi.Dim.Height = img.Bounds().Dy()
 
 	// Scaling cover image
 	if cover {
-		if imgDecodingErr != nil {
-			return bo.handleDecodingError(bi, imgDecodingErr, cfg, log)
-		}
-
 		w, h := cfg.Cover.Width, cfg.Cover.Height
 		switch cfg.Cover.Resize {
 		case config.ImageResizeModeNone:
@@ -203,10 +247,6 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 
 	// Scaling non-cover images
 	if !cover && cfg.ScaleFactor > 0.0 && cfg.ScaleFactor != 1.0 {
-		if imgDecodingErr != nil {
-			return bo.handleDecodingError(bi, imgDecodingErr, cfg, log)
-		}
-
 		if imgType == "png" || imgType == "jpeg" {
 			resizedImg := imaging.Resize(img, 0, int(float64(img.Bounds().Dy())*cfg.ScaleFactor), imaging.Linear)
 			if resizedImg == nil {
@@ -221,10 +261,6 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 
 	// PNG transparency
 	if cfg.RemovePNGTransparency {
-		if imgDecodingErr != nil {
-			return bo.handleDecodingError(bi, imgDecodingErr, cfg, log)
-		}
-
 		if imgType == "png" {
 			opaque := func(im image.Image) bool {
 				if oimg, ok := im.(interface{ Opaque() bool }); ok {
@@ -246,10 +282,6 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 
 	// Compression & image quality
 	if cfg.Optimize {
-		if imgDecodingErr != nil {
-			return bo.handleDecodingError(bi, imgDecodingErr, cfg, log)
-		}
-
 		switch imgType {
 		case "jpeg":
 			jr, err := jpegquality.NewWithBytes(bo.Data)
@@ -276,10 +308,6 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 
 	// Kindle compatibility
 	if kindle {
-		if imgDecodingErr != nil {
-			return bo.handleDecodingError(bi, imgDecodingErr, cfg, log)
-		}
-
 		if isImageSupported(imgType) && imgType != "jpeg" {
 			log.Warn("Image type is not supported by target device, converting to jpeg",
 				zap.String("id", bo.ID),
@@ -290,19 +318,27 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 	}
 
 	if !imageChanged {
-		return bi, nil
+		return bi
 	}
 
 	data, err := bo.encodeImage(img, imgType, cfg, log)
 	if err != nil {
+		log.Warn("Unable to encode image", zap.String("id", bo.ID), zap.Error(err))
 		if !cfg.UseBroken {
-			return nil, err
+			// Use embedded broken.png placeholder instead of returning error
+			bi.Data = brokenImagePNG
+			bi.MimeType = "image/png"
+			// Decode the placeholder to get dimensions
+			if plImg, _, decErr := image.Decode(bytes.NewReader(brokenImagePNG)); decErr == nil {
+				bi.Dim.Width = plImg.Bounds().Dx()
+				bi.Dim.Height = plImg.Bounds().Dy()
+			}
 		}
-		return bi, nil
+		return bi
 	}
 	if data != nil {
 		bi.Data = data
 	}
 
-	return bi, nil
+	return bi
 }

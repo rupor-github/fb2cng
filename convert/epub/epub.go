@@ -630,7 +630,7 @@ func writeBodyIntroContent(parent *etree.Element, c *content.Content, body *fb2.
 	}
 
 	if body.Image != nil {
-		writeImageElement(parent, body.Image)
+		writeImageElement(parent, c, body.Image)
 	}
 
 	return nil
@@ -680,7 +680,7 @@ func writeSectionContent(parent *etree.Element, c *content.Content, section *fb2
 	}
 
 	if section.Image != nil {
-		writeImageElement(parent, section.Image)
+		writeImageElement(parent, c, section.Image)
 	}
 
 	if section.Annotation != nil {
@@ -752,7 +752,7 @@ func writeFlowItems(parent *etree.Element, c *content.Content, items []fb2.FlowI
 			}
 		case fb2.FlowImage:
 			if item.Image != nil {
-				writeImageElement(parent, item.Image)
+				writeImageElement(parent, c, item.Image)
 			}
 		case fb2.FlowEmptyLine:
 			parent.CreateElement("br")
@@ -896,7 +896,11 @@ func writeInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inli
 		if seg.Image != nil {
 			img := parent.CreateElement("img")
 			imgID := strings.TrimPrefix(seg.Image.Href, "#")
-			img.CreateAttr("src", "images/"+imgID)
+			if imgData, ok := c.ImagesIndex[imgID]; ok {
+				img.CreateAttr("src", "images/"+imgData.Filename)
+			} else {
+				img.CreateAttr("src", "images/"+imgID)
+			}
 			if seg.Image.Alt != "" {
 				img.CreateAttr("alt", seg.Image.Alt)
 			}
@@ -904,7 +908,7 @@ func writeInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inli
 	}
 }
 
-func writeImageElement(parent *etree.Element, img *fb2.Image) {
+func writeImageElement(parent *etree.Element, c *content.Content, img *fb2.Image) {
 	div := parent.CreateElement("div")
 	div.CreateAttr("class", "image")
 	if img.ID != "" {
@@ -913,7 +917,11 @@ func writeImageElement(parent *etree.Element, img *fb2.Image) {
 
 	imgElem := div.CreateElement("img")
 	imgID := strings.TrimPrefix(img.Href, "#")
-	imgElem.CreateAttr("src", "images/"+imgID)
+	if imgData, ok := c.ImagesIndex[imgID]; ok {
+		imgElem.CreateAttr("src", "images/"+imgData.Filename)
+	} else {
+		imgElem.CreateAttr("src", "images/"+imgID)
+	}
 	if img.Alt != "" {
 		imgElem.CreateAttr("alt", img.Alt)
 	}
@@ -1118,7 +1126,7 @@ func writeXHTMLChapter(zw *zip.Writer, chapter *chapterData, log *zap.Logger) er
 
 func writeImages(zw *zip.Writer, images fb2.BookImages, log *zap.Logger) error {
 	for id, img := range images {
-		filename := fmt.Sprintf("%s/%s", imagesDir, id)
+		filename := fmt.Sprintf("%s/%s", imagesDir, img.Filename)
 
 		if err := writeDataToZip(zw, filename, img.Data); err != nil {
 			return fmt.Errorf("unable to write image %s: %w", id, err)
@@ -1183,7 +1191,7 @@ func writeCoverPage(zw *zip.Writer, c *content.Content, cfg *config.DocumentConf
 		svgImage.CreateAttr("y", "0")
 		svgImage.CreateAttr("width", "100")
 		svgImage.CreateAttr("height", "100")
-		svgImage.CreateAttr("xlink:href", "images/"+c.CoverID)
+		svgImage.CreateAttr("xlink:href", "images/"+coverImage.Filename)
 	case config.ImageResizeModeKeepAR:
 		fallthrough
 	default:
@@ -1202,7 +1210,7 @@ func writeCoverPage(zw *zip.Writer, c *content.Content, cfg *config.DocumentConf
 		svgImage.CreateAttr("y", "0")
 		svgImage.CreateAttr("width", fmt.Sprintf("%d", w))
 		svgImage.CreateAttr("height", fmt.Sprintf("%d", h))
-		svgImage.CreateAttr("xlink:href", "images/"+c.CoverID)
+		svgImage.CreateAttr("xlink:href", "images/"+coverImage.Filename)
 	}
 
 	doc.Indent(2)
@@ -1328,12 +1336,12 @@ func writeOPF(zw *zip.Writer, c *content.Content, chapters []chapterData, log *z
 		item := manifest.CreateElement("item")
 		if id == c.CoverID {
 			item.CreateAttr("id", "book-cover-image")
-			item.CreateAttr("href", "images/"+id)
+			item.CreateAttr("href", "images/"+img.Filename)
 			item.CreateAttr("media-type", img.MimeType)
 			item.CreateAttr("properties", "cover-image")
 		} else {
 			item.CreateAttr("id", "img-"+id)
-			item.CreateAttr("href", "images/"+id)
+			item.CreateAttr("href", "images/"+img.Filename)
 			item.CreateAttr("media-type", img.MimeType)
 		}
 	}

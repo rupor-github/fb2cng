@@ -152,10 +152,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 
 	// Process all binary objects creating actual images and reference index
 	// This happens after NormalizeLinks so the not-found image binary is included
-	allImages, err := book.PrepareImages(outputFormat.ForKindle(), &env.Cfg.Document.Images, log)
-	if err != nil {
-		return nil, fmt.Errorf("unable to prepare images: %w", err)
-	}
+	allImages := book.PrepareImages(outputFormat.ForKindle(), &env.Cfg.Document.Images, log)
 
 	// Filter images to only include those that are actually referenced
 	imagesIndex := filterReferencedImages(allImages, links, coverID, log)
