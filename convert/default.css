@@ -3,23 +3,27 @@ p {
     text-align: justify;
     margin: 0 0 0.3em 0;
 }
-h1,
+.title {
+    margin: 2em 0 1em 0;
+    page-break-before: always;
+    text-align: center;
+    font-weight: bold;
+}
+h1 {
+    font-size: 140%;
+}
 h2,
 h3,
 h4,
 h5,
 h6 {
-    margin: 2em 0 1em 0;
-    page-break-before: always;
-    text-align: center;
     font-size: 120%;
-    font-weight: bold;
 }
-br.title-emptyline {
+.title-emptyline {
     display: block;
     margin: 0.5em 0;
 }
-br.title-paragraph {
+.title-paragraph {
     display: block;
 }
 .title-first,
@@ -34,22 +38,19 @@ br.title-paragraph {
     margin: 1em 0;
     page-break-after: avoid;
 }
-.poem-title {
-    margin: 1em 0;
-}
-.poem-title-first,
-.poem-title-next {
-    text-align: center;
-    text-indent: 0;
-    margin: 0;
-}
 .image {
+    text-indent: 0em;
     text-align: center;
-    text-indent: 0;
 }
-.image img {
+img.block-image {
     max-width: 100%;
+    max-height: 100%;
     height: auto;
+}
+img.inline-image {
+    max-width: 100%;
+    max-height: 100%;
+    vertical-align: middle;
 }
 .epigraph {
     text-align: right;
@@ -66,14 +67,26 @@ br.title-paragraph {
     font-style: italic;
     margin: 0 0 0 3em;
 }
+.poem-title {
+    margin: 1em 0;
+}
+.poem-title-first,
+.poem-title-next {
+    text-align: center;
+    text-indent: 0;
+    margin: 0;
+}
 .stanza {
     margin: 0.5em 0;
 }
 .stanza-title {
-    text-align: center;
-    font-weight: bold;
-    text-indent: 0;
     margin: 0.5em 0;
+}
+.stanza-title-first,
+.stanza-title-next {
+    text-align: center;
+    text-indent: 0;
+    margin: 0;
 }
 .stanza-subtitle {
     text-align: center;
@@ -123,4 +136,7 @@ a.footnote-link {
     font-style: normal;
     font-size: 0.8em;
     vertical-align: super;
+}
+.unexpected {
+    text-decoration: line-through;
 }

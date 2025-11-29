@@ -258,6 +258,7 @@ tasks:
       - ./**/*.yaml.tmpl
       - ./**/*.jpeg
       - ./**/*.png
+      - ./**/*.css
       - ./content/text/dictionaries/*.gz
       - ./content/text/sentences/*.gz
     generates:

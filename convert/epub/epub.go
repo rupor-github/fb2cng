@@ -24,7 +24,7 @@ import (
 const (
 	mimetypeContent = "application/epub+zip"
 	oebpsDir        = "OEBPS"
-	imagesDir       = "OEBPS/images"
+	imagesDir       = "images"
 )
 
 type chapterData struct {
@@ -595,7 +595,7 @@ func writeBodyIntroContent(parent *etree.Element, c *content.Content, body *fb2.
 			headingLevel = 6
 		}
 		headingTag := fmt.Sprintf("h%d", headingLevel)
-		
+
 		titleElem := parent.CreateElement(headingTag)
 		titleElem.CreateAttr("class", "title")
 		firstParagraph := true
@@ -654,13 +654,9 @@ func writeBodyIntroContent(parent *etree.Element, c *content.Content, body *fb2.
 
 func writeSectionContent(parent *etree.Element, c *content.Content, section *fb2.Section, skipTitle bool, depth int, log *zap.Logger) error {
 	if section.Title != nil && !skipTitle {
-		// Determine heading level (h1-h6) based on depth
-		headingLevel := depth
-		if headingLevel > 6 {
-			headingLevel = 6
-		}
+		headingLevel := min(depth, 6)
 		headingTag := fmt.Sprintf("h%d", headingLevel)
-		
+
 		titleElem := parent.CreateElement(headingTag)
 		titleElem.CreateAttr("class", "title")
 		firstParagraph := true
@@ -924,6 +920,7 @@ func writeInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inli
 	case fb2.InlineImageSegment:
 		if seg.Image != nil {
 			img := parent.CreateElement("img")
+			img.CreateAttr("class", "inline-image")
 			imgID := strings.TrimPrefix(seg.Image.Href, "#")
 			if imgData, ok := c.ImagesIndex[imgID]; ok {
 				img.CreateAttr("src", path.Join(imagesDir, imgData.Filename))
@@ -945,11 +942,12 @@ func writeImageElement(parent *etree.Element, c *content.Content, img *fb2.Image
 	}
 
 	imgElem := div.CreateElement("img")
+	imgElem.CreateAttr("class", "block-image")
 	imgID := strings.TrimPrefix(img.Href, "#")
 	if imgData, ok := c.ImagesIndex[imgID]; ok {
-		imgElem.CreateAttr("src", "images/"+imgData.Filename)
+		imgElem.CreateAttr("src", path.Join(imagesDir, imgData.Filename))
 	} else {
-		imgElem.CreateAttr("src", "images/"+imgID)
+		imgElem.CreateAttr("src", path.Join(imagesDir, imgID))
 	}
 	if img.Alt != "" {
 		imgElem.CreateAttr("alt", img.Alt)
@@ -1029,15 +1027,24 @@ func writePoemElement(parent *etree.Element, c *content.Content, poem *fb2.Poem,
 		if stanza.Title != nil {
 			stanzaTitleDiv := stanzaDiv.CreateElement("div")
 			stanzaTitleDiv.CreateAttr("class", "stanza-title")
+			firstParagraph := true
 			for _, item := range stanza.Title.Items {
 				if item.Paragraph != nil {
 					p := stanzaTitleDiv.CreateElement("p")
 					if item.Paragraph.ID != "" {
 						p.CreateAttr("id", item.Paragraph.ID)
 					}
-					if item.Paragraph.Style != "" {
-						p.CreateAttr("class", item.Paragraph.Style)
+					var class string
+					if firstParagraph {
+						class = "stanza-title-first"
+						firstParagraph = false
+					} else {
+						class = "stanza-title-next"
 					}
+					if item.Paragraph.Style != "" {
+						class = class + " " + item.Paragraph.Style
+					}
+					p.CreateAttr("class", class)
 					writeParagraphInline(p, c, item.Paragraph)
 				} else if item.EmptyLine {
 					stanzaTitleDiv.CreateElement("br")
@@ -1149,13 +1156,12 @@ func writeTableElement(parent *etree.Element, c *content.Content, table *fb2.Tab
 }
 
 func writeXHTMLChapter(zw *zip.Writer, chapter *chapterData, _ *zap.Logger) error {
-	chapter.Doc.Indent(2)
-	return writeXMLToZip(zw, oebpsDir+"/"+chapter.Filename, chapter.Doc)
+	return writeXMLToZip(zw, filepath.Join(oebpsDir, chapter.Filename), chapter.Doc)
 }
 
 func writeImages(zw *zip.Writer, images fb2.BookImages, log *zap.Logger) error {
 	for id, img := range images {
-		filename := path.Join(imagesDir, img.Filename)
+		filename := filepath.Join(oebpsDir, imagesDir, img.Filename)
 
 		if err := writeDataToZip(zw, filename, img.Data); err != nil {
 			return fmt.Errorf("unable to write image %s: %w", id, err)
@@ -1242,8 +1248,7 @@ func writeCoverPage(zw *zip.Writer, c *content.Content, cfg *config.DocumentConf
 		svgImage.CreateAttr("xlink:href", "images/"+coverImage.Filename)
 	}
 
-	doc.Indent(2)
-	return writeXMLToZip(zw, oebpsDir+"/cover.xhtml", doc)
+	return writeXMLToZip(zw, filepath.Join(oebpsDir, "cover.xhtml"), doc)
 }
 
 func writeStylesheet(zw *zip.Writer, c *content.Content, css []byte) error {
@@ -1253,7 +1258,7 @@ func writeStylesheet(zw *zip.Writer, c *content.Content, css []byte) error {
 		}
 	}
 
-	return writeDataToZip(zw, oebpsDir+"/stylesheet.css", css)
+	return writeDataToZip(zw, filepath.Join(oebpsDir, "stylesheet.css"), css)
 }
 
 func writeOPF(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap.Logger) error {
@@ -1361,8 +1366,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 		itemref.CreateAttr("idref", chapter.ID)
 	}
 
-	doc.Indent(2)
-	return writeXMLToZip(zw, oebpsDir+"/content.opf", doc)
+	return writeXMLToZip(zw, filepath.Join(oebpsDir, "content.opf"), doc)
 }
 
 func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap.Logger) error {
@@ -1428,8 +1432,7 @@ func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 		}
 	}
 
-	doc.Indent(2)
-	return writeXMLToZip(zw, oebpsDir+"/toc.ncx", doc)
+	return writeXMLToZip(zw, filepath.Join(oebpsDir, "toc.ncx"), doc)
 }
 
 func calculateSectionDepth(section *fb2.Section, currentDepth int) int {
@@ -1517,8 +1520,7 @@ func writeNav(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 		}
 	}
 
-	doc.Indent(2)
-	return writeXMLToZip(zw, oebpsDir+"/nav.xhtml", doc)
+	return writeXMLToZip(zw, filepath.Join(oebpsDir, "nav.xhtml"), doc)
 }
 
 func buildNavOL(parent *etree.Element, section *fb2.Section, filename string, generatedIDs map[*fb2.Section]string) {

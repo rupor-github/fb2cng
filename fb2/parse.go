@@ -75,6 +75,8 @@ func ParseBookXML(doc *etree.Document, footnoteNames []string, log *zap.Logger) 
 				return nil, fmt.Errorf("binary: %w", err)
 			}
 			book.Binaries = append(book.Binaries, bin)
+		default:
+			log.Warn("Unexpected tag in FictionBook, ignoring", zap.String("parent", root.Tag), zap.String("tag", child.Tag))
 		}
 	}
 
@@ -125,6 +127,8 @@ func parseDescription(el *etree.Element, log *zap.Logger) (Description, error) {
 				return desc, fmt.Errorf("output: %w", err)
 			}
 			desc.Output = append(desc.Output, out)
+		default:
+			log.Warn("Unexpected tag in description, ignoring", zap.String("parent", el.Tag), zap.String("tag", child.Tag))
 		}
 	}
 	return desc, nil
@@ -181,6 +185,8 @@ func parseTitleInfo(el *etree.Element, log *zap.Logger) (TitleInfo, error) {
 		case "sequence":
 			seq := parseSequence(child, log)
 			info.Sequences = append(info.Sequences, seq)
+		default:
+			log.Warn("Unexpected tag in title-info, ignoring", zap.String("parent", el.Tag), zap.String("tag", child.Tag))
 		}
 	}
 	return info, nil
@@ -207,7 +213,7 @@ func parseBookLang(in string, log *zap.Logger) language.Tag {
 	return language.Und
 }
 
-func parseAuthor(el *etree.Element, _ *zap.Logger) Author {
+func parseAuthor(el *etree.Element, log *zap.Logger) Author {
 	author := Author{}
 	for _, child := range el.ChildElements() {
 		switch child.Tag {
@@ -225,6 +231,8 @@ func parseAuthor(el *etree.Element, _ *zap.Logger) Author {
 			author.Emails = append(author.Emails, strings.TrimSpace(child.Text()))
 		case "id":
 			author.ID = strings.TrimSpace(child.Text())
+		default:
+			log.Warn("Unexpected tag in author, ignoring", zap.String("parent", el.Tag), zap.String("tag", child.Tag))
 		}
 	}
 	return author
@@ -281,7 +289,7 @@ func parseFlow(el *etree.Element, log *zap.Logger) (Flow, error) {
 		if !ok {
 			continue
 		}
-		item, err := parseFlowItem(child, log)
+		item, err := parseFlowItem(child, el.Tag, log)
 		if err != nil {
 			return flow, err
 		}
@@ -292,7 +300,59 @@ func parseFlow(el *etree.Element, log *zap.Logger) (Flow, error) {
 	return flow, nil
 }
 
-func parseFlowItem(el *etree.Element, log *zap.Logger) (*FlowItem, error) {
+// isKnownTextTag checks if a tag is a known FB2 text-containing element
+// that could reasonably be converted to a paragraph when found unexpectedly
+func isKnownTextTag(tag string) bool {
+	knownTextTags := map[string]bool{
+		"text-author": true,
+		"date":        true,
+		"v":           true, // verse
+		"stanza":      true,
+		"epigraph":    true,
+		"annotation":  true,
+	}
+	return knownTextTags[tag]
+}
+
+// extractAllText recursively extracts all text content from an element,
+// including from nested block and inline elements
+func extractAllText(el *etree.Element) string {
+	var text strings.Builder
+	for _, node := range el.Child {
+		switch token := node.(type) {
+		case *etree.CharData:
+			text.WriteString(token.Data)
+		case *etree.Element:
+			// Recursively extract text from nested elements
+			text.WriteString(extractAllText(token))
+		}
+	}
+	return text.String()
+}
+
+// parseUnexpectedAsParagraph extracts all text content from an element and its children
+// and creates a paragraph with it. Used when handling unexpected tags.
+func parseUnexpectedAsParagraph(el *etree.Element, log *zap.Logger) Paragraph {
+	para := Paragraph{
+		ID:    el.SelectAttrValue("id", ""),
+		Style: el.SelectAttrValue("style", ""),
+		Lang:  xmlLang(el),
+	}
+	// Set style to mark this as an unexpected conversion
+	if para.Style == "" {
+		para.Style = "unexpected " + el.Tag
+	} else {
+		para.Style = "unexpected " + el.Tag + " " + para.Style
+	}
+	// Extract all text content recursively
+	allText := extractAllText(el)
+	if allText != "" {
+		para.Text = []InlineSegment{{Kind: InlineText, Text: allText}}
+	}
+	return para
+}
+
+func parseFlowItem(el *etree.Element, parentTag string, log *zap.Logger) (*FlowItem, error) {
 	switch el.Tag {
 	case "p":
 		para := parseParagraph(el, log)
@@ -334,6 +394,13 @@ func parseFlowItem(el *etree.Element, log *zap.Logger) (*FlowItem, error) {
 		s := section
 		return &FlowItem{Kind: FlowSection, Section: &s}, nil
 	default:
+		// Check if this is a known text-containing tag that we can handle as a paragraph
+		if isKnownTextTag(el.Tag) {
+			log.Warn("Unexpected tag as flow item, converting to paragraph", zap.String("parent", parentTag), zap.String("tag", el.Tag))
+			para := parseUnexpectedAsParagraph(el, log)
+			return &FlowItem{Kind: FlowParagraph, Paragraph: &para}, nil
+		}
+		log.Warn("Unknown tag as flow item, ignoring", zap.String("parent", parentTag), zap.String("tag", el.Tag))
 		return nil, nil
 	}
 }
@@ -447,6 +514,8 @@ func parseBody(el *etree.Element, log *zap.Logger) (Body, error) {
 				return body, err
 			}
 			body.Sections = append(body.Sections, section)
+		default:
+			log.Warn("Unexpected tag in body, ignoring", zap.String("parent", el.Tag), zap.String("tag", child.Tag))
 		}
 	}
 	return body, nil
@@ -465,6 +534,8 @@ func parseTitle(el *etree.Element, log *zap.Logger) *Title {
 			title.Items = append(title.Items, TitleItem{Paragraph: &para})
 		case "empty-line":
 			title.Items = append(title.Items, TitleItem{EmptyLine: true})
+		default:
+			log.Warn("Unexpected tag in title, ignoring", zap.String("parent", el.Tag), zap.String("tag", child.Tag))
 		}
 	}
 	if len(title.Items) == 0 {
@@ -486,7 +557,7 @@ func parseEpigraph(el *etree.Element, log *zap.Logger) (Epigraph, error) {
 			epi.TextAuthors = append(epi.TextAuthors, para)
 			continue
 		}
-		item, err := parseFlowItem(child, log)
+		item, err := parseFlowItem(child, el.Tag, log)
 		if err != nil {
 			return epi, err
 		}
@@ -530,7 +601,7 @@ func parseSection(el *etree.Element, log *zap.Logger) (Section, error) {
 			subCopy := sub
 			section.Content = append(section.Content, FlowItem{Kind: FlowSection, Section: &subCopy})
 		default:
-			item, err := parseFlowItem(child, log)
+			item, err := parseFlowItem(child, el.Tag, log)
 			if err != nil {
 				return section, err
 			}
@@ -576,6 +647,8 @@ func parsePoem(el *etree.Element, log *zap.Logger) (Poem, error) {
 		case "date":
 			date := parseDate(child, log)
 			poem.Date = &date
+		default:
+			log.Warn("Unexpected tag in poem, ignoring", zap.String("parent", el.Tag), zap.String("tag", child.Tag))
 		}
 	}
 	return poem, nil
@@ -597,6 +670,8 @@ func parseStanza(el *etree.Element, log *zap.Logger) (Stanza, error) {
 		case "v":
 			para := parseParagraph(child, log)
 			stanza.Verses = append(stanza.Verses, para)
+		default:
+			log.Warn("Unexpected tag in stanza, ignoring", zap.String("parent", el.Tag), zap.String("tag", child.Tag))
 		}
 	}
 	return stanza, nil
@@ -617,7 +692,7 @@ func parseCite(el *etree.Element, log *zap.Logger) (Cite, error) {
 			cite.TextAuthors = append(cite.TextAuthors, para)
 			continue
 		}
-		item, err := parseFlowItem(child, log)
+		item, err := parseFlowItem(child, el.Tag, log)
 		if err != nil {
 			return cite, err
 		}
@@ -699,6 +774,8 @@ func parseDocumentInfo(el *etree.Element, log *zap.Logger) (DocumentInfo, error)
 			info.History = &flow
 		case "publisher":
 			info.Publishers = append(info.Publishers, parseAuthor(child, log))
+		default:
+			log.Warn("Unexpected tag in document-info, ignoring", zap.String("parent", el.Tag), zap.String("tag", child.Tag))
 		}
 	}
 	return info, nil
@@ -725,6 +802,8 @@ func parsePublishInfo(el *etree.Element, log *zap.Logger) (PublishInfo, error) {
 		case "sequence":
 			seq := parseSequence(child, log)
 			info.Sequences = append(info.Sequences, seq)
+		default:
+			log.Warn("Unexpected tag in publish-info, ignoring", zap.String("parent", el.Tag), zap.String("tag", child.Tag))
 		}
 	}
 	return info, nil
@@ -794,6 +873,8 @@ func parseOutputInstruction(el *etree.Element, log *zap.Logger) (OutputInstructi
 				return instruction, err
 			}
 			instruction.Documents = append(instruction.Documents, doc)
+		default:
+			log.Warn("Unexpected tag in output instruction, ignoring", zap.String("parent", el.Tag), zap.String("tag", child.Tag))
 		}
 	}
 	return instruction, nil
