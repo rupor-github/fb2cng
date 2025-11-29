@@ -28,6 +28,9 @@ import (
 //go:embed default_cover.jpeg
 var defaultCoverImage []byte
 
+//go:embed default.css
+var defaultStylesheet []byte
+
 func Run(ctx context.Context, cmd *cli.Command) (err error) {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -82,6 +85,15 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 			}
 			env.DefaultCover = data
 		}
+	}
+
+	env.DefaultStyle = defaultStylesheet
+	if env.Cfg.Document.StylesheetPath != "" {
+		data, err := os.ReadFile(env.Cfg.Document.StylesheetPath)
+		if err != nil {
+			return fmt.Errorf("unable to read default css from %q: %w", env.Cfg.Document.StylesheetPath, err)
+		}
+		env.DefaultStyle = data
 	}
 
 	env.NoDirs, env.Overwrite = cmd.Bool("nodirs"), cmd.Bool("overwrite")

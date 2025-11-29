@@ -104,7 +104,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		return fmt.Errorf("unable to write images: %w", err)
 	}
 
-	if err := writeStylesheet(zw, c); err != nil {
+	if err := writeStylesheet(zw, c, env.DefaultStyle); err != nil {
 		return fmt.Errorf("unable to write stylesheet: %w", err)
 	}
 
@@ -1118,7 +1118,7 @@ func writeTableElement(parent *etree.Element, c *content.Content, table *fb2.Tab
 	}
 }
 
-func writeXHTMLChapter(zw *zip.Writer, chapter *chapterData, log *zap.Logger) error {
+func writeXHTMLChapter(zw *zip.Writer, chapter *chapterData, _ *zap.Logger) error {
 	chapter.Doc.Indent(2)
 	return writeXMLToZip(zw, oebpsDir+"/"+chapter.Filename, chapter.Doc)
 }
@@ -1216,41 +1216,14 @@ func writeCoverPage(zw *zip.Writer, c *content.Content, cfg *config.DocumentConf
 	return writeXMLToZip(zw, oebpsDir+"/cover.xhtml", doc)
 }
 
-func writeStylesheet(zw *zip.Writer, c *content.Content) error {
-	css := `p { text-indent: 1em; text-align: justify; margin: 0 0 0.3em 0; }
-.title { margin: 2em 0 1em 0; page-break-before: always; }
-br.title { display: block; margin: 0.5em 0; }
-.title-first, .title-next { text-align: center; font-size: 120%; font-weight: bold; text-indent: 0; margin: 0; }
-.sub-title { text-align: center; font-weight: bold; text-indent: 0; margin: 1em 0; page-break-after: avoid; }
-.poem-title { margin: 1em 0; }
-.poem-title-first, .poem-title-next { text-align: center; text-indent: 0; margin: 0; }
-.image { text-align: center; text-indent: 0; }
-.image img { max-width: 100%; height: auto; }
-.epigraph { text-align: right; font-style: italic; margin: 0.4em 0 0.2em 4em; }
-.annotation { font-size: 80%; text-align: center; margin: 2em 1em 1em 1em; }
-.poem { text-indent: 0; font-style: italic; margin: 0 0 0 3em; }
-.stanza { margin: 0.5em 0; }
-.stanza-title { text-align: center; font-weight: bold; text-indent: 0; margin: 0.5em 0; }
-.stanza-subtitle { text-align: center; text-indent: 0; margin: 0.25em 0; }
-.verse { margin: 0.25em 0 0.25em 2em; text-indent: 0; }
-.cite, blockquote.cite { margin: 1em 2em; }
-.text-author { text-align: right; font-style: italic; text-indent: 0; page-break-before: avoid; font-weight: bold; }
-.date { text-align: right; text-indent: 0; margin: 0.5em 0; }
-.section { margin: 1em 0; }
-table { border-collapse: collapse; margin: 1em auto; }
-td, th { border: 1px solid #ccc; padding: 0.5em; }
-a.external-link { text-decoration: underline; }
-a.internal-link { text-decoration: none; }
-a.footnote-link { text-decoration: none; font-style: normal; font-size: 0.8em; vertical-align: super; }
-`
-
+func writeStylesheet(zw *zip.Writer, c *content.Content, css []byte) error {
 	for _, style := range c.Book.Stylesheets {
 		if style.Type == "text/css" {
-			css += "\n/* FB2 embedded stylesheet */\n" + style.Data + "\n"
+			css = append(css, "\n/* FB2 embedded stylesheet */\n"+style.Data+"\n"...)
 		}
 	}
 
-	return writeDataToZip(zw, oebpsDir+"/stylesheet.css", []byte(css))
+	return writeDataToZip(zw, oebpsDir+"/stylesheet.css", css)
 }
 
 func writeOPF(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap.Logger) error {

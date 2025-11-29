@@ -25,6 +25,9 @@ document:
   # unreadable epub/kepub files - turn this on
   fix_zip: false
 
+  #---- CSS stylesheet to use. If absent - default one will be supplied
+  # stylesheet_path = "default.css"
+
   #---- When file_name_format is set output file will have name created using FB2 metainformation
   #---- NOTE: watch out for path separators, directories will be created!
   output_name_template: |
@@ -55,6 +58,7 @@ document:
   insert_soft_hyphen: false
 
   images:
+
     # Do not skip images which cannot be decoded by program. Use them without
     # any processing, allowing reader to decide what to do.
     use_broken: false

@@ -24,6 +24,7 @@ type LocalEnv struct {
 	Overwrite    bool
 	CodePage     encoding.Encoding
 	DefaultCover []byte
+	DefaultStyle []byte
 
 	start         time.Time
 	restoreStdLog func()
