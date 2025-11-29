@@ -3,21 +3,29 @@ p {
     text-align: justify;
     margin: 0 0 0.3em 0;
 }
-.title {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
     margin: 2em 0 1em 0;
     page-break-before: always;
-}
-br.title {
-    display: block;
-    margin: 0.5em 0;
-}
-.title-first,
-.title-next {
     text-align: center;
     font-size: 120%;
     font-weight: bold;
+}
+br.title-emptyline {
+    display: block;
+    margin: 0.5em 0;
+}
+br.title-paragraph {
+    display: block;
+}
+.title-first,
+.title-next {
+    display: inline;
     text-indent: 0;
-    margin: 0;
 }
 .sub-title {
     text-align: center;
