@@ -235,11 +235,6 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 		return nil, nil, err
 	}
 
-	// First pass: assign sequential IDs to all sections without IDs
-	assignSectionIDs(c)
-	// Second pass: assign sequential IDs to all chapter-level subtitles without IDs
-	assignSubtitleIDs(c)
-
 	var chapters []chapterData
 	chapterNum := 0
 	idToFile := make(idToFileMap)
@@ -395,67 +390,6 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 	return chapters, idToFile, nil
 }
 
-// assignSectionIDs assigns sequential IDs to all sections that don't have IDs
-func assignSectionIDs(c *content.Content) {
-	counter := 0
-	for i := range c.Book.Bodies {
-		assignBodySectionIDs(&c.Book.Bodies[i], c.GeneratedIDs, &counter)
-	}
-}
-
-// assignBodySectionIDs recursively assigns IDs to sections in a body
-func assignBodySectionIDs(body *fb2.Body, idMap map[*fb2.Section]string, counter *int) {
-	for i := range body.Sections {
-		assignSectionIDRecursive(&body.Sections[i], idMap, counter)
-	}
-}
-
-// assignSectionIDRecursive recursively assigns IDs to a section and its children
-func assignSectionIDRecursive(section *fb2.Section, idMap map[*fb2.Section]string, counter *int) {
-	// Only assign ID if section doesn't have one
-	if section.ID == "" {
-		*counter++
-		idMap[section] = fmt.Sprintf("sect_%d", *counter)
-	}
-
-	// Process child sections
-	for i := range section.Content {
-		if section.Content[i].Kind == fb2.FlowSection && section.Content[i].Section != nil {
-			assignSectionIDRecursive(section.Content[i].Section, idMap, counter)
-		}
-	}
-}
-
-// assignSubtitleIDs assigns sequential IDs to chapter-level subtitles that don't have IDs
-func assignSubtitleIDs(c *content.Content) {
-	counter := 0
-	for i := range c.Book.Bodies {
-		assignBodySubtitleIDs(&c.Book.Bodies[i], c.GeneratedSubtitles, &counter)
-	}
-}
-
-// assignBodySubtitleIDs recursively assigns IDs to subtitles in a body
-func assignBodySubtitleIDs(body *fb2.Body, idMap map[*fb2.Paragraph]string, counter *int) {
-	for i := range body.Sections {
-		assignSectionSubtitleIDs(&body.Sections[i], idMap, counter)
-	}
-}
-
-// assignSectionSubtitleIDs recursively assigns IDs to subtitles at section level (not in poems/cites/etc.)
-func assignSectionSubtitleIDs(section *fb2.Section, idMap map[*fb2.Paragraph]string, counter *int) {
-	// Process content items
-	for i := range section.Content {
-		if section.Content[i].Kind == fb2.FlowSubtitle && section.Content[i].Subtitle != nil && section.Content[i].Subtitle.ID == "" {
-			// Subtitle at section level without ID - assign one
-			*counter++
-			idMap[section.Content[i].Subtitle] = fmt.Sprintf("subtitle_%d", *counter)
-		} else if section.Content[i].Kind == fb2.FlowSection && section.Content[i].Section != nil {
-			// Recurse into nested sections
-			assignSectionSubtitleIDs(section.Content[i].Section, idMap, counter)
-		}
-	}
-}
-
 // collectTopSections recursively unwraps sections without titles (grouping sections)
 // and returns only sections with titles that should become chapters
 func collectTopSections(sections []fb2.Section) []*fb2.Section {
@@ -504,7 +438,7 @@ func extractTitleText(section *fb2.Section) string {
 	if section.ID != "" {
 		return "~ " + section.ID + " ~"
 	}
-	return "Chapter"
+	return "Unknown chapter title"
 }
 
 // extractTOCText extracts text from title items for TOC display
@@ -599,8 +533,12 @@ func extractSubtitleText(subtitle *fb2.Paragraph, subtitleID string) string {
 		return imageAlt
 	}
 
-	// Last resort: use ID with tildes
-	return "~ " + subtitleID + " ~"
+	if subtitleID != "" {
+		// Fallback -use ID with tildes
+		return "~ " + subtitleID + " ~"
+	}
+
+	return "Unknown subtitle"
 }
 
 func paragraphToPlainText(p *fb2.Paragraph) string {
@@ -822,7 +760,7 @@ func writeFootnoteSectionContent(parent *etree.Element, c *content.Content, sect
 		titleDiv := parent.CreateElement("div")
 		titleDiv.CreateAttr("class", "footnote-title")
 		firstParagraph := true
-		for i, item := range section.Title.Items {
+		for _, item := range section.Title.Items {
 			if item.Paragraph != nil {
 				p := titleDiv.CreateElement("p")
 				if item.Paragraph.ID != "" {
@@ -841,10 +779,7 @@ func writeFootnoteSectionContent(parent *etree.Element, c *content.Content, sect
 				p.CreateAttr("class", class)
 				writeParagraphInline(p, c, item.Paragraph)
 			} else if item.EmptyLine {
-				if i > 0 && i < len(section.Title.Items)-1 {
-					p := titleDiv.CreateElement("p")
-					p.CreateAttr("class", "footnote-title-emptyline")
-				}
+				titleDiv.CreateElement("br")
 			}
 		}
 	}
@@ -970,30 +905,6 @@ func writeFlowContentInCite(parent *etree.Element, c *content.Content, items []f
 	return writeFlowItemsWithContext(parent, c, items, depth, "cite", log)
 }
 
-// getSectionID returns the ID for a section, using the generated ID if the section doesn't have one
-func getSectionID(section *fb2.Section, generatedIDs map[*fb2.Section]string) string {
-	if section.ID != "" {
-		return section.ID
-	}
-	if id, exists := generatedIDs[section]; exists {
-		return id
-	}
-	// Should not happen if assignSectionIDs was called, but provide fallback
-	return "section-unknown"
-}
-
-// getSubtitleID returns the ID for a subtitle, using the generated ID if the subtitle doesn't have one
-func getSubtitleID(subtitle *fb2.Paragraph, generatedIDs map[*fb2.Paragraph]string) string {
-	if subtitle.ID != "" {
-		return subtitle.ID
-	}
-	if id, exists := generatedIDs[subtitle]; exists {
-		return id
-	}
-	// Should not happen if assignSubtitleIDs was called, but provide fallback
-	return "subtitle-unknown"
-}
-
 // isGroupingSection checks if a section is a pure grouping container
 // (no content except nested sections)
 func isGroupingSection(section *fb2.Section) bool {
@@ -1039,7 +950,8 @@ func writeFlowItemsWithContext(parent *etree.Element, c *content.Content, items 
 				writeImageElement(parent, c, item.Image)
 			}
 		case fb2.FlowEmptyLine:
-			parent.CreateElement("br")
+			div := parent.CreateElement("div")
+			div.CreateAttr("class", "emptyline")
 		case fb2.FlowSubtitle:
 			if item.Subtitle != nil {
 				var class string
@@ -1064,7 +976,7 @@ func writeFlowItemsWithContext(parent *etree.Element, c *content.Content, items 
 					headingTag := fmt.Sprintf("h%d", headingLevel)
 					h := parent.CreateElement(headingTag)
 					// Always set ID (use generated if original doesn't exist)
-					subtitleID := getSubtitleID(item.Subtitle, c.GeneratedSubtitles)
+					subtitleID := item.Subtitle.ID
 					h.CreateAttr("id", subtitleID)
 					if item.Subtitle.Lang != "" {
 						h.CreateAttr("xml:lang", item.Subtitle.Lang)
@@ -1102,7 +1014,7 @@ func writeFlowItemsWithContext(parent *etree.Element, c *content.Content, items 
 					div := parent.CreateElement("div")
 					div.CreateAttr("class", "section")
 					// Always add an ID for sections so TOC links work
-					sectionID := getSectionID(item.Section, c.GeneratedIDs)
+					sectionID := item.Section.ID
 					div.CreateAttr("id", sectionID)
 					if item.Section.Lang != "" {
 						div.CreateAttr("xml:lang", item.Section.Lang)
@@ -1202,9 +1114,7 @@ func writeInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inli
 			} else {
 				img.CreateAttr("src", path.Join(imagesDir, imgID))
 			}
-			if seg.Image.Alt != "" {
-				img.CreateAttr("alt", seg.Image.Alt)
-			}
+			img.CreateAttr("alt", seg.Image.Alt)
 		}
 	}
 }
@@ -1224,9 +1134,7 @@ func writeImageElement(parent *etree.Element, c *content.Content, img *fb2.Image
 	} else {
 		imgElem.CreateAttr("src", path.Join(imagesDir, imgID))
 	}
-	if img.Alt != "" {
-		imgElem.CreateAttr("alt", img.Alt)
-	}
+	imgElem.CreateAttr("alt", img.Alt)
 	if img.Title != "" {
 		imgElem.CreateAttr("title", img.Title)
 	}
@@ -1618,7 +1526,9 @@ func writeOPF(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 			item.CreateAttr("id", "book-cover-image")
 			item.CreateAttr("href", "images/"+img.Filename)
 			item.CreateAttr("media-type", img.MimeType)
-			item.CreateAttr("properties", "cover-image")
+			if c.OutputFormat == config.OutputFmtEpub3 {
+				item.CreateAttr("properties", "cover-image")
+			}
 		} else {
 			item.CreateAttr("id", "img-"+id)
 			item.CreateAttr("href", "images/"+img.Filename)
@@ -1735,7 +1645,7 @@ func buildNCXNavPoints(parent *etree.Element, section *fb2.Section, filename str
 		if item.Kind == fb2.FlowSubtitle && item.Subtitle != nil {
 			// Subtitle in section - add to TOC
 			*playOrder++
-			subtitleID := getSubtitleID(item.Subtitle, c.GeneratedSubtitles)
+			subtitleID := item.Subtitle.ID
 			navPoint := parent.CreateElement("navPoint")
 			navPoint.CreateAttr("id", fmt.Sprintf("navpoint-%s", subtitleID))
 			navPoint.CreateAttr("playOrder", fmt.Sprintf("%d", *playOrder))
@@ -1753,7 +1663,7 @@ func buildNCXNavPoints(parent *etree.Element, section *fb2.Section, filename str
 				// Section with title - add to TOC
 				*playOrder++
 				// Use section ID or generated ID
-				sectionID := getSectionID(item.Section, c.GeneratedIDs)
+				sectionID := item.Section.ID
 				navPoint := parent.CreateElement("navPoint")
 				navPoint.CreateAttr("id", fmt.Sprintf("navpoint-%s", sectionID))
 				navPoint.CreateAttr("playOrder", fmt.Sprintf("%d", *playOrder))
@@ -1829,7 +1739,7 @@ func buildNavOL(parent *etree.Element, section *fb2.Section, filename string, c 
 			if nestedOL == nil {
 				nestedOL = parent.CreateElement("ol")
 			}
-			subtitleID := getSubtitleID(item.Subtitle, c.GeneratedSubtitles)
+			subtitleID := item.Subtitle.ID
 			li := nestedOL.CreateElement("li")
 			a := li.CreateElement("a")
 			a.CreateAttr("href", filename+"#"+subtitleID)
@@ -1844,7 +1754,7 @@ func buildNavOL(parent *etree.Element, section *fb2.Section, filename string, c 
 				li := nestedOL.CreateElement("li")
 				a := li.CreateElement("a")
 				// Use section ID or generated ID
-				sectionID := getSectionID(item.Section, c.GeneratedIDs)
+				sectionID := item.Section.ID
 				a.CreateAttr("href", filename+"#"+sectionID)
 				a.SetText(extractTitleText(item.Section))
 

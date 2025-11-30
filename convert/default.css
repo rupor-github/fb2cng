@@ -136,6 +136,10 @@ blockquote.cite {
     text-indent: 0;
     margin: 0.5em 0;
 }
+.emptyline {
+	display: block;
+    margin: 1em 0;
+}
 .section {
     margin: 1em 0;
 }
@@ -161,9 +165,6 @@ th {
     text-indent: 0;
     margin: 0.2em 0;
     font-size: 100%;
-}
-.footnote-title-emptyline {
-    margin: 0.3em 0;
 }
 a.external-link {
     text-decoration: underline;

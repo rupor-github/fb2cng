@@ -2,6 +2,8 @@ package fb2
 
 import (
 	_ "embed"
+	"fmt"
+	"maps"
 	"strings"
 
 	"go.uber.org/zap"
@@ -281,6 +283,82 @@ func (fb *FictionBook) NormalizeLinks(log *zap.Logger) (*FictionBook, IDIndex, R
 	resultLinks = result.buildReverseLinkIndex(log)
 
 	return result, resultIDs, resultLinks
+}
+
+// NormalizeIDs assigns sequential IDs to all sections and subtitles that don't have IDs.
+// It uses the provided IDIndex to avoid ID collisions with existing IDs.
+// Returns a new FictionBook with IDs assigned and an updated IDIndex that includes the generated IDs.
+// The original FictionBook remains unchanged.
+func (fb *FictionBook) NormalizeIDs(existingIDs IDIndex, log *zap.Logger) (*FictionBook, IDIndex) {
+	result := fb.clone()
+	// Create a new index with existing IDs
+	updatedIDs := make(IDIndex, len(existingIDs))
+	maps.Copy(updatedIDs, existingIDs)
+
+	sectionCounter, subtitleCounter := 0, 0
+	for i := range result.Bodies {
+		bodyPath := []any{&result.Bodies[i]}
+		result.assignBodyIDs(&result.Bodies[i], bodyPath, existingIDs, updatedIDs, &sectionCounter, &subtitleCounter, log)
+	}
+
+	return result, updatedIDs
+}
+
+// assignBodyIDs recursively assigns IDs to sections and subtitles in a body
+func (fb *FictionBook) assignBodyIDs(body *Body, path []any, existingIDs, updatedIDs IDIndex, sectionCounter, subtitleCounter *int, log *zap.Logger) {
+	for i := range body.Sections {
+		sectionPath := append(append([]any{}, path...), &body.Sections[i])
+		fb.assignSectionIDs(&body.Sections[i], sectionPath, existingIDs, updatedIDs, sectionCounter, subtitleCounter, log)
+	}
+}
+
+// assignSectionIDs recursively assigns IDs to a section, its subtitles, and its child sections
+func (fb *FictionBook) assignSectionIDs(section *Section, path []any, existingIDs, updatedIDs IDIndex, sectionCounter, subtitleCounter *int, log *zap.Logger) {
+	// Assign ID to section if it doesn't have one
+	if section.ID == "" {
+		// Find a unique ID that doesn't collide
+		for {
+			*sectionCounter++
+			candidateID := fmt.Sprintf("sect_%d", *sectionCounter)
+			if _, exists := existingIDs[candidateID]; !exists {
+				section.ID = candidateID
+				// Add to updated index with special type
+				updatedIDs[candidateID] = ElementRef{
+					Type: "section-generated",
+					Path: path,
+				}
+				log.Debug("Generated section id", zap.String("ID", candidateID))
+				break
+			}
+		}
+	}
+
+	// Process content items
+	for i := range section.Content {
+		if section.Content[i].Kind == FlowSubtitle && section.Content[i].Subtitle != nil && section.Content[i].Subtitle.ID == "" {
+			// Subtitle at section level without ID - assign one
+			// Find a unique ID that doesn't collide
+			for {
+				*subtitleCounter++
+				candidateID := fmt.Sprintf("subtitle_%d", *subtitleCounter)
+				if _, exists := existingIDs[candidateID]; !exists {
+					section.Content[i].Subtitle.ID = candidateID
+					// Add to updated index with special type
+					subtitlePath := append(append([]any{}, path...), &section.Content[i], section.Content[i].Subtitle)
+					updatedIDs[candidateID] = ElementRef{
+						Type: "subtitle-generated",
+						Path: subtitlePath,
+					}
+					log.Debug("Generated subtitle id", zap.String("ID", candidateID))
+					break
+				}
+			}
+		} else if section.Content[i].Kind == FlowSection && section.Content[i].Section != nil {
+			// Recurse into nested sections
+			childPath := append(append([]any{}, path...), &section.Content[i], section.Content[i].Section)
+			fb.assignSectionIDs(section.Content[i].Section, childPath, existingIDs, updatedIDs, sectionCounter, subtitleCounter, log)
+		}
+	}
 }
 
 // replaceBrokenLink replaces a broken link with text or points broken image links to notFoundImage

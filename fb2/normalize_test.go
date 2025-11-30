@@ -542,3 +542,137 @@ func TestEnsureNotFoundImageBinary_Idempotent(t *testing.T) {
 		t.Error("not-found image binary not found in binaries list")
 	}
 }
+
+func TestNormalizeIDs_AvoidCollisions(t *testing.T) {
+	log := zaptest.NewLogger(t)
+
+	// Create a book with existing IDs that will collide with generated ones
+	book := &FictionBook{
+		Bodies: []Body{
+			{
+				Kind: BodyMain,
+				Sections: []Section{
+					{
+						ID: "sect_1", // This exists
+						Content: []FlowItem{
+							{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Section 1"}}}},
+						},
+					},
+					{
+						// No ID - should get sect_2
+						Content: []FlowItem{
+							{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Section 2"}}}},
+						},
+					},
+					{
+						ID: "sect_2", // This exists - so next generated should skip to sect_3
+						Content: []FlowItem{
+							{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Section 3"}}}},
+						},
+					},
+					{
+						// No ID - should get sect_3
+						Content: []FlowItem{
+							{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Section 4"}}}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Build ID index
+	ids := book.buildIDIndex(log)
+
+	// Normalize IDs
+	result, updatedIDs := book.NormalizeIDs(ids, log)
+
+	// Check results - all sections should have unique IDs
+	seenIDs := make(map[string]int)
+	for i, section := range result.Bodies[0].Sections {
+		if prevIdx, exists := seenIDs[section.ID]; exists {
+			t.Errorf("Duplicate ID %q found at sections %d and %d", section.ID, prevIdx, i)
+		}
+		seenIDs[section.ID] = i
+
+		if section.ID == "" {
+			t.Errorf("Section %d has empty ID", i)
+		}
+	}
+
+	// Verify we have exactly 4 unique IDs
+	if len(seenIDs) != 4 {
+		t.Errorf("Expected 4 unique IDs, got %d", len(seenIDs))
+	}
+
+	// Verify the IDs are correct
+	sections := result.Bodies[0].Sections
+	if sections[0].ID != "sect_1" {
+		t.Errorf("Section 0 should keep ID 'sect_1', got %q", sections[0].ID)
+	}
+	if sections[1].ID != "sect_3" {
+		t.Errorf("Section 1 should get ID 'sect_3' (avoiding collision with sect_2), got %q", sections[1].ID)
+	}
+	if sections[2].ID != "sect_2" {
+		t.Errorf("Section 2 should keep ID 'sect_2', got %q", sections[2].ID)
+	}
+	if sections[3].ID != "sect_4" {
+		t.Errorf("Section 3 should get ID 'sect_4', got %q", sections[3].ID)
+	}
+	_ = updatedIDs // use it
+}
+
+func TestNormalizeIDs_UpdatesIndex(t *testing.T) {
+	log := zaptest.NewLogger(t)
+
+	book := &FictionBook{
+		Bodies: []Body{
+			{
+				Kind: BodyMain,
+				Sections: []Section{
+					{
+						// No ID
+						Content: []FlowItem{
+							{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Section 1"}}}},
+							{Kind: FlowSubtitle, Subtitle: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Subtitle 1"}}}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ids := book.buildIDIndex(log)
+	result, updatedIDs := book.NormalizeIDs(ids, log)
+
+	// Check that generated section ID is in updated index
+	sectionID := result.Bodies[0].Sections[0].ID
+	if sectionID == "" {
+		t.Fatal("Section should have been assigned an ID")
+	}
+
+	if ref, exists := updatedIDs[sectionID]; !exists {
+		t.Errorf("Updated ID index should contain generated section ID %q", sectionID)
+	} else if ref.Type != "section-generated" {
+		t.Errorf("Generated section ID %q should have type 'section-generated', got %q", sectionID, ref.Type)
+	}
+
+	// Check that generated subtitle ID is in updated index
+	var subtitleID string
+	for _, item := range result.Bodies[0].Sections[0].Content {
+		if item.Kind == FlowSubtitle && item.Subtitle != nil {
+			subtitleID = item.Subtitle.ID
+			break
+		}
+	}
+
+	if subtitleID == "" {
+		t.Fatal("Subtitle should have been assigned an ID")
+	}
+
+	if ref, exists := updatedIDs[subtitleID]; !exists {
+		t.Errorf("Updated ID index should contain generated subtitle ID %q", subtitleID)
+	} else if ref.Type != "subtitle-generated" {
+		t.Errorf("Generated subtitle ID %q should have type 'subtitle-generated', got %q", subtitleID, ref.Type)
+	}
+}

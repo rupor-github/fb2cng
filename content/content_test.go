@@ -8,6 +8,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/beevik/etree"
@@ -694,5 +695,116 @@ func TestFilterReferencedImages_WithoutNotFoundImage(t *testing.T) {
 
 	if _, exists := filtered["used-img"]; !exists {
 		t.Error("used-img should be included")
+	}
+}
+
+func TestNormalizeIDs(t *testing.T) {
+	fb2Content := `<?xml version="1.0" encoding="utf-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <description>
+    <title-info>
+      <genre>prose</genre>
+      <author><first-name>Test</first-name><last-name>Author</last-name></author>
+      <book-title>Test Book</book-title>
+      <lang>en</lang>
+    </title-info>
+    <document-info>
+      <author><first-name>Test</first-name><last-name>Author</last-name></author>
+      <program-used>test</program-used>
+      <date>2024-01-01</date>
+      <id>00000000-0000-0000-0000-000000000001</id>
+      <version>1.0</version>
+    </document-info>
+  </description>
+  <body>
+    <section>
+      <title><p>Chapter 1</p></title>
+      <subtitle>First subtitle</subtitle>
+      <p>Content 1</p>
+    </section>
+    <section>
+      <title><p>Chapter 2</p></title>
+      <subtitle>Second subtitle</subtitle>
+      <p>Content 2</p>
+      <section>
+        <title><p>Nested section</p></title>
+        <p>Nested content</p>
+      </section>
+    </section>
+  </body>
+</FictionBook>`
+
+	logger := zap.NewNop()
+	ctx := state.ContextWithEnv(context.Background())
+	env := state.EnvFromContext(ctx)
+	cfg, err := config.LoadConfiguration("")
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+	env.Cfg = cfg
+	env.Log = logger
+
+	reader := strings.NewReader(fb2Content)
+	c, err := Prepare(ctx, reader, "test.fb2", config.OutputFmtEpub2, logger)
+	if err != nil {
+		t.Fatalf("Failed to prepare content: %v", err)
+	}
+
+	// Verify sections have IDs assigned
+	// Should have 3 sections (2 top-level + 1 nested), all with IDs now
+	if len(c.Book.Bodies) == 0 {
+		t.Fatal("Expected at least one body")
+	}
+
+	body := &c.Book.Bodies[0]
+	if len(body.Sections) != 2 {
+		t.Fatalf("Expected 2 top-level sections, got %d", len(body.Sections))
+	}
+
+	// Check first section has ID
+	if body.Sections[0].ID == "" {
+		t.Error("First section should have an ID")
+	}
+	if !strings.HasPrefix(body.Sections[0].ID, "sect_") {
+		t.Errorf("Section ID %q doesn't follow pattern 'sect_N'", body.Sections[0].ID)
+	}
+
+	// Check second section has ID
+	if body.Sections[1].ID == "" {
+		t.Error("Second section should have an ID")
+	}
+
+	// Check nested section has ID
+	hasNestedSection := false
+	for _, item := range body.Sections[1].Content {
+		if item.Kind == fb2.FlowSection && item.Section != nil {
+			hasNestedSection = true
+			if item.Section.ID == "" {
+				t.Error("Nested section should have an ID")
+			}
+			if !strings.HasPrefix(item.Section.ID, "sect_") {
+				t.Errorf("Nested section ID %q doesn't follow pattern 'sect_N'", item.Section.ID)
+			}
+		}
+	}
+	if !hasNestedSection {
+		t.Error("Expected a nested section")
+	}
+
+	// Check subtitles have IDs
+	subtitleCount := 0
+	for _, item := range body.Sections[0].Content {
+		if item.Kind == fb2.FlowSubtitle && item.Subtitle != nil {
+			subtitleCount++
+			if item.Subtitle.ID == "" {
+				t.Error("Subtitle should have an ID")
+			}
+			if !strings.HasPrefix(item.Subtitle.ID, "subtitle_") {
+				t.Errorf("Subtitle ID %q doesn't follow pattern 'subtitle_N'", item.Subtitle.ID)
+			}
+		}
+	}
+	if subtitleCount == 0 {
+		t.Error("Expected at least one subtitle")
 	}
 }

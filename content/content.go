@@ -28,14 +28,12 @@ type Content struct {
 	Doc          *etree.Document
 	OutputFormat config.OutputFmt
 
-	Book               *fb2.FictionBook
-	CoverID            string
-	FootnotesIndex     fb2.FootnoteRefs
-	ImagesIndex        fb2.BookImages
-	IDsIndex           fb2.IDIndex
-	LinksRevIndex      fb2.ReverseLinkIndex
-	GeneratedIDs       map[*fb2.Section]string   // Map sections without IDs to generated IDs
-	GeneratedSubtitles map[*fb2.Paragraph]string // Map subtitles without IDs to generated IDs
+	Book           *fb2.FictionBook
+	CoverID        string
+	FootnotesIndex fb2.FootnoteRefs
+	ImagesIndex    fb2.BookImages
+	IDsIndex       fb2.IDIndex
+	LinksRevIndex  fb2.ReverseLinkIndex
 
 	Splitter *text.Splitter
 	Hyphen   *text.Hyphenator
@@ -150,6 +148,10 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 	book, footnotes := book.NormalizeFootnoteBodies(log)
 	// Build id and link indexes replacing/removing broken links (may add not-found image binary)
 	book, ids, links := book.NormalizeLinks(log)
+	// Assign sequential IDs to all sections and subtitles without IDs
+	// (avoiding collisions with existing IDs) - we will need it for ToC. This
+	// also updates the ID index with generated IDs marked as "TYPE-generated"
+	book, ids = book.NormalizeIDs(ids, log)
 
 	// Process all binary objects creating actual images and reference index
 	// This happens after NormalizeLinks so the not-found image binary is included
@@ -159,18 +161,16 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 	imagesIndex := filterReferencedImages(allImages, links, coverID, log)
 
 	c := &Content{
-		SrcName:            srcName,
-		Doc:                doc,
-		OutputFormat:       outputFormat,
-		Book:               book,
-		CoverID:            coverID,
-		FootnotesIndex:     footnotes,
-		ImagesIndex:        imagesIndex,
-		IDsIndex:           ids,
-		LinksRevIndex:      links,
-		GeneratedIDs:       make(map[*fb2.Section]string),
-		GeneratedSubtitles: make(map[*fb2.Paragraph]string),
-		WorkDir:            tmpDir,
+		SrcName:        srcName,
+		Doc:            doc,
+		OutputFormat:   outputFormat,
+		Book:           book,
+		CoverID:        coverID,
+		FootnotesIndex: footnotes,
+		ImagesIndex:    imagesIndex,
+		IDsIndex:       ids,
+		LinksRevIndex:  links,
+		WorkDir:        tmpDir,
 	}
 
 	if env.Cfg.Document.InsertSoftHyphen {
