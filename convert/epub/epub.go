@@ -32,8 +32,8 @@ type chapterData struct {
 	Filename       string
 	Title          string
 	Doc            *etree.Document
-	Section        *fb2.Section   // Reference to source section for TOC hierarchy
-	FootnoteBodies []*fb2.Body    // Footnote bodies for TOC (each body gets separate entry)
+	Section        *fb2.Section // Reference to source section for TOC hierarchy
+	FootnoteBodies []*fb2.Body  // Footnote bodies for TOC (each body gets separate entry)
 }
 
 // idToFileMap maps element IDs to the chapter filename containing them
@@ -346,12 +346,12 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 					collectIDsFromSection(&body.Sections[i], filename, idToFile)
 				}
 			}
-			
+
 			// Create separate chapter entries for each footnote body for TOC
 			for bodyIdx, body := range footnoteBodies {
 				chapterNum++
 				bodyChapterID := fmt.Sprintf("index%05d", chapterNum)
-				
+
 				// Extract title from body
 				var bodyTitle string
 				if body.Title != nil {
@@ -365,13 +365,13 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 				if bodyTitle == "" {
 					bodyTitle = "Notes"
 				}
-				
+
 				// Generate body ID matching what we used in HTML
 				bodyID := fmt.Sprintf("footnote-body-%d", bodyIdx)
 				if body.Name != "" {
 					bodyID = body.Name
 				}
-				
+
 				chapters = append(chapters, chapterData{
 					ID:       bodyChapterID,
 					Filename: filename + "#" + bodyID,
@@ -379,7 +379,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 					Doc:      nil, // Only first entry has the doc
 				})
 			}
-			
+
 			// Store the doc in the first footnote body chapter
 			if len(chapters) > 0 {
 				// Find the first footnote chapter we just added
