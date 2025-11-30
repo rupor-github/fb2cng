@@ -28,11 +28,12 @@ const (
 )
 
 type chapterData struct {
-	ID       string
-	Filename string
-	Title    string
-	Doc      *etree.Document
-	Section  *fb2.Section // Reference to source section for TOC hierarchy
+	ID             string
+	Filename       string
+	Title          string
+	Doc            *etree.Document
+	Section        *fb2.Section   // Reference to source section for TOC hierarchy
+	FootnoteBodies []*fb2.Body    // Footnote bodies for TOC (each body gets separate entry)
 }
 
 // idToFileMap maps element IDs to the chapter filename containing them
@@ -95,6 +96,9 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 	fixInternalLinks(chapters, idToFile, log)
 
 	for _, chapter := range chapters {
+		if chapter.Doc == nil {
+			continue // Skip chapters without documents (e.g., additional footnote body TOC entries)
+		}
 		if err := writeXHTMLChapter(zw, &chapter, log); err != nil {
 			return fmt.Errorf("unable to write chapter %s: %w", chapter.ID, err)
 		}
@@ -308,7 +312,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 		}
 	}
 
-	// Process all footnote bodies as a single chapter
+	// Process all footnote bodies - each body becomes a separate top-level chapter
 	if len(footnoteBodies) > 0 {
 		if err := ctx.Err(); err != nil {
 			return nil, nil, err
@@ -318,35 +322,70 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 		chapterID := fmt.Sprintf("index%05d", chapterNum)
 		filename := "footnotes.xhtml"
 
-		// Extract title from first footnote body
-		var title string
+		// Extract title from first footnote body for the document
+		var docTitle string
 		if footnoteBodies[0].Title != nil {
 			for _, item := range footnoteBodies[0].Title.Items {
 				if item.Paragraph != nil {
-					title = paragraphToPlainText(item.Paragraph)
+					docTitle = paragraphToPlainText(item.Paragraph)
 					break
 				}
 			}
 		}
-		if title == "" {
-			title = "Notes"
+		if docTitle == "" {
+			docTitle = "Notes"
 		}
 
-		doc, err := footnotesBodiesToXHTML(c, footnoteBodies, title, log)
+		doc, err := footnotesBodiesToXHTML(c, footnoteBodies, docTitle, log)
 		if err != nil {
 			log.Error("Unable to convert footnotes", zap.Error(err))
 		} else {
-			chapters = append(chapters, chapterData{
-				ID:       chapterID,
-				Filename: filename,
-				Title:    title,
-				Doc:      doc,
-			})
 			// Collect IDs from all footnote bodies
 			for _, body := range footnoteBodies {
 				for i := range body.Sections {
 					collectIDsFromSection(&body.Sections[i], filename, idToFile)
 				}
+			}
+			
+			// Create separate chapter entries for each footnote body for TOC
+			for bodyIdx, body := range footnoteBodies {
+				chapterNum++
+				bodyChapterID := fmt.Sprintf("index%05d", chapterNum)
+				
+				// Extract title from body
+				var bodyTitle string
+				if body.Title != nil {
+					for _, item := range body.Title.Items {
+						if item.Paragraph != nil {
+							bodyTitle = paragraphToPlainText(item.Paragraph)
+							break
+						}
+					}
+				}
+				if bodyTitle == "" {
+					bodyTitle = "Notes"
+				}
+				
+				// Generate body ID matching what we used in HTML
+				bodyID := fmt.Sprintf("footnote-body-%d", bodyIdx)
+				if body.Name != "" {
+					bodyID = body.Name
+				}
+				
+				chapters = append(chapters, chapterData{
+					ID:       bodyChapterID,
+					Filename: filename + "#" + bodyID,
+					Title:    bodyTitle,
+					Doc:      nil, // Only first entry has the doc
+				})
+			}
+			
+			// Store the doc in the first footnote body chapter
+			if len(chapters) > 0 {
+				// Find the first footnote chapter we just added
+				chapters[len(chapters)-len(footnoteBodies)].Doc = doc
+				chapters[len(chapters)-len(footnoteBodies)].ID = chapterID
+				chapters[len(chapters)-len(footnoteBodies)].Filename = filename
 			}
 		}
 	}
@@ -557,10 +596,20 @@ func footnotesBodiesToXHTML(c *content.Content, bodies []*fb2.Body, title string
 	bodyElem := html.CreateElement("body")
 
 	// Process all footnote bodies
-	for _, body := range bodies {
+	for bodyIdx, body := range bodies {
+		// Create a wrapper div for each body with an ID
+		bodyDiv := bodyElem.CreateElement("div")
+		bodyDiv.CreateAttr("class", "footnote-body")
+		// Generate an ID for this body for TOC linking
+		bodyID := fmt.Sprintf("footnote-body-%d", bodyIdx)
+		if body.Name != "" {
+			bodyID = body.Name
+		}
+		bodyDiv.CreateAttr("id", bodyID)
+
 		// Write body intro content if it has a title
 		if body.Title != nil {
-			if err := writeBodyIntroContent(bodyElem, c, body, 1, log); err != nil {
+			if err := writeBodyIntroContent(bodyDiv, c, body, 1, log); err != nil {
 				return nil, err
 			}
 		}
@@ -569,7 +618,7 @@ func footnotesBodiesToXHTML(c *content.Content, bodies []*fb2.Body, title string
 		for i := range body.Sections {
 			section := &body.Sections[i]
 			// Create a div wrapper for each footnote section to preserve structure
-			div := bodyElem.CreateElement("div")
+			div := bodyDiv.CreateElement("div")
 			div.CreateAttr("class", "section")
 			if section.ID != "" {
 				div.CreateAttr("id", section.ID)
@@ -578,7 +627,7 @@ func footnotesBodiesToXHTML(c *content.Content, bodies []*fb2.Body, title string
 				div.CreateAttr("xml:lang", section.Lang)
 			}
 
-			if err := writeSectionContent(div, c, section, false, 1, log); err != nil {
+			if err := writeFootnoteSectionContent(div, c, section, false, log); err != nil {
 				return nil, err
 			}
 		}
@@ -647,6 +696,70 @@ func writeBodyIntroContent(parent *etree.Element, c *content.Content, body *fb2.
 
 	if body.Image != nil {
 		writeImageElement(parent, c, body.Image)
+	}
+
+	return nil
+}
+
+func writeFootnoteSectionContent(parent *etree.Element, c *content.Content, section *fb2.Section, skipTitle bool, log *zap.Logger) error {
+	if section.Title != nil && !skipTitle {
+		titleDiv := parent.CreateElement("div")
+		titleDiv.CreateAttr("class", "footnote-title")
+		firstParagraph := true
+		for i, item := range section.Title.Items {
+			if item.Paragraph != nil {
+				p := titleDiv.CreateElement("p")
+				if item.Paragraph.ID != "" {
+					p.CreateAttr("id", item.Paragraph.ID)
+				}
+				var class string
+				if firstParagraph {
+					class = "footnote-title-first"
+					firstParagraph = false
+				} else {
+					class = "footnote-title-next"
+				}
+				if item.Paragraph.Style != "" {
+					class = class + " " + item.Paragraph.Style
+				}
+				p.CreateAttr("class", class)
+				writeParagraphInline(p, c, item.Paragraph)
+			} else if item.EmptyLine {
+				if i > 0 && i < len(section.Title.Items)-1 {
+					p := titleDiv.CreateElement("p")
+					p.CreateAttr("class", "footnote-title-emptyline")
+				}
+			}
+		}
+	}
+
+	for _, epigraph := range section.Epigraphs {
+		div := parent.CreateElement("div")
+		div.CreateAttr("class", "epigraph")
+		if err := writeFlowContent(div, c, &epigraph.Flow, 1, log); err != nil {
+			return err
+		}
+		for _, ta := range epigraph.TextAuthors {
+			p := div.CreateElement("p")
+			p.CreateAttr("class", "text-author")
+			writeParagraphInline(p, c, &ta)
+		}
+	}
+
+	if section.Image != nil {
+		writeImageElement(parent, c, section.Image)
+	}
+
+	if section.Annotation != nil {
+		div := parent.CreateElement("div")
+		div.CreateAttr("class", "annotation")
+		if err := writeFlowContent(div, c, section.Annotation, 1, log); err != nil {
+			return err
+		}
+	}
+
+	if err := writeFlowItems(parent, c, section.Content, false, 1, log); err != nil {
+		return err
 	}
 
 	return nil
@@ -1655,6 +1768,9 @@ func collectIDsFromFlowItem(item *fb2.FlowItem, filename string, idToFile idToFi
 // fixInternalLinks updates internal links to include chapter filenames when needed
 func fixInternalLinks(chapters []chapterData, idToFile idToFileMap, log *zap.Logger) {
 	for i := range chapters {
+		if chapters[i].Doc == nil {
+			continue
+		}
 		currentFile := chapters[i].Filename
 		fixLinksInDocument(chapters[i].Doc, currentFile, idToFile, log)
 	}

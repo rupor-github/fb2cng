@@ -125,6 +125,23 @@ th {
     border: 1px solid #ccc;
     padding: 0.5em;
 }
+.footnote-body {
+    margin: 2em 0;
+}
+.footnote-title {
+    margin: 1em 0 0.5em 0;
+    text-align: left;
+    font-weight: bold;
+}
+.footnote-title-first,
+.footnote-title-next {
+    text-indent: 0;
+    margin: 0.2em 0;
+    font-size: 100%;
+}
+.footnote-title-emptyline {
+    margin: 0.3em 0;
+}
 a.external-link {
     text-decoration: underline;
 }

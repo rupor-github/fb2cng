@@ -32,3 +32,4 @@ This project uses Go (Golang) and follows standard community practices, prioriti
 *   **Prefer standard library:** Where possible, prefer the Go standard library over external dependencies.
 *   **Concurrency:** When writing concurrent code, prioritize using channels and goroutines following Go idioms.
 *   **Code Review:** When performing a code review, focus on idiomatic Go practices, test coverage, and clear error handling.
+*   **Temporary artifacts:** Always generate temporary artifacts (like test binaries) in the /tmp directory
