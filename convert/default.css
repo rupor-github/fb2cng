@@ -31,7 +31,8 @@ h6 {
     display: inline;
     text-indent: 0;
 }
-.sub-title {
+.subtitle {
+    page-break-before: auto;
     text-align: center;
     font-weight: bold;
     text-indent: 0;
@@ -57,10 +58,22 @@ img.inline-image {
     font-style: italic;
     margin: 0.4em 0 0.2em 4em;
 }
+.epigraph-subtitle {
+    text-align: right;
+    font-style: italic;
+    text-indent: 0;
+    margin: 0.3em 0;
+}
 .annotation {
     font-size: 80%;
     text-align: center;
     margin: 2em 1em 1em 1em;
+}
+.annotation-subtitle {
+    text-align: center;
+    text-indent: 0;
+    margin: 0.5em 0;
+    font-size: 90%;
 }
 .poem {
     text-indent: 0;
@@ -75,6 +88,11 @@ img.inline-image {
     text-align: center;
     text-indent: 0;
     margin: 0;
+}
+.poem-subtitle {
+    text-align: center;
+    text-indent: 0;
+    margin: 0.5em 0;
 }
 .stanza {
     margin: 0.5em 0;
@@ -100,6 +118,11 @@ img.inline-image {
 .cite,
 blockquote.cite {
     margin: 1em 2em;
+}
+.cite-subtitle {
+    text-align: left;
+    text-indent: 0;
+    margin: 0.5em 0;
 }
 .text-author {
     text-align: right;

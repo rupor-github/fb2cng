@@ -28,13 +28,14 @@ type Content struct {
 	Doc          *etree.Document
 	OutputFormat config.OutputFmt
 
-	Book           *fb2.FictionBook
-	CoverID        string
-	FootnotesIndex fb2.FootnoteRefs
-	ImagesIndex    fb2.BookImages
-	IDsIndex       fb2.IDIndex
-	LinksRevIndex  fb2.ReverseLinkIndex
-	GeneratedIDs   map[*fb2.Section]string // Map sections without IDs to generated IDs
+	Book               *fb2.FictionBook
+	CoverID            string
+	FootnotesIndex     fb2.FootnoteRefs
+	ImagesIndex        fb2.BookImages
+	IDsIndex           fb2.IDIndex
+	LinksRevIndex      fb2.ReverseLinkIndex
+	GeneratedIDs       map[*fb2.Section]string   // Map sections without IDs to generated IDs
+	GeneratedSubtitles map[*fb2.Paragraph]string // Map subtitles without IDs to generated IDs
 
 	Splitter *text.Splitter
 	Hyphen   *text.Hyphenator
@@ -158,17 +159,18 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 	imagesIndex := filterReferencedImages(allImages, links, coverID, log)
 
 	c := &Content{
-		SrcName:        srcName,
-		Doc:            doc,
-		OutputFormat:   outputFormat,
-		Book:           book,
-		CoverID:        coverID,
-		FootnotesIndex: footnotes,
-		ImagesIndex:    imagesIndex,
-		IDsIndex:       ids,
-		LinksRevIndex:  links,
-		GeneratedIDs:   make(map[*fb2.Section]string),
-		WorkDir:        tmpDir,
+		SrcName:            srcName,
+		Doc:                doc,
+		OutputFormat:       outputFormat,
+		Book:               book,
+		CoverID:            coverID,
+		FootnotesIndex:     footnotes,
+		ImagesIndex:        imagesIndex,
+		IDsIndex:           ids,
+		LinksRevIndex:      links,
+		GeneratedIDs:       make(map[*fb2.Section]string),
+		GeneratedSubtitles: make(map[*fb2.Paragraph]string),
+		WorkDir:            tmpDir,
 	}
 
 	if env.Cfg.Document.InsertSoftHyphen {
