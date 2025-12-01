@@ -394,13 +394,14 @@ func parseFlowItem(el *etree.Element, parentTag string, log *zap.Logger) (*FlowI
 		s := section
 		return &FlowItem{Kind: FlowSection, Section: &s}, nil
 	default:
+		msg := fmt.Sprintf("Unexpected tag in %s, ", parentTag)
 		// Check if this is a known text-containing tag that we can handle as a paragraph
 		if isKnownTextTag(el.Tag) {
-			log.Warn("Unexpected tag as flow item, converting to paragraph", zap.String("parent", parentTag), zap.String("tag", el.Tag))
+			log.Warn(msg+"converting to paragraph", zap.String("tag", el.Tag))
 			para := parseUnexpectedAsParagraph(el, log)
 			return &FlowItem{Kind: FlowParagraph, Paragraph: &para}, nil
 		}
-		log.Warn("Unknown tag as flow item, ignoring", zap.String("parent", parentTag), zap.String("tag", el.Tag))
+		log.Warn(msg+"ignoring", zap.String("tag", el.Tag))
 		return nil, nil
 	}
 }
@@ -709,7 +710,10 @@ func parseTable(el *etree.Element, log *zap.Logger) (Table, error) {
 		Style: el.SelectAttrValue("style", ""),
 	}
 	for _, rowEl := range el.SelectElements("tr") {
-		row := TableRow{Align: rowEl.SelectAttrValue("align", "")}
+		row := TableRow{
+			Style: rowEl.SelectAttrValue("style", ""),
+			Align: rowEl.SelectAttrValue("align", ""),
+		}
 		for _, cellNode := range rowEl.ChildElements() {
 			cell, err := parseTableCell(cellNode, log)
 			if err != nil {

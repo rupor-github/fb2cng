@@ -6,6 +6,7 @@ p {
 .title {
     margin: 2em 0 1em 0;
     page-break-before: always;
+    text-indent: 0em;
     text-align: center;
     font-weight: bold;
 }
@@ -21,7 +22,7 @@ h6 {
 }
 .title-emptyline {
     display: block;
-    margin: 0.5em 0;
+    margin: 0.8em 0;
 }
 .title-paragraph {
     display: block;
@@ -144,13 +145,18 @@ blockquote.cite {
     margin: 1em 0;
 }
 table {
+    width: 100%;
     border-collapse: collapse;
     margin: 1em auto;
 }
-td,
 th {
-    border: 1px solid #ccc;
-    padding: 0.5em;
+    border: 1px solid black;
+    background: #ccc;
+	padding: 0.5em;
+}
+td {
+    border: 1px solid black;
+	padding: 0.5em;
 }
 .footnote-body {
     margin: 2em 0;

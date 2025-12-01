@@ -379,6 +379,7 @@ type Table struct {
 
 // TableRow corresponds to trType.
 type TableRow struct {
+	Style string
 	Align string
 	Cells []TableCell
 }

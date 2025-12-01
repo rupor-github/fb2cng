@@ -1280,8 +1280,18 @@ func writeTableElement(parent *etree.Element, c *content.Content, table *fb2.Tab
 
 	for _, row := range table.Rows {
 		tr := tableElem.CreateElement("tr")
-		if row.Align != "" {
-			tr.CreateAttr("align", row.Align)
+		if row.Style != "" || row.Align != "" {
+			style := row.Style
+			if row.Align != "" {
+				if style != "" && !strings.HasSuffix(style, ";") {
+					style += ";"
+				}
+				if style != "" {
+					style += " "
+				}
+				style += fmt.Sprintf("text-align: %s;", row.Align)
+			}
+			tr.CreateAttr("style", style)
 		}
 
 		for _, cell := range row.Cells {
@@ -1295,20 +1305,33 @@ func writeTableElement(parent *etree.Element, c *content.Content, table *fb2.Tab
 			if cell.ID != "" {
 				td.CreateAttr("id", cell.ID)
 			}
-			if cell.Style != "" {
-				td.CreateAttr("class", cell.Style)
-			}
 			if cell.ColSpan > 1 {
 				td.CreateAttr("colspan", fmt.Sprintf("%d", cell.ColSpan))
 			}
 			if cell.RowSpan > 1 {
 				td.CreateAttr("rowspan", fmt.Sprintf("%d", cell.RowSpan))
 			}
-			if cell.Align != "" {
-				td.CreateAttr("align", cell.Align)
-			}
-			if cell.VAlign != "" {
-				td.CreateAttr("valign", cell.VAlign)
+			if cell.Style != "" || cell.Align != "" || cell.VAlign != "" {
+				style := cell.Style
+				if cell.Align != "" {
+					if style != "" && !strings.HasSuffix(style, ";") {
+						style += ";"
+					}
+					if style != "" {
+						style += " "
+					}
+					style += fmt.Sprintf("text-align: %s;", cell.Align)
+				}
+				if cell.VAlign != "" {
+					if style != "" && !strings.HasSuffix(style, ";") {
+						style += ";"
+					}
+					if style != "" {
+						style += " "
+					}
+					style += fmt.Sprintf("vertical-align: %s;", cell.VAlign)
+				}
+				td.CreateAttr("style", style)
 			}
 
 			for _, seg := range cell.Content {
