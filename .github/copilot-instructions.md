@@ -17,6 +17,7 @@ This project uses Go (Golang) and follows standard community practices, prioriti
 *   **Indentation:** Use tabs for indentation, not spaces (standard Go practice).
 *   **Formatting:** Always run `go fmt` before committing. Generated code should be explicitly marked and excluded from style checks.
 *   **Imports:** Use standard grouping for imports: standard library first, then third-party libraries, then local project packages, separated by blank lines.
+*   **Control flow:** Prefer early funcion exits. When possible prefer if/then to full if/then/else to avoid nesting.
 
 ## Error Handling
 *   **Error Values:** Errors should be the last return value and have type `error`.

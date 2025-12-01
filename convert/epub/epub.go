@@ -242,152 +242,194 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 
 	for i := range c.Book.Bodies {
 		body := &c.Book.Bodies[i]
+		if body.Footnotes() {
+			// Collect footnote bodies for later processing
+			footnoteBodies = append(footnoteBodies, body)
+			continue
+		}
+
 		// Process main and other bodies (not footnotes)
-		if !body.Footnotes() {
-			// If body has title, create a chapter for body intro content
-			if body.Title != nil {
-				chapterNum++
-				chapterID := fmt.Sprintf("index%05d", chapterNum)
-				filename := fmt.Sprintf("%s.xhtml", chapterID)
+		// If body has title, create a chapter for body intro content
+		if body.Title != nil {
+			chapterNum++
+			chapterID := fmt.Sprintf("index%05d", chapterNum)
+			filename := fmt.Sprintf("%s.xhtml", chapterID)
 
-				var title string
-				for _, item := range body.Title.Items {
-					if item.Paragraph != nil {
-						title = paragraphToPlainText(item.Paragraph)
-						break
-					}
-				}
-				if title == "" {
-					title = "Untitled"
-				}
-
-				doc, err := bodyIntroToXHTML(c, body, title, log)
-				if err != nil {
-					log.Error("Unable to convert body intro", zap.Error(err))
-				} else {
-					chapters = append(chapters, chapterData{
-						ID:       chapterID,
-						Filename: filename,
-						Title:    title,
-						Doc:      doc,
-					})
-					collectIDsFromBody(body, filename, idToFile)
+			var title string
+			for _, item := range body.Title.Items {
+				if item.Paragraph != nil {
+					title = paragraphToPlainText(item.Paragraph)
+					break
 				}
 			}
+			if title == "" {
+				title = "Untitled"
+			}
 
-			// Process only top-level sections as chapters
-			// Unwrap sections without titles (grouping sections)
-			topSections := collectTopSections(body.Sections)
-			for _, section := range topSections {
-				if err := ctx.Err(); err != nil {
-					return nil, nil, err
-				}
-
-				chapterNum++
-				chapterID := fmt.Sprintf("index%05d", chapterNum)
-				filename := fmt.Sprintf("%s.xhtml", chapterID)
-				title := extractTitleText(section)
-
-				doc, err := sectionToXHTML(c, section, title, log)
-				if err != nil {
-					log.Error("Unable to convert section", zap.Error(err))
-					continue
-				}
-
+			doc, err := bodyIntroToXHTML(c, body, title, log)
+			if err != nil {
+				log.Error("Unable to convert body intro", zap.Error(err))
+			} else {
 				chapters = append(chapters, chapterData{
 					ID:       chapterID,
 					Filename: filename,
 					Title:    title,
 					Doc:      doc,
-					Section:  section,
 				})
-				collectIDsFromSection(section, filename, idToFile)
+				collectIDsFromBody(body, filename, idToFile)
 			}
-		} else {
-			// Collect footnote bodies for later processing
-			footnoteBodies = append(footnoteBodies, body)
 		}
+
+		// Process only top-level sections as chapters
+		// Unwrap sections without titles (grouping sections)
+		topSections := collectTopSections(body.Sections)
+		for _, section := range topSections {
+			if err := ctx.Err(); err != nil {
+				return nil, nil, err
+			}
+
+			chapterNum++
+			chapterID := fmt.Sprintf("index%05d", chapterNum)
+			filename := fmt.Sprintf("%s.xhtml", chapterID)
+			title := extractTitleText(section)
+
+			doc, err := sectionToXHTML(c, section, title, log)
+			if err != nil {
+				log.Error("Unable to convert section", zap.Error(err))
+				continue
+			}
+
+			chapters = append(chapters, chapterData{
+				ID:       chapterID,
+				Filename: filename,
+				Title:    title,
+				Doc:      doc,
+				Section:  section,
+			})
+			collectIDsFromSection(section, filename, idToFile)
+		}
+	}
+
+	if len(footnoteBodies) == 0 {
+		return chapters, idToFile, nil
 	}
 
 	// Process all footnote bodies - each body becomes a separate top-level chapter
-	if len(footnoteBodies) > 0 {
-		if err := ctx.Err(); err != nil {
-			return nil, nil, err
-		}
+	chapterNum++
+	footnotesChapters, err := processFootnoteBodies(c, footnoteBodies, chapterNum, idToFile, log)
+	if err != nil {
+		log.Error("Unable to convert footnotes", zap.Error(err))
+		return chapters, idToFile, nil
+	}
 
-		chapterNum++
-		chapterID := fmt.Sprintf("index%05d", chapterNum)
-		filename := "footnotes.xhtml"
+	chapters = append(chapters, footnotesChapters...)
+	return chapters, idToFile, nil
+}
 
-		// Extract title from first footnote body for the document
-		var docTitle string
-		if footnoteBodies[0].Title != nil {
-			for _, item := range footnoteBodies[0].Title.Items {
-				if item.Paragraph != nil {
-					docTitle = paragraphToPlainText(item.Paragraph)
-					break
-				}
+// processFootnoteBodies converts all footnote bodies to XHTML and creates chapter entries
+func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, startChapterNum int, idToFile idToFileMap, log *zap.Logger) ([]chapterData, error) {
+	filename := "footnotes.xhtml"
+	docTitle := extractBodyTitle(footnoteBodies[0])
+
+	doc := etree.NewDocument()
+	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
+
+	html := doc.CreateElement("html")
+	html.CreateAttr("xmlns", "http://www.w3.org/1999/xhtml")
+	html.CreateAttr("xmlns:epub", "http://www.idpf.org/2007/ops")
+
+	head := html.CreateElement("head")
+
+	meta := head.CreateElement("meta")
+	meta.CreateAttr("http-equiv", "Content-Type")
+	meta.CreateAttr("content", "text/html; charset=utf-8")
+
+	link := head.CreateElement("link")
+	link.CreateAttr("rel", "stylesheet")
+	link.CreateAttr("type", "text/css")
+	link.CreateAttr("href", "stylesheet.css")
+
+	titleElem := head.CreateElement("title")
+	titleElem.SetText(docTitle)
+
+	bodyElem := html.CreateElement("body")
+
+	// Process all footnote bodies - build XHTML and chapter metadata in single loop
+	var chapters []chapterData
+	for bodyIdx, body := range footnoteBodies {
+		bodyID := generateFootnoteBodyID(body, bodyIdx)
+		bodyTitle := extractBodyTitle(body)
+
+		// Create XHTML wrapper div for this body
+		bodyDiv := bodyElem.CreateElement("div")
+		bodyDiv.CreateAttr("class", "footnote-body")
+		bodyDiv.CreateAttr("id", bodyID)
+
+		// Write body intro content if it has a title
+		if body.Title != nil {
+			if err := writeBodyIntroContent(bodyDiv, c, body, 1, log); err != nil {
+				return nil, err
 			}
 		}
-		if docTitle == "" {
-			docTitle = "Notes"
+
+		// Write all sections from this body and collect IDs
+		for i := range body.Sections {
+			section := &body.Sections[i]
+			collectIDsFromSection(section, filename, idToFile)
+
+			div := bodyDiv.CreateElement("div")
+			div.CreateAttr("class", "section")
+			if section.ID != "" {
+				div.CreateAttr("id", section.ID)
+			}
+			if section.Lang != "" {
+				div.CreateAttr("xml:lang", section.Lang)
+			}
+
+			if err := writeFootnoteSectionContent(div, c, section, false, log); err != nil {
+				return nil, err
+			}
 		}
 
-		doc, err := footnotesBodiesToXHTML(c, footnoteBodies, docTitle, log)
-		if err != nil {
-			log.Error("Unable to convert footnotes", zap.Error(err))
-		} else {
-			// Collect IDs from all footnote bodies
-			for _, body := range footnoteBodies {
-				for i := range body.Sections {
-					collectIDsFromSection(&body.Sections[i], filename, idToFile)
+		// Create chapter entry for TOC - all bodies use anchor reference
+		chapterID := fmt.Sprintf("index%05d", startChapterNum+bodyIdx)
+		var chapterDoc *etree.Document
+		if bodyIdx == 0 {
+			// First chapter owns the document for writing to file
+			chapterDoc = doc
+		}
+		
+		chapters = append(chapters, chapterData{
+			ID:       chapterID,
+			Filename: filename + "#" + bodyID,
+			Title:    bodyTitle,
+			Doc:      chapterDoc,
+		})
+	}
+
+	return chapters, nil
+}
+
+// extractBodyTitle extracts the title text from a body
+func extractBodyTitle(body *fb2.Body) string {
+	if body.Title != nil {
+		for _, item := range body.Title.Items {
+			if item.Paragraph != nil {
+				if title := paragraphToPlainText(item.Paragraph); title != "" {
+					return title
 				}
-			}
-
-			// Create separate chapter entries for each footnote body for TOC
-			for bodyIdx, body := range footnoteBodies {
-				chapterNum++
-				bodyChapterID := fmt.Sprintf("index%05d", chapterNum)
-
-				// Extract title from body
-				var bodyTitle string
-				if body.Title != nil {
-					for _, item := range body.Title.Items {
-						if item.Paragraph != nil {
-							bodyTitle = paragraphToPlainText(item.Paragraph)
-							break
-						}
-					}
-				}
-				if bodyTitle == "" {
-					bodyTitle = "Notes"
-				}
-
-				// Generate body ID matching what we used in HTML
-				bodyID := fmt.Sprintf("footnote-body-%d", bodyIdx)
-				if body.Name != "" {
-					bodyID = body.Name
-				}
-
-				chapters = append(chapters, chapterData{
-					ID:       bodyChapterID,
-					Filename: filename + "#" + bodyID,
-					Title:    bodyTitle,
-					Doc:      nil, // Only first entry has the doc
-				})
-			}
-
-			// Store the doc in the first footnote body chapter
-			if len(chapters) > 0 {
-				// Find the first footnote chapter we just added
-				chapters[len(chapters)-len(footnoteBodies)].Doc = doc
-				chapters[len(chapters)-len(footnoteBodies)].ID = chapterID
-				chapters[len(chapters)-len(footnoteBodies)].Filename = filename
 			}
 		}
 	}
+	return "Notes"
+}
 
-	return chapters, idToFile, nil
+// generateFootnoteBodyID generates a unique ID for a footnote body
+func generateFootnoteBodyID(body *fb2.Body, index int) string {
+	if body.Name != "" {
+		return body.Name
+	}
+	return fmt.Sprintf("footnote-body-%d", index)
 }
 
 // collectTopSections recursively unwraps sections without titles (grouping sections)
@@ -624,71 +666,6 @@ func sectionToXHTML(c *content.Content, section *fb2.Section, title string, log 
 
 	if err := writeSectionContent(body, c, section, false, 1, log); err != nil {
 		return nil, err
-	}
-
-	return doc, nil
-}
-
-func footnotesBodiesToXHTML(c *content.Content, bodies []*fb2.Body, title string, log *zap.Logger) (*etree.Document, error) {
-	doc := etree.NewDocument()
-	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
-
-	html := doc.CreateElement("html")
-	html.CreateAttr("xmlns", "http://www.w3.org/1999/xhtml")
-	html.CreateAttr("xmlns:epub", "http://www.idpf.org/2007/ops")
-
-	head := html.CreateElement("head")
-
-	meta := head.CreateElement("meta")
-	meta.CreateAttr("http-equiv", "Content-Type")
-	meta.CreateAttr("content", "text/html; charset=utf-8")
-
-	link := head.CreateElement("link")
-	link.CreateAttr("rel", "stylesheet")
-	link.CreateAttr("type", "text/css")
-	link.CreateAttr("href", "stylesheet.css")
-
-	titleElem := head.CreateElement("title")
-	titleElem.SetText(title)
-
-	bodyElem := html.CreateElement("body")
-
-	// Process all footnote bodies
-	for bodyIdx, body := range bodies {
-		// Create a wrapper div for each body with an ID
-		bodyDiv := bodyElem.CreateElement("div")
-		bodyDiv.CreateAttr("class", "footnote-body")
-		// Generate an ID for this body for TOC linking
-		bodyID := fmt.Sprintf("footnote-body-%d", bodyIdx)
-		if body.Name != "" {
-			bodyID = body.Name
-		}
-		bodyDiv.CreateAttr("id", bodyID)
-
-		// Write body intro content if it has a title
-		if body.Title != nil {
-			if err := writeBodyIntroContent(bodyDiv, c, body, 1, log); err != nil {
-				return nil, err
-			}
-		}
-
-		// Write all sections from this body
-		for i := range body.Sections {
-			section := &body.Sections[i]
-			// Create a div wrapper for each footnote section to preserve structure
-			div := bodyDiv.CreateElement("div")
-			div.CreateAttr("class", "section")
-			if section.ID != "" {
-				div.CreateAttr("id", section.ID)
-			}
-			if section.Lang != "" {
-				div.CreateAttr("xml:lang", section.Lang)
-			}
-
-			if err := writeFootnoteSectionContent(div, c, section, false, log); err != nil {
-				return nil, err
-			}
-		}
 	}
 
 	return doc, nil
@@ -1339,7 +1316,12 @@ func writeTableElement(parent *etree.Element, c *content.Content, table *fb2.Tab
 }
 
 func writeXHTMLChapter(zw *zip.Writer, chapter *chapterData, _ *zap.Logger) error {
-	return writeXMLToZip(zw, filepath.Join(oebpsDir, chapter.Filename), chapter.Doc)
+	// Extract base filename without anchor for file writing
+	filename := chapter.Filename
+	if idx := strings.Index(filename, "#"); idx != -1 {
+		filename = filename[:idx]
+	}
+	return writeXMLToZip(zw, filepath.Join(oebpsDir, filename), chapter.Doc)
 }
 
 func writeImages(zw *zip.Writer, images fb2.BookImages, log *zap.Logger) error {
@@ -1513,11 +1495,24 @@ func writeOPF(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 		coverPageItem.CreateAttr("media-type", "application/xhtml+xml")
 	}
 
+	// Track files added to manifest to avoid duplicates (e.g., footnotes.xhtml with multiple fragments)
+	// Map filename -> chapter ID of first occurrence
+	addedFiles := make(map[string]string)
 	for _, chapter := range chapters {
-		item := manifest.CreateElement("item")
-		item.CreateAttr("id", chapter.ID)
-		item.CreateAttr("href", chapter.Filename)
-		item.CreateAttr("media-type", "application/xhtml+xml")
+		// Extract base filename without fragment
+		filename := chapter.Filename
+		if idx := strings.Index(filename, "#"); idx != -1 {
+			filename = filename[:idx]
+		}
+		
+		// Only add each file once to manifest
+		if _, exists := addedFiles[filename]; !exists {
+			item := manifest.CreateElement("item")
+			item.CreateAttr("id", chapter.ID)
+			item.CreateAttr("href", filename)
+			item.CreateAttr("media-type", "application/xhtml+xml")
+			addedFiles[filename] = chapter.ID
+		}
 	}
 
 	for id, img := range c.ImagesIndex {
@@ -1546,9 +1541,21 @@ func writeOPF(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 		coverRef.CreateAttr("idref", "cover-page")
 	}
 
+	// Add chapters to spine, but only reference each file once (use first chapter ID for files with fragments)
+	addedToSpine := make(map[string]bool)
 	for _, chapter := range chapters {
-		itemref := spine.CreateElement("itemref")
-		itemref.CreateAttr("idref", chapter.ID)
+		// Extract base filename without fragment
+		filename := chapter.Filename
+		if idx := strings.Index(filename, "#"); idx != -1 {
+			filename = filename[:idx]
+		}
+		
+		// Only add each file once to spine
+		if !addedToSpine[filename] {
+			itemref := spine.CreateElement("itemref")
+			itemref.CreateAttr("idref", addedFiles[filename])
+			addedToSpine[filename] = true
+		}
 	}
 
 	return writeXMLToZip(zw, filepath.Join(oebpsDir, "content.opf"), doc)
