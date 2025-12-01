@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/beevik/etree"
 	fixzip "github.com/hidez8891/zip"
@@ -123,13 +124,13 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 	}
 
 	switch c.OutputFormat {
-	case config.OutputFmtEpub2, config.OutputFmtKepub:
-		if err := writeNCX(zw, c, chapters, log); err != nil {
-			return fmt.Errorf("unable to write NCX: %w", err)
-		}
 	case config.OutputFmtEpub3:
 		if err := writeNav(zw, c, chapters, log); err != nil {
 			return fmt.Errorf("unable to write NAV: %w", err)
+		}
+	default:
+		if err := writeNCX(zw, c, chapters, log); err != nil {
+			return fmt.Errorf("unable to write NCX: %w", err)
 		}
 	}
 
@@ -400,7 +401,7 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, start
 			// First chapter owns the document for writing to file
 			chapterDoc = doc
 		}
-		
+
 		chapters = append(chapters, chapterData{
 			ID:       chapterID,
 			Filename: filename + "#" + bodyID,
@@ -1437,10 +1438,10 @@ func writeOPF(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 	pkg.CreateAttr("unique-identifier", "BookId")
 
 	switch c.OutputFormat {
-	case config.OutputFmtEpub2, config.OutputFmtKepub:
-		pkg.CreateAttr("version", "2.0")
 	case config.OutputFmtEpub3:
 		pkg.CreateAttr("version", "3.0")
+	default:
+		pkg.CreateAttr("version", "2.0")
 	}
 	metadata := pkg.CreateElement("metadata")
 	metadata.CreateAttr("xmlns:dc", "http://purl.org/dc/elements/1.1/")
@@ -1456,33 +1457,54 @@ func writeOPF(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 	dcLang := metadata.CreateElement("dc:language")
 	dcLang.SetText(c.Book.Description.TitleInfo.Lang.String())
 
-	for _, author := range c.Book.Description.TitleInfo.Authors {
+	for idx, author := range c.Book.Description.TitleInfo.Authors {
 		dcCreator := metadata.CreateElement("dc:creator")
-		dcCreator.CreateAttr("opf:role", "aut")
 		authorName := strings.TrimSpace(fmt.Sprintf("%s %s %s", author.FirstName, author.MiddleName, author.LastName))
 		dcCreator.SetText(authorName)
+
+		// EPUB3 uses <meta property="role"> with refines, EPUB2 uses opf:role attribute
+		if c.OutputFormat == config.OutputFmtEpub3 {
+			creatorID := fmt.Sprintf("creator%d", idx)
+			dcCreator.CreateAttr("id", creatorID)
+
+			roleMeta := metadata.CreateElement("meta")
+			roleMeta.CreateAttr("refines", "#"+creatorID)
+			roleMeta.CreateAttr("property", "role")
+			roleMeta.CreateAttr("scheme", "marc:relators")
+			roleMeta.SetText("aut")
+		} else {
+			dcCreator.CreateAttr("opf:role", "aut")
+		}
 	}
 
-	if c.CoverID != "" {
+	// EPUB2 uses <meta name="cover">, EPUB3 uses properties="cover-image" on manifest item
+	if c.CoverID != "" && c.OutputFormat != config.OutputFmtEpub3 {
 		meta := metadata.CreateElement("meta")
 		meta.CreateAttr("name", "cover")
 		meta.CreateAttr("content", "book-cover-image")
 	}
 
+	// EPUB3 requires dcterms:modified metadata
+	if c.OutputFormat == config.OutputFmtEpub3 {
+		modifiedMeta := metadata.CreateElement("meta")
+		modifiedMeta.CreateAttr("property", "dcterms:modified")
+		modifiedMeta.SetText(time.Now().UTC().Format("2006-01-02T15:04:05Z"))
+	}
+
 	manifest := pkg.CreateElement("manifest")
 
 	switch c.OutputFormat {
-	case config.OutputFmtEpub2, config.OutputFmtKepub:
-		item := manifest.CreateElement("item")
-		item.CreateAttr("id", "ncx")
-		item.CreateAttr("href", "toc.ncx")
-		item.CreateAttr("media-type", "application/x-dtbncx+xml")
 	case config.OutputFmtEpub3:
 		item := manifest.CreateElement("item")
 		item.CreateAttr("id", "nav")
 		item.CreateAttr("href", "nav.xhtml")
 		item.CreateAttr("media-type", "application/xhtml+xml")
 		item.CreateAttr("properties", "nav")
+	default:
+		item := manifest.CreateElement("item")
+		item.CreateAttr("id", "ncx")
+		item.CreateAttr("href", "toc.ncx")
+		item.CreateAttr("media-type", "application/x-dtbncx+xml")
 	}
 
 	cssItem := manifest.CreateElement("item")
@@ -1495,6 +1517,9 @@ func writeOPF(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 		coverPageItem.CreateAttr("id", "cover-page")
 		coverPageItem.CreateAttr("href", "cover.xhtml")
 		coverPageItem.CreateAttr("media-type", "application/xhtml+xml")
+		if c.OutputFormat == config.OutputFmtEpub3 {
+			coverPageItem.CreateAttr("properties", "svg")
+		}
 	}
 
 	// Track files added to manifest to avoid duplicates (e.g., footnote files with multiple body fragments)
@@ -1506,7 +1531,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 		if idx := strings.Index(filename, "#"); idx != -1 {
 			filename = filename[:idx]
 		}
-		
+
 		// Only add each file once to manifest
 		if _, exists := addedFiles[filename]; !exists {
 			item := manifest.CreateElement("item")
@@ -1534,7 +1559,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 	}
 
 	spine := pkg.CreateElement("spine")
-	if c.OutputFormat == config.OutputFmtEpub2 || c.OutputFormat == config.OutputFmtKepub {
+	if c.OutputFormat != config.OutputFmtEpub3 {
 		spine.CreateAttr("toc", "ncx")
 	}
 
@@ -1551,7 +1576,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 		if idx := strings.Index(filename, "#"); idx != -1 {
 			filename = filename[:idx]
 		}
-		
+
 		// Only add each file once to spine
 		if !addedToSpine[filename] {
 			itemref := spine.CreateElement("itemref")
@@ -1704,19 +1729,36 @@ func writeNav(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 	doc := etree.NewDocument()
 	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
 
+	// EPUB 3.3 uses HTML5 doctype
+	doc.CreateDirective("DOCTYPE html")
+
 	html := doc.CreateElement("html")
 	html.CreateAttr("xmlns", "http://www.w3.org/1999/xhtml")
 	html.CreateAttr("xmlns:epub", "http://www.idpf.org/2007/ops")
+	// Adobe Digital Editions do not like following tags:
+	// html.CreateAttr("lang", c.Book.Description.TitleInfo.Lang.String())
+	// html.CreateAttr("xml:lang", c.Book.Description.TitleInfo.Lang.String())
 
 	head := html.CreateElement("head")
+
+	meta := head.CreateElement("meta")
+	meta.CreateAttr("charset", "utf-8")
+
 	title := head.CreateElement("title")
 	title.SetText("Table of Contents")
+
+	// Add CSS for better presentation
+	link := head.CreateElement("link")
+	link.CreateAttr("rel", "stylesheet")
+	link.CreateAttr("type", "text/css")
+	link.CreateAttr("href", "stylesheet.css")
 
 	body := html.CreateElement("body")
 
 	nav := body.CreateElement("nav")
 	nav.CreateAttr("epub:type", "toc")
 	nav.CreateAttr("id", "toc")
+	nav.CreateAttr("role", "doc-toc")
 
 	h1 := nav.CreateElement("h1")
 	h1.SetText("Table of Contents")
@@ -1739,17 +1781,30 @@ func writeNav(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 }
 
 func buildNavOL(parent *etree.Element, section *fb2.Section, filename string, c *content.Content) {
-	var nestedOL *etree.Element
+	// Get or create the single <ol> for this parent <li>
+	// EPUB 3.3 requires only one <ol> per <li>, all nested items must go in that one <ol>
+	nestedOL := parent.SelectElement("ol")
+	if nestedOL == nil {
+		nestedOL = parent.CreateElement("ol")
+	}
+
+	hadItems := len(nestedOL.ChildElements()) > 0
+	buildNavOLItems(nestedOL, section, filename, c)
+
+	// Remove <ol> if it's empty (no items were added)
+	if !hadItems && len(nestedOL.ChildElements()) == 0 {
+		parent.RemoveChild(nestedOL)
+	}
+}
+
+func buildNavOLItems(parentOL *etree.Element, section *fb2.Section, filename string, c *content.Content) {
 	var lastLI *etree.Element
 
 	for _, item := range section.Content {
 		if item.Kind == fb2.FlowSubtitle && item.Subtitle != nil {
 			// Subtitle in section - add to TOC
-			if nestedOL == nil {
-				nestedOL = parent.CreateElement("ol")
-			}
 			subtitleID := item.Subtitle.ID
-			li := nestedOL.CreateElement("li")
+			li := parentOL.CreateElement("li")
 			a := li.CreateElement("a")
 			a.CreateAttr("href", filename+"#"+subtitleID)
 			a.SetText(extractSubtitleText(item.Subtitle, subtitleID))
@@ -1757,26 +1812,24 @@ func buildNavOL(parent *etree.Element, section *fb2.Section, filename string, c 
 		} else if item.Kind == fb2.FlowSection && item.Section != nil {
 			if item.Section.Title != nil {
 				// Section with title - add to TOC
-				if nestedOL == nil {
-					nestedOL = parent.CreateElement("ol")
-				}
-				li := nestedOL.CreateElement("li")
+				li := parentOL.CreateElement("li")
 				a := li.CreateElement("a")
 				// Use section ID or generated ID
 				sectionID := item.Section.ID
 				a.CreateAttr("href", filename+"#"+sectionID)
 				a.SetText(extractTitleText(item.Section))
 
-				// Recursively process nested sections
+				// Recursively process nested sections - creates <ol> under this <li>
 				buildNavOL(li, item.Section, filename, c)
 				lastLI = li
 			} else {
-				// Section without title (grouping) - process its children
-				// If there's a previous sibling with title, nest under it; otherwise at current level
+				// Section without title (grouping) - add its children at current level
+				// If there's a previous sibling with title, nest under it
 				if lastLI != nil {
 					buildNavOL(lastLI, item.Section, filename, c)
 				} else {
-					buildNavOL(parent, item.Section, filename, c)
+					// Add children directly to current <ol>
+					buildNavOLItems(parentOL, item.Section, filename, c)
 				}
 			}
 		}
