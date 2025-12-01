@@ -328,7 +328,9 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 
 // processFootnoteBodies converts all footnote bodies to XHTML and creates chapter entries
 func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, startChapterNum int, idToFile idToFileMap, log *zap.Logger) ([]chapterData, error) {
-	filename := "footnotes.xhtml"
+	// Use index-based filename like regular chapters
+	chapterID := fmt.Sprintf("index%05d", startChapterNum)
+	filename := fmt.Sprintf("%s.xhtml", chapterID)
 	docTitle := extractBodyTitle(footnoteBodies[0])
 
 	doc := etree.NewDocument()
@@ -1495,7 +1497,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 		coverPageItem.CreateAttr("media-type", "application/xhtml+xml")
 	}
 
-	// Track files added to manifest to avoid duplicates (e.g., footnotes.xhtml with multiple fragments)
+	// Track files added to manifest to avoid duplicates (e.g., footnote files with multiple body fragments)
 	// Map filename -> chapter ID of first occurrence
 	addedFiles := make(map[string]string)
 	for _, chapter := range chapters {
