@@ -103,6 +103,21 @@ type Flow struct {
 	Items []FlowItem
 }
 
+// AsPlainText extracts plain text content from all flow items, excluding image alt text.
+func (f *Flow) AsPlainText() string {
+	var buf strings.Builder
+	for _, item := range f.Items {
+		text := item.AsPlainText()
+		if text != "" {
+			if buf.Len() > 0 {
+				buf.WriteString(" ")
+			}
+			buf.WriteString(text)
+		}
+	}
+	return strings.TrimSpace(buf.String())
+}
+
 // FlowItemKind distinguishes the different kinds of flow content.
 type FlowItemKind string
 
@@ -127,6 +142,37 @@ type FlowItem struct {
 	Table     *Table
 	Image     *Image
 	Section   *Section
+}
+
+// AsPlainText extracts plain text from the flow item based on its kind.
+func (fi *FlowItem) AsPlainText() string {
+	switch fi.Kind {
+	case FlowParagraph:
+		if fi.Paragraph != nil {
+			return fi.Paragraph.AsPlainText()
+		}
+	case FlowSubtitle:
+		if fi.Subtitle != nil {
+			return fi.Subtitle.AsPlainText()
+		}
+	case FlowPoem:
+		if fi.Poem != nil {
+			return fi.Poem.AsPlainText()
+		}
+	case FlowCite:
+		if fi.Cite != nil {
+			return fi.Cite.AsPlainText()
+		}
+	case FlowTable:
+		if fi.Table != nil {
+			return fi.Table.AsPlainText()
+		}
+	case FlowSection:
+		if fi.Section != nil {
+			return fi.Section.AsPlainText()
+		}
+	}
+	return ""
 }
 
 // Author mirrors authorType in the schema.
@@ -335,6 +381,28 @@ type Epigraph struct {
 	TextAuthors []Paragraph
 }
 
+// AsPlainText extracts plain text from the epigraph including flow content and text authors.
+func (e *Epigraph) AsPlainText() string {
+	var buf strings.Builder
+
+	text := e.Flow.AsPlainText()
+	if text != "" {
+		buf.WriteString(text)
+	}
+
+	for _, author := range e.TextAuthors {
+		text := author.AsPlainText()
+		if text != "" {
+			if buf.Len() > 0 {
+				buf.WriteString(" ")
+			}
+			buf.WriteString(text)
+		}
+	}
+
+	return strings.TrimSpace(buf.String())
+}
+
 // Section corresponds to sectionType in the schema.
 type Section struct {
 	ID         string
@@ -355,6 +423,50 @@ func (s *Section) AsTitleText(fallback string) string {
 		}
 	}
 	return fallback
+}
+
+// AsPlainText extracts plain text from the section including title, epigraphs, annotation, and content.
+func (s *Section) AsPlainText() string {
+	var buf strings.Builder
+
+	if s.Title != nil {
+		text := s.Title.AsTOCText("")
+		if text != "" {
+			buf.WriteString(text)
+		}
+	}
+
+	for _, epi := range s.Epigraphs {
+		text := epi.AsPlainText()
+		if text != "" {
+			if buf.Len() > 0 {
+				buf.WriteString(" ")
+			}
+			buf.WriteString(text)
+		}
+	}
+
+	if s.Annotation != nil {
+		text := s.Annotation.AsPlainText()
+		if text != "" {
+			if buf.Len() > 0 {
+				buf.WriteString(" ")
+			}
+			buf.WriteString(text)
+		}
+	}
+
+	for _, item := range s.Content {
+		text := item.AsPlainText()
+		if text != "" {
+			if buf.Len() > 0 {
+				buf.WriteString(" ")
+			}
+			buf.WriteString(text)
+		}
+	}
+
+	return strings.TrimSpace(buf.String())
 }
 
 // Paragraph corresponds to pType in the schema.
@@ -499,12 +611,100 @@ type Poem struct {
 	Date        *Date
 }
 
+// AsPlainText extracts plain text from the poem including title, epigraphs, subtitles, stanzas, and text authors.
+func (p *Poem) AsPlainText() string {
+	var buf strings.Builder
+
+	if p.Title != nil {
+		text := p.Title.AsTOCText("")
+		if text != "" {
+			buf.WriteString(text)
+		}
+	}
+
+	for _, epi := range p.Epigraphs {
+		text := epi.AsPlainText()
+		if text != "" {
+			if buf.Len() > 0 {
+				buf.WriteString(" ")
+			}
+			buf.WriteString(text)
+		}
+	}
+
+	for _, subtitle := range p.Subtitles {
+		text := subtitle.AsPlainText()
+		if text != "" {
+			if buf.Len() > 0 {
+				buf.WriteString(" ")
+			}
+			buf.WriteString(text)
+		}
+	}
+
+	for _, stanza := range p.Stanzas {
+		text := stanza.AsPlainText()
+		if text != "" {
+			if buf.Len() > 0 {
+				buf.WriteString(" ")
+			}
+			buf.WriteString(text)
+		}
+	}
+
+	for _, author := range p.TextAuthors {
+		text := author.AsPlainText()
+		if text != "" {
+			if buf.Len() > 0 {
+				buf.WriteString(" ")
+			}
+			buf.WriteString(text)
+		}
+	}
+
+	return strings.TrimSpace(buf.String())
+}
+
 // Stanza groups verses that form a single poem stanza.
 type Stanza struct {
 	Lang     string
 	Title    *Title
 	Subtitle *Paragraph
 	Verses   []Paragraph
+}
+
+// AsPlainText extracts plain text from the stanza including title, subtitle, and verses.
+func (s *Stanza) AsPlainText() string {
+	var buf strings.Builder
+
+	if s.Title != nil {
+		text := s.Title.AsTOCText("")
+		if text != "" {
+			buf.WriteString(text)
+		}
+	}
+
+	if s.Subtitle != nil {
+		text := s.Subtitle.AsPlainText()
+		if text != "" {
+			if buf.Len() > 0 {
+				buf.WriteString(" ")
+			}
+			buf.WriteString(text)
+		}
+	}
+
+	for _, verse := range s.Verses {
+		text := verse.AsPlainText()
+		if text != "" {
+			if buf.Len() > 0 {
+				buf.WriteString(" ")
+			}
+			buf.WriteString(text)
+		}
+	}
+
+	return strings.TrimSpace(buf.String())
 }
 
 // Cite corresponds to citeType in the schema.
@@ -515,6 +715,33 @@ type Cite struct {
 	TextAuthors []Paragraph
 }
 
+// AsPlainText extracts plain text from the cite including items and text authors.
+func (c *Cite) AsPlainText() string {
+	var buf strings.Builder
+
+	for _, item := range c.Items {
+		text := item.AsPlainText()
+		if text != "" {
+			if buf.Len() > 0 {
+				buf.WriteString(" ")
+			}
+			buf.WriteString(text)
+		}
+	}
+
+	for _, author := range c.TextAuthors {
+		text := author.AsPlainText()
+		if text != "" {
+			if buf.Len() > 0 {
+				buf.WriteString(" ")
+			}
+			buf.WriteString(text)
+		}
+	}
+
+	return strings.TrimSpace(buf.String())
+}
+
 // Table corresponds to tableType in the schema.
 type Table struct {
 	ID    string
@@ -522,11 +749,45 @@ type Table struct {
 	Rows  []TableRow
 }
 
+// AsPlainText extracts plain text from all table cells.
+func (t *Table) AsPlainText() string {
+	var buf strings.Builder
+
+	for _, row := range t.Rows {
+		text := row.AsPlainText()
+		if text != "" {
+			if buf.Len() > 0 {
+				buf.WriteString(" ")
+			}
+			buf.WriteString(text)
+		}
+	}
+
+	return strings.TrimSpace(buf.String())
+}
+
 // TableRow corresponds to trType.
 type TableRow struct {
 	Style string
 	Align string
 	Cells []TableCell
+}
+
+// AsPlainText extracts plain text from all cells in the row.
+func (tr *TableRow) AsPlainText() string {
+	var buf strings.Builder
+
+	for _, cell := range tr.Cells {
+		text := cell.AsPlainText()
+		if text != "" {
+			if buf.Len() > 0 {
+				buf.WriteString(" ")
+			}
+			buf.WriteString(text)
+		}
+	}
+
+	return strings.TrimSpace(buf.String())
 }
 
 // TableCell models tdType/thType entries and stores inline content.
@@ -539,6 +800,17 @@ type TableCell struct {
 	Align   string
 	VAlign  string
 	Content []InlineSegment
+}
+
+// AsPlainText extracts plain text from the cell content.
+func (tc *TableCell) AsPlainText() string {
+	var buf strings.Builder
+
+	for _, seg := range tc.Content {
+		buf.WriteString(seg.AsText())
+	}
+
+	return strings.TrimSpace(buf.String())
 }
 
 // BinaryObject stores embedded binary data (images) encoded in base64.

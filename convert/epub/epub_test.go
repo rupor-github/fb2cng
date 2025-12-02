@@ -1649,7 +1649,8 @@ func TestCollectIDsFromBody(t *testing.T) {
 }
 
 func TestWriteOPF(t *testing.T) {
-	_, _, log := setupTestContext(t)
+	_, env, log := setupTestContext(t)
+	cfg := &env.Cfg.Document
 
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
@@ -1686,7 +1687,7 @@ func TestWriteOPF(t *testing.T) {
 		},
 	}
 
-	err := writeOPF(zw, c, chapters, log)
+	err := writeOPF(zw, c, cfg, chapters, log)
 	if err != nil {
 		t.Fatalf("writeOPF() error = %v", err)
 	}
@@ -1714,7 +1715,7 @@ func TestWriteOPF(t *testing.T) {
 			if !strings.Contains(string(content), "Test Book") {
 				t.Error("OPF should contain book title")
 			}
-			if !strings.Contains(string(content), "John Q Public") {
+			if !strings.Contains(string(content), "Public John Q") {
 				t.Error("OPF should contain author name")
 			}
 			if !strings.Contains(string(content), "test-book-123") {
@@ -1755,7 +1756,8 @@ func TestWriteOPF(t *testing.T) {
 }
 
 func TestWriteOPF_Epub3(t *testing.T) {
-	_, _, log := setupTestContext(t)
+	_, env, log := setupTestContext(t)
+	cfg := &env.Cfg.Document
 
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
@@ -1783,7 +1785,7 @@ func TestWriteOPF_Epub3(t *testing.T) {
 		{ID: "ch01", Filename: "ch01.xhtml", Title: "Chapter 1"},
 	}
 
-	err := writeOPF(zw, c, chapters, log)
+	err := writeOPF(zw, c, cfg, chapters, log)
 	if err != nil {
 		t.Fatalf("writeOPF() error = %v", err)
 	}
@@ -2078,5 +2080,308 @@ func TestWriteCoverPage(t *testing.T) {
 
 	if !foundCover {
 		t.Error("Cover page not found in zip")
+	}
+}
+
+func TestGenerateTOCPage(t *testing.T) {
+	log := setupTestLogger(t)
+
+	c := &content.Content{
+		Book: &fb2.FictionBook{
+			Description: fb2.Description{
+				TitleInfo: fb2.TitleInfo{
+					BookTitle: fb2.TextField{Value: "Test Book"},
+				},
+			},
+		},
+	}
+
+	chapters := []chapterData{
+		{
+			ID:       "ch1",
+			Filename: "ch1.xhtml",
+			Title:    "Chapter 1",
+		},
+		{
+			ID:       "ch2",
+			Filename: "ch2.xhtml",
+			Title:    "Chapter 2",
+		},
+	}
+
+	cfg := &config.TOCPageConfig{
+		Title: "Table of Contents",
+	}
+
+	tocChapter := generateTOCPage(c, chapters, cfg, log)
+
+	if tocChapter.ID != "toc-page" {
+		t.Errorf("Expected ID 'toc-page', got '%s'", tocChapter.ID)
+	}
+
+	if tocChapter.Filename != "toc-page.xhtml" {
+		t.Errorf("Expected filename 'toc-page.xhtml', got '%s'", tocChapter.Filename)
+	}
+
+	if tocChapter.Title != "Table of Contents" {
+		t.Errorf("Expected title 'Table of Contents', got '%s'", tocChapter.Title)
+	}
+
+	if tocChapter.Doc == nil {
+		t.Fatal("TOC document should not be nil")
+	}
+
+	// Check document structure
+	body := tocChapter.Doc.Root().SelectElement("body")
+	if body == nil {
+		t.Fatal("Body element not found")
+	}
+
+	// Check body has CSS class
+	if body.SelectAttrValue("class", "") != "toc-page" {
+		t.Errorf("Expected body class 'toc-page', got '%s'", body.SelectAttrValue("class", ""))
+	}
+
+	h1 := body.SelectElement("h1")
+	if h1 == nil {
+		t.Fatal("H1 element not found")
+	}
+
+	// Check h1 has CSS class
+	if h1.SelectAttrValue("class", "") != "toc-title" {
+		t.Errorf("Expected h1 class 'toc-title', got '%s'", h1.SelectAttrValue("class", ""))
+	}
+
+	// H1 now contains the book title, not the TOC title
+	if h1.Text() != "Test Book" {
+		t.Errorf("Expected H1 text 'Test Book', got '%s'", h1.Text())
+	}
+
+	ol := body.SelectElement("ol")
+	if ol == nil {
+		t.Fatal("OL element not found")
+	}
+
+	// Check ol has CSS class
+	if ol.SelectAttrValue("class", "") != "toc-list" {
+		t.Errorf("Expected ol class 'toc-list', got '%s'", ol.SelectAttrValue("class", ""))
+	}
+
+	items := ol.SelectElements("li")
+	if len(items) != 2 {
+		t.Errorf("Expected 2 list items, got %d", len(items))
+	}
+
+	// Check first item
+	if len(items) > 0 {
+		// Check li has CSS class
+		if items[0].SelectAttrValue("class", "") != "toc-item" {
+			t.Errorf("Expected li class 'toc-item', got '%s'", items[0].SelectAttrValue("class", ""))
+		}
+
+		a := items[0].SelectElement("a")
+		if a == nil {
+			t.Fatal("First item should have anchor element")
+		}
+
+		// Check anchor has CSS class
+		if a.SelectAttrValue("class", "") != "toc-link" {
+			t.Errorf("Expected a class 'toc-link', got '%s'", a.SelectAttrValue("class", ""))
+		}
+
+		href := a.SelectAttrValue("href", "")
+		if href != "ch1.xhtml" {
+			t.Errorf("Expected href 'ch1.xhtml', got '%s'", href)
+		}
+		if a.Text() != "Chapter 1" {
+			t.Errorf("Expected link text 'Chapter 1', got '%s'", a.Text())
+		}
+	}
+}
+
+func TestGenerateTOCPage_IDCollision(t *testing.T) {
+	log := setupTestLogger(t)
+
+	c := &content.Content{
+		Book: &fb2.FictionBook{
+			Description: fb2.Description{
+				TitleInfo: fb2.TitleInfo{
+					BookTitle: fb2.TextField{Value: "Test Book"},
+				},
+			},
+		},
+	}
+
+	// Create chapters with IDs that will collide with TOC page IDs
+	chapters := []chapterData{
+		{
+			ID:       "toc-page",
+			Filename: "toc-page.xhtml",
+			Title:    "Chapter with TOC ID",
+		},
+		{
+			ID:       "toc-page-1",
+			Filename: "toc-page-1.xhtml",
+			Title:    "Another collision",
+		},
+		{
+			ID:       "ch1",
+			Filename: "ch1.xhtml",
+			Title:    "Normal Chapter",
+		},
+	}
+
+	cfg := &config.TOCPageConfig{
+		Title: "Table of Contents",
+	}
+
+	tocChapter := generateTOCPage(c, chapters, cfg, log)
+
+	// Should get toc-page-2 since toc-page and toc-page-1 are taken
+	if tocChapter.ID != "toc-page-2" {
+		t.Errorf("Expected ID 'toc-page-2' (avoiding collisions), got '%s'", tocChapter.ID)
+	}
+
+	if tocChapter.Filename != "toc-page-2.xhtml" {
+		t.Errorf("Expected filename 'toc-page-2.xhtml', got '%s'", tocChapter.Filename)
+	}
+}
+
+func TestGenerate_WithTOCPageBefore(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	testFB2Path := "../../testdata/_Test.fb2"
+	fb2File, err := os.Open(testFB2Path)
+	if err != nil {
+		t.Fatalf("Failed to open test FB2: %v", err)
+	}
+	defer fb2File.Close()
+
+	ctx, env, log := setupTestContext(t)
+	env.Overwrite = true
+	tmpDir := t.TempDir()
+
+	c, err := content.Prepare(ctx, fb2File, testFB2Path, config.OutputFmtEpub2, log)
+	if err != nil {
+		t.Fatalf("Failed to prepare content: %v", err)
+	}
+
+	outputPath := filepath.Join(tmpDir, "test-toc-before.epub")
+	cfg := env.Cfg.Document
+	cfg.TOCPage.Placement = config.TOCPagePlacementBefore
+	cfg.TOCPage.Title = "Contents"
+
+	err = Generate(ctx, c, outputPath, &cfg, log)
+	if err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	zr, err := zip.OpenReader(outputPath)
+	if err != nil {
+		t.Fatalf("Failed to open output as zip: %v", err)
+	}
+	defer zr.Close()
+
+	var foundTOCPage bool
+	for _, f := range zr.File {
+		if strings.Contains(f.Name, "toc-page.xhtml") {
+			foundTOCPage = true
+			rc, err := f.Open()
+			if err != nil {
+				t.Fatalf("open toc page: %v", err)
+			}
+			content, _ := io.ReadAll(rc)
+			rc.Close()
+
+			if !strings.Contains(string(content), "Contents") {
+				t.Error("TOC page should contain title 'Contents'")
+			}
+		}
+	}
+
+	if !foundTOCPage {
+		t.Error("TOC page not found in zip")
+	}
+
+	// Check OPF to verify TOC page is in spine
+	var foundInOPF bool
+	for _, f := range zr.File {
+		if strings.HasSuffix(f.Name, "content.opf") {
+			rc, err := f.Open()
+			if err != nil {
+				t.Fatalf("open opf: %v", err)
+			}
+			content, _ := io.ReadAll(rc)
+			rc.Close()
+
+			if strings.Contains(string(content), "toc-page") {
+				foundInOPF = true
+			}
+		}
+	}
+
+	if !foundInOPF {
+		t.Error("TOC page not found in OPF manifest")
+	}
+}
+
+func TestGenerate_WithTOCPageAfter(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	testFB2Path := "../../testdata/_Test.fb2"
+	fb2File, err := os.Open(testFB2Path)
+	if err != nil {
+		t.Fatalf("Failed to open test FB2: %v", err)
+	}
+	defer fb2File.Close()
+
+	ctx, env, log := setupTestContext(t)
+	env.Overwrite = true
+	tmpDir := t.TempDir()
+
+	c, err := content.Prepare(ctx, fb2File, testFB2Path, config.OutputFmtEpub3, log)
+	if err != nil {
+		t.Fatalf("Failed to prepare content: %v", err)
+	}
+
+	outputPath := filepath.Join(tmpDir, "test-toc-after.epub")
+	cfg := env.Cfg.Document
+	cfg.TOCPage.Placement = config.TOCPagePlacementAfter
+	cfg.TOCPage.Title = "Table of Contents"
+
+	err = Generate(ctx, c, outputPath, &cfg, log)
+	if err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	zr, err := zip.OpenReader(outputPath)
+	if err != nil {
+		t.Fatalf("Failed to open output as zip: %v", err)
+	}
+	defer zr.Close()
+
+	var foundTOCPage bool
+	for _, f := range zr.File {
+		if strings.Contains(f.Name, "toc-page.xhtml") {
+			foundTOCPage = true
+			rc, err := f.Open()
+			if err != nil {
+				t.Fatalf("open toc page: %v", err)
+			}
+			content, _ := io.ReadAll(rc)
+			rc.Close()
+
+			if !strings.Contains(string(content), "Table of Contents") {
+				t.Error("TOC page should contain title 'Table of Contents'")
+			}
+		}
+	}
+
+	if !foundTOCPage {
+		t.Error("TOC page not found in zip")
 	}
 }

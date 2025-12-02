@@ -39,14 +39,23 @@ type (
 		BodyNames []string      `yaml:"bodies" validate:"dive,required"`
 	}
 
+	TOCPageConfig struct {
+		Placement       TOCPagePlacement `yaml:"placement" validate:"oneof=0 1 2"`
+		Title           string           `yaml:"title" validate:"required_unless=Placement 0"`
+		AuthorsTemplate string           `yaml:"authors_template"`
+	}
+
 	DocumentConfig struct {
 		FixZip                bool            `yaml:"fix_zip"`
 		StylesheetPath        string          `yaml:"stylesheet_path" sanitize:"assure_file_access"`
 		OutputNameTemplate    string          `yaml:"output_name_template"`
+		MetaTitleTemplate     string          `yaml:"meta_title_template"`
+		MetaAuthorTemplate    string          `yaml:"meta_author_template"`
 		FileNameTransliterate bool            `yaml:"file_name_transliterate"`
 		InsertSoftHyphen      bool            `yaml:"insert_soft_hyphen"`
 		Images                ImagesConfig    `yaml:"images"`
 		Footnotes             FootnotesConfig `yaml:"footnotes"`
+		TOCPage               TOCPageConfig   `yaml:"toc_page"`
 	}
 
 	Config struct {
@@ -61,10 +70,16 @@ const (
 	// NOTE: must match yaml field name above, alternative is to use struct
 	// field name and reflection which I want to avoid for now
 	OutputNameTemplateFieldName TemplateFieldName = "output_name_template"
+	MetaTitleTemplateFieldName  TemplateFieldName = "meta_title_template"
+	MetaAuthorTemplateFieldName TemplateFieldName = "meta_author_template"
+	AuthorsTemplateFieldName    TemplateFieldName = "authors_template"
 )
 
 var requiredOptions = append([]func(*gencfg.ProcessingOptions){},
 	gencfg.WithDoNotExpandField(string(OutputNameTemplateFieldName)),
+	gencfg.WithDoNotExpandField(string(MetaTitleTemplateFieldName)),
+	gencfg.WithDoNotExpandField(string(MetaAuthorTemplateFieldName)),
+	gencfg.WithDoNotExpandField(string(AuthorsTemplateFieldName)),
 )
 
 func unmarshalConfig(data []byte, cfg *Config, process bool) (*Config, error) {

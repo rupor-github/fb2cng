@@ -1,4 +1,4 @@
-package convert
+package fields
 
 import (
 	"bytes"
@@ -10,7 +10,6 @@ import (
 	sprig "github.com/go-task/slim-sprig/v3"
 
 	"fbc/config"
-	"fbc/content"
 	"fbc/fb2"
 )
 
@@ -26,6 +25,7 @@ type AuthorDefinition struct {
 // Values is a struct that holds variables we make available for template expansion
 type Values struct {
 	Context    string
+	Index      int
 	Title      string
 	Series     []SequenceDefinition
 	Language   string
@@ -89,7 +89,7 @@ func buildAuthors(authors []fb2.Author) []AuthorDefinition {
 	return result
 }
 
-func expandTemplate(c *content.Content, name config.TemplateFieldName, field string, format config.OutputFmt) (string, error) {
+func Expand(name config.TemplateFieldName, field string, index int, book *fb2.FictionBook, srcName string, format config.OutputFmt) (string, error) {
 	funcMap := sprig.FuncMap()
 
 	tmpl, err := template.New(string(name)).Funcs(funcMap).Parse(field)
@@ -98,16 +98,18 @@ func expandTemplate(c *content.Content, name config.TemplateFieldName, field str
 	}
 
 	values := Values{
-		Context:    string(name),
-		Title:      c.Book.Description.TitleInfo.BookTitle.Value,
-		Series:     buildSequences(c.Book.Description.TitleInfo.Sequences),
-		Language:   c.Book.Description.TitleInfo.Lang.String(),
-		Date:       buildDate(c.Book.Description.TitleInfo.Date),
-		Authors:    buildAuthors(c.Book.Description.TitleInfo.Authors),
+		Context: string(name),
+		Index:   index,
+
+		Title:      book.Description.TitleInfo.BookTitle.Value,
+		Series:     buildSequences(book.Description.TitleInfo.Sequences),
+		Language:   book.Description.TitleInfo.Lang.String(),
+		Date:       buildDate(book.Description.TitleInfo.Date),
+		Authors:    buildAuthors(book.Description.TitleInfo.Authors),
 		Format:     format.String(),
-		SourceFile: strings.TrimSuffix(filepath.Base(c.SrcName), filepath.Ext(c.SrcName)),
-		BookID:     c.Book.Description.DocumentInfo.ID,
-		Genres:     buildGenres(c.Book.Description.TitleInfo.Genres),
+		SourceFile: strings.TrimSuffix(filepath.Base(srcName), filepath.Ext(srcName)),
+		BookID:     book.Description.DocumentInfo.ID,
+		Genres:     buildGenres(book.Description.TitleInfo.Genres),
 	}
 
 	buf := new(bytes.Buffer)

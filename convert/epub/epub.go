@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"fbc/config"
 	"fbc/content"
 	"fbc/fb2"
+	"fbc/fb2/fields"
 	"fbc/state"
 )
 
@@ -92,6 +94,16 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		return fmt.Errorf("unable to convert content: %w", err)
 	}
 
+	// Add TOC page if requested
+	if cfg.TOCPage.Placement != config.TOCPagePlacementNone {
+		tocChapter := generateTOCPage(c, chapters, &cfg.TOCPage, log)
+		if cfg.TOCPage.Placement == config.TOCPagePlacementBefore {
+			chapters = append([]chapterData{tocChapter}, chapters...)
+		} else {
+			chapters = append(chapters, tocChapter)
+		}
+	}
+
 	// Fix internal links to include chapter filenames
 	fixInternalLinks(chapters, idToFile, log)
 
@@ -118,7 +130,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		}
 	}
 
-	if err := writeOPF(zw, c, chapters, log); err != nil {
+	if err := writeOPF(zw, c, cfg, chapters, log); err != nil {
 		return fmt.Errorf("unable to write OPF: %w", err)
 	}
 
@@ -1095,7 +1107,7 @@ func writeStylesheet(zw *zip.Writer, c *content.Content, css []byte) error {
 	return writeDataToZip(zw, filepath.Join(oebpsDir, "stylesheet.css"), css)
 }
 
-func writeOPF(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap.Logger) error {
+func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, chapters []chapterData, log *zap.Logger) error {
 	doc := etree.NewDocument()
 	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
 
@@ -1114,7 +1126,16 @@ func writeOPF(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 	metadata.CreateAttr("xmlns:opf", "http://www.idpf.org/2007/opf")
 
 	dcTitle := metadata.CreateElement("dc:title")
-	dcTitle.SetText(c.Book.Description.TitleInfo.BookTitle.Value)
+	title := c.Book.Description.TitleInfo.BookTitle.Value
+	if cfg.MetaTitleTemplate != "" {
+		expanded, err := fields.Expand(config.MetaTitleTemplateFieldName, cfg.MetaTitleTemplate, -1, c.Book, c.SrcName, c.OutputFormat)
+		if err != nil {
+			log.Warn("Unable to prepare title for generated OPF", zap.Error(err))
+		} else {
+			title = expanded
+		}
+	}
+	dcTitle.SetText(title)
 
 	dcIdentifier := metadata.CreateElement("dc:identifier")
 	dcIdentifier.CreateAttr("id", "BookId")
@@ -1126,6 +1147,14 @@ func writeOPF(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 	for idx, author := range c.Book.Description.TitleInfo.Authors {
 		dcCreator := metadata.CreateElement("dc:creator")
 		authorName := strings.TrimSpace(fmt.Sprintf("%s %s %s", author.FirstName, author.MiddleName, author.LastName))
+		if cfg.MetaAuthorTemplate != "" {
+			expanded, err := fields.Expand(config.MetaAuthorTemplateFieldName, cfg.MetaAuthorTemplate, idx, c.Book, c.SrcName, c.OutputFormat)
+			if err != nil {
+				log.Warn("Unable to prepare author name for generated OPF", zap.Error(err))
+			} else {
+				authorName = expanded
+			}
+		}
 		dcCreator.SetText(authorName)
 
 		// EPUB3 uses <meta property="role"> with refines, EPUB2 uses opf:role attribute
@@ -1140,6 +1169,28 @@ func writeOPF(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 			roleMeta.SetText("aut")
 		} else {
 			dcCreator.CreateAttr("opf:role", "aut")
+		}
+	}
+
+	for _, genreRef := range c.Book.Description.TitleInfo.Genres {
+		meta := metadata.CreateElement("dc:subject")
+		meta.SetText(genreRef.Value)
+	}
+
+	if c.Book.Description.TitleInfo.Annotation != nil {
+		meta := metadata.CreateElement("dc:description")
+		meta.SetText(c.Book.Description.TitleInfo.Annotation.AsPlainText())
+	}
+
+	if len(c.Book.Description.TitleInfo.Sequences) > 0 {
+		// Do not let series metadata to disappear, use calibre meta tags
+		meta := metadata.CreateElement("meta")
+		meta.CreateAttr("name", "calibre:series")
+		meta.CreateAttr("content", c.Book.Description.TitleInfo.Sequences[0].Name)
+		if c.Book.Description.TitleInfo.Sequences[0].Number != nil {
+			meta = metadata.CreateElement("meta")
+			meta.CreateAttr("name", "calibre:series_index")
+			meta.CreateAttr("content", strconv.Itoa(*c.Book.Description.TitleInfo.Sequences[0].Number))
 		}
 	}
 
@@ -1389,15 +1440,9 @@ func writeNav(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 	doc := etree.NewDocument()
 	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
 
-	// EPUB 3.3 uses HTML5 doctype
-	doc.CreateDirective("DOCTYPE html")
-
 	html := doc.CreateElement("html")
 	html.CreateAttr("xmlns", "http://www.w3.org/1999/xhtml")
 	html.CreateAttr("xmlns:epub", "http://www.idpf.org/2007/ops")
-	// Adobe Digital Editions do not like following tags:
-	// html.CreateAttr("lang", c.Book.Description.TitleInfo.Lang.String())
-	// html.CreateAttr("xml:lang", c.Book.Description.TitleInfo.Lang.String())
 
 	head := html.CreateElement("head")
 
@@ -1480,6 +1525,121 @@ func buildNavOLItems(parentOL *etree.Element, section *fb2.Section, filename str
 					buildNavOL(lastLI, item.Section, filename, c)
 				} else {
 					buildNavOLItems(parentOL, item.Section, filename, c)
+				}
+			}
+		}
+	}
+}
+
+// generateTOCPage creates a TOC chapter as an XHTML page
+func generateTOCPage(c *content.Content, chapters []chapterData, cfg *config.TOCPageConfig, log *zap.Logger) chapterData {
+	doc := createXHTMLDocument(cfg.Title)
+	body := doc.Root().SelectElement("body")
+	body.CreateAttr("class", "toc-page")
+
+	h1 := body.CreateElement("h1")
+	h1.CreateAttr("class", "toc-title")
+	h1.SetText(c.Book.Description.TitleInfo.BookTitle.Value)
+
+	if cfg.AuthorsTemplate != "" {
+		expanded, err := fields.Expand(config.AuthorsTemplateFieldName, cfg.AuthorsTemplate, -1, c.Book, c.SrcName, c.OutputFormat)
+		if err != nil {
+			log.Warn("Unable to prepare list of authors for generated TOC", zap.Error(err))
+		} else {
+			h2 := body.CreateElement("h2")
+			h2.CreateAttr("class", "toc-authors")
+			h2.SetText(expanded)
+		}
+	}
+
+	ol := body.CreateElement("ol")
+	ol.CreateAttr("class", "toc-list")
+
+	for _, chapter := range chapters {
+		li := ol.CreateElement("li")
+		li.CreateAttr("class", "toc-item")
+		a := li.CreateElement("a")
+		a.CreateAttr("class", "toc-link")
+		a.CreateAttr("href", chapter.Filename)
+		a.SetText(chapter.Title)
+
+		if chapter.Section != nil {
+			buildTOCPageOL(li, chapter.Section, chapter.Filename, c)
+		}
+	}
+
+	// Find a unique ID and filename that doesn't collide with existing chapters
+	baseID := "toc-page"
+	id := baseID
+	filename := baseID + ".xhtml"
+
+	existingIDs := make(map[string]bool, len(chapters))
+	for _, ch := range chapters {
+		existingIDs[ch.ID] = true
+	}
+
+	counter := 0
+	for existingIDs[id] {
+		counter++
+		id = fmt.Sprintf("%s-%d", baseID, counter)
+		filename = id + ".xhtml"
+	}
+
+	return chapterData{
+		ID:       id,
+		Filename: filename,
+		Title:    cfg.Title,
+		Doc:      doc,
+	}
+}
+
+// buildTOCPageOL recursively builds nested TOC structure for the TOC page
+func buildTOCPageOL(parent *etree.Element, section *fb2.Section, filename string, c *content.Content) {
+	nestedOL := parent.SelectElement("ol")
+	if nestedOL == nil {
+		nestedOL = parent.CreateElement("ol")
+		nestedOL.CreateAttr("class", "toc-list toc-nested")
+	}
+
+	hadItems := len(nestedOL.ChildElements()) > 0
+	buildTOCPageOLItems(nestedOL, section, filename, c)
+
+	if !hadItems && len(nestedOL.ChildElements()) == 0 {
+		parent.RemoveChild(nestedOL)
+	}
+}
+
+// buildTOCPageOLItems adds TOC entries for subsections to the ordered list
+func buildTOCPageOLItems(parentOL *etree.Element, section *fb2.Section, filename string, c *content.Content) {
+	var lastLI *etree.Element
+
+	for _, item := range section.Content {
+		if item.Kind == fb2.FlowSubtitle && item.Subtitle != nil {
+			subtitleID := item.Subtitle.ID
+			li := parentOL.CreateElement("li")
+			li.CreateAttr("class", "toc-item toc-subtitle")
+			a := li.CreateElement("a")
+			a.CreateAttr("class", "toc-link")
+			a.CreateAttr("href", filename+"#"+subtitleID)
+			a.SetText(item.Subtitle.AsTOCText(fb2.FormatIDToTOC(subtitleID)))
+			lastLI = li
+		} else if item.Kind == fb2.FlowSection && item.Section != nil {
+			if item.Section.Title != nil {
+				li := parentOL.CreateElement("li")
+				li.CreateAttr("class", "toc-item toc-section")
+				a := li.CreateElement("a")
+				a.CreateAttr("class", "toc-link")
+				sectionID := item.Section.ID
+				a.CreateAttr("href", filename+"#"+sectionID)
+				a.SetText(item.Section.AsTitleText(""))
+
+				buildTOCPageOL(li, item.Section, filename, c)
+				lastLI = li
+			} else {
+				if lastLI != nil {
+					buildTOCPageOL(lastLI, item.Section, filename, c)
+				} else {
+					buildTOCPageOLItems(parentOL, item.Section, filename, c)
 				}
 			}
 		}

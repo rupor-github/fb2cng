@@ -324,3 +324,104 @@ func (x *OutputFmt) UnmarshalText(text []byte) error {
 func (x *OutputFmt) AppendText(b []byte) ([]byte, error) {
 	return append(b, x.String()...), nil
 }
+
+const (
+	// TOCPagePlacementNone is a TOCPagePlacement of type None.
+	TOCPagePlacementNone TOCPagePlacement = iota
+	// TOCPagePlacementBefore is a TOCPagePlacement of type Before.
+	TOCPagePlacementBefore
+	// TOCPagePlacementAfter is a TOCPagePlacement of type After.
+	TOCPagePlacementAfter
+)
+
+var ErrInvalidTOCPagePlacement = fmt.Errorf("not a valid TOCPagePlacement, try [%s]", strings.Join(_TOCPagePlacementNames, ", "))
+
+const _TOCPagePlacementName = "nonebeforeafter"
+
+var _TOCPagePlacementNames = []string{
+	_TOCPagePlacementName[0:4],
+	_TOCPagePlacementName[4:10],
+	_TOCPagePlacementName[10:15],
+}
+
+// TOCPagePlacementNames returns a list of possible string values of TOCPagePlacement.
+func TOCPagePlacementNames() []string {
+	tmp := make([]string, len(_TOCPagePlacementNames))
+	copy(tmp, _TOCPagePlacementNames)
+	return tmp
+}
+
+var _TOCPagePlacementMap = map[TOCPagePlacement]string{
+	TOCPagePlacementNone:   _TOCPagePlacementName[0:4],
+	TOCPagePlacementBefore: _TOCPagePlacementName[4:10],
+	TOCPagePlacementAfter:  _TOCPagePlacementName[10:15],
+}
+
+// String implements the Stringer interface.
+func (x TOCPagePlacement) String() string {
+	if str, ok := _TOCPagePlacementMap[x]; ok {
+		return str
+	}
+	return fmt.Sprintf("TOCPagePlacement(%d)", x)
+}
+
+// IsValid provides a quick way to determine if the typed value is
+// part of the allowed enumerated values
+func (x TOCPagePlacement) IsValid() bool {
+	_, ok := _TOCPagePlacementMap[x]
+	return ok
+}
+
+var _TOCPagePlacementValue = map[string]TOCPagePlacement{
+	_TOCPagePlacementName[0:4]:                    TOCPagePlacementNone,
+	strings.ToLower(_TOCPagePlacementName[0:4]):   TOCPagePlacementNone,
+	_TOCPagePlacementName[4:10]:                   TOCPagePlacementBefore,
+	strings.ToLower(_TOCPagePlacementName[4:10]):  TOCPagePlacementBefore,
+	_TOCPagePlacementName[10:15]:                  TOCPagePlacementAfter,
+	strings.ToLower(_TOCPagePlacementName[10:15]): TOCPagePlacementAfter,
+}
+
+// ParseTOCPagePlacement attempts to convert a string to a TOCPagePlacement.
+func ParseTOCPagePlacement(name string) (TOCPagePlacement, error) {
+	if x, ok := _TOCPagePlacementValue[name]; ok {
+		return x, nil
+	}
+	// Case insensitive parse, do a separate lookup to prevent unnecessary cost of lowercasing a string if we don't need to.
+	if x, ok := _TOCPagePlacementValue[strings.ToLower(name)]; ok {
+		return x, nil
+	}
+	return TOCPagePlacement(0), fmt.Errorf("%s is %w", name, ErrInvalidTOCPagePlacement)
+}
+
+// MustParseTOCPagePlacement converts a string to a TOCPagePlacement, and panics if is not valid.
+func MustParseTOCPagePlacement(name string) TOCPagePlacement {
+	val, err := ParseTOCPagePlacement(name)
+	if err != nil {
+		panic(err)
+	}
+	return val
+}
+
+// MarshalText implements the text marshaller method.
+func (x TOCPagePlacement) MarshalText() ([]byte, error) {
+	return []byte(x.String()), nil
+}
+
+// UnmarshalText implements the text unmarshaller method.
+func (x *TOCPagePlacement) UnmarshalText(text []byte) error {
+	name := string(text)
+	tmp, err := ParseTOCPagePlacement(name)
+	if err != nil {
+		return err
+	}
+	*x = tmp
+	return nil
+}
+
+// AppendText appends the textual representation of itself to the end of b
+// (allocating a larger slice if necessary) and returns the updated slice.
+//
+// Implementations must not retain b, nor mutate any bytes within b[:len(b)].
+func (x *TOCPagePlacement) AppendText(b []byte) ([]byte, error) {
+	return append(b, x.String()...), nil
+}

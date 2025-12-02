@@ -8,6 +8,10 @@ type FootnotesMode int
 // ENUM(none, keepAR, stretch)
 type ImageResizeMode int
 
+// Specification of TOC page placement.
+// ENUM(none, before, after)
+type TOCPagePlacement int
+
 // Specification of requested output type.
 // ENUM(epub2, epub3, kepub, kfx)
 type OutputFmt int

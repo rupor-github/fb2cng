@@ -5,6 +5,7 @@ version: 1
 # additional functions from slim-sprig package are available for processing: https://go-task.github.io/slim-sprig
 # List of variables always available (additional variables could be specified for a particular field):
 # - .Context (string) - name of the template field, uniquely defines processing context
+# - .Index (integer) - when template is applied to a slice variable index selects slice element relevant in a particular context, otherwise -1
 # - .Title (string) - book title as specified in fb2 metainformation
 # - .Series (array of { .Name (string), .Number (integer) }) - series as specified in fb2 metainformation.
 #     NOTE: according to fictionbook schema series could be hierarhical (series
@@ -25,11 +26,11 @@ document:
   # unreadable epub/kepub files - turn this on
   fix_zip: false
 
-  #---- CSS stylesheet to use. If absent - default one will be supplied
+  # CSS stylesheet to use. If absent - default one will be supplied
   # stylesheet_path = "default.css"
 
-  #---- When file_name_format is set output file will have name created using FB2 metainformation
-  #---- NOTE: watch out for path separators, directories will be created!
+  # When output_name_template is set output file will have name created using FB2 metainformation
+  # NOTE: watch out for path separators, directories will be created!
   output_name_template: |
     {{- $all := "" -}}
     {{- if gt (len .Authors) 0 -}}
@@ -48,6 +49,37 @@ document:
     {{- else -}}
     {{-   .Title -}}
     {{- end -}}
+
+  # When meta_title_template is set output book title metainformation will be
+  # formatted using it. This is often used to conviniently sort device library
+  # listings
+  meta_title_template: |
+    {{- if gt (len .Series) 0 -}}
+    {{-   with first .Series -}}
+    {{-     $seriesLetters := list -}}
+    {{-     range $word := splitList " " .Name -}}
+    {{-       $seriesLetters = append $seriesLetters (upper (first (splitList "" $word))) -}}
+    {{-     end -}}
+    {{-     if gt (len $seriesLetters) 0 -}}
+    {{-       "(" }}{{- join "" $seriesLetters -}}
+    {{-       if gt .Number 0 -}}
+    {{-         printf " - %02d" .Number -}}
+    {{-       end -}}
+    {{-       ") " -}}
+    {{-     end -}}
+    {{-   end -}}
+    {{- end -}}
+    {{  .Title -}}
+
+  # When meta_author_template is set author(s) name in output book
+  # metainformation will be formatted using it. Template is applied to each
+  # available author individually using .Index field
+  meta_author_template: |
+    {{- with index .Authors .Index }}
+    {{-  .LastName -}}
+    {{-  if .FirstName }} {{.FirstName}}{{ end -}}
+    {{-  if .MiddleName }} {{.MiddleName }}{{ end -}}
+    {{ end -}}
 
   #---- Slugify/transliterate output file name - after all other processing on file name is completed
   file_name_transliterate: false
@@ -106,6 +138,26 @@ document:
     # Names of the bodies in fb2 document to consider for footnotes processing
     # if required by mode
     bodies: ["notes", "comments", "примечания", "комментарии"]
+
+  toc_page:
+    # Generate additional page with TOC (some devices may not support epub TOC at all)
+    # "none"   - do not generate
+    # "before" - at the beginning of the book
+    # "after"  - at the end of the book
+    placement: "before"
+    # Name of the TOC page in a proper TOC
+    title: "Content"
+    # when toc page generation requested and authors_template is set - page will
+    # have header with authors formatted using it
+    authors_template: |
+      {{-   $all := list -}}
+      {{-   range .Authors -}}
+      {{-     $name := .LastName -}}
+      {{-     if .FirstName -}}{{ $name = (cat $name .FirstName) -}}{{- end -}}
+      {{-     if .MiddleName -}}{{ $name = (cat $name .MiddleName) -}}{{- end -}}
+      {{-     $all = append $all $name -}}
+      {{-   end -}}
+      {{-   join ", " $all -}}
 
 logging:
   # controls terminal (stdout, stderr) output

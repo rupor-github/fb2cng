@@ -12,6 +12,7 @@ import (
 
 	"fbc/config"
 	"fbc/content"
+	"fbc/fb2/fields"
 	"fbc/state"
 )
 
@@ -53,7 +54,7 @@ func makeDefaultFileName(src string, format config.OutputFmt, env *state.LocalEn
 }
 
 func expandOutputNameTemplate(c *content.Content, env *state.LocalEnv) string {
-	expandedName, err := expandTemplate(c, config.OutputNameTemplateFieldName, env.Cfg.Document.OutputNameTemplate, c.OutputFormat)
+	expandedName, err := fields.Expand(config.OutputNameTemplateFieldName, env.Cfg.Document.OutputNameTemplate, -1, c.Book, c.SrcName, c.OutputFormat)
 	if err != nil {
 		env.Log.Warn("Unable to prepare output filename", zap.Error(err))
 		return ""
