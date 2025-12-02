@@ -261,10 +261,66 @@ func (b *Body) Other() bool {
 	return b.Kind != BodyMain && b.Kind != BodyFootnotes
 }
 
+// AsTitleText extracts the title text from the body, with fallback.
+func (b *Body) AsTitleText(fallback string) string {
+	if b.Title != nil {
+		for _, item := range b.Title.Items {
+			if item.Paragraph != nil {
+				if title := item.Paragraph.AsPlainText(); title != "" {
+					return title
+				}
+			}
+		}
+	}
+	return fallback
+}
+
 // Title aggregates one or more title paragraphs or empty lines.
 type Title struct {
 	Lang  string
 	Items []TitleItem
+}
+
+// AsTOCText extracts text from title items for TOC display.
+// Priority: 1) plain text, 2) image alt attributes, 3) fallback
+func (t *Title) AsTOCText(fallback string) string {
+	var buf strings.Builder
+	var imageAltBuf strings.Builder
+	hasText := false
+
+	for _, item := range t.Items {
+		if item.Paragraph != nil {
+			text := item.Paragraph.AsPlainText()
+			if text != "" {
+				if buf.Len() > 0 {
+					buf.WriteString(" ")
+				}
+				buf.WriteString(text)
+				hasText = true
+			}
+
+			// Also collect image alt text as fallback
+			imageAlt := item.Paragraph.AsImageAlt()
+			if imageAlt != "" {
+				if imageAltBuf.Len() > 0 {
+					imageAltBuf.WriteString(" ")
+				}
+				imageAltBuf.WriteString(imageAlt)
+			}
+		}
+	}
+
+	if hasText {
+		return strings.TrimSpace(buf.String())
+	}
+
+	// Fallback to image alt text if no plain text
+	imageAltText := strings.TrimSpace(imageAltBuf.String())
+	if imageAltText != "" {
+		return imageAltText
+	}
+
+	return fallback
 }
 
 // TitleItem is a single paragraph or empty line within a title.
@@ -290,6 +346,17 @@ type Section struct {
 	Content    []FlowItem
 }
 
+// AsTitleText extracts the title text from the section with fallback.
+func (s *Section) AsTitleText(fallback string) string {
+	if s.Title != nil {
+		text := s.Title.AsTOCText(FormatIDToTOC(s.ID))
+		if text != "" {
+			return text
+		}
+	}
+	return fallback
+}
+
 // Paragraph corresponds to pType in the schema.
 type Paragraph struct {
 	ID    string
@@ -305,6 +372,38 @@ func (p *Paragraph) AsPlainText() string {
 		buf.WriteString(seg.AsText())
 	}
 	return strings.TrimSpace(buf.String())
+}
+
+// AsImageAlt extracts alt text from all images in the paragraph.
+func (p *Paragraph) AsImageAlt() string {
+	var buf strings.Builder
+	for _, seg := range p.Text {
+		alt := seg.AsImageAlt()
+		if alt != "" {
+			if buf.Len() > 0 {
+				buf.WriteString(" ")
+			}
+			buf.WriteString(alt)
+		}
+	}
+	return strings.TrimSpace(buf.String())
+}
+
+// AsTOCText extracts text for TOC display from the paragraph.
+// Priority: 1) plain text, 2) image alt attributes, 3) fallback text
+func (p *Paragraph) AsTOCText(fallback string) string {
+	// Try plain text first
+	text := p.AsPlainText()
+	if text != "" {
+		return text
+	}
+
+	// Try image alt text as fallback
+	imageAlt := p.AsImageAlt()
+	if imageAlt != "" {
+		return imageAlt
+	}
+	return fallback
 }
 
 // InlineSegmentKind distinguishes different inline content types.
@@ -350,6 +449,26 @@ func (seg *InlineSegment) AsText() string {
 		buf.WriteString(child.AsText())
 	}
 	return buf.String()
+}
+
+// AsImageAlt recursively extracts alt text from inline images in this segment.
+func (seg *InlineSegment) AsImageAlt() string {
+	if seg.Kind == InlineImageSegment && seg.Image != nil && seg.Image.Alt != "" {
+		return seg.Image.Alt
+	}
+
+	// Recurse into children
+	var buf strings.Builder
+	for _, child := range seg.Children {
+		alt := child.AsImageAlt()
+		if alt != "" {
+			if buf.Len() > 0 {
+				buf.WriteString(" ")
+			}
+			buf.WriteString(alt)
+		}
+	}
+	return strings.TrimSpace(buf.String())
 }
 
 // InlineImage corresponds to the <image> element embedded in inline content.
@@ -427,4 +546,11 @@ type BinaryObject struct {
 	ID          string
 	ContentType string
 	Data        []byte
+}
+
+func FormatIDToTOC(id string) string {
+	if len(id) == 0 {
+		return ""
+	}
+	return "~ " + id + " ~"
 }

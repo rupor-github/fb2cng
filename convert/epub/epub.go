@@ -290,7 +290,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 			chapterNum++
 			chapterID := fmt.Sprintf("index%05d", chapterNum)
 			filename := fmt.Sprintf("%s.xhtml", chapterID)
-			title := extractTitleText(section)
+			title := section.AsTitleText(fmt.Sprintf("chapter-section-%d", chapterNum))
 
 			doc, err := sectionToXHTML(c, section, title, log)
 			if err != nil {
@@ -330,7 +330,7 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, start
 	// Use index-based filename like regular chapters
 	chapterID := fmt.Sprintf("index%05d", startChapterNum)
 	filename := fmt.Sprintf("%s.xhtml", chapterID)
-	docTitle := extractBodyTitle(footnoteBodies[0])
+	docTitle := footnoteBodies[0].AsTitleText("footnotes")
 
 	doc := createXHTMLDocument(docTitle)
 	bodyElem := doc.Root().SelectElement("body")
@@ -339,7 +339,7 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, start
 	var chapters []chapterData
 	for bodyIdx, body := range footnoteBodies {
 		bodyID := generateFootnoteBodyID(body, bodyIdx)
-		bodyTitle := extractBodyTitle(body)
+		bodyTitle := body.AsTitleText(bodyID)
 
 		// Create XHTML wrapper div for this body
 		bodyDiv := bodyElem.CreateElement("div")
@@ -391,140 +391,12 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, start
 	return chapters, nil
 }
 
-// extractBodyTitle extracts the title text from a body
-func extractBodyTitle(body *fb2.Body) string {
-	if body.Title != nil {
-		for _, item := range body.Title.Items {
-			if item.Paragraph != nil {
-				if title := item.Paragraph.AsPlainText(); title != "" {
-					return title
-				}
-			}
-		}
-	}
-	return "Notes"
-}
-
 // generateFootnoteBodyID generates a unique ID for a footnote body
 func generateFootnoteBodyID(body *fb2.Body, index int) string {
 	if body.Name != "" {
-		return body.Name
+		return fmt.Sprintf("%s-%d", body.Name, index)
 	}
 	return fmt.Sprintf("footnote-body-%d", index)
-}
-
-func extractTitleText(section *fb2.Section) string {
-	if section.Title != nil {
-		text := extractTOCText(section.Title.Items)
-		if text != "" {
-			return text
-		}
-	}
-	// Fallback to ID with tildes
-	if section.ID != "" {
-		return "~ " + section.ID + " ~"
-	}
-	return "Unknown chapter title"
-}
-
-// extractTOCText extracts text from title items for TOC display
-// Priority: 1) plain text, 2) image alt attributes, 3) empty
-func extractTOCText(items []fb2.TitleItem) string {
-	var buf strings.Builder
-	var imageAltBuf strings.Builder
-	hasText := false
-
-	for _, item := range items {
-		if item.Paragraph != nil {
-			text := item.Paragraph.AsPlainText()
-			if text != "" {
-				if buf.Len() > 0 {
-					buf.WriteString(" ")
-				}
-				buf.WriteString(text)
-				hasText = true
-			}
-
-			// Also collect image alt text as fallback
-			imageAlt := extractImageAltFromParagraph(item.Paragraph)
-			if imageAlt != "" {
-				if imageAltBuf.Len() > 0 {
-					imageAltBuf.WriteString(" ")
-				}
-				imageAltBuf.WriteString(imageAlt)
-			}
-		}
-	}
-
-	if hasText {
-		return strings.TrimSpace(buf.String())
-	}
-
-	// Fallback to image alt text if no plain text
-	imageAltText := strings.TrimSpace(imageAltBuf.String())
-	if imageAltText != "" {
-		return imageAltText
-	}
-
-	return ""
-}
-
-// extractImageAltFromParagraph extracts alt text from all images in a paragraph
-func extractImageAltFromParagraph(p *fb2.Paragraph) string {
-	var buf strings.Builder
-	for _, seg := range p.Text {
-		alt := extractImageAltFromSegment(&seg)
-		if alt != "" {
-			if buf.Len() > 0 {
-				buf.WriteString(" ")
-			}
-			buf.WriteString(alt)
-		}
-	}
-	return strings.TrimSpace(buf.String())
-}
-
-// extractImageAltFromSegment recursively extracts alt text from inline images
-func extractImageAltFromSegment(seg *fb2.InlineSegment) string {
-	if seg.Kind == fb2.InlineImageSegment && seg.Image != nil && seg.Image.Alt != "" {
-		return seg.Image.Alt
-	}
-
-	// Recurse into children
-	var buf strings.Builder
-	for _, child := range seg.Children {
-		alt := extractImageAltFromSegment(&child)
-		if alt != "" {
-			if buf.Len() > 0 {
-				buf.WriteString(" ")
-			}
-			buf.WriteString(alt)
-		}
-	}
-	return strings.TrimSpace(buf.String())
-}
-
-// extractSubtitleText extracts text from a subtitle paragraph for TOC display
-// Priority: 1) plain text, 2) image alt attributes, 3) ID with tildes
-func extractSubtitleText(subtitle *fb2.Paragraph, subtitleID string) string {
-	// Try plain text first
-	text := subtitle.AsPlainText()
-	if text != "" {
-		return text
-	}
-
-	// Try image alt text as fallback
-	imageAlt := extractImageAltFromParagraph(subtitle)
-	if imageAlt != "" {
-		return imageAlt
-	}
-
-	if subtitleID != "" {
-		// Fallback -use ID with tildes
-		return "~ " + subtitleID + " ~"
-	}
-
-	return "Unknown subtitle"
 }
 
 // createXHTMLDocument creates a standard XHTML document structure with head elements
@@ -1479,7 +1351,7 @@ func buildNCXNavPoints(parent *etree.Element, section *fb2.Section, filename str
 
 			navLabel := navPoint.CreateElement("navLabel")
 			labelText := navLabel.CreateElement("text")
-			labelText.SetText(extractSubtitleText(item.Subtitle, subtitleID))
+			labelText.SetText(item.Subtitle.AsTOCText(fb2.FormatIDToTOC(subtitleID)))
 
 			navContent := navPoint.CreateElement("content")
 			navContent.CreateAttr("src", filename+"#"+subtitleID)
@@ -1495,7 +1367,7 @@ func buildNCXNavPoints(parent *etree.Element, section *fb2.Section, filename str
 
 				navLabel := navPoint.CreateElement("navLabel")
 				labelText := navLabel.CreateElement("text")
-				labelText.SetText(extractTitleText(item.Section))
+				labelText.SetText(item.Section.AsTitleText(""))
 
 				navContent := navPoint.CreateElement("content")
 				navContent.CreateAttr("src", filename+"#"+sectionID)
@@ -1591,7 +1463,7 @@ func buildNavOLItems(parentOL *etree.Element, section *fb2.Section, filename str
 			li := parentOL.CreateElement("li")
 			a := li.CreateElement("a")
 			a.CreateAttr("href", filename+"#"+subtitleID)
-			a.SetText(extractSubtitleText(item.Subtitle, subtitleID))
+			a.SetText(item.Subtitle.AsTOCText(fb2.FormatIDToTOC(subtitleID)))
 			lastLI = li
 		} else if item.Kind == fb2.FlowSection && item.Section != nil {
 			if item.Section.Title != nil {
@@ -1599,7 +1471,7 @@ func buildNavOLItems(parentOL *etree.Element, section *fb2.Section, filename str
 				a := li.CreateElement("a")
 				sectionID := item.Section.ID
 				a.CreateAttr("href", filename+"#"+sectionID)
-				a.SetText(extractTitleText(item.Section))
+				a.SetText(item.Section.AsTitleText(""))
 
 				buildNavOL(li, item.Section, filename, c)
 				lastLI = li
