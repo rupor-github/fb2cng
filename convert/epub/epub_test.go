@@ -566,9 +566,9 @@ func TestProcessFootnoteBodies(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		bodies         []*fb2.Body
-		expectError    bool
+		name             string
+		bodies           []*fb2.Body
+		expectError      bool
 		expectedChapters int
 	}{
 		{
@@ -588,7 +588,7 @@ func TestProcessFootnoteBodies(t *testing.T) {
 					},
 				},
 			},
-			expectError:    false,
+			expectError:      false,
 			expectedChapters: 1,
 		},
 		{
@@ -607,7 +607,7 @@ func TestProcessFootnoteBodies(t *testing.T) {
 					},
 				},
 			},
-			expectError:    false,
+			expectError:      false,
 			expectedChapters: 2,
 		},
 		{
@@ -619,7 +619,7 @@ func TestProcessFootnoteBodies(t *testing.T) {
 					},
 				},
 			},
-			expectError:    false,
+			expectError:      false,
 			expectedChapters: 1,
 		},
 	}
@@ -905,7 +905,7 @@ func TestGenerate_WithFootnotes(t *testing.T) {
 	if footnoteDoc != nil {
 		// Verify unique IDs for all footnote bodies
 		bodyDivs := footnoteDoc.FindElements("//div[@class='footnote-body']")
-		
+
 		ids := make(map[string]bool)
 		for _, div := range bodyDivs {
 			id := div.SelectAttrValue("id", "")
@@ -946,7 +946,7 @@ func TestGenerate_OverwriteProtection(t *testing.T) {
 	}
 
 	outputPath := filepath.Join(tmpDir, "existing.epub")
-	
+
 	// Create existing file
 	if err := os.WriteFile(outputPath, []byte("existing"), 0644); err != nil {
 		t.Fatalf("Create existing file: %v", err)
@@ -954,7 +954,7 @@ func TestGenerate_OverwriteProtection(t *testing.T) {
 
 	cfg := &config.DocumentConfig{}
 	err := Generate(ctx, c, outputPath, cfg, log)
-	
+
 	if err == nil {
 		t.Error("Generate() should fail when file exists and overwrite is false")
 	}
@@ -1050,7 +1050,7 @@ func TestAppendImageElement_MissingImage(t *testing.T) {
 		t.Error("Image div should still be created for missing image")
 		return
 	}
-	
+
 	imgElem := div.SelectElement("img")
 	if imgElem == nil {
 		t.Error("Image element should still be created for missing image")
