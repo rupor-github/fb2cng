@@ -146,6 +146,8 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 
 	// Normalize footnote bodies and build footnote index
 	book, footnotes := book.NormalizeFootnoteBodies(log)
+	// Flatten grouping sections (sections without titles that only contain other sections)
+	book = book.NormalizeSections(log)
 	// Build id and link indexes replacing/removing broken links (may add not-found image binary)
 	book, ids, links := book.NormalizeLinks(log)
 	// Assign sequential IDs to all sections and subtitles without IDs

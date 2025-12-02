@@ -281,10 +281,9 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 			}
 		}
 
-		// Process only top-level sections as chapters
-		// Unwrap sections without titles (grouping sections)
-		topSections := collectTopSections(body.Sections)
-		for _, section := range topSections {
+		// Process top-level sections as chapters
+		for i := range body.Sections {
+			section := &body.Sections[i]
 			if err := ctx.Err(); err != nil {
 				return nil, nil, err
 			}
@@ -413,43 +412,6 @@ func generateFootnoteBodyID(body *fb2.Body, index int) string {
 		return body.Name
 	}
 	return fmt.Sprintf("footnote-body-%d", index)
-}
-
-// collectTopSections recursively unwraps sections without titles (grouping sections)
-// and returns only sections with titles that should become chapters
-func collectTopSections(sections []fb2.Section) []*fb2.Section {
-	var result []*fb2.Section
-	for i := range sections {
-		section := &sections[i]
-		if section.Title != nil {
-			// This section has a title, it's a real chapter
-			result = append(result, section)
-		} else {
-			// This section has no title, it's a grouping section
-			// Look for nested sections inside it
-			nestedSections := extractNestedSections(section)
-			result = append(result, nestedSections...)
-		}
-	}
-	return result
-}
-
-// extractNestedSections extracts sections from within a section's content
-func extractNestedSections(section *fb2.Section) []*fb2.Section {
-	var result []*fb2.Section
-	for i := range section.Content {
-		if section.Content[i].Kind == fb2.FlowSection && section.Content[i].Section != nil {
-			nested := section.Content[i].Section
-			if nested.Title != nil {
-				// Found a section with title
-				result = append(result, nested)
-			} else {
-				// Recursively unwrap this section too
-				result = append(result, extractNestedSections(nested)...)
-			}
-		}
-	}
-	return result
 }
 
 func extractTitleText(section *fb2.Section) string {
@@ -806,25 +768,6 @@ func writeSectionContent(parent *etree.Element, c *content.Content, section *fb2
 	return nil
 }
 
-// isGroupingSection checks if a section is a pure grouping container
-// (no content except nested sections)
-func isGroupingSection(section *fb2.Section) bool {
-	if section.Title != nil || section.Image != nil || section.Annotation != nil || len(section.Epigraphs) > 0 {
-		return false
-	}
-	// Must have at least one section child
-	if len(section.Content) == 0 {
-		return false
-	}
-	// Check if all content items are sections
-	for _, item := range section.Content {
-		if item.Kind != fb2.FlowSection {
-			return false
-		}
-	}
-	return true
-}
-
 func writeFlowItemsWithContext(parent *etree.Element, c *content.Content, items []fb2.FlowItem, depth int, context string, log *zap.Logger) error {
 	for _, item := range items {
 		switch item.Kind {
@@ -904,25 +847,14 @@ func writeFlowItemsWithContext(parent *etree.Element, c *content.Content, items 
 			}
 		case fb2.FlowSection:
 			if item.Section != nil {
-				// Check if this is a pure grouping section (no title, no content except nested sections)
-				if item.Section.Title == nil && isGroupingSection(item.Section) {
-					// Transparent grouping - write children directly without wrapper
-					if err := writeFlowItemsWithContext(parent, c, item.Section.Content, depth, "", log); err != nil {
-						return err
-					}
-				} else {
-					// Regular section - create wrapper div
-					div := parent.CreateElement("div")
-					div.CreateAttr("class", "section")
-					// Always add an ID for sections so TOC links work
-					sectionID := item.Section.ID
-					div.CreateAttr("id", sectionID)
-					if item.Section.Lang != "" {
-						div.CreateAttr("xml:lang", item.Section.Lang)
-					}
-					if err := writeSectionContent(div, c, item.Section, false, depth+1, log); err != nil {
-						return err
-					}
+				div := parent.CreateElement("div")
+				div.CreateAttr("class", "section")
+				div.CreateAttr("id", item.Section.ID)
+				if item.Section.Lang != "" {
+					div.CreateAttr("xml:lang", item.Section.Lang)
+				}
+				if err := writeSectionContent(div, c, item.Section, false, depth+1, log); err != nil {
+					return err
 				}
 			}
 		}
@@ -1214,7 +1146,7 @@ func writeXHTMLChapter(zw *zip.Writer, chapter *chapterData, _ *zap.Logger) erro
 	return writeXMLToZip(zw, filepath.Join(oebpsDir, filename), chapter.Doc)
 }
 
-func writeImages(zw *zip.Writer, images fb2.BookImages, log *zap.Logger) error {
+func writeImages(zw *zip.Writer, images fb2.BookImages, _ *zap.Logger) error {
 	for id, img := range images {
 		filename := filepath.Join(oebpsDir, imagesDir, img.Filename)
 

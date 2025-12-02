@@ -464,3 +464,92 @@ func (fb *FictionBook) ensureNotFoundImageBinary() {
 		Data:        notFoundImagePNG,
 	})
 }
+
+// NormalizeSections flattens grouping sections (sections without titles that only contain other sections)
+// by promoting their children up to the parent level. This ensures that section hierarchy is clean and
+// doesn't contain unnecessary nesting levels. Returns a new FictionBook with normalized sections.
+func (fb *FictionBook) NormalizeSections(log *zap.Logger) *FictionBook {
+	result := fb.clone()
+	for i := range result.Bodies {
+		result.Bodies[i].Sections = normalizeSections(result.Bodies[i].Sections, log)
+	}
+	return result
+}
+
+// normalizeSections recursively normalizes sections by flattening grouping sections
+func normalizeSections(sections []Section, log *zap.Logger) []Section {
+	var result []Section
+	for i := range sections {
+		section := &sections[i]
+		if section.Title == nil && isGroupingSection(section) {
+			// Grouping section without title - unwrap and flatten
+			log.Debug("Flattening grouping section", zap.String("id", section.ID))
+			flattened := extractSectionsFromContent(section.Content, log)
+			result = append(result, flattened...)
+		} else {
+			// Regular section - normalize its content recursively
+			section.Content = normalizeFlowItems(section.Content, log)
+			result = append(result, *section)
+		}
+	}
+	return result
+}
+
+// isGroupingSection checks if a section is a pure grouping container (no content except nested sections)
+func isGroupingSection(section *Section) bool {
+	if section.Title != nil || section.Image != nil || section.Annotation != nil || len(section.Epigraphs) > 0 {
+		return false
+	}
+	if len(section.Content) == 0 {
+		return false
+	}
+	for _, item := range section.Content {
+		if item.Kind != FlowSection {
+			return false
+		}
+	}
+	return true
+}
+
+// extractSectionsFromContent extracts and normalizes sections from flow items
+func extractSectionsFromContent(items []FlowItem, log *zap.Logger) []Section {
+	var result []Section
+	for i := range items {
+		if items[i].Kind == FlowSection && items[i].Section != nil {
+			nested := items[i].Section
+			if nested.Title == nil && isGroupingSection(nested) {
+				// Recursively flatten nested grouping sections
+				flattened := extractSectionsFromContent(nested.Content, log)
+				result = append(result, flattened...)
+			} else {
+				// Regular section - normalize its content recursively
+				nested.Content = normalizeFlowItems(nested.Content, log)
+				result = append(result, *nested)
+			}
+		}
+	}
+	return result
+}
+
+// normalizeFlowItems recursively normalizes flow items by flattening grouping sections
+func normalizeFlowItems(items []FlowItem, log *zap.Logger) []FlowItem {
+	var result []FlowItem
+	for i := range items {
+		item := items[i]
+		if item.Kind == FlowSection && item.Section != nil {
+			section := item.Section
+			if section.Title == nil && isGroupingSection(section) {
+				// Grouping section - unwrap and add its children directly
+				result = append(result, section.Content...)
+			} else {
+				// Regular section - normalize its content recursively
+				section.Content = normalizeFlowItems(section.Content, log)
+				item.Section = section
+				result = append(result, item)
+			}
+		} else {
+			result = append(result, item)
+		}
+	}
+	return result
+}

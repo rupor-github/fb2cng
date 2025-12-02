@@ -676,3 +676,185 @@ func TestNormalizeIDs_UpdatesIndex(t *testing.T) {
 		t.Errorf("Generated subtitle ID %q should have type 'subtitle-generated', got %q", subtitleID, ref.Type)
 	}
 }
+
+func TestNormalizeSections(t *testing.T) {
+	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+
+	t.Run("flattens_grouping_sections_at_body_level", func(t *testing.T) {
+		fb := &FictionBook{
+			Bodies: []Body{
+				{
+					Kind: BodyMain,
+					Sections: []Section{
+						{
+							ID:    "grouping1",
+							Title: nil, // No title - grouping section
+							Content: []FlowItem{
+								{Kind: FlowSection, Section: &Section{ID: "ch1", Title: &Title{}}},
+								{Kind: FlowSection, Section: &Section{ID: "ch2", Title: &Title{}}},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result := fb.NormalizeSections(log)
+
+		if len(result.Bodies[0].Sections) != 2 {
+			t.Fatalf("expected 2 sections after flattening, got %d", len(result.Bodies[0].Sections))
+		}
+		if result.Bodies[0].Sections[0].ID != "ch1" {
+			t.Errorf("expected first section ID to be 'ch1', got %q", result.Bodies[0].Sections[0].ID)
+		}
+		if result.Bodies[0].Sections[1].ID != "ch2" {
+			t.Errorf("expected second section ID to be 'ch2', got %q", result.Bodies[0].Sections[1].ID)
+		}
+	})
+
+	t.Run("preserves_sections_with_titles", func(t *testing.T) {
+		fb := &FictionBook{
+			Bodies: []Body{
+				{
+					Kind: BodyMain,
+					Sections: []Section{
+						{ID: "ch1", Title: &Title{}},
+						{ID: "ch2", Title: &Title{}},
+					},
+				},
+			},
+		}
+
+		result := fb.NormalizeSections(log)
+
+		if len(result.Bodies[0].Sections) != 2 {
+			t.Fatalf("expected 2 sections, got %d", len(result.Bodies[0].Sections))
+		}
+		if result.Bodies[0].Sections[0].ID != "ch1" || result.Bodies[0].Sections[1].ID != "ch2" {
+			t.Error("sections changed unexpectedly")
+		}
+	})
+
+	t.Run("preserves_sections_with_content", func(t *testing.T) {
+		fb := &FictionBook{
+			Bodies: []Body{
+				{
+					Kind: BodyMain,
+					Sections: []Section{
+						{
+							ID:    "ch1",
+							Title: nil,
+							Content: []FlowItem{
+								{Kind: FlowParagraph, Paragraph: &Paragraph{}},
+								{Kind: FlowSection, Section: &Section{ID: "nested", Title: &Title{}}},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result := fb.NormalizeSections(log)
+
+		// Section with mixed content (paragraph + section) should NOT be flattened
+		if len(result.Bodies[0].Sections) != 1 {
+			t.Fatalf("expected 1 section, got %d", len(result.Bodies[0].Sections))
+		}
+		if result.Bodies[0].Sections[0].ID != "ch1" {
+			t.Errorf("section ID changed unexpectedly")
+		}
+	})
+
+	t.Run("flattens_nested_grouping_sections", func(t *testing.T) {
+		fb := &FictionBook{
+			Bodies: []Body{
+				{
+					Kind: BodyMain,
+					Sections: []Section{
+						{
+							ID:    "ch1",
+							Title: &Title{},
+							Content: []FlowItem{
+								{Kind: FlowParagraph, Paragraph: &Paragraph{}},
+								{
+									Kind: FlowSection,
+									Section: &Section{
+										ID:    "grouping",
+										Title: nil,
+										Content: []FlowItem{
+											{Kind: FlowSection, Section: &Section{ID: "nested1", Title: &Title{}}},
+											{Kind: FlowSection, Section: &Section{ID: "nested2", Title: &Title{}}},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result := fb.NormalizeSections(log)
+
+		// Top level should still have 1 section
+		if len(result.Bodies[0].Sections) != 1 {
+			t.Fatalf("expected 1 top-level section, got %d", len(result.Bodies[0].Sections))
+		}
+
+		// But the grouping section inside should be flattened
+		section := result.Bodies[0].Sections[0]
+		if len(section.Content) != 3 {
+			t.Fatalf("expected 3 content items (1 paragraph + 2 flattened sections), got %d", len(section.Content))
+		}
+
+		// First should be paragraph
+		if section.Content[0].Kind != FlowParagraph {
+			t.Error("expected first item to be paragraph")
+		}
+
+		// Second and third should be the flattened sections
+		if section.Content[1].Kind != FlowSection || section.Content[1].Section.ID != "nested1" {
+			t.Error("expected second item to be nested1 section")
+		}
+		if section.Content[2].Kind != FlowSection || section.Content[2].Section.ID != "nested2" {
+			t.Error("expected third item to be nested2 section")
+		}
+	})
+
+	t.Run("recursively_flattens_deeply_nested_grouping", func(t *testing.T) {
+		fb := &FictionBook{
+			Bodies: []Body{
+				{
+					Kind: BodyMain,
+					Sections: []Section{
+						{
+							ID:    "grouping1",
+							Title: nil,
+							Content: []FlowItem{
+								{
+									Kind: FlowSection,
+									Section: &Section{
+										ID:    "grouping2",
+										Title: nil,
+										Content: []FlowItem{
+											{Kind: FlowSection, Section: &Section{ID: "ch1", Title: &Title{}}},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result := fb.NormalizeSections(log)
+
+		if len(result.Bodies[0].Sections) != 1 {
+			t.Fatalf("expected 1 section after recursive flattening, got %d", len(result.Bodies[0].Sections))
+		}
+		if result.Bodies[0].Sections[0].ID != "ch1" {
+			t.Errorf("expected section ID to be 'ch1', got %q", result.Bodies[0].Sections[0].ID)
+		}
+	})
+}
