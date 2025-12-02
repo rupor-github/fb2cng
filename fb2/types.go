@@ -1,6 +1,7 @@
 package fb2
 
 import (
+	"strings"
 	"time"
 
 	"golang.org/x/text/language"
@@ -297,6 +298,15 @@ type Paragraph struct {
 	Text  []InlineSegment
 }
 
+// AsPlainText returns the plain text content of the paragraph by extracting text from all segments.
+func (p *Paragraph) AsPlainText() string {
+	var buf strings.Builder
+	for _, seg := range p.Text {
+		buf.WriteString(seg.AsText())
+	}
+	return strings.TrimSpace(buf.String())
+}
+
 // InlineSegmentKind distinguishes different inline content types.
 type InlineSegmentKind string
 
@@ -324,6 +334,22 @@ type InlineSegment struct {
 	LinkType string
 	Children []InlineSegment
 	Image    *InlineImage
+}
+
+// AsText returns the plain text content of the inline segment, recursively extracting text from children.
+// Link elements are skipped completely for text extraction (e.g., for TOC text).
+func (seg *InlineSegment) AsText() string {
+	// Skip link elements completely for text extraction
+	if seg.Kind == InlineLink {
+		return ""
+	}
+
+	var buf strings.Builder
+	buf.WriteString(seg.Text)
+	for _, child := range seg.Children {
+		buf.WriteString(child.AsText())
+	}
+	return buf.String()
 }
 
 // InlineImage corresponds to the <image> element embedded in inline content.

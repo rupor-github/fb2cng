@@ -29,12 +29,11 @@ const (
 )
 
 type chapterData struct {
-	ID             string
-	Filename       string
-	Title          string
-	Doc            *etree.Document
-	Section        *fb2.Section // Reference to source section for TOC hierarchy
-	FootnoteBodies []*fb2.Body  // Footnote bodies for TOC (each body gets separate entry)
+	ID       string
+	Filename string
+	Title    string
+	Doc      *etree.Document
+	Section  *fb2.Section // Reference to source section for TOC hierarchy
 }
 
 // idToFileMap maps element IDs to the chapter filename containing them
@@ -259,7 +258,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 			var title string
 			for _, item := range body.Title.Items {
 				if item.Paragraph != nil {
-					title = paragraphToPlainText(item.Paragraph)
+					title = item.Paragraph.AsPlainText()
 					break
 				}
 			}
@@ -349,7 +348,7 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, start
 
 		// Write body intro content if it has a title
 		if body.Title != nil {
-			if err := writeBodyIntroContent(bodyDiv, c, body, 1, log); err != nil {
+			if err := appendBodyIntroContent(bodyDiv, c, body, 1, log); err != nil {
 				return nil, err
 			}
 		}
@@ -368,7 +367,7 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, start
 				div.CreateAttr("xml:lang", section.Lang)
 			}
 
-			if err := writeFootnoteSectionContent(div, c, section, false, log); err != nil {
+			if err := appendFootnoteSectionContent(div, c, section, false, log); err != nil {
 				return nil, err
 			}
 		}
@@ -397,7 +396,7 @@ func extractBodyTitle(body *fb2.Body) string {
 	if body.Title != nil {
 		for _, item := range body.Title.Items {
 			if item.Paragraph != nil {
-				if title := paragraphToPlainText(item.Paragraph); title != "" {
+				if title := item.Paragraph.AsPlainText(); title != "" {
 					return title
 				}
 			}
@@ -437,7 +436,7 @@ func extractTOCText(items []fb2.TitleItem) string {
 
 	for _, item := range items {
 		if item.Paragraph != nil {
-			text := paragraphToPlainText(item.Paragraph)
+			text := item.Paragraph.AsPlainText()
 			if text != "" {
 				if buf.Len() > 0 {
 					buf.WriteString(" ")
@@ -509,7 +508,7 @@ func extractImageAltFromSegment(seg *fb2.InlineSegment) string {
 // Priority: 1) plain text, 2) image alt attributes, 3) ID with tildes
 func extractSubtitleText(subtitle *fb2.Paragraph, subtitleID string) string {
 	// Try plain text first
-	text := paragraphToPlainText(subtitle)
+	text := subtitle.AsPlainText()
 	if text != "" {
 		return text
 	}
@@ -526,14 +525,6 @@ func extractSubtitleText(subtitle *fb2.Paragraph, subtitleID string) string {
 	}
 
 	return "Unknown subtitle"
-}
-
-func paragraphToPlainText(p *fb2.Paragraph) string {
-	var buf strings.Builder
-	for _, seg := range p.Text {
-		buf.WriteString(inlineSegmentToText(&seg))
-	}
-	return strings.TrimSpace(buf.String())
 }
 
 // createXHTMLDocument creates a standard XHTML document structure with head elements
@@ -564,9 +555,9 @@ func createXHTMLDocument(title string) *etree.Document {
 	return doc
 }
 
-// writeTitleAsHeading writes a title as a heading element (h1-h6) with span children for each paragraph
+// appendTitleAsHeading appends a title as a heading element (h1-h6) with span children for each paragraph
 // Used for body and section titles that need semantic heading markup
-func writeTitleAsHeading(parent *etree.Element, c *content.Content, title *fb2.Title, depth int, classPrefix string) {
+func appendTitleAsHeading(parent *etree.Element, c *content.Content, title *fb2.Title, depth int, classPrefix string) {
 	headingLevel := min(depth, 6)
 	headingTag := fmt.Sprintf("h%d", headingLevel)
 
@@ -597,7 +588,7 @@ func writeTitleAsHeading(parent *etree.Element, c *content.Content, title *fb2.T
 				class = class + " " + item.Paragraph.Style
 			}
 			span.CreateAttr("class", class)
-			writeParagraphInline(span, c, item.Paragraph)
+			appendParagraphInline(span, c, item.Paragraph)
 			prevWasEmptyLine = false
 		} else if item.EmptyLine {
 			br := titleElem.CreateElement("br")
@@ -607,9 +598,9 @@ func writeTitleAsHeading(parent *etree.Element, c *content.Content, title *fb2.T
 	}
 }
 
-// writeTitleAsDiv writes a title as a div container with p elements for each paragraph
+// appendTitleAsDiv appends a title as a div container with p elements for each paragraph
 // Used for poem, stanza, and footnote titles
-func writeTitleAsDiv(parent *etree.Element, c *content.Content, title *fb2.Title, classPrefix string) {
+func appendTitleAsDiv(parent *etree.Element, c *content.Content, title *fb2.Title, classPrefix string) {
 	titleDiv := parent.CreateElement("div")
 	titleDiv.CreateAttr("class", classPrefix)
 	firstParagraph := true
@@ -631,49 +622,35 @@ func writeTitleAsDiv(parent *etree.Element, c *content.Content, title *fb2.Title
 				class = class + " " + item.Paragraph.Style
 			}
 			p.CreateAttr("class", class)
-			writeParagraphInline(p, c, item.Paragraph)
+			appendParagraphInline(p, c, item.Paragraph)
 		} else if item.EmptyLine {
 			titleDiv.CreateElement("br")
 		}
 	}
 }
 
-// writeEpigraphs writes all epigraphs with their flow content and text authors
-func writeEpigraphs(parent *etree.Element, c *content.Content, epigraphs []fb2.Epigraph, depth int, log *zap.Logger) error {
+// appendEpigraphs appends all epigraphs with their flow content and text authors
+func appendEpigraphs(parent *etree.Element, c *content.Content, epigraphs []fb2.Epigraph, depth int, log *zap.Logger) error {
 	for _, epigraph := range epigraphs {
 		div := parent.CreateElement("div")
 		div.CreateAttr("class", "epigraph")
-		if err := writeFlowItemsWithContext(div, c, epigraph.Flow.Items, depth, "epigraph", log); err != nil {
+		if err := appendFlowItemsWithContext(div, c, epigraph.Flow.Items, depth, "epigraph", log); err != nil {
 			return err
 		}
 		for _, ta := range epigraph.TextAuthors {
 			p := div.CreateElement("p")
 			p.CreateAttr("class", "text-author")
-			writeParagraphInline(p, c, &ta)
+			appendParagraphInline(p, c, &ta)
 		}
 	}
 	return nil
-}
-
-func inlineSegmentToText(seg *fb2.InlineSegment) string {
-	// Skip link elements completely for TOC text
-	if seg.Kind == fb2.InlineLink {
-		return ""
-	}
-
-	var buf strings.Builder
-	buf.WriteString(seg.Text)
-	for _, child := range seg.Children {
-		buf.WriteString(inlineSegmentToText(&child))
-	}
-	return buf.String()
 }
 
 func bodyIntroToXHTML(c *content.Content, body *fb2.Body, title string, log *zap.Logger) (*etree.Document, error) {
 	doc := createXHTMLDocument(title)
 	bodyElem := doc.Root().SelectElement("body")
 
-	if err := writeBodyIntroContent(bodyElem, c, body, 1, log); err != nil {
+	if err := appendBodyIntroContent(bodyElem, c, body, 1, log); err != nil {
 		return nil, err
 	}
 
@@ -689,86 +666,86 @@ func sectionToXHTML(c *content.Content, section *fb2.Section, title string, log 
 		body.CreateAttr("id", section.ID)
 	}
 
-	if err := writeSectionContent(body, c, section, false, 1, log); err != nil {
+	if err := appendSectionContent(body, c, section, false, 1, log); err != nil {
 		return nil, err
 	}
 
 	return doc, nil
 }
 
-func writeBodyIntroContent(parent *etree.Element, c *content.Content, body *fb2.Body, depth int, log *zap.Logger) error {
+func appendBodyIntroContent(parent *etree.Element, c *content.Content, body *fb2.Body, depth int, log *zap.Logger) error {
 	if body.Title != nil {
-		writeTitleAsHeading(parent, c, body.Title, depth, "title")
+		appendTitleAsHeading(parent, c, body.Title, depth, "title")
 	}
 
-	if err := writeEpigraphs(parent, c, body.Epigraphs, depth, log); err != nil {
+	if err := appendEpigraphs(parent, c, body.Epigraphs, depth, log); err != nil {
 		return err
 	}
 
 	if body.Image != nil {
-		writeImageElement(parent, c, body.Image)
+		appendImageElement(parent, c, body.Image)
 	}
 
 	return nil
 }
 
-func writeFootnoteSectionContent(parent *etree.Element, c *content.Content, section *fb2.Section, skipTitle bool, log *zap.Logger) error {
+func appendFootnoteSectionContent(parent *etree.Element, c *content.Content, section *fb2.Section, skipTitle bool, log *zap.Logger) error {
 	if section.Title != nil && !skipTitle {
-		writeTitleAsDiv(parent, c, section.Title, "footnote-title")
+		appendTitleAsDiv(parent, c, section.Title, "footnote-title")
 	}
 
-	if err := writeEpigraphs(parent, c, section.Epigraphs, 1, log); err != nil {
+	if err := appendEpigraphs(parent, c, section.Epigraphs, 1, log); err != nil {
 		return err
 	}
 
 	if section.Image != nil {
-		writeImageElement(parent, c, section.Image)
+		appendImageElement(parent, c, section.Image)
 	}
 
 	if section.Annotation != nil {
 		div := parent.CreateElement("div")
 		div.CreateAttr("class", "annotation")
-		if err := writeFlowItemsWithContext(div, c, section.Annotation.Items, 1, "annotation", log); err != nil {
+		if err := appendFlowItemsWithContext(div, c, section.Annotation.Items, 1, "annotation", log); err != nil {
 			return err
 		}
 	}
 
-	if err := writeFlowItemsWithContext(parent, c, section.Content, 1, "", log); err != nil {
+	if err := appendFlowItemsWithContext(parent, c, section.Content, 1, "", log); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func writeSectionContent(parent *etree.Element, c *content.Content, section *fb2.Section, skipTitle bool, depth int, log *zap.Logger) error {
+func appendSectionContent(parent *etree.Element, c *content.Content, section *fb2.Section, skipTitle bool, depth int, log *zap.Logger) error {
 	if section.Title != nil && !skipTitle {
-		writeTitleAsHeading(parent, c, section.Title, depth, "title")
+		appendTitleAsHeading(parent, c, section.Title, depth, "title")
 	}
 
-	if err := writeEpigraphs(parent, c, section.Epigraphs, depth, log); err != nil {
+	if err := appendEpigraphs(parent, c, section.Epigraphs, depth, log); err != nil {
 		return err
 	}
 
 	if section.Image != nil {
-		writeImageElement(parent, c, section.Image)
+		appendImageElement(parent, c, section.Image)
 	}
 
 	if section.Annotation != nil {
 		div := parent.CreateElement("div")
 		div.CreateAttr("class", "annotation")
-		if err := writeFlowItemsWithContext(div, c, section.Annotation.Items, depth, "annotation", log); err != nil {
+		if err := appendFlowItemsWithContext(div, c, section.Annotation.Items, depth, "annotation", log); err != nil {
 			return err
 		}
 	}
 
-	if err := writeFlowItemsWithContext(parent, c, section.Content, depth, "", log); err != nil {
+	if err := appendFlowItemsWithContext(parent, c, section.Content, depth, "", log); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func writeFlowItemsWithContext(parent *etree.Element, c *content.Content, items []fb2.FlowItem, depth int, context string, log *zap.Logger) error {
+func appendFlowItemsWithContext(parent *etree.Element, c *content.Content, items []fb2.FlowItem, depth int, context string, log *zap.Logger) error {
 	for _, item := range items {
 		switch item.Kind {
 		case fb2.FlowParagraph:
@@ -783,11 +760,11 @@ func writeFlowItemsWithContext(parent *etree.Element, c *content.Content, items 
 				if item.Paragraph.Style != "" {
 					p.CreateAttr("class", item.Paragraph.Style)
 				}
-				writeParagraphInline(p, c, item.Paragraph)
+				appendParagraphInline(p, c, item.Paragraph)
 			}
 		case fb2.FlowImage:
 			if item.Image != nil {
-				writeImageElement(parent, c, item.Image)
+				appendImageElement(parent, c, item.Image)
 			}
 		case fb2.FlowEmptyLine:
 			div := parent.CreateElement("div")
@@ -809,7 +786,7 @@ func writeFlowItemsWithContext(parent *etree.Element, c *content.Content, items 
 						p.CreateAttr("xml:lang", item.Subtitle.Lang)
 					}
 					p.CreateAttr("class", class)
-					writeParagraphInline(p, c, item.Subtitle)
+					appendParagraphInline(p, c, item.Subtitle)
 				} else {
 					// In section - use header (one level more than enclosing title)
 					headingLevel := min(depth+1, 6)
@@ -826,24 +803,24 @@ func writeFlowItemsWithContext(parent *etree.Element, c *content.Content, items 
 						class = class + " " + item.Subtitle.Style
 					}
 					h.CreateAttr("class", class)
-					writeParagraphInline(h, c, item.Subtitle)
+					appendParagraphInline(h, c, item.Subtitle)
 				}
 			}
 		case fb2.FlowPoem:
 			if item.Poem != nil {
-				if err := writePoemElement(parent, c, item.Poem, depth, log); err != nil {
+				if err := appendPoemElement(parent, c, item.Poem, depth, log); err != nil {
 					return err
 				}
 			}
 		case fb2.FlowCite:
 			if item.Cite != nil {
-				if err := writeCiteElement(parent, c, item.Cite, depth, log); err != nil {
+				if err := appendCiteElement(parent, c, item.Cite, depth, log); err != nil {
 					return err
 				}
 			}
 		case fb2.FlowTable:
 			if item.Table != nil {
-				writeTableElement(parent, c, item.Table)
+				appendTableElement(parent, c, item.Table)
 			}
 		case fb2.FlowSection:
 			if item.Section != nil {
@@ -853,7 +830,7 @@ func writeFlowItemsWithContext(parent *etree.Element, c *content.Content, items 
 				if item.Section.Lang != "" {
 					div.CreateAttr("xml:lang", item.Section.Lang)
 				}
-				if err := writeSectionContent(div, c, item.Section, false, depth+1, log); err != nil {
+				if err := appendSectionContent(div, c, item.Section, false, depth+1, log); err != nil {
 					return err
 				}
 			}
@@ -862,13 +839,13 @@ func writeFlowItemsWithContext(parent *etree.Element, c *content.Content, items 
 	return nil
 }
 
-func writeParagraphInline(parent *etree.Element, c *content.Content, p *fb2.Paragraph) {
+func appendParagraphInline(parent *etree.Element, c *content.Content, p *fb2.Paragraph) {
 	for _, seg := range p.Text {
-		writeInlineSegment(parent, c, &seg)
+		appendInlineSegment(parent, c, &seg)
 	}
 }
 
-func writeInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.InlineSegment) {
+func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.InlineSegment) {
 	switch seg.Kind {
 	case fb2.InlineText:
 		if parent.ChildElements() == nil || len(parent.ChildElements()) == 0 {
@@ -880,32 +857,32 @@ func writeInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inli
 	case fb2.InlineStrong:
 		strong := parent.CreateElement("strong")
 		for _, child := range seg.Children {
-			writeInlineSegment(strong, c, &child)
+			appendInlineSegment(strong, c, &child)
 		}
 	case fb2.InlineEmphasis:
 		em := parent.CreateElement("em")
 		for _, child := range seg.Children {
-			writeInlineSegment(em, c, &child)
+			appendInlineSegment(em, c, &child)
 		}
 	case fb2.InlineStrikethrough:
 		del := parent.CreateElement("del")
 		for _, child := range seg.Children {
-			writeInlineSegment(del, c, &child)
+			appendInlineSegment(del, c, &child)
 		}
 	case fb2.InlineSub:
 		sub := parent.CreateElement("sub")
 		for _, child := range seg.Children {
-			writeInlineSegment(sub, c, &child)
+			appendInlineSegment(sub, c, &child)
 		}
 	case fb2.InlineSup:
 		sup := parent.CreateElement("sup")
 		for _, child := range seg.Children {
-			writeInlineSegment(sup, c, &child)
+			appendInlineSegment(sup, c, &child)
 		}
 	case fb2.InlineCode:
 		code := parent.CreateElement("code")
 		for _, child := range seg.Children {
-			writeInlineSegment(code, c, &child)
+			appendInlineSegment(code, c, &child)
 		}
 	case fb2.InlineNamedStyle:
 		span := parent.CreateElement("span")
@@ -913,7 +890,7 @@ func writeInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inli
 			span.CreateAttr("class", seg.Style)
 		}
 		for _, child := range seg.Children {
-			writeInlineSegment(span, c, &child)
+			appendInlineSegment(span, c, &child)
 		}
 	case fb2.InlineLink:
 		a := parent.CreateElement("a")
@@ -935,7 +912,7 @@ func writeInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inli
 			a.CreateAttr("class", linkClass)
 		}
 		for _, child := range seg.Children {
-			writeInlineSegment(a, c, &child)
+			appendInlineSegment(a, c, &child)
 		}
 	case fb2.InlineImageSegment:
 		if seg.Image != nil {
@@ -952,7 +929,7 @@ func writeInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inli
 	}
 }
 
-func writeImageElement(parent *etree.Element, c *content.Content, img *fb2.Image) {
+func appendImageElement(parent *etree.Element, c *content.Content, img *fb2.Image) {
 	div := parent.CreateElement("div")
 	div.CreateAttr("class", "image")
 	if img.ID != "" {
@@ -973,7 +950,7 @@ func writeImageElement(parent *etree.Element, c *content.Content, img *fb2.Image
 	}
 }
 
-func writePoemElement(parent *etree.Element, c *content.Content, poem *fb2.Poem, depth int, log *zap.Logger) error {
+func appendPoemElement(parent *etree.Element, c *content.Content, poem *fb2.Poem, depth int, log *zap.Logger) error {
 	div := parent.CreateElement("div")
 	div.CreateAttr("class", "poem")
 	if poem.ID != "" {
@@ -984,10 +961,10 @@ func writePoemElement(parent *etree.Element, c *content.Content, poem *fb2.Poem,
 	}
 
 	if poem.Title != nil {
-		writeTitleAsDiv(div, c, poem.Title, "poem-title")
+		appendTitleAsDiv(div, c, poem.Title, "poem-title")
 	}
 
-	if err := writeEpigraphs(div, c, poem.Epigraphs, depth, log); err != nil {
+	if err := appendEpigraphs(div, c, poem.Epigraphs, depth, log); err != nil {
 		return err
 	}
 
@@ -997,7 +974,7 @@ func writePoemElement(parent *etree.Element, c *content.Content, poem *fb2.Poem,
 		if subtitle.ID != "" {
 			p.CreateAttr("id", subtitle.ID)
 		}
-		writeParagraphInline(p, c, &subtitle)
+		appendParagraphInline(p, c, &subtitle)
 	}
 
 	for _, stanza := range poem.Stanzas {
@@ -1008,7 +985,7 @@ func writePoemElement(parent *etree.Element, c *content.Content, poem *fb2.Poem,
 		}
 
 		if stanza.Title != nil {
-			writeTitleAsDiv(stanzaDiv, c, stanza.Title, "stanza-title")
+			appendTitleAsDiv(stanzaDiv, c, stanza.Title, "stanza-title")
 		}
 
 		if stanza.Subtitle != nil {
@@ -1017,20 +994,20 @@ func writePoemElement(parent *etree.Element, c *content.Content, poem *fb2.Poem,
 			if stanza.Subtitle.ID != "" {
 				p.CreateAttr("id", stanza.Subtitle.ID)
 			}
-			writeParagraphInline(p, c, stanza.Subtitle)
+			appendParagraphInline(p, c, stanza.Subtitle)
 		}
 
 		for _, verse := range stanza.Verses {
 			p := stanzaDiv.CreateElement("p")
 			p.CreateAttr("class", "verse")
-			writeParagraphInline(p, c, &verse)
+			appendParagraphInline(p, c, &verse)
 		}
 	}
 
 	for _, ta := range poem.TextAuthors {
 		p := div.CreateElement("p")
 		p.CreateAttr("class", "text-author")
-		writeParagraphInline(p, c, &ta)
+		appendParagraphInline(p, c, &ta)
 	}
 
 	if poem.Date != nil {
@@ -1045,7 +1022,7 @@ func writePoemElement(parent *etree.Element, c *content.Content, poem *fb2.Poem,
 	return nil
 }
 
-func writeCiteElement(parent *etree.Element, c *content.Content, cite *fb2.Cite, depth int, log *zap.Logger) error {
+func appendCiteElement(parent *etree.Element, c *content.Content, cite *fb2.Cite, depth int, log *zap.Logger) error {
 	blockquote := parent.CreateElement("blockquote")
 	if cite.ID != "" {
 		blockquote.CreateAttr("id", cite.ID)
@@ -1055,14 +1032,14 @@ func writeCiteElement(parent *etree.Element, c *content.Content, cite *fb2.Cite,
 	}
 	blockquote.CreateAttr("class", "cite")
 
-	if err := writeFlowItemsWithContext(blockquote, c, cite.Items, depth, "cite", log); err != nil {
+	if err := appendFlowItemsWithContext(blockquote, c, cite.Items, depth, "cite", log); err != nil {
 		return err
 	}
 
 	for _, ta := range cite.TextAuthors {
 		p := blockquote.CreateElement("p")
 		p.CreateAttr("class", "text-author")
-		writeParagraphInline(p, c, &ta)
+		appendParagraphInline(p, c, &ta)
 	}
 	return nil
 }
@@ -1094,7 +1071,7 @@ func buildStyleAttr(baseStyle, align, vAlign string) string {
 	return style
 }
 
-func writeTableElement(parent *etree.Element, c *content.Content, table *fb2.Table) {
+func appendTableElement(parent *etree.Element, c *content.Content, table *fb2.Table) {
 	tableElem := parent.CreateElement("table")
 	if table.ID != "" {
 		tableElem.CreateAttr("id", table.ID)
@@ -1131,7 +1108,7 @@ func writeTableElement(parent *etree.Element, c *content.Content, table *fb2.Tab
 			}
 
 			for _, seg := range cell.Content {
-				writeInlineSegment(td, c, &seg)
+				appendInlineSegment(td, c, &seg)
 			}
 		}
 	}
