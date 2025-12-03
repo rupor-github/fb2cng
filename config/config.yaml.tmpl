@@ -153,15 +153,15 @@ document:
     # when toc page generation requested and authors_template is set - page will
     # have header with authors formatted using it
     authors_template: |
-      {{-   $names := list -}}
-      {{-   range .Authors -}}
-      {{-     $name := list -}}
-      {{-     if .FirstName -}}{{ $name = append $name .FirstName -}}{{- end -}}
-      {{-     if .MiddleName -}}{{ $name = append $name .MiddleName -}}{{- end -}}
-      {{-     if .LastName -}}{{ $name = append $name .LastName }}{{- end -}}
-      {{-     $names = append $names (join " " $name) -}}
-      {{-   end -}}
-      {{-   join ", " $names -}}
+      {{- $names := list -}}
+      {{- range .Authors -}}
+      {{-   $name := list -}}
+      {{-   if .FirstName -}}{{ $name = append $name .FirstName -}}{{- end -}}
+      {{-   if .MiddleName -}}{{ $name = append $name .MiddleName -}}{{- end -}}
+      {{-   if .LastName -}}{{ $name = append $name .LastName }}{{- end -}}
+      {{-   $names = append $names (join " " $name) -}}
+      {{- end -}}
+      {{- join ", " $names -}}
 
 logging:
   # controls terminal (stdout, stderr) output
