@@ -38,20 +38,6 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 	}
 	env := state.EnvFromContext(ctx)
 
-	if _, err := os.Stat(outputPath); err == nil {
-		if !env.Overwrite {
-			return fmt.Errorf("output file already exists: %s", outputPath)
-		}
-		log.Warn("Overwriting existing file", zap.String("file", outputPath))
-		if err = os.Remove(outputPath); err != nil {
-			return err
-		}
-	} else if !os.IsNotExist(err) {
-		return err
-	} else if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
-		return fmt.Errorf("unable to create output directory: %w", err)
-	}
-
 	log.Info("Generating EPUB", zap.Stringer("format", c.OutputFormat), zap.String("output", outputPath))
 
 	_, tmpName := filepath.Split(outputPath)

@@ -350,6 +350,21 @@ func processBook(ctx context.Context, r io.Reader, src string, dst string, forma
 	// Determine output file name and path based on input and configuration.
 	outputName = buildOutputPath(c, src, dst, env)
 
+	// Check if output file already exists
+	if _, err := os.Stat(outputName); err == nil {
+		if !env.Overwrite {
+			return fmt.Errorf("output file already exists: %s", outputName)
+		}
+		log.Warn("Overwriting existing file", zap.String("file", outputName))
+		if err = os.Remove(outputName); err != nil {
+			return err
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	} else if err := os.MkdirAll(filepath.Dir(outputName), 0755); err != nil {
+		return fmt.Errorf("unable to create output directory: %w", err)
+	}
+
 	// Generate output in the requested format
 	switch c.OutputFormat {
 	case config.OutputFmtEpub2, config.OutputFmtEpub3, config.OutputFmtKepub:

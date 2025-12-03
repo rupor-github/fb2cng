@@ -11,7 +11,7 @@ version: 1
 #     NOTE: according to fictionbook schema series could be hierarhical (series
 #     contain series and so on). Hierarhy is competely ignored - anything below
 #     first level is dropped.
-#     NOTE: I am not aware of any usage of multiple series, for example Calibre only supports one. So on
+#     NOTE: Similarily I am not aware of any usage of multiple series, for example Calibre only supports one. So on
 #     some occasions internally converter only uses first series available.
 # - .Language (string) - cannonical string representation of a language as specified in fb2 metainformation
 # - .Date (string) - date as specified in fb2 metainformation.
@@ -52,12 +52,14 @@ document:
     {{-   .Title -}}
     {{- end -}}
 
-  #---- Slugify/transliterate output file name - after all other processing on file name is completed
+  # Slugify/transliterate output file name - after all other processing on file name is completed
   file_name_transliterate: false
 
-  # Insert soft hyphen symbols '\u00AD' inside words - for devices which do not support proper hyphenation
-  # NOTE: it may conflict with built-in viewer hyphenation, for example modern day Kindles always have
-  # hyphenation turned on for Russian language (and off for English)
+  # Insert soft hyphen symbols '\u00AD' inside words - for devices which do not
+  # support proper hyphenation
+  # NOTE: it may conflict with built-in hyphenation in the viewer, for example
+  # modern day Kindles always have hyphenation turned on for Russian language
+  # (and off for English)
   insert_soft_hyphen: false
 
   metainformation:
