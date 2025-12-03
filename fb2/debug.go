@@ -279,7 +279,7 @@ func (tw treeWriter) paragraph(depth int, label string, p *Paragraph) {
 	if p == nil {
 		return
 	}
-	tw.Line(depth, "%s id=%q lang=%q style=%q", label, p.ID, p.Lang, p.Style)
+	tw.Line(depth, "%s id=%q lang=%q style=%q special=%t", label, p.ID, p.Lang, p.Style, p.Special)
 	if len(p.Text) == 0 {
 		return
 	}

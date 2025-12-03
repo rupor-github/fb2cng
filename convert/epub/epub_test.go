@@ -628,7 +628,7 @@ func TestProcessFootnoteBodies(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			idToFile := make(idToFileMap)
 			existingChapters := []chapterData{}
-			chapters, err := processFootnoteBodies(c, tt.bodies, existingChapters, 0, idToFile, log)
+			chapters, err := processFootnoteBodies(c, tt.bodies, existingChapters, idToFile, log)
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")

@@ -115,7 +115,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 
 	// Process all footnote bodies - each body becomes a separate top-level chapter
 	chapterNum++
-	footnotesChapters, err := processFootnoteBodies(c, footnoteBodies, chapters, chapterNum, idToFile, log)
+	footnotesChapters, err := processFootnoteBodies(c, footnoteBodies, chapters, idToFile, log)
 	if err != nil {
 		log.Error("Unable to convert footnotes", zap.Error(err))
 		return chapters, idToFile, nil
@@ -126,7 +126,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 }
 
 // processFootnoteBodies converts all footnote bodies to XHTML and creates chapter entries
-func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, existingChapters []chapterData, startChapterNum int, idToFile idToFileMap, log *zap.Logger) ([]chapterData, error) {
+func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, existingChapters []chapterData, idToFile idToFileMap, log *zap.Logger) ([]chapterData, error) {
 	// Build map of existing IDs to check for collisions
 	existingIDs := make(map[string]bool, len(existingChapters))
 	for _, ch := range existingChapters {

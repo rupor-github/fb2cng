@@ -387,10 +387,11 @@ func cloneParagraphPtr(p *Paragraph) *Paragraph {
 
 func cloneParagraph(p *Paragraph) Paragraph {
 	return Paragraph{
-		ID:    p.ID,
-		Lang:  p.Lang,
-		Style: p.Style,
-		Text:  cloneInlineSegments(p.Text),
+		ID:      p.ID,
+		Lang:    p.Lang,
+		Style:   p.Style,
+		Special: p.Special,
+		Text:    cloneInlineSegments(p.Text),
 	}
 }
 

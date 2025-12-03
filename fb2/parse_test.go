@@ -419,3 +419,169 @@ func TestImageParsing(t *testing.T) {
 		}
 	})
 }
+
+func TestParagraphSpecialFlag(t *testing.T) {
+	log := zaptest.NewLogger(t)
+
+	xml := `<?xml version="1.0" encoding="utf-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <description>
+    <title-info>
+      <author><first-name>Test</first-name><last-name>Author</last-name></author>
+      <book-title>Test</book-title>
+    </title-info>
+    <document-info>
+      <author><first-name>Doc</first-name><last-name>Creator</last-name></author>
+      <date>2024-01-01</date>
+    </document-info>
+  </description>
+  <body>
+    <title><p>Chapter Title</p></title>
+    <section>
+      <title><p>Section Title</p></title>
+      <p>Regular paragraph.</p>
+      <epigraph>
+        <p>Epigraph text.</p>
+        <text-author>Epigraph Author</text-author>
+      </epigraph>
+      <poem>
+        <title><p>Poem Title</p></title>
+        <stanza><v>Verse</v></stanza>
+        <text-author>Poem Author</text-author>
+      </poem>
+      <cite>
+        <p>Citation text.</p>
+        <text-author>Citation Author</text-author>
+      </cite>
+    </section>
+  </body>
+</FictionBook>`
+
+	doc := etree.NewDocument()
+	if err := doc.ReadFromString(xml); err != nil {
+		t.Fatalf("Failed to parse XML: %v", err)
+	}
+
+	book, err := ParseBookXML(doc, nil, log)
+	if err != nil {
+		t.Fatalf("Failed to parse book: %v", err)
+	}
+
+	body := book.Bodies[0]
+
+	// Test body title paragraph
+	if body.Title == nil || len(body.Title.Items) == 0 {
+		t.Fatal("Body title missing")
+	}
+	titlePara := body.Title.Items[0].Paragraph
+	if titlePara == nil {
+		t.Fatal("Body title paragraph missing")
+	}
+	if !titlePara.Special {
+		t.Error("Body title paragraph should have Special=true")
+	}
+
+	section := body.Sections[0]
+
+	// Test section title paragraph
+	if section.Title == nil || len(section.Title.Items) == 0 {
+		t.Fatal("Section title missing")
+	}
+	sectionTitlePara := section.Title.Items[0].Paragraph
+	if sectionTitlePara == nil {
+		t.Fatal("Section title paragraph missing")
+	}
+	if !sectionTitlePara.Special {
+		t.Error("Section title paragraph should have Special=true")
+	}
+
+	// Test regular paragraph
+	regularPara := section.Content[0].Paragraph
+	if regularPara == nil {
+		t.Fatal("Regular paragraph missing")
+	}
+	if regularPara.Special {
+		t.Error("Regular paragraph should have Special=false")
+	}
+
+	// Test epigraph text-author
+	epigraph := section.Epigraphs[0]
+	if len(epigraph.TextAuthors) == 0 {
+		t.Fatal("Epigraph text-author missing")
+	}
+	epigraphAuthor := epigraph.TextAuthors[0]
+	if !epigraphAuthor.Special {
+		t.Error("Epigraph text-author should have Special=true")
+	}
+
+	// Test epigraph regular paragraph
+	epigraphPara := epigraph.Flow.Items[0].Paragraph
+	if epigraphPara == nil {
+		t.Fatal("Epigraph paragraph missing")
+	}
+	if epigraphPara.Special {
+		t.Error("Epigraph paragraph should have Special=false")
+	}
+
+	// Find poem and test its components
+	var poem *Poem
+	for _, item := range section.Content {
+		if item.Poem != nil {
+			poem = item.Poem
+			break
+		}
+	}
+	if poem == nil {
+		t.Fatal("Poem not found")
+	}
+
+	// Test poem title
+	if poem.Title == nil || len(poem.Title.Items) == 0 {
+		t.Fatal("Poem title missing")
+	}
+	poemTitlePara := poem.Title.Items[0].Paragraph
+	if poemTitlePara == nil {
+		t.Fatal("Poem title paragraph missing")
+	}
+	if !poemTitlePara.Special {
+		t.Error("Poem title paragraph should have Special=true")
+	}
+
+	// Test poem text-author
+	if len(poem.TextAuthors) == 0 {
+		t.Fatal("Poem text-author missing")
+	}
+	poemAuthor := poem.TextAuthors[0]
+	if !poemAuthor.Special {
+		t.Error("Poem text-author should have Special=true")
+	}
+
+	// Find cite and test its text-author
+	var cite *Cite
+	for _, item := range section.Content {
+		if item.Cite != nil {
+			cite = item.Cite
+			break
+		}
+	}
+	if cite == nil {
+		t.Fatal("Cite not found")
+	}
+
+	if len(cite.TextAuthors) == 0 {
+		t.Fatal("Cite text-author missing")
+	}
+	citeAuthor := cite.TextAuthors[0]
+	if !citeAuthor.Special {
+		t.Error("Cite text-author should have Special=true")
+	}
+
+	// Test cite regular paragraph
+	citePara := cite.Items[0].Paragraph
+	if citePara == nil {
+		t.Fatal("Cite paragraph missing")
+	}
+	if citePara.Special {
+		t.Error("Cite paragraph should have Special=false")
+	}
+}

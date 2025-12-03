@@ -471,10 +471,11 @@ func (s *Section) AsPlainText() string {
 
 // Paragraph corresponds to pType in the schema.
 type Paragraph struct {
-	ID    string
-	Lang  string
-	Style string
-	Text  []InlineSegment
+	ID      string
+	Lang    string
+	Style   string
+	Special bool
+	Text    []InlineSegment
 }
 
 // AsPlainText returns the plain text content of the paragraph by extracting text from all segments.
