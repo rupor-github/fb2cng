@@ -11,6 +11,8 @@ version: 1
 #     NOTE: according to fictionbook schema series could be hierarhical (series
 #     contain series and so on). Hierarhy is competely ignored - anything below
 #     first level is dropped.
+#     NOTE: I am not aware of any usage of multiple series, for example Calibre only supports one. So on
+#     some ocations internally converter only uses first series available.
 # - .Language (string) - cannonical string representation of a language as specified in fb2 metainformation
 # - .Date (string) - date as specified in fb2 metainformation.
 #     NOTE: If valid xs:date "value" attribute is provided - it will be used, otherwide just text as defined
@@ -73,7 +75,8 @@ document:
 
   # When meta_author_template is set author(s) name in output book
   # metainformation will be formatted using it. Template is applied to each
-  # available author individually using .Index field
+  # available author individually using .Index field. Device library often
+  # requires particular format for sorting
   meta_author_template: |
     {{- with index .Authors .Index }}
     {{-  .LastName -}}
