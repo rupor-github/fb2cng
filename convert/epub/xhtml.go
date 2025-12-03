@@ -541,49 +541,54 @@ func appendFlowItemsWithContext(parent *etree.Element, c *content.Content, items
 }
 
 func appendParagraphInline(parent *etree.Element, c *content.Content, p *fb2.Paragraph) {
+	hyphenate := !p.Special && c.Hyphen != nil
 	for _, seg := range p.Text {
-		appendInlineSegment(parent, c, &seg)
+		appendInlineSegment(parent, c, &seg, hyphenate)
 	}
 }
 
-func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.InlineSegment) {
+func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.InlineSegment, hyphenate bool) {
 	switch seg.Kind {
 	case fb2.InlineText:
+		text := seg.Text
+		if hyphenate {
+			text = c.Hyphen.Hyphenate(text)
+		}
 		if parent.ChildElements() == nil || len(parent.ChildElements()) == 0 {
-			parent.SetText(seg.Text)
+			parent.SetText(text)
 		} else {
 			lastChild := parent.ChildElements()[len(parent.ChildElements())-1]
-			lastChild.SetTail(lastChild.Tail() + seg.Text)
+			lastChild.SetTail(lastChild.Tail() + text)
 		}
 	case fb2.InlineStrong:
 		strong := parent.CreateElement("strong")
 		for _, child := range seg.Children {
-			appendInlineSegment(strong, c, &child)
+			appendInlineSegment(strong, c, &child, hyphenate)
 		}
 	case fb2.InlineEmphasis:
 		em := parent.CreateElement("em")
 		for _, child := range seg.Children {
-			appendInlineSegment(em, c, &child)
+			appendInlineSegment(em, c, &child, hyphenate)
 		}
 	case fb2.InlineStrikethrough:
 		del := parent.CreateElement("del")
 		for _, child := range seg.Children {
-			appendInlineSegment(del, c, &child)
+			appendInlineSegment(del, c, &child, hyphenate)
 		}
 	case fb2.InlineSub:
 		sub := parent.CreateElement("sub")
 		for _, child := range seg.Children {
-			appendInlineSegment(sub, c, &child)
+			appendInlineSegment(sub, c, &child, hyphenate)
 		}
 	case fb2.InlineSup:
 		sup := parent.CreateElement("sup")
 		for _, child := range seg.Children {
-			appendInlineSegment(sup, c, &child)
+			appendInlineSegment(sup, c, &child, hyphenate)
 		}
 	case fb2.InlineCode:
 		code := parent.CreateElement("code")
 		for _, child := range seg.Children {
-			appendInlineSegment(code, c, &child)
+			appendInlineSegment(code, c, &child, hyphenate)
 		}
 	case fb2.InlineNamedStyle:
 		span := parent.CreateElement("span")
@@ -591,7 +596,7 @@ func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inl
 			span.CreateAttr("class", seg.Style)
 		}
 		for _, child := range seg.Children {
-			appendInlineSegment(span, c, &child)
+			appendInlineSegment(span, c, &child, hyphenate)
 		}
 	case fb2.InlineLink:
 		a := parent.CreateElement("a")
@@ -613,7 +618,7 @@ func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inl
 			a.CreateAttr("class", linkClass)
 		}
 		for _, child := range seg.Children {
-			appendInlineSegment(a, c, &child)
+			appendInlineSegment(a, c, &child, hyphenate)
 		}
 	case fb2.InlineImageSegment:
 		if seg.Image != nil {
@@ -809,7 +814,7 @@ func appendTableElement(parent *etree.Element, c *content.Content, table *fb2.Ta
 			}
 
 			for _, seg := range cell.Content {
-				appendInlineSegment(td, c, &seg)
+				appendInlineSegment(td, c, &seg, false)
 			}
 		}
 	}
