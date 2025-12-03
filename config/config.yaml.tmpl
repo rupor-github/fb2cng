@@ -84,8 +84,8 @@ document:
 
     # When creator_name_template is set author(s) name in output book
     # metainformation will be formatted using it. Template is applied to each
-    # available author individually using .Index field. Device library often
-    # particular format for sorting
+    # available author individually using .Index field. Device often use
+    # particular format for sorting books by author names
     creator_name_template: |
       {{- with index .Authors .Index }}
       {{-  .LastName -}}
@@ -197,8 +197,9 @@ logging:
     #mode: append
     mode: overwrite
 
-# when program runs with "debug" option report file is produced at the specified destination
-# it contains full debug log and other artifacts to help with troubleshooting
+# when program runs with "debug" option report file is produced at the
+# specified destination it contains full debug log and other artifacts to help
+# with troubleshooting
 reporting:
   # could be relative to current working directory.
   destination: fb2cng-report.zip
