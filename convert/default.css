@@ -66,15 +66,19 @@ img.inline-image {
     margin: 0.3em 0;
 }
 .annotation {
-    font-size: 80%;
-    text-align: center;
     margin: 2em 1em 1em 1em;
+}
+.annotation-title {
+    margin: 1em 0;
+    text-align: center;
+    text-indent: 0;
+    font-weight: bold;
 }
 .annotation-subtitle {
     text-align: center;
     text-indent: 0;
     margin: 0.5em 0;
-    font-size: 90%;
+    font-weight: bold;
 }
 .poem {
     text-indent: 0;
@@ -170,7 +174,6 @@ td {
 .footnote-title-next {
     text-indent: 0;
     margin: 0.2em 0;
-    font-size: 100%;
 }
 a.external-link {
     text-decoration: underline;

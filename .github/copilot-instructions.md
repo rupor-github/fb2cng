@@ -5,6 +5,7 @@ applyTo: "**"
 # Project general coding standards
 
 This project uses Go (Golang) and follows standard community practices, prioritizing simplicity and clarity.
+When running prompt always assume that sources could be changed.
 
 ## Naming Conventions
 *   **Variables/Functions:** Use `camelCase` for variable names and function names.

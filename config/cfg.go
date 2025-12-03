@@ -39,6 +39,12 @@ type (
 		BodyNames []string      `yaml:"bodies" validate:"dive,required"`
 	}
 
+	AnnotationConfig struct {
+		Enable bool   `yaml:"enable"`
+		Title  string `yaml:"title" validate:"required_unless=Enable false"`
+		TOC    bool   `yaml:"toc"`
+	}
+
 	TOCPageConfig struct {
 		Placement       TOCPagePlacement `yaml:"placement" validate:"oneof=0 1 2"`
 		Title           string           `yaml:"title" validate:"required_unless=Placement 0"`
@@ -59,6 +65,7 @@ type (
 		InsertSoftHyphen      bool                  `yaml:"insert_soft_hyphen"`
 		Images                ImagesConfig          `yaml:"images"`
 		Footnotes             FootnotesConfig       `yaml:"footnotes"`
+		Annotation            AnnotationConfig      `yaml:"annotation"`
 		TOCPage               TOCPageConfig         `yaml:"toc_page"`
 		Metainformation       MetainformationConfig `yaml:"metainformation"`
 	}

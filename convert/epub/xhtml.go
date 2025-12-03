@@ -17,11 +17,12 @@ import (
 )
 
 type chapterData struct {
-	ID       string
-	Filename string
-	Title    string
-	Doc      *etree.Document
-	Section  *fb2.Section // Reference to source section for TOC hierarchy
+	ID           string
+	Filename     string
+	Title        string
+	Doc          *etree.Document
+	Section      *fb2.Section // Reference to source section for TOC hierarchy
+	IncludeInTOC bool         // Whether to include this chapter in navigation/TOC
 }
 
 // idToFileMap maps element IDs to the chapter filename containing them
@@ -68,10 +69,11 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 				log.Error("Unable to convert body intro", zap.Error(err))
 			} else {
 				chapters = append(chapters, chapterData{
-					ID:       chapterID,
-					Filename: filename,
-					Title:    title,
-					Doc:      doc,
+					ID:           chapterID,
+					Filename:     filename,
+					Title:        title,
+					Doc:          doc,
+					IncludeInTOC: true,
 				})
 				collectIDsFromBody(body, filename, idToFile)
 			}
@@ -96,11 +98,12 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 			}
 
 			chapters = append(chapters, chapterData{
-				ID:       chapterID,
-				Filename: filename,
-				Title:    title,
-				Doc:      doc,
-				Section:  section,
+				ID:           chapterID,
+				Filename:     filename,
+				Title:        title,
+				Doc:          doc,
+				Section:      section,
+				IncludeInTOC: true,
 			})
 			collectIDsFromSection(section, filename, idToFile)
 		}
@@ -112,7 +115,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 
 	// Process all footnote bodies - each body becomes a separate top-level chapter
 	chapterNum++
-	footnotesChapters, err := processFootnoteBodies(c, footnoteBodies, chapterNum, idToFile, log)
+	footnotesChapters, err := processFootnoteBodies(c, footnoteBodies, chapters, chapterNum, idToFile, log)
 	if err != nil {
 		log.Error("Unable to convert footnotes", zap.Error(err))
 		return chapters, idToFile, nil
@@ -123,10 +126,25 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 }
 
 // processFootnoteBodies converts all footnote bodies to XHTML and creates chapter entries
-func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, startChapterNum int, idToFile idToFileMap, log *zap.Logger) ([]chapterData, error) {
-	// Use index-based filename like regular chapters
-	chapterID := fmt.Sprintf("index%05d", startChapterNum)
-	filename := fmt.Sprintf("%s.xhtml", chapterID)
+func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, existingChapters []chapterData, startChapterNum int, idToFile idToFileMap, log *zap.Logger) ([]chapterData, error) {
+	// Build map of existing IDs to check for collisions
+	existingIDs := make(map[string]bool, len(existingChapters))
+	for _, ch := range existingChapters {
+		existingIDs[ch.ID] = true
+	}
+
+	// Find a unique ID and filename that doesn't collide with existing chapters
+	baseID := "footnotes"
+	chapterID := baseID
+	filename := baseID + ".xhtml"
+
+	counter := 0
+	for existingIDs[chapterID] {
+		counter++
+		chapterID = fmt.Sprintf("%s-%d", baseID, counter)
+		filename = chapterID + ".xhtml"
+	}
+
 	docTitle := footnoteBodies[0].AsTitleText("footnotes")
 
 	doc := createXHTMLDocument(docTitle)
@@ -170,7 +188,20 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, start
 		}
 
 		// Create chapter entry for TOC - all bodies use anchor reference
-		chapterID := fmt.Sprintf("index%05d", startChapterNum+bodyIdx)
+		// Find unique ID that doesn't collide
+		var baseChapterID string
+		if bodyIdx == 0 {
+			baseChapterID = "footnotes"
+		} else {
+			baseChapterID = fmt.Sprintf("footnotes-%d", bodyIdx)
+		}
+		tocChapterID := baseChapterID
+		counter := 0
+		for existingIDs[tocChapterID] {
+			counter++
+			tocChapterID = fmt.Sprintf("%s-dup%d", baseChapterID, counter)
+		}
+		existingIDs[tocChapterID] = true
 		var chapterDoc *etree.Document
 		if bodyIdx == 0 {
 			// First chapter owns the document for writing to file
@@ -178,10 +209,11 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, start
 		}
 
 		chapters = append(chapters, chapterData{
-			ID:       chapterID,
-			Filename: filename + "#" + bodyID,
-			Title:    bodyTitle,
-			Doc:      chapterDoc,
+			ID:           tocChapterID,
+			Filename:     filename + "#" + bodyID,
+			Title:        bodyTitle,
+			Doc:          chapterDoc,
+			IncludeInTOC: true,
 		})
 	}
 

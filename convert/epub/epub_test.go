@@ -627,7 +627,8 @@ func TestProcessFootnoteBodies(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			idToFile := make(idToFileMap)
-			chapters, err := processFootnoteBodies(c, tt.bodies, 0, idToFile, log)
+			existingChapters := []chapterData{}
+			chapters, err := processFootnoteBodies(c, tt.bodies, existingChapters, 0, idToFile, log)
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
@@ -1846,9 +1847,10 @@ func TestWriteNCX(t *testing.T) {
 
 	chapters := []chapterData{
 		{
-			ID:       "ch01",
-			Filename: "ch01.xhtml",
-			Title:    "Chapter 1",
+			ID:           "ch01",
+			Filename:     "ch01.xhtml",
+			Title:        "Chapter 1",
+			IncludeInTOC: true,
 			Section: &fb2.Section{
 				Title: &fb2.Title{
 					Items: []fb2.TitleItem{
@@ -1860,9 +1862,10 @@ func TestWriteNCX(t *testing.T) {
 			},
 		},
 		{
-			ID:       "ch02",
-			Filename: "ch02.xhtml",
-			Title:    "Chapter 2",
+			ID:           "ch02",
+			Filename:     "ch02.xhtml",
+			Title:        "Chapter 2",
+			IncludeInTOC: true,
 		},
 	}
 
@@ -1947,9 +1950,10 @@ func TestWriteNav(t *testing.T) {
 
 	chapters := []chapterData{
 		{
-			ID:       "ch01",
-			Filename: "ch01.xhtml",
-			Title:    "Chapter 1",
+			ID:           "ch01",
+			Filename:     "ch01.xhtml",
+			Title:        "Chapter 1",
+			IncludeInTOC: true,
 			Section: &fb2.Section{
 				Title: &fb2.Title{
 					Items: []fb2.TitleItem{
@@ -2098,14 +2102,16 @@ func TestGenerateTOCPage(t *testing.T) {
 
 	chapters := []chapterData{
 		{
-			ID:       "ch1",
-			Filename: "ch1.xhtml",
-			Title:    "Chapter 1",
+			ID:           "ch1",
+			Filename:     "ch1.xhtml",
+			Title:        "Chapter 1",
+			IncludeInTOC: true,
 		},
 		{
-			ID:       "ch2",
-			Filename: "ch2.xhtml",
-			Title:    "Chapter 2",
+			ID:           "ch2",
+			Filename:     "ch2.xhtml",
+			Title:        "Chapter 2",
+			IncludeInTOC: true,
 		},
 	}
 
@@ -2215,19 +2221,22 @@ func TestGenerateTOCPage_IDCollision(t *testing.T) {
 	// Create chapters with IDs that will collide with TOC page IDs
 	chapters := []chapterData{
 		{
-			ID:       "toc-page",
-			Filename: "toc-page.xhtml",
-			Title:    "Chapter with TOC ID",
+			ID:           "toc-page",
+			Filename:     "toc-page.xhtml",
+			Title:        "Chapter with TOC ID",
+			IncludeInTOC: true,
 		},
 		{
-			ID:       "toc-page-1",
-			Filename: "toc-page-1.xhtml",
-			Title:    "Another collision",
+			ID:           "toc-page-1",
+			Filename:     "toc-page-1.xhtml",
+			Title:        "Another collision",
+			IncludeInTOC: true,
 		},
 		{
-			ID:       "ch1",
-			Filename: "ch1.xhtml",
-			Title:    "Normal Chapter",
+			ID:           "ch1",
+			Filename:     "ch1.xhtml",
+			Title:        "Normal Chapter",
+			IncludeInTOC: true,
 		},
 	}
 

@@ -61,7 +61,6 @@ document:
   insert_soft_hyphen: false
 
   metainformation:
-
     # When title_template is set output book title metainformation will be
     # formatted using it. This is often used to conviniently sort device library
     # listings
@@ -98,7 +97,6 @@ document:
     transliterate: false
 
   images:
-
     # Do not skip images which cannot be decoded by program. Use them without
     # any processing, allowing reader to decide what to do.
     use_broken: false
@@ -125,7 +123,7 @@ document:
       # "none"    - do nothing
       # "keepAR"  - when image height is less than specified, resize to specified height keeping aspect ratio
       # "stretch" - unconditionally resize to specified width and height
-      resize: "stretch"
+      resize: stretch
       # Reader screen size so cover image could be adjusted properly
       width: 1264
       height: 1680
@@ -142,19 +140,27 @@ document:
     #   B -> A) will be selected.
     #   for epub3 and kindle formats it will be <aside> and <epub> recommended
     #   by Amazon publishing guidelines
-    mode: "default"
+    mode: default
     # Names of the bodies in fb2 document to consider for footnotes processing
     # if required by mode
     bodies: ["notes", "comments", "примечания", "комментарии"]
+
+  annotation:
+    # Create separate "chapter" with book annotation if available
+    enable: false
+    # Use provded annotation title
+    title: Annotation
+    # Show annotation in TOC
+    toc: true
 
   toc_page:
     # Generate additional page with TOC (some devices may not support epub TOC at all)
     # "none"   - do not generate
     # "before" - at the beginning of the book
     # "after"  - at the end of the book
-    placement: "before"
+    placement: none
     # Name of the TOC page in a proper TOC
-    title: "Content"
+    title: Content
     # when toc page generation requested and authors_template is set - page will
     # have header with authors formatted using it
     authors_template: |

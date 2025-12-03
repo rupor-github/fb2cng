@@ -83,6 +83,12 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		return fmt.Errorf("unable to convert content: %w", err)
 	}
 
+	// Add Annotation chapter if requested
+	if cfg.Annotation.Enable && c.Book.Description.TitleInfo.Annotation != nil {
+		annotationChapter := generateAnnotation(c, chapters, &cfg.Annotation, log)
+		chapters = append([]chapterData{annotationChapter}, chapters...)
+	}
+
 	// Add TOC page if requested
 	if cfg.TOCPage.Placement != config.TOCPagePlacementNone {
 		tocChapter := generateTOCPage(c, chapters, &cfg.TOCPage, log)
@@ -552,6 +558,9 @@ func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 	// Calculate TOC depth
 	maxDepth := 1
 	for _, chapter := range chapters {
+		if !chapter.IncludeInTOC {
+			continue
+		}
 		if chapter.Section != nil {
 			depth := calculateSectionDepth(chapter.Section, 1)
 			if depth > maxDepth {
@@ -580,6 +589,9 @@ func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 
 	playOrder := 0
 	for _, chapter := range chapters {
+		if !chapter.IncludeInTOC {
+			continue
+		}
 		playOrder++
 		navPoint := navMap.CreateElement("navPoint")
 		navPoint.CreateAttr("id", chapter.ID)
@@ -701,6 +713,9 @@ func writeNav(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 	ol := nav.CreateElement("ol")
 
 	for _, chapter := range chapters {
+		if !chapter.IncludeInTOC {
+			continue
+		}
 		li := ol.CreateElement("li")
 		a := li.CreateElement("a")
 		a.CreateAttr("href", chapter.Filename)
@@ -761,6 +776,48 @@ func buildNavOLItems(parentOL *etree.Element, section *fb2.Section, filename str
 	}
 }
 
+func generateAnnotation(c *content.Content, chapters []chapterData, cfg *config.AnnotationConfig, log *zap.Logger) chapterData {
+	doc := createXHTMLDocument(cfg.Title)
+	body := doc.Root().SelectElement("body")
+	body.CreateAttr("class", "annotation-page")
+
+	h1 := body.CreateElement("h1")
+	h1.CreateAttr("class", "annotation-title")
+	h1.SetText(cfg.Title)
+
+	annotationDiv := body.CreateElement("div")
+	annotationDiv.CreateAttr("class", "annotation")
+
+	if err := appendFlowItemsWithContext(annotationDiv, c, c.Book.Description.TitleInfo.Annotation.Items, 1, "annotation", log); err != nil {
+		log.Warn("Unable to convert annotation content", zap.Error(err))
+	}
+
+	// Find a unique ID and filename that doesn't collide with existing chapters
+	baseID := "annotation-page"
+	id := baseID
+	filename := baseID + ".xhtml"
+
+	existingIDs := make(map[string]bool, len(chapters))
+	for _, ch := range chapters {
+		existingIDs[ch.ID] = true
+	}
+
+	counter := 0
+	for existingIDs[id] {
+		counter++
+		id = fmt.Sprintf("%s-%d", baseID, counter)
+		filename = id + ".xhtml"
+	}
+
+	return chapterData{
+		ID:           id,
+		Filename:     filename,
+		Title:        cfg.Title,
+		Doc:          doc,
+		IncludeInTOC: cfg.TOC,
+	}
+}
+
 // generateTOCPage creates a TOC chapter as an XHTML page
 func generateTOCPage(c *content.Content, chapters []chapterData, cfg *config.TOCPageConfig, log *zap.Logger) chapterData {
 	doc := createXHTMLDocument(cfg.Title)
@@ -786,6 +843,9 @@ func generateTOCPage(c *content.Content, chapters []chapterData, cfg *config.TOC
 	ol.CreateAttr("class", "toc-list")
 
 	for _, chapter := range chapters {
+		if !chapter.IncludeInTOC {
+			continue
+		}
 		li := ol.CreateElement("li")
 		li.CreateAttr("class", "toc-item")
 		a := li.CreateElement("a")
@@ -816,10 +876,11 @@ func generateTOCPage(c *content.Content, chapters []chapterData, cfg *config.TOC
 	}
 
 	return chapterData{
-		ID:       id,
-		Filename: filename,
-		Title:    cfg.Title,
-		Doc:      doc,
+		ID:           id,
+		Filename:     filename,
+		Title:        cfg.Title,
+		Doc:          doc,
+		IncludeInTOC: true,
 	}
 }
 
