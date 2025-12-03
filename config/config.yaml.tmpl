@@ -12,12 +12,12 @@ version: 1
 #     contain series and so on). Hierarhy is competely ignored - anything below
 #     first level is dropped.
 #     NOTE: I am not aware of any usage of multiple series, for example Calibre only supports one. So on
-#     some ocations internally converter only uses first series available.
+#     some occasions internally converter only uses first series available.
 # - .Language (string) - cannonical string representation of a language as specified in fb2 metainformation
 # - .Date (string) - date as specified in fb2 metainformation.
 #     NOTE: If valid xs:date "value" attribute is provided - it will be used, otherwide just text as defined
 # - .Authors (array of { .FirstName (string), .MiddleName (string), .LastName (string)}) as specified in fb2 metainformation
-# - .Format (string) - string representing requested conversion (ex: epub, azw3, kepub...)
+# - .Format (string) - string representing requested conversion (ex: epub2, epub3, kepub...)
 # - .SourceFile (string) - base part of the source file name (no path, no extension)
 # - .BookID (string) - book UUID as specified by fb2 metainformation or assigned by converter
 # - .Genres (array of strings) - genres names as specified by fb2 metainformation
@@ -162,7 +162,7 @@ document:
     # Name of the TOC page in a proper TOC
     title: Content
     # when toc page generation requested and authors_template is set - page will
-    # have header with authors formatted using it
+    # have title (header) with authors formatted using it
     authors_template: |
       {{- $names := list -}}
       {{- range .Authors -}}
