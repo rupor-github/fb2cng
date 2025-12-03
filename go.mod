@@ -1,6 +1,6 @@
 module fbc
 
-go 1.25.4
+go 1.25.5
 
 tool (
 	github.com/abice/go-enum
@@ -60,7 +60,7 @@ require (
 	golang.org/x/exp/typeparams v0.0.0-20251125195548-87e1e737ad39 // indirect
 	golang.org/x/mod v0.30.0 // indirect
 	golang.org/x/sync v0.18.0 // indirect
-	golang.org/x/telemetry v0.0.0-20251124170345-55bbf377f459 // indirect
+	golang.org/x/telemetry v0.0.0-20251128220624-abf20d0e57ec // indirect
 	golang.org/x/tools v0.39.0 // indirect
 	golang.org/x/tools/cmd/cover v0.1.0-deprecated // indirect
 	honnef.co/go/tools v0.6.1 // indirect

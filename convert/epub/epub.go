@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/beevik/etree"
+	"github.com/gosimple/slug"
 	fixzip "github.com/hidez8891/zip"
 	"go.uber.org/zap"
 
@@ -1127,13 +1128,16 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 
 	dcTitle := metadata.CreateElement("dc:title")
 	title := c.Book.Description.TitleInfo.BookTitle.Value
-	if cfg.MetaTitleTemplate != "" {
-		expanded, err := fields.Expand(config.MetaTitleTemplateFieldName, cfg.MetaTitleTemplate, -1, c.Book, c.SrcName, c.OutputFormat)
+	if cfg.Metainformation.TitleTemplate != "" {
+		expanded, err := fields.Expand(config.MetaTitleTemplateFieldName, cfg.Metainformation.TitleTemplate, -1, c.Book, c.SrcName, c.OutputFormat)
 		if err != nil {
 			log.Warn("Unable to prepare title for generated OPF", zap.Error(err))
 		} else {
 			title = expanded
 		}
+	}
+	if cfg.Metainformation.Transliterate {
+		title = slug.Make(title)
 	}
 	dcTitle.SetText(title)
 
@@ -1147,13 +1151,16 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	for idx, author := range c.Book.Description.TitleInfo.Authors {
 		dcCreator := metadata.CreateElement("dc:creator")
 		authorName := strings.TrimSpace(fmt.Sprintf("%s %s %s", author.FirstName, author.MiddleName, author.LastName))
-		if cfg.MetaAuthorTemplate != "" {
-			expanded, err := fields.Expand(config.MetaAuthorTemplateFieldName, cfg.MetaAuthorTemplate, idx, c.Book, c.SrcName, c.OutputFormat)
+		if cfg.Metainformation.CreatorNameTemplate != "" {
+			expanded, err := fields.Expand(config.MetaCreatorNameTemplateFieldName, cfg.Metainformation.CreatorNameTemplate, idx, c.Book, c.SrcName, c.OutputFormat)
 			if err != nil {
 				log.Warn("Unable to prepare author name for generated OPF", zap.Error(err))
 			} else {
 				authorName = expanded
 			}
+		}
+		if cfg.Metainformation.Transliterate {
+			authorName = slug.Make(authorName)
 		}
 		dcCreator.SetText(authorName)
 

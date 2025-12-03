@@ -52,38 +52,6 @@ document:
     {{-   .Title -}}
     {{- end -}}
 
-  # When meta_title_template is set output book title metainformation will be
-  # formatted using it. This is often used to conviniently sort device library
-  # listings
-  meta_title_template: |
-    {{- if gt (len .Series) 0 -}}
-    {{-   with first .Series -}}
-    {{-     $seriesLetters := list -}}
-    {{-     range $word := splitList " " .Name -}}
-    {{-       $seriesLetters = append $seriesLetters (upper (first (splitList "" $word))) -}}
-    {{-     end -}}
-    {{-     if gt (len $seriesLetters) 0 -}}
-    {{-       "(" }}{{- join "" $seriesLetters -}}
-    {{-       if gt .Number 0 -}}
-    {{-         printf " - %02d" .Number -}}
-    {{-       end -}}
-    {{-       ") " -}}
-    {{-     end -}}
-    {{-   end -}}
-    {{- end -}}
-    {{  .Title -}}
-
-  # When meta_author_template is set author(s) name in output book
-  # metainformation will be formatted using it. Template is applied to each
-  # available author individually using .Index field. Device library often
-  # particular format for sorting
-  meta_author_template: |
-    {{- with index .Authors .Index }}
-    {{-  .LastName -}}
-    {{-  if .FirstName }} {{.FirstName}}{{ end -}}
-    {{-  if .MiddleName }} {{.MiddleName }}{{ end -}}
-    {{ end -}}
-
   #---- Slugify/transliterate output file name - after all other processing on file name is completed
   file_name_transliterate: false
 
@@ -91,6 +59,43 @@ document:
   # NOTE: it may conflict with built-in viewer hyphenation, for example modern day Kindles always have
   # hyphenation turned on for Russian language (and off for English)
   insert_soft_hyphen: false
+
+  metainformation:
+
+    # When title_template is set output book title metainformation will be
+    # formatted using it. This is often used to conviniently sort device library
+    # listings
+    title_template: |
+      {{- if gt (len .Series) 0 -}}
+      {{-   with first .Series -}}
+      {{-     $seriesLetters := list -}}
+      {{-     range $word := splitList " " .Name -}}
+      {{-       $seriesLetters = append $seriesLetters (upper (first (splitList "" $word))) -}}
+      {{-     end -}}
+      {{-     if gt (len $seriesLetters) 0 -}}
+      {{-       "(" }}{{- join "" $seriesLetters -}}
+      {{-       if gt .Number 0 -}}
+      {{-         printf " - %02d" .Number -}}
+      {{-       end -}}
+      {{-       ") " -}}
+      {{-     end -}}
+      {{-   end -}}
+      {{- end -}}
+      {{  .Title -}}
+
+    # When creator_name_template is set author(s) name in output book
+    # metainformation will be formatted using it. Template is applied to each
+    # available author individually using .Index field. Device library often
+    # particular format for sorting
+    creator_name_template: |
+      {{- with index .Authors .Index }}
+      {{-  .LastName -}}
+      {{-  if .FirstName }} {{.FirstName}}{{ end -}}
+      {{-  if .MiddleName }} {{.MiddleName }}{{ end -}}
+      {{ end -}}
+
+    # Slugify/transliterate book title and author(s) names
+    transliterate: false
 
   images:
 
