@@ -12,6 +12,7 @@ import (
 	"github.com/beevik/etree"
 	"go.uber.org/zap"
 
+	"fbc/config"
 	"fbc/content"
 	"fbc/fb2"
 )
@@ -147,8 +148,7 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, exist
 
 	docTitle := footnoteBodies[0].AsTitleText("footnotes")
 
-	doc := createXHTMLDocument(docTitle)
-	bodyElem := doc.Root().SelectElement("body")
+	doc, root := createXHTMLDocument(c, docTitle)
 
 	// Process all footnote bodies - build XHTML and chapter metadata in single loop
 	var chapters []chapterData
@@ -157,7 +157,7 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, exist
 		bodyTitle := body.AsTitleText(bodyID)
 
 		// Create XHTML wrapper div for this body
-		bodyDiv := bodyElem.CreateElement("div")
+		bodyDiv := root.CreateElement("div")
 		bodyDiv.CreateAttr("class", "footnote-body")
 		bodyDiv.CreateAttr("id", bodyID)
 
@@ -229,7 +229,9 @@ func generateFootnoteBodyID(body *fb2.Body, index int) string {
 }
 
 // createXHTMLDocument creates a standard XHTML document structure with head elements
-func createXHTMLDocument(title string) *etree.Document {
+func createXHTMLDocument(c *content.Content, title string) (*etree.Document, *etree.Element) {
+	c.KoboSpanSet(0, 0)
+
 	doc := etree.NewDocument()
 	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
 
@@ -251,14 +253,27 @@ func createXHTMLDocument(title string) *etree.Document {
 	titleElem := head.CreateElement("title")
 	titleElem.SetText(title)
 
-	html.CreateElement("body")
+	body := html.CreateElement("body")
 
-	return doc
+	var root *etree.Element
+	if c.OutputFormat == config.OutputFmtKepub {
+		bookColumnsDiv := body.CreateElement("div")
+		bookColumnsDiv.CreateAttr("id", "book-columns")
+		inner := bookColumnsDiv.CreateElement("div")
+		inner.CreateAttr("id", "book-inner")
+		root = inner
+	} else {
+		root = body
+	}
+
+	return doc, root
 }
 
 // appendTitleAsHeading appends a title as a heading element (h1-h6) with span children for each paragraph
 // Used for body and section titles that need semantic heading markup
 func appendTitleAsHeading(parent *etree.Element, c *content.Content, title *fb2.Title, depth int, classPrefix string) {
+	c.KoboSpanNextParagraph()
+
 	headingLevel := min(depth, 6)
 	headingTag := fmt.Sprintf("h%d", headingLevel)
 
@@ -308,6 +323,7 @@ func appendTitleAsDiv(parent *etree.Element, c *content.Content, title *fb2.Titl
 
 	for _, item := range title.Items {
 		if item.Paragraph != nil {
+			c.KoboSpanNextParagraph()
 			p := titleDiv.CreateElement("p")
 			if item.Paragraph.ID != "" {
 				p.CreateAttr("id", item.Paragraph.ID)
@@ -339,6 +355,7 @@ func appendEpigraphs(parent *etree.Element, c *content.Content, epigraphs []fb2.
 			return err
 		}
 		for _, ta := range epigraph.TextAuthors {
+			c.KoboSpanNextParagraph()
 			p := div.CreateElement("p")
 			p.CreateAttr("class", "text-author")
 			appendParagraphInline(p, c, &ta)
@@ -348,10 +365,9 @@ func appendEpigraphs(parent *etree.Element, c *content.Content, epigraphs []fb2.
 }
 
 func bodyIntroToXHTML(c *content.Content, body *fb2.Body, title string, log *zap.Logger) (*etree.Document, error) {
-	doc := createXHTMLDocument(title)
-	bodyElem := doc.Root().SelectElement("body")
+	doc, root := createXHTMLDocument(c, title)
 
-	if err := appendBodyIntroContent(bodyElem, c, body, 1, log); err != nil {
+	if err := appendBodyIntroContent(root, c, body, 1, log); err != nil {
 		return nil, err
 	}
 
@@ -359,15 +375,14 @@ func bodyIntroToXHTML(c *content.Content, body *fb2.Body, title string, log *zap
 }
 
 func sectionToXHTML(c *content.Content, section *fb2.Section, title string, log *zap.Logger) (*etree.Document, error) {
-	doc := createXHTMLDocument(title)
-	body := doc.Root().SelectElement("body")
+	doc, root := createXHTMLDocument(c, title)
 
-	// Add section ID to body element so it can be a link target
+	// Add section ID to root element so it can be a link target
 	if section.ID != "" {
-		body.CreateAttr("id", section.ID)
+		root.CreateAttr("id", section.ID)
 	}
 
-	if err := appendSectionContent(body, c, section, false, 1, log); err != nil {
+	if err := appendSectionContent(root, c, section, false, 1, log); err != nil {
 		return nil, err
 	}
 
@@ -451,6 +466,7 @@ func appendFlowItemsWithContext(parent *etree.Element, c *content.Content, items
 		switch item.Kind {
 		case fb2.FlowParagraph:
 			if item.Paragraph != nil {
+				c.KoboSpanNextParagraph()
 				p := parent.CreateElement("p")
 				if item.Paragraph.ID != "" {
 					p.CreateAttr("id", item.Paragraph.ID)
@@ -471,6 +487,7 @@ func appendFlowItemsWithContext(parent *etree.Element, c *content.Content, items
 			div := parent.CreateElement("div")
 			div.CreateAttr("class", "emptyline")
 		case fb2.FlowSubtitle:
+			c.KoboSpanNextParagraph()
 			if item.Subtitle != nil {
 				var class string
 				if context != "" {
@@ -547,19 +564,34 @@ func appendParagraphInline(parent *etree.Element, c *content.Content, p *fb2.Par
 	}
 }
 
-func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.InlineSegment, hyphenate bool) {
-	switch seg.Kind {
-	case fb2.InlineText:
-		text := seg.Text
-		if hyphenate {
-			text = c.Hyphen.Hyphenate(text)
+func appendInlineText(parent *etree.Element, c *content.Content, text string, hyphenate bool) {
+	if hyphenate {
+		text = c.Hyphen.Hyphenate(text)
+	}
+	if c.OutputFormat == config.OutputFmtKepub && strings.TrimSpace(text) != "" {
+		// Kobo mode: wrap text in span with unique ID
+		for s := range c.Splitter.Sentences(text) {
+			paragraph, sentence := c.KoboSpanNextSentence()
+			span := parent.CreateElement("span")
+			span.CreateAttr("class", "koboSpan")
+			span.CreateAttr("id", fmt.Sprintf("kobo.%d.%d", paragraph, sentence))
+			span.SetText(s)
 		}
+	} else {
+		// Standard mode: use original tail-based approach
 		if parent.ChildElements() == nil || len(parent.ChildElements()) == 0 {
 			parent.SetText(text)
 		} else {
 			lastChild := parent.ChildElements()[len(parent.ChildElements())-1]
 			lastChild.SetTail(lastChild.Tail() + text)
 		}
+	}
+}
+
+func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.InlineSegment, hyphenate bool) {
+	switch seg.Kind {
+	case fb2.InlineText:
+		appendInlineText(parent, c, seg.Text, hyphenate)
 	case fb2.InlineStrong:
 		strong := parent.CreateElement("strong")
 		for _, child := range seg.Children {
@@ -622,7 +654,17 @@ func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inl
 		}
 	case fb2.InlineImageSegment:
 		if seg.Image != nil {
-			img := parent.CreateElement("img")
+			var imgParent *etree.Element
+			if c.OutputFormat == config.OutputFmtKepub {
+				paragraph, sentence := c.KoboSpanNextSentence()
+				span := parent.CreateElement("span")
+				span.CreateAttr("class", "koboSpan")
+				span.CreateAttr("id", fmt.Sprintf("kobo.%d.%d", paragraph, sentence))
+				imgParent = span
+			} else {
+				imgParent = parent
+			}
+			img := imgParent.CreateElement("img")
 			img.CreateAttr("class", "inline-image")
 			imgID := strings.TrimPrefix(seg.Image.Href, "#")
 			if imgData, ok := c.ImagesIndex[imgID]; ok {
@@ -642,7 +684,19 @@ func appendImageElement(parent *etree.Element, c *content.Content, img *fb2.Imag
 		div.CreateAttr("id", img.ID)
 	}
 
-	imgElem := div.CreateElement("img")
+	c.KoboSpanNextParagraph()
+	var imgParent *etree.Element
+	if c.OutputFormat == config.OutputFmtKepub {
+		paragraph, sentence := c.KoboSpanNextSentence()
+		span := div.CreateElement("span")
+		span.CreateAttr("class", "koboSpan")
+		span.CreateAttr("id", fmt.Sprintf("kobo.%d.%d", paragraph, sentence))
+		imgParent = span
+	} else {
+		imgParent = div
+	}
+
+	imgElem := imgParent.CreateElement("img")
 	imgElem.CreateAttr("class", "block-image")
 	imgID := strings.TrimPrefix(img.Href, "#")
 	if imgData, ok := c.ImagesIndex[imgID]; ok {
@@ -675,6 +729,7 @@ func appendPoemElement(parent *etree.Element, c *content.Content, poem *fb2.Poem
 	}
 
 	for _, subtitle := range poem.Subtitles {
+		c.KoboSpanNextParagraph()
 		p := div.CreateElement("p")
 		p.CreateAttr("class", "poem-subtitle")
 		if subtitle.ID != "" {
@@ -695,6 +750,7 @@ func appendPoemElement(parent *etree.Element, c *content.Content, poem *fb2.Poem
 		}
 
 		if stanza.Subtitle != nil {
+			c.KoboSpanNextParagraph()
 			p := stanzaDiv.CreateElement("p")
 			p.CreateAttr("class", "stanza-subtitle")
 			if stanza.Subtitle.ID != "" {
@@ -704,6 +760,7 @@ func appendPoemElement(parent *etree.Element, c *content.Content, poem *fb2.Poem
 		}
 
 		for _, verse := range stanza.Verses {
+			c.KoboSpanNextParagraph()
 			p := stanzaDiv.CreateElement("p")
 			p.CreateAttr("class", "verse")
 			appendParagraphInline(p, c, &verse)
@@ -711,19 +768,23 @@ func appendPoemElement(parent *etree.Element, c *content.Content, poem *fb2.Poem
 	}
 
 	for _, ta := range poem.TextAuthors {
+		c.KoboSpanNextParagraph()
 		p := div.CreateElement("p")
 		p.CreateAttr("class", "text-author")
 		appendParagraphInline(p, c, &ta)
 	}
 
 	if poem.Date != nil {
+		c.KoboSpanNextParagraph()
 		p := div.CreateElement("p")
 		p.CreateAttr("class", "date")
+		var dateText string
 		if poem.Date.Display != "" {
-			p.SetText(poem.Date.Display)
+			dateText = poem.Date.Display
 		} else if !poem.Date.Value.IsZero() {
-			p.SetText(poem.Date.Value.Format("2006-01-02"))
+			dateText = poem.Date.Value.Format("2006-01-02")
 		}
+		appendInlineText(p, c, dateText, false)
 	}
 	return nil
 }
@@ -743,6 +804,7 @@ func appendCiteElement(parent *etree.Element, c *content.Content, cite *fb2.Cite
 	}
 
 	for _, ta := range cite.TextAuthors {
+		c.KoboSpanNextParagraph()
 		p := blockquote.CreateElement("p")
 		p.CreateAttr("class", "text-author")
 		appendParagraphInline(p, c, &ta)
@@ -778,6 +840,7 @@ func buildStyleAttr(baseStyle, align, vAlign string) string {
 }
 
 func appendTableElement(parent *etree.Element, c *content.Content, table *fb2.Table) {
+	c.KoboSpanNextParagraph()
 	tableElem := parent.CreateElement("table")
 	if table.ID != "" {
 		tableElem.CreateAttr("id", table.ID)

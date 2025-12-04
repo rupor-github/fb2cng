@@ -1,26 +1,40 @@
 # Content should be UTF-8!
 version: 1
 
-# Some fields must be specified using go template language: https://pkg.go.dev/text/template#pkg-overview
-# additional functions from slim-sprig package are available for processing: https://go-task.github.io/slim-sprig
-# List of variables always available (additional variables could be specified for a particular field):
-# - .Context (string) - name of the template field, uniquely defines processing context
-# - .Index (integer) - when template is applied to a slice variable index selects slice element relevant in a particular context, otherwise -1
+# Some fields must be specified using go template language:
+# https://pkg.go.dev/text/template#pkg-overview with additional functions from
+# slim-sprig package available for processing:
+# https://go-task.github.io/slim-sprig
+# List of variables always available (additional variables could be specified
+# for a particular field):
+# - .Context (string) - name of the template field, uniquely defines processing
+# context
+# - .Index (integer) - when template is applied to a slice variable index
+# selects slice element relevant in a particular context, otherwise -1
 # - .Title (string) - book title as specified in fb2 metainformation
-# - .Series (array of { .Name (string), .Number (integer) }) - series as specified in fb2 metainformation.
+# - .Series (array of { .Name (string), .Number (integer) }) - series as
+# specified in fb2 metainformation.
 #     NOTE: according to fictionbook schema series could be hierarhical (series
 #     contain series and so on). Hierarhy is competely ignored - anything below
 #     first level is dropped.
-#     NOTE: Similarily I am not aware of any usage of multiple series, for example Calibre only supports one. So on
-#     some occasions internally converter only uses first series available.
-# - .Language (string) - cannonical string representation of a language as specified in fb2 metainformation
+#     NOTE: Similarily I am not aware of any usage of multiple series, for
+#     example Calibre only supports one. So on some occasions internally
+#     converter only uses first series available.
+# - .Language (string) - cannonical string representation of a language as
+# specified in fb2 metainformation
 # - .Date (string) - date as specified in fb2 metainformation.
-#     NOTE: If valid xs:date "value" attribute is provided - it will be used, otherwide just text as defined
-# - .Authors (array of { .FirstName (string), .MiddleName (string), .LastName (string)}) as specified in fb2 metainformation
-# - .Format (string) - string representing requested conversion (ex: epub2, epub3, kepub...)
-# - .SourceFile (string) - base part of the source file name (no path, no extension)
-# - .BookID (string) - book UUID as specified by fb2 metainformation or assigned by converter
-# - .Genres (array of strings) - genres names as specified by fb2 metainformation
+#     NOTE: If valid xs:date "value" attribute is provided - it will be used,
+#     otherwide just text as defined
+# - .Authors (array of { .FirstName (string), .MiddleName (string), .LastName
+# (string)}) as specified in fb2 metainformation
+# - .Format (string) - string representing requested conversion (ex: epub2,
+# epub3, kepub...)
+# - .SourceFile (string) - base part of the source file name (no path, no
+# extension)
+# - .BookID (string) - book UUID as specified by fb2 metainformation or
+# assigned by converter
+# - .Genres (array of strings) - genres names as specified by fb2
+# metainformation
 
 document:
   # Some programs (CoolReader and some versions of FBReader) expect "old" zip
@@ -31,7 +45,8 @@ document:
   # CSS stylesheet to use. If absent - default one will be supplied
   # stylesheet_path = "default.css"
 
-  # When output_name_template is set output file will have name created using FB2 metainformation
+  # When output_name_template is set output file will have name created using
+  # FB2 metainformation
   # NOTE: watch out for path separators, directories will be created!
   output_name_template: |
     {{- $all := "" -}}
@@ -52,7 +67,8 @@ document:
     {{-   .Title -}}
     {{- end -}}
 
-  # Slugify/transliterate output file name - after all other processing on file name is completed
+  # Slugify/transliterate output file name - after all other processing on file
+  # name is completed
   file_name_transliterate: false
 
   # Insert soft hyphen symbols '\u00AD' inside words - for devices which do not
@@ -64,8 +80,8 @@ document:
 
   metainformation:
     # When title_template is set output book title metainformation will be
-    # formatted using it. This is often used to conviniently sort device library
-    # listings
+    # formatted using it. This is often used to conviniently sort device
+    # library listings
     title_template: |
       {{- if gt (len .Series) 0 -}}
       {{-   with first .Series -}}
@@ -95,7 +111,8 @@ document:
       {{-  if .MiddleName }} {{.MiddleName }}{{ end -}}
       {{ end -}}
 
-    # Slugify/transliterate book title and author(s) names
+    # Slugify/transliterate book title and author(s) names - after all other
+    # processing is completed
     transliterate: false
 
   images:
@@ -115,7 +132,8 @@ document:
     jpeq_quality_level: 75
 
     cover:
-      # When book does not have cover image supply one. For Amazon formats always true
+      # When book does not have cover image supply one. For Amazon formats
+      # always true
       generate: false
       # What image to use as default cover when default one is needed. If
       # required but not specified program will use internal resource
@@ -123,7 +141,8 @@ document:
 
       # How to process cover image
       # "none"    - do nothing
-      # "keepAR"  - when image height is less than specified, resize to specified height keeping aspect ratio
+      # "keepAR"  - when image height is less than specified, resize to
+      # specified height keeping aspect ratio
       # "stretch" - unconditionally resize to specified width and height
       resize: stretch
       # Reader screen size so cover image could be adjusted properly
@@ -156,15 +175,16 @@ document:
     toc: true
 
   toc_page:
-    # Generate additional page with TOC (some devices may not support epub TOC at all)
+    # Generate additional page with TOC (some devices may not support epub TOC
+    # at all)
     # "none"   - do not generate
     # "before" - at the beginning of the book
     # "after"  - at the end of the book
     placement: none
     # Name of the TOC page in a proper TOC
     title: Content
-    # when toc page generation requested and authors_template is set - page will
-    # have title (header) with authors formatted using it
+    # when toc page generation requested and authors_template is set - page
+    # will have title (header) with authors formatted using it
     authors_template: |
       {{- $names := list -}}
       {{- range .Authors -}}

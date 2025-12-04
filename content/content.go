@@ -38,6 +38,27 @@ type Content struct {
 	Splitter *text.Splitter
 	Hyphen   *text.Hyphenator
 	WorkDir  string
+
+	koboSpanParagraphs int
+	koboSpanSentences  int
+}
+
+// KoboSpanNextSentence increments sentence and returns the current Kobo span
+func (c *Content) KoboSpanNextSentence() (int, int) {
+	c.koboSpanSentences++
+	return c.koboSpanParagraphs, c.koboSpanSentences
+}
+
+// KoboSpanNextParagraph increments paragraph, resets sentence, and returns previous Kobo span
+func (c *Content) KoboSpanNextParagraph() (int, int) {
+	oldParagraphs, oldSentences := c.koboSpanParagraphs, c.koboSpanSentences
+	c.koboSpanParagraphs++
+	c.koboSpanSentences = 0
+	return oldParagraphs, oldSentences
+}
+
+func (c *Content) KoboSpanSet(paragraphs, sentences int) {
+	c.koboSpanParagraphs, c.koboSpanSentences = paragraphs, sentences
 }
 
 // Prepare reads, parses, and prepares FB2 content for conversion.

@@ -763,15 +763,15 @@ func buildNavOLItems(parentOL *etree.Element, section *fb2.Section, filename str
 }
 
 func generateAnnotation(c *content.Content, chapters []chapterData, cfg *config.AnnotationConfig, log *zap.Logger) chapterData {
-	doc := createXHTMLDocument(cfg.Title)
-	body := doc.Root().SelectElement("body")
-	body.CreateAttr("class", "annotation-page")
+	doc, root := createXHTMLDocument(c, cfg.Title)
+	root.CreateAttr("class", "annotation-page")
 
-	h1 := body.CreateElement("h1")
+	c.KoboSpanNextParagraph()
+	h1 := root.CreateElement("h1")
 	h1.CreateAttr("class", "annotation-title")
-	h1.SetText(cfg.Title)
+	appendInlineText(h1, c, cfg.Title, false)
 
-	annotationDiv := body.CreateElement("div")
+	annotationDiv := root.CreateElement("div")
 	annotationDiv.CreateAttr("class", "annotation")
 
 	if err := appendFlowItemsWithContext(annotationDiv, c, c.Book.Description.TitleInfo.Annotation.Items, 1, "annotation", log); err != nil {
@@ -806,26 +806,28 @@ func generateAnnotation(c *content.Content, chapters []chapterData, cfg *config.
 
 // generateTOCPage creates a TOC chapter as an XHTML page
 func generateTOCPage(c *content.Content, chapters []chapterData, cfg *config.TOCPageConfig, log *zap.Logger) chapterData {
-	doc := createXHTMLDocument(cfg.Title)
-	body := doc.Root().SelectElement("body")
-	body.CreateAttr("class", "toc-page")
+	doc, root := createXHTMLDocument(c, cfg.Title)
+	root.CreateAttr("class", "toc-page")
 
-	h1 := body.CreateElement("h1")
+	c.KoboSpanNextParagraph()
+	h1 := root.CreateElement("h1")
 	h1.CreateAttr("class", "toc-title")
-	h1.SetText(c.Book.Description.TitleInfo.BookTitle.Value)
+	appendInlineText(h1, c, c.Book.Description.TitleInfo.BookTitle.Value, false)
 
 	if cfg.AuthorsTemplate != "" {
 		expanded, err := fields.Expand(config.AuthorsTemplateFieldName, cfg.AuthorsTemplate, -1, c.Book, c.SrcName, c.OutputFormat)
 		if err != nil {
 			log.Warn("Unable to prepare list of authors for generated TOC", zap.Error(err))
 		} else {
-			h2 := body.CreateElement("h2")
+			c.KoboSpanNextParagraph()
+			h2 := root.CreateElement("h2")
 			h2.CreateAttr("class", "toc-authors")
-			h2.SetText(expanded)
+			appendInlineText(h2, c, expanded, false)
 		}
 	}
 
-	ol := body.CreateElement("ol")
+	c.KoboSpanNextParagraph()
+	ol := root.CreateElement("ol")
 	ol.CreateAttr("class", "toc-list")
 
 	for _, chapter := range chapters {
@@ -837,7 +839,7 @@ func generateTOCPage(c *content.Content, chapters []chapterData, cfg *config.TOC
 		a := li.CreateElement("a")
 		a.CreateAttr("class", "toc-link")
 		a.CreateAttr("href", chapter.Filename)
-		a.SetText(chapter.Title)
+		appendInlineText(a, c, chapter.Title, false)
 
 		if chapter.Section != nil {
 			buildTOCPageOL(li, chapter.Section, chapter.Filename, c)
@@ -872,8 +874,10 @@ func generateTOCPage(c *content.Content, chapters []chapterData, cfg *config.TOC
 
 // buildTOCPageOL recursively builds nested TOC structure for the TOC page
 func buildTOCPageOL(parent *etree.Element, section *fb2.Section, filename string, c *content.Content) {
+	var oldParagraphs, oldSentences int
 	nestedOL := parent.SelectElement("ol")
 	if nestedOL == nil {
+		oldParagraphs, oldSentences = c.KoboSpanNextParagraph()
 		nestedOL = parent.CreateElement("ol")
 		nestedOL.CreateAttr("class", "toc-list toc-nested")
 	}
@@ -883,6 +887,7 @@ func buildTOCPageOL(parent *etree.Element, section *fb2.Section, filename string
 
 	if !hadItems && len(nestedOL.ChildElements()) == 0 {
 		parent.RemoveChild(nestedOL)
+		c.KoboSpanSet(oldParagraphs, oldSentences)
 	}
 }
 
@@ -898,7 +903,7 @@ func buildTOCPageOLItems(parentOL *etree.Element, section *fb2.Section, filename
 			a := li.CreateElement("a")
 			a.CreateAttr("class", "toc-link")
 			a.CreateAttr("href", filename+"#"+subtitleID)
-			a.SetText(item.Subtitle.AsTOCText(fb2.FormatIDToTOC(subtitleID)))
+			appendInlineText(a, c, item.Subtitle.AsTOCText(fb2.FormatIDToTOC(subtitleID)), false)
 			lastLI = li
 		} else if item.Kind == fb2.FlowSection && item.Section != nil {
 			if item.Section.Title != nil {
@@ -908,7 +913,7 @@ func buildTOCPageOLItems(parentOL *etree.Element, section *fb2.Section, filename
 				a.CreateAttr("class", "toc-link")
 				sectionID := item.Section.ID
 				a.CreateAttr("href", filename+"#"+sectionID)
-				a.SetText(item.Section.AsTitleText(""))
+				appendInlineText(a, c, item.Section.AsTitleText(""), false)
 
 				buildTOCPageOL(li, item.Section, filename, c)
 				lastLI = li
