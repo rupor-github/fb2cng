@@ -1,7 +1,7 @@
 package config
 
 // Specification of requested footnotes processing mode.
-// ENUM(default, inline, block, float)
+// ENUM(default, float)
 type FootnotesMode int
 
 // Specification of image resizing mode.

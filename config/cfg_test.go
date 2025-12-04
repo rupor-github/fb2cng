@@ -37,7 +37,7 @@ document:
     optimize: true
     jpeq_quality_level: 85
   footnotes:
-    mode: inline
+    mode: float
     bodies: ["notes", "comments"]
 logging:
   console:
@@ -75,7 +75,7 @@ reporting:
 		t.Errorf("JPEGQuality = %d, want 85", cfg.Document.Images.JPEGQuality)
 	}
 
-	if cfg.Document.Footnotes.Mode != FootnotesModeInline {
+	if cfg.Document.Footnotes.Mode != FootnotesModeFloat {
 		t.Errorf("FootnotesMode = %d, want FootnotesModeInline", cfg.Document.Footnotes.Mode)
 	}
 

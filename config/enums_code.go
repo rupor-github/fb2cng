@@ -13,23 +13,17 @@ import (
 const (
 	// FootnotesModeDefault is a FootnotesMode of type Default.
 	FootnotesModeDefault FootnotesMode = iota
-	// FootnotesModeInline is a FootnotesMode of type Inline.
-	FootnotesModeInline
-	// FootnotesModeBlock is a FootnotesMode of type Block.
-	FootnotesModeBlock
 	// FootnotesModeFloat is a FootnotesMode of type Float.
 	FootnotesModeFloat
 )
 
 var ErrInvalidFootnotesMode = fmt.Errorf("not a valid FootnotesMode, try [%s]", strings.Join(_FootnotesModeNames, ", "))
 
-const _FootnotesModeName = "defaultinlineblockfloat"
+const _FootnotesModeName = "defaultfloat"
 
 var _FootnotesModeNames = []string{
 	_FootnotesModeName[0:7],
-	_FootnotesModeName[7:13],
-	_FootnotesModeName[13:18],
-	_FootnotesModeName[18:23],
+	_FootnotesModeName[7:12],
 }
 
 // FootnotesModeNames returns a list of possible string values of FootnotesMode.
@@ -41,9 +35,7 @@ func FootnotesModeNames() []string {
 
 var _FootnotesModeMap = map[FootnotesMode]string{
 	FootnotesModeDefault: _FootnotesModeName[0:7],
-	FootnotesModeInline:  _FootnotesModeName[7:13],
-	FootnotesModeBlock:   _FootnotesModeName[13:18],
-	FootnotesModeFloat:   _FootnotesModeName[18:23],
+	FootnotesModeFloat:   _FootnotesModeName[7:12],
 }
 
 // String implements the Stringer interface.
@@ -62,14 +54,10 @@ func (x FootnotesMode) IsValid() bool {
 }
 
 var _FootnotesModeValue = map[string]FootnotesMode{
-	_FootnotesModeName[0:7]:                    FootnotesModeDefault,
-	strings.ToLower(_FootnotesModeName[0:7]):   FootnotesModeDefault,
-	_FootnotesModeName[7:13]:                   FootnotesModeInline,
-	strings.ToLower(_FootnotesModeName[7:13]):  FootnotesModeInline,
-	_FootnotesModeName[13:18]:                  FootnotesModeBlock,
-	strings.ToLower(_FootnotesModeName[13:18]): FootnotesModeBlock,
-	_FootnotesModeName[18:23]:                  FootnotesModeFloat,
-	strings.ToLower(_FootnotesModeName[18:23]): FootnotesModeFloat,
+	_FootnotesModeName[0:7]:                   FootnotesModeDefault,
+	strings.ToLower(_FootnotesModeName[0:7]):  FootnotesModeDefault,
+	_FootnotesModeName[7:12]:                  FootnotesModeFloat,
+	strings.ToLower(_FootnotesModeName[7:12]): FootnotesModeFloat,
 }
 
 // ParseFootnotesMode attempts to convert a string to a FootnotesMode.
