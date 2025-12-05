@@ -20,13 +20,21 @@ import (
 	"fbc/state"
 )
 
+// BackLinkRef tracks a single reference to a footnote for generating back-links
+type BackLinkRef struct {
+	RefID    string // unique ID for this reference occurrence (e.g., "ref-note1-1")
+	TargetID string // ID of the footnote being referenced
+	Filename string // filename containing the reference
+}
+
 // Content encapsulates both the raw FB2 XML document and the structured
 // normalized internal representation derived from the official FictionBook 2.0
 // schemas. https://github.com/gribuser/fb2.git commit 4d3740e319039911c30d291abb0c8b26ec99703b
 type Content struct {
-	SrcName      string
-	Doc          *etree.Document
-	OutputFormat config.OutputFmt
+	SrcName       string
+	Doc           *etree.Document
+	OutputFormat  config.OutputFmt
+	FootnotesMode config.FootnotesMode
 
 	Book           *fb2.FictionBook
 	CoverID        string
@@ -39,6 +47,11 @@ type Content struct {
 	Hyphen   *text.Hyphenator
 	WorkDir  string
 
+	// Footnote back-link tracking
+	BackLinkIndex   map[string][]BackLinkRef // targetID -> list of references to it
+	CurrentFilename string                   // current file being processed
+
+	// Kobo span tracking
 	koboSpanParagraphs int
 	koboSpanSentences  int
 }
@@ -59,6 +72,19 @@ func (c *Content) KoboSpanNextParagraph() (int, int) {
 
 func (c *Content) KoboSpanSet(paragraphs, sentences int) {
 	c.koboSpanParagraphs, c.koboSpanSentences = paragraphs, sentences
+}
+
+// AddFootnoteBackLinkRef adds a footnote reference and returns the BackLinkRef for generating links
+func (c *Content) AddFootnoteBackLinkRef(targetID string) BackLinkRef {
+	refs := c.BackLinkIndex[targetID]
+	refNum := len(refs) + 1
+	ref := BackLinkRef{
+		RefID:    fmt.Sprintf("ref-%s-%d", targetID, refNum),
+		TargetID: targetID,
+		Filename: c.CurrentFilename,
+	}
+	c.BackLinkIndex[targetID] = append(refs, ref)
+	return ref
 }
 
 // Prepare reads, parses, and prepares FB2 content for conversion.
@@ -187,6 +213,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 		SrcName:        srcName,
 		Doc:            doc,
 		OutputFormat:   outputFormat,
+		FootnotesMode:  env.Cfg.Document.Footnotes.Mode,
 		Book:           book,
 		CoverID:        coverID,
 		FootnotesIndex: footnotes,
@@ -194,6 +221,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 		IDsIndex:       ids,
 		LinksRevIndex:  links,
 		WorkDir:        tmpDir,
+		BackLinkIndex:  make(map[string][]BackLinkRef),
 	}
 
 	if env.Cfg.Document.InsertSoftHyphen {

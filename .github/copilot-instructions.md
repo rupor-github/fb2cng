@@ -34,4 +34,4 @@ When running prompt always assume that sources could be changed.
 *   **Prefer standard library:** Where possible, prefer the Go standard library over external dependencies.
 *   **Concurrency:** When writing concurrent code, prioritize using channels and goroutines following Go idioms.
 *   **Code Review:** When performing a code review, focus on idiomatic Go practices, test coverage, and clear error handling.
-*   **Temporary artifacts:** Always generate temporary artifacts (like test binaries) in the /tmp directory
+*   **Binaries and temporary artifacts:** Never build anything in project directory, use /tmp. Always generate temporary artifacts in the /tmp directory

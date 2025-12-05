@@ -14,6 +14,7 @@ import (
 
 	"fbc/config"
 	"fbc/content"
+	"fbc/content/text"
 	"fbc/fb2"
 )
 
@@ -25,6 +26,8 @@ type chapterData struct {
 	Section      *fb2.Section // Reference to source section for TOC hierarchy
 	IncludeInTOC bool         // Whether to include this chapter in navigation/TOC
 }
+
+const backlinkSym = "<<" // String for additional link backs in the footnote bodies
 
 // idToFileMap maps element IDs to the chapter filename containing them
 type idToFileMap map[string]string
@@ -65,6 +68,9 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 				title = "Untitled"
 			}
 
+			// Set current filename for footnote reference tracking
+			c.CurrentFilename = filename
+
 			doc, err := bodyIntroToXHTML(c, body, title, log)
 			if err != nil {
 				log.Error("Unable to convert body intro", zap.Error(err))
@@ -91,6 +97,9 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 			chapterID := fmt.Sprintf("index%05d", chapterNum)
 			filename := fmt.Sprintf("%s.xhtml", chapterID)
 			title := section.AsTitleText(fmt.Sprintf("chapter-section-%d", chapterNum))
+
+			// Set current filename for footnote reference tracking
+			c.CurrentFilename = filename
 
 			doc, err := sectionToXHTML(c, section, title, log)
 			if err != nil {
@@ -146,9 +155,12 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, exist
 		filename = chapterID + ".xhtml"
 	}
 
-	docTitle := footnoteBodies[0].AsTitleText("footnotes")
+	docTitle := footnoteBodies[0].AsTitleText("Footnotes")
 
 	doc, root := createXHTMLDocument(c, docTitle)
+
+	// Set current filename for footnote tracking
+	c.CurrentFilename = filename
 
 	// Process all footnote bodies - build XHTML and chapter metadata in single loop
 	var chapters []chapterData
@@ -173,17 +185,19 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, exist
 			section := &body.Sections[i]
 			collectIDsFromSection(section, filename, idToFile)
 
-			div := bodyDiv.CreateElement("div")
-			div.CreateAttr("class", "section")
-			if section.ID != "" {
-				div.CreateAttr("id", section.ID)
-			}
-			if section.Lang != "" {
-				div.CreateAttr("xml:lang", section.Lang)
-			}
-
-			if err := appendFootnoteSectionContent(div, c, section, false, log); err != nil {
-				return nil, err
+			// Choose appropriate element type based on mode and format
+			if c.FootnotesMode == config.FootnotesModeFloat && c.OutputFormat == config.OutputFmtEpub3 {
+				if err := appendEpub3FloatFootnoteSectionContent(bodyDiv, c, section, log); err != nil {
+					return nil, err
+				}
+			} else if c.FootnotesMode == config.FootnotesModeFloat && (c.OutputFormat == config.OutputFmtEpub2 || c.OutputFormat == config.OutputFmtKepub) {
+				if err := appendEpub2FloatFootnoteSectionContent(bodyDiv, c, section, log); err != nil {
+					return nil, err
+				}
+			} else {
+				if err := appendDefaultFootnoteSectionContent(bodyDiv, c, section, log); err != nil {
+					return nil, err
+				}
 			}
 		}
 
@@ -405,17 +419,164 @@ func appendBodyIntroContent(parent *etree.Element, c *content.Content, body *fb2
 	return nil
 }
 
-func appendFootnoteSectionContent(parent *etree.Element, c *content.Content, section *fb2.Section, skipTitle bool, log *zap.Logger) error {
-	if section.Title != nil && !skipTitle {
+// appendEpub2FloatFootnoteSectionContent appends footnote section content in
+// EPUB2 float mode uses <p class="footnote"> and simplified rendering to fit
+// everything in a single paragraph keeping as much formatting as possible.
+func appendEpub2FloatFootnoteSectionContent(parent *etree.Element, c *content.Content, section *fb2.Section, _ *zap.Logger) error {
+	c.KoboSpanNextParagraph()
+
+	sectionElem := parent.CreateElement("p")
+	sectionElem.CreateAttr("class", "footnote")
+	if section.ID != "" {
+		sectionElem.CreateAttr("id", section.ID)
+	}
+	if section.Lang != "" {
+		sectionElem.CreateAttr("xml:lang", section.Lang)
+	}
+
+	// Add back-reference link at the beginning with title
+	if section.ID != "" {
+		if refs, exists := c.BackLinkIndex[section.ID]; exists && len(refs) > 0 {
+			for i, ref := range refs {
+				if i > 0 {
+					sectionElem.CreateText(text.NBSP)
+				}
+				backLink := sectionElem.CreateElement("a")
+				href := ref.Filename + "#" + ref.RefID
+				backLink.CreateAttr("href", href)
+				backLink.CreateAttr("class", "footnote-backlink")
+
+				textParent := backLink
+				if c.OutputFormat == config.OutputFmtKepub {
+					paragraph, sentence := c.KoboSpanNextSentence()
+					span := backLink.CreateElement("span")
+					span.CreateAttr("class", "koboSpan")
+					span.CreateAttr("id", fmt.Sprintf("kobo.%d.%d", paragraph, sentence))
+					textParent = span
+				}
+				// Use title as link text if available, otherwise use ↩
+				if section.Title != nil && i == 0 {
+					textParent.CreateText(section.Title.AsTOCText(backlinkSym))
+				} else {
+					textParent.CreateText(backlinkSym)
+				}
+			}
+			sectionElem.CreateText(text.NBSP)
+		}
+	}
+
+	for _, item := range section.Content {
+		switch item.Kind {
+		case fb2.FlowParagraph:
+			if item.Paragraph != nil {
+				span := sectionElem.CreateElement("span")
+				if item.Paragraph.ID != "" {
+					span.CreateAttr("id", item.Paragraph.ID)
+				}
+				if item.Paragraph.Style != "" {
+					span.CreateAttr("class", item.Paragraph.Style)
+				}
+				appendParagraphInline(span, c, item.Paragraph)
+				sectionElem.CreateElement("br")
+			}
+		case fb2.FlowImage:
+			if item.Image != nil {
+				// Render image inline (no div wrapper)
+				var imgsectionElem *etree.Element
+				if c.OutputFormat == config.OutputFmtKepub {
+					paragraph, sentence := c.KoboSpanNextSentence()
+					span := sectionElem.CreateElement("span")
+					span.CreateAttr("class", "koboSpan")
+					span.CreateAttr("id", fmt.Sprintf("kobo.%d.%d", paragraph, sentence))
+					imgsectionElem = span
+				} else {
+					imgsectionElem = sectionElem
+				}
+				img := imgsectionElem.CreateElement("img")
+				img.CreateAttr("class", "inline-image")
+				if item.Image.ID != "" {
+					img.CreateAttr("id", item.Image.ID)
+				}
+				imgID := strings.TrimPrefix(item.Image.Href, "#")
+				if imgData, ok := c.ImagesIndex[imgID]; ok {
+					img.CreateAttr("src", path.Join(imagesDir, imgData.Filename))
+				} else {
+					img.CreateAttr("src", path.Join(imagesDir, imgID))
+				}
+				img.CreateAttr("alt", item.Image.Alt)
+				if item.Image.Title != "" {
+					img.CreateAttr("title", item.Image.Title)
+				}
+			}
+		case fb2.FlowPoem:
+			if item.Poem != nil {
+				span := sectionElem.CreateElement("span")
+				span.CreateAttr("class", "poem")
+				if item.Poem.ID != "" {
+					span.CreateAttr("id", item.Poem.ID)
+				}
+				span.CreateText(item.Poem.AsPlainText())
+				sectionElem.CreateElement("br")
+			}
+		case fb2.FlowSubtitle:
+			if item.Subtitle != nil {
+				span := sectionElem.CreateElement("span")
+				if item.Subtitle.ID != "" {
+					span.CreateAttr("id", item.Subtitle.ID)
+				}
+				span.CreateAttr("class", "subtitle")
+				appendParagraphInline(span, c, item.Subtitle)
+				sectionElem.CreateElement("br")
+			}
+		case fb2.FlowCite:
+			if item.Cite != nil {
+				span := sectionElem.CreateElement("span")
+				span.CreateAttr("class", "cite")
+				if item.Cite.ID != "" {
+					span.CreateAttr("id", item.Cite.ID)
+				}
+				span.CreateText(item.Cite.AsPlainText())
+				sectionElem.CreateElement("br")
+			}
+		case fb2.FlowEmptyLine:
+			sectionElem.CreateElement("br")
+		case fb2.FlowTable:
+			if item.Table != nil {
+				span := sectionElem.CreateElement("span")
+				if item.Table.ID != "" {
+					span.CreateAttr("id", item.Table.ID)
+				}
+				span.CreateText(item.Table.AsPlainText())
+				sectionElem.CreateElement("br")
+			}
+		}
+	}
+
+	return nil
+}
+
+// appendEpub3FloatFootnoteSectionContent appends footnote section content in EPUB3 float mode
+// EPUB3 Float mode uses <aside epub:type="footnote">
+func appendEpub3FloatFootnoteSectionContent(parent *etree.Element, c *content.Content, section *fb2.Section, log *zap.Logger) error {
+	if section.Title != nil {
 		appendTitleAsDiv(parent, c, section.Title, "footnote-title")
 	}
 
-	if err := appendEpigraphs(parent, c, section.Epigraphs, 1, log); err != nil {
+	sectionElem := parent.CreateElement("aside")
+	sectionElem.CreateAttr("epub:type", "footnote")
+	if section.ID != "" {
+		sectionElem.CreateAttr("id", section.ID)
+	}
+	if section.Lang != "" {
+		sectionElem.CreateAttr("xml:lang", section.Lang)
+	}
+
+	if err := appendEpigraphs(sectionElem, c, section.Epigraphs, 1, log); err != nil {
 		return err
 	}
 
 	if section.Image != nil {
-		appendImageElement(parent, c, section.Image)
+		appendImageElement(sectionElem, c, section.Image)
 	}
 
 	if section.Annotation != nil {
@@ -426,10 +587,70 @@ func appendFootnoteSectionContent(parent *etree.Element, c *content.Content, sec
 		}
 	}
 
-	if err := appendFlowItemsWithContext(parent, c, section.Content, 1, "", log); err != nil {
+	if err := appendFlowItemsWithContext(sectionElem, c, section.Content, 1, "", log); err != nil {
 		return err
 	}
 
+	// Add back-references for EPUB3 float mode
+	if section.ID != "" {
+		if refs, exists := c.BackLinkIndex[section.ID]; exists && len(refs) > 0 {
+			// Add back-reference links
+			backDiv := parent.CreateElement("p")
+			backDiv.CreateAttr("class", "footnote-backlink")
+
+			for i, ref := range refs {
+				if i == 0 {
+					backDiv.CreateText("Back:" + text.NBSP)
+				} else {
+					backDiv.CreateText(text.NBSP)
+				}
+				backLink := backDiv.CreateElement("a")
+				// Include filename in href for cross-file back-references
+				href := ref.Filename + "#" + ref.RefID
+				backLink.CreateAttr("href", href)
+				backLink.CreateAttr("epub:type", "backlink")
+				backLink.CreateText(backlinkSym)
+			}
+		}
+	}
+	return nil
+}
+
+// appendDefaultFootnoteSectionContent appends footnote section content in
+// default mode using <div class="footnote">
+func appendDefaultFootnoteSectionContent(parent *etree.Element, c *content.Content, section *fb2.Section, log *zap.Logger) error {
+	sectionElem := parent.CreateElement("div")
+	sectionElem.CreateAttr("class", "footnote")
+	if section.ID != "" {
+		sectionElem.CreateAttr("id", section.ID)
+	}
+	if section.Lang != "" {
+		sectionElem.CreateAttr("xml:lang", section.Lang)
+	}
+
+	if section.Title != nil {
+		appendTitleAsDiv(sectionElem, c, section.Title, "footnote-title")
+	}
+
+	if err := appendEpigraphs(sectionElem, c, section.Epigraphs, 1, log); err != nil {
+		return err
+	}
+
+	if section.Image != nil {
+		appendImageElement(sectionElem, c, section.Image)
+	}
+
+	if section.Annotation != nil {
+		div := sectionElem.CreateElement("div")
+		div.CreateAttr("class", "annotation")
+		if err := appendFlowItemsWithContext(div, c, section.Annotation.Items, 1, "annotation", log); err != nil {
+			return err
+		}
+	}
+
+	if err := appendFlowItemsWithContext(sectionElem, c, section.Content, 1, "", log); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -640,6 +861,19 @@ func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inl
 			if linkID, internalLink := strings.CutPrefix(seg.Href, "#"); internalLink {
 				if _, isFootnote := c.FootnotesIndex[linkID]; isFootnote {
 					linkClass = "footnote-link"
+					// Handle float mode footnote references
+					if c.FootnotesMode == config.FootnotesModeFloat {
+						ref := c.AddFootnoteBackLinkRef(linkID)
+						// Add reference ID for EPUB2 bidirectional linking
+						if c.OutputFormat == config.OutputFmtEpub2 {
+							a.CreateAttr("id", ref.RefID)
+						}
+						// Add epub:type="noteref" for EPUB3
+						if c.OutputFormat == config.OutputFmtEpub3 {
+							a.CreateAttr("epub:type", "noteref")
+							a.CreateAttr("id", ref.RefID)
+						}
+					}
 				} else {
 					linkClass = "internal-link"
 				}

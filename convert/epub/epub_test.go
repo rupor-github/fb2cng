@@ -639,6 +639,7 @@ func TestProcessFootnoteBodies(t *testing.T) {
 			bodies: []*fb2.Body{
 				{
 					Name: "notes",
+					Kind: fb2.BodyFootnotes,
 					Title: &fb2.Title{
 						Items: []fb2.TitleItem{
 							{Paragraph: &fb2.Paragraph{
@@ -659,12 +660,14 @@ func TestProcessFootnoteBodies(t *testing.T) {
 			bodies: []*fb2.Body{
 				{
 					Name: "notes",
+					Kind: fb2.BodyFootnotes,
 					Sections: []fb2.Section{
 						{ID: "note1"},
 					},
 				},
 				{
 					Name: "notes",
+					Kind: fb2.BodyFootnotes,
 					Sections: []fb2.Section{
 						{ID: "note2"},
 					},
@@ -2455,5 +2458,194 @@ func TestGenerate_WithTOCPageAfter(t *testing.T) {
 
 	if !foundTOCPage {
 		t.Error("TOC page not found in zip")
+	}
+}
+
+// TestFloatModeFootnotes verifies Amazon KDP-compliant footnote markup
+func TestFloatModeFootnotes(t *testing.T) {
+	tests := []struct {
+		name           string
+		format         config.OutputFmt
+		mode           config.FootnotesMode
+		expectNoteref  bool // EPUB3: expect epub:type="noteref"
+		expectAside    bool // EPUB3: expect <aside epub:type="footnote">
+		expectRefID    bool // EPUB2/3: expect id on <a> reference
+		expectBacklink bool // expect back-reference link
+	}{
+		{
+			name:           "EPUB3 float mode",
+			format:         config.OutputFmtEpub3,
+			mode:           config.FootnotesModeFloat,
+			expectNoteref:  true,
+			expectAside:    true,
+			expectRefID:    true,
+			expectBacklink: true,
+		},
+		{
+			name:           "EPUB2 float mode",
+			format:         config.OutputFmtEpub2,
+			mode:           config.FootnotesModeFloat,
+			expectNoteref:  false,
+			expectAside:    false,
+			expectRefID:    true,
+			expectBacklink: true,
+		},
+		{
+			name:           "EPUB3 default mode",
+			format:         config.OutputFmtEpub3,
+			mode:           config.FootnotesModeDefault,
+			expectNoteref:  false,
+			expectAside:    false,
+			expectRefID:    false,
+			expectBacklink: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _, log := setupTestContext(t)
+
+			// Create test content with footnote
+			c := &content.Content{
+				OutputFormat:  tt.format,
+				FootnotesMode: tt.mode,
+				BackLinkIndex: make(map[string][]content.BackLinkRef),
+				Book: &fb2.FictionBook{
+					Bodies: []fb2.Body{
+						{
+							Sections: []fb2.Section{
+								{
+									ID: "chapter1",
+									Content: []fb2.FlowItem{
+										{
+											Kind: fb2.FlowParagraph,
+											Paragraph: &fb2.Paragraph{
+												Text: []fb2.InlineSegment{
+													{Kind: fb2.InlineText, Text: "Text with footnote"},
+													{
+														Kind: fb2.InlineLink,
+														Href: "#note1",
+														Children: []fb2.InlineSegment{
+															{Kind: fb2.InlineText, Text: "1"},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						{
+							Name: "notes",
+							Kind: fb2.BodyFootnotes,
+							Sections: []fb2.Section{
+								{
+									ID: "note1",
+									Content: []fb2.FlowItem{
+										{
+											Kind: fb2.FlowParagraph,
+											Paragraph: &fb2.Paragraph{
+												Text: []fb2.InlineSegment{
+													{Kind: fb2.InlineText, Text: "Footnote text"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				FootnotesIndex: fb2.FootnoteRefs{
+					"note1": fb2.FootnoteRef{BodyIdx: 1, SectionIdx: 0},
+				},
+			}
+
+			chapters, _, err := convertToXHTML(ctx, c, log)
+			if err != nil {
+				t.Fatalf("convertToXHTML() error = %v", err)
+			}
+
+			// Find chapter with main content
+			var mainChapter *chapterData
+			for i := range chapters {
+				if chapters[i].Doc != nil && strings.Contains(chapters[i].ID, "index") {
+					mainChapter = &chapters[i]
+					break
+				}
+			}
+			if mainChapter == nil {
+				t.Fatal("Main chapter not found")
+			}
+
+			// Check for footnote reference attributes
+			linkElems := mainChapter.Doc.FindElements("//a[@href='#note1']")
+			if len(linkElems) == 0 {
+				t.Fatal("Footnote link not found")
+			}
+			link := linkElems[0]
+
+			if tt.expectNoteref {
+				epubType := link.SelectAttrValue("epub:type", "")
+				if epubType != "noteref" {
+					t.Errorf("Expected epub:type='noteref', got '%s'", epubType)
+				}
+			}
+
+			if tt.expectRefID {
+				refID := link.SelectAttrValue("id", "")
+				if refID == "" {
+					t.Error("Expected id attribute on footnote reference")
+				} else if !strings.HasPrefix(refID, "ref-note1-") {
+					t.Errorf("Expected ref ID to start with 'ref-note1-', got '%s'", refID)
+				}
+			}
+
+			// Find footnote chapter
+			var fnChapter *chapterData
+			for i := range chapters {
+				if chapters[i].Doc != nil && strings.Contains(chapters[i].ID, "footnote") {
+					fnChapter = &chapters[i]
+					break
+				}
+			}
+			if fnChapter == nil {
+				t.Fatal("Footnote chapter not found")
+			}
+
+			if tt.expectAside {
+				// Check for <aside epub:type="footnote">
+				asides := fnChapter.Doc.FindElements("//aside[@epub:type='footnote']")
+				if len(asides) == 0 {
+					t.Error("Expected <aside epub:type='footnote'> not found")
+				}
+			}
+
+			if tt.expectBacklink {
+				// Check for back-reference link
+				var backlinks []*etree.Element
+				if tt.format == config.OutputFmtEpub2 || tt.format == config.OutputFmtKepub {
+					// EPUB2: backlink is inside <p class="footnote">
+					backlinks = fnChapter.Doc.FindElements("//p[@class='footnote']/a")
+				} else {
+					// EPUB3: backlink is in separate <p class="footnote-backlink">
+					backlinks = fnChapter.Doc.FindElements("//p[@class='footnote-backlink']/a")
+				}
+				if len(backlinks) == 0 {
+					t.Error("Expected back-reference link not found")
+				} else {
+					backlink := backlinks[0]
+					href := backlink.SelectAttrValue("href", "")
+					// Backlink should include filename and anchor
+					if !strings.Contains(href, ".xhtml#ref-note1-") {
+						t.Errorf("Expected backlink href to contain '.xhtml#ref-note1-', got '%s'", href)
+					}
+					if backlink.Text() != backlinkSym {
+						t.Errorf("Expected backlink text '%s', got '%s'", backlinkSym, backlink.Text())
+					}
+				}
+			}
+		})
 	}
 }
