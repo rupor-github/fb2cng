@@ -87,8 +87,8 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 		}
 
 		// Process top-level sections as chapters
-		for i := range body.Sections {
-			section := &body.Sections[i]
+		for j := range body.Sections {
+			section := &body.Sections[j]
 			if err := ctx.Err(); err != nil {
 				return nil, nil, err
 			}
@@ -1117,7 +1117,7 @@ func appendTableElement(parent *etree.Element, c *content.Content, table *fb2.Ta
 	}
 }
 
-func writeXHTMLChapter(zw *zip.Writer, chapter *chapterData, _ *zap.Logger) error {
+func writeXHTMLChapter(zw *zip.Writer, chapter *chapterData) error {
 	// Extract base filename without anchor for file writing
 	filename := chapter.Filename
 	if idx := strings.Index(filename, "#"); idx != -1 {

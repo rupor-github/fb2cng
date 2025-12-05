@@ -92,7 +92,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		if chapter.Doc == nil {
 			continue // Skip chapters without documents (e.g., additional footnote body TOC entries)
 		}
-		if err := writeXHTMLChapter(zw, &chapter, log); err != nil {
+		if err := writeXHTMLChapter(zw, &chapter); err != nil {
 			return fmt.Errorf("unable to write chapter %s: %w", chapter.ID, err)
 		}
 	}

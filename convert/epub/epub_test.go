@@ -1620,8 +1620,6 @@ func TestWriteImages(t *testing.T) {
 }
 
 func TestWriteXHTMLChapter(t *testing.T) {
-	_, _, log := setupTestContext(t)
-
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 
@@ -1637,7 +1635,7 @@ func TestWriteXHTMLChapter(t *testing.T) {
 		Doc:      doc,
 	}
 
-	err := writeXHTMLChapter(zw, &chapter, log)
+	err := writeXHTMLChapter(zw, &chapter)
 	if err != nil {
 		t.Fatalf("writeXHTMLChapter() error = %v", err)
 	}
