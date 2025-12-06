@@ -24,6 +24,7 @@ type chapterData struct {
 	Title        string
 	Doc          *etree.Document
 	Section      *fb2.Section // Reference to source section for TOC hierarchy
+	AnchorID     string       // ID to use as anchor in links (if different from automatic determination)
 	IncludeInTOC bool         // Whether to include this chapter in navigation/TOC
 }
 
@@ -31,6 +32,21 @@ const backlinkSym = "<<" // String for additional link backs in the footnote bod
 
 // idToFileMap maps element IDs to the chapter filename containing them
 type idToFileMap map[string]string
+
+// generateUniqueID returns a unique ID and filename that doesn't collide with FB2 element IDs
+func generateUniqueID(baseID string, fbIDs fb2.IDIndex) (id, filename string) {
+	id = baseID
+	filename = baseID + ".xhtml"
+	counter := 0
+	_, exists := fbIDs[id]
+	for exists {
+		counter++
+		id = fmt.Sprintf("%s-%d", baseID, counter)
+		filename = id + ".xhtml"
+		_, exists = fbIDs[id]
+	}
+	return id, filename
+}
 
 func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([]chapterData, idToFileMap, error) {
 	if err := ctx.Err(); err != nil {
@@ -54,8 +70,8 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 		// If body has title, create a chapter for body intro content
 		if body.Title != nil {
 			chapterNum++
-			chapterID := fmt.Sprintf("index%05d", chapterNum)
-			filename := fmt.Sprintf("%s.xhtml", chapterID)
+			baseID := fmt.Sprintf("index%05d", chapterNum)
+			chapterID, filename := generateUniqueID(baseID, c.IDsIndex)
 
 			var title string
 			for _, item := range body.Title.Items {
@@ -71,7 +87,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 			// Set current filename for footnote reference tracking
 			c.CurrentFilename = filename
 
-			doc, err := bodyIntroToXHTML(c, body, title, log)
+			doc, err := bodyIntroToXHTML(c, body, title, chapterID, log)
 			if err != nil {
 				log.Error("Unable to convert body intro", zap.Error(err))
 			} else {
@@ -94,14 +110,14 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 			}
 
 			chapterNum++
-			chapterID := fmt.Sprintf("index%05d", chapterNum)
-			filename := fmt.Sprintf("%s.xhtml", chapterID)
+			baseID := fmt.Sprintf("index%05d", chapterNum)
+			chapterID, filename := generateUniqueID(baseID, c.IDsIndex)
 			title := section.AsTitleText(fmt.Sprintf("chapter-section-%d", chapterNum))
 
 			// Set current filename for footnote reference tracking
 			c.CurrentFilename = filename
 
-			doc, err := sectionToXHTML(c, section, title, log)
+			doc, err := bodyToXHTML(c, body, section, title, log)
 			if err != nil {
 				log.Error("Unable to convert section", zap.Error(err))
 				continue
@@ -137,23 +153,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 
 // processFootnoteBodies converts all footnote bodies to XHTML and creates chapter entries
 func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, existingChapters []chapterData, idToFile idToFileMap, log *zap.Logger) ([]chapterData, error) {
-	// Build map of existing IDs to check for collisions
-	existingIDs := make(map[string]bool, len(existingChapters))
-	for _, ch := range existingChapters {
-		existingIDs[ch.ID] = true
-	}
-
-	// Find a unique ID and filename that doesn't collide with existing chapters
-	baseID := "footnotes"
-	chapterID := baseID
-	filename := baseID + ".xhtml"
-
-	counter := 0
-	for existingIDs[chapterID] {
-		counter++
-		chapterID = fmt.Sprintf("%s-%d", baseID, counter)
-		filename = chapterID + ".xhtml"
-	}
+	_, filename := generateUniqueID("footnotes", c.IDsIndex)
 
 	docTitle := footnoteBodies[0].AsTitleText("Footnotes")
 
@@ -165,7 +165,8 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, exist
 	// Process all footnote bodies - build XHTML and chapter metadata in single loop
 	var chapters []chapterData
 	for bodyIdx, body := range footnoteBodies {
-		bodyID := generateFootnoteBodyID(body, bodyIdx)
+		baseBodyID := fmt.Sprintf("%s%05d", body.Name, bodyIdx)
+		bodyID, _ := generateUniqueID(baseBodyID, c.IDsIndex)
 		bodyTitle := body.AsTitleText(bodyID)
 
 		// Create XHTML wrapper div for this body
@@ -201,21 +202,8 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, exist
 			}
 		}
 
-		// Create chapter entry for TOC - all bodies use anchor reference
-		// Find unique ID that doesn't collide
-		var baseChapterID string
-		if bodyIdx == 0 {
-			baseChapterID = "footnotes"
-		} else {
-			baseChapterID = fmt.Sprintf("footnotes-%d", bodyIdx)
-		}
-		tocChapterID := baseChapterID
-		counter := 0
-		for existingIDs[tocChapterID] {
-			counter++
-			tocChapterID = fmt.Sprintf("%s-dup%d", baseChapterID, counter)
-		}
-		existingIDs[tocChapterID] = true
+		// Create chapter entry for TOC - reuse bodyID as base for uniqueness
+		tocChapterID, _ := generateUniqueID(bodyID, c.IDsIndex)
 		var chapterDoc *etree.Document
 		if bodyIdx == 0 {
 			// First chapter owns the document for writing to file
@@ -224,7 +212,8 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, exist
 
 		chapters = append(chapters, chapterData{
 			ID:           tocChapterID,
-			Filename:     filename + "#" + bodyID,
+			Filename:     filename,
+			AnchorID:     bodyID,
 			Title:        bodyTitle,
 			Doc:          chapterDoc,
 			IncludeInTOC: true,
@@ -232,14 +221,6 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, exist
 	}
 
 	return chapters, nil
-}
-
-// generateFootnoteBodyID generates a unique ID for a footnote body
-func generateFootnoteBodyID(body *fb2.Body, index int) string {
-	if body.Name != "" {
-		return fmt.Sprintf("%s-%d", body.Name, index)
-	}
-	return fmt.Sprintf("footnote-body-%d", index)
 }
 
 // createXHTMLDocument creates a standard XHTML document structure with head elements
@@ -301,7 +282,7 @@ func appendTitleAsHeading(parent *etree.Element, c *content.Content, title *fb2.
 			// Add <br> before non-first paragraphs to separate them, but not if previous was empty line
 			if i > 0 && !prevWasEmptyLine {
 				br := titleElem.CreateElement("br")
-				br.CreateAttr("class", classPrefix+"-paragraph")
+				br.CreateAttr("class", classPrefix+"-break")
 			}
 			span := titleElem.CreateElement("span")
 			if item.Paragraph.ID != "" {
@@ -378,25 +359,50 @@ func appendEpigraphs(parent *etree.Element, c *content.Content, epigraphs []fb2.
 	return nil
 }
 
-func bodyIntroToXHTML(c *content.Content, body *fb2.Body, title string, log *zap.Logger) (*etree.Document, error) {
+func bodyIntroToXHTML(c *content.Content, body *fb2.Body, title string, chapterID string, log *zap.Logger) (*etree.Document, error) {
 	doc, root := createXHTMLDocument(c, title)
 
-	if err := appendBodyIntroContent(root, c, body, 1, log); err != nil {
+	// Create wrapper div with class based on body type
+	var bodyClass string
+	if body.Main() {
+		bodyClass = "main-body"
+	} else {
+		bodyClass = "other-body"
+	}
+
+	bodyDiv := root.CreateElement("div")
+	bodyDiv.CreateAttr("class", bodyClass)
+
+	// Add unique ID to div wrapper
+	bodyDiv.CreateAttr("id", chapterID)
+
+	if err := appendBodyIntroContent(bodyDiv, c, body, 1, log); err != nil {
 		return nil, err
 	}
 
 	return doc, nil
 }
 
-func sectionToXHTML(c *content.Content, section *fb2.Section, title string, log *zap.Logger) (*etree.Document, error) {
+func bodyToXHTML(c *content.Content, body *fb2.Body, section *fb2.Section, title string, log *zap.Logger) (*etree.Document, error) {
 	doc, root := createXHTMLDocument(c, title)
 
-	// Add section ID to root element so it can be a link target
-	if section.ID != "" {
-		root.CreateAttr("id", section.ID)
+	// Create wrapper div with class based on body type
+	var bodyClass string
+	if body.Main() {
+		bodyClass = "main-body"
+	} else {
+		bodyClass = "other-body"
 	}
 
-	if err := appendSectionContent(root, c, section, false, 1, log); err != nil {
+	bodyDiv := root.CreateElement("div")
+	bodyDiv.CreateAttr("class", bodyClass)
+
+	// Add section ID to div wrapper so it can be a link target
+	if section.ID != "" {
+		bodyDiv.CreateAttr("id", section.ID)
+	}
+
+	if err := appendSectionContent(bodyDiv, c, section, 1, log); err != nil {
 		return nil, err
 	}
 
@@ -405,7 +411,22 @@ func sectionToXHTML(c *content.Content, section *fb2.Section, title string, log 
 
 func appendBodyIntroContent(parent *etree.Element, c *content.Content, body *fb2.Body, depth int, log *zap.Logger) error {
 	if body.Title != nil {
-		appendTitleAsHeading(parent, c, body.Title, depth, "title")
+		// Always create wrapper div for body title
+		titleWrapper := parent.CreateElement("div")
+		titleWrapper.CreateAttr("class", "body-title")
+
+		// Insert top vignette if needed
+		if body.Main() && c.Book.IsVignetteEnabled(config.VignettePosBookTitleTop) {
+			appendVignetteImage(titleWrapper, c, config.VignettePosBookTitleTop)
+		}
+
+		// Append the title with header class
+		appendTitleAsHeading(titleWrapper, c, body.Title, depth, "body-title-header")
+
+		// Insert bottom vignette if needed
+		if body.Main() && c.Book.IsVignetteEnabled(config.VignettePosBookTitleBottom) {
+			appendVignetteImage(titleWrapper, c, config.VignettePosBookTitleBottom)
+		}
 	}
 
 	if err := appendEpigraphs(parent, c, body.Epigraphs, depth, log); err != nil {
@@ -444,7 +465,7 @@ func appendEpub2FloatFootnoteSectionContent(parent *etree.Element, c *content.Co
 				backLink := sectionElem.CreateElement("a")
 				href := ref.Filename + "#" + ref.RefID
 				backLink.CreateAttr("href", href)
-				backLink.CreateAttr("class", "footnote-backlink")
+				backLink.CreateAttr("class", "link-backlink")
 
 				textParent := backLink
 				if c.OutputFormat == config.OutputFmtKepub {
@@ -493,7 +514,7 @@ func appendEpub2FloatFootnoteSectionContent(parent *etree.Element, c *content.Co
 					imgsectionElem = sectionElem
 				}
 				img := imgsectionElem.CreateElement("img")
-				img.CreateAttr("class", "inline-image")
+				img.CreateAttr("class", "image-inline")
 				if item.Image.ID != "" {
 					img.CreateAttr("id", item.Image.ID)
 				}
@@ -596,7 +617,6 @@ func appendEpub3FloatFootnoteSectionContent(parent *etree.Element, c *content.Co
 		if refs, exists := c.BackLinkIndex[section.ID]; exists && len(refs) > 0 {
 			// Add back-reference links
 			backDiv := parent.CreateElement("p")
-			backDiv.CreateAttr("class", "footnote-backlink")
 
 			for i, ref := range refs {
 				if i == 0 {
@@ -605,10 +625,12 @@ func appendEpub3FloatFootnoteSectionContent(parent *etree.Element, c *content.Co
 					backDiv.CreateText(text.NBSP)
 				}
 				backLink := backDiv.CreateElement("a")
+				backLink.CreateAttr("class", "link-backlink")
 				// Include filename in href for cross-file back-references
 				href := ref.Filename + "#" + ref.RefID
 				backLink.CreateAttr("href", href)
 				backLink.CreateAttr("epub:type", "backlink")
+				backLink.CreateAttr("role", "doc-backlink")
 				backLink.CreateText(backlinkSym)
 			}
 		}
@@ -654,9 +676,32 @@ func appendDefaultFootnoteSectionContent(parent *etree.Element, c *content.Conte
 	return nil
 }
 
-func appendSectionContent(parent *etree.Element, c *content.Content, section *fb2.Section, skipTitle bool, depth int, log *zap.Logger) error {
-	if section.Title != nil && !skipTitle {
-		appendTitleAsHeading(parent, c, section.Title, depth, "title")
+func appendSectionContent(parent *etree.Element, c *content.Content, section *fb2.Section, depth int, log *zap.Logger) error {
+	if section.Title != nil {
+		// Always create wrapper div for section title
+		titleWrapper := parent.CreateElement("div")
+		var wrapperClass, headerClass string
+		if depth == 1 {
+			wrapperClass = "chapter-title"
+			headerClass = "chapter-title-header"
+		} else {
+			wrapperClass = "section-title"
+			headerClass = "section-title-header"
+		}
+		titleWrapper.CreateAttr("class", wrapperClass)
+
+		// Insert top vignette if needed
+		if depth == 1 && c.Book.IsVignetteEnabled(config.VignettePosChapterTitleTop) {
+			appendVignetteImage(titleWrapper, c, config.VignettePosChapterTitleTop)
+		}
+
+		// Append the title with appropriate header class
+		appendTitleAsHeading(titleWrapper, c, section.Title, depth, headerClass)
+
+		// Insert bottom vignette if needed
+		if depth == 1 && c.Book.IsVignetteEnabled(config.VignettePosChapterTitleBottom) {
+			appendVignetteImage(titleWrapper, c, config.VignettePosChapterTitleBottom)
+		}
 	}
 
 	if err := appendEpigraphs(parent, c, section.Epigraphs, depth, log); err != nil {
@@ -677,6 +722,11 @@ func appendSectionContent(parent *etree.Element, c *content.Content, section *fb
 
 	if err := appendFlowItemsWithContext(parent, c, section.Content, depth, "", log); err != nil {
 		return err
+	}
+
+	// Insert end vignette at the end of chapter
+	if depth == 1 && c.Book.IsVignetteEnabled(config.VignettePosChapterEnd) {
+		appendVignetteImage(parent, c, config.VignettePosChapterEnd)
 	}
 
 	return nil
@@ -731,13 +781,12 @@ func appendFlowItemsWithContext(parent *etree.Element, c *content.Content, items
 					headingLevel := min(depth+1, 6)
 					headingTag := fmt.Sprintf("h%d", headingLevel)
 					h := parent.CreateElement(headingTag)
-					// Always set ID (use generated if original doesn't exist)
 					subtitleID := item.Subtitle.ID
 					h.CreateAttr("id", subtitleID)
 					if item.Subtitle.Lang != "" {
 						h.CreateAttr("xml:lang", item.Subtitle.Lang)
 					}
-					class = "subtitle"
+					class = "section-subtitle"
 					if item.Subtitle.Style != "" {
 						class = class + " " + item.Subtitle.Style
 					}
@@ -769,7 +818,7 @@ func appendFlowItemsWithContext(parent *etree.Element, c *content.Content, items
 				if item.Section.Lang != "" {
 					div.CreateAttr("xml:lang", item.Section.Lang)
 				}
-				if err := appendSectionContent(div, c, item.Section, false, depth+1, log); err != nil {
+				if err := appendSectionContent(div, c, item.Section, depth+1, log); err != nil {
 					return err
 				}
 			}
@@ -860,26 +909,24 @@ func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inl
 			var linkClass string
 			if linkID, internalLink := strings.CutPrefix(seg.Href, "#"); internalLink {
 				if _, isFootnote := c.FootnotesIndex[linkID]; isFootnote {
-					linkClass = "footnote-link"
+					linkClass = "link-footnote"
 					// Handle float mode footnote references
 					if c.FootnotesMode == config.FootnotesModeFloat {
 						ref := c.AddFootnoteBackLinkRef(linkID)
-						// Add reference ID for EPUB2 bidirectional linking
-						if c.OutputFormat == config.OutputFmtEpub2 {
-							a.CreateAttr("id", ref.RefID)
-						}
+						// Add reference ID
+						a.CreateAttr("id", ref.RefID)
 						// Add epub:type="noteref" for EPUB3
 						if c.OutputFormat == config.OutputFmtEpub3 {
 							a.CreateAttr("epub:type", "noteref")
-							a.CreateAttr("id", ref.RefID)
+							a.CreateAttr("role", "doc-noteref")
 						}
 					}
 				} else {
-					linkClass = "internal-link"
+					linkClass = "link-internal"
 				}
 			} else {
 				// External link
-				linkClass = "external-link"
+				linkClass = "link-external"
 			}
 			a.CreateAttr("class", linkClass)
 		}
@@ -899,7 +946,7 @@ func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inl
 				imgParent = parent
 			}
 			img := imgParent.CreateElement("img")
-			img.CreateAttr("class", "inline-image")
+			img.CreateAttr("class", "image-inline")
 			imgID := strings.TrimPrefix(seg.Image.Href, "#")
 			if imgData, ok := c.ImagesIndex[imgID]; ok {
 				img.CreateAttr("src", path.Join(imagesDir, imgData.Filename))
@@ -931,7 +978,7 @@ func appendImageElement(parent *etree.Element, c *content.Content, img *fb2.Imag
 	}
 
 	imgElem := imgParent.CreateElement("img")
-	imgElem.CreateAttr("class", "block-image")
+	imgElem.CreateAttr("class", "image-block")
 	imgID := strings.TrimPrefix(img.Href, "#")
 	if imgData, ok := c.ImagesIndex[imgID]; ok {
 		imgElem.CreateAttr("src", path.Join(imagesDir, imgData.Filename))
@@ -942,6 +989,38 @@ func appendImageElement(parent *etree.Element, c *content.Content, img *fb2.Imag
 	if img.Title != "" {
 		imgElem.CreateAttr("title", img.Title)
 	}
+}
+
+func appendVignetteImage(parent *etree.Element, c *content.Content, position config.VignettePos) {
+	if !c.Book.IsVignetteEnabled(position) {
+		return
+	}
+
+	vignetteID := c.Book.VignetteIDs[position]
+	imgData, ok := c.ImagesIndex[vignetteID]
+	if !ok {
+		return
+	}
+
+	div := parent.CreateElement("div")
+	div.CreateAttr("class", fmt.Sprintf("vignette vignette-%s", position.String()))
+
+	c.KoboSpanNextParagraph()
+	var imgParent *etree.Element
+	if c.OutputFormat == config.OutputFmtKepub {
+		paragraph, sentence := c.KoboSpanNextSentence()
+		span := div.CreateElement("span")
+		span.CreateAttr("class", "koboSpan")
+		span.CreateAttr("id", fmt.Sprintf("kobo.%d.%d", paragraph, sentence))
+		imgParent = span
+	} else {
+		imgParent = div
+	}
+
+	imgElem := imgParent.CreateElement("img")
+	imgElem.CreateAttr("class", "image-vignette")
+	imgElem.CreateAttr("src", path.Join(imagesDir, imgData.Filename))
+	imgElem.CreateAttr("alt", "")
 }
 
 func appendPoemElement(parent *etree.Element, c *content.Content, poem *fb2.Poem, depth int, log *zap.Logger) error {

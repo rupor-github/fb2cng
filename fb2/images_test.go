@@ -340,7 +340,7 @@ func TestBinaryObject_PrepareImage_SVGPreservation(t *testing.T) {
 	svgData := []byte(`<svg xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100"/></svg>`)
 	bo := &BinaryObject{
 		ID:          "test-svg",
-		ContentType: "image/svg",
+		ContentType: "image/svg+xml",
 		Data:        svgData,
 	}
 

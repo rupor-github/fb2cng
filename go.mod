@@ -17,7 +17,7 @@ require (
 	github.com/hidez8891/zip v1.11.0
 	github.com/maruel/natural v1.2.1
 	github.com/neurosnap/sentences v1.1.2
-	github.com/rupor-github/gencfg v1.0.11
+	github.com/rupor-github/gencfg v1.0.13
 	github.com/urfave/cli/v3 v3.6.1
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.1

@@ -12,6 +12,10 @@ type ImageResizeMode int
 // ENUM(none, before, after)
 type TOCPagePlacement int
 
+// type of vignette
+// ENUM(book-title-top, book-title-bottom, chapter-title-top, chapter-title-bottom, chapter-end)
+type VignettePos string
+
 // Specification of requested output type.
 // ENUM(epub2, epub3, kepub, kfx)
 type OutputFmt int

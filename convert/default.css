@@ -1,15 +1,11 @@
+/* Base paragraph style */
 p {
     text-indent: 1em;
     text-align: justify;
     margin: 0 0 0.3em 0;
 }
-.title {
-    margin: 2em 0 1em 0;
-    page-break-before: always;
-    text-indent: 0em;
-    text-align: center;
-    font-weight: bold;
-}
+
+/* Heading sizes */
 h1 {
     font-size: 140%;
 }
@@ -20,19 +16,89 @@ h5,
 h6 {
     font-size: 120%;
 }
-.title-emptyline {
+
+/* Body title wrapper - controls page breaks and margins for entire title block including vignettes */
+.body-title {
+    page-break-before: always;
+    page-break-inside: avoid;
+    page-break-after: avoid;
+    margin: 2em 0 1em 0;
+}
+
+/* Chapter title wrapper (depth 1 sections) - controls page breaks and margins */
+.chapter-title {
+    page-break-before: always;
+    page-break-inside: avoid;
+    page-break-after: avoid;
+    margin: 2em 0 1em 0;
+}
+
+/* Section title wrapper (nested sections) - no page breaks, only margins */
+.section-title {
+    page-break-inside: avoid;
+    page-break-after: avoid;
+    margin: 2em 0 1em 0;
+}
+
+/* Body title header element (h1-h6 inside body-title wrapper) */
+.body-title-header {
+    text-indent: 0;
+    text-align: center;
+    font-weight: bold;
+}
+.body-title-header-emptyline {
     display: block;
     margin: 0.8em 0;
 }
-.title-paragraph {
+.body-title-header-break {
     display: block;
 }
-.title-first,
-.title-next {
+.body-title-header-first,
+.body-title-header-next {
     display: inline;
     text-indent: 0;
 }
-.subtitle {
+
+/* Chapter title header (h1 inside chapter-title wrapper for depth 1 sections) */
+.chapter-title-header {
+    text-indent: 0;
+    text-align: center;
+    font-weight: bold;
+}
+.chapter-title-header-emptyline {
+    display: block;
+    margin: 0.8em 0;
+}
+.chapter-title-header-break {
+    display: block;
+}
+.chapter-title-header-first,
+.chapter-title-header-next {
+    display: inline;
+    text-indent: 0;
+}
+
+/* Section title header (h2-h6 inside section-title wrapper for nested sections) */
+.section-title-header {
+    text-indent: 0;
+    text-align: center;
+    font-weight: bold;
+}
+.section-title-header-emptyline {
+    display: block;
+    margin: 0.8em 0;
+}
+.section-title-header-break {
+    display: block;
+}
+.section-title-header-first,
+.section-title-header-next {
+    display: inline;
+    text-indent: 0;
+}
+
+/* Section subtitle */
+.section-subtitle {
     page-break-before: auto;
     text-align: center;
     font-weight: bold;
@@ -40,20 +106,51 @@ h6 {
     margin: 1em 0;
     page-break-after: avoid;
 }
+
+/* Images */
 .image {
-    text-indent: 0em;
+    text-indent: 0;
     text-align: center;
 }
-img.block-image {
+img.image-block {
     max-width: 100%;
     max-height: 100%;
     height: auto;
 }
-img.inline-image {
+img.image-inline {
     max-width: 100%;
     max-height: 100%;
     vertical-align: middle;
 }
+img.image-vignette {
+    max-width: 100%;
+    max-height: 100%;
+    height: auto;
+}
+
+/* Vignettes (decorative images at titles and chapter ends) */
+.vignette {
+    text-indent: 0;
+    text-align: center;
+    margin: 0.5em 0;
+}
+.vignette-book-title-top {
+    margin: 1em 0 0.5em 0;
+}
+.vignette-book-title-bottom {
+    margin: 0.5em 0 1em 0;
+}
+.vignette-chapter-title-top {
+    margin: 1em 0 0.5em 0;
+}
+.vignette-chapter-title-bottom {
+    margin: 0.5em 0 1em 0;
+}
+.vignette-chapter-end {
+    margin: 1.5em 0;
+    page-break-before: avoid;
+}
+
 .epigraph {
     text-align: right;
     font-style: italic;
@@ -149,21 +246,26 @@ blockquote.cite {
     margin: 1em 0;
 }
 table {
-    width: 100%;
+    max-width: 100%;
+    width: auto;
     border-collapse: collapse;
     margin: 1em auto;
+    table-layout: auto;
+    overflow-x: auto;
+    display: block;
+    page-break-inside: avoid;
 }
 th {
     border: 1px solid black;
     background: #ccc;
 	padding: 0.5em;
+	white-space: nowrap;
 }
 td {
     border: 1px solid black;
 	padding: 0.5em;
-}
-.footnote-body {
-    margin: 2em 0;
+	word-wrap: break-word;
+	max-width: 200px;
 }
 .footnote {
     text-indent: 0;
@@ -178,22 +280,25 @@ td {
     text-indent: 0;
     margin: 0.2em 0;
 }
-.footnote-backlink {
-    text-indent: 0;
-    margin: 0 0;
-    font-weight: bold;
-}
-a.external-link {
+/* Links */
+.link-external {
     text-decoration: underline;
 }
-a.internal-link {
+.link-internal {
     text-decoration: none;
 }
-a.footnote-link {
+.link-footnote {
     text-decoration: none;
     font-style: normal;
     font-size: 0.8em;
     vertical-align: super;
+}
+.link-toc {
+    text-decoration: none;
+}
+.link-backlink {
+    text-decoration: none;
+    font-weight: bold;
 }
 .unexpected {
     text-decoration: line-through;

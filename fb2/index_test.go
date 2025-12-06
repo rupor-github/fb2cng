@@ -431,7 +431,7 @@ func TestTitleImageInTestFile(t *testing.T) {
 	}
 
 	// Build link index
-	_, _, links := book.NormalizeLinks(log)
+	_, _, links := book.NormalizeLinks(nil, log)
 
 	// Verify title.png is in the index
 	refs, exists := links["title.png"]
@@ -612,7 +612,7 @@ func TestBBImageInTestFile(t *testing.T) {
 	}
 
 	// Build link index
-	_, _, links := book.NormalizeLinks(log)
+	_, _, links := book.NormalizeLinks(nil, log)
 
 	// Verify bb.png is in the index
 	refs, exists := links["bb.png"]

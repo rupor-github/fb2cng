@@ -194,6 +194,21 @@ document:
       {{- end -}}
       {{- join ", " $names -}}
 
+  # Vignette images could be specified for book title (main section titile)
+  # and for chapter title and end of chapter. Each item could be absent
+  # (disabled), set to "builtin" (converter will use default images) or have
+  # file path pointing to existing valid image file
+  # NOTE: vignettes on subtitles and nested sections are not supported for
+  # automatic vignetting
+  vignettes:
+    book_title:
+      top: builtin
+      bottom: builtin
+    chapter_title:
+      top: builtin
+      bottom: builtin
+      end: builtin
+
 logging:
   # controls terminal (stdout, stderr) output
   console:

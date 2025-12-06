@@ -91,7 +91,7 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 	if env.Cfg.Document.StylesheetPath != "" {
 		data, err := os.ReadFile(env.Cfg.Document.StylesheetPath)
 		if err != nil {
-			return fmt.Errorf("unable to read default css from %q: %w", env.Cfg.Document.StylesheetPath, err)
+			return fmt.Errorf("unable to read style css from %q: %w", env.Cfg.Document.StylesheetPath, err)
 		}
 		env.DefaultStyle = data
 	}

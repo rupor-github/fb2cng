@@ -71,7 +71,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 
 	// Add Annotation chapter if requested
 	if cfg.Annotation.Enable && c.Book.Description.TitleInfo.Annotation != nil {
-		annotationChapter := generateAnnotation(c, chapters, &cfg.Annotation, log)
+		annotationChapter := generateAnnotation(c, &cfg.Annotation, log)
 		chapters = append([]chapterData{annotationChapter}, chapters...)
 	}
 
@@ -527,6 +527,17 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	return writeXMLToZip(zw, filepath.Join(oebpsDir, "content.opf"), doc)
 }
 
+// getChapterAnchor returns the anchor ID to use for a chapter link
+func getChapterAnchor(chapter chapterData) string {
+	if chapter.AnchorID != "" {
+		return chapter.AnchorID
+	}
+	if chapter.Section != nil && chapter.Section.ID != "" {
+		return chapter.Section.ID
+	}
+	return chapter.ID
+}
+
 func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap.Logger) error {
 	doc := etree.NewDocument()
 	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
@@ -548,10 +559,7 @@ func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 			continue
 		}
 		if chapter.Section != nil {
-			depth := calculateSectionDepth(chapter.Section, 1)
-			if depth > maxDepth {
-				maxDepth = depth
-			}
+			maxDepth = max(maxDepth, calculateSectionDepth(chapter.Section, 1))
 		}
 	}
 
@@ -588,7 +596,7 @@ func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 		labelText.SetText(chapter.Title)
 
 		navContent := navPoint.CreateElement("content")
-		navContent.CreateAttr("src", chapter.Filename)
+		navContent.CreateAttr("src", chapter.Filename+"#"+getChapterAnchor(chapter))
 
 		// Add nested sections to TOC
 		if chapter.Section != nil {
@@ -604,14 +612,9 @@ func calculateSectionDepth(section *fb2.Section, currentDepth int) int {
 	for _, item := range section.Content {
 		if item.Kind == fb2.FlowSubtitle && item.Subtitle != nil {
 			// Subtitles count as same depth as sections at this level
-			if currentDepth > maxDepth {
-				maxDepth = currentDepth
-			}
+			maxDepth = max(maxDepth, currentDepth)
 		} else if item.Kind == fb2.FlowSection && item.Section != nil && item.Section.Title != nil {
-			depth := calculateSectionDepth(item.Section, currentDepth+1)
-			if depth > maxDepth {
-				maxDepth = depth
-			}
+			maxDepth = max(maxDepth, calculateSectionDepth(item.Section, currentDepth+1))
 		}
 	}
 	return maxDepth
@@ -704,7 +707,7 @@ func writeNav(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 		}
 		li := ol.CreateElement("li")
 		a := li.CreateElement("a")
-		a.CreateAttr("href", chapter.Filename)
+		a.CreateAttr("href", chapter.Filename+"#"+getChapterAnchor(chapter))
 		a.SetText(chapter.Title)
 
 		// Add nested sections to TOC
@@ -762,37 +765,26 @@ func buildNavOLItems(parentOL *etree.Element, section *fb2.Section, filename str
 	}
 }
 
-func generateAnnotation(c *content.Content, chapters []chapterData, cfg *config.AnnotationConfig, log *zap.Logger) chapterData {
+func generateAnnotation(c *content.Content, cfg *config.AnnotationConfig, log *zap.Logger) chapterData {
 	doc, root := createXHTMLDocument(c, cfg.Title)
-	root.CreateAttr("class", "annotation-page")
+
+	id, filename := generateUniqueID("annotation-page", c.IDsIndex)
+
+	// Create wrapper div with annotation-body class and proper chapter ID
+	annotationBodyDiv := root.CreateElement("div")
+	annotationBodyDiv.CreateAttr("class", "annotation-body")
+	annotationBodyDiv.CreateAttr("id", id)
 
 	c.KoboSpanNextParagraph()
-	h1 := root.CreateElement("h1")
+	h1 := annotationBodyDiv.CreateElement("h1")
 	h1.CreateAttr("class", "annotation-title")
 	appendInlineText(h1, c, cfg.Title, false)
 
-	annotationDiv := root.CreateElement("div")
+	annotationDiv := annotationBodyDiv.CreateElement("div")
 	annotationDiv.CreateAttr("class", "annotation")
 
 	if err := appendFlowItemsWithContext(annotationDiv, c, c.Book.Description.TitleInfo.Annotation.Items, 1, "annotation", log); err != nil {
 		log.Warn("Unable to convert annotation content", zap.Error(err))
-	}
-
-	// Find a unique ID and filename that doesn't collide with existing chapters
-	baseID := "annotation-page"
-	id := baseID
-	filename := baseID + ".xhtml"
-
-	existingIDs := make(map[string]bool, len(chapters))
-	for _, ch := range chapters {
-		existingIDs[ch.ID] = true
-	}
-
-	counter := 0
-	for existingIDs[id] {
-		counter++
-		id = fmt.Sprintf("%s-%d", baseID, counter)
-		filename = id + ".xhtml"
 	}
 
 	return chapterData{
@@ -807,10 +799,16 @@ func generateAnnotation(c *content.Content, chapters []chapterData, cfg *config.
 // generateTOCPage creates a TOC chapter as an XHTML page
 func generateTOCPage(c *content.Content, chapters []chapterData, cfg *config.TOCPageConfig, log *zap.Logger) chapterData {
 	doc, root := createXHTMLDocument(c, cfg.Title)
-	root.CreateAttr("class", "toc-page")
+
+	id, filename := generateUniqueID("toc-page", c.IDsIndex)
+
+	// Create wrapper div with toc-body class and proper chapter ID
+	tocBodyDiv := root.CreateElement("div")
+	tocBodyDiv.CreateAttr("class", "toc-body")
+	tocBodyDiv.CreateAttr("id", id)
 
 	c.KoboSpanNextParagraph()
-	h1 := root.CreateElement("h1")
+	h1 := tocBodyDiv.CreateElement("h1")
 	h1.CreateAttr("class", "toc-title")
 	appendInlineText(h1, c, c.Book.Description.TitleInfo.BookTitle.Value, false)
 
@@ -820,14 +818,14 @@ func generateTOCPage(c *content.Content, chapters []chapterData, cfg *config.TOC
 			log.Warn("Unable to prepare list of authors for generated TOC", zap.Error(err))
 		} else {
 			c.KoboSpanNextParagraph()
-			h2 := root.CreateElement("h2")
+			h2 := tocBodyDiv.CreateElement("h2")
 			h2.CreateAttr("class", "toc-authors")
 			appendInlineText(h2, c, expanded, false)
 		}
 	}
 
 	c.KoboSpanNextParagraph()
-	ol := root.CreateElement("ol")
+	ol := tocBodyDiv.CreateElement("ol")
 	ol.CreateAttr("class", "toc-list")
 
 	for _, chapter := range chapters {
@@ -837,30 +835,13 @@ func generateTOCPage(c *content.Content, chapters []chapterData, cfg *config.TOC
 		li := ol.CreateElement("li")
 		li.CreateAttr("class", "toc-item")
 		a := li.CreateElement("a")
-		a.CreateAttr("class", "toc-link")
-		a.CreateAttr("href", chapter.Filename)
+		a.CreateAttr("class", "link-toc")
+		a.CreateAttr("href", chapter.Filename+"#"+getChapterAnchor(chapter))
 		appendInlineText(a, c, chapter.Title, false)
 
 		if chapter.Section != nil {
 			buildTOCPageOL(li, chapter.Section, chapter.Filename, c)
 		}
-	}
-
-	// Find a unique ID and filename that doesn't collide with existing chapters
-	baseID := "toc-page"
-	id := baseID
-	filename := baseID + ".xhtml"
-
-	existingIDs := make(map[string]bool, len(chapters))
-	for _, ch := range chapters {
-		existingIDs[ch.ID] = true
-	}
-
-	counter := 0
-	for existingIDs[id] {
-		counter++
-		id = fmt.Sprintf("%s-%d", baseID, counter)
-		filename = id + ".xhtml"
 	}
 
 	return chapterData{
@@ -901,7 +882,7 @@ func buildTOCPageOLItems(parentOL *etree.Element, section *fb2.Section, filename
 			li := parentOL.CreateElement("li")
 			li.CreateAttr("class", "toc-item toc-subtitle")
 			a := li.CreateElement("a")
-			a.CreateAttr("class", "toc-link")
+			a.CreateAttr("class", "link-toc")
 			a.CreateAttr("href", filename+"#"+subtitleID)
 			appendInlineText(a, c, item.Subtitle.AsTOCText(fb2.FormatIDToTOC(subtitleID)), false)
 			lastLI = li
@@ -910,7 +891,7 @@ func buildTOCPageOLItems(parentOL *etree.Element, section *fb2.Section, filename
 				li := parentOL.CreateElement("li")
 				li.CreateAttr("class", "toc-item toc-section")
 				a := li.CreateElement("a")
-				a.CreateAttr("class", "toc-link")
+				a.CreateAttr("class", "link-toc")
 				sectionID := item.Section.ID
 				a.CreateAttr("href", filename+"#"+sectionID)
 				appendInlineText(a, c, item.Section.AsTitleText(""), false)

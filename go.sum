@@ -76,8 +76,8 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=
 github.com/rogpeppe/go-internal v1.14.1/go.mod h1:MaRKkUm5W0goXpeCfT7UZI6fk/L7L7so1lCWt35ZSgc=
-github.com/rupor-github/gencfg v1.0.11 h1:HVGfDpGNsQaUJfevtGOkkp/+PaBSMLKLMXggrTbH+oA=
-github.com/rupor-github/gencfg v1.0.11/go.mod h1:E8xQ+r9NXwTNId+mfdZrVr2Xz7KkSY+n2L9ASjHy+Zc=
+github.com/rupor-github/gencfg v1.0.13 h1:7RadogWwFIXkO2RReKeqOdJ0xtJ7ONyYTdwhP7ueKW0=
+github.com/rupor-github/gencfg v1.0.13/go.mod h1:52RG4eQQCM0hBniDN0TxeApuIluG32NtVZU0GxhATEM=
 github.com/russross/blackfriday/v2 v2.1.0 h1:JIOH55/0cWyOuilr9/qlrm0BSXldqnqwMsf35Ld67mk=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/shopspring/decimal v1.4.0 h1:bxl37RwXBklmTi0C79JfXCEBD1cqqHt0bbgBAGFp81k=

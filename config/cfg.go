@@ -57,6 +57,18 @@ type (
 		Transliterate       bool   `yaml:"transliterate"`
 	}
 
+	VignettesConfig struct {
+		BookTitle    VignettePositions `yaml:"book_title"`
+		ChapterTitle VignettePositions `yaml:"chapter_title"`
+	}
+
+	// VignettePositions defines where vignettes can be placed
+	VignettePositions struct {
+		Top    string `yaml:"top,omitempty" sanitize:"oneof_or_tag=builtin assure_file_access"`
+		Bottom string `yaml:"bottom,omitempty" sanitize:"oneof_or_tag=builtin assure_file_access"`
+		End    string `yaml:"end,omitempty" sanitize:"oneof_or_tag=builtin assure_file_access"`
+	}
+
 	DocumentConfig struct {
 		FixZip                bool                  `yaml:"fix_zip"`
 		StylesheetPath        string                `yaml:"stylesheet_path" sanitize:"assure_file_access"`
@@ -68,6 +80,7 @@ type (
 		Annotation            AnnotationConfig      `yaml:"annotation"`
 		TOCPage               TOCPageConfig         `yaml:"toc_page"`
 		Metainformation       MetainformationConfig `yaml:"metainformation"`
+		Vignettes             VignettesConfig       `yaml:"vignettes"`
 	}
 
 	Config struct {
@@ -93,6 +106,11 @@ var requiredOptions = append([]func(*gencfg.ProcessingOptions){},
 	gencfg.WithDoNotExpandField(string(MetaCreatorNameTemplateFieldName)),
 	gencfg.WithDoNotExpandField(string(AuthorsTemplateFieldName)),
 )
+
+// IsEmpty returns true if no vignette positions are defined
+func (v *VignettePositions) IsEmpty() bool {
+	return v.Top == "" && v.Bottom == "" && v.End == ""
+}
 
 func unmarshalConfig(data []byte, cfg *Config, process bool) (*Config, error) {
 	// We want to use only fields we defined so we cannot use yaml.Unmarshal

@@ -8,6 +8,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -524,7 +525,8 @@ func TestFilterReferencedImages(t *testing.T) {
 	}
 
 	// Filter images
-	filtered := filterReferencedImages(allImages, links, "cover-img", log)
+	book := &fb2.FictionBook{}
+	filtered := book.FilterReferencedImages(allImages, links, "cover-img", log)
 
 	// Verify only referenced images are included
 	if len(filtered) != 3 {
@@ -572,7 +574,8 @@ func TestFilterReferencedImages_EmptyCover(t *testing.T) {
 	}
 
 	// Filter with no cover
-	filtered := filterReferencedImages(allImages, links, "", log)
+	book := &fb2.FictionBook{}
+	filtered := book.FilterReferencedImages(allImages, links, "", log)
 
 	// Verify only used image is included
 	if len(filtered) != 1 {
@@ -611,7 +614,8 @@ func TestFilterReferencedImages_OnlyTextLinks(t *testing.T) {
 	}
 
 	// Filter with no cover and no image links
-	filtered := filterReferencedImages(allImages, links, "", log)
+	book := &fb2.FictionBook{}
+	filtered := book.FilterReferencedImages(allImages, links, "", log)
 
 	// Should be empty
 	if len(filtered) != 0 {
@@ -635,7 +639,7 @@ func TestFilterReferencedImages_IncludesNotFoundImage(t *testing.T) {
 			MimeType: "image/jpeg",
 			Data:     img2Data,
 		},
-		fb2.NotFoundImageID: &fb2.BookImage{
+		"test-not-found-id": &fb2.BookImage{
 			MimeType: "image/png",
 			Data:     notFoundData,
 		},
@@ -648,7 +652,10 @@ func TestFilterReferencedImages_IncludesNotFoundImage(t *testing.T) {
 	}
 
 	// Filter images
-	filtered := filterReferencedImages(allImages, links, "", log)
+	book := &fb2.FictionBook{
+		NotFoundImageID: "test-not-found-id",
+	}
+	filtered := book.FilterReferencedImages(allImages, links, "", log)
 
 	// Should include used-img and not-found image, but not unused-img
 	if len(filtered) != 2 {
@@ -659,7 +666,7 @@ func TestFilterReferencedImages_IncludesNotFoundImage(t *testing.T) {
 		t.Error("used-img should be included")
 	}
 
-	if _, exists := filtered[fb2.NotFoundImageID]; !exists {
+	if _, exists := filtered["test-not-found-id"]; !exists {
 		t.Error("not-found image should always be included")
 	}
 
@@ -687,7 +694,8 @@ func TestFilterReferencedImages_WithoutNotFoundImage(t *testing.T) {
 	}
 
 	// Filter images - should work fine when not-found image doesn't exist
-	filtered := filterReferencedImages(allImages, links, "", log)
+	book := &fb2.FictionBook{}
+	filtered := book.FilterReferencedImages(allImages, links, "", log)
 
 	if len(filtered) != 1 {
 		t.Errorf("expected 1 filtered image, got %d", len(filtered))
@@ -695,6 +703,408 @@ func TestFilterReferencedImages_WithoutNotFoundImage(t *testing.T) {
 
 	if _, exists := filtered["used-img"]; !exists {
 		t.Error("used-img should be included")
+	}
+}
+
+func TestFilterReferencedImages_WithVignettes(t *testing.T) {
+	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+
+	img1Data := createTestJPEG(t, 50, 50, 80)
+	img2Data := createTestJPEG(t, 50, 50, 80)
+	img3Data := createTestJPEG(t, 50, 50, 80)
+
+	allImages := fb2.BookImages{
+		"used-img": &fb2.BookImage{
+			MimeType: "image/jpeg",
+			Data:     img1Data,
+		},
+		"unused-img": &fb2.BookImage{
+			MimeType: "image/jpeg",
+			Data:     img2Data,
+		},
+		"vignette-img": &fb2.BookImage{
+			MimeType: "image/svg+xml",
+			Data:     img3Data,
+		},
+	}
+
+	links := fb2.ReverseLinkIndex{
+		"used-img": []fb2.ElementRef{
+			{Type: "block-image", Path: []any{}},
+		},
+	}
+
+	// Filter with vignette - vignette should be included even though not in links
+	book := &fb2.FictionBook{
+		VignetteIDs: map[config.VignettePos]string{
+			config.VignettePosChapterEnd: "vignette-img",
+		},
+	}
+	filtered := book.FilterReferencedImages(allImages, links, "", log)
+
+	// Should include used-img and vignette-img, but not unused-img
+	if len(filtered) != 2 {
+		t.Errorf("expected 2 filtered images, got %d", len(filtered))
+	}
+
+	if _, exists := filtered["used-img"]; !exists {
+		t.Error("used-img should be included")
+	}
+
+	if _, exists := filtered["vignette-img"]; !exists {
+		t.Error("vignette-img should be included even though not in links")
+	}
+
+	if _, exists := filtered["unused-img"]; exists {
+		t.Error("unused-img should not be included")
+	}
+}
+
+func TestPrepareVignettes_Empty(t *testing.T) {
+	vigCfg := &config.VignettesConfig{}
+	defaultVignettes := make(map[config.VignettePos][]byte)
+
+	vignettes, err := prepareVignettes(vigCfg, defaultVignettes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(vignettes) != 0 {
+		t.Errorf("expected empty map, got %d entries", len(vignettes))
+	}
+}
+
+func TestPrepareVignettes_Builtin(t *testing.T) {
+	vigCfg := &config.VignettesConfig{
+		BookTitle: config.VignettePositions{
+			Top:    "builtin",
+			Bottom: "builtin",
+		},
+		ChapterTitle: config.VignettePositions{
+			Top:    "builtin",
+			Bottom: "builtin",
+			End:    "builtin",
+		},
+	}
+
+	svgData := []byte("<svg>test</svg>")
+	defaultVignettes := map[config.VignettePos][]byte{
+		config.VignettePosBookTitleTop:       svgData,
+		config.VignettePosBookTitleBottom:    svgData,
+		config.VignettePosChapterTitleTop:    svgData,
+		config.VignettePosChapterTitleBottom: svgData,
+		config.VignettePosChapterEnd:         svgData,
+	}
+
+	vignettes, err := prepareVignettes(vigCfg, defaultVignettes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(vignettes) != 5 {
+		t.Errorf("expected 5 vignettes, got %d", len(vignettes))
+	}
+
+	for pos, vig := range vignettes {
+		if vig.ContentType != "image/svg+xml" {
+			t.Errorf("position %v: expected content type 'image/svg+xml', got %q", pos, vig.ContentType)
+		}
+		if !bytes.Equal(vig.Data, svgData) {
+			t.Errorf("position %v: data mismatch", pos)
+		}
+	}
+}
+
+func TestPrepareVignettes_BuiltinNotAvailable(t *testing.T) {
+	vigCfg := &config.VignettesConfig{
+		BookTitle: config.VignettePositions{
+			Top: "builtin",
+		},
+	}
+
+	defaultVignettes := make(map[config.VignettePos][]byte)
+
+	vignettes, err := prepareVignettes(vigCfg, defaultVignettes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(vignettes) != 0 {
+		t.Errorf("expected empty map when builtin not available, got %d entries", len(vignettes))
+	}
+}
+
+func TestPrepareVignettes_FromFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	svgContent := []byte("<svg><rect width=\"100\" height=\"100\"/></svg>")
+	topFile := filepath.Join(tmpDir, "top.svg")
+	bottomFile := filepath.Join(tmpDir, "bottom.svg")
+
+	if err := os.WriteFile(topFile, svgContent, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+	if err := os.WriteFile(bottomFile, svgContent, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	vigCfg := &config.VignettesConfig{
+		BookTitle: config.VignettePositions{
+			Top:    topFile,
+			Bottom: bottomFile,
+		},
+	}
+
+	defaultVignettes := make(map[config.VignettePos][]byte)
+
+	vignettes, err := prepareVignettes(vigCfg, defaultVignettes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(vignettes) != 2 {
+		t.Errorf("expected 2 vignettes, got %d", len(vignettes))
+	}
+
+	for pos, vig := range vignettes {
+		if vig.ContentType != "image/svg+xml" {
+			t.Errorf("position %v: expected content type 'image/svg+xml', got %q", pos, vig.ContentType)
+		}
+		if !bytes.Equal(vig.Data, svgContent) {
+			t.Errorf("position %v: data mismatch", pos)
+		}
+	}
+}
+
+func TestPrepareVignettes_FromFile_PNG(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	pngData := createTestPNG(t, 100, 100)
+	pngFile := filepath.Join(tmpDir, "vignette.png")
+
+	if err := os.WriteFile(pngFile, pngData, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	vigCfg := &config.VignettesConfig{
+		ChapterTitle: config.VignettePositions{
+			End: pngFile,
+		},
+	}
+
+	defaultVignettes := make(map[config.VignettePos][]byte)
+
+	vignettes, err := prepareVignettes(vigCfg, defaultVignettes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(vignettes) != 1 {
+		t.Errorf("expected 1 vignette, got %d", len(vignettes))
+	}
+
+	vig := vignettes[config.VignettePosChapterEnd]
+	if vig == nil {
+		t.Fatal("vignette not found")
+	}
+
+	if vig.ContentType != "image/png" {
+		t.Errorf("expected content type 'image/png', got %q", vig.ContentType)
+	}
+
+	if !bytes.Equal(vig.Data, pngData) {
+		t.Error("data mismatch")
+	}
+}
+
+func TestPrepareVignettes_FromFile_JPEG(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	jpegData := createTestJPEG(t, 100, 100, 80)
+	jpegFile := filepath.Join(tmpDir, "vignette.jpg")
+
+	if err := os.WriteFile(jpegFile, jpegData, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	vigCfg := &config.VignettesConfig{
+		BookTitle: config.VignettePositions{
+			Top: jpegFile,
+		},
+	}
+
+	defaultVignettes := make(map[config.VignettePos][]byte)
+
+	vignettes, err := prepareVignettes(vigCfg, defaultVignettes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(vignettes) != 1 {
+		t.Errorf("expected 1 vignette, got %d", len(vignettes))
+	}
+
+	vig := vignettes[config.VignettePosBookTitleTop]
+	if vig == nil {
+		t.Fatal("vignette not found")
+	}
+
+	if vig.ContentType != "image/jpeg" {
+		t.Errorf("expected content type 'image/jpeg', got %q", vig.ContentType)
+	}
+
+	if !bytes.Equal(vig.Data, jpegData) {
+		t.Error("data mismatch")
+	}
+}
+
+func TestPrepareVignettes_UnsupportedContentType(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	textContent := []byte("This is plain text, not an image")
+	textFile := filepath.Join(tmpDir, "vignette.txt")
+
+	if err := os.WriteFile(textFile, textContent, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	vigCfg := &config.VignettesConfig{
+		BookTitle: config.VignettePositions{
+			Top: textFile,
+		},
+	}
+
+	defaultVignettes := make(map[config.VignettePos][]byte)
+
+	_, err := prepareVignettes(vigCfg, defaultVignettes)
+	if err == nil {
+		t.Fatal("expected error for non-image file, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "unsupported content type") {
+		t.Errorf("expected error message about unsupported content type, got: %v", err)
+	}
+}
+
+func TestPrepareVignettes_FileNotFound(t *testing.T) {
+	vigCfg := &config.VignettesConfig{
+		BookTitle: config.VignettePositions{
+			Top: "/nonexistent/path/to/vignette.svg",
+		},
+	}
+
+	defaultVignettes := make(map[config.VignettePos][]byte)
+
+	_, err := prepareVignettes(vigCfg, defaultVignettes)
+	if err == nil {
+		t.Fatal("expected error for nonexistent file, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "failed to read vignette file") {
+		t.Errorf("expected error message about reading file, got: %v", err)
+	}
+}
+
+func TestPrepareVignettes_Mixed(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	fileContent := []byte("<svg>from file</svg>")
+	builtinContent := []byte("<svg>builtin</svg>")
+
+	customFile := filepath.Join(tmpDir, "custom.svg")
+	if err := os.WriteFile(customFile, fileContent, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	vigCfg := &config.VignettesConfig{
+		BookTitle: config.VignettePositions{
+			Top:    "builtin",
+			Bottom: customFile,
+		},
+		ChapterTitle: config.VignettePositions{
+			Top: "builtin",
+		},
+	}
+
+	defaultVignettes := map[config.VignettePos][]byte{
+		config.VignettePosBookTitleTop:    builtinContent,
+		config.VignettePosChapterTitleTop: builtinContent,
+	}
+
+	vignettes, err := prepareVignettes(vigCfg, defaultVignettes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(vignettes) != 3 {
+		t.Errorf("expected 3 vignettes, got %d", len(vignettes))
+	}
+
+	if vig, ok := vignettes[config.VignettePosBookTitleTop]; ok {
+		if vig.ContentType != "image/svg+xml" {
+			t.Errorf("BookTitleTop should have content type 'image/svg+xml', got %q", vig.ContentType)
+		}
+		if !bytes.Equal(vig.Data, builtinContent) {
+			t.Error("BookTitleTop should use builtin content")
+		}
+	} else {
+		t.Error("BookTitleTop vignette missing")
+	}
+
+	if vig, ok := vignettes[config.VignettePosBookTitleBottom]; ok {
+		if vig.ContentType != "image/svg+xml" {
+			t.Errorf("BookTitleBottom should have content type 'image/svg+xml', got %q", vig.ContentType)
+		}
+		if !bytes.Equal(vig.Data, fileContent) {
+			t.Error("BookTitleBottom should use file content")
+		}
+	} else {
+		t.Error("BookTitleBottom vignette missing")
+	}
+
+	if vig, ok := vignettes[config.VignettePosChapterTitleTop]; ok {
+		if vig.ContentType != "image/svg+xml" {
+			t.Errorf("ChapterTitleTop should have content type 'image/svg+xml', got %q", vig.ContentType)
+		}
+		if !bytes.Equal(vig.Data, builtinContent) {
+			t.Error("ChapterTitleTop should use builtin content")
+		}
+	} else {
+		t.Error("ChapterTitleTop vignette missing")
+	}
+}
+
+func TestPrepareVignettes_Partial(t *testing.T) {
+	svgData := []byte("<svg>test</svg>")
+	defaultVignettes := map[config.VignettePos][]byte{
+		config.VignettePosBookTitleTop: svgData,
+		config.VignettePosChapterEnd:   svgData,
+	}
+
+	vigCfg := &config.VignettesConfig{
+		BookTitle: config.VignettePositions{
+			Top: "builtin",
+		},
+		ChapterTitle: config.VignettePositions{
+			End: "builtin",
+		},
+	}
+
+	vignettes, err := prepareVignettes(vigCfg, defaultVignettes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(vignettes) != 2 {
+		t.Errorf("expected 2 vignettes, got %d", len(vignettes))
+	}
+
+	if _, ok := vignettes[config.VignettePosBookTitleTop]; !ok {
+		t.Error("BookTitleTop vignette should be present")
+	}
+
+	if _, ok := vignettes[config.VignettePosChapterEnd]; !ok {
+		t.Error("ChapterEnd vignette should be present")
 	}
 }
 

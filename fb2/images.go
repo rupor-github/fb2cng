@@ -193,7 +193,7 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 	}
 
 	// Special case - do not touch SVG
-	if strings.HasSuffix(strings.ToLower(bo.ContentType), "svg") {
+	if strings.HasSuffix(strings.ToLower(bo.ContentType), "svg+xml") {
 		bi.MimeType = "image/svg+xml"
 		return bi
 	}

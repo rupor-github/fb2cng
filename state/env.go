@@ -20,11 +20,12 @@ type LocalEnv struct {
 	Log *zap.Logger
 
 	// used by convert subcommand
-	NoDirs       bool
-	Overwrite    bool
-	CodePage     encoding.Encoding
-	DefaultCover []byte
-	DefaultStyle []byte
+	NoDirs           bool
+	Overwrite        bool
+	CodePage         encoding.Encoding
+	DefaultCover     []byte
+	DefaultStyle     []byte
+	DefaultVignettes map[config.VignettePos][]byte
 
 	start         time.Time
 	restoreStdLog func()
@@ -39,7 +40,7 @@ func EnvFromContext(ctx context.Context) *LocalEnv {
 }
 
 func ContextWithEnv(ctx context.Context) context.Context {
-	return context.WithValue(ctx, envKey{}, &LocalEnv{start: time.Now()})
+	return context.WithValue(ctx, envKey{}, newLocalEnv())
 }
 
 func (e *LocalEnv) Uptime() time.Duration {

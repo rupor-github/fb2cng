@@ -23,6 +23,15 @@ func (b *FictionBook) String() string {
 
 func (tw treeWriter) fictionBook(book *FictionBook) treeWriter {
 	tw.Line(0, "FictionBook")
+	if book.NotFoundImageID != "" {
+		tw.Line(1, "NotFoundImageID=%q", book.NotFoundImageID)
+	}
+	if len(book.VignetteIDs) > 0 {
+		tw.Line(1, "VignetteIDs: %d", len(book.VignetteIDs))
+		for pos, id := range book.VignetteIDs {
+			tw.Line(2, "Vignette[%s]=%q", pos, id)
+		}
+	}
 	for i, sheet := range book.Stylesheets {
 		tw.Line(1, "Stylesheet[%d] type=%q bytes=%d", i, sheet.Type, len(sheet.Data))
 	}

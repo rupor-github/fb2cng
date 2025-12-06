@@ -50,39 +50,41 @@ func TestGenerateFootnoteBodyID(t *testing.T) {
 			name:     "body with name",
 			body:     &fb2.Body{Name: "notes"},
 			index:    0,
-			expected: "notes-0",
+			expected: "notes00000",
 		},
 		{
 			name:     "body with name and higher index",
 			body:     &fb2.Body{Name: "notes"},
 			index:    5,
-			expected: "notes-5",
+			expected: "notes00005",
 		},
 		{
 			name:     "body without name",
 			body:     &fb2.Body{},
 			index:    0,
-			expected: "footnote-body-0",
+			expected: "00000",
 		},
 		{
 			name:     "body without name with index",
 			body:     &fb2.Body{},
 			index:    3,
-			expected: "footnote-body-3",
+			expected: "00003",
 		},
 		{
 			name:     "duplicate body names get unique IDs",
 			body:     &fb2.Body{Name: "notes"},
 			index:    1,
-			expected: "notes-1",
+			expected: "notes00001",
 		},
 	}
 
+	fbIDs := make(fb2.IDIndex)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := generateFootnoteBodyID(tt.body, tt.index)
+			baseBodyID := fmt.Sprintf("%s%05d", tt.body.Name, tt.index)
+			result, _ := generateUniqueID(baseBodyID, fbIDs)
 			if result != tt.expected {
-				t.Errorf("generateFootnoteBodyID() = %v, want %v", result, tt.expected)
+				t.Errorf("generateUniqueID() = %v, want %v", result, tt.expected)
 			}
 		})
 	}
@@ -95,9 +97,11 @@ func TestGenerateFootnoteBodyID_UniquenessWithDuplicateNames(t *testing.T) {
 		{Name: "notes"},
 	}
 
+	fbIDs := make(fb2.IDIndex)
 	ids := make(map[string]bool)
 	for i, body := range bodies {
-		id := generateFootnoteBodyID(body, i)
+		baseBodyID := fmt.Sprintf("%s%05d", body.Name, i)
+		id, _ := generateUniqueID(baseBodyID, fbIDs)
 		if ids[id] {
 			t.Errorf("Duplicate ID generated: %s", id)
 		}
@@ -1125,8 +1129,10 @@ func TestAppendImageElement_MissingImage(t *testing.T) {
 
 func BenchmarkGenerateFootnoteBodyID(b *testing.B) {
 	body := &fb2.Body{Name: "notes"}
+	fbIDs := make(fb2.IDIndex)
 	for i := 0; i < b.N; i++ {
-		_ = generateFootnoteBodyID(body, i%100)
+		baseBodyID := fmt.Sprintf("%s%05d", body.Name, i%100)
+		_, _ = generateUniqueID(baseBodyID, fbIDs)
 	}
 }
 
@@ -2207,12 +2213,22 @@ func TestGenerateTOCPage(t *testing.T) {
 		t.Fatal("Body element not found")
 	}
 
-	// Check body has CSS class
-	if body.SelectAttrValue("class", "") != "toc-page" {
-		t.Errorf("Expected body class 'toc-page', got '%s'", body.SelectAttrValue("class", ""))
+	// Check for toc-body div wrapper
+	tocBodyDiv := body.SelectElement("div")
+	if tocBodyDiv == nil {
+		t.Fatal("TOC body div wrapper not found")
 	}
 
-	h1 := body.SelectElement("h1")
+	if tocBodyDiv.SelectAttrValue("class", "") != "toc-body" {
+		t.Errorf("Expected div class 'toc-body', got '%s'", tocBodyDiv.SelectAttrValue("class", ""))
+	}
+
+	// Check div has ID matching chapter ID
+	if tocBodyDiv.SelectAttrValue("id", "") != tocChapter.ID {
+		t.Errorf("Expected div id '%s', got '%s'", tocChapter.ID, tocBodyDiv.SelectAttrValue("id", ""))
+	}
+
+	h1 := tocBodyDiv.SelectElement("h1")
 	if h1 == nil {
 		t.Fatal("H1 element not found")
 	}
@@ -2227,7 +2243,7 @@ func TestGenerateTOCPage(t *testing.T) {
 		t.Errorf("Expected H1 text 'Test Book', got '%s'", h1.Text())
 	}
 
-	ol := body.SelectElement("ol")
+	ol := tocBodyDiv.SelectElement("ol")
 	if ol == nil {
 		t.Fatal("OL element not found")
 	}
@@ -2255,13 +2271,13 @@ func TestGenerateTOCPage(t *testing.T) {
 		}
 
 		// Check anchor has CSS class
-		if a.SelectAttrValue("class", "") != "toc-link" {
-			t.Errorf("Expected a class 'toc-link', got '%s'", a.SelectAttrValue("class", ""))
+		if a.SelectAttrValue("class", "") != "link-toc" {
+			t.Errorf("Expected a class 'link-toc', got '%s'", a.SelectAttrValue("class", ""))
 		}
 
 		href := a.SelectAttrValue("href", "")
-		if href != "ch1.xhtml" {
-			t.Errorf("Expected href 'ch1.xhtml', got '%s'", href)
+		if href != "ch1.xhtml#ch1" {
+			t.Errorf("Expected href 'ch1.xhtml#ch1', got '%s'", href)
 		}
 		if a.Text() != "Chapter 1" {
 			t.Errorf("Expected link text 'Chapter 1', got '%s'", a.Text())
@@ -2282,20 +2298,7 @@ func TestGenerateTOCPage_IDCollision(t *testing.T) {
 		},
 	}
 
-	// Create chapters with IDs that will collide with TOC page IDs
 	chapters := []chapterData{
-		{
-			ID:           "toc-page",
-			Filename:     "toc-page.xhtml",
-			Title:        "Chapter with TOC ID",
-			IncludeInTOC: true,
-		},
-		{
-			ID:           "toc-page-1",
-			Filename:     "toc-page-1.xhtml",
-			Title:        "Another collision",
-			IncludeInTOC: true,
-		},
 		{
 			ID:           "ch1",
 			Filename:     "ch1.xhtml",
@@ -2304,13 +2307,19 @@ func TestGenerateTOCPage_IDCollision(t *testing.T) {
 		},
 	}
 
+	// Simulate FB2 source having element IDs that collide with TOC page IDs
+	c.IDsIndex = fb2.IDIndex{
+		"toc-page":   {Type: "section"},
+		"toc-page-1": {Type: "section"},
+	}
+
 	cfg := &config.TOCPageConfig{
 		Title: "Table of Contents",
 	}
 
 	tocChapter := generateTOCPage(c, chapters, cfg, log)
 
-	// Should get toc-page-2 since toc-page and toc-page-1 are taken
+	// Should get toc-page-2 since toc-page and toc-page-1 are taken by FB2 element IDs
 	if tocChapter.ID != "toc-page-2" {
 		t.Errorf("Expected ID 'toc-page-2' (avoiding collisions), got '%s'", tocChapter.ID)
 	}
@@ -2600,10 +2609,10 @@ func TestFloatModeFootnotes(t *testing.T) {
 				}
 			}
 
-			// Find footnote chapter
+			// Find footnote chapter (has AnchorID set)
 			var fnChapter *chapterData
 			for i := range chapters {
-				if chapters[i].Doc != nil && strings.Contains(chapters[i].ID, "footnote") {
+				if chapters[i].Doc != nil && chapters[i].AnchorID != "" {
 					fnChapter = &chapters[i]
 					break
 				}
@@ -2627,8 +2636,8 @@ func TestFloatModeFootnotes(t *testing.T) {
 					// EPUB2: backlink is inside <p class="footnote">
 					backlinks = fnChapter.Doc.FindElements("//p[@class='footnote']/a")
 				} else {
-					// EPUB3: backlink is in separate <p class="footnote-backlink">
-					backlinks = fnChapter.Doc.FindElements("//p[@class='footnote-backlink']/a")
+					// EPUB3: backlink is <a class="link-backlink"> in separate <p>
+					backlinks = fnChapter.Doc.FindElements("//a[@class='link-backlink']")
 				}
 				if len(backlinks) == 0 {
 					t.Error("Expected back-reference link not found")

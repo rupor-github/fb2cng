@@ -1,9 +1,11 @@
 package content
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -191,12 +193,20 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 		book.Description.TitleInfo.Coverpage = append([]fb2.InlineImage{}, ref)
 	}
 
+	// Process vignettes configuration
+	vignettes, err := prepareVignettes(&env.Cfg.Document.Vignettes, env.DefaultVignettes)
+	if err != nil {
+		return nil, err
+	}
+
+	// Order of calls is important here!
+
 	// Normalize footnote bodies and build footnote index
 	book, footnotes := book.NormalizeFootnoteBodies(log)
 	// Flatten grouping sections (sections without titles that only contain other sections)
 	book = book.NormalizeSections(log)
-	// Build id and link indexes replacing/removing broken links (may add not-found image binary)
-	book, ids, links := book.NormalizeLinks(log)
+	// Build id and link indexes replacing/removing broken links (may add not-found image binary and vignette binaries)
+	book, ids, links := book.NormalizeLinks(vignettes, log)
 	// Assign sequential IDs to all sections and subtitles without IDs
 	// (avoiding collisions with existing IDs) - we will need it for ToC. This
 	// also updates the ID index with generated IDs marked as "TYPE-generated"
@@ -207,7 +217,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 	allImages := book.PrepareImages(outputFormat.ForKindle(), &env.Cfg.Document.Images, log)
 
 	// Filter images to only include those that are actually referenced
-	imagesIndex := filterReferencedImages(allImages, links, coverID, log)
+	imagesIndex := book.FilterReferencedImages(allImages, links, coverID, log)
 
 	c := &Content{
 		SrcName:        srcName,
@@ -228,8 +238,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 		c.Hyphen = text.NewHyphenator(book.Description.TitleInfo.Lang, log)
 	}
 
-	// TODO: old converter only used sentences tokenizer for kepub (where
-	// actual sentences are necessary), should I keep the same logic?
+	// We only need sentences tokenizer for kepub
 	if outputFormat == config.OutputFmtKepub {
 		c.Splitter = text.NewSplitter(book.Description.TitleInfo.Lang, log)
 	}
@@ -244,51 +253,59 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 	return c, nil
 }
 
-// filterReferencedImages returns only images that are actually referenced in the book
-func filterReferencedImages(allImages fb2.BookImages, links fb2.ReverseLinkIndex, coverID string, log *zap.Logger) fb2.BookImages {
-	referenced := make(map[string]bool)
+// prepareVignettes creates a map of vignette binaries from configuration
+// Returns an initialized but empty map if no vignettes are defined
+func prepareVignettes(vigCfg *config.VignettesConfig, defaultVignettes map[config.VignettePos][]byte) (map[config.VignettePos]*fb2.BinaryObject, error) {
+	vignettes := make(map[config.VignettePos]*fb2.BinaryObject)
 
-	// Always include the not-found image if it exists (it may be needed for broken links)
-	if _, exists := allImages[fb2.NotFoundImageID]; exists {
-		referenced[fb2.NotFoundImageID] = true
+	vignetteChecks := []struct {
+		configValue string
+		position    config.VignettePos
+	}{
+		{vigCfg.BookTitle.Top, config.VignettePosBookTitleTop},
+		{vigCfg.BookTitle.Bottom, config.VignettePosBookTitleBottom},
+		{vigCfg.ChapterTitle.Top, config.VignettePosChapterTitleTop},
+		{vigCfg.ChapterTitle.Bottom, config.VignettePosChapterTitleBottom},
+		{vigCfg.ChapterTitle.End, config.VignettePosChapterEnd},
 	}
 
-	// Add cover image if present
-	if coverID != "" {
-		referenced[coverID] = true
-	}
-
-	// Add all images referenced in links
-	for targetID, refs := range links {
-		if len(refs) == 0 {
+	for _, check := range vignetteChecks {
+		if check.configValue == "" {
 			continue
 		}
 
-		// Check if any reference is an image type
-		for _, ref := range refs {
-			switch ref.Type {
-			case "coverpage", "block-image", "inline-image":
-				referenced[targetID] = true
+		var data []byte
+		var contentType string
+		if check.configValue == "builtin" {
+			var ok bool
+			data, ok = defaultVignettes[check.position]
+			if !ok {
+				continue
+			}
+			contentType = "image/svg+xml"
+		} else {
+			fileData, err := os.ReadFile(check.configValue)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read vignette file %q: %w", check.configValue, err)
+			}
+			data = fileData
+			contentType = http.DetectContentType(data)
+
+			// SVG files are detected as text/plain or text/xml, so check for SVG content
+			if strings.HasPrefix(contentType, "text/") && bytes.Contains(data, []byte("<svg")) {
+				contentType = "image/svg+xml"
+			}
+
+			if !strings.HasPrefix(contentType, "image/") {
+				return nil, fmt.Errorf("vignette file %q has unsupported content type %q (only image/* types are supported)", check.configValue, contentType)
 			}
 		}
-	}
 
-	// Build filtered index
-	filtered := make(fb2.BookImages)
-	for id := range referenced {
-		if img, exists := allImages[id]; exists {
-			filtered[id] = img
-			continue
-		}
-		log.Debug("Referenced image not found in prepared images", zap.String("id", id))
-	}
-
-	log.Debug("Filtered images index", zap.Int("total", len(allImages)), zap.Int("referenced", len(filtered)))
-	for id, img := range allImages {
-		if _, exists := filtered[id]; !exists {
-			log.Debug("Excluding unreferenced image", zap.String("id", id), zap.String("type", img.MimeType))
+		vignettes[check.position] = &fb2.BinaryObject{
+			ContentType: contentType,
+			Data:        data,
 		}
 	}
 
-	return filtered
+	return vignettes, nil
 }

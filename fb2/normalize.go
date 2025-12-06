@@ -7,13 +7,12 @@ import (
 	"strings"
 
 	"go.uber.org/zap"
+
+	"fbc/config"
 )
 
 //go:embed not_found.png
 var notFoundImagePNG []byte
-
-// NotFoundImageID is the ID used for the placeholder image when broken image links are found
-const NotFoundImageID = "fbc-not-found-image"
 
 // Normalization functions for footnotes and links.
 
@@ -222,14 +221,53 @@ func flattenSectionContent(items []FlowItem) []FlowItem {
 	return flattened
 }
 
-// NormalizeLinks validates all links and replaces broken ones with text or points broken image links to notFoundImage.
-// Returns a new FictionBook with broken links replaced, along with corrected ID and link indexes.
-// The returned indexes reflect the state after link replacements. The original remains unchanged.
-func (fb *FictionBook) NormalizeLinks(log *zap.Logger) (*FictionBook, IDIndex, ReverseLinkIndex) {
+// NormalizeLinks validates all links and replaces broken ones with text or
+// points broken image links to notFoundImage. Processes vignettes and adds
+// them to binaries with unique IDs. Returns a new FictionBook with broken
+// links replaced, along with corrected ID and link indexes. The returned
+// indexes reflect the state after link replacements. The original remains
+// unchanged.
+func (fb *FictionBook) NormalizeLinks(vignettes map[config.VignettePos]*BinaryObject, log *zap.Logger) (*FictionBook, IDIndex, ReverseLinkIndex) {
 	result := fb.clone()
 
 	// Rebuild indexes for the cloned book since the original indexes reference the original book's pointers
 	resultIDs := result.buildIDIndex(log)
+
+	// Initialize NotFoundImageID with a unique value
+	counter := 0
+	for {
+		candidateID := fmt.Sprintf("not-found-%d", counter)
+		if _, exists := resultIDs[candidateID]; !exists {
+			result.NotFoundImageID = candidateID
+			break
+		}
+		counter++
+	}
+
+	// Process vignettes: create unique IDs for enabled decorations and add
+	// them to book binaries
+	// NOTE: we do not have to follow the same logic as for non found image
+	// since we are sure that those will be used, so we always need them
+	result.VignetteIDs = make(map[config.VignettePos]string)
+	for pos, v := range vignettes {
+		// Generate unique ID for this vignette position
+		counter := 0
+		for {
+			candidateID := fmt.Sprintf("%s-%d", pos.String(), counter)
+			if _, exists := resultIDs[candidateID]; !exists {
+				result.VignetteIDs[pos] = candidateID
+				// Add to binaries
+				result.Binaries = append(result.Binaries, BinaryObject{
+					ID:          candidateID,
+					ContentType: v.ContentType,
+					Data:        v.Data,
+				})
+				break
+			}
+			counter++
+		}
+	}
+
 	resultLinks := result.buildReverseLinkIndex(log)
 
 	for targetID, refs := range resultLinks {
@@ -246,7 +284,7 @@ func (fb *FictionBook) NormalizeLinks(log *zap.Logger) (*FictionBook, IDIndex, R
 			for _, ref := range refs {
 				log.Warn("Link with empty href detected", zap.String("location", FormatRefPath(ref.Path)))
 				if result.replaceBrokenLink(ref, "", log) {
-					// Ensure not-found image binary is present if we replaced an image link
+					// Ensure not found image binary is present if we replaced an image link
 					result.ensureNotFoundImageBinary()
 				}
 			}
@@ -256,7 +294,7 @@ func (fb *FictionBook) NormalizeLinks(log *zap.Logger) (*FictionBook, IDIndex, R
 			for _, ref := range refs {
 				log.Warn("Broken external link detected", zap.String("location", FormatRefPath(ref.Path)))
 				if result.replaceBrokenLink(ref, targetID, log) {
-					// Ensure not-found image binary is present if we replaced an image link
+					// Ensure not found image binary is present if we replaced an image link
 					result.ensureNotFoundImageBinary()
 				}
 			}
@@ -272,7 +310,7 @@ func (fb *FictionBook) NormalizeLinks(log *zap.Logger) (*FictionBook, IDIndex, R
 			for _, ref := range refs {
 				log.Warn("Broken internal link detected", zap.String("target", targetID), zap.String("location", FormatRefPath(ref.Path)))
 				if result.replaceBrokenLink(ref, targetID, log) {
-					// Ensure not-found image binary is present if we replaced an image link
+					// Ensure not found image binary is present if we replaced an image link
 					result.ensureNotFoundImageBinary()
 				}
 			}
@@ -376,30 +414,30 @@ func (fb *FictionBook) replaceBrokenLink(ref ElementRef, targetID string, log *z
 			}
 		}
 	case "coverpage":
-		// Point coverpage to not-found image
+		// Point coverpage to not found image
 		if len(ref.Path) > 0 {
 			if img, ok := ref.Path[len(ref.Path)-1].(*InlineImage); ok {
-				img.Href = "#" + NotFoundImageID
-				log.Debug("Broken coverpage image link redirected to not-found image", zap.String("original", targetID))
+				img.Href = "#" + fb.NotFoundImageID
+				log.Debug("Broken coverpage image link redirected to not found image", zap.String("original", targetID))
 				addedNotFoundImage = true
 			}
 		}
 	case "block-image":
-		// Point block image to not-found image
+		// Point block image to not found image
 		if len(ref.Path) > 0 {
 			if img, ok := ref.Path[len(ref.Path)-1].(*Image); ok {
-				img.Href = "#" + NotFoundImageID
-				log.Debug("Broken block image link redirected to not-found image", zap.String("original", targetID))
+				img.Href = "#" + fb.NotFoundImageID
+				log.Debug("Broken block image link redirected to not found image", zap.String("original", targetID))
 				addedNotFoundImage = true
 			}
 		}
 	case "inline-image":
-		// Point inline image to not-found image
+		// Point inline image to not found image
 		if len(ref.Path) > 0 {
 			if segment, ok := ref.Path[len(ref.Path)-1].(*InlineSegment); ok {
 				if segment.Image != nil {
-					segment.Image.Href = "#" + NotFoundImageID
-					log.Debug("Broken inline image link redirected to not-found image", zap.String("original", targetID))
+					segment.Image.Href = "#" + fb.NotFoundImageID
+					log.Debug("Broken inline image link redirected to not found image", zap.String("original", targetID))
 					addedNotFoundImage = true
 				}
 			}
@@ -448,21 +486,79 @@ func extractLinkText(segment *InlineSegment) string {
 	return text
 }
 
-// ensureNotFoundImageBinary adds the not-found image binary if it doesn't already exist
+// ensureNotFoundImageBinary adds the not found image binary if it doesn't already exist
 func (fb *FictionBook) ensureNotFoundImageBinary() {
-	// Check if not-found image binary already exists
+	// Check if not found image binary already exists
 	for i := range fb.Binaries {
-		if fb.Binaries[i].ID == NotFoundImageID {
+		if fb.Binaries[i].ID == fb.NotFoundImageID {
 			return
 		}
 	}
 
-	// Add not-found image binary
+	// Add not found image binary
 	fb.Binaries = append(fb.Binaries, BinaryObject{
-		ID:          NotFoundImageID,
+		ID:          fb.NotFoundImageID,
 		ContentType: "image/png",
 		Data:        notFoundImagePNG,
 	})
+}
+
+// FilterReferencedImages returns only images that are actually referenced in the book
+func (fb *FictionBook) FilterReferencedImages(allImages BookImages, links ReverseLinkIndex, coverID string, log *zap.Logger) BookImages {
+	referenced := make(map[string]bool)
+
+	// Always include the not found image if it exists (it may be needed for broken links)
+	if fb.NotFoundImageID != "" {
+		if _, exists := allImages[fb.NotFoundImageID]; exists {
+			referenced[fb.NotFoundImageID] = true
+		}
+	}
+
+	// Always include vignette images
+	for _, vignetteID := range fb.VignetteIDs {
+		if _, exists := allImages[vignetteID]; exists {
+			referenced[vignetteID] = true
+		}
+	}
+
+	// Add cover image if present
+	if coverID != "" {
+		referenced[coverID] = true
+	}
+
+	// Add all images referenced in links
+	for targetID, refs := range links {
+		if len(refs) == 0 {
+			continue
+		}
+
+		// Check if any reference is an image type
+		for _, ref := range refs {
+			switch ref.Type {
+			case "coverpage", "block-image", "inline-image":
+				referenced[targetID] = true
+			}
+		}
+	}
+
+	// Build filtered index
+	filtered := make(BookImages)
+	for id := range referenced {
+		if img, exists := allImages[id]; exists {
+			filtered[id] = img
+			continue
+		}
+		log.Debug("Referenced image not found in prepared images", zap.String("id", id))
+	}
+
+	log.Debug("Filtered images index", zap.Int("total", len(allImages)), zap.Int("referenced", len(filtered)))
+	for id, img := range allImages {
+		if _, exists := filtered[id]; !exists {
+			log.Debug("Excluding unreferenced image", zap.String("id", id), zap.String("type", img.MimeType))
+		}
+	}
+
+	return filtered
 }
 
 // NormalizeSections flattens grouping sections (sections without titles that only contain other sections)

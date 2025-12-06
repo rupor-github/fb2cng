@@ -1,5 +1,9 @@
 package fb2
 
+import (
+	"fbc/config"
+)
+
 // Clone and deep copy functions for FictionBook structures.
 // This is needed to safely manipulate copies of the book, which is very useful
 // for debugging and testing.
@@ -11,16 +15,29 @@ func (fb *FictionBook) clone() *FictionBook {
 	}
 
 	clone := &FictionBook{
-		Stylesheets: cloneStylesheets(fb.Stylesheets),
-		Description: cloneDescription(&fb.Description),
-		Bodies:      cloneBodies(fb.Bodies),
-		Binaries:    cloneBinaries(fb.Binaries),
+		Stylesheets:     cloneStylesheets(fb.Stylesheets),
+		Description:     cloneDescription(&fb.Description),
+		Bodies:          cloneBodies(fb.Bodies),
+		Binaries:        cloneBinaries(fb.Binaries),
+		NotFoundImageID: fb.NotFoundImageID,
+		VignetteIDs:     cloneVignetteIDs(fb.VignetteIDs),
 	}
 
 	return clone
 }
 
 // Clone helper functions for deep copying
+
+func cloneVignetteIDs(vignettes map[config.VignettePos]string) map[config.VignettePos]string {
+	if vignettes == nil {
+		return nil
+	}
+	result := make(map[config.VignettePos]string, len(vignettes))
+	for k, v := range vignettes {
+		result[k] = v
+	}
+	return result
+}
 
 func cloneStylesheets(stylesheets []Stylesheet) []Stylesheet {
 	if stylesheets == nil {

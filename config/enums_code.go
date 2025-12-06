@@ -413,3 +413,97 @@ func (x *TOCPagePlacement) UnmarshalText(text []byte) error {
 func (x *TOCPagePlacement) AppendText(b []byte) ([]byte, error) {
 	return append(b, x.String()...), nil
 }
+
+const (
+	// VignettePosBookTitleTop is a VignettePos of type book-title-top.
+	VignettePosBookTitleTop VignettePos = "book-title-top"
+	// VignettePosBookTitleBottom is a VignettePos of type book-title-bottom.
+	VignettePosBookTitleBottom VignettePos = "book-title-bottom"
+	// VignettePosChapterTitleTop is a VignettePos of type chapter-title-top.
+	VignettePosChapterTitleTop VignettePos = "chapter-title-top"
+	// VignettePosChapterTitleBottom is a VignettePos of type chapter-title-bottom.
+	VignettePosChapterTitleBottom VignettePos = "chapter-title-bottom"
+	// VignettePosChapterEnd is a VignettePos of type chapter-end.
+	VignettePosChapterEnd VignettePos = "chapter-end"
+)
+
+var ErrInvalidVignettePos = fmt.Errorf("not a valid VignettePos, try [%s]", strings.Join(_VignettePosNames, ", "))
+
+var _VignettePosNames = []string{
+	string(VignettePosBookTitleTop),
+	string(VignettePosBookTitleBottom),
+	string(VignettePosChapterTitleTop),
+	string(VignettePosChapterTitleBottom),
+	string(VignettePosChapterEnd),
+}
+
+// VignettePosNames returns a list of possible string values of VignettePos.
+func VignettePosNames() []string {
+	tmp := make([]string, len(_VignettePosNames))
+	copy(tmp, _VignettePosNames)
+	return tmp
+}
+
+// String implements the Stringer interface.
+func (x VignettePos) String() string {
+	return string(x)
+}
+
+// IsValid provides a quick way to determine if the typed value is
+// part of the allowed enumerated values
+func (x VignettePos) IsValid() bool {
+	_, err := ParseVignettePos(string(x))
+	return err == nil
+}
+
+var _VignettePosValue = map[string]VignettePos{
+	"book-title-top":       VignettePosBookTitleTop,
+	"book-title-bottom":    VignettePosBookTitleBottom,
+	"chapter-title-top":    VignettePosChapterTitleTop,
+	"chapter-title-bottom": VignettePosChapterTitleBottom,
+	"chapter-end":          VignettePosChapterEnd,
+}
+
+// ParseVignettePos attempts to convert a string to a VignettePos.
+func ParseVignettePos(name string) (VignettePos, error) {
+	if x, ok := _VignettePosValue[name]; ok {
+		return x, nil
+	}
+	// Case insensitive parse, do a separate lookup to prevent unnecessary cost of lowercasing a string if we don't need to.
+	if x, ok := _VignettePosValue[strings.ToLower(name)]; ok {
+		return x, nil
+	}
+	return VignettePos(""), fmt.Errorf("%s is %w", name, ErrInvalidVignettePos)
+}
+
+// MustParseVignettePos converts a string to a VignettePos, and panics if is not valid.
+func MustParseVignettePos(name string) VignettePos {
+	val, err := ParseVignettePos(name)
+	if err != nil {
+		panic(err)
+	}
+	return val
+}
+
+// MarshalText implements the text marshaller method.
+func (x VignettePos) MarshalText() ([]byte, error) {
+	return []byte(string(x)), nil
+}
+
+// UnmarshalText implements the text unmarshaller method.
+func (x *VignettePos) UnmarshalText(text []byte) error {
+	tmp, err := ParseVignettePos(string(text))
+	if err != nil {
+		return err
+	}
+	*x = tmp
+	return nil
+}
+
+// AppendText appends the textual representation of itself to the end of b
+// (allocating a larger slice if necessary) and returns the updated slice.
+//
+// Implementations must not retain b, nor mutate any bytes within b[:len(b)].
+func (x *VignettePos) AppendText(b []byte) ([]byte, error) {
+	return append(b, x.String()...), nil
+}

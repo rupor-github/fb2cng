@@ -5,16 +5,25 @@ import (
 	"time"
 
 	"golang.org/x/text/language"
+
+	"fbc/config"
 )
 
 // Type definitions for FictionBook2 format structures.
 
 // FictionBook mirrors the root element defined in FictionBook.xsd.
 type FictionBook struct {
-	Stylesheets []Stylesheet
-	Description Description
-	Bodies      []Body
-	Binaries    []BinaryObject
+	Stylesheets     []Stylesheet
+	Description     Description
+	Bodies          []Body
+	Binaries        []BinaryObject
+	NotFoundImageID string                        // ID used for placeholder image when broken image links are found
+	VignetteIDs     map[config.VignettePos]string // IDs for vignette images by position
+}
+
+func (fb *FictionBook) IsVignetteEnabled(position config.VignettePos) bool {
+	_, exists := fb.VignetteIDs[position]
+	return exists
 }
 
 type FootnoteRef struct {

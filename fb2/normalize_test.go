@@ -381,7 +381,7 @@ func TestNormalizeLinks(t *testing.T) {
 	}
 
 	// Normalize links
-	normalized, ids, links := original.NormalizeLinks(log)
+	normalized, ids, links := original.NormalizeLinks(nil, log)
 
 	// Verify original is unchanged
 	if original.Bodies[0].Sections[0].Content[0].Paragraph.Text[0].Kind != InlineLink {
@@ -463,12 +463,17 @@ func TestNormalizeLinks_BrokenImageLinks(t *testing.T) {
 	}
 
 	// Normalize links
-	normalized, _, _ := original.NormalizeLinks(log)
+	normalized, _, _ := original.NormalizeLinks(nil, log)
+
+	// Verify NotFoundImageID was initialized
+	if normalized.NotFoundImageID == "" {
+		t.Error("NotFoundImageID was not initialized")
+	}
 
 	// Verify not-found image binary was added
 	foundNotFoundBinary := false
 	for i := range normalized.Binaries {
-		if normalized.Binaries[i].ID == NotFoundImageID {
+		if normalized.Binaries[i].ID == normalized.NotFoundImageID {
 			foundNotFoundBinary = true
 			if normalized.Binaries[i].ContentType != "image/png" {
 				t.Errorf("notFoundImage has wrong content type: %s", normalized.Binaries[i].ContentType)
@@ -484,35 +489,37 @@ func TestNormalizeLinks_BrokenImageLinks(t *testing.T) {
 	}
 
 	// Verify coverpage image points to not-found image
-	if normalized.Description.TitleInfo.Coverpage[0].Href != "#"+NotFoundImageID {
+	expectedHref := "#" + normalized.NotFoundImageID
+	if normalized.Description.TitleInfo.Coverpage[0].Href != expectedHref {
 		t.Errorf("coverpage href not redirected: got %q, want %q",
-			normalized.Description.TitleInfo.Coverpage[0].Href, "#"+NotFoundImageID)
+			normalized.Description.TitleInfo.Coverpage[0].Href, expectedHref)
 	}
 
 	// Verify block image points to not-found image
-	if normalized.Bodies[0].Sections[0].Content[0].Image.Href != "#"+NotFoundImageID {
+	if normalized.Bodies[0].Sections[0].Content[0].Image.Href != expectedHref {
 		t.Errorf("block image href not redirected: got %q, want %q",
-			normalized.Bodies[0].Sections[0].Content[0].Image.Href, "#"+NotFoundImageID)
+			normalized.Bodies[0].Sections[0].Content[0].Image.Href, expectedHref)
 	}
 
 	// Verify inline image points to not-found image
 	inlineImg := normalized.Bodies[0].Sections[0].Content[1].Paragraph.Text[1].Image
-	if inlineImg.Href != "#"+NotFoundImageID {
+	if inlineImg.Href != expectedHref {
 		t.Errorf("inline image href not redirected: got %q, want %q",
-			inlineImg.Href, "#"+NotFoundImageID)
+			inlineImg.Href, expectedHref)
 	}
 
 	// Verify original is unchanged
-	if original.Description.TitleInfo.Coverpage[0].Href == "#"+NotFoundImageID {
+	if original.Description.TitleInfo.Coverpage[0].Href == expectedHref {
 		t.Error("original coverpage was mutated")
 	}
-	if original.Bodies[0].Sections[0].Content[0].Image.Href == "#"+NotFoundImageID {
+	if original.Bodies[0].Sections[0].Content[0].Image.Href == expectedHref {
 		t.Error("original block image was mutated")
 	}
 }
 
 func TestEnsureNotFoundImageBinary_Idempotent(t *testing.T) {
 	book := &FictionBook{
+		NotFoundImageID: "test-not-found-id",
 		Binaries: []BinaryObject{
 			{ID: "existing-image", ContentType: "image/jpeg", Data: []byte{1, 2, 3}},
 		},
@@ -533,7 +540,7 @@ func TestEnsureNotFoundImageBinary_Idempotent(t *testing.T) {
 	// Verify the not-found binary is present
 	found := false
 	for i := range book.Binaries {
-		if book.Binaries[i].ID == NotFoundImageID {
+		if book.Binaries[i].ID == book.NotFoundImageID {
 			found = true
 			break
 		}
