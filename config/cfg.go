@@ -42,12 +42,11 @@ type (
 	AnnotationConfig struct {
 		Enable bool   `yaml:"enable"`
 		Title  string `yaml:"title" validate:"required_unless=Enable false"`
-		TOC    bool   `yaml:"toc"`
+		InTOC  bool   `yaml:"in_toc"`
 	}
 
 	TOCPageConfig struct {
 		Placement       TOCPagePlacement `yaml:"placement" validate:"oneof=0 1 2"`
-		Title           string           `yaml:"title" validate:"required_unless=Placement 0"`
 		AuthorsTemplate string           `yaml:"authors_template"`
 	}
 

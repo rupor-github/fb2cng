@@ -75,8 +75,8 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		chapters = append([]chapterData{annotationChapter}, chapters...)
 	}
 
-	// Add TOC page if requested
-	if cfg.TOCPage.Placement != config.TOCPagePlacementNone {
+	// Add TOC page if requested (EPUB2 only, EPUB3 uses nav.xhtml)
+	if cfg.TOCPage.Placement != config.TOCPagePlacementNone && c.OutputFormat != config.OutputFmtEpub3 {
 		tocChapter := generateTOCPage(c, chapters, &cfg.TOCPage, log)
 		if cfg.TOCPage.Placement == config.TOCPagePlacementBefore {
 			chapters = append([]chapterData{tocChapter}, chapters...)
@@ -117,7 +117,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 
 	switch c.OutputFormat {
 	case config.OutputFmtEpub3:
-		if err := writeNav(zw, c, chapters, log); err != nil {
+		if err := writeNav(zw, c, cfg, chapters, log); err != nil {
 			return fmt.Errorf("unable to write NAV: %w", err)
 		}
 	default:
@@ -502,6 +502,13 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		spine.CreateAttr("toc", "ncx")
 	}
 
+	// EPUB3: Add nav.xhtml to spine according to TOCPagePlacement
+	if c.OutputFormat == config.OutputFmtEpub3 && cfg.TOCPage.Placement == config.TOCPagePlacementBefore {
+		navRef := spine.CreateElement("itemref")
+		navRef.CreateAttr("idref", "nav")
+		navRef.CreateAttr("linear", "no")
+	}
+
 	if c.CoverID != "" {
 		coverRef := spine.CreateElement("itemref")
 		coverRef.CreateAttr("idref", "cover-page")
@@ -509,11 +516,17 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 
 	// Add chapters to spine, but only reference each file once (use first chapter ID for files with fragments)
 	addedToSpine := make(map[string]bool)
+	var tocPageID string
 	for _, chapter := range chapters {
 		// Extract base filename without fragment
 		filename := chapter.Filename
 		if idx := strings.Index(filename, "#"); idx != -1 {
 			filename = filename[:idx]
+		}
+
+		// Track toc-page for guide/landmarks
+		if chapter.ID == "toc-page" {
+			tocPageID = addedFiles[filename]
 		}
 
 		// Only add each file once to spine
@@ -524,18 +537,96 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		}
 	}
 
+	// EPUB3: Add nav.xhtml to spine at the end if placement is after
+	if c.OutputFormat == config.OutputFmtEpub3 && cfg.TOCPage.Placement == config.TOCPagePlacementAfter {
+		navRef := spine.CreateElement("itemref")
+		navRef.CreateAttr("idref", "nav")
+		navRef.CreateAttr("linear", "no")
+	}
+
+	// EPUB2: Add guide section
+	if c.OutputFormat != config.OutputFmtEpub3 {
+		guide := pkg.CreateElement("guide")
+
+		if c.CoverID != "" {
+			coverRef := guide.CreateElement("reference")
+			coverRef.CreateAttr("type", "cover")
+			coverRef.CreateAttr("title", "Cover")
+			coverRef.CreateAttr("href", "cover.xhtml")
+		}
+
+		if tocPageID != "" {
+			tocRef := guide.CreateElement("reference")
+			tocRef.CreateAttr("type", "toc")
+			tocRef.CreateAttr("title", "Table of Contents")
+			// Find the filename for toc-page
+			for filename, id := range addedFiles {
+				if id == tocPageID {
+					tocRef.CreateAttr("href", filename)
+					break
+				}
+			}
+		}
+	}
+
 	return writeXMLToZip(zw, filepath.Join(oebpsDir, "content.opf"), doc)
 }
 
-// getChapterAnchor returns the anchor ID to use for a chapter link
-func getChapterAnchor(chapter chapterData) string {
-	if chapter.AnchorID != "" {
-		return chapter.AnchorID
+func writeNav(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, chapters []chapterData, log *zap.Logger) error {
+	doc := etree.NewDocument()
+	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
+
+	html := doc.CreateElement("html")
+	html.CreateAttr("xmlns", "http://www.w3.org/1999/xhtml")
+	html.CreateAttr("xmlns:epub", "http://www.idpf.org/2007/ops")
+
+	head := html.CreateElement("head")
+
+	meta := head.CreateElement("meta")
+	meta.CreateAttr("charset", "utf-8")
+
+	title := head.CreateElement("title")
+	title.SetText("Table of Contents")
+
+	// Add CSS for better presentation
+	link := head.CreateElement("link")
+	link.CreateAttr("rel", "stylesheet")
+	link.CreateAttr("type", "text/css")
+	link.CreateAttr("href", "stylesheet.css")
+
+	body := html.CreateElement("body")
+
+	nav := body.CreateElement("nav")
+	nav.CreateAttr("epub:type", "toc")
+	nav.CreateAttr("id", "toc")
+	nav.CreateAttr("role", "doc-toc")
+
+	// Build TOC content structure
+	buildTOCContent(nav, c, chapters, &cfg.TOCPage, log)
+
+	// EPUB3: Add landmarks navigation (replaces EPUB2 guide)
+	landmarksNav := body.CreateElement("nav")
+	landmarksNav.CreateAttr("epub:type", "landmarks")
+	landmarksNav.CreateAttr("id", "landmarks")
+	landmarksNav.CreateAttr("hidden", "")
+
+	landmarksH2 := landmarksNav.CreateElement("h2")
+	landmarksH2.SetText("Landmarks")
+
+	landmarksOL := landmarksNav.CreateElement("ol")
+
+	// Add cover to landmarks if it exists
+	if c.CoverID != "" {
+		li := landmarksOL.CreateElement("li")
+		a := li.CreateElement("a")
+		a.CreateAttr("epub:type", "cover")
+		a.CreateAttr("href", "cover.xhtml")
+		a.SetText("Cover")
 	}
-	if chapter.Section != nil && chapter.Section.ID != "" {
-		return chapter.Section.ID
-	}
-	return chapter.ID
+
+	// Note: toc-page is never generated for EPUB3, so no need to add it to landmarks
+
+	return writeXMLToZip(zw, filepath.Join(oebpsDir, "nav.xhtml"), doc)
 }
 
 func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap.Logger) error {
@@ -607,6 +698,26 @@ func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 	return writeXMLToZip(zw, filepath.Join(oebpsDir, "toc.ncx"), doc)
 }
 
+func writeDataToZip(zw *zip.Writer, name string, data []byte) error {
+	w, err := zw.Create(name)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(data)
+	return err
+}
+
+// getChapterAnchor returns the anchor ID to use for a chapter link
+func getChapterAnchor(chapter chapterData) string {
+	if chapter.AnchorID != "" {
+		return chapter.AnchorID
+	}
+	if chapter.Section != nil && chapter.Section.ID != "" {
+		return chapter.Section.ID
+	}
+	return chapter.ID
+}
+
 func calculateSectionDepth(section *fb2.Section, currentDepth int) int {
 	maxDepth := currentDepth
 	for _, item := range section.Content {
@@ -667,104 +778,6 @@ func buildNCXNavPoints(parent *etree.Element, section *fb2.Section, filename str
 	}
 }
 
-func writeNav(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap.Logger) error {
-	doc := etree.NewDocument()
-	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
-
-	html := doc.CreateElement("html")
-	html.CreateAttr("xmlns", "http://www.w3.org/1999/xhtml")
-	html.CreateAttr("xmlns:epub", "http://www.idpf.org/2007/ops")
-
-	head := html.CreateElement("head")
-
-	meta := head.CreateElement("meta")
-	meta.CreateAttr("charset", "utf-8")
-
-	title := head.CreateElement("title")
-	title.SetText("Table of Contents")
-
-	// Add CSS for better presentation
-	link := head.CreateElement("link")
-	link.CreateAttr("rel", "stylesheet")
-	link.CreateAttr("type", "text/css")
-	link.CreateAttr("href", "stylesheet.css")
-
-	body := html.CreateElement("body")
-
-	nav := body.CreateElement("nav")
-	nav.CreateAttr("epub:type", "toc")
-	nav.CreateAttr("id", "toc")
-	nav.CreateAttr("role", "doc-toc")
-
-	h1 := nav.CreateElement("h1")
-	h1.SetText("Table of Contents")
-
-	ol := nav.CreateElement("ol")
-
-	for _, chapter := range chapters {
-		if !chapter.IncludeInTOC {
-			continue
-		}
-		li := ol.CreateElement("li")
-		a := li.CreateElement("a")
-		a.CreateAttr("href", chapter.Filename+"#"+getChapterAnchor(chapter))
-		a.SetText(chapter.Title)
-
-		// Add nested sections to TOC
-		if chapter.Section != nil {
-			buildNavOL(li, chapter.Section, chapter.Filename, c)
-		}
-	}
-
-	return writeXMLToZip(zw, filepath.Join(oebpsDir, "nav.xhtml"), doc)
-}
-
-func buildNavOL(parent *etree.Element, section *fb2.Section, filename string, c *content.Content) {
-	nestedOL := parent.SelectElement("ol")
-	if nestedOL == nil {
-		nestedOL = parent.CreateElement("ol")
-	}
-
-	hadItems := len(nestedOL.ChildElements()) > 0
-	buildNavOLItems(nestedOL, section, filename, c)
-
-	if !hadItems && len(nestedOL.ChildElements()) == 0 {
-		parent.RemoveChild(nestedOL)
-	}
-}
-
-func buildNavOLItems(parentOL *etree.Element, section *fb2.Section, filename string, c *content.Content) {
-	var lastLI *etree.Element
-
-	for _, item := range section.Content {
-		if item.Kind == fb2.FlowSubtitle && item.Subtitle != nil {
-			subtitleID := item.Subtitle.ID
-			li := parentOL.CreateElement("li")
-			a := li.CreateElement("a")
-			a.CreateAttr("href", filename+"#"+subtitleID)
-			a.SetText(item.Subtitle.AsTOCText(fb2.FormatIDToTOC(subtitleID)))
-			lastLI = li
-		} else if item.Kind == fb2.FlowSection && item.Section != nil {
-			if item.Section.Title != nil {
-				li := parentOL.CreateElement("li")
-				a := li.CreateElement("a")
-				sectionID := item.Section.ID
-				a.CreateAttr("href", filename+"#"+sectionID)
-				a.SetText(item.Section.AsTitleText(""))
-
-				buildNavOL(li, item.Section, filename, c)
-				lastLI = li
-			} else {
-				if lastLI != nil {
-					buildNavOL(lastLI, item.Section, filename, c)
-				} else {
-					buildNavOLItems(parentOL, item.Section, filename, c)
-				}
-			}
-		}
-	}
-}
-
 func generateAnnotation(c *content.Content, cfg *config.AnnotationConfig, log *zap.Logger) chapterData {
 	doc, root := createXHTMLDocument(c, cfg.Title)
 
@@ -792,13 +805,14 @@ func generateAnnotation(c *content.Content, cfg *config.AnnotationConfig, log *z
 		Filename:     filename,
 		Title:        cfg.Title,
 		Doc:          doc,
-		IncludeInTOC: cfg.TOC,
+		IncludeInTOC: cfg.InTOC,
 	}
 }
 
 // generateTOCPage creates a TOC chapter as an XHTML page
 func generateTOCPage(c *content.Content, chapters []chapterData, cfg *config.TOCPageConfig, log *zap.Logger) chapterData {
-	doc, root := createXHTMLDocument(c, cfg.Title)
+	title := "Table of Contents" // Default title, not actually visible
+	doc, root := createXHTMLDocument(c, title)
 
 	id, filename := generateUniqueID("toc-page", c.IDsIndex)
 
@@ -807,25 +821,52 @@ func generateTOCPage(c *content.Content, chapters []chapterData, cfg *config.TOC
 	tocBodyDiv.CreateAttr("class", "toc-body")
 	tocBodyDiv.CreateAttr("id", id)
 
-	c.KoboSpanNextParagraph()
-	h1 := tocBodyDiv.CreateElement("h1")
-	h1.CreateAttr("class", "toc-title")
-	appendInlineText(h1, c, c.Book.Description.TitleInfo.BookTitle.Value, false)
+	// Build TOC content structure
+	buildTOCContent(tocBodyDiv, c, chapters, cfg, log)
 
+	return chapterData{
+		ID:           id,
+		Filename:     filename,
+		Title:        title,
+		Doc:          doc,
+		IncludeInTOC: false,
+	}
+}
+
+// buildTOCContent creates the TOC title, authors, and list structure
+// parentContainer is the element to add content to (e.g., nav element or div)
+// cfg is the TOC configuration
+func buildTOCContent(parentContainer *etree.Element, c *content.Content, chapters []chapterData, cfg *config.TOCPageConfig, log *zap.Logger) {
+	// Add book title
+	c.KoboSpanNextParagraph()
+	h1 := parentContainer.CreateElement("h1")
+	h1.CreateAttr("class", "toc-title")
+
+	// First span for book title
+	titleSpan := h1.CreateElement("span")
+	titleSpan.CreateAttr("class", "toc-title-first")
+	appendInlineText(titleSpan, c, c.Book.Description.TitleInfo.BookTitle.Value, false)
+
+	// Add authors if template is provided
 	if cfg.AuthorsTemplate != "" {
 		expanded, err := fields.Expand(config.AuthorsTemplateFieldName, cfg.AuthorsTemplate, -1, c.Book, c.SrcName, c.OutputFormat)
 		if err != nil {
-			log.Warn("Unable to prepare list of authors for generated TOC", zap.Error(err))
+			log.Warn("Unable to prepare list of authors for TOC", zap.Error(err))
 		} else {
-			c.KoboSpanNextParagraph()
-			h2 := tocBodyDiv.CreateElement("h2")
-			h2.CreateAttr("class", "toc-authors")
-			appendInlineText(h2, c, expanded, false)
+			// Add break before authors
+			br := h1.CreateElement("br")
+			br.CreateAttr("class", "toc-title-break")
+
+			// Add authors span
+			authorsSpan := h1.CreateElement("span")
+			authorsSpan.CreateAttr("class", "toc-title-next")
+			appendInlineText(authorsSpan, c, expanded, false)
 		}
 	}
 
+	// Build TOC list
 	c.KoboSpanNextParagraph()
-	ol := tocBodyDiv.CreateElement("ol")
+	ol := parentContainer.CreateElement("ol")
 	ol.CreateAttr("class", "toc-list")
 
 	for _, chapter := range chapters {
@@ -839,17 +880,10 @@ func generateTOCPage(c *content.Content, chapters []chapterData, cfg *config.TOC
 		a.CreateAttr("href", chapter.Filename+"#"+getChapterAnchor(chapter))
 		appendInlineText(a, c, chapter.Title, false)
 
+		// Add nested sections to TOC
 		if chapter.Section != nil {
 			buildTOCPageOL(li, chapter.Section, chapter.Filename, c)
 		}
-	}
-
-	return chapterData{
-		ID:           id,
-		Filename:     filename,
-		Title:        cfg.Title,
-		Doc:          doc,
-		IncludeInTOC: true,
 	}
 }
 
@@ -907,13 +941,4 @@ func buildTOCPageOLItems(parentOL *etree.Element, section *fb2.Section, filename
 			}
 		}
 	}
-}
-
-func writeDataToZip(zw *zip.Writer, name string, data []byte) error {
-	w, err := zw.Create(name)
-	if err != nil {
-		return err
-	}
-	_, err = w.Write(data)
-	return err
 }

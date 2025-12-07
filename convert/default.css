@@ -97,6 +97,25 @@ h6 {
     text-indent: 0;
 }
 
+/* TOC title header (h1 in nav.xhtml or toc-page.xhtml) */
+.toc-title {
+    text-indent: 0;
+    text-align: center;
+    font-weight: bold;
+}
+.toc-title-emptyline {
+    display: block;
+    margin: 0.8em 0;
+}
+.toc-title-break {
+    display: block;
+}
+.toc-title-first,
+.toc-title-next {
+    display: inline;
+    text-indent: 0;
+}
+
 /* Section subtitle */
 .section-subtitle {
     page-break-before: auto;

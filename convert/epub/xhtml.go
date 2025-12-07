@@ -16,6 +16,7 @@ import (
 	"fbc/content"
 	"fbc/content/text"
 	"fbc/fb2"
+	"fbc/state"
 )
 
 type chapterData struct {
@@ -109,6 +110,11 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 				return nil, nil, err
 			}
 
+			// This is a workaround to make EPubCheck happy
+			// Check if we need to generate invisible link to nav.xhtml
+			env := state.EnvFromContext(ctx)
+			addHiddenNavLink := env.Cfg.Document.TOCPage.Placement != config.TOCPagePlacementNone && body.Main() && j == 0
+
 			chapterNum++
 			baseID := fmt.Sprintf("index%05d", chapterNum)
 			chapterID, filename := generateUniqueID(baseID, c.IDsIndex)
@@ -117,7 +123,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 			// Set current filename for footnote reference tracking
 			c.CurrentFilename = filename
 
-			doc, err := bodyToXHTML(c, body, section, title, log)
+			doc, err := bodyToXHTML(c, body, section, title, addHiddenNavLink, log)
 			if err != nil {
 				log.Error("Unable to convert section", zap.Error(err))
 				continue
@@ -141,7 +147,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 
 	// Process all footnote bodies - each body becomes a separate top-level chapter
 	chapterNum++
-	footnotesChapters, err := processFootnoteBodies(c, footnoteBodies, chapters, idToFile, log)
+	footnotesChapters, err := processFootnoteBodies(c, footnoteBodies, idToFile, log)
 	if err != nil {
 		log.Error("Unable to convert footnotes", zap.Error(err))
 		return chapters, idToFile, nil
@@ -152,7 +158,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 }
 
 // processFootnoteBodies converts all footnote bodies to XHTML and creates chapter entries
-func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, existingChapters []chapterData, idToFile idToFileMap, log *zap.Logger) ([]chapterData, error) {
+func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, idToFile idToFileMap, log *zap.Logger) ([]chapterData, error) {
 	_, filename := generateUniqueID("footnotes", c.IDsIndex)
 
 	docTitle := footnoteBodies[0].AsTitleText("Footnotes")
@@ -383,7 +389,7 @@ func bodyIntroToXHTML(c *content.Content, body *fb2.Body, title string, chapterI
 	return doc, nil
 }
 
-func bodyToXHTML(c *content.Content, body *fb2.Body, section *fb2.Section, title string, log *zap.Logger) (*etree.Document, error) {
+func bodyToXHTML(c *content.Content, body *fb2.Body, section *fb2.Section, title string, addHiddenNav bool, log *zap.Logger) (*etree.Document, error) {
 	doc, root := createXHTMLDocument(c, title)
 
 	// Create wrapper div with class based on body type
@@ -404,6 +410,15 @@ func bodyToXHTML(c *content.Content, body *fb2.Body, section *fb2.Section, title
 
 	if err := appendSectionContent(bodyDiv, c, section, 1, log); err != nil {
 		return nil, err
+	}
+
+	// EPUB3: Add hidden navigation link at the end of the first main body section
+	if addHiddenNav && c.OutputFormat == config.OutputFmtEpub3 {
+		hiddenP := bodyDiv.CreateElement("p")
+		hiddenP.CreateAttr("style", "display: none;")
+		navLink := hiddenP.CreateElement("a")
+		navLink.CreateAttr("href", "nav.xhtml")
+		navLink.SetText("Navigation")
 	}
 
 	return doc, nil

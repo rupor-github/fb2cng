@@ -697,8 +697,7 @@ func TestProcessFootnoteBodies(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			idToFile := make(idToFileMap)
-			existingChapters := []chapterData{}
-			chapters, err := processFootnoteBodies(c, tt.bodies, existingChapters, idToFile, log)
+			chapters, err := processFootnoteBodies(c, tt.bodies, idToFile, log)
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
@@ -2036,7 +2035,13 @@ func TestWriteNav(t *testing.T) {
 		},
 	}
 
-	err := writeNav(zw, c, chapters, log)
+	cfg := &config.DocumentConfig{
+		TOCPage: config.TOCPageConfig{
+			Placement: config.TOCPagePlacementNone,
+		},
+	}
+
+	err := writeNav(zw, c, cfg, chapters, log)
 	if err != nil {
 		t.Fatalf("writeNav() error = %v", err)
 	}
@@ -2168,6 +2173,8 @@ func TestGenerateTOCPage(t *testing.T) {
 				},
 			},
 		},
+		IDsIndex:     make(fb2.IDIndex),
+		OutputFormat: config.OutputFmtEpub2,
 	}
 
 	chapters := []chapterData{
@@ -2185,9 +2192,7 @@ func TestGenerateTOCPage(t *testing.T) {
 		},
 	}
 
-	cfg := &config.TOCPageConfig{
-		Title: "Table of Contents",
-	}
+	cfg := &config.TOCPageConfig{}
 
 	tocChapter := generateTOCPage(c, chapters, cfg, log)
 
@@ -2238,9 +2243,16 @@ func TestGenerateTOCPage(t *testing.T) {
 		t.Errorf("Expected h1 class 'toc-title', got '%s'", h1.SelectAttrValue("class", ""))
 	}
 
-	// H1 now contains the book title, not the TOC title
-	if h1.Text() != "Test Book" {
-		t.Errorf("Expected H1 text 'Test Book', got '%s'", h1.Text())
+	// H1 now contains the book title in a span with the new structure
+	titleSpan := h1.SelectElement("span")
+	if titleSpan == nil {
+		t.Fatal("Title span not found in h1")
+	}
+	if titleSpan.SelectAttrValue("class", "") != "toc-title-first" {
+		t.Errorf("Expected span class 'toc-title-first', got '%s'", titleSpan.SelectAttrValue("class", ""))
+	}
+	if titleSpan.Text() != "Test Book" {
+		t.Errorf("Expected title span text 'Test Book', got '%s'", titleSpan.Text())
 	}
 
 	ol := tocBodyDiv.SelectElement("ol")
@@ -2313,9 +2325,7 @@ func TestGenerateTOCPage_IDCollision(t *testing.T) {
 		"toc-page-1": {Type: "section"},
 	}
 
-	cfg := &config.TOCPageConfig{
-		Title: "Table of Contents",
-	}
+	cfg := &config.TOCPageConfig{}
 
 	tocChapter := generateTOCPage(c, chapters, cfg, log)
 
@@ -2353,7 +2363,6 @@ func TestGenerate_WithTOCPageBefore(t *testing.T) {
 	outputPath := filepath.Join(tmpDir, "test-toc-before.epub")
 	cfg := env.Cfg.Document
 	cfg.TOCPage.Placement = config.TOCPagePlacementBefore
-	cfg.TOCPage.Title = "Contents"
 
 	err = Generate(ctx, c, outputPath, &cfg, log)
 	if err != nil {
@@ -2433,7 +2442,6 @@ func TestGenerate_WithTOCPageAfter(t *testing.T) {
 	outputPath := filepath.Join(tmpDir, "test-toc-after.epub")
 	cfg := env.Cfg.Document
 	cfg.TOCPage.Placement = config.TOCPagePlacementAfter
-	cfg.TOCPage.Title = "Table of Contents"
 
 	err = Generate(ctx, c, outputPath, &cfg, log)
 	if err != nil {
@@ -2446,25 +2454,27 @@ func TestGenerate_WithTOCPageAfter(t *testing.T) {
 	}
 	defer zr.Close()
 
-	var foundTOCPage bool
+	// For EPUB3, check nav.xhtml instead of toc-page.xhtml
+	var foundNavPage bool
 	for _, f := range zr.File {
-		if strings.Contains(f.Name, "toc-page.xhtml") {
-			foundTOCPage = true
+		if strings.Contains(f.Name, "nav.xhtml") {
+			foundNavPage = true
 			rc, err := f.Open()
 			if err != nil {
-				t.Fatalf("open toc page: %v", err)
+				t.Fatalf("open nav page: %v", err)
 			}
 			content, _ := io.ReadAll(rc)
 			rc.Close()
 
-			if !strings.Contains(string(content), "Table of Contents") {
-				t.Error("TOC page should contain title 'Table of Contents'")
+			// Check that nav.xhtml contains the book title
+			if !strings.Contains(string(content), "Тестовая книга") {
+				t.Error("Nav page should contain book title")
 			}
 		}
 	}
 
-	if !foundTOCPage {
-		t.Error("TOC page not found in zip")
+	if !foundNavPage {
+		t.Error("Nav page not found in zip")
 	}
 }
 
