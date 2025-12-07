@@ -70,6 +70,7 @@ type (
 
 	DocumentConfig struct {
 		FixZip                bool                  `yaml:"fix_zip"`
+		OpenFromCover         bool                  `yaml:"open_from_cover"`
 		StylesheetPath        string                `yaml:"stylesheet_path" sanitize:"assure_file_access"`
 		OutputNameTemplate    string                `yaml:"output_name_template"`
 		FileNameTransliterate bool                  `yaml:"file_name_transliterate"`

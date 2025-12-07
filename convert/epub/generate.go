@@ -567,6 +567,22 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 				}
 			}
 		}
+
+		// Add start reference based on OpenFromCover setting
+		startRef := guide.CreateElement("reference")
+		startRef.CreateAttr("type", "text")
+		startRef.CreateAttr("title", "Start")
+		if cfg.OpenFromCover && c.CoverID != "" {
+			startRef.CreateAttr("href", "cover.xhtml")
+		} else {
+			// Find first text chapter (skip annotation-page if present)
+			for _, chapter := range chapters {
+				if !strings.HasPrefix(chapter.ID, "annotation-page") && !strings.HasPrefix(chapter.ID, "toc-page") {
+					startRef.CreateAttr("href", chapter.Filename+"#"+getChapterAnchor(chapter))
+					break
+				}
+			}
+		}
 	}
 
 	return writeXMLToZip(zw, filepath.Join(oebpsDir, "content.opf"), doc)
@@ -624,7 +640,22 @@ func writeNav(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		a.SetText("Cover")
 	}
 
-	// Note: toc-page is never generated for EPUB3, so no need to add it to landmarks
+	// Add bodymatter landmark based on OpenFromCover setting
+	li := landmarksOL.CreateElement("li")
+	a := li.CreateElement("a")
+	a.CreateAttr("epub:type", "bodymatter")
+	a.SetText("Start")
+	if cfg.OpenFromCover && c.CoverID != "" {
+		a.CreateAttr("href", "cover.xhtml")
+	} else {
+		// Find first text chapter (skip annotation-page if present)
+		for _, chapter := range chapters {
+			if !strings.HasPrefix(chapter.ID, "annotation-page") {
+				a.CreateAttr("href", chapter.Filename+"#"+getChapterAnchor(chapter))
+				break
+			}
+		}
+	}
 
 	return writeXMLToZip(zw, filepath.Join(oebpsDir, "nav.xhtml"), doc)
 }
