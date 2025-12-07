@@ -152,21 +152,41 @@
       <empty-line></empty-line>
       <subtitle>Подзаголовок 7 (код).</subtitle>
       <empty-line></empty-line>
-      <p>Элемент <code>
-          <emphasis>&lt;code></emphasis>
-        </code> предназначен для оформления <code>терминов</code>, <code>строк программного кода</code> и подобных <code>фрагментов текста</code>, обычно отображаемых шрифтом <code>фиксированной ширины</code>.</p>
-      <empty-line></empty-line>
-      <p>Листинги программ:</p>
-      <empty-line></empty-line>
-      <p>
-        <code>&lt;xsl:template match="fb:code"><sup>
-            <a l:href="#n_17" type="note">[17]</a>
-          </sup> &lt;xsl:element name="programlisting"> &lt;xsl:apply-templates select="@xml:lang|@id"/> &lt;xsl:apply-templates/> &lt;/xsl:element> &lt;/xsl:template></code>
-      </p>
-      <empty-line></empty-line>
-      <p>
-        <code>&lt;xsl:template match="fb:stanza"> &lt;xsl:choose> &lt;xsl:when test="count(fb:title) > 0"> &lt;formalpara role="poem"> &lt;xsl:call-template name="section_title"/> &lt;para role="poem"> &lt;xsl:apply-templates select="@xml:lang|@id"/> &lt;literallayout xml:space="preserve" role="poem">&lt;xsl:apply-templates select="fb:v"/>&lt;/literallayout> &lt;/para> &lt;/formalpara> &lt;/xsl:when> &lt;xsl:otherwise> &lt;literallayout xml:space="preserve" role="poem">&lt;xsl:apply-templates select="@xml:lang|@id"/>&lt;xsl:apply-templates select="fb:v"/>&lt;/literallayout> &lt;/xsl:otherwise> &lt;/xsl:choose> &lt;/xsl:template></code>
-      </p>
+
+   <p>Элемент <code><emphasis>&lt;code&gt;</emphasis></code> предназначен для оформления <code>терминов</code>, <code>строк программного кода</code> и подобных <code>фрагментов текста</code>, обычно отображаемых шрифтом <code>фиксированной ширины</code>.</p>
+
+   <empty-line/>
+   <p>Листинги программ:</p>
+   <empty-line/>
+
+   <p><code>
+    &lt;xsl:template match="fb:code"&gt;<sup><a l:href="#n_17" type="note">[17]</a></sup>
+        &lt;xsl:element name="programlisting"&gt;
+            &lt;xsl:apply-templates select="@xml:lang|@id"/&gt;
+            &lt;xsl:apply-templates/&gt;
+        &lt;/xsl:element&gt;
+    &lt;/xsl:template&gt;
+   </code></p>
+   <empty-line/>
+   <p><code>
+    &lt;xsl:template match="fb:stanza"&gt;
+        &lt;xsl:choose&gt;
+            &lt;xsl:when test="count(fb:title) &gt; 0"&gt;
+                &lt;formalpara role="poem"&gt;
+                    &lt;xsl:call-template name="section_title"/&gt;
+                    &lt;para role="poem"&gt;
+                        &lt;xsl:apply-templates select="@xml:lang|@id"/&gt;
+                        &lt;literallayout xml:space="preserve" role="poem"&gt;&lt;xsl:apply-templates select="fb:v"/&gt;&lt;/literallayout&gt;
+                    &lt;/para&gt;
+                &lt;/formalpara&gt;
+            &lt;/xsl:when&gt;
+            &lt;xsl:otherwise&gt;
+                &lt;literallayout xml:space="preserve" role="poem"&gt;&lt;xsl:apply-templates select="@xml:lang|@id"/&gt;&lt;xsl:apply-templates select="fb:v"/&gt;&lt;/literallayout&gt;
+            &lt;/xsl:otherwise&gt;
+        &lt;/xsl:choose&gt;
+    &lt;/xsl:template&gt;
+   </code></p>
+
       <p id="p_2">… и обратная перекрёстная ссылка на параграф в начале этой главы: <emphasis>[<a l:href="#p_1">перекрёстная ссылка</a>]</emphasis>.</p>
       <empty-line></empty-line>
       <image alt="Виньетка" id="i_1" l:href="#vin.png" title="Конец главы (image title)"></image>

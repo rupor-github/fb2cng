@@ -5,6 +5,17 @@ p {
     margin: 0 0 0.3em 0;
 }
 
+/* Code blocks - left aligned, no justification */
+code {
+    text-align: left;
+    white-space: pre-wrap;
+    font-family: monospace;
+    font-size: 70%;
+}
+p code {
+    text-align: left;
+}
+
 /* Heading sizes */
 h1 {
     font-size: 140%;
