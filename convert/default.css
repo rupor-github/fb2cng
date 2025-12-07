@@ -40,7 +40,7 @@ h6 {
     margin: 2em 0 1em 0;
 }
 
-/* Body title header element (h1-h6 inside body-title wrapper) */
+/* Body title header (h1-h6 inside body-title wrapper) */
 .body-title-header {
     text-indent: 0;
     text-align: center;
@@ -170,6 +170,7 @@ img.image-vignette {
     page-break-before: avoid;
 }
 
+/* Epigraphs (quotations at chapter/section beginnings) */
 .epigraph {
     text-align: right;
     font-style: italic;
@@ -181,6 +182,8 @@ img.image-vignette {
     text-indent: 0;
     margin: 0.3em 0;
 }
+
+/* Annotations (book summaries and descriptions) */
 .annotation {
     margin: 2em 1em 1em 1em;
 }
@@ -196,6 +199,8 @@ img.image-vignette {
     margin: 0.5em 0;
     font-weight: bold;
 }
+
+/* Poems and poetry formatting */
 .poem {
     text-indent: 0;
     font-style: italic;
@@ -215,6 +220,8 @@ img.image-vignette {
     text-indent: 0;
     margin: 0.5em 0;
 }
+
+/* Stanzas (poem sections) */
 .stanza {
     margin: 0.5em 0;
 }
@@ -232,10 +239,14 @@ img.image-vignette {
     text-indent: 0;
     margin: 0.25em 0;
 }
+
+/* Verses (individual poem lines) */
 .verse {
     margin: 0.25em 0 0.25em 2em;
     text-indent: 0;
 }
+
+/* Citations and block quotes */
 .cite,
 blockquote.cite {
     margin: 1em 2em;
@@ -245,6 +256,8 @@ blockquote.cite {
     text-indent: 0;
     margin: 0.5em 0;
 }
+
+/* Text author attribution */
 .text-author {
     text-align: right;
     font-style: italic;
@@ -252,18 +265,26 @@ blockquote.cite {
     page-break-before: avoid;
     font-weight: bold;
 }
+
+/* Date elements */
 .date {
     text-align: right;
     text-indent: 0;
     margin: 0.5em 0;
 }
+
+/* Empty lines for spacing */
 .emptyline {
 	display: block;
     margin: 1em 0;
 }
+
+/* Generic section container */
 .section {
     margin: 1em 0;
 }
+
+/* Tables */
 table {
     max-width: 100%;
     width: auto;
@@ -286,6 +307,8 @@ td {
 	word-wrap: break-word;
 	max-width: 200px;
 }
+
+/* Footnotes */
 .footnote {
     text-indent: 0;
 }
@@ -299,7 +322,7 @@ td {
     text-indent: 0;
     margin: 0.2em 0;
 }
-/* Links */
+/* Links and hyperlink styles */
 .link-external {
     text-decoration: underline;
 }
@@ -319,6 +342,8 @@ td {
     text-decoration: none;
     font-weight: bold;
 }
+
+/* Unexpected/error elements */
 .unexpected {
     text-decoration: line-through;
 }
