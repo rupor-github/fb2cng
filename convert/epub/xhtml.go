@@ -1,12 +1,9 @@
 package epub
 
 import (
-	"archive/zip"
-	"bytes"
 	"context"
 	"fmt"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/beevik/etree"
@@ -33,21 +30,6 @@ const backlinkSym = "<<" // String for additional link backs in the footnote bod
 
 // idToFileMap maps element IDs to the chapter filename containing them
 type idToFileMap map[string]string
-
-// generateUniqueID returns a unique ID and filename that doesn't collide with FB2 element IDs
-func generateUniqueID(baseID string, fbIDs fb2.IDIndex) (id, filename string) {
-	id = baseID
-	filename = baseID + ".xhtml"
-	counter := 0
-	_, exists := fbIDs[id]
-	for exists {
-		counter++
-		id = fmt.Sprintf("%s-%d", baseID, counter)
-		filename = id + ".xhtml"
-		_, exists = fbIDs[id]
-	}
-	return id, filename
-}
 
 func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([]chapterData, idToFileMap, error) {
 	if err := ctx.Err(); err != nil {
@@ -270,6 +252,65 @@ func createXHTMLDocument(c *content.Content, title string) (*etree.Document, *et
 	return doc, root
 }
 
+func bodyIntroToXHTML(c *content.Content, body *fb2.Body, title string, chapterID string, log *zap.Logger) (*etree.Document, error) {
+	doc, root := createXHTMLDocument(c, title)
+
+	// Create wrapper div with class based on body type
+	var bodyClass string
+	if body.Main() {
+		bodyClass = "main-body"
+	} else {
+		bodyClass = "other-body"
+	}
+
+	bodyDiv := root.CreateElement("div")
+	bodyDiv.CreateAttr("class", bodyClass)
+
+	// Add unique ID to div wrapper
+	bodyDiv.CreateAttr("id", chapterID)
+
+	if err := appendBodyIntroContent(bodyDiv, c, body, 1, log); err != nil {
+		return nil, err
+	}
+
+	return doc, nil
+}
+
+func bodyToXHTML(c *content.Content, body *fb2.Body, section *fb2.Section, title string, addHiddenNav bool, log *zap.Logger) (*etree.Document, error) {
+	doc, root := createXHTMLDocument(c, title)
+
+	// Create wrapper div with class based on body type
+	var bodyClass string
+	if body.Main() {
+		bodyClass = "main-body"
+	} else {
+		bodyClass = "other-body"
+	}
+
+	bodyDiv := root.CreateElement("div")
+	bodyDiv.CreateAttr("class", bodyClass)
+
+	// Add section ID to div wrapper so it can be a link target
+	if section.ID != "" {
+		bodyDiv.CreateAttr("id", section.ID)
+	}
+
+	if err := appendSectionContent(bodyDiv, c, section, 1, log); err != nil {
+		return nil, err
+	}
+
+	// EPUB3: Add hidden navigation link at the end of the first main body section
+	if addHiddenNav && c.OutputFormat == config.OutputFmtEpub3 {
+		hiddenP := bodyDiv.CreateElement("p")
+		hiddenP.CreateAttr("style", "display: none;")
+		navLink := hiddenP.CreateElement("a")
+		navLink.CreateAttr("href", "nav.xhtml")
+		navLink.SetText("Navigation")
+	}
+
+	return doc, nil
+}
+
 // appendTitleAsHeading appends a title as a heading element (h1-h6) with span children for each paragraph
 // Used for body and section titles that need semantic heading markup
 func appendTitleAsHeading(parent *etree.Element, c *content.Content, title *fb2.Title, depth int, classPrefix string) {
@@ -363,65 +404,6 @@ func appendEpigraphs(parent *etree.Element, c *content.Content, epigraphs []fb2.
 		}
 	}
 	return nil
-}
-
-func bodyIntroToXHTML(c *content.Content, body *fb2.Body, title string, chapterID string, log *zap.Logger) (*etree.Document, error) {
-	doc, root := createXHTMLDocument(c, title)
-
-	// Create wrapper div with class based on body type
-	var bodyClass string
-	if body.Main() {
-		bodyClass = "main-body"
-	} else {
-		bodyClass = "other-body"
-	}
-
-	bodyDiv := root.CreateElement("div")
-	bodyDiv.CreateAttr("class", bodyClass)
-
-	// Add unique ID to div wrapper
-	bodyDiv.CreateAttr("id", chapterID)
-
-	if err := appendBodyIntroContent(bodyDiv, c, body, 1, log); err != nil {
-		return nil, err
-	}
-
-	return doc, nil
-}
-
-func bodyToXHTML(c *content.Content, body *fb2.Body, section *fb2.Section, title string, addHiddenNav bool, log *zap.Logger) (*etree.Document, error) {
-	doc, root := createXHTMLDocument(c, title)
-
-	// Create wrapper div with class based on body type
-	var bodyClass string
-	if body.Main() {
-		bodyClass = "main-body"
-	} else {
-		bodyClass = "other-body"
-	}
-
-	bodyDiv := root.CreateElement("div")
-	bodyDiv.CreateAttr("class", bodyClass)
-
-	// Add section ID to div wrapper so it can be a link target
-	if section.ID != "" {
-		bodyDiv.CreateAttr("id", section.ID)
-	}
-
-	if err := appendSectionContent(bodyDiv, c, section, 1, log); err != nil {
-		return nil, err
-	}
-
-	// EPUB3: Add hidden navigation link at the end of the first main body section
-	if addHiddenNav && c.OutputFormat == config.OutputFmtEpub3 {
-		hiddenP := bodyDiv.CreateElement("p")
-		hiddenP.CreateAttr("style", "display: none;")
-		navLink := hiddenP.CreateElement("a")
-		navLink.CreateAttr("href", "nav.xhtml")
-		navLink.SetText("Navigation")
-	}
-
-	return doc, nil
 }
 
 func appendBodyIntroContent(parent *etree.Element, c *content.Content, body *fb2.Body, depth int, log *zap.Logger) error {
@@ -1140,33 +1122,6 @@ func appendCiteElement(parent *etree.Element, c *content.Content, cite *fb2.Cite
 	return nil
 }
 
-// buildStyleAttr builds a CSS style attribute from base style and alignment properties
-func buildStyleAttr(baseStyle, align, vAlign string) string {
-	style := baseStyle
-
-	if align != "" {
-		if style != "" && !strings.HasSuffix(style, ";") {
-			style += ";"
-		}
-		if style != "" {
-			style += " "
-		}
-		style += fmt.Sprintf("text-align: %s;", align)
-	}
-
-	if vAlign != "" {
-		if style != "" && !strings.HasSuffix(style, ";") {
-			style += ";"
-		}
-		if style != "" {
-			style += " "
-		}
-		style += fmt.Sprintf("vertical-align: %s;", vAlign)
-	}
-
-	return style
-}
-
 func appendTableElement(parent *etree.Element, c *content.Content, table *fb2.Table) {
 	c.KoboSpanNextParagraph()
 	tableElem := parent.CreateElement("table")
@@ -1211,13 +1166,46 @@ func appendTableElement(parent *etree.Element, c *content.Content, table *fb2.Ta
 	}
 }
 
-func writeXHTMLChapter(zw *zip.Writer, chapter *chapterData) error {
-	// Extract base filename without anchor for file writing
-	filename := chapter.Filename
-	if idx := strings.Index(filename, "#"); idx != -1 {
-		filename = filename[:idx]
+// buildStyleAttr builds a CSS style attribute from base style and alignment properties
+func buildStyleAttr(baseStyle, align, vAlign string) string {
+	style := baseStyle
+
+	if align != "" {
+		if style != "" && !strings.HasSuffix(style, ";") {
+			style += ";"
+		}
+		if style != "" {
+			style += " "
+		}
+		style += fmt.Sprintf("text-align: %s;", align)
 	}
-	return writeXMLToZip(zw, filepath.Join(oebpsDir, filename), chapter.Doc)
+
+	if vAlign != "" {
+		if style != "" && !strings.HasSuffix(style, ";") {
+			style += ";"
+		}
+		if style != "" {
+			style += " "
+		}
+		style += fmt.Sprintf("vertical-align: %s;", vAlign)
+	}
+
+	return style
+}
+
+// generateUniqueID returns a unique ID and filename that doesn't collide with FB2 element IDs
+func generateUniqueID(baseID string, fbIDs fb2.IDIndex) (id, filename string) {
+	id = baseID
+	filename = baseID + ".xhtml"
+	counter := 0
+	_, exists := fbIDs[id]
+	for exists {
+		counter++
+		id = fmt.Sprintf("%s-%d", baseID, counter)
+		filename = id + ".xhtml"
+		_, exists = fbIDs[id]
+	}
+	return id, filename
 }
 
 // collectIDsFromBody collects all IDs from a body and maps them to the given filename
@@ -1338,12 +1326,4 @@ func fixLinksInElement(elem *etree.Element, currentFile string, idToFile idToFil
 	for _, child := range elem.ChildElements() {
 		fixLinksInElement(child, currentFile, idToFile, log)
 	}
-}
-
-func writeXMLToZip(zw *zip.Writer, name string, doc *etree.Document) error {
-	var buf bytes.Buffer
-	if _, err := doc.WriteTo(&buf); err != nil {
-		return err
-	}
-	return writeDataToZip(zw, name, buf.Bytes())
 }

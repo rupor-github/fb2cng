@@ -2,6 +2,7 @@ package epub
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -142,57 +143,76 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 	return copyFile(tmpName, outputPath)
 }
 
-func copyZipWithoutDataDescriptors(from, to string) error {
+func generateAnnotation(c *content.Content, cfg *config.AnnotationConfig, log *zap.Logger) chapterData {
+	doc, root := createXHTMLDocument(c, cfg.Title)
 
-	out, err := os.Create(to)
-	if err != nil {
-		return fmt.Errorf("unable to create target file (%s): %w", to, err)
+	id, filename := generateUniqueID("annotation-page", c.IDsIndex)
+
+	// Create wrapper div with annotation-body class and proper chapter ID
+	annotationBodyDiv := root.CreateElement("div")
+	annotationBodyDiv.CreateAttr("class", "annotation-body")
+	annotationBodyDiv.CreateAttr("id", id)
+
+	c.KoboSpanNextParagraph()
+	h1 := annotationBodyDiv.CreateElement("h1")
+	h1.CreateAttr("class", "annotation-title")
+	appendInlineText(h1, c, cfg.Title, false)
+
+	annotationDiv := annotationBodyDiv.CreateElement("div")
+	annotationDiv.CreateAttr("class", "annotation")
+
+	if err := appendFlowItemsWithContext(annotationDiv, c, c.Book.Description.TitleInfo.Annotation.Items, 1, "annotation", log); err != nil {
+		log.Warn("Unable to convert annotation content", zap.Error(err))
 	}
-	defer out.Close()
 
-	r, err := fixzip.OpenReader(from)
-	if err != nil {
-		return fmt.Errorf("unable to read archive file (%s): %w", from, err)
+	return chapterData{
+		ID:           id,
+		Filename:     filename,
+		Title:        cfg.Title,
+		Doc:          doc,
+		IncludeInTOC: cfg.InTOC,
 	}
-	defer r.Close()
-
-	w := fixzip.NewWriter(out)
-	defer w.Close()
-
-	for _, file := range r.File {
-		// unset data descriptor flag.
-		file.Flags &= ^fixzip.FlagDataDescriptor
-
-		// copy zip entry
-		if err := w.CopyFile(file); err != nil {
-			return fmt.Errorf("unable to write target file (%s): %w", to, err)
-		}
-	}
-	return nil
 }
 
-func copyFile(src, dst string) error {
+// generateTOCPage creates a TOC chapter as an XHTML page
+func generateTOCPage(c *content.Content, chapters []chapterData, cfg *config.TOCPageConfig, log *zap.Logger) chapterData {
+	title := "Table of Contents" // Default title, not actually visible
+	doc, root := createXHTMLDocument(c, title)
 
-	sourceFile, err := os.Open(src)
-	if err != nil {
-		return fmt.Errorf("failed to open source file: %w", err)
-	}
-	defer sourceFile.Close()
+	id, filename := generateUniqueID("toc-page", c.IDsIndex)
 
-	destinationFile, err := os.Create(dst)
-	if err != nil {
-		return fmt.Errorf("failed to create destination file: %w", err)
-	}
-	defer destinationFile.Close()
+	// Create wrapper div with toc-body class and proper chapter ID
+	tocBodyDiv := root.CreateElement("div")
+	tocBodyDiv.CreateAttr("class", "toc-body")
+	tocBodyDiv.CreateAttr("id", id)
 
-	if _, err = io.Copy(destinationFile, sourceFile); err != nil {
-		return fmt.Errorf("failed to copy file contents: %w", err)
-	}
+	// Build TOC content structure
+	buildTOCContent(tocBodyDiv, c, chapters, cfg, log)
 
-	if err = destinationFile.Close(); err != nil {
-		return fmt.Errorf("failed to close destination file: %w", err)
+	return chapterData{
+		ID:           id,
+		Filename:     filename,
+		Title:        title,
+		Doc:          doc,
+		IncludeInTOC: false,
 	}
-	return nil
+}
+
+func writeXHTMLChapter(zw *zip.Writer, chapter *chapterData) error {
+	// Extract base filename without anchor for file writing
+	filename := chapter.Filename
+	if idx := strings.Index(filename, "#"); idx != -1 {
+		filename = filename[:idx]
+	}
+	return writeXMLToZip(zw, filepath.Join(oebpsDir, filename), chapter.Doc)
+}
+
+func writeXMLToZip(zw *zip.Writer, name string, doc *etree.Document) error {
+	var buf bytes.Buffer
+	if _, err := doc.WriteTo(&buf); err != nil {
+		return err
+	}
+	return writeDataToZip(zw, name, buf.Bytes())
 }
 
 func writeMimetype(zw *zip.Writer) error {
@@ -738,30 +758,6 @@ func writeDataToZip(zw *zip.Writer, name string, data []byte) error {
 	return err
 }
 
-// getChapterAnchor returns the anchor ID to use for a chapter link
-func getChapterAnchor(chapter chapterData) string {
-	if chapter.AnchorID != "" {
-		return chapter.AnchorID
-	}
-	if chapter.Section != nil && chapter.Section.ID != "" {
-		return chapter.Section.ID
-	}
-	return chapter.ID
-}
-
-func calculateSectionDepth(section *fb2.Section, currentDepth int) int {
-	maxDepth := currentDepth
-	for _, item := range section.Content {
-		if item.Kind == fb2.FlowSubtitle && item.Subtitle != nil {
-			// Subtitles count as same depth as sections at this level
-			maxDepth = max(maxDepth, currentDepth)
-		} else if item.Kind == fb2.FlowSection && item.Section != nil && item.Section.Title != nil {
-			maxDepth = max(maxDepth, calculateSectionDepth(item.Section, currentDepth+1))
-		}
-	}
-	return maxDepth
-}
-
 func buildNCXNavPoints(parent *etree.Element, section *fb2.Section, filename string, playOrder *int, c *content.Content) {
 	var lastNavPoint *etree.Element
 
@@ -806,61 +802,6 @@ func buildNCXNavPoints(parent *etree.Element, section *fb2.Section, filename str
 				}
 			}
 		}
-	}
-}
-
-func generateAnnotation(c *content.Content, cfg *config.AnnotationConfig, log *zap.Logger) chapterData {
-	doc, root := createXHTMLDocument(c, cfg.Title)
-
-	id, filename := generateUniqueID("annotation-page", c.IDsIndex)
-
-	// Create wrapper div with annotation-body class and proper chapter ID
-	annotationBodyDiv := root.CreateElement("div")
-	annotationBodyDiv.CreateAttr("class", "annotation-body")
-	annotationBodyDiv.CreateAttr("id", id)
-
-	c.KoboSpanNextParagraph()
-	h1 := annotationBodyDiv.CreateElement("h1")
-	h1.CreateAttr("class", "annotation-title")
-	appendInlineText(h1, c, cfg.Title, false)
-
-	annotationDiv := annotationBodyDiv.CreateElement("div")
-	annotationDiv.CreateAttr("class", "annotation")
-
-	if err := appendFlowItemsWithContext(annotationDiv, c, c.Book.Description.TitleInfo.Annotation.Items, 1, "annotation", log); err != nil {
-		log.Warn("Unable to convert annotation content", zap.Error(err))
-	}
-
-	return chapterData{
-		ID:           id,
-		Filename:     filename,
-		Title:        cfg.Title,
-		Doc:          doc,
-		IncludeInTOC: cfg.InTOC,
-	}
-}
-
-// generateTOCPage creates a TOC chapter as an XHTML page
-func generateTOCPage(c *content.Content, chapters []chapterData, cfg *config.TOCPageConfig, log *zap.Logger) chapterData {
-	title := "Table of Contents" // Default title, not actually visible
-	doc, root := createXHTMLDocument(c, title)
-
-	id, filename := generateUniqueID("toc-page", c.IDsIndex)
-
-	// Create wrapper div with toc-body class and proper chapter ID
-	tocBodyDiv := root.CreateElement("div")
-	tocBodyDiv.CreateAttr("class", "toc-body")
-	tocBodyDiv.CreateAttr("id", id)
-
-	// Build TOC content structure
-	buildTOCContent(tocBodyDiv, c, chapters, cfg, log)
-
-	return chapterData{
-		ID:           id,
-		Filename:     filename,
-		Title:        title,
-		Doc:          doc,
-		IncludeInTOC: false,
 	}
 }
 
@@ -972,4 +913,81 @@ func buildTOCPageOLItems(parentOL *etree.Element, section *fb2.Section, filename
 			}
 		}
 	}
+}
+
+// getChapterAnchor returns the anchor ID to use for a chapter link
+func getChapterAnchor(chapter chapterData) string {
+	if chapter.AnchorID != "" {
+		return chapter.AnchorID
+	}
+	if chapter.Section != nil && chapter.Section.ID != "" {
+		return chapter.Section.ID
+	}
+	return chapter.ID
+}
+
+func calculateSectionDepth(section *fb2.Section, currentDepth int) int {
+	maxDepth := currentDepth
+	for _, item := range section.Content {
+		if item.Kind == fb2.FlowSubtitle && item.Subtitle != nil {
+			// Subtitles count as same depth as sections at this level
+			maxDepth = max(maxDepth, currentDepth)
+		} else if item.Kind == fb2.FlowSection && item.Section != nil && item.Section.Title != nil {
+			maxDepth = max(maxDepth, calculateSectionDepth(item.Section, currentDepth+1))
+		}
+	}
+	return maxDepth
+}
+
+func copyZipWithoutDataDescriptors(from, to string) error {
+
+	out, err := os.Create(to)
+	if err != nil {
+		return fmt.Errorf("unable to create target file (%s): %w", to, err)
+	}
+	defer out.Close()
+
+	r, err := fixzip.OpenReader(from)
+	if err != nil {
+		return fmt.Errorf("unable to read archive file (%s): %w", from, err)
+	}
+	defer r.Close()
+
+	w := fixzip.NewWriter(out)
+	defer w.Close()
+
+	for _, file := range r.File {
+		// unset data descriptor flag.
+		file.Flags &= ^fixzip.FlagDataDescriptor
+
+		// copy zip entry
+		if err := w.CopyFile(file); err != nil {
+			return fmt.Errorf("unable to write target file (%s): %w", to, err)
+		}
+	}
+	return nil
+}
+
+func copyFile(src, dst string) error {
+
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("failed to open source file: %w", err)
+	}
+	defer sourceFile.Close()
+
+	destinationFile, err := os.Create(dst)
+	if err != nil {
+		return fmt.Errorf("failed to create destination file: %w", err)
+	}
+	defer destinationFile.Close()
+
+	if _, err = io.Copy(destinationFile, sourceFile); err != nil {
+		return fmt.Errorf("failed to copy file contents: %w", err)
+	}
+
+	if err = destinationFile.Close(); err != nil {
+		return fmt.Errorf("failed to close destination file: %w", err)
+	}
+	return nil
 }
