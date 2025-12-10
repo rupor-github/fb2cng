@@ -518,6 +518,11 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	}
 
 	spine := pkg.CreateElement("spine")
+	if c.CoverID != "" {
+		coverRef := spine.CreateElement("itemref")
+		coverRef.CreateAttr("idref", "cover-page")
+	}
+
 	if c.OutputFormat != config.OutputFmtEpub3 {
 		spine.CreateAttr("toc", "ncx")
 	}
@@ -527,11 +532,6 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		navRef := spine.CreateElement("itemref")
 		navRef.CreateAttr("idref", "nav")
 		navRef.CreateAttr("linear", "no")
-	}
-
-	if c.CoverID != "" {
-		coverRef := spine.CreateElement("itemref")
-		coverRef.CreateAttr("idref", "cover-page")
 	}
 
 	// Add chapters to spine, but only reference each file once (use first chapter ID for files with fragments)
@@ -645,6 +645,7 @@ func writeNav(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	landmarksNav.CreateAttr("epub:type", "landmarks")
 	landmarksNav.CreateAttr("id", "landmarks")
 	landmarksNav.CreateAttr("hidden", "")
+	landmarksNav.CreateAttr("style", "display: none;")
 
 	landmarksH2 := landmarksNav.CreateElement("h2")
 	landmarksH2.SetText("Landmarks")
