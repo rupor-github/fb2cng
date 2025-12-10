@@ -13,7 +13,7 @@ type ImageResizeMode int
 type TOCPagePlacement int
 
 // type of vignette
-// ENUM(book-title-top, book-title-bottom, chapter-title-top, chapter-title-bottom, chapter-end)
+// ENUM(book-title-top, book-title-bottom, chapter-title-top, chapter-title-bottom, chapter-end, section-title-top, section-title-bottom, section-end)
 type VignettePos string
 
 // Specification of requested output type.

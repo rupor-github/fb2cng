@@ -3,6 +3,8 @@ package content
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"errors"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -13,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/beevik/etree"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
@@ -776,14 +779,14 @@ func TestPrepareVignettes_Empty(t *testing.T) {
 
 func TestPrepareVignettes_Builtin(t *testing.T) {
 	vigCfg := &config.VignettesConfig{
-		BookTitle: config.VignettePositions{
-			Top:    "builtin",
-			Bottom: "builtin",
+		Book: config.VignettePositions{
+			TitleTop:    "builtin",
+			TitleBottom: "builtin",
 		},
-		ChapterTitle: config.VignettePositions{
-			Top:    "builtin",
-			Bottom: "builtin",
-			End:    "builtin",
+		Chapter: config.VignettePositions{
+			TitleTop:    "builtin",
+			TitleBottom: "builtin",
+			End:         "builtin",
 		},
 	}
 
@@ -817,8 +820,8 @@ func TestPrepareVignettes_Builtin(t *testing.T) {
 
 func TestPrepareVignettes_BuiltinNotAvailable(t *testing.T) {
 	vigCfg := &config.VignettesConfig{
-		BookTitle: config.VignettePositions{
-			Top: "builtin",
+		Book: config.VignettePositions{
+			TitleTop: "builtin",
 		},
 	}
 
@@ -849,9 +852,9 @@ func TestPrepareVignettes_FromFile(t *testing.T) {
 	}
 
 	vigCfg := &config.VignettesConfig{
-		BookTitle: config.VignettePositions{
-			Top:    topFile,
-			Bottom: bottomFile,
+		Book: config.VignettePositions{
+			TitleTop:    topFile,
+			TitleBottom: bottomFile,
 		},
 	}
 
@@ -887,7 +890,7 @@ func TestPrepareVignettes_FromFile_PNG(t *testing.T) {
 	}
 
 	vigCfg := &config.VignettesConfig{
-		ChapterTitle: config.VignettePositions{
+		Chapter: config.VignettePositions{
 			End: pngFile,
 		},
 	}
@@ -928,8 +931,8 @@ func TestPrepareVignettes_FromFile_JPEG(t *testing.T) {
 	}
 
 	vigCfg := &config.VignettesConfig{
-		BookTitle: config.VignettePositions{
-			Top: jpegFile,
+		Book: config.VignettePositions{
+			TitleTop: jpegFile,
 		},
 	}
 
@@ -969,8 +972,8 @@ func TestPrepareVignettes_UnsupportedContentType(t *testing.T) {
 	}
 
 	vigCfg := &config.VignettesConfig{
-		BookTitle: config.VignettePositions{
-			Top: textFile,
+		Book: config.VignettePositions{
+			TitleTop: textFile,
 		},
 	}
 
@@ -988,8 +991,8 @@ func TestPrepareVignettes_UnsupportedContentType(t *testing.T) {
 
 func TestPrepareVignettes_FileNotFound(t *testing.T) {
 	vigCfg := &config.VignettesConfig{
-		BookTitle: config.VignettePositions{
-			Top: "/nonexistent/path/to/vignette.svg",
+		Book: config.VignettePositions{
+			TitleTop: "/nonexistent/path/to/vignette.svg",
 		},
 	}
 
@@ -1017,12 +1020,12 @@ func TestPrepareVignettes_Mixed(t *testing.T) {
 	}
 
 	vigCfg := &config.VignettesConfig{
-		BookTitle: config.VignettePositions{
-			Top:    "builtin",
-			Bottom: customFile,
+		Book: config.VignettePositions{
+			TitleTop:    "builtin",
+			TitleBottom: customFile,
 		},
-		ChapterTitle: config.VignettePositions{
-			Top: "builtin",
+		Chapter: config.VignettePositions{
+			TitleTop: "builtin",
 		},
 	}
 
@@ -1082,10 +1085,10 @@ func TestPrepareVignettes_Partial(t *testing.T) {
 	}
 
 	vigCfg := &config.VignettesConfig{
-		BookTitle: config.VignettePositions{
-			Top: "builtin",
+		Book: config.VignettePositions{
+			TitleTop: "builtin",
 		},
-		ChapterTitle: config.VignettePositions{
+		Chapter: config.VignettePositions{
 			End: "builtin",
 		},
 	}
@@ -1201,20 +1204,465 @@ func TestNormalizeIDs(t *testing.T) {
 		t.Error("Expected a nested section")
 	}
 
-	// Check subtitles have IDs
+	// Check that subtitles do not get auto-generated IDs
 	subtitleCount := 0
 	for _, item := range body.Sections[0].Content {
 		if item.Kind == fb2.FlowSubtitle && item.Subtitle != nil {
 			subtitleCount++
-			if item.Subtitle.ID == "" {
-				t.Error("Subtitle should have an ID")
-			}
-			if !strings.HasPrefix(item.Subtitle.ID, "subtitle_") {
-				t.Errorf("Subtitle ID %q doesn't follow pattern 'subtitle_N'", item.Subtitle.ID)
-			}
+			// Subtitles should NOT get auto-generated IDs
 		}
 	}
 	if subtitleCount == 0 {
 		t.Error("Expected at least one subtitle")
+	}
+}
+
+func TestContent_KoboSpanNextSentence(t *testing.T) {
+	c, _ := setupTestContent(t)
+	c.koboSpanParagraphs = 5
+	c.koboSpanSentences = 10
+
+	para, sent := c.KoboSpanNextSentence()
+	if para != 5 {
+		t.Errorf("KoboSpanNextSentence() paragraph = %d, want 5", para)
+	}
+	if sent != 11 {
+		t.Errorf("KoboSpanNextSentence() sentence = %d, want 11", sent)
+	}
+
+	if c.koboSpanParagraphs != 5 {
+		t.Errorf("paragraph counter = %d, want 5", c.koboSpanParagraphs)
+	}
+	if c.koboSpanSentences != 11 {
+		t.Errorf("sentence counter = %d, want 11", c.koboSpanSentences)
+	}
+}
+
+func TestContent_KoboSpanNextParagraph(t *testing.T) {
+	c, _ := setupTestContent(t)
+	c.koboSpanParagraphs = 5
+	c.koboSpanSentences = 10
+
+	para, sent := c.KoboSpanNextParagraph()
+	if para != 5 {
+		t.Errorf("KoboSpanNextParagraph() returned paragraph = %d, want 5", para)
+	}
+	if sent != 10 {
+		t.Errorf("KoboSpanNextParagraph() returned sentence = %d, want 10", sent)
+	}
+
+	if c.koboSpanParagraphs != 6 {
+		t.Errorf("paragraph counter = %d, want 6", c.koboSpanParagraphs)
+	}
+	if c.koboSpanSentences != 0 {
+		t.Errorf("sentence counter = %d, want 0 (reset)", c.koboSpanSentences)
+	}
+}
+
+func TestContent_KoboSpanSet(t *testing.T) {
+	c, _ := setupTestContent(t)
+
+	c.KoboSpanSet(15, 25)
+	if c.koboSpanParagraphs != 15 {
+		t.Errorf("paragraph counter = %d, want 15", c.koboSpanParagraphs)
+	}
+	if c.koboSpanSentences != 25 {
+		t.Errorf("sentence counter = %d, want 25", c.koboSpanSentences)
+	}
+
+	c.KoboSpanSet(0, 0)
+	if c.koboSpanParagraphs != 0 {
+		t.Errorf("paragraph counter = %d, want 0", c.koboSpanParagraphs)
+	}
+	if c.koboSpanSentences != 0 {
+		t.Errorf("sentence counter = %d, want 0", c.koboSpanSentences)
+	}
+}
+
+func TestContent_AddFootnoteBackLinkRef(t *testing.T) {
+	c, _ := setupTestContent(t)
+	c.BackLinkIndex = make(map[string][]BackLinkRef)
+	c.CurrentFilename = "chapter01.xhtml"
+
+	// Add first reference
+	ref1 := c.AddFootnoteBackLinkRef("footnote-1")
+	if ref1.RefID != "ref-footnote-1-1" {
+		t.Errorf("First ref ID = %q, want %q", ref1.RefID, "ref-footnote-1-1")
+	}
+	if ref1.TargetID != "footnote-1" {
+		t.Errorf("First ref TargetID = %q, want %q", ref1.TargetID, "footnote-1")
+	}
+	if ref1.Filename != "chapter01.xhtml" {
+		t.Errorf("First ref Filename = %q, want %q", ref1.Filename, "chapter01.xhtml")
+	}
+
+	// Add second reference to same footnote
+	ref2 := c.AddFootnoteBackLinkRef("footnote-1")
+	if ref2.RefID != "ref-footnote-1-2" {
+		t.Errorf("Second ref ID = %q, want %q", ref2.RefID, "ref-footnote-1-2")
+	}
+
+	// Check index
+	refs := c.BackLinkIndex["footnote-1"]
+	if len(refs) != 2 {
+		t.Errorf("BackLinkIndex length = %d, want 2", len(refs))
+	}
+
+	// Change filename and add another reference
+	c.CurrentFilename = "chapter02.xhtml"
+	ref3 := c.AddFootnoteBackLinkRef("footnote-2")
+	if ref3.RefID != "ref-footnote-2-1" {
+		t.Errorf("Third ref ID = %q, want %q", ref3.RefID, "ref-footnote-2-1")
+	}
+	if ref3.Filename != "chapter02.xhtml" {
+		t.Errorf("Third ref Filename = %q, want %q", ref3.Filename, "chapter02.xhtml")
+	}
+
+	if len(c.BackLinkIndex) != 2 {
+		t.Errorf("BackLinkIndex size = %d, want 2", len(c.BackLinkIndex))
+	}
+}
+
+func TestContent_AddFootnoteBackLinkRef_MultipleFootnotes(t *testing.T) {
+	c, _ := setupTestContent(t)
+	c.BackLinkIndex = make(map[string][]BackLinkRef)
+	c.CurrentFilename = "test.xhtml"
+
+	// Add references to different footnotes
+	ref1 := c.AddFootnoteBackLinkRef("note-1")
+	ref2 := c.AddFootnoteBackLinkRef("note-2")
+	ref3 := c.AddFootnoteBackLinkRef("note-1")
+
+	if len(c.BackLinkIndex["note-1"]) != 2 {
+		t.Errorf("note-1 refs = %d, want 2", len(c.BackLinkIndex["note-1"]))
+	}
+	if len(c.BackLinkIndex["note-2"]) != 1 {
+		t.Errorf("note-2 refs = %d, want 1", len(c.BackLinkIndex["note-2"]))
+	}
+
+	if ref1.RefID == ref3.RefID {
+		t.Error("Different references to same footnote should have different RefIDs")
+	}
+	if ref1.RefID == ref2.RefID {
+		t.Error("References to different footnotes should have different RefIDs")
+	}
+}
+
+func TestPrepare_InvalidXML(t *testing.T) {
+	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+	ctx := state.ContextWithEnv(context.Background())
+	env := state.EnvFromContext(ctx)
+	cfg, err := config.LoadConfiguration("")
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	env.Cfg = cfg
+	env.Log = logger
+
+	// Invalid XML
+	invalidXML := strings.NewReader("<FictionBook><unclosed>")
+	_, err = Prepare(ctx, invalidXML, "invalid.fb2", config.OutputFmtEpub2, logger)
+	if err == nil {
+		t.Error("Expected error for invalid XML, got nil")
+	}
+	if !strings.Contains(err.Error(), "unable to read FB2") {
+		t.Errorf("Expected 'unable to read FB2' error, got: %v", err)
+	}
+}
+
+func TestPrepare_ContextCanceled(t *testing.T) {
+	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	validXML := strings.NewReader(`<?xml version="1.0"?><FictionBook/>`)
+	_, err := Prepare(ctx, validXML, "test.fb2", config.OutputFmtEpub2, logger)
+	if err == nil {
+		t.Error("Expected error for canceled context, got nil")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("Expected context.Canceled error, got: %v", err)
+	}
+}
+
+func TestPrepare_InvalidBookID(t *testing.T) {
+	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+	ctx := state.ContextWithEnv(context.Background())
+	env := state.EnvFromContext(ctx)
+	cfg, err := config.LoadConfiguration("")
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	env.Cfg = cfg
+	env.Log = logger
+
+	fb2Content := `<?xml version="1.0" encoding="utf-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <description>
+    <title-info>
+      <genre>prose</genre>
+      <author><first-name>Test</first-name><last-name>Author</last-name></author>
+      <book-title>Test Book</book-title>
+      <lang>en</lang>
+    </title-info>
+    <document-info>
+      <author><first-name>Test</first-name><last-name>Author</last-name></author>
+      <program-used>test</program-used>
+      <date>2024-01-01</date>
+      <id>invalid-uuid-format</id>
+      <version>1.0</version>
+    </document-info>
+  </description>
+  <body>
+    <section>
+      <p>Content</p>
+    </section>
+  </body>
+</FictionBook>`
+
+	reader := strings.NewReader(fb2Content)
+	c, err := Prepare(ctx, reader, "test.fb2", config.OutputFmtEpub2, logger)
+	if err != nil {
+		t.Fatalf("Prepare() failed: %v", err)
+	}
+
+	// Should have corrected the invalid UUID
+	if c.Book.Description.DocumentInfo.ID == "invalid-uuid-format" {
+		t.Error("Expected UUID to be corrected, but it wasn't")
+	}
+
+	// New ID should be a valid UUID
+	if _, err := uuid.Parse(c.Book.Description.DocumentInfo.ID); err != nil {
+		t.Errorf("Corrected ID is not a valid UUID: %v", err)
+	}
+}
+
+func TestPrepare_WithDefaultCoverGeneration(t *testing.T) {
+	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+	ctx := state.ContextWithEnv(context.Background())
+	env := state.EnvFromContext(ctx)
+	cfg, err := config.LoadConfiguration("")
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	cfg.Document.Images.Cover.Generate = true
+	env.Cfg = cfg
+	env.Log = logger
+	env.DefaultCover = []byte{0xFF, 0xD8, 0xFF, 0xE0} // JPEG header
+
+	fb2Content := `<?xml version="1.0" encoding="utf-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <description>
+    <title-info>
+      <genre>prose</genre>
+      <author><first-name>Test</first-name><last-name>Author</last-name></author>
+      <book-title>Test Book</book-title>
+      <lang>en</lang>
+    </title-info>
+    <document-info>
+      <author><first-name>Test</first-name><last-name>Author</last-name></author>
+      <program-used>test</program-used>
+      <date>2024-01-01</date>
+      <id>00000000-0000-0000-0000-000000000001</id>
+      <version>1.0</version>
+    </document-info>
+  </description>
+  <body>
+    <section>
+      <p>Content</p>
+    </section>
+  </body>
+</FictionBook>`
+
+	reader := strings.NewReader(fb2Content)
+	c, err := Prepare(ctx, reader, "test.fb2", config.OutputFmtEpub2, logger)
+	if err != nil {
+		t.Fatalf("Prepare() failed: %v", err)
+	}
+
+	// Should have generated a cover
+	if c.CoverID == "" {
+		t.Error("Expected cover to be generated, but CoverID is empty")
+	}
+
+	// Coverpage should be set
+	if len(c.Book.Description.TitleInfo.Coverpage) == 0 {
+		t.Error("Expected coverpage to be set")
+	}
+
+	// Binary should contain the cover
+	foundCover := false
+	for _, bin := range c.Book.Binaries {
+		if bin.ID == c.CoverID {
+			foundCover = true
+			if len(bin.Data) == 0 {
+				t.Error("Cover binary has no data")
+			}
+			break
+		}
+	}
+	if !foundCover {
+		t.Error("Cover binary not found in book binaries")
+	}
+}
+
+func TestPrepare_WithHyphenation(t *testing.T) {
+	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+	ctx := state.ContextWithEnv(context.Background())
+	env := state.EnvFromContext(ctx)
+	cfg, err := config.LoadConfiguration("")
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	cfg.Document.InsertSoftHyphen = true
+	env.Cfg = cfg
+	env.Log = logger
+
+	fb2Content := `<?xml version="1.0" encoding="utf-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <description>
+    <title-info>
+      <genre>prose</genre>
+      <author><first-name>Test</first-name><last-name>Author</last-name></author>
+      <book-title>Test Book</book-title>
+      <lang>en</lang>
+    </title-info>
+    <document-info>
+      <author><first-name>Test</first-name><last-name>Author</last-name></author>
+      <program-used>test</program-used>
+      <date>2024-01-01</date>
+      <id>00000000-0000-0000-0000-000000000001</id>
+      <version>1.0</version>
+    </document-info>
+  </description>
+  <body>
+    <section>
+      <p>Hyphenation test content</p>
+    </section>
+  </body>
+</FictionBook>`
+
+	reader := strings.NewReader(fb2Content)
+	c, err := Prepare(ctx, reader, "test.fb2", config.OutputFmtEpub2, logger)
+	if err != nil {
+		t.Fatalf("Prepare() failed: %v", err)
+	}
+
+	if c.Hyphen == nil {
+		t.Error("Expected hyphenator to be initialized, but it's nil")
+	}
+}
+
+func TestPrepare_KepubSplitter(t *testing.T) {
+	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+	ctx := state.ContextWithEnv(context.Background())
+	env := state.EnvFromContext(ctx)
+	cfg, err := config.LoadConfiguration("")
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	env.Cfg = cfg
+	env.Log = logger
+
+	fb2Content := `<?xml version="1.0" encoding="utf-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <description>
+    <title-info>
+      <genre>prose</genre>
+      <author><first-name>Test</first-name><last-name>Author</last-name></author>
+      <book-title>Test Book</book-title>
+      <lang>en</lang>
+    </title-info>
+    <document-info>
+      <author><first-name>Test</first-name><last-name>Author</last-name></author>
+      <program-used>test</program-used>
+      <date>2024-01-01</date>
+      <id>00000000-0000-0000-0000-000000000001</id>
+      <version>1.0</version>
+    </document-info>
+  </description>
+  <body>
+    <section>
+      <p>Sentence one. Sentence two.</p>
+    </section>
+  </body>
+</FictionBook>`
+
+	t.Run("kepub has splitter", func(t *testing.T) {
+		reader := strings.NewReader(fb2Content)
+		c, err := Prepare(ctx, reader, "test.fb2", config.OutputFmtKepub, logger)
+		if err != nil {
+			t.Fatalf("Prepare() failed: %v", err)
+		}
+
+		if c.Splitter == nil {
+			t.Error("Expected splitter to be initialized for kepub, but it's nil")
+		}
+	})
+
+	t.Run("non-kepub has no splitter", func(t *testing.T) {
+		reader := strings.NewReader(fb2Content)
+		c, err := Prepare(ctx, reader, "test.fb2", config.OutputFmtEpub2, logger)
+		if err != nil {
+			t.Fatalf("Prepare() failed: %v", err)
+		}
+
+		if c.Splitter != nil {
+			t.Error("Expected splitter to be nil for non-kepub format")
+		}
+	})
+}
+
+func TestPrepare_WithCoverID(t *testing.T) {
+	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+	ctx := state.ContextWithEnv(context.Background())
+	env := state.EnvFromContext(ctx)
+	cfg, err := config.LoadConfiguration("")
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	env.Cfg = cfg
+	env.Log = logger
+
+	jpegData := createTestJPEG(t, 100, 100, 80)
+
+	fb2Content := `<?xml version="1.0" encoding="utf-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0" xmlns:l="http://www.w3.org/1999/xlink">
+  <description>
+    <title-info>
+      <genre>prose</genre>
+      <author><first-name>Test</first-name><last-name>Author</last-name></author>
+      <book-title>Test Book</book-title>
+      <coverpage><image l:href="#cover.jpg"/></coverpage>
+      <lang>en</lang>
+    </title-info>
+    <document-info>
+      <author><first-name>Test</first-name><last-name>Author</last-name></author>
+      <program-used>test</program-used>
+      <date>2024-01-01</date>
+      <id>00000000-0000-0000-0000-000000000001</id>
+      <version>1.0</version>
+    </document-info>
+  </description>
+  <body>
+    <section>
+      <p>Content</p>
+    </section>
+  </body>
+  <binary id="cover.jpg" content-type="image/jpeg">` + base64.StdEncoding.EncodeToString(jpegData) + `</binary>
+</FictionBook>`
+
+	reader := strings.NewReader(fb2Content)
+	c, err := Prepare(ctx, reader, "test.fb2", config.OutputFmtEpub2, logger)
+	if err != nil {
+		t.Fatalf("Prepare() failed: %v", err)
+	}
+
+	if c.CoverID != "cover.jpg" {
+		t.Errorf("Expected CoverID to be 'cover.jpg', got %q", c.CoverID)
+	}
+
+	if _, exists := c.ImagesIndex[c.CoverID]; !exists {
+		t.Error("Cover image not found in images index")
 	}
 }

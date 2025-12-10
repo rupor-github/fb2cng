@@ -19,7 +19,7 @@ type (
 
 	CoverConfig struct {
 		Generate         bool            `yaml:"generate"`
-		DefaultImagePath string          `yaml:"default_image_path" sanitize:"assure_file_access"`
+		DefaultImagePath string          `yaml:"default_image_path,omitempty" sanitize:"assure_file_access"`
 		Resize           ImageResizeMode `yaml:"resize" validate:"gte=0"`
 		Width            int             `yaml:"width" validate:"min=600"`
 		Height           int             `yaml:"height" validate:"min=800"`
@@ -46,8 +46,9 @@ type (
 	}
 
 	TOCPageConfig struct {
-		Placement       TOCPagePlacement `yaml:"placement" validate:"oneof=0 1 2"`
-		AuthorsTemplate string           `yaml:"authors_template"`
+		Placement            TOCPagePlacement `yaml:"placement" validate:"oneof=0 1 2"`
+		AuthorsTemplate      string           `yaml:"authors_template"`
+		ChaptersWithoutTitle bool             `yaml:"include_chapters_without_title"`
 	}
 
 	MetainformationConfig struct {
@@ -57,21 +58,27 @@ type (
 	}
 
 	VignettesConfig struct {
-		BookTitle    VignettePositions `yaml:"book_title"`
-		ChapterTitle VignettePositions `yaml:"chapter_title"`
+		Book    VignettePositions `yaml:"book"`
+		Chapter VignettePositions `yaml:"chapter"`
+		Section VignettePositions `yaml:"section"`
 	}
 
 	// VignettePositions defines where vignettes can be placed
 	VignettePositions struct {
-		Top    string `yaml:"top,omitempty" sanitize:"oneof_or_tag=builtin assure_file_access"`
-		Bottom string `yaml:"bottom,omitempty" sanitize:"oneof_or_tag=builtin assure_file_access"`
-		End    string `yaml:"end,omitempty" sanitize:"oneof_or_tag=builtin assure_file_access"`
+		TitleTop    string `yaml:"title_top,omitempty" sanitize:"oneof_or_tag=builtin assure_file_access"`
+		TitleBottom string `yaml:"title_bottom,omitempty" sanitize:"oneof_or_tag=builtin assure_file_access"`
+		End         string `yaml:"end,omitempty" sanitize:"oneof_or_tag=builtin assure_file_access"`
+	}
+
+	DropcapsConfig struct {
+		Enable        bool   `yaml:"enable"`
+		IgnoreSymbols string `yaml:"ignore_symbols,omitempty"`
 	}
 
 	DocumentConfig struct {
 		FixZip                bool                  `yaml:"fix_zip"`
 		OpenFromCover         bool                  `yaml:"open_from_cover"`
-		StylesheetPath        string                `yaml:"stylesheet_path" sanitize:"assure_file_access"`
+		StylesheetPath        string                `yaml:"stylesheet_path,omitempty" sanitize:"assure_file_access"`
 		OutputNameTemplate    string                `yaml:"output_name_template"`
 		FileNameTransliterate bool                  `yaml:"file_name_transliterate"`
 		InsertSoftHyphen      bool                  `yaml:"insert_soft_hyphen"`
@@ -81,6 +88,7 @@ type (
 		TOCPage               TOCPageConfig         `yaml:"toc_page"`
 		Metainformation       MetainformationConfig `yaml:"metainformation"`
 		Vignettes             VignettesConfig       `yaml:"vignettes"`
+		Dropcaps              DropcapsConfig        `yaml:"dropcaps"`
 	}
 
 	Config struct {
@@ -109,7 +117,7 @@ var requiredOptions = append([]func(*gencfg.ProcessingOptions){},
 
 // IsEmpty returns true if no vignette positions are defined
 func (v *VignettePositions) IsEmpty() bool {
-	return v.Top == "" && v.Bottom == "" && v.End == ""
+	return v.TitleTop == "" && v.TitleBottom == "" && v.End == ""
 }
 
 func unmarshalConfig(data []byte, cfg *Config, process bool) (*Config, error) {

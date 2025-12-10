@@ -425,6 +425,12 @@ const (
 	VignettePosChapterTitleBottom VignettePos = "chapter-title-bottom"
 	// VignettePosChapterEnd is a VignettePos of type chapter-end.
 	VignettePosChapterEnd VignettePos = "chapter-end"
+	// VignettePosSectionTitleTop is a VignettePos of type section-title-top.
+	VignettePosSectionTitleTop VignettePos = "section-title-top"
+	// VignettePosSectionTitleBottom is a VignettePos of type section-title-bottom.
+	VignettePosSectionTitleBottom VignettePos = "section-title-bottom"
+	// VignettePosSectionEnd is a VignettePos of type section-end.
+	VignettePosSectionEnd VignettePos = "section-end"
 )
 
 var ErrInvalidVignettePos = fmt.Errorf("not a valid VignettePos, try [%s]", strings.Join(_VignettePosNames, ", "))
@@ -435,6 +441,9 @@ var _VignettePosNames = []string{
 	string(VignettePosChapterTitleTop),
 	string(VignettePosChapterTitleBottom),
 	string(VignettePosChapterEnd),
+	string(VignettePosSectionTitleTop),
+	string(VignettePosSectionTitleBottom),
+	string(VignettePosSectionEnd),
 }
 
 // VignettePosNames returns a list of possible string values of VignettePos.
@@ -462,6 +471,9 @@ var _VignettePosValue = map[string]VignettePos{
 	"chapter-title-top":    VignettePosChapterTitleTop,
 	"chapter-title-bottom": VignettePosChapterTitleBottom,
 	"chapter-end":          VignettePosChapterEnd,
+	"section-title-top":    VignettePosSectionTitleTop,
+	"section-title-bottom": VignettePosSectionTitleBottom,
+	"section-end":          VignettePosSectionEnd,
 }
 
 // ParseVignettePos attempts to convert a string to a VignettePos.

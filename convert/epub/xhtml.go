@@ -100,7 +100,12 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 			chapterNum++
 			baseID := fmt.Sprintf("index%05d", chapterNum)
 			chapterID, filename := generateUniqueID(baseID, c.IDsIndex)
-			title := section.AsTitleText(fmt.Sprintf("chapter-section-%d", chapterNum))
+
+			var fallback string
+			if env.Cfg.Document.TOCPage.ChaptersWithoutTitle {
+				fallback = section.AsTitleText(fmt.Sprintf("chapter-section-%d", chapterNum))
+			}
+			title := section.AsTitleText(fallback)
 
 			// Set current filename for footnote reference tracking
 			c.CurrentFilename = filename
@@ -117,7 +122,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 				Title:        title,
 				Doc:          doc,
 				Section:      section,
-				IncludeInTOC: true,
+				IncludeInTOC: title != "",
 			})
 			collectIDsFromSection(section, filename, idToFile)
 		}
@@ -204,7 +209,7 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, idToF
 			AnchorID:     bodyID,
 			Title:        bodyTitle,
 			Doc:          chapterDoc,
-			IncludeInTOC: true,
+			IncludeInTOC: bodyTitle != "",
 		})
 	}
 
@@ -233,6 +238,9 @@ func createXHTMLDocument(c *content.Content, title string) (*etree.Document, *et
 	link.CreateAttr("type", "text/css")
 	link.CreateAttr("href", "stylesheet.css")
 
+	if title == "" {
+		title = "Untitled"
+	}
 	titleElem := head.CreateElement("title")
 	titleElem.SetText(title)
 
@@ -605,7 +613,7 @@ func appendEpub3FloatFootnoteSectionContent(parent *etree.Element, c *content.Co
 		}
 	}
 
-	if err := appendFlowItemsWithContext(sectionElem, c, section.Content, 1, "", log); err != nil {
+	if err := appendFlowItemsWithContext(sectionElem, c, section.Content, 1, "section", log); err != nil {
 		return err
 	}
 
@@ -667,7 +675,7 @@ func appendDefaultFootnoteSectionContent(parent *etree.Element, c *content.Conte
 		}
 	}
 
-	if err := appendFlowItemsWithContext(sectionElem, c, section.Content, 1, "", log); err != nil {
+	if err := appendFlowItemsWithContext(sectionElem, c, section.Content, 1, "section", log); err != nil {
 		return err
 	}
 	return nil
@@ -681,23 +689,34 @@ func appendSectionContent(parent *etree.Element, c *content.Content, section *fb
 		if depth == 1 {
 			wrapperClass = "chapter-title"
 			headerClass = "chapter-title-header"
+
+			// Insert top vignette for chapters
+			if c.Book.IsVignetteEnabled(config.VignettePosChapterTitleTop) {
+				appendVignetteImage(titleWrapper, c, config.VignettePosChapterTitleTop)
+			}
 		} else {
 			wrapperClass = "section-title"
 			headerClass = "section-title-header"
+
+			// Insert top vignette for sections
+			if c.Book.IsVignetteEnabled(config.VignettePosSectionTitleTop) {
+				appendVignetteImage(titleWrapper, c, config.VignettePosSectionTitleTop)
+			}
 		}
 		titleWrapper.CreateAttr("class", wrapperClass)
-
-		// Insert top vignette if needed
-		if depth == 1 && c.Book.IsVignetteEnabled(config.VignettePosChapterTitleTop) {
-			appendVignetteImage(titleWrapper, c, config.VignettePosChapterTitleTop)
-		}
 
 		// Append the title with appropriate header class
 		appendTitleAsHeading(titleWrapper, c, section.Title, depth, headerClass)
 
-		// Insert bottom vignette if needed
-		if depth == 1 && c.Book.IsVignetteEnabled(config.VignettePosChapterTitleBottom) {
-			appendVignetteImage(titleWrapper, c, config.VignettePosChapterTitleBottom)
+		// Insert bottom vignette
+		if depth == 1 {
+			if c.Book.IsVignetteEnabled(config.VignettePosChapterTitleBottom) {
+				appendVignetteImage(titleWrapper, c, config.VignettePosChapterTitleBottom)
+			}
+		} else {
+			if c.Book.IsVignetteEnabled(config.VignettePosSectionTitleBottom) {
+				appendVignetteImage(titleWrapper, c, config.VignettePosSectionTitleBottom)
+			}
 		}
 	}
 
@@ -717,13 +736,17 @@ func appendSectionContent(parent *etree.Element, c *content.Content, section *fb
 		}
 	}
 
-	if err := appendFlowItemsWithContext(parent, c, section.Content, depth, "", log); err != nil {
+	if err := appendFlowItemsWithContext(parent, c, section.Content, depth, "section", log); err != nil {
 		return err
 	}
 
-	// Insert end vignette at the end of chapter
-	if depth == 1 && c.Book.IsVignetteEnabled(config.VignettePosChapterEnd) {
-		appendVignetteImage(parent, c, config.VignettePosChapterEnd)
+	// Insert end vignette
+	if section.Title != nil {
+		if depth == 1 && c.Book.IsVignetteEnabled(config.VignettePosChapterEnd) {
+			appendVignetteImage(parent, c, config.VignettePosChapterEnd)
+		} else if depth > 1 && c.Book.IsVignetteEnabled(config.VignettePosSectionEnd) {
+			appendVignetteImage(parent, c, config.VignettePosSectionEnd)
+		}
 	}
 
 	return nil
@@ -755,41 +778,21 @@ func appendFlowItemsWithContext(parent *etree.Element, c *content.Content, items
 			div := parent.CreateElement("div")
 			div.CreateAttr("class", "emptyline")
 		case fb2.FlowSubtitle:
-			c.KoboSpanNextParagraph()
 			if item.Subtitle != nil {
-				var class string
-				if context != "" {
-					// Inside poem/cite/epigraph/annotation - use paragraph with context-specific class
-					class = context + "-subtitle"
-					if item.Subtitle.Style != "" {
-						class = class + " " + item.Subtitle.Style
-					}
-					p := parent.CreateElement("p")
-					if item.Subtitle.ID != "" {
-						p.CreateAttr("id", item.Subtitle.ID)
-					}
-					if item.Subtitle.Lang != "" {
-						p.CreateAttr("xml:lang", item.Subtitle.Lang)
-					}
-					p.CreateAttr("class", class)
-					appendParagraphInline(p, c, item.Subtitle)
-				} else {
-					// In section - use header (one level more than enclosing title)
-					headingLevel := min(depth+1, 6)
-					headingTag := fmt.Sprintf("h%d", headingLevel)
-					h := parent.CreateElement(headingTag)
-					subtitleID := item.Subtitle.ID
-					h.CreateAttr("id", subtitleID)
-					if item.Subtitle.Lang != "" {
-						h.CreateAttr("xml:lang", item.Subtitle.Lang)
-					}
-					class = "section-subtitle"
-					if item.Subtitle.Style != "" {
-						class = class + " " + item.Subtitle.Style
-					}
-					h.CreateAttr("class", class)
-					appendParagraphInline(h, c, item.Subtitle)
+				c.KoboSpanNextParagraph()
+				p := parent.CreateElement("p")
+				if item.Subtitle.ID != "" {
+					p.CreateAttr("id", item.Subtitle.ID)
 				}
+				if item.Subtitle.Lang != "" {
+					p.CreateAttr("xml:lang", item.Subtitle.Lang)
+				}
+				class := context + "-subtitle"
+				if item.Subtitle.Style != "" {
+					class = class + " " + item.Subtitle.Style
+				}
+				p.CreateAttr("class", class)
+				appendParagraphInline(p, c, item.Subtitle)
 			}
 		case fb2.FlowPoem:
 			if item.Poem != nil {
@@ -826,6 +829,48 @@ func appendFlowItemsWithContext(parent *etree.Element, c *content.Content, items
 
 func appendParagraphInline(parent *etree.Element, c *content.Content, p *fb2.Paragraph) {
 	hyphenate := !p.Special && c.Hyphen != nil
+
+	// Handle drop cap if paragraph has has-dropcap style
+	if hasStyle("has-dropcap", p.Style) && len(p.Text) > 0 {
+		// Find first non-empty text segment
+		for i := range p.Text {
+			seg := &p.Text[i]
+			if seg.Kind == fb2.InlineText && seg.Text != "" {
+				// Extract first character
+				runes := []rune(seg.Text)
+				if len(runes) > 0 {
+					firstChar := string(runes[0])
+					restOfText := string(runes[1:])
+
+					// Create span for drop cap
+					dropCapSpan := parent.CreateElement("span")
+					dropCapSpan.CreateAttr("class", "dropcap")
+					if c.OutputFormat == config.OutputFmtKepub {
+						paragraph, sentence := c.KoboSpanNextSentence()
+						koboSpan := dropCapSpan.CreateElement("span")
+						koboSpan.CreateAttr("class", "koboSpan")
+						koboSpan.CreateAttr("id", fmt.Sprintf("kobo.%d.%d", paragraph, sentence))
+						koboSpan.SetText(firstChar)
+					} else {
+						dropCapSpan.SetText(firstChar)
+					}
+
+					// Render the rest of the text
+					if restOfText != "" {
+						appendInlineText(parent, c, restOfText, hyphenate)
+					}
+
+					// Render remaining segments
+					for j := i + 1; j < len(p.Text); j++ {
+						appendInlineSegment(parent, c, &p.Text[j], hyphenate)
+					}
+					return
+				}
+			}
+		}
+	}
+
+	// Regular paragraph rendering (no drop cap)
 	for _, seg := range p.Text {
 		appendInlineSegment(parent, c, &seg, hyphenate)
 	}
@@ -1164,6 +1209,22 @@ func appendTableElement(parent *etree.Element, c *content.Content, table *fb2.Ta
 			}
 		}
 	}
+}
+
+// hasStyle checks if the paragraph style contains "has-dropcap"
+func hasStyle(style, styles string) bool {
+	if styles == "" {
+		return false
+	}
+	if style == "" {
+		return true
+	}
+	for part := range strings.FieldsSeq(styles) {
+		if part == style {
+			return true
+		}
+	}
+	return false
 }
 
 // buildStyleAttr builds a CSS style attribute from base style and alignment properties

@@ -203,14 +203,14 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 
 	// Normalize footnote bodies and build footnote index
 	book, footnotes := book.NormalizeFootnoteBodies(log)
-	// Flatten grouping sections (sections without titles that only contain other sections)
-	book = book.NormalizeSections(log)
 	// Build id and link indexes replacing/removing broken links (may add not-found image binary and vignette binaries)
 	book, ids, links := book.NormalizeLinks(vignettes, log)
-	// Assign sequential IDs to all sections and subtitles without IDs
+	// Assign sequential IDs to all sections without IDs
 	// (avoiding collisions with existing IDs) - we will need it for ToC. This
-	// also updates the ID index with generated IDs marked as "TYPE-generated"
+	// also updates the ID index with generated IDs marked as "section-generated"
 	book, ids = book.NormalizeIDs(ids, log)
+	// Mark first paragraphs in sections with drop-cap style for rendering
+	book = book.MarkDropcaps(&env.Cfg.Document.Dropcaps)
 
 	// Process all binary objects creating actual images and reference index
 	// This happens after NormalizeLinks so the not-found image binary is included
@@ -262,11 +262,14 @@ func prepareVignettes(vigCfg *config.VignettesConfig, defaultVignettes map[confi
 		configValue string
 		position    config.VignettePos
 	}{
-		{vigCfg.BookTitle.Top, config.VignettePosBookTitleTop},
-		{vigCfg.BookTitle.Bottom, config.VignettePosBookTitleBottom},
-		{vigCfg.ChapterTitle.Top, config.VignettePosChapterTitleTop},
-		{vigCfg.ChapterTitle.Bottom, config.VignettePosChapterTitleBottom},
-		{vigCfg.ChapterTitle.End, config.VignettePosChapterEnd},
+		{vigCfg.Book.TitleTop, config.VignettePosBookTitleTop},
+		{vigCfg.Book.TitleBottom, config.VignettePosBookTitleBottom},
+		{vigCfg.Chapter.TitleTop, config.VignettePosChapterTitleTop},
+		{vigCfg.Chapter.TitleBottom, config.VignettePosChapterTitleBottom},
+		{vigCfg.Chapter.End, config.VignettePosChapterEnd},
+		{vigCfg.Section.TitleTop, config.VignettePosSectionTitleTop},
+		{vigCfg.Section.TitleBottom, config.VignettePosSectionTitleBottom},
+		{vigCfg.Section.End, config.VignettePosSectionEnd},
 	}
 
 	for _, check := range vignetteChecks {

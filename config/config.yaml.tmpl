@@ -194,21 +194,33 @@ document:
       {{-   $names = append $names (join " " $name) -}}
       {{- end -}}
       {{- join ", " $names -}}
+    # Include chapter without title to TOC - this prevents empty TOC on "bad" books adding chapters without titles to the TOC
+    include_chapters_without_title: false
 
-  # Vignette images could be specified for book title (main section titile)
-  # and for chapter title and end of chapter. Each item could be absent
-  # (disabled), set to "builtin" (converter will use default images) or have
-  # file path pointing to existing valid image file
-  # NOTE: vignettes on subtitles and nested sections are not supported for
-  # automatic vignetting
-  vignettes:
-    book_title:
-      top: builtin
-      bottom: builtin
-    chapter_title:
-      top: builtin
-      bottom: builtin
-      end: builtin
+  # Vignette images could be specified for book title (body title), chapter
+  # title and end of chapter (first level sections in the body) and for the
+  # nested sections titles and ends (nested sections inside chapters). Each
+  # item could be absent (disabled), set to "builtin" (converter will use
+  # default images) or have file path pointing to existing valid image file
+  # NOTE: subtitles are not supported for automatic vignetting
+  # vignettes:
+  #   book:
+  #     title_top: builtin
+  #     title_bottom: builtin
+  #   chapter:
+  #     title_top: builtin
+  #     title_bottom: builtin
+  #     end: builtin
+  #   section:
+  #     title_top: builtin
+  #     title_bottom: builtin
+  #     end: builtin
+
+  dropcaps:
+    # Allow automatic dropcap styling
+    enable: true
+    # Characters to ignore when styling dropcaps
+    ignore_symbols: "'\"-.…0123456789‒–—«»“”<>"
 
 logging:
   # controls terminal (stdout, stderr) output

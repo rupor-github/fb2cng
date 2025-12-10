@@ -16,6 +16,21 @@ p code {
     text-align: left;
 }
 
+/* Drop caps - decorative large first letter */
+.dropcap {
+    font-weight: bold;
+    font-size: 3.5em;
+    float: left;
+    margin-top: -0.1em 0.1em -0.1em;
+    padding-right: 0.1em;
+}
+
+/* Paragraphs with drop caps should have no text indent */
+p.has-dropcap,
+span.has-dropcap {
+    text-indent: 0;
+}
+
 /* Heading sizes */
 h1 {
     font-size: 140%;
@@ -179,6 +194,16 @@ img.image-vignette {
     margin: 1.5em 0;
     page-break-before: avoid;
 }
+.vignette-section-title-top {
+    margin: 0.8em 0 0.4em 0;
+}
+.vignette-section-title-bottom {
+    margin: 0.4em 0 0.8em 0;
+}
+.vignette-section-end {
+    margin: 1em 0;
+    page-break-before: avoid;
+}
 
 /* Epigraphs (quotations at chapter/section beginnings) */
 .epigraph {
@@ -291,6 +316,7 @@ blockquote.cite {
 
 /* Generic section container */
 .section {
+    page-break-before: always;
     margin: 1em 0;
 }
 

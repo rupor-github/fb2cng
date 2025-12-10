@@ -372,7 +372,7 @@ func parseFlowItem(el *etree.Element, parentTag string, log *zap.Logger) (*FlowI
 		c := cite
 		return &FlowItem{Kind: FlowCite, Cite: &c}, nil
 	case "subtitle":
-		para := parseParagraph(el, false, log)
+		para := parseParagraph(el, true, log)
 		return &FlowItem{Kind: FlowSubtitle, Subtitle: &para}, nil
 	case "empty-line":
 		return &FlowItem{Kind: FlowEmptyLine}, nil

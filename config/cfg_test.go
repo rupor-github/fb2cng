@@ -373,3 +373,231 @@ document:
 		t.Error("ScaleFactor should have default value")
 	}
 }
+
+func TestOutputFmt_String(t *testing.T) {
+	tests := []struct {
+		fmt      OutputFmt
+		expected string
+	}{
+		{OutputFmtEpub2, "epub2"},
+		{OutputFmtEpub3, "epub3"},
+		{OutputFmtKepub, "kepub"},
+		{OutputFmtKfx, "kfx"},
+		{OutputFmt(99), "OutputFmt(99)"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.expected, func(t *testing.T) {
+			got := tt.fmt.String()
+			if got != tt.expected {
+				t.Errorf("String() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestOutputFmt_IsValid(t *testing.T) {
+	tests := []struct {
+		fmt   OutputFmt
+		valid bool
+	}{
+		{OutputFmtEpub2, true},
+		{OutputFmtEpub3, true},
+		{OutputFmtKepub, true},
+		{OutputFmtKfx, true},
+		{OutputFmt(99), false},
+		{OutputFmt(-1), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.fmt.String(), func(t *testing.T) {
+			got := tt.fmt.IsValid()
+			if got != tt.valid {
+				t.Errorf("IsValid() = %v, want %v", got, tt.valid)
+			}
+		})
+	}
+}
+
+func TestParseOutputFmt(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		expected  OutputFmt
+		shouldErr bool
+	}{
+		{"epub2 lowercase", "epub2", OutputFmtEpub2, false},
+		{"EPUB2 uppercase", "EPUB2", OutputFmtEpub2, false},
+		{"epub3", "epub3", OutputFmtEpub3, false},
+		{"kepub", "kepub", OutputFmtKepub, false},
+		{"kfx", "kfx", OutputFmtKfx, false},
+		{"invalid", "invalid", OutputFmt(0), true},
+		{"empty", "", OutputFmt(0), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseOutputFmt(tt.input)
+			if tt.shouldErr {
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+				if got != tt.expected {
+					t.Errorf("ParseOutputFmt(%q) = %v, want %v", tt.input, got, tt.expected)
+				}
+			}
+		})
+	}
+}
+
+func TestMustParseOutputFmt(t *testing.T) {
+	t.Run("valid value", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("MustParseOutputFmt panicked unexpectedly: %v", r)
+			}
+		}()
+		got := MustParseOutputFmt("epub2")
+		if got != OutputFmtEpub2 {
+			t.Errorf("MustParseOutputFmt(\"epub2\") = %v, want %v", got, OutputFmtEpub2)
+		}
+	})
+
+	t.Run("invalid value panics", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("MustParseOutputFmt should have panicked")
+			}
+		}()
+		MustParseOutputFmt("invalid")
+	})
+}
+
+func TestOutputFmt_MarshalText(t *testing.T) {
+	tests := []struct {
+		fmt      OutputFmt
+		expected string
+	}{
+		{OutputFmtEpub2, "epub2"},
+		{OutputFmtEpub3, "epub3"},
+		{OutputFmtKepub, "kepub"},
+		{OutputFmtKfx, "kfx"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.expected, func(t *testing.T) {
+			got, err := tt.fmt.MarshalText()
+			if err != nil {
+				t.Errorf("MarshalText() error = %v", err)
+			}
+			if string(got) != tt.expected {
+				t.Errorf("MarshalText() = %q, want %q", string(got), tt.expected)
+			}
+		})
+	}
+}
+
+func TestOutputFmt_UnmarshalText(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		expected  OutputFmt
+		shouldErr bool
+	}{
+		{"epub2", "epub2", OutputFmtEpub2, false},
+		{"epub3", "epub3", OutputFmtEpub3, false},
+		{"kepub", "kepub", OutputFmtKepub, false},
+		{"kfx", "kfx", OutputFmtKfx, false},
+		{"invalid", "invalid", OutputFmt(0), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var fmt OutputFmt
+			err := fmt.UnmarshalText([]byte(tt.input))
+			if tt.shouldErr {
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("UnmarshalText() error = %v", err)
+				}
+				if fmt != tt.expected {
+					t.Errorf("UnmarshalText(%q) = %v, want %v", tt.input, fmt, tt.expected)
+				}
+			}
+		})
+	}
+}
+
+func TestOutputFmtNames(t *testing.T) {
+	names := OutputFmtNames()
+	expected := []string{"epub2", "epub3", "kepub", "kfx"}
+
+	if len(names) != len(expected) {
+		t.Errorf("OutputFmtNames() length = %d, want %d", len(names), len(expected))
+	}
+
+	for i, name := range expected {
+		if names[i] != name {
+			t.Errorf("OutputFmtNames()[%d] = %q, want %q", i, names[i], name)
+		}
+	}
+}
+
+func TestOutputFmt_ForKindle(t *testing.T) {
+	tests := []struct {
+		fmt      OutputFmt
+		expected bool
+	}{
+		{OutputFmtEpub2, false},
+		{OutputFmtEpub3, false},
+		{OutputFmtKepub, false},
+		{OutputFmtKfx, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.fmt.String(), func(t *testing.T) {
+			got := tt.fmt.ForKindle()
+			if got != tt.expected {
+				t.Errorf("ForKindle() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestOutputFmt_Ext(t *testing.T) {
+	tests := []struct {
+		fmt      OutputFmt
+		expected string
+	}{
+		{OutputFmtEpub2, ".epub"},
+		{OutputFmtEpub3, ".epub"},
+		{OutputFmtKepub, ".kepub.epub"},
+		{OutputFmtKfx, ".kfx"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.fmt.String(), func(t *testing.T) {
+			got := tt.fmt.Ext()
+			if got != tt.expected {
+				t.Errorf("Ext() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestOutputFmt_Ext_Panic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("Ext() should panic for invalid format")
+		}
+	}()
+	invalidFmt := OutputFmt(99)
+	invalidFmt.Ext()
+}

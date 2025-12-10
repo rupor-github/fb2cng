@@ -2,6 +2,7 @@ package convert
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/beevik/etree"
@@ -286,5 +287,119 @@ func TestBuildPathFromTemplate_EmptyPath(t *testing.T) {
 
 	if result != expected {
 		t.Errorf("assemblePathWithSubdirs() with empty path = %q, want %q", result, expected)
+	}
+}
+
+func TestExpandOutputNameTemplate_ErrorCase(t *testing.T) {
+	c := setupTestContentForPath(t, config.OutputFmtEpub3)
+	// Invalid template with unknown field
+	env := setupTestEnvForOutputPath(t, true, false, config.OutputFmtEpub3, "{{.InvalidField}}")
+
+	result := expandOutputNameTemplate(c, env)
+	if result != "" {
+		t.Errorf("expandOutputNameTemplate() with invalid template = %q, want empty string", result)
+	}
+}
+
+func TestBuildOutputPath_WithTemplate(t *testing.T) {
+	c := setupTestContentForPath(t, config.OutputFmtEpub3)
+	// Use invalid template that falls back to default filename
+	env := setupTestEnvForOutputPath(t, false, false, config.OutputFmtEpub3, "{{.InvalidField}}")
+
+	result := buildOutputPath(c, "source/book.fb2", "/output", env)
+
+	// Should create path with default filename
+	if !filepath.IsAbs(result) {
+		t.Errorf("buildOutputPath() should return absolute path, got %q", result)
+	}
+
+	// Should contain output directory
+	if !strings.HasPrefix(result, "/output") {
+		t.Errorf("buildOutputPath() = %q, should start with /output", result)
+	}
+
+	// Should end with .epub
+	if filepath.Ext(result) != ".epub" {
+		t.Errorf("buildOutputPath() = %q, should end with .epub", result)
+	}
+}
+
+func TestMakeDefaultFileName_WithAuthors(t *testing.T) {
+	env := setupTestEnvForOutputPath(t, true, false, config.OutputFmtEpub3, "")
+
+	result := makeDefaultFileName("books/test_book.fb2", config.OutputFmtEpub3, env)
+	expected := "test_book.epub"
+
+	if result != expected {
+		t.Errorf("makeDefaultFileName() = %q, want %q", result, expected)
+	}
+}
+
+func TestMakeDefaultFileName_WithTransliterate(t *testing.T) {
+	env := setupTestEnvForOutputPath(t, true, true, config.OutputFmtEpub3, "")
+
+	result := makeDefaultFileName("books/Книга.fb2", config.OutputFmtEpub3, env)
+	expected := "kniga.epub"
+
+	if result != expected {
+		t.Errorf("makeDefaultFileName() = %q, want %q", result, expected)
+	}
+}
+
+func TestMakeDefaultFileName_KepubFormat(t *testing.T) {
+	env := setupTestEnvForOutputPath(t, true, false, config.OutputFmtKepub, "")
+
+	result := makeDefaultFileName("test.fb2", config.OutputFmtKepub, env)
+	expected := "test.kepub.epub"
+
+	if result != expected {
+		t.Errorf("makeDefaultFileName() = %q, want %q", result, expected)
+	}
+}
+
+func TestCleanPathSegment_Transliterate(t *testing.T) {
+	env := setupTestEnvForOutputPath(t, true, true, config.OutputFmtEpub3, "")
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"cyrillic", "Привет", "privet"},
+		{"mixed", "Книга123", "kniga123"},
+		{"already latin", "Hello World", "hello-world"},
+		{"special chars", "Test: File?", "test-file"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := cleanPathSegment(tt.input, env)
+			if result != tt.expected {
+				t.Errorf("cleanPathSegment(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestCleanPathSegment_NoTransliterate(t *testing.T) {
+	env := setupTestEnvForOutputPath(t, true, false, config.OutputFmtEpub3, "")
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"cyrillic preserved", "Привет", "Привет"},
+		{"path separator removed", "Test/File", "TestFile"},
+		{"leading dot removed", ".hidden", "hidden"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := cleanPathSegment(tt.input, env)
+			if result != tt.expected {
+				t.Errorf("cleanPathSegment(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
 	}
 }

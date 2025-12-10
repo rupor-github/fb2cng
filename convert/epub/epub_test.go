@@ -1126,22 +1126,6 @@ func TestAppendImageElement_MissingImage(t *testing.T) {
 	}
 }
 
-func BenchmarkGenerateFootnoteBodyID(b *testing.B) {
-	body := &fb2.Body{Name: "notes"}
-	fbIDs := make(fb2.IDIndex)
-	for i := 0; i < b.N; i++ {
-		baseBodyID := fmt.Sprintf("%s%05d", body.Name, i%100)
-		_, _ = generateUniqueID(baseBodyID, fbIDs)
-	}
-}
-
-func BenchmarkCreateXHTMLDocument(b *testing.B) {
-	c := &content.Content{}
-	for i := 0; i < b.N; i++ {
-		_, _ = createXHTMLDocument(c, fmt.Sprintf("Chapter %d", i))
-	}
-}
-
 // Additional tests for improving coverage
 
 func TestCopyZipWithoutDataDescriptors(t *testing.T) {
@@ -2288,8 +2272,8 @@ func TestGenerateTOCPage(t *testing.T) {
 		}
 
 		href := a.SelectAttrValue("href", "")
-		if href != "ch1.xhtml#ch1" {
-			t.Errorf("Expected href 'ch1.xhtml#ch1', got '%s'", href)
+		if href != "ch1.xhtml" {
+			t.Errorf("Expected href 'ch1.xhtml', got '%s'", href)
 		}
 		if a.Text() != "Chapter 1" {
 			t.Errorf("Expected link text 'Chapter 1', got '%s'", a.Text())

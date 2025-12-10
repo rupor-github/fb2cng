@@ -273,29 +273,3 @@ func TestNew_SeekError(t *testing.T) {
 		t.Errorf("quality mismatch after seek: first=%d, second=%d", quality1, quality2)
 	}
 }
-
-func BenchmarkQualityDetection(b *testing.B) {
-	data := createTestJPEG(&testing.T{}, 200, 200, 85)
-
-	b.ResetTimer()
-	for b.Loop() {
-		qr, err := NewWithBytes(data)
-		if err != nil {
-			b.Fatalf("NewWithBytes failed: %v", err)
-		}
-		_ = qr.Quality()
-	}
-}
-
-func BenchmarkQualityDetectionLarge(b *testing.B) {
-	data := createTestJPEG(&testing.T{}, 1000, 1000, 85)
-
-	b.ResetTimer()
-	for b.Loop() {
-		qr, err := NewWithBytes(data)
-		if err != nil {
-			b.Fatalf("NewWithBytes failed: %v", err)
-		}
-		_ = qr.Quality()
-	}
-}

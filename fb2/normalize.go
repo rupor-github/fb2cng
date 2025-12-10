@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"strings"
+	"unicode"
 
 	"go.uber.org/zap"
 
@@ -323,7 +324,7 @@ func (fb *FictionBook) NormalizeLinks(vignettes map[config.VignettePos]*BinaryOb
 	return result, resultIDs, resultLinks
 }
 
-// NormalizeIDs assigns sequential IDs to all sections and subtitles that don't have IDs.
+// NormalizeIDs assigns sequential IDs to all sections that don't have IDs.
 // It uses the provided IDIndex to avoid ID collisions with existing IDs.
 // Returns a new FictionBook with IDs assigned and an updated IDIndex that includes the generated IDs.
 // The original FictionBook remains unchanged.
@@ -342,7 +343,7 @@ func (fb *FictionBook) NormalizeIDs(existingIDs IDIndex, log *zap.Logger) (*Fict
 	return result, updatedIDs
 }
 
-// assignBodyIDs recursively assigns IDs to sections and subtitles in a body
+// assignBodyIDs recursively assigns IDs to sections in a body
 func (fb *FictionBook) assignBodyIDs(body *Body, path []any, existingIDs, updatedIDs IDIndex, sectionCounter, subtitleCounter *int, log *zap.Logger) {
 	for i := range body.Sections {
 		sectionPath := append(append([]any{}, path...), &body.Sections[i])
@@ -350,7 +351,7 @@ func (fb *FictionBook) assignBodyIDs(body *Body, path []any, existingIDs, update
 	}
 }
 
-// assignSectionIDs recursively assigns IDs to a section, its subtitles, and its child sections
+// assignSectionIDs recursively assigns IDs to a section and its child sections
 func (fb *FictionBook) assignSectionIDs(section *Section, path []any, existingIDs, updatedIDs IDIndex, sectionCounter, subtitleCounter *int, log *zap.Logger) {
 	// Assign ID to section if it doesn't have one
 	if section.ID == "" {
@@ -373,25 +374,7 @@ func (fb *FictionBook) assignSectionIDs(section *Section, path []any, existingID
 
 	// Process content items
 	for i := range section.Content {
-		if section.Content[i].Kind == FlowSubtitle && section.Content[i].Subtitle != nil && section.Content[i].Subtitle.ID == "" {
-			// Subtitle at section level without ID - assign one
-			// Find a unique ID that doesn't collide
-			for {
-				*subtitleCounter++
-				candidateID := fmt.Sprintf("subtitle_%d", *subtitleCounter)
-				if _, exists := existingIDs[candidateID]; !exists {
-					section.Content[i].Subtitle.ID = candidateID
-					// Add to updated index with special type
-					subtitlePath := append(append([]any{}, path...), &section.Content[i], section.Content[i].Subtitle)
-					updatedIDs[candidateID] = ElementRef{
-						Type: "subtitle-generated",
-						Path: subtitlePath,
-					}
-					log.Debug("Generated subtitle id", zap.String("ID", candidateID))
-					break
-				}
-			}
-		} else if section.Content[i].Kind == FlowSection && section.Content[i].Section != nil {
+		if section.Content[i].Kind == FlowSection && section.Content[i].Section != nil {
 			// Recurse into nested sections
 			childPath := append(append([]any{}, path...), &section.Content[i], section.Content[i].Section)
 			fb.assignSectionIDs(section.Content[i].Section, childPath, existingIDs, updatedIDs, sectionCounter, subtitleCounter, log)
@@ -561,91 +544,98 @@ func (fb *FictionBook) FilterReferencedImages(allImages BookImages, links Revers
 	return filtered
 }
 
-// NormalizeSections flattens grouping sections (sections without titles that only contain other sections)
-// by promoting their children up to the parent level. This ensures that section hierarchy is clean and
-// doesn't contain unnecessary nesting levels. Returns a new FictionBook with normalized sections.
-func (fb *FictionBook) NormalizeSections(log *zap.Logger) *FictionBook {
+// MarkDropcaps walks all main bodies of the book and marks first text paragraphs
+// in each section with "has-dropcap" style for drop cap rendering. Only paragraphs
+// at the section level are considered - paragraphs inside titles, epigraphs, poems,
+// cites, tables, or other nested structures are ignored.
+// If the first word contains any symbol from cfg.IgnoreSymbols or starts with a
+// Unicode space, the paragraph is left unchanged. Otherwise, "has-dropcap" is appended
+// to the paragraph's Style field, allowing renderers to apply special formatting by
+// extracting the first character during rendering.
+// Returns a new FictionBook with marked drop caps. The original remains unchanged.
+func (fb *FictionBook) MarkDropcaps(cfg *config.DropcapsConfig) *FictionBook {
+	if cfg == nil || !cfg.Enable {
+		return fb
+	}
+
 	result := fb.clone()
 	for i := range result.Bodies {
-		result.Bodies[i].Sections = normalizeSections(result.Bodies[i].Sections, log)
-	}
-	return result
-}
-
-// normalizeSections recursively normalizes sections by flattening grouping sections
-func normalizeSections(sections []Section, log *zap.Logger) []Section {
-	var result []Section
-	for i := range sections {
-		section := &sections[i]
-		if section.Title == nil && isGroupingSection(section) {
-			// Grouping section without title - unwrap and flatten
-			log.Debug("Flattening grouping section", zap.String("id", section.ID))
-			flattened := extractSectionsFromContent(section.Content, log)
-			result = append(result, flattened...)
-		} else {
-			// Regular section - normalize its content recursively
-			section.Content = normalizeFlowItems(section.Content, log)
-			result = append(result, *section)
-		}
-	}
-	return result
-}
-
-// isGroupingSection checks if a section is a pure grouping container (no content except nested sections)
-func isGroupingSection(section *Section) bool {
-	if section.Title != nil || section.Image != nil || section.Annotation != nil || len(section.Epigraphs) > 0 {
-		return false
-	}
-	if len(section.Content) == 0 {
-		return false
-	}
-	for _, item := range section.Content {
-		if item.Kind != FlowSection {
-			return false
-		}
-	}
-	return true
-}
-
-// extractSectionsFromContent extracts and normalizes sections from flow items
-func extractSectionsFromContent(items []FlowItem, log *zap.Logger) []Section {
-	var result []Section
-	for i := range items {
-		if items[i].Kind == FlowSection && items[i].Section != nil {
-			nested := items[i].Section
-			if nested.Title == nil && isGroupingSection(nested) {
-				// Recursively flatten nested grouping sections
-				flattened := extractSectionsFromContent(nested.Content, log)
-				result = append(result, flattened...)
-			} else {
-				// Regular section - normalize its content recursively
-				nested.Content = normalizeFlowItems(nested.Content, log)
-				result = append(result, *nested)
+		if result.Bodies[i].Main() {
+			for j := range result.Bodies[i].Sections {
+				markSectionDropcaps(&result.Bodies[i].Sections[j], cfg.IgnoreSymbols)
 			}
 		}
 	}
 	return result
 }
 
-// normalizeFlowItems recursively normalizes flow items by flattening grouping sections
-func normalizeFlowItems(items []FlowItem, log *zap.Logger) []FlowItem {
-	var result []FlowItem
-	for i := range items {
-		item := items[i]
-		if item.Kind == FlowSection && item.Section != nil {
-			section := item.Section
-			if section.Title == nil && isGroupingSection(section) {
-				// Grouping section - unwrap and add its children directly
-				result = append(result, section.Content...)
-			} else {
-				// Regular section - normalize its content recursively
-				section.Content = normalizeFlowItems(section.Content, log)
-				item.Section = section
-				result = append(result, item)
+// markSectionDropcaps marks drop caps for the first paragraph in a section and its nested sections
+func markSectionDropcaps(section *Section, ignoreSymbols string) {
+	// Track whether we've marked a paragraph or encountered a nested section at current level
+	markedOrNested := false
+
+	// Find and mark the first text paragraph in this section's content
+	for i := range section.Content {
+		if section.Content[i].Kind == FlowParagraph && section.Content[i].Paragraph != nil {
+			// Only process paragraphs if we haven't already marked one or hit a nested section
+			if !markedOrNested {
+				if !markParagraphDropcap(section.Content[i].Paragraph, ignoreSymbols) {
+					// Successfully marked, stop looking for more paragraphs in this section
+					markedOrNested = true
+				}
+				// If couldn't mark, continue looking for next paragraph
 			}
-		} else {
-			result = append(result, item)
+		} else if section.Content[i].Kind == FlowSection && section.Content[i].Section != nil {
+			// Once we hit a nested section, mark it and stop processing paragraphs at this level
+			markedOrNested = true
+			// Recursively process nested sections - they each get their own dropcap
+			markSectionDropcaps(section.Content[i].Section, ignoreSymbols)
 		}
 	}
-	return result
+}
+
+// markParagraphDropcap marks a paragraph for drop cap rendering by appending "has-dropcap" to its Style.
+// Returns true to continue looking for more paragraphs, false if marked or explicitly skipped (Unicode space or ignored symbol).
+func markParagraphDropcap(para *Paragraph, ignoreSymbols string) bool {
+	if len(para.Text) == 0 {
+		return true // Continue looking (empty paragraph)
+	}
+
+	// Find the first non-empty text segment to analyze
+	for i := range para.Text {
+		seg := &para.Text[i]
+
+		// Only process plain text segments
+		if seg.Kind != InlineText || seg.Text == "" {
+			continue
+		}
+
+		// Get the first rune
+		runes := []rune(seg.Text)
+		if len(runes) == 0 {
+			continue
+		}
+
+		firstRune := runes[0]
+
+		// Check if first character is a Unicode space - stop looking, this section shouldn't have dropcap
+		if unicode.IsSpace(firstRune) {
+			return false // Stop looking (found paragraph with space)
+		}
+
+		// Check if first character should be ignored - stop looking, this section shouldn't have dropcap
+		if strings.ContainsRune(ignoreSymbols, firstRune) {
+			return false // Stop looking (found paragraph with ignored symbol)
+		}
+
+		// Append has-dropcap style to existing style
+		if para.Style == "" {
+			para.Style = "has-dropcap"
+		} else {
+			para.Style = para.Style + " has-dropcap"
+		}
+		return false // Stop looking, successfully marked
+	}
+
+	return true // Continue looking (no valid text found in this paragraph)
 }

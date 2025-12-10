@@ -1,4 +1,3 @@
-* Dropcaps
 * page map
 * kfx
 

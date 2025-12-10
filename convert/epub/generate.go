@@ -598,7 +598,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 			// Find first text chapter (skip annotation-page if present)
 			for _, chapter := range chapters {
 				if !strings.HasPrefix(chapter.ID, "annotation-page") && !strings.HasPrefix(chapter.ID, "toc-page") {
-					startRef.CreateAttr("href", chapter.Filename+"#"+getChapterAnchor(chapter))
+					startRef.CreateAttr("href", chapter.Filename+getChapterAnchorSuffix(chapter))
 					break
 				}
 			}
@@ -671,7 +671,7 @@ func writeNav(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		// Find first text chapter (skip annotation-page if present)
 		for _, chapter := range chapters {
 			if !strings.HasPrefix(chapter.ID, "annotation-page") {
-				a.CreateAttr("href", chapter.Filename+"#"+getChapterAnchor(chapter))
+				a.CreateAttr("href", chapter.Filename+getChapterAnchorSuffix(chapter))
 				break
 			}
 		}
@@ -709,13 +709,13 @@ func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 	metaDepth.CreateAttr("name", "dtb:depth")
 	metaDepth.CreateAttr("content", fmt.Sprintf("%d", maxDepth))
 
-	metaTotal := head.CreateElement("meta")
-	metaTotal.CreateAttr("name", "dtb:totalPageCount")
-	metaTotal.CreateAttr("content", "0")
-
-	metaMax := head.CreateElement("meta")
-	metaMax.CreateAttr("name", "dtb:maxPageNumber")
-	metaMax.CreateAttr("content", "0")
+	// metaTotal := head.CreateElement("meta")
+	// metaTotal.CreateAttr("name", "dtb:totalPageCount")
+	// metaTotal.CreateAttr("content", "0")
+	//
+	// metaMax := head.CreateElement("meta")
+	// metaMax.CreateAttr("name", "dtb:maxPageNumber")
+	// metaMax.CreateAttr("content", "0")
 
 	docTitle := ncx.CreateElement("docTitle")
 	text := docTitle.CreateElement("text")
@@ -738,7 +738,7 @@ func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 		labelText.SetText(chapter.Title)
 
 		navContent := navPoint.CreateElement("content")
-		navContent.CreateAttr("src", chapter.Filename+"#"+getChapterAnchor(chapter))
+		navContent.CreateAttr("src", chapter.Filename+getChapterAnchorSuffix(chapter))
 
 		// Add nested sections to TOC
 		if chapter.Section != nil {
@@ -762,23 +762,9 @@ func buildNCXNavPoints(parent *etree.Element, section *fb2.Section, filename str
 	var lastNavPoint *etree.Element
 
 	for _, item := range section.Content {
-		if item.Kind == fb2.FlowSubtitle && item.Subtitle != nil {
-			*playOrder++
-			subtitleID := item.Subtitle.ID
-			navPoint := parent.CreateElement("navPoint")
-			navPoint.CreateAttr("id", fmt.Sprintf("navpoint-%s", subtitleID))
-			navPoint.CreateAttr("playOrder", fmt.Sprintf("%d", *playOrder))
-
-			navLabel := navPoint.CreateElement("navLabel")
-			labelText := navLabel.CreateElement("text")
-			labelText.SetText(item.Subtitle.AsTOCText(fb2.FormatIDToTOC(subtitleID)))
-
-			navContent := navPoint.CreateElement("content")
-			navContent.CreateAttr("src", filename+"#"+subtitleID)
-
-			lastNavPoint = navPoint
-		} else if item.Kind == fb2.FlowSection && item.Section != nil {
-			if item.Section.Title != nil {
+		if item.Kind == fb2.FlowSection && item.Section != nil {
+			titleText := item.Section.AsTitleText("")
+			if titleText != "" {
 				*playOrder++
 				sectionID := item.Section.ID
 				navPoint := parent.CreateElement("navPoint")
@@ -787,7 +773,7 @@ func buildNCXNavPoints(parent *etree.Element, section *fb2.Section, filename str
 
 				navLabel := navPoint.CreateElement("navLabel")
 				labelText := navLabel.CreateElement("text")
-				labelText.SetText(item.Section.AsTitleText(""))
+				labelText.SetText(titleText)
 
 				navContent := navPoint.CreateElement("content")
 				navContent.CreateAttr("src", filename+"#"+sectionID)
@@ -849,7 +835,7 @@ func buildTOCContent(parentContainer *etree.Element, c *content.Content, chapter
 		li.CreateAttr("class", "toc-item")
 		a := li.CreateElement("a")
 		a.CreateAttr("class", "link-toc")
-		a.CreateAttr("href", chapter.Filename+"#"+getChapterAnchor(chapter))
+		a.CreateAttr("href", chapter.Filename+getChapterAnchorSuffix(chapter))
 		appendInlineText(a, c, chapter.Title, false)
 
 		// Add nested sections to TOC
@@ -883,24 +869,16 @@ func buildTOCPageOLItems(parentOL *etree.Element, section *fb2.Section, filename
 	var lastLI *etree.Element
 
 	for _, item := range section.Content {
-		if item.Kind == fb2.FlowSubtitle && item.Subtitle != nil {
-			subtitleID := item.Subtitle.ID
-			li := parentOL.CreateElement("li")
-			li.CreateAttr("class", "toc-item toc-subtitle")
-			a := li.CreateElement("a")
-			a.CreateAttr("class", "link-toc")
-			a.CreateAttr("href", filename+"#"+subtitleID)
-			appendInlineText(a, c, item.Subtitle.AsTOCText(fb2.FormatIDToTOC(subtitleID)), false)
-			lastLI = li
-		} else if item.Kind == fb2.FlowSection && item.Section != nil {
-			if item.Section.Title != nil {
+		if item.Kind == fb2.FlowSection && item.Section != nil {
+			titleText := item.Section.AsTitleText("")
+			if titleText != "" {
 				li := parentOL.CreateElement("li")
 				li.CreateAttr("class", "toc-item toc-section")
 				a := li.CreateElement("a")
 				a.CreateAttr("class", "link-toc")
 				sectionID := item.Section.ID
 				a.CreateAttr("href", filename+"#"+sectionID)
-				appendInlineText(a, c, item.Section.AsTitleText(""), false)
+				appendInlineText(a, c, titleText, false)
 
 				buildTOCPageOL(li, item.Section, filename, c)
 				lastLI = li
@@ -915,15 +893,14 @@ func buildTOCPageOLItems(parentOL *etree.Element, section *fb2.Section, filename
 	}
 }
 
-// getChapterAnchor returns the anchor ID to use for a chapter link
-func getChapterAnchor(chapter chapterData) string {
+// getChapterAnchorSuffix returns the anchor suffix (including #) for chapter links in TOC/Nav/NCX.
+// Only footnote bodies need anchors since multiple bodies share one file.
+// Regular chapters start at the top of their own files, so no anchor is needed.
+func getChapterAnchorSuffix(chapter chapterData) string {
 	if chapter.AnchorID != "" {
-		return chapter.AnchorID
+		return "#" + chapter.AnchorID
 	}
-	if chapter.Section != nil && chapter.Section.ID != "" {
-		return chapter.Section.ID
-	}
-	return chapter.ID
+	return ""
 }
 
 func calculateSectionDepth(section *fb2.Section, currentDepth int) int {
