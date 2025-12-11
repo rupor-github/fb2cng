@@ -25,7 +25,7 @@ import (
 	"fbc/state"
 )
 
-//go:embed default_cover.jpeg
+//go:embed default.jpeg
 var defaultCoverImage []byte
 
 //go:embed default.css

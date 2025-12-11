@@ -346,7 +346,7 @@ func TestContent_DefaultCoverFallback(t *testing.T) {
 	c.ImagesIndex = imagesIndex
 
 	// Check if default cover exists
-	defaultCoverPath := "./default_cover.jpeg"
+	defaultCoverPath := "./default.jpeg"
 	if _, err := os.Stat(defaultCoverPath); err == nil {
 		t.Logf("default cover available at %s", defaultCoverPath)
 	}

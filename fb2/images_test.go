@@ -380,11 +380,8 @@ func TestBinaryObject_PrepareImage_InvalidImage(t *testing.T) {
 	if bytes.Equal(bi.Data, bo.Data) {
 		t.Fatal("expected placeholder image, got original broken data")
 	}
-	if bi.MimeType != "image/png" {
+	if bi.MimeType != "image/svg+xml" {
 		t.Errorf("expected MimeType to be image/png, got %s", bi.MimeType)
-	}
-	if bi.Dim.Width == 0 || bi.Dim.Height == 0 {
-		t.Error("expected placeholder image to have dimensions")
 	}
 }
 

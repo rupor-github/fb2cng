@@ -475,7 +475,7 @@ func TestNormalizeLinks_BrokenImageLinks(t *testing.T) {
 	for i := range normalized.Binaries {
 		if normalized.Binaries[i].ID == normalized.NotFoundImageID {
 			foundNotFoundBinary = true
-			if normalized.Binaries[i].ContentType != "image/png" {
+			if normalized.Binaries[i].ContentType != "image/svg+xml" {
 				t.Errorf("notFoundImage has wrong content type: %s", normalized.Binaries[i].ContentType)
 			}
 			if len(normalized.Binaries[i].Data) == 0 {

@@ -348,6 +348,9 @@ func (t *Title) AsTOCText(fallback string) string {
 			text := item.Paragraph.AsPlainText()
 			if text != "" {
 				if buf.Len() > 0 {
+					if !strings.HasSuffix(buf.String(), ".") {
+						buf.WriteString(".")
+					}
 					buf.WriteString(" ")
 				}
 				buf.WriteString(text)
