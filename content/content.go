@@ -45,8 +45,10 @@ type PageMapEntry struct {
 type Content struct {
 	SrcName       string
 	Doc           *etree.Document
-	OutputFormat  config.OutputFmt
-	FootnotesMode config.FootnotesMode
+	OutputFormat  config.OutputFmt     // config: output format
+	FootnotesMode config.FootnotesMode // config: footnotes handling mode
+	PageSize      int                  // config: runes per page, 0 if disabled
+	AdobeDE       bool                 // config: Adobe DE page markers are being generated instead of NCX pageList
 
 	Book           *fb2.FictionBook
 	CoverID        string
@@ -68,15 +70,14 @@ type Content struct {
 	koboSpanSentences  int
 
 	// Page map tracking
-	PageSize            int                       // runes per page, 0 if disabled
 	PageTrackingEnabled bool                      // whether to track pages in current context
-	AdobeDE             bool                      // whether Adobe DE page markers are being generated instead of NCX pageList
 	pageRuneCounter     int                       // current rune count
 	TotalPages          int                       // current page number
 	PageMapIndex        map[string][]PageMapEntry // filename -> page entries in that file
 }
 
 // Prepare reads, parses, and prepares FB2 content for conversion.
+// It is used for all output formats.
 func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat config.OutputFmt, log *zap.Logger) (*Content, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

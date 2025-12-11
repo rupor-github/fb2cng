@@ -1,4 +1,4 @@
-* page map
+* fonts in stylesheet - embedded fonts support
 * kfx
 
 * see if float-new-more is feasible

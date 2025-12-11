@@ -256,8 +256,6 @@ tasks:
       - ./**/*.mod
       - ./**/*.sum
       - ./**/config/config.yaml.tmpl
-      - ./fb2/broken.png
-      - ./fb2/not_found.png
       - ./convert/default.css
       - ./convert/default_cover.jpeg
       - ./content/text/dictionaries/*.gz

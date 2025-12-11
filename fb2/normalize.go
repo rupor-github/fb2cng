@@ -12,8 +12,22 @@ import (
 	"fbc/config"
 )
 
-//go:embed not_found.png
-var notFoundImagePNG []byte
+var notFoundImage = []byte(`<svg xmlns="http://www.w3.org/2000/svg"
+     width="200" height="200" viewBox="0 0 200 200"
+     role="img" aria-label="Not found image placeholder">
+  <title>Not found image</title>
+
+  <!-- background -->
+  <rect x="0" y="0" width="200" height="200" fill="#ffffff"/>
+
+  <!-- border -->
+  <rect x="6" y="6" width="188" height="188" fill="none" stroke="#333" stroke-width="4" rx="4" ry="4"/>
+
+  <!-- centered text -->
+  <text x="100" y="100" text-anchor="middle" dominant-baseline="middle"
+        font-family="Helvetica, Arial, sans-serif" font-weight="700"
+        font-size="20" fill="#E60000">IMAGE NOT FOUND</text>
+</svg>`)
 
 // Normalization functions for footnotes and links.
 
@@ -481,8 +495,8 @@ func (fb *FictionBook) ensureNotFoundImageBinary() {
 	// Add not found image binary
 	fb.Binaries = append(fb.Binaries, BinaryObject{
 		ID:          fb.NotFoundImageID,
-		ContentType: "image/png",
-		Data:        notFoundImagePNG,
+		ContentType: "image/svg+xml",
+		Data:        notFoundImage,
 	})
 }
 

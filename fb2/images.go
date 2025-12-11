@@ -24,8 +24,22 @@ import (
 	"fbc/jpegquality"
 )
 
-//go:embed broken.png
-var brokenImagePNG []byte
+var brokenImage = []byte(`<svg xmlns="http://www.w3.org/2000/svg"
+     width="200" height="200" viewBox="0 0 200 200"
+     role="img" aria-label="Broken image placeholder">
+  <title>Broken image</title>
+
+  <!-- background -->
+  <rect x="0" y="0" width="200" height="200" fill="#ffffff"/>
+
+  <!-- border -->
+  <rect x="6" y="6" width="188" height="188" fill="none" stroke="#333" stroke-width="4" rx="4" ry="4"/>
+
+  <!-- centered text -->
+  <text x="100" y="100" text-anchor="middle" dominant-baseline="middle"
+        font-family="Helvetica, Arial, sans-serif" font-weight="700"
+        font-size="20" fill="#E60000">BROKEN IMAGE</text>
+</svg>`)
 
 // Image processing functions for FictionBook.
 
@@ -143,14 +157,9 @@ func (bo *BinaryObject) handleImageError(bi *BookImage, operation string, err er
 
 	if !cfg.UseBroken {
 		log.Debug("Substituting image with broken.png", zap.String("id", bo.ID))
-		// Use embedded broken.png placeholder instead of broken data
-		bi.Data = brokenImagePNG
-		bi.MimeType = "image/png"
-		// Decode the placeholder to get dimensions
-		if img, _, decErr := image.Decode(bytes.NewReader(brokenImagePNG)); decErr == nil {
-			bi.Dim.Width = img.Bounds().Dx()
-			bi.Dim.Height = img.Bounds().Dy()
-		}
+		// Use  placeholder instead of broken data
+		bi.Data = brokenImage
+		bi.MimeType = "image/svg+xml"
 	}
 	return bi
 }
