@@ -31,10 +31,31 @@ const backlinkSym = "<<" // String for additional link backs in the footnote bod
 // idToFileMap maps element IDs to the chapter filename containing them
 type idToFileMap map[string]string
 
+// findBlockLevelParent walks up the element tree to find the nearest block-level container
+// Returns nil if no suitable parent is found
+func findBlockLevelParent(elem *etree.Element) *etree.Element {
+	blockTags := map[string]bool{
+		"p": true, "div": true, "blockquote": true, "td": true, "th": true,
+		"li": true, "dd": true, "dt": true, "section": true, "article": true,
+		"aside": true, "h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true,
+	}
+
+	current := elem
+	for current != nil {
+		if blockTags[current.Tag] {
+			return current
+		}
+		current = current.Parent()
+	}
+	return nil
+}
+
 func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([]chapterData, idToFileMap, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
+
+	env := state.EnvFromContext(ctx)
 
 	var chapters []chapterData
 	chapterNum := 0
@@ -48,6 +69,9 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 			footnoteBodies = append(footnoteBodies, body)
 			continue
 		}
+
+		// Enable page tracking for main and other bodies
+		c.PageTrackingEnabled = true
 
 		// Process main and other bodies (not footnotes)
 		// If body has title, create a chapter for body intro content
@@ -94,7 +118,6 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 
 			// This is a workaround to make EPubCheck happy
 			// Check if we need to generate invisible link to nav.xhtml
-			env := state.EnvFromContext(ctx)
 			addHiddenNavLink := env.Cfg.Document.TOCPage.Placement != config.TOCPagePlacementNone && body.Main() && j == 0
 
 			chapterNum++
@@ -134,6 +157,8 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 
 	// Process all footnote bodies - each body becomes a separate top-level chapter
 	chapterNum++
+	// Only disable page tracking if footnotes are in float mode
+	c.PageTrackingEnabled = env.Cfg.Document.Footnotes.Mode != config.FootnotesModeFloat
 	footnotesChapters, err := processFootnoteBodies(c, footnoteBodies, idToFile, log)
 	if err != nil {
 		log.Error("Unable to convert footnotes", zap.Error(err))
@@ -310,7 +335,7 @@ func bodyToXHTML(c *content.Content, body *fb2.Body, section *fb2.Section, title
 	// EPUB3: Add hidden navigation link at the end of the first main body section
 	if addHiddenNav && c.OutputFormat == config.OutputFmtEpub3 {
 		hiddenP := bodyDiv.CreateElement("p")
-		hiddenP.CreateAttr("style", "display: none;")
+		hiddenP.CreateAttr("style", "display: none; visibility: hidden")
 		navLink := hiddenP.CreateElement("a")
 		navLink.CreateAttr("href", "nav.xhtml")
 		navLink.SetText("Navigation")
@@ -877,12 +902,30 @@ func appendParagraphInline(parent *etree.Element, c *content.Content, p *fb2.Par
 }
 
 func appendInlineText(parent *etree.Element, c *content.Content, text string, hyphenate bool) {
+	// Track runes for page map
+	c.UpdatePageRuneCount(text)
+
 	if hyphenate {
 		text = c.Hyphen.Hyphenate(text)
 	}
+
 	if c.OutputFormat == config.OutputFmtKepub && strings.TrimSpace(text) != "" {
 		// Kobo mode: wrap text in span with unique ID
 		for s := range c.Splitter.Sentences(text) {
+			// Check for page boundary before each sentence
+			if c.CheckPageBoundary() {
+				spanID := c.AddPageMapEntry()
+				// Find block-level parent to insert page marker
+				blockParent := findBlockLevelParent(parent)
+				if blockParent != nil {
+					// Insert as first child of block parent - use <a> for kepub
+					pageMarker := etree.NewElement("span")
+					pageMarker.CreateAttr("id", spanID)
+					pageMarker.CreateAttr("class", "page-marker")
+					blockParent.InsertChildAt(0, pageMarker)
+				}
+			}
+
 			paragraph, sentence := c.KoboSpanNextSentence()
 			span := parent.CreateElement("span")
 			span.CreateAttr("class", "koboSpan")
@@ -890,6 +933,21 @@ func appendInlineText(parent *etree.Element, c *content.Content, text string, hy
 			span.SetText(s)
 		}
 	} else {
+		// Check for page boundary
+		if c.CheckPageBoundary() {
+			spanID := c.AddPageMapEntry()
+			// Find block-level parent to insert page marker
+			blockParent := findBlockLevelParent(parent)
+			if blockParent != nil {
+				// Insert as first child of block parent
+				// Use <a> for epub2/kepub, <span> for epub3
+				pageMarker := etree.NewElement("span")
+				pageMarker.CreateAttr("id", spanID)
+				pageMarker.CreateAttr("class", "page-marker")
+				blockParent.InsertChildAt(0, pageMarker)
+			}
+		}
+
 		// Standard mode: use original tail-based approach
 		if parent.ChildElements() == nil || len(parent.ChildElements()) == 0 {
 			parent.SetText(text)

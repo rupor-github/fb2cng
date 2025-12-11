@@ -5,10 +5,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"iter"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/beevik/etree"
 	"github.com/google/uuid"
@@ -27,6 +30,13 @@ type BackLinkRef struct {
 	RefID    string // unique ID for this reference occurrence (e.g., "ref-note1-1")
 	TargetID string // ID of the footnote being referenced
 	Filename string // filename containing the reference
+}
+
+// PageMapEntry represents a page marker in the document
+type PageMapEntry struct {
+	PageNum  int    // global page number
+	SpanID   string // id="page{num}" to insert
+	Filename string // filename containing this page marker
 }
 
 // Content encapsulates both the raw FB2 XML document and the structured
@@ -56,37 +66,14 @@ type Content struct {
 	// Kobo span tracking
 	koboSpanParagraphs int
 	koboSpanSentences  int
-}
 
-// KoboSpanNextSentence increments sentence and returns the current Kobo span
-func (c *Content) KoboSpanNextSentence() (int, int) {
-	c.koboSpanSentences++
-	return c.koboSpanParagraphs, c.koboSpanSentences
-}
-
-// KoboSpanNextParagraph increments paragraph, resets sentence, and returns previous Kobo span
-func (c *Content) KoboSpanNextParagraph() (int, int) {
-	oldParagraphs, oldSentences := c.koboSpanParagraphs, c.koboSpanSentences
-	c.koboSpanParagraphs++
-	c.koboSpanSentences = 0
-	return oldParagraphs, oldSentences
-}
-
-func (c *Content) KoboSpanSet(paragraphs, sentences int) {
-	c.koboSpanParagraphs, c.koboSpanSentences = paragraphs, sentences
-}
-
-// AddFootnoteBackLinkRef adds a footnote reference and returns the BackLinkRef for generating links
-func (c *Content) AddFootnoteBackLinkRef(targetID string) BackLinkRef {
-	refs := c.BackLinkIndex[targetID]
-	refNum := len(refs) + 1
-	ref := BackLinkRef{
-		RefID:    fmt.Sprintf("ref-%s-%d", targetID, refNum),
-		TargetID: targetID,
-		Filename: c.CurrentFilename,
-	}
-	c.BackLinkIndex[targetID] = append(refs, ref)
-	return ref
+	// Page map tracking
+	PageSize            int                       // runes per page, 0 if disabled
+	PageTrackingEnabled bool                      // whether to track pages in current context
+	AdobeDE             bool                      // whether Adobe DE page markers are being generated instead of NCX pageList
+	pageRuneCounter     int                       // current rune count
+	TotalPages          int                       // current page number
+	PageMapIndex        map[string][]PageMapEntry // filename -> page entries in that file
 }
 
 // Prepare reads, parses, and prepares FB2 content for conversion.
@@ -232,6 +219,15 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 		LinksRevIndex:  links,
 		WorkDir:        tmpDir,
 		BackLinkIndex:  make(map[string][]BackLinkRef),
+		PageMapIndex:   make(map[string][]PageMapEntry),
+	}
+
+	// Initialize page map settings
+	if env.Cfg.Document.PageMap.Enable {
+		c.PageSize = env.Cfg.Document.PageMap.Size
+		if outputFormat == config.OutputFmtEpub2 || outputFormat == config.OutputFmtKepub {
+			c.AdobeDE = env.Cfg.Document.PageMap.AdobeDE
+		}
 	}
 
 	if env.Cfg.Document.InsertSoftHyphen {
@@ -311,4 +307,86 @@ func prepareVignettes(vigCfg *config.VignettesConfig, defaultVignettes map[confi
 	}
 
 	return vignettes, nil
+}
+
+// KoboSpanNextSentence increments sentence and returns the current Kobo span
+func (c *Content) KoboSpanNextSentence() (int, int) {
+	c.koboSpanSentences++
+	return c.koboSpanParagraphs, c.koboSpanSentences
+}
+
+// KoboSpanNextParagraph increments paragraph, resets sentence, and returns previous Kobo span
+func (c *Content) KoboSpanNextParagraph() (int, int) {
+	oldParagraphs, oldSentences := c.koboSpanParagraphs, c.koboSpanSentences
+	c.koboSpanParagraphs++
+	c.koboSpanSentences = 0
+	return oldParagraphs, oldSentences
+}
+
+func (c *Content) KoboSpanSet(paragraphs, sentences int) {
+	c.koboSpanParagraphs, c.koboSpanSentences = paragraphs, sentences
+}
+
+// UpdatePageRuneCount adds rune count and checks if a new page boundary is reached
+func (c *Content) UpdatePageRuneCount(text string) {
+	if c.PageSize == 0 || !c.PageTrackingEnabled {
+		return
+	}
+	c.pageRuneCounter += utf8.RuneCountInString(text)
+}
+
+// CheckPageBoundary checks if we've crossed a page boundary and returns true if a page marker should be inserted
+func (c *Content) CheckPageBoundary() bool {
+	if c.PageSize == 0 || !c.PageTrackingEnabled {
+		return false
+	}
+	if c.pageRuneCounter >= c.PageSize {
+		c.TotalPages++
+		c.pageRuneCounter = 0
+		return true
+	}
+	return false
+}
+
+// AddPageMapEntry records a page marker in the current file
+func (c *Content) AddPageMapEntry() string {
+	spanID := fmt.Sprintf("page%d", c.TotalPages)
+	entry := PageMapEntry{
+		PageNum:  c.TotalPages,
+		SpanID:   spanID,
+		Filename: c.CurrentFilename,
+	}
+	c.PageMapIndex[c.CurrentFilename] = append(c.PageMapIndex[c.CurrentFilename], entry)
+	return spanID
+}
+
+// GetAllPagesSeq returns an iterator over all page entries sorted by page number
+func (c *Content) GetAllPagesSeq() iter.Seq[PageMapEntry] {
+	return func(yield func(PageMapEntry) bool) {
+		var pages []PageMapEntry
+		for _, entries := range c.PageMapIndex {
+			pages = append(pages, entries...)
+		}
+		slices.SortFunc(pages, func(a, b PageMapEntry) int {
+			return a.PageNum - b.PageNum
+		})
+		for _, page := range pages {
+			if !yield(page) {
+				return
+			}
+		}
+	}
+}
+
+// AddFootnoteBackLinkRef adds a footnote reference and returns the BackLinkRef for generating links
+func (c *Content) AddFootnoteBackLinkRef(targetID string) BackLinkRef {
+	refs := c.BackLinkIndex[targetID]
+	refNum := len(refs) + 1
+	ref := BackLinkRef{
+		RefID:    fmt.Sprintf("ref-%s-%d", targetID, refNum),
+		TargetID: targetID,
+		Filename: c.CurrentFilename,
+	}
+	c.BackLinkIndex[targetID] = append(refs, ref)
+	return ref
 }

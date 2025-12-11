@@ -75,6 +75,12 @@ type (
 		IgnoreSymbols string `yaml:"ignore_symbols,omitempty"`
 	}
 
+	PageMapConfig struct {
+		Enable  bool `yaml:"enable"`
+		Size    int  `yaml:"size" validate:"required_unless=Enable false,min=500"`
+		AdobeDE bool `yaml:"adobe_de"`
+	}
+
 	DocumentConfig struct {
 		FixZip                bool                  `yaml:"fix_zip"`
 		OpenFromCover         bool                  `yaml:"open_from_cover"`
@@ -89,6 +95,7 @@ type (
 		Metainformation       MetainformationConfig `yaml:"metainformation"`
 		Vignettes             VignettesConfig       `yaml:"vignettes"`
 		Dropcaps              DropcapsConfig        `yaml:"dropcaps"`
+		PageMap               PageMapConfig         `yaml:"page_map"`
 	}
 
 	Config struct {

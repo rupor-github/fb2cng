@@ -125,6 +125,12 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		if err := writeNCX(zw, c, chapters, log); err != nil {
 			return fmt.Errorf("unable to write NCX: %w", err)
 		}
+		// For EPUB2 and KEPUB with AdobeDE, write page-map.xml instead of NCX pageList
+		if c.PageSize > 0 && c.AdobeDE {
+			if err := writePageMap(zw, c, log); err != nil {
+				return fmt.Errorf("unable to write page-map: %w", err)
+			}
+		}
 	}
 
 	// make sure buffers are flushed before continuing
@@ -464,6 +470,14 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		item.CreateAttr("id", "ncx")
 		item.CreateAttr("href", "toc.ncx")
 		item.CreateAttr("media-type", "application/x-dtbncx+xml")
+
+		// Add page-map.xml to manifest for EPUB2/KEPUB with AdobeDE
+		if c.PageSize > 0 && c.AdobeDE {
+			pageMapItem := manifest.CreateElement("item")
+			pageMapItem.CreateAttr("id", "page-map")
+			pageMapItem.CreateAttr("href", "page-map.xml")
+			pageMapItem.CreateAttr("media-type", "application/oebps-page-map+xml")
+		}
 	}
 
 	cssItem := manifest.CreateElement("item")
@@ -521,10 +535,15 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	if c.CoverID != "" {
 		coverRef := spine.CreateElement("itemref")
 		coverRef.CreateAttr("idref", "cover-page")
+		coverRef.CreateAttr("linear", "no")
 	}
 
 	if c.OutputFormat != config.OutputFmtEpub3 {
 		spine.CreateAttr("toc", "ncx")
+		// Add page-map attribute for AdobeDE
+		if c.PageSize > 0 && c.AdobeDE {
+			spine.CreateAttr("page-map", "page-map")
+		}
 	}
 
 	// EPUB3: Add nav.xhtml to spine according to TOCPagePlacement
@@ -553,6 +572,10 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		if !addedToSpine[filename] {
 			itemref := spine.CreateElement("itemref")
 			itemref.CreateAttr("idref", addedFiles[filename])
+			// Add linear="no" for footnotes.xhtml in float mode
+			if filename == "footnotes.xhtml" && c.FootnotesMode == config.FootnotesModeFloat {
+				itemref.CreateAttr("linear", "no")
+			}
 			addedToSpine[filename] = true
 		}
 	}
@@ -645,7 +668,7 @@ func writeNav(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	landmarksNav.CreateAttr("epub:type", "landmarks")
 	landmarksNav.CreateAttr("id", "landmarks")
 	landmarksNav.CreateAttr("hidden", "")
-	landmarksNav.CreateAttr("style", "display: none;")
+	landmarksNav.CreateAttr("style", "display: none; visibility: hidden;")
 
 	landmarksH2 := landmarksNav.CreateElement("h2")
 	landmarksH2.SetText("Landmarks")
@@ -675,6 +698,27 @@ func writeNav(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 				a.CreateAttr("href", chapter.Filename+getChapterAnchorSuffix(chapter))
 				break
 			}
+		}
+	}
+
+	// Add page-list navigation for EPUB3
+	if c.PageSize > 0 {
+		pageNav := body.CreateElement("nav")
+		pageNav.CreateAttr("epub:type", "page-list")
+		pageNav.CreateAttr("id", "page-list")
+		pageNav.CreateAttr("hidden", "")
+		pageNav.CreateAttr("style", "display: none; visibility: hidden;")
+
+		h2 := pageNav.CreateElement("h2")
+		h2.SetText("Pages")
+
+		ol := pageNav.CreateElement("ol")
+
+		for page := range c.GetAllPagesSeq() {
+			li := ol.CreateElement("li")
+			a := li.CreateElement("a")
+			a.CreateAttr("href", page.Filename+"#"+page.SpanID)
+			a.SetText(fmt.Sprintf("%d", page.PageNum))
 		}
 	}
 
@@ -710,13 +754,16 @@ func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 	metaDepth.CreateAttr("name", "dtb:depth")
 	metaDepth.CreateAttr("content", fmt.Sprintf("%d", maxDepth))
 
-	// metaTotal := head.CreateElement("meta")
-	// metaTotal.CreateAttr("name", "dtb:totalPageCount")
-	// metaTotal.CreateAttr("content", "0")
-	//
-	// metaMax := head.CreateElement("meta")
-	// metaMax.CreateAttr("name", "dtb:maxPageNumber")
-	// metaMax.CreateAttr("content", "0")
+	// Add page count metadata if page map is enabled
+	if c.PageSize > 0 {
+		metaTotal := head.CreateElement("meta")
+		metaTotal.CreateAttr("name", "dtb:totalPageCount")
+		metaTotal.CreateAttr("content", fmt.Sprintf("%d", c.TotalPages))
+
+		metaMax := head.CreateElement("meta")
+		metaMax.CreateAttr("name", "dtb:maxPageNumber")
+		metaMax.CreateAttr("content", fmt.Sprintf("%d", c.TotalPages))
+	}
 
 	docTitle := ncx.CreateElement("docTitle")
 	text := docTitle.CreateElement("text")
@@ -747,7 +794,42 @@ func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 		}
 	}
 
+	// Add pageList for EPUB2 and KEPUB (only if not using AdobeDE page-map)
+	if c.PageSize > 0 && !c.AdobeDE {
+		pageList := ncx.CreateElement("pageList")
+
+		for page := range c.GetAllPagesSeq() {
+			pageTarget := pageList.CreateElement("pageTarget")
+			pageTarget.CreateAttr("id", fmt.Sprintf("page-%d", page.PageNum))
+			pageTarget.CreateAttr("type", "normal")
+			pageTarget.CreateAttr("value", fmt.Sprintf("%d", page.PageNum))
+
+			navLabel := pageTarget.CreateElement("navLabel")
+			text := navLabel.CreateElement("text")
+			text.SetText(fmt.Sprintf("%d", page.PageNum))
+
+			content := pageTarget.CreateElement("content")
+			content.CreateAttr("src", page.Filename+"#"+page.SpanID)
+		}
+	}
+
 	return writeXMLToZip(zw, filepath.Join(oebpsDir, "toc.ncx"), doc)
+}
+
+func writePageMap(zw *zip.Writer, c *content.Content, _ *zap.Logger) error {
+	doc := etree.NewDocument()
+	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
+
+	pageMap := doc.CreateElement("page-map")
+	pageMap.CreateAttr("xmlns", "http://www.idpf.org/2007/opf")
+
+	for page := range c.GetAllPagesSeq() {
+		pageElem := pageMap.CreateElement("page")
+		pageElem.CreateAttr("name", fmt.Sprintf("%d", page.PageNum))
+		pageElem.CreateAttr("href", page.Filename+"#"+page.SpanID)
+	}
+
+	return writeXMLToZip(zw, filepath.Join(oebpsDir, "page-map.xml"), doc)
 }
 
 func writeDataToZip(zw *zip.Writer, name string, data []byte) error {

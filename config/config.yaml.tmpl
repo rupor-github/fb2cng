@@ -118,9 +118,22 @@ document:
     # processing is completed
     transliterate: false
 
+  page_map:
+    # Generate page map if possible
+    enable: true
+    # approximate page size in Unicode code points, min size = 500
+    size: 2300
+    # Adobe RMSDK/ADE does not have support for NCX pageList. It uses its own
+    # proprietary way - if you want it set adobe_de to true. It will cause
+    # EpubCheck to complain with ERROR(RSC-005): OEBPS/content.opf: Error while
+    # parsing file: attribute "page-map" not allowed here; expected attribute
+    # "id".
+    # NOTE: only used with EPUB2/KEPUB
+    adobe_de: false
+
   images:
     # Do not skip images which cannot be decoded by program. Use them without
-    # any processing, allowing reader to decide what to do.
+    # any processing, allowing reader to decide what to do
     use_broken: false
     # Kindle eInc devices do not handle transparent PNG images well
     remove_png_transparency: false
