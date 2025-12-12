@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1264" height="1680" viewBox="0 0 1264 1680"
+     role="img" aria-label="Thick Art-Deco ornamental frame with darker gray background">
+
+  <!-- background fill -->
+  <rect x="0" y="0" width="1264" height="1680" fill="#888888"/>
+
+  <defs>
+    <style>
+      .main { fill: none; stroke: currentColor; stroke-width: 28; stroke-linejoin: miter; stroke-linecap: square; }
+      .inner { fill: none; stroke: currentColor; stroke-width: 14; stroke-linejoin: miter; stroke-linecap: square; }
+      .thin  { fill: none; stroke: currentColor; stroke-width: 8;  stroke-linejoin: miter; stroke-linecap: square; }
+      .dot   { fill: currentColor; }
+    </style>
+  </defs>
+
+  <!-- outer heavy frame -->
+  <rect class="main" x="28" y="28" width="1208" height="1624" rx="6" ry="6" />
+
+  <!-- stepped inner frame -->
+  <rect class="inner" x="120" y="120" width="1024" height="1440" />
+  <rect class="thin"  x="190" y="190" width="884"  height="1280" />
+
+  <!-- corner blocks -->
+  <rect class="main"  x="28"   y="28"   width="160" height="160" />
+  <rect class="inner" x="48"   y="48"   width="120" height="120" />
+  <rect class="main"  x="1076" y="28"   width="160" height="160" />
+  <rect class="inner" x="1096" y="48"   width="120" height="120" />
+  <rect class="main"  x="28"   y="1492" width="160" height="160" />
+  <rect class="inner" x="48"   y="1512" width="120" height="120" />
+  <rect class="main"  x="1076" y="1492" width="160" height="160" />
+  <rect class="inner" x="1096" y="1512" width="120" height="120" />
+
+  <!-- vertical pilasters -->
+  <path class="main"  d="M220 320 v1040" />
+  <path class="main"  d="M1044 320 v1040" />
+  <path class="inner" d="M260 360 v960" />
+  <path class="inner" d="M1004 360 v960" />
+
+  <!-- top center deco -->
+  <g transform="translate(632,160)" stroke="currentColor" fill="none">
+    <path class="main"  d="M-220 0 H220" />
+    <path class="inner" d="M-180 0 V80 H-120 V0" />
+    <path class="inner" d="M-90 0 V120 H-50 V0" />
+    <path class="inner" d="M50 0 V120 H90 V0" />
+    <path class="inner" d="M120 0 V80 H180 V0" />
+    <rect class="thin" x="-12" y="-8" width="24" height="16" rx="2" ry="2" />
+  </g>
+
+  <!-- bottom center deco -->
+  <g transform="translate(632,1520)" stroke="currentColor" fill="none">
+    <path class="main"  d="M-220 0 H220" />
+    <path class="inner" d="M-180 0 V-80 H-120 V0" />
+    <path class="inner" d="M-90 0 V-120 H-50 V0" />
+    <path class="inner" d="M50 0 V-120 H90 V0" />
+    <path class="inner" d="M120 0 V-80 H180 V0" />
+    <rect class="thin" x="-12" y="-8" width="24" height="16" rx="2" ry="2" />
+  </g>
+
+  <!-- center medallion -->
+  <g transform="translate(632,840)">
+    <rect class="main"  x="-120" y="-120" width="240" height="240" rx="12" ry="12" />
+    <rect class="inner" x="-80"  y="-80"  width="160" height="160" rx="8" ry="8" />
+    <rect class="thin"  x="-44"  y="-44"  width="88"  height="88"  rx="4" ry="4" />
+    <circle class="dot" cx="0" cy="0" r="10"/>
+  </g>
+
+  <!-- mid-side bars -->
+  <path class="main" d="M220 600 h-160" />
+  <path class="main" d="M220 1080 h-160" />
+  <path class="main" d="M1044 600 h160" />
+  <path class="main" d="M1044 1080 h160" />
+
+  <!-- tiny ticks -->
+  <path class="thin" d="M632 310 v30" />
+  <path class="thin" d="M632 1370 v30" />
+  <path class="thin" d="M350 840 h30" />
+  <path class="thin" d="M914 840 h30" />
+
+</svg>
