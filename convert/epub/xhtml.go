@@ -26,7 +26,10 @@ type chapterData struct {
 	IncludeInTOC bool         // Whether to include this chapter in navigation/TOC
 }
 
-const backlinkSym = "<<" // String for additional link backs in the footnote bodies
+const (
+	backlinkSym = "[<]"       // String for additional link backs in the footnote bodies
+	moreSym     = "(~)\u00A0" // String to indicate more content in footnote previews
+)
 
 // idToFileMap maps element IDs to the chapter filename containing them
 type idToFileMap map[string]string
@@ -461,6 +464,16 @@ func appendBodyIntroContent(parent *etree.Element, c *content.Content, body *fb2
 	return nil
 }
 
+// hasImageChild checks if an element contains an img child
+func hasImageChild(elem *etree.Element) bool {
+	for _, child := range elem.ChildElements() {
+		if child.Tag == "img" {
+			return true
+		}
+	}
+	return false
+}
+
 // appendEpub2FloatFootnoteSectionContent appends footnote section content in
 // EPUB2 float mode uses <p class="footnote"> and simplified rendering to fit
 // everything in a single paragraph keeping as much formatting as possible.
@@ -594,6 +607,29 @@ func appendEpub2FloatFootnoteSectionContent(parent *etree.Element, c *content.Co
 		}
 	}
 
+	// If there's more than one text span, add moreSym indicator to the first one
+	textSpans := make([]*etree.Element, 0)
+	for _, child := range sectionElem.ChildElements() {
+		if child.Tag == "span" {
+			// Exclude koboSpan and image-containing spans
+			if class := child.SelectAttrValue("class", ""); class != "koboSpan" && !hasImageChild(child) {
+				textSpans = append(textSpans, child)
+			}
+		}
+	}
+
+	if len(textSpans) > 1 {
+		firstSpan := textSpans[0]
+
+		// Create the "more" indicator span
+		moreSpan := etree.NewElement("span")
+		moreSpan.CreateAttr("class", "footnote-more")
+		moreSpan.SetText(moreSym)
+
+		// Insert at the beginning of first span
+		firstSpan.InsertChildAt(0, moreSpan)
+	}
+
 	return nil
 }
 
@@ -622,7 +658,7 @@ func appendEpub3FloatFootnoteSectionContent(parent *etree.Element, c *content.Co
 	}
 
 	if section.Annotation != nil {
-		div := parent.CreateElement("div")
+		div := sectionElem.CreateElement("div")
 		div.CreateAttr("class", "annotation")
 		if err := appendFlowItemsWithContext(div, c, section.Annotation.Items, 1, "annotation", log); err != nil {
 			return err
@@ -633,6 +669,26 @@ func appendEpub3FloatFootnoteSectionContent(parent *etree.Element, c *content.Co
 		return err
 	}
 
+	// If there's more than one paragraph in aside, add moreSym indicator to the first one
+	paragraphs := make([]*etree.Element, 0)
+	for _, child := range sectionElem.ChildElements() {
+		if child.Tag == "p" {
+			paragraphs = append(paragraphs, child)
+		}
+	}
+
+	if len(paragraphs) > 1 {
+		firstPara := paragraphs[0]
+
+		// Create the "more" indicator span
+		moreSpan := etree.NewElement("span")
+		moreSpan.CreateAttr("class", "footnote-more")
+		moreSpan.SetText(moreSym)
+
+		// Insert at the beginning of first paragraph
+		firstPara.InsertChildAt(0, moreSpan)
+	}
+
 	// Add back-references for EPUB3 float mode
 	if section.ID != "" {
 		if refs, exists := c.BackLinkIndex[section.ID]; exists && len(refs) > 0 {
@@ -640,9 +696,7 @@ func appendEpub3FloatFootnoteSectionContent(parent *etree.Element, c *content.Co
 			backDiv := parent.CreateElement("p")
 
 			for i, ref := range refs {
-				if i == 0 {
-					backDiv.CreateText("Back:" + text.NBSP)
-				} else {
+				if i > 0 {
 					backDiv.CreateText(text.NBSP)
 				}
 				backLink := backDiv.CreateElement("a")

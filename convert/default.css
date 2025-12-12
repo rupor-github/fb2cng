@@ -356,6 +356,18 @@ td {
     text-indent: 0;
     margin: 0.2em 0;
 }
+/* "More" indicator for floating footnotes */
+/* if you do not want it uncomment this one and comment out next rule */
+.footnote-more {
+    display: none;
+}
+/* if you do want it uncomment this one and comment out previous rule */
+/* usially make sence to keep this rule in sync with .link-backlink style */
+/* .footnote-more { */
+/*     text-decoration: none; */
+/*     font-weight: bold; */
+/* 	color: gray; */
+/* } */
 
 /* Links and hyperlink styles */
 .link-external {
@@ -376,6 +388,7 @@ td {
 .link-backlink {
     text-decoration: none;
     font-weight: bold;
+	color: gray;
 }
 
 /* Unexpected/error elements */
