@@ -541,9 +541,9 @@ func appendEpub2FloatFootnoteSectionContent(parent *etree.Element, c *content.Co
 				}
 				imgID := strings.TrimPrefix(item.Image.Href, "#")
 				if imgData, ok := c.ImagesIndex[imgID]; ok {
-					img.CreateAttr("src", path.Join(imagesDir, imgData.Filename))
+					img.CreateAttr("src", imgData.Filename)
 				} else {
-					img.CreateAttr("src", path.Join(imagesDir, imgID))
+					img.CreateAttr("src", path.Join(fb2.ImagesDir, imgID))
 				}
 				img.CreateAttr("alt", item.Image.Alt)
 				if item.Image.Title != "" {
@@ -1040,9 +1040,9 @@ func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inl
 			img.CreateAttr("class", "image-inline")
 			imgID := strings.TrimPrefix(seg.Image.Href, "#")
 			if imgData, ok := c.ImagesIndex[imgID]; ok {
-				img.CreateAttr("src", path.Join(imagesDir, imgData.Filename))
+				img.CreateAttr("src", imgData.Filename)
 			} else {
-				img.CreateAttr("src", path.Join(imagesDir, imgID))
+				img.CreateAttr("src", path.Join(fb2.ImagesDir, imgID))
 			}
 			img.CreateAttr("alt", seg.Image.Alt)
 		}
@@ -1072,9 +1072,9 @@ func appendImageElement(parent *etree.Element, c *content.Content, img *fb2.Imag
 	imgElem.CreateAttr("class", "image-block")
 	imgID := strings.TrimPrefix(img.Href, "#")
 	if imgData, ok := c.ImagesIndex[imgID]; ok {
-		imgElem.CreateAttr("src", path.Join(imagesDir, imgData.Filename))
+		imgElem.CreateAttr("src", imgData.Filename)
 	} else {
-		imgElem.CreateAttr("src", path.Join(imagesDir, imgID))
+		imgElem.CreateAttr("src", path.Join(fb2.ImagesDir, imgID))
 	}
 	imgElem.CreateAttr("alt", img.Alt)
 	if img.Title != "" {
@@ -1110,7 +1110,7 @@ func appendVignetteImage(parent *etree.Element, c *content.Content, position con
 
 	imgElem := imgParent.CreateElement("img")
 	imgElem.CreateAttr("class", "image-vignette")
-	imgElem.CreateAttr("src", path.Join(imagesDir, imgData.Filename))
+	imgElem.CreateAttr("src", imgData.Filename)
 	imgElem.CreateAttr("alt", "")
 }
 

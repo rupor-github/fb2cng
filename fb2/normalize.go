@@ -12,9 +12,7 @@ import (
 	"fbc/config"
 )
 
-var notFoundImage = []byte(`<svg xmlns="http://www.w3.org/2000/svg"
-     width="200" height="200" viewBox="0 0 200 200"
-     role="img" aria-label="Not found image placeholder">
+var notFoundImage = []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
   <title>Not found image</title>
 
   <!-- background -->

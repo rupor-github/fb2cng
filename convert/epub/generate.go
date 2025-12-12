@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -22,13 +23,11 @@ import (
 	"fbc/content"
 	"fbc/fb2"
 	"fbc/fb2/fields"
-	"fbc/state"
 )
 
 const (
 	mimetypeContent = "application/epub+zip"
 	oebpsDir        = "OEBPS"
-	imagesDir       = "images"
 )
 
 // Generate creates the EPUB output file.
@@ -37,7 +36,6 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	env := state.EnvFromContext(ctx)
 
 	log.Info("Generating EPUB", zap.Stringer("format", c.OutputFormat), zap.String("output", outputPath))
 
@@ -102,7 +100,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		return fmt.Errorf("unable to write images: %w", err)
 	}
 
-	if err := writeStylesheet(zw, c, env.DefaultStyle); err != nil {
+	if err := writeStylesheet(zw, c); err != nil {
 		return fmt.Errorf("unable to write stylesheet: %w", err)
 	}
 
@@ -251,7 +249,8 @@ func writeContainer(zw *zip.Writer) error {
 
 func writeImages(zw *zip.Writer, images fb2.BookImages, _ *zap.Logger) error {
 	for id, img := range images {
-		filename := filepath.Join(oebpsDir, imagesDir, img.Filename)
+		// Filename already contains directory (e.g., "images/img00001.jpg")
+		filename := filepath.Join(oebpsDir, img.Filename)
 
 		if err := writeDataToZip(zw, filename, img.Data); err != nil {
 			return fmt.Errorf("unable to write image %s: %w", id, err)
@@ -314,7 +313,7 @@ func writeCoverPage(zw *zip.Writer, c *content.Content, cfg *config.DocumentConf
 		svgImage.CreateAttr("y", "0")
 		svgImage.CreateAttr("width", "100")
 		svgImage.CreateAttr("height", "100")
-		svgImage.CreateAttr("xlink:href", "images/"+coverImage.Filename)
+		svgImage.CreateAttr("xlink:href", coverImage.Filename)
 	case config.ImageResizeModeKeepAR:
 		fallthrough
 	default:
@@ -333,20 +332,42 @@ func writeCoverPage(zw *zip.Writer, c *content.Content, cfg *config.DocumentConf
 		svgImage.CreateAttr("y", "0")
 		svgImage.CreateAttr("width", fmt.Sprintf("%d", w))
 		svgImage.CreateAttr("height", fmt.Sprintf("%d", h))
-		svgImage.CreateAttr("xlink:href", "images/"+coverImage.Filename)
+		svgImage.CreateAttr("xlink:href", coverImage.Filename)
 	}
 
 	return writeXMLToZip(zw, filepath.Join(oebpsDir, "cover.xhtml"), doc)
 }
 
-func writeStylesheet(zw *zip.Writer, c *content.Content, css []byte) error {
+func writeStylesheet(zw *zip.Writer, c *content.Content) error {
+	var finalCSS strings.Builder
+
+	// All stylesheets (including default) are now in Book.Stylesheets, already normalized
 	for _, style := range c.Book.Stylesheets {
-		if style.Type == "text/css" {
-			css = append(css, "\n/* FB2 embedded stylesheet */\n"+style.Data+"\n"...)
+		if style.Type != "text/css" {
+			continue
 		}
+
+		styleCSS := style.Data
+
+		// Write stylesheet resources to EPUB and rewrite CSS URLs
+		for _, resource := range style.Resources {
+			// Filename already contains directory (e.g., "fonts/myfont.woff2")
+			fullPath := filepath.Join(oebpsDir, resource.Filename)
+
+			if err := writeDataToZip(zw, fullPath, resource.Data); err != nil {
+				return fmt.Errorf("unable to write stylesheet resource %s: %w",
+					resource.Filename, err)
+			}
+
+			// Rewrite CSS URL references to point to EPUB internal paths
+			styleCSS = rewriteCSSURL(styleCSS, resource.OriginalURL, resource.Filename)
+		}
+
+		finalCSS.WriteString(styleCSS)
+		finalCSS.WriteString("\n")
 	}
 
-	return writeDataToZip(zw, filepath.Join(oebpsDir, "stylesheet.css"), css)
+	return writeDataToZip(zw, filepath.Join(oebpsDir, "stylesheet.css"), []byte(finalCSS.String()))
 }
 
 func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, chapters []chapterData, log *zap.Logger) error {
@@ -485,6 +506,19 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	cssItem.CreateAttr("href", "stylesheet.css")
 	cssItem.CreateAttr("media-type", "text/css")
 
+	// Add stylesheet resources to manifest
+	resourceIndex := 0
+	for _, style := range c.Book.Stylesheets {
+		for _, resource := range style.Resources {
+			item := manifest.CreateElement("item")
+			item.CreateAttr("id", fmt.Sprintf("css-resource-%d", resourceIndex))
+			// Filename already contains directory (e.g., "fonts/myfont.woff2")
+			item.CreateAttr("href", resource.Filename)
+			item.CreateAttr("media-type", resource.MimeType)
+			resourceIndex++
+		}
+	}
+
 	if c.CoverID != "" {
 		coverPageItem := manifest.CreateElement("item")
 		coverPageItem.CreateAttr("id", "cover-page")
@@ -519,14 +553,14 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		item := manifest.CreateElement("item")
 		if id == c.CoverID {
 			item.CreateAttr("id", "book-cover-image")
-			item.CreateAttr("href", "images/"+img.Filename)
+			item.CreateAttr("href", img.Filename)
 			item.CreateAttr("media-type", img.MimeType)
 			if c.OutputFormat == config.OutputFmtEpub3 {
 				item.CreateAttr("properties", "cover-image")
 			}
 		} else {
 			item.CreateAttr("id", "img-"+id)
-			item.CreateAttr("href", "images/"+img.Filename)
+			item.CreateAttr("href", img.Filename)
 			item.CreateAttr("media-type", img.MimeType)
 		}
 	}
@@ -1050,4 +1084,23 @@ func copyFile(src, dst string) error {
 		return fmt.Errorf("failed to close destination file: %w", err)
 	}
 	return nil
+}
+
+// rewriteCSSURL replaces URL references in CSS
+func rewriteCSSURL(css, oldURL, newPath string) string {
+	// Handle all url() variations: url("..."), url('...'), url(...)
+	patterns := []string{
+		`url\s*\(\s*"` + regexp.QuoteMeta(oldURL) + `"\s*\)`,
+		`url\s*\(\s*'` + regexp.QuoteMeta(oldURL) + `'\s*\)`,
+		`url\s*\(\s*` + regexp.QuoteMeta(oldURL) + `\s*\)`,
+	}
+
+	newRef := `url("` + newPath + `")`
+
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		css = re.ReplaceAllString(css, newRef)
+	}
+
+	return css
 }

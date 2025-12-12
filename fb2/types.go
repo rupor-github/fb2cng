@@ -11,6 +11,13 @@ import (
 
 // Type definitions for FictionBook2 format structures.
 
+// EPUB directory names for different resource types
+const (
+	ImagesDir = "images" // Directory for image files in EPUB
+	FontsDir  = "fonts"  // Directory for font files in EPUB
+	OtherDir  = "other"  // Directory for other resource files in EPUB
+)
+
 // FictionBook mirrors the root element defined in FictionBook.xsd.
 type FictionBook struct {
 	Stylesheets     []Stylesheet
@@ -55,10 +62,21 @@ type IDIndex map[string]ElementRef
 
 type ReverseLinkIndex map[string][]ElementRef
 
+// StylesheetResource represents an external resource referenced in CSS
+type StylesheetResource struct {
+	OriginalURL string // Original URL from CSS (e.g., "fonts/myfont.woff2" or "#font-id")
+	ResolvedID  string // ID of the binary object (if found or generated)
+	MimeType    string // MIME type from binary or detected
+	Data        []byte // Resource data from binary or loaded from file
+	Filename    string // Full path within EPUB (e.g., "fonts/myfont.woff2" or "other/image.svg")
+	Loaded      bool   // True if resource was loaded from external file
+}
+
 // Stylesheet corresponds to the optional <stylesheet> element.
 type Stylesheet struct {
-	Type string
-	Data string
+	Type      string
+	Data      string               // Original CSS text
+	Resources []StylesheetResource // Parsed external resources
 }
 
 // Description groups metadata about the book extracted from <description>.

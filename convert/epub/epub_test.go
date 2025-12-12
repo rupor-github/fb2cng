@@ -1515,14 +1515,13 @@ func TestWriteStylesheet(t *testing.T) {
 	c := &content.Content{
 		Book: &fb2.FictionBook{
 			Stylesheets: []fb2.Stylesheet{
+				{Type: "text/css", Data: "body { font-family: serif; }"},
 				{Type: "text/css", Data: "/* custom */"}},
 		},
 		OutputFormat: config.OutputFmtEpub2,
 	}
 
-	defaultStyle := []byte("body { font-family: serif; }")
-
-	err := writeStylesheet(zw, c, defaultStyle)
+	err := writeStylesheet(zw, c)
 	if err != nil {
 		t.Fatalf("writeStylesheet() error = %v", err)
 	}
@@ -1555,6 +1554,152 @@ func TestWriteStylesheet(t *testing.T) {
 
 	if !foundCSS {
 		t.Error("CSS file not found in zip")
+	}
+}
+
+func TestWriteStylesheetWithResources(t *testing.T) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+
+	// Create stylesheet with font resource
+	c := &content.Content{
+		Book: &fb2.FictionBook{
+			Stylesheets: []fb2.Stylesheet{
+				{Type: "text/css", Data: "body { font-family: serif; }"},
+				{
+					Type: "text/css",
+					Data: "@font-face { font-family: 'MyFont'; src: url('#myfont'); }",
+					Resources: []fb2.StylesheetResource{
+						{
+							OriginalURL: "#myfont",
+							ResolvedID:  "myfont",
+							MimeType:    "font/woff2",
+							Data:        []byte("fake font data"),
+							Filename:    "fonts/myfont.woff2", // Full path with directory
+						},
+					},
+				},
+			},
+		},
+		OutputFormat: config.OutputFmtEpub2,
+	}
+
+	err := writeStylesheet(zw, c)
+	if err != nil {
+		t.Fatalf("writeStylesheet() error = %v", err)
+	}
+
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close zip error = %v", err)
+	}
+
+	// Verify the zip contains both stylesheet and font
+	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatalf("zip reader error = %v", err)
+	}
+
+	foundCSS := false
+	foundFont := false
+
+	for _, f := range zr.File {
+		if f.Name == "OEBPS/stylesheet.css" {
+			foundCSS = true
+			// Read and verify CSS was rewritten
+			rc, err := f.Open()
+			if err != nil {
+				t.Fatalf("open css error = %v", err)
+			}
+			cssData, _ := io.ReadAll(rc)
+			rc.Close()
+			cssStr := string(cssData)
+
+			// Should contain rewritten URL
+			if !strings.Contains(cssStr, `url("fonts/myfont.woff2")`) {
+				t.Errorf("CSS should contain rewritten URL, got: %s", cssStr)
+			}
+			// Should not contain only original URL (it's OK if both exist during transition)
+			if strings.Contains(cssStr, `url('#myfont')`) && !strings.Contains(cssStr, `url("fonts/myfont.woff2")`) {
+				t.Errorf("CSS should have rewritten original URL")
+			}
+		}
+		if f.Name == "OEBPS/fonts/myfont.woff2" {
+			foundFont = true
+			// Verify font data
+			rc, err := f.Open()
+			if err != nil {
+				t.Fatalf("open font error = %v", err)
+			}
+			fontData, _ := io.ReadAll(rc)
+			rc.Close()
+			if string(fontData) != "fake font data" {
+				t.Errorf("font data mismatch")
+			}
+		}
+	}
+
+	if !foundCSS {
+		t.Error("stylesheet.css not found in zip")
+	}
+	if !foundFont {
+		t.Error("font resource not found in zip")
+	}
+}
+
+func TestWriteStylesheetWithNonFontResource(t *testing.T) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+
+	// Create stylesheet with non-font resource (e.g., SVG image)
+	c := &content.Content{
+		Book: &fb2.FictionBook{
+			Stylesheets: []fb2.Stylesheet{
+				{Type: "text/css", Data: "body { margin: 0; }"},
+				{
+					Type: "text/css",
+					Data: "background: url('#mysvg');",
+					Resources: []fb2.StylesheetResource{
+						{
+							OriginalURL: "#mysvg",
+							ResolvedID:  "mysvg",
+							MimeType:    "image/svg+xml",
+							Data:        []byte("<svg></svg>"),
+							Filename:    "other/mysvg.svg", // Full path with directory
+						},
+					},
+				},
+			},
+		},
+		OutputFormat: config.OutputFmtEpub2,
+	}
+
+	err := writeStylesheet(zw, c)
+	if err != nil {
+		t.Fatalf("writeStylesheet() error = %v", err)
+	}
+
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close zip error = %v", err)
+	}
+
+	// Verify the resource goes to "other" directory
+	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatalf("zip reader error = %v", err)
+	}
+
+	foundResource := false
+	for _, f := range zr.File {
+		if f.Name == "OEBPS/other/mysvg.svg" {
+			foundResource = true
+		}
+		if f.Name == "OEBPS/fonts/mysvg.svg" {
+			t.Error("non-font resource should not be in fonts directory")
+		}
+	}
+
+	if !foundResource {
+		t.Error("SVG resource not found in other/ directory")
 	}
 }
 

@@ -32,8 +32,11 @@ func (tw treeWriter) fictionBook(book *FictionBook) treeWriter {
 			tw.Line(2, "Vignette[%s]=%q", pos, id)
 		}
 	}
-	for i, sheet := range book.Stylesheets {
-		tw.Line(1, "Stylesheet[%d] type=%q bytes=%d", i, sheet.Type, len(sheet.Data))
+	if len(book.Stylesheets) > 0 {
+		tw.Line(1, "Stylesheets: %d", len(book.Stylesheets))
+		for i := range book.Stylesheets {
+			tw.stylesheet(2, &book.Stylesheets[i], i)
+		}
 	}
 	tw.description(1, &book.Description)
 	for i := range book.Bodies {
@@ -47,6 +50,25 @@ func (tw treeWriter) fictionBook(book *FictionBook) treeWriter {
 		}
 	}
 	return tw
+}
+
+func (tw treeWriter) stylesheet(depth int, sheet *Stylesheet, index int) {
+	if sheet == nil {
+		return
+	}
+	tw.Line(depth, "Stylesheet[%d] type=%q bytes=%d", index, sheet.Type, len(sheet.Data))
+	if len(sheet.Resources) > 0 {
+		tw.Line(depth+1, "Resources: %d", len(sheet.Resources))
+		for i := range sheet.Resources {
+			res := &sheet.Resources[i]
+			loaded := ""
+			if res.Loaded {
+				loaded = " [loaded from file]"
+			}
+			tw.Line(depth+2, "Resource[%d] url=%q id=%q mime=%q filename=%q bytes=%d%s",
+				i, res.OriginalURL, res.ResolvedID, res.MimeType, res.Filename, len(res.Data), loaded)
+		}
+	}
 }
 
 func (tw treeWriter) description(depth int, desc *Description) {

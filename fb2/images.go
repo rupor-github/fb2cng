@@ -12,6 +12,7 @@ import (
 	_ "image/jpeg"
 	"image/png"
 	"mime"
+	"path"
 	"strings"
 
 	"github.com/disintegration/imaging"
@@ -24,9 +25,7 @@ import (
 	"fbc/jpegquality"
 )
 
-var brokenImage = []byte(`<svg xmlns="http://www.w3.org/2000/svg"
-     width="200" height="200" viewBox="0 0 200 200"
-     role="img" aria-label="Broken image placeholder">
+var brokenImage = []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
   <title>Broken image</title>
 
   <!-- background -->
@@ -43,40 +42,22 @@ var brokenImage = []byte(`<svg xmlns="http://www.w3.org/2000/svg"
 
 // Image processing functions for FictionBook.
 
-// mimeToExt returns file extension for common image MIME types
-func mimeToExt(mimeType string) string {
-	// Handle common types directly to prefer standard extensions
-	switch strings.ToLower(mimeType) {
-	case "image/jpeg":
-		return "jpg"
-	case "image/png":
-		return "png"
-	case "image/gif":
-		return "gif"
-	case "image/bmp":
-		return "bmp"
-	case "image/svg+xml":
-		return "svg"
-	case "image/webp":
-		return "webp"
-	case "image/tiff":
-		return "tiff"
-	}
-	// Fallback to mime package for other types
-	exts, err := mime.ExtensionsByType(mimeType)
-	if err == nil && len(exts) > 0 {
-		return strings.TrimPrefix(exts[0], ".")
-	}
-	return "img"
-}
-
 // PrepareImages processes all binary objects in the FictionBook creating
 // actual image and building image index. Never returns an error - uses placeholder for broken images.
+// Non-image binaries (e.g., fonts) are skipped.
 func (fb *FictionBook) PrepareImages(kindle bool, cfg *config.ImagesConfig, log *zap.Logger) BookImages {
 	index := make(BookImages)
 
 	imgNum := 1
 	for i := range fb.Binaries {
+		// Skip non-image binaries (e.g., fonts loaded by stylesheet normalization)
+		if !isImageMIME(fb.Binaries[i].ContentType) {
+			log.Debug("Skipping non-image binary",
+				zap.String("id", fb.Binaries[i].ID),
+				zap.String("content-type", fb.Binaries[i].ContentType))
+			continue
+		}
+
 		if _, exists := index[fb.Binaries[i].ID]; exists {
 			log.Debug("Duplicate binary ID found, skipping", zap.String("id", fb.Binaries[i].ID))
 			continue
@@ -84,23 +65,11 @@ func (fb *FictionBook) PrepareImages(kindle bool, cfg *config.ImagesConfig, log 
 		cover := len(fb.Description.TitleInfo.Coverpage) > 0 && strings.HasSuffix(fb.Description.TitleInfo.Coverpage[0].Href, fb.Binaries[i].ID)
 		bi := fb.Binaries[i].PrepareImage(kindle, cover, cfg, log)
 		ext := mimeToExt(bi.MimeType)
-		bi.Filename = fmt.Sprintf("img%05d.%s", imgNum, ext)
+		bi.Filename = path.Join(ImagesDir, fmt.Sprintf("img%05d.%s", imgNum, ext))
 		imgNum++
 		index[fb.Binaries[i].ID] = bi
 	}
 	return index
-}
-
-// isImageSupported returns true if image is supported and does not need
-// conversion. Kindle devices support only GIF, BMP, JPEG and PNG formats.
-func isImageSupported(format string) bool {
-	imgType := strings.TrimPrefix(format, ".")
-	for _, t := range [...]string{"gif", "bmp", "jpeg", "png"} {
-		if strings.EqualFold(t, imgType) {
-			return true
-		}
-	}
-	return false
 }
 
 // JpegDPIType specifyes type of the DPI units
@@ -330,4 +299,48 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 	}
 
 	return bi
+}
+
+// isImageSupported returns true if image is supported and does not need
+// conversion. Kindle devices support only GIF, BMP, JPEG and PNG formats.
+func isImageSupported(format string) bool {
+	imgType := strings.TrimPrefix(format, ".")
+	for _, t := range [...]string{"gif", "bmp", "jpeg", "png"} {
+		if strings.EqualFold(t, imgType) {
+			return true
+		}
+	}
+	return false
+}
+
+// isImageMIME returns true if the MIME type indicates an image resource
+func isImageMIME(mimeType string) bool {
+	return strings.HasPrefix(mimeType, "image/")
+}
+
+// mimeToExt returns file extension for common image MIME types
+func mimeToExt(mimeType string) string {
+	// Handle common types directly to prefer standard extensions
+	switch strings.ToLower(mimeType) {
+	case "image/jpeg":
+		return "jpg"
+	case "image/png":
+		return "png"
+	case "image/gif":
+		return "gif"
+	case "image/bmp":
+		return "bmp"
+	case "image/svg+xml":
+		return "svg"
+	case "image/webp":
+		return "webp"
+	case "image/tiff":
+		return "tiff"
+	}
+	// Fallback to mime package for other types
+	exts, err := mime.ExtensionsByType(mimeType)
+	if err == nil && len(exts) > 0 {
+		return strings.TrimPrefix(exts[0], ".")
+	}
+	return "img"
 }

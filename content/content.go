@@ -193,6 +193,9 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 	book, footnotes := book.NormalizeFootnoteBodies(log)
 	// Build id and link indexes replacing/removing broken links (may add not-found image binary and vignette binaries)
 	book, ids, links := book.NormalizeLinks(vignettes, log)
+	// Normalize stylesheets and resolve external resources (may load files from disk and add to binaries)
+	// Pass default stylesheet so it's processed uniformly with FB2 embedded stylesheets
+	book = book.NormalizeStylesheets(srcName, env.DefaultStyle, log)
 	// Assign sequential IDs to all sections without IDs
 	// (avoiding collisions with existing IDs) - we will need it for ToC. This
 	// also updates the ID index with generated IDs marked as "section-generated"

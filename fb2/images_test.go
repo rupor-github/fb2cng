@@ -657,3 +657,53 @@ func TestParseBinary_CorruptedBase64(t *testing.T) {
 		t.Error("expected error for invalid base64")
 	}
 }
+
+func TestPrepareImages_SkipsNonImageBinaries(t *testing.T) {
+	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+	cfg := &config.ImagesConfig{
+		JPEGQuality: 85,
+		Optimize:    false,
+		UseBroken:   false,
+		ScaleFactor: 1.0,
+		Cover: config.CoverConfig{
+			Width:  0,
+			Height: 0,
+			Resize: config.ImageResizeModeNone,
+		},
+	}
+
+	jpegData := createTestJPEG(t, 100, 100, 90)
+
+	fb := &FictionBook{
+		Binaries: []BinaryObject{
+			// Regular image - should be processed
+			{ID: "img1", ContentType: "image/jpeg", Data: jpegData},
+			// Font - should be skipped
+			{ID: "font1", ContentType: "font/woff2", Data: []byte("fake font data")},
+			// Another font format - should be skipped
+			{ID: "font2", ContentType: "application/font-woff", Data: []byte("fake font data 2")},
+			// Another image - should be processed
+			{ID: "img2", ContentType: "image/png", Data: createTestPNG(t, 50, 50, false)},
+		},
+	}
+
+	images := fb.PrepareImages(false, cfg, log)
+
+	// Should only have 2 images (img1 and img2), fonts should be skipped
+	if len(images) != 2 {
+		t.Fatalf("expected 2 images, got %d", len(images))
+	}
+
+	if _, exists := images["img1"]; !exists {
+		t.Error("image 'img1' should exist in index")
+	}
+	if _, exists := images["img2"]; !exists {
+		t.Error("image 'img2' should exist in index")
+	}
+	if _, exists := images["font1"]; exists {
+		t.Error("font 'font1' should not be in image index")
+	}
+	if _, exists := images["font2"]; exists {
+		t.Error("font 'font2' should not be in image index")
+	}
+}
