@@ -298,7 +298,8 @@ func TestNormalizeStylesheets(t *testing.T) {
 		// Create a temporary font file
 		tmpDir := t.TempDir()
 		fontPath := filepath.Join(tmpDir, "testfont.woff2")
-		fontData := []byte("fake woff2 font data")
+		// Use proper WOFF2 magic bytes "wOF2" followed by additional data
+		fontData := []byte{0x77, 0x4F, 0x46, 0x32, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 		if err := os.WriteFile(fontPath, fontData, 0644); err != nil {
 			t.Fatalf("failed to create test font file: %v", err)
 		}
@@ -353,7 +354,8 @@ func TestNormalizeStylesheets(t *testing.T) {
 		}
 
 		fontPath := filepath.Join(fontsDir, "myfont.ttf")
-		fontData := []byte("fake ttf font data")
+		// Use proper TTF magic bytes (0x00, 0x01, 0x00, 0x00) followed by additional data
+		fontData := []byte{0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 		if err := os.WriteFile(fontPath, fontData, 0644); err != nil {
 			t.Fatalf("failed to create test font file: %v", err)
 		}
@@ -461,7 +463,8 @@ func TestNormalizeStylesheets(t *testing.T) {
 		}
 
 		fontPath := filepath.Join(fontsDir, "default.woff2")
-		fontData := []byte("default font data")
+		// Use proper WOFF2 magic bytes "wOF2"
+		fontData := []byte{0x77, 0x4F, 0x46, 0x32, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 		if err := os.WriteFile(fontPath, fontData, 0644); err != nil {
 			t.Fatalf("failed to create font file: %v", err)
 		}
@@ -531,7 +534,8 @@ func TestNormalizeStylesheets(t *testing.T) {
 		}
 
 		fontPath := filepath.Join(fontsDir, "embedded.woff2")
-		fontData := []byte("embedded font data")
+		// Use proper WOFF2 magic bytes "wOF2"
+		fontData := []byte{0x77, 0x4F, 0x46, 0x32, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 		if err := os.WriteFile(fontPath, fontData, 0644); err != nil {
 			t.Fatalf("failed to create font file: %v", err)
 		}

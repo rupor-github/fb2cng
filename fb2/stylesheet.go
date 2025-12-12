@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/h2non/filetype"
 	"go.uber.org/zap"
 )
 
@@ -132,7 +133,7 @@ func (fb *FictionBook) resolveStylesheetResource(ref cssExternalRef, binaryIndex
 		// Use only basename for filename
 		baseName := filepath.Base(resourceID)
 
-		// Determine directory based on MIME type
+		// Determine directory based on content type
 		var dir string
 		if isFontMIME(binary.ContentType) {
 			dir = FontsDir
@@ -197,6 +198,14 @@ func (fb *FictionBook) resolveStylesheetResource(ref cssExternalRef, binaryIndex
 	}
 	if mimeType == "" {
 		mimeType = http.DetectContentType(data)
+	}
+
+	if !validateLoadedResource(mimeType, data) {
+		log.Warn("Loaded stylesheet resource failed validation",
+			zap.String("url", ref.URL),
+			zap.String("path", resourcePath),
+			zap.String("context", ref.Context))
+		return nil
 	}
 
 	// Use only basename from original URL for the filename
@@ -332,6 +341,22 @@ func sanitizeResourceFilename(url string) string {
 	}
 
 	return base
+}
+
+// validateLoadedResource performs additional sanity checks on loaded resource data
+func validateLoadedResource(mimeType string, data []byte) bool {
+	// do additional sanity check
+	switch mimeType {
+	case "font/woff":
+		return filetype.Is(data, "woff")
+	case "font/woff2":
+		return filetype.Is(data, "woff2")
+	case "font/ttf":
+		return filetype.Is(data, "ttf")
+	case "font/otf":
+		return filetype.Is(data, "otf")
+	}
+	return true
 }
 
 // mimeToExtension returns file extension for common MIME types
