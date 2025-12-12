@@ -82,16 +82,6 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 
 			title := body.Title.AsTOCText("Untitled")
 
-			// for _, item := range body.Title.Items {
-			// 	if item.Paragraph != nil {
-			// 		title = item.Paragraph.AsPlainText()
-			// 		break
-			// 	}
-			// }
-			// if title == "" {
-			// 	title = "Untitled"
-			// }
-
 			// Set current filename for footnote reference tracking
 			c.CurrentFilename = filename
 
