@@ -49,6 +49,8 @@ type Content struct {
 	FootnotesMode config.FootnotesMode // config: footnotes handling mode
 	PageSize      int                  // config: runes per page, 0 if disabled
 	AdobeDE       bool                 // config: Adobe DE page markers are being generated instead of NCX pageList
+	BacklinkStr   string               // config: backlink indicator
+	MoreParaStr   string               // config: more paragraphs indicator
 
 	Book           *fb2.FictionBook
 	CoverID        string
@@ -215,6 +217,8 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 		Doc:            doc,
 		OutputFormat:   outputFormat,
 		FootnotesMode:  env.Cfg.Document.Footnotes.Mode,
+		BacklinkStr:    string(env.Cfg.Document.Footnotes.Backlinks),
+		MoreParaStr:    string(env.Cfg.Document.Footnotes.MoreParagraphs),
 		Book:           book,
 		CoverID:        coverID,
 		FootnotesIndex: footnotes,

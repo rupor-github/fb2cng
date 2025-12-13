@@ -26,32 +26,8 @@ type chapterData struct {
 	IncludeInTOC bool         // Whether to include this chapter in navigation/TOC
 }
 
-const (
-	backlinkSym = "[<]"       // String for additional link backs in the footnote bodies
-	moreSym     = "(~)\u00A0" // String to indicate more content in footnote previews
-)
-
 // idToFileMap maps element IDs to the chapter filename containing them
 type idToFileMap map[string]string
-
-// findBlockLevelParent walks up the element tree to find the nearest block-level container
-// Returns nil if no suitable parent is found
-func findBlockLevelParent(elem *etree.Element) *etree.Element {
-	blockTags := map[string]bool{
-		"p": true, "div": true, "blockquote": true, "td": true, "th": true,
-		"li": true, "dd": true, "dt": true, "section": true, "article": true,
-		"aside": true, "h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true,
-	}
-
-	current := elem
-	for current != nil {
-		if blockTags[current.Tag] {
-			return current
-		}
-		current = current.Parent()
-	}
-	return nil
-}
 
 func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([]chapterData, idToFileMap, error) {
 	if err := ctx.Err(); err != nil {
@@ -511,9 +487,9 @@ func appendEpub2FloatFootnoteSectionContent(parent *etree.Element, c *content.Co
 				}
 				// Use title as link text if available, otherwise use ↩
 				if section.Title != nil && i == 0 {
-					textParent.CreateText(section.Title.AsTOCText(backlinkSym))
+					textParent.CreateText(section.Title.AsTOCText(c.BacklinkStr))
 				} else {
-					textParent.CreateText(backlinkSym)
+					textParent.CreateText(c.BacklinkStr)
 				}
 			}
 			sectionElem.CreateText(text.NBSP)
@@ -607,7 +583,7 @@ func appendEpub2FloatFootnoteSectionContent(parent *etree.Element, c *content.Co
 		}
 	}
 
-	// If there's more than one text span, add moreSym indicator to the first one
+	// If there's more than one text span, add indicator to the first one
 	textSpans := make([]*etree.Element, 0)
 	for _, child := range sectionElem.ChildElements() {
 		if child.Tag == "span" {
@@ -624,7 +600,7 @@ func appendEpub2FloatFootnoteSectionContent(parent *etree.Element, c *content.Co
 		// Create the "more" indicator span
 		moreSpan := etree.NewElement("span")
 		moreSpan.CreateAttr("class", "footnote-more")
-		moreSpan.SetText(moreSym)
+		moreSpan.SetText(c.MoreParaStr)
 
 		// Insert at the beginning of first span
 		firstSpan.InsertChildAt(0, moreSpan)
@@ -669,7 +645,7 @@ func appendEpub3FloatFootnoteSectionContent(parent *etree.Element, c *content.Co
 		return err
 	}
 
-	// If there's more than one paragraph in aside, add moreSym indicator to the first one
+	// If there's more than one paragraph in aside, add indicator to the first one
 	paragraphs := make([]*etree.Element, 0)
 	for _, child := range sectionElem.ChildElements() {
 		if child.Tag == "p" {
@@ -683,7 +659,7 @@ func appendEpub3FloatFootnoteSectionContent(parent *etree.Element, c *content.Co
 		// Create the "more" indicator span
 		moreSpan := etree.NewElement("span")
 		moreSpan.CreateAttr("class", "footnote-more")
-		moreSpan.SetText(moreSym)
+		moreSpan.SetText(c.MoreParaStr)
 
 		// Insert at the beginning of first paragraph
 		firstPara.InsertChildAt(0, moreSpan)
@@ -706,7 +682,7 @@ func appendEpub3FloatFootnoteSectionContent(parent *etree.Element, c *content.Co
 				backLink.CreateAttr("href", href)
 				backLink.CreateAttr("epub:type", "backlink")
 				backLink.CreateAttr("role", "doc-backlink")
-				backLink.CreateText(backlinkSym)
+				backLink.CreateText(c.BacklinkStr)
 			}
 		}
 	}
@@ -1490,4 +1466,23 @@ func fixLinksInElement(elem *etree.Element, currentFile string, idToFile idToFil
 	for _, child := range elem.ChildElements() {
 		fixLinksInElement(child, currentFile, idToFile, log)
 	}
+}
+
+// findBlockLevelParent walks up the element tree to find the nearest block-level container
+// Returns nil if no suitable parent is found
+func findBlockLevelParent(elem *etree.Element) *etree.Element {
+	blockTags := map[string]bool{
+		"p": true, "div": true, "blockquote": true, "td": true, "th": true,
+		"li": true, "dd": true, "dt": true, "section": true, "article": true,
+		"aside": true, "h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true,
+	}
+
+	current := elem
+	for current != nil {
+		if blockTags[current.Tag] {
+			return current
+		}
+		current = current.Parent()
+	}
+	return nil
 }

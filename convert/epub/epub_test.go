@@ -2609,6 +2609,8 @@ func TestGenerate_WithTOCPageAfter(t *testing.T) {
 
 // TestFloatModeFootnotes verifies Amazon KDP-compliant footnote markup
 func TestFloatModeFootnotes(t *testing.T) {
+	const backlinkSym = "[<]"
+
 	tests := []struct {
 		name           string
 		format         config.OutputFmt
@@ -2656,6 +2658,7 @@ func TestFloatModeFootnotes(t *testing.T) {
 				OutputFormat:  tt.format,
 				FootnotesMode: tt.mode,
 				BackLinkIndex: make(map[string][]content.BackLinkRef),
+				BacklinkStr:   backlinkSym,
 				Book: &fb2.FictionBook{
 					Bodies: []fb2.Body{
 						{
@@ -2791,6 +2794,305 @@ func TestFloatModeFootnotes(t *testing.T) {
 						t.Errorf("Expected backlink text '%s', got '%s'", backlinkSym, backlink.Text())
 					}
 				}
+			}
+		})
+	}
+}
+
+// TestFloatModeFootnotesMultipleParagraphs verifies the "more paragraphs" indicator
+func TestFloatModeFootnotesMultipleParagraphs(t *testing.T) {
+	const moreParaSym = "(~)\u00A0"
+	const backlinkSym = "[<]"
+
+	tests := []struct {
+		name                string
+		format              config.OutputFmt
+		mode                config.FootnotesMode
+		expectMoreIndicator bool
+	}{
+		{
+			name:                "EPUB3 float mode with multiple paragraphs",
+			format:              config.OutputFmtEpub3,
+			mode:                config.FootnotesModeFloat,
+			expectMoreIndicator: true,
+		},
+		{
+			name:                "EPUB2 float mode with multiple paragraphs",
+			format:              config.OutputFmtEpub2,
+			mode:                config.FootnotesModeFloat,
+			expectMoreIndicator: true,
+		},
+		{
+			name:                "Kepub float mode with multiple paragraphs",
+			format:              config.OutputFmtKepub,
+			mode:                config.FootnotesModeFloat,
+			expectMoreIndicator: true,
+		},
+		{
+			name:                "EPUB3 default mode with multiple paragraphs",
+			format:              config.OutputFmtEpub3,
+			mode:                config.FootnotesModeDefault,
+			expectMoreIndicator: false, // Default mode doesn't use more indicator
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _, log := setupTestContext(t)
+
+			// Create test content with multi-paragraph footnote
+			c := &content.Content{
+				OutputFormat:  tt.format,
+				FootnotesMode: tt.mode,
+				BackLinkIndex: make(map[string][]content.BackLinkRef),
+				BacklinkStr:   backlinkSym,
+				MoreParaStr:   moreParaSym,
+				Book: &fb2.FictionBook{
+					Bodies: []fb2.Body{
+						{
+							Sections: []fb2.Section{
+								{
+									ID: "chapter1",
+									Content: []fb2.FlowItem{
+										{
+											Kind: fb2.FlowParagraph,
+											Paragraph: &fb2.Paragraph{
+												Text: []fb2.InlineSegment{
+													{Kind: fb2.InlineText, Text: "Text with footnote"},
+													{
+														Kind: fb2.InlineLink,
+														Href: "#note1",
+														Children: []fb2.InlineSegment{
+															{Kind: fb2.InlineText, Text: "1"},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						{
+							Name: "notes",
+							Kind: fb2.BodyFootnotes,
+							Sections: []fb2.Section{
+								{
+									ID: "note1",
+									Content: []fb2.FlowItem{
+										{
+											Kind: fb2.FlowParagraph,
+											Paragraph: &fb2.Paragraph{
+												Text: []fb2.InlineSegment{
+													{Kind: fb2.InlineText, Text: "First paragraph of footnote"},
+												},
+											},
+										},
+										{
+											Kind: fb2.FlowParagraph,
+											Paragraph: &fb2.Paragraph{
+												Text: []fb2.InlineSegment{
+													{Kind: fb2.InlineText, Text: "Second paragraph of footnote"},
+												},
+											},
+										},
+										{
+											Kind: fb2.FlowParagraph,
+											Paragraph: &fb2.Paragraph{
+												Text: []fb2.InlineSegment{
+													{Kind: fb2.InlineText, Text: "Third paragraph of footnote"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				FootnotesIndex: fb2.FootnoteRefs{
+					"note1": fb2.FootnoteRef{BodyIdx: 1, SectionIdx: 0},
+				},
+			}
+
+			chapters, _, err := convertToXHTML(ctx, c, log)
+			if err != nil {
+				t.Fatalf("convertToXHTML() error = %v", err)
+			}
+
+			// Find footnote chapter
+			var fnChapter *chapterData
+			for i := range chapters {
+				if chapters[i].Doc != nil && chapters[i].AnchorID != "" {
+					fnChapter = &chapters[i]
+					break
+				}
+			}
+			if fnChapter == nil {
+				t.Fatal("Footnote chapter not found")
+			}
+
+			// Look for the "more paragraphs" indicator
+			moreSpans := fnChapter.Doc.FindElements("//span[@class='footnote-more']")
+
+			if tt.expectMoreIndicator {
+				if len(moreSpans) == 0 {
+					t.Error("Expected 'footnote-more' span not found")
+				} else {
+					moreSpan := moreSpans[0]
+					if moreSpan.Text() != moreParaSym {
+						t.Errorf("Expected more indicator text '%s', got '%s'", moreParaSym, moreSpan.Text())
+					}
+
+					// Verify it's in the first paragraph/span
+					if tt.format == config.OutputFmtEpub3 {
+						// EPUB3: should be in first <p> inside <aside>
+						aside := fnChapter.Doc.FindElement("//aside[@epub:type='footnote']")
+						if aside != nil {
+							firstP := aside.SelectElement("p")
+							if firstP != nil {
+								firstChild := firstP.ChildElements()
+								if len(firstChild) > 0 && firstChild[0].Tag == "span" {
+									if firstChild[0].SelectAttrValue("class", "") != "footnote-more" {
+										t.Error("More indicator should be first child of first paragraph")
+									}
+								}
+							}
+						}
+					} else {
+						// EPUB2/Kepub: should be in first <span> of <p class="footnote">
+						fnP := fnChapter.Doc.FindElement("//p[@class='footnote']")
+						if fnP != nil {
+							// The more indicator is inserted as first child of the first text span
+							firstTextSpan := fnP.SelectElement("span")
+							if firstTextSpan != nil {
+								// Check if first child is the more indicator
+								children := firstTextSpan.ChildElements()
+								if len(children) > 0 {
+									if children[0].Tag == "span" && children[0].SelectAttrValue("class", "") != "footnote-more" {
+										t.Error("More indicator should be first child of first text span")
+									}
+								}
+							}
+						}
+					}
+				}
+			} else {
+				if len(moreSpans) > 0 {
+					t.Error("Did not expect 'footnote-more' span in default mode")
+				}
+			}
+		})
+	}
+}
+
+// TestFloatModeFootnotesSingleParagraph verifies NO "more paragraphs" indicator with single paragraph
+func TestFloatModeFootnotesSingleParagraph(t *testing.T) {
+	const moreParaSym = "(~)\u00A0"
+	const backlinkSym = "[<]"
+
+	tests := []struct {
+		name   string
+		format config.OutputFmt
+	}{
+		{
+			name:   "EPUB3 float mode single paragraph",
+			format: config.OutputFmtEpub3,
+		},
+		{
+			name:   "EPUB2 float mode single paragraph",
+			format: config.OutputFmtEpub2,
+		},
+		{
+			name:   "Kepub float mode single paragraph",
+			format: config.OutputFmtKepub,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _, log := setupTestContext(t)
+
+			// Create test content with SINGLE paragraph footnote
+			c := &content.Content{
+				OutputFormat:  tt.format,
+				FootnotesMode: config.FootnotesModeFloat,
+				BackLinkIndex: make(map[string][]content.BackLinkRef),
+				BacklinkStr:   backlinkSym,
+				MoreParaStr:   moreParaSym,
+				Book: &fb2.FictionBook{
+					Bodies: []fb2.Body{
+						{
+							Sections: []fb2.Section{
+								{
+									ID: "chapter1",
+									Content: []fb2.FlowItem{
+										{
+											Kind: fb2.FlowParagraph,
+											Paragraph: &fb2.Paragraph{
+												Text: []fb2.InlineSegment{
+													{Kind: fb2.InlineText, Text: "Text with footnote"},
+													{
+														Kind: fb2.InlineLink,
+														Href: "#note1",
+														Children: []fb2.InlineSegment{
+															{Kind: fb2.InlineText, Text: "1"},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						{
+							Name: "notes",
+							Kind: fb2.BodyFootnotes,
+							Sections: []fb2.Section{
+								{
+									ID: "note1",
+									Content: []fb2.FlowItem{
+										{
+											Kind: fb2.FlowParagraph,
+											Paragraph: &fb2.Paragraph{
+												Text: []fb2.InlineSegment{
+													{Kind: fb2.InlineText, Text: "Single paragraph footnote"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				FootnotesIndex: fb2.FootnoteRefs{
+					"note1": fb2.FootnoteRef{BodyIdx: 1, SectionIdx: 0},
+				},
+			}
+
+			chapters, _, err := convertToXHTML(ctx, c, log)
+			if err != nil {
+				t.Fatalf("convertToXHTML() error = %v", err)
+			}
+
+			// Find footnote chapter
+			var fnChapter *chapterData
+			for i := range chapters {
+				if chapters[i].Doc != nil && chapters[i].AnchorID != "" {
+					fnChapter = &chapters[i]
+					break
+				}
+			}
+			if fnChapter == nil {
+				t.Fatal("Footnote chapter not found")
+			}
+
+			// Should NOT have "more paragraphs" indicator with single paragraph
+			moreSpans := fnChapter.Doc.FindElements("//span[@class='footnote-more']")
+			if len(moreSpans) > 0 {
+				t.Error("Should not have 'footnote-more' span with single paragraph footnote")
 			}
 		})
 	}

@@ -11,6 +11,18 @@ import (
 	"github.com/rupor-github/gencfg"
 )
 
+type DoubleQuoteString string
+
+// MarshalYAML implements the yaml.Marshaler interface.
+func (s DoubleQuoteString) MarshalYAML() (any, error) {
+	node := yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Style: yaml.DoubleQuotedStyle,
+		Value: string(s),
+	}
+	return &node, nil
+}
+
 //go:embed config.yaml.tmpl
 var ConfigTmpl []byte
 
@@ -35,8 +47,10 @@ type (
 	}
 
 	FootnotesConfig struct {
-		Mode      FootnotesMode `yaml:"mode" validate:"gte=0"`
-		BodyNames []string      `yaml:"bodies" validate:"dive,required"`
+		Mode           FootnotesMode     `yaml:"mode" validate:"gte=0"`
+		BodyNames      []string          `yaml:"bodies" validate:"dive,required"`
+		Backlinks      DoubleQuoteString `yaml:"backlinks" validate:"gt=0"`
+		MoreParagraphs DoubleQuoteString `yaml:"more_paragraphs" validate:"gt=0"`
 	}
 
 	AnnotationConfig struct {
@@ -71,8 +85,8 @@ type (
 	}
 
 	DropcapsConfig struct {
-		Enable        bool   `yaml:"enable"`
-		IgnoreSymbols string `yaml:"ignore_symbols,omitempty"`
+		Enable        bool              `yaml:"enable"`
+		IgnoreSymbols DoubleQuoteString `yaml:"ignore_symbols,omitempty"`
 	}
 
 	PageMapConfig struct {

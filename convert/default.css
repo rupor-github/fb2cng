@@ -316,7 +316,7 @@ blockquote.cite {
 
 /* Empty lines for spacing */
 .emptyline {
-	display: block;
+    display: block;
     margin: 1em 0;
 }
 
@@ -335,11 +335,11 @@ table {
 th {
     border: 1px solid black;
     background: #ccc;
-	padding: 0.5em;
+    padding: 0.5em;
 }
 td {
     border: 1px solid black;
-	padding: 0.5em;
+    padding: 0.5em;
 }
 
 /* Footnotes */
@@ -357,17 +357,17 @@ td {
     margin: 0.2em 0;
 }
 /* "More" indicator for floating footnotes */
-/* if you do not want it uncomment this one and comment out next rule */
-.footnote-more {
-    display: none;
-}
-/* if you do want it uncomment this one and comment out previous rule */
-/* usially make sence to keep this rule in sync with .link-backlink style */
+/* if you do not want it - make sure this rule is uuncommented and next one is commented */
 /* .footnote-more { */
-/*     text-decoration: none; */
-/*     font-weight: bold; */
-/* 	color: gray; */
+/*     display: none; */
 /* } */
+/* if you want it - make sure this rule is uuncommented and previous one is commented */
+/* usially make sence to keep this rule in sync with .link-backlink style */
+.footnote-more {
+    text-decoration: none;
+    font-weight: bold;
+    color: gray;
+}
 
 /* Links and hyperlink styles */
 .link-external {
@@ -388,7 +388,7 @@ td {
 .link-backlink {
     text-decoration: none;
     font-weight: bold;
-	color: gray;
+    color: gray;
 }
 
 /* Unexpected/error elements */

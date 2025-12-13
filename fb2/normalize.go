@@ -574,7 +574,7 @@ func (fb *FictionBook) MarkDropcaps(cfg *config.DropcapsConfig) *FictionBook {
 	for i := range result.Bodies {
 		if result.Bodies[i].Main() {
 			for j := range result.Bodies[i].Sections {
-				markSectionDropcaps(&result.Bodies[i].Sections[j], cfg.IgnoreSymbols)
+				markSectionDropcaps(&result.Bodies[i].Sections[j], string(cfg.IgnoreSymbols))
 			}
 		}
 	}

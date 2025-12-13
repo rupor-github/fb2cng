@@ -1,4 +1,3 @@
-* move moreSym and backlinkSym to configuration
 * notes renumeration
 
 * kfx

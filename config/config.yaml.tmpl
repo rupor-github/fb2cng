@@ -179,6 +179,13 @@ document:
     # Names of the bodies in fb2 document to consider for footnotes processing
     # if required by mode
     bodies: ["notes", "comments", "примечания", "комментарии"]
+    # In floating note body backlinks to original content will be represented
+    # by this string
+    backlinks: "[<]"
+    # If floating note body has more than one paragraph this string could be
+    # shown at the beginning of the first paragraph (.css footnote-more
+    # controls visibility)
+    more_paragraphs: "(~)\u00A0"
 
   annotation:
     # Create separate "chapter" with book annotation if available
