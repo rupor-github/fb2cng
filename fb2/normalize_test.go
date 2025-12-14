@@ -383,14 +383,6 @@ func TestNormalizeLinks(t *testing.T) {
 	// Normalize links
 	normalized, ids, links := original.NormalizeLinks(nil, log)
 
-	// Verify original is unchanged
-	if original.Bodies[0].Sections[0].Content[0].Paragraph.Text[0].Kind != InlineLink {
-		t.Errorf("original link was mutated: kind = %v", original.Bodies[0].Sections[0].Content[0].Paragraph.Text[0].Kind)
-	}
-	if original.Bodies[0].Sections[0].Content[0].Paragraph.Text[0].Href != "#nonexistent" {
-		t.Errorf("original link href was mutated: href = %v", original.Bodies[0].Sections[0].Content[0].Paragraph.Text[0].Href)
-	}
-
 	// Verify normalized has the link replaced with text
 	if normalized.Bodies[0].Sections[0].Content[0].Paragraph.Text[0].Kind != InlineText {
 		t.Errorf("normalized link was not replaced: kind = %v", normalized.Bodies[0].Sections[0].Content[0].Paragraph.Text[0].Kind)
@@ -508,13 +500,6 @@ func TestNormalizeLinks_BrokenImageLinks(t *testing.T) {
 			inlineImg.Href, expectedHref)
 	}
 
-	// Verify original is unchanged
-	if original.Description.TitleInfo.Coverpage[0].Href == expectedHref {
-		t.Error("original coverpage was mutated")
-	}
-	if original.Bodies[0].Sections[0].Content[0].Image.Href == expectedHref {
-		t.Error("original block image was mutated")
-	}
 }
 
 func TestEnsureNotFoundImageBinary_Idempotent(t *testing.T) {
@@ -1067,50 +1052,6 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 		linkText2 := result.Bodies[1].Sections[1].Content[0].Paragraph.Text[1].Children[0].Text
 		if linkText2 != "0.1" {
 			t.Errorf("n2->n1 cross-reference link text = %q, want %q", linkText2, "0.1")
-		}
-	})
-
-	t.Run("preserves_original_book", func(t *testing.T) {
-		book := &FictionBook{
-			Bodies: []Body{
-				{
-					Kind: BodyMain,
-					Sections: []Section{
-						{
-							ID: "s1",
-							Content: []FlowItem{
-								{
-									Kind: FlowParagraph,
-									Paragraph: &Paragraph{
-										Text: []InlineSegment{
-											{Kind: InlineLink, Href: "#n1", Children: []InlineSegment{{Kind: InlineText, Text: "[1]"}}},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-				{
-					Kind:     BodyFootnotes,
-					Sections: []Section{{ID: "n1", Title: &Title{Items: []TitleItem{{Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Original"}}}}}}}},
-				},
-			},
-		}
-
-		footnotesIndex := FootnoteRefs{"n1": {BodyIdx: 1, SectionIdx: 0}}
-		_, _ = book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
-
-		// Original link text should be unchanged
-		origLinkText := book.Bodies[0].Sections[0].Content[0].Paragraph.Text[0].Children[0].Text
-		if origLinkText != "[1]" {
-			t.Errorf("original link text was mutated: %q", origLinkText)
-		}
-
-		// Original footnote title should be unchanged
-		origTitle := book.Bodies[1].Sections[0].Title.Items[0].Paragraph.Text[0].Text
-		if origTitle != "Original" {
-			t.Errorf("original footnote title was mutated: %q", origTitle)
 		}
 	})
 

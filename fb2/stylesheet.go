@@ -35,36 +35,34 @@ type cssExternalRef struct {
 // This should be called after binaries are loaded but before generating output.
 // srcPath is the path to the source FB2 file, used to resolve relative paths.
 // defaultCSS is optional default stylesheet data to prepend (can be nil or empty).
-// Returns a new FictionBook with processed stylesheets. Original remains unchanged.
+// Modifies the FictionBook in place.
 func (fb *FictionBook) NormalizeStylesheets(srcPath string, defaultCSS []byte, log *zap.Logger) *FictionBook {
-	result := fb.clone()
-
 	// Prepend default stylesheet if provided
 	if len(defaultCSS) > 0 {
 		defaultStylesheet := Stylesheet{
 			Type: "text/css",
 			Data: string(defaultCSS),
 		}
-		result.Stylesheets = append([]Stylesheet{defaultStylesheet}, result.Stylesheets...)
+		fb.Stylesheets = append([]Stylesheet{defaultStylesheet}, fb.Stylesheets...)
 		log.Debug("Added default stylesheet for processing", zap.Int("bytes", len(defaultCSS)))
 	}
 
 	// Early return if no stylesheets to process
-	if len(result.Stylesheets) == 0 {
-		return result
+	if len(fb.Stylesheets) == 0 {
+		return fb
 	}
 
 	// Build binary ID lookup
 	binaryIndex := make(map[string]*BinaryObject)
-	for i := range result.Binaries {
-		binaryIndex[result.Binaries[i].ID] = &result.Binaries[i]
+	for i := range fb.Binaries {
+		binaryIndex[fb.Binaries[i].ID] = &fb.Binaries[i]
 	}
 
 	// Get source directory for resolving relative paths in FB2 embedded stylesheets
 	srcDir := filepath.Dir(srcPath)
 
-	for i := range result.Stylesheets {
-		sheet := &result.Stylesheets[i]
+	for i := range fb.Stylesheets {
+		sheet := &fb.Stylesheets[i]
 
 		if sheet.Type != "text/css" {
 			log.Debug("Skipping non-CSS stylesheet", zap.String("type", sheet.Type))
@@ -105,14 +103,14 @@ func (fb *FictionBook) NormalizeStylesheets(srcPath string, defaultCSS []byte, l
 			}
 
 			// Try to resolve reference
-			resource := result.resolveStylesheetResource(ref, binaryIndex, basePath, log)
+			resource := fb.resolveStylesheetResource(ref, binaryIndex, basePath, log)
 			if resource != nil {
 				sheet.Resources = append(sheet.Resources, *resource)
 			}
 		}
 	}
 
-	return result
+	return fb
 }
 
 // resolveStylesheetResource attempts to resolve a CSS resource reference

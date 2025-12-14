@@ -85,5 +85,45 @@ func (c *Content) String() string {
 		out += "\n" + tw.String()
 	}
 
+	if len(c.BackLinkIndex) > 0 {
+		tw := debug.NewTreeWriter()
+		totalBackLinks := 0
+		for _, refs := range c.BackLinkIndex {
+			totalBackLinks += len(refs)
+		}
+		tw.Line(0, "BackLinkIndex (%d targets, %d total backlinks)", len(c.BackLinkIndex), totalBackLinks)
+
+		keys := slices.Collect(maps.Keys(c.BackLinkIndex))
+		sort.Sort(natural.StringSlice(keys))
+		for _, k := range keys {
+			refs := c.BackLinkIndex[k]
+			tw.Line(1, "Target=%q (%d backlinks)", k, len(refs))
+			for i, ref := range refs {
+				tw.Line(2, "BackLink[%d] refID=%q file=%q", i, ref.RefID, ref.Filename)
+			}
+		}
+		out += "\n" + tw.String()
+	}
+
+	if len(c.PageMapIndex) > 0 {
+		tw := debug.NewTreeWriter()
+		totalPages := 0
+		for _, pages := range c.PageMapIndex {
+			totalPages += len(pages)
+		}
+		tw.Line(0, "PageMapIndex (%d files, %d total pages)", len(c.PageMapIndex), totalPages)
+
+		keys := slices.Collect(maps.Keys(c.PageMapIndex))
+		sort.Sort(natural.StringSlice(keys))
+		for _, k := range keys {
+			pages := c.PageMapIndex[k]
+			tw.Line(1, "File=%q (%d pages)", k, len(pages))
+			for i, page := range pages {
+				tw.Line(2, "Page[%d] num=%d spanID=%q", i, page.PageNum, page.SpanID)
+			}
+		}
+		out += "\n" + tw.String()
+	}
+
 	return out
 }

@@ -33,40 +33,36 @@ var notFoundImage = []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="200" 
 // footnotes body by replacing its Sections slice with the flattened result
 // produced by Body.normalizeFootnotes(). Non-footnote bodies are left
 // untouched.
-// This returns a new FictionBook with normalized bodies and the footnote index.
-// The returned FictionBook is a deep copy, so the original remains unchanged.
+// Modifies the FictionBook in place.
 func (fb *FictionBook) NormalizeFootnoteBodies(log *zap.Logger) (*FictionBook, FootnoteRefs) {
-	result := fb.clone()
-	for i := range result.Bodies {
-		if result.Bodies[i].Footnotes() {
-			result.Bodies[i] = result.Bodies[i].normalizeFootnotes(log)
+	for i := range fb.Bodies {
+		if fb.Bodies[i].Footnotes() {
+			fb.Bodies[i] = fb.Bodies[i].normalizeFootnotes(log)
 		}
 	}
 
 	// Build footnote index from the normalized bodies
-	footnotesIndex := result.buildFootnotesIndex(log)
+	footnotesIndex := fb.buildFootnotesIndex(log)
 
-	return result, footnotesIndex
+	return fb, footnotesIndex
 }
 
 // NormalizeLinks validates all links and replaces broken ones with text or
 // points broken image links to notFoundImage. Processes vignettes and adds
-// them to binaries with unique IDs. Returns a new FictionBook with broken
+// them to binaries with unique IDs. Returns the FictionBook with broken
 // links replaced, along with corrected ID and link indexes. The returned
-// indexes reflect the state after link replacements. The original remains
-// unchanged.
+// indexes reflect the state after link replacements.
+// Modifies the FictionBook in place.
 func (fb *FictionBook) NormalizeLinks(vignettes map[config.VignettePos]*BinaryObject, log *zap.Logger) (*FictionBook, IDIndex, ReverseLinkIndex) {
-	result := fb.clone()
-
-	// Rebuild indexes for the cloned book since the original indexes reference the original book's pointers
-	resultIDs := result.buildIDIndex(log)
+	// Rebuild indexes since we'll be modifying the book
+	resultIDs := fb.buildIDIndex(log)
 
 	// Initialize NotFoundImageID with a unique value
 	counter := 0
 	for {
 		candidateID := fmt.Sprintf("not-found-%d", counter)
 		if _, exists := resultIDs[candidateID]; !exists {
-			result.NotFoundImageID = candidateID
+			fb.NotFoundImageID = candidateID
 			break
 		}
 		counter++
@@ -76,16 +72,16 @@ func (fb *FictionBook) NormalizeLinks(vignettes map[config.VignettePos]*BinaryOb
 	// them to book binaries
 	// NOTE: we do not have to follow the same logic as for non found image
 	// since we are sure that those will be used, so we always need them
-	result.VignetteIDs = make(map[config.VignettePos]string)
+	fb.VignetteIDs = make(map[config.VignettePos]string)
 	for pos, v := range vignettes {
 		// Generate unique ID for this vignette position
 		counter := 0
 		for {
 			candidateID := fmt.Sprintf("%s-%d", pos.String(), counter)
 			if _, exists := resultIDs[candidateID]; !exists {
-				result.VignetteIDs[pos] = candidateID
+				fb.VignetteIDs[pos] = candidateID
 				// Add to binaries
-				result.Binaries = append(result.Binaries, BinaryObject{
+				fb.Binaries = append(fb.Binaries, BinaryObject{
 					ID:          candidateID,
 					ContentType: v.ContentType,
 					Data:        v.Data,
@@ -96,7 +92,7 @@ func (fb *FictionBook) NormalizeLinks(vignettes map[config.VignettePos]*BinaryOb
 		}
 	}
 
-	resultLinks := result.buildReverseLinkIndex(log)
+	resultLinks := fb.buildReverseLinkIndex(log)
 
 	for targetID, refs := range resultLinks {
 		// Check the type of link
@@ -111,9 +107,9 @@ func (fb *FictionBook) NormalizeLinks(vignettes map[config.VignettePos]*BinaryOb
 			// Empty href - replace with text
 			for _, ref := range refs {
 				log.Warn("Link with empty href detected", zap.String("location", FormatRefPath(ref.Path)))
-				if result.replaceBrokenLink(ref, "", log) {
+				if fb.replaceBrokenLink(ref, "", log) {
 					// Ensure not found image binary is present if we replaced an image link
-					result.ensureNotFoundImageBinary()
+					fb.ensureNotFoundImageBinary()
 				}
 			}
 
@@ -121,9 +117,9 @@ func (fb *FictionBook) NormalizeLinks(vignettes map[config.VignettePos]*BinaryOb
 			// Broken external link - replace with text
 			for _, ref := range refs {
 				log.Warn("Broken external link detected", zap.String("location", FormatRefPath(ref.Path)))
-				if result.replaceBrokenLink(ref, targetID, log) {
+				if fb.replaceBrokenLink(ref, targetID, log) {
 					// Ensure not found image binary is present if we replaced an image link
-					result.ensureNotFoundImageBinary()
+					fb.ensureNotFoundImageBinary()
 				}
 			}
 
@@ -137,37 +133,36 @@ func (fb *FictionBook) NormalizeLinks(vignettes map[config.VignettePos]*BinaryOb
 			// Broken internal link - replace with text
 			for _, ref := range refs {
 				log.Warn("Broken internal link detected", zap.String("target", targetID), zap.String("location", FormatRefPath(ref.Path)))
-				if result.replaceBrokenLink(ref, targetID, log) {
+				if fb.replaceBrokenLink(ref, targetID, log) {
 					// Ensure not found image binary is present if we replaced an image link
-					result.ensureNotFoundImageBinary()
+					fb.ensureNotFoundImageBinary()
 				}
 			}
 		}
 	}
 
 	// Rebuild link index after replacements to remove references to replaced links
-	resultLinks = result.buildReverseLinkIndex(log)
+	resultLinks = fb.buildReverseLinkIndex(log)
 
-	return result, resultIDs, resultLinks
+	return fb, resultIDs, resultLinks
 }
 
 // NormalizeIDs assigns sequential IDs to all sections that don't have IDs.
 // It uses the provided IDIndex to avoid ID collisions with existing IDs.
-// Returns a new FictionBook with IDs assigned and an updated IDIndex that includes the generated IDs.
-// The original FictionBook remains unchanged.
+// Returns the FictionBook with IDs assigned and an updated IDIndex that includes the generated IDs.
+// Modifies the FictionBook in place.
 func (fb *FictionBook) NormalizeIDs(existingIDs IDIndex, log *zap.Logger) (*FictionBook, IDIndex) {
-	result := fb.clone()
 	// Create a new index with existing IDs
 	updatedIDs := make(IDIndex, len(existingIDs))
 	maps.Copy(updatedIDs, existingIDs)
 
 	sectionCounter, subtitleCounter := 0, 0
-	for i := range result.Bodies {
-		bodyPath := []any{&result.Bodies[i]}
-		result.assignBodyIDs(&result.Bodies[i], bodyPath, existingIDs, updatedIDs, &sectionCounter, &subtitleCounter, log)
+	for i := range fb.Bodies {
+		bodyPath := []any{&fb.Bodies[i]}
+		fb.assignBodyIDs(&fb.Bodies[i], bodyPath, existingIDs, updatedIDs, &sectionCounter, &subtitleCounter, log)
 	}
 
-	return result, updatedIDs
+	return fb, updatedIDs
 }
 
 // NormalizeFootnoteLabels renumbers footnotes and updates their titles and link text.
@@ -176,29 +171,28 @@ func (fb *FictionBook) NormalizeIDs(existingIDs IDIndex, log *zap.Logger) (*Fict
 // 1. The FootnoteRefs index with BodyNum, NoteNum, and DisplayText
 // 2. Footnote section titles to use the formatted label
 // 3. Link text in main body content that references footnotes
-// Returns a new FictionBook with updated labels. The original remains unchanged.
+// Modifies the FictionBook in place.
 func (fb *FictionBook) NormalizeFootnoteLabels(footnotesIndex FootnoteRefs, template string, log *zap.Logger) (*FictionBook, FootnoteRefs) {
-	result := fb.clone()
 	updatedIndex := make(FootnoteRefs, len(footnotesIndex))
 
 	// Count total footnote bodies first
 	totalFootnoteBodies := 0
-	for i := range result.Bodies {
-		if result.Bodies[i].Footnotes() {
+	for i := range fb.Bodies {
+		if fb.Bodies[i].Footnotes() {
 			totalFootnoteBodies++
 		}
 	}
 
 	// First pass: compute numbering for all footnotes
 	bodyNumCounter := 0
-	for i := range result.Bodies {
-		if !result.Bodies[i].Footnotes() {
+	for i := range fb.Bodies {
+		if !fb.Bodies[i].Footnotes() {
 			continue
 		}
 		bodyNumCounter++
 
-		for j := range result.Bodies[i].Sections {
-			section := &result.Bodies[i].Sections[j]
+		for j := range fb.Bodies[i].Sections {
+			section := &fb.Bodies[i].Sections[j]
 			if section.ID == "" {
 				continue
 			}
@@ -211,7 +205,7 @@ func (fb *FictionBook) NormalizeFootnoteLabels(footnotesIndex FootnoteRefs, temp
 				templateBodyNum = 0
 			}
 
-			displayText, err := fb.ExpandTemplateFootnoteLabel(config.LabelTemplateFieldName, template, templateBodyNum, noteNum, &result.Bodies[i], section)
+			displayText, err := fb.ExpandTemplateFootnoteLabel(config.LabelTemplateFieldName, template, templateBodyNum, noteNum, &fb.Bodies[i], section)
 			if err != nil {
 				log.Warn("Failed to expand footnote label template, using default formatter",
 					zap.Int("body", templateBodyNum),
@@ -241,24 +235,24 @@ func (fb *FictionBook) NormalizeFootnoteLabels(footnotesIndex FootnoteRefs, temp
 	// Second pass: update link text everywhere
 
 	// Update links in TitleInfo annotation
-	if result.Description.TitleInfo.Annotation != nil {
-		updateFootnoteLinksInFlow(result.Description.TitleInfo.Annotation, updatedIndex)
+	if fb.Description.TitleInfo.Annotation != nil {
+		updateFootnoteLinksInFlow(fb.Description.TitleInfo.Annotation, updatedIndex)
 	}
 
 	// Update links in all bodies (including footnote bodies for cross-references)
-	for i := range result.Bodies {
+	for i := range fb.Bodies {
 		// Update links in body epigraphs
-		for j := range result.Bodies[i].Epigraphs {
-			updateFootnoteLinksInEpigraph(&result.Bodies[i].Epigraphs[j], updatedIndex)
+		for j := range fb.Bodies[i].Epigraphs {
+			updateFootnoteLinksInEpigraph(&fb.Bodies[i].Epigraphs[j], updatedIndex)
 		}
 
 		// Update links in sections
-		for j := range result.Bodies[i].Sections {
-			updateFootnoteLinksInSection(&result.Bodies[i].Sections[j], updatedIndex)
+		for j := range fb.Bodies[i].Sections {
+			updateFootnoteLinksInSection(&fb.Bodies[i].Sections[j], updatedIndex)
 		}
 	}
 
-	return result, updatedIndex
+	return fb, updatedIndex
 }
 
 // MarkDropcaps walks all main bodies of the book and marks first text paragraphs
@@ -269,21 +263,20 @@ func (fb *FictionBook) NormalizeFootnoteLabels(footnotesIndex FootnoteRefs, temp
 // Unicode space, the paragraph is left unchanged. Otherwise, "has-dropcap" is appended
 // to the paragraph's Style field, allowing renderers to apply special formatting by
 // extracting the first character during rendering.
-// Returns a new FictionBook with marked drop caps. The original remains unchanged.
+// Modifies the FictionBook in place.
 func (fb *FictionBook) MarkDropcaps(cfg *config.DropcapsConfig) *FictionBook {
 	if cfg == nil || !cfg.Enable {
 		return fb
 	}
 
-	result := fb.clone()
-	for i := range result.Bodies {
-		if result.Bodies[i].Main() {
-			for j := range result.Bodies[i].Sections {
-				markSectionDropcaps(&result.Bodies[i].Sections[j], string(cfg.IgnoreSymbols))
+	for i := range fb.Bodies {
+		if fb.Bodies[i].Main() {
+			for j := range fb.Bodies[i].Sections {
+				markSectionDropcaps(&fb.Bodies[i].Sections[j], string(cfg.IgnoreSymbols))
 			}
 		}
 	}
-	return result
+	return fb
 }
 
 // assignBodyIDs recursively assigns IDs to sections in a body

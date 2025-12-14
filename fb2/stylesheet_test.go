@@ -271,29 +271,6 @@ func TestNormalizeStylesheets(t *testing.T) {
 		}
 	})
 
-	t.Run("immutability - original unchanged", func(t *testing.T) {
-		original := &FictionBook{
-			Stylesheets: []Stylesheet{
-				{Type: "text/css", Data: `src: url('#font1');`},
-			},
-			Binaries: []BinaryObject{
-				{ID: "font1", ContentType: "font/woff", Data: []byte("data")},
-			},
-		}
-
-		result := original.NormalizeStylesheets("", nil, log)
-
-		// Original should have no resources
-		if len(original.Stylesheets[0].Resources) != 0 {
-			t.Error("original book was modified")
-		}
-
-		// Result should have resources
-		if len(result.Stylesheets[0].Resources) != 1 {
-			t.Error("result book missing resources")
-		}
-	})
-
 	t.Run("loads external font file", func(t *testing.T) {
 		// Create a temporary font file
 		tmpDir := t.TempDir()
