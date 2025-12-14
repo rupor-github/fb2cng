@@ -5,11 +5,10 @@ version: 1
 # https://pkg.go.dev/text/template#pkg-overview with additional functions from
 # slim-sprig package available for processing:
 # https://go-task.github.io/slim-sprig
-# List of variables always available (additional variables could be specified
-# for a particular field):
+# List of variables usualy available (if it is different - it will be specified
+# in comments for a particular field):
 # - .Context (string) - name of the template field, uniquely defines processing
 # context
-# - .Index (integer) - when template is applied to a slice variable index
 # selects slice element relevant in a particular context, otherwise -1
 # - .Title (string) - book title as specified in fb2 metainformation
 # - .Series (array of { .Name (string), .Number (integer) }) - series as
@@ -105,8 +104,8 @@ document:
 
     # When creator_name_template is set author(s) name in output book
     # metainformation will be formatted using it. Template is applied to each
-    # available author individually using .Index field. Device often use
-    # particular format for sorting books by author names
+    # available author individually using additional .Index field. Device often
+    # use particular format for sorting books by author names
     creator_name_template: |
       {{- with index .Authors .Index }}
       {{-  .LastName -}}
@@ -167,8 +166,12 @@ document:
 
   footnotes:
     # How to render footnotes in the book
-    # "default"    - no special processing, footnotes are just regular links
-    # "float"      - pop up footnotes (result depends on reader support).
+    # "default"         - no special processing, footnotes are just regular links
+    # "float"           - pop up footnotes (result depends on reader support).
+    # "floatRenumbered" - same as float, but footnote links and titles use
+    #                     sequential numbering in format "(body).(note)" where
+    #                     body is 1-based index among footnote bodies and note
+    #                     is 1-based index within that body
     # Actual generated content will follow output format requrements
     # for example with "float" pop-up footnotes
     #   for epub2 and kepub simple "bi-directional links" method (A -> B and
@@ -186,6 +189,18 @@ document:
     # shown at the beginning of the first paragraph (.css footnote-more
     # controls visibility)
     more_paragraphs: "(~)\u00A0"
+    # If floatRenumbered is specified this template will be used to format text
+    # displayed in footnotes references. Following fields are available:
+    # - .Context (string)
+    # - .BodyNumber (int) - 1 based index
+    # - .NoteNumber (int) - 1 based index
+    # NOTE: if there is only one body with footnotes in a book .BodyNumber will
+    # be set to 0
+    label_template: |
+      {{- if gt .BodyNumber 0 -}}
+      {{-   printf "%d" .BodyNumber -}}.
+      {{- end -}}
+      {{- printf "%d" .NoteNumber -}}
 
   annotation:
     # Create separate "chapter" with book annotation if available

@@ -193,6 +193,10 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 
 	// Normalize footnote bodies and build footnote index
 	book, footnotes := book.NormalizeFootnoteBodies(log)
+	// For floatRenumbered mode, renumber footnotes and update labels
+	if env.Cfg.Document.Footnotes.Mode == config.FootnotesModeFloatRenumbered {
+		book, footnotes = book.NormalizeFootnoteLabels(footnotes, env.Cfg.Document.Footnotes.LabelTemplate, log)
+	}
 	// Build id and link indexes replacing/removing broken links (may add not-found image binary and vignette binaries)
 	book, ids, links := book.NormalizeLinks(vignettes, log)
 	// Normalize stylesheets and resolve external resources (may load files from disk and add to binaries)

@@ -674,3 +674,692 @@ func TestNormalizeIDs_UpdatesIndex(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeFootnoteLabels(t *testing.T) {
+	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+
+	t.Run("renumbers_footnotes_with_default_formatter", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Kind: BodyMain,
+					Sections: []Section{
+						{
+							ID: "s1",
+							Content: []FlowItem{
+								{
+									Kind: FlowParagraph,
+									Paragraph: &Paragraph{
+										Text: []InlineSegment{
+											{Kind: InlineText, Text: "Text with "},
+											{
+												Kind: InlineLink,
+												Href: "#n1",
+												Children: []InlineSegment{
+													{Kind: InlineText, Text: "[1]"},
+												},
+											},
+											{Kind: InlineText, Text: " and "},
+											{
+												Kind: InlineLink,
+												Href: "#n2",
+												Children: []InlineSegment{
+													{Kind: InlineText, Text: "[2]"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Kind: BodyFootnotes,
+					Sections: []Section{
+						{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note 1"}}}}}},
+						{ID: "n2", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note 2"}}}}}},
+					},
+				},
+			},
+		}
+
+		footnotesIndex := FootnoteRefs{
+			"n1": {BodyIdx: 1, SectionIdx: 0},
+			"n2": {BodyIdx: 1, SectionIdx: 1},
+		}
+
+		result, updatedIndex := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+
+		// Check updated index has numbering info
+		// BodyNum stays 1 (actual body counter), but DisplayText uses 0 for single footnote body
+		if updatedIndex["n1"].BodyNum != 1 {
+			t.Errorf("n1 BodyNum = %d, want 1", updatedIndex["n1"].BodyNum)
+		}
+		if updatedIndex["n1"].DisplayText != "0.1" {
+			t.Errorf("n1 DisplayText = %q, want %q", updatedIndex["n1"].DisplayText, "0.1")
+		}
+		if updatedIndex["n2"].BodyNum != 1 {
+			t.Errorf("n2 BodyNum = %d, want 1", updatedIndex["n2"].BodyNum)
+		}
+		if updatedIndex["n2"].DisplayText != "0.2" {
+			t.Errorf("n2 DisplayText = %q, want %q", updatedIndex["n2"].DisplayText, "0.2")
+		}
+
+		// Check footnote titles are updated with DisplayText
+		if result.Bodies[1].Sections[0].Title == nil {
+			t.Fatal("n1 title should not be nil")
+		}
+		titleText := result.Bodies[1].Sections[0].Title.Items[0].Paragraph.Text[0].Text
+		if titleText != "0.1" {
+			t.Errorf("n1 title = %q, want %q", titleText, "0.1")
+		}
+
+		// Check link text is updated with DisplayText
+		linkText := result.Bodies[0].Sections[0].Content[0].Paragraph.Text[1].Children[0].Text
+		if linkText != "0.1" {
+			t.Errorf("link to n1 text = %q, want %q", linkText, "0.1")
+		}
+		linkText2 := result.Bodies[0].Sections[0].Content[0].Paragraph.Text[3].Children[0].Text
+		if linkText2 != "0.2" {
+			t.Errorf("link to n2 text = %q, want %q", linkText2, "0.2")
+		}
+	})
+
+	t.Run("custom_formatter", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Kind: BodyMain,
+					Sections: []Section{
+						{
+							ID: "s1",
+							Content: []FlowItem{
+								{
+									Kind: FlowParagraph,
+									Paragraph: &Paragraph{
+										Text: []InlineSegment{
+											{
+												Kind: InlineLink,
+												Href: "#n1",
+												Children: []InlineSegment{
+													{Kind: InlineText, Text: "old"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Kind: BodyFootnotes,
+					Sections: []Section{
+						{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}}}},
+					},
+				},
+			},
+		}
+
+		footnotesIndex := FootnoteRefs{
+			"n1": {BodyIdx: 1, SectionIdx: 0},
+		}
+
+		result, updatedIndex := book.NormalizeFootnoteLabels(footnotesIndex, "[a.{{- .NoteNumber -}}]", log)
+
+		if updatedIndex["n1"].DisplayText != "[a.1]" {
+			t.Errorf("n1 DisplayText = %q, want %q", updatedIndex["n1"].DisplayText, "[a.1]")
+		}
+
+		linkText := result.Bodies[0].Sections[0].Content[0].Paragraph.Text[0].Children[0].Text
+		if linkText != "[a.1]" {
+			t.Errorf("link text = %q, want %q", linkText, "[a.1]")
+		}
+	})
+
+	t.Run("multiple_footnote_bodies", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Kind: BodyMain,
+					Sections: []Section{
+						{
+							ID: "s1",
+							Content: []FlowItem{
+								{
+									Kind: FlowParagraph,
+									Paragraph: &Paragraph{
+										Text: []InlineSegment{
+											{Kind: InlineLink, Href: "#n1", Children: []InlineSegment{{Kind: InlineText, Text: "[1]"}}},
+											{Kind: InlineLink, Href: "#c1", Children: []InlineSegment{{Kind: InlineText, Text: "[c1]"}}},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Kind: BodyFootnotes,
+					Name: "notes",
+					Sections: []Section{
+						{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note 1"}}}}}},
+					},
+				},
+				{
+					Kind: BodyFootnotes,
+					Name: "comments",
+					Sections: []Section{
+						{ID: "c1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Comment 1"}}}}}},
+					},
+				},
+			},
+		}
+
+		footnotesIndex := FootnoteRefs{
+			"n1": {BodyIdx: 1, SectionIdx: 0},
+			"c1": {BodyIdx: 2, SectionIdx: 0},
+		}
+
+		_, updatedIndex := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+
+		// First footnote body: n1 should be 1.1
+		if updatedIndex["n1"].DisplayText != "1.1" {
+			t.Errorf("n1 DisplayText = %q, want %q", updatedIndex["n1"].DisplayText, "1.1")
+		}
+		if updatedIndex["n1"].BodyNum != 1 || updatedIndex["n1"].NoteNum != 1 {
+			t.Errorf("n1 numbering = %d.%d, want 1.1", updatedIndex["n1"].BodyNum, updatedIndex["n1"].NoteNum)
+		}
+
+		// Second footnote body: c1 should be 2.1
+		if updatedIndex["c1"].DisplayText != "2.1" {
+			t.Errorf("c1 DisplayText = %q, want %q", updatedIndex["c1"].DisplayText, "2.1")
+		}
+		if updatedIndex["c1"].BodyNum != 2 || updatedIndex["c1"].NoteNum != 1 {
+			t.Errorf("c1 numbering = %d.%d, want 2.1", updatedIndex["c1"].BodyNum, updatedIndex["c1"].NoteNum)
+		}
+	})
+
+	t.Run("updates_links_in_epigraph_text_authors", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Kind: BodyMain,
+					Epigraphs: []Epigraph{
+						{
+							Flow: Flow{
+								Items: []FlowItem{
+									{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Quote"}}}},
+								},
+							},
+							TextAuthors: []Paragraph{
+								{
+									Text: []InlineSegment{
+										{Kind: InlineText, Text: "Author"},
+										{Kind: InlineLink, Href: "#n1", Children: []InlineSegment{{Kind: InlineText, Text: "[1]"}}},
+									},
+								},
+							},
+						},
+					},
+					Sections: []Section{{ID: "s1"}},
+				},
+				{
+					Kind:     BodyFootnotes,
+					Sections: []Section{{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}}}}},
+				},
+			},
+		}
+
+		footnotesIndex := FootnoteRefs{"n1": {BodyIdx: 1, SectionIdx: 0}}
+		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+
+		linkText := result.Bodies[0].Epigraphs[0].TextAuthors[0].Text[1].Children[0].Text
+		if linkText != "0.1" {
+			t.Errorf("epigraph text-author link text = %q, want %q", linkText, "0.1")
+		}
+	})
+
+	t.Run("updates_links_in_section_title", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Kind: BodyMain,
+					Sections: []Section{
+						{
+							ID: "s1",
+							Title: &Title{
+								Items: []TitleItem{
+									{
+										Paragraph: &Paragraph{
+											Text: []InlineSegment{
+												{Kind: InlineText, Text: "Chapter"},
+												{Kind: InlineLink, Href: "#n1", Children: []InlineSegment{{Kind: InlineText, Text: "[1]"}}},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Kind:     BodyFootnotes,
+					Sections: []Section{{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}}}}},
+				},
+			},
+		}
+
+		footnotesIndex := FootnoteRefs{"n1": {BodyIdx: 1, SectionIdx: 0}}
+		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+
+		linkText := result.Bodies[0].Sections[0].Title.Items[0].Paragraph.Text[1].Children[0].Text
+		if linkText != "0.1" {
+			t.Errorf("section title link text = %q, want %q", linkText, "0.1")
+		}
+	})
+
+	t.Run("updates_links_in_poem_stanza_verse", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Kind: BodyMain,
+					Sections: []Section{
+						{
+							ID: "s1",
+							Content: []FlowItem{
+								{
+									Kind: FlowPoem,
+									Poem: &Poem{
+										ID: "poem1",
+										Stanzas: []Stanza{
+											{
+												Verses: []Paragraph{
+													{
+														Text: []InlineSegment{
+															{Kind: InlineText, Text: "Verse with "},
+															{Kind: InlineLink, Href: "#n1", Children: []InlineSegment{{Kind: InlineText, Text: "[1]"}}},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Kind:     BodyFootnotes,
+					Sections: []Section{{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}}}}},
+				},
+			},
+		}
+
+		footnotesIndex := FootnoteRefs{"n1": {BodyIdx: 1, SectionIdx: 0}}
+		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+
+		linkText := result.Bodies[0].Sections[0].Content[0].Poem.Stanzas[0].Verses[0].Text[1].Children[0].Text
+		if linkText != "0.1" {
+			t.Errorf("poem verse link text = %q, want %q", linkText, "0.1")
+		}
+	})
+
+	t.Run("updates_cross_references_in_footnotes", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Kind:     BodyMain,
+					Sections: []Section{{ID: "s1"}},
+				},
+				{
+					Kind: BodyFootnotes,
+					Sections: []Section{
+						{
+							ID: "n1",
+							Content: []FlowItem{
+								{
+									Kind: FlowParagraph,
+									Paragraph: &Paragraph{
+										Text: []InlineSegment{
+											{Kind: InlineText, Text: "See also "},
+											{Kind: InlineLink, Href: "#n2", Children: []InlineSegment{{Kind: InlineText, Text: "[2]"}}},
+										},
+									},
+								},
+							},
+						},
+						{
+							ID: "n2",
+							Content: []FlowItem{
+								{
+									Kind: FlowParagraph,
+									Paragraph: &Paragraph{
+										Text: []InlineSegment{
+											{Kind: InlineText, Text: "Back to "},
+											{Kind: InlineLink, Href: "#n1", Children: []InlineSegment{{Kind: InlineText, Text: "[1]"}}},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		footnotesIndex := FootnoteRefs{
+			"n1": {BodyIdx: 1, SectionIdx: 0},
+			"n2": {BodyIdx: 1, SectionIdx: 1},
+		}
+
+		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+
+		// Cross-reference from n1 to n2
+		linkText1 := result.Bodies[1].Sections[0].Content[0].Paragraph.Text[1].Children[0].Text
+		if linkText1 != "0.2" {
+			t.Errorf("n1->n2 cross-reference link text = %q, want %q", linkText1, "0.2")
+		}
+
+		// Cross-reference from n2 to n1
+		linkText2 := result.Bodies[1].Sections[1].Content[0].Paragraph.Text[1].Children[0].Text
+		if linkText2 != "0.1" {
+			t.Errorf("n2->n1 cross-reference link text = %q, want %q", linkText2, "0.1")
+		}
+	})
+
+	t.Run("preserves_original_book", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Kind: BodyMain,
+					Sections: []Section{
+						{
+							ID: "s1",
+							Content: []FlowItem{
+								{
+									Kind: FlowParagraph,
+									Paragraph: &Paragraph{
+										Text: []InlineSegment{
+											{Kind: InlineLink, Href: "#n1", Children: []InlineSegment{{Kind: InlineText, Text: "[1]"}}},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Kind:     BodyFootnotes,
+					Sections: []Section{{ID: "n1", Title: &Title{Items: []TitleItem{{Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Original"}}}}}}}},
+				},
+			},
+		}
+
+		footnotesIndex := FootnoteRefs{"n1": {BodyIdx: 1, SectionIdx: 0}}
+		_, _ = book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+
+		// Original link text should be unchanged
+		origLinkText := book.Bodies[0].Sections[0].Content[0].Paragraph.Text[0].Children[0].Text
+		if origLinkText != "[1]" {
+			t.Errorf("original link text was mutated: %q", origLinkText)
+		}
+
+		// Original footnote title should be unchanged
+		origTitle := book.Bodies[1].Sections[0].Title.Items[0].Paragraph.Text[0].Text
+		if origTitle != "Original" {
+			t.Errorf("original footnote title was mutated: %q", origTitle)
+		}
+	})
+
+	t.Run("updates_links_in_table_cells", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Kind: BodyMain,
+					Sections: []Section{
+						{
+							ID: "s1",
+							Content: []FlowItem{
+								{
+									Kind: FlowTable,
+									Table: &Table{
+										Rows: []TableRow{
+											{
+												Cells: []TableCell{
+													{
+														Content: []InlineSegment{
+															{Kind: InlineText, Text: "Cell with "},
+															{Kind: InlineLink, Href: "#n1", Children: []InlineSegment{{Kind: InlineText, Text: "[1]"}}},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Kind:     BodyFootnotes,
+					Sections: []Section{{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}}}}},
+				},
+			},
+		}
+
+		footnotesIndex := FootnoteRefs{"n1": {BodyIdx: 1, SectionIdx: 0}}
+		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+
+		linkText := result.Bodies[0].Sections[0].Content[0].Table.Rows[0].Cells[0].Content[1].Children[0].Text
+		if linkText != "0.1" {
+			t.Errorf("table cell link text = %q, want %q", linkText, "0.1")
+		}
+	})
+
+	t.Run("updates_links_in_cite_text_authors", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Kind: BodyMain,
+					Sections: []Section{
+						{
+							ID: "s1",
+							Content: []FlowItem{
+								{
+									Kind: FlowCite,
+									Cite: &Cite{
+										Items: []FlowItem{
+											{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Quote"}}}},
+										},
+										TextAuthors: []Paragraph{
+											{
+												Text: []InlineSegment{
+													{Kind: InlineText, Text: "Author"},
+													{Kind: InlineLink, Href: "#n1", Children: []InlineSegment{{Kind: InlineText, Text: "[1]"}}},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Kind:     BodyFootnotes,
+					Sections: []Section{{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}}}}},
+				},
+			},
+		}
+
+		footnotesIndex := FootnoteRefs{"n1": {BodyIdx: 1, SectionIdx: 0}}
+		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+
+		linkText := result.Bodies[0].Sections[0].Content[0].Cite.TextAuthors[0].Text[1].Children[0].Text
+		if linkText != "0.1" {
+			t.Errorf("cite text-author link text = %q, want %q", linkText, "0.1")
+		}
+	})
+
+	t.Run("updates_links_in_poem_title", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Kind: BodyMain,
+					Sections: []Section{
+						{
+							ID: "s1",
+							Content: []FlowItem{
+								{
+									Kind: FlowPoem,
+									Poem: &Poem{
+										ID: "poem1",
+										Title: &Title{
+											Items: []TitleItem{
+												{
+													Paragraph: &Paragraph{
+														Text: []InlineSegment{
+															{Kind: InlineText, Text: "Poem title"},
+															{Kind: InlineLink, Href: "#n1", Children: []InlineSegment{{Kind: InlineText, Text: "[1]"}}},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Kind:     BodyFootnotes,
+					Sections: []Section{{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}}}}},
+				},
+			},
+		}
+
+		footnotesIndex := FootnoteRefs{"n1": {BodyIdx: 1, SectionIdx: 0}}
+		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+
+		linkText := result.Bodies[0].Sections[0].Content[0].Poem.Title.Items[0].Paragraph.Text[1].Children[0].Text
+		if linkText != "0.1" {
+			t.Errorf("poem title link text = %q, want %q", linkText, "0.1")
+		}
+	})
+
+	t.Run("updates_links_in_stanza_title_and_subtitle", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Kind: BodyMain,
+					Sections: []Section{
+						{
+							ID: "s1",
+							Content: []FlowItem{
+								{
+									Kind: FlowPoem,
+									Poem: &Poem{
+										ID: "poem1",
+										Stanzas: []Stanza{
+											{
+												Title: &Title{
+													Items: []TitleItem{
+														{
+															Paragraph: &Paragraph{
+																Text: []InlineSegment{
+																	{Kind: InlineText, Text: "Stanza title"},
+																	{Kind: InlineLink, Href: "#n1", Children: []InlineSegment{{Kind: InlineText, Text: "[1]"}}},
+																},
+															},
+														},
+													},
+												},
+												Subtitle: &Paragraph{
+													Text: []InlineSegment{
+														{Kind: InlineText, Text: "Subtitle"},
+														{Kind: InlineLink, Href: "#n2", Children: []InlineSegment{{Kind: InlineText, Text: "[2]"}}},
+													},
+												},
+												Verses: []Paragraph{},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Kind: BodyFootnotes,
+					Sections: []Section{
+						{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note 1"}}}}}},
+						{ID: "n2", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note 2"}}}}}},
+					},
+				},
+			},
+		}
+
+		footnotesIndex := FootnoteRefs{
+			"n1": {BodyIdx: 1, SectionIdx: 0},
+			"n2": {BodyIdx: 1, SectionIdx: 1},
+		}
+		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+
+		stanza := result.Bodies[0].Sections[0].Content[0].Poem.Stanzas[0]
+
+		titleLinkText := stanza.Title.Items[0].Paragraph.Text[1].Children[0].Text
+		if titleLinkText != "0.1" {
+			t.Errorf("stanza title link text = %q, want %q", titleLinkText, "0.1")
+		}
+
+		subtitleLinkText := stanza.Subtitle.Text[1].Children[0].Text
+		if subtitleLinkText != "0.2" {
+			t.Errorf("stanza subtitle link text = %q, want %q", subtitleLinkText, "0.2")
+		}
+	})
+
+	t.Run("updates_links_in_title_info_annotation", func(t *testing.T) {
+		book := &FictionBook{
+			Description: Description{
+				TitleInfo: TitleInfo{
+					Annotation: &Flow{
+						Items: []FlowItem{
+							{
+								Kind: FlowParagraph,
+								Paragraph: &Paragraph{
+									Text: []InlineSegment{
+										{Kind: InlineText, Text: "Annotation with "},
+										{Kind: InlineLink, Href: "#n1", Children: []InlineSegment{{Kind: InlineText, Text: "[1]"}}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			Bodies: []Body{
+				{
+					Kind:     BodyMain,
+					Sections: []Section{{ID: "s1"}},
+				},
+				{
+					Kind:     BodyFootnotes,
+					Sections: []Section{{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}}}}},
+				},
+			},
+		}
+
+		footnotesIndex := FootnoteRefs{"n1": {BodyIdx: 1, SectionIdx: 0}}
+		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+
+		linkText := result.Description.TitleInfo.Annotation.Items[0].Paragraph.Text[1].Children[0].Text
+		if linkText != "0.1" {
+			t.Errorf("annotation link text = %q, want %q", linkText, "0.1")
+		}
+	})
+}

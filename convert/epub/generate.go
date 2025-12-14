@@ -22,7 +22,6 @@ import (
 	"fbc/config"
 	"fbc/content"
 	"fbc/fb2"
-	"fbc/fb2/fields"
 )
 
 const (
@@ -391,7 +390,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	dcTitle := metadata.CreateElement("dc:title")
 	title := c.Book.Description.TitleInfo.BookTitle.Value
 	if cfg.Metainformation.TitleTemplate != "" {
-		expanded, err := fields.Expand(config.MetaTitleTemplateFieldName, cfg.Metainformation.TitleTemplate, -1, c.Book, c.SrcName, c.OutputFormat)
+		expanded, err := c.Book.ExpandTemplateSimple(config.MetaTitleTemplateFieldName, cfg.Metainformation.TitleTemplate, c.SrcName, c.OutputFormat)
 		if err != nil {
 			log.Warn("Unable to prepare title for generated OPF", zap.Error(err))
 		} else {
@@ -414,7 +413,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		dcCreator := metadata.CreateElement("dc:creator")
 		authorName := strings.TrimSpace(fmt.Sprintf("%s %s %s", author.FirstName, author.MiddleName, author.LastName))
 		if cfg.Metainformation.CreatorNameTemplate != "" {
-			expanded, err := fields.Expand(config.MetaCreatorNameTemplateFieldName, cfg.Metainformation.CreatorNameTemplate, idx, c.Book, c.SrcName, c.OutputFormat)
+			expanded, err := c.Book.ExpandTemplateIndexed(config.MetaCreatorNameTemplateFieldName, cfg.Metainformation.CreatorNameTemplate, idx, c.SrcName, c.OutputFormat)
 			if err != nil {
 				log.Warn("Unable to prepare author name for generated OPF", zap.Error(err))
 			} else {
@@ -607,7 +606,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 			itemref := spine.CreateElement("itemref")
 			itemref.CreateAttr("idref", addedFiles[filename])
 			// Add linear="no" for footnotes.xhtml in float mode
-			if filename == "footnotes.xhtml" && c.FootnotesMode == config.FootnotesModeFloat {
+			if filename == "footnotes.xhtml" && c.FootnotesMode.IsFloat() {
 				itemref.CreateAttr("linear", "no")
 			}
 			addedToSpine[filename] = true
@@ -924,7 +923,7 @@ func buildTOCContent(parentContainer *etree.Element, c *content.Content, chapter
 
 	// Add authors if template is provided
 	if cfg.AuthorsTemplate != "" {
-		expanded, err := fields.Expand(config.AuthorsTemplateFieldName, cfg.AuthorsTemplate, -1, c.Book, c.SrcName, c.OutputFormat)
+		expanded, err := c.Book.ExpandTemplateSimple(config.AuthorsTemplateFieldName, cfg.AuthorsTemplate, c.SrcName, c.OutputFormat)
 		if err != nil {
 			log.Warn("Unable to prepare list of authors for TOC", zap.Error(err))
 		} else {

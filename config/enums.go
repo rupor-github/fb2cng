@@ -1,8 +1,12 @@
 package config
 
 // Specification of requested footnotes processing mode.
-// ENUM(default, float)
+// ENUM(default, float, floatRenumbered)
 type FootnotesMode int
+
+func (f FootnotesMode) IsFloat() bool {
+	return f == FootnotesModeFloat || f == FootnotesModeFloatRenumbered
+}
 
 // Specification of image resizing mode.
 // ENUM(none, keepAR, stretch)

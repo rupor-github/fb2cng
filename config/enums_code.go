@@ -15,15 +15,18 @@ const (
 	FootnotesModeDefault FootnotesMode = iota
 	// FootnotesModeFloat is a FootnotesMode of type Float.
 	FootnotesModeFloat
+	// FootnotesModeFloatRenumbered is a FootnotesMode of type FloatRenumbered.
+	FootnotesModeFloatRenumbered
 )
 
 var ErrInvalidFootnotesMode = fmt.Errorf("not a valid FootnotesMode, try [%s]", strings.Join(_FootnotesModeNames, ", "))
 
-const _FootnotesModeName = "defaultfloat"
+const _FootnotesModeName = "defaultfloatfloatRenumbered"
 
 var _FootnotesModeNames = []string{
 	_FootnotesModeName[0:7],
 	_FootnotesModeName[7:12],
+	_FootnotesModeName[12:27],
 }
 
 // FootnotesModeNames returns a list of possible string values of FootnotesMode.
@@ -34,8 +37,9 @@ func FootnotesModeNames() []string {
 }
 
 var _FootnotesModeMap = map[FootnotesMode]string{
-	FootnotesModeDefault: _FootnotesModeName[0:7],
-	FootnotesModeFloat:   _FootnotesModeName[7:12],
+	FootnotesModeDefault:         _FootnotesModeName[0:7],
+	FootnotesModeFloat:           _FootnotesModeName[7:12],
+	FootnotesModeFloatRenumbered: _FootnotesModeName[12:27],
 }
 
 // String implements the Stringer interface.
@@ -54,10 +58,12 @@ func (x FootnotesMode) IsValid() bool {
 }
 
 var _FootnotesModeValue = map[string]FootnotesMode{
-	_FootnotesModeName[0:7]:                   FootnotesModeDefault,
-	strings.ToLower(_FootnotesModeName[0:7]):  FootnotesModeDefault,
-	_FootnotesModeName[7:12]:                  FootnotesModeFloat,
-	strings.ToLower(_FootnotesModeName[7:12]): FootnotesModeFloat,
+	_FootnotesModeName[0:7]:                    FootnotesModeDefault,
+	strings.ToLower(_FootnotesModeName[0:7]):   FootnotesModeDefault,
+	_FootnotesModeName[7:12]:                   FootnotesModeFloat,
+	strings.ToLower(_FootnotesModeName[7:12]):  FootnotesModeFloat,
+	_FootnotesModeName[12:27]:                  FootnotesModeFloatRenumbered,
+	strings.ToLower(_FootnotesModeName[12:27]): FootnotesModeFloatRenumbered,
 }
 
 // ParseFootnotesMode attempts to convert a string to a FootnotesMode.

@@ -51,6 +51,7 @@ type (
 		BodyNames      []string          `yaml:"bodies" validate:"dive,required"`
 		Backlinks      DoubleQuoteString `yaml:"backlinks" validate:"gt=0"`
 		MoreParagraphs DoubleQuoteString `yaml:"more_paragraphs" validate:"gt=0"`
+		LabelTemplate  string            `yaml:"label_template" validate:"required_if=Mode 2"`
 	}
 
 	AnnotationConfig struct {
@@ -127,6 +128,7 @@ const (
 	MetaTitleTemplateFieldName       TemplateFieldName = "title_template"
 	MetaCreatorNameTemplateFieldName TemplateFieldName = "creator_name_template"
 	AuthorsTemplateFieldName         TemplateFieldName = "authors_template"
+	LabelTemplateFieldName           TemplateFieldName = "label_template"
 )
 
 var requiredOptions = append([]func(*gencfg.ProcessingOptions){},
@@ -134,6 +136,7 @@ var requiredOptions = append([]func(*gencfg.ProcessingOptions){},
 	gencfg.WithDoNotExpandField(string(MetaTitleTemplateFieldName)),
 	gencfg.WithDoNotExpandField(string(MetaCreatorNameTemplateFieldName)),
 	gencfg.WithDoNotExpandField(string(AuthorsTemplateFieldName)),
+	gencfg.WithDoNotExpandField(string(LabelTemplateFieldName)),
 )
 
 // IsEmpty returns true if no vignette positions are defined

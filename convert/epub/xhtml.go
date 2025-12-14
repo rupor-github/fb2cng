@@ -128,7 +128,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 	// Process all footnote bodies - each body becomes a separate top-level chapter
 	chapterNum++
 	// Only disable page tracking if footnotes are in float mode
-	c.PageTrackingEnabled = env.Cfg.Document.Footnotes.Mode != config.FootnotesModeFloat
+	c.PageTrackingEnabled = !env.Cfg.Document.Footnotes.Mode.IsFloat()
 	footnotesChapters, err := processFootnoteBodies(c, footnoteBodies, idToFile, log)
 	if err != nil {
 		log.Error("Unable to convert footnotes", zap.Error(err))
@@ -175,11 +175,11 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, idToF
 			collectIDsFromSection(section, filename, idToFile)
 
 			// Choose appropriate element type based on mode and format
-			if c.FootnotesMode == config.FootnotesModeFloat && c.OutputFormat == config.OutputFmtEpub3 {
+			if c.FootnotesMode.IsFloat() && c.OutputFormat == config.OutputFmtEpub3 {
 				if err := appendEpub3FloatFootnoteSectionContent(bodyDiv, c, section, log); err != nil {
 					return nil, err
 				}
-			} else if c.FootnotesMode == config.FootnotesModeFloat && (c.OutputFormat == config.OutputFmtEpub2 || c.OutputFormat == config.OutputFmtKepub) {
+			} else if c.FootnotesMode.IsFloat() && (c.OutputFormat == config.OutputFmtEpub2 || c.OutputFormat == config.OutputFmtKepub) {
 				if err := appendEpub2FloatFootnoteSectionContent(bodyDiv, c, section, log); err != nil {
 					return nil, err
 				}
@@ -1032,7 +1032,7 @@ func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inl
 				if _, isFootnote := c.FootnotesIndex[linkID]; isFootnote {
 					linkClass = "link-footnote"
 					// Handle float mode footnote references
-					if c.FootnotesMode == config.FootnotesModeFloat {
+					if c.FootnotesMode.IsFloat() {
 						ref := c.AddFootnoteBackLinkRef(linkID)
 						// Add reference ID
 						a.CreateAttr("id", ref.RefID)

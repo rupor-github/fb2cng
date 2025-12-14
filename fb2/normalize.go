@@ -168,6 +168,233 @@ func footnoteTitle(orig *Title, id, lang string) *Title {
 	return &Title{Lang: lang, Items: []TitleItem{{Paragraph: para}}}
 }
 
+// NormalizeFootnoteLabels renumbers footnotes and updates their titles and link text.
+// For floatRenumbered mode, it assigns sequential numbers to each footnote within
+// each body and updates:
+// 1. The FootnoteRefs index with BodyNum, NoteNum, and DisplayText
+// 2. Footnote section titles to use the formatted label
+// 3. Link text in main body content that references footnotes
+// Returns a new FictionBook with updated labels. The original remains unchanged.
+func (fb *FictionBook) NormalizeFootnoteLabels(footnotesIndex FootnoteRefs, template string, log *zap.Logger) (*FictionBook, FootnoteRefs) {
+	result := fb.clone()
+	updatedIndex := make(FootnoteRefs, len(footnotesIndex))
+
+	// Count total footnote bodies first
+	totalFootnoteBodies := 0
+	for i := range result.Bodies {
+		if result.Bodies[i].Footnotes() {
+			totalFootnoteBodies++
+		}
+	}
+
+	// First pass: compute numbering for all footnotes
+	bodyNumCounter := 0
+	for i := range result.Bodies {
+		if !result.Bodies[i].Footnotes() {
+			continue
+		}
+		bodyNumCounter++
+
+		for j := range result.Bodies[i].Sections {
+			section := &result.Bodies[i].Sections[j]
+			if section.ID == "" {
+				continue
+			}
+
+			noteNum := j + 1
+
+			// Use 0 for template expansion if there's only one footnote body
+			templateBodyNum := bodyNumCounter
+			if totalFootnoteBodies == 1 {
+				templateBodyNum = 0
+			}
+
+			displayText, err := fb.ExpandTemplateFootnoteLabel(config.LabelTemplateFieldName, template, templateBodyNum, noteNum)
+			if err != nil {
+				log.Warn("Failed to expand footnote label template, using default formatter",
+					zap.Int("body", templateBodyNum),
+					zap.Int("note", noteNum),
+					zap.Error(err))
+				displayText = fmt.Sprintf("%d.%d", templateBodyNum, noteNum)
+			}
+
+			// Update the index with numbering info (keep original bodyNumCounter)
+			updatedIndex[section.ID] = FootnoteRef{
+				BodyIdx:     i,
+				SectionIdx:  j,
+				BodyNum:     bodyNumCounter,
+				NoteNum:     noteNum,
+				DisplayText: displayText,
+			}
+
+			// Update footnote section title
+			section.Title = createFootnoteLabelTitle(displayText, section.Lang)
+
+			log.Debug("Renumbered footnote",
+				zap.String("id", section.ID),
+				zap.String("label", displayText))
+		}
+	}
+
+	// Second pass: update link text everywhere
+
+	// Update links in TitleInfo annotation
+	if result.Description.TitleInfo.Annotation != nil {
+		updateFootnoteLinksInFlow(result.Description.TitleInfo.Annotation, updatedIndex)
+	}
+
+	// Update links in all bodies (including footnote bodies for cross-references)
+	for i := range result.Bodies {
+		// Update links in body epigraphs
+		for j := range result.Bodies[i].Epigraphs {
+			updateFootnoteLinksInEpigraph(&result.Bodies[i].Epigraphs[j], updatedIndex)
+		}
+
+		// Update links in sections
+		for j := range result.Bodies[i].Sections {
+			updateFootnoteLinksInSection(&result.Bodies[i].Sections[j], updatedIndex)
+		}
+	}
+
+	return result, updatedIndex
+}
+
+// createFootnoteLabelTitle creates a title with the formatted label text.
+func createFootnoteLabelTitle(label, lang string) *Title {
+	para := &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: label}}}
+	return &Title{Lang: lang, Items: []TitleItem{{Paragraph: para}}}
+}
+
+// updateFootnoteLinksInEpigraph updates footnote link text in an epigraph.
+func updateFootnoteLinksInEpigraph(epigraph *Epigraph, index FootnoteRefs) {
+	updateFootnoteLinksInFlow(&epigraph.Flow, index)
+	for i := range epigraph.TextAuthors {
+		updateFootnoteLinksInSegments(epigraph.TextAuthors[i].Text, index)
+	}
+}
+
+// updateFootnoteLinksInSection recursively updates footnote link text in a section.
+func updateFootnoteLinksInSection(section *Section, index FootnoteRefs) {
+	// Update links in title
+	updateFootnoteLinksInTitle(section.Title, index)
+
+	// Update links in epigraphs
+	for i := range section.Epigraphs {
+		updateFootnoteLinksInEpigraph(&section.Epigraphs[i], index)
+	}
+
+	// Update links in annotation
+	if section.Annotation != nil {
+		updateFootnoteLinksInFlow(section.Annotation, index)
+	}
+
+	// Update links in content
+	for i := range section.Content {
+		updateFootnoteLinksInFlowItem(&section.Content[i], index)
+	}
+}
+
+// updateFootnoteLinksInFlow updates footnote link text in a flow.
+func updateFootnoteLinksInFlow(flow *Flow, index FootnoteRefs) {
+	for i := range flow.Items {
+		updateFootnoteLinksInFlowItem(&flow.Items[i], index)
+	}
+}
+
+// updateFootnoteLinksInFlowItem updates footnote link text in a flow item.
+func updateFootnoteLinksInFlowItem(item *FlowItem, index FootnoteRefs) {
+	switch item.Kind {
+	case FlowParagraph:
+		if item.Paragraph != nil {
+			updateFootnoteLinksInSegments(item.Paragraph.Text, index)
+		}
+	case FlowSubtitle:
+		if item.Subtitle != nil {
+			updateFootnoteLinksInSegments(item.Subtitle.Text, index)
+		}
+	case FlowPoem:
+		if item.Poem != nil {
+			updateFootnoteLinksInTitle(item.Poem.Title, index)
+			for i := range item.Poem.Epigraphs {
+				updateFootnoteLinksInEpigraph(&item.Poem.Epigraphs[i], index)
+			}
+			for i := range item.Poem.Subtitles {
+				updateFootnoteLinksInSegments(item.Poem.Subtitles[i].Text, index)
+			}
+			for i := range item.Poem.Stanzas {
+				updateFootnoteLinksInTitle(item.Poem.Stanzas[i].Title, index)
+				if item.Poem.Stanzas[i].Subtitle != nil {
+					updateFootnoteLinksInSegments(item.Poem.Stanzas[i].Subtitle.Text, index)
+				}
+				for j := range item.Poem.Stanzas[i].Verses {
+					updateFootnoteLinksInSegments(item.Poem.Stanzas[i].Verses[j].Text, index)
+				}
+			}
+			for i := range item.Poem.TextAuthors {
+				updateFootnoteLinksInSegments(item.Poem.TextAuthors[i].Text, index)
+			}
+		}
+	case FlowCite:
+		if item.Cite != nil {
+			for i := range item.Cite.Items {
+				updateFootnoteLinksInFlowItem(&item.Cite.Items[i], index)
+			}
+			for i := range item.Cite.TextAuthors {
+				updateFootnoteLinksInSegments(item.Cite.TextAuthors[i].Text, index)
+			}
+		}
+	case FlowTable:
+		if item.Table != nil {
+			for i := range item.Table.Rows {
+				for j := range item.Table.Rows[i].Cells {
+					updateFootnoteLinksInSegments(item.Table.Rows[i].Cells[j].Content, index)
+				}
+			}
+		}
+	case FlowSection:
+		if item.Section != nil {
+			updateFootnoteLinksInSection(item.Section, index)
+		}
+	}
+}
+
+// updateFootnoteLinksInTitle updates footnote link text in a title.
+func updateFootnoteLinksInTitle(title *Title, index FootnoteRefs) {
+	if title == nil {
+		return
+	}
+	for i := range title.Items {
+		if title.Items[i].Paragraph != nil {
+			updateFootnoteLinksInSegments(title.Items[i].Paragraph.Text, index)
+		}
+	}
+}
+
+// updateFootnoteLinksInSegments updates footnote link text in inline segments.
+func updateFootnoteLinksInSegments(segments []InlineSegment, index FootnoteRefs) {
+	for i := range segments {
+		seg := &segments[i]
+
+		if seg.Kind == InlineLink && seg.Href != "" {
+			// Check if this is a footnote link
+			if targetID, ok := strings.CutPrefix(seg.Href, "#"); ok {
+				if ref, isFootnote := index[targetID]; isFootnote && ref.DisplayText != "" {
+					// Replace link children with the formatted label
+					seg.Children = []InlineSegment{{
+						Kind: InlineText,
+						Text: ref.DisplayText,
+					}}
+				}
+			}
+		}
+
+		// Recursively process children
+		if len(seg.Children) > 0 {
+			updateFootnoteLinksInSegments(seg.Children, index)
+		}
+	}
+}
+
 // flattenSectionContent recursively flattens nested sections into a single content flow.
 // Nested section metadata (title, epigraphs, etc.) is converted to flow items,
 // and the section's content is merged into the parent flow.

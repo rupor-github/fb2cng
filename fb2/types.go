@@ -34,8 +34,11 @@ func (fb *FictionBook) IsVignetteEnabled(position config.VignettePos) bool {
 }
 
 type FootnoteRef struct {
-	BodyIdx    int
-	SectionIdx int
+	BodyIdx     int
+	SectionIdx  int
+	BodyNum     int    // 1-based body number (for renumbered mode)
+	NoteNum     int    // 1-based note number within body (for renumbered mode)
+	DisplayText string // Formatted text like "1.3" (computed during normalization)
 }
 
 type FootnoteRefs map[string]FootnoteRef
