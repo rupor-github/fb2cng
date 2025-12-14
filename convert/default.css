@@ -4,6 +4,20 @@ p {
     text-align: justify;
     margin: 0 0 0.3em 0;
 }
+@media amzn-mobi {
+    p {
+        text-indent: 1em;
+        text-align: justify;
+        margin: 0 -8pt 0.3em -8pt;
+    }
+}
+@media amzn-kf8 {
+    p {
+        text-indent: 1em;
+        text-align: justify;
+        margin: 0 -8pt 0.3em -8pt;
+    }
+}
 
 /* Code blocks - left aligned, no justification */
 code {
