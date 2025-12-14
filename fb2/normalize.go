@@ -12,6 +12,8 @@ import (
 	"fbc/config"
 )
 
+// Normalization functions to prepare parsed book for conversion
+
 var notFoundImage = []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
   <title>Not found image</title>
 
@@ -26,8 +28,6 @@ var notFoundImage = []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="200" 
         font-family="Helvetica, Arial, sans-serif" font-weight="700"
         font-size="20" fill="#E60000">IMAGE NOT FOUND</text>
 </svg>`)
-
-// Normalization functions for footnotes and links.
 
 // NormalizeFootnoteBodies walks all bodies of the book and normalizes any
 // footnotes body by replacing its Sections slice with the flattened result
@@ -47,6 +47,404 @@ func (fb *FictionBook) NormalizeFootnoteBodies(log *zap.Logger) (*FictionBook, F
 	footnotesIndex := result.buildFootnotesIndex(log)
 
 	return result, footnotesIndex
+}
+
+// NormalizeLinks validates all links and replaces broken ones with text or
+// points broken image links to notFoundImage. Processes vignettes and adds
+// them to binaries with unique IDs. Returns a new FictionBook with broken
+// links replaced, along with corrected ID and link indexes. The returned
+// indexes reflect the state after link replacements. The original remains
+// unchanged.
+func (fb *FictionBook) NormalizeLinks(vignettes map[config.VignettePos]*BinaryObject, log *zap.Logger) (*FictionBook, IDIndex, ReverseLinkIndex) {
+	result := fb.clone()
+
+	// Rebuild indexes for the cloned book since the original indexes reference the original book's pointers
+	resultIDs := result.buildIDIndex(log)
+
+	// Initialize NotFoundImageID with a unique value
+	counter := 0
+	for {
+		candidateID := fmt.Sprintf("not-found-%d", counter)
+		if _, exists := resultIDs[candidateID]; !exists {
+			result.NotFoundImageID = candidateID
+			break
+		}
+		counter++
+	}
+
+	// Process vignettes: create unique IDs for enabled decorations and add
+	// them to book binaries
+	// NOTE: we do not have to follow the same logic as for non found image
+	// since we are sure that those will be used, so we always need them
+	result.VignetteIDs = make(map[config.VignettePos]string)
+	for pos, v := range vignettes {
+		// Generate unique ID for this vignette position
+		counter := 0
+		for {
+			candidateID := fmt.Sprintf("%s-%d", pos.String(), counter)
+			if _, exists := resultIDs[candidateID]; !exists {
+				result.VignetteIDs[pos] = candidateID
+				// Add to binaries
+				result.Binaries = append(result.Binaries, BinaryObject{
+					ID:          candidateID,
+					ContentType: v.ContentType,
+					Data:        v.Data,
+				})
+				break
+			}
+			counter++
+		}
+	}
+
+	resultLinks := result.buildReverseLinkIndex(log)
+
+	for targetID, refs := range resultLinks {
+		// Check the type of link
+		linkType := refs[0].Type // All refs for same target should have same type
+
+		switch linkType {
+		case "external-link":
+			// Valid external links - leave them alone
+			continue
+
+		case "empty-href-link":
+			// Empty href - replace with text
+			for _, ref := range refs {
+				log.Warn("Link with empty href detected", zap.String("location", FormatRefPath(ref.Path)))
+				if result.replaceBrokenLink(ref, "", log) {
+					// Ensure not found image binary is present if we replaced an image link
+					result.ensureNotFoundImageBinary()
+				}
+			}
+
+		case "broken-link":
+			// Broken external link - replace with text
+			for _, ref := range refs {
+				log.Warn("Broken external link detected", zap.String("location", FormatRefPath(ref.Path)))
+				if result.replaceBrokenLink(ref, targetID, log) {
+					// Ensure not found image binary is present if we replaced an image link
+					result.ensureNotFoundImageBinary()
+				}
+			}
+
+		default:
+			// Internal link - check if target ID exists
+			if _, exists := resultIDs[targetID]; exists {
+				// Valid internal link - leave it alone
+				continue
+			}
+
+			// Broken internal link - replace with text
+			for _, ref := range refs {
+				log.Warn("Broken internal link detected", zap.String("target", targetID), zap.String("location", FormatRefPath(ref.Path)))
+				if result.replaceBrokenLink(ref, targetID, log) {
+					// Ensure not found image binary is present if we replaced an image link
+					result.ensureNotFoundImageBinary()
+				}
+			}
+		}
+	}
+
+	// Rebuild link index after replacements to remove references to replaced links
+	resultLinks = result.buildReverseLinkIndex(log)
+
+	return result, resultIDs, resultLinks
+}
+
+// NormalizeIDs assigns sequential IDs to all sections that don't have IDs.
+// It uses the provided IDIndex to avoid ID collisions with existing IDs.
+// Returns a new FictionBook with IDs assigned and an updated IDIndex that includes the generated IDs.
+// The original FictionBook remains unchanged.
+func (fb *FictionBook) NormalizeIDs(existingIDs IDIndex, log *zap.Logger) (*FictionBook, IDIndex) {
+	result := fb.clone()
+	// Create a new index with existing IDs
+	updatedIDs := make(IDIndex, len(existingIDs))
+	maps.Copy(updatedIDs, existingIDs)
+
+	sectionCounter, subtitleCounter := 0, 0
+	for i := range result.Bodies {
+		bodyPath := []any{&result.Bodies[i]}
+		result.assignBodyIDs(&result.Bodies[i], bodyPath, existingIDs, updatedIDs, &sectionCounter, &subtitleCounter, log)
+	}
+
+	return result, updatedIDs
+}
+
+// NormalizeFootnoteLabels renumbers footnotes and updates their titles and link text.
+// For floatRenumbered mode, it assigns sequential numbers to each footnote within
+// each body and updates:
+// 1. The FootnoteRefs index with BodyNum, NoteNum, and DisplayText
+// 2. Footnote section titles to use the formatted label
+// 3. Link text in main body content that references footnotes
+// Returns a new FictionBook with updated labels. The original remains unchanged.
+func (fb *FictionBook) NormalizeFootnoteLabels(footnotesIndex FootnoteRefs, template string, log *zap.Logger) (*FictionBook, FootnoteRefs) {
+	result := fb.clone()
+	updatedIndex := make(FootnoteRefs, len(footnotesIndex))
+
+	// Count total footnote bodies first
+	totalFootnoteBodies := 0
+	for i := range result.Bodies {
+		if result.Bodies[i].Footnotes() {
+			totalFootnoteBodies++
+		}
+	}
+
+	// First pass: compute numbering for all footnotes
+	bodyNumCounter := 0
+	for i := range result.Bodies {
+		if !result.Bodies[i].Footnotes() {
+			continue
+		}
+		bodyNumCounter++
+
+		for j := range result.Bodies[i].Sections {
+			section := &result.Bodies[i].Sections[j]
+			if section.ID == "" {
+				continue
+			}
+
+			noteNum := j + 1
+
+			// Use 0 for template expansion if there's only one footnote body
+			templateBodyNum := bodyNumCounter
+			if totalFootnoteBodies == 1 {
+				templateBodyNum = 0
+			}
+
+			displayText, err := fb.ExpandTemplateFootnoteLabel(config.LabelTemplateFieldName, template, templateBodyNum, noteNum, &result.Bodies[i], section)
+			if err != nil {
+				log.Warn("Failed to expand footnote label template, using default formatter",
+					zap.Int("body", templateBodyNum),
+					zap.Int("note", noteNum),
+					zap.Error(err))
+				displayText = fmt.Sprintf("%d.%d", templateBodyNum, noteNum)
+			}
+
+			// Update the index with numbering info (keep original bodyNumCounter)
+			updatedIndex[section.ID] = FootnoteRef{
+				BodyIdx:     i,
+				SectionIdx:  j,
+				BodyNum:     bodyNumCounter,
+				NoteNum:     noteNum,
+				DisplayText: displayText,
+			}
+
+			// Update footnote section title
+			section.Title = createFootnoteLabelTitle(displayText, section.Lang)
+
+			log.Debug("Renumbered footnote",
+				zap.String("id", section.ID),
+				zap.String("label", displayText))
+		}
+	}
+
+	// Second pass: update link text everywhere
+
+	// Update links in TitleInfo annotation
+	if result.Description.TitleInfo.Annotation != nil {
+		updateFootnoteLinksInFlow(result.Description.TitleInfo.Annotation, updatedIndex)
+	}
+
+	// Update links in all bodies (including footnote bodies for cross-references)
+	for i := range result.Bodies {
+		// Update links in body epigraphs
+		for j := range result.Bodies[i].Epigraphs {
+			updateFootnoteLinksInEpigraph(&result.Bodies[i].Epigraphs[j], updatedIndex)
+		}
+
+		// Update links in sections
+		for j := range result.Bodies[i].Sections {
+			updateFootnoteLinksInSection(&result.Bodies[i].Sections[j], updatedIndex)
+		}
+	}
+
+	return result, updatedIndex
+}
+
+// MarkDropcaps walks all main bodies of the book and marks first text paragraphs
+// in each section with "has-dropcap" style for drop cap rendering. Only paragraphs
+// at the section level are considered - paragraphs inside titles, epigraphs, poems,
+// cites, tables, or other nested structures are ignored.
+// If the first word contains any symbol from cfg.IgnoreSymbols or starts with a
+// Unicode space, the paragraph is left unchanged. Otherwise, "has-dropcap" is appended
+// to the paragraph's Style field, allowing renderers to apply special formatting by
+// extracting the first character during rendering.
+// Returns a new FictionBook with marked drop caps. The original remains unchanged.
+func (fb *FictionBook) MarkDropcaps(cfg *config.DropcapsConfig) *FictionBook {
+	if cfg == nil || !cfg.Enable {
+		return fb
+	}
+
+	result := fb.clone()
+	for i := range result.Bodies {
+		if result.Bodies[i].Main() {
+			for j := range result.Bodies[i].Sections {
+				markSectionDropcaps(&result.Bodies[i].Sections[j], string(cfg.IgnoreSymbols))
+			}
+		}
+	}
+	return result
+}
+
+// assignBodyIDs recursively assigns IDs to sections in a body
+func (fb *FictionBook) assignBodyIDs(body *Body, path []any, existingIDs, updatedIDs IDIndex, sectionCounter, subtitleCounter *int, log *zap.Logger) {
+	for i := range body.Sections {
+		sectionPath := append(append([]any{}, path...), &body.Sections[i])
+		fb.assignSectionIDs(&body.Sections[i], sectionPath, existingIDs, updatedIDs, sectionCounter, subtitleCounter, log)
+	}
+}
+
+// FilterReferencedImages returns only images that are actually referenced in the book
+func (fb *FictionBook) FilterReferencedImages(allImages BookImages, links ReverseLinkIndex, coverID string, log *zap.Logger) BookImages {
+	referenced := make(map[string]bool)
+
+	// Always include the not found image if it exists (it may be needed for broken links)
+	if fb.NotFoundImageID != "" {
+		if _, exists := allImages[fb.NotFoundImageID]; exists {
+			referenced[fb.NotFoundImageID] = true
+		}
+	}
+
+	// Always include vignette images
+	for _, vignetteID := range fb.VignetteIDs {
+		if _, exists := allImages[vignetteID]; exists {
+			referenced[vignetteID] = true
+		}
+	}
+
+	// Add cover image if present
+	if coverID != "" {
+		referenced[coverID] = true
+	}
+
+	// Add all images referenced in links
+	for targetID, refs := range links {
+		if len(refs) == 0 {
+			continue
+		}
+
+		// Check if any reference is an image type
+		for _, ref := range refs {
+			switch ref.Type {
+			case "coverpage", "block-image", "inline-image":
+				referenced[targetID] = true
+			}
+		}
+	}
+
+	// Build filtered index
+	filtered := make(BookImages)
+	for id := range referenced {
+		if img, exists := allImages[id]; exists {
+			filtered[id] = img
+			continue
+		}
+		log.Debug("Referenced image not found in prepared images", zap.String("id", id))
+	}
+
+	log.Debug("Filtered images index", zap.Int("total", len(allImages)), zap.Int("referenced", len(filtered)))
+	for id, img := range allImages {
+		if _, exists := filtered[id]; !exists {
+			log.Debug("Excluding unreferenced image", zap.String("id", id), zap.String("type", img.MimeType))
+		}
+	}
+
+	return filtered
+}
+
+// assignSectionIDs recursively assigns IDs to a section and its child sections
+func (fb *FictionBook) assignSectionIDs(section *Section, path []any, existingIDs, updatedIDs IDIndex, sectionCounter, subtitleCounter *int, log *zap.Logger) {
+	// Assign ID to section if it doesn't have one
+	if section.ID == "" {
+		// Find a unique ID that doesn't collide
+		for {
+			*sectionCounter++
+			candidateID := fmt.Sprintf("sect_%d", *sectionCounter)
+			if _, exists := existingIDs[candidateID]; !exists {
+				section.ID = candidateID
+				// Add to updated index with special type
+				updatedIDs[candidateID] = ElementRef{
+					Type: "section-generated",
+					Path: path,
+				}
+				log.Debug("Generated section id", zap.String("ID", candidateID))
+				break
+			}
+		}
+	}
+
+	// Process content items
+	for i := range section.Content {
+		if section.Content[i].Kind == FlowSection && section.Content[i].Section != nil {
+			// Recurse into nested sections
+			childPath := append(append([]any{}, path...), &section.Content[i], section.Content[i].Section)
+			fb.assignSectionIDs(section.Content[i].Section, childPath, existingIDs, updatedIDs, sectionCounter, subtitleCounter, log)
+		}
+	}
+}
+
+// ensureNotFoundImageBinary adds the not found image binary if it doesn't already exist
+func (fb *FictionBook) ensureNotFoundImageBinary() {
+	// Check if not found image binary already exists
+	for i := range fb.Binaries {
+		if fb.Binaries[i].ID == fb.NotFoundImageID {
+			return
+		}
+	}
+
+	// Add not found image binary
+	fb.Binaries = append(fb.Binaries, BinaryObject{
+		ID:          fb.NotFoundImageID,
+		ContentType: "image/svg+xml",
+		Data:        notFoundImage,
+	})
+}
+
+// replaceBrokenLink replaces a broken link with text or points broken image links to notFoundImage
+func (fb *FictionBook) replaceBrokenLink(ref ElementRef, targetID string, log *zap.Logger) (addedNotFoundImage bool) {
+	// Navigate to the element containing the link and replace it
+	switch ref.Type {
+	case "inline-link", "empty-href-link", "broken-link":
+		if len(ref.Path) > 0 {
+			if segment, ok := ref.Path[len(ref.Path)-1].(*InlineSegment); ok {
+				replacementText := createBrokenLinkText(targetID, segment, ref.Type)
+				*segment = InlineSegment{
+					Kind: InlineText,
+					Text: replacementText,
+				}
+			}
+		}
+	case "coverpage":
+		// Point coverpage to not found image
+		if len(ref.Path) > 0 {
+			if img, ok := ref.Path[len(ref.Path)-1].(*InlineImage); ok {
+				img.Href = "#" + fb.NotFoundImageID
+				log.Debug("Broken coverpage image link redirected to not found image", zap.String("original", targetID))
+				addedNotFoundImage = true
+			}
+		}
+	case "block-image":
+		// Point block image to not found image
+		if len(ref.Path) > 0 {
+			if img, ok := ref.Path[len(ref.Path)-1].(*Image); ok {
+				img.Href = "#" + fb.NotFoundImageID
+				log.Debug("Broken block image link redirected to not found image", zap.String("original", targetID))
+				addedNotFoundImage = true
+			}
+		}
+	case "inline-image":
+		// Point inline image to not found image
+		if len(ref.Path) > 0 {
+			if segment, ok := ref.Path[len(ref.Path)-1].(*InlineSegment); ok {
+				if segment.Image != nil {
+					segment.Image.Href = "#" + fb.NotFoundImageID
+					log.Debug("Broken inline image link redirected to not found image", zap.String("original", targetID))
+					addedNotFoundImage = true
+				}
+			}
+		}
+	}
+	return
 }
 
 // normalizeFootnotes processes a footnotes body to ensure proper structure.
@@ -166,97 +564,6 @@ func footnoteTitle(orig *Title, id, lang string) *Title {
 	}
 	para := &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "~ " + id + " ~"}}}
 	return &Title{Lang: lang, Items: []TitleItem{{Paragraph: para}}}
-}
-
-// NormalizeFootnoteLabels renumbers footnotes and updates their titles and link text.
-// For floatRenumbered mode, it assigns sequential numbers to each footnote within
-// each body and updates:
-// 1. The FootnoteRefs index with BodyNum, NoteNum, and DisplayText
-// 2. Footnote section titles to use the formatted label
-// 3. Link text in main body content that references footnotes
-// Returns a new FictionBook with updated labels. The original remains unchanged.
-func (fb *FictionBook) NormalizeFootnoteLabels(footnotesIndex FootnoteRefs, template string, log *zap.Logger) (*FictionBook, FootnoteRefs) {
-	result := fb.clone()
-	updatedIndex := make(FootnoteRefs, len(footnotesIndex))
-
-	// Count total footnote bodies first
-	totalFootnoteBodies := 0
-	for i := range result.Bodies {
-		if result.Bodies[i].Footnotes() {
-			totalFootnoteBodies++
-		}
-	}
-
-	// First pass: compute numbering for all footnotes
-	bodyNumCounter := 0
-	for i := range result.Bodies {
-		if !result.Bodies[i].Footnotes() {
-			continue
-		}
-		bodyNumCounter++
-
-		for j := range result.Bodies[i].Sections {
-			section := &result.Bodies[i].Sections[j]
-			if section.ID == "" {
-				continue
-			}
-
-			noteNum := j + 1
-
-			// Use 0 for template expansion if there's only one footnote body
-			templateBodyNum := bodyNumCounter
-			if totalFootnoteBodies == 1 {
-				templateBodyNum = 0
-			}
-
-			displayText, err := fb.ExpandTemplateFootnoteLabel(config.LabelTemplateFieldName, template, templateBodyNum, noteNum)
-			if err != nil {
-				log.Warn("Failed to expand footnote label template, using default formatter",
-					zap.Int("body", templateBodyNum),
-					zap.Int("note", noteNum),
-					zap.Error(err))
-				displayText = fmt.Sprintf("%d.%d", templateBodyNum, noteNum)
-			}
-
-			// Update the index with numbering info (keep original bodyNumCounter)
-			updatedIndex[section.ID] = FootnoteRef{
-				BodyIdx:     i,
-				SectionIdx:  j,
-				BodyNum:     bodyNumCounter,
-				NoteNum:     noteNum,
-				DisplayText: displayText,
-			}
-
-			// Update footnote section title
-			section.Title = createFootnoteLabelTitle(displayText, section.Lang)
-
-			log.Debug("Renumbered footnote",
-				zap.String("id", section.ID),
-				zap.String("label", displayText))
-		}
-	}
-
-	// Second pass: update link text everywhere
-
-	// Update links in TitleInfo annotation
-	if result.Description.TitleInfo.Annotation != nil {
-		updateFootnoteLinksInFlow(result.Description.TitleInfo.Annotation, updatedIndex)
-	}
-
-	// Update links in all bodies (including footnote bodies for cross-references)
-	for i := range result.Bodies {
-		// Update links in body epigraphs
-		for j := range result.Bodies[i].Epigraphs {
-			updateFootnoteLinksInEpigraph(&result.Bodies[i].Epigraphs[j], updatedIndex)
-		}
-
-		// Update links in sections
-		for j := range result.Bodies[i].Sections {
-			updateFootnoteLinksInSection(&result.Bodies[i].Sections[j], updatedIndex)
-		}
-	}
-
-	return result, updatedIndex
 }
 
 // createFootnoteLabelTitle creates a title with the formatted label text.
@@ -461,213 +768,6 @@ func flattenSectionContent(items []FlowItem) []FlowItem {
 	return flattened
 }
 
-// NormalizeLinks validates all links and replaces broken ones with text or
-// points broken image links to notFoundImage. Processes vignettes and adds
-// them to binaries with unique IDs. Returns a new FictionBook with broken
-// links replaced, along with corrected ID and link indexes. The returned
-// indexes reflect the state after link replacements. The original remains
-// unchanged.
-func (fb *FictionBook) NormalizeLinks(vignettes map[config.VignettePos]*BinaryObject, log *zap.Logger) (*FictionBook, IDIndex, ReverseLinkIndex) {
-	result := fb.clone()
-
-	// Rebuild indexes for the cloned book since the original indexes reference the original book's pointers
-	resultIDs := result.buildIDIndex(log)
-
-	// Initialize NotFoundImageID with a unique value
-	counter := 0
-	for {
-		candidateID := fmt.Sprintf("not-found-%d", counter)
-		if _, exists := resultIDs[candidateID]; !exists {
-			result.NotFoundImageID = candidateID
-			break
-		}
-		counter++
-	}
-
-	// Process vignettes: create unique IDs for enabled decorations and add
-	// them to book binaries
-	// NOTE: we do not have to follow the same logic as for non found image
-	// since we are sure that those will be used, so we always need them
-	result.VignetteIDs = make(map[config.VignettePos]string)
-	for pos, v := range vignettes {
-		// Generate unique ID for this vignette position
-		counter := 0
-		for {
-			candidateID := fmt.Sprintf("%s-%d", pos.String(), counter)
-			if _, exists := resultIDs[candidateID]; !exists {
-				result.VignetteIDs[pos] = candidateID
-				// Add to binaries
-				result.Binaries = append(result.Binaries, BinaryObject{
-					ID:          candidateID,
-					ContentType: v.ContentType,
-					Data:        v.Data,
-				})
-				break
-			}
-			counter++
-		}
-	}
-
-	resultLinks := result.buildReverseLinkIndex(log)
-
-	for targetID, refs := range resultLinks {
-		// Check the type of link
-		linkType := refs[0].Type // All refs for same target should have same type
-
-		switch linkType {
-		case "external-link":
-			// Valid external links - leave them alone
-			continue
-
-		case "empty-href-link":
-			// Empty href - replace with text
-			for _, ref := range refs {
-				log.Warn("Link with empty href detected", zap.String("location", FormatRefPath(ref.Path)))
-				if result.replaceBrokenLink(ref, "", log) {
-					// Ensure not found image binary is present if we replaced an image link
-					result.ensureNotFoundImageBinary()
-				}
-			}
-
-		case "broken-link":
-			// Broken external link - replace with text
-			for _, ref := range refs {
-				log.Warn("Broken external link detected", zap.String("location", FormatRefPath(ref.Path)))
-				if result.replaceBrokenLink(ref, targetID, log) {
-					// Ensure not found image binary is present if we replaced an image link
-					result.ensureNotFoundImageBinary()
-				}
-			}
-
-		default:
-			// Internal link - check if target ID exists
-			if _, exists := resultIDs[targetID]; exists {
-				// Valid internal link - leave it alone
-				continue
-			}
-
-			// Broken internal link - replace with text
-			for _, ref := range refs {
-				log.Warn("Broken internal link detected", zap.String("target", targetID), zap.String("location", FormatRefPath(ref.Path)))
-				if result.replaceBrokenLink(ref, targetID, log) {
-					// Ensure not found image binary is present if we replaced an image link
-					result.ensureNotFoundImageBinary()
-				}
-			}
-		}
-	}
-
-	// Rebuild link index after replacements to remove references to replaced links
-	resultLinks = result.buildReverseLinkIndex(log)
-
-	return result, resultIDs, resultLinks
-}
-
-// NormalizeIDs assigns sequential IDs to all sections that don't have IDs.
-// It uses the provided IDIndex to avoid ID collisions with existing IDs.
-// Returns a new FictionBook with IDs assigned and an updated IDIndex that includes the generated IDs.
-// The original FictionBook remains unchanged.
-func (fb *FictionBook) NormalizeIDs(existingIDs IDIndex, log *zap.Logger) (*FictionBook, IDIndex) {
-	result := fb.clone()
-	// Create a new index with existing IDs
-	updatedIDs := make(IDIndex, len(existingIDs))
-	maps.Copy(updatedIDs, existingIDs)
-
-	sectionCounter, subtitleCounter := 0, 0
-	for i := range result.Bodies {
-		bodyPath := []any{&result.Bodies[i]}
-		result.assignBodyIDs(&result.Bodies[i], bodyPath, existingIDs, updatedIDs, &sectionCounter, &subtitleCounter, log)
-	}
-
-	return result, updatedIDs
-}
-
-// assignBodyIDs recursively assigns IDs to sections in a body
-func (fb *FictionBook) assignBodyIDs(body *Body, path []any, existingIDs, updatedIDs IDIndex, sectionCounter, subtitleCounter *int, log *zap.Logger) {
-	for i := range body.Sections {
-		sectionPath := append(append([]any{}, path...), &body.Sections[i])
-		fb.assignSectionIDs(&body.Sections[i], sectionPath, existingIDs, updatedIDs, sectionCounter, subtitleCounter, log)
-	}
-}
-
-// assignSectionIDs recursively assigns IDs to a section and its child sections
-func (fb *FictionBook) assignSectionIDs(section *Section, path []any, existingIDs, updatedIDs IDIndex, sectionCounter, subtitleCounter *int, log *zap.Logger) {
-	// Assign ID to section if it doesn't have one
-	if section.ID == "" {
-		// Find a unique ID that doesn't collide
-		for {
-			*sectionCounter++
-			candidateID := fmt.Sprintf("sect_%d", *sectionCounter)
-			if _, exists := existingIDs[candidateID]; !exists {
-				section.ID = candidateID
-				// Add to updated index with special type
-				updatedIDs[candidateID] = ElementRef{
-					Type: "section-generated",
-					Path: path,
-				}
-				log.Debug("Generated section id", zap.String("ID", candidateID))
-				break
-			}
-		}
-	}
-
-	// Process content items
-	for i := range section.Content {
-		if section.Content[i].Kind == FlowSection && section.Content[i].Section != nil {
-			// Recurse into nested sections
-			childPath := append(append([]any{}, path...), &section.Content[i], section.Content[i].Section)
-			fb.assignSectionIDs(section.Content[i].Section, childPath, existingIDs, updatedIDs, sectionCounter, subtitleCounter, log)
-		}
-	}
-}
-
-// replaceBrokenLink replaces a broken link with text or points broken image links to notFoundImage
-func (fb *FictionBook) replaceBrokenLink(ref ElementRef, targetID string, log *zap.Logger) (addedNotFoundImage bool) {
-	// Navigate to the element containing the link and replace it
-	switch ref.Type {
-	case "inline-link", "empty-href-link", "broken-link":
-		if len(ref.Path) > 0 {
-			if segment, ok := ref.Path[len(ref.Path)-1].(*InlineSegment); ok {
-				replacementText := createBrokenLinkText(targetID, segment, ref.Type)
-				*segment = InlineSegment{
-					Kind: InlineText,
-					Text: replacementText,
-				}
-			}
-		}
-	case "coverpage":
-		// Point coverpage to not found image
-		if len(ref.Path) > 0 {
-			if img, ok := ref.Path[len(ref.Path)-1].(*InlineImage); ok {
-				img.Href = "#" + fb.NotFoundImageID
-				log.Debug("Broken coverpage image link redirected to not found image", zap.String("original", targetID))
-				addedNotFoundImage = true
-			}
-		}
-	case "block-image":
-		// Point block image to not found image
-		if len(ref.Path) > 0 {
-			if img, ok := ref.Path[len(ref.Path)-1].(*Image); ok {
-				img.Href = "#" + fb.NotFoundImageID
-				log.Debug("Broken block image link redirected to not found image", zap.String("original", targetID))
-				addedNotFoundImage = true
-			}
-		}
-	case "inline-image":
-		// Point inline image to not found image
-		if len(ref.Path) > 0 {
-			if segment, ok := ref.Path[len(ref.Path)-1].(*InlineSegment); ok {
-				if segment.Image != nil {
-					segment.Image.Href = "#" + fb.NotFoundImageID
-					log.Debug("Broken inline image link redirected to not found image", zap.String("original", targetID))
-					addedNotFoundImage = true
-				}
-			}
-		}
-	}
-	return
-}
-
 // createBrokenLinkText generates replacement text for a broken link
 func createBrokenLinkText(targetID string, segment *InlineSegment, refType string) string {
 	// Extract the visible text from the link's children
@@ -706,106 +806,6 @@ func extractLinkText(segment *InlineSegment) string {
 		text += extractLinkText(&segment.Children[i])
 	}
 	return text
-}
-
-// ensureNotFoundImageBinary adds the not found image binary if it doesn't already exist
-func (fb *FictionBook) ensureNotFoundImageBinary() {
-	// Check if not found image binary already exists
-	for i := range fb.Binaries {
-		if fb.Binaries[i].ID == fb.NotFoundImageID {
-			return
-		}
-	}
-
-	// Add not found image binary
-	fb.Binaries = append(fb.Binaries, BinaryObject{
-		ID:          fb.NotFoundImageID,
-		ContentType: "image/svg+xml",
-		Data:        notFoundImage,
-	})
-}
-
-// FilterReferencedImages returns only images that are actually referenced in the book
-func (fb *FictionBook) FilterReferencedImages(allImages BookImages, links ReverseLinkIndex, coverID string, log *zap.Logger) BookImages {
-	referenced := make(map[string]bool)
-
-	// Always include the not found image if it exists (it may be needed for broken links)
-	if fb.NotFoundImageID != "" {
-		if _, exists := allImages[fb.NotFoundImageID]; exists {
-			referenced[fb.NotFoundImageID] = true
-		}
-	}
-
-	// Always include vignette images
-	for _, vignetteID := range fb.VignetteIDs {
-		if _, exists := allImages[vignetteID]; exists {
-			referenced[vignetteID] = true
-		}
-	}
-
-	// Add cover image if present
-	if coverID != "" {
-		referenced[coverID] = true
-	}
-
-	// Add all images referenced in links
-	for targetID, refs := range links {
-		if len(refs) == 0 {
-			continue
-		}
-
-		// Check if any reference is an image type
-		for _, ref := range refs {
-			switch ref.Type {
-			case "coverpage", "block-image", "inline-image":
-				referenced[targetID] = true
-			}
-		}
-	}
-
-	// Build filtered index
-	filtered := make(BookImages)
-	for id := range referenced {
-		if img, exists := allImages[id]; exists {
-			filtered[id] = img
-			continue
-		}
-		log.Debug("Referenced image not found in prepared images", zap.String("id", id))
-	}
-
-	log.Debug("Filtered images index", zap.Int("total", len(allImages)), zap.Int("referenced", len(filtered)))
-	for id, img := range allImages {
-		if _, exists := filtered[id]; !exists {
-			log.Debug("Excluding unreferenced image", zap.String("id", id), zap.String("type", img.MimeType))
-		}
-	}
-
-	return filtered
-}
-
-// MarkDropcaps walks all main bodies of the book and marks first text paragraphs
-// in each section with "has-dropcap" style for drop cap rendering. Only paragraphs
-// at the section level are considered - paragraphs inside titles, epigraphs, poems,
-// cites, tables, or other nested structures are ignored.
-// If the first word contains any symbol from cfg.IgnoreSymbols or starts with a
-// Unicode space, the paragraph is left unchanged. Otherwise, "has-dropcap" is appended
-// to the paragraph's Style field, allowing renderers to apply special formatting by
-// extracting the first character during rendering.
-// Returns a new FictionBook with marked drop caps. The original remains unchanged.
-func (fb *FictionBook) MarkDropcaps(cfg *config.DropcapsConfig) *FictionBook {
-	if cfg == nil || !cfg.Enable {
-		return fb
-	}
-
-	result := fb.clone()
-	for i := range result.Bodies {
-		if result.Bodies[i].Main() {
-			for j := range result.Bodies[i].Sections {
-				markSectionDropcaps(&result.Bodies[i].Sections[j], string(cfg.IgnoreSymbols))
-			}
-		}
-	}
-	return result
 }
 
 // markSectionDropcaps marks drop caps for the first paragraph in a section and its nested sections

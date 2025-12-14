@@ -53,7 +53,7 @@ func makeDefaultFileName(src string, format config.OutputFmt, env *state.LocalEn
 }
 
 func expandOutputNameTemplate(c *content.Content, env *state.LocalEnv) string {
-	expandedName, err := c.Book.ExpandTemplateSimple(config.OutputNameTemplateFieldName, env.Cfg.Document.OutputNameTemplate, c.SrcName, c.OutputFormat)
+	expandedName, err := c.Book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, env.Cfg.Document.OutputNameTemplate, c.SrcName, c.OutputFormat)
 	if err != nil {
 		env.Log.Warn("Unable to prepare output filename", zap.Error(err))
 		return ""

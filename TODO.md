@@ -1,4 +1,4 @@
-* notes renumeration
+* text transformations?
 
 * kfx
 

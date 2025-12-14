@@ -12,75 +12,8 @@ import (
 	"fbc/config"
 )
 
-type sequenceDefinition struct {
-	Name   string
-	Number int
-}
-
-type authorDefinition struct {
-	FirstName, MiddleName, LastName string
-}
-
-// templateValues is a struct that holds variables we make available for template expansion
-type templateValues struct {
-	Context    string
-	Index      int
-	Title      string
-	Series     []sequenceDefinition
-	Language   string
-	Date       string
-	Authors    []authorDefinition
-	Format     string
-	SourceFile string
-	BookID     string
-	Genres     []string
-}
-
-// footnoteValues is a struct that holds variables for footnote label templates
-type footnoteValues struct {
-	Context    string
-	BodyNumber int
-	NoteNumber int
-}
-
-// ExpandTemplateSimple expands a template string with book metadata without an index
-func (fb *FictionBook) ExpandTemplateSimple(name config.TemplateFieldName, field string, srcName string, format config.OutputFmt) (string, error) {
-	values := &templateValues{
-		Context:    string(name),
-		Index:      -1,
-		Title:      fb.Description.TitleInfo.BookTitle.Value,
-		Series:     fb.buildSequences(),
-		Language:   fb.Description.TitleInfo.Lang.String(),
-		Date:       fb.buildDate(),
-		Authors:    fb.buildAuthors(),
-		Format:     format.String(),
-		SourceFile: strings.TrimSuffix(filepath.Base(srcName), filepath.Ext(srcName)),
-		BookID:     fb.Description.DocumentInfo.ID,
-		Genres:     fb.buildGenres(),
-	}
-	return expandTemplate(name, field, values)
-}
-
-// ExpandTemplateIndexed expands a template string with book metadata and an index
-func (fb *FictionBook) ExpandTemplateIndexed(name config.TemplateFieldName, field string, index int, srcName string, format config.OutputFmt) (string, error) {
-	values := &templateValues{
-		Context:    string(name),
-		Index:      index,
-		Title:      fb.Description.TitleInfo.BookTitle.Value,
-		Series:     fb.buildSequences(),
-		Language:   fb.Description.TitleInfo.Lang.String(),
-		Date:       fb.buildDate(),
-		Authors:    fb.buildAuthors(),
-		Format:     format.String(),
-		SourceFile: strings.TrimSuffix(filepath.Base(srcName), filepath.Ext(srcName)),
-		BookID:     fb.Description.DocumentInfo.ID,
-		Genres:     fb.buildGenres(),
-	}
-	return expandTemplate(name, field, values)
-}
-
-// ExpandTemplateFootnoteLabel expands a template string for footnote labels with body and note numbers
-func (fb *FictionBook) ExpandTemplateFootnoteLabel(name config.TemplateFieldName, field string, bodyNum, noteNum int) (string, error) {
+// ExpandTemplateAuthorName expands a template string for author/creator name
+func (fb *FictionBook) ExpandTemplateAuthorName(name config.TemplateFieldName, field string, index int, author *Author) (string, error) {
 	funcMap := sprig.FuncMap()
 
 	tmpl, err := template.New(string(name)).Funcs(funcMap).Parse(field)
@@ -88,10 +21,18 @@ func (fb *FictionBook) ExpandTemplateFootnoteLabel(name config.TemplateFieldName
 		return "", fmt.Errorf("unable to parse template field %s: %w", name, err)
 	}
 
-	values := &footnoteValues{
+	values := &struct {
+		Context    string
+		Index      int
+		FirstName  string
+		MiddleName string
+		LastName   string
+	}{
 		Context:    string(name),
-		BodyNumber: bodyNum,
-		NoteNumber: noteNum,
+		Index:      index,
+		FirstName:  author.FirstName,
+		MiddleName: author.MiddleName,
+		LastName:   author.LastName,
 	}
 
 	buf := new(bytes.Buffer)
@@ -101,13 +42,86 @@ func (fb *FictionBook) ExpandTemplateFootnoteLabel(name config.TemplateFieldName
 	return buf.String(), nil
 }
 
-// expandTemplate is the private implementation that expands a template string with initialized values
-func expandTemplate(name config.TemplateFieldName, field string, values *templateValues) (string, error) {
+// ExpandTemplateFootnoteLabel expands a template string for footnote labels with body and note numbers
+func (fb *FictionBook) ExpandTemplateFootnoteLabel(name config.TemplateFieldName, field string, bodyNum, noteNum int, body *Body, section *Section) (string, error) {
 	funcMap := sprig.FuncMap()
 
 	tmpl, err := template.New(string(name)).Funcs(funcMap).Parse(field)
 	if err != nil {
 		return "", fmt.Errorf("unable to parse template field %s: %w", name, err)
+	}
+
+	bodyTitle := ""
+	if body != nil {
+		bodyTitle = body.AsTitleText(body.Name)
+	}
+
+	noteTitle := ""
+	if section != nil && section.Title != nil {
+		noteTitle = section.Title.AsTOCText("")
+	}
+
+	values := &struct {
+		Context    string
+		BodyNumber int
+		NoteNumber int
+		BodyTitle  string
+		NoteTitle  string
+	}{
+		Context:    string(name),
+		BodyNumber: bodyNum,
+		NoteNumber: noteNum,
+		BodyTitle:  bodyTitle,
+		NoteTitle:  noteTitle,
+	}
+
+	buf := new(bytes.Buffer)
+	if err := tmpl.Execute(buf, values); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+type sequenceDefinition struct {
+	Name   string
+	Number int
+}
+
+type authorDefinition struct {
+	FirstName, MiddleName, LastName string
+}
+
+// ExpandTemplateMetainfo expands a template string with book metadata
+func (fb *FictionBook) ExpandTemplateMetainfo(name config.TemplateFieldName, field string, srcName string, format config.OutputFmt) (string, error) {
+	funcMap := sprig.FuncMap()
+
+	tmpl, err := template.New(string(name)).Funcs(funcMap).Parse(field)
+	if err != nil {
+		return "", fmt.Errorf("unable to parse template field %s: %w", name, err)
+	}
+
+	values := &struct {
+		Context    string
+		Title      string
+		Series     []sequenceDefinition
+		Language   string
+		Date       string
+		Authors    []authorDefinition
+		Format     string
+		SourceFile string
+		BookID     string
+		Genres     []string
+	}{
+		Context:    string(name),
+		Title:      fb.Description.TitleInfo.BookTitle.Value,
+		Series:     fb.buildSequences(),
+		Language:   fb.Description.TitleInfo.Lang.String(),
+		Date:       fb.buildDate(),
+		Authors:    fb.buildAuthors(),
+		Format:     format.String(),
+		SourceFile: strings.TrimSuffix(filepath.Base(srcName), filepath.Ext(srcName)),
+		BookID:     fb.Description.DocumentInfo.ID,
+		Genres:     fb.buildGenres(),
 	}
 
 	buf := new(bytes.Buffer)

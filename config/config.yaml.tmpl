@@ -1,39 +1,12 @@
 # Content should be UTF-8!
 version: 1
 
-# Some fields must be specified using go template language:
-# https://pkg.go.dev/text/template#pkg-overview with additional functions from
-# slim-sprig package available for processing:
-# https://go-task.github.io/slim-sprig
-# List of variables usualy available (if it is different - it will be specified
-# in comments for a particular field):
-# - .Context (string) - name of the template field, uniquely defines processing
-# context
-# selects slice element relevant in a particular context, otherwise -1
-# - .Title (string) - book title as specified in fb2 metainformation
-# - .Series (array of { .Name (string), .Number (integer) }) - series as
-# specified in fb2 metainformation.
-#     NOTE: according to fictionbook schema series could be hierarhical (series
-#     contain series and so on). Hierarhy is competely ignored - anything below
-#     first level is dropped.
-#     NOTE: Similarily I am not aware of any usage of multiple series, for
-#     example Calibre only supports one. So on some occasions internally
-#     converter only uses first series available.
-# - .Language (string) - cannonical string representation of a language as
-# specified in fb2 metainformation
-# - .Date (string) - date as specified in fb2 metainformation.
-#     NOTE: If valid xs:date "value" attribute is provided - it will be used,
-#     otherwide just text as defined
-# - .Authors (array of { .FirstName (string), .MiddleName (string), .LastName
-# (string)}) as specified in fb2 metainformation
-# - .Format (string) - string representing requested conversion (ex: epub2,
-# epub3, kepub...)
-# - .SourceFile (string) - base part of the source file name (no path, no
-# extension)
-# - .BookID (string) - book UUID as specified by fb2 metainformation or
-# assigned by converter
-# - .Genres (array of strings) - genres names as specified by fb2
-# metainformation
+# NOTE: Some fields (have _template in the name) must be specified using go
+# template language: https://pkg.go.dev/text/template#pkg-overview with
+# additional functions from slim-sprig package available for processing:
+# https://go-task.github.io/slim-sprig. In all cases variable .Context (string)
+# is available and is set to field name to uniquely identitfy processing
+# context.
 
 document:
   # Some programs (CoolReader and some versions of FBReader) expect "old" zip
@@ -47,8 +20,33 @@ document:
   # CSS stylesheet to use. If absent - default one will be supplied
   # stylesheet_path = "default.css"
 
-  # When output_name_template is set output file will have name created using
-  # FB2 metainformation
+  # When output_name_template is set output file name will be created using FB2
+  # metainformation
+  # List of variables available:
+  # - .Title (string) - book title as specified in fb2 metainformation
+  # - .Series (array of { .Name (string), .Number (integer) }) - series as
+  # specified in fb2 metainformation.
+  #     NOTE: according to fictionbook schema series could be hierarhical (series
+  #     contain series and so on). Hierarhy is competely ignored - anything below
+  #     first level is dropped.
+  #     NOTE: Similarily I am not aware of any usage of multiple series, for
+  #     example Calibre only supports one. So on some occasions internally
+  #     converter only uses first series available.
+  # - .Language (string) - cannonical string representation of a language as
+  # specified in fb2 metainformation
+  # - .Date (string) - date as specified in fb2 metainformation.
+  #     NOTE: If valid xs:date "value" attribute is provided - it will be used,
+  #     otherwide just text as defined
+  # - .Authors (array of { .FirstName (string), .MiddleName (string), .LastName
+  # (string)}) as specified in fb2 metainformation
+  # - .Format (string) - string representing requested conversion (ex: epub2,
+  # epub3, kepub...)
+  # - .SourceFile (string) - base part of the source file name (no path, no
+  # extension)
+  # - .BookID (string) - book UUID as specified by fb2 metainformation or
+  # assigned by converter
+  # - .Genres (array of strings) - genres names as specified by fb2
+  # metainformation
   # NOTE: watch out for path separators, directories will be created!
   output_name_template: |
     {{- $all := "" -}}
@@ -83,7 +81,32 @@ document:
   metainformation:
     # When title_template is set output book title metainformation will be
     # formatted using it. This is often used to conviniently sort device
-    # library listings
+    # library listings.
+    # List of variables available:
+    # - .Title (string) - book title as specified in fb2 metainformation
+    # - .Series (array of { .Name (string), .Number (integer) }) - series as
+    # specified in fb2 metainformation.
+    #     NOTE: according to fictionbook schema series could be hierarhical (series
+    #     contain series and so on). Hierarhy is competely ignored - anything below
+    #     first level is dropped.
+    #     NOTE: Similarily I am not aware of any usage of multiple series, for
+    #     example Calibre only supports one. So on some occasions internally
+    #     converter only uses first series available.
+    # - .Language (string) - cannonical string representation of a language as
+    # specified in fb2 metainformation
+    # - .Date (string) - date as specified in fb2 metainformation.
+    #     NOTE: If valid xs:date "value" attribute is provided - it will be used,
+    #     otherwide just text as defined
+    # - .Authors (array of { .FirstName (string), .MiddleName (string), .LastName
+    # (string)}) as specified in fb2 metainformation
+    # - .Format (string) - string representing requested conversion (ex: epub2,
+    # epub3, kepub...)
+    # - .SourceFile (string) - base part of the source file name (no path, no
+    # extension)
+    # - .BookID (string) - book UUID as specified by fb2 metainformation or
+    # assigned by converter
+    # - .Genres (array of strings) - genres names as specified by fb2
+    # metainformation
     title_template: |
       {{- if gt (len .Series) 0 -}}
       {{-   with first .Series -}}
@@ -104,14 +127,16 @@ document:
 
     # When creator_name_template is set author(s) name in output book
     # metainformation will be formatted using it. Template is applied to each
-    # available author individually using additional .Index field. Device often
-    # use particular format for sorting books by author names
+    # available author individually. Device often uses particular format for
+    # sorting books by author names. Folowing fields are available:
+    # - .Index (int) - 0 based index (if there is more than 1 author)
+    # - .FirstName (string),
+    # - .MiddleName (string),
+    # - .LastName (string)
     creator_name_template: |
-      {{- with index .Authors .Index }}
-      {{-  .LastName -}}
-      {{-  if .FirstName }} {{.FirstName}}{{ end -}}
-      {{-  if .MiddleName }} {{.MiddleName }}{{ end -}}
-      {{ end -}}
+      {{- .LastName -}}
+      {{- if .FirstName }} {{.FirstName}}{{ end -}}
+      {{- if .MiddleName }} {{.MiddleName }}{{ end -}}
 
     # Slugify/transliterate book title and author(s) names - after all other
     # processing is completed
@@ -120,8 +145,10 @@ document:
   page_map:
     # Generate page map if possible
     enable: true
+
     # approximate page size in Unicode code points, min size = 500
     size: 2300
+
     # Adobe RMSDK/ADE does not have support for NCX pageList. It uses its own
     # proprietary way - if you want it set adobe_de to true. It will cause
     # EpubCheck to complain with ERROR(RSC-005): OEBPS/content.opf: Error while
@@ -134,15 +161,19 @@ document:
     # Do not skip images which cannot be decoded by program. Use them without
     # any processing, allowing reader to decide what to do
     use_broken: false
+
     # Kindle eInc devices do not handle transparent PNG images well
     remove_png_transparency: false
+
     # Resize all images (but cover) with specified ratio
     scale_factor: 1.0
+
     # Recompress all supported images (presently JPEG, PNG). For JPEG quality
     # respects "jpeg_quality_level": if detected level for an image is higher
     # than requested image will be re-encoded. For PNG best compression_level
     # is always specified.
     optimize: false
+
     # JPEG quality level to use, percentage points (40% - 100%)
     jpeq_quality_level: 75
 
@@ -150,6 +181,7 @@ document:
       # When book does not have cover image supply one. For Amazon formats
       # always true
       generate: false
+
       # What image to use as default cover when default one is needed. If
       # required but not specified program will use internal resource
       # default_image_path = "default_cover.jpeg"
@@ -160,6 +192,7 @@ document:
       # specified height keeping aspect ratio
       # "stretch" - unconditionally resize to specified width and height
       resize: stretch
+
       # Reader screen size so cover image could be adjusted properly
       width: 1264
       height: 1680
@@ -179,20 +212,25 @@ document:
     #   for epub3 and kindle formats it will be <aside> and <epub> recommended
     #   by Amazon publishing guidelines
     mode: default
+
     # Names of the bodies in fb2 document to consider for footnotes processing
     # if required by mode
     bodies: ["notes", "comments", "примечания", "комментарии"]
+
     # In floating note body backlinks to original content will be represented
     # by this string
     backlinks: "[<]"
+
     # If floating note body has more than one paragraph this string could be
     # shown at the beginning of the first paragraph (.css footnote-more
     # controls visibility)
     more_paragraphs: "(~)\u00A0"
+
     # If floatRenumbered is specified this template will be used to format text
     # displayed in footnotes references. Following fields are available:
-    # - .Context (string)
+    # - .BodyTitle (string) - can be empty
     # - .BodyNumber (int) - 1 based index
+    # - .NoteTitle (string) - can be empty
     # - .NoteNumber (int) - 1 based index
     # NOTE: if there is only one body with footnotes in a book .BodyNumber will
     # be set to 0
@@ -205,8 +243,10 @@ document:
   annotation:
     # Create separate "chapter" with book annotation if available
     enable: false
+
     # Use provded annotation title
     title: Annotation
+
     # Show annotation in TOC (generated page, ncx, nav, ...)
     in_toc: true
 
@@ -217,8 +257,34 @@ document:
     # "before" - at the beginning of the book
     # "after"  - at the end of the book
     placement: none
+
     # when toc page generation requested and authors_template is set - page
     # will have title (header) with authors formatted using it
+    # List of variables available:
+    # - .Title (string) - book title as specified in fb2 metainformation
+    # - .Series (array of { .Name (string), .Number (integer) }) - series as
+    # specified in fb2 metainformation.
+    #     NOTE: according to fictionbook schema series could be hierarhical (series
+    #     contain series and so on). Hierarhy is competely ignored - anything below
+    #     first level is dropped.
+    #     NOTE: Similarily I am not aware of any usage of multiple series, for
+    #     example Calibre only supports one. So on some occasions internally
+    #     converter only uses first series available.
+    # - .Language (string) - cannonical string representation of a language as
+    # specified in fb2 metainformation
+    # - .Date (string) - date as specified in fb2 metainformation.
+    #     NOTE: If valid xs:date "value" attribute is provided - it will be used,
+    #     otherwide just text as defined
+    # - .Authors (array of { .FirstName (string), .MiddleName (string), .LastName
+    # (string)}) as specified in fb2 metainformation
+    # - .Format (string) - string representing requested conversion (ex: epub2,
+    # epub3, kepub...)
+    # - .SourceFile (string) - base part of the source file name (no path, no
+    # extension)
+    # - .BookID (string) - book UUID as specified by fb2 metainformation or
+    # assigned by converter
+    # - .Genres (array of strings) - genres names as specified by fb2
+    # metainformation
     authors_template: |
       {{- $names := list -}}
       {{- range .Authors -}}
@@ -229,6 +295,7 @@ document:
       {{-   $names = append $names (join " " $name) -}}
       {{- end -}}
       {{- join ", " $names -}}
+
     # Include chapter without title to TOC - this prevents empty TOC on "bad" books adding chapters without titles to the TOC
     include_chapters_without_title: false
 
@@ -253,7 +320,8 @@ document:
 
   dropcaps:
     # Allow automatic dropcap styling
-    enable: true
+    enable: false
+
     # Characters to ignore when styling dropcaps
     ignore_symbols: "'\"-.…0123456789‒–—«»“”<>"
 
@@ -265,15 +333,18 @@ logging:
     # "normal" - messages INFO level and higher are outputted
     # "debug"  - all log messages are outputted
     level: normal
+
   #---- controls logging to a file (could duplicate CONSOLE messages)
   file:
     # path to the log file, could be relative to current working directory
     destination: fb2cng.log
+
     # logging level
     # "none"   - suppress file logging
     # "normal" - messages INFO level and higher are printed
     # "debug"  - all log output is printed
     level: debug
+
     # how to handle output file during consecutive program runs
     # "append"    - keep all old log messages, append new ones at the end
     # "overwrite" - keep only messages from the last run, log is overwritten

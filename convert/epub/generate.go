@@ -390,7 +390,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	dcTitle := metadata.CreateElement("dc:title")
 	title := c.Book.Description.TitleInfo.BookTitle.Value
 	if cfg.Metainformation.TitleTemplate != "" {
-		expanded, err := c.Book.ExpandTemplateSimple(config.MetaTitleTemplateFieldName, cfg.Metainformation.TitleTemplate, c.SrcName, c.OutputFormat)
+		expanded, err := c.Book.ExpandTemplateMetainfo(config.MetaTitleTemplateFieldName, cfg.Metainformation.TitleTemplate, c.SrcName, c.OutputFormat)
 		if err != nil {
 			log.Warn("Unable to prepare title for generated OPF", zap.Error(err))
 		} else {
@@ -413,7 +413,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		dcCreator := metadata.CreateElement("dc:creator")
 		authorName := strings.TrimSpace(fmt.Sprintf("%s %s %s", author.FirstName, author.MiddleName, author.LastName))
 		if cfg.Metainformation.CreatorNameTemplate != "" {
-			expanded, err := c.Book.ExpandTemplateIndexed(config.MetaCreatorNameTemplateFieldName, cfg.Metainformation.CreatorNameTemplate, idx, c.SrcName, c.OutputFormat)
+			expanded, err := c.Book.ExpandTemplateAuthorName(config.MetaCreatorNameTemplateFieldName, cfg.Metainformation.CreatorNameTemplate, idx, &author)
 			if err != nil {
 				log.Warn("Unable to prepare author name for generated OPF", zap.Error(err))
 			} else {
@@ -923,7 +923,7 @@ func buildTOCContent(parentContainer *etree.Element, c *content.Content, chapter
 
 	// Add authors if template is provided
 	if cfg.AuthorsTemplate != "" {
-		expanded, err := c.Book.ExpandTemplateSimple(config.AuthorsTemplateFieldName, cfg.AuthorsTemplate, c.SrcName, c.OutputFormat)
+		expanded, err := c.Book.ExpandTemplateMetainfo(config.AuthorsTemplateFieldName, cfg.AuthorsTemplate, c.SrcName, c.OutputFormat)
 		if err != nil {
 			log.Warn("Unable to prepare list of authors for TOC", zap.Error(err))
 		} else {
