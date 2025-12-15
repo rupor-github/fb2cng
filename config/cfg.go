@@ -96,6 +96,18 @@ type (
 		AdobeDE bool `yaml:"adobe_de"`
 	}
 
+	TextTransformConfig struct {
+		Speech   TextTransform `yaml:"speech"`
+		Dashes   TextTransform `yaml:"dashes"`
+		Dialogue TextTransform `yaml:"dialogue"`
+	}
+
+	TextTransform struct {
+		Enable bool              `yaml:"enable"`
+		From   DoubleQuoteString `yaml:"from" validate:"required_if=Enable true"`
+		To     DoubleQuoteString `yaml:"to" validate:"required_if=Enable true"`
+	}
+
 	DocumentConfig struct {
 		FixZip                bool                  `yaml:"fix_zip"`
 		OpenFromCover         bool                  `yaml:"open_from_cover"`
@@ -111,6 +123,7 @@ type (
 		Vignettes             VignettesConfig       `yaml:"vignettes"`
 		Dropcaps              DropcapsConfig        `yaml:"dropcaps"`
 		PageMap               PageMapConfig         `yaml:"page_map"`
+		Transformations       TextTransformConfig   `yaml:"text_transformations"`
 	}
 
 	Config struct {

@@ -206,6 +206,8 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 	// (avoiding collisions with existing IDs) - we will need it for ToC. This
 	// also updates the ID index with generated IDs marked as "section-generated"
 	book, ids = book.NormalizeIDs(ids, log)
+	// Apply text transformations to regular content paragraphs
+	book = book.TransformText(&env.Cfg.Document.Transformations)
 	// Mark first paragraphs in sections with drop-cap style for rendering
 	book = book.MarkDropcaps(&env.Cfg.Document.Dropcaps)
 

@@ -6,6 +6,8 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
+
+	"fbc/config"
 )
 
 func TestNormalizeFootnotes(t *testing.T) {
@@ -1301,6 +1303,516 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 		linkText := result.Description.TitleInfo.Annotation.Items[0].Paragraph.Text[1].Children[0].Text
 		if linkText != "0.1" {
 			t.Errorf("annotation link text = %q, want %q", linkText, "0.1")
+		}
+	})
+}
+
+func TestTransformText(t *testing.T) {
+	t.Run("transforms_regular_paragraphs", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Sections: []Section{
+						{
+							Content: []FlowItem{
+								{
+									Kind: FlowParagraph,
+									Paragraph: &Paragraph{
+										Text: []InlineSegment{
+											{Kind: InlineText, Text: "«Hello, world!»"},
+										},
+									},
+								},
+								{
+									Kind: FlowParagraph,
+									Paragraph: &Paragraph{
+										Text: []InlineSegment{
+											{Kind: InlineText, Text: "Text with - dashes - here"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		cfg := &config.TextTransformConfig{
+			Speech: config.TextTransform{
+				Enable: true,
+				From:   "«»",
+				To:     "\"",
+			},
+			Dashes: config.TextTransform{
+				Enable: true,
+				From:   "-",
+				To:     "—",
+			},
+		}
+
+		result := book.TransformText(cfg)
+
+		// Check first paragraph - speech transformation
+		text1 := result.Bodies[0].Sections[0].Content[0].Paragraph.Text[0].Text
+		if text1 != "\"Hello, world!»" {
+			t.Errorf("first paragraph text = %q, want %q", text1, "\"Hello, world!»")
+		}
+
+		// Check second paragraph - dash transformation (only dashes surrounded by spaces)
+		text2 := result.Bodies[0].Sections[0].Content[1].Paragraph.Text[0].Text
+		if text2 != "Text with — dashes — here" {
+			t.Errorf("second paragraph text = %q, want %q", text2, "Text with — dashes — here")
+		}
+	})
+
+	t.Run("ignores_subtitles", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Sections: []Section{
+						{
+							Content: []FlowItem{
+								{
+									Kind: FlowSubtitle,
+									Subtitle: &Paragraph{
+										Text: []InlineSegment{
+											{Kind: InlineText, Text: "«Subtitle text»"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		cfg := &config.TextTransformConfig{
+			Speech: config.TextTransform{
+				Enable: true,
+				From:   "«»",
+				To:     "\"",
+			},
+		}
+
+		result := book.TransformText(cfg)
+
+		// Subtitle should not be transformed
+		text := result.Bodies[0].Sections[0].Content[0].Subtitle.Text[0].Text
+		if text != "«Subtitle text»" {
+			t.Errorf("subtitle text changed = %q, want %q", text, "«Subtitle text»")
+		}
+	})
+
+	t.Run("ignores_poems", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Sections: []Section{
+						{
+							Content: []FlowItem{
+								{
+									Kind: FlowPoem,
+									Poem: &Poem{
+										Stanzas: []Stanza{
+											{
+												Verses: []Paragraph{
+													{
+														Text: []InlineSegment{
+															{Kind: InlineText, Text: "«Poetry line»"},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		cfg := &config.TextTransformConfig{
+			Speech: config.TextTransform{
+				Enable: true,
+				From:   "«»",
+				To:     "\"",
+			},
+		}
+
+		result := book.TransformText(cfg)
+
+		// Poem verse should not be transformed
+		text := result.Bodies[0].Sections[0].Content[0].Poem.Stanzas[0].Verses[0].Text[0].Text
+		if text != "«Poetry line»" {
+			t.Errorf("poem verse text changed = %q, want %q", text, "«Poetry line»")
+		}
+	})
+
+	t.Run("ignores_cites", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Sections: []Section{
+						{
+							Content: []FlowItem{
+								{
+									Kind: FlowCite,
+									Cite: &Cite{
+										Items: []FlowItem{
+											{
+												Kind: FlowParagraph,
+												Paragraph: &Paragraph{
+													Text: []InlineSegment{
+														{Kind: InlineText, Text: "«Cited text»"},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		cfg := &config.TextTransformConfig{
+			Speech: config.TextTransform{
+				Enable: true,
+				From:   "«»",
+				To:     "\"",
+			},
+		}
+
+		result := book.TransformText(cfg)
+
+		// Cite paragraph should not be transformed
+		text := result.Bodies[0].Sections[0].Content[0].Cite.Items[0].Paragraph.Text[0].Text
+		if text != "«Cited text»" {
+			t.Errorf("cite text changed = %q, want %q", text, "«Cited text»")
+		}
+	})
+
+	t.Run("ignores_section_titles", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Sections: []Section{
+						{
+							Title: &Title{
+								Items: []TitleItem{
+									{
+										Paragraph: &Paragraph{
+											Text: []InlineSegment{
+												{Kind: InlineText, Text: "«Title text»"},
+											},
+										},
+									},
+								},
+							},
+							Content: []FlowItem{
+								{
+									Kind: FlowParagraph,
+									Paragraph: &Paragraph{
+										Text: []InlineSegment{
+											{Kind: InlineText, Text: "«Content text»"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		cfg := &config.TextTransformConfig{
+			Speech: config.TextTransform{
+				Enable: true,
+				From:   "«»",
+				To:     "\"",
+			},
+		}
+
+		result := book.TransformText(cfg)
+
+		// Title should not be transformed
+		titleText := result.Bodies[0].Sections[0].Title.Items[0].Paragraph.Text[0].Text
+		if titleText != "«Title text»" {
+			t.Errorf("title text changed = %q, want %q", titleText, "«Title text»")
+		}
+
+		// Content paragraph should be transformed
+		contentText := result.Bodies[0].Sections[0].Content[0].Paragraph.Text[0].Text
+		if contentText != "\"Content text»" {
+			t.Errorf("content text = %q, want %q", contentText, "\"Content text»")
+		}
+	})
+
+	t.Run("transforms_nested_sections", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Sections: []Section{
+						{
+							Content: []FlowItem{
+								{
+									Kind: FlowParagraph,
+									Paragraph: &Paragraph{
+										Text: []InlineSegment{
+											{Kind: InlineText, Text: "«Parent section»"},
+										},
+									},
+								},
+								{
+									Kind: FlowSection,
+									Section: &Section{
+										Content: []FlowItem{
+											{
+												Kind: FlowParagraph,
+												Paragraph: &Paragraph{
+													Text: []InlineSegment{
+														{Kind: InlineText, Text: "«Nested section»"},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		cfg := &config.TextTransformConfig{
+			Speech: config.TextTransform{
+				Enable: true,
+				From:   "«»",
+				To:     "\"",
+			},
+		}
+
+		result := book.TransformText(cfg)
+
+		// Parent section paragraph should be transformed
+		parentText := result.Bodies[0].Sections[0].Content[0].Paragraph.Text[0].Text
+		if parentText != "\"Parent section»" {
+			t.Errorf("parent text = %q, want %q", parentText, "\"Parent section»")
+		}
+
+		// Nested section paragraph should be transformed
+		nestedText := result.Bodies[0].Sections[0].Content[1].Section.Content[0].Paragraph.Text[0].Text
+		if nestedText != "\"Nested section»" {
+			t.Errorf("nested text = %q, want %q", nestedText, "\"Nested section»")
+		}
+	})
+
+	t.Run("transforms_nested_inline_segments", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Sections: []Section{
+						{
+							Content: []FlowItem{
+								{
+									Kind: FlowParagraph,
+									Paragraph: &Paragraph{
+										Text: []InlineSegment{
+											{Kind: InlineText, Text: "«Outer text»"},
+											{
+												Kind: InlineStrong,
+												Children: []InlineSegment{
+													{Kind: InlineText, Text: "«Strong text»"},
+													{
+														Kind: InlineEmphasis,
+														Children: []InlineSegment{
+															{Kind: InlineText, Text: "«Emphasized»"},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		cfg := &config.TextTransformConfig{
+			Speech: config.TextTransform{
+				Enable: true,
+				From:   "«»",
+				To:     "\"",
+			},
+		}
+
+		result := book.TransformText(cfg)
+
+		para := result.Bodies[0].Sections[0].Content[0].Paragraph
+
+		// Outer text should be transformed
+		if para.Text[0].Text != "\"Outer text»" {
+			t.Errorf("outer text = %q, want %q", para.Text[0].Text, "\"Outer text»")
+		}
+
+		// Strong child text should be transformed
+		if para.Text[1].Children[0].Text != "\"Strong text»" {
+			t.Errorf("strong text = %q, want %q", para.Text[1].Children[0].Text, "\"Strong text»")
+		}
+
+		// Emphasis nested child text should be transformed
+		if para.Text[1].Children[1].Children[0].Text != "\"Emphasized»" {
+			t.Errorf("emphasis text = %q, want %q", para.Text[1].Children[1].Children[0].Text, "\"Emphasized»")
+		}
+	})
+
+	t.Run("ignores_whitespace_only_segments", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Sections: []Section{
+						{
+							Content: []FlowItem{
+								{
+									Kind: FlowParagraph,
+									Paragraph: &Paragraph{
+										Text: []InlineSegment{
+											{Kind: InlineText, Text: "   \t\n  "},
+											{Kind: InlineText, Text: "«Real text»"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		cfg := &config.TextTransformConfig{
+			Speech: config.TextTransform{
+				Enable: true,
+				From:   "«»",
+				To:     "\"",
+			},
+		}
+
+		result := book.TransformText(cfg)
+
+		// Whitespace segment should remain unchanged
+		whitespaceText := result.Bodies[0].Sections[0].Content[0].Paragraph.Text[0].Text
+		if whitespaceText != "   \t\n  " {
+			t.Errorf("whitespace text changed = %q", whitespaceText)
+		}
+
+		// Real text should be transformed
+		realText := result.Bodies[0].Sections[0].Content[0].Paragraph.Text[1].Text
+		if realText != "\"Real text»" {
+			t.Errorf("real text = %q, want %q", realText, "\"Real text»")
+		}
+	})
+
+	t.Run("handles_nil_config", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Sections: []Section{
+						{
+							Content: []FlowItem{
+								{
+									Kind: FlowParagraph,
+									Paragraph: &Paragraph{
+										Text: []InlineSegment{
+											{Kind: InlineText, Text: "«Text»"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result := book.TransformText(nil)
+
+		// Text should remain unchanged with nil config
+		text := result.Bodies[0].Sections[0].Content[0].Paragraph.Text[0].Text
+		if text != "«Text»" {
+			t.Errorf("text changed with nil config = %q", text)
+		}
+	})
+
+	t.Run("processes_all_bodies", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Kind: BodyMain,
+					Sections: []Section{
+						{
+							Content: []FlowItem{
+								{
+									Kind: FlowParagraph,
+									Paragraph: &Paragraph{
+										Text: []InlineSegment{
+											{Kind: InlineText, Text: "«Main body»"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Kind: BodyFootnotes,
+					Sections: []Section{
+						{
+							Content: []FlowItem{
+								{
+									Kind: FlowParagraph,
+									Paragraph: &Paragraph{
+										Text: []InlineSegment{
+											{Kind: InlineText, Text: "«Footnote body»"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		cfg := &config.TextTransformConfig{
+			Speech: config.TextTransform{
+				Enable: true,
+				From:   "«»",
+				To:     "\"",
+			},
+		}
+
+		result := book.TransformText(cfg)
+
+		// Main body should be transformed
+		mainText := result.Bodies[0].Sections[0].Content[0].Paragraph.Text[0].Text
+		if mainText != "\"Main body»" {
+			t.Errorf("main body text = %q, want %q", mainText, "\"Main body»")
+		}
+
+		// Footnote body should be transformed
+		footnoteText := result.Bodies[1].Sections[0].Content[0].Paragraph.Text[0].Text
+		if footnoteText != "\"Footnote body»" {
+			t.Errorf("footnote body text = %q, want %q", footnoteText, "\"Footnote body»")
 		}
 	})
 }

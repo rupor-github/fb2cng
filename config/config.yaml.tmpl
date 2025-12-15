@@ -154,7 +154,7 @@ document:
     # EpubCheck to complain with ERROR(RSC-005): OEBPS/content.opf: Error while
     # parsing file: attribute "page-map" not allowed here; expected attribute
     # "id".
-    # NOTE: only used with EPUB2/KEPUB
+    # NOTE: only relevant for EPUB2/KEPUB
     adobe_de: false
 
   images:
@@ -202,19 +202,15 @@ document:
     # "default"         - no special processing, footnotes are just regular links
     # "float"           - pop up footnotes (result depends on reader support).
     # "floatRenumbered" - same as float, but footnote links and titles use
-    #                     sequential numbering in format "(body).(note)" where
-    #                     body is 1-based index among footnote bodies and note
-    #                     is 1-based index within that body
-    # Actual generated content will follow output format requrements
-    # for example with "float" pop-up footnotes
-    #   for epub2 and kepub simple "bi-directional links" method (A -> B and
-    #   B -> A) will be selected.
-    #   for epub3 and kindle formats it will be <aside> and <epub> recommended
-    #   by Amazon publishing guidelines
+    #                     sequential numbering controlled by label_template.
+    # NOTE: actual generated content will follow output format requrements for
+    # example with floating footnotes for epub2 and kepub "bi-directional
+    # links" method (A -> B and B -> A) and for epub3 it will be <aside> and
+    # <epub> required elements
     mode: default
 
     # Names of the bodies in fb2 document to consider for footnotes processing
-    # if required by mode
+    # if required by mode specified
     bodies: ["notes", "comments", "примечания", "комментарии"]
 
     # In floating note body backlinks to original content will be represented
@@ -324,6 +320,37 @@ document:
 
     # Characters to ignore when styling dropcaps
     ignore_symbols: "'\"-.…0123456789‒–—«»“”<>"
+
+  text_transformations:
+    # Could be used to fix some common issues with old FB2 files during
+    # conversion automatically. Applied only to regular body paragraphs (not in
+    # titles, poems, cites, etc). This mostly legacy staff and ideally should
+    # not be necessary
+    # NOTE: Order of operations is hardcoded: speech -> dashes -> dialogue and
+    # presently can not be changed
+
+    # At the beginning of paragraph text starting with Unicode symbol included
+    # in "from" string possibly followed by any number of Unicode space symbols
+    # is replaced with "to" string
+    speech:
+      enable: false
+      from: "‐‑−–—―"
+      to: "— "
+
+    # Any Unicode symbol included in "from" string, surrounded by Unicode
+    # spaces is replaced with first Unicode symbol from "to" string.
+    dashes:
+      enable: false
+      from: "‐‑−–—―"
+      to: "—"
+
+    # Sequence of leading Unicode spaces followed by any Unicode symbol
+    # included in "from" string is replaced with "to" string followed by this
+    # Unicode symbol.
+    dialogue:
+      enable: false
+      from: "‐‑−–—―"
+      to: " "
 
 logging:
   # controls terminal (stdout, stderr) output

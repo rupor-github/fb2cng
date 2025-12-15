@@ -279,6 +279,25 @@ func (fb *FictionBook) MarkDropcaps(cfg *config.DropcapsConfig) *FictionBook {
 	return fb
 }
 
+// TransformText walks all bodies of the book and applies text transformations to
+// regular content paragraphs. Only paragraphs at the section content level are
+// transformed - paragraphs inside titles, subtitles, poems, cites, epigraphs,
+// tables, or other nested structures are ignored. The transformations are applied
+// to non-empty text segments within those paragraphs.
+// Modifies the FictionBook in place.
+func (fb *FictionBook) TransformText(cfg *config.TextTransformConfig) *FictionBook {
+	if cfg == nil {
+		return fb
+	}
+
+	for i := range fb.Bodies {
+		for j := range fb.Bodies[i].Sections {
+			transformSectionText(&fb.Bodies[i].Sections[j], cfg)
+		}
+	}
+	return fb
+}
+
 // assignBodyIDs recursively assigns IDs to sections in a body
 func (fb *FictionBook) assignBodyIDs(body *Body, path []any, existingIDs, updatedIDs IDIndex, sectionCounter, subtitleCounter *int, log *zap.Logger) {
 	for i := range body.Sections {
@@ -870,4 +889,38 @@ func markParagraphDropcap(para *Paragraph, ignoreSymbols string) bool {
 	}
 
 	return true // Continue looking (no valid text found in this paragraph)
+}
+
+// transformSectionText recursively applies text transformations to regular content paragraphs in a section
+func transformSectionText(section *Section, cfg *config.TextTransformConfig) {
+	for i := range section.Content {
+		switch section.Content[i].Kind {
+		case FlowParagraph:
+			if section.Content[i].Paragraph != nil {
+				transformParagraphText(section.Content[i].Paragraph, cfg)
+			}
+		case FlowSection:
+			if section.Content[i].Section != nil {
+				transformSectionText(section.Content[i].Section, cfg)
+			}
+		}
+	}
+}
+
+// transformParagraphText applies text transformations to all text segments in a paragraph
+func transformParagraphText(para *Paragraph, cfg *config.TextTransformConfig) {
+	for i := range para.Text {
+		transformInlineSegment(&para.Text[i], cfg)
+	}
+}
+
+// transformInlineSegment recursively applies text transformations to inline segments
+func transformInlineSegment(seg *InlineSegment, cfg *config.TextTransformConfig) {
+	if seg.Kind == InlineText && strings.TrimSpace(seg.Text) != "" {
+		seg.Text = applyTextTransformations(seg.Text, cfg)
+	}
+
+	for i := range seg.Children {
+		transformInlineSegment(&seg.Children[i], cfg)
+	}
 }
