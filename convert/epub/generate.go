@@ -451,14 +451,19 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	}
 
 	if len(c.Book.Description.TitleInfo.Sequences) > 0 {
-		// Do not let series metadata to disappear, use calibre meta tags
-		meta := metadata.CreateElement("meta")
-		meta.CreateAttr("name", "calibre:series")
-		meta.CreateAttr("content", c.Book.Description.TitleInfo.Sequences[0].Name)
-		if c.Book.Description.TitleInfo.Sequences[0].Number != nil {
-			meta = metadata.CreateElement("meta")
-			meta.CreateAttr("name", "calibre:series_index")
-			meta.CreateAttr("content", strconv.Itoa(*c.Book.Description.TitleInfo.Sequences[0].Number))
+		if c.OutputFormat == config.OutputFmtEpub3 {
+			// EPUB3: use belongs-to-collection for each sequence
+			addSequencesToMetadata(metadata, c.Book.Description.TitleInfo.Sequences)
+		} else {
+			// EPUB2/KEPUB: use calibre meta tags for first sequence only
+			meta := metadata.CreateElement("meta")
+			meta.CreateAttr("name", "calibre:series")
+			meta.CreateAttr("content", c.Book.Description.TitleInfo.Sequences[0].Name)
+			if c.Book.Description.TitleInfo.Sequences[0].Number != nil {
+				meta = metadata.CreateElement("meta")
+				meta.CreateAttr("name", "calibre:series_index")
+				meta.CreateAttr("content", strconv.Itoa(*c.Book.Description.TitleInfo.Sequences[0].Number))
+			}
 		}
 	}
 
@@ -1102,4 +1107,49 @@ func rewriteCSSURL(css, oldURL, newPath string) string {
 	}
 
 	return css
+}
+
+// addSequencesToMetadata adds EPUB3 belongs-to-collection metadata for all sequences.
+// It processes nested sequences recursively, generating unique IDs for each collection.
+func addSequencesToMetadata(metadata *etree.Element, sequences []fb2.Sequence) {
+	counter := 1
+	for i := range sequences {
+		counter = addSequenceMetadata(metadata, &sequences[i], counter, 1)
+	}
+}
+
+func addSequenceMetadata(metadata *etree.Element, seq *fb2.Sequence, idCounter int, level int) int {
+	collectionID := fmt.Sprintf("collection%d", idCounter)
+	idCounter++
+
+	// Add collection type
+	meta := metadata.CreateElement("meta")
+	meta.CreateAttr("property", "belongs-to-collection")
+	meta.CreateAttr("id", collectionID)
+	meta.SetText(seq.Name)
+
+	// Add collection type (series for top-level, set for nested)
+	collType := "series"
+	if level > 1 {
+		collType = "set"
+	}
+	meta = metadata.CreateElement("meta")
+	meta.CreateAttr("refines", "#"+collectionID)
+	meta.CreateAttr("property", "collection-type")
+	meta.SetText(collType)
+
+	// Add group position if number is specified
+	if seq.Number != nil {
+		meta = metadata.CreateElement("meta")
+		meta.CreateAttr("refines", "#"+collectionID)
+		meta.CreateAttr("property", "group-position")
+		meta.SetText(strconv.Itoa(*seq.Number))
+	}
+
+	// Process nested sequences
+	for i := range seq.Children {
+		idCounter = addSequenceMetadata(metadata, &seq.Children[i], idCounter, level+1)
+	}
+
+	return idCounter
 }

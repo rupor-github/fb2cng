@@ -28,10 +28,7 @@ document:
   # specified in fb2 metainformation.
   #     NOTE: according to fictionbook schema series could be hierarhical (series
   #     contain series and so on). Hierarhy is competely ignored - anything below
-  #     first level is dropped.
-  #     NOTE: Similarily I am not aware of any usage of multiple series, for
-  #     example Calibre only supports one. So on some occasions internally
-  #     converter only uses first series available.
+  #     first level is not present here.
   # - .Language (string) - cannonical string representation of a language as
   # specified in fb2 metainformation
   # - .Date (string) - date as specified in fb2 metainformation.
@@ -79,6 +76,10 @@ document:
   insert_soft_hyphen: false
 
   metainformation:
+    # NOTE: when generating OPF metainformation for epub2/kepub calibre:series
+    # tags with first collection available are used, for epub3 metainformation
+    # contains all available collections
+
     # When title_template is set output book title metainformation will be
     # formatted using it. This is often used to conviniently sort device
     # library listings.
@@ -88,10 +89,7 @@ document:
     # specified in fb2 metainformation.
     #     NOTE: according to fictionbook schema series could be hierarhical (series
     #     contain series and so on). Hierarhy is competely ignored - anything below
-    #     first level is dropped.
-    #     NOTE: Similarily I am not aware of any usage of multiple series, for
-    #     example Calibre only supports one. So on some occasions internally
-    #     converter only uses first series available.
+    #     first level is not present here.
     # - .Language (string) - cannonical string representation of a language as
     # specified in fb2 metainformation
     # - .Date (string) - date as specified in fb2 metainformation.

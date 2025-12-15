@@ -3097,3 +3097,216 @@ func TestFloatModeFootnotesSingleParagraph(t *testing.T) {
 		})
 	}
 }
+
+func TestWriteOPF_EPUB3Collections(t *testing.T) {
+	_, env, log := setupTestContext(t)
+	cfg := &env.Cfg.Document
+
+	num1 := 1
+	num5 := 5
+	num10 := 10
+
+	tests := []struct {
+		name      string
+		sequences []fb2.Sequence
+		format    config.OutputFmt
+		validate  func(t *testing.T, opfContent string)
+	}{
+		{
+			name: "EPUB3 single sequence with number",
+			sequences: []fb2.Sequence{
+				{Name: "Test Series", Number: &num5},
+			},
+			format: config.OutputFmtEpub3,
+			validate: func(t *testing.T, opfContent string) {
+				if !strings.Contains(opfContent, `<meta property="belongs-to-collection" id="collection1">Test Series</meta>`) {
+					t.Error("Expected belongs-to-collection metadata")
+				}
+				if !strings.Contains(opfContent, `<meta refines="#collection1" property="collection-type">series</meta>`) {
+					t.Error("Expected collection-type='series'")
+				}
+				if !strings.Contains(opfContent, `<meta refines="#collection1" property="group-position">5</meta>`) {
+					t.Error("Expected group-position='5'")
+				}
+				if strings.Contains(opfContent, `calibre:series`) {
+					t.Error("EPUB3 should not have calibre metadata")
+				}
+			},
+		},
+		{
+			name: "EPUB2 single sequence with number",
+			sequences: []fb2.Sequence{
+				{Name: "Test Series", Number: &num5},
+			},
+			format: config.OutputFmtEpub2,
+			validate: func(t *testing.T, opfContent string) {
+				if !strings.Contains(opfContent, `<meta name="calibre:series" content="Test Series"/>`) {
+					t.Error("Expected calibre:series metadata")
+				}
+				if !strings.Contains(opfContent, `<meta name="calibre:series_index" content="5"/>`) {
+					t.Error("Expected calibre:series_index='5'")
+				}
+				if strings.Contains(opfContent, `belongs-to-collection`) {
+					t.Error("EPUB2 should not have belongs-to-collection metadata")
+				}
+			},
+		},
+		{
+			name: "KEPUB single sequence",
+			sequences: []fb2.Sequence{
+				{Name: "Test Series", Number: &num5},
+			},
+			format: config.OutputFmtKepub,
+			validate: func(t *testing.T, opfContent string) {
+				if !strings.Contains(opfContent, `<meta name="calibre:series" content="Test Series"/>`) {
+					t.Error("Expected calibre:series metadata for KEPUB")
+				}
+				if strings.Contains(opfContent, `belongs-to-collection`) {
+					t.Error("KEPUB should not have belongs-to-collection metadata")
+				}
+			},
+		},
+		{
+			name: "EPUB3 multiple sequences",
+			sequences: []fb2.Sequence{
+				{Name: "Series One", Number: &num1},
+				{Name: "Series Two", Number: &num5},
+				{Name: "Series Three", Number: nil},
+			},
+			format: config.OutputFmtEpub3,
+			validate: func(t *testing.T, opfContent string) {
+				if !strings.Contains(opfContent, `<meta property="belongs-to-collection" id="collection1">Series One</meta>`) {
+					t.Error("Expected first collection")
+				}
+				if !strings.Contains(opfContent, `<meta property="belongs-to-collection" id="collection2">Series Two</meta>`) {
+					t.Error("Expected second collection")
+				}
+				if !strings.Contains(opfContent, `<meta property="belongs-to-collection" id="collection3">Series Three</meta>`) {
+					t.Error("Expected third collection")
+				}
+				if !strings.Contains(opfContent, `<meta refines="#collection1" property="group-position">1</meta>`) {
+					t.Error("Expected group-position for first collection")
+				}
+				if !strings.Contains(opfContent, `<meta refines="#collection2" property="group-position">5</meta>`) {
+					t.Error("Expected group-position for second collection")
+				}
+				// Third sequence has no number, should not have group-position
+				if strings.Contains(opfContent, `<meta refines="#collection3" property="group-position">`) {
+					t.Error("Third collection should not have group-position")
+				}
+			},
+		},
+		{
+			name: "EPUB3 nested sequences",
+			sequences: []fb2.Sequence{
+				{
+					Name:   "Parent Series",
+					Number: &num1,
+					Children: []fb2.Sequence{
+						{Name: "Child Series One", Number: &num5},
+						{Name: "Child Series Two", Number: &num10},
+					},
+				},
+			},
+			format: config.OutputFmtEpub3,
+			validate: func(t *testing.T, opfContent string) {
+				if !strings.Contains(opfContent, `<meta property="belongs-to-collection" id="collection1">Parent Series</meta>`) {
+					t.Error("Expected parent collection")
+				}
+				if !strings.Contains(opfContent, `<meta refines="#collection1" property="collection-type">series</meta>`) {
+					t.Error("Expected parent to be type 'series'")
+				}
+				if !strings.Contains(opfContent, `<meta property="belongs-to-collection" id="collection2">Child Series One</meta>`) {
+					t.Error("Expected first child collection")
+				}
+				if !strings.Contains(opfContent, `<meta refines="#collection2" property="collection-type">set</meta>`) {
+					t.Error("Expected child to be type 'set'")
+				}
+				if !strings.Contains(opfContent, `<meta property="belongs-to-collection" id="collection3">Child Series Two</meta>`) {
+					t.Error("Expected second child collection")
+				}
+				if !strings.Contains(opfContent, `<meta refines="#collection3" property="collection-type">set</meta>`) {
+					t.Error("Expected second child to be type 'set'")
+				}
+			},
+		},
+		{
+			name:      "No sequences",
+			sequences: []fb2.Sequence{},
+			format:    config.OutputFmtEpub3,
+			validate: func(t *testing.T, opfContent string) {
+				if strings.Contains(opfContent, `belongs-to-collection`) {
+					t.Error("Should not have collection metadata when no sequences")
+				}
+				if strings.Contains(opfContent, `calibre:series`) {
+					t.Error("Should not have calibre metadata when no sequences")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			zw := zip.NewWriter(&buf)
+
+			c := &content.Content{
+				Book: &fb2.FictionBook{
+					Description: fb2.Description{
+						TitleInfo: fb2.TitleInfo{
+							BookTitle: fb2.TextField{Value: "Test Book"},
+							Lang:      language.Make("en"),
+							Authors: []fb2.Author{
+								{FirstName: "John", LastName: "Doe"},
+							},
+							Sequences: tt.sequences,
+						},
+						DocumentInfo: fb2.DocumentInfo{
+							ID: "test-book-id",
+						},
+					},
+				},
+				OutputFormat: tt.format,
+				ImagesIndex:  make(fb2.BookImages),
+			}
+
+			chapters := []chapterData{
+				{ID: "ch01", Filename: "ch01.xhtml", Title: "Chapter 1"},
+			}
+
+			err := writeOPF(zw, c, cfg, chapters, log)
+			if err != nil {
+				t.Fatalf("writeOPF() error = %v", err)
+			}
+
+			if err := zw.Close(); err != nil {
+				t.Fatalf("close zip: %v", err)
+			}
+
+			zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+			if err != nil {
+				t.Fatalf("open zip: %v", err)
+			}
+
+			var opfContent string
+			for _, f := range zr.File {
+				if strings.HasSuffix(f.Name, "content.opf") {
+					rc, err := f.Open()
+					if err != nil {
+						t.Fatalf("open opf: %v", err)
+					}
+					contentBytes, _ := io.ReadAll(rc)
+					rc.Close()
+					opfContent = string(contentBytes)
+					break
+				}
+			}
+
+			if opfContent == "" {
+				t.Fatal("content.opf not found")
+			}
+
+			tt.validate(t, opfContent)
+		})
+	}
+}
