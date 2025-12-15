@@ -15,7 +15,7 @@ vars:
 
   REF_VER: '{{regexFind "refs/tags/v[0-9]+\\.[0-9]+\\.?[0-9]*[-a-zA-Z0-9+]*" (env "GITHUB_REF")}}'
 
-  TARGET_RELEASES: [linux-amd64]
+  TARGET_RELEASES: [linux-amd64, linux-arm64, darwin-amd64, darwin-arm64, windows-amd64-.exe, windows-arm64-.exe]
 
   TATN: {sh: '{{if (env "TERM")}}tput setaf 4{{end}}'}
   TOFF: {sh: '{{if (env "TERM")}}tput sgr0{{end}}'}
@@ -152,6 +152,25 @@ tasks:
     status:
       - test -f '{{.REL_NAME}}.zip'
 
+  release-for-platform-darwin:
+    internal: true
+    desc: Builds release for specified platform
+    requires:
+      vars: [GOOS, GOARCH, SUFFIX]
+    label: release-for-platform-darwin-{{.GOOS}}-{{.GOARCH}}
+    vars:
+      BUILD_DIR: '{{.REL_BUILD_DIR}}_{{.GOOS}}_{{.GOARCH}}'
+      REL_NAME: '{{.REL_BUILD_DIR}}/{{.PRJ_NAME}}-{{.GOOS}}-{{.GOARCH}}'
+    cmds:
+      - mkdir -p {{.BUILD_DIR}}
+      - defer: rm -rf {{.BUILD_DIR}}
+      - task: go-build
+        vars: {GOOS: '{{.GOOS}}', GOARCH: '{{.GOARCH}}', FLAGS: 'release', PACKAGE: './cmd/{{.PRJ_NAME}}', TARGET: '{{.BUILD_DIR}}/{{.PRJ_NAME}}{{.SUFFIX}}'}
+      - echo "{{.TATN}}Archiving release \"{{.REL_NAME}}.zip\"{{.TOFF}}"
+      - 7z a -r -bd -bso0 -tzip {{.REL_NAME}} ./{{.BUILD_DIR}}/*
+    status:
+      - test -f '{{.REL_NAME}}.zip'
+
   get-dictionaries:
     internal: true
     run: once
@@ -268,7 +287,7 @@ tasks:
     desc: Generates "misc/version.go" file with version info to be used on runtime.
     run: when_changed
     vars:
-      VER: '{{if .REF_VER}}{{regexFind "[0-9]+\\.[0-9]+\\.?[0-9]*[-a-zA-Z0-9+]*" .REF_VER}}{{else}}1.0.0-dev{{end}}'
+      VER: '{{if .REF_VER}}{{regexFind "[0-9]+\\.[0-9]+\\.?[0-9]*[-a-zA-Z0-9+]*" .REF_VER}}{{else}}0.0.1-dev{{end}}'
       DIR: '{{.ROOT_DIR}}/misc'
       FILE: '{{.ROOT_DIR}}/misc/version.go'
       NAME: '{{.PRJ_NAME}}'

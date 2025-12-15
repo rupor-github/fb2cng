@@ -1,0 +1,223 @@
+version: '3'
+
+output: 'group'
+silent: true
+
+vars:
+  BUILD_DIR: 'build'
+
+  PRJ_NAME: 'github.com/rupor-github/gencfg'
+  # This project uses misc/version.go as part of gencfg CLI tool because the whole
+  # package is imported into other project and tool is build there, but we still need
+  # to show proper version - let's deduce tag for next version automatically here,
+  # otherwise it is easy to forget and we are always out of sync...
+  PRJ_VERSION: {sh: GOTOOLCHAIN=local+path go tool autotag -C -n -b main}
+
+  GO_VERSION_MIN_REQUIRED: '1.25.3'
+
+  GO_VERSION_FULL: {sh: GOTOOLCHAIN=local+path go version}
+  GO_VERSION: '{{regexFind "[0-9]+\\.[0-9]+\\.?[0-9]*" (regexFind "go version go[0-9]+\\.[0-9]+\\.?[0-9]*[a-zA-Z0-9]* [^/]+/.*" .GO_VERSION_FULL)}}'
+
+  TATN: {sh: '{{if (env "TERM")}}tput setaf 4{{end}}'}
+  TOFF: {sh: '{{if (env "TERM")}}tput sgr0{{end}}'}
+
+env:
+  CGO_ENABLED: '0'
+  GOPATH: '{{default "/tmp/gopkg_gencfg_{{.GO_VERSION}}" (env "GOPATH")}}'
+  # lock everything to locally installed go version to prevent automatic caching and usage of multiple go versions
+  GOTOOLCHAIN: 'local+path'
+
+tasks:
+
+  default:
+    desc: Builds local development version and updates artifacts (if necessary) for release build
+    aliases: [debug]
+    deps:
+      - task: copy-file
+        vars: {SRC: 'scripts/git/pre-commit', DST: '.git/hooks/pre-commit'}
+      - task: copy-file
+        vars: {SRC: 'scripts/git/pre-push', DST: '.git/hooks/pre-push'}
+      - task: check-go-version
+      - task: generate-project-versions
+    cmds:
+      - task: go-build
+        vars: {FLAG: 'debug', PACKAGE: './cmd/tool', TARGET: '{{.BUILD_DIR}}/gencfg'}
+      - task: compile-all-tests
+      - task: lint
+
+  release:
+    desc: Builds release version
+    deps: [check-go-version, generate-project-versions]
+    cmds:
+      - task: go-build
+        vars: {FLAG: 'release', PACKAGE: './cmd/tool', TARGET: '{{.BUILD_DIR}}/gencfg'}
+
+  test:
+    desc: |
+      Runs available tests
+          When invoked as usual runs tests for all packages where it can find "*_test.go" files, for example: "task test"
+          You can specify what tests to run by using PACKAGES environment variable, for example: "PACKAGES='./module1,./module2' task test"
+          You can pass any additional parameters supported by "go test", for example: "PACKAGES='./module1' task test -- -run=TestFunc"
+    deps: [check-go-version, generate-project-versions]
+    vars:
+      TEST_DIR: '{{.ROOT_DIR}}/{{.BUILD_DIR}}/tests_results'
+      DIRS_WITH_TESTS:
+        sh: find -name '*_test.go' -printf "%h\n" | sort -u
+      PACKAGES: '{{default .DIRS_WITH_TESTS (replace "," "\n" (env "PACKAGES"))}}'
+    env:
+      CGO_ENABLED: '1'
+    cmds:
+      - mkdir -p {{.TEST_DIR}}
+      - for: {var: PACKAGES}
+        cmd: |
+          echo
+          echo "{{.TATN}}gencfg{{if (ne (clean .ITEM) ".")}} {{clean .ITEM}}{{end}} tests...{{.TOFF}}"
+          echo
+          go test -mod=mod -v -coverprofile='{{.TEST_DIR}}/test_{{replace "/" "_" (clean .ITEM)}}_coverage.out' {{.CLI_ARGS}} '{{.ITEM}}'
+
+  clean:
+    desc: Removes build artifacts and task's checksums
+    cmds:
+      - rm -rfv '{{.BUILD_DIR}}'
+      - rm -rfv '_obj'
+      - rm -fv .task/checksum/*
+      - rm -fv .task/timestamp/*
+      - rm -fv misc/version.go
+
+  lint:
+    internal: true
+    desc: Lints the whole project
+    cmds:
+      - echo "{{.TATN}}Linting project{{.TOFF}}"
+      - go tool staticcheck -f stylish -tests=true ./...
+
+  go-modinit:
+    desc: Using current toolchain (re)initializes go.mod with provided module name, gets latest versions and runs tidy
+    aliases: [modinit]
+    prompt: This will replace your existing go.mod and go.sum if you have any. Do you want to continue?
+    requires:
+      vars: [GO_VERSION]
+    cmds:
+      - echo "{{.TATN}}Running go mod init for \"{{.PRJ_NAME}}\" with {{.GO_VERSION}}{{.TOFF}}"
+      - |
+        [ -f {{.ROOT_DIR}}/go.mod ] && rm {{.ROOT_DIR}}/go.mod || true
+        [ -f {{.ROOT_DIR}}/go.sum ] && rm {{.ROOT_DIR}}/go.sum || true
+      - go mod init {{.PRJ_NAME}}
+      - go mod edit -go {{.GO_VERSION}} -toolchain go{{.GO_VERSION}}
+      - go get -tool github.com/rupor-github/fork-autotag/autotag
+      - go get -tool honnef.co/go/tools/cmd/staticcheck
+      - go get -u ./...
+      - go mod tidy {{.CLI_ARGS}}
+
+  go-tidy:
+    desc: Tidy Go modules for the project
+    aliases: [tidy]
+    requires:
+      vars: [GO_VERSION]
+    cmds:
+      - echo "{{.TATN}}Running go tidy{{.TOFF}}"
+      - go mod tidy -go={{.GO_VERSION}} {{.CLI_ARGS}}
+
+  compile-all-tests:
+    internal: true
+    run: when_changed
+    desc: Makes sure that tests could be compiled successfully
+    env:
+      CGO_ENABLED: '1'
+    vars:
+      DIRS_WITH_TESTS:
+        sh: find -name '*_test.go' -printf "%h\n" | sort -u
+    cmds:
+      - echo "{{.TATN}}Check compiling all availble tests{{.TOFF}}"
+      - for: {var: DIRS_WITH_TESTS, as: DIR}
+        cmd: go test -mod=mod -c -o /dev/null '{{.DIR}}'
+    sources:
+      - ./**/*.go
+
+  check-go-version:
+    internal: true
+    run: once
+    desc: Validates that minimal Go version requirement is met and updates required files accordingly
+    preconditions:
+      - sh: scripts/bash/vercmp.sh {{.GO_VERSION}} gteq {{.GO_VERSION_MIN_REQUIRED}}
+        msg: "At least {{.GO_VERSION_MIN_REQUIRED}} of go is required, but {{.GO_VERSION}} is detected!"
+
+  go-build:
+    internal: true
+    run: when_changed
+    desc: Builds binary using go toolchain
+    label: go-build-{{.PACKAGE}}-{{.TARGET}}-{{.FLAG}}
+    requires:
+      vars: [FLAG, PACKAGE, TARGET]
+    vars:
+      GOARGS: |
+        {{- if eq .FLAG "debug" -}}
+          -mod=mod -gcflags 'all=-N -l'
+        {{- else if eq .FLAG "release" -}}
+          -mod=mod -trimpath
+        {{- else -}}
+        {{fail "go build flags could be \"debug\" or \"release\" only!"}}
+        {{- end -}}
+    cmds:
+      - echo "{{.TATN}}Building \"{{base .TARGET}}\" binary from \"{{.PACKAGE}}\"{{.TOFF}}"
+      - go build {{.GOARGS}} -tags '{{.FLAG}}' -o '{{.TARGET}}' '{{.PACKAGE}}'
+    sources:
+      - ./**/*.go
+    generates:
+      - '{{.TARGET}}'
+    status:
+      # NOTE: since we are using the same build directory for debug and release builds of the same binary (different
+      # compiler options the same sources) we need an additional check here
+      - go version -m '{{.TARGET}}' | grep -q -e '-tags={{.FLAG}}'
+
+  generate-project-versions:
+    internal: true
+    desc: Generates "misc/version.go" file with version info to be used on runtime
+    run: when_changed
+    vars:
+      DIR: '{{.ROOT_DIR}}/misc'
+      FILE: '{{.DIR}}/version.go'
+      GIT_HASH:
+        sh: git rev-list -1 HEAD || true
+      GIT_STATUS:
+        sh: git diff --shortstat
+    cmds:
+      - echo "{{.TATN}}Project version {{.PRJ_VERSION}}, git {{.GIT_HASH}}{{if .GIT_STATUS}}*{{end}}{{.TOFF}}"
+      - mkdir -p {{.DIR}}
+      - |
+        cat << EOF > {{.FILE}}
+        // Code generated by build tools. DO NOT EDIT.
+
+        package misc
+
+        const(
+          AppName = "gencfg"
+        )
+
+        func GetVersion() string {
+            return "{{.PRJ_VERSION}}"
+        }
+        EOF
+      - gofmt -w {{.FILE}}
+    sources:
+      - .git/index
+    generates:
+      - '{{.FILE}}'
+
+  copy-file:
+    internal: true
+    desc: Copies source file to destination
+    requires:
+      vars: [SRC, DST]
+    label: copy-file-{{.SRC}}-{{.DST}}
+    cmds:
+      - echo "{{.TATN}}Copying \"{{.SRC}}\" to \"{{.DST}}\"{{.TOFF}}"
+      - mkdir -p {{dir .DST}}
+      - cp '{{.SRC}}' '{{.DST}}'
+    sources:
+      - '{{.SRC}}'
+    generates:
+      - '{{.DST}}'
+    status:
+      - test -f '{{.DST}}'
+    method: timestamp

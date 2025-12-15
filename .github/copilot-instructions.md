@@ -19,7 +19,7 @@ When running prompt always assume that sources could be changed.
 *   **Formatting:** Always run `goimports-reviser -format -company-prefixes github.com/rupor-github ./...` before committing. Generated code should be explicitly marked and excluded from style checks.
 *   **Imports:** Use standard grouping for imports: standard library first, then third-party libraries, then local project packages, separated by blank lines.
 *   **Control flow:** Prefer early funcion exits. When possible prefer if/then to full if/then/else to avoid nesting.
-*   **Language**  Always use latest Go fearutes.
+*   **Language**  Always use latest Go features.
 
 ## Error Handling
 *   **Error Values:** Errors should be the last return value and have type `error`.
