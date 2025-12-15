@@ -3,7 +3,7 @@
     <span style="vertical-align:middle;">&nbsp;&nbsp;Next generation of FB2 converter to EPUB2/3, KEPUB</span>
 </h1>
 
-### A complete rewrite of [fb2mobi](https://github.com/rupor-github/fb2converter)
+### A complete rewrite of [fb2converter](https://github.com/rupor-github/fb2converter)
 
 **BETA version - not a released code yet.**
 
