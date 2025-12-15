@@ -6,7 +6,7 @@ repos:
       - id: check-gofmt
         name: Checking go source formatting
         language: system
-        entry: bash -c "exit $(gofmt -l . | wc -l)"
+        entry: bash -c "exit $(gofmt -l . | grep -v '^vendor/' | wc -l)"
         require_serial: true
         always_run: true
         stages: [pre-commit, pre-push]
