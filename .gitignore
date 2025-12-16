@@ -14,9 +14,6 @@
 *.epub
 *.fb2
 
-# temporary
-cmd/mhl/*.go
-
 # build specific
 build/
 build_*/

@@ -128,6 +128,8 @@ tasks:
       - defer: rm -rf {{.BUILD_DIR}}
       - task: go-build
         vars: {GOOS: '{{.GOOS}}', GOARCH: '{{.GOARCH}}', FLAGS: 'release', PACKAGE: './cmd/{{.PRJ_NAME}}', TARGET: '{{.BUILD_DIR}}/{{.PRJ_NAME}}{{.SUFFIX}}'}
+      - task: go-build
+        vars: {GOOS: '{{.GOOS}}', GOARCH: '{{.GOARCH}}', FLAGS: 'release', PACKAGE: './cmd/mhl', TARGET: '{{.BUILD_DIR}}/mhl-connector{{.SUFFIX}}'}
       - echo "{{.TATN}}Archiving release \"{{.REL_NAME}}.zip\"{{.TOFF}}"
       - 7z a -r -bd -bso0 -tzip {{.REL_NAME}} ./{{.BUILD_DIR}}/*
     status:
