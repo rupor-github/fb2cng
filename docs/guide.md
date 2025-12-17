@@ -234,11 +234,110 @@ document:
 
 ### Custom Stylesheets
 
-Specify your own CSS stylesheet and embed fonts:
+fb2cng includes a comprehensive default stylesheet that styles all FB2 elements. You can customize appearance by providing your own CSS file.
+
+#### Using Custom Stylesheets
 
 ```yaml
 document:
   stylesheet_path: "mystyle.css"
+```
+
+**Important:** Your custom stylesheet is **prepended** to the default stylesheet, so you can:
+- Override default styles by using the same CSS selectors
+- Add new styles while keeping default formatting
+- Customize specific elements without rewriting everything
+
+#### Default Stylesheet Classes
+
+The built-in stylesheet ([`convert/default.css`](../convert/default.css)) provides comprehensive styling for:
+
+**Document Structure:**
+- `.body-title`, `.chapter-title`, `.section-title` - Title containers with page break control
+- `.body-title-header`, `.chapter-title-header`, `.section-title-header` - Title text styling
+- `.section-subtitle` - Section subtitles
+- `.toc-title` - Table of contents title
+
+**Content Elements:**
+- `p` - Paragraphs with text indentation and justification
+- `h1` - `h6` - Headings (h1: 140%, h2-h6: 120%)
+- `code` - Code blocks with monospace font
+- `.dropcap` - Decorative large first letter
+- `.has-dropcap` - Paragraphs containing drop caps
+
+**Poetry and Quotes:**
+- `.poem`, `.poem-title`, `.poem-subtitle` - Poem containers
+- `.stanza`, `.stanza-title` - Poem sections
+- `.verse` - Individual poem lines
+- `.cite` - Block quotations
+- `.epigraph`, `.epigraph-subtitle` - Quotations at chapter starts
+
+**Images:**
+- `.image` - Image container
+- `img.image-block` - Block images (responsive sizing)
+- `img.image-inline` - Inline images
+- `img.image-vignette` - Decorative vignettes (100% width)
+
+**Vignettes (Decorative Images):**
+- `.vignette-book-title-top/bottom` - Book title decorations
+- `.vignette-chapter-title-top/bottom` - Chapter title decorations
+- `.vignette-chapter-end` - Chapter end decorations
+- `.vignette-section-title-top/bottom` - Section title decorations
+- `.vignette-section-end` - Section end decorations
+
+**Annotations and Metadata:**
+- `.annotation`, `.annotation-title` - Book descriptions
+- `.text-author` - Author attribution
+- `.date` - Date elements
+
+**Footnotes:**
+- `.footnote`, `.footnote-title` - Footnote styling
+- `.footnote-more` - Multi-paragraph indicator
+- `.link-footnote` - Superscript footnote references
+- `.link-backlink` - Return links from footnotes
+
+**Links:**
+- `.link-external` - External hyperlinks (underlined)
+- `.link-internal` - Internal document links (no underline)
+- `.link-toc` - Table of contents links
+
+**Special:**
+- `.emptyline` - Spacing elements
+- `.unexpected` - Error/unexpected content (strikethrough)
+
+**Media Queries:**
+- `@media amzn-mobi` - Kindle MOBI-specific styles
+- `@media amzn-kf8` - Kindle KF8-specific styles
+
+#### Customization Examples
+
+**Override paragraph styling:**
+```css
+/* Your custom stylesheet */
+p {
+    text-indent: 2em;  /* Larger indent than default 1em */
+    margin-bottom: 0.5em;
+}
+```
+
+**Customize headings:**
+```css
+h1 {
+    font-size: 180%;  /* Larger than default 140% */
+    color: #333;
+}
+
+.chapter-title-header {
+    text-align: left;  /* Override default center alignment */
+}
+```
+
+**Change drop cap appearance:**
+```css
+.dropcap {
+    font-size: 4em;  /* Larger than default 3.5em */
+    color: #800000;
+}
 ```
 
 #### Stylesheet with Fonts
@@ -257,14 +356,61 @@ Create a CSS file with font references:
     font-style: italic;
 }
 
+@font-face {
+    font-family: "paragraph";
+    src: url("PTSerif-Bold.ttf");
+    font-weight: bold;
+}
+
 body {
     font-family: "paragraph";
 }
+
+.dropcap {
+    font-family: "paragraph";
+    font-weight: bold;
+}
 ```
 
-Place fonts in the same directory as the CSS file. They will be automatically embedded in the EPUB.
+**Font Files:** Place fonts in the same directory as the CSS file. They will be automatically embedded in the EPUB.
 
-See [stylesheets.md](stylesheets.md) for detailed information on path resolution and resource handling.
+**Supported Formats:** TTF, OTF, WOFF, WOFF2
+
+#### Resource Path Resolution
+
+When referencing resources (fonts, images) in your custom stylesheet:
+
+**Fragment References** - Reference FB2 binary objects:
+```css
+src: url("#font-id");  /* Resolves to FB2 <binary id="font-id"> */
+```
+
+**Relative Paths** - Resolve from current working directory:
+```css
+src: url("fonts/MyFont.ttf");  /* Loads from ./fonts/MyFont.ttf */
+src: url("../shared/fonts/x.ttf");  /* Basename only: fonts/x.ttf in EPUB */
+```
+
+**Absolute Paths** - Basename extracted:
+```css
+src: url("/usr/share/fonts/MyFont.ttf");  /* Becomes fonts/MyFont.ttf in EPUB */
+```
+
+**Data URLs** - Kept as-is (already embedded):
+```css
+src: url("data:font/woff2;base64,...");  /* No processing needed */
+```
+
+**HTTP(S) URLs** - Not supported (warning logged):
+```css
+src: url("https://example.com/font.woff");  /* Cannot be embedded */
+```
+
+**Note:** Resources are organized in EPUB by type:
+- Fonts → `OEBPS/fonts/`
+- Images and other resources → `OEBPS/other/`
+
+See [stylesheets.md](stylesheets.md) for complete technical details on path resolution and resource handling.
 
 ### Image Processing
 
@@ -570,7 +716,7 @@ logging:
 ### Getting Default Configuration
 
 ```bash
-fbc dumpconfig --default > default.yaml
+fbc dumpconfig --default default.yaml
 ```
 
 This provides a complete template with all available options and their default values.
