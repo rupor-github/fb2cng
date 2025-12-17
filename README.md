@@ -11,6 +11,7 @@
 - Release platforms limited in comparison with fb2converter.
 - Generation of Kindle formats isn't implemented, only epub2/kepub/epub3 for now.
 
+Simple Copilot generated [user guide](https://github.com/rupor-github/fb2cng/docs/guide.md)
 Russian discussion [forum](https://4pda.ru/forum/index.php?showtopic=942250).
 
 ### Installation:
