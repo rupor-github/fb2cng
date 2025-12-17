@@ -331,7 +331,7 @@ blockquote.cite {
 /* Empty lines for spacing */
 .emptyline {
     display: block;
-    margin: 1em 0;
+    margin: 1em;
 }
 
 /* Generic section container */
