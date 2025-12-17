@@ -44,6 +44,7 @@ func Compare(a, b string) int {
 				an, aerr := strconv.ParseUint(a[:ia], 10, 64)
 				bn, berr := strconv.ParseUint(b[:ib], 10, 64)
 				if aerr == nil && berr == nil {
+					// Fast path: both fit in uint64
 					if an != bn {
 						// #nosec G40
 						return int(an - bn)
@@ -51,6 +52,19 @@ func Compare(a, b string) int {
 					// Semantically the same digits, e.g. "00" == "0", "01" == "1". In
 					// this case, only continue processing if there's trailing data on
 					// both sides, otherwise do lexical comparison.
+					if ia != len(a) && ib != len(b) {
+						a = a[ia:]
+						b = b[ib:]
+						continue
+					}
+				} else {
+					// Slow path: at least one number exceeds uint64
+					// Both are still pure digits (verified by ia > 0 and ib > 0)
+					result := compareNumericStrings(a[:ia], b[:ib])
+					if result != 0 {
+						return result
+					}
+					// Numbers are semantically equal, continue if both have trailing data
 					if ia != len(a) && ib != len(b) {
 						a = a[ia:]
 						b = b[ib:]
@@ -104,4 +118,37 @@ func digits(s string) int {
 		}
 	}
 	return len(s)
+}
+
+// compareNumericStrings compares two numeric strings without parsing them.
+// This handles arbitrarily large numbers that don't fit in uint64.
+// It does no memory allocation.
+func compareNumericStrings(a, b string) int {
+	// Strip leading zeros
+	a = trimLeadingZeros(a)
+	b = trimLeadingZeros(b)
+
+	// Compare by length first (more digits = larger number)
+	if len(a) != len(b) {
+		return len(a) - len(b)
+	}
+
+	// Same length: lexical comparison works correctly for digits
+	return strings.Compare(a, b)
+}
+
+// trimLeadingZeros removes leading zeros from a numeric string.
+// Returns "0" if the string is all zeros.
+// This function does no memory allocation (only string slicing).
+func trimLeadingZeros(s string) string {
+	for i := 0; i < len(s); i++ {
+		if s[i] != '0' {
+			return s[i:]
+		}
+	}
+	// All zeros - return "0"
+	if len(s) > 0 {
+		return s[len(s)-1:]
+	}
+	return s
 }

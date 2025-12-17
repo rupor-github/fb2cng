@@ -15,7 +15,7 @@ require (
 	github.com/gosimple/slug v1.15.0
 	github.com/h2non/filetype v1.1.3
 	github.com/hidez8891/zip v1.11.0
-	github.com/maruel/natural v1.2.1
+	github.com/maruel/natural v1.3.0
 	github.com/neurosnap/sentences v1.1.2
 	github.com/rupor-github/gencfg v1.0.13
 	github.com/urfave/cli/v3 v3.6.1
@@ -60,7 +60,7 @@ require (
 	golang.org/x/exp/typeparams v0.0.0-20251209150349-8475f28825e9 // indirect
 	golang.org/x/mod v0.31.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/telemetry v0.0.0-20251215142616-e75fd47794af // indirect
+	golang.org/x/telemetry v0.0.0-20251217172151-2adc8cf14124 // indirect
 	golang.org/x/tools v0.40.0 // indirect
 	golang.org/x/tools/cmd/cover v0.1.0-deprecated // indirect
 	honnef.co/go/tools v0.6.1 // indirect

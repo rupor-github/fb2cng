@@ -208,7 +208,7 @@ func writeXHTMLChapter(zw *zip.Writer, chapter *chapterData) error {
 	if idx := strings.Index(filename, "#"); idx != -1 {
 		filename = filename[:idx]
 	}
-	return writeXMLToZip(zw, filepath.Join(oebpsDir, filename), chapter.Doc)
+	return writeXMLToZip(zw, path.Join(oebpsDir, filename), chapter.Doc)
 }
 
 func writeXMLToZip(zw *zip.Writer, name string, doc *etree.Document) error {
@@ -244,7 +244,7 @@ func writeContainer(zw *zip.Writer) error {
 	rootfile.CreateAttr("full-path", path.Join(oebpsDir, "content.opf"))
 	rootfile.CreateAttr("media-type", "application/oebps-package+xml")
 
-	return writeXMLToZip(zw, "META-INF/container.xml", doc)
+	return writeXMLToZip(zw, path.Join("META-INF", "container.xml"), doc)
 }
 
 func writeImages(zw *zip.Writer, images fb2.BookImages, _ *zap.Logger) error {
@@ -335,7 +335,7 @@ func writeCoverPage(zw *zip.Writer, c *content.Content, cfg *config.DocumentConf
 		svgImage.CreateAttr("xlink:href", coverImage.Filename)
 	}
 
-	return writeXMLToZip(zw, filepath.Join(oebpsDir, "cover.xhtml"), doc)
+	return writeXMLToZip(zw, path.Join(oebpsDir, "cover.xhtml"), doc)
 }
 
 func writeStylesheet(zw *zip.Writer, c *content.Content) error {
@@ -367,7 +367,7 @@ func writeStylesheet(zw *zip.Writer, c *content.Content) error {
 		finalCSS.WriteString("\n")
 	}
 
-	return writeDataToZip(zw, filepath.Join(oebpsDir, "stylesheet.css"), []byte(finalCSS.String()))
+	return writeDataToZip(zw, path.Join(oebpsDir, "stylesheet.css"), []byte(finalCSS.String()))
 }
 
 func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, chapters []chapterData, log *zap.Logger) error {
@@ -667,7 +667,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		}
 	}
 
-	return writeXMLToZip(zw, filepath.Join(oebpsDir, "content.opf"), doc)
+	return writeXMLToZip(zw, path.Join(oebpsDir, "content.opf"), doc)
 }
 
 func writeNav(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, chapters []chapterData, log *zap.Logger) error {
@@ -761,7 +761,7 @@ func writeNav(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		}
 	}
 
-	return writeXMLToZip(zw, filepath.Join(oebpsDir, "nav.xhtml"), doc)
+	return writeXMLToZip(zw, path.Join(oebpsDir, "nav.xhtml"), doc)
 }
 
 func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap.Logger) error {
@@ -852,7 +852,7 @@ func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 		}
 	}
 
-	return writeXMLToZip(zw, filepath.Join(oebpsDir, "toc.ncx"), doc)
+	return writeXMLToZip(zw, path.Join(oebpsDir, "toc.ncx"), doc)
 }
 
 func writePageMap(zw *zip.Writer, c *content.Content, _ *zap.Logger) error {
@@ -868,7 +868,7 @@ func writePageMap(zw *zip.Writer, c *content.Content, _ *zap.Logger) error {
 		pageElem.CreateAttr("href", page.Filename+"#"+page.SpanID)
 	}
 
-	return writeXMLToZip(zw, filepath.Join(oebpsDir, "page-map.xml"), doc)
+	return writeXMLToZip(zw, path.Join(oebpsDir, "page-map.xml"), doc)
 }
 
 func writeDataToZip(zw *zip.Writer, name string, data []byte) error {
