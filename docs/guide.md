@@ -323,12 +323,68 @@ document:
     
     # Multi-paragraph indicator
     more_paragraphs: "(~)\u00A0"
+    
+    # Label template (only used with floatRenumbered mode)
+    label_template: |
+      {{- if gt .BodyNumber 0 -}}
+      {{-   printf "%d" .BodyNumber -}}.
+      {{- end -}}
+      {{- printf "%d" .NoteNumber -}}
 ```
 
-**Modes:**
-- `default` - Regular hyperlinks
-- `float` - Popup footnotes (reader support required)
-- `floatRenumbered` - Popup with sequential numbering
+**Footnote Modes:**
+
+- **`default`** - Regular hyperlinks to footnotes with no special processing
+- **`float`** - Popup/floating footnotes (requires reader support). Preserves original footnote reference text from FB2 file
+- **`floatRenumbered`** - Same as `float`, but automatically renumbers all footnotes sequentially and replaces their reference text with formatted labels
+
+**floatRenumbered Mode:**
+
+When using `floatRenumbered` mode, the converter:
+1. Assigns sequential numbers to each footnote within each footnote body
+2. Updates footnote reference text in the main content to use the formatted label
+3. Updates footnote section titles to match the new numbering
+
+This is useful when the original FB2 has inconsistent or non-sequential footnote numbering.
+
+**label_template:**
+
+The `label_template` uses Go template syntax to format how footnote references appear. Available fields:
+
+- `.BodyTitle` (string) - Title of the footnote body (can be empty)
+- `.BodyNumber` (int) - 1-based index of the footnote body (0 if only one body)
+- `.NoteTitle` (string) - Original footnote title (can be empty)
+- `.NoteNumber` (int) - 1-based sequential number of the footnote within its body
+
+**Examples:**
+
+Simple sequential numbering (default):
+```yaml
+label_template: |
+  {{- printf "%d" .NoteNumber -}}
+```
+Result: `1`, `2`, `3`, ...
+
+Body prefix when multiple footnote bodies exist:
+```yaml
+label_template: |
+  {{- if gt .BodyNumber 0 -}}
+  {{-   printf "%d" .BodyNumber -}}.
+  {{- end -}}
+  {{- printf "%d" .NoteNumber -}}
+```
+Result: `1.1`, `1.2`, `2.1`, `2.2`, ... (or just `1`, `2`, ... if single body)
+
+Custom format with body title:
+```yaml
+label_template: |
+  {{- if .BodyTitle -}}
+  {{-   printf "[%s-%d]" .BodyTitle .NoteNumber -}}
+  {{- else -}}
+  {{-   printf "[%d]" .NoteNumber -}}
+  {{- end -}}
+```
+Result: `[Notes-1]`, `[Notes-2]`, ... (or `[1]`, `[2]`, ... if no title)
 
 ### Table of Contents
 
