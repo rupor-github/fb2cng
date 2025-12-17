@@ -15,6 +15,7 @@ import (
 	"golang.org/x/text/encoding/unicode/utf32"
 	"golang.org/x/text/transform"
 
+	"fbc/common"
 	"fbc/config"
 	"fbc/state"
 )
@@ -86,7 +87,7 @@ func TestProcess_NonExistentPath(t *testing.T) {
 	ctx, _ := setupTestEnv(t)
 	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 
-	err := process(ctx, "/nonexistent/path/file.fb2", "/tmp", config.OutputFmtEpub3, logger)
+	err := process(ctx, "/nonexistent/path/file.fb2", "/tmp", common.OutputFmtEpub3, logger)
 	if err == nil {
 		t.Fatal("Expected error for non-existent path, got nil")
 	}
@@ -104,7 +105,7 @@ func TestProcess_CancelledContext(t *testing.T) {
 	cancel() // Cancel immediately
 
 	tmpDir := t.TempDir()
-	err := process(cancelCtx, tmpDir, tmpDir, config.OutputFmtEpub3, logger)
+	err := process(cancelCtx, tmpDir, tmpDir, common.OutputFmtEpub3, logger)
 	if err != context.Canceled {
 		t.Errorf("Expected context.Canceled error, got %v", err)
 	}
@@ -130,7 +131,7 @@ func TestProcess_Directory(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	err := process(ctx, tmpDir, dstDir, config.OutputFmtEpub3, logger)
+	err := process(ctx, tmpDir, dstDir, common.OutputFmtEpub3, logger)
 	if err != nil {
 		t.Errorf("process() error = %v", err)
 	}
@@ -151,7 +152,7 @@ func TestProcess_DirectoryWithTail(t *testing.T) {
 	// Add a non-existent tail to the directory path
 	pathWithTail := filepath.Join(invalidPath, "nonexistent.fb2")
 
-	err := process(ctx, pathWithTail, tmpDir, config.OutputFmtEpub3, logger)
+	err := process(ctx, pathWithTail, tmpDir, common.OutputFmtEpub3, logger)
 	if err == nil {
 		t.Fatal("Expected error for directory with tail, got nil")
 	}
@@ -176,7 +177,7 @@ func TestProcess_SingleFile(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	err := process(ctx, testFile, dstDir, config.OutputFmtEpub3, logger)
+	err := process(ctx, testFile, dstDir, common.OutputFmtEpub3, logger)
 	if err != nil {
 		t.Errorf("process() error = %v", err)
 	}
@@ -222,7 +223,7 @@ func TestProcess_Archive(t *testing.T) {
 	w.Close()
 	zipFile.Close()
 
-	err = process(ctx, zipPath, dstDir, config.OutputFmtEpub3, logger)
+	err = process(ctx, zipPath, dstDir, common.OutputFmtEpub3, logger)
 	if err != nil {
 		t.Errorf("process() error = %v", err)
 	}
@@ -270,7 +271,7 @@ func TestProcess_ArchiveWithPath(t *testing.T) {
 
 	// Process with a path inside the archive
 	pathInArchive := zipPath + string(filepath.Separator) + "subdir"
-	err = process(ctx, pathInArchive, dstDir, config.OutputFmtEpub3, logger)
+	err = process(ctx, pathInArchive, dstDir, common.OutputFmtEpub3, logger)
 	if err != nil {
 		t.Errorf("process() error = %v", err)
 	}
@@ -289,7 +290,7 @@ func TestProcess_NonFB2File(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	err := process(ctx, testFile, tmpDir, config.OutputFmtEpub3, logger)
+	err := process(ctx, testFile, tmpDir, common.OutputFmtEpub3, logger)
 	if err == nil {
 		t.Fatal("Expected error for non-FB2 file, got nil")
 	}
@@ -307,7 +308,7 @@ func TestProcess_EmptyDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 	dstDir := t.TempDir()
 
-	err := process(ctx, tmpDir, dstDir, config.OutputFmtEpub3, logger)
+	err := process(ctx, tmpDir, dstDir, common.OutputFmtEpub3, logger)
 	if err != nil {
 		t.Errorf("process() should handle empty directory, got error: %v", err)
 	}
@@ -332,7 +333,7 @@ func TestProcess_DifferentFormats(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	formats := []config.OutputFmt{config.OutputFmtEpub2, config.OutputFmtKepub, config.OutputFmtKfx}
+	formats := []common.OutputFmt{common.OutputFmtEpub2, common.OutputFmtKepub, common.OutputFmtKfx}
 	for _, format := range formats {
 		t.Run(format.String(), func(t *testing.T) {
 			err := process(ctx, testFile, dstDir, format, logger)
@@ -350,7 +351,7 @@ func TestProcessDir_EmptyDir(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	err := processDir(ctx, tmpDir, tmpDir, config.OutputFmtEpub3, logger)
+	err := processDir(ctx, tmpDir, tmpDir, common.OutputFmtEpub3, logger)
 	if err != nil {
 		t.Errorf("Expected no error for empty directory, got %v", err)
 	}
@@ -363,7 +364,7 @@ func TestProcessDir_NonExistent(t *testing.T) {
 
 	// processDir uses filepath.Walk which logs warnings but doesn't fail
 	// on non-existent directories
-	err := processDir(ctx, "/nonexistent-dir-12345", "/tmp", config.OutputFmtEpub3, logger)
+	err := processDir(ctx, "/nonexistent-dir-12345", "/tmp", common.OutputFmtEpub3, logger)
 	// The function may return an error from filepath.Walk
 	// Just verify it doesn't panic
 	_ = err
@@ -385,7 +386,7 @@ func TestProcessDir_WithCancelledContext(t *testing.T) {
 	cancel() // Cancel context
 
 	// processDir should handle context cancellation gracefully
-	err := processDir(cancelCtx, tmpDir, tmpDir, config.OutputFmtEpub3, logger)
+	err := processDir(cancelCtx, tmpDir, tmpDir, common.OutputFmtEpub3, logger)
 	// The function may or may not return an error depending on timing
 	// Just ensure it doesn't panic
 	_ = err
@@ -396,24 +397,24 @@ func TestParseOutputFmt(t *testing.T) {
 	tests := []struct {
 		name    string
 		input   string
-		want    config.OutputFmt
+		want    common.OutputFmt
 		wantErr bool
 	}{
-		{"epub2", "epub2", config.OutputFmtEpub2, false},
-		{"EPUB2 uppercase", "EPUB2", config.OutputFmtEpub2, false},
-		{"epub3", "epub3", config.OutputFmtEpub3, false},
-		{"EPUB3 uppercase", "EPUB3", config.OutputFmtEpub3, false},
-		{"kepub", "kepub", config.OutputFmtKepub, false},
-		{"KEPUB uppercase", "KEPUB", config.OutputFmtKepub, false},
-		{"kfx", "kfx", config.OutputFmtKfx, false},
-		{"KFX uppercase", "KFX", config.OutputFmtKfx, false},
+		{"epub2", "epub2", common.OutputFmtEpub2, false},
+		{"EPUB2 uppercase", "EPUB2", common.OutputFmtEpub2, false},
+		{"epub3", "epub3", common.OutputFmtEpub3, false},
+		{"EPUB3 uppercase", "EPUB3", common.OutputFmtEpub3, false},
+		{"kepub", "kepub", common.OutputFmtKepub, false},
+		{"KEPUB uppercase", "KEPUB", common.OutputFmtKepub, false},
+		{"kfx", "kfx", common.OutputFmtKfx, false},
+		{"KFX uppercase", "KFX", common.OutputFmtKfx, false},
 		{"invalid", "invalid", 0, true},
 		{"empty", "", 0, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := config.ParseOutputFmt(tt.input)
+			got, err := common.ParseOutputFmt(tt.input)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ParseOutputFmt() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -429,13 +430,13 @@ func TestParseOutputFmt(t *testing.T) {
 func TestOutputFmt_String(t *testing.T) {
 	tests := []struct {
 		name string
-		fmt  config.OutputFmt
+		fmt  common.OutputFmt
 		want string
 	}{
-		{"epub2", config.OutputFmtEpub2, "epub2"},
-		{"epub3", config.OutputFmtEpub3, "epub3"},
-		{"kepub", config.OutputFmtKepub, "kepub"},
-		{"kfx", config.OutputFmtKfx, "kfx"},
+		{"epub2", common.OutputFmtEpub2, "epub2"},
+		{"epub3", common.OutputFmtEpub3, "epub3"},
+		{"kepub", common.OutputFmtKepub, "kepub"},
+		{"kfx", common.OutputFmtKfx, "kfx"},
 	}
 
 	for _, tt := range tests {
@@ -457,7 +458,7 @@ func TestProcessBook(t *testing.T) {
 
 	// Basic UTF-8 without BOM
 	dst := t.TempDir()
-	err := processBook(ctx, selectReader(readerForEncoding(t, sample, encUnknown), encUnknown), sampleName, dst, config.OutputFmtEpub3, logger)
+	err := processBook(ctx, selectReader(readerForEncoding(t, sample, encUnknown), encUnknown), sampleName, dst, common.OutputFmtEpub3, logger)
 	if err != nil {
 		t.Errorf("processBook() error = %v", err)
 	}
@@ -468,7 +469,7 @@ func TestProcessBook(t *testing.T) {
 		testName := "encoding_" + string(rune('0'+i))
 		t.Run(testName, func(t *testing.T) {
 			dst := t.TempDir()
-			err := processBook(ctx, selectReader(readerForEncoding(t, sample, enc), enc), sampleName, dst, config.OutputFmtEpub3, logger)
+			err := processBook(ctx, selectReader(readerForEncoding(t, sample, enc), enc), sampleName, dst, common.OutputFmtEpub3, logger)
 			if err != nil {
 				t.Errorf("processBook() with encoding %v error = %v", enc, err)
 			}
@@ -493,7 +494,7 @@ func TestProcessBook_WithPanic(t *testing.T) {
 	}()
 
 	dst := t.TempDir()
-	err := processBook(ctx, selectReader(readerForEncoding(t, sample, encUnknown), encUnknown), sampleName, dst, config.OutputFmtEpub3, logger)
+	err := processBook(ctx, selectReader(readerForEncoding(t, sample, encUnknown), encUnknown), sampleName, dst, common.OutputFmtEpub3, logger)
 	_ = err
 }
 

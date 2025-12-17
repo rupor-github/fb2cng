@@ -10,6 +10,7 @@ import (
 	"github.com/gosimple/slug"
 	"go.uber.org/zap"
 
+	"fbc/common"
 	"fbc/config"
 	"fbc/content"
 	"fbc/state"
@@ -44,7 +45,7 @@ func makeOutputDir(src, dst string, env *state.LocalEnv) string {
 	return filepath.Join(dst, filepath.Dir(src))
 }
 
-func makeDefaultFileName(src string, format config.OutputFmt, env *state.LocalEnv) string {
+func makeDefaultFileName(src string, format common.OutputFmt, env *state.LocalEnv) string {
 	baseName := strings.TrimSuffix(filepath.Base(src), filepath.Ext(src))
 	if env.Cfg.Document.FileNameTransliterate {
 		baseName = slug.Make(baseName)
@@ -64,7 +65,7 @@ func expandOutputNameTemplate(c *content.Content, env *state.LocalEnv) string {
 // makeFullPath takes an expanded template name (which may contain
 // path separators for subdirectories) and assembles it into a full output path,
 // cleaning and transliterating segments as needed
-func makeFullPath(outDir, expandedName string, format config.OutputFmt, env *state.LocalEnv) string {
+func makeFullPath(outDir, expandedName string, format common.OutputFmt, env *state.LocalEnv) string {
 	pathSegments := splitPathSegments(expandedName)
 	if len(pathSegments) == 0 {
 		return outDir

@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
+	"fbc/common"
 	"fbc/config"
 )
 
@@ -59,7 +60,7 @@ func TestBinaryObject_PrepareImage_BasicJPEG(t *testing.T) {
 		UseBroken:             false,
 		RemovePNGTransparency: false,
 		ScaleFactor:           1.0,
-		Cover:                 config.CoverConfig{Width: 1600, Height: 2560, Resize: config.ImageResizeModeNone},
+		Cover:                 config.CoverConfig{Width: 1600, Height: 2560, Resize: common.ImageResizeModeNone},
 	}
 
 	jpegData := createTestJPEG(t, 100, 100, 90)
@@ -89,7 +90,7 @@ func TestBinaryObject_PrepareImage_BasicPNG(t *testing.T) {
 		UseBroken:             false,
 		RemovePNGTransparency: false,
 		ScaleFactor:           1.0,
-		Cover:                 config.CoverConfig{Width: 1600, Height: 2560, Resize: config.ImageResizeModeNone},
+		Cover:                 config.CoverConfig{Width: 1600, Height: 2560, Resize: common.ImageResizeModeNone},
 	}
 
 	pngData := createTestPNG(t, 50, 50, false)
@@ -113,7 +114,7 @@ func TestBinaryObject_PrepareImage_CoverResizeKeepAR(t *testing.T) {
 		UseBroken:             false,
 		RemovePNGTransparency: false,
 		ScaleFactor:           1.0,
-		Cover:                 config.CoverConfig{Width: 800, Height: 1200, Resize: config.ImageResizeModeKeepAR},
+		Cover:                 config.CoverConfig{Width: 800, Height: 1200, Resize: common.ImageResizeModeKeepAR},
 	}
 
 	// Create a small image that should be resized
@@ -151,7 +152,7 @@ func TestBinaryObject_PrepareImage_CoverResizeStretch(t *testing.T) {
 		UseBroken:             false,
 		RemovePNGTransparency: false,
 		ScaleFactor:           1.0,
-		Cover:                 config.CoverConfig{Width: 600, Height: 900, Resize: config.ImageResizeModeStretch},
+		Cover:                 config.CoverConfig{Width: 600, Height: 900, Resize: common.ImageResizeModeStretch},
 	}
 
 	jpegData := createTestJPEG(t, 100, 100, 90)
@@ -182,7 +183,7 @@ func TestBinaryObject_PrepareImage_CoverNoResize(t *testing.T) {
 		UseBroken:             false,
 		RemovePNGTransparency: false,
 		ScaleFactor:           1.0,
-		Cover:                 config.CoverConfig{Width: 800, Height: 1200, Resize: config.ImageResizeModeNone},
+		Cover:                 config.CoverConfig{Width: 800, Height: 1200, Resize: common.ImageResizeModeNone},
 	}
 
 	originalWidth, originalHeight := 100, 150
@@ -214,7 +215,7 @@ func TestBinaryObject_PrepareImage_ScaleFactor(t *testing.T) {
 		UseBroken:             false,
 		RemovePNGTransparency: false,
 		ScaleFactor:           0.5,
-		Cover:                 config.CoverConfig{Width: 1600, Height: 2560, Resize: config.ImageResizeModeNone},
+		Cover:                 config.CoverConfig{Width: 1600, Height: 2560, Resize: common.ImageResizeModeNone},
 	}
 
 	jpegData := createTestJPEG(t, 100, 200, 90)
@@ -246,7 +247,7 @@ func TestBinaryObject_PrepareImage_RemovePNGTransparency(t *testing.T) {
 		UseBroken:             false,
 		RemovePNGTransparency: true,
 		ScaleFactor:           1.0,
-		Cover:                 config.CoverConfig{Width: 1600, Height: 2560, Resize: config.ImageResizeModeNone},
+		Cover:                 config.CoverConfig{Width: 1600, Height: 2560, Resize: common.ImageResizeModeNone},
 	}
 
 	pngData := createTestPNG(t, 50, 50, true)
@@ -279,7 +280,7 @@ func TestBinaryObject_PrepareImage_JPEGQualityOptimization(t *testing.T) {
 		UseBroken:             false,
 		RemovePNGTransparency: false,
 		ScaleFactor:           1.0,
-		Cover:                 config.CoverConfig{Width: 1600, Height: 2560, Resize: config.ImageResizeModeNone},
+		Cover:                 config.CoverConfig{Width: 1600, Height: 2560, Resize: common.ImageResizeModeNone},
 	}
 
 	// Create high quality JPEG
@@ -308,7 +309,7 @@ func TestBinaryObject_PrepareImage_KindleConversion(t *testing.T) {
 		UseBroken:             false,
 		RemovePNGTransparency: false,
 		ScaleFactor:           1.0,
-		Cover:                 config.CoverConfig{Width: 1600, Height: 2560, Resize: config.ImageResizeModeNone},
+		Cover:                 config.CoverConfig{Width: 1600, Height: 2560, Resize: common.ImageResizeModeNone},
 	}
 
 	// PNG should be converted to JPEG for Kindle
@@ -334,7 +335,7 @@ func TestBinaryObject_PrepareImage_SVGPreservation(t *testing.T) {
 		UseBroken:             false,
 		RemovePNGTransparency: false,
 		ScaleFactor:           0.5,
-		Cover:                 config.CoverConfig{Width: 800, Height: 1200, Resize: config.ImageResizeModeStretch},
+		Cover:                 config.CoverConfig{Width: 800, Height: 1200, Resize: common.ImageResizeModeStretch},
 	}
 
 	svgData := []byte(`<svg xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100"/></svg>`)
@@ -363,7 +364,7 @@ func TestBinaryObject_PrepareImage_InvalidImage(t *testing.T) {
 		UseBroken:             false,
 		RemovePNGTransparency: false,
 		ScaleFactor:           1.0,
-		Cover:                 config.CoverConfig{Width: 800, Height: 1200, Resize: config.ImageResizeModeStretch},
+		Cover:                 config.CoverConfig{Width: 800, Height: 1200, Resize: common.ImageResizeModeStretch},
 	}
 
 	bo := &BinaryObject{
@@ -393,7 +394,7 @@ func TestBinaryObject_PrepareImage_UseBrokenFlag(t *testing.T) {
 		UseBroken:             true,
 		RemovePNGTransparency: false,
 		ScaleFactor:           1.0,
-		Cover:                 config.CoverConfig{Width: 800, Height: 1200, Resize: config.ImageResizeModeStretch},
+		Cover:                 config.CoverConfig{Width: 800, Height: 1200, Resize: common.ImageResizeModeStretch},
 	}
 
 	bo := &BinaryObject{
@@ -420,7 +421,7 @@ func TestFictionBook_PrepareImages(t *testing.T) {
 		UseBroken:             false,
 		RemovePNGTransparency: false,
 		ScaleFactor:           1.0,
-		Cover:                 config.CoverConfig{Width: 1600, Height: 2560, Resize: config.ImageResizeModeNone},
+		Cover:                 config.CoverConfig{Width: 1600, Height: 2560, Resize: common.ImageResizeModeNone},
 	}
 
 	jpegData := createTestJPEG(t, 100, 100, 90)
@@ -460,7 +461,7 @@ func TestFictionBook_PrepareImages_DuplicateIDs(t *testing.T) {
 		UseBroken:             false,
 		RemovePNGTransparency: false,
 		ScaleFactor:           1.0,
-		Cover:                 config.CoverConfig{Width: 1600, Height: 2560, Resize: config.ImageResizeModeNone},
+		Cover:                 config.CoverConfig{Width: 1600, Height: 2560, Resize: common.ImageResizeModeNone},
 	}
 
 	jpegData := createTestJPEG(t, 100, 100, 90)
@@ -489,7 +490,7 @@ func TestFictionBook_PrepareImages_CoverDetection(t *testing.T) {
 		UseBroken:             false,
 		RemovePNGTransparency: false,
 		ScaleFactor:           1.0,
-		Cover:                 config.CoverConfig{Width: 800, Height: 1200, Resize: config.ImageResizeModeKeepAR},
+		Cover:                 config.CoverConfig{Width: 800, Height: 1200, Resize: common.ImageResizeModeKeepAR},
 	}
 
 	// Create a small cover image
@@ -668,7 +669,7 @@ func TestPrepareImages_SkipsNonImageBinaries(t *testing.T) {
 		Cover: config.CoverConfig{
 			Width:  0,
 			Height: 0,
-			Resize: config.ImageResizeModeNone,
+			Resize: common.ImageResizeModeNone,
 		},
 	}
 

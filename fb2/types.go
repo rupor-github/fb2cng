@@ -6,7 +6,7 @@ import (
 
 	"golang.org/x/text/language"
 
-	"fbc/config"
+	"fbc/common"
 )
 
 // Type definitions for FictionBook2 format structures.
@@ -25,10 +25,10 @@ type FictionBook struct {
 	Bodies          []Body
 	Binaries        []BinaryObject
 	NotFoundImageID string                        // ID used for placeholder image when broken image links are found
-	VignetteIDs     map[config.VignettePos]string // IDs for vignette images by position
+	VignetteIDs     map[common.VignettePos]string // IDs for vignette images by position
 }
 
-func (fb *FictionBook) IsVignetteEnabled(position config.VignettePos) bool {
+func (fb *FictionBook) IsVignetteEnabled(position common.VignettePos) bool {
 	_, exists := fb.VignetteIDs[position]
 	return exists
 }

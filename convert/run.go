@@ -18,7 +18,7 @@ import (
 	"golang.org/x/text/encoding/ianaindex"
 
 	"fbc/archive"
-	"fbc/config"
+	"fbc/common"
 	"fbc/content"
 	"fbc/convert/epub"
 	"fbc/convert/kfx"
@@ -61,17 +61,17 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 		log.Warn("Mailformed command line, too many destinations", zap.Strings("ignoring", cmd.Args().Slice()[2:]))
 	}
 
-	format, err := config.ParseOutputFmt(cmd.String("to"))
+	format, err := common.ParseOutputFmt(cmd.String("to"))
 	if err != nil {
 		log.Warn("Unknown output format requested, switching to epub2", zap.Error(err))
-		format = config.OutputFmtEpub2
+		format = common.OutputFmtEpub2
 	}
 
 	// Amazon formats must always have valid cover page
 	if format.ForKindle() {
 		env.Cfg.Document.Images.Cover.Generate = true
-		if env.Cfg.Document.Images.Cover.Resize == config.ImageResizeModeNone {
-			env.Cfg.Document.Images.Cover.Resize = config.ImageResizeModeKeepAR
+		if env.Cfg.Document.Images.Cover.Resize == common.ImageResizeModeNone {
+			env.Cfg.Document.Images.Cover.Resize = common.ImageResizeModeKeepAR
 		}
 		env.Cfg.Document.Images.Cover.Generate = true
 	}
@@ -123,7 +123,7 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 // process handles the core conversion logic independently of CLI framework. It
 // determines the input type (directory, archive, or single file) and processes
 // accordingly.
-func process(ctx context.Context, src, dst string, format config.OutputFmt, log *zap.Logger) error {
+func process(ctx context.Context, src, dst string, format common.OutputFmt, log *zap.Logger) error {
 	var head, tail string
 	for head = src; len(head) != 0; head, tail = filepath.Split(head) {
 		if err := ctx.Err(); err != nil {
@@ -196,7 +196,7 @@ func process(ctx context.Context, src, dst string, format config.OutputFmt, log 
 }
 
 // processDir walks directory tree finding fb2 files and processes them.
-func processDir(ctx context.Context, dir, dst string, format config.OutputFmt, log *zap.Logger) (err error) {
+func processDir(ctx context.Context, dir, dst string, format common.OutputFmt, log *zap.Logger) (err error) {
 	count := 0
 	defer func() {
 		if err == nil && count == 0 {
@@ -260,7 +260,7 @@ func processDir(ctx context.Context, dir, dst string, format config.OutputFmt, l
 
 // processArchive walks all files inside archive, finds fb2 files under
 // "pathIn" and processes them.
-func processArchive(ctx context.Context, path, pathIn, pathOut, dst string, format config.OutputFmt, log *zap.Logger) (err error) {
+func processArchive(ctx context.Context, path, pathIn, pathOut, dst string, format common.OutputFmt, log *zap.Logger) (err error) {
 	count := 0
 	defer func() {
 		if err == nil && count == 0 {
@@ -322,7 +322,7 @@ func processArchive(ctx context.Context, path, pathIn, pathOut, dst string, form
 // inside archive or directory it will be relative path inside archive or
 // directory (including base file name). "dst" is the destination directory
 // where the converted file should be written.
-func processBook(ctx context.Context, r io.Reader, src string, dst string, format config.OutputFmt, log *zap.Logger) (rerr error) {
+func processBook(ctx context.Context, r io.Reader, src string, dst string, format common.OutputFmt, log *zap.Logger) (rerr error) {
 	env := state.EnvFromContext(ctx)
 
 	var refID, outputName string
@@ -367,11 +367,11 @@ func processBook(ctx context.Context, r io.Reader, src string, dst string, forma
 
 	// Generate output in the requested format
 	switch c.OutputFormat {
-	case config.OutputFmtEpub2, config.OutputFmtEpub3, config.OutputFmtKepub:
+	case common.OutputFmtEpub2, common.OutputFmtEpub3, common.OutputFmtKepub:
 		if err := epub.Generate(ctx, c, outputName, &env.Cfg.Document, log); err != nil {
 			return fmt.Errorf("unable to generate output: %w", err)
 		}
-	case config.OutputFmtKfx:
+	case common.OutputFmtKfx:
 		if err := kfx.Generate(ctx, c, outputName, &env.Cfg.Document, log); err != nil {
 			return fmt.Errorf("unable to generate output: %w", err)
 		}

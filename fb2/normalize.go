@@ -9,6 +9,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"fbc/common"
 	"fbc/config"
 )
 
@@ -53,7 +54,7 @@ func (fb *FictionBook) NormalizeFootnoteBodies(log *zap.Logger) (*FictionBook, F
 // links replaced, along with corrected ID and link indexes. The returned
 // indexes reflect the state after link replacements.
 // Modifies the FictionBook in place.
-func (fb *FictionBook) NormalizeLinks(vignettes map[config.VignettePos]*BinaryObject, log *zap.Logger) (*FictionBook, IDIndex, ReverseLinkIndex) {
+func (fb *FictionBook) NormalizeLinks(vignettes map[common.VignettePos]*BinaryObject, log *zap.Logger) (*FictionBook, IDIndex, ReverseLinkIndex) {
 	// Rebuild indexes since we'll be modifying the book
 	resultIDs := fb.buildIDIndex(log)
 
@@ -72,7 +73,7 @@ func (fb *FictionBook) NormalizeLinks(vignettes map[config.VignettePos]*BinaryOb
 	// them to book binaries
 	// NOTE: we do not have to follow the same logic as for non found image
 	// since we are sure that those will be used, so we always need them
-	fb.VignetteIDs = make(map[config.VignettePos]string)
+	fb.VignetteIDs = make(map[common.VignettePos]string)
 	for pos, v := range vignettes {
 		// Generate unique ID for this vignette position
 		counter := 0

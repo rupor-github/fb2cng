@@ -9,6 +9,7 @@ import (
 
 	sprig "github.com/go-task/slim-sprig/v3"
 
+	"fbc/common"
 	"fbc/config"
 )
 
@@ -92,7 +93,7 @@ type authorDefinition struct {
 }
 
 // ExpandTemplateMetainfo expands a template string with book metadata
-func (fb *FictionBook) ExpandTemplateMetainfo(name config.TemplateFieldName, field string, srcName string, format config.OutputFmt) (string, error) {
+func (fb *FictionBook) ExpandTemplateMetainfo(name config.TemplateFieldName, field string, srcName string, format common.OutputFmt) (string, error) {
 	funcMap := sprig.FuncMap()
 
 	tmpl, err := template.New(string(name)).Funcs(funcMap).Parse(field)

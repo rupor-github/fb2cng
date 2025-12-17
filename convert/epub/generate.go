@@ -19,6 +19,7 @@ import (
 	fixzip "github.com/hidez8891/zip"
 	"go.uber.org/zap"
 
+	"fbc/common"
 	"fbc/config"
 	"fbc/content"
 	"fbc/fb2"
@@ -74,9 +75,9 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 	}
 
 	// Add TOC page if requested (EPUB2 only, EPUB3 uses nav.xhtml)
-	if cfg.TOCPage.Placement != config.TOCPagePlacementNone && c.OutputFormat != config.OutputFmtEpub3 {
+	if cfg.TOCPage.Placement != common.TOCPagePlacementNone && c.OutputFormat != common.OutputFmtEpub3 {
 		tocChapter := generateTOCPage(c, chapters, &cfg.TOCPage, log)
-		if cfg.TOCPage.Placement == config.TOCPagePlacementBefore {
+		if cfg.TOCPage.Placement == common.TOCPagePlacementBefore {
 			chapters = append([]chapterData{tocChapter}, chapters...)
 		} else {
 			chapters = append(chapters, tocChapter)
@@ -114,7 +115,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 	}
 
 	switch c.OutputFormat {
-	case config.OutputFmtEpub3:
+	case common.OutputFmtEpub3:
 		if err := writeNav(zw, c, cfg, chapters, log); err != nil {
 			return fmt.Errorf("unable to write NAV: %w", err)
 		}
@@ -285,9 +286,9 @@ func writeCoverPage(zw *zip.Writer, c *content.Content, cfg *config.DocumentConf
 	style.CreateAttr("type", "text/css")
 
 	switch cfg.Images.Cover.Resize {
-	case config.ImageResizeModeStretch:
+	case common.ImageResizeModeStretch:
 		style.SetText("html, body { margin: 0; padding: 0; width:100%; heignt: 100%; } svg { display: block; width: 100%; height: 100%; }")
-	case config.ImageResizeModeKeepAR:
+	case common.ImageResizeModeKeepAR:
 		fallthrough
 	default:
 		style.SetText("html, body { margin: 0; padding: 0; width:100%; heignt: 100%; } svg { display: block; width: auto; height: 100%; margin: 0 auto }")
@@ -304,7 +305,7 @@ func writeCoverPage(zw *zip.Writer, c *content.Content, cfg *config.DocumentConf
 	svg.CreateAttr("xmlns:xlink", "http://www.w3.org/1999/xlink")
 
 	switch cfg.Images.Cover.Resize {
-	case config.ImageResizeModeStretch:
+	case common.ImageResizeModeStretch:
 		svg.CreateAttr("viewBox", "0 0 100 100")
 		svg.CreateAttr("preserveAspectRatio", "xMidYMid slice")
 		svgImage := svg.CreateElement("image")
@@ -313,7 +314,7 @@ func writeCoverPage(zw *zip.Writer, c *content.Content, cfg *config.DocumentConf
 		svgImage.CreateAttr("width", "100")
 		svgImage.CreateAttr("height", "100")
 		svgImage.CreateAttr("xlink:href", coverImage.Filename)
-	case config.ImageResizeModeKeepAR:
+	case common.ImageResizeModeKeepAR:
 		fallthrough
 	default:
 		// Use actual image dimensions for ImageResizeModeNone
@@ -378,7 +379,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	pkg.CreateAttr("unique-identifier", "BookId")
 
 	switch c.OutputFormat {
-	case config.OutputFmtEpub3:
+	case common.OutputFmtEpub3:
 		pkg.CreateAttr("version", "3.0")
 	default:
 		pkg.CreateAttr("version", "2.0")
@@ -426,7 +427,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		dcCreator.SetText(authorName)
 
 		// EPUB3 uses <meta property="role"> with refines, EPUB2 uses opf:role attribute
-		if c.OutputFormat == config.OutputFmtEpub3 {
+		if c.OutputFormat == common.OutputFmtEpub3 {
 			creatorID := fmt.Sprintf("creator%d", idx)
 			dcCreator.CreateAttr("id", creatorID)
 
@@ -451,7 +452,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	}
 
 	if len(c.Book.Description.TitleInfo.Sequences) > 0 {
-		if c.OutputFormat == config.OutputFmtEpub3 {
+		if c.OutputFormat == common.OutputFmtEpub3 {
 			// EPUB3: use belongs-to-collection for each sequence
 			addSequencesToMetadata(metadata, c.Book.Description.TitleInfo.Sequences)
 		} else {
@@ -468,14 +469,14 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	}
 
 	// EPUB2 uses <meta name="cover">, EPUB3 uses properties="cover-image" on manifest item
-	if c.CoverID != "" && c.OutputFormat != config.OutputFmtEpub3 {
+	if c.CoverID != "" && c.OutputFormat != common.OutputFmtEpub3 {
 		meta := metadata.CreateElement("meta")
 		meta.CreateAttr("name", "cover")
 		meta.CreateAttr("content", "book-cover-image")
 	}
 
 	// EPUB3 requires dcterms:modified metadata
-	if c.OutputFormat == config.OutputFmtEpub3 {
+	if c.OutputFormat == common.OutputFmtEpub3 {
 		modifiedMeta := metadata.CreateElement("meta")
 		modifiedMeta.CreateAttr("property", "dcterms:modified")
 		modifiedMeta.SetText(time.Now().UTC().Format("2006-01-02T15:04:05Z"))
@@ -484,7 +485,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	manifest := pkg.CreateElement("manifest")
 
 	switch c.OutputFormat {
-	case config.OutputFmtEpub3:
+	case common.OutputFmtEpub3:
 		item := manifest.CreateElement("item")
 		item.CreateAttr("id", "nav")
 		item.CreateAttr("href", "nav.xhtml")
@@ -528,7 +529,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		coverPageItem.CreateAttr("id", "cover-page")
 		coverPageItem.CreateAttr("href", "cover.xhtml")
 		coverPageItem.CreateAttr("media-type", "application/xhtml+xml")
-		if c.OutputFormat == config.OutputFmtEpub3 {
+		if c.OutputFormat == common.OutputFmtEpub3 {
 			coverPageItem.CreateAttr("properties", "svg")
 		}
 	}
@@ -559,7 +560,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 			item.CreateAttr("id", "book-cover-image")
 			item.CreateAttr("href", img.Filename)
 			item.CreateAttr("media-type", img.MimeType)
-			if c.OutputFormat == config.OutputFmtEpub3 {
+			if c.OutputFormat == common.OutputFmtEpub3 {
 				item.CreateAttr("properties", "cover-image")
 			}
 		} else {
@@ -576,7 +577,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		coverRef.CreateAttr("linear", "no")
 	}
 
-	if c.OutputFormat != config.OutputFmtEpub3 {
+	if c.OutputFormat != common.OutputFmtEpub3 {
 		spine.CreateAttr("toc", "ncx")
 		// Add page-map attribute for AdobeDE
 		if c.PageSize > 0 && c.AdobeDE {
@@ -585,7 +586,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	}
 
 	// EPUB3: Add nav.xhtml to spine according to TOCPagePlacement
-	if c.OutputFormat == config.OutputFmtEpub3 && cfg.TOCPage.Placement == config.TOCPagePlacementBefore {
+	if c.OutputFormat == common.OutputFmtEpub3 && cfg.TOCPage.Placement == common.TOCPagePlacementBefore {
 		navRef := spine.CreateElement("itemref")
 		navRef.CreateAttr("idref", "nav")
 		navRef.CreateAttr("linear", "no")
@@ -619,14 +620,14 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	}
 
 	// EPUB3: Add nav.xhtml to spine at the end if placement is after
-	if c.OutputFormat == config.OutputFmtEpub3 && cfg.TOCPage.Placement == config.TOCPagePlacementAfter {
+	if c.OutputFormat == common.OutputFmtEpub3 && cfg.TOCPage.Placement == common.TOCPagePlacementAfter {
 		navRef := spine.CreateElement("itemref")
 		navRef.CreateAttr("idref", "nav")
 		navRef.CreateAttr("linear", "no")
 	}
 
 	// EPUB2: Add guide section
-	if c.OutputFormat != config.OutputFmtEpub3 {
+	if c.OutputFormat != common.OutputFmtEpub3 {
 		guide := pkg.CreateElement("guide")
 
 		if c.CoverID != "" {

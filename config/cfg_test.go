@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/rupor-github/gencfg"
+
+	"fbc/common"
 )
 
 func TestLoadConfiguration_NoFile(t *testing.T) {
@@ -75,7 +77,7 @@ reporting:
 		t.Errorf("JPEGQuality = %d, want 85", cfg.Document.Images.JPEGQuality)
 	}
 
-	if cfg.Document.Footnotes.Mode != FootnotesModeFloat {
+	if cfg.Document.Footnotes.Mode != common.FootnotesModeFloat {
 		t.Errorf("FootnotesMode = %d, want FootnotesModeInline", cfg.Document.Footnotes.Mode)
 	}
 
@@ -376,14 +378,14 @@ document:
 
 func TestOutputFmt_String(t *testing.T) {
 	tests := []struct {
-		fmt      OutputFmt
+		fmt      common.OutputFmt
 		expected string
 	}{
-		{OutputFmtEpub2, "epub2"},
-		{OutputFmtEpub3, "epub3"},
-		{OutputFmtKepub, "kepub"},
-		{OutputFmtKfx, "kfx"},
-		{OutputFmt(99), "OutputFmt(99)"},
+		{common.OutputFmtEpub2, "epub2"},
+		{common.OutputFmtEpub3, "epub3"},
+		{common.OutputFmtKepub, "kepub"},
+		{common.OutputFmtKfx, "kfx"},
+		{common.OutputFmt(99), "OutputFmt(99)"},
 	}
 
 	for _, tt := range tests {
@@ -398,15 +400,15 @@ func TestOutputFmt_String(t *testing.T) {
 
 func TestOutputFmt_IsValid(t *testing.T) {
 	tests := []struct {
-		fmt   OutputFmt
+		fmt   common.OutputFmt
 		valid bool
 	}{
-		{OutputFmtEpub2, true},
-		{OutputFmtEpub3, true},
-		{OutputFmtKepub, true},
-		{OutputFmtKfx, true},
-		{OutputFmt(99), false},
-		{OutputFmt(-1), false},
+		{common.OutputFmtEpub2, true},
+		{common.OutputFmtEpub3, true},
+		{common.OutputFmtKepub, true},
+		{common.OutputFmtKfx, true},
+		{common.OutputFmt(99), false},
+		{common.OutputFmt(-1), false},
 	}
 
 	for _, tt := range tests {
@@ -423,21 +425,21 @@ func TestParseOutputFmt(t *testing.T) {
 	tests := []struct {
 		name      string
 		input     string
-		expected  OutputFmt
+		expected  common.OutputFmt
 		shouldErr bool
 	}{
-		{"epub2 lowercase", "epub2", OutputFmtEpub2, false},
-		{"EPUB2 uppercase", "EPUB2", OutputFmtEpub2, false},
-		{"epub3", "epub3", OutputFmtEpub3, false},
-		{"kepub", "kepub", OutputFmtKepub, false},
-		{"kfx", "kfx", OutputFmtKfx, false},
-		{"invalid", "invalid", OutputFmt(0), true},
-		{"empty", "", OutputFmt(0), true},
+		{"epub2 lowercase", "epub2", common.OutputFmtEpub2, false},
+		{"EPUB2 uppercase", "EPUB2", common.OutputFmtEpub2, false},
+		{"epub3", "epub3", common.OutputFmtEpub3, false},
+		{"kepub", "kepub", common.OutputFmtKepub, false},
+		{"kfx", "kfx", common.OutputFmtKfx, false},
+		{"invalid", "invalid", common.OutputFmt(0), true},
+		{"empty", "", common.OutputFmt(0), true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ParseOutputFmt(tt.input)
+			got, err := common.ParseOutputFmt(tt.input)
 			if tt.shouldErr {
 				if err == nil {
 					t.Error("Expected error, got nil")
@@ -447,7 +449,7 @@ func TestParseOutputFmt(t *testing.T) {
 					t.Errorf("Unexpected error: %v", err)
 				}
 				if got != tt.expected {
-					t.Errorf("ParseOutputFmt(%q) = %v, want %v", tt.input, got, tt.expected)
+					t.Errorf("common.ParseOutputFmt(%q) = %v, want %v", tt.input, got, tt.expected)
 				}
 			}
 		})
@@ -458,34 +460,34 @@ func TestMustParseOutputFmt(t *testing.T) {
 	t.Run("valid value", func(t *testing.T) {
 		defer func() {
 			if r := recover(); r != nil {
-				t.Errorf("MustParseOutputFmt panicked unexpectedly: %v", r)
+				t.Errorf("common.MustParseOutputFmt panicked unexpectedly: %v", r)
 			}
 		}()
-		got := MustParseOutputFmt("epub2")
-		if got != OutputFmtEpub2 {
-			t.Errorf("MustParseOutputFmt(\"epub2\") = %v, want %v", got, OutputFmtEpub2)
+		got := common.MustParseOutputFmt("epub2")
+		if got != common.OutputFmtEpub2 {
+			t.Errorf("common.MustParseOutputFmt(\"epub2\") = %v, want %v", got, common.OutputFmtEpub2)
 		}
 	})
 
 	t.Run("invalid value panics", func(t *testing.T) {
 		defer func() {
 			if r := recover(); r == nil {
-				t.Error("MustParseOutputFmt should have panicked")
+				t.Error("common.MustParseOutputFmt should have panicked")
 			}
 		}()
-		MustParseOutputFmt("invalid")
+		common.MustParseOutputFmt("invalid")
 	})
 }
 
 func TestOutputFmt_MarshalText(t *testing.T) {
 	tests := []struct {
-		fmt      OutputFmt
+		fmt      common.OutputFmt
 		expected string
 	}{
-		{OutputFmtEpub2, "epub2"},
-		{OutputFmtEpub3, "epub3"},
-		{OutputFmtKepub, "kepub"},
-		{OutputFmtKfx, "kfx"},
+		{common.OutputFmtEpub2, "epub2"},
+		{common.OutputFmtEpub3, "epub3"},
+		{common.OutputFmtKepub, "kepub"},
+		{common.OutputFmtKfx, "kfx"},
 	}
 
 	for _, tt := range tests {
@@ -505,19 +507,19 @@ func TestOutputFmt_UnmarshalText(t *testing.T) {
 	tests := []struct {
 		name      string
 		input     string
-		expected  OutputFmt
+		expected  common.OutputFmt
 		shouldErr bool
 	}{
-		{"epub2", "epub2", OutputFmtEpub2, false},
-		{"epub3", "epub3", OutputFmtEpub3, false},
-		{"kepub", "kepub", OutputFmtKepub, false},
-		{"kfx", "kfx", OutputFmtKfx, false},
-		{"invalid", "invalid", OutputFmt(0), true},
+		{"epub2", "epub2", common.OutputFmtEpub2, false},
+		{"epub3", "epub3", common.OutputFmtEpub3, false},
+		{"kepub", "kepub", common.OutputFmtKepub, false},
+		{"kfx", "kfx", common.OutputFmtKfx, false},
+		{"invalid", "invalid", common.OutputFmt(0), true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var fmt OutputFmt
+			var fmt common.OutputFmt
 			err := fmt.UnmarshalText([]byte(tt.input))
 			if tt.shouldErr {
 				if err == nil {
@@ -536,29 +538,29 @@ func TestOutputFmt_UnmarshalText(t *testing.T) {
 }
 
 func TestOutputFmtNames(t *testing.T) {
-	names := OutputFmtNames()
+	names := common.OutputFmtNames()
 	expected := []string{"epub2", "epub3", "kepub", "kfx"}
 
 	if len(names) != len(expected) {
-		t.Errorf("OutputFmtNames() length = %d, want %d", len(names), len(expected))
+		t.Errorf("common.OutputFmtNames() length = %d, want %d", len(names), len(expected))
 	}
 
 	for i, name := range expected {
 		if names[i] != name {
-			t.Errorf("OutputFmtNames()[%d] = %q, want %q", i, names[i], name)
+			t.Errorf("common.OutputFmtNames()[%d] = %q, want %q", i, names[i], name)
 		}
 	}
 }
 
 func TestOutputFmt_ForKindle(t *testing.T) {
 	tests := []struct {
-		fmt      OutputFmt
+		fmt      common.OutputFmt
 		expected bool
 	}{
-		{OutputFmtEpub2, false},
-		{OutputFmtEpub3, false},
-		{OutputFmtKepub, false},
-		{OutputFmtKfx, true},
+		{common.OutputFmtEpub2, false},
+		{common.OutputFmtEpub3, false},
+		{common.OutputFmtKepub, false},
+		{common.OutputFmtKfx, true},
 	}
 
 	for _, tt := range tests {
@@ -573,13 +575,13 @@ func TestOutputFmt_ForKindle(t *testing.T) {
 
 func TestOutputFmt_Ext(t *testing.T) {
 	tests := []struct {
-		fmt      OutputFmt
+		fmt      common.OutputFmt
 		expected string
 	}{
-		{OutputFmtEpub2, ".epub"},
-		{OutputFmtEpub3, ".epub"},
-		{OutputFmtKepub, ".kepub.epub"},
-		{OutputFmtKfx, ".kfx"},
+		{common.OutputFmtEpub2, ".epub"},
+		{common.OutputFmtEpub3, ".epub"},
+		{common.OutputFmtKepub, ".kepub.epub"},
+		{common.OutputFmtKfx, ".kfx"},
 	}
 
 	for _, tt := range tests {
@@ -598,6 +600,6 @@ func TestOutputFmt_Ext_Panic(t *testing.T) {
 			t.Error("Ext() should panic for invalid format")
 		}
 	}()
-	invalidFmt := OutputFmt(99)
+	invalidFmt := common.OutputFmt(99)
 	invalidFmt.Ext()
 }

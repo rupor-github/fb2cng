@@ -21,6 +21,7 @@ import (
 	_ "golang.org/x/image/tiff"
 	_ "golang.org/x/image/webp"
 
+	"fbc/common"
 	"fbc/config"
 	"fbc/jpegquality"
 )
@@ -189,8 +190,8 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 	if cover {
 		w, h := cfg.Cover.Width, cfg.Cover.Height
 		switch cfg.Cover.Resize {
-		case config.ImageResizeModeNone:
-		case config.ImageResizeModeKeepAR:
+		case common.ImageResizeModeNone:
+		case common.ImageResizeModeKeepAR:
 			if img.Bounds().Dy() >= h {
 				break
 			}
@@ -202,7 +203,7 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 			bi.Dim.Width = img.Bounds().Dx()
 			bi.Dim.Height = img.Bounds().Dy()
 			imageChanged = true
-		case config.ImageResizeModeStretch:
+		case common.ImageResizeModeStretch:
 			resizedImg := imaging.Resize(img, w, h, imaging.Lanczos)
 			if resizedImg == nil {
 				return bo.handleImageError(bi, "resize", nil, cfg, log)

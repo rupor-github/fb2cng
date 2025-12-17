@@ -6,6 +6,7 @@ import (
 
 	"golang.org/x/text/language"
 
+	"fbc/common"
 	"fbc/config"
 )
 
@@ -30,7 +31,7 @@ func setupTestBook(t *testing.T, book *FictionBook) *FictionBook {
 func TestExpandTemplate_SimpleText(t *testing.T) {
 	book := setupTestBook(t, nil)
 
-	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "simple-text", "testbook.fb2", config.OutputFmtEpub3)
+	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "simple-text", "testbook.fb2", common.OutputFmtEpub3)
 	if err != nil {
 		t.Fatalf("ExpandTemplateSimple() error = %v", err)
 	}
@@ -52,7 +53,7 @@ func TestExpandTemplate_Title(t *testing.T) {
 	}
 	book = setupTestBook(t, book)
 
-	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ .Title }}", "testbook.fb2", config.OutputFmtEpub3)
+	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ .Title }}", "testbook.fb2", common.OutputFmtEpub3)
 	if err != nil {
 		t.Fatalf("ExpandTemplate() error = %v", err)
 	}
@@ -78,7 +79,7 @@ func TestExpandTemplate_Authors(t *testing.T) {
 	}
 	book = setupTestBook(t, book)
 
-	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ (index .Authors 0).LastName }}", "testbook.fb2", config.OutputFmtEpub3)
+	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ (index .Authors 0).LastName }}", "testbook.fb2", common.OutputFmtEpub3)
 	if err != nil {
 		t.Fatalf("ExpandTemplate() error = %v", err)
 	}
@@ -104,7 +105,7 @@ func TestExpandTemplate_Series(t *testing.T) {
 	}
 	book = setupTestBook(t, book)
 
-	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ (index .Series 0).Name }}", "testbook.fb2", config.OutputFmtEpub3)
+	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ (index .Series 0).Name }}", "testbook.fb2", common.OutputFmtEpub3)
 	if err != nil {
 		t.Fatalf("ExpandTemplate() error = %v", err)
 	}
@@ -130,7 +131,7 @@ func TestExpandTemplate_SeriesNumber(t *testing.T) {
 	}
 	book = setupTestBook(t, book)
 
-	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ (index .Series 0).Number }}", "testbook.fb2", config.OutputFmtEpub3)
+	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ (index .Series 0).Number }}", "testbook.fb2", common.OutputFmtEpub3)
 	if err != nil {
 		t.Fatalf("ExpandTemplate() error = %v", err)
 	}
@@ -153,7 +154,7 @@ func TestExpandTemplate_Language(t *testing.T) {
 	}
 	book = setupTestBook(t, book)
 
-	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ .Language }}", "testbook.fb2", config.OutputFmtEpub3)
+	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ .Language }}", "testbook.fb2", common.OutputFmtEpub3)
 	if err != nil {
 		t.Fatalf("ExpandTemplate() error = %v", err)
 	}
@@ -165,7 +166,7 @@ func TestExpandTemplate_Language(t *testing.T) {
 func TestExpandTemplate_Format(t *testing.T) {
 	book := setupTestBook(t, nil)
 
-	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ .Format }}", "testbook.fb2", config.OutputFmtEpub3)
+	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ .Format }}", "testbook.fb2", common.OutputFmtEpub3)
 	if err != nil {
 		t.Fatalf("ExpandTemplate() error = %v", err)
 	}
@@ -177,7 +178,7 @@ func TestExpandTemplate_Format(t *testing.T) {
 func TestExpandTemplate_SourceFile(t *testing.T) {
 	book := setupTestBook(t, nil)
 
-	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ .SourceFile }}", "path/to/mybook.fb2", config.OutputFmtEpub3)
+	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ .SourceFile }}", "path/to/mybook.fb2", common.OutputFmtEpub3)
 	if err != nil {
 		t.Fatalf("ExpandTemplate() error = %v", err)
 	}
@@ -199,7 +200,7 @@ func TestExpandTemplate_BookID(t *testing.T) {
 	}
 	book = setupTestBook(t, book)
 
-	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ .BookID }}", "testbook.fb2", config.OutputFmtEpub3)
+	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ .BookID }}", "testbook.fb2", common.OutputFmtEpub3)
 	if err != nil {
 		t.Fatalf("ExpandTemplate() error = %v", err)
 	}
@@ -225,7 +226,7 @@ func TestExpandTemplate_Genres(t *testing.T) {
 	}
 	book = setupTestBook(t, book)
 
-	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ index .Genres 0 }}", "testbook.fb2", config.OutputFmtEpub3)
+	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ index .Genres 0 }}", "testbook.fb2", common.OutputFmtEpub3)
 	if err != nil {
 		t.Fatalf("ExpandTemplate() error = %v", err)
 	}
@@ -256,7 +257,7 @@ func TestExpandTemplate_ComplexTemplate(t *testing.T) {
 	book = setupTestBook(t, book)
 
 	template := "{{ (index .Authors 0).LastName }}/{{ (index .Series 0).Name }}/{{ printf \"%02d\" (index .Series 0).Number }} - {{ .Title }}"
-	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, template, "source.fb2", config.OutputFmtEpub3)
+	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, template, "source.fb2", common.OutputFmtEpub3)
 	if err != nil {
 		t.Fatalf("ExpandTemplate() error = %v", err)
 	}
@@ -280,7 +281,7 @@ func TestExpandTemplate_SprigFunctions(t *testing.T) {
 	}
 	book = setupTestBook(t, book)
 
-	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ .Title | title }}", "testbook.fb2", config.OutputFmtEpub3)
+	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ .Title | title }}", "testbook.fb2", common.OutputFmtEpub3)
 	if err != nil {
 		t.Fatalf("ExpandTemplate() error = %v", err)
 	}
@@ -292,7 +293,7 @@ func TestExpandTemplate_SprigFunctions(t *testing.T) {
 func TestExpandTemplate_InvalidTemplate(t *testing.T) {
 	book := setupTestBook(t, nil)
 
-	_, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ .Title", "testbook.fb2", config.OutputFmtEpub3)
+	_, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ .Title", "testbook.fb2", common.OutputFmtEpub3)
 	if err == nil {
 		t.Error("ExpandTemplate() expected error for invalid template, got nil")
 	}
@@ -301,7 +302,7 @@ func TestExpandTemplate_InvalidTemplate(t *testing.T) {
 func TestExpandTemplate_InvalidField(t *testing.T) {
 	book := setupTestBook(t, nil)
 
-	_, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ .NonExistentField }}", "testbook.fb2", config.OutputFmtEpub3)
+	_, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ .NonExistentField }}", "testbook.fb2", common.OutputFmtEpub3)
 	if err == nil {
 		t.Error("ExpandTemplate() expected error for invalid field, got nil")
 	}
@@ -433,7 +434,7 @@ func TestExpandTemplate_PathSeparators(t *testing.T) {
 	}
 	book = setupTestBook(t, book)
 
-	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ (index .Authors 0).LastName }}/{{ .Title }}", "testbook.fb2", config.OutputFmtEpub3)
+	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ (index .Authors 0).LastName }}/{{ .Title }}", "testbook.fb2", common.OutputFmtEpub3)
 	if err != nil {
 		t.Fatalf("ExpandTemplate() error = %v", err)
 	}

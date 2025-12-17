@@ -215,15 +215,15 @@ tasks:
     cmds:
       - echo "{{.TATN}}Generating enums{{.TOFF}}"
       - |
-        go tool go-enum --output-suffix _code --file config/enums.go \
+        go tool go-enum --output-suffix _code --file common/enums.go \
           --names \
           --nocase \
           --marshal \
           --mustparse
     sources:
-      - config/enums.go
+      - common/enums.go
     generates:
-      - config/enums_code.go
+      - common/enums_code.go
 
   lint:
     desc: Lints the whole project

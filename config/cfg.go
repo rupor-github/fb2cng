@@ -9,6 +9,8 @@ import (
 	yaml "gopkg.in/yaml.v3"
 
 	"github.com/rupor-github/gencfg"
+
+	"fbc/common"
 )
 
 type DoubleQuoteString string
@@ -30,11 +32,11 @@ type (
 	TemplateFieldName string
 
 	CoverConfig struct {
-		Generate         bool            `yaml:"generate"`
-		DefaultImagePath string          `yaml:"default_image_path,omitempty" sanitize:"assure_file_access"`
-		Resize           ImageResizeMode `yaml:"resize" validate:"gte=0"`
-		Width            int             `yaml:"width" validate:"min=600"`
-		Height           int             `yaml:"height" validate:"min=800"`
+		Generate         bool                   `yaml:"generate"`
+		DefaultImagePath string                 `yaml:"default_image_path,omitempty" sanitize:"assure_file_access"`
+		Resize           common.ImageResizeMode `yaml:"resize" validate:"gte=0"`
+		Width            int                    `yaml:"width" validate:"min=600"`
+		Height           int                    `yaml:"height" validate:"min=800"`
 	}
 
 	ImagesConfig struct {
@@ -47,11 +49,11 @@ type (
 	}
 
 	FootnotesConfig struct {
-		Mode           FootnotesMode     `yaml:"mode" validate:"gte=0"`
-		BodyNames      []string          `yaml:"bodies" validate:"dive,required"`
-		Backlinks      DoubleQuoteString `yaml:"backlinks" validate:"gt=0"`
-		MoreParagraphs DoubleQuoteString `yaml:"more_paragraphs" validate:"gt=0"`
-		LabelTemplate  string            `yaml:"label_template" validate:"required_if=Mode 2"`
+		Mode           common.FootnotesMode `yaml:"mode" validate:"gte=0"`
+		BodyNames      []string             `yaml:"bodies" validate:"dive,required"`
+		Backlinks      DoubleQuoteString    `yaml:"backlinks" validate:"gt=0"`
+		MoreParagraphs DoubleQuoteString    `yaml:"more_paragraphs" validate:"gt=0"`
+		LabelTemplate  string               `yaml:"label_template" validate:"required_if=Mode 2"`
 	}
 
 	AnnotationConfig struct {
@@ -61,9 +63,9 @@ type (
 	}
 
 	TOCPageConfig struct {
-		Placement            TOCPagePlacement `yaml:"placement" validate:"oneof=0 1 2"`
-		AuthorsTemplate      string           `yaml:"authors_template"`
-		ChaptersWithoutTitle bool             `yaml:"include_chapters_without_title"`
+		Placement            common.TOCPagePlacement `yaml:"placement" validate:"oneof=0 1 2"`
+		AuthorsTemplate      string                  `yaml:"authors_template"`
+		ChaptersWithoutTitle bool                    `yaml:"include_chapters_without_title"`
 	}
 
 	MetainformationConfig struct {

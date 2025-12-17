@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/text/encoding"
 
+	"fbc/common"
 	"fbc/config"
 )
 
@@ -25,7 +26,7 @@ type LocalEnv struct {
 	CodePage         encoding.Encoding
 	DefaultCover     []byte
 	DefaultStyle     []byte
-	DefaultVignettes map[config.VignettePos][]byte
+	DefaultVignettes map[common.VignettePos][]byte
 
 	start         time.Time
 	restoreStdLog func()

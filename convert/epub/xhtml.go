@@ -9,7 +9,7 @@ import (
 	"github.com/beevik/etree"
 	"go.uber.org/zap"
 
-	"fbc/config"
+	"fbc/common"
 	"fbc/content"
 	"fbc/content/text"
 	"fbc/fb2"
@@ -88,7 +88,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 
 			// This is a workaround to make EPubCheck happy
 			// Check if we need to generate invisible link to nav.xhtml
-			addHiddenNavLink := env.Cfg.Document.TOCPage.Placement != config.TOCPagePlacementNone && body.Main() && j == 0
+			addHiddenNavLink := env.Cfg.Document.TOCPage.Placement != common.TOCPagePlacementNone && body.Main() && j == 0
 
 			chapterNum++
 			baseID := fmt.Sprintf("index%05d", chapterNum)
@@ -175,11 +175,11 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, idToF
 			collectIDsFromSection(section, filename, idToFile)
 
 			// Choose appropriate element type based on mode and format
-			if c.FootnotesMode.IsFloat() && c.OutputFormat == config.OutputFmtEpub3 {
+			if c.FootnotesMode.IsFloat() && c.OutputFormat == common.OutputFmtEpub3 {
 				if err := appendEpub3FloatFootnoteSectionContent(bodyDiv, c, section, log); err != nil {
 					return nil, err
 				}
-			} else if c.FootnotesMode.IsFloat() && (c.OutputFormat == config.OutputFmtEpub2 || c.OutputFormat == config.OutputFmtKepub) {
+			} else if c.FootnotesMode.IsFloat() && (c.OutputFormat == common.OutputFmtEpub2 || c.OutputFormat == common.OutputFmtKepub) {
 				if err := appendEpub2FloatFootnoteSectionContent(bodyDiv, c, section, log); err != nil {
 					return nil, err
 				}
@@ -242,7 +242,7 @@ func createXHTMLDocument(c *content.Content, title string) (*etree.Document, *et
 	body := html.CreateElement("body")
 
 	var root *etree.Element
-	if c.OutputFormat == config.OutputFmtKepub {
+	if c.OutputFormat == common.OutputFmtKepub {
 		bookColumnsDiv := body.CreateElement("div")
 		bookColumnsDiv.CreateAttr("id", "book-columns")
 		inner := bookColumnsDiv.CreateElement("div")
@@ -303,7 +303,7 @@ func bodyToXHTML(c *content.Content, body *fb2.Body, section *fb2.Section, title
 	}
 
 	// EPUB3: Add hidden navigation link at the end of the first main body section
-	if addHiddenNav && c.OutputFormat == config.OutputFmtEpub3 {
+	if addHiddenNav && c.OutputFormat == common.OutputFmtEpub3 {
 		hiddenP := bodyDiv.CreateElement("p")
 		hiddenP.CreateAttr("style", "display: none; visibility: hidden")
 		navLink := hiddenP.CreateElement("a")
@@ -416,16 +416,16 @@ func appendBodyIntroContent(parent *etree.Element, c *content.Content, body *fb2
 		titleWrapper.CreateAttr("class", "body-title")
 
 		// Insert top vignette if needed
-		if body.Main() && c.Book.IsVignetteEnabled(config.VignettePosBookTitleTop) {
-			appendVignetteImage(titleWrapper, c, config.VignettePosBookTitleTop)
+		if body.Main() && c.Book.IsVignetteEnabled(common.VignettePosBookTitleTop) {
+			appendVignetteImage(titleWrapper, c, common.VignettePosBookTitleTop)
 		}
 
 		// Append the title with header class
 		appendTitleAsHeading(titleWrapper, c, body.Title, depth, "body-title-header")
 
 		// Insert bottom vignette if needed
-		if body.Main() && c.Book.IsVignetteEnabled(config.VignettePosBookTitleBottom) {
-			appendVignetteImage(titleWrapper, c, config.VignettePosBookTitleBottom)
+		if body.Main() && c.Book.IsVignetteEnabled(common.VignettePosBookTitleBottom) {
+			appendVignetteImage(titleWrapper, c, common.VignettePosBookTitleBottom)
 		}
 	}
 
@@ -478,7 +478,7 @@ func appendEpub2FloatFootnoteSectionContent(parent *etree.Element, c *content.Co
 				backLink.CreateAttr("class", "link-backlink")
 
 				textParent := backLink
-				if c.OutputFormat == config.OutputFmtKepub {
+				if c.OutputFormat == common.OutputFmtKepub {
 					paragraph, sentence := c.KoboSpanNextSentence()
 					span := backLink.CreateElement("span")
 					span.CreateAttr("class", "koboSpan")
@@ -514,7 +514,7 @@ func appendEpub2FloatFootnoteSectionContent(parent *etree.Element, c *content.Co
 			if item.Image != nil {
 				// Render image inline (no div wrapper)
 				var imgsectionElem *etree.Element
-				if c.OutputFormat == config.OutputFmtKepub {
+				if c.OutputFormat == common.OutputFmtKepub {
 					paragraph, sentence := c.KoboSpanNextSentence()
 					span := sectionElem.CreateElement("span")
 					span.CreateAttr("class", "koboSpan")
@@ -737,16 +737,16 @@ func appendSectionContent(parent *etree.Element, c *content.Content, section *fb
 			headerClass = "chapter-title-header"
 
 			// Insert top vignette for chapters
-			if c.Book.IsVignetteEnabled(config.VignettePosChapterTitleTop) {
-				appendVignetteImage(titleWrapper, c, config.VignettePosChapterTitleTop)
+			if c.Book.IsVignetteEnabled(common.VignettePosChapterTitleTop) {
+				appendVignetteImage(titleWrapper, c, common.VignettePosChapterTitleTop)
 			}
 		} else {
 			wrapperClass = "section-title"
 			headerClass = "section-title-header"
 
 			// Insert top vignette for sections
-			if c.Book.IsVignetteEnabled(config.VignettePosSectionTitleTop) {
-				appendVignetteImage(titleWrapper, c, config.VignettePosSectionTitleTop)
+			if c.Book.IsVignetteEnabled(common.VignettePosSectionTitleTop) {
+				appendVignetteImage(titleWrapper, c, common.VignettePosSectionTitleTop)
 			}
 		}
 		titleWrapper.CreateAttr("class", wrapperClass)
@@ -756,12 +756,12 @@ func appendSectionContent(parent *etree.Element, c *content.Content, section *fb
 
 		// Insert bottom vignette
 		if depth == 1 {
-			if c.Book.IsVignetteEnabled(config.VignettePosChapterTitleBottom) {
-				appendVignetteImage(titleWrapper, c, config.VignettePosChapterTitleBottom)
+			if c.Book.IsVignetteEnabled(common.VignettePosChapterTitleBottom) {
+				appendVignetteImage(titleWrapper, c, common.VignettePosChapterTitleBottom)
 			}
 		} else {
-			if c.Book.IsVignetteEnabled(config.VignettePosSectionTitleBottom) {
-				appendVignetteImage(titleWrapper, c, config.VignettePosSectionTitleBottom)
+			if c.Book.IsVignetteEnabled(common.VignettePosSectionTitleBottom) {
+				appendVignetteImage(titleWrapper, c, common.VignettePosSectionTitleBottom)
 			}
 		}
 	}
@@ -788,10 +788,10 @@ func appendSectionContent(parent *etree.Element, c *content.Content, section *fb
 
 	// Insert end vignette
 	if section.Title != nil {
-		if depth == 1 && c.Book.IsVignetteEnabled(config.VignettePosChapterEnd) {
-			appendVignetteImage(parent, c, config.VignettePosChapterEnd)
-		} else if depth > 1 && c.Book.IsVignetteEnabled(config.VignettePosSectionEnd) {
-			appendVignetteImage(parent, c, config.VignettePosSectionEnd)
+		if depth == 1 && c.Book.IsVignetteEnabled(common.VignettePosChapterEnd) {
+			appendVignetteImage(parent, c, common.VignettePosChapterEnd)
+		} else if depth > 1 && c.Book.IsVignetteEnabled(common.VignettePosSectionEnd) {
+			appendVignetteImage(parent, c, common.VignettePosSectionEnd)
 		}
 	}
 
@@ -891,7 +891,7 @@ func appendParagraphInline(parent *etree.Element, c *content.Content, p *fb2.Par
 					// Create span for drop cap
 					dropCapSpan := parent.CreateElement("span")
 					dropCapSpan.CreateAttr("class", "dropcap")
-					if c.OutputFormat == config.OutputFmtKepub {
+					if c.OutputFormat == common.OutputFmtKepub {
 						paragraph, sentence := c.KoboSpanNextSentence()
 						koboSpan := dropCapSpan.CreateElement("span")
 						koboSpan.CreateAttr("class", "koboSpan")
@@ -930,7 +930,7 @@ func appendInlineText(parent *etree.Element, c *content.Content, text string, hy
 		text = c.Hyphen.Hyphenate(text)
 	}
 
-	if c.OutputFormat == config.OutputFmtKepub && strings.TrimSpace(text) != "" {
+	if c.OutputFormat == common.OutputFmtKepub && strings.TrimSpace(text) != "" {
 		// Kobo mode: wrap text in span with unique ID
 		for s := range c.Splitter.Sentences(text) {
 			// Check for page boundary before each sentence
@@ -1037,7 +1037,7 @@ func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inl
 						// Add reference ID
 						a.CreateAttr("id", ref.RefID)
 						// Add epub:type="noteref" for EPUB3
-						if c.OutputFormat == config.OutputFmtEpub3 {
+						if c.OutputFormat == common.OutputFmtEpub3 {
 							a.CreateAttr("epub:type", "noteref")
 							a.CreateAttr("role", "doc-noteref")
 						}
@@ -1057,7 +1057,7 @@ func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inl
 	case fb2.InlineImageSegment:
 		if seg.Image != nil {
 			var imgParent *etree.Element
-			if c.OutputFormat == config.OutputFmtKepub {
+			if c.OutputFormat == common.OutputFmtKepub {
 				paragraph, sentence := c.KoboSpanNextSentence()
 				span := parent.CreateElement("span")
 				span.CreateAttr("class", "koboSpan")
@@ -1088,7 +1088,7 @@ func appendImageElement(parent *etree.Element, c *content.Content, img *fb2.Imag
 
 	c.KoboSpanNextParagraph()
 	var imgParent *etree.Element
-	if c.OutputFormat == config.OutputFmtKepub {
+	if c.OutputFormat == common.OutputFmtKepub {
 		paragraph, sentence := c.KoboSpanNextSentence()
 		span := div.CreateElement("span")
 		span.CreateAttr("class", "koboSpan")
@@ -1112,7 +1112,7 @@ func appendImageElement(parent *etree.Element, c *content.Content, img *fb2.Imag
 	}
 }
 
-func appendVignetteImage(parent *etree.Element, c *content.Content, position config.VignettePos) {
+func appendVignetteImage(parent *etree.Element, c *content.Content, position common.VignettePos) {
 	if !c.Book.IsVignetteEnabled(position) {
 		return
 	}
@@ -1128,7 +1128,7 @@ func appendVignetteImage(parent *etree.Element, c *content.Content, position con
 
 	c.KoboSpanNextParagraph()
 	var imgParent *etree.Element
-	if c.OutputFormat == config.OutputFmtKepub {
+	if c.OutputFormat == common.OutputFmtKepub {
 		paragraph, sentence := c.KoboSpanNextSentence()
 		span := div.CreateElement("span")
 		span.CreateAttr("class", "koboSpan")

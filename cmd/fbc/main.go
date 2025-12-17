@@ -15,6 +15,7 @@ import (
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
+	"fbc/common"
 	"fbc/config"
 	"fbc/convert"
 	"fbc/misc"
@@ -151,8 +152,8 @@ func main() {
 				OnUsageError: usageErrorHandler,
 				Action:       convert.Run,
 				Flags: []cli.Flag{
-					&cli.StringFlag{Name: "to", Value: config.OutputFmtEpub2.String(),
-						Usage: "conversion output `TYPE` (supported types: " + strings.Join(config.OutputFmtNames(), ", ") + ")"},
+					&cli.StringFlag{Name: "to", Value: common.OutputFmtEpub2.String(),
+						Usage: "conversion output `TYPE` (supported types: " + strings.Join(common.OutputFmtNames(), ", ") + ")"},
 					&cli.BoolFlag{Name: "nodirs", Aliases: []string{"nd"}, Usage: "when producing output do not keep input directory structure"},
 					&cli.BoolFlag{Name: "overwrite", Aliases: []string{"ow"}, Usage: "continue even if destination exits, overwrite files"},
 					&cli.StringFlag{Name: "force-zip-cp",

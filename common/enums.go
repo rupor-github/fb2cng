@@ -1,4 +1,8 @@
-package config
+// The only reason this package exists is because we need some of the enums in
+// MHL connector. And since connector is only relevant in Windows build and is
+// not part of main program functionality I do not want its config to mix with
+// main program configuration at all. So I have to separate enums into package.
+package common
 
 // Specification of requested footnotes processing mode.
 // ENUM(default, float, floatRenumbered)

@@ -19,6 +19,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
+	"fbc/common"
 	"fbc/config"
 	"fbc/fb2"
 	"fbc/state"
@@ -180,7 +181,7 @@ func TestContent_CoverImageProcessing_Resize(t *testing.T) {
 	// Configure cover resizing
 	env.Cfg.Document.Images.Cover.Width = 600
 	env.Cfg.Document.Images.Cover.Height = 900
-	env.Cfg.Document.Images.Cover.Resize = config.ImageResizeModeKeepAR
+	env.Cfg.Document.Images.Cover.Resize = common.ImageResizeModeKeepAR
 
 	// Small cover that should be resized
 	jpegData := createTestJPEG(t, 100, 150, 90)
@@ -218,7 +219,7 @@ func TestContent_CoverImageProcessing_NoResize(t *testing.T) {
 	c, ctx := setupTestContent(t)
 	env := state.EnvFromContext(ctx)
 
-	env.Cfg.Document.Images.Cover.Resize = config.ImageResizeModeNone
+	env.Cfg.Document.Images.Cover.Resize = common.ImageResizeModeNone
 
 	originalWidth, originalHeight := 100, 150
 	jpegData := createTestJPEG(t, originalWidth, originalHeight, 90)
@@ -739,8 +740,8 @@ func TestFilterReferencedImages_WithVignettes(t *testing.T) {
 
 	// Filter with vignette - vignette should be included even though not in links
 	book := &fb2.FictionBook{
-		VignetteIDs: map[config.VignettePos]string{
-			config.VignettePosChapterEnd: "vignette-img",
+		VignetteIDs: map[common.VignettePos]string{
+			common.VignettePosChapterEnd: "vignette-img",
 		},
 	}
 	filtered := book.FilterReferencedImages(allImages, links, "", log)
@@ -765,7 +766,7 @@ func TestFilterReferencedImages_WithVignettes(t *testing.T) {
 
 func TestPrepareVignettes_Empty(t *testing.T) {
 	vigCfg := &config.VignettesConfig{}
-	defaultVignettes := make(map[config.VignettePos][]byte)
+	defaultVignettes := make(map[common.VignettePos][]byte)
 
 	vignettes, err := prepareVignettes(vigCfg, defaultVignettes)
 	if err != nil {
@@ -791,12 +792,12 @@ func TestPrepareVignettes_Builtin(t *testing.T) {
 	}
 
 	svgData := []byte("<svg>test</svg>")
-	defaultVignettes := map[config.VignettePos][]byte{
-		config.VignettePosBookTitleTop:       svgData,
-		config.VignettePosBookTitleBottom:    svgData,
-		config.VignettePosChapterTitleTop:    svgData,
-		config.VignettePosChapterTitleBottom: svgData,
-		config.VignettePosChapterEnd:         svgData,
+	defaultVignettes := map[common.VignettePos][]byte{
+		common.VignettePosBookTitleTop:       svgData,
+		common.VignettePosBookTitleBottom:    svgData,
+		common.VignettePosChapterTitleTop:    svgData,
+		common.VignettePosChapterTitleBottom: svgData,
+		common.VignettePosChapterEnd:         svgData,
 	}
 
 	vignettes, err := prepareVignettes(vigCfg, defaultVignettes)
@@ -825,7 +826,7 @@ func TestPrepareVignettes_BuiltinNotAvailable(t *testing.T) {
 		},
 	}
 
-	defaultVignettes := make(map[config.VignettePos][]byte)
+	defaultVignettes := make(map[common.VignettePos][]byte)
 
 	vignettes, err := prepareVignettes(vigCfg, defaultVignettes)
 	if err != nil {
@@ -858,7 +859,7 @@ func TestPrepareVignettes_FromFile(t *testing.T) {
 		},
 	}
 
-	defaultVignettes := make(map[config.VignettePos][]byte)
+	defaultVignettes := make(map[common.VignettePos][]byte)
 
 	vignettes, err := prepareVignettes(vigCfg, defaultVignettes)
 	if err != nil {
@@ -895,7 +896,7 @@ func TestPrepareVignettes_FromFile_PNG(t *testing.T) {
 		},
 	}
 
-	defaultVignettes := make(map[config.VignettePos][]byte)
+	defaultVignettes := make(map[common.VignettePos][]byte)
 
 	vignettes, err := prepareVignettes(vigCfg, defaultVignettes)
 	if err != nil {
@@ -906,7 +907,7 @@ func TestPrepareVignettes_FromFile_PNG(t *testing.T) {
 		t.Errorf("expected 1 vignette, got %d", len(vignettes))
 	}
 
-	vig := vignettes[config.VignettePosChapterEnd]
+	vig := vignettes[common.VignettePosChapterEnd]
 	if vig == nil {
 		t.Fatal("vignette not found")
 	}
@@ -936,7 +937,7 @@ func TestPrepareVignettes_FromFile_JPEG(t *testing.T) {
 		},
 	}
 
-	defaultVignettes := make(map[config.VignettePos][]byte)
+	defaultVignettes := make(map[common.VignettePos][]byte)
 
 	vignettes, err := prepareVignettes(vigCfg, defaultVignettes)
 	if err != nil {
@@ -947,7 +948,7 @@ func TestPrepareVignettes_FromFile_JPEG(t *testing.T) {
 		t.Errorf("expected 1 vignette, got %d", len(vignettes))
 	}
 
-	vig := vignettes[config.VignettePosBookTitleTop]
+	vig := vignettes[common.VignettePosBookTitleTop]
 	if vig == nil {
 		t.Fatal("vignette not found")
 	}
@@ -977,7 +978,7 @@ func TestPrepareVignettes_UnsupportedContentType(t *testing.T) {
 		},
 	}
 
-	defaultVignettes := make(map[config.VignettePos][]byte)
+	defaultVignettes := make(map[common.VignettePos][]byte)
 
 	_, err := prepareVignettes(vigCfg, defaultVignettes)
 	if err == nil {
@@ -996,7 +997,7 @@ func TestPrepareVignettes_FileNotFound(t *testing.T) {
 		},
 	}
 
-	defaultVignettes := make(map[config.VignettePos][]byte)
+	defaultVignettes := make(map[common.VignettePos][]byte)
 
 	_, err := prepareVignettes(vigCfg, defaultVignettes)
 	if err == nil {
@@ -1029,9 +1030,9 @@ func TestPrepareVignettes_Mixed(t *testing.T) {
 		},
 	}
 
-	defaultVignettes := map[config.VignettePos][]byte{
-		config.VignettePosBookTitleTop:    builtinContent,
-		config.VignettePosChapterTitleTop: builtinContent,
+	defaultVignettes := map[common.VignettePos][]byte{
+		common.VignettePosBookTitleTop:    builtinContent,
+		common.VignettePosChapterTitleTop: builtinContent,
 	}
 
 	vignettes, err := prepareVignettes(vigCfg, defaultVignettes)
@@ -1043,7 +1044,7 @@ func TestPrepareVignettes_Mixed(t *testing.T) {
 		t.Errorf("expected 3 vignettes, got %d", len(vignettes))
 	}
 
-	if vig, ok := vignettes[config.VignettePosBookTitleTop]; ok {
+	if vig, ok := vignettes[common.VignettePosBookTitleTop]; ok {
 		if vig.ContentType != "image/svg+xml" {
 			t.Errorf("BookTitleTop should have content type 'image/svg+xml', got %q", vig.ContentType)
 		}
@@ -1054,7 +1055,7 @@ func TestPrepareVignettes_Mixed(t *testing.T) {
 		t.Error("BookTitleTop vignette missing")
 	}
 
-	if vig, ok := vignettes[config.VignettePosBookTitleBottom]; ok {
+	if vig, ok := vignettes[common.VignettePosBookTitleBottom]; ok {
 		if vig.ContentType != "image/svg+xml" {
 			t.Errorf("BookTitleBottom should have content type 'image/svg+xml', got %q", vig.ContentType)
 		}
@@ -1065,7 +1066,7 @@ func TestPrepareVignettes_Mixed(t *testing.T) {
 		t.Error("BookTitleBottom vignette missing")
 	}
 
-	if vig, ok := vignettes[config.VignettePosChapterTitleTop]; ok {
+	if vig, ok := vignettes[common.VignettePosChapterTitleTop]; ok {
 		if vig.ContentType != "image/svg+xml" {
 			t.Errorf("ChapterTitleTop should have content type 'image/svg+xml', got %q", vig.ContentType)
 		}
@@ -1079,9 +1080,9 @@ func TestPrepareVignettes_Mixed(t *testing.T) {
 
 func TestPrepareVignettes_Partial(t *testing.T) {
 	svgData := []byte("<svg>test</svg>")
-	defaultVignettes := map[config.VignettePos][]byte{
-		config.VignettePosBookTitleTop: svgData,
-		config.VignettePosChapterEnd:   svgData,
+	defaultVignettes := map[common.VignettePos][]byte{
+		common.VignettePosBookTitleTop: svgData,
+		common.VignettePosChapterEnd:   svgData,
 	}
 
 	vigCfg := &config.VignettesConfig{
@@ -1102,11 +1103,11 @@ func TestPrepareVignettes_Partial(t *testing.T) {
 		t.Errorf("expected 2 vignettes, got %d", len(vignettes))
 	}
 
-	if _, ok := vignettes[config.VignettePosBookTitleTop]; !ok {
+	if _, ok := vignettes[common.VignettePosBookTitleTop]; !ok {
 		t.Error("BookTitleTop vignette should be present")
 	}
 
-	if _, ok := vignettes[config.VignettePosChapterEnd]; !ok {
+	if _, ok := vignettes[common.VignettePosChapterEnd]; !ok {
 		t.Error("ChapterEnd vignette should be present")
 	}
 }
@@ -1158,7 +1159,7 @@ func TestNormalizeIDs(t *testing.T) {
 	env.Log = logger
 
 	reader := strings.NewReader(fb2Content)
-	c, err := Prepare(ctx, reader, "test.fb2", config.OutputFmtEpub2, logger)
+	c, err := Prepare(ctx, reader, "test.fb2", common.OutputFmtEpub2, logger)
 	if err != nil {
 		t.Fatalf("Failed to prepare content: %v", err)
 	}
@@ -1361,7 +1362,7 @@ func TestPrepare_InvalidXML(t *testing.T) {
 
 	// Invalid XML
 	invalidXML := strings.NewReader("<FictionBook><unclosed>")
-	_, err = Prepare(ctx, invalidXML, "invalid.fb2", config.OutputFmtEpub2, logger)
+	_, err = Prepare(ctx, invalidXML, "invalid.fb2", common.OutputFmtEpub2, logger)
 	if err == nil {
 		t.Error("Expected error for invalid XML, got nil")
 	}
@@ -1376,7 +1377,7 @@ func TestPrepare_ContextCanceled(t *testing.T) {
 	cancel() // Cancel immediately
 
 	validXML := strings.NewReader(`<?xml version="1.0"?><FictionBook/>`)
-	_, err := Prepare(ctx, validXML, "test.fb2", config.OutputFmtEpub2, logger)
+	_, err := Prepare(ctx, validXML, "test.fb2", common.OutputFmtEpub2, logger)
 	if err == nil {
 		t.Error("Expected error for canceled context, got nil")
 	}
@@ -1421,7 +1422,7 @@ func TestPrepare_InvalidBookID(t *testing.T) {
 </FictionBook>`
 
 	reader := strings.NewReader(fb2Content)
-	c, err := Prepare(ctx, reader, "test.fb2", config.OutputFmtEpub2, logger)
+	c, err := Prepare(ctx, reader, "test.fb2", common.OutputFmtEpub2, logger)
 	if err != nil {
 		t.Fatalf("Prepare() failed: %v", err)
 	}
@@ -1475,7 +1476,7 @@ func TestPrepare_WithDefaultCoverGeneration(t *testing.T) {
 </FictionBook>`
 
 	reader := strings.NewReader(fb2Content)
-	c, err := Prepare(ctx, reader, "test.fb2", config.OutputFmtEpub2, logger)
+	c, err := Prepare(ctx, reader, "test.fb2", common.OutputFmtEpub2, logger)
 	if err != nil {
 		t.Fatalf("Prepare() failed: %v", err)
 	}
@@ -1543,7 +1544,7 @@ func TestPrepare_WithHyphenation(t *testing.T) {
 </FictionBook>`
 
 	reader := strings.NewReader(fb2Content)
-	c, err := Prepare(ctx, reader, "test.fb2", config.OutputFmtEpub2, logger)
+	c, err := Prepare(ctx, reader, "test.fb2", common.OutputFmtEpub2, logger)
 	if err != nil {
 		t.Fatalf("Prepare() failed: %v", err)
 	}
@@ -1590,7 +1591,7 @@ func TestPrepare_KepubSplitter(t *testing.T) {
 
 	t.Run("kepub has splitter", func(t *testing.T) {
 		reader := strings.NewReader(fb2Content)
-		c, err := Prepare(ctx, reader, "test.fb2", config.OutputFmtKepub, logger)
+		c, err := Prepare(ctx, reader, "test.fb2", common.OutputFmtKepub, logger)
 		if err != nil {
 			t.Fatalf("Prepare() failed: %v", err)
 		}
@@ -1602,7 +1603,7 @@ func TestPrepare_KepubSplitter(t *testing.T) {
 
 	t.Run("non-kepub has no splitter", func(t *testing.T) {
 		reader := strings.NewReader(fb2Content)
-		c, err := Prepare(ctx, reader, "test.fb2", config.OutputFmtEpub2, logger)
+		c, err := Prepare(ctx, reader, "test.fb2", common.OutputFmtEpub2, logger)
 		if err != nil {
 			t.Fatalf("Prepare() failed: %v", err)
 		}
@@ -1653,7 +1654,7 @@ func TestPrepare_WithCoverID(t *testing.T) {
 </FictionBook>`
 
 	reader := strings.NewReader(fb2Content)
-	c, err := Prepare(ctx, reader, "test.fb2", config.OutputFmtEpub2, logger)
+	c, err := Prepare(ctx, reader, "test.fb2", common.OutputFmtEpub2, logger)
 	if err != nil {
 		t.Fatalf("Prepare() failed: %v", err)
 	}

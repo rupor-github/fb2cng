@@ -3,7 +3,7 @@
 
 // Built By: go install
 
-package config
+package common
 
 import (
 	"fmt"

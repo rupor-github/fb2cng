@@ -746,11 +746,13 @@ MyHomeLib Installation Directory
     │
     ├───fb2epub
     │       fb2epub.exe  (copy or symlink to mhl-connector.exe)
-    │       fb2epub.yaml (optional configuration)
+    │       fb2epub.yaml (optional fbc.exe configuration)
+    │       connector.yaml (optional connector configuration)
     │
     └───fb2mobi
             fb2mobi.exe  (copy or symlink to mhl-connector.exe)
-            fb2mobi.yaml (optional configuration)
+            fb2mobi.yaml (optional fbc.exe configuration)
+            connector.yaml (optional connector configuration)
 ```
 
 ### Setup Options
@@ -772,28 +774,59 @@ mklink fb2mobi.exe mhl-connector.exe
 
 ### Configuration
 
-Place format-specific configuration files in the same directory as the connector:
+#### FBC Configuration (Optional)
 
-- `fb2epub.yaml` - Settings for EPUB conversion
-- `fb2mobi.yaml` - Settings for MOBI/KFX conversion
+Place format-specific fbc configuration files in the same directory as the connector:
 
-If no configuration file exists, defaults are used.
+- `fb2epub.yaml` - Settings for EPUB conversion (passed to fbc.exe)
+- `fb2mobi.yaml` - Settings for MOBI/KFX conversion (passed to fbc.exe)
 
-### Debug Mode
+These files use the same format as the main fbc configuration file documented above.
 
-Set environment variable to enable debug output:
+#### Connector Configuration (Optional)
 
-**Windows:**
-```cmd
-set FBC_DEBUG=yes
+Since passing additional arguments via MyHomeLib is inconvenient, the connector supports an optional `connector.yaml` configuration file. This file should be located in the same directory as the connector executable (next to `fb2epub.exe` or `fb2mobi.exe`).
+
+**Configuration structure:**
+
+```yaml
+# Content should be UTF-8!
+version: 1
+
+# Redirect connector logs to a file (optional)
+# log_destination: connector.log
+
+# Pass debug flag to fbc (optional, default: false)
+debug: false
+
+# Output format specification (optional)
+# When not specified or not compatible, defaults will be used
+# output_format: epub3
 ```
+
+**Available fields:**
+
+- `log_destination` (string, optional) - Path to log file for connector diagnostics. If not specified, logs go to console
+- `debug` (boolean, default: false) - Enable debug mode for fbc.exe, generates diagnostic report
+- `output_format` (string, optional) - Override default output format. Allowed values:
+  - For `fb2epub.exe`: `epub2`, `epub3`, `kepub`
+  - For `fb2mobi.exe`: `kfx`
+  - If incompatible format is specified, default is used with warning in logs
+
+**When connector.yaml is not needed:**
+
+In most cases, the connector works fine without configuration. You only need `connector.yaml` if you want to:
+- Debug the MyHomeLib integration
+- Override the default output format
+- Redirect logs to a file for troubleshooting
 
 ### Connector Behavior
 
-- `fb2epub.exe` → Converts to EPUB3
-- `fb2mobi.exe` → Converts to KFX
+- `fb2epub.exe` → Converts to EPUB2 by default (or format specified in `connector.yaml`)
+- `fb2mobi.exe` → Converts to KFX by default
 - Automatically uses `--overwrite` flag
-- Expects exactly 2 arguments: source file and destination directory
+- Expects exactly 2 arguments: source and destination files
+- Logs to console by default (or to file if specified in `connector.yaml`)
 
 ## Troubleshooting
 

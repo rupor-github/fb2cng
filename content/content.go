@@ -18,6 +18,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/net/html/charset"
 
+	"fbc/common"
 	"fbc/config"
 	"fbc/content/text"
 	"fbc/fb2"
@@ -45,8 +46,8 @@ type PageMapEntry struct {
 type Content struct {
 	SrcName       string
 	Doc           *etree.Document
-	OutputFormat  config.OutputFmt     // config: output format
-	FootnotesMode config.FootnotesMode // config: footnotes handling mode
+	OutputFormat  common.OutputFmt     // config: output format
+	FootnotesMode common.FootnotesMode // config: footnotes handling mode
 	PageSize      int                  // config: runes per page, 0 if disabled
 	AdobeDE       bool                 // config: Adobe DE page markers are being generated instead of NCX pageList
 	BacklinkStr   string               // config: backlink indicator
@@ -80,7 +81,7 @@ type Content struct {
 
 // Prepare reads, parses, and prepares FB2 content for conversion.
 // It is used for all output formats.
-func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat config.OutputFmt, log *zap.Logger) (*Content, error) {
+func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat common.OutputFmt, log *zap.Logger) (*Content, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -194,7 +195,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 	// Normalize footnote bodies and build footnote index
 	book, footnotes := book.NormalizeFootnoteBodies(log)
 	// For floatRenumbered mode, renumber footnotes and update labels
-	if env.Cfg.Document.Footnotes.Mode == config.FootnotesModeFloatRenumbered {
+	if env.Cfg.Document.Footnotes.Mode == common.FootnotesModeFloatRenumbered {
 		book, footnotes = book.NormalizeFootnoteLabels(footnotes, env.Cfg.Document.Footnotes.LabelTemplate, log)
 	}
 	// Build id and link indexes replacing/removing broken links (may add not-found image binary and vignette binaries)
@@ -239,7 +240,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 	// Initialize page map settings
 	if env.Cfg.Document.PageMap.Enable {
 		c.PageSize = env.Cfg.Document.PageMap.Size
-		if outputFormat == config.OutputFmtEpub2 || outputFormat == config.OutputFmtKepub {
+		if outputFormat == common.OutputFmtEpub2 || outputFormat == common.OutputFmtKepub {
 			c.AdobeDE = env.Cfg.Document.PageMap.AdobeDE
 		}
 	}
@@ -249,7 +250,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 	}
 
 	// We only need sentences tokenizer for kepub
-	if outputFormat == config.OutputFmtKepub {
+	if outputFormat == common.OutputFmtKepub {
 		c.Splitter = text.NewSplitter(book.Description.TitleInfo.Lang, log)
 	}
 
@@ -265,21 +266,21 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat conf
 
 // prepareVignettes creates a map of vignette binaries from configuration
 // Returns an initialized but empty map if no vignettes are defined
-func prepareVignettes(vigCfg *config.VignettesConfig, defaultVignettes map[config.VignettePos][]byte) (map[config.VignettePos]*fb2.BinaryObject, error) {
-	vignettes := make(map[config.VignettePos]*fb2.BinaryObject)
+func prepareVignettes(vigCfg *config.VignettesConfig, defaultVignettes map[common.VignettePos][]byte) (map[common.VignettePos]*fb2.BinaryObject, error) {
+	vignettes := make(map[common.VignettePos]*fb2.BinaryObject)
 
 	vignetteChecks := []struct {
 		configValue string
-		position    config.VignettePos
+		position    common.VignettePos
 	}{
-		{vigCfg.Book.TitleTop, config.VignettePosBookTitleTop},
-		{vigCfg.Book.TitleBottom, config.VignettePosBookTitleBottom},
-		{vigCfg.Chapter.TitleTop, config.VignettePosChapterTitleTop},
-		{vigCfg.Chapter.TitleBottom, config.VignettePosChapterTitleBottom},
-		{vigCfg.Chapter.End, config.VignettePosChapterEnd},
-		{vigCfg.Section.TitleTop, config.VignettePosSectionTitleTop},
-		{vigCfg.Section.TitleBottom, config.VignettePosSectionTitleBottom},
-		{vigCfg.Section.End, config.VignettePosSectionEnd},
+		{vigCfg.Book.TitleTop, common.VignettePosBookTitleTop},
+		{vigCfg.Book.TitleBottom, common.VignettePosBookTitleBottom},
+		{vigCfg.Chapter.TitleTop, common.VignettePosChapterTitleTop},
+		{vigCfg.Chapter.TitleBottom, common.VignettePosChapterTitleBottom},
+		{vigCfg.Chapter.End, common.VignettePosChapterEnd},
+		{vigCfg.Section.TitleTop, common.VignettePosSectionTitleTop},
+		{vigCfg.Section.TitleBottom, common.VignettePosSectionTitleBottom},
+		{vigCfg.Section.End, common.VignettePosSectionEnd},
 	}
 
 	for _, check := range vignetteChecks {

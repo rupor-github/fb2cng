@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap/zaptest"
 	"golang.org/x/text/language"
 
+	"fbc/common"
 	"fbc/config"
 	"fbc/content"
 	"fbc/fb2"
@@ -153,7 +154,7 @@ func TestCreateXHTMLDocument(t *testing.T) {
 }
 
 func TestCreateXHTMLDocument_Kobo(t *testing.T) {
-	c := &content.Content{OutputFormat: config.OutputFmtKepub}
+	c := &content.Content{OutputFormat: common.OutputFmtKepub}
 	title := "Test Chapter"
 	doc, root := createXHTMLDocument(c, title)
 
@@ -822,7 +823,7 @@ func TestGenerate_Integration(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Prepare content using the same function as the main converter
-	c, err := content.Prepare(ctx, fb2File, testFB2Path, config.OutputFmtEpub2, log)
+	c, err := content.Prepare(ctx, fb2File, testFB2Path, common.OutputFmtEpub2, log)
 	if err != nil {
 		t.Fatalf("Failed to prepare content: %v", err)
 	}
@@ -909,7 +910,7 @@ func TestGenerate_WithFootnotes(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Prepare content using the same function as the main converter
-	c, err := content.Prepare(ctx, fb2File, testFB2Path, config.OutputFmtEpub2, log)
+	c, err := content.Prepare(ctx, fb2File, testFB2Path, common.OutputFmtEpub2, log)
 	if err != nil {
 		t.Fatalf("Failed to prepare content: %v", err)
 	}
@@ -1010,7 +1011,7 @@ func TestGenerate_OverwriteProtection(t *testing.T) {
 			},
 			Bodies: []fb2.Body{{Kind: fb2.BodyMain}},
 		},
-		OutputFormat: config.OutputFmtEpub2,
+		OutputFormat: common.OutputFmtEpub2,
 		ImagesIndex:  make(fb2.BookImages),
 		WorkDir:      tmpDir,
 	}
@@ -1041,7 +1042,7 @@ func TestGenerate_ContextCancellation(t *testing.T) {
 
 	c := &content.Content{
 		Book:         &fb2.FictionBook{},
-		OutputFormat: config.OutputFmtEpub2,
+		OutputFormat: common.OutputFmtEpub2,
 		ImagesIndex:  make(fb2.BookImages),
 		WorkDir:      tmpDir,
 	}
@@ -1518,7 +1519,7 @@ func TestWriteStylesheet(t *testing.T) {
 				{Type: "text/css", Data: "body { font-family: serif; }"},
 				{Type: "text/css", Data: "/* custom */"}},
 		},
-		OutputFormat: config.OutputFmtEpub2,
+		OutputFormat: common.OutputFmtEpub2,
 	}
 
 	err := writeStylesheet(zw, c)
@@ -1581,7 +1582,7 @@ func TestWriteStylesheetWithResources(t *testing.T) {
 				},
 			},
 		},
-		OutputFormat: config.OutputFmtEpub2,
+		OutputFormat: common.OutputFmtEpub2,
 	}
 
 	err := writeStylesheet(zw, c)
@@ -1670,7 +1671,7 @@ func TestWriteStylesheetWithNonFontResource(t *testing.T) {
 				},
 			},
 		},
-		OutputFormat: config.OutputFmtEpub2,
+		OutputFormat: common.OutputFmtEpub2,
 	}
 
 	err := writeStylesheet(zw, c)
@@ -1873,7 +1874,7 @@ func TestWriteOPF(t *testing.T) {
 				},
 			},
 		},
-		OutputFormat: config.OutputFmtEpub2,
+		OutputFormat: common.OutputFmtEpub2,
 		ImagesIndex:  make(fb2.BookImages),
 		CoverID:      "cover1",
 	}
@@ -1976,7 +1977,7 @@ func TestWriteOPF_Epub3(t *testing.T) {
 				},
 			},
 		},
-		OutputFormat: config.OutputFmtEpub3,
+		OutputFormat: common.OutputFmtEpub3,
 		ImagesIndex:  make(fb2.BookImages),
 	}
 
@@ -2039,7 +2040,7 @@ func TestWriteNCX(t *testing.T) {
 				},
 			},
 		},
-		OutputFormat: config.OutputFmtEpub2,
+		OutputFormat: common.OutputFmtEpub2,
 		ImagesIndex:  make(fb2.BookImages),
 	}
 
@@ -2142,7 +2143,7 @@ func TestWriteNav(t *testing.T) {
 				},
 			},
 		},
-		OutputFormat: config.OutputFmtEpub3,
+		OutputFormat: common.OutputFmtEpub3,
 		ImagesIndex:  make(fb2.BookImages),
 	}
 
@@ -2166,7 +2167,7 @@ func TestWriteNav(t *testing.T) {
 
 	cfg := &config.DocumentConfig{
 		TOCPage: config.TOCPageConfig{
-			Placement: config.TOCPagePlacementNone,
+			Placement: common.TOCPagePlacementNone,
 		},
 	}
 
@@ -2243,7 +2244,7 @@ func TestWriteCoverPage(t *testing.T) {
 				},
 			},
 		},
-		OutputFormat: config.OutputFmtEpub2,
+		OutputFormat: common.OutputFmtEpub2,
 		ImagesIndex: fb2.BookImages{
 			"cover": &fb2.BookImage{
 				Filename: "cover.jpg",
@@ -2303,7 +2304,7 @@ func TestGenerateTOCPage(t *testing.T) {
 			},
 		},
 		IDsIndex:     make(fb2.IDIndex),
-		OutputFormat: config.OutputFmtEpub2,
+		OutputFormat: common.OutputFmtEpub2,
 	}
 
 	chapters := []chapterData{
@@ -2484,14 +2485,14 @@ func TestGenerate_WithTOCPageBefore(t *testing.T) {
 	env.Overwrite = true
 	tmpDir := t.TempDir()
 
-	c, err := content.Prepare(ctx, fb2File, testFB2Path, config.OutputFmtEpub2, log)
+	c, err := content.Prepare(ctx, fb2File, testFB2Path, common.OutputFmtEpub2, log)
 	if err != nil {
 		t.Fatalf("Failed to prepare content: %v", err)
 	}
 
 	outputPath := filepath.Join(tmpDir, "test-toc-before.epub")
 	cfg := env.Cfg.Document
-	cfg.TOCPage.Placement = config.TOCPagePlacementBefore
+	cfg.TOCPage.Placement = common.TOCPagePlacementBefore
 
 	err = Generate(ctx, c, outputPath, &cfg, log)
 	if err != nil {
@@ -2563,14 +2564,14 @@ func TestGenerate_WithTOCPageAfter(t *testing.T) {
 	env.Overwrite = true
 	tmpDir := t.TempDir()
 
-	c, err := content.Prepare(ctx, fb2File, testFB2Path, config.OutputFmtEpub3, log)
+	c, err := content.Prepare(ctx, fb2File, testFB2Path, common.OutputFmtEpub3, log)
 	if err != nil {
 		t.Fatalf("Failed to prepare content: %v", err)
 	}
 
 	outputPath := filepath.Join(tmpDir, "test-toc-after.epub")
 	cfg := env.Cfg.Document
-	cfg.TOCPage.Placement = config.TOCPagePlacementAfter
+	cfg.TOCPage.Placement = common.TOCPagePlacementAfter
 
 	err = Generate(ctx, c, outputPath, &cfg, log)
 	if err != nil {
@@ -2613,8 +2614,8 @@ func TestFloatModeFootnotes(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		format         config.OutputFmt
-		mode           config.FootnotesMode
+		format         common.OutputFmt
+		mode           common.FootnotesMode
 		expectNoteref  bool // EPUB3: expect epub:type="noteref"
 		expectAside    bool // EPUB3: expect <aside epub:type="footnote">
 		expectRefID    bool // EPUB2/3: expect id on <a> reference
@@ -2622,8 +2623,8 @@ func TestFloatModeFootnotes(t *testing.T) {
 	}{
 		{
 			name:           "EPUB3 float mode",
-			format:         config.OutputFmtEpub3,
-			mode:           config.FootnotesModeFloat,
+			format:         common.OutputFmtEpub3,
+			mode:           common.FootnotesModeFloat,
 			expectNoteref:  true,
 			expectAside:    true,
 			expectRefID:    true,
@@ -2631,8 +2632,8 @@ func TestFloatModeFootnotes(t *testing.T) {
 		},
 		{
 			name:           "EPUB2 float mode",
-			format:         config.OutputFmtEpub2,
-			mode:           config.FootnotesModeFloat,
+			format:         common.OutputFmtEpub2,
+			mode:           common.FootnotesModeFloat,
 			expectNoteref:  false,
 			expectAside:    false,
 			expectRefID:    true,
@@ -2640,8 +2641,8 @@ func TestFloatModeFootnotes(t *testing.T) {
 		},
 		{
 			name:           "EPUB3 default mode",
-			format:         config.OutputFmtEpub3,
-			mode:           config.FootnotesModeDefault,
+			format:         common.OutputFmtEpub3,
+			mode:           common.FootnotesModeDefault,
 			expectNoteref:  false,
 			expectAside:    false,
 			expectRefID:    false,
@@ -2774,7 +2775,7 @@ func TestFloatModeFootnotes(t *testing.T) {
 			if tt.expectBacklink {
 				// Check for back-reference link
 				var backlinks []*etree.Element
-				if tt.format == config.OutputFmtEpub2 || tt.format == config.OutputFmtKepub {
+				if tt.format == common.OutputFmtEpub2 || tt.format == common.OutputFmtKepub {
 					// EPUB2: backlink is inside <p class="footnote">
 					backlinks = fnChapter.Doc.FindElements("//p[@class='footnote']/a")
 				} else {
@@ -2806,32 +2807,32 @@ func TestFloatModeFootnotesMultipleParagraphs(t *testing.T) {
 
 	tests := []struct {
 		name                string
-		format              config.OutputFmt
-		mode                config.FootnotesMode
+		format              common.OutputFmt
+		mode                common.FootnotesMode
 		expectMoreIndicator bool
 	}{
 		{
 			name:                "EPUB3 float mode with multiple paragraphs",
-			format:              config.OutputFmtEpub3,
-			mode:                config.FootnotesModeFloat,
+			format:              common.OutputFmtEpub3,
+			mode:                common.FootnotesModeFloat,
 			expectMoreIndicator: true,
 		},
 		{
 			name:                "EPUB2 float mode with multiple paragraphs",
-			format:              config.OutputFmtEpub2,
-			mode:                config.FootnotesModeFloat,
+			format:              common.OutputFmtEpub2,
+			mode:                common.FootnotesModeFloat,
 			expectMoreIndicator: true,
 		},
 		{
 			name:                "Kepub float mode with multiple paragraphs",
-			format:              config.OutputFmtKepub,
-			mode:                config.FootnotesModeFloat,
+			format:              common.OutputFmtKepub,
+			mode:                common.FootnotesModeFloat,
 			expectMoreIndicator: true,
 		},
 		{
 			name:                "EPUB3 default mode with multiple paragraphs",
-			format:              config.OutputFmtEpub3,
-			mode:                config.FootnotesModeDefault,
+			format:              common.OutputFmtEpub3,
+			mode:                common.FootnotesModeDefault,
 			expectMoreIndicator: false, // Default mode doesn't use more indicator
 		},
 	}
@@ -2945,7 +2946,7 @@ func TestFloatModeFootnotesMultipleParagraphs(t *testing.T) {
 					}
 
 					// Verify it's in the first paragraph/span
-					if tt.format == config.OutputFmtEpub3 {
+					if tt.format == common.OutputFmtEpub3 {
 						// EPUB3: should be in first <p> inside <aside>
 						aside := fnChapter.Doc.FindElement("//aside[@epub:type='footnote']")
 						if aside != nil {
@@ -2993,19 +2994,19 @@ func TestFloatModeFootnotesSingleParagraph(t *testing.T) {
 
 	tests := []struct {
 		name   string
-		format config.OutputFmt
+		format common.OutputFmt
 	}{
 		{
 			name:   "EPUB3 float mode single paragraph",
-			format: config.OutputFmtEpub3,
+			format: common.OutputFmtEpub3,
 		},
 		{
 			name:   "EPUB2 float mode single paragraph",
-			format: config.OutputFmtEpub2,
+			format: common.OutputFmtEpub2,
 		},
 		{
 			name:   "Kepub float mode single paragraph",
-			format: config.OutputFmtKepub,
+			format: common.OutputFmtKepub,
 		},
 	}
 
@@ -3016,7 +3017,7 @@ func TestFloatModeFootnotesSingleParagraph(t *testing.T) {
 			// Create test content with SINGLE paragraph footnote
 			c := &content.Content{
 				OutputFormat:  tt.format,
-				FootnotesMode: config.FootnotesModeFloat,
+				FootnotesMode: common.FootnotesModeFloat,
 				BackLinkIndex: make(map[string][]content.BackLinkRef),
 				BacklinkStr:   backlinkSym,
 				MoreParaStr:   moreParaSym,
@@ -3109,7 +3110,7 @@ func TestWriteOPF_EPUB3Collections(t *testing.T) {
 	tests := []struct {
 		name      string
 		sequences []fb2.Sequence
-		format    config.OutputFmt
+		format    common.OutputFmt
 		validate  func(t *testing.T, opfContent string)
 	}{
 		{
@@ -3117,7 +3118,7 @@ func TestWriteOPF_EPUB3Collections(t *testing.T) {
 			sequences: []fb2.Sequence{
 				{Name: "Test Series", Number: &num5},
 			},
-			format: config.OutputFmtEpub3,
+			format: common.OutputFmtEpub3,
 			validate: func(t *testing.T, opfContent string) {
 				if !strings.Contains(opfContent, `<meta property="belongs-to-collection" id="collection1">Test Series</meta>`) {
 					t.Error("Expected belongs-to-collection metadata")
@@ -3138,7 +3139,7 @@ func TestWriteOPF_EPUB3Collections(t *testing.T) {
 			sequences: []fb2.Sequence{
 				{Name: "Test Series", Number: &num5},
 			},
-			format: config.OutputFmtEpub2,
+			format: common.OutputFmtEpub2,
 			validate: func(t *testing.T, opfContent string) {
 				if !strings.Contains(opfContent, `<meta name="calibre:series" content="Test Series"/>`) {
 					t.Error("Expected calibre:series metadata")
@@ -3156,7 +3157,7 @@ func TestWriteOPF_EPUB3Collections(t *testing.T) {
 			sequences: []fb2.Sequence{
 				{Name: "Test Series", Number: &num5},
 			},
-			format: config.OutputFmtKepub,
+			format: common.OutputFmtKepub,
 			validate: func(t *testing.T, opfContent string) {
 				if !strings.Contains(opfContent, `<meta name="calibre:series" content="Test Series"/>`) {
 					t.Error("Expected calibre:series metadata for KEPUB")
@@ -3173,7 +3174,7 @@ func TestWriteOPF_EPUB3Collections(t *testing.T) {
 				{Name: "Series Two", Number: &num5},
 				{Name: "Series Three", Number: nil},
 			},
-			format: config.OutputFmtEpub3,
+			format: common.OutputFmtEpub3,
 			validate: func(t *testing.T, opfContent string) {
 				if !strings.Contains(opfContent, `<meta property="belongs-to-collection" id="collection1">Series One</meta>`) {
 					t.Error("Expected first collection")
@@ -3208,7 +3209,7 @@ func TestWriteOPF_EPUB3Collections(t *testing.T) {
 					},
 				},
 			},
-			format: config.OutputFmtEpub3,
+			format: common.OutputFmtEpub3,
 			validate: func(t *testing.T, opfContent string) {
 				if !strings.Contains(opfContent, `<meta property="belongs-to-collection" id="collection1">Parent Series</meta>`) {
 					t.Error("Expected parent collection")
@@ -3233,7 +3234,7 @@ func TestWriteOPF_EPUB3Collections(t *testing.T) {
 		{
 			name:      "No sequences",
 			sequences: []fb2.Sequence{},
-			format:    config.OutputFmtEpub3,
+			format:    common.OutputFmtEpub3,
 			validate: func(t *testing.T, opfContent string) {
 				if strings.Contains(opfContent, `belongs-to-collection`) {
 					t.Error("Should not have collection metadata when no sequences")
