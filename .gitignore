@@ -13,6 +13,7 @@
 *.conf
 *.epub
 *.fb2
+*.kfx
 
 # build specific
 build/
