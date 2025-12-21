@@ -155,7 +155,7 @@ func BuildReadingOrders(sectionIDs []string) []any {
 	return []any{readingOrder{Name: "$351", Sections: sectionIDs}}
 }
 
-func BuildDocumentData(readingOrders []any) any {
+func BuildDocumentData(readingOrders []any, maxID int64) any {
 	// Copy stable keys from your passing samples to avoid deep decoder assumptions.
 	return documentData{
 		V16:   decimalWithUnit{Value: ion.MustParseDecimal("1"), Unit: "$308"},
@@ -165,7 +165,7 @@ func BuildDocumentData(readingOrders []any) any {
 		V436:  "$441",
 		V477:  "$56",
 		V560:  "$557",
-		MaxID: 851,
+		MaxID: maxID,
 		RO:    readingOrders,
 	}
 }

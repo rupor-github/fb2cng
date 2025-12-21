@@ -27,4 +27,4 @@ content/text/sentences/*.json.gz
 !content/text/sentences/hungarian.json.gz
 !content/text/sentences/icelandic.json.gz
 !content/text/sentences/korean.json.gz
-!testdata/*.fb2
+!testdata/_Test.fb2

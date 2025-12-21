@@ -37,11 +37,6 @@ type entityHeader struct {
 	HeaderLen uint32
 }
 
-type indexTableEntry struct {
-	NumID, NumType uint32
-	Offset, Size   uint64
-}
-
 // PackParams are inputs to Pack().
 //
 // This packer follows KFXInput's container layout (see kfxlib/kfx_container.py)

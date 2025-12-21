@@ -16,8 +16,11 @@ var ionBVM = []byte{0xE0, 0x01, 0x00, 0xEA}
 // KFX stores this prolog separately as "document symbols" and then stores each
 // fragment payload as BVM + value (without LST).
 type Prolog struct {
+	// Bytes is the BVM+LST prefix used to strip the prolog from MarshalBinaryLST output.
 	Bytes []byte
-	LST   ion.SymbolTable
+	// DocSymbols is the BVM+IonValue blob stored in the container as document symbols.
+	DocSymbols []byte
+	LST        ion.SymbolTable
 }
 
 // BuildProlog creates a KFX "document symbols" datagram (BVM + local symbol
@@ -33,25 +36,51 @@ func BuildProlog(localSymbols []string, imports ...ion.SharedSymbolTable) (*Prol
 	}
 	lst := lstb.Build()
 
-	// ion-go only writes the LST when writing at least one top-level value.
-	// We write a single null and then strip it, leaving a datagram with exactly
-	// one value: the LST.
-	buf := bytes.Buffer{}
-	w := ion.NewBinaryWriterLST(&buf, lst)
-	if err := w.WriteNull(); err != nil {
+	// MarshalBinaryLST is what MarshalPayload relies on; using it here guarantees
+	// that prolog.Bytes is exactly the prefix of MarshalBinaryLST output.
+	b, err := ion.MarshalBinaryLST(nil, lst)
+	if err != nil {
 		return nil, err
 	}
-	if err := w.Finish(); err != nil {
-		return nil, err
-	}
-
-	b := buf.Bytes()
 	if len(b) == 0 || b[len(b)-1] != 0x0F {
 		return nil, fmt.Errorf("unexpected prolog trailer")
 	}
 	b = b[:len(b)-1]
 
-	return &Prolog{Bytes: b, LST: lst}, nil
+	p := &Prolog{Bytes: b, LST: lst}
+
+	// Build document symbols payload as a single annotated value ($ion_symbol_table)
+	// with import max_id including system symbols (kfxlib expects this).
+	type importEntry struct {
+		Name  string `ion:"name"`
+		Ver   int64  `ion:"version"`
+		MaxID int64  `ion:"max_id"`
+	}
+	type symtab struct {
+		Imports []importEntry `ion:"imports"`
+		Symbols []string      `ion:"symbols"`
+	}
+
+	maxID := int64(lst.MaxID())
+	// Imported YJ_symbols are numeric "$10".."$851"; local symbols start after that.
+	// kfxlib adjusts import.max_id by subtracting system symbol count (9).
+	if len(imports) > 0 {
+		// imports[0] is YJ_symbols; its max_id should be system+851 (=860) for v10.
+		// With ion-go system max_id=9, this is 9+842=851.
+		maxID = int64(len(ion.V1SystemSymbolTable.Symbols())) + 842
+	}
+
+	ds := symtab{
+		Imports: []importEntry{{Name: "YJ_symbols", Ver: 10, MaxID: maxID}},
+		Symbols: localSymbols,
+	}
+	doc, err := MarshalAnnotatedPayload(ds, []ion.SymbolToken{ion.NewSymbolTokenFromString("$ion_symbol_table")}, p)
+	if err != nil {
+		return nil, fmt.Errorf("marshal document symbols: %w", err)
+	}
+	p.DocSymbols = doc
+
+	return p, nil
 }
 
 // MarshalPayload encodes v as a KFX fragment payload: BVM + value bytes.

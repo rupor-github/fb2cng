@@ -28,7 +28,7 @@ func dumpDebug(c *content.Content, containerID string, prolog *ionutil.Prolog, f
 	if err := os.WriteFile(filepath.Join(dir, "container_id.txt"), []byte(containerID+"\n"), 0644); err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(dir, "document_symbols.ion"), prolog.Bytes, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "document_symbols.ion"), prolog.DocSymbols, 0644); err != nil {
 		return err
 	}
 
