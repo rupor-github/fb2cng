@@ -63,6 +63,7 @@ type Content struct {
 	Splitter *text.Splitter
 	Hyphen   *text.Hyphenator
 	WorkDir  string
+	Debug    bool
 
 	// Footnote back-link tracking
 	BackLinkIndex   map[string][]BackLinkRef // targetID -> list of references to it
@@ -233,6 +234,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 		IDsIndex:       ids,
 		LinksRevIndex:  links,
 		WorkDir:        tmpDir,
+		Debug:          env.Rpt != nil,
 		BackLinkIndex:  make(map[string][]BackLinkRef),
 		PageMapIndex:   make(map[string][]PageMapEntry),
 	}

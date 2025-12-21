@@ -117,7 +117,11 @@ func Pack(p *PackParams) ([]byte, error) {
 	for _, fr := range p.Fragments {
 		// NOTE: For KFXInput compatibility we avoid storing IonAnnotations inside
 		// entity payloads. Fragment identity is solely from entity table (id/type).
+		// Singleton fragments have entity id "$348".
 		idName := fr.FID
+		if fr.FID == fr.FType {
+			idName = "$348"
+		}
 
 		id, ok := st.FindByName(idName)
 		if !ok {

@@ -33,7 +33,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 	coverResourceID := "$702"
 	coverMediaID := "$703"
 
-	yjSST := symbols.SharedYJSymbols(842)
+	yjSST := symbols.SharedYJSymbols(851)
 	prolog, err := ionutil.BuildProlog(nil, yjSST)
 	if err != nil {
 		return fmt.Errorf("build document symbols: %w", err)
@@ -86,35 +86,57 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		Rows []any  `ion:"$141"`
 	}
 
-	// Minimal location / PID maps.
-	type locEntry struct {
-		EID int64 `ion:"$155"`
-		Off int64 `ion:"$143"`
+	// Minimal location / PID maps (kfxlib/yj_position_location.py expectations).
+	type location struct {
+		EID    int64 `ion:"$155"`
+		Offset int64 `ion:"$143,omitempty"`
 	}
-	type locationMap struct {
-		Entries []locEntry `ion:"$181"`
+	type locationMapRoot struct {
+		ROName    string     `ion:"$178,symbol"`
+		Locations []location `ion:"$182"`
 	}
-	type pidMapWithOffsetEntry struct {
-		Range []int64 `ion:"$181"`
-		Sec   string  `ion:"$174,symbol"`
+	type positionMapSection struct {
+		Section string  `ion:"$174,symbol"`
+		EIDs    []int64 `ion:"$181"`
 	}
 	type pidMapEntry struct {
-		K int64 `ion:"$184"`
-		V int64 `ion:"$185"`
+		PID    int64 `ion:"$184"`
+		EID    int64 `ion:"$185"`
+		Offset int64 `ion:"$143,omitempty"`
 	}
+
+	eidTextBase := int64(2000)
+	eidStoryOuter := int64(3000)
+	eidStoryInner := int64(3001)
+
+	title := c.Book.Description.TitleInfo.BookTitle.Value
+	titleLen := int64(len([]rune(title)))
+	pidEnd := int64(2) + titleLen
 
 	fragments := []model.Fragment{
 		{FID: "$538", FType: "$538", Value: builders.BuildDocumentData(readingOrders)},
 		{FID: "$258", FType: "$258", Value: builders.BuildMetadataReadingOrders(readingOrders)},
 		{FID: "$490", FType: "$490", Value: builders.BuildBookMetadata(c, containerID, coverResourceID)},
 		{FID: "$389", FType: "$389", Value: builders.BuildNavigation()},
-		{FID: "$550", FType: "$550", Value: locationMap{Entries: []locEntry{{EID: 0, Off: 0}}}},
-		{FID: "$264", FType: "$264", Value: []pidMapWithOffsetEntry{{Range: []int64{0, 1}, Sec: sectionID}}},
-		{FID: "$265", FType: "$265", Value: []pidMapEntry{{K: 0, V: 0}}},
+
+		// $264: position_map (maps EIDs to sections).
+		{FID: "$264", FType: "$264", Value: []positionMapSection{{Section: sectionID, EIDs: []int64{eidTextBase, eidStoryOuter, eidStoryInner}}}},
+
+		// $265: position_id_map (PID -> EID mapping, terminated by EID=0).
+		{FID: "$265", FType: "$265", Value: []pidMapEntry{
+			{PID: 0, EID: eidTextBase},
+			{PID: 1, EID: eidStoryOuter},
+			{PID: 2, EID: eidStoryInner},
+			{PID: pidEnd, EID: 0},
+		}},
+
+		// $550: location_map (one root struct, contains list of {eid, offset}).
+		{FID: "$550", FType: "$550", Value: []locationMapRoot{{ROName: "$351", Locations: []location{{EID: eidTextBase, Offset: 0}}}}},
+
 		{FID: "$395", FType: "$395", Value: builders.BuildResourcePath()},
-		{FID: contentID, FType: "$145", Value: contentFragment{Name: contentID, T: []string{c.Book.Description.TitleInfo.BookTitle.Value}, V436: 0, V305: []any{}}},
-		{FID: storylineID, FType: "$259", Value: storyline{ID: storylineID, Seq: []any{outerNode{EID: 0, V156: "$323", V159: "$270", V790: 1, Kids: []any{innerNode{EID: 0, V159: "$269", V145: contentRef{Name: contentID, V403: 0}}}}}}},
-		{FID: sectionID, FType: "$260", Value: section{ID: sectionID, Rows: []any{sectionStoryline{EID: 0, SL: storylineID, V156: "$326", V140: "$320", V159: "$270", V66: 0, V67: 0}}}},
+		{FID: contentID, FType: "$145", Value: contentFragment{Name: contentID, T: []string{title}, V436: 0, V305: []any{}}},
+		{FID: storylineID, FType: "$259", Value: storyline{ID: storylineID, Seq: []any{outerNode{EID: eidStoryOuter, V156: "$323", V159: "$270", V790: 1, Kids: []any{innerNode{EID: eidStoryInner, V159: "$269", V145: contentRef{Name: contentID, V403: 0}}}}}}},
+		{FID: sectionID, FType: "$260", Value: section{ID: sectionID, Rows: []any{sectionStoryline{EID: eidTextBase, SL: storylineID, V156: "$326", V140: "$320", V159: "$270", V66: 0, V67: 0}}}},
 	}
 
 	// Cover image.
@@ -140,6 +162,10 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 	}
 
 	fragments = append(fragments, model.Fragment{FID: "$419", FType: "$419", Value: builders.BuildEntityMap(containerID, entityMapIDs, sectionID, sectionResources)})
+
+	if err := dumpDebug(c, containerID, prolog, fragments, log); err != nil {
+		return fmt.Errorf("store kfx debug dumps: %w", err)
+	}
 
 	data, err := container.Pack(&container.PackParams{
 		ContainerID:              containerID,

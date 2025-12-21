@@ -669,6 +669,7 @@ Enable with `--debug` flag. Creates archive with:
 - Complete debug logs
 - Configuration dump
 - Processing artifacts
+- KFX internals dump (when generating KFX)
 - Error information
 
 ## Configuration

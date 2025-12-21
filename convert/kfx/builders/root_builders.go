@@ -73,7 +73,6 @@ type navRoot struct {
 func BuildFormatCapabilities() any {
 	// Match what your known-good KFX samples use.
 	return []any{
-		map[string]any{"$492": "kfxgen.pidMapWithOffset", "version": int64(1)},
 		map[string]any{"$492": "kfxgen.textBlock", "version": int64(1)},
 	}
 }
