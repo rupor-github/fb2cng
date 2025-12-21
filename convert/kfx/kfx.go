@@ -197,6 +197,9 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		localSymbols = append(localSymbols, d.ID)
 	}
 
+	tocID := "toc"
+	localSymbols = append(localSymbols, tocID)
+
 	yjSST := symbols.SharedYJSymbols(851)
 	prolog, err := ionutil.BuildProlog(localSymbols, yjSST)
 	if err != nil {
@@ -215,7 +218,8 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		{FID: "$538", FType: "$538", Value: builders.BuildDocumentData(readingOrders, 851)},
 		{FID: "$258", FType: "$258", Value: builders.BuildMetadataReadingOrders(readingOrders)},
 		{FID: "$490", FType: "$490", Value: builders.BuildBookMetadata(c, containerID, coverResourceID)},
-		{FID: "$389", FType: "$389", Value: builders.BuildNavigation()},
+		{FID: tocID, FType: "$391", Value: builders.BuildNavContainerTOC(tocID)},
+		{FID: "$389", FType: "$389", Value: builders.BuildNavigation(tocID)},
 		{FID: "$585", FType: "$585", Value: builders.BuildConversionFeatures(reflowSectionSize)},
 
 		// $264: position_map (maps EIDs to sections).
@@ -253,8 +257,8 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 	}
 
 	// Entity map must reference all non-singleton fragment IDs.
-	entityMapIDs := make([]string, 0, 2+len(contentIDs))
-	entityMapIDs = append(entityMapIDs, sectionID, storylineID)
+	entityMapIDs := make([]string, 0, 3+len(contentIDs))
+	entityMapIDs = append(entityMapIDs, sectionID, storylineID, tocID)
 	entityMapIDs = append(entityMapIDs, contentIDs...)
 	sectionResources := []string{}
 	if c.CoverID != "" {

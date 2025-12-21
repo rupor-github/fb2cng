@@ -60,14 +60,15 @@ type entityMap struct {
 }
 
 type navContainer struct {
+	Name string `ion:"$239,symbol"`
 	Type string `ion:"$235,symbol"`
 	// keep empty list
 	Items []any `ion:"$247"`
 }
 
 type navRoot struct {
-	ROName string `ion:"$178,symbol"`
-	Navs   []any  `ion:"$392"`
+	ROName string   `ion:"$178,symbol"`
+	Navs   []string `ion:"$392,symbol"`
 }
 
 func BuildFormatCapabilities() any {
@@ -178,13 +179,13 @@ func BuildResourcePath() any {
 	return map[string]any{"$247": []any{}}
 }
 
-func BuildNavigation() any {
-	// Minimal nav: one reading order, one empty TOC container.
-	toc := annotatedValue{
-		Value:       navContainer{Type: "$212", Items: []any{}},
-		Annotations: annot("$391"),
-	}
-	return []any{navRoot{ROName: "$351", Navs: []any{toc}}}
+func BuildNavigation(tocID string) any {
+	// Minimal nav: one reading order with a single (empty) TOC container.
+	return []any{navRoot{ROName: "$351", Navs: []string{tocID}}}
+}
+
+func BuildNavContainerTOC(tocID string) any {
+	return navContainer{Name: tocID, Type: "$212", Items: []any{}}
 }
 
 func BuildEmptyListRoot() []any { return []any{} }
