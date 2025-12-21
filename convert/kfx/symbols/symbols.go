@@ -19,8 +19,11 @@ const (
 // shared symbol table with an offset of Ion system symbols (maxID=10), so SID N
 // maps to "$<N+10>".
 func SharedYJSymbols(maxID uint64) ion.SharedSymbolTable {
-	// System table (v1) has max_id=10 and already contains "name", "version",
-	// "imports", "symbols", "max_id", "$ion_symbol_table", etc.
+	// KFX uses numeric symbol texts like "$538" and entity tables store numeric
+	// IDs that correspond to those values (e.g. "$538" -> idnum 538).
+	//
+	// To achieve that, the shared symbol table must start at "$11" so that the
+	// first imported symbol (global SID 11) resolves to text "$11".
 	base := len(ion.V1SystemSymbolTable.Symbols())
 
 	syms := make([]string, 0, maxID)

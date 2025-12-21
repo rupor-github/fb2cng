@@ -7,12 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"sort"
 
 	"github.com/amazon-ion/ion-go/ion"
 
-	"fbc/convert/kfx"
 	"fbc/convert/kfx/ionutil"
+	"fbc/convert/kfx/model"
 )
 
 const (
@@ -24,18 +23,18 @@ const (
 )
 
 type containerHeader struct {
-	Signature  [4]byte
-	Version    uint16
-	HeaderSize uint32
+	Signature [4]byte
+	Version   uint16
+	HeaderLen uint32
 
-	InfoOffset uint32
-	InfoSize   uint32
+	ContainerInfoOffset uint32
+	ContainerInfoLength uint32
 }
 
 type entityHeader struct {
 	Signature [4]byte
 	Version   uint16
-	Size      uint32
+	HeaderLen uint32
 }
 
 type indexTableEntry struct {
@@ -43,30 +42,33 @@ type indexTableEntry struct {
 	Offset, Size   uint64
 }
 
-// PackParams are inputs to Pack(). This is intentionally low-level: higher
-// layers should build fragments and decide symbol tables.
+// PackParams are inputs to Pack().
+//
+// This packer follows KFXInput's container layout (see kfxlib/kfx_container.py)
+// closely because offsets/lengths are validated by the decoder.
 type PackParams struct {
 	ContainerID string
 
-	// ContainerInfo is the Ion $270 value (unannotated) that will be stored at InfoOffset.
-	ContainerInfo any
+	KfxgenApplicationVersion string
+	KfxgenPackageVersion     string
+
 	// DocumentSymbols is the BVM+LST blob (local symbol table datagram).
 	DocumentSymbols []byte
-	// FormatCapabilities is the Ion $593 value.
+	// FormatCapabilities is the Ion value that will be stored annotated as $593.
 	FormatCapabilities any
 
 	// Prolog is the parsed prolog (doc symbols) used to serialize fragments.
 	Prolog *ionutil.Prolog
 
-	Fragments []kfx.Fragment
+	// Fragments are entity fragments (everything except container fragments $270,
+	// $593, $ion_symbol_table). The $419 fragment MUST be included here.
+	Fragments []model.Fragment
 }
 
 // Pack creates a single-file KFX "CONT" container.
 //
-// NOTE: This is a scaffolding packer. It writes a structurally-correct container
-// (header + container_info + kfxgen_info + doc symbols + format capabilities +
-// entity index + entities). Producing a *valid* KFX book is handled by fragment
-// builders and strict field choices.
+// It matches KFXInput's serializer order:
+// header -> entity_table -> doc_symbols -> format_capabilities -> container_info -> kfxgen_info -> entity_data
 func Pack(p *PackParams) ([]byte, error) {
 	if p.Prolog == nil {
 		return nil, fmt.Errorf("missing prolog")
@@ -75,144 +77,181 @@ func Pack(p *PackParams) ([]byte, error) {
 		return nil, fmt.Errorf("missing document symbols")
 	}
 
-	// Serialize container_info and format_capabilities as standalone Ion values.
-	containerInfoBytes, err := ionutil.MarshalPayload(p.ContainerInfo, p.Prolog)
-	if err != nil {
-		return nil, fmt.Errorf("marshal container_info: %w", err)
-	}
-	formatCapabilitiesBytes, err := ionutil.MarshalPayload(p.FormatCapabilities, p.Prolog)
+	st := p.Prolog.LST
+
+	formatCapsBytes, err := ionutil.MarshalAnnotatedPayload(
+		p.FormatCapabilities,
+		[]ion.SymbolToken{ion.NewSymbolTokenFromString("$593")},
+		p.Prolog,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("marshal format_capabilities: %w", err)
 	}
 
-	// Build entity payloads.
-	// KFX entity payload is BVM + (annotated fragment value).
-	type packedEntity struct {
-		idNum   uint32
-		typeNum uint32
-		data    []byte
+	entityInfoBytes, err := ionutil.MarshalPayload(map[string]any{"$410": int64(0), "$411": int64(0)}, p.Prolog)
+	if err != nil {
+		return nil, fmt.Errorf("marshal entity_info: %w", err)
 	}
 
-	st := p.Prolog.LST
-	packed := make([]packedEntity, 0, len(p.Fragments))
-	for _, fr := range p.Fragments {
-		ann := []ion.SymbolToken{
-			ion.NewSymbolTokenFromString(fr.FID),
-			ion.NewSymbolTokenFromString(fr.FType),
-		}
-		payload, err := ionutil.MarshalAnnotatedPayload(fr.Value, ann, p.Prolog)
-		if err != nil {
-			return nil, fmt.Errorf("marshal fragment %s/%s: %w", fr.FID, fr.FType, err)
-		}
+	// Build entity_data + entity_table.
+	entityData := bytes.Buffer{}
+	entityTable := bytes.Buffer{}
+	entityOffset := uint64(0)
 
-		id, ok := st.FindByName(fr.FID)
+	addTableRow := func(idNum, typeNum uint32, off uint64, size uint64) error {
+		if err := binary.Write(&entityTable, binary.LittleEndian, idNum); err != nil {
+			return err
+		}
+		if err := binary.Write(&entityTable, binary.LittleEndian, typeNum); err != nil {
+			return err
+		}
+		if err := binary.Write(&entityTable, binary.LittleEndian, off); err != nil {
+			return err
+		}
+		if err := binary.Write(&entityTable, binary.LittleEndian, size); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	for _, fr := range p.Fragments {
+		// NOTE: For KFXInput compatibility we avoid storing IonAnnotations inside
+		// entity payloads. Fragment identity is solely from entity table (id/type).
+		idName := fr.FID
+
+		id, ok := st.FindByName(idName)
 		if !ok {
-			return nil, fmt.Errorf("fid symbol not in doc LST: %q", fr.FID)
+			return nil, fmt.Errorf("id symbol not in doc LST: %q", idName)
 		}
 		typ, ok := st.FindByName(fr.FType)
 		if !ok {
-			return nil, fmt.Errorf("ftype symbol not in doc LST: %q", fr.FType)
+			return nil, fmt.Errorf("type symbol not in doc LST: %q", fr.FType)
 		}
 
-		// KFX index table uses numeric IDs *excluding* the system table.
-		id -= ion.V1SystemSymbolTable.MaxID()
-		typ -= ion.V1SystemSymbolTable.MaxID()
-
-		packed = append(packed, packedEntity{
-			idNum:   uint32(id),
-			typeNum: uint32(typ),
-			data:    payload,
-		})
-	}
-
-	// Stable sort makes output deterministic.
-	sort.Slice(packed, func(i, j int) bool {
-		if packed[i].typeNum != packed[j].typeNum {
-			return packed[i].typeNum < packed[j].typeNum
+		var payload []byte
+		switch fr.FType {
+		case "$417", "$418":
+			b, ok := fr.Value.([]byte)
+			if !ok {
+				return nil, fmt.Errorf("raw fragment %s must be []byte", fr.FType)
+			}
+			payload = b
+		default:
+			payload, err = ionutil.MarshalPayload(fr.Value, p.Prolog)
+			if err != nil {
+				return nil, fmt.Errorf("marshal fragment %s/%s: %w", fr.FID, fr.FType, err)
+			}
 		}
-		return packed[i].idNum < packed[j].idNum
-	})
 
-	// Serialize entities (ENTY + payload).
-	// TODO: add entity_info when needed.
-	entitiesBuf := bytes.Buffer{}
-	index := make([]indexTableEntry, 0, len(packed))
-
-	for _, e := range packed {
-		start := uint64(entitiesBuf.Len())
-
+		// Build ENTY.
+		enty := bytes.Buffer{}
 		eh := entityHeader{}
 		copy(eh.Signature[:], []byte(signatureENTY))
 		eh.Version = entityVersion
-		eh.Size = uint32(binary.Size(eh))
-		if err := binary.Write(&entitiesBuf, binary.LittleEndian, &eh); err != nil {
+		eh.HeaderLen = 0
+		if err := binary.Write(&enty, binary.LittleEndian, &eh); err != nil {
+			return nil, err
+		}
+		if _, err := enty.Write(entityInfoBytes); err != nil {
 			return nil, err
 		}
 
-		if _, err := entitiesBuf.Write(e.data); err != nil {
+		// Patch header_len.
+		entyBytes := enty.Bytes()
+		hdrLen := uint32(len(entyBytes))
+		binary.LittleEndian.PutUint32(entyBytes[6:10], hdrLen)
+
+		if _, err := enty.Write(payload); err != nil {
 			return nil, err
 		}
 
-		index = append(index, indexTableEntry{
-			NumID:   e.idNum,
-			NumType: e.typeNum,
-			Offset:  start,
-			Size:    uint64(binary.Size(eh)) + uint64(len(e.data)),
-		})
+		serialized := enty.Bytes()
+		if _, err := entityData.Write(serialized); err != nil {
+			return nil, err
+		}
+
+		if err := addTableRow(uint32(id), uint32(typ), entityOffset, uint64(len(serialized))); err != nil {
+			return nil, err
+		}
+		entityOffset += uint64(len(serialized))
 	}
 
-	indexBuf := bytes.Buffer{}
-	for _, it := range index {
-		if err := binary.Write(&indexBuf, binary.LittleEndian, &it); err != nil {
-			return nil, err
-		}
+	// Header with placeholders.
+	out := bytes.Buffer{}
+	h := containerHeader{}
+	copy(h.Signature[:], []byte(signatureCONT))
+	h.Version = containerVersion
+	if err := binary.Write(&out, binary.LittleEndian, &h); err != nil {
+		return nil, err
 	}
 
-	// Build kfxgen_info JSON payload (kfxlib expects JSON array of {key,value}).
-	// TODO: include kfxgen_payload_sha1 and kfxgen_acr when container_info offsets are fixed.
+	// container_info (unannotated IonStruct), with offsets pointing at blocks.
+	containerInfo := map[string]any{
+		"$409": p.ContainerID,
+		"$410": int64(0),
+		"$411": int64(0),
+		"$412": int64(4096),
+		"$413": int64(out.Len()),
+		"$414": int64(entityTable.Len()),
+	}
+
+	// entity_table
+	if _, err := out.Write(entityTable.Bytes()); err != nil {
+		return nil, err
+	}
+
+	// doc_symbols
+	containerInfo["$415"] = int64(out.Len())
+	containerInfo["$416"] = int64(len(p.DocumentSymbols))
+	if _, err := out.Write(p.DocumentSymbols); err != nil {
+		return nil, err
+	}
+
+	// format_capabilities
+	containerInfo["$594"] = int64(out.Len())
+	containerInfo["$595"] = int64(len(formatCapsBytes))
+	if _, err := out.Write(formatCapsBytes); err != nil {
+		return nil, err
+	}
+
+	// container_info block at the end of header area
+	containerInfoBytes, err := ionutil.MarshalPayload(containerInfo, p.Prolog)
+	if err != nil {
+		return nil, fmt.Errorf("marshal container_info: %w", err)
+	}
+	containerInfoOffset := out.Len()
+	if _, err := out.Write(containerInfoBytes); err != nil {
+		return nil, err
+	}
+
+	// kfxgen_info JSON (must be within header area)
 	kfxgenInfo := []map[string]any{
-		{"key": "appVersion", "value": "fb2cng"},
-		{"key": "buildVersion", "value": "dev"},
+		{"key": "kfxgen_package_version", "value": p.KfxgenPackageVersion},
+		{"key": "kfxgen_application_version", "value": p.KfxgenApplicationVersion},
+		{"key": "kfxgen_payload_sha1", "value": fmt.Sprintf("%x", sha1.Sum(entityData.Bytes()))},
+		{"key": "kfxgen_acr", "value": p.ContainerID},
 	}
 	kfxgenInfoBytes, err := json.Marshal(kfxgenInfo)
 	if err != nil {
 		return nil, err
 	}
-
-	out := bytes.Buffer{}
-
-	h := containerHeader{}
-	copy(h.Signature[:], []byte(signatureCONT))
-	h.Version = containerVersion
-	h.HeaderSize = uint32(binary.Size(h))
-
-	// Header is immediately followed by container info.
-	h.InfoOffset = h.HeaderSize
-	h.InfoSize = uint32(len(containerInfoBytes))
-
-	if err := binary.Write(&out, binary.LittleEndian, &h); err != nil {
-		return nil, err
-	}
-	if _, err := out.Write(containerInfoBytes); err != nil {
-		return nil, err
-	}
 	if _, err := out.Write(kfxgenInfoBytes); err != nil {
 		return nil, err
 	}
-	if _, err := out.Write(p.DocumentSymbols); err != nil {
-		return nil, err
-	}
-	if _, err := out.Write(formatCapabilitiesBytes); err != nil {
-		return nil, err
-	}
-	if _, err := out.Write(indexBuf.Bytes()); err != nil {
-		return nil, err
-	}
-	if _, err := out.Write(entitiesBuf.Bytes()); err != nil {
+
+	headerLen := out.Len()
+
+	// Patch header.
+	buf := out.Bytes()
+	binary.LittleEndian.PutUint32(buf[6:10], uint32(headerLen))
+	binary.LittleEndian.PutUint32(buf[10:14], uint32(containerInfoOffset))
+	binary.LittleEndian.PutUint32(buf[14:18], uint32(len(containerInfoBytes)))
+
+	// entity_data
+	if _, err := out.Write(entityData.Bytes()); err != nil {
 		return nil, err
 	}
 
-	_ = sha1.Sum(out.Bytes())
 	return out.Bytes(), nil
 }
 

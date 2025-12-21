@@ -2,6 +2,7 @@ package ionutil
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/amazon-ion/ion-go/ion"
 )
@@ -19,20 +20,38 @@ type Prolog struct {
 	LST   ion.SymbolTable
 }
 
-// BuildProlog creates a local symbol table (importing the provided shared tables)
-// and returns its binary encoding (BVM+LST) plus the resulting symbol table.
-func BuildProlog(imports ...ion.SharedSymbolTable) (*Prolog, error) {
-	// Build an immutable LST for later symbol lookups.
-	lst := ion.NewSymbolTableBuilder(imports...).Build()
+// BuildProlog creates a KFX "document symbols" datagram (BVM + local symbol
+// table) that imports the provided shared tables and defines the requested local
+// symbols.
+//
+// KFX stores this datagram separately (container_info.$415/$416) and fragment
+// payloads are encoded as: BVM + value (no embedded symbol table).
+func BuildProlog(localSymbols []string, imports ...ion.SharedSymbolTable) (*Prolog, error) {
+	lstb := ion.NewSymbolTableBuilder(imports...)
+	for _, s := range localSymbols {
+		_, _ = lstb.Add(s)
+	}
+	lst := lstb.Build()
 
+	// ion-go only writes the LST when writing at least one top-level value.
+	// We write a single null and then strip it, leaving a datagram with exactly
+	// one value: the LST.
 	buf := bytes.Buffer{}
-	w := ion.NewBinaryWriter(&buf, imports...)
-	// Do not encode any values, only finish the datagram.
+	w := ion.NewBinaryWriterLST(&buf, lst)
+	if err := w.WriteNull(); err != nil {
+		return nil, err
+	}
 	if err := w.Finish(); err != nil {
 		return nil, err
 	}
 
-	return &Prolog{Bytes: buf.Bytes(), LST: lst}, nil
+	b := buf.Bytes()
+	if len(b) == 0 || b[len(b)-1] != 0x0F {
+		return nil, fmt.Errorf("unexpected prolog trailer")
+	}
+	b = b[:len(b)-1]
+
+	return &Prolog{Bytes: b, LST: lst}, nil
 }
 
 // MarshalPayload encodes v as a KFX fragment payload: BVM + value bytes.
