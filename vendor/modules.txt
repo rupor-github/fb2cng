@@ -18,6 +18,9 @@ github.com/Masterminds/sprig/v3
 ## explicit; go 1.24.0
 github.com/abice/go-enum
 github.com/abice/go-enum/generator
+# github.com/amazon-ion/ion-go v1.5.0
+## explicit; go 1.13
+github.com/amazon-ion/ion-go/ion
 # github.com/beevik/etree v1.6.0
 ## explicit; go 1.23.0
 github.com/beevik/etree
