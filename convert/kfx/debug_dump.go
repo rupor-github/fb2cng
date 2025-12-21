@@ -31,6 +31,9 @@ func dumpDebug(c *content.Content, containerID string, prolog *ionutil.Prolog, f
 	if err := os.WriteFile(filepath.Join(dir, "document_symbols.ion"), prolog.DocSymbols, 0644); err != nil {
 		return err
 	}
+	if err := os.WriteFile(filepath.Join(dir, "tree.txt"), []byte(buildKFXDebugTree(containerID, len(prolog.DocSymbols), fragments)), 0644); err != nil {
+		return err
+	}
 
 	var manifest strings.Builder
 	manifest.WriteString("fid\tftype\tpayload_bytes\n")
