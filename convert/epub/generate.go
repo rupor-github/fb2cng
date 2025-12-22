@@ -220,6 +220,7 @@ func writeXMLToZip(zw *zip.Writer, name string, doc *etree.Document) error {
 }
 
 func writeMimetype(zw *zip.Writer) error {
+	// do not set time for mimetype, it spoils epubcheck magic
 	w, err := zw.CreateHeader(&zip.FileHeader{
 		Name:   "mimetype",
 		Method: zip.Store,
@@ -872,7 +873,11 @@ func writePageMap(zw *zip.Writer, c *content.Content, _ *zap.Logger) error {
 }
 
 func writeDataToZip(zw *zip.Writer, name string, data []byte) error {
-	w, err := zw.Create(name)
+	w, err := zw.CreateHeader(&zip.FileHeader{
+		Name:     name,
+		Method:   zip.Deflate,
+		Modified: time.Now(),
+	})
 	if err != nil {
 		return err
 	}

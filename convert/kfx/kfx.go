@@ -23,6 +23,10 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		return err
 	}
 
+	if true {
+		return fmt.Errorf("KFX generation is experimental and not yet implemented")
+	}
+
 	log.Info("Generating KFX", zap.String("output", outputPath))
 
 	containerID := "CR!" + c.Book.Description.DocumentInfo.ID

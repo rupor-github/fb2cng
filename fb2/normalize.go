@@ -814,11 +814,11 @@ func extractLinkText(segment *InlineSegment) string {
 		return segment.Text
 	}
 
-	var text string
+	var sb strings.Builder
 	for i := range segment.Children {
-		text += extractLinkText(&segment.Children[i])
+		sb.WriteString(extractLinkText(&segment.Children[i]))
 	}
-	return text
+	return sb.String()
 }
 
 // markSectionDropcaps marks drop caps for the first paragraph in a section and its nested sections
