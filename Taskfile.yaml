@@ -39,6 +39,7 @@ tasks:
     cmds:
       - task: go-build
         vars: {FLAGS: 'debug', PACKAGE: './cmd/{{.PRJ_NAME}}', TARGET: '{{.DEV_BUILD_DIR}}/{{.PRJ_NAME}}'}
+      - task: build-debug-tools
       - task: compile-all-tests
       - task: lint
 
@@ -250,6 +251,17 @@ tasks:
         cmd: go test -mod=mod -c -o /dev/null '{{.DIR}}'
     sources:
       - ./**/*.go
+
+  build-debug-tools:
+    desc: Builds debug utils for development for host OS
+    aliases: [debug-tools]
+    platforms: [linux]
+    deps:
+      - task: pre-commit-install
+      - task: generate-project-version
+    cmds:
+      - task: go-build
+        vars: {FLAGS: 'debug', PACKAGE: './cmd/debug/kfxdump', TARGET: '{{.DEV_BUILD_DIR}}/kfxdump'}
 
   go-build:
     internal: true

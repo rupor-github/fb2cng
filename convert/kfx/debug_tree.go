@@ -15,6 +15,10 @@ type kfxTreeWriter struct {
 	*debug.TreeWriter
 }
 
+func BuildDebugTree(containerID string, prologSymbols int, fragments []model.Fragment) string {
+	return buildKFXDebugTree(containerID, prologSymbols, fragments)
+}
+
 func buildKFXDebugTree(containerID string, prologSymbols int, fragments []model.Fragment) string {
 	tw := kfxTreeWriter{debug.NewTreeWriter()}
 
@@ -46,8 +50,32 @@ func buildKFXDebugTree(containerID string, prologSymbols int, fragments []model.
 			case []byte:
 				tw.Line(4, "raw_bytes=%d", len(v))
 			default:
+				val := fr.Value
+				// Normalize KFXInput-style decoded maps for stable diffs vs our own tree.txt.
+				if fr.FType == "$145" {
+					type contentFragmentTree struct {
+						Name        string `ion:"name,symbol"`
+						ContentList any    `ion:"$146"`
+					}
+
+					var contentList any
+					switch m := fr.Value.(type) {
+					case map[string]any:
+						contentList = m["$146"]
+					case map[ion.SymbolToken]any:
+						for k, v := range m {
+							if k.Text != nil && *k.Text == "$146" {
+								contentList = v
+								break
+							}
+						}
+					}
+
+					val = contentFragmentTree{Name: fr.FID, ContentList: contentList}
+				}
+
 				// ion.MarshalText gives a stable-ish readable view; keep it short.
-				b, err := ion.MarshalText(v)
+				b, err := ion.MarshalText(val)
 				if err != nil {
 					tw.Line(4, "value=<ion marshal error: %v>", err)
 					continue
