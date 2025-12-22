@@ -377,6 +377,28 @@ func (c *Content) AddPageMapEntry() string {
 	return spanID
 }
 
+func (c *Content) ResetPageMap() {
+	c.pageRuneCounter = 0
+	c.TotalPages = 0
+	c.PageMapIndex = make(map[string][]PageMapEntry)
+}
+
+// ForceNewPage records a synthetic page for a file.
+// Used for spine items where we don't (or can't) inject in-document page markers (e.g., cover, TOC page).
+func (c *Content) ForceNewPage(filename string) {
+	if c.PageSize == 0 {
+		return
+	}
+	c.TotalPages++
+	c.pageRuneCounter = 0
+	entry := PageMapEntry{
+		PageNum:  c.TotalPages,
+		SpanID:   "",
+		Filename: filename,
+	}
+	c.PageMapIndex[filename] = append(c.PageMapIndex[filename], entry)
+}
+
 // GetAllPagesSeq returns an iterator over all page entries sorted by page number
 func (c *Content) GetAllPagesSeq() iter.Seq[PageMapEntry] {
 	return func(yield func(PageMapEntry) bool) {

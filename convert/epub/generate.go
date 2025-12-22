@@ -63,19 +63,62 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		return fmt.Errorf("unable to write container: %w", err)
 	}
 
-	chapters, idToFile, err := convertToXHTML(ctx, c, log)
-	if err != nil {
-		return fmt.Errorf("unable to convert content: %w", err)
+	annotationEnabled := cfg.Annotation.Enable && c.Book.Description.TitleInfo.Annotation != nil
+	tocEnabled := cfg.TOCPage.Placement != common.TOCPagePlacementNone && c.OutputFormat != common.OutputFmtEpub3
+
+	var chapters []chapterData
+	var idToFile idToFileMap
+
+	if c.PageSize > 0 {
+		// Single-pass: cover/toc/annotation are treated as one page each (no in-document markers).
+		var tocFilename string
+		if tocEnabled {
+			_, tocFilename = generateUniqueID("toc-page", c.IDsIndex)
+		}
+		var annFilename string
+		if annotationEnabled {
+			_, annFilename = generateUniqueID("annotation-page", c.IDsIndex)
+		}
+
+		c.ResetPageMap()
+
+		if c.CoverID != "" {
+			c.ForceNewPage("cover.xhtml")
+		}
+		if tocEnabled && cfg.TOCPage.Placement == common.TOCPagePlacementBefore {
+			c.ForceNewPage(tocFilename)
+		}
+		if annotationEnabled {
+			c.ForceNewPage(annFilename)
+		}
+
+		var err error
+		chapters, idToFile, err = convertToXHTML(ctx, c, log)
+		if err != nil {
+			return fmt.Errorf("unable to convert content: %w", err)
+		}
+
+		if tocEnabled && cfg.TOCPage.Placement != common.TOCPagePlacementBefore {
+			c.ForceNewPage(tocFilename)
+		}
+	} else {
+		var err error
+		chapters, idToFile, err = convertToXHTML(ctx, c, log)
+		if err != nil {
+			return fmt.Errorf("unable to convert content: %w", err)
+		}
 	}
 
-	// Add Annotation chapter if requested
-	if cfg.Annotation.Enable && c.Book.Description.TitleInfo.Annotation != nil {
+	// Generated pages should not influence the page map.
+	oldPageTracking := c.PageTrackingEnabled
+	c.PageTrackingEnabled = false
+	defer func() { c.PageTrackingEnabled = oldPageTracking }()
+
+	if annotationEnabled {
 		annotationChapter := generateAnnotation(c, &cfg.Annotation, log)
 		chapters = append([]chapterData{annotationChapter}, chapters...)
 	}
-
-	// Add TOC page if requested (EPUB2 only, EPUB3 uses nav.xhtml)
-	if cfg.TOCPage.Placement != common.TOCPagePlacementNone && c.OutputFormat != common.OutputFmtEpub3 {
+	if tocEnabled {
 		tocChapter := generateTOCPage(c, chapters, &cfg.TOCPage, log)
 		if cfg.TOCPage.Placement == common.TOCPagePlacementBefore {
 			chapters = append([]chapterData{tocChapter}, chapters...)
@@ -152,6 +195,12 @@ func generateAnnotation(c *content.Content, cfg *config.AnnotationConfig, log *z
 
 	id, filename := generateUniqueID("annotation-page", c.IDsIndex)
 
+	oldFilename := c.CurrentFilename
+	c.CurrentFilename = filename
+	defer func() {
+		c.CurrentFilename = oldFilename
+	}()
+
 	// Create wrapper div with annotation-body class and proper chapter ID
 	annotationBodyDiv := root.CreateElement("div")
 	annotationBodyDiv.CreateAttr("class", "annotation-body")
@@ -184,6 +233,12 @@ func generateTOCPage(c *content.Content, chapters []chapterData, cfg *config.TOC
 	doc, root := createXHTMLDocument(c, title)
 
 	id, filename := generateUniqueID("toc-page", c.IDsIndex)
+
+	oldFilename := c.CurrentFilename
+	c.CurrentFilename = filename
+	defer func() {
+		c.CurrentFilename = oldFilename
+	}()
 
 	// Create wrapper div with toc-body class and proper chapter ID
 	tocBodyDiv := root.CreateElement("div")
@@ -260,15 +315,15 @@ func writeImages(zw *zip.Writer, images fb2.BookImages, _ *zap.Logger) error {
 	return nil
 }
 
-func writeCoverPage(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, log *zap.Logger) error {
+func generateCoverPageDoc(c *content.Content, cfg *config.DocumentConfig, log *zap.Logger) (*etree.Document, error) {
 	if c.CoverID == "" {
-		return nil
+		return nil, nil
 	}
 
 	coverImage, ok := c.ImagesIndex[c.CoverID]
 	if !ok {
 		log.Warn("Cover image not found in images index", zap.String("cover_id", c.CoverID))
-		return nil
+		return nil, nil
 	}
 
 	doc := etree.NewDocument()
@@ -336,6 +391,17 @@ func writeCoverPage(zw *zip.Writer, c *content.Content, cfg *config.DocumentConf
 		svgImage.CreateAttr("xlink:href", coverImage.Filename)
 	}
 
+	return doc, nil
+}
+
+func writeCoverPage(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, log *zap.Logger) error {
+	doc, err := generateCoverPageDoc(c, cfg, log)
+	if err != nil {
+		return err
+	}
+	if doc == nil {
+		return nil
+	}
 	return writeXMLToZip(zw, path.Join(oebpsDir, "cover.xhtml"), doc)
 }
 
@@ -757,7 +823,11 @@ func writeNav(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		for page := range c.GetAllPagesSeq() {
 			li := ol.CreateElement("li")
 			a := li.CreateElement("a")
-			a.CreateAttr("href", page.Filename+"#"+page.SpanID)
+			href := page.Filename
+			if page.SpanID != "" {
+				href += "#" + page.SpanID
+			}
+			a.CreateAttr("href", href)
 			a.SetText(fmt.Sprintf("%d", page.PageNum))
 		}
 	}
@@ -849,7 +919,11 @@ func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 			text.SetText(fmt.Sprintf("%d", page.PageNum))
 
 			content := pageTarget.CreateElement("content")
-			content.CreateAttr("src", page.Filename+"#"+page.SpanID)
+			src := page.Filename
+			if page.SpanID != "" {
+				src += "#" + page.SpanID
+			}
+			content.CreateAttr("src", src)
 		}
 	}
 
@@ -866,7 +940,11 @@ func writePageMap(zw *zip.Writer, c *content.Content, _ *zap.Logger) error {
 	for page := range c.GetAllPagesSeq() {
 		pageElem := pageMap.CreateElement("page")
 		pageElem.CreateAttr("name", fmt.Sprintf("%d", page.PageNum))
-		pageElem.CreateAttr("href", page.Filename+"#"+page.SpanID)
+		href := page.Filename
+		if page.SpanID != "" {
+			href += "#" + page.SpanID
+		}
+		pageElem.CreateAttr("href", href)
 	}
 
 	return writeXMLToZip(zw, path.Join(oebpsDir, "page-map.xml"), doc)

@@ -50,7 +50,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 		}
 
 		// Enable page tracking for main and other bodies
-		c.PageTrackingEnabled = true
+		c.PageTrackingEnabled = c.PageSize > 0
 
 		// Process main and other bodies (not footnotes)
 		// If body has title, create a chapter for body intro content
@@ -128,7 +128,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 	// Process all footnote bodies - each body becomes a separate top-level chapter
 	chapterNum++
 	// Only disable page tracking if footnotes are in float mode
-	c.PageTrackingEnabled = !env.Cfg.Document.Footnotes.Mode.IsFloat()
+	c.PageTrackingEnabled = c.PageSize > 0 && !env.Cfg.Document.Footnotes.Mode.IsFloat()
 	footnotesChapters, err := processFootnoteBodies(c, footnoteBodies, idToFile, log)
 	if err != nil {
 		log.Error("Unable to convert footnotes", zap.Error(err))
