@@ -24,10 +24,9 @@ func BuildConversionFeatures(reflowSectionSize int64) any {
 	}
 
 	return conversionFeatures{Features: []any{
-		conversionFeature{
-			Namespace: "com.amazon.yjconversion",
-			Feature:   "reflow-section-size",
-			VInfo:     versionInfo{Version: versionMajorMinor{Major: reflowSectionSize}},
-		},
+		conversionFeature{Namespace: "com.amazon.yjconversion", Feature: "reflow-style", VInfo: versionInfo{Version: versionMajorMinor{Major: 11, Minor: 0}}},
+		conversionFeature{Namespace: "com.amazon.yjconversion", Feature: "reflow-language-expansion", VInfo: versionInfo{Version: versionMajorMinor{Major: 1, Minor: 0}}},
+		conversionFeature{Namespace: "SDK.Marker", Feature: "CanonicalFormat", VInfo: versionInfo{Version: versionMajorMinor{Major: 1}}},
+		conversionFeature{Namespace: "com.amazon.yjconversion", Feature: "reflow-section-size", VInfo: versionInfo{Version: versionMajorMinor{Major: reflowSectionSize}}},
 	}}
 }

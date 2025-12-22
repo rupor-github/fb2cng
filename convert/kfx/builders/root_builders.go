@@ -180,12 +180,19 @@ func BuildResourcePath() any {
 }
 
 func BuildNavigation(tocID string) any {
-	// Minimal nav: one reading order with a single (empty) TOC container.
 	return []any{navRoot{ROName: "$351", Navs: []string{tocID}}}
 }
 
-func BuildNavContainerTOC(tocID string) any {
-	return navContainer{Name: tocID, Type: "$212", Items: []any{}}
+func BuildNavContainerTOC(tocID string, items []any) any {
+	return navContainer{Name: tocID, Type: "$212", Items: items}
+}
+
+func BuildSectionMetadata(id string) any {
+	type sectionMetadata struct {
+		Items   []metadataKV `ion:"$258"`
+		Section string       `ion:"$598,symbol"`
+	}
+	return sectionMetadata{Items: []metadataKV{{Key: "IS_TARGET_SECTION", Value: true}}, Section: id}
 }
 
 func BuildEmptyListRoot() []any { return []any{} }
