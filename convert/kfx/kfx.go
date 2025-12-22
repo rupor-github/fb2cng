@@ -23,9 +23,9 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		return err
 	}
 
-	if true {
-		return fmt.Errorf("KFX generation is experimental and not yet implemented")
-	}
+	// if true {
+	// 	return fmt.Errorf("KFX generation is experimental and not yet implemented")
+	// }
 
 	log.Info("Generating KFX", zap.String("output", outputPath))
 
@@ -41,28 +41,28 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 
 	// Minimal content fragment.
 	type contentFragment struct {
-		Name string   `ion:"name,symbol"`
-		T    []string `ion:"$146"`
-		V436 int64    `ion:"$436"`
-		V305 []any    `ion:"$305"`
+		Name               string   `ion:"name,symbol"`
+		ContentList        []string `ion:"$146"`
+		Selection          int64    `ion:"$436"`
+		ScreenActualHeight []any    `ion:"$305"`
 	}
 
 	// Minimal storyline that references the content fragment.
 	type contentRef struct {
-		Name string `ion:"name,symbol"`
-		V403 int64  `ion:"$403"`
+		Name  string `ion:"name,symbol"`
+		Index int64  `ion:"$403"`
 	}
 	type innerNode struct {
-		EID  int64      `ion:"$155"`
-		V159 string     `ion:"$159,symbol"`
-		V145 contentRef `ion:"$145"`
+		EID     int64      `ion:"$155"`
+		Type    string     `ion:"$159,symbol"`
+		Content contentRef `ion:"$145"`
 	}
 	type outerNode struct {
-		EID  int64  `ion:"$155"`
-		V156 string `ion:"$156,symbol"`
-		V159 string `ion:"$159,symbol"`
-		Kids []any  `ion:"$146"`
-		V790 int64  `ion:"$790"`
+		EID          int64  `ion:"$155"`
+		Layout       string `ion:"$156,symbol"`
+		Type         string `ion:"$159,symbol"`
+		Kids         []any  `ion:"$146"`
+		HeadingLevel int64  `ion:"$790"`
 	}
 	type storyline struct {
 		ID  string `ion:"$176,symbol"`
@@ -71,13 +71,13 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 
 	// Minimal section that references the storyline.
 	type sectionStoryline struct {
-		EID  int64  `ion:"$155"`
-		SL   string `ion:"$176,symbol"`
-		V156 string `ion:"$156,symbol"`
-		V140 string `ion:"$140,symbol"`
-		V159 string `ion:"$159,symbol"`
-		V66  int64  `ion:"$66"`
-		V67  int64  `ion:"$67"`
+		EID         int64  `ion:"$155"`
+		SL          string `ion:"$176,symbol"`
+		Layout      string `ion:"$156,symbol"`
+		Float       string `ion:"$140,symbol"`
+		Type        string `ion:"$159,symbol"`
+		FixedWidth  int64  `ion:"$66"`
+		FixedHeight int64  `ion:"$67"`
 	}
 	type section struct {
 		ID   string `ion:"$174,symbol"`
@@ -156,7 +156,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		idx := int64(len(curBlocks))
 		curBlocks = append(curBlocks, b)
 		curBytes += bBytes
-		blockRefs[i] = contentRef{Name: curID, V403: idx}
+		blockRefs[i] = contentRef{Name: curID, Index: idx}
 	}
 	if err := flush(); err != nil {
 		return err
@@ -193,7 +193,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 
 	kids := make([]any, 0, len(lt.Nodes))
 	for i, n := range lt.Nodes {
-		kids = append(kids, innerNode{EID: n.EID, V159: "$269", V145: blockRefs[i]})
+		kids = append(kids, innerNode{EID: n.EID, Type: "$269", Content: blockRefs[i]})
 	}
 
 	localSymbols := make([]string, 0, len(contentDefs)+8)
@@ -236,14 +236,14 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		{FID: "$550", FType: "$550", Value: []locationMapRoot{{ROName: "$351", Locations: locs}}},
 
 		{FID: "$395", FType: "$395", Value: builders.BuildResourcePath()},
-		{FID: storylineID, FType: "$259", Value: storyline{ID: storylineID, Seq: []any{outerNode{EID: eidStoryOuter, V156: "$323", V159: "$270", V790: 1, Kids: kids}}}},
-		{FID: sectionID, FType: "$260", Value: section{ID: sectionID, Rows: []any{sectionStoryline{EID: eidTextBase, SL: storylineID, V156: "$326", V140: "$320", V159: "$270", V66: 0, V67: 0}}}},
+		{FID: storylineID, FType: "$259", Value: storyline{ID: storylineID, Seq: []any{outerNode{EID: eidStoryOuter, Layout: "$323", Type: "$270", HeadingLevel: 1, Kids: kids}}}},
+		{FID: sectionID, FType: "$260", Value: section{ID: sectionID, Rows: []any{sectionStoryline{EID: eidTextBase, SL: storylineID, Layout: "$326", Float: "$320", Type: "$270", FixedWidth: 0, FixedHeight: 0}}}},
 	}
 
 	contentIDs := make([]string, 0, len(contentDefs))
 	for _, d := range contentDefs {
 		contentIDs = append(contentIDs, d.ID)
-		fragments = append(fragments, model.Fragment{FID: d.ID, FType: "$145", Value: contentFragment{Name: d.ID, T: d.Blocks, V436: 0, V305: []any{}}})
+		fragments = append(fragments, model.Fragment{FID: d.ID, FType: "$145", Value: contentFragment{Name: d.ID, ContentList: d.Blocks, Selection: 0, ScreenActualHeight: []any{}}})
 	}
 
 	// Cover image.

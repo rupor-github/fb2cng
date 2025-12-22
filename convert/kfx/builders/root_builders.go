@@ -20,15 +20,15 @@ type decimalWithUnit struct {
 }
 
 type documentData struct {
-	V16   decimalWithUnit `ion:"$16"`
-	V42   decimalWithUnit `ion:"$42"`
-	V112  string          `ion:"$112,symbol"`
-	V192  string          `ion:"$192,symbol"`
-	V436  string          `ion:"$436,symbol"`
-	V477  string          `ion:"$477,symbol"`
-	V560  string          `ion:"$560,symbol"`
-	MaxID int64           `ion:"max_id"`
-	RO    []any           `ion:"$169"`
+	FontSize           decimalWithUnit `ion:"$16"`
+	LineHeight         decimalWithUnit `ion:"$42"`
+	ColumnCount        string          `ion:"$112,symbol"`
+	Direction          string          `ion:"$192,symbol"`
+	Selection          string          `ion:"$436,symbol"`
+	SpacingPercentBase string          `ion:"$477,symbol"`
+	WritingMode        string          `ion:"$560,symbol"`
+	MaxID              int64           `ion:"max_id"`
+	RO                 []any           `ion:"$169"`
 }
 
 type section struct {
@@ -159,15 +159,15 @@ func BuildReadingOrders(sectionIDs []string) []any {
 func BuildDocumentData(readingOrders []any, maxID int64) any {
 	// Copy stable keys from your passing samples to avoid deep decoder assumptions.
 	return documentData{
-		V16:   decimalWithUnit{Value: ion.MustParseDecimal("1"), Unit: "$308"},
-		V42:   decimalWithUnit{Value: ion.MustParseDecimal("1.2"), Unit: "$308"},
-		V112:  "$383",
-		V192:  "$376",
-		V436:  "$441",
-		V477:  "$56",
-		V560:  "$557",
-		MaxID: maxID,
-		RO:    readingOrders,
+		FontSize:           decimalWithUnit{Value: ion.MustParseDecimal("1"), Unit: "$308"},
+		LineHeight:         decimalWithUnit{Value: ion.MustParseDecimal("1.2"), Unit: "$308"},
+		ColumnCount:        "$383",
+		Direction:          "$376",
+		Selection:          "$441",
+		SpacingPercentBase: "$56",
+		WritingMode:        "$557",
+		MaxID:              maxID,
+		RO:                 readingOrders,
 	}
 }
 

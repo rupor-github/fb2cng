@@ -14,3 +14,9 @@ func annot(names ...string) []ion.SymbolToken {
 	}
 	return out
 }
+
+// Keep these helpers around for future KFX/Ion work.
+var (
+	_ = annot
+	_ = annotatedValue{}
+)
