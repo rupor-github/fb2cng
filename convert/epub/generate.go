@@ -306,7 +306,7 @@ func writeContainer(zw *zip.Writer) error {
 func writeImages(zw *zip.Writer, images fb2.BookImages, _ *zap.Logger) error {
 	for id, img := range images {
 		// Filename already contains directory (e.g., "images/img00001.jpg")
-		filename := filepath.Join(oebpsDir, img.Filename)
+		filename := path.Join(oebpsDir, img.Filename)
 
 		if err := writeDataToZip(zw, filename, img.Data); err != nil {
 			return fmt.Errorf("unable to write image %s: %w", id, err)
