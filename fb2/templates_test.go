@@ -552,13 +552,13 @@ func TestExpandTemplateFootnoteLabel_EmptyBodyNameAndTitle(t *testing.T) {
 	body := &Body{Name: ""}
 	section := &Section{}
 
-	template := "{{.BodyTitle | default \"notes\"}}.{{.NoteNumber}}"
+	template := "{{.BodyTitle}}.{{.NoteNumber}}"
 	result, err := book.ExpandTemplateFootnoteLabel(config.LabelTemplateFieldName, template, 1, 3, body, section)
 	if err != nil {
 		t.Fatalf("ExpandTemplateFootnoteLabel() error = %v", err)
 	}
-	if result != "notes.3" {
-		t.Errorf("ExpandTemplateFootnoteLabel() = %q, want %q", result, "notes.3")
+	if result != "[No Title].3" {
+		t.Errorf("ExpandTemplateFootnoteLabel() = %q, want %q", result, "[No Title].3")
 	}
 }
 
