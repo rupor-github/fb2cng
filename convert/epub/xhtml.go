@@ -232,10 +232,6 @@ func createXHTMLDocument(c *content.Content, title string) (*etree.Document, *et
 
 	head := html.CreateElement("head")
 
-	meta := head.CreateElement("meta")
-	meta.CreateAttr("http-equiv", "Content-Type")
-	meta.CreateAttr("content", "text/html; charset=utf-8")
-
 	link := head.CreateElement("link")
 	link.CreateAttr("rel", "stylesheet")
 	link.CreateAttr("type", "text/css")

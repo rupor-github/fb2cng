@@ -341,10 +341,6 @@ func generateCoverPageDoc(c *content.Content, cfg *config.DocumentConfig, log *z
 
 	head := html.CreateElement("head")
 
-	meta := head.CreateElement("meta")
-	meta.CreateAttr("http-equiv", "Content-Type")
-	meta.CreateAttr("content", "text/html; charset=utf-8")
-
 	style := head.CreateElement("style")
 	style.CreateAttr("type", "text/css")
 
