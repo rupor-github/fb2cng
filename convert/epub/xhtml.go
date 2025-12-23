@@ -8,6 +8,7 @@ import (
 
 	"github.com/beevik/etree"
 	"go.uber.org/zap"
+	"golang.org/x/text/cases"
 
 	"fbc/common"
 	"fbc/content"
@@ -155,7 +156,7 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, idToF
 	for bodyIdx, body := range footnoteBodies {
 		baseBodyID := fmt.Sprintf("%s%05d", body.Name, bodyIdx)
 		bodyID, _ := generateUniqueID(baseBodyID, c.IDsIndex)
-		bodyTitle := body.AsTitleText(bodyID)
+		bodyTitle := body.AsTitleText(cases.Title(c.Book.Description.TitleInfo.Lang, cases.NoLower).String(body.Name))
 
 		// Create XHTML wrapper div for this body
 		bodyDiv := root.CreateElement("div")
@@ -217,6 +218,13 @@ func createXHTMLDocument(c *content.Content, title string) (*etree.Document, *et
 
 	doc := etree.NewDocument()
 	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
+
+	// Add DOCTYPE declaration based on output format to make Sigil happy
+	if c.OutputFormat == common.OutputFmtEpub3 {
+		doc.CreateDirective("DOCTYPE html")
+	} else {
+		doc.CreateDirective(`DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd"`)
+	}
 
 	html := doc.CreateElement("html")
 	html.CreateAttr("xmlns", "http://www.w3.org/1999/xhtml")

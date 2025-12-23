@@ -348,6 +348,9 @@ func (b *Body) AsTitleText(fallback string) string {
 			}
 		}
 	}
+	if fallback == "" {
+		return "[No Title]"
+	}
 	return fallback
 }
 
@@ -454,6 +457,9 @@ func (s *Section) AsTitleText(fallback string) string {
 		if text != "" {
 			return text
 		}
+	}
+	if fallback == "" {
+		return "[No Title]"
 	}
 	return fallback
 }

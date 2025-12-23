@@ -329,6 +329,13 @@ func generateCoverPageDoc(c *content.Content, cfg *config.DocumentConfig, log *z
 	doc := etree.NewDocument()
 	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
 
+	// Add DOCTYPE declaration based on output format to make Sigil happy
+	if c.OutputFormat == common.OutputFmtEpub3 {
+		doc.CreateDirective("DOCTYPE html")
+	} else {
+		doc.CreateDirective(`DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd"`)
+	}
+
 	html := doc.CreateElement("html")
 	html.CreateAttr("xmlns", "http://www.w3.org/1999/xhtml")
 
@@ -740,6 +747,9 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 func writeNav(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, chapters []chapterData, log *zap.Logger) error {
 	doc := etree.NewDocument()
 	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
+
+	// Add DOCTYPE declaration to make Sigil happy
+	doc.CreateDirective("DOCTYPE html")
 
 	html := doc.CreateElement("html")
 	html.CreateAttr("xmlns", "http://www.w3.org/1999/xhtml")
