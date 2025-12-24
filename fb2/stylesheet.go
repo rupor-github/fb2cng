@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -260,7 +261,7 @@ func (fb *FictionBook) resolveStylesheetResource(ref cssExternalRef, binaryIndex
 	}
 
 	// Set full path with directory
-	resource.Filename = filepath.Join(dir, resource.Filename)
+	resource.Filename = path.Join(dir, resource.Filename)
 
 	log.Info("Loaded stylesheet resource from file",
 		zap.String("url", ref.URL),
