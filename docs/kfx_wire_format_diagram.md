@@ -552,4 +552,3 @@ Visual byte map (approximate):
 
 ---
 
-*Generated for KFXInput project - December 2024*
