@@ -533,10 +533,10 @@ Visual byte map (approximate):
   Entity Directory         Symbol Table             Fragment
   Entry contains:          resolves to:             becomes:
   ┌─────────────┐         ┌─────────────┐         ┌─────────────┐
-  │ id_idnum=   │────────▶│ Symbol #823 │────────▶│ fid =       │
+  │ id_idnum=   │────────>│ Symbol #823 │────────>│ fid =       │
   │    823      │         │ ="chapter_1"│         │ "chapter_1" │
   │             │         │             │         │             │
-  │ type_idnum= │────────▶│ Symbol #260 │────────▶│ ftype =     │
+  │ type_idnum= │────────>│ Symbol #260 │────────>│ ftype =     │
   │    260      │         │ ="$260"     │         │ "$260"      │
   └─────────────┘         └─────────────┘         └─────────────┘
 
@@ -551,4 +551,3 @@ Visual byte map (approximate):
 ```
 
 ---
-
