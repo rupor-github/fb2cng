@@ -276,8 +276,8 @@ Example: 0x8A = string (type 8) with 10-byte (A) body
 │  ────────────────────────────────────────                               │
 │  $258   Metadata          - Book metadata (title, author, etc.)         │
 │  $259   Storyline         - Content sequence                            │
-│  $264   position_map      - EID → section mapping                      │
-│  $265   position_id_map   - PID → (EID, offset) mapping                │
+│  $264   position_map      - EID → section mapping                       │
+│  $265   position_id_map   - PID → (EID, offset) mapping                 │
 │  $389   book_navigation   - Navigation per reading order                │
 │  $419   container_entity_map - Fragment/container associations          │
 │  $538   document_data     - Reading orders, document structure          │
@@ -325,7 +325,7 @@ Example: 0x8A = string (type 8) with 10-byte (A) body
                                   │ references
                                   ▼
 ┌─────────────┐           ┌────────────────┐           ┌─────────────┐
-│    $258     │──────────▶│     $260       │◀──────────│    $419     │
+│    $258     │──────────>│     $260       │<──────────│    $419     │
 │  Metadata   │           │   section      │           │ entity_map  │
 │ (title,etc) │           │ (chapter/page) │           │($252 list)  │
 └─────────────┘           └───────┬────────┘           └─────────────┘
@@ -353,7 +353,7 @@ Example: 0x8A = string (type 8) with 10-byte (A) body
   ┌─────────────┐                           ┌─────────────┐
   │    $164     │───────────────────────────│    $266     │
   │  ext_res    │     resource              │   anchor    │
-  │(descriptors)│◀──── reference ───────────│ (nav target)│
+  │(descriptors)│<──── reference ───────────│ (nav target)│
   └──────┬──────┘                           └──────┬──────┘
          │                                         │
          │ $165 location                           │ $183 position
@@ -372,9 +372,9 @@ Example: 0x8A = string (type 8) with 10-byte (A) body
 
   Position/Location Mapping:
   ┌──────────────┐     ┌──────────────┐     ┌─────────────┐
-  │    $264      │────▶│    $265      │────▶│    $550     │
+  │    $264      │────>│    $265      │────>│    $550     │
   │ position_map │     │position_id_  │     │ location_map│
-  │(EID→section)│     │map (PID→EID)│     │ (LOC→PID)  │
+  │(EID→section) │     │map (PID→EID) │     │ (LOC→PID)   │
   └──────────────┘     └──────────────┘     └─────────────┘
 ```
 
