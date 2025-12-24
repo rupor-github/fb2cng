@@ -32,7 +32,7 @@ require (
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
-	github.com/BurntSushi/toml v1.5.0 // indirect
+	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
@@ -41,7 +41,7 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/go-playground/validator/v10 v10.29.0 // indirect
+	github.com/go-playground/validator/v10 v10.30.0 // indirect
 	github.com/golang/mock v1.6.0 // indirect
 	github.com/gosimple/unidecode v1.0.1 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
@@ -58,10 +58,10 @@ require (
 	github.com/urfave/cli/v2 v2.27.7 // indirect
 	github.com/xrash/smetrics v0.0.0-20250705151800-55b8f293f342 // indirect
 	golang.org/x/crypto v0.46.0 // indirect
-	golang.org/x/exp/typeparams v0.0.0-20251209150349-8475f28825e9 // indirect
+	golang.org/x/exp/typeparams v0.0.0-20251219203646-944ab1f22d93 // indirect
 	golang.org/x/mod v0.31.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/telemetry v0.0.0-20251217172151-2adc8cf14124 // indirect
+	golang.org/x/telemetry v0.0.0-20251222180846-3f2a21fb04ff // indirect
 	golang.org/x/tools v0.40.0 // indirect
 	golang.org/x/tools/cmd/cover v0.1.0-deprecated // indirect
 	honnef.co/go/tools v0.6.1 // indirect

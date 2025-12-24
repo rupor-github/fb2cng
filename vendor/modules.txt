@@ -1,7 +1,7 @@
 # dario.cat/mergo v1.0.2
 ## explicit; go 1.13
 dario.cat/mergo
-# github.com/BurntSushi/toml v1.5.0
+# github.com/BurntSushi/toml v1.6.0
 ## explicit; go 1.18
 github.com/BurntSushi/toml
 github.com/BurntSushi/toml/internal
@@ -46,7 +46,7 @@ github.com/go-playground/locales/currency
 # github.com/go-playground/universal-translator v0.18.1
 ## explicit; go 1.18
 github.com/go-playground/universal-translator
-# github.com/go-playground/validator/v10 v10.29.0
+# github.com/go-playground/validator/v10 v10.30.0
 ## explicit; go 1.24.0
 github.com/go-playground/validator/v10
 # github.com/go-task/slim-sprig/v3 v3.0.0
@@ -151,7 +151,7 @@ golang.org/x/crypto/blowfish
 golang.org/x/crypto/pbkdf2
 golang.org/x/crypto/scrypt
 golang.org/x/crypto/sha3
-# golang.org/x/exp/typeparams v0.0.0-20251209150349-8475f28825e9
+# golang.org/x/exp/typeparams v0.0.0-20251219203646-944ab1f22d93
 ## explicit; go 1.24.0
 golang.org/x/exp/typeparams
 # golang.org/x/image v0.34.0
@@ -186,7 +186,7 @@ golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
-# golang.org/x/telemetry v0.0.0-20251217172151-2adc8cf14124
+# golang.org/x/telemetry v0.0.0-20251222180846-3f2a21fb04ff
 ## explicit; go 1.24.0
 golang.org/x/telemetry/counter
 golang.org/x/telemetry/internal/counter
