@@ -5,27 +5,136 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"math/big"
+	"os"
+	"path/filepath"
+	"time"
 
 	"go.uber.org/zap"
+	"golang.org/x/text/language"
 
 	"fbc/config"
 	"fbc/content"
+	"fbc/misc"
 )
 
 // Generate creates the KFX output file.
-func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *config.DocumentConfig, log *zap.Logger) error {
-	if err := ctx.Err(); err != nil {
+func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *config.DocumentConfig, log *zap.Logger) (err error) {
+	if err = ctx.Err(); err != nil {
 		return err
 	}
 
-	// if true {
-	// 	return fmt.Errorf("KFX generation is experimental and not yet implemented")
-	// }
+	log.Info("KFX generation starting", zap.String("output", outputPath))
+	defer func(start time.Time) {
+		if err == nil {
+			log.Info("KFX generation completed", zap.Duration("elapsed", time.Since(start)))
+		}
+	}(time.Now())
 
-	log.Info("Generating KFX", zap.String("output", outputPath))
-
+	// Generate container ID from document ID
 	containerID := "CR!" + hashTo28Alphanumeric(c.Book.Description.DocumentInfo.ID)
-	_ = containerID
+
+	// Create container with basic metadata
+	container := &Container{
+		ContainerID:     containerID,
+		CompressionType: 0, // No compression
+		DRMScheme:       0, // No DRM
+		ChunkSize:       DefaultChunkSize,
+		GeneratorApp:    misc.GetAppName(),
+		GeneratorPkg:    misc.GetVersion(),
+		Fragments:       NewFragmentList(),
+	}
+
+	// Build minimal fragments from content
+	if err := buildFragments(container, c, cfg, log); err != nil {
+		return err
+	}
+
+	// Write debug output when in debug mode
+	if c.Debug {
+		debugPath := filepath.Join(c.WorkDir, filepath.Base(outputPath)+".debug.txt")
+		debugOutput := container.String() + "\n" + container.DumpFragments()
+		if err := os.WriteFile(debugPath, []byte(debugOutput), 0644); err != nil {
+			log.Warn("Failed to write debug output", zap.Error(err))
+		}
+	}
+
+	// Serialize container to KFX
+	kfxData, err := container.WriteContainer()
+	if err != nil {
+		return err
+	}
+
+	// Ensure output directory exists
+	if dir := filepath.Dir(outputPath); dir != "" {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return err
+		}
+	}
+
+	// Write KFX file
+	if err := os.WriteFile(outputPath, kfxData, 0644); err != nil {
+		return err
+	}
+
+	log.Debug("KFX written",
+		zap.String("output", outputPath),
+		zap.Int("size", len(kfxData)),
+		zap.Int("fragments", container.Fragments.Len()),
+	)
+
+	return nil
+}
+
+// buildFragments creates KFX fragments from content.
+// This is a minimal skeleton that will be expanded as fragment generators are implemented.
+func buildFragments(container *Container, c *content.Content, cfg *config.DocumentConfig, log *zap.Logger) error {
+	// TODO: Phase 2-6 - Add fragment generators here
+
+	// For now, create minimal required fragments
+
+	// $258 Metadata - basic book metadata
+	metadata := NewStruct()
+	metadata.Set(SymTitle, c.Book.Description.TitleInfo.BookTitle.Value) // title ($153)
+
+	if len(c.Book.Description.TitleInfo.Authors) > 0 {
+		author := c.Book.Description.TitleInfo.Authors[0]
+		authorName := ""
+		if author.FirstName != "" {
+			authorName = author.FirstName
+		}
+		if author.LastName != "" {
+			if authorName != "" {
+				authorName += " "
+			}
+			authorName += author.LastName
+		}
+		if authorName != "" {
+			metadata.Set(SymAuthor, authorName) // author ($222)
+		}
+	}
+	if lang := c.Book.Description.TitleInfo.Lang; lang != language.Und {
+		metadata.Set(SymLanguage, lang.String()) // language ($10)
+	}
+
+	container.Fragments.Add(&Fragment{
+		FType: SymMetadata, // $258
+		FID:   SymMetadata,
+		Value: metadata,
+	})
+
+	// $538 DocumentData - reading orders
+	docData := NewStruct()
+	docData.Set(SymReadingOrders, ListValue{ // reading_orders ($169)
+		NewStruct().Set(SymUniqueID, "default"), // id ($155)
+	})
+
+	container.Fragments.Add(&Fragment{
+		FType: SymDocumentData, // $538
+		FID:   SymDocumentData,
+		Value: docData,
+	})
+
+	log.Debug("Built fragments", zap.Int("count", container.Fragments.Len()))
 
 	return nil
 }

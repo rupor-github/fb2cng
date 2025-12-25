@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"fbc/convert/kfx"
 )
 
 func main() {
@@ -18,5 +20,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	_ = b
+	container, err := kfx.ReadContainer(b)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "parse %s: %v\n", path, err)
+		os.Exit(1)
+	}
+
+	fmt.Println(container.String())
+	fmt.Println()
+	fmt.Println(container.DumpFragments())
 }
