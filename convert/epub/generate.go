@@ -32,12 +32,17 @@ const (
 
 // Generate creates the EPUB output file.
 // It handles epub2, epub3, and kepub variants based on content.OutputFormat.
-func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *config.DocumentConfig, log *zap.Logger) error {
+func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *config.DocumentConfig, log *zap.Logger) (err error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 
-	log.Info("Generating EPUB", zap.Stringer("format", c.OutputFormat), zap.String("output", outputPath))
+	log.Info("EPUB generation starting", zap.Stringer("format", c.OutputFormat), zap.String("output", outputPath))
+	defer func(start time.Time) {
+		if err == nil {
+			log.Info("EPUB generation completed", zap.Duration("elapsed", time.Since(start)))
+		}
+	}(time.Now())
 
 	_, tmpName := filepath.Split(outputPath)
 	tmpName = filepath.Join(c.WorkDir, tmpName)
