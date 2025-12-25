@@ -7,6 +7,9 @@ Implement KFX (Kindle Format X) output generation from FB2 content. The implemen
 2. Support both serialization (write) and deserialization (read) for debugging
 3. Pass validation via `testdata/input.py` (KFXInput plugin)
 4. Follow project coding standards (Go idioms, structured logging, etc.)
+5. Documentation of format are in docs/kfxsturcrure.md and docs/symdict.md
+6. Resulting output must pass testdata/input.py without errors and warnings (kindle_audit_metadata warnings could be ignored)
+7. Examples of proper working kfx files could be found in /mnt/d/test
 
 ## Progress Tracking
 
