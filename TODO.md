@@ -8,14 +8,16 @@ Implement KFX (Kindle Format X) output generation from FB2 content. The implemen
 3. Pass validation via `testdata/input.py` (KFXInput plugin)
 4. Follow project coding standards (Go idioms, structured logging, etc.)
 5. Documentation of format are in docs/kfxsturcrure.md and docs/symdict.md
-6. Resulting output must pass testdata/input.py without errors and warnings (kindle_audit_metadata warnings could be ignored)
-7. Examples of proper working kfx files could be found in /mnt/d/test
+6. We do not want to implement every feature supported by KFX, any magazine-specific ($267, $387, $390), dictionary/notebook specific ($609, $610, $611, $621) could be omitted.
+7. We probably could use inline anchors via $266 rather than doing ($391, $393, $394).
+8. Resulting output must pass testdata/input.py without errors and warnings (kindle_audit_metadata warnings could be ignored).
+9. Examples of proper working kfx files could be found in /mnt/d/test - our results should resemble them.
 
 ## Progress Tracking
 
 - **Started:** 2025-12-25
 - **Phase 1 Complete:** ✅ (Core Ion/KFX Infrastructure + Generate skeleton)
-- Phase 2 Complete: [ ]
+- **Phase 2 Complete:** ✅ (Fragment Model)
 - Phase 3 Complete: [ ]
 - Phase 4 Complete: [ ]
 - Phase 5 Complete: [ ]

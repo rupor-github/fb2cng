@@ -408,3 +408,57 @@ var CONTAINER_FRAGMENT_TYPES = map[int]bool{
 	SymFormatCapab: true, // $593
 	// $ion_symbol_table is also a container fragment but handled separately
 }
+
+// SINGLETON_FRAGMENT_TYPES are root fragment types where only one fragment is expected per book.
+var SINGLETON_FRAGMENT_TYPES = map[int]bool{
+	SymMetadata:       true, // $258
+	SymPositionMap:    true, // $264
+	SymPositionIdMap:  true, // $265
+	SymContainer:      true, // $270
+	SymBookNavigation: true, // $389
+	SymContEntityMap:  true, // $419
+	SymBookMetadata:   true, // $490
+	SymDocumentData:   true, // $538
+	SymLocationMap:    true, // $550
+	SymFormatCapab:    true, // $593
+}
+
+// REQUIRED_BOOK_FRAGMENT_TYPES are fragment types that must be present for a normal book.
+// Note: Some types may be conditionally required based on book type (dictionary, KPF, etc.).
+var REQUIRED_BOOK_FRAGMENT_TYPES = map[int]bool{
+	SymMetadata:      true, // $258 - basic metadata (or $490)
+	SymStoryline:     true, // $259 - root content container
+	SymSection:       true, // $260 - at least one section
+	SymPositionMap:   true, // $264 - EID to section mapping
+	SymPositionIdMap: true, // $265 - PID to EID/offset mapping
+	SymContEntityMap: true, // $419 - container entity map
+	SymDocumentData:  true, // $538 - reading orders (KFX v2+)
+	SymLocationMap:   true, // $550 - location map
+}
+
+// ALLOWED_BOOK_FRAGMENT_TYPES are optional, known fragment types for books.
+var ALLOWED_BOOK_FRAGMENT_TYPES = map[int]bool{
+	SymStyle:          true, // $157 - styles
+	SymExtResource:    true, // $164 - external resource descriptors
+	SymGradient:       true, // $263 - gradients
+	SymAnchor:         true, // $266 - anchors for navigation
+	SymSectionMeta:    true, // $267 - section metadata (magazine)
+	SymText:           true, // $269 - text content (inline)
+	SymRawMedia:       true, // $417 - raw media bytes
+	SymRawFont:        true, // $418 - raw font bytes
+	SymBookMetadata:   true, // $490 - categorised metadata
+	SymBookNavigation: true, // $389 - navigation per reading order
+	SymSectionNav:     true, // $390 - section navigation (magazine)
+	SymNavContainer:   true, // $391 - navigation container
+	SymNavUnit:        true, // $393 - navigation unit
+	SymFormatCapab:    true, // $593 - format capabilities
+	SymAuxiliaryData:  true, // $597 - auxiliary data
+	SymSectionPosMap:  true, // $609 - section position ID map
+}
+
+// Additional symbols for fragment types not in the main constants
+const (
+	SymSectionMeta   = 267 // section_metadata
+	SymGradient      = 263 // gradient
+	SymSectionPosMap = 609 // section_position_id_map
+)

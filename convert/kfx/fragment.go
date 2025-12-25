@@ -284,3 +284,89 @@ type SymbolValue int
 
 // RawValue represents raw bytes for $417/$418 fragments.
 type RawValue []byte
+
+// HasKey checks if a field exists in the struct.
+func (s StructValue) HasKey(field int) bool {
+	_, ok := s[field]
+	return ok
+}
+
+// GetSymbol gets a symbol field value.
+func (s StructValue) GetSymbol(field int) (SymbolValue, bool) {
+	v, ok := s[field]
+	if !ok {
+		return 0, false
+	}
+	sym, ok := v.(SymbolValue)
+	return sym, ok
+}
+
+// GetList gets a list field value.
+func (s StructValue) GetList(field int) ([]any, bool) {
+	v, ok := s[field]
+	if !ok {
+		return nil, false
+	}
+	switch val := v.(type) {
+	case []any:
+		return val, true
+	case ListValue:
+		return []any(val), true
+	default:
+		return nil, false
+	}
+}
+
+// GetStruct gets a nested struct field value.
+func (s StructValue) GetStruct(field int) (StructValue, bool) {
+	v, ok := s[field]
+	if !ok {
+		return nil, false
+	}
+	switch val := v.(type) {
+	case StructValue:
+		return val, true
+	case map[int]any:
+		return StructValue(val), true
+	default:
+		return nil, false
+	}
+}
+
+// SetStruct sets a nested struct field.
+func (s StructValue) SetStruct(field int, value StructValue) StructValue {
+	return s.Set(field, value)
+}
+
+// Delete removes a field from the struct.
+func (s StructValue) Delete(field int) StructValue {
+	delete(s, field)
+	return s
+}
+
+// Keys returns all field IDs in the struct.
+func (s StructValue) Keys() []int {
+	keys := make([]int, 0, len(s))
+	for k := range s {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// Len returns the number of items in the list.
+func (l ListValue) Len() int {
+	return len(l)
+}
+
+// Get returns item at index.
+func (l ListValue) Get(i int) any {
+	if i < 0 || i >= len(l) {
+		return nil
+	}
+	return l[i]
+}
+
+// ToSlice converts ListValue to []any.
+func (l ListValue) ToSlice() []any {
+	return []any(l)
+}
