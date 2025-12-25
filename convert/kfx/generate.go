@@ -86,25 +86,48 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 
 // buildFragments creates KFX fragments from content.
 func buildFragments(container *Container, c *content.Content, cfg *config.DocumentConfig, log *zap.Logger) error {
-	// $258 Metadata - basic book metadata
-	metadataFrag := BuildMetadataFragment(c, cfg, log)
+	// Create style registry with default styles
+	styles := DefaultStyleRegistry()
+
+	// Generate storyline and section fragments from book content
+	// EIDs start at 1000 - this is arbitrary but leaves room for future system IDs
+	startEID := 1000
+	contentFragments, _, sectionNames, err := GenerateStorylineFromBook(c.Book, styles, startEID)
+	if err != nil {
+		return err
+	}
+
+	// $258 Metadata - basic book metadata (needs sectionNames for reading_orders)
+	metadataFrag := BuildMetadataFragment(c, cfg, log, sectionNames)
 	if err := container.Fragments.Add(metadataFrag); err != nil {
 		return err
 	}
 
-	// $538 DocumentData - reading orders (required for KFX v2)
-	docDataFrag := BuildDocumentDataFragmentSimple("default")
+	// Add style fragments from registry
+	for _, styleFrag := range styles.BuildFragments() {
+		if err := container.Fragments.Add(styleFrag); err != nil {
+			return err
+		}
+	}
+
+	// Add all content fragments to container
+	for _, frag := range contentFragments.All() {
+		if err := container.Fragments.Add(frag); err != nil {
+			return err
+		}
+	}
+
+	// $538 DocumentData - reading orders with sections
+	docDataFrag := BuildDocumentDataFragment(sectionNames)
 	if err := container.Fragments.Add(docDataFrag); err != nil {
 		return err
 	}
 
 	// $593 FormatCapabilities - KFX v2 format capabilities
-	fcFrag := BuildFormatCapabilitiesFragment(nil) // Use default features
+	fcFrag := BuildFormatCapabilitiesFragment(nil)
 	if err := container.Fragments.Add(fcFrag); err != nil {
 		return err
 	}
-
-	// Store format capabilities in container for serialization
 	container.FormatCapabilities = fcFrag.Value
 
 	// $419 ContainerEntityMap - must be added after all other fragments

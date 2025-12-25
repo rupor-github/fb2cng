@@ -10,8 +10,12 @@ func BuildContainerEntityMapFragment(containerID string, fragments *FragmentList
 		if CONTAINER_FRAGMENT_TYPES[frag.FType] {
 			continue
 		}
-		// Use fragment ID as symbol
-		entityIDs = append(entityIDs, SymbolValue(frag.FID))
+		// Use fragment ID as symbol - handle both numeric IDs and named IDs
+		if frag.FIDName != "" {
+			entityIDs = append(entityIDs, SymbolByName(frag.FIDName))
+		} else {
+			entityIDs = append(entityIDs, SymbolValue(frag.FID))
+		}
 	}
 
 	// Build container entry
@@ -36,7 +40,12 @@ func BuildContainerEntityMapWithDependencies(
 		if CONTAINER_FRAGMENT_TYPES[frag.FType] {
 			continue
 		}
-		entityIDs = append(entityIDs, SymbolValue(frag.FID))
+		// Use fragment ID as symbol - handle both numeric IDs and named IDs
+		if frag.FIDName != "" {
+			entityIDs = append(entityIDs, SymbolByName(frag.FIDName))
+		} else {
+			entityIDs = append(entityIDs, SymbolValue(frag.FID))
+		}
 	}
 
 	// Build container entry

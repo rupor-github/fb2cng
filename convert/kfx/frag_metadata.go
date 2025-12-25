@@ -10,8 +10,8 @@ import (
 )
 
 // BuildMetadataFragment creates the $258 metadata fragment from content.
-// This contains basic book metadata: title, author, language, etc.
-func BuildMetadataFragment(c *content.Content, cfg *config.DocumentConfig, log *zap.Logger) *Fragment {
+// This contains basic book metadata: title, author, language, and reading_orders.
+func BuildMetadataFragment(c *content.Content, cfg *config.DocumentConfig, log *zap.Logger, sectionNames []string) *Fragment {
 	metadata := NewStruct()
 
 	// Title ($153) - use template if configured
@@ -70,6 +70,16 @@ func BuildMetadataFragment(c *content.Content, cfg *config.DocumentConfig, log *
 	// ISBN ($223)
 	if pub := c.Book.Description.PublishInfo; pub != nil && pub.ISBN != nil && pub.ISBN.Value != "" {
 		metadata.SetString(SymISBN, pub.ISBN.Value)
+	}
+
+	// Reading orders ($169) - must match document_data
+	if len(sectionNames) > 0 {
+		sections := make([]any, 0, len(sectionNames))
+		for _, name := range sectionNames {
+			sections = append(sections, SymbolByName(name))
+		}
+		readingOrder := NewReadingOrder(SymDefault, sections)
+		metadata.SetList(SymReadingOrders, []any{readingOrder})
 	}
 
 	return NewRootFragment(SymMetadata, metadata)
@@ -147,14 +157,14 @@ func BuildBookMetadataFragment(c *content.Content, cfg *config.DocumentConfig, l
 
 // BuildDocumentDataFragment creates the $538 document_data fragment.
 // This contains reading orders and is required for KFX v2.
-func BuildDocumentDataFragment(readingOrderName string, sectionIDs []string) *Fragment {
-	// Build reading order with section list
-	sections := make([]any, 0, len(sectionIDs))
-	for _, sid := range sectionIDs {
-		sections = append(sections, SymbolValue(SymbolID(sid)))
+func BuildDocumentDataFragment(sectionNames []string) *Fragment {
+	// Build reading order with section list as symbol references
+	sections := make([]any, 0, len(sectionNames))
+	for _, name := range sectionNames {
+		sections = append(sections, SymbolByName(name))
 	}
 
-	readingOrder := NewReadingOrder(readingOrderName, sections)
+	readingOrder := NewReadingOrder(SymDefault, sections) // $351 = default
 
 	docData := NewStruct().
 		SetList(SymReadingOrders, []any{readingOrder}) // $169 = reading_orders
@@ -162,9 +172,9 @@ func BuildDocumentDataFragment(readingOrderName string, sectionIDs []string) *Fr
 	return NewRootFragment(SymDocumentData, docData)
 }
 
-// BuildDocumentDataFragmentSimple creates a simple $538 with just an ID.
-func BuildDocumentDataFragmentSimple(readingOrderName string) *Fragment {
-	readingOrder := NewStruct().SetString(SymUniqueID, readingOrderName)
+// BuildDocumentDataFragmentSimple creates a simple $538 with just reading order name.
+func BuildDocumentDataFragmentSimple() *Fragment {
+	readingOrder := NewStruct().SetSymbol(SymReadOrderName, SymDefault) // $178 = $351
 
 	docData := NewStruct().
 		SetList(SymReadingOrders, []any{readingOrder})

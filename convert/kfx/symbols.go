@@ -262,6 +262,9 @@ const (
 	// Render mode ($601-$602)
 	SymRender = 601 // render
 	SymBlock  = 602 // block
+
+	// Alt text ($584)
+	SymAltText = 584 // alt_text
 )
 
 // yjSymbolNames maps symbol IDs to their string names.

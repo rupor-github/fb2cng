@@ -227,8 +227,9 @@ func NewStoryline(storyName string, sections []any) StructValue {
 // Reading order builders
 
 // NewReadingOrder creates a reading order entry for $538 document_data.
-func NewReadingOrder(name string, sections []any) StructValue {
-	ro := NewStruct().SetString(SymUniqueID, name) // $155 = id
+// The name should be a symbol like SymDefault ($351 = "default").
+func NewReadingOrder(name int, sections []any) StructValue {
+	ro := NewStruct().SetSymbol(SymReadOrderName, name) // $178 = reading_order_name
 	if len(sections) > 0 {
 		ro.SetList(SymSections, sections) // $170 = sections
 	}

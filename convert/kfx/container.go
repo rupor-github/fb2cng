@@ -132,7 +132,8 @@ type Container struct {
 	ContainerFormat    string // "KFX main", "KFX metadata", etc.
 	Fragments          *FragmentList
 	DocSymbolTable     ion.SymbolTable
-	FormatCapabilities any // $593 value if present
+	FormatCapabilities any      // $593 value if present
+	LocalSymbols       []string // Local symbol names (added after YJ_symbols)
 }
 
 // NewContainer creates a new empty container.
@@ -359,8 +360,84 @@ func (c *Container) classifyContainerFormat() {
 	c.ContainerFormat = "KFX unknown"
 }
 
+// CollectLocalSymbols scans all fragments and collects string field names
+// and fragment ID names that need to be added to the local symbol table.
+func (c *Container) CollectLocalSymbols() {
+	seen := make(map[string]bool)
+
+	for _, frag := range c.Fragments.All() {
+		// Collect fragment ID name
+		if frag.FIDName != "" {
+			seen[frag.FIDName] = true
+		}
+		c.collectSymbolsFromValue(frag.Value, seen)
+	}
+
+	// Also collect from format capabilities
+	if c.FormatCapabilities != nil {
+		c.collectSymbolsFromValue(c.FormatCapabilities, seen)
+	}
+
+	// Filter out symbols that already exist in Ion system table or YJ_symbols
+	c.LocalSymbols = make([]string, 0, len(seen))
+	for name := range seen {
+		// Check Ion system symbols first
+		if _, found := ion.V1SystemSymbolTable.FindByName(name); found {
+			continue
+		}
+		// Check YJ_symbols shared table
+		if _, found := sharedSymbolTable.FindByName(name); found {
+			continue
+		}
+		c.LocalSymbols = append(c.LocalSymbols, name)
+	}
+	slices.Sort(c.LocalSymbols)
+}
+
+// collectSymbolsFromValue recursively collects string field names from a value.
+func (c *Container) collectSymbolsFromValue(v any, seen map[string]bool) {
+	switch val := v.(type) {
+	case map[string]any:
+		for k, v := range val {
+			// String keys that aren't symbol references need to be local symbols
+			if !strings.HasPrefix(k, "$") {
+				seen[k] = true
+			}
+			c.collectSymbolsFromValue(v, seen)
+		}
+	case StructValue:
+		for _, v := range val {
+			c.collectSymbolsFromValue(v, seen)
+		}
+	case ListValue:
+		for _, item := range val {
+			c.collectSymbolsFromValue(item, seen)
+		}
+	case []any:
+		for _, item := range val {
+			c.collectSymbolsFromValue(item, seen)
+		}
+	}
+}
+
+// GetLocalSymbolID returns the symbol ID for a local symbol name.
+// Local symbols are numbered starting after the imported YJ_symbols max_id.
+// YJ_symbols max_id = 851, so local symbols start at 852.
+func (c *Container) GetLocalSymbolID(name string) int {
+	for i, s := range c.LocalSymbols {
+		if s == name {
+			// YJ_symbols max_id (851) + 1 + local index
+			return LargestKnownSymbol + 1 + i
+		}
+	}
+	return -1 // Not found
+}
+
 // WriteContainer serializes a container to bytes.
 func (c *Container) WriteContainer() ([]byte, error) {
+	// Collect local symbols before serialization
+	c.CollectLocalSymbols()
+
 	// Build entity directory and entity payloads
 	var entityDir bytes.Buffer
 	var entityPayloads bytes.Buffer
@@ -382,10 +459,18 @@ func (c *Container) WriteContainer() ([]byte, error) {
 		// Entry: id_idnum (u32), type_idnum (u32), offset (u64), length (u64)
 		var entry [EntityDirEntrySize]byte
 
-		// For root fragments, use $348 (Null) as id placeholder
-		idNum := frag.FID
+		// Resolve fragment ID
+		var idNum int
 		if frag.IsRoot() {
 			idNum = SymNull // $348
+		} else if frag.FIDName != "" {
+			// Resolve FIDName to symbol ID
+			idNum = c.GetLocalSymbolID(frag.FIDName)
+			if idNum < 0 {
+				return nil, fmt.Errorf("local symbol not found: %s", frag.FIDName)
+			}
+		} else {
+			idNum = frag.FID
 		}
 
 		WriteLittleEndianU32(entry[0:4], uint32(idNum))
@@ -541,10 +626,17 @@ func (c *Container) buildEntityInfo() ([]byte, error) {
 
 // serializeFragmentValue serializes a fragment's value to Ion binary.
 func (c *Container) serializeFragmentValue(frag *Fragment) ([]byte, error) {
-	w := NewIonWriter()
+	// Use writer with local symbols if we have any
+	var w *IonWriter
+	if len(c.LocalSymbols) > 0 {
+		w = NewIonWriterWithLocalSymbols(c.LocalSymbols)
+	} else {
+		w = NewIonWriter()
+	}
 
-	// For non-root fragments, the value is wrapped with annotation
-	if !frag.IsRoot() {
+	// Root fragments (fid == ftype, stored as $348 in directory) have the $ftype annotation
+	// Non-root fragments (have unique fid) do NOT have an annotation
+	if frag.IsRoot() {
 		if err := w.WriteAnnotation(frag.FType); err != nil {
 			return nil, err
 		}
@@ -568,12 +660,22 @@ func (c *Container) writeValue(w *IonWriter, value any) error {
 		return w.WriteInt(int64(v))
 	case int64:
 		return w.WriteInt(v)
+	case float64:
+		return w.WriteFloat(v)
 	case string:
 		return w.WriteString(v)
 	case []byte:
 		return w.WriteBlob(v)
 	case SymbolValue:
 		return w.WriteSymbolID(int(v))
+	case SymbolByNameValue:
+		// Write symbol by name with explicit SID from local symbols
+		name := string(v)
+		sid := c.GetLocalSymbolID(name)
+		if sid < 0 {
+			return fmt.Errorf("local symbol not found: %s", name)
+		}
+		return w.WriteSymbolBySID(name, sid)
 	case StructValue:
 		return c.writeStruct(w, v)
 	case map[int]any:
@@ -644,16 +746,22 @@ func (c *Container) writeList(w *IonWriter, items []any) error {
 	return w.EndList()
 }
 
-// buildDocSymbolTable builds the $ion_symbol_table blob.
-// For now, we don't add local symbols - the YJ_symbols covers everything we need.
+// buildDocSymbolTable builds the $ion_symbol_table blob with local symbols.
 func (c *Container) buildDocSymbolTable() ([]byte, error) {
-	w := NewIonWriter()
+	// Create local symbol table with YJ_symbols import and local symbols
+	localST := ion.NewLocalSymbolTable([]ion.SharedSymbolTable{sharedSymbolTable}, c.LocalSymbols)
 
-	// The prolog from NewIonWriter already includes symbol table import
-	// We just need to create an empty local symbol table extension
-	// Actually, for writing, we can just return the prolog as is
+	// Serialize the symbol table
+	var buf bytes.Buffer
+	w := ion.NewBinaryWriter(&buf)
+	if err := localST.WriteTo(w); err != nil {
+		return nil, fmt.Errorf("write symbol table: %w", err)
+	}
+	if err := w.Finish(); err != nil {
+		return nil, fmt.Errorf("finish symbol table writer: %w", err)
+	}
 
-	return w.Bytes()
+	return buf.Bytes(), nil
 }
 
 // buildFormatCapabilities builds the $593 format capabilities blob.

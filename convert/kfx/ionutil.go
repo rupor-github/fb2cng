@@ -98,6 +98,35 @@ func NewIonWriter() *IonWriter {
 	}
 }
 
+// NewIonWriterWithLocalSymbols creates a new Ion binary writer with YJ_symbols and local symbols.
+// The local symbols are added to a combined shared symbol table.
+func NewIonWriterWithLocalSymbols(localSymbols []string) *IonWriter {
+	buf := &bytes.Buffer{}
+
+	// Create a combined symbol table that includes both YJ_symbols and local symbols
+	combinedST := createCombinedSymbolTable(localSymbols)
+	w := ion.NewBinaryWriter(buf, combinedST)
+	return &IonWriter{
+		buf:    buf,
+		writer: w,
+	}
+}
+
+// createCombinedSymbolTable creates a shared symbol table with YJ_symbols plus local symbols.
+func createCombinedSymbolTable(localSymbols []string) ion.SharedSymbolTable {
+	// Get symbols from YJ_symbols
+	baseSymbols := sharedSymbolTable.Symbols()
+
+	// Combine with local symbols
+	allSymbols := make([]string, 0, len(baseSymbols)+len(localSymbols))
+	allSymbols = append(allSymbols, baseSymbols...)
+	allSymbols = append(allSymbols, localSymbols...)
+
+	// Create a new shared symbol table with all symbols
+	// Using version 10 to match YJ_symbols, but this is really a combined table
+	return ion.NewSharedSymbolTable("YJ_symbols", 10, allSymbols)
+}
+
 // Bytes returns the serialized Ion binary data including prolog (BVM + symbol table import).
 func (w *IonWriter) Bytes() ([]byte, error) {
 	if err := w.writer.Finish(); err != nil {
@@ -223,6 +252,13 @@ func (w *IonWriter) WriteSymbolID(id int) error {
 	return w.writer.WriteSymbolFromString(fmt.Sprintf("$%d", id))
 }
 
+// WriteSymbolBySID writes a symbol value with explicit symbol ID.
+// This is used for local symbols that have a fixed ID in the document symbol table.
+func (w *IonWriter) WriteSymbolBySID(name string, sid int) error {
+	tok := ion.SymbolToken{Text: &name, LocalSID: int64(sid)}
+	return w.writer.WriteSymbol(tok)
+}
+
 // WriteSymbolField writes a field name by ID (for use in structs).
 func (w *IonWriter) WriteSymbolField(id int) error {
 	tok := ion.NewSymbolTokenFromString(fmt.Sprintf("$%d", id))
@@ -248,6 +284,11 @@ func (w *IonWriter) WriteString(v string) error {
 // WriteBlob writes a blob value.
 func (w *IonWriter) WriteBlob(v []byte) error {
 	return w.writer.WriteBlob(v)
+}
+
+// WriteFloat writes a float64 value.
+func (w *IonWriter) WriteFloat(v float64) error {
+	return w.writer.WriteFloat(v)
 }
 
 // WriteBool writes a boolean value.

@@ -7,14 +7,15 @@ import (
 
 // Fragment represents a single KFX fragment with type, id, and value.
 type Fragment struct {
-	FType int // Fragment type symbol ID (e.g., SymSection for $260)
-	FID   int // Fragment ID symbol ID (equals FType for root fragments, or unique ID)
-	Value any // Ion value (map[int]any for struct, []any for list, etc.)
+	FType   int    // Fragment type symbol ID (e.g., SymSection for $260)
+	FID     int    // Fragment ID symbol ID (equals FType for root fragments, or resolved from FIDName)
+	FIDName string // Fragment ID name for non-root fragments (e.g., "content_1", "section_1")
+	Value   any    // Ion value (map[int]any for struct, []any for list, etc.)
 }
 
 // IsRoot returns true if this is a root fragment (fid == ftype).
 func (f *Fragment) IsRoot() bool {
-	return f.FID == f.FType
+	return f.FIDName == "" && f.FID == f.FType
 }
 
 // IsSingleton returns true if this fragment type should only appear once.
@@ -27,9 +28,9 @@ func (f *Fragment) IsRaw() bool {
 	return RAW_FRAGMENT_TYPES[f.FType]
 }
 
-// Key returns the fragment key as (ftype, fid) pair.
+// Key returns the fragment key as (ftype, fid/fidname) pair.
 func (f *Fragment) Key() FragmentKey {
-	return FragmentKey{FType: f.FType, FID: f.FID}
+	return FragmentKey{FType: f.FType, FID: f.FID, FIDName: f.FIDName}
 }
 
 // String returns a debug representation of the fragment.
@@ -37,17 +38,24 @@ func (f *Fragment) String() string {
 	if f.IsRoot() {
 		return fmt.Sprintf("Fragment(%s)", FormatSymbol(f.FType))
 	}
+	if f.FIDName != "" {
+		return fmt.Sprintf("Fragment(%s, id=%s)", FormatSymbol(f.FType), f.FIDName)
+	}
 	return fmt.Sprintf("Fragment(%s, id=%s)", FormatSymbol(f.FType), FormatSymbol(f.FID))
 }
 
 // FragmentKey uniquely identifies a fragment by type and id.
 type FragmentKey struct {
-	FType int
-	FID   int
+	FType   int
+	FID     int
+	FIDName string
 }
 
 // String returns a debug representation of the key.
 func (k FragmentKey) String() string {
+	if k.FIDName != "" {
+		return fmt.Sprintf("%s:%s", FormatSymbol(k.FType), k.FIDName)
+	}
 	if k.FType == k.FID {
 		return FormatSymbol(k.FType)
 	}
@@ -223,6 +231,16 @@ func (s StructValue) SetList(field int, items []any) StructValue {
 	return s.Set(field, items)
 }
 
+// SetFloat sets a float64 field.
+func (s StructValue) SetFloat(field int, value float64) StructValue {
+	return s.Set(field, value)
+}
+
+// SetStruct sets a struct field.
+func (s StructValue) SetStruct(field int, value StructValue) StructValue {
+	return s.Set(field, value)
+}
+
 // Get gets a field value.
 func (s StructValue) Get(field int) any {
 	return s[field]
@@ -282,6 +300,15 @@ func (l *ListValue) AddString(s string) *ListValue {
 // When writing, this will be encoded as an Ion symbol, not a string.
 type SymbolValue int
 
+// SymbolByNameValue represents a symbol value by its string name.
+// When writing, the name is resolved to a symbol ID using the local symbol table.
+type SymbolByNameValue string
+
+// SymbolByName creates a symbol value by name for later resolution.
+func SymbolByName(name string) SymbolByNameValue {
+	return SymbolByNameValue(name)
+}
+
 // RawValue represents raw bytes for $417/$418 fragments.
 type RawValue []byte
 
@@ -331,11 +358,6 @@ func (s StructValue) GetStruct(field int) (StructValue, bool) {
 	default:
 		return nil, false
 	}
-}
-
-// SetStruct sets a nested struct field.
-func (s StructValue) SetStruct(field int, value StructValue) StructValue {
-	return s.Set(field, value)
 }
 
 // Delete removes a field from the struct.

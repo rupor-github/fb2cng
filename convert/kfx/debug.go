@@ -60,15 +60,13 @@ func formatValue(tw *debug.TreeWriter, depth int, value any) {
 	case float64:
 		tw.Line(depth, "%f", v)
 	case string:
-		if len(v) > 100 {
-			tw.Line(depth, "%q... (%d chars)", v[:100], len(v))
-		} else {
-			tw.Line(depth, "%q", v)
-		}
+		tw.Line(depth, "%q", v)
 	case []byte:
 		tw.Line(depth, "blob(%d bytes)", len(v))
 	case SymbolValue:
 		tw.Line(depth, "sym:%s", FormatSymbol(int(v)))
+	case SymbolByNameValue:
+		tw.Line(depth, "sym:%q", string(v))
 	case RawValue:
 		tw.Line(depth, "raw(%d bytes)", len(v))
 	case StructValue:
@@ -145,11 +143,7 @@ func formatListValue(tw *debug.TreeWriter, depth int, items []any) {
 	}
 
 	tw.Line(depth, "[%d items]", len(items))
-	for i, item := range items {
-		if i >= 10 {
-			tw.Line(depth+1, "... and %d more", len(items)-10)
-			break
-		}
+	for _, item := range items {
 		formatValue(tw, depth+1, item)
 	}
 }
@@ -157,7 +151,7 @@ func formatListValue(tw *debug.TreeWriter, depth int, items []any) {
 func allSimple(items []any) bool {
 	for _, item := range items {
 		switch item.(type) {
-		case nil, bool, int, int64, int32, float64, string, SymbolValue:
+		case nil, bool, int, int64, int32, float64, string, SymbolValue, SymbolByNameValue:
 			continue
 		default:
 			return false
@@ -177,12 +171,11 @@ func formatSimple(v any) string {
 	case float64:
 		return fmt.Sprintf("%f", val)
 	case string:
-		if len(val) > 20 {
-			return fmt.Sprintf("%q...", val[:20])
-		}
 		return fmt.Sprintf("%q", val)
 	case SymbolValue:
 		return FormatSymbol(int(val))
+	case SymbolByNameValue:
+		return fmt.Sprintf("sym:%q", string(val))
 	default:
 		return fmt.Sprintf("<%T>", v)
 	}
@@ -228,9 +221,6 @@ func formatValueCompact(v any) string {
 	case float64:
 		return fmt.Sprintf("%g", val)
 	case string:
-		if len(val) > 50 {
-			return fmt.Sprintf("%q... (%d chars)", val[:50], len(val))
-		}
 		return fmt.Sprintf("%q", val)
 	case []byte, RawValue:
 		var b []byte
@@ -243,6 +233,8 @@ func formatValueCompact(v any) string {
 		return fmt.Sprintf("<blob %d bytes>", len(b))
 	case SymbolValue:
 		return FormatSymbol(int(val))
+	case SymbolByNameValue:
+		return fmt.Sprintf("sym:%q", string(val))
 	case StructValue:
 		return formatStructCompactInt(map[int]any(val))
 	case map[int]any:
@@ -272,11 +264,7 @@ func formatStructCompactInt(m map[int]any) string {
 	for _, k := range keys {
 		parts = append(parts, fmt.Sprintf("%s: %s", FormatSymbol(k), formatValueCompact(m[k])))
 	}
-	result := "{" + strings.Join(parts, ", ") + "}"
-	if len(result) > 200 {
-		return fmt.Sprintf("{...%d fields}", len(m))
-	}
-	return result
+	return "{" + strings.Join(parts, ", ") + "}"
 }
 
 func formatStructCompactString(m map[string]any) string {
@@ -293,27 +281,16 @@ func formatStructCompactString(m map[string]any) string {
 	for _, k := range keys {
 		parts = append(parts, fmt.Sprintf("%s: %s", k, formatValueCompact(m[k])))
 	}
-	result := "{" + strings.Join(parts, ", ") + "}"
-	if len(result) > 200 {
-		return fmt.Sprintf("{...%d fields}", len(m))
-	}
-	return result
+	return "{" + strings.Join(parts, ", ") + "}"
 }
 
 func formatListCompact(items []any) string {
 	if len(items) == 0 {
 		return "[]"
 	}
-	if len(items) > 5 {
-		return fmt.Sprintf("[...%d items]", len(items))
-	}
 	parts := make([]string, len(items))
 	for i, item := range items {
 		parts[i] = formatValueCompact(item)
 	}
-	result := "[" + strings.Join(parts, ", ") + "]"
-	if len(result) > 100 {
-		return fmt.Sprintf("[...%d items]", len(items))
-	}
-	return result
+	return "[" + strings.Join(parts, ", ") + "]"
 }
