@@ -18,7 +18,7 @@ Implement KFX (Kindle Format X) output generation from FB2 content. The implemen
 - **Started:** 2025-12-25
 - **Phase 1 Complete:** ✅ (Core Ion/KFX Infrastructure + Generate skeleton)
 - **Phase 2 Complete:** ✅ (Fragment Model)
-- Phase 3 Complete: [ ]
+- **Phase 3 Complete:** ✅ (Core Fragment Generators)
 - Phase 4 Complete: [ ]
 - Phase 5 Complete: [ ]
 - Phase 6 Complete: [ ]
@@ -69,44 +69,62 @@ Implement KFX (Kindle Format X) output generation from FB2 content. The implemen
   - Logs elapsed time via defer
   - Write/read roundtrip verified with kfxdump
 
-### Phase 2: Fragment Model (`convert/kfx/`)
+### Phase 2: Fragment Model (`convert/kfx/`) ✅ COMPLETE
 
-- [ ] **2.1 Fragment Types** (`fragment.go`)
-  - Define Fragment struct (ftype, fid, value)
-  - Implement FragmentKey (single vs dual annotation)
-  - Implement FragmentList with type/id indexing
-  - Define ROOT_FRAGMENT_TYPES, SINGLETON_FRAGMENT_TYPES sets
-  - Define REQUIRED_BOOK_FRAGMENT_TYPES, ALLOWED_BOOK_FRAGMENT_TYPES
+- [x] **2.1 Fragment Types** (`fragment.go`, `symbols.go`)
+  - [x] Fragment struct (ftype, fid, value) - already in Phase 1
+  - [x] FragmentKey (single vs dual annotation) - already in Phase 1
+  - [x] FragmentList with type/id indexing - already in Phase 1
+  - [x] ROOT_FRAGMENT_TYPES - already in Phase 1
+  - [x] SINGLETON_FRAGMENT_TYPES set - added
+  - [x] REQUIRED_BOOK_FRAGMENT_TYPES, ALLOWED_BOOK_FRAGMENT_TYPES - added
+  - [x] Extended StructValue with HasKey, GetSymbol, GetList, GetStruct, SetStruct, Delete, Keys
+  - [x] Extended ListValue with Len, Get, ToSlice
 
-- [ ] **2.2 Fragment Values** (`values.go`)
-  - Helper types for common Ion value patterns (structs, lists, symbols)
-  - Value builders for style properties, content nodes, navigation
-  - Support for nested struct construction
+- [x] **2.2 Fragment Values** (`values.go`)
+  - [x] Position builders (NewPosition, NewPositionWithKfxID)
+  - [x] Length/unit builders (NewLength, NewLengthEm, NewLengthPt, NewLengthPx, etc.)
+  - [x] Style property builders (NewStyleEvent, SetStyleRef)
+  - [x] Content node builders (NewTextContent, NewImageContent, NewContainerContent)
+  - [x] Navigation builders (NewNavUnit, NewNavContainer, NewTOCContainer, etc.)
+  - [x] Resource builders (NewExternalResource, NewImageResourcePNG/JPG/GIF)
+  - [x] Anchor builders (NewPositionAnchor, NewURIAnchor)
+  - [x] Metadata builders (NewMetadataEntry, NewCategorisedMetadata)
+  - [x] Section/Storyline builders (NewSection, NewStoryline, NewReadingOrder)
+  - [x] Format capabilities builders (NewFormatCapabilities, AddFeature)
+  - [x] Container entity map builders (NewContainerEntry, NewContainerEntityMap)
+  - [x] Helper functions (Sym, NewSymbolList, StrList)
 
-### Phase 3: Core Fragment Generators (`convert/kfx/`)
+### Phase 3: Core Fragment Generators (`convert/kfx/`) ✅ COMPLETE
 
-- [ ] **3.1 Container Fragment** (`frag_container.go`) - $270
-  - Generate container metadata fragment
-  - Include container ID, version, generator info
-  - Include entity list ($181)
+- [x] **3.1 Container Fragment** (`frag_container.go`) - $270
+  - [x] BuildContainerFragment - creates from entity list
+  - [x] BuildContainerFragmentFromContainer - creates from Container state
+  - [x] Includes container ID, version, generator info, entity list ($181)
 
-- [ ] **3.2 Symbol Table Fragment** (`frag_symtab.go`) - $ion_symbol_table
-  - Generate document symbol table
-  - Include imports (YJ_symbols) and local symbols
-  - Track symbols used during generation
+- [x] **3.2 Symbol Table Fragment** - handled in container.go
+  - [x] buildDocSymbolTable() in container.go handles symbol table
+  - [x] Uses YJ_symbols shared table, no separate file needed
 
-- [ ] **3.3 Container Entity Map** (`frag_entitymap.go`) - $419
-  - Generate entity map with container list ($252)
-  - Optionally include entity dependencies ($253)
+- [x] **3.3 Container Entity Map** (`frag_entitymap.go`) - $419
+  - [x] BuildContainerEntityMapFragment - basic entity map with $252
+  - [x] BuildContainerEntityMapWithDependencies - with $253 dependencies
+  - [x] ComputeEntityDependencies - analyzes resource dependencies
+  - [x] EntityDependency struct for dependency tracking
 
-- [ ] **3.4 Metadata Fragments** (`frag_metadata.go`)
-  - $258 (Metadata): title, author, language, etc.
-  - $490 (BookMetadata): categorised metadata
-  - $538 (DocumentData): reading orders
+- [x] **3.4 Metadata Fragments** (`frag_metadata.go`)
+  - [x] BuildMetadataFragment - $258 with template expansion (title, author, language, publisher, ISBN)
+  - [x] BuildBookMetadataFragment - $490 categorised metadata
+  - [x] BuildDocumentDataFragment - $538 with reading orders and sections
+  - [x] BuildDocumentDataFragmentSimple - $538 minimal
+  - [x] formatAuthorName helper using same patterns as EPUB generation
 
-- [ ] **3.5 Format Capabilities** (`frag_capabilities.go`) - $593
-  - Generate format capabilities for KFX v2
-  - Include kfxgen capabilities (positionMaps, etc.)
+- [x] **3.5 Format Capabilities** (`frag_capabilities.go`) - $593
+  - [x] BuildFormatCapabilitiesFragment - KFX v2 capabilities
+  - [x] FormatCapabilitiesOptions configuration struct
+  - [x] DefaultFormatCapabilitiesOptions / SimpleFormatCapabilitiesOptions
+
+- [x] **Updated generate.go** to use new fragment builders
 
 ### Phase 4: Content Fragment Generators (`convert/kfx/`)
 

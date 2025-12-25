@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-	"golang.org/x/text/language"
 
 	"fbc/config"
 	"fbc/content"
@@ -86,53 +85,33 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 }
 
 // buildFragments creates KFX fragments from content.
-// This is a minimal skeleton that will be expanded as fragment generators are implemented.
 func buildFragments(container *Container, c *content.Content, cfg *config.DocumentConfig, log *zap.Logger) error {
-	// TODO: Phase 2-6 - Add fragment generators here
-
-	// For now, create minimal required fragments
-
 	// $258 Metadata - basic book metadata
-	metadata := NewStruct()
-	metadata.Set(SymTitle, c.Book.Description.TitleInfo.BookTitle.Value) // title ($153)
-
-	if len(c.Book.Description.TitleInfo.Authors) > 0 {
-		author := c.Book.Description.TitleInfo.Authors[0]
-		authorName := ""
-		if author.FirstName != "" {
-			authorName = author.FirstName
-		}
-		if author.LastName != "" {
-			if authorName != "" {
-				authorName += " "
-			}
-			authorName += author.LastName
-		}
-		if authorName != "" {
-			metadata.Set(SymAuthor, authorName) // author ($222)
-		}
-	}
-	if lang := c.Book.Description.TitleInfo.Lang; lang != language.Und {
-		metadata.Set(SymLanguage, lang.String()) // language ($10)
+	metadataFrag := BuildMetadataFragment(c, cfg, log)
+	if err := container.Fragments.Add(metadataFrag); err != nil {
+		return err
 	}
 
-	container.Fragments.Add(&Fragment{
-		FType: SymMetadata, // $258
-		FID:   SymMetadata,
-		Value: metadata,
-	})
+	// $538 DocumentData - reading orders (required for KFX v2)
+	docDataFrag := BuildDocumentDataFragmentSimple("default")
+	if err := container.Fragments.Add(docDataFrag); err != nil {
+		return err
+	}
 
-	// $538 DocumentData - reading orders
-	docData := NewStruct()
-	docData.Set(SymReadingOrders, ListValue{ // reading_orders ($169)
-		NewStruct().Set(SymUniqueID, "default"), // id ($155)
-	})
+	// $593 FormatCapabilities - KFX v2 format capabilities
+	fcFrag := BuildFormatCapabilitiesFragment(nil) // Use default features
+	if err := container.Fragments.Add(fcFrag); err != nil {
+		return err
+	}
 
-	container.Fragments.Add(&Fragment{
-		FType: SymDocumentData, // $538
-		FID:   SymDocumentData,
-		Value: docData,
-	})
+	// Store format capabilities in container for serialization
+	container.FormatCapabilities = fcFrag.Value
+
+	// $419 ContainerEntityMap - must be added after all other fragments
+	entityMapFrag := BuildContainerEntityMapFragment(container.ContainerID, container.Fragments)
+	if err := container.Fragments.Add(entityMapFrag); err != nil {
+		return err
+	}
 
 	log.Debug("Built fragments", zap.Int("count", container.Fragments.Len()))
 
