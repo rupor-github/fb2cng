@@ -98,12 +98,119 @@ func NewIonWriter() *IonWriter {
 	}
 }
 
-// Bytes returns the serialized Ion binary data.
+// Bytes returns the serialized Ion binary data including prolog (BVM + symbol table import).
 func (w *IonWriter) Bytes() ([]byte, error) {
 	if err := w.writer.Finish(); err != nil {
 		return nil, fmt.Errorf("finish ion writer: %w", err)
 	}
 	return w.buf.Bytes(), nil
+}
+
+// RawBytes returns the serialized Ion binary data without the prolog (no BVM, no symbol table).
+// This is used for entity payloads which are stored in ENTY blocks.
+func (w *IonWriter) RawBytes() ([]byte, error) {
+	data, err := w.Bytes()
+	if err != nil {
+		return nil, err
+	}
+	return stripIonProlog(data), nil
+}
+
+// BytesWithBVM returns Ion data with BVM but without the symbol table import annotation.
+// This is used for container_info and format_capabilities blobs which need BVM
+// but rely on doc_symbol_table for symbol resolution.
+func (w *IonWriter) BytesWithBVM() ([]byte, error) {
+	data, err := w.Bytes()
+	if err != nil {
+		return nil, err
+	}
+	raw := stripIonProlog(data)
+	// Prepend BVM to raw data
+	result := make([]byte, 0, len(ionBVM)+len(raw))
+	result = append(result, ionBVM...)
+	result = append(result, raw...)
+	return result, nil
+}
+
+// stripIonProlog removes the Ion BVM and symbol table annotation from the beginning of Ion data.
+// It returns the raw Ion value(s) that follow the symbol table.
+func stripIonProlog(data []byte) []byte {
+	if len(data) < 4 {
+		return data
+	}
+	// Check for Ion BVM (E0 01 00 EA)
+	if data[0] != 0xE0 || data[1] != 0x01 || data[2] != 0x00 || data[3] != 0xEA {
+		return data
+	}
+	pos := 4
+
+	// Skip symbol table annotation wrapper if present
+	// Format: EE <VarUInt length> <annot_count> <annot_symbols...> <content>
+	// For symbol table: annot is $3 ($ion_symbol_table), content is a struct
+	for pos < len(data) {
+		typeByte := data[pos]
+		typeCode := typeByte >> 4
+		lenCode := typeByte & 0x0F
+
+		// Check for annotation wrapper (type 0xE)
+		if typeCode != 0xE {
+			break
+		}
+
+		// Get the total length of this annotation wrapper
+		var totalLen int
+		var headerLen int
+		if lenCode == 0xE {
+			// VarUInt length follows
+			length, lenBytes := readVarUInt(data[pos+1:])
+			totalLen = int(length)
+			headerLen = 1 + lenBytes
+		} else {
+			// Length is in the low nibble
+			totalLen = int(lenCode)
+			headerLen = 1
+		}
+
+		// Check if first annotation is $3 ($ion_symbol_table)
+		// After the header, we have annot_length (VarUInt) then annot symbols
+		annotStart := pos + headerLen
+		if annotStart >= len(data) {
+			break
+		}
+
+		// Read annotation count/length VarUInt
+		annotSymLen, annotSymLenBytes := readVarUInt(data[annotStart:])
+		firstAnnotPos := annotStart + annotSymLenBytes
+
+		if firstAnnotPos >= len(data) {
+			break
+		}
+
+		// Check if it's symbol $3 - Ion encodes symbol IDs as VarUInt
+		// $3 would be encoded as 0x83 (high bit set = end, value = 3)
+		if annotSymLen >= 1 && data[firstAnnotPos] == 0x83 {
+			// This is $ion_symbol_table, skip the entire annotation wrapper
+			pos += headerLen + totalLen
+			continue
+		}
+
+		break
+	}
+
+	return data[pos:]
+}
+
+// readVarUInt reads a variable-length unsigned integer from Ion binary.
+// Returns the value and the number of bytes consumed.
+func readVarUInt(data []byte) (uint64, int) {
+	var result uint64
+	for i, b := range data {
+		result = (result << 7) | uint64(b&0x7F)
+		if b&0x80 != 0 {
+			return result, i + 1
+		}
+	}
+	return result, len(data)
 }
 
 // WriteSymbol writes a symbol value by name (e.g., "$409").

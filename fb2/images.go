@@ -279,7 +279,7 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 	// Kindle compatibility
 	if kindle {
 		if isImageSupported(imgType) && imgType != "jpeg" {
-			log.Warn("Image type is not supported by target device, converting to jpeg",
+			log.Debug("Image type is not supported by target device, converting to jpeg",
 				zap.String("id", bo.ID),
 				zap.String("type", imgType))
 			bi.MimeType = mime.TypeByExtension(".jpeg")

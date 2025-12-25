@@ -536,7 +536,7 @@ func (c *Container) buildEntityInfo() ([]byte, error) {
 	if err := w.EndStruct(); err != nil {
 		return nil, err
 	}
-	return w.Bytes()
+	return w.BytesWithBVM()
 }
 
 // serializeFragmentValue serializes a fragment's value to Ion binary.
@@ -554,7 +554,7 @@ func (c *Container) serializeFragmentValue(frag *Fragment) ([]byte, error) {
 		return nil, err
 	}
 
-	return w.Bytes()
+	return w.BytesWithBVM()
 }
 
 // writeValue writes any value to the Ion writer.
@@ -673,7 +673,7 @@ func (c *Container) buildFormatCapabilities() ([]byte, error) {
 		return nil, err
 	}
 
-	return w.Bytes()
+	return w.BytesWithBVM()
 }
 
 // buildContainerInfoWithOffsets builds container_info with specified offsets.
@@ -742,7 +742,7 @@ func (c *Container) buildContainerInfoWithOffsets(
 		return nil, err
 	}
 
-	return w.Bytes()
+	return w.BytesWithBVM()
 }
 
 // buildKfxgenMetadata builds the kfxgen metadata JSON blob.
