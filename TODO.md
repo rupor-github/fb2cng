@@ -21,7 +21,7 @@ Implement KFX (Kindle Format X) output generation from FB2 content. The implemen
 - **Phase 2 Complete:** ✅ (Fragment Model)
 - **Phase 3 Complete:** ✅ (Core Fragment Generators)
 - **Phase 4 Complete:** ✅ (Content Fragment Generators - Storyline, Section, Content, Style)
-- **Phase 5 Complete:** ✅ (Navigation + Resources; Anchors disabled)
+- **Phase 5 Complete:** ✅ (Navigation + Resources + Anchors (filtered until Phase 6))
 - Phase 6 Complete: [ ] (Position Maps - $264, $265, $550)
 - Phase 7 Complete: [ ]
 - Phase 8 Complete: [ ]
@@ -36,8 +36,8 @@ After Phase 4 + partial Phase 5:
 - ✅ Debug output shows all fields correctly (Version, Format, Generator, LocalSymbols)
 - ✅ Fixed Ion append bug that corrupted data during container read
 - ✅ External resources ($164) + Raw media ($417) implemented and referenced from content
-- ⚠️ Anchors ($266) implemented but currently disabled (was causing KFXInput id/format errors)
-- ❌ Missing: Position maps ($264, $265, $550) - **required for full validation**
+- ✅ Anchors ($266) implemented (unique ids + $180 anchor_name); currently only emitted for actually referenced anchors to keep KFXInput happy until Phase 6
+- ❌ Missing: Position maps ($264, $265, $550) - required for full validation and for parity with reference KFX anchor set
 
 Current validation result: 1 error (missing $264, $265, $550 fragments). (ISBN/$223 emission is currently commented out to avoid KFXInput complaints.)
 
@@ -178,7 +178,7 @@ Current validation result: 1 error (missing $264, $265, $550 fragments). (ISBN/$
   - [x] DocumentData ($538) includes matching reading_orders
   - [x] Section names generated as "c0", "c1", etc.
 
-### Phase 5: Resource & Navigation Fragments (`convert/kfx/`)
+### Phase 5: Resource & Navigation Fragments (`convert/kfx/`) ✅ COMPLETE
 
 - [x] **5.1 External Resources** (`frag_resource.go`) - $164
   - Generate resource descriptors for images
@@ -190,9 +190,10 @@ Current validation result: 1 error (missing $264, $265, $550 fragments). (ISBN/$
   - Store binary data as raw entity payload (ENTY payload bytes)
   - fid == location (as local symbol)
 
-- [ ] **5.3 Anchor Fragments** (`frag_anchor.go`) - $266
-  - Implemented but currently **disabled** (KFXInput errors: id collisions + invalid anchor ids)
-  - Re-enable after choosing correct anchor id scheme and linking resolution
+- [x] **5.3 Anchor Fragments** (`frag_anchor.go`) - $266
+  - Emits `$180 anchor_name` + `$183 position` (with `$155 id` pointing to first EID)
+  - NOTE: currently only emits anchors that are actually referenced by `$179 link_to` to keep `testdata/input.py` happy until Phase 6 maps exist
+  - Parity note: reference `/mnt/d/test/*-kfxout.kfx` emits many numeric-id anchors ($852+), coupled with Phase 6 fragments ($264/$265/$550)
 
 - [x] **5.4 Navigation Fragments** (`frag_storyline.go`)
   - [x] $389 (BookNavigation): per reading order with nav_containers

@@ -149,6 +149,14 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 		}
 	}
 
+	// $266 Anchors (for internal links)
+	referencedAnchors := collectReferencedAnchorNames(container.Fragments)
+	for _, frag := range buildAnchorFragments(tocEntries, referencedAnchors) {
+		if err := container.Fragments.Add(frag); err != nil {
+			return err
+		}
+	}
+
 	// $593 FormatCapabilities - KFX v2 format capabilities
 	fcFrag := BuildFormatCapabilitiesFragment(nil)
 	if err := container.Fragments.Add(fcFrag); err != nil {

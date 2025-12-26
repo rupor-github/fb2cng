@@ -298,10 +298,11 @@ func (g *ContentGenerator) processInlineSegment(seg *fb2.InlineSegment, text *st
 
 		if linkEnd > linkStart {
 			// Add link event
+			linkTo := strings.TrimPrefix(seg.Href, "#")
 			*events = append(*events, StyleEvent{
 				Offset: linkStart,
 				Length: linkEnd - linkStart,
-				LinkTo: seg.Href,
+				LinkTo: linkTo,
 			})
 		}
 

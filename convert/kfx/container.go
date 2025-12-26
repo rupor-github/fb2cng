@@ -421,6 +421,8 @@ func (c *Container) collectSymbolsFromValue(v any, seen map[string]bool) {
 		for _, item := range val {
 			c.collectSymbolsFromValue(item, seen)
 		}
+	case SymbolByNameValue:
+		seen[string(val)] = true
 	}
 }
 
