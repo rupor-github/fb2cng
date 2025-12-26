@@ -255,15 +255,15 @@ const (
 	SymAnchor = 266 // anchor
 
 	// Version info ($587-$593)
-	SymMajorVersion = 587 // major_version
-	SymMinorVersion = 588 // minor_version
-	SymNamespace    = 586 // namespace
-	SymVersionInfo  = 589 // version_info
-	SymFeatures     = 590 // features
+	SymMajorVersion    = 587 // major_version
+	SymMinorVersion    = 588 // minor_version
+	SymNamespace       = 586 // namespace
+	SymVersionInfo     = 589 // version_info
+	SymFeatures        = 590 // features
 	SymContentFeatures = 585 // content_features
-	SymFormatCapab      = 593 // format_capabilities
-	SymFCapabOffset = 594 // bcFCapabilitiesOffset
-	SymFCapabLength = 595 // bcFCapabilitiesLength
+	SymFormatCapab     = 593 // format_capabilities
+	SymFCapabOffset    = 594 // bcFCapabilitiesOffset
+	SymFCapabLength    = 595 // bcFCapabilitiesLength
 
 	// Auxiliary ($597-$598)
 	SymAuxiliaryData = 597 // auxiliary_data
@@ -402,17 +402,17 @@ var RAW_FRAGMENT_TYPES = map[int]bool{
 
 // ROOT_FRAGMENT_TYPES are fragment types that use fid == ftype (singleton pattern).
 var ROOT_FRAGMENT_TYPES = map[int]bool{
-	SymMetadata:         true, // $258
-	SymPositionMap:      true, // $264
-	SymPositionIdMap:    true, // $265
-	SymContainer:        true, // $270
-	SymBookNavigation:   true, // $389
-	SymContEntityMap:    true, // $419
-	SymBookMetadata:     true, // $490
-	SymDocumentData:     true, // $538
-	SymLocationMap:      true, // $550
-	SymContentFeatures:  true, // $585
-	SymFormatCapab:      true, // $593
+	SymMetadata:        true, // $258
+	SymPositionMap:     true, // $264
+	SymPositionIdMap:   true, // $265
+	SymContainer:       true, // $270
+	SymBookNavigation:  true, // $389
+	SymContEntityMap:   true, // $419
+	SymBookMetadata:    true, // $490
+	SymDocumentData:    true, // $538
+	SymLocationMap:     true, // $550
+	SymContentFeatures: true, // $585
+	SymFormatCapab:     true, // $593
 }
 
 // CONTAINER_FRAGMENT_TYPES are fragment types that live in the container header,
@@ -425,17 +425,17 @@ var CONTAINER_FRAGMENT_TYPES = map[int]bool{
 
 // SINGLETON_FRAGMENT_TYPES are root fragment types where only one fragment is expected per book.
 var SINGLETON_FRAGMENT_TYPES = map[int]bool{
-	SymMetadata:         true, // $258
-	SymPositionMap:      true, // $264
-	SymPositionIdMap:    true, // $265
-	SymContainer:        true, // $270
-	SymBookNavigation:   true, // $389
-	SymContEntityMap:    true, // $419
-	SymBookMetadata:     true, // $490
-	SymDocumentData:     true, // $538
-	SymLocationMap:      true, // $550
-	SymContentFeatures:  true, // $585
-	SymFormatCapab:      true, // $593
+	SymMetadata:        true, // $258
+	SymPositionMap:     true, // $264
+	SymPositionIdMap:   true, // $265
+	SymContainer:       true, // $270
+	SymBookNavigation:  true, // $389
+	SymContEntityMap:   true, // $419
+	SymBookMetadata:    true, // $490
+	SymDocumentData:    true, // $538
+	SymLocationMap:     true, // $550
+	SymContentFeatures: true, // $585
+	SymFormatCapab:     true, // $593
 }
 
 // REQUIRED_BOOK_FRAGMENT_TYPES are fragment types that must be present for a normal book.
@@ -453,23 +453,23 @@ var REQUIRED_BOOK_FRAGMENT_TYPES = map[int]bool{
 
 // ALLOWED_BOOK_FRAGMENT_TYPES are optional, known fragment types for books.
 var ALLOWED_BOOK_FRAGMENT_TYPES = map[int]bool{
-	SymStyle:          true, // $157 - styles
-	SymExtResource:    true, // $164 - external resource descriptors
-	SymGradient:       true, // $263 - gradients
-	SymAnchor:         true, // $266 - anchors for navigation
-	SymSectionMeta:    true, // $267 - section metadata (magazine)
-	SymText:           true, // $269 - text content (inline)
-	SymRawMedia:       true, // $417 - raw media bytes
-	SymRawFont:        true, // $418 - raw font bytes
-	SymBookMetadata:   true, // $490 - categorised metadata
-	SymBookNavigation: true, // $389 - navigation per reading order
-	SymSectionNav:     true, // $390 - section navigation (magazine)
-	SymNavContainer:   true, // $391 - navigation container
-	SymNavUnit:        true, // $393 - navigation unit
-	SymFormatCapab:    true, // $593 - format capabilities
-	SymAuxiliaryData:    true, // $597 - auxiliary data
-	SymContentFeatures:  true, // $585 - content_features
-	SymSectionPosMap:    true, // $609 - section position ID map
+	SymStyle:           true, // $157 - styles
+	SymExtResource:     true, // $164 - external resource descriptors
+	SymGradient:        true, // $263 - gradients
+	SymAnchor:          true, // $266 - anchors for navigation
+	SymSectionMeta:     true, // $267 - section metadata (magazine)
+	SymText:            true, // $269 - text content (inline)
+	SymRawMedia:        true, // $417 - raw media bytes
+	SymRawFont:         true, // $418 - raw font bytes
+	SymBookMetadata:    true, // $490 - categorised metadata
+	SymBookNavigation:  true, // $389 - navigation per reading order
+	SymSectionNav:      true, // $390 - section navigation (magazine)
+	SymNavContainer:    true, // $391 - navigation container
+	SymNavUnit:         true, // $393 - navigation unit
+	SymFormatCapab:     true, // $593 - format capabilities
+	SymAuxiliaryData:   true, // $597 - auxiliary data
+	SymContentFeatures: true, // $585 - content_features
+	SymSectionPosMap:   true, // $609 - section position ID map
 }
 
 // Additional symbols for fragment types not in the main constants
