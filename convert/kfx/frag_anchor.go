@@ -1,52 +1,5 @@
 package kfx
 
-func collectReferencedAnchorNames(fragments *FragmentList) map[string]bool {
-	refs := make(map[string]bool)
-	for _, frag := range fragments.All() {
-		collectReferencedAnchorNamesFromValue(frag.Value, refs)
-	}
-	return refs
-}
-
-func collectReferencedAnchorNamesFromValue(v any, refs map[string]bool) {
-	switch vv := v.(type) {
-	case StructValue:
-		for k, val := range vv {
-			if k == SymLinkTo {
-				if s, ok := val.(SymbolByNameValue); ok {
-					refs[string(s)] = true
-				} else if s, ok := val.(string); ok {
-					refs[s] = true
-				}
-			}
-			collectReferencedAnchorNamesFromValue(val, refs)
-		}
-	case map[int]any:
-		for k, val := range vv {
-			if k == SymLinkTo {
-				if s, ok := val.(SymbolByNameValue); ok {
-					refs[string(s)] = true
-				} else if s, ok := val.(string); ok {
-					refs[s] = true
-				}
-			}
-			collectReferencedAnchorNamesFromValue(val, refs)
-		}
-	case ListValue:
-		for _, item := range vv {
-			collectReferencedAnchorNamesFromValue(item, refs)
-		}
-	case []any:
-		for _, item := range vv {
-			collectReferencedAnchorNamesFromValue(item, refs)
-		}
-	case map[string]any:
-		for _, item := range vv {
-			collectReferencedAnchorNamesFromValue(item, refs)
-		}
-	}
-}
-
 func isGeneratedSectionName(name string) bool {
 	if len(name) < 2 || name[0] != 'c' {
 		return false
@@ -73,7 +26,7 @@ func buildAnchorFragments(tocEntries []*TOCEntry, referenced map[string]bool) []
 			if e.ID != "" && e.FirstEID != 0 {
 				// Avoid collisions with our generated section IDs (c0,c1,...) which are
 				// already used by $260 section entities.
-				if !isGeneratedSectionName(e.ID) && referenced[e.ID] {
+				if !isGeneratedSectionName(e.ID) && (referenced == nil || referenced[e.ID]) {
 					pos := NewStruct().SetInt(SymUniqueID, int64(e.FirstEID))
 					out = append(out, &Fragment{
 						FType:   SymAnchor,

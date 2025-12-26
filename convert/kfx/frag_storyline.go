@@ -230,6 +230,16 @@ type StorylineBuilder struct {
 	pageTemplateEID int // Separate EID for page template container
 }
 
+// AllEIDs returns all EIDs used by this section (page template + content entries).
+func (sb *StorylineBuilder) AllEIDs() []int {
+	eids := make([]int, 0, len(sb.contentEntries)+1)
+	eids = append(eids, sb.pageTemplateEID)
+	for _, ref := range sb.contentEntries {
+		eids = append(eids, ref.EID)
+	}
+	return eids
+}
+
 // NewStorylineBuilder creates a new storyline builder.
 // Allocates the first EID for the page template container.
 func NewStorylineBuilder(storyName, sectionName string, startEID int) *StorylineBuilder {
@@ -331,12 +341,13 @@ func (sb *StorylineBuilder) Build(width, height int) (*Fragment, *Fragment) {
 
 // GenerateStorylineFromBook creates storyline and section fragments from an FB2 book.
 // It uses the provided StyleRegistry to reference styles by name.
-// Returns fragments, next EID, section names for document_data, and TOC entries.
-func GenerateStorylineFromBook(book *fb2.FictionBook, styles *StyleRegistry, imageResourceNames map[string]string, startEID int) (*FragmentList, int, []string, []*TOCEntry, error) {
+// Returns fragments, next EID, section names for document_data, TOC entries, and per-section EID sets.
+func GenerateStorylineFromBook(book *fb2.FictionBook, styles *StyleRegistry, imageResourceNames map[string]string, startEID int) (*FragmentList, int, []string, []*TOCEntry, map[string][]int, error) {
 	fragments := NewFragmentList()
 	eidCounter := startEID
 	sectionNames := make([]string, 0)
 	tocEntries := make([]*TOCEntry, 0)
+	sectionEIDs := make(map[string][]int)
 
 	// All content fragments will be collected here
 	allContentFragments := make(map[string][]string)
@@ -383,13 +394,15 @@ func GenerateStorylineFromBook(book *fb2.FictionBook, styles *StyleRegistry, ima
 			}
 
 			if err := processBodyIntroContentWithAccum(body, sb, styles, imageResourceNames, ca); err != nil {
-				return nil, 0, nil, nil, err
+				return nil, 0, nil, nil, nil, err
 			}
 
 			// Collect content fragments
 			for name, list := range ca.Finish() {
 				allContentFragments[name] = list
 			}
+
+			sectionEIDs[sectionName] = sb.AllEIDs()
 
 			// Create TOC entry for body intro
 			title := body.Title.AsTOCText("Untitled")
@@ -410,10 +423,10 @@ func GenerateStorylineFromBook(book *fb2.FictionBook, styles *StyleRegistry, ima
 			storylineFrag, sectionFrag := sb.Build(defaultWidth, defaultHeight)
 
 			if err := fragments.Add(storylineFrag); err != nil {
-				return nil, 0, nil, nil, err
+				return nil, 0, nil, nil, nil, err
 			}
 			if err := fragments.Add(sectionFrag); err != nil {
-				return nil, 0, nil, nil, err
+				return nil, 0, nil, nil, nil, err
 			}
 		}
 
@@ -438,13 +451,15 @@ func GenerateStorylineFromBook(book *fb2.FictionBook, styles *StyleRegistry, ima
 			var nestedTOCEntries []*TOCEntry
 
 			if err := processStorylineContentWithAccum(section, sb, styles, imageResourceNames, ca, 1, &nestedTOCEntries); err != nil {
-				return nil, 0, nil, nil, err
+				return nil, 0, nil, nil, nil, err
 			}
 
 			// Collect content fragments
 			for name, list := range ca.Finish() {
 				allContentFragments[name] = list
 			}
+
+			sectionEIDs[sectionName] = sb.AllEIDs()
 
 			// Create TOC entry for this section
 			title := section.AsTitleText("")
@@ -466,10 +481,10 @@ func GenerateStorylineFromBook(book *fb2.FictionBook, styles *StyleRegistry, ima
 			storylineFrag, sectionFrag := sb.Build(defaultWidth, defaultHeight)
 
 			if err := fragments.Add(storylineFrag); err != nil {
-				return nil, 0, nil, nil, err
+				return nil, 0, nil, nil, nil, err
 			}
 			if err := fragments.Add(sectionFrag); err != nil {
-				return nil, 0, nil, nil, err
+				return nil, 0, nil, nil, nil, err
 			}
 		}
 	}
@@ -478,11 +493,11 @@ func GenerateStorylineFromBook(book *fb2.FictionBook, styles *StyleRegistry, ima
 	for name, contentList := range allContentFragments {
 		contentFrag := buildContentFragmentByName(name, contentList)
 		if err := fragments.Add(contentFrag); err != nil {
-			return nil, 0, nil, nil, err
+			return nil, 0, nil, nil, nil, err
 		}
 	}
 
-	return fragments, eidCounter, sectionNames, tocEntries, nil
+	return fragments, eidCounter, sectionNames, tocEntries, sectionEIDs, nil
 }
 
 // processBodyIntroContentWithAccum processes body intro content using ContentAccumulator.

@@ -21,25 +21,29 @@ Implement KFX (Kindle Format X) output generation from FB2 content. The implemen
 - **Phase 2 Complete:** ✅ (Fragment Model)
 - **Phase 3 Complete:** ✅ (Core Fragment Generators)
 - **Phase 4 Complete:** ✅ (Content Fragment Generators - Storyline, Section, Content, Style)
-- **Phase 5 Complete:** ✅ (Navigation + Resources + Anchors (filtered until Phase 6))
-- Phase 6 Complete: [ ] (Position Maps - $264, $265, $550)
+- **Phase 5 Complete:** ✅ (Navigation + Resources + Anchors)
+- **Phase 6 Complete:** ✅ (Position/Location mapping + content feature parity: $264, $265, $550, $585)
 - Phase 7 Complete: [ ]
 - Phase 8 Complete: [ ]
 
 ## Current Status
 
-After Phase 4 + partial Phase 5:
+After Phase 6:
 - ✅ Navigation fragment ($389 book_navigation) implemented with hierarchical TOC
 - ✅ KFX structure aligned with EPUB (body intro as separate storyline, nested TOC entries)
 - ✅ Content chunking implemented (paragraphs as separate entries, auto-split at 8KB)
-- ✅ Passes KFXInput validation except for missing position maps
 - ✅ Debug output shows all fields correctly (Version, Format, Generator, LocalSymbols)
-- ✅ Fixed Ion append bug that corrupted data during container read
+- ✅ Debug output is written into the per-book temp WorkDir so it is captured by the report zip
 - ✅ External resources ($164) + Raw media ($417) implemented and referenced from content
-- ✅ Anchors ($266) implemented (unique ids + $180 anchor_name); currently only emitted for actually referenced anchors to keep KFXInput happy until Phase 6
-- ❌ Missing: Position maps ($264, $265, $550) - required for full validation and for parity with reference KFX anchor set
+- ✅ Anchors ($266) implemented and emitted only when referenced by FB2 links (avoid “unreferenced fragments” warnings)
+- ✅ Position/location mapping implemented and aligned with reference files:
+  - $264 position_map
+  - $265 position_id_map as list of {pid,eid} structs with PID progression based on content length
+  - $550 location_map
+- ✅ $585 content_features added (reflow-* and CanonicalFormat live here in reference KFX, not in $593)
+- ✅ $593 format_capabilities kept minimal (kfxgen.textBlock)
 
-Current validation result: 1 error (missing $264, $265, $550 fragments). (ISBN/$223 emission is currently commented out to avoid KFXInput complaints.)
+Current validation result: `testdata/input.py` passes with no errors; remaining warning is typically “Unknown generator: kfxgen=fbc/…”.
 
 ## Implementation Plan
 
@@ -81,7 +85,7 @@ Current validation result: 1 error (missing $264, $265, $550 fragments). (ISBN/$
   - `Generate()` creates minimal KFX container with basic metadata
   - Uses `misc.GetAppName()` and `misc.GetVersion()` for generator info
   - Uses `DefaultChunkSize` constant
-  - Writes debug output to `.debug.txt` file
+  - Writes debug output to `<workdir>/<output>.debug.txt` so it is included into the reporting archive
   - Logs elapsed time via defer
   - Write/read roundtrip verified with kfxdump
 
@@ -192,8 +196,8 @@ Current validation result: 1 error (missing $264, $265, $550 fragments). (ISBN/$
 
 - [x] **5.3 Anchor Fragments** (`frag_anchor.go`) - $266
   - Emits `$180 anchor_name` + `$183 position` (with `$155 id` pointing to first EID)
-  - NOTE: currently only emits anchors that are actually referenced by `$179 link_to` to keep `testdata/input.py` happy until Phase 6 maps exist
-  - Parity note: reference `/mnt/d/test/*-kfxout.kfx` emits many numeric-id anchors ($852+), coupled with Phase 6 fragments ($264/$265/$550)
+  - Emits anchors only for IDs referenced by FB2 links (via reverse link index) to avoid “unreferenced fragments” warnings
+  - Parity note: reference `/mnt/d/test/*-kfxout.kfx` emits many anchors coupled with $264/$265/$550
 
 - [x] **5.4 Navigation Fragments** (`frag_storyline.go`)
   - [x] $389 (BookNavigation): per reading order with nav_containers
@@ -202,19 +206,24 @@ Current validation result: 1 error (missing $264, $265, $550 fragments). (ISBN/$
   - [x] BuildNavigationFragment creates complete TOC from TOCEntry tree
   - Note: Skip $390, $394 (magazine/conditional specific)
 
-### Phase 6: Position Mapping (`convert/kfx/`)
+### Phase 6: Position Mapping (`convert/kfx/`) ✅ COMPLETE
 
-- [ ] **6.1 Position Map** (`frag_posmap.go`) - $264
+- [x] **6.1 Position Map** (`frag_positionmaps.go`) - $264
   - Generate EID to section membership map
   - Track element IDs during content generation
 
-- [ ] **6.2 Position ID Map** (`frag_posidmap.go`) - $265
-  - Generate PID to (EID, offset) mapping
-  - Support flat map format (simpler for initial implementation)
+- [x] **6.2 Position ID Map** (`frag_positionmaps.go`) - $265
+  - Generate PID to (EID, offset=0) mapping
+  - Uses reference-like shape: list of structs `{ $184 pid, $185 eid }` + sentinel
+  - PID progression is sparse and derived from content length (page template + storyline items in section order)
 
-- [ ] **6.3 Location Map** (`frag_locmap.go`) - $550
+- [x] **6.3 Location Map** (`frag_positionmaps.go`) - $550
   - Generate location to position mapping
   - Used for Kindle "location" feature
+
+- [x] **6.4 Content Features** (`frag_contentfeatures.go`) - $585
+  - Emit reflow-* and CanonicalFormat features in the same place as reference KFX
+  - reflow-section-size is computed from max per-section pid span
 
 ### Phase 7: Debug & Verification (`convert/kfx/`, `cmd/debug/kfxdump/`)
 
@@ -269,9 +278,7 @@ convert/kfx/
 ├── frag_rawmedia.go     # $417 RawMedia
 ├── frag_anchor.go       # $266 Anchor
 ├── frag_navigation.go   # $389, $391, $393 Navigation
-├── frag_posmap.go       # $264 PositionMap
-├── frag_posidmap.go     # $265 PositionIDMap
-├── frag_locmap.go       # $550 LocationMap
+├── frag_positionmaps.go # $264/$265/$550 Position/Location maps
 └── generate_test.go     # Unit tests
 
 cmd/debug/kfxdump/

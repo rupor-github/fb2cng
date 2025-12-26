@@ -257,9 +257,11 @@ const (
 	// Version info ($587-$593)
 	SymMajorVersion = 587 // major_version
 	SymMinorVersion = 588 // minor_version
+	SymNamespace    = 586 // namespace
 	SymVersionInfo  = 589 // version_info
 	SymFeatures     = 590 // features
-	SymFormatCapab  = 593 // format_capabilities
+	SymContentFeatures = 585 // content_features
+	SymFormatCapab      = 593 // format_capabilities
 	SymFCapabOffset = 594 // bcFCapabilitiesOffset
 	SymFCapabLength = 595 // bcFCapabilitiesLength
 
@@ -400,16 +402,17 @@ var RAW_FRAGMENT_TYPES = map[int]bool{
 
 // ROOT_FRAGMENT_TYPES are fragment types that use fid == ftype (singleton pattern).
 var ROOT_FRAGMENT_TYPES = map[int]bool{
-	SymMetadata:       true, // $258
-	SymPositionMap:    true, // $264
-	SymPositionIdMap:  true, // $265
-	SymContainer:      true, // $270
-	SymBookNavigation: true, // $389
-	SymContEntityMap:  true, // $419
-	SymBookMetadata:   true, // $490
-	SymDocumentData:   true, // $538
-	SymLocationMap:    true, // $550
-	SymFormatCapab:    true, // $593
+	SymMetadata:         true, // $258
+	SymPositionMap:      true, // $264
+	SymPositionIdMap:    true, // $265
+	SymContainer:        true, // $270
+	SymBookNavigation:   true, // $389
+	SymContEntityMap:    true, // $419
+	SymBookMetadata:     true, // $490
+	SymDocumentData:     true, // $538
+	SymLocationMap:      true, // $550
+	SymContentFeatures:  true, // $585
+	SymFormatCapab:      true, // $593
 }
 
 // CONTAINER_FRAGMENT_TYPES are fragment types that live in the container header,
@@ -422,16 +425,17 @@ var CONTAINER_FRAGMENT_TYPES = map[int]bool{
 
 // SINGLETON_FRAGMENT_TYPES are root fragment types where only one fragment is expected per book.
 var SINGLETON_FRAGMENT_TYPES = map[int]bool{
-	SymMetadata:       true, // $258
-	SymPositionMap:    true, // $264
-	SymPositionIdMap:  true, // $265
-	SymContainer:      true, // $270
-	SymBookNavigation: true, // $389
-	SymContEntityMap:  true, // $419
-	SymBookMetadata:   true, // $490
-	SymDocumentData:   true, // $538
-	SymLocationMap:    true, // $550
-	SymFormatCapab:    true, // $593
+	SymMetadata:         true, // $258
+	SymPositionMap:      true, // $264
+	SymPositionIdMap:    true, // $265
+	SymContainer:        true, // $270
+	SymBookNavigation:   true, // $389
+	SymContEntityMap:    true, // $419
+	SymBookMetadata:     true, // $490
+	SymDocumentData:     true, // $538
+	SymLocationMap:      true, // $550
+	SymContentFeatures:  true, // $585
+	SymFormatCapab:      true, // $593
 }
 
 // REQUIRED_BOOK_FRAGMENT_TYPES are fragment types that must be present for a normal book.
@@ -463,8 +467,9 @@ var ALLOWED_BOOK_FRAGMENT_TYPES = map[int]bool{
 	SymNavContainer:   true, // $391 - navigation container
 	SymNavUnit:        true, // $393 - navigation unit
 	SymFormatCapab:    true, // $593 - format capabilities
-	SymAuxiliaryData:  true, // $597 - auxiliary data
-	SymSectionPosMap:  true, // $609 - section position ID map
+	SymAuxiliaryData:    true, // $597 - auxiliary data
+	SymContentFeatures:  true, // $585 - content_features
+	SymSectionPosMap:    true, // $609 - section position ID map
 }
 
 // Additional symbols for fragment types not in the main constants

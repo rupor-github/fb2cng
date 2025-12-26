@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"math/big"
+	"math/bits"
 	"os"
 	"path/filepath"
 	"time"
@@ -51,6 +52,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 	}
 
 	// Write debug output when in debug mode (after serialization so all data is populated)
+	// Use c.WorkDir (which is already a temp dir) so it is captured by the reporting archive.
 	if c.Debug {
 		debugPath := filepath.Join(c.WorkDir, filepath.Base(outputPath)+".debug.txt")
 		debugOutput := container.String() + "\n" + container.DumpFragments()
@@ -98,9 +100,19 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	// Generate storyline and section fragments from book content
 	// EIDs start at 1000 - this is arbitrary but leaves room for future system IDs
 	startEID := 1000
-	contentFragments, nextEID, sectionNames, tocEntries, err := GenerateStorylineFromBook(c.Book, styles, imageResourceNames, startEID)
+	contentFragments, nextEID, sectionNames, tocEntries, sectionEIDs, err := GenerateStorylineFromBook(c.Book, styles, imageResourceNames, startEID)
 	if err != nil {
 		return err
+	}
+
+	posItems := CollectPositionItems(contentFragments, sectionNames)
+	allEIDs := CollectAllEIDs(sectionEIDs)
+	// Prefer actual reading-order EIDs when available.
+	if len(posItems) > 0 {
+		allEIDs = make([]int, 0, len(posItems))
+		for _, it := range posItems {
+			allEIDs = append(allEIDs, it.EID)
+		}
 	}
 
 	// $258 Metadata - basic book metadata (needs sectionNames for reading_orders)
@@ -137,6 +149,17 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 		}
 	}
 
+	// Phase 6: Position maps ($264/$265) + location map ($550)
+	if err := container.Fragments.Add(BuildPositionMapFragment(sectionNames, sectionEIDs)); err != nil {
+		return err
+	}
+	if err := container.Fragments.Add(BuildPositionIdMapFragment(allEIDs, posItems)); err != nil {
+		return err
+	}
+	if err := container.Fragments.Add(BuildLocationMapFragment(allEIDs)); err != nil {
+		return err
+	}
+
 	// $164 External resources + $417 Raw media (images)
 	for _, frag := range externalRes {
 		if err := container.Fragments.Add(frag); err != nil {
@@ -150,19 +173,25 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	}
 
 	// $266 Anchors (for internal links)
-	referencedAnchors := collectReferencedAnchorNames(container.Fragments)
+	referencedAnchors := make(map[string]bool, len(c.LinksRevIndex))
+	for id := range c.LinksRevIndex {
+		referencedAnchors[id] = true
+	}
 	for _, frag := range buildAnchorFragments(tocEntries, referencedAnchors) {
 		if err := container.Fragments.Add(frag); err != nil {
 			return err
 		}
 	}
 
-	// $593 FormatCapabilities - KFX v2 format capabilities
-	fcFrag := BuildFormatCapabilitiesFragment(nil)
-	if err := container.Fragments.Add(fcFrag); err != nil {
+	// $593 FormatCapabilities - keep minimal (KFXInput reads kfxgen.* here)
+	container.FormatCapabilities = BuildFormatCapabilitiesFragment(DefaultFormatFeatures()).Value
+
+	// $585 content_features - reflow/canonical features live here in reference files
+	maxSectionPIDCount := computeMaxSectionPIDCount(sectionEIDs, posItems)
+	reflowSectionSize := reflowSectionSizeVersion(maxSectionPIDCount)
+	if err := container.Fragments.Add(BuildContentFeaturesFragment(reflowSectionSize)); err != nil {
 		return err
 	}
-	container.FormatCapabilities = fcFrag.Value
 
 	// $419 ContainerEntityMap - must be added after all other fragments
 	deps := ComputeEntityDependencies(container.Fragments)
@@ -177,6 +206,43 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 }
 
 const charsetCR = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+func reflowSectionSizeVersion(maxSectionPIDCount int) int {
+	if maxSectionPIDCount <= 0 {
+		return 1
+	}
+	// Heuristic matching KFXInput expectations.
+	// ceil(log2(n)) = bits.Len(uint(n-1)); version is that minus 11 (clamped to >= 1).
+	v := bits.Len(uint(maxSectionPIDCount - 1))
+	ver := v - 11
+	if ver < 1 {
+		ver = 1
+	}
+	return ver
+}
+
+func computeMaxSectionPIDCount(sectionEIDs map[string][]int, posItems []PositionItem) int {
+	eidToSection := make(map[int]string)
+	for sec, eids := range sectionEIDs {
+		for _, eid := range eids {
+			eidToSection[eid] = sec
+		}
+	}
+
+	bySection := make(map[string]int)
+	for _, it := range posItems {
+		sec := eidToSection[it.EID]
+		bySection[sec] += it.Length
+	}
+
+	max := 0
+	for _, v := range bySection {
+		if v > max {
+			max = v
+		}
+	}
+	return max
+}
 
 // randomAlphanumeric28 generates a random string of exactly 28 bytes
 // containing only uppercase Latin letters (A-Z) and digits (0-9).

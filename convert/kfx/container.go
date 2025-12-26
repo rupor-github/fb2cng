@@ -132,16 +132,18 @@ type Container struct {
 	ContainerFormat    string // "KFX main", "KFX metadata", etc.
 	Fragments          *FragmentList
 	DocSymbolTable     ion.SymbolTable
-	FormatCapabilities any      // $593 value if present
-	LocalSymbols       []string // Local symbol names (added after YJ_symbols)
+	FormatCapabilities any               // $593 value if present
+	LocalSymbols       []string          // Local symbol names (added after YJ_symbols)
+	KfxgenExtra        map[string]string // Extra kfxgen metadata entries
 }
 
 // NewContainer creates a new empty container.
 func NewContainer() *Container {
 	return &Container{
-		Version:   ContainerVersion,
-		ChunkSize: DefaultChunkSize,
-		Fragments: NewFragmentList(),
+		Version:     ContainerVersion,
+		ChunkSize:   DefaultChunkSize,
+		Fragments:   NewFragmentList(),
+		KfxgenExtra: make(map[string]string),
 	}
 }
 
@@ -319,9 +321,15 @@ func (c *Container) parseKfxgenMetadata(data []byte) {
 		return // Ignore errors
 	}
 
+	if c.KfxgenExtra == nil {
+		c.KfxgenExtra = make(map[string]string)
+	}
 	for _, item := range items {
 		key := item["key"]
 		value := item["value"]
+		if key != "" {
+			c.KfxgenExtra[key] = value
+		}
 		switch key {
 		case "appVersion", "kfxgen_application_version":
 			c.GeneratorApp = value
@@ -869,6 +877,22 @@ func (c *Container) buildKfxgenMetadata(payloadSHA1 string) []byte {
 		{"key": "kfxgen_application_version", "value": c.GeneratorApp},
 		{"key": "kfxgen_payload_sha1", "value": payloadSHA1},
 		{"key": "kfxgen_acr", "value": c.ContainerID},
+	}
+
+	if len(c.KfxgenExtra) > 0 {
+		keys := make([]string, 0, len(c.KfxgenExtra))
+		for k := range c.KfxgenExtra {
+			// Avoid duplicating built-in entries.
+			switch k {
+			case "kfxgen_package_version", "kfxgen_application_version", "kfxgen_payload_sha1", "kfxgen_acr":
+				continue
+			}
+			keys = append(keys, k)
+		}
+		slices.Sort(keys)
+		for _, k := range keys {
+			items = append(items, map[string]string{"key": k, "value": c.KfxgenExtra[k]})
+		}
 	}
 
 	data, _ := json.Marshal(items)
