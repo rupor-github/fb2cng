@@ -13,6 +13,7 @@ import (
 
 	"fbc/config"
 	"fbc/content"
+	"fbc/fb2"
 	"fbc/misc"
 )
 
@@ -84,10 +85,20 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	// Create style registry with default styles
 	styles := DefaultStyleRegistry()
 
+	usedIDs := collectUsedImageIDs(c.Book)
+	usedImages := make(fb2.BookImages, len(usedIDs))
+	for id, img := range c.ImagesIndex {
+		if usedIDs[id] {
+			usedImages[id] = img
+		}
+	}
+
+	externalRes, rawMedia, imageResourceNames := buildImageResourceFragments(usedImages)
+
 	// Generate storyline and section fragments from book content
 	// EIDs start at 1000 - this is arbitrary but leaves room for future system IDs
 	startEID := 1000
-	contentFragments, nextEID, sectionNames, tocEntries, err := GenerateStorylineFromBook(c.Book, styles, startEID)
+	contentFragments, nextEID, sectionNames, tocEntries, err := GenerateStorylineFromBook(c.Book, styles, imageResourceNames, startEID)
 	if err != nil {
 		return err
 	}
@@ -126,6 +137,18 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 		}
 	}
 
+	// $164 External resources + $417 Raw media (images)
+	for _, frag := range externalRes {
+		if err := container.Fragments.Add(frag); err != nil {
+			return err
+		}
+	}
+	for _, frag := range rawMedia {
+		if err := container.Fragments.Add(frag); err != nil {
+			return err
+		}
+	}
+
 	// $593 FormatCapabilities - KFX v2 format capabilities
 	fcFrag := BuildFormatCapabilitiesFragment(nil)
 	if err := container.Fragments.Add(fcFrag); err != nil {
@@ -134,7 +157,8 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	container.FormatCapabilities = fcFrag.Value
 
 	// $419 ContainerEntityMap - must be added after all other fragments
-	entityMapFrag := BuildContainerEntityMapFragment(container.ContainerID, container.Fragments)
+	deps := ComputeEntityDependencies(container.Fragments)
+	entityMapFrag := BuildContainerEntityMapWithDependencies(container.ContainerID, container.Fragments, deps)
 	if err := container.Fragments.Add(entityMapFrag); err != nil {
 		return err
 	}

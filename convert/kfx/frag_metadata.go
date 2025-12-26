@@ -68,9 +68,10 @@ func BuildMetadataFragment(c *content.Content, cfg *config.DocumentConfig, log *
 	}
 
 	// ISBN ($223)
-	if pub := c.Book.Description.PublishInfo; pub != nil && pub.ISBN != nil && pub.ISBN.Value != "" {
-		metadata.SetString(SymISBN, pub.ISBN.Value)
-	}
+	// NOTE: currently commented out because KFXInput validation flags $223 as an unexpected symbol.
+	// if pub := c.Book.Description.PublishInfo; pub != nil && pub.ISBN != nil && pub.ISBN.Value != "" {
+	// 	metadata.SetString(SymISBN, pub.ISBN.Value)
+	// }
 
 	// Reading orders ($169) - must match document_data
 	if len(sectionNames) > 0 {

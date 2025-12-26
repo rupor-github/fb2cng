@@ -213,6 +213,11 @@ func DefaultStyleRegistry() *StyleRegistry {
 		TextAlign(SymJustify).
 		Build())
 
+	// Image style
+	sr.Register(NewStyle("image").
+		TextAlign(SymCenter).
+		Build())
+
 	// Heading styles (h1-h6)
 	sr.Register(NewStyle("h1").
 		FontSize(2.0, SymUnitEm).

@@ -278,10 +278,13 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 
 	// Kindle compatibility
 	if kindle {
+		// For Kindle output we normalize supported raster formats to JPEG.
+		// (We keep the isImageSupported check because not all raster types are handled reliably.)
 		if isImageSupported(imgType) && imgType != "jpeg" {
-			log.Debug("Image type is not supported by target device, converting to jpeg",
+			log.Debug("Converting image to jpeg for Kindle output",
 				zap.String("id", bo.ID),
 				zap.String("type", imgType))
+			imgType = "jpeg"
 			bi.MimeType = mime.TypeByExtension(".jpeg")
 			imageChanged = true
 		}
