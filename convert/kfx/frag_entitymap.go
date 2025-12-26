@@ -1,35 +1,8 @@
 package kfx
 
-// BuildContainerEntityMapFragment creates the $419 container_entity_map fragment.
-// This fragment lists which entities belong to which container(s).
-func BuildContainerEntityMapFragment(containerID string, fragments *FragmentList) *Fragment {
-	// Build list of entity IDs (fragment ids as symbols)
-	entityIDs := make([]any, 0, fragments.Len())
-	for _, frag := range fragments.All() {
-		// Skip container-level fragments
-		if CONTAINER_FRAGMENT_TYPES[frag.FType] {
-			continue
-		}
-		// Use fragment ID as symbol - handle both numeric IDs and named IDs
-		if frag.FIDName != "" {
-			entityIDs = append(entityIDs, SymbolByName(frag.FIDName))
-		} else {
-			entityIDs = append(entityIDs, SymbolValue(frag.FID))
-		}
-	}
-
-	// Build container entry
-	containerEntry := NewContainerEntry(containerID, entityIDs)
-
-	// Build container entity map
-	entityMap := NewContainerEntityMap([]any{containerEntry})
-
-	return NewRootFragment(SymContEntityMap, entityMap)
-}
-
-// BuildContainerEntityMapWithDependencies creates $419 with entity dependencies ($253).
-// Dependencies describe which fragments depend on which resources.
-func BuildContainerEntityMapWithDependencies(
+// BuildContainerEntityMapFragment creates the $419 container_entity_map fragment
+// with entity dependencies ($253). Dependencies describe which fragments depend on which resources.
+func BuildContainerEntityMapFragment(
 	containerID string,
 	fragments *FragmentList,
 	dependencies []EntityDependency,
@@ -127,8 +100,6 @@ func ComputeEntityDependencies(fragments *FragmentList) []EntityDependency {
 			})
 		}
 	}
-
-	// TODO: Add section -> resource dependencies when content processing is implemented
 
 	return deps
 }

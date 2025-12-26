@@ -148,7 +148,7 @@ func NewPageTemplateEntry(eid int, storylineName string, width, height int) Stru
 		Set(SymStoryName, SymbolByName(storylineName)). // $176 = story_name ref
 		SetInt(SymWidth, int64(width)).                 // $66 = width
 		SetInt(SymHeight, int64(height)).               // $67 = height
-		SetSymbol(SymLayout, SymPage).                  // $156 = layout = $326 (page)
+		SetSymbol(SymLayout, SymScaleFit).              // $156 = layout = $326 (scale_fit)
 		SetSymbol(SymFloat, SymCenter).                 // $140 = float = $320 (center)
 		SetSymbol(SymType, SymContainer)                // $159 = type = $270 (container)
 }

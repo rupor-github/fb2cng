@@ -262,7 +262,7 @@ func BuildPositionIdMapFragment(allEIDs []int, items []PositionItem) *Fragment {
 func BuildLocationMapFragment(allEIDs []int) *Fragment {
 	locations := make([]any, 0)
 	if len(allEIDs) > 0 {
-		const positionsPerLocation = 150
+		const positionsPerLocation = 110
 		for i := 0; i < len(allEIDs); i += positionsPerLocation {
 			locations = append(locations, NewStruct().SetInt(SymUniqueID, int64(allEIDs[i])))
 		}

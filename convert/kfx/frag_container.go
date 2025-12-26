@@ -1,51 +1,5 @@
 package kfx
 
-import (
-	"fbc/misc"
-)
-
-// BuildContainerFragment creates the $270 container fragment.
-// This is a root fragment that contains container-level metadata.
-func BuildContainerFragment(containerID string, entityList []FragmentKey) *Fragment {
-	container := NewStruct()
-
-	// $409 container id
-	container.SetString(SymContainerId, containerID)
-
-	// $412 chunk size
-	container.SetInt(SymChunkSize, DefaultChunkSize)
-
-	// $410 compression type (always 0 - no compression)
-	container.SetInt(SymComprType, 0)
-
-	// $411 DRM scheme (always 0 - no DRM)
-	container.SetInt(SymDRMScheme, 0)
-
-	// $587 major_version - generator application version
-	container.SetString(SymMajorVersion, misc.GetAppName())
-
-	// $588 minor_version - generator package version
-	container.SetString(SymMinorVersion, misc.GetVersion())
-
-	// $161 format - container format label
-	container.SetString(SymFormat, "KFX main")
-
-	// $181 contains - list of entity [type, id] pairs
-	if len(entityList) > 0 {
-		entities := make([]any, 0, len(entityList))
-		for _, key := range entityList {
-			// Each entity is represented as [type_idnum, id_idnum]
-			entities = append(entities, []any{
-				int64(key.FType),
-				int64(key.FID),
-			})
-		}
-		container.SetList(SymContainsIds, entities)
-	}
-
-	return NewRootFragment(SymContainer, container)
-}
-
 // BuildContainerFragmentFromContainer creates a $270 fragment from Container state.
 // This is used when the container already has its configuration set.
 func BuildContainerFragmentFromContainer(c *Container) *Fragment {

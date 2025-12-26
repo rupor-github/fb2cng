@@ -171,9 +171,10 @@ const (
 	SymJustify     = 321 // justify
 	SymHorizontal  = 322 // horizontal
 	SymVertical    = 323 // vertical
-	SymStart       = 324 // start
-	SymEnd         = 325 // end
-	SymPage        = 326 // page
+	SymFixedFit    = 324 // fixed
+	SymOverflow    = 325 // overflow
+	SymScaleFit    = 326 // scale_fit
+	SymRadial      = 327 // radial
 	SymSolid       = 328 // solid
 
 	// More values ($348-$386)
@@ -275,6 +276,10 @@ const (
 
 	// Alt text ($584)
 	SymAltText = 584 // alt_text
+
+	// Start/End ($680-$681)
+	SymStart = 680 // start
+	SymEnd   = 681 // end
 )
 
 // yjSymbolNames maps symbol IDs to their string names.
@@ -314,7 +319,8 @@ var yjSymbolNames = map[int]string{
 	284: "png", 285: "jpg", 286: "gif", 287: "pobject",
 	306: "unit", 307: "value", 308: "em", 309: "ex", 310: "ratio", 314: "percent",
 	315: "cm", 316: "mm", 317: "in", 318: "pt", 319: "px",
-	320: "center", 321: "justify", 322: "horizontal", 323: "vertical", 324: "start", 325: "end", 326: "page", 328: "solid",
+	320: "center", 321: "justify", 322: "horizontal", 323: "vertical",
+	324: "fixed", 325: "overflow", 326: "scale_fit", 327: "radial", 328: "solid",
 	348: "null", 349: "none", 350: "normal", 351: "default", 352: "always", 353: "avoid",
 	361: "bold", 362: "semibold", 363: "light", 364: "medium", 382: "italic", 383: "auto", 385: "portrait", 386: "landscape",
 	389: "book_navigation", 390: "section_navigation", 391: "nav_container",
@@ -333,6 +339,7 @@ var yjSymbolNames = map[int]string{
 	587: "major_version", 588: "minor_version", 589: "version_info", 590: "features",
 	593: "format_capabilities", 594: "bcFCapabilitiesOffset", 595: "bcFCapabilitiesLength",
 	597: "auxiliary_data", 598: "kfx_id", 601: "render", 602: "block",
+	680: "start", 681: "end",
 }
 
 // yjSymbolIDs maps symbol names to their IDs (reverse of yjSymbolNames).

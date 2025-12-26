@@ -195,7 +195,7 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 
 	// $419 ContainerEntityMap - must be added after all other fragments
 	deps := ComputeEntityDependencies(container.Fragments)
-	entityMapFrag := BuildContainerEntityMapWithDependencies(container.ContainerID, container.Fragments, deps)
+	entityMapFrag := BuildContainerEntityMapFragment(container.ContainerID, container.Fragments, deps)
 	if err := container.Fragments.Add(entityMapFrag); err != nil {
 		return err
 	}
@@ -207,12 +207,16 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 
 const charsetCR = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
+// reflowSectionSizeVersion computes the reflow-section-size major version from
+// the maximum per-section PID count. This value is stored in $585 content_features
+// and used by KFXInput for validation.
+//
+// The formula approximates: version = max(1, ceil(log2(maxCount)) - 11)
+// Using bits.Len(n-1) gives ceil(log2(n)) for n > 0.
 func reflowSectionSizeVersion(maxSectionPIDCount int) int {
 	if maxSectionPIDCount <= 0 {
 		return 1
 	}
-	// Heuristic matching KFXInput expectations.
-	// ceil(log2(n)) = bits.Len(uint(n-1)); version is that minus 11 (clamped to >= 1).
 	v := bits.Len(uint(maxSectionPIDCount - 1))
 	ver := v - 11
 	if ver < 1 {

@@ -294,11 +294,12 @@ Example: 0x8A = string (type 8) with 10-byte (A) body
 │                                                                         │
 │  COMMON OPTIONAL FRAGMENTS                                              │
 │  ────────────────────────────────────────                               │
+│  $145   content           - Content fragments (paragraph text pools)    │
 │  $277   container_block   - Layout container structures                 │
 │  $418   bcRawFont         - Raw font data (embedded fonts)              │
 │  $490   BookMetadata      - Structured metadata (categorized)           │
-│  $585   format_capabilities - Feature flags and capabilities            │
-│  $593   fcFCapabilities   - Capability details (when present)           │
+│  $585   content_features  - Reflow/canonical format features            │
+│  $593   format_capabilities - KFX format feature flags (header blob)    │
 │  $597   yj.eid_offset     - EID offset information                      │
 │                                                                         │
 │  NOT IN SIMPLE BOOKS (omitted)                                          │
@@ -376,6 +377,13 @@ Example: 0x8A = string (type 8) with 10-byte (A) body
   │ position_map │     │position_id_  │     │ location_map│
   │(EID→section) │     │map (PID→EID) │     │ (LOC→PID)   │
   └──────────────┘     └──────────────┘     └─────────────┘
+
+  Content/Format Features:
+  ┌──────────────┐     ┌──────────────┐
+  │    $585      │     │    $593      │
+  │content_feats │     │format_capabs │
+  │(reflow-*, etc)│     │(kfxgen.*)   │
+  └──────────────┘     └──────────────┘
 ```
 
 ---

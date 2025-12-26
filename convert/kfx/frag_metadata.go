@@ -86,76 +86,6 @@ func BuildMetadataFragment(c *content.Content, cfg *config.DocumentConfig, log *
 	return NewRootFragment(SymMetadata, metadata)
 }
 
-// BuildBookMetadataFragment creates the $490 book_metadata fragment.
-// This is the categorised metadata format used by newer KFX files.
-func BuildBookMetadataFragment(c *content.Content, cfg *config.DocumentConfig, log *zap.Logger) *Fragment {
-	// Build kindle_title_metadata category
-	titleMetadata := make([]any, 0)
-
-	// Title - use template if configured
-	title := c.Book.Description.TitleInfo.BookTitle.Value
-	if cfg.Metainformation.TitleTemplate != "" {
-		expanded, err := c.Book.ExpandTemplateMetainfo(
-			config.MetaTitleTemplateFieldName,
-			cfg.Metainformation.TitleTemplate,
-			c.SrcName,
-			c.OutputFormat,
-		)
-		if err != nil {
-			log.Warn("Unable to expand title template for KFX book metadata", zap.Error(err))
-		} else {
-			title = expanded
-		}
-	}
-	if title != "" {
-		titleMetadata = append(titleMetadata, NewMetadataEntry("title", title))
-	}
-
-	// Author - use template if configured
-	if len(c.Book.Description.TitleInfo.Authors) > 0 {
-		author := c.Book.Description.TitleInfo.Authors[0]
-		authorName := formatAuthorName(author)
-
-		if cfg.Metainformation.CreatorNameTemplate != "" {
-			expanded, err := c.Book.ExpandTemplateAuthorName(
-				config.MetaCreatorNameTemplateFieldName,
-				cfg.Metainformation.CreatorNameTemplate,
-				0,
-				&author,
-			)
-			if err != nil {
-				log.Warn("Unable to expand author name template for KFX book metadata", zap.Error(err))
-			} else {
-				authorName = expanded
-			}
-		}
-
-		if authorName != "" {
-			titleMetadata = append(titleMetadata, NewMetadataEntry("author", authorName))
-		}
-	}
-
-	// Language
-	if lang := c.Book.Description.TitleInfo.Lang; lang != language.Und {
-		titleMetadata = append(titleMetadata, NewMetadataEntry("language", lang.String()))
-	}
-
-	// Publisher
-	if pub := c.Book.Description.PublishInfo; pub != nil && pub.Publisher != nil && pub.Publisher.Value != "" {
-		titleMetadata = append(titleMetadata, NewMetadataEntry("publisher", pub.Publisher.Value))
-	}
-
-	// Build categorised_metadata list
-	catMetadata := ListValue{
-		NewCategorisedMetadata("kindle_title_metadata", titleMetadata),
-	}
-
-	bookMetadata := NewStruct().
-		SetList(SymCatMetadata, catMetadata.ToSlice()) // $491 = categorised_metadata
-
-	return NewRootFragment(SymBookMetadata, bookMetadata)
-}
-
 // BuildDocumentDataFragment creates the $538 document_data fragment.
 // This contains reading orders and is required for KFX v2.
 func BuildDocumentDataFragment(sectionNames []string) *Fragment {
@@ -169,16 +99,6 @@ func BuildDocumentDataFragment(sectionNames []string) *Fragment {
 
 	docData := NewStruct().
 		SetList(SymReadingOrders, []any{readingOrder}) // $169 = reading_orders
-
-	return NewRootFragment(SymDocumentData, docData)
-}
-
-// BuildDocumentDataFragmentSimple creates a simple $538 with just reading order name.
-func BuildDocumentDataFragmentSimple() *Fragment {
-	readingOrder := NewStruct().SetSymbol(SymReadOrderName, SymDefault) // $178 = $351
-
-	docData := NewStruct().
-		SetList(SymReadingOrders, []any{readingOrder})
 
 	return NewRootFragment(SymDocumentData, docData)
 }

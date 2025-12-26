@@ -1107,6 +1107,43 @@ The conversion process tracks which `$157` styles were referenced (`used_kfx_sty
 
 Derived from: `kfxlib/yj_to_epub.py:KFX_EPUB.__init__` (pops `$157`, removes `used_kfx_styles`, then `check_empty(kfx_styles, "kfx styles")`).
 
+### 7.9 `$585` content_features (reflow and canonical format)
+
+The `$585` fragment contains feature declarations for content-related capabilities. In reference KFX files, the reflow-* and CanonicalFormat features are stored here rather than in `$593` format_capabilities.
+
+**Fragment structure:**
+
+- Fragment type: `$585`
+- Root fragment (fid == ftype)
+- Value: Ion struct with `$590` (features) field containing a list of feature entries
+
+**Feature entry structure:**
+
+Each entry in the `$590` list is a struct containing:
+
+- `$492` (key): Feature name string (e.g., "reflow-style", "reflow-section-size", "CanonicalFormat")
+- `$586` (namespace): Feature namespace (e.g., "com.amazon.yjconversion", "SDK.Marker")
+- `$589` (version_info): Struct containing:
+  - `version`: Struct with `$587` (major_version) and `$588` (minor_version) as integers
+
+**Common features:**
+
+| Feature Key | Namespace | Description |
+|-------------|-----------|-------------|
+| reflow-style | com.amazon.yjconversion | Indicates reflow styling support |
+| reflow-section-size | com.amazon.yjconversion | Version relates to max section PID count |
+| reflow-language-expansion | com.amazon.yjconversion | Language expansion support |
+| CanonicalFormat | SDK.Marker | Indicates canonical format compliance |
+
+**reflow-section-size version calculation:**
+
+The major_version for reflow-section-size is derived from the maximum per-section PID count:
+- `version = max(1, ceil(log2(maxSectionPIDCount)) - 11)`
+
+This is used by KFXInput for validation and by Kindle for rendering optimization.
+
+Derived from: Reference KFX files in `/mnt/d/test/`, `convert/kfx/frag_contentfeatures.go`.
+
 ---
 
 ---

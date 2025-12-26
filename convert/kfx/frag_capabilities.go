@@ -38,17 +38,3 @@ func DefaultFormatFeatures() []FormatFeature {
 		{Key: "kfxgen.textBlock", Version: 1},
 	}
 }
-
-// PositionMapFeatures returns format features for books with position maps.
-func PositionMapFeatures(positionMaps int, pidMapWithOffset bool) []FormatFeature {
-	features := []FormatFeature{
-		{Key: "kfxgen.textBlock", Version: 1},
-	}
-	if positionMaps > 0 {
-		features = append(features, FormatFeature{Key: "kfxgen.positionMaps", Version: positionMaps})
-	}
-	if pidMapWithOffset {
-		features = append(features, FormatFeature{Key: "kfxgen.pidMapWithOffset", Version: 1})
-	}
-	return features
-}
