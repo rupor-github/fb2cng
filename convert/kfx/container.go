@@ -195,6 +195,19 @@ func ReadContainer(data []byte) (*Container, error) {
 	// Use doc symbol table as prolog for entity decoding
 	lstProlog := docSymData
 
+	// Read format capabilities if present (v2 containers)
+	if contInfo.FCapabLen > 0 {
+		fCapabData := data[contInfo.FCapabOff : contInfo.FCapabOff+contInfo.FCapabLen]
+		r := NewIonReader(lstProlog, fCapabData)
+		if r.Next() {
+			// Skip the $593 annotation and read the value
+			c.FormatCapabilities, err = r.ReadValue()
+			if err != nil {
+				return nil, fmt.Errorf("read format capabilities: %w", err)
+			}
+		}
+	}
+
 	// Read entity directory and entities
 	if contInfo.IndexTabLen > 0 {
 		indexTabReader := bytes.NewReader(data[contInfo.IndexTabOff : contInfo.IndexTabOff+contInfo.IndexTabLen])
@@ -294,10 +307,21 @@ func (c *Container) parseEntity(data, lstProlog []byte, typeNum, idNum int) (*Fr
 		}
 	}
 
+	// Try to resolve FIDName from DocSymbolTable for consistent sorting
+	var fidName string
+	if c.DocSymbolTable != nil && fid != ftype {
+		name, ok := c.DocSymbolTable.FindByID(uint64(fid))
+		if ok && !strings.HasPrefix(name, "$") {
+			// Only use the name if it's not a "$NNN" placeholder
+			fidName = name
+		}
+	}
+
 	return &Fragment{
-		FType: ftype,
-		FID:   fid,
-		Value: value,
+		FType:   ftype,
+		FID:     fid,
+		FIDName: fidName,
+		Value:   value,
 	}, nil
 }
 

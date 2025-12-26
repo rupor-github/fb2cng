@@ -15,33 +15,124 @@ func (c *Container) String() string {
 	tw.Line(0, "KFX Container")
 	tw.Line(1, "Version: %d", c.Version)
 	tw.Line(1, "ContainerID: %q", c.ContainerID)
-	tw.Line(1, "Format: %q", c.ContainerFormat)
+	
+	// Show format with classification reason
+	formatReason := c.getFormatReason()
+	if formatReason != "" {
+		tw.Line(1, "Format: %q (%s)", c.ContainerFormat, formatReason)
+	} else {
+		tw.Line(1, "Format: %q", c.ContainerFormat)
+	}
+	
 	tw.Line(1, "Generator: %s / %s", c.GeneratorApp, c.GeneratorPkg)
 	tw.Line(1, "ChunkSize: %d", c.ChunkSize)
 	tw.Line(1, "Compression: %d", c.CompressionType)
 	tw.Line(1, "DRM: %d", c.DRMScheme)
 
+	// Show format capabilities if present
+	if c.FormatCapabilities != nil {
+		tw.Line(1, "FormatCapabilities:")
+		formatValue(tw, 2, c.FormatCapabilities)
+	}
+
 	if c.Fragments != nil && c.Fragments.Len() > 0 {
-		tw.Line(1, "Fragments: %d", c.Fragments.Len())
+		// Calculate fragment statistics
+		rootCount, rawCount, singletonCount := c.getFragmentStats()
+		regularCount := c.Fragments.Len() - rootCount
+		
+		// Build stats parts
+		stats := []string{fmt.Sprintf("%d total", c.Fragments.Len())}
+		if rootCount > 0 {
+			stats = append(stats, fmt.Sprintf("%d root", rootCount))
+		}
+		if rawCount > 0 {
+			stats = append(stats, fmt.Sprintf("%d raw", rawCount))
+		}
+		if singletonCount > 0 && singletonCount != rootCount {
+			stats = append(stats, fmt.Sprintf("%d singleton", singletonCount))
+		}
+		if regularCount > 0 {
+			stats = append(stats, fmt.Sprintf("%d regular", regularCount))
+		}
+		
+		tw.Line(1, "Fragments: %s", strings.Join(stats, ", "))
 
 		// Group by type
 		types := c.Fragments.Types()
 		for _, ftype := range types {
 			frags := c.Fragments.GetByType(ftype)
-			tw.Line(2, "%s (%d)", FormatSymbol(ftype), len(frags))
-			for _, f := range frags {
+			
+			// Sort fragments for deterministic output
+			sortedFrags := make([]*Fragment, len(frags))
+			copy(sortedFrags, frags)
+			slices.SortFunc(sortedFrags, func(a, b *Fragment) int {
+				// Sort by FIDName if both have it (prefer name-based sorting)
+				if a.FIDName != "" && b.FIDName != "" {
+					return strings.Compare(a.FIDName, b.FIDName)
+				}
+				// Otherwise sort by FID
+				return a.FID - b.FID
+			})
+			
+			// Add type markers
+			markers := c.getTypeMarkers(ftype)
+			if markers != "" {
+				tw.Line(2, "%s %s (%d)", FormatSymbol(ftype), markers, len(sortedFrags))
+			} else {
+				tw.Line(2, "%s (%d)", FormatSymbol(ftype), len(sortedFrags))
+			}
+			
+			for _, f := range sortedFrags {
 				if f.IsRoot() {
 					tw.Line(3, "[root]")
-				} else if f.FIDName != "" {
-					// Show local symbol name with resolved ID if available
-					if len(c.LocalSymbols) > 0 {
-						symID := c.GetLocalSymbolID(f.FIDName)
-						tw.Line(3, "id=$%d (%s)", symID, f.FIDName)
-					} else {
-						tw.Line(3, "id=%s", f.FIDName)
-					}
 				} else {
-					tw.Line(3, "id=%s", FormatSymbol(f.FID))
+					// Determine the symbol ID and name for display
+					var fidID int
+					var fidName string
+					
+					if f.FIDName != "" {
+						// Fragment was created with FIDName - resolve it to symbol ID
+						fidName = f.FIDName
+						if len(c.LocalSymbols) > 0 {
+							fidID = c.GetLocalSymbolID(f.FIDName)
+							if fidID < 0 {
+								// Not found in local symbols, use FID if it's valid
+								if f.FID > 0 {
+									fidID = f.FID
+								} else {
+									// FID not resolved yet, show as unknown
+									tw.Line(3, "id=(unresolved) (%s)", f.FIDName)
+									formatValue(tw, 4, f.Value)
+									continue
+								}
+							}
+						} else if f.FID > 0 {
+							// No local symbols, use FID directly
+							fidID = f.FID
+						} else {
+							// Can't resolve
+							tw.Line(3, "id=(unresolved) (%s)", f.FIDName)
+							formatValue(tw, 4, f.Value)
+							continue
+						}
+					} else {
+						// Fragment uses numeric FID directly
+						fidID = f.FID
+						// Try to look up the name from DocSymbolTable
+						if c.DocSymbolTable != nil {
+							name, ok := c.DocSymbolTable.FindByID(uint64(fidID))
+							if ok && !strings.HasPrefix(name, "$") {
+								// Only use if it's a real name, not a "$NNN" placeholder
+								fidName = name
+							}
+						}
+					}
+					
+					if fidName != "" {
+						tw.Line(3, "id=$%d (%s)", fidID, fidName)
+					} else {
+						tw.Line(3, "id=%s", FormatSymbol(fidID))
+					}
 				}
 				formatValue(tw, 4, f.Value)
 			}
@@ -49,8 +140,17 @@ func (c *Container) String() string {
 	}
 
 	if c.DocSymbolTable != nil {
-		// Show local symbols from the document symbol table
-		tw.Line(1, "DocSymbolTable: present")
+		// Show document symbol table details
+		imports := c.DocSymbolTable.Imports()
+		var importInfo string
+		if len(imports) > 0 {
+			importNames := make([]string, len(imports))
+			for i, imp := range imports {
+				importNames[i] = fmt.Sprintf("%s(v%d,maxID=%d)", imp.Name(), imp.Version(), imp.MaxID())
+			}
+			importInfo = fmt.Sprintf(" imports=[%s]", strings.Join(importNames, ", "))
+		}
+		tw.Line(1, "DocSymbolTable: maxID=%d%s", c.DocSymbolTable.MaxID(), importInfo)
 	}
 
 	if len(c.LocalSymbols) > 0 {
@@ -60,28 +160,121 @@ func (c *Container) String() string {
 		}
 	}
 
+	// Show extra kfxgen metadata if present
+	if len(c.KfxgenExtra) > 0 {
+		tw.Line(1, "KfxgenExtra: %d", len(c.KfxgenExtra))
+		// Filter out standard keys
+		extraKeys := make([]string, 0, len(c.KfxgenExtra))
+		for k := range c.KfxgenExtra {
+			switch k {
+			case "kfxgen_package_version", "kfxgen_application_version", 
+				 "kfxgen_payload_sha1", "kfxgen_acr", "appVersion", "buildVersion":
+				// Skip standard keys that are shown elsewhere
+				continue
+			default:
+				extraKeys = append(extraKeys, k)
+			}
+		}
+		slices.Sort(extraKeys)
+		for _, k := range extraKeys {
+			tw.Line(2, "%s: %q", k, c.KfxgenExtra[k])
+		}
+	}
+
 	return tw.String()
 }
 
-// formatValue formats a value for debug output.
+// getFormatReason returns the reason for container format classification.
+func (c *Container) getFormatReason() string {
+	if c.Fragments == nil {
+		return ""
+	}
+	
+	// Check for main container types
+	mainTypes := []struct {
+		sym  int
+		name string
+	}{
+		{SymStoryline, "has $storyline"},
+		{SymSection, "has $section"},
+		{SymDocumentData, "has $document_data"},
+	}
+	for _, t := range mainTypes {
+		if len(c.Fragments.GetByType(t.sym)) > 0 {
+			return t.name
+		}
+	}
+
+	// Check for metadata container types
+	metaTypes := []struct {
+		sym  int
+		name string
+	}{
+		{SymMetadata, "has $metadata"},
+		{SymContEntityMap, "has $cont_entity_map"},
+		{SymBookMetadata, "has $book_metadata"},
+	}
+	for _, t := range metaTypes {
+		if len(c.Fragments.GetByType(t.sym)) > 0 {
+			return t.name
+		}
+	}
+
+	// Check for attachable
+	if len(c.Fragments.GetByType(SymRawMedia)) > 0 {
+		return "has $raw_media"
+	}
+
+	return ""
+}
+
+// getFragmentStats returns counts of root, raw, and singleton fragments.
+func (c *Container) getFragmentStats() (root, raw, singleton int) {
+	if c.Fragments == nil {
+		return 0, 0, 0
+	}
+	
+	for _, f := range c.Fragments.All() {
+		if f.IsRoot() {
+			root++
+		}
+		if f.IsRaw() {
+			raw++
+		}
+		if f.IsSingleton() {
+			singleton++
+		}
+	}
+	return
+}
+
+// getTypeMarkers returns marker string for a fragment type.
+func (c *Container) getTypeMarkers(ftype int) string {
+	markers := []string{}
+	
+	if ROOT_FRAGMENT_TYPES[ftype] {
+		markers = append(markers, "[root]")
+	}
+	if RAW_FRAGMENT_TYPES[ftype] {
+		markers = append(markers, "[raw]")
+	}
+	if CONTAINER_FRAGMENT_TYPES[ftype] {
+		markers = append(markers, "[container]")
+	}
+	
+	if len(markers) == 0 {
+		return ""
+	}
+	return strings.Join(markers, " ")
+}
+
+// formatValue formats a value for debug output in a compact way.
 func formatValue(tw *debug.TreeWriter, depth int, value any) {
 	switch v := value.(type) {
-	case nil:
-		tw.Line(depth, "null")
-	case bool:
-		tw.Line(depth, "%v", v)
-	case int, int64, int32:
-		tw.Line(depth, "%d", v)
-	case float64:
-		tw.Line(depth, "%f", v)
-	case string:
-		tw.Line(depth, "%q", v)
+	case nil, bool, int, int64, int32, float64, string, SymbolValue, SymbolByNameValue:
+		tw.Line(depth, "%s", formatSimpleValue(v))
 	case []byte:
 		tw.Line(depth, "blob(%d bytes)", len(v))
-	case SymbolValue:
-		tw.Line(depth, "sym:%s", FormatSymbol(int(v)))
-	case SymbolByNameValue:
-		tw.Line(depth, "sym:%q", string(v))
 	case RawValue:
 		tw.Line(depth, "raw(%d bytes)", len(v))
 	case StructValue:
@@ -99,6 +292,27 @@ func formatValue(tw *debug.TreeWriter, depth int, value any) {
 	}
 }
 
+func formatSimpleValue(v any) string {
+	switch val := v.(type) {
+	case nil:
+		return "null"
+	case bool:
+		return fmt.Sprintf("%v", val)
+	case int, int64, int32:
+		return fmt.Sprintf("%d", val)
+	case float64:
+		return fmt.Sprintf("%g", val)
+	case string:
+		return fmt.Sprintf("%q", val)
+	case SymbolValue:
+		return FormatSymbol(int(val))
+	case SymbolByNameValue:
+		return fmt.Sprintf("sym:%q", string(val))
+	default:
+		return fmt.Sprintf("<%T>", v)
+	}
+}
+
 func formatStructValueInt(tw *debug.TreeWriter, depth int, m map[int]any) {
 	if len(m) == 0 {
 		tw.Line(depth, "{}")
@@ -112,12 +326,26 @@ func formatStructValueInt(tw *debug.TreeWriter, depth int, m map[int]any) {
 	}
 	slices.Sort(keys)
 
-	tw.Line(depth, "{")
 	for _, k := range keys {
-		tw.Line(depth+1, "%s:", FormatSymbol(k))
-		formatValue(tw, depth+2, m[k])
+		keyName := FormatSymbol(k)
+		val := m[k]
+		
+		// Try to format simple values inline
+		if isSimpleValue(val) {
+			tw.Line(depth, "%s: %s", keyName, formatSimpleValue(val))
+		} else if blob, ok := val.([]byte); ok {
+			tw.Line(depth, "%s: blob(%d bytes)", keyName, len(blob))
+		} else if raw, ok := val.(RawValue); ok {
+			tw.Line(depth, "%s: raw(%d bytes)", keyName, len(raw))
+		} else if list, ok := val.(ListValue); ok {
+			formatListValueWithKey(tw, depth, keyName, []any(list))
+		} else if list, ok := val.([]any); ok {
+			formatListValueWithKey(tw, depth, keyName, list)
+		} else {
+			tw.Line(depth, "%s:", keyName)
+			formatValue(tw, depth+1, val)
+		}
 	}
-	tw.Line(depth, "}")
 }
 
 func formatStructValueString(tw *debug.TreeWriter, depth int, m map[string]any) {
@@ -133,12 +361,25 @@ func formatStructValueString(tw *debug.TreeWriter, depth int, m map[string]any) 
 	}
 	slices.Sort(keys)
 
-	tw.Line(depth, "{")
 	for _, k := range keys {
-		tw.Line(depth+1, "%s:", FormatSymbol(k))
-		formatValue(tw, depth+2, m[k])
+		val := m[k]
+		
+		// Try to format simple values inline
+		if isSimpleValue(val) {
+			tw.Line(depth, "%s: %s", k, formatSimpleValue(val))
+		} else if blob, ok := val.([]byte); ok {
+			tw.Line(depth, "%s: blob(%d bytes)", k, len(blob))
+		} else if raw, ok := val.(RawValue); ok {
+			tw.Line(depth, "%s: raw(%d bytes)", k, len(raw))
+		} else if list, ok := val.(ListValue); ok {
+			formatListValueWithKey(tw, depth, k, []any(list))
+		} else if list, ok := val.([]any); ok {
+			formatListValueWithKey(tw, depth, k, list)
+		} else {
+			tw.Line(depth, "%s:", k)
+			formatValue(tw, depth+1, val)
+		}
 	}
-	tw.Line(depth, "}")
 }
 
 func formatListValue(tw *debug.TreeWriter, depth int, items []any) {
@@ -151,49 +392,67 @@ func formatListValue(tw *debug.TreeWriter, depth int, items []any) {
 	if len(items) <= 5 && allSimple(items) {
 		parts := make([]string, len(items))
 		for i, item := range items {
-			parts[i] = formatSimple(item)
+			parts[i] = formatSimpleValue(item)
 		}
 		tw.Line(depth, "[%s]", strings.Join(parts, ", "))
 		return
 	}
 
-	tw.Line(depth, "[%d items]", len(items))
-	for _, item := range items {
-		formatValue(tw, depth+1, item)
+	// For longer lists, show items with index
+	for i, item := range items {
+		if isSimpleValue(item) {
+			tw.Line(depth, "[%d]: %s", i, formatSimpleValue(item))
+		} else {
+			tw.Line(depth, "[%d]:", i)
+			formatValue(tw, depth+1, item)
+		}
+	}
+}
+
+func formatListValueWithKey(tw *debug.TreeWriter, depth int, key string, items []any) {
+	if len(items) == 0 {
+		tw.Line(depth, "%s: []", key)
+		return
+	}
+
+	// For short lists of simple values, show inline
+	if len(items) <= 5 && allSimple(items) {
+		parts := make([]string, len(items))
+		for i, item := range items {
+			parts[i] = formatSimpleValue(item)
+		}
+		tw.Line(depth, "%s: [%s]", key, strings.Join(parts, ", "))
+		return
+	}
+
+	// For longer lists, show count on parent line
+	tw.Line(depth, "%s: (%d)", key, len(items))
+	for i, item := range items {
+		if isSimpleValue(item) {
+			tw.Line(depth+1, "[%d]: %s", i, formatSimpleValue(item))
+		} else {
+			tw.Line(depth+1, "[%d]:", i)
+			formatValue(tw, depth+2, item)
+		}
+	}
+}
+
+func isSimpleValue(v any) bool {
+	switch v.(type) {
+	case nil, bool, int, int64, int32, float64, string, SymbolValue, SymbolByNameValue:
+		return true
+	default:
+		return false
 	}
 }
 
 func allSimple(items []any) bool {
 	for _, item := range items {
-		switch item.(type) {
-		case nil, bool, int, int64, int32, float64, string, SymbolValue, SymbolByNameValue:
-			continue
-		default:
+		if !isSimpleValue(item) {
 			return false
 		}
 	}
 	return true
-}
-
-func formatSimple(v any) string {
-	switch val := v.(type) {
-	case nil:
-		return "null"
-	case bool:
-		return fmt.Sprintf("%v", val)
-	case int, int64, int32:
-		return fmt.Sprintf("%d", val)
-	case float64:
-		return fmt.Sprintf("%f", val)
-	case string:
-		return fmt.Sprintf("%q", val)
-	case SymbolValue:
-		return FormatSymbol(int(val))
-	case SymbolByNameValue:
-		return fmt.Sprintf("sym:%q", string(val))
-	default:
-		return fmt.Sprintf("<%T>", v)
-	}
 }
 
 // DumpFragments returns a detailed dump of all fragments.
@@ -210,21 +469,72 @@ func (c *Container) DumpFragments() string {
 	types := c.Fragments.Types()
 	for _, ftype := range types {
 		frags := c.Fragments.GetByType(ftype)
-		fmt.Fprintf(&sb, "### %s (%d fragments)\n\n", FormatSymbol(ftype), len(frags))
+		
+		// Sort fragments for deterministic output
+		sortedFrags := make([]*Fragment, len(frags))
+		copy(sortedFrags, frags)
+		slices.SortFunc(sortedFrags, func(a, b *Fragment) int {
+			// Sort by FIDName if both have it (prefer name-based sorting)
+			if a.FIDName != "" && b.FIDName != "" {
+				return strings.Compare(a.FIDName, b.FIDName)
+			}
+			// Otherwise sort by FID
+			return a.FID - b.FID
+		})
+		
+		fmt.Fprintf(&sb, "### %s (%d fragments)\n\n", FormatSymbol(ftype), len(sortedFrags))
 
-		for _, f := range frags {
+		for _, f := range sortedFrags {
 			if f.IsRoot() {
 				sb.WriteString("  [root fragment]\n")
-			} else if f.FIDName != "" {
-				// Show local symbol name with resolved ID if available
-				if len(c.LocalSymbols) > 0 {
-					symID := c.GetLocalSymbolID(f.FIDName)
-					fmt.Fprintf(&sb, "  id: $%d (%s)\n", symID, f.FIDName)
-				} else {
-					fmt.Fprintf(&sb, "  id: %s\n", f.FIDName)
-				}
 			} else {
-				fmt.Fprintf(&sb, "  id: %s\n", FormatSymbol(f.FID))
+				// Determine the symbol ID and name for display
+				var fidID int
+				var fidName string
+				
+				if f.FIDName != "" {
+					// Fragment was created with FIDName - resolve it to symbol ID
+					fidName = f.FIDName
+					if len(c.LocalSymbols) > 0 {
+						fidID = c.GetLocalSymbolID(f.FIDName)
+						if fidID < 0 {
+							// Not found in local symbols, use FID if it's valid
+							if f.FID > 0 {
+								fidID = f.FID
+							} else {
+								// FID not resolved yet
+								fmt.Fprintf(&sb, "  id: (unresolved) (%s)\n", f.FIDName)
+								fmt.Fprintf(&sb, "  value: %s\n\n", formatValueCompact(f.Value))
+								continue
+							}
+						}
+					} else if f.FID > 0 {
+						// No local symbols, use FID directly
+						fidID = f.FID
+					} else {
+						// Can't resolve
+						fmt.Fprintf(&sb, "  id: (unresolved) (%s)\n", f.FIDName)
+						fmt.Fprintf(&sb, "  value: %s\n\n", formatValueCompact(f.Value))
+						continue
+					}
+				} else {
+					// Fragment uses numeric FID directly
+					fidID = f.FID
+					// Try to look up the name from DocSymbolTable
+					if c.DocSymbolTable != nil {
+						name, ok := c.DocSymbolTable.FindByID(uint64(fidID))
+						if ok && !strings.HasPrefix(name, "$") {
+							// Only use if it's a real name, not a "$NNN" placeholder
+							fidName = name
+						}
+					}
+				}
+				
+				if fidName != "" {
+					fmt.Fprintf(&sb, "  id: $%d (%s)\n", fidID, fidName)
+				} else {
+					fmt.Fprintf(&sb, "  id: %s\n", FormatSymbol(fidID))
+				}
 			}
 			fmt.Fprintf(&sb, "  value: %s\n\n", formatValueCompact(f.Value))
 		}
