@@ -23,19 +23,19 @@ const (
 
 // Font style/weight values
 const (
-	SymFontNormal    = 350 // normal
-	SymFontBold      = 361 // bold
-	SymFontItalic    = 382 // italic
-	SymFontSemibold  = 362 // semibold
-	SymFontLight     = 363 // light
-	SymFontMedium    = 364 // medium
+	SymFontNormal   = 350 // normal
+	SymFontBold     = 361 // bold
+	SymFontItalic   = 382 // italic
+	SymFontSemibold = 362 // semibold
+	SymFontLight    = 363 // light
+	SymFontMedium   = 364 // medium
 )
 
 // StyleDef defines a KFX style with its properties.
 type StyleDef struct {
-	Name       string            // Style name (becomes local symbol)
-	Parent     string            // Parent style name (for inheritance)
-	Properties map[int]any       // KFX property symbol -> value
+	Name       string      // Style name (becomes local symbol)
+	Parent     string      // Parent style name (for inheritance)
+	Properties map[int]any // KFX property symbol -> value
 }
 
 // DimensionValue creates a dimension value with unit.
@@ -171,8 +171,8 @@ func BuildStyleFragment(def StyleDef) *Fragment {
 // StyleRegistry manages style definitions and generates style fragments.
 type StyleRegistry struct {
 	styles map[string]StyleDef
-	order  []string          // Preserve insertion order
-	used   map[string]bool   // Track which styles are actually used
+	order  []string        // Preserve insertion order
+	used   map[string]bool // Track which styles are actually used
 }
 
 // NewStyleRegistry creates a new style registry.
@@ -203,7 +203,7 @@ func (sr *StyleRegistry) Names() []string {
 }
 
 // EnsureStyle ensures a style exists, creating a minimal one if needed.
-// Marks the style as used for output. This is used for dynamically 
+// Marks the style as used for output. This is used for dynamically
 // encountered styles from FB2 paragraphs.
 func (sr *StyleRegistry) EnsureStyle(name string) {
 	sr.used[name] = true

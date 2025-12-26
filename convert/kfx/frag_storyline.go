@@ -57,24 +57,24 @@ func BuildSectionFragment(sectionName string, pageTemplates []any) *Fragment {
 // Based on reference: {$155: eid, $176: storyline_name, $66: w, $67: h, $156: layout, $140: float, $159: $270}
 func NewPageTemplateEntry(eid int, storylineName string, width, height int) StructValue {
 	return NewStruct().
-		SetInt(SymUniqueID, int64(eid)).           // $155 = id
+		SetInt(SymUniqueID, int64(eid)).                // $155 = id
 		Set(SymStoryName, SymbolByName(storylineName)). // $176 = story_name ref
-		SetInt(SymWidth, int64(width)).            // $66 = width
-		SetInt(SymHeight, int64(height)).          // $67 = height
-		SetSymbol(SymLayout, SymPage).             // $156 = layout = $326 (page)
-		SetSymbol(SymFloat, SymCenter).            // $140 = float = $320 (center)
-		SetSymbol(SymType, SymContainer)           // $159 = type = $270 (container)
+		SetInt(SymWidth, int64(width)).                 // $66 = width
+		SetInt(SymHeight, int64(height)).               // $67 = height
+		SetSymbol(SymLayout, SymPage).                  // $156 = layout = $326 (page)
+		SetSymbol(SymFloat, SymCenter).                 // $140 = float = $320 (center)
+		SetSymbol(SymType, SymContainer)                // $159 = type = $270 (container)
 }
 
 // ContentRef represents a reference to content within a storyline.
 type ContentRef struct {
-	EID           int    // Element ID ($155)
-	Type          int    // Content type symbol ($269=text, $270=container, $271=image, etc.)
-	ContentName   string // Name of the content fragment
-	ContentOffset int    // Offset within content fragment ($403)
-	Style         string // Optional style name
+	EID           int             // Element ID ($155)
+	Type          int             // Content type symbol ($269=text, $270=container, $271=image, etc.)
+	ContentName   string          // Name of the content fragment
+	ContentOffset int             // Offset within content fragment ($403)
+	Style         string          // Optional style name
 	StyleEvents   []StyleEventRef // Optional inline style events ($142)
-	Children      []any  // Optional nested content for containers
+	Children      []any           // Optional nested content for containers
 }
 
 // StyleEventRef represents a style event for inline formatting ($142).
@@ -89,8 +89,8 @@ type StyleEventRef struct {
 // Based on reference: {$155: eid, $157: style, $159: type, $145: {name: content_X, $403: offset}}
 func NewContentEntry(ref ContentRef) StructValue {
 	entry := NewStruct().
-		SetInt(SymUniqueID, int64(ref.EID)).   // $155 = id
-		SetSymbol(SymType, ref.Type)           // $159 = type
+		SetInt(SymUniqueID, int64(ref.EID)). // $155 = id
+		SetSymbol(SymType, ref.Type)         // $159 = type
 
 	if ref.Style != "" {
 		entry.Set(SymStyle, SymbolByName(ref.Style)) // $157 = style as symbol
@@ -102,7 +102,7 @@ func NewContentEntry(ref ContentRef) StructValue {
 		for _, se := range ref.StyleEvents {
 			ev := NewStruct().
 				SetInt(SymOffset, int64(se.Offset)). // $143 = offset
-				SetInt(SymLength, int64(se.Length)) // $144 = length
+				SetInt(SymLength, int64(se.Length))  // $144 = length
 			if se.Style != "" {
 				ev.Set(SymStyle, SymbolByName(se.Style)) // $157 = style
 			}
@@ -116,8 +116,8 @@ func NewContentEntry(ref ContentRef) StructValue {
 
 	// Content reference - nested struct with name and offset
 	contentRef := map[string]any{
-		"name":  SymbolByName(ref.ContentName),
-		"$403":  ref.ContentOffset,
+		"name": SymbolByName(ref.ContentName),
+		"$403": ref.ContentOffset,
 	}
 	entry.Set(SymContent, contentRef) // $145 = content
 
@@ -131,11 +131,11 @@ func NewContentEntry(ref ContentRef) StructValue {
 
 // StorylineBuilder helps build storyline content incrementally.
 type StorylineBuilder struct {
-	name            string       // Storyline name (e.g., "l1")
-	sectionName     string       // Associated section name (e.g., "c0")
+	name            string // Storyline name (e.g., "l1")
+	sectionName     string // Associated section name (e.g., "c0")
 	contentEntries  []ContentRef
 	eidCounter      int
-	pageTemplateEID int          // Separate EID for page template container
+	pageTemplateEID int // Separate EID for page template container
 }
 
 // NewStorylineBuilder creates a new storyline builder.
@@ -144,8 +144,8 @@ func NewStorylineBuilder(storyName, sectionName string, startEID int) *Storyline
 	return &StorylineBuilder{
 		name:            storyName,
 		sectionName:     sectionName,
-		pageTemplateEID: startEID,      // First EID goes to page template
-		eidCounter:      startEID + 1,  // Content EIDs start after page template
+		pageTemplateEID: startEID,     // First EID goes to page template
+		eidCounter:      startEID + 1, // Content EIDs start after page template
 	}
 }
 
