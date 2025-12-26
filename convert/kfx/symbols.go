@@ -61,6 +61,7 @@ const (
 	SymKeepFirst     = 131 // first (keep_together)
 	SymKeepLast      = 132 // last (keep_together)
 	SymFloat         = 140 // float
+	SymPageTemplates = 141 // page_templates
 	SymStyleEvents   = 142 // style_events
 	SymOffset        = 143 // offset
 	SymLength        = 144 // length
@@ -159,6 +160,7 @@ const (
 	SymValue       = 307 // value
 	SymUnitEm      = 308 // em
 	SymUnitEx      = 309 // ex
+	SymUnitRatio   = 310 // ratio
 	SymUnitPercent = 314 // percent
 	SymUnitCm      = 315 // cm
 	SymUnitMm      = 316 // mm
@@ -169,6 +171,9 @@ const (
 	SymJustify     = 321 // justify
 	SymHorizontal  = 322 // horizontal
 	SymVertical    = 323 // vertical
+	SymStart       = 324 // start
+	SymEnd         = 325 // end
+	SymPage        = 326 // page
 	SymSolid       = 328 // solid
 
 	// More values ($348-$386)
@@ -179,6 +184,9 @@ const (
 	SymAlways    = 352 // always
 	SymAvoid     = 353 // avoid
 	SymBold      = 361 // bold
+	SymSemibold  = 362 // semibold
+	SymLight     = 363 // light
+	SymMedium    = 364 // medium
 	SymItalic    = 382 // italic
 	SymAuto      = 383 // auto
 	SymPortrait  = 385 // portrait
@@ -279,7 +287,7 @@ var yjSymbolNames = map[int]string{
 	51: "padding", 56: "width", 57: "height", 58: "top", 59: "left", 60: "bottom", 61: "right",
 	70: "fill_color", 72: "fill_opacity", 83: "border_color", 88: "border_style", 93: "border_weight",
 	98: "transform", 112: "column_count", 125: "dropcap_lines", 126: "dropcap_chars",
-	127: "hyphens", 131: "first", 132: "last", 140: "float",
+	127: "hyphens", 131: "first", 132: "last", 140: "float", 141: "page_templates",
 	142: "style_events", 143: "offset", 144: "length", 145: "content", 146: "content_list",
 	148: "table_column_span", 149: "table_row_span", 151: "header",
 	153: "title", 154: "description", 155: "id",
@@ -302,11 +310,11 @@ var yjSymbolNames = map[int]string{
 	274: "plugin", 275: "knockout", 276: "list", 277: "listitem",
 	278: "table", 279: "table_row", 280: "sidebar", 281: "footnote", 282: "figure", 283: "inline",
 	284: "png", 285: "jpg", 286: "gif", 287: "pobject",
-	306: "unit", 307: "value", 308: "em", 309: "ex", 314: "percent",
+	306: "unit", 307: "value", 308: "em", 309: "ex", 310: "ratio", 314: "percent",
 	315: "cm", 316: "mm", 317: "in", 318: "pt", 319: "px",
-	320: "center", 321: "justify", 322: "horizontal", 323: "vertical", 328: "solid",
+	320: "center", 321: "justify", 322: "horizontal", 323: "vertical", 324: "start", 325: "end", 326: "page", 328: "solid",
 	348: "null", 349: "none", 350: "normal", 351: "default", 352: "always", 353: "avoid",
-	361: "bold", 382: "italic", 383: "auto", 385: "portrait", 386: "landscape",
+	361: "bold", 362: "semibold", 363: "light", 364: "medium", 382: "italic", 383: "auto", 385: "portrait", 386: "landscape",
 	389: "book_navigation", 390: "section_navigation", 391: "nav_container",
 	392: "nav_containers", 393: "nav_unit", 394: "conditional_nav_group_unit",
 	397: "titlepage", 398: "acknowledgements", 399: "preface",

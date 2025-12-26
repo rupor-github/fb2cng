@@ -12,6 +12,7 @@ Implement KFX (Kindle Format X) output generation from FB2 content. The implemen
 7. We probably could use inline anchors via $266 rather than doing ($391, $393, $394).
 8. Resulting output must pass testdata/input.py without errors and warnings (kindle_audit_metadata warnings could be ignored).
 9. Examples of proper working kfx files could be found in /mnt/d/test - our results should resemble them.
+10. Format changed code with `goimports-reviser -format -company-prefixes github.com/rupor-github -excludes vendor ./...` when done.
 
 ## Progress Tracking
 

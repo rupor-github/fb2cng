@@ -7,12 +7,6 @@ import (
 	"fbc/fb2"
 )
 
-// Symbol constants for structure - additions to main symbols.go
-const (
-	SymPageTemplates = 141 // page_templates - list of content locations in section
-	SymPage          = 326 // page - layout value
-)
-
 // BuildStorylineFragment creates a $259 storyline fragment.
 // Based on reference KFX, storyline has:
 // - Named FID (like "l1", "l2", etc.)
