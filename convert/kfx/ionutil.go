@@ -56,7 +56,10 @@ func DecodeIon(prolog, data []byte, v any) error {
 	if HasIonBVM(data) {
 		ionData = data[len(ionBVM):]
 	}
-	combined := append(prolog, ionData...)
+	// Create new slice to avoid modifying original prolog's underlying array
+	combined := make([]byte, 0, len(prolog)+len(ionData))
+	combined = append(combined, prolog...)
+	combined = append(combined, ionData...)
 
 	if err := ion.Unmarshal(combined, v, sharedSymbolTable); err != nil {
 		return err
@@ -365,7 +368,10 @@ func NewIonReader(prolog, data []byte) *IonReader {
 	if HasIonBVM(data) {
 		ionData = data[len(ionBVM):]
 	}
-	combined := append(prolog, ionData...)
+	// Create new slice to avoid modifying original prolog's underlying array
+	combined := make([]byte, 0, len(prolog)+len(ionData))
+	combined = append(combined, prolog...)
+	combined = append(combined, ionData...)
 	r := ion.NewReaderCat(bytes.NewReader(combined), ion.NewCatalog(sharedSymbolTable))
 	return &IonReader{reader: r}
 }

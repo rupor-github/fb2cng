@@ -32,6 +32,14 @@ func (c *Container) String() string {
 			for _, f := range frags {
 				if f.IsRoot() {
 					tw.Line(3, "[root]")
+				} else if f.FIDName != "" {
+					// Show local symbol name with resolved ID if available
+					if len(c.LocalSymbols) > 0 {
+						symID := c.GetLocalSymbolID(f.FIDName)
+						tw.Line(3, "id=$%d (%s)", symID, f.FIDName)
+					} else {
+						tw.Line(3, "id=%s", f.FIDName)
+					}
 				} else {
 					tw.Line(3, "id=%s", FormatSymbol(f.FID))
 				}
@@ -43,6 +51,13 @@ func (c *Container) String() string {
 	if c.DocSymbolTable != nil {
 		// Show local symbols from the document symbol table
 		tw.Line(1, "DocSymbolTable: present")
+	}
+
+	if len(c.LocalSymbols) > 0 {
+		tw.Line(1, "LocalSymbols: %d", len(c.LocalSymbols))
+		for i, sym := range c.LocalSymbols {
+			tw.Line(2, "$%d: %s", LargestKnownSymbol+1+i, sym)
+		}
 	}
 
 	return tw.String()
@@ -200,6 +215,14 @@ func (c *Container) DumpFragments() string {
 		for _, f := range frags {
 			if f.IsRoot() {
 				sb.WriteString("  [root fragment]\n")
+			} else if f.FIDName != "" {
+				// Show local symbol name with resolved ID if available
+				if len(c.LocalSymbols) > 0 {
+					symID := c.GetLocalSymbolID(f.FIDName)
+					fmt.Fprintf(&sb, "  id: $%d (%s)\n", symID, f.FIDName)
+				} else {
+					fmt.Fprintf(&sb, "  id: %s\n", f.FIDName)
+				}
 			} else {
 				fmt.Fprintf(&sb, "  id: %s\n", FormatSymbol(f.FID))
 			}

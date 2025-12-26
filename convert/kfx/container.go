@@ -301,12 +301,16 @@ func (c *Container) parseEntity(data, lstProlog []byte, typeNum, idNum int) (*Fr
 
 // parseKfxgenMetadata parses the JSON-like kfxgen metadata blob.
 func (c *Container) parseKfxgenMetadata(data []byte) {
+	if len(data) == 0 {
+		return
+	}
+
 	// Remove 0x1B bytes and decode as ASCII
 	cleaned := bytes.ReplaceAll(data, []byte{0x1B}, []byte{})
 	text := string(cleaned)
 
 	// Convert pseudo-JSON to valid JSON
-	// Pattern: {key: "value", key: "value"}
+	// Pattern: unquoted keys like key: need to become "key":
 	re := regexp.MustCompile(`(\w+)\s*:`)
 	text = re.ReplaceAllString(text, `"$1":`)
 
@@ -437,6 +441,9 @@ func (c *Container) GetLocalSymbolID(name string) int {
 func (c *Container) WriteContainer() ([]byte, error) {
 	// Collect local symbols before serialization
 	c.CollectLocalSymbols()
+
+	// Classify container format for debug output
+	c.classifyContainerFormat()
 
 	// Build entity directory and entity payloads
 	var entityDir bytes.Buffer

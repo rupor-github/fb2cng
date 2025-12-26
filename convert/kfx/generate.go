@@ -33,34 +33,29 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 	containerID := "CR!" + hashTo28Alphanumeric(c.Book.Description.DocumentInfo.ID)
 
 	// Create container with basic metadata
-	container := &Container{
-		ContainerID:     containerID,
-		CompressionType: 0, // No compression
-		DRMScheme:       0, // No DRM
-		ChunkSize:       DefaultChunkSize,
-		GeneratorApp:    misc.GetAppName(),
-		GeneratorPkg:    misc.GetVersion(),
-		Fragments:       NewFragmentList(),
-	}
+	container := NewContainer()
+	container.ContainerID = containerID
+	container.GeneratorApp = misc.GetAppName()
+	container.GeneratorPkg = misc.GetVersion()
 
 	// Build minimal fragments from content
 	if err := buildFragments(container, c, cfg, log); err != nil {
 		return err
 	}
 
-	// Write debug output when in debug mode
+	// Serialize container to KFX
+	kfxData, err := container.WriteContainer()
+	if err != nil {
+		return err
+	}
+
+	// Write debug output when in debug mode (after serialization so all data is populated)
 	if c.Debug {
 		debugPath := filepath.Join(c.WorkDir, filepath.Base(outputPath)+".debug.txt")
 		debugOutput := container.String() + "\n" + container.DumpFragments()
 		if err := os.WriteFile(debugPath, []byte(debugOutput), 0644); err != nil {
 			log.Warn("Failed to write debug output", zap.Error(err))
 		}
-	}
-
-	// Serialize container to KFX
-	kfxData, err := container.WriteContainer()
-	if err != nil {
-		return err
 	}
 
 	// Ensure output directory exists
@@ -92,7 +87,7 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	// Generate storyline and section fragments from book content
 	// EIDs start at 1000 - this is arbitrary but leaves room for future system IDs
 	startEID := 1000
-	contentFragments, _, sectionNames, err := GenerateStorylineFromBook(c.Book, styles, startEID)
+	contentFragments, nextEID, sectionNames, tocEntries, err := GenerateStorylineFromBook(c.Book, styles, startEID)
 	if err != nil {
 		return err
 	}
@@ -121,6 +116,14 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	docDataFrag := BuildDocumentDataFragment(sectionNames)
 	if err := container.Fragments.Add(docDataFrag); err != nil {
 		return err
+	}
+
+	// Build navigation containers (TOC) from TOC entries
+	if len(tocEntries) > 0 {
+		navFrag := BuildNavigationFragment(tocEntries, nextEID)
+		if err := container.Fragments.Add(navFrag); err != nil {
+			return err
+		}
 	}
 
 	// $593 FormatCapabilities - KFX v2 format capabilities

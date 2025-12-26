@@ -21,17 +21,24 @@ Implement KFX (Kindle Format X) output generation from FB2 content. The implemen
 - **Phase 2 Complete:** ✅ (Fragment Model)
 - **Phase 3 Complete:** ✅ (Core Fragment Generators)
 - **Phase 4 Complete:** ✅ (Content Fragment Generators - Storyline, Section, Content, Style)
-- Phase 5 Complete: [ ] (Position Maps - $264, $265, $389, $550)
-- Phase 6 Complete: [ ]
+- **Phase 5 In Progress:** 🔄 (Navigation done, Resources/Anchors pending)
+- Phase 6 Complete: [ ] (Position Maps - $264, $265, $550)
 - Phase 7 Complete: [ ]
 - Phase 8 Complete: [ ]
 
 ## Current Status
 
-After Phase 4, KFX generation produces a valid file with only **1 error**:
-- Missing position map fragments: $264 (position_map), $265 (position_id_map), $389 (book_navigation), $550 (location_map)
+After Phase 4 + partial Phase 5:
+- ✅ Navigation fragment ($389 book_navigation) implemented with hierarchical TOC
+- ✅ KFX structure aligned with EPUB (body intro as separate storyline, nested TOC entries)
+- ✅ Content chunking implemented (paragraphs as separate entries, auto-split at 8KB)
+- ✅ Passes KFXInput validation except for missing position maps
+- ✅ Debug output shows all fields correctly (Version, Format, Generator, LocalSymbols)
+- ✅ Fixed Ion append bug that corrupted data during container read
+- ❌ Missing: External resources ($164), Raw media ($417), Anchors ($266)
+- ❌ Missing: Position maps ($264, $265, $550) - **required for full validation**
 
-These are Phase 5-6 features required for full validation.
+Current validation result: 1 error (missing $264, $265, $550 fragments)
 
 ## Implementation Plan
 
@@ -141,6 +148,7 @@ These are Phase 5-6 features required for full validation.
   - [x] StorylineBuilder - incremental content building
   - [x] Named FID (like "l1", "l2") with story_name symbol reference
   - [x] Separate EID allocation for page template vs content
+  - [x] Body intro content as separate storyline (aligned with EPUB structure)
 
 - [x] **4.2 Section Fragments** (`frag_storyline.go`) - $260
   - [x] BuildSectionFragment - section with page_templates ($141)
@@ -152,6 +160,9 @@ These are Phase 5-6 features required for full validation.
   - [x] Content fragments with name as symbol reference
   - [x] Content entries in storyline's content_list
   - [x] FB2 section/body processing to storyline/section pairs
+  - [x] Nested section tracking for TOC hierarchy (aligned with EPUB)
+  - [x] ContentAccumulator for automatic chunking (max 8KB per fragment)
+  - [x] Each paragraph as separate entry in content_list
 
 - [x] **4.4 Style Fragments** (`frag_style.go`) - $157
   - [x] StyleDef structure with name and properties
@@ -180,10 +191,11 @@ These are Phase 5-6 features required for full validation.
   - Generate anchor fragments for internal links
   - Include position references ($183)
 
-- [ ] **5.4 Navigation Fragments** (`frag_navigation.go`)
-  - $389 (BookNavigation): per reading order
-  - $391 (NavContainer): TOC structure
-  - $393 (NavUnit): individual nav entries
+- [x] **5.4 Navigation Fragments** (`frag_storyline.go`)
+  - [x] $389 (BookNavigation): per reading order with nav_containers
+  - [x] TOC structure with hierarchical entries (nested $247)
+  - [x] TOCEntry struct for tracking hierarchy (mirrors epub's chapterData)
+  - [x] BuildNavigationFragment creates complete TOC from TOCEntry tree
   - Note: Skip $390, $394 (magazine/conditional specific)
 
 ### Phase 6: Position Mapping (`convert/kfx/`)

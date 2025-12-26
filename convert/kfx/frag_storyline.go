@@ -7,6 +7,99 @@ import (
 	"fbc/fb2"
 )
 
+// TOCEntry represents a table of contents entry with hierarchical structure.
+// This mirrors the chapterData structure in epub for consistent TOC generation.
+type TOCEntry struct {
+	ID           string      // Unique ID for this entry
+	Title        string      // Display title for TOC
+	SectionName  string      // KFX section name (e.g., "c0")
+	StoryName    string      // KFX storyline name (e.g., "l1")
+	FirstEID     int         // First content EID for navigation target
+	IncludeInTOC bool        // Whether to include in TOC
+	Children     []*TOCEntry // Nested TOC entries for subsections
+}
+
+// MaxContentFragmentSize is the maximum size in bytes for a content fragment's content_list.
+// KFXInput validates that content fragments don't exceed 8192 bytes.
+// This is separate from the container's ChunkSize ($412) which is used for streaming/compression.
+const MaxContentFragmentSize = 8192
+
+// ContentAccumulator manages content fragments with automatic chunking.
+// Each paragraph/text entry is a separate item in content_list.
+// When accumulated size exceeds MaxContentFragmentSize, a new fragment is created.
+type ContentAccumulator struct {
+	baseCounter  int                 // Base counter for naming (e.g., 1 for content_1)
+	currentName  string              // Current content fragment name
+	currentList  []string            // Current content list (each entry is one paragraph)
+	currentSize  int                 // Current accumulated size in bytes
+	fragments    map[string][]string // All completed content fragments
+	chunkCounter int                 // Counter for chunk suffixes (0 = no suffix)
+}
+
+// NewContentAccumulator creates a new content accumulator.
+func NewContentAccumulator(baseCounter int) *ContentAccumulator {
+	name := fmt.Sprintf("content_%d", baseCounter)
+	return &ContentAccumulator{
+		baseCounter:  baseCounter,
+		currentName:  name,
+		currentList:  make([]string, 0),
+		currentSize:  0,
+		fragments:    make(map[string][]string),
+		chunkCounter: 0,
+	}
+}
+
+// CurrentName returns the current content fragment name.
+func (ca *ContentAccumulator) CurrentName() string {
+	return ca.currentName
+}
+
+// CurrentOffset returns the current offset (index) within the current content fragment.
+func (ca *ContentAccumulator) CurrentOffset() int {
+	return len(ca.currentList)
+}
+
+// Add adds a paragraph/text entry to the accumulator.
+// Each call adds one entry to content_list. Creates new chunk if size limit exceeded.
+// Returns the content name and offset for the added text.
+func (ca *ContentAccumulator) Add(text string) (name string, offset int) {
+	textSize := len(text)
+
+	// Check if we need to start a new chunk
+	// Start new chunk if current is non-empty and adding this would exceed limit
+	if ca.currentSize > 0 && ca.currentSize+textSize > MaxContentFragmentSize {
+		ca.finishCurrentChunk()
+	}
+
+	name = ca.currentName
+	offset = len(ca.currentList)
+	ca.currentList = append(ca.currentList, text)
+	ca.currentSize += textSize
+
+	return name, offset
+}
+
+// finishCurrentChunk saves the current chunk and starts a new one.
+func (ca *ContentAccumulator) finishCurrentChunk() {
+	if len(ca.currentList) > 0 {
+		ca.fragments[ca.currentName] = ca.currentList
+	}
+
+	ca.chunkCounter++
+	ca.currentName = fmt.Sprintf("content_%d_%d", ca.baseCounter, ca.chunkCounter)
+	ca.currentList = make([]string, 0)
+	ca.currentSize = 0
+}
+
+// Finish completes accumulation and returns all content fragments.
+func (ca *ContentAccumulator) Finish() map[string][]string {
+	// Save current chunk if it has content
+	if len(ca.currentList) > 0 {
+		ca.fragments[ca.currentName] = ca.currentList
+	}
+	return ca.fragments
+}
+
 // BuildStorylineFragment creates a $259 storyline fragment.
 // Based on reference KFX, storyline has:
 // - Named FID (like "l1", "l2", etc.)
@@ -219,14 +312,15 @@ func (sb *StorylineBuilder) Build(width, height int) (*Fragment, *Fragment) {
 
 // GenerateStorylineFromBook creates storyline and section fragments from an FB2 book.
 // It uses the provided StyleRegistry to reference styles by name.
-// Returns fragments, next EID, and section names for document_data.
-func GenerateStorylineFromBook(book *fb2.FictionBook, styles *StyleRegistry, startEID int) (*FragmentList, int, []string, error) {
+// Returns fragments, next EID, section names for document_data, and TOC entries.
+func GenerateStorylineFromBook(book *fb2.FictionBook, styles *StyleRegistry, startEID int) (*FragmentList, int, []string, []*TOCEntry, error) {
 	fragments := NewFragmentList()
 	eidCounter := startEID
 	sectionNames := make([]string, 0)
+	tocEntries := make([]*TOCEntry, 0)
 
-	// Content accumulator - collects text into content fragments
-	contentFragments := make(map[string][]string)
+	// All content fragments will be collected here
+	allContentFragments := make(map[string][]string)
 	contentCount := 0
 
 	// Default dimensions (will be adjusted by Kindle)
@@ -242,7 +336,57 @@ func GenerateStorylineFromBook(book *fb2.FictionBook, styles *StyleRegistry, sta
 			continue
 		}
 
-		// Process sections in the body
+		// Process body intro content (title, epigraphs, image) as separate storyline
+		// This mirrors epub's bodyIntroToXHTML which creates a separate chapter for body intro
+		if body.Title != nil {
+			sectionCount++
+			storyName := fmt.Sprintf("l%d", sectionCount)
+			sectionName := fmt.Sprintf("c%d", sectionCount-1)
+			sectionNames = append(sectionNames, sectionName)
+
+			// Create storyline builder for body intro
+			sb := NewStorylineBuilder(storyName, sectionName, eidCounter)
+
+			// Process body intro content with accumulator
+			contentCount++
+			ca := NewContentAccumulator(contentCount)
+
+			if err := processBodyIntroContentWithAccum(body, sb, styles, ca); err != nil {
+				return nil, 0, nil, nil, err
+			}
+
+			// Collect content fragments
+			for name, list := range ca.Finish() {
+				allContentFragments[name] = list
+			}
+
+			// Create TOC entry for body intro
+			title := body.Title.AsTOCText("Untitled")
+			tocEntry := &TOCEntry{
+				ID:           sectionName,
+				Title:        title,
+				SectionName:  sectionName,
+				StoryName:    storyName,
+				FirstEID:     sb.FirstEID(),
+				IncludeInTOC: true,
+			}
+			tocEntries = append(tocEntries, tocEntry)
+
+			// Update EID counter
+			eidCounter = sb.NextEID()
+
+			// Build storyline and section fragments
+			storylineFrag, sectionFrag := sb.Build(defaultWidth, defaultHeight)
+
+			if err := fragments.Add(storylineFrag); err != nil {
+				return nil, 0, nil, nil, err
+			}
+			if err := fragments.Add(sectionFrag); err != nil {
+				return nil, 0, nil, nil, err
+			}
+		}
+
+		// Process top-level sections as chapters (like epub does)
 		for j := range body.Sections {
 			section := &body.Sections[j]
 			sectionCount++
@@ -255,19 +399,34 @@ func GenerateStorylineFromBook(book *fb2.FictionBook, styles *StyleRegistry, sta
 			// Create storyline builder
 			sb := NewStorylineBuilder(storyName, sectionName, eidCounter)
 
-			// Process section content
+			// Process section content with accumulator
 			contentCount++
-			contentName := fmt.Sprintf("content_%d", contentCount)
-			var contentList []string
+			ca := NewContentAccumulator(contentCount)
 
-			if err := processStorylineContent(section, sb, styles, &contentList, contentName, 1); err != nil {
-				return nil, 0, nil, err
+			// Track nested section info for TOC hierarchy
+			var nestedTOCEntries []*TOCEntry
+
+			if err := processStorylineContentWithAccum(section, sb, styles, ca, 1, &nestedTOCEntries); err != nil {
+				return nil, 0, nil, nil, err
 			}
 
-			// Store content fragment data
-			if len(contentList) > 0 {
-				contentFragments[contentName] = contentList
+			// Collect content fragments
+			for name, list := range ca.Finish() {
+				allContentFragments[name] = list
 			}
+
+			// Create TOC entry for this section
+			title := section.AsTitleText("")
+			tocEntry := &TOCEntry{
+				ID:           section.ID,
+				Title:        title,
+				SectionName:  sectionName,
+				StoryName:    storyName,
+				FirstEID:     sb.FirstEID(),
+				IncludeInTOC: title != "",
+				Children:     nestedTOCEntries,
+			}
+			tocEntries = append(tocEntries, tocEntry)
 
 			// Update EID counter
 			eidCounter = sb.NextEID()
@@ -276,32 +435,72 @@ func GenerateStorylineFromBook(book *fb2.FictionBook, styles *StyleRegistry, sta
 			storylineFrag, sectionFrag := sb.Build(defaultWidth, defaultHeight)
 
 			if err := fragments.Add(storylineFrag); err != nil {
-				return nil, 0, nil, err
+				return nil, 0, nil, nil, err
 			}
 			if err := fragments.Add(sectionFrag); err != nil {
-				return nil, 0, nil, err
+				return nil, 0, nil, nil, err
 			}
 		}
 	}
 
 	// Create content fragments from accumulated content
-	for name, contentList := range contentFragments {
+	for name, contentList := range allContentFragments {
 		contentFrag := buildContentFragmentByName(name, contentList)
 		if err := fragments.Add(contentFrag); err != nil {
-			return nil, 0, nil, err
+			return nil, 0, nil, nil, err
 		}
 	}
 
-	return fragments, eidCounter, sectionNames, nil
+	return fragments, eidCounter, sectionNames, tocEntries, nil
 }
 
-// processStorylineContent processes FB2 section content into storyline entries.
-func processStorylineContent(section *fb2.Section, sb *StorylineBuilder, styles *StyleRegistry, contentList *[]string, contentName string, depth int) error {
+// processBodyIntroContentWithAccum processes body intro content using ContentAccumulator.
+func processBodyIntroContentWithAccum(body *fb2.Body, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator) error {
 	addContent := func(text, styleName string) {
-		styles.EnsureStyle(styleName) // Register style if not already present
-		offset := len(*contentList)
-		*contentList = append(*contentList, text)
+		styles.EnsureStyle(styleName)
+		contentName, offset := ca.Add(text)
 		sb.AddContent(SymText, contentName, offset, styleName)
+	}
+
+	// Process body title
+	if body.Title != nil {
+		for _, item := range body.Title.Items {
+			if item.Paragraph != nil {
+				text := paragraphToText(item.Paragraph)
+				if text != "" {
+					addContent(text, "body-title")
+				}
+			}
+		}
+	}
+
+	// Process body epigraphs
+	for _, epigraph := range body.Epigraphs {
+		for _, item := range epigraph.Flow.Items {
+			if item.Kind == fb2.FlowParagraph && item.Paragraph != nil {
+				text := paragraphToText(item.Paragraph)
+				if text != "" {
+					addContent(text, "epigraph")
+				}
+			}
+		}
+		for i := range epigraph.TextAuthors {
+			text := paragraphToText(&epigraph.TextAuthors[i])
+			if text != "" {
+				addContent(text, "text-author")
+			}
+		}
+	}
+
+	return nil
+}
+
+// processStorylineContentWithAccum processes FB2 section content using ContentAccumulator.
+func processStorylineContentWithAccum(section *fb2.Section, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, depth int, nestedTOC *[]*TOCEntry) error {
+	addContent := func(text, styleName string) int {
+		styles.EnsureStyle(styleName)
+		contentName, offset := ca.Add(text)
+		return sb.AddContent(SymText, contentName, offset, styleName)
 	}
 
 	// Process title
@@ -320,7 +519,7 @@ func processStorylineContent(section *fb2.Section, sb *StorylineBuilder, styles 
 	// Process epigraphs
 	for _, epigraph := range section.Epigraphs {
 		for _, item := range epigraph.Flow.Items {
-			processFlowItemToStoryline(&item, sb, styles, contentList, contentName, depth)
+			processFlowItemWithAccum(&item, sb, styles, ca, depth)
 		}
 		for i := range epigraph.TextAuthors {
 			text := paragraphToText(&epigraph.TextAuthors[i])
@@ -332,18 +531,47 @@ func processStorylineContent(section *fb2.Section, sb *StorylineBuilder, styles 
 
 	// Process content items
 	for _, item := range section.Content {
-		processFlowItemToStoryline(&item, sb, styles, contentList, contentName, depth)
+		if item.Kind == fb2.FlowSection && item.Section != nil {
+			// Nested section - track for TOC hierarchy
+			nestedSection := item.Section
+			titleText := nestedSection.AsTitleText("")
+
+			// Track the EID where this nested section starts
+			firstEID := sb.NextEID()
+
+			// Process nested section content recursively
+			var childTOC []*TOCEntry
+			if err := processStorylineContentWithAccum(nestedSection, sb, styles, ca, depth+1, &childTOC); err != nil {
+				return err
+			}
+
+			// Create TOC entry for nested section
+			if titleText != "" {
+				tocEntry := &TOCEntry{
+					ID:           nestedSection.ID,
+					Title:        titleText,
+					FirstEID:     firstEID,
+					IncludeInTOC: true,
+					Children:     childTOC,
+				}
+				*nestedTOC = append(*nestedTOC, tocEntry)
+			} else if len(childTOC) > 0 {
+				// Section without title - promote children to parent level
+				*nestedTOC = append(*nestedTOC, childTOC...)
+			}
+		} else {
+			processFlowItemWithAccum(&item, sb, styles, ca, depth)
+		}
 	}
 
 	return nil
 }
 
-// processFlowItemToStoryline processes a flow item into storyline content.
-func processFlowItemToStoryline(item *fb2.FlowItem, sb *StorylineBuilder, styles *StyleRegistry, contentList *[]string, contentName string, depth int) {
+// processFlowItemWithAccum processes a flow item using ContentAccumulator.
+func processFlowItemWithAccum(item *fb2.FlowItem, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, depth int) {
 	addContent := func(text, styleName string) {
-		styles.EnsureStyle(styleName) // Register style if not already present
-		offset := len(*contentList)
-		*contentList = append(*contentList, text)
+		styles.EnsureStyle(styleName)
+		contentName, offset := ca.Add(text)
 		sb.AddContent(SymText, contentName, offset, styleName)
 	}
 
@@ -373,12 +601,12 @@ func processFlowItemToStoryline(item *fb2.FlowItem, sb *StorylineBuilder, styles
 
 	case fb2.FlowPoem:
 		if item.Poem != nil {
-			processPoemToStoryline(item.Poem, sb, styles, contentList, contentName)
+			processPoemWithAccum(item.Poem, sb, styles, ca)
 		}
 
 	case fb2.FlowCite:
 		if item.Cite != nil {
-			processCiteToStoryline(item.Cite, sb, styles, contentList, contentName)
+			processCiteWithAccum(item.Cite, sb, styles, ca)
 		}
 
 	case fb2.FlowTable:
@@ -394,32 +622,15 @@ func processFlowItemToStoryline(item *fb2.FlowItem, sb *StorylineBuilder, styles
 		// For now skip
 
 	case fb2.FlowSection:
-		// Nested sections - process recursively
-		if item.Section != nil {
-			if item.Section.Title != nil {
-				styleName := fmt.Sprintf("h%d", min(depth+1, 6))
-				for _, titleItem := range item.Section.Title.Items {
-					if titleItem.Paragraph != nil {
-						text := paragraphToText(titleItem.Paragraph)
-						if text != "" {
-							addContent(text, styleName)
-						}
-					}
-				}
-			}
-			for _, subItem := range item.Section.Content {
-				processFlowItemToStoryline(&subItem, sb, styles, contentList, contentName, depth+1)
-			}
-		}
+		// Nested sections handled in processStorylineContentWithAccum
 	}
 }
 
-// processPoemToStoryline processes poem content into storyline.
-func processPoemToStoryline(poem *fb2.Poem, sb *StorylineBuilder, styles *StyleRegistry, contentList *[]string, contentName string) {
+// processPoemWithAccum processes poem content using ContentAccumulator.
+func processPoemWithAccum(poem *fb2.Poem, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator) {
 	addContent := func(text, styleName string) {
-		styles.EnsureStyle(styleName) // Register style if not already present
-		offset := len(*contentList)
-		*contentList = append(*contentList, text)
+		styles.EnsureStyle(styleName)
+		contentName, offset := ca.Add(text)
 		sb.AddContent(SymText, contentName, offset, styleName)
 	}
 
@@ -461,12 +672,11 @@ func processPoemToStoryline(poem *fb2.Poem, sb *StorylineBuilder, styles *StyleR
 	}
 }
 
-// processCiteToStoryline processes cite content into storyline.
-func processCiteToStoryline(cite *fb2.Cite, sb *StorylineBuilder, styles *StyleRegistry, contentList *[]string, contentName string) {
+// processCiteWithAccum processes cite content using ContentAccumulator.
+func processCiteWithAccum(cite *fb2.Cite, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator) {
 	addContent := func(text, styleName string) {
-		styles.EnsureStyle(styleName) // Register style if not already present
-		offset := len(*contentList)
-		*contentList = append(*contentList, text)
+		styles.EnsureStyle(styleName)
+		contentName, offset := ca.Add(text)
 		sb.AddContent(SymText, contentName, offset, styleName)
 	}
 
@@ -542,4 +752,63 @@ func anySlice(s []string) []any {
 		result[i] = v
 	}
 	return result
+}
+
+// BuildNavigationFragment creates a $389 book_navigation fragment from TOC entries.
+// This creates a hierarchical TOC structure similar to epub's NCX/nav.
+// The $389 fragment value is a list of reading order navigation entries.
+func BuildNavigationFragment(tocEntries []*TOCEntry, startEID int) *Fragment {
+	// Build TOC entries recursively
+	entries := buildNavEntries(tocEntries, startEID)
+
+	// Create TOC navigation container
+	tocContainer := NewTOCContainer(entries)
+
+	// Create nav_containers list with just TOC for now
+	// Could add landmarks, page_list later
+	navContainers := []any{tocContainer}
+
+	// Build reading order navigation entry
+	// Structure: {$178: $351 (default), $392: [nav_containers]}
+	readingOrderNav := NewStruct().
+		SetSymbol(SymReadOrderName, SymDefault). // $178 = default reading order
+		SetList(SymNavContainers, navContainers) // $392 = nav_containers
+
+	// $389 is a list of reading order navigation entries
+	bookNavList := []any{readingOrderNav}
+
+	return &Fragment{
+		FType: SymBookNavigation,
+		FID:   SymBookNavigation, // Root fragment - FID == FType
+		Value: bookNavList,
+	}
+}
+
+// buildNavEntries recursively builds navigation unit entries from TOC entries.
+func buildNavEntries(tocEntries []*TOCEntry, startEID int) []any {
+	entries := make([]any, 0, len(tocEntries))
+
+	for _, entry := range tocEntries {
+		if !entry.IncludeInTOC {
+			continue
+		}
+
+		// Create target position pointing to the first EID of the content
+		targetPos := NewStruct().SetInt(SymUniqueID, int64(entry.FirstEID)) // $155 = id
+
+		// Create nav unit with label and target
+		navUnit := NewNavUnit(entry.Title, targetPos)
+
+		// Add nested entries for children (hierarchical TOC)
+		if len(entry.Children) > 0 {
+			childEntries := buildNavEntries(entry.Children, startEID)
+			if len(childEntries) > 0 {
+				navUnit.SetList(SymEntries, childEntries) // $247 = nested entries
+			}
+		}
+
+		entries = append(entries, navUnit)
+	}
+
+	return entries
 }
