@@ -427,7 +427,7 @@ func writeStylesheet(zw *zip.Writer, c *content.Content) error {
 		// Write stylesheet resources to EPUB and rewrite CSS URLs
 		for _, resource := range style.Resources {
 			// Filename already contains directory (e.g., "fonts/myfont.woff2")
-			fullPath := filepath.Join(oebpsDir, resource.Filename)
+			fullPath := path.Join(oebpsDir, resource.Filename)
 
 			if err := writeDataToZip(zw, fullPath, resource.Data); err != nil {
 				return fmt.Errorf("unable to write stylesheet resource %s: %w",

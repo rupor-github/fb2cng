@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"fmt"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -20,6 +21,10 @@ import (
 func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *config.DocumentConfig, log *zap.Logger) (err error) {
 	if err = ctx.Err(); err != nil {
 		return err
+	}
+
+	if true {
+		return fmt.Errorf("not yet implemented")
 	}
 
 	log.Info("KFX generation starting", zap.String("output", outputPath))
