@@ -195,10 +195,12 @@ func NewURIAnchor(uri string) StructValue {
 // Metadata builders - for $258 metadata and $490 book_metadata
 
 // NewMetadataEntry creates a metadata key-value entry for $490 categorised metadata.
-func NewMetadataEntry(key string, value string) StructValue {
+// Value is intentionally `any` because reference KFX often uses non-string values (e.g. bool)
+// under $307.
+func NewMetadataEntry(key string, value any) StructValue {
 	return NewStruct().
-		SetString(SymKey, key).    // $492 = key
-		SetString(SymValue, value) // $307 = value
+		SetString(SymKey, key). // $492 = key
+		Set(SymValue, value)    // $307 = value
 }
 
 // NewCategorisedMetadata creates a categorised metadata entry for $490.

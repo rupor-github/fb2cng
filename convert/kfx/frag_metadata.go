@@ -30,9 +30,30 @@ func BuildMetadataFragment(sectionNames []string) *Fragment {
 
 // BuildBookMetadataFragment creates the $490 book_metadata fragment.
 // This contains categorised metadata: title, author, language, etc.
-func BuildBookMetadataFragment(c *content.Content, cfg *config.DocumentConfig, log *zap.Logger) *Fragment {
+func BuildBookMetadataFragment(c *content.Content, cfg *config.DocumentConfig, log *zap.Logger, containerID, coverResourceName string) *Fragment {
 	// Kindle title metadata
 	titleMetadata := make([]any, 0)
+
+	// Stable IDs (these don't need to match Amazon exactly, but having them helps parity/compat)
+	asin := hashToAlphanumeric(c.Book.Description.DocumentInfo.ID, 32)
+	if asin != "" {
+		titleMetadata = append(titleMetadata, NewMetadataEntry("ASIN", asin))
+		titleMetadata = append(titleMetadata, NewMetadataEntry("content_id", asin))
+	}
+	if containerID != "" {
+		titleMetadata = append(titleMetadata, NewMetadataEntry("asset_id", containerID))
+	}
+	bookID := c.Book.Description.DocumentInfo.ID
+	if bookID != "" {
+		titleMetadata = append(titleMetadata, NewMetadataEntry("book_id", bookID))
+	}
+	titleMetadata = append(titleMetadata, NewMetadataEntry("cde_content_type", "PDOC"))
+	if coverResourceName != "" {
+		titleMetadata = append(titleMetadata, NewMetadataEntry("cover_image", coverResourceName))
+	}
+	// Common boolean flags present in reference output.
+	titleMetadata = append(titleMetadata, NewMetadataEntry("is_sample", false))
+	titleMetadata = append(titleMetadata, NewMetadataEntry("override_kindle_font", false))
 
 	// Title
 	title := c.Book.Description.TitleInfo.BookTitle.Value

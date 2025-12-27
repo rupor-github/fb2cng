@@ -8,6 +8,7 @@ import (
 	"math/bits"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -32,7 +33,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 	}(time.Now())
 
 	// Generate container ID from document ID
-	containerID := "CR!" + hashTo28Alphanumeric(c.Book.Description.DocumentInfo.ID)
+	containerID := "CR!" + hashToAlphanumeric(c.Book.Description.DocumentInfo.ID, 28)
 
 	// Create container with basic metadata
 	container := NewContainer()
@@ -115,8 +116,17 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 		}
 	}
 
+	// Cover image resource name (e.g. "e6") for metadata.
+	coverResName := ""
+	if len(c.Book.Description.TitleInfo.Coverpage) > 0 && imageResourceNames != nil {
+		coverID := strings.TrimPrefix(c.Book.Description.TitleInfo.Coverpage[0].Href, "#")
+		if rn, ok := imageResourceNames[coverID]; ok {
+			coverResName = rn
+		}
+	}
+
 	// $490 Book Metadata - categorised metadata (title, author, language, etc.)
-	bookMetadataFrag := BuildBookMetadataFragment(c, cfg, log)
+	bookMetadataFrag := BuildBookMetadataFragment(c, cfg, log, container.ContainerID, coverResName)
 	if err := container.Fragments.Add(bookMetadataFrag); err != nil {
 		return err
 	}
@@ -254,11 +264,9 @@ func computeMaxSectionPIDCount(sectionEIDs map[string][]int, posItems []Position
 	return max
 }
 
-// randomAlphanumeric28 generates a random string of exactly 28 bytes
+// randomAlphanumeric generates a random string of the given length
 // containing only uppercase Latin letters (A-Z) and digits (0-9).
-func randomAlphanumeric28() string {
-	const length = 28
-
+func randomAlphanumeric(length int) string {
 	result := make([]byte, length)
 	charsetLen := big.NewInt(int64(len(charsetCR)))
 
@@ -272,26 +280,25 @@ func randomAlphanumeric28() string {
 	return string(result)
 }
 
-// hashTo28Alphanumeric hashes the input string to produce exactly 28 bytes
-// containing only uppercase Latin letters (A-Z) and digits (0-9). It does this
-// deterministically - same input string will always produce the same output
-// string. If the input is empty, a random string is generated instead.
-func hashTo28Alphanumeric(input string) string {
+// hashToAlphanumeric hashes the input string to produce a deterministic string of exactly
+// `length` bytes containing only uppercase Latin letters (A-Z) and digits (0-9).
+// If the input is empty, a random string is generated instead.
+func hashToAlphanumeric(input string, length int) string {
 	if input == "" {
-		return randomAlphanumeric28()
+		return randomAlphanumeric(length)
+	}
+	if length <= 0 {
+		return ""
 	}
 
-	// Use SHA-256 to hash the input
 	hash := sha256.Sum256([]byte(input))
-
-	// Map hash bytes to full alphanumeric charset (A-Z, 0-9)
-	result := make([]byte, 28)
-
-	for i := range 28 {
-		// Use hash bytes to deterministically select from charset
-		idx := hash[i] % byte(len(charsetCR))
+	result := make([]byte, length)
+	for i := range length {
+		// SHA-256 gives 32 bytes; we only currently need 28/32. For any larger length,
+		// repeat hash bytes deterministically.
+		hb := hash[i%len(hash)]
+		idx := hb % byte(len(charsetCR))
 		result[i] = charsetCR[idx]
 	}
-
 	return string(result)
 }
