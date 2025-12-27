@@ -66,12 +66,26 @@ func (c *Container) String() string {
 			sortedFrags := make([]*Fragment, len(frags))
 			copy(sortedFrags, frags)
 			slices.SortFunc(sortedFrags, func(a, b *Fragment) int {
-				// Sort by FIDName if both have it (prefer name-based sorting)
-				if a.FIDName != "" && b.FIDName != "" {
-					return strings.Compare(a.FIDName, b.FIDName)
+				// Root fragments first
+				if a.IsRoot() && !b.IsRoot() {
+					return -1
 				}
-				// Otherwise sort by FID
-				return a.FID - b.FID
+				if !a.IsRoot() && b.IsRoot() {
+					return 1
+				}
+
+				// Resolve FIDs for comparison
+				aFID := a.FID
+				if a.FIDName != "" && aFID == 0 {
+					aFID = c.GetLocalSymbolID(a.FIDName)
+				}
+				bFID := b.FID
+				if b.FIDName != "" && bFID == 0 {
+					bFID = c.GetLocalSymbolID(b.FIDName)
+				}
+
+				// Sort by resolved FID
+				return aFID - bFID
 			})
 
 			// Add type markers
@@ -499,12 +513,26 @@ func (c *Container) DumpFragments() string {
 		sortedFrags := make([]*Fragment, len(frags))
 		copy(sortedFrags, frags)
 		slices.SortFunc(sortedFrags, func(a, b *Fragment) int {
-			// Sort by FIDName if both have it (prefer name-based sorting)
-			if a.FIDName != "" && b.FIDName != "" {
-				return strings.Compare(a.FIDName, b.FIDName)
+			// Root fragments first
+			if a.IsRoot() && !b.IsRoot() {
+				return -1
 			}
-			// Otherwise sort by FID
-			return a.FID - b.FID
+			if !a.IsRoot() && b.IsRoot() {
+				return 1
+			}
+
+			// Resolve FIDs for comparison
+			aFID := a.FID
+			if a.FIDName != "" && aFID == 0 {
+				aFID = c.GetLocalSymbolID(a.FIDName)
+			}
+			bFID := b.FID
+			if b.FIDName != "" && bFID == 0 {
+				bFID = c.GetLocalSymbolID(b.FIDName)
+			}
+
+			// Sort by resolved FID
+			return aFID - bFID
 		})
 
 		fmt.Fprintf(&sb, "### %s (%d fragments)\n\n", FormatSymbol(ftype), len(sortedFrags))
