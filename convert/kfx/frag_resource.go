@@ -60,15 +60,22 @@ func buildImageResourceFragments(images fb2.BookImages) ([]*Fragment, []*Fragmen
 }
 
 func makeResourceLocation(idx int) string {
-	// Matches reference KFX pattern: "resource/rsrcXYZ".
+	// Matches reference KFX pattern: "resource/rsrcXYZ" where XYZ is base36-encoded index.
+	// Base36 encoding is used to keep resource location strings compact while maintaining
+	// compatibility with Amazon's KFX format conventions.
 	return fmt.Sprintf("resource/rsrc%s", toBase36(idx))
 }
 
 func makeResourceName(idx int) string {
 	// Matches reference KFX pattern: short local symbols like "e40G".
+	// Uses base36 encoding for compact representation, consistent with resource locations.
+	// These are the fragment IDs (FIDName) for external resource fragments.
 	return fmt.Sprintf("e%s", toBase36(idx))
 }
 
+// toBase36 converts an integer to a base36 string (0-9a-z).
+// Used for resource naming to match reference KFX format conventions.
+// Returns "0" for values <= 0.
 func toBase36(v int) string {
 	if v <= 0 {
 		return "0"

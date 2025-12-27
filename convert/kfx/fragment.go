@@ -6,10 +6,26 @@ import (
 )
 
 // Fragment represents a single KFX fragment with type, id, and value.
+//
+// Fragment Naming Conventions:
+//
+// FIDName is used to identify fragments and gets resolved to local symbol IDs during
+// serialization. Different fragment types use different naming patterns optimized for
+// their purpose:
+//
+//   - Resources: Base36-encoded (e.g., "resource/rsrcA", "e1G") - matches Amazon KFX format
+//   - Content: Descriptive format "content_{N}" or "content_{N}_{M}" - human-readable for debugging
+//   - Storyline: Simple format "l{N}" (e.g., l1, l2) - readable sequential identifiers
+//   - Section: Simple format "c{N}" (e.g., c0, c1) - readable sequential identifiers
+//   - Styles: Semantic names from stylesheet (e.g., "body", "emphasis") - preserves meaning
+//   - Anchors: Original document IDs (e.g., "note123") - maintains link integrity
+//
+// This mixed approach balances compatibility (base36 for resources), debuggability
+// (human-readable names), and semantic preservation (original IDs/style names).
 type Fragment struct {
 	FType   int    // Fragment type symbol ID (e.g., SymSection for $260)
 	FID     int    // Fragment ID symbol ID (equals FType for root fragments, or resolved from FIDName)
-	FIDName string // Fragment ID name for non-root fragments (e.g., "content_1", "section_1")
+	FIDName string // Fragment ID name for non-root fragments (see naming conventions above)
 	Value   any    // Ion value (map[int]any for struct, []any for list, etc.)
 }
 

@@ -12,8 +12,11 @@ func isGeneratedSectionName(name string) bool {
 	return true
 }
 
-// buildAnchorFragments generates $266 anchors for internal navigation.
-// KFXInput expects the entity ID name to match $180 (anchor_name).
+// buildAnchorFragments generates $266 anchor fragments for internal navigation.
+// Fragment naming uses the actual ID from the source document (e.g., section IDs, note IDs).
+// These IDs are preserved from the original FB2 to maintain link integrity, except for
+// generated section names (c0, c1, etc.) which are filtered to avoid collisions.
+// This is the only fragment type that uses source document IDs directly as FIDNames.
 func buildAnchorFragments(tocEntries []*TOCEntry, referenced map[string]bool) []*Fragment {
 	var out []*Fragment
 

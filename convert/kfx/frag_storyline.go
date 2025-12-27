@@ -27,6 +27,12 @@ const MaxContentFragmentSize = 8192
 // ContentAccumulator manages content fragments with automatic chunking.
 // Each paragraph/text entry is a separate item in content_list.
 // When accumulated size exceeds MaxContentFragmentSize, a new fragment is created.
+// ContentAccumulator accumulates paragraph content into named content fragments,
+// automatically splitting into chunks when size limits are exceeded.
+// 
+// Fragment naming pattern: "content_{N}" where N is sequential (e.g., content_1, content_2).
+// When chunked: "content_{N}_{M}" where M is chunk number (e.g., content_1_1, content_1_2).
+// This human-readable format is used instead of base36 for better debuggability.
 type ContentAccumulator struct {
 	baseCounter  int                 // Base counter for naming (e.g., 1 for content_1)
 	currentName  string              // Current content fragment name
@@ -37,6 +43,7 @@ type ContentAccumulator struct {
 }
 
 // NewContentAccumulator creates a new content accumulator.
+// Fragment names follow pattern "content_{baseCounter}" for readability.
 func NewContentAccumulator(baseCounter int) *ContentAccumulator {
 	name := fmt.Sprintf("content_%d", baseCounter)
 	return &ContentAccumulator{
@@ -102,9 +109,12 @@ func (ca *ContentAccumulator) Finish() map[string][]string {
 
 // BuildStorylineFragment creates a $259 storyline fragment.
 // Based on reference KFX, storyline has:
-// - Named FID (like "l1", "l2", etc.)
+// - Named FID (like "l1", "l2", etc.) - simple decimal format for readability
 // - $176 (story_name) as symbol reference
 // - $146 (content_list) with content entries
+//
+// Naming pattern: "l{N}" where N is sequential (e.g., l1, l2, l3).
+// Uses simple format instead of base36 for better human readability during debugging.
 func BuildStorylineFragment(storyName string, contentEntries []any) *Fragment {
 	storyline := NewStruct().
 		Set(SymStoryName, SymbolByName(storyName)) // $176 = story_name as symbol
@@ -122,9 +132,12 @@ func BuildStorylineFragment(storyName string, contentEntries []any) *Fragment {
 
 // BuildSectionFragment creates a $260 section fragment.
 // Based on reference KFX, section has:
-// - Named FID (like "c0", "c1", etc.)
+// - Named FID (like "c0", "c1", etc.) - simple decimal format for readability
 // - $174 (section_name) as symbol reference
 // - $141 (page_templates) with layout entries for storylines
+//
+// Naming pattern: "c{N}" where N is sequential starting from 0 (e.g., c0, c1, c2).
+// Uses simple format instead of base36 for better human readability during debugging.
 func BuildSectionFragment(sectionName string, pageTemplates []any) *Fragment {
 	section := NewStruct().
 		Set(SymSectionName, SymbolByName(sectionName)) // $174 = section_name as symbol
@@ -773,6 +786,9 @@ func tableToText(table *fb2.Table) string {
 }
 
 // buildContentFragmentByName creates a content ($145) fragment with string name.
+// The name parameter comes from ContentAccumulator and follows the pattern "content_{N}"
+// or "content_{N}_{M}" for chunked content. This human-readable naming convention
+// is maintained throughout the conversion for easier debugging and inspection.
 func buildContentFragmentByName(name string, contentList []string) *Fragment {
 	// Use string-keyed map for content with local symbol names
 	// The "name" field value should be a symbol, not a string

@@ -122,6 +122,9 @@ func (sb *StyleBuilder) Build() StyleDef {
 }
 
 // BuildStyleFragment creates a $157 style fragment from a StyleDef.
+// Fragment naming uses the actual style name from the stylesheet (e.g., "body", "emphasis").
+// Unlike other fragment types, style names are semantic identifiers from the source document
+// rather than auto-generated sequential names, preserving the original style semantics.
 func BuildStyleFragment(def StyleDef) *Fragment {
 	style := NewStruct().
 		Set(SymStyleName, SymbolByName(def.Name)) // $173 = style_name as symbol
