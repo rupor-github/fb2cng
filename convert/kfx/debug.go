@@ -168,18 +168,10 @@ func (c *Container) String() string {
 					tw.Line(3, "$ion v%d: symbols $%d-$%d (Ion system symbols)",
 						imp.Version(), currentID, imp.MaxID())
 				} else if imp.Name() == "YJ_symbols" {
-					// YJ_symbols - show range and a few examples
+					// YJ_symbols
 					endID := currentID + len(imp.Symbols()) - 1
 					tw.Line(3, "YJ_symbols v%d: symbols $%d-$%d (%d known KFX symbols)",
 						imp.Version(), currentID, endID, len(imp.Symbols()))
-					// Show a few example symbols
-					examples := []int{SymLanguage, SymContent, SymStoryline, SymMetadata, SymContainerId}
-					tw.Line(4, "Examples: %s=%d, %s=%d, %s=%d, %s=%d, %s=%d",
-						SymbolName(examples[0]), examples[0],
-						SymbolName(examples[1]), examples[1],
-						SymbolName(examples[2]), examples[2],
-						SymbolName(examples[3]), examples[3],
-						SymbolName(examples[4]), examples[4])
 				} else {
 					tw.Line(3, "%s v%d: symbols $%d-$%d",
 						imp.Name(), imp.Version(), currentID, currentID+len(imp.Symbols())-1)
