@@ -7,14 +7,34 @@ import (
 	"fbc/config"
 	"fbc/content"
 	"fbc/fb2"
+	"fbc/misc"
 )
 
 // BuildMetadataFragment creates the $258 metadata fragment from content.
-// This contains basic book metadata: title, author, language, and reading_orders.
-func BuildMetadataFragment(c *content.Content, cfg *config.DocumentConfig, log *zap.Logger, sectionNames []string) *Fragment {
+// This contains reading_orders for navigation.
+func BuildMetadataFragment(sectionNames []string) *Fragment {
 	metadata := NewStruct()
 
-	// Title ($153) - use template if configured
+	// Reading orders ($169) - must match document_data
+	if len(sectionNames) > 0 {
+		sections := make([]any, 0, len(sectionNames))
+		for _, name := range sectionNames {
+			sections = append(sections, SymbolByName(name))
+		}
+		readingOrder := NewReadingOrder(SymDefault, sections)
+		metadata.SetList(SymReadingOrders, []any{readingOrder})
+	}
+
+	return NewRootFragment(SymMetadata, metadata)
+}
+
+// BuildBookMetadataFragment creates the $490 book_metadata fragment.
+// This contains categorised metadata: title, author, language, etc.
+func BuildBookMetadataFragment(c *content.Content, cfg *config.DocumentConfig, log *zap.Logger) *Fragment {
+	// Kindle title metadata
+	titleMetadata := make([]any, 0)
+
+	// Title
 	title := c.Book.Description.TitleInfo.BookTitle.Value
 	if cfg.Metainformation.TitleTemplate != "" {
 		expanded, err := c.Book.ExpandTemplateMetainfo(
@@ -30,14 +50,12 @@ func BuildMetadataFragment(c *content.Content, cfg *config.DocumentConfig, log *
 		}
 	}
 	if title != "" {
-		metadata.SetString(SymTitle, title)
+		titleMetadata = append(titleMetadata, NewMetadataEntry("title", title))
 	}
 
-	// Author ($222) - use template if configured, otherwise format from FB2 author
-	if len(c.Book.Description.TitleInfo.Authors) > 0 {
-		author := c.Book.Description.TitleInfo.Authors[0]
+	// Author(s)
+	for _, author := range c.Book.Description.TitleInfo.Authors {
 		authorName := formatAuthorName(author)
-
 		if cfg.Metainformation.CreatorNameTemplate != "" {
 			expanded, err := c.Book.ExpandTemplateAuthorName(
 				config.MetaCreatorNameTemplateFieldName,
@@ -51,39 +69,54 @@ func BuildMetadataFragment(c *content.Content, cfg *config.DocumentConfig, log *
 				authorName = expanded
 			}
 		}
-
 		if authorName != "" {
-			metadata.SetString(SymAuthor, authorName)
+			titleMetadata = append(titleMetadata, NewMetadataEntry("author", authorName))
 		}
 	}
 
-	// Language ($10)
+	// Language
 	if lang := c.Book.Description.TitleInfo.Lang; lang != language.Und {
-		metadata.SetString(SymLanguage, lang.String())
+		titleMetadata = append(titleMetadata, NewMetadataEntry("language", lang.String()))
 	}
 
-	// Publisher ($232)
+	// Publisher
 	if pub := c.Book.Description.PublishInfo; pub != nil && pub.Publisher != nil && pub.Publisher.Value != "" {
-		metadata.SetString(SymPublisher, pub.Publisher.Value)
+		titleMetadata = append(titleMetadata, NewMetadataEntry("publisher", pub.Publisher.Value))
 	}
 
-	// ISBN ($223)
-	// NOTE: currently commented out because KFXInput validation flags $223 as an unexpected symbol.
-	// if pub := c.Book.Description.PublishInfo; pub != nil && pub.ISBN != nil && pub.ISBN.Value != "" {
-	// 	metadata.SetString(SymISBN, pub.ISBN.Value)
-	// }
-
-	// Reading orders ($169) - must match document_data
-	if len(sectionNames) > 0 {
-		sections := make([]any, 0, len(sectionNames))
-		for _, name := range sectionNames {
-			sections = append(sections, SymbolByName(name))
+	// Description/annotation
+	if annot := c.Book.Description.TitleInfo.Annotation; annot != nil {
+		desc := annot.AsPlainText()
+		if desc != "" {
+			titleMetadata = append(titleMetadata, NewMetadataEntry("description", desc))
 		}
-		readingOrder := NewReadingOrder(SymDefault, sections)
-		metadata.SetList(SymReadingOrders, []any{readingOrder})
 	}
 
-	return NewRootFragment(SymMetadata, metadata)
+	// Build categorised metadata structure
+	categories := make([]any, 0)
+	if len(titleMetadata) > 0 {
+		categories = append(categories, NewCategorisedMetadata("kindle_title_metadata", titleMetadata))
+	}
+
+	// Kindle audit metadata (creator info)
+	auditMetadata := []any{
+		NewMetadataEntry("creator_version", misc.GetVersion()),
+		NewMetadataEntry("file_creator", misc.GetAppName()),
+	}
+	categories = append(categories, NewCategorisedMetadata("kindle_audit_metadata", auditMetadata))
+
+	// Kindle ebook metadata (capabilities)
+	ebookMetadata := []any{
+		NewMetadataEntry("selection", "enabled"),
+	}
+	categories = append(categories, NewCategorisedMetadata("kindle_ebook_metadata", ebookMetadata))
+
+	// Kindle capability metadata (empty but required)
+	categories = append(categories, NewCategorisedMetadata("kindle_capability_metadata", []any{}))
+
+	bookMetadata := NewStruct().SetList(SymCatMetadata, categories) // $491
+
+	return NewRootFragment(SymBookMetadata, bookMetadata)
 }
 
 // BuildDocumentDataFragment creates the $538 document_data fragment.

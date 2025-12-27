@@ -13,6 +13,11 @@ func BuildContainerEntityMapFragment(
 		if CONTAINER_FRAGMENT_TYPES[frag.FType] {
 			continue
 		}
+		// $258/$490 are root fragments and are present as ENTY records, but should not be referenced
+		// in the container entity map (it is a list of non-root fids).
+		if frag.IsRoot() && (frag.FType == SymMetadata || frag.FType == SymBookMetadata) {
+			continue
+		}
 		// Use fragment ID as symbol - handle both numeric IDs and named IDs
 		if frag.FIDName != "" {
 			entityIDs = append(entityIDs, SymbolByName(frag.FIDName))

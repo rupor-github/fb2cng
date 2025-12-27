@@ -115,8 +115,14 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 		}
 	}
 
-	// $258 Metadata - basic book metadata (needs sectionNames for reading_orders)
-	metadataFrag := BuildMetadataFragment(c, cfg, log, sectionNames)
+	// $490 Book Metadata - categorised metadata (title, author, language, etc.)
+	bookMetadataFrag := BuildBookMetadataFragment(c, cfg, log)
+	if err := container.Fragments.Add(bookMetadataFrag); err != nil {
+		return err
+	}
+
+	// $258 Metadata - reading orders only
+	metadataFrag := BuildMetadataFragment(sectionNames)
 	if err := container.Fragments.Add(metadataFrag); err != nil {
 		return err
 	}
