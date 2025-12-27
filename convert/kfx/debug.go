@@ -15,7 +15,7 @@ func (c *Container) String() string {
 	tw.Line(0, "KFX Container")
 	tw.Line(1, "Version: %d", c.Version)
 	tw.Line(1, "ContainerID: %q", c.ContainerID)
-	
+
 	// Show format with classification reason
 	formatReason := c.getFormatReason()
 	if formatReason != "" {
@@ -23,7 +23,7 @@ func (c *Container) String() string {
 	} else {
 		tw.Line(1, "Format: %q", c.ContainerFormat)
 	}
-	
+
 	tw.Line(1, "Generator: %s / %s", c.GeneratorApp, c.GeneratorPkg)
 	tw.Line(1, "ChunkSize: %d", c.ChunkSize)
 	tw.Line(1, "Compression: %d", c.CompressionType)
@@ -39,7 +39,7 @@ func (c *Container) String() string {
 		// Calculate fragment statistics
 		rootCount, rawCount, singletonCount := c.getFragmentStats()
 		regularCount := c.Fragments.Len() - rootCount
-		
+
 		// Build stats parts
 		stats := []string{fmt.Sprintf("%d total", c.Fragments.Len())}
 		if rootCount > 0 {
@@ -54,14 +54,14 @@ func (c *Container) String() string {
 		if regularCount > 0 {
 			stats = append(stats, fmt.Sprintf("%d regular", regularCount))
 		}
-		
+
 		tw.Line(1, "Fragments: %s", strings.Join(stats, ", "))
 
 		// Group by type
 		types := c.Fragments.Types()
 		for _, ftype := range types {
 			frags := c.Fragments.GetByType(ftype)
-			
+
 			// Sort fragments for deterministic output
 			sortedFrags := make([]*Fragment, len(frags))
 			copy(sortedFrags, frags)
@@ -73,7 +73,7 @@ func (c *Container) String() string {
 				// Otherwise sort by FID
 				return a.FID - b.FID
 			})
-			
+
 			// Add type markers
 			markers := c.getTypeMarkers(ftype)
 			if markers != "" {
@@ -81,7 +81,7 @@ func (c *Container) String() string {
 			} else {
 				tw.Line(2, "%s (%d)", FormatSymbol(ftype), len(sortedFrags))
 			}
-			
+
 			for _, f := range sortedFrags {
 				if f.IsRoot() {
 					tw.Line(3, "[root]")
@@ -89,7 +89,7 @@ func (c *Container) String() string {
 					// Determine the symbol ID and name for display
 					var fidID int
 					var fidName string
-					
+
 					if f.FIDName != "" {
 						// Fragment was created with FIDName - resolve it to symbol ID
 						fidName = f.FIDName
@@ -127,7 +127,7 @@ func (c *Container) String() string {
 							}
 						}
 					}
-					
+
 					if fidName != "" {
 						tw.Line(3, "id=$%d (%s)", fidID, fidName)
 					} else {
@@ -167,8 +167,8 @@ func (c *Container) String() string {
 		extraKeys := make([]string, 0, len(c.KfxgenExtra))
 		for k := range c.KfxgenExtra {
 			switch k {
-			case "kfxgen_package_version", "kfxgen_application_version", 
-				 "kfxgen_payload_sha1", "kfxgen_acr", "appVersion", "buildVersion":
+			case "kfxgen_package_version", "kfxgen_application_version",
+				"kfxgen_payload_sha1", "kfxgen_acr", "appVersion", "buildVersion":
 				// Skip standard keys that are shown elsewhere
 				continue
 			default:
@@ -189,7 +189,7 @@ func (c *Container) getFormatReason() string {
 	if c.Fragments == nil {
 		return ""
 	}
-	
+
 	// Check for main container types
 	mainTypes := []struct {
 		sym  int
@@ -233,7 +233,7 @@ func (c *Container) getFragmentStats() (root, raw, singleton int) {
 	if c.Fragments == nil {
 		return 0, 0, 0
 	}
-	
+
 	for _, f := range c.Fragments.All() {
 		if f.IsRoot() {
 			root++
@@ -251,7 +251,7 @@ func (c *Container) getFragmentStats() (root, raw, singleton int) {
 // getTypeMarkers returns marker string for a fragment type.
 func (c *Container) getTypeMarkers(ftype int) string {
 	markers := []string{}
-	
+
 	if ROOT_FRAGMENT_TYPES[ftype] {
 		markers = append(markers, "[root]")
 	}
@@ -261,7 +261,7 @@ func (c *Container) getTypeMarkers(ftype int) string {
 	if CONTAINER_FRAGMENT_TYPES[ftype] {
 		markers = append(markers, "[container]")
 	}
-	
+
 	if len(markers) == 0 {
 		return ""
 	}
@@ -329,7 +329,7 @@ func formatStructValueInt(tw *debug.TreeWriter, depth int, m map[int]any) {
 	for _, k := range keys {
 		keyName := FormatSymbol(k)
 		val := m[k]
-		
+
 		// Try to format simple values inline
 		if isSimpleValue(val) {
 			tw.Line(depth, "%s: %s", keyName, formatSimpleValue(val))
@@ -363,7 +363,7 @@ func formatStructValueString(tw *debug.TreeWriter, depth int, m map[string]any) 
 
 	for _, k := range keys {
 		val := m[k]
-		
+
 		// Try to format simple values inline
 		if isSimpleValue(val) {
 			tw.Line(depth, "%s: %s", k, formatSimpleValue(val))
@@ -469,7 +469,7 @@ func (c *Container) DumpFragments() string {
 	types := c.Fragments.Types()
 	for _, ftype := range types {
 		frags := c.Fragments.GetByType(ftype)
-		
+
 		// Sort fragments for deterministic output
 		sortedFrags := make([]*Fragment, len(frags))
 		copy(sortedFrags, frags)
@@ -481,7 +481,7 @@ func (c *Container) DumpFragments() string {
 			// Otherwise sort by FID
 			return a.FID - b.FID
 		})
-		
+
 		fmt.Fprintf(&sb, "### %s (%d fragments)\n\n", FormatSymbol(ftype), len(sortedFrags))
 
 		for _, f := range sortedFrags {
@@ -491,7 +491,7 @@ func (c *Container) DumpFragments() string {
 				// Determine the symbol ID and name for display
 				var fidID int
 				var fidName string
-				
+
 				if f.FIDName != "" {
 					// Fragment was created with FIDName - resolve it to symbol ID
 					fidName = f.FIDName
@@ -529,7 +529,7 @@ func (c *Container) DumpFragments() string {
 						}
 					}
 				}
-				
+
 				if fidName != "" {
 					fmt.Fprintf(&sb, "  id: $%d (%s)\n", fidID, fidName)
 				} else {

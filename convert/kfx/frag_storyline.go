@@ -29,7 +29,7 @@ const MaxContentFragmentSize = 8192
 // When accumulated size exceeds MaxContentFragmentSize, a new fragment is created.
 // ContentAccumulator accumulates paragraph content into named content fragments,
 // automatically splitting into chunks when size limits are exceeded.
-// 
+//
 // Fragment naming pattern: "content_{N}" where N is sequential (e.g., content_1, content_2).
 // When chunked: "content_{N}_{M}" where M is chunk number (e.g., content_1_1, content_1_2).
 // This human-readable format is used instead of base36 for better debuggability.
