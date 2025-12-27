@@ -689,13 +689,8 @@ func (c *Container) serializeFragmentValue(frag *Fragment) ([]byte, error) {
 		w = NewIonWriter()
 	}
 
-	// Root fragments (fid == ftype, stored as $348 in directory) have the $ftype annotation
-	// Non-root fragments (have unique fid) do NOT have an annotation
-	if frag.IsRoot() {
-		if err := w.WriteAnnotation(frag.FType); err != nil {
-			return nil, err
-		}
-	}
+	// KFXInput expects fragment payload values to be unannotated; fragment identity is carried
+	// by the entity directory (id_idnum/type_idnum).
 
 	if err := c.writeValue(w, frag.Value); err != nil {
 		return nil, err
