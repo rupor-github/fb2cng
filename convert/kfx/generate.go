@@ -55,7 +55,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 	// Use c.WorkDir (which is already a temp dir) so it is captured by the reporting archive.
 	if c.Debug {
 		debugPath := filepath.Join(c.WorkDir, filepath.Base(outputPath)+".debug.txt")
-		debugOutput := container.String() + "\n" + container.DumpFragments()
+		debugOutput := container.String() + "\n\n" + container.DumpFragments()
 		if err := os.WriteFile(debugPath, []byte(debugOutput), 0644); err != nil {
 			log.Warn("Failed to write debug output", zap.Error(err))
 		}

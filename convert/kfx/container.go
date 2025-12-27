@@ -192,6 +192,10 @@ func ReadContainer(data []byte) (*Container, error) {
 	}
 	c.DocSymbolTable = docSymTab
 
+	// Extract local symbols from the symbol table
+	// The Symbols() method returns only the locally-defined symbols (not imported ones)
+	c.LocalSymbols = docSymTab.Symbols()
+
 	// Use doc symbol table as prolog for entity decoding
 	lstProlog := docSymData
 
@@ -540,6 +544,16 @@ func (c *Container) WriteContainer() ([]byte, error) {
 
 	// Build kfxgen metadata
 	payloadSHA1 := sha1.Sum(entityPayloads.Bytes())
+
+	// Populate KfxgenExtra for debug output
+	if c.KfxgenExtra == nil {
+		c.KfxgenExtra = make(map[string]string)
+	}
+	c.KfxgenExtra["kfxgen_package_version"] = c.GeneratorPkg
+	c.KfxgenExtra["kfxgen_application_version"] = c.GeneratorApp
+	c.KfxgenExtra["kfxgen_payload_sha1"] = hex.EncodeToString(payloadSHA1[:])
+	c.KfxgenExtra["kfxgen_acr"] = c.ContainerID
+
 	kfxgenMeta := c.buildKfxgenMetadata(hex.EncodeToString(payloadSHA1[:]))
 
 	// Calculate header layout
@@ -791,6 +805,9 @@ func (c *Container) writeList(w *IonWriter, items []any) error {
 func (c *Container) buildDocSymbolTable() ([]byte, error) {
 	// Create local symbol table with YJ_symbols import and local symbols
 	localST := ion.NewLocalSymbolTable([]ion.SharedSymbolTable{sharedSymbolTable}, c.LocalSymbols)
+
+	// Store symbol table for debug output
+	c.DocSymbolTable = localST
 
 	// Serialize the symbol table
 	var buf bytes.Buffer

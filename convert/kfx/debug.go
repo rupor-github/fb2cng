@@ -140,43 +140,68 @@ func (c *Container) String() string {
 	}
 
 	if c.DocSymbolTable != nil {
-		// Show document symbol table details
+		tw.Line(0, "")
+		tw.Line(1, "DocSymbolTable: maxID=%d", c.DocSymbolTable.MaxID())
+
+		// Show imports with their ranges
 		imports := c.DocSymbolTable.Imports()
-		var importInfo string
 		if len(imports) > 0 {
-			importNames := make([]string, len(imports))
-			for i, imp := range imports {
-				importNames[i] = fmt.Sprintf("%s(v%d,maxID=%d)", imp.Name(), imp.Version(), imp.MaxID())
+			tw.Line(2, "Imports:")
+			currentID := 1
+			for _, imp := range imports {
+				if imp.Name() == "$ion" {
+					// System symbols 1-9
+					tw.Line(3, "$ion v%d: symbols $%d-$%d (Ion system symbols)",
+						imp.Version(), currentID, imp.MaxID())
+				} else if imp.Name() == "YJ_symbols" {
+					// YJ_symbols - show range and a few examples
+					endID := currentID + len(imp.Symbols()) - 1
+					tw.Line(3, "YJ_symbols v%d: symbols $%d-$%d (%d known KFX symbols)",
+						imp.Version(), currentID, endID, len(imp.Symbols()))
+					// Show a few example symbols
+					examples := []int{SymLanguage, SymContent, SymStoryline, SymMetadata, SymContainerId}
+					tw.Line(4, "Examples: %s=%d, %s=%d, %s=%d, %s=%d, %s=%d",
+						SymbolName(examples[0]), examples[0],
+						SymbolName(examples[1]), examples[1],
+						SymbolName(examples[2]), examples[2],
+						SymbolName(examples[3]), examples[3],
+						SymbolName(examples[4]), examples[4])
+				} else {
+					tw.Line(3, "%s v%d: symbols $%d-$%d",
+						imp.Name(), imp.Version(), currentID, currentID+len(imp.Symbols())-1)
+				}
+				currentID += len(imp.Symbols())
 			}
-			importInfo = fmt.Sprintf(" imports=[%s]", strings.Join(importNames, ", "))
 		}
-		tw.Line(1, "DocSymbolTable: maxID=%d%s", c.DocSymbolTable.MaxID(), importInfo)
+
+		// Show local symbols range if present
+		if len(c.LocalSymbols) > 0 {
+			startID := LargestKnownSymbol + 1
+			endID := startID + len(c.LocalSymbols) - 1
+			tw.Line(2, "Local: symbols $%d-$%d (%d document-specific symbols)",
+				startID, endID, len(c.LocalSymbols))
+		}
 	}
 
 	if len(c.LocalSymbols) > 0 {
+		tw.Line(0, "")
 		tw.Line(1, "LocalSymbols: %d", len(c.LocalSymbols))
 		for i, sym := range c.LocalSymbols {
 			tw.Line(2, "$%d: %s", LargestKnownSymbol+1+i, sym)
 		}
 	}
 
-	// Show extra kfxgen metadata if present
+	// Show kfxgen metadata if present
 	if len(c.KfxgenExtra) > 0 {
+		tw.Line(0, "")
 		tw.Line(1, "KfxgenExtra: %d", len(c.KfxgenExtra))
-		// Filter out standard keys
-		extraKeys := make([]string, 0, len(c.KfxgenExtra))
+		// Show all keys sorted
+		allKeys := make([]string, 0, len(c.KfxgenExtra))
 		for k := range c.KfxgenExtra {
-			switch k {
-			case "kfxgen_package_version", "kfxgen_application_version",
-				"kfxgen_payload_sha1", "kfxgen_acr", "appVersion", "buildVersion":
-				// Skip standard keys that are shown elsewhere
-				continue
-			default:
-				extraKeys = append(extraKeys, k)
-			}
+			allKeys = append(allKeys, k)
 		}
-		slices.Sort(extraKeys)
-		for _, k := range extraKeys {
+		slices.Sort(allKeys)
+		for _, k := range allKeys {
 			tw.Line(2, "%s: %q", k, c.KfxgenExtra[k])
 		}
 	}
