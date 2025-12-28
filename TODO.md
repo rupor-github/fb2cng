@@ -2,7 +2,18 @@
 
 ## Overview
 
-This document outlines a phased approach to implement CSS stylesheet support for KFX output generation. The goal is to translate the `default.css` rules (and custom user stylesheets) into KFX-native styles, ensuring consistent formatting between EPUB and KFX outputs.
+This document outlines a phased approach to implement CSS stylesheet support
+for KFX output generation. The goal is to translate the `default.css` rules
+(and custom user stylesheets) into KFX-native styles, ensuring consistent
+formatting between EPUB and KFX outputs.
+
+1. Pass validation via `testdata/input.py` (KFXInput plugin)
+2. Implementation docs are in `docs/`
+3. Follow project coding standards (Go idioms, structured logging, etc.)
+4. Use latest go fearutes - ALWAYS 
+5. instead of gofmt use `goimports-reviser -format -rm-unused -set-alias
+   -company-prefixes github.com/rupor-github -excludes vendor ./...` - it is
+   always available
 
 ## Media Query Policy
 
@@ -612,17 +623,6 @@ convert/kfx/
 4. ✅ No regression in existing KFX functionality
 5. ✅ Clear documentation of supported CSS subset
 6. ✅ Warning logs for unsupported CSS features
-7. ✅ `@media amzn-kf8` rules properly applied
-8. ✅ Amazon KDP CSS compatibility documented
+7. ✅ Amazon KDP CSS compatibility documented
 
 ---
-
-## References
-
-- Amazon KDP: [Enhanced Typesetting Attributes](https://kdp.amazon.com/en_US/help/topic/GB5GDY7WAJDN9GFK)
-- Amazon KDP: [KF8 HTML/CSS Support](https://kdp.amazon.com/en_US/help/topic/GG5R7N649LECKP7U)
-- Amazon: [Kindle Publishing Guidelines](https://kindlegen.s3.amazonaws.com/AmazonKindlePublishingGuidelines.pdf)
-- MobileRead Wiki: [KF8 CSS Reference](https://wiki.mobileread.com/wiki/Kindle_Format_8_CSS)
-- Project: `convert/default.css` - Current stylesheet
-- Project: `convert/kfx/frag_style.go` - Current KFX style implementation
-- Project: `convert/kfx/symbols.go` - KFX property symbols
