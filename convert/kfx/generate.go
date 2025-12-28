@@ -12,6 +12,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"fbc/common"
 	"fbc/config"
 	"fbc/content"
 	"fbc/fb2"
@@ -103,6 +104,15 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	contentFragments, nextEID, sectionNames, tocEntries, sectionEIDs, err := GenerateStorylineFromBook(c.Book, styles, imageResourceNames, startEID)
 	if err != nil {
 		return err
+	}
+
+	annotationEnabled := cfg.Annotation.Enable && c.Book.Description.TitleInfo.Annotation != nil
+	tocPageEnabled := cfg.TOCPage.Placement != common.TOCPagePlacementNone
+	if annotationEnabled || tocPageEnabled {
+		sectionNames, tocEntries, sectionEIDs, nextEID, err = addGeneratedSections(c, cfg, log, styles, imageResourceNames, contentFragments, sectionNames, tocEntries, sectionEIDs, nextEID)
+		if err != nil {
+			return err
+		}
 	}
 
 	posItems := CollectPositionItems(contentFragments, sectionNames)
@@ -237,10 +247,11 @@ const charsetCR = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 // the maximum per-section PID count.
 //
 // This matches KFXInput's calculation:
-//   if max > 65536:
-//     v = min(((max-65536)//16384)+2, 256)
-//   else:
-//     v = 1
+//
+//	if max > 65536:
+//	  v = min(((max-65536)//16384)+2, 256)
+//	else:
+//	  v = 1
 func reflowSectionSizeVersion(maxSectionPIDCount int) int {
 	if maxSectionPIDCount <= 65536 {
 		return 1

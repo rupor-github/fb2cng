@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"fbc/common"
 	"fbc/fb2"
 )
 
@@ -406,7 +407,7 @@ func GenerateStorylineFromBook(book *fb2.FictionBook, styles *StyleRegistry, ima
 				}
 			}
 
-			if err := processBodyIntroContentWithAccum(body, sb, styles, imageResourceNames, ca); err != nil {
+			if err := processBodyIntroContentWithAccum(book, body, sb, styles, imageResourceNames, ca); err != nil {
 				return nil, 0, nil, nil, nil, err
 			}
 
@@ -463,7 +464,7 @@ func GenerateStorylineFromBook(book *fb2.FictionBook, styles *StyleRegistry, ima
 			// Track nested section info for TOC hierarchy
 			var nestedTOCEntries []*TOCEntry
 
-			if err := processStorylineContentWithAccum(section, sb, styles, imageResourceNames, ca, 1, &nestedTOCEntries); err != nil {
+			if err := processStorylineContentWithAccum(book, section, sb, styles, imageResourceNames, ca, 1, &nestedTOCEntries); err != nil {
 				return nil, 0, nil, nil, nil, err
 			}
 
@@ -514,7 +515,23 @@ func GenerateStorylineFromBook(book *fb2.FictionBook, styles *StyleRegistry, ima
 }
 
 // processBodyIntroContentWithAccum processes body intro content using ContentAccumulator.
-func processBodyIntroContentWithAccum(body *fb2.Body, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames map[string]string, ca *ContentAccumulator) error {
+func addVignetteImage(book *fb2.FictionBook, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames map[string]string, pos common.VignettePos) {
+	if book == nil || !book.IsVignetteEnabled(pos) {
+		return
+	}
+	vigID := book.VignetteIDs[pos]
+	if vigID == "" {
+		return
+	}
+	resName, ok := imageResourceNames[vigID]
+	if !ok {
+		return
+	}
+	styles.EnsureStyle("vignette")
+	sb.AddImage(resName, "vignette")
+}
+
+func processBodyIntroContentWithAccum(book *fb2.FictionBook, body *fb2.Body, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames map[string]string, ca *ContentAccumulator) error {
 	if body.Image != nil {
 		imgID := strings.TrimPrefix(body.Image.Href, "#")
 		if resName, ok := imageResourceNames[imgID]; ok {
@@ -525,10 +542,16 @@ func processBodyIntroContentWithAccum(body *fb2.Body, sb *StorylineBuilder, styl
 
 	// Process body title
 	if body.Title != nil {
+		if body.Main() {
+			addVignetteImage(book, sb, styles, imageResourceNames, common.VignettePosBookTitleTop)
+		}
 		for _, item := range body.Title.Items {
 			if item.Paragraph != nil {
 				addParagraphWithInlineImages(item.Paragraph, "body-title", sb, styles, imageResourceNames, ca)
 			}
+		}
+		if body.Main() {
+			addVignetteImage(book, sb, styles, imageResourceNames, common.VignettePosBookTitleBottom)
 		}
 	}
 
@@ -546,7 +569,7 @@ func processBodyIntroContentWithAccum(body *fb2.Body, sb *StorylineBuilder, styl
 }
 
 // processStorylineContentWithAccum processes FB2 section content using ContentAccumulator.
-func processStorylineContentWithAccum(section *fb2.Section, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames map[string]string, ca *ContentAccumulator, depth int, nestedTOC *[]*TOCEntry) error {
+func processStorylineContentWithAccum(book *fb2.FictionBook, section *fb2.Section, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames map[string]string, ca *ContentAccumulator, depth int, nestedTOC *[]*TOCEntry) error {
 	if section.Image != nil {
 		imgID := strings.TrimPrefix(section.Image.Href, "#")
 		if resName, ok := imageResourceNames[imgID]; ok {
@@ -557,11 +580,23 @@ func processStorylineContentWithAccum(section *fb2.Section, sb *StorylineBuilder
 
 	// Process title
 	if section.Title != nil {
+		if depth == 1 {
+			addVignetteImage(book, sb, styles, imageResourceNames, common.VignettePosChapterTitleTop)
+		} else {
+			addVignetteImage(book, sb, styles, imageResourceNames, common.VignettePosSectionTitleTop)
+		}
+
 		styleName := fmt.Sprintf("h%d", min(depth, 6))
 		for _, item := range section.Title.Items {
 			if item.Paragraph != nil {
 				addParagraphWithInlineImages(item.Paragraph, styleName, sb, styles, imageResourceNames, ca)
 			}
+		}
+
+		if depth == 1 {
+			addVignetteImage(book, sb, styles, imageResourceNames, common.VignettePosChapterTitleBottom)
+		} else {
+			addVignetteImage(book, sb, styles, imageResourceNames, common.VignettePosSectionTitleBottom)
 		}
 	}
 
@@ -594,7 +629,7 @@ func processStorylineContentWithAccum(section *fb2.Section, sb *StorylineBuilder
 
 			// Process nested section content recursively
 			var childTOC []*TOCEntry
-			if err := processStorylineContentWithAccum(nestedSection, sb, styles, imageResourceNames, ca, depth+1, &childTOC); err != nil {
+			if err := processStorylineContentWithAccum(book, nestedSection, sb, styles, imageResourceNames, ca, depth+1, &childTOC); err != nil {
 				return err
 			}
 
@@ -615,6 +650,12 @@ func processStorylineContentWithAccum(section *fb2.Section, sb *StorylineBuilder
 		} else {
 			processFlowItemWithAccum(&item, sb, styles, imageResourceNames, ca, depth)
 		}
+	}
+
+	if depth == 1 {
+		addVignetteImage(book, sb, styles, imageResourceNames, common.VignettePosChapterEnd)
+	} else {
+		addVignetteImage(book, sb, styles, imageResourceNames, common.VignettePosSectionEnd)
 	}
 
 	return nil

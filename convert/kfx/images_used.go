@@ -17,6 +17,13 @@ func collectUsedImageIDs(book *fb2.FictionBook) map[string]bool {
 		}
 	}
 
+	// Vignettes
+	for _, id := range book.VignetteIDs {
+		if id != "" {
+			used[id] = true
+		}
+	}
+
 	for i := range book.Bodies {
 		body := &book.Bodies[i]
 		if body.Footnotes() {

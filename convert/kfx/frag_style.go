@@ -361,5 +361,27 @@ func DefaultStyleRegistry() *StyleRegistry {
 		MarginBottom(1.0, SymUnitEm).
 		Build())
 
+	// Annotation page title
+	sr.Register(NewStyle("annotation-title").
+		Inherit("h2").
+		Build())
+
+	// TOC page styles
+	sr.Register(NewStyle("toc-title").
+		Inherit("h2").
+		Build())
+	sr.Register(NewStyle("toc-item").
+		Inherit("paragraph").
+		TextIndent(0, SymUnitEm).
+		MarginLeft(1.0, SymUnitEm).
+		Build())
+
+	// Vignette image style
+	sr.Register(NewStyle("vignette").
+		Inherit("image").
+		MarginTop(0.5, SymUnitEm).
+		MarginBottom(0.5, SymUnitEm).
+		Build())
+
 	return sr
 }
