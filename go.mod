@@ -19,6 +19,8 @@ require (
 	github.com/maruel/natural v1.3.0
 	github.com/neurosnap/sentences v1.1.2
 	github.com/rupor-github/gencfg v1.0.13
+	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c
+	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
 	github.com/urfave/cli/v3 v3.6.1
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.1
@@ -41,7 +43,7 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/go-playground/validator/v10 v10.30.0 // indirect
+	github.com/go-playground/validator/v10 v10.30.1 // indirect
 	github.com/golang/mock v1.6.0 // indirect
 	github.com/gosimple/unidecode v1.0.1 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect

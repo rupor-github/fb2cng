@@ -21,6 +21,7 @@ build/
 build_*/
 release/
 release_*/
+**/*-bcRawMedia/
 misc/version.go
 content/text/dictionaries/*.txt.gz
 content/text/sentences/*.json.gz

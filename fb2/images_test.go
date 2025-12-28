@@ -327,7 +327,7 @@ func TestBinaryObject_PrepareImage_KindleConversion(t *testing.T) {
 	}
 }
 
-func TestBinaryObject_PrepareImage_SVGPreservation(t *testing.T) {
+func TestBinaryObject_PrepareImage_SVGRasterizeForKindle(t *testing.T) {
 	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	cfg := &config.ImagesConfig{
 		JPEGQuality:           85,
@@ -347,12 +347,11 @@ func TestBinaryObject_PrepareImage_SVGPreservation(t *testing.T) {
 
 	bi := bo.PrepareImage(true, true, cfg, log)
 
-	// SVG should be normalized to image/svg+xml
-	if bi.MimeType != "image/svg+xml" {
-		t.Errorf("expected SVG mime type normalized to image/svg+xml, got %s", bi.MimeType)
+	if bi.MimeType != "image/jpeg" {
+		t.Fatalf("expected SVG to be rasterized to JPEG for Kindle, got %s", bi.MimeType)
 	}
-	if !bytes.Equal(bi.Data, svgData) {
-		t.Error("SVG data should remain unchanged")
+	if _, _, err := image.Decode(bytes.NewReader(bi.Data)); err != nil {
+		t.Fatalf("expected rasterized SVG data to be decodable image: %v", err)
 	}
 }
 
@@ -567,37 +566,6 @@ func TestSetJpegDPI_AlreadyPresent(t *testing.T) {
 	}
 	if newbuf != buf {
 		t.Error("expected same buffer returned when APP0 already present")
-	}
-}
-
-func TestIsImageSupported(t *testing.T) {
-	tests := []struct {
-		format   string
-		expected bool
-	}{
-		{"jpeg", true},
-		{"JPEG", true},
-		{".jpeg", true},
-		{"jpg", false}, // Note: function checks for "jpeg" not "jpg"
-		{"png", true},
-		{"PNG", true},
-		{".png", true},
-		{"gif", true},
-		{"GIF", true},
-		{"bmp", true},
-		{"BMP", true},
-		{"webp", false},
-		{"tiff", false},
-		{"svg", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.format, func(t *testing.T) {
-			got := isImageSupported(tt.format)
-			if got != tt.expected {
-				t.Errorf("isImageSupported(%q) = %v, want %v", tt.format, got, tt.expected)
-			}
-		})
 	}
 }
 

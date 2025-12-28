@@ -11,11 +11,14 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	"image/png"
+	"math"
 	"mime"
 	"path"
 	"strings"
 
 	"github.com/disintegration/imaging"
+	"github.com/srwiley/oksvg"
+	"github.com/srwiley/rasterx"
 	"go.uber.org/zap"
 	_ "golang.org/x/image/bmp"
 	_ "golang.org/x/image/tiff"
@@ -117,7 +120,7 @@ func setJpegDPI(buf *bytes.Buffer, dpit jpegDPIType, xdensity, ydensity int16) (
 
 // handleImageError is a unified error handler for all image processing failures.
 // It logs the error and optionally substitutes the image with a placeholder.
-func (bo *BinaryObject) handleImageError(bi *BookImage, operation string, err error, cfg *config.ImagesConfig, log *zap.Logger) *BookImage {
+func (bo *BinaryObject) handleImageError(bi *BookImage, operation string, err error, kindle bool, cfg *config.ImagesConfig, log *zap.Logger) *BookImage {
 	// Log warning with appropriate context
 	if err != nil {
 		log.Warn("Unable to "+operation+" image", zap.String("id", bo.ID), zap.String("content-type", bo.ContentType), zap.Error(err))
@@ -125,13 +128,67 @@ func (bo *BinaryObject) handleImageError(bi *BookImage, operation string, err er
 		log.Warn("Unable to "+operation+" image", zap.String("id", bo.ID), zap.String("content-type", bo.ContentType))
 	}
 
-	if !cfg.UseBroken {
-		log.Debug("Substituting image with broken.png", zap.String("id", bo.ID))
-		// Use  placeholder instead of broken data
-		bi.Data = brokenImage
-		bi.MimeType = "image/svg+xml"
+	if cfg.UseBroken {
+		return bi
 	}
+
+	log.Debug("Substituting image with broken placeholder", zap.String("id", bo.ID))
+	bi.Data = brokenImage
+	bi.MimeType = "image/svg+xml"
+
+	if !kindle {
+		return bi
+	}
+
+	img, rasterErr := rasterizeSVGToImage(brokenImage, cfg.Cover.Width, cfg.Cover.Height)
+	if rasterErr != nil {
+		log.Warn("Unable to rasterize broken placeholder SVG", zap.String("id", bo.ID), zap.Error(rasterErr))
+		return bi
+	}
+
+	data, encErr := bo.encodeImage(img, "jpeg", cfg, log)
+	if encErr != nil {
+		log.Warn("Unable to encode rasterized broken placeholder", zap.String("id", bo.ID), zap.Error(encErr))
+		return bi
+	}
+
+	bi.Data = data
+	bi.MimeType = "image/jpeg"
+	bi.Dim.Width = img.Bounds().Dx()
+	bi.Dim.Height = img.Bounds().Dy()
 	return bi
+}
+
+func rasterizeSVGToImage(svgData []byte, targetW, targetH int) (image.Image, error) {
+	icon, err := oksvg.ReadIconStream(bytes.NewReader(svgData))
+	if err != nil {
+		return nil, err
+	}
+
+	w := int(math.Ceil(icon.ViewBox.W))
+	h := int(math.Ceil(icon.ViewBox.H))
+	if targetW > 0 {
+		w = targetW
+	}
+	if targetH > 0 {
+		h = targetH
+	}
+	if w <= 0 {
+		w = 1024
+	}
+	if h <= 0 {
+		h = 1024
+	}
+
+	icon.SetTarget(0, 0, float64(w), float64(h))
+
+	dst := image.NewRGBA(image.Rect(0, 0, w, h))
+	draw.Draw(dst, dst.Bounds(), &image.Uniform{C: color.RGBA{255, 255, 255, 255}}, image.Point{}, draw.Src)
+
+	scanner := rasterx.NewScannerGV(w, h, dst, dst.Bounds())
+	dasher := rasterx.NewDasher(w, h, scanner)
+	icon.Draw(dasher, 1.0)
+	return dst, nil
 }
 
 func (bo *BinaryObject) encodeImage(img image.Image, imgType string, cfg *config.ImagesConfig, log *zap.Logger) ([]byte, error) {
@@ -171,16 +228,77 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 		Data:     bo.Data,
 	}
 
-	// Special case - do not touch SVG
+	// SVG handling
 	if strings.HasSuffix(strings.ToLower(bo.ContentType), "svg+xml") {
 		bi.MimeType = "image/svg+xml"
+		if !kindle {
+			return bi
+		}
+
+		img, err := rasterizeSVGToImage(bo.Data, 0, 0)
+		if err != nil {
+			return bo.handleImageError(bi, "rasterize", err, kindle, cfg, log)
+		}
+
+		bi.Dim.Width = img.Bounds().Dx()
+		bi.Dim.Height = img.Bounds().Dy()
+		imgType := "jpeg"
+		bi.MimeType = "image/jpeg"
+		imageChanged := true
+
+		// Cover resizing for SVG follows the same rules as raster images.
+		if cover {
+			w, h := cfg.Cover.Width, cfg.Cover.Height
+			switch cfg.Cover.Resize {
+			case common.ImageResizeModeNone:
+			case common.ImageResizeModeKeepAR:
+				if img.Bounds().Dy() < h {
+					resizedImg := imaging.Resize(img, 0, h, imaging.Lanczos)
+					if resizedImg == nil {
+						return bo.handleImageError(bi, "resize", nil, kindle, cfg, log)
+					}
+					img = resizedImg
+					bi.Dim.Width = img.Bounds().Dx()
+					bi.Dim.Height = img.Bounds().Dy()
+				}
+			case common.ImageResizeModeStretch:
+				resizedImg := imaging.Resize(img, w, h, imaging.Lanczos)
+				if resizedImg == nil {
+					return bo.handleImageError(bi, "resize", nil, kindle, cfg, log)
+				}
+				img = resizedImg
+				bi.Dim.Width = img.Bounds().Dx()
+				bi.Dim.Height = img.Bounds().Dy()
+			}
+		}
+
+		if !cover && cfg.ScaleFactor > 0.0 && cfg.ScaleFactor != 1.0 {
+			resizedImg := imaging.Resize(img, 0, int(float64(img.Bounds().Dy())*cfg.ScaleFactor), imaging.Linear)
+			if resizedImg == nil {
+				return bo.handleImageError(bi, "resize", nil, kindle, cfg, log)
+			}
+			img = resizedImg
+			bi.Dim.Width = img.Bounds().Dx()
+			bi.Dim.Height = img.Bounds().Dy()
+		}
+
+		data, encErr := bo.encodeImage(img, imgType, cfg, log)
+		if encErr != nil {
+			return bo.handleImageError(bi, "encode", encErr, kindle, cfg, log)
+		}
+		if data != nil {
+			bi.Data = data
+		}
+		if !imageChanged {
+			return bi
+		}
 		return bi
 	}
 
 	imageChanged := false
 	img, imgType, imgDecodingErr := image.Decode(bytes.NewReader(bo.Data))
 	if imgDecodingErr != nil {
-		return bo.handleImageError(bi, "decode", imgDecodingErr, cfg, log)
+		return bo.handleImageError(bi, "decode", imgDecodingErr, kindle, cfg, log)
 	}
 	bi.MimeType = mime.TypeByExtension("." + imgType)
 	bi.Dim.Width = img.Bounds().Dx()
@@ -197,7 +315,7 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 			}
 			resizedImg := imaging.Resize(img, 0, h, imaging.Lanczos)
 			if resizedImg == nil {
-				return bo.handleImageError(bi, "resize", nil, cfg, log)
+				return bo.handleImageError(bi, "resize", nil, kindle, cfg, log)
 			}
 			img = resizedImg
 			bi.Dim.Width = img.Bounds().Dx()
@@ -206,7 +324,7 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 		case common.ImageResizeModeStretch:
 			resizedImg := imaging.Resize(img, w, h, imaging.Lanczos)
 			if resizedImg == nil {
-				return bo.handleImageError(bi, "resize", nil, cfg, log)
+				return bo.handleImageError(bi, "resize", nil, kindle, cfg, log)
 			}
 			img = resizedImg
 			bi.Dim.Width = img.Bounds().Dx()
@@ -217,16 +335,14 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 
 	// Scaling non-cover images
 	if !cover && cfg.ScaleFactor > 0.0 && cfg.ScaleFactor != 1.0 {
-		if imgType == "png" || imgType == "jpeg" {
-			resizedImg := imaging.Resize(img, 0, int(float64(img.Bounds().Dy())*cfg.ScaleFactor), imaging.Linear)
-			if resizedImg == nil {
-				return bo.handleImageError(bi, "resize", nil, cfg, log)
-			}
-			img = resizedImg
-			bi.Dim.Width = img.Bounds().Dx()
-			bi.Dim.Height = img.Bounds().Dy()
-			imageChanged = true
+		resizedImg := imaging.Resize(img, 0, int(float64(img.Bounds().Dy())*cfg.ScaleFactor), imaging.Linear)
+		if resizedImg == nil {
+			return bo.handleImageError(bi, "resize", nil, kindle, cfg, log)
 		}
+		img = resizedImg
+		bi.Dim.Width = img.Bounds().Dx()
+		bi.Dim.Height = img.Bounds().Dy()
+		imageChanged = true
 	}
 
 	// PNG transparency
@@ -276,18 +392,14 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 		}
 	}
 
-	// Kindle compatibility
-	if kindle {
-		// For Kindle output we normalize supported raster formats to JPEG.
-		// (We keep the isImageSupported check because not all raster types are handled reliably.)
-		if isImageSupported(imgType) && imgType != "jpeg" {
-			log.Debug("Converting image to jpeg for Kindle output",
-				zap.String("id", bo.ID),
-				zap.String("type", imgType))
-			imgType = "jpeg"
-			bi.MimeType = mime.TypeByExtension(".jpeg")
-			imageChanged = true
-		}
+	// Kindle compatibility: normalize any decodable raster format to JPEG.
+	if kindle && imgType != "jpeg" {
+		log.Debug("Converting image to jpeg for Kindle output",
+			zap.String("id", bo.ID),
+			zap.String("type", imgType))
+		imgType = "jpeg"
+		bi.MimeType = "image/jpeg"
+		imageChanged = true
 	}
 
 	if !imageChanged {
@@ -296,7 +408,7 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 
 	data, err := bo.encodeImage(img, imgType, cfg, log)
 	if err != nil {
-		return bo.handleImageError(bi, "encode", err, cfg, log)
+		return bo.handleImageError(bi, "encode", err, kindle, cfg, log)
 	}
 	if data != nil {
 		bi.Data = data
@@ -305,17 +417,6 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 	return bi
 }
 
-// isImageSupported returns true if image is supported and does not need
-// conversion. Kindle devices support only GIF, BMP, JPEG and PNG formats.
-func isImageSupported(format string) bool {
-	imgType := strings.TrimPrefix(format, ".")
-	for _, t := range [...]string{"gif", "bmp", "jpeg", "png"} {
-		if strings.EqualFold(t, imgType) {
-			return true
-		}
-	}
-	return false
-}
 
 // isImageMIME returns true if the MIME type indicates an image resource
 func isImageMIME(mimeType string) bool {
