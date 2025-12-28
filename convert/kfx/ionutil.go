@@ -101,9 +101,9 @@ func NewIonWriter() *IonWriter {
 	}
 }
 
-// NewIonWriterWithLocalSymbols creates a new Ion binary writer with YJ_symbols and local symbols.
+// NewIonWriterLocalSymbols creates a new Ion binary writer with YJ_symbols and local symbols.
 // The local symbols are added to a combined shared symbol table.
-func NewIonWriterWithLocalSymbols(localSymbols []string) *IonWriter {
+func NewIonWriterLocalSymbols(localSymbols []string) *IonWriter {
 	buf := &bytes.Buffer{}
 
 	// Create a combined symbol table that includes both YJ_symbols and local symbols

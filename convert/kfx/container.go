@@ -564,7 +564,7 @@ func (c *Container) WriteContainer() ([]byte, error) {
 	fCapabOffset := docSymOffset + uint32(len(docSymBlob))
 
 	// Build container_info with correct offsets
-	containerInfo, err := c.buildContainerInfoWithOffsets(
+	containerInfo, err := c.buildContainerInfo(
 		entityDirOffset, uint32(entityDir.Len()),
 		docSymOffset, uint32(len(docSymBlob)),
 		fCapabOffset, uint32(len(fCapabBlob)),
@@ -684,7 +684,7 @@ func (c *Container) serializeFragmentValue(frag *Fragment) ([]byte, error) {
 	// Use writer with local symbols if we have any
 	var w *IonWriter
 	if len(c.LocalSymbols) > 0 {
-		w = NewIonWriterWithLocalSymbols(c.LocalSymbols)
+		w = NewIonWriterLocalSymbols(c.LocalSymbols)
 	} else {
 		w = NewIonWriter()
 	}
@@ -837,8 +837,8 @@ func (c *Container) buildFormatCapabilities() ([]byte, error) {
 	return w.BytesWithBVM()
 }
 
-// buildContainerInfoWithOffsets builds container_info with specified offsets.
-func (c *Container) buildContainerInfoWithOffsets(
+// buildContainerInfo builds container_info with specified offsets.
+func (c *Container) buildContainerInfo(
 	indexTabOffset, indexTabLen uint32,
 	docSymOffset, docSymLen uint32,
 	fCapabOffset, fCapabLen uint32,

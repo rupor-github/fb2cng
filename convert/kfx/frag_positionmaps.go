@@ -60,9 +60,9 @@ func compressEIDs(eids []int) []any {
 	return out
 }
 
-// BuildPositionMapFragment creates the $264 position_map root fragment.
+// BuildPositionMap creates the $264 position_map root fragment.
 // Value is a list of structs, one per section: {$174: section_id, $181: [eid...]}.
-func BuildPositionMapFragment(sectionNames []string, sectionEIDs map[string][]int) *Fragment {
+func BuildPositionMap(sectionNames []string, sectionEIDs map[string][]int) *Fragment {
 	entries := make([]any, 0, len(sectionNames))
 	for _, sectionName := range sectionNames {
 		eids := sectionEIDs[sectionName]
@@ -219,10 +219,10 @@ func CollectPositionItems(fragments *FragmentList, sectionNames []string) []Posi
 	return out
 }
 
-// BuildPositionIdMapFragment creates the $265 position_id_map root fragment.
+// BuildPositionIDMap creates the $265 position_id_map root fragment.
 // Reference KFX uses a list of structs: { $184 pid, $185 eid }.
 // We emit a sparse mapping (entry per EID start) with pid gaps based on text length.
-func BuildPositionIdMapFragment(allEIDs []int, items []PositionItem) *Fragment {
+func BuildPositionIDMap(allEIDs []int, items []PositionItem) *Fragment {
 	entries := make([]any, 0, len(allEIDs)+1)
 
 	pid := int64(0)
@@ -257,9 +257,9 @@ func BuildPositionIdMapFragment(allEIDs []int, items []PositionItem) *Fragment {
 	return NewRootFragment(SymPositionIdMap, ListValue(entries))
 }
 
-// BuildLocationMapFragment creates the $550 location_map root fragment.
+// BuildLocationMap creates the $550 location_map root fragment.
 // Value is a list of length 1 containing a struct with keys {$178, $182}.
-func BuildLocationMapFragment(allEIDs []int) *Fragment {
+func BuildLocationMap(allEIDs []int) *Fragment {
 	locations := make([]any, 0)
 	if len(allEIDs) > 0 {
 		const positionsPerLocation = 110

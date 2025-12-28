@@ -333,7 +333,7 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 	if cfg.Optimize {
 		switch imgType {
 		case "jpeg":
-			jr, err := jpegquality.NewWithBytes(bo.Data)
+			jr, err := jpegquality.NewFromBytes(bo.Data)
 			if err != nil {
 				log.Warn("Unable to detect JPEG quality level, skipping...", zap.String("id", bo.ID), zap.Error(err))
 				break

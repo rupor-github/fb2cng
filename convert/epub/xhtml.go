@@ -177,15 +177,15 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, idToF
 
 			// Choose appropriate element type based on mode and format
 			if c.FootnotesMode.IsFloat() && c.OutputFormat == common.OutputFmtEpub3 {
-				if err := appendEpub3FloatFootnoteSectionContent(bodyDiv, c, section, log); err != nil {
+				if err := appendFloatFootnoteSectionContentEpub3(bodyDiv, c, section, log); err != nil {
 					return nil, err
 				}
 			} else if c.FootnotesMode.IsFloat() && (c.OutputFormat == common.OutputFmtEpub2 || c.OutputFormat == common.OutputFmtKepub) {
-				if err := appendEpub2FloatFootnoteSectionContent(bodyDiv, c, section, log); err != nil {
+				if err := appendFloatFootnoteSectionContentEpub2(bodyDiv, c, section, log); err != nil {
 					return nil, err
 				}
 			} else {
-				if err := appendDefaultFootnoteSectionContent(bodyDiv, c, section, log); err != nil {
+				if err := appendFootnoteSectionContent(bodyDiv, c, section, log); err != nil {
 					return nil, err
 				}
 			}
@@ -400,7 +400,7 @@ func appendEpigraphs(parent *etree.Element, c *content.Content, epigraphs []fb2.
 	for _, epigraph := range epigraphs {
 		div := parent.CreateElement("div")
 		div.CreateAttr("class", "epigraph")
-		if err := appendFlowItemsWithContext(div, c, epigraph.Flow.Items, depth, "epigraph", log); err != nil {
+		if err := appendFlowItems(div, c, epigraph.Flow.Items, depth, "epigraph", log); err != nil {
 			return err
 		}
 		for _, ta := range epigraph.TextAuthors {
@@ -454,10 +454,10 @@ func hasImageChild(elem *etree.Element) bool {
 	return false
 }
 
-// appendEpub2FloatFootnoteSectionContent appends footnote section content in
+// appendFloatFootnoteSectionContentEpub2 appends footnote section content in
 // EPUB2 float mode uses <p class="footnote"> and simplified rendering to fit
 // everything in a single paragraph keeping as much formatting as possible.
-func appendEpub2FloatFootnoteSectionContent(parent *etree.Element, c *content.Content, section *fb2.Section, _ *zap.Logger) error {
+func appendFloatFootnoteSectionContentEpub2(parent *etree.Element, c *content.Content, section *fb2.Section, _ *zap.Logger) error {
 	c.KoboSpanNextParagraph()
 
 	sectionElem := parent.CreateElement("p")
@@ -613,9 +613,9 @@ func appendEpub2FloatFootnoteSectionContent(parent *etree.Element, c *content.Co
 	return nil
 }
 
-// appendEpub3FloatFootnoteSectionContent appends footnote section content in EPUB3 float mode
+// appendFloatFootnoteSectionContentEpub3 appends footnote section content in EPUB3 float mode
 // EPUB3 Float mode uses <aside epub:type="footnote">
-func appendEpub3FloatFootnoteSectionContent(parent *etree.Element, c *content.Content, section *fb2.Section, log *zap.Logger) error {
+func appendFloatFootnoteSectionContentEpub3(parent *etree.Element, c *content.Content, section *fb2.Section, log *zap.Logger) error {
 	if section.Title != nil {
 		appendTitleAsDiv(parent, c, section.Title, "footnote-title")
 	}
@@ -640,12 +640,12 @@ func appendEpub3FloatFootnoteSectionContent(parent *etree.Element, c *content.Co
 	if section.Annotation != nil {
 		div := sectionElem.CreateElement("div")
 		div.CreateAttr("class", "annotation")
-		if err := appendFlowItemsWithContext(div, c, section.Annotation.Items, 1, "annotation", log); err != nil {
+		if err := appendFlowItems(div, c, section.Annotation.Items, 1, "annotation", log); err != nil {
 			return err
 		}
 	}
 
-	if err := appendFlowItemsWithContext(sectionElem, c, section.Content, 1, "section", log); err != nil {
+	if err := appendFlowItems(sectionElem, c, section.Content, 1, "section", log); err != nil {
 		return err
 	}
 
@@ -693,9 +693,9 @@ func appendEpub3FloatFootnoteSectionContent(parent *etree.Element, c *content.Co
 	return nil
 }
 
-// appendDefaultFootnoteSectionContent appends footnote section content in
+// appendFootnoteSectionContent appends footnote section content in
 // default mode using <div class="footnote">
-func appendDefaultFootnoteSectionContent(parent *etree.Element, c *content.Content, section *fb2.Section, log *zap.Logger) error {
+func appendFootnoteSectionContent(parent *etree.Element, c *content.Content, section *fb2.Section, log *zap.Logger) error {
 	sectionElem := parent.CreateElement("div")
 	sectionElem.CreateAttr("class", "footnote")
 	if section.ID != "" {
@@ -720,12 +720,12 @@ func appendDefaultFootnoteSectionContent(parent *etree.Element, c *content.Conte
 	if section.Annotation != nil {
 		div := sectionElem.CreateElement("div")
 		div.CreateAttr("class", "annotation")
-		if err := appendFlowItemsWithContext(div, c, section.Annotation.Items, 1, "annotation", log); err != nil {
+		if err := appendFlowItems(div, c, section.Annotation.Items, 1, "annotation", log); err != nil {
 			return err
 		}
 	}
 
-	if err := appendFlowItemsWithContext(sectionElem, c, section.Content, 1, "section", log); err != nil {
+	if err := appendFlowItems(sectionElem, c, section.Content, 1, "section", log); err != nil {
 		return err
 	}
 	return nil
@@ -781,12 +781,12 @@ func appendSectionContent(parent *etree.Element, c *content.Content, section *fb
 	if section.Annotation != nil {
 		div := parent.CreateElement("div")
 		div.CreateAttr("class", "annotation")
-		if err := appendFlowItemsWithContext(div, c, section.Annotation.Items, depth, "annotation", log); err != nil {
+		if err := appendFlowItems(div, c, section.Annotation.Items, depth, "annotation", log); err != nil {
 			return err
 		}
 	}
 
-	if err := appendFlowItemsWithContext(parent, c, section.Content, depth, "section", log); err != nil {
+	if err := appendFlowItems(parent, c, section.Content, depth, "section", log); err != nil {
 		return err
 	}
 
@@ -802,7 +802,7 @@ func appendSectionContent(parent *etree.Element, c *content.Content, section *fb
 	return nil
 }
 
-func appendFlowItemsWithContext(parent *etree.Element, c *content.Content, items []fb2.FlowItem, depth int, context string, log *zap.Logger) error {
+func appendFlowItems(parent *etree.Element, c *content.Content, items []fb2.FlowItem, depth int, context string, log *zap.Logger) error {
 	for _, item := range items {
 		switch item.Kind {
 		case fb2.FlowParagraph:
@@ -1237,7 +1237,7 @@ func appendCiteElement(parent *etree.Element, c *content.Content, cite *fb2.Cite
 	}
 	blockquote.CreateAttr("class", "cite")
 
-	if err := appendFlowItemsWithContext(blockquote, c, cite.Items, depth, "cite", log); err != nil {
+	if err := appendFlowItems(blockquote, c, cite.Items, depth, "cite", log); err != nil {
 		return err
 	}
 

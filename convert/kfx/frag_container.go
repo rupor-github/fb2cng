@@ -1,8 +1,8 @@
 package kfx
 
-// BuildContainerFragmentFromContainer creates a $270 fragment from Container state.
+// BuildContainerFragment creates a $270 fragment from Container state.
 // This is used when the container already has its configuration set.
-func BuildContainerFragmentFromContainer(c *Container) *Fragment {
+func BuildContainerFragment(c *Container) *Fragment {
 	container := NewStruct()
 
 	// $409 container id

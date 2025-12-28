@@ -18,8 +18,8 @@ func TestCollectAllEIDs(t *testing.T) {
 	}
 }
 
-func TestBuildPositionMapFragment(t *testing.T) {
-	f := BuildPositionMapFragment([]string{"c0"}, map[string][]int{"c0": {1000, 1001, 1002}})
+func TestBuildPositionMap(t *testing.T) {
+	f := BuildPositionMap([]string{"c0"}, map[string][]int{"c0": {1000, 1001, 1002}})
 	if f.FType != SymPositionMap || f.FID != SymPositionMap {
 		t.Fatalf("unexpected fragment key: %v/%v", f.FType, f.FID)
 	}
@@ -39,8 +39,8 @@ func TestBuildPositionMapFragment(t *testing.T) {
 	}
 }
 
-func TestBuildLocationMapFragment(t *testing.T) {
-	f := BuildLocationMapFragment([]int{1000, 1001})
+func TestBuildLocationMap(t *testing.T) {
+	f := BuildLocationMap([]int{1000, 1001})
 	if f.FType != SymLocationMap || f.FID != SymLocationMap {
 		t.Fatalf("unexpected fragment key: %v/%v", f.FType, f.FID)
 	}
@@ -56,7 +56,7 @@ func TestBuildLocationMapFragment(t *testing.T) {
 
 func TestBuildPositionIdMapFragmentSparse(t *testing.T) {
 	items := []PositionItem{{EID: 1000, Length: 1}, {EID: 1001, Length: 1000}}
-	f := BuildPositionIdMapFragment(nil, items)
+	f := BuildPositionIDMap(nil, items)
 	lst, ok := f.Value.(ListValue)
 	if !ok || len(lst) < 3 {
 		t.Fatalf("unexpected value type/len: %T %d", f.Value, len(lst))

@@ -17,8 +17,8 @@ func NewPosition(eid string, offset int64) StructValue {
 	return pos
 }
 
-// NewPositionWithKfxID creates a position using kfx_id ($598) instead of id ($155).
-func NewPositionWithKfxID(kfxID string, offset int64) StructValue {
+// NewPositionKFXID creates a position using kfx_id ($598) instead of id ($155).
+func NewPositionKFXID(kfxID string, offset int64) StructValue {
 	pos := NewStruct().SetString(SymKfxID, kfxID) // $598 = kfx_id
 	if offset != 0 {
 		pos.SetInt(SymOffset, offset) // $143 = offset

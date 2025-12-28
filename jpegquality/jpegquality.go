@@ -65,8 +65,8 @@ type jpegReader struct {
 	q  int
 }
 
-// NewWithBytes ...
-func NewWithBytes(buf []byte) (qr Qualitier, err error) {
+// NewFromBytes ...
+func NewFromBytes(buf []byte) (qr Qualitier, err error) {
 	return New(bytes.NewReader(buf))
 }
 

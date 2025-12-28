@@ -46,9 +46,9 @@ func TestNew_ValidJPEG(t *testing.T) {
 func TestNewWithBytes_ValidJPEG(t *testing.T) {
 	data := createTestJPEG(t, 100, 100, 90)
 
-	qr, err := NewWithBytes(data)
+	qr, err := NewFromBytes(data)
 	if err != nil {
-		t.Fatalf("NewWithBytes failed: %v", err)
+		t.Fatalf("NewFromBytes failed: %v", err)
 	}
 
 	quality := qr.Quality()
@@ -61,9 +61,9 @@ func TestQuality_HighQuality(t *testing.T) {
 	// High quality JPEG should report high quality value
 	data := createTestJPEG(t, 100, 100, 95)
 
-	qr, err := NewWithBytes(data)
+	qr, err := NewFromBytes(data)
 	if err != nil {
-		t.Fatalf("NewWithBytes failed: %v", err)
+		t.Fatalf("NewFromBytes failed: %v", err)
 	}
 
 	quality := qr.Quality()
@@ -77,9 +77,9 @@ func TestQuality_LowQuality(t *testing.T) {
 	// Low quality JPEG should report low quality value
 	data := createTestJPEG(t, 100, 100, 50)
 
-	qr, err := NewWithBytes(data)
+	qr, err := NewFromBytes(data)
 	if err != nil {
-		t.Fatalf("NewWithBytes failed: %v", err)
+		t.Fatalf("NewFromBytes failed: %v", err)
 	}
 
 	quality := qr.Quality()
@@ -93,9 +93,9 @@ func TestQuality_MaxQuality(t *testing.T) {
 	// Maximum quality JPEG
 	data := createTestJPEG(t, 100, 100, 100)
 
-	qr, err := NewWithBytes(data)
+	qr, err := NewFromBytes(data)
 	if err != nil {
-		t.Fatalf("NewWithBytes failed: %v", err)
+		t.Fatalf("NewFromBytes failed: %v", err)
 	}
 
 	quality := qr.Quality()
@@ -118,7 +118,7 @@ func TestNew_InvalidData(t *testing.T) {
 func TestNewWithBytes_InvalidData(t *testing.T) {
 	invalidData := []byte("this is not jpeg")
 
-	_, err := NewWithBytes(invalidData)
+	_, err := NewFromBytes(invalidData)
 	if err != ErrInvalidJPEG {
 		t.Errorf("expected ErrInvalidJPEG, got %v", err)
 	}
@@ -164,9 +164,9 @@ func TestQuality_VariousQualities(t *testing.T) {
 		t.Run(string(rune('0'+targetQuality/10)), func(t *testing.T) {
 			data := createTestJPEG(t, 100, 100, targetQuality)
 
-			qr, err := NewWithBytes(data)
+			qr, err := NewFromBytes(data)
 			if err != nil {
-				t.Fatalf("NewWithBytes failed for quality %d: %v", targetQuality, err)
+				t.Fatalf("NewFromBytes failed for quality %d: %v", targetQuality, err)
 			}
 
 			detectedQuality := qr.Quality()
@@ -194,9 +194,9 @@ func TestQuality_DifferentImageSizes(t *testing.T) {
 		t.Run(string(rune('0'+size.width/100)), func(t *testing.T) {
 			data := createTestJPEG(t, size.width, size.height, 85)
 
-			qr, err := NewWithBytes(data)
+			qr, err := NewFromBytes(data)
 			if err != nil {
-				t.Fatalf("NewWithBytes failed for size %dx%d: %v", size.width, size.height, err)
+				t.Fatalf("NewFromBytes failed for size %dx%d: %v", size.width, size.height, err)
 			}
 
 			quality := qr.Quality()

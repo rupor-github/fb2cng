@@ -1,8 +1,8 @@
 package kfx
 
-// BuildContentFeaturesFragment creates the $585 content_features root fragment.
+// BuildContentFeatures creates the $585 content_features root fragment.
 // Reference KFX stores reflow-* and CanonicalFormat features here (not in $593).
-func BuildContentFeaturesFragment(reflowSectionSize int) *Fragment {
+func BuildContentFeatures(reflowSectionSize int) *Fragment {
 	features := []any{
 		map[int]any{
 			SymKey:       "reflow-style",

@@ -89,7 +89,6 @@ func addGeneratedSections(
 	cfg *config.DocumentConfig,
 	log *zap.Logger,
 	styles *StyleRegistry,
-	imageResourceNames map[string]string,
 	fragments *FragmentList,
 	sectionNames []string,
 	tocEntries []*TOCEntry,

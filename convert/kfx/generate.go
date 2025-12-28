@@ -109,7 +109,7 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	annotationEnabled := cfg.Annotation.Enable && c.Book.Description.TitleInfo.Annotation != nil
 	tocPageEnabled := cfg.TOCPage.Placement != common.TOCPagePlacementNone
 	if annotationEnabled || tocPageEnabled {
-		sectionNames, tocEntries, sectionEIDs, nextEID, err = addGeneratedSections(c, cfg, log, styles, imageResourceNames, contentFragments, sectionNames, tocEntries, sectionEIDs, nextEID)
+		sectionNames, tocEntries, sectionEIDs, nextEID, err = addGeneratedSections(c, cfg, log, styles, contentFragments, sectionNames, tocEntries, sectionEIDs, nextEID)
 		if err != nil {
 			return err
 		}
@@ -135,13 +135,13 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	}
 
 	// $490 Book Metadata - categorised metadata (title, author, language, etc.)
-	bookMetadataFrag := BuildBookMetadataFragment(c, cfg, log, container.ContainerID, coverResName)
+	bookMetadataFrag := BuildBookMetadata(c, cfg, log, container.ContainerID, coverResName)
 	if err := container.Fragments.Add(bookMetadataFrag); err != nil {
 		return err
 	}
 
 	// $258 Metadata - reading orders only
-	metadataFrag := BuildMetadataFragment(sectionNames)
+	metadataFrag := BuildMetadata(sectionNames)
 	if err := container.Fragments.Add(metadataFrag); err != nil {
 		return err
 	}
@@ -161,31 +161,31 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	}
 
 	// $538 DocumentData - reading orders with sections
-	docDataFrag := BuildDocumentDataFragment(sectionNames)
+	docDataFrag := BuildDocumentData(sectionNames)
 	if err := container.Fragments.Add(docDataFrag); err != nil {
 		return err
 	}
 
 	// Build navigation containers (TOC) from TOC entries
 	if len(tocEntries) > 0 {
-		navFrag := BuildNavigationFragment(tocEntries, nextEID)
+		navFrag := BuildNavigation(tocEntries, nextEID)
 		if err := container.Fragments.Add(navFrag); err != nil {
 			return err
 		}
 	}
 	// $395 resource_path (present in reference output; usually empty)
-	if err := container.Fragments.Add(BuildResourcePathFragment()); err != nil {
+	if err := container.Fragments.Add(BuildResourcePath()); err != nil {
 		return err
 	}
 
 	// Phase 6: Position maps ($264/$265) + location map ($550)
-	if err := container.Fragments.Add(BuildPositionMapFragment(sectionNames, sectionEIDs)); err != nil {
+	if err := container.Fragments.Add(BuildPositionMap(sectionNames, sectionEIDs)); err != nil {
 		return err
 	}
-	if err := container.Fragments.Add(BuildPositionIdMapFragment(allEIDs, posItems)); err != nil {
+	if err := container.Fragments.Add(BuildPositionIDMap(allEIDs, posItems)); err != nil {
 		return err
 	}
-	if err := container.Fragments.Add(BuildLocationMapFragment(allEIDs)); err != nil {
+	if err := container.Fragments.Add(BuildLocationMap(allEIDs)); err != nil {
 		return err
 	}
 
@@ -213,12 +213,12 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	}
 
 	// $593 FormatCapabilities - keep minimal (KFXInput reads kfxgen.* here)
-	container.FormatCapabilities = BuildFormatCapabilitiesFragment(DefaultFormatFeatures()).Value
+	container.FormatCapabilities = BuildFormatCapabilities(DefaultFormatFeatures()).Value
 
 	// $585 content_features - reflow/canonical features live here in reference files
 	maxSectionPIDCount := computeMaxSectionPIDCount(sectionEIDs, posItems)
 	reflowSectionSize := reflowSectionSizeVersion(maxSectionPIDCount)
-	if err := container.Fragments.Add(BuildContentFeaturesFragment(reflowSectionSize)); err != nil {
+	if err := container.Fragments.Add(BuildContentFeatures(reflowSectionSize)); err != nil {
 		return err
 	}
 
@@ -231,7 +231,7 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 
 	// $419 ContainerEntityMap - must be added after all other fragments
 	deps := ComputeEntityDependencies(container.Fragments)
-	entityMapFrag := BuildContainerEntityMapFragment(container.ContainerID, container.Fragments, deps)
+	entityMapFrag := BuildContainerEntityMap(container.ContainerID, container.Fragments, deps)
 	if err := container.Fragments.Add(entityMapFrag); err != nil {
 		return err
 	}

@@ -1,8 +1,8 @@
 package kfx
 
-// BuildContainerEntityMapFragment creates the $419 container_entity_map fragment
+// BuildContainerEntityMap creates the $419 container_entity_map fragment
 // with entity dependencies ($253). Dependencies describe which fragments depend on which resources.
-func BuildContainerEntityMapFragment(
+func BuildContainerEntityMap(
 	containerID string,
 	fragments *FragmentList,
 	dependencies []EntityDependency,

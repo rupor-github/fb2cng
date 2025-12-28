@@ -10,9 +10,9 @@ import (
 	"fbc/misc"
 )
 
-// BuildMetadataFragment creates the $258 metadata fragment from content.
+// BuildMetadata creates the $258 metadata fragment from content.
 // This contains reading_orders for navigation.
-func BuildMetadataFragment(sectionNames []string) *Fragment {
+func BuildMetadata(sectionNames []string) *Fragment {
 	metadata := NewStruct()
 
 	// Reading orders ($169) - must match document_data
@@ -28,9 +28,9 @@ func BuildMetadataFragment(sectionNames []string) *Fragment {
 	return NewRootFragment(SymMetadata, metadata)
 }
 
-// BuildBookMetadataFragment creates the $490 book_metadata fragment.
+// BuildBookMetadata creates the $490 book_metadata fragment.
 // This contains categorised metadata: title, author, language, etc.
-func BuildBookMetadataFragment(c *content.Content, cfg *config.DocumentConfig, log *zap.Logger, containerID, coverResourceName string) *Fragment {
+func BuildBookMetadata(c *content.Content, cfg *config.DocumentConfig, log *zap.Logger, containerID, coverResourceName string) *Fragment {
 	// Kindle title metadata
 	titleMetadata := make([]any, 0)
 
@@ -141,9 +141,9 @@ func BuildBookMetadataFragment(c *content.Content, cfg *config.DocumentConfig, l
 	return NewRootFragment(SymBookMetadata, bookMetadata)
 }
 
-// BuildDocumentDataFragment creates the $538 document_data fragment.
+// BuildDocumentData creates the $538 document_data fragment.
 // This contains reading orders and is required for KFX v2.
-func BuildDocumentDataFragment(sectionNames []string) *Fragment {
+func BuildDocumentData(sectionNames []string) *Fragment {
 	// Build reading order with section list as symbol references
 	sections := make([]any, 0, len(sectionNames))
 	for _, name := range sectionNames {

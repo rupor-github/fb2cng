@@ -219,7 +219,7 @@ func generateAnnotation(c *content.Content, cfg *config.AnnotationConfig, log *z
 	annotationDiv := annotationBodyDiv.CreateElement("div")
 	annotationDiv.CreateAttr("class", "annotation")
 
-	if err := appendFlowItemsWithContext(annotationDiv, c, c.Book.Description.TitleInfo.Annotation.Items, 1, "annotation", log); err != nil {
+	if err := appendFlowItems(annotationDiv, c, c.Book.Description.TitleInfo.Annotation.Items, 1, "annotation", log); err != nil {
 		log.Warn("Unable to convert annotation content", zap.Error(err))
 	}
 

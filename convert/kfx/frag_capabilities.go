@@ -1,9 +1,9 @@
 package kfx
 
-// BuildFormatCapabilitiesFragment creates the $593 format_capabilities fragment.
+// BuildFormatCapabilities creates the $593 format_capabilities fragment.
 // This declares the KFX format features used in the book.
 // The value is a list of feature entries, each with $492 (key) and version.
-func BuildFormatCapabilitiesFragment(features []FormatFeature) *Fragment {
+func BuildFormatCapabilities(features []FormatFeature) *Fragment {
 	if len(features) == 0 {
 		// Default minimal features
 		features = DefaultFormatFeatures()

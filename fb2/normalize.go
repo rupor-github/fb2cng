@@ -254,19 +254,19 @@ func (fb *FictionBook) NormalizeFootnoteLabels(footnotesIndex FootnoteRefs, temp
 
 	// Update links in TitleInfo annotation
 	if fb.Description.TitleInfo.Annotation != nil {
-		updateFootnoteLinksInFlow(fb.Description.TitleInfo.Annotation, updatedIndex)
+		updateFootnoteLinksFlow(fb.Description.TitleInfo.Annotation, updatedIndex)
 	}
 
 	// Update links in all bodies (including footnote bodies for cross-references)
 	for i := range fb.Bodies {
 		// Update links in body epigraphs
 		for j := range fb.Bodies[i].Epigraphs {
-			updateFootnoteLinksInEpigraph(&fb.Bodies[i].Epigraphs[j], updatedIndex)
+			updateFootnoteLinksEpigraph(&fb.Bodies[i].Epigraphs[j], updatedIndex)
 		}
 
 		// Update links in sections
 		for j := range fb.Bodies[i].Sections {
-			updateFootnoteLinksInSection(&fb.Bodies[i].Sections[j], updatedIndex)
+			updateFootnoteLinksSection(&fb.Bodies[i].Sections[j], updatedIndex)
 		}
 	}
 
@@ -602,113 +602,113 @@ func createFootnoteLabelTitle(label, lang string) *Title {
 	return &Title{Lang: lang, Items: []TitleItem{{Paragraph: para}}}
 }
 
-// updateFootnoteLinksInEpigraph updates footnote link text in an epigraph.
-func updateFootnoteLinksInEpigraph(epigraph *Epigraph, index FootnoteRefs) {
-	updateFootnoteLinksInFlow(&epigraph.Flow, index)
+// updateFootnoteLinksEpigraph updates footnote link text in an epigraph.
+func updateFootnoteLinksEpigraph(epigraph *Epigraph, index FootnoteRefs) {
+	updateFootnoteLinksFlow(&epigraph.Flow, index)
 	for i := range epigraph.TextAuthors {
-		updateFootnoteLinksInSegments(epigraph.TextAuthors[i].Text, index)
+		updateFootnoteLinksSegments(epigraph.TextAuthors[i].Text, index)
 	}
 }
 
-// updateFootnoteLinksInSection recursively updates footnote link text in a section.
-func updateFootnoteLinksInSection(section *Section, index FootnoteRefs) {
+// updateFootnoteLinksSection recursively updates footnote link text in a section.
+func updateFootnoteLinksSection(section *Section, index FootnoteRefs) {
 	// Update links in title
-	updateFootnoteLinksInTitle(section.Title, index)
+	updateFootnoteLinksTitle(section.Title, index)
 
 	// Update links in epigraphs
 	for i := range section.Epigraphs {
-		updateFootnoteLinksInEpigraph(&section.Epigraphs[i], index)
+		updateFootnoteLinksEpigraph(&section.Epigraphs[i], index)
 	}
 
 	// Update links in annotation
 	if section.Annotation != nil {
-		updateFootnoteLinksInFlow(section.Annotation, index)
+		updateFootnoteLinksFlow(section.Annotation, index)
 	}
 
 	// Update links in content
 	for i := range section.Content {
-		updateFootnoteLinksInFlowItem(&section.Content[i], index)
+		updateFootnoteLinksFlowItem(&section.Content[i], index)
 	}
 }
 
-// updateFootnoteLinksInFlow updates footnote link text in a flow.
-func updateFootnoteLinksInFlow(flow *Flow, index FootnoteRefs) {
+// updateFootnoteLinksFlow updates footnote link text in a flow.
+func updateFootnoteLinksFlow(flow *Flow, index FootnoteRefs) {
 	for i := range flow.Items {
-		updateFootnoteLinksInFlowItem(&flow.Items[i], index)
+		updateFootnoteLinksFlowItem(&flow.Items[i], index)
 	}
 }
 
-// updateFootnoteLinksInFlowItem updates footnote link text in a flow item.
-func updateFootnoteLinksInFlowItem(item *FlowItem, index FootnoteRefs) {
+// updateFootnoteLinksFlowItem updates footnote link text in a flow item.
+func updateFootnoteLinksFlowItem(item *FlowItem, index FootnoteRefs) {
 	switch item.Kind {
 	case FlowParagraph:
 		if item.Paragraph != nil {
-			updateFootnoteLinksInSegments(item.Paragraph.Text, index)
+			updateFootnoteLinksSegments(item.Paragraph.Text, index)
 		}
 	case FlowSubtitle:
 		if item.Subtitle != nil {
-			updateFootnoteLinksInSegments(item.Subtitle.Text, index)
+			updateFootnoteLinksSegments(item.Subtitle.Text, index)
 		}
 	case FlowPoem:
 		if item.Poem != nil {
-			updateFootnoteLinksInTitle(item.Poem.Title, index)
+			updateFootnoteLinksTitle(item.Poem.Title, index)
 			for i := range item.Poem.Epigraphs {
-				updateFootnoteLinksInEpigraph(&item.Poem.Epigraphs[i], index)
+				updateFootnoteLinksEpigraph(&item.Poem.Epigraphs[i], index)
 			}
 			for i := range item.Poem.Subtitles {
-				updateFootnoteLinksInSegments(item.Poem.Subtitles[i].Text, index)
+				updateFootnoteLinksSegments(item.Poem.Subtitles[i].Text, index)
 			}
 			for i := range item.Poem.Stanzas {
-				updateFootnoteLinksInTitle(item.Poem.Stanzas[i].Title, index)
+				updateFootnoteLinksTitle(item.Poem.Stanzas[i].Title, index)
 				if item.Poem.Stanzas[i].Subtitle != nil {
-					updateFootnoteLinksInSegments(item.Poem.Stanzas[i].Subtitle.Text, index)
+					updateFootnoteLinksSegments(item.Poem.Stanzas[i].Subtitle.Text, index)
 				}
 				for j := range item.Poem.Stanzas[i].Verses {
-					updateFootnoteLinksInSegments(item.Poem.Stanzas[i].Verses[j].Text, index)
+					updateFootnoteLinksSegments(item.Poem.Stanzas[i].Verses[j].Text, index)
 				}
 			}
 			for i := range item.Poem.TextAuthors {
-				updateFootnoteLinksInSegments(item.Poem.TextAuthors[i].Text, index)
+				updateFootnoteLinksSegments(item.Poem.TextAuthors[i].Text, index)
 			}
 		}
 	case FlowCite:
 		if item.Cite != nil {
 			for i := range item.Cite.Items {
-				updateFootnoteLinksInFlowItem(&item.Cite.Items[i], index)
+				updateFootnoteLinksFlowItem(&item.Cite.Items[i], index)
 			}
 			for i := range item.Cite.TextAuthors {
-				updateFootnoteLinksInSegments(item.Cite.TextAuthors[i].Text, index)
+				updateFootnoteLinksSegments(item.Cite.TextAuthors[i].Text, index)
 			}
 		}
 	case FlowTable:
 		if item.Table != nil {
 			for i := range item.Table.Rows {
 				for j := range item.Table.Rows[i].Cells {
-					updateFootnoteLinksInSegments(item.Table.Rows[i].Cells[j].Content, index)
+					updateFootnoteLinksSegments(item.Table.Rows[i].Cells[j].Content, index)
 				}
 			}
 		}
 	case FlowSection:
 		if item.Section != nil {
-			updateFootnoteLinksInSection(item.Section, index)
+			updateFootnoteLinksSection(item.Section, index)
 		}
 	}
 }
 
-// updateFootnoteLinksInTitle updates footnote link text in a title.
-func updateFootnoteLinksInTitle(title *Title, index FootnoteRefs) {
+// updateFootnoteLinksTitle updates footnote link text in a title.
+func updateFootnoteLinksTitle(title *Title, index FootnoteRefs) {
 	if title == nil {
 		return
 	}
 	for i := range title.Items {
 		if title.Items[i].Paragraph != nil {
-			updateFootnoteLinksInSegments(title.Items[i].Paragraph.Text, index)
+			updateFootnoteLinksSegments(title.Items[i].Paragraph.Text, index)
 		}
 	}
 }
 
-// updateFootnoteLinksInSegments updates footnote link text in inline segments.
-func updateFootnoteLinksInSegments(segments []InlineSegment, index FootnoteRefs) {
+// updateFootnoteLinksSegments updates footnote link text in inline segments.
+func updateFootnoteLinksSegments(segments []InlineSegment, index FootnoteRefs) {
 	for i := range segments {
 		seg := &segments[i]
 
@@ -727,7 +727,7 @@ func updateFootnoteLinksInSegments(segments []InlineSegment, index FootnoteRefs)
 
 		// Recursively process children
 		if len(seg.Children) > 0 {
-			updateFootnoteLinksInSegments(seg.Children, index)
+			updateFootnoteLinksSegments(seg.Children, index)
 		}
 	}
 }
