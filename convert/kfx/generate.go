@@ -164,6 +164,10 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 			return err
 		}
 	}
+	// $395 resource_path (present in reference output; usually empty)
+	if err := container.Fragments.Add(BuildResourcePathFragment()); err != nil {
+		return err
+	}
 
 	// Phase 6: Position maps ($264/$265) + location map ($550)
 	if err := container.Fragments.Add(BuildPositionMapFragment(sectionNames, sectionEIDs)); err != nil {
@@ -209,6 +213,13 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 		return err
 	}
 
+	// $597 auxiliary_data - reference uses this to mark target sections.
+	for _, frag := range BuildAuxiliaryDataFragments(sectionNames) {
+		if err := container.Fragments.Add(frag); err != nil {
+			return err
+		}
+	}
+
 	// $419 ContainerEntityMap - must be added after all other fragments
 	deps := ComputeEntityDependencies(container.Fragments)
 	entityMapFrag := BuildContainerEntityMapFragment(container.ContainerID, container.Fragments, deps)
@@ -234,10 +245,7 @@ func reflowSectionSizeVersion(maxSectionPIDCount int) int {
 		return 1
 	}
 	v := bits.Len(uint(maxSectionPIDCount - 1))
-	ver := v - 11
-	if ver < 1 {
-		ver = 1
-	}
+	ver := min(v-11, 1)
 	return ver
 }
 

@@ -129,6 +129,7 @@ func BuildBookMetadataFragment(c *content.Content, cfg *config.DocumentConfig, l
 	// Kindle ebook metadata (capabilities)
 	ebookMetadata := []any{
 		NewMetadataEntry("selection", "enabled"),
+		NewMetadataEntry("nested_span", "enabled"),
 	}
 	categories = append(categories, NewCategorisedMetadata("kindle_ebook_metadata", ebookMetadata))
 

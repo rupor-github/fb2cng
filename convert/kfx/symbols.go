@@ -193,13 +193,14 @@ const (
 	SymPortrait  = 385 // portrait
 	SymLandscape = 386 // landscape
 
-	// Navigation ($389-$394)
+	// Navigation ($389-$395)
 	SymBookNavigation = 389 // book_navigation
 	SymSectionNav     = 390 // section_navigation (magazine - skip)
 	SymNavContainer   = 391 // nav_container
 	SymNavContainers  = 392 // nav_containers
 	SymNavUnit        = 393 // nav_unit
 	SymCondNavUnit    = 394 // conditional_nav_group_unit (skip)
+	SymResourcePath   = 395 // resource_path
 
 	// Landmarks ($397-$408)
 	SymTitlePage        = 397 // titlepage
@@ -324,7 +325,7 @@ var yjSymbolNames = map[int]string{
 	348: "null", 349: "none", 350: "normal", 351: "default", 352: "always", 353: "avoid",
 	361: "bold", 362: "semibold", 363: "light", 364: "medium", 382: "italic", 383: "auto", 385: "portrait", 386: "landscape",
 	389: "book_navigation", 390: "section_navigation", 391: "nav_container",
-	392: "nav_containers", 393: "nav_unit", 394: "conditional_nav_group_unit",
+	392: "nav_containers", 393: "nav_unit", 394: "conditional_nav_group_unit", 395: "resource_path",
 	397: "titlepage", 398: "acknowledgements", 399: "preface",
 	405: "frontmatter", 406: "bodymatter", 407: "backmatter",
 	409: "bcContId", 410: "bcComprType", 411: "bcDRMScheme", 412: "bcChunkSize",
@@ -414,6 +415,7 @@ var ROOT_FRAGMENT_TYPES = map[int]bool{
 	SymPositionIdMap:   true, // $265
 	SymContainer:       true, // $270
 	SymBookNavigation:  true, // $389
+	SymResourcePath:    true, // $395
 	SymContEntityMap:   true, // $419
 	SymBookMetadata:    true, // $490
 	SymDocumentData:    true, // $538
