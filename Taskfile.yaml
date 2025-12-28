@@ -290,7 +290,7 @@ tasks:
       - ./**/*.sum
       - ./**/config/config.yaml.tmpl
       - ./convert/default.css
-      - ./convert/default.jpeg
+      - ./convert/default-cover.svg
       - ./content/text/dictionaries/*.gz
       - ./content/text/sentences/*.gz
     generates:

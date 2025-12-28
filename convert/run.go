@@ -23,10 +23,11 @@ import (
 	"fbc/convert/epub"
 	"fbc/convert/kfx"
 	"fbc/state"
+	imgutil "fbc/utils/images"
 )
 
-//go:embed default.jpeg
-var defaultCoverImage []byte
+//go:embed default-cover.svg
+var defaultCoverSVG []byte
 
 //go:embed default.css
 var defaultStylesheet []byte
@@ -77,7 +78,16 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 	}
 
 	if env.Cfg.Document.Images.Cover.Generate {
-		env.DefaultCover = defaultCoverImage
+		img, err := imgutil.RasterizeSVGToImage(defaultCoverSVG, env.Cfg.Document.Images.Cover.Width, env.Cfg.Document.Images.Cover.Height)
+		if err != nil {
+			return fmt.Errorf("unable to rasterize embedded default cover svg: %w", err)
+		}
+		jpegData, err := imgutil.EncodeJPEGWithDPI(img, env.Cfg.Document.Images.JPEGQuality, imgutil.DpiPxPerInch, 300, 300)
+		if err != nil {
+			return fmt.Errorf("unable to encode embedded default cover jpeg: %w", err)
+		}
+		env.DefaultCover = jpegData
+
 		if env.Cfg.Document.Images.Cover.DefaultImagePath != "" {
 			data, err := os.ReadFile(env.Cfg.Document.Images.Cover.DefaultImagePath)
 			if err != nil {

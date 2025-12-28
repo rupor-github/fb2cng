@@ -8,10 +8,10 @@
 
   <defs>
     <style>
-      .main { fill: none; stroke: currentColor; stroke-width: 28; stroke-linejoin: miter; stroke-linecap: square; }
-      .inner { fill: none; stroke: currentColor; stroke-width: 14; stroke-linejoin: miter; stroke-linecap: square; }
-      .thin  { fill: none; stroke: currentColor; stroke-width: 8;  stroke-linejoin: miter; stroke-linecap: square; }
-      .dot   { fill: currentColor; }
+      .main { fill: none; stroke: #111111; stroke-width: 28; stroke-linejoin: miter; stroke-linecap: square; }
+      .inner { fill: none; stroke: #111111; stroke-width: 14; stroke-linejoin: miter; stroke-linecap: square; }
+      .thin  { fill: none; stroke: #111111; stroke-width: 8;  stroke-linejoin: miter; stroke-linecap: square; }
+      .dot   { fill: #111111; }
     </style>
   </defs>
 
@@ -39,7 +39,7 @@
   <path class="inner" d="M1004 360 v960" />
 
   <!-- top center deco -->
-  <g transform="translate(632,160)" stroke="currentColor" fill="none">
+  <g transform="translate(632,160)" stroke="#111111" fill="none">
     <path class="main"  d="M-220 0 H220" />
     <path class="inner" d="M-180 0 V80 H-120 V0" />
     <path class="inner" d="M-90 0 V120 H-50 V0" />
@@ -49,7 +49,7 @@
   </g>
 
   <!-- bottom center deco -->
-  <g transform="translate(632,1520)" stroke="currentColor" fill="none">
+  <g transform="translate(632,1520)" stroke="#111111" fill="none">
     <path class="main"  d="M-220 0 H220" />
     <path class="inner" d="M-180 0 V-80 H-120 V0" />
     <path class="inner" d="M-90 0 V-120 H-50 V0" />

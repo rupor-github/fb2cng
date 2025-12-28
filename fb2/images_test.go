@@ -14,6 +14,7 @@ import (
 
 	"fbc/common"
 	"fbc/config"
+	imgutil "fbc/utils/images"
 )
 
 // createTestJPEG creates a simple JPEG image for testing
@@ -527,7 +528,7 @@ func TestFictionBook_PrepareImages_CoverDetection(t *testing.T) {
 	}
 }
 
-func TestSetJpegDPI(t *testing.T) {
+func TestEnsureJFIFAPP0(t *testing.T) {
 	// Create a JPEG without JFIF APP0 marker
 	img := image.NewRGBA(image.Rect(0, 0, 10, 10))
 	var buf bytes.Buffer
@@ -535,37 +536,25 @@ func TestSetJpegDPI(t *testing.T) {
 		t.Fatalf("failed to encode JPEG: %v", err)
 	}
 
-	newbuf, added := setJpegDPI(&buf, dpiPxPerInch, 300, 300)
+	out, added, err := imgutil.EnsureJFIFAPP0(buf.Bytes(), imgutil.DpiPxPerInch, 300, 300)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if !added {
 		t.Error("expected DPI marker to be added")
 	}
-	if newbuf.Len() <= buf.Len() {
+	if len(out) <= buf.Len() {
 		t.Error("expected buffer to grow after adding DPI marker")
 	}
 
 	// Verify it starts with JPEG SOI marker
-	data := newbuf.Bytes()
-	if data[0] != 0xFF || data[1] != 0xD8 {
+	if out[0] != 0xFF || out[1] != 0xD8 {
 		t.Error("JPEG SOI marker should be preserved")
 	}
 
 	// Verify APP0 marker was added
-	if data[2] != 0xFF || data[3] != 0xE0 {
+	if out[2] != 0xFF || out[3] != 0xE0 {
 		t.Error("expected JFIF APP0 marker at position 2-3")
-	}
-}
-
-func TestSetJpegDPI_AlreadyPresent(t *testing.T) {
-	// Create a minimal JPEG with APP0 already present
-	data := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10}
-	buf := bytes.NewBuffer(data)
-
-	newbuf, added := setJpegDPI(buf, dpiPxPerInch, 300, 300)
-	if added {
-		t.Error("expected no DPI marker addition when already present")
-	}
-	if newbuf != buf {
-		t.Error("expected same buffer returned when APP0 already present")
 	}
 }
 

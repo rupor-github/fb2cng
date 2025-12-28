@@ -3,7 +3,6 @@ package fb2
 import (
 	"bytes"
 	_ "embed"
-	"encoding/binary"
 	"fmt"
 	"image"
 	"image/color"
@@ -11,15 +10,14 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	"image/png"
-	"math"
 	"mime"
 	"path"
 	"strings"
 
 	"github.com/disintegration/imaging"
-	"github.com/srwiley/oksvg"
-	"github.com/srwiley/rasterx"
 	"go.uber.org/zap"
+
+	imgutil "fbc/utils/images"
 	_ "golang.org/x/image/bmp"
 	_ "golang.org/x/image/tiff"
 	_ "golang.org/x/image/webp"
@@ -76,48 +74,6 @@ func (fb *FictionBook) PrepareImages(kindle bool, cfg *config.ImagesConfig, log 
 	return index
 }
 
-// JpegDPIType specifyes type of the DPI units
-type jpegDPIType uint8
-
-// DPI units type values
-const (
-	dpiNoUnits jpegDPIType = iota
-	dpiPxPerInch
-	dpiPxPerSm
-)
-
-// setJpegDPI creates JFIF APP0 with provided DPI if segment is missing in image.
-// This is specific to go - when encoding jpeg standard encoder does not create
-// JFIF APP0 segment and Kindles do not like it.
-func setJpegDPI(buf *bytes.Buffer, dpit jpegDPIType, xdensity, ydensity int16) (*bytes.Buffer, bool) {
-
-	var (
-		marker = []byte{0xFF, 0xE0}                               // APP0 segment marker
-		jfif   = []byte{0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x02} // jfif + version
-	)
-
-	data := buf.Bytes()
-
-	// If JFIF APP0 segment is there - do not do anything
-	if bytes.Equal(data[2:4], marker) {
-		return buf, false
-	}
-
-	var newbuf = new(bytes.Buffer)
-
-	newbuf.Write(data[:2])
-	newbuf.Write(marker)
-	binary.Write(newbuf, binary.BigEndian, uint16(0x10)) // length
-	newbuf.Write(jfif)
-	binary.Write(newbuf, binary.BigEndian, uint8(dpit))
-	binary.Write(newbuf, binary.BigEndian, uint16(xdensity))
-	binary.Write(newbuf, binary.BigEndian, uint16(ydensity))
-	binary.Write(newbuf, binary.BigEndian, uint16(0)) // no thumbnail segment
-	newbuf.Write(data[2:])
-
-	return newbuf, true
-}
-
 // handleImageError is a unified error handler for all image processing failures.
 // It logs the error and optionally substitutes the image with a placeholder.
 func (bo *BinaryObject) handleImageError(bi *BookImage, operation string, err error, kindle bool, cfg *config.ImagesConfig, log *zap.Logger) *BookImage {
@@ -140,7 +96,7 @@ func (bo *BinaryObject) handleImageError(bi *BookImage, operation string, err er
 		return bi
 	}
 
-	img, rasterErr := rasterizeSVGToImage(brokenImage, cfg.Cover.Width, cfg.Cover.Height)
+	img, rasterErr := imgutil.RasterizeSVGToImage(brokenImage, cfg.Cover.Width, cfg.Cover.Height)
 	if rasterErr != nil {
 		log.Warn("Unable to rasterize broken placeholder SVG", zap.String("id", bo.ID), zap.Error(rasterErr))
 		return bi
@@ -159,38 +115,6 @@ func (bo *BinaryObject) handleImageError(bi *BookImage, operation string, err er
 	return bi
 }
 
-func rasterizeSVGToImage(svgData []byte, targetW, targetH int) (image.Image, error) {
-	icon, err := oksvg.ReadIconStream(bytes.NewReader(svgData))
-	if err != nil {
-		return nil, err
-	}
-
-	w := int(math.Ceil(icon.ViewBox.W))
-	h := int(math.Ceil(icon.ViewBox.H))
-	if targetW > 0 {
-		w = targetW
-	}
-	if targetH > 0 {
-		h = targetH
-	}
-	if w <= 0 {
-		w = 1024
-	}
-	if h <= 0 {
-		h = 1024
-	}
-
-	icon.SetTarget(0, 0, float64(w), float64(h))
-
-	dst := image.NewRGBA(image.Rect(0, 0, w, h))
-	draw.Draw(dst, dst.Bounds(), &image.Uniform{C: color.RGBA{255, 255, 255, 255}}, image.Point{}, draw.Src)
-
-	scanner := rasterx.NewScannerGV(w, h, dst, dst.Bounds())
-	dasher := rasterx.NewDasher(w, h, scanner)
-	icon.Draw(dasher, 1.0)
-	return dst, nil
-}
-
 func (bo *BinaryObject) encodeImage(img image.Image, imgType string, cfg *config.ImagesConfig, log *zap.Logger) ([]byte, error) {
 	var buf = new(bytes.Buffer)
 	var err error
@@ -207,11 +131,14 @@ func (bo *BinaryObject) encodeImage(img image.Image, imgType string, cfg *config
 		if err != nil {
 			return nil, fmt.Errorf("unable to encode processed JPEG, ID - %s: %w", bo.ID, err)
 		}
-		newbuf, added := setJpegDPI(buf, dpiPxPerInch, 300, 300)
+		data, added, err := imgutil.EnsureJFIFAPP0(buf.Bytes(), imgutil.DpiPxPerInch, 300, 300)
+		if err != nil {
+			return nil, fmt.Errorf("unable to insert jpeg JFIF APP0 marker segment, ID - %s: %w", bo.ID, err)
+		}
 		if added {
 			log.Debug("Inserting jpeg JFIF APP0 marker segment", zap.String("id", bo.ID))
 		}
-		return newbuf.Bytes(), nil
+		return data, nil
 	default:
 		log.Warn("Unable to process image - unsupported format, skipping", zap.String("id", bo.ID), zap.String("type", imgType))
 		return nil, nil
@@ -235,7 +162,7 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 			return bi
 		}
 
-		img, err := rasterizeSVGToImage(bo.Data, 0, 0)
+		img, err := imgutil.RasterizeSVGToImage(bo.Data, 0, 0)
 		if err != nil {
 			return bo.handleImageError(bi, "rasterize", err, kindle, cfg, log)
 		}
@@ -416,7 +343,6 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 
 	return bi
 }
-
 
 // isImageMIME returns true if the MIME type indicates an image resource
 func isImageMIME(mimeType string) bool {
