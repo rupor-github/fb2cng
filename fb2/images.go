@@ -155,6 +155,14 @@ func (bo *BinaryObject) encodeImage(img image.Image, imgType string, cfg *config
 		}
 		return buf.Bytes(), nil
 	case "jpeg":
+		if cfg.Optimize && imgutil.IsGrayscale(img) {
+			if _, ok := img.(*image.Gray); !ok {
+				gray := image.NewGray(img.Bounds())
+				draw.Draw(gray, gray.Bounds(), img, img.Bounds().Min, draw.Src)
+				img = gray
+			}
+		}
+
 		err = imaging.Encode(buf, img, imaging.JPEG, imaging.JPEGQuality(cfg.JPEGQuality))
 		if err != nil {
 			return nil, fmt.Errorf("unable to encode processed JPEG, ID - %s: %w", bo.ID, err)

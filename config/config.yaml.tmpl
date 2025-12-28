@@ -169,11 +169,12 @@ document:
     # Recompress all supported images (presently JPEG, PNG). For JPEG quality
     # respects "jpeg_quality_level": if detected level for an image is higher
     # than requested image will be re-encoded. For PNG best compression_level
-    # is always specified.
-    optimize: false
+    # is always specified. Additionally will trigger grayscale detection for
+    # JPEG images 
+    optimize: true
 
     # JPEG quality level to use, percentage points (40% - 100%)
-    jpeq_quality_level: 75
+    jpeq_quality_level: 95
 
     screen:
       # Reader screen size so images could be adjusted properly
