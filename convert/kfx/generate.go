@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"math/big"
-	"math/bits"
 	"os"
 	"path/filepath"
 	"strings"
@@ -235,18 +234,19 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 const charsetCR = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 // reflowSectionSizeVersion computes the reflow-section-size major version from
-// the maximum per-section PID count. This value is stored in $585 content_features
-// and used by KFXInput for validation.
+// the maximum per-section PID count.
 //
-// The formula approximates: version = max(1, ceil(log2(maxCount)) - 11)
-// Using bits.Len(n-1) gives ceil(log2(n)) for n > 0.
+// This matches KFXInput's calculation:
+//   if max > 65536:
+//     v = min(((max-65536)//16384)+2, 256)
+//   else:
+//     v = 1
 func reflowSectionSizeVersion(maxSectionPIDCount int) int {
-	if maxSectionPIDCount <= 0 {
+	if maxSectionPIDCount <= 65536 {
 		return 1
 	}
-	v := bits.Len(uint(maxSectionPIDCount - 1))
-	ver := min(v-11, 1)
-	return ver
+	ver := ((maxSectionPIDCount - 65536) / (16 * 1024)) + 2
+	return min(ver, 256)
 }
 
 func computeMaxSectionPIDCount(sectionEIDs map[string][]int, posItems []PositionItem) int {
