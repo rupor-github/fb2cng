@@ -179,8 +179,8 @@ func TestContent_CoverImageProcessing_Resize(t *testing.T) {
 	env := state.EnvFromContext(ctx)
 
 	// Configure cover resizing
-	env.Cfg.Document.Images.Cover.Width = 600
-	env.Cfg.Document.Images.Cover.Height = 900
+	env.Cfg.Document.Images.Screen.Width = 600
+	env.Cfg.Document.Images.Screen.Height = 900
 	env.Cfg.Document.Images.Cover.Resize = common.ImageResizeModeKeepAR
 
 	// Small cover that should be resized

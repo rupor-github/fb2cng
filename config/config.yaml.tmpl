@@ -175,6 +175,13 @@ document:
     # JPEG quality level to use, percentage points (40% - 100%)
     jpeq_quality_level: 75
 
+    screen:
+      # Reader screen size so images could be adjusted properly
+      # This is used to prepare cover and some other operations, like SVG
+      # rasterization for kindle devices
+      width: 1264
+      height: 1680
+
     cover:
       # When book does not have cover image supply one. For Amazon formats
       # always true
@@ -190,10 +197,6 @@ document:
       # specified height keeping aspect ratio
       # "stretch" - unconditionally resize to specified width and height
       resize: stretch
-
-      # Reader screen size so cover image could be adjusted properly
-      width: 1264
-      height: 1680
 
   footnotes:
     # How to render footnotes in the book

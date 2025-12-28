@@ -16,18 +16,35 @@ import (
 // Normalization functions to prepare parsed book for conversion
 
 var notFoundImage = []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
-  <title>Not found image</title>
+  <title>Image not found placeholder</title>
 
   <!-- background -->
   <rect x="0" y="0" width="200" height="200" fill="#ffffff"/>
 
-  <!-- border -->
-  <rect x="6" y="6" width="188" height="188" fill="none" stroke="#333" stroke-width="4" rx="4" ry="4"/>
+  <!-- outer border -->
+  <rect x="6" y="6" width="188" height="188"
+        fill="none" stroke="#333333" stroke-width="4"
+        rx="4" ry="4"/>
 
-  <!-- centered text -->
-  <text x="100" y="100" text-anchor="middle" dominant-baseline="middle"
-        font-family="Helvetica, Arial, sans-serif" font-weight="700"
-        font-size="20" fill="#E60000">IMAGE NOT FOUND</text>
+  <!-- empty image frame -->
+  <rect x="40" y="50" width="120" height="90"
+        fill="none"
+        stroke="#666666"
+        stroke-width="4"
+        stroke-dasharray="8 6"
+        rx="4" ry="4"/>
+
+  <!-- magnifying glass -->
+  <circle cx="105" cy="105" r="18"
+          fill="none"
+          stroke="#E60000"
+          stroke-width="4"/>
+
+  <line x1="118" y1="118"
+        x2="138" y2="138"
+        stroke="#E60000"
+        stroke-width="4"
+        stroke-linecap="round"/>
 </svg>`)
 
 // NormalizeFootnoteBodies walks all bodies of the book and normalizes any

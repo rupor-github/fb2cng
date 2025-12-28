@@ -35,17 +35,21 @@ type (
 		Generate         bool                   `yaml:"generate"`
 		DefaultImagePath string                 `yaml:"default_image_path,omitempty" sanitize:"assure_file_access"`
 		Resize           common.ImageResizeMode `yaml:"resize" validate:"gte=0"`
-		Width            int                    `yaml:"width" validate:"min=600"`
-		Height           int                    `yaml:"height" validate:"min=800"`
+	}
+
+	ScreenConfig struct {
+		Width  int `yaml:"width" validate:"min=600"`
+		Height int `yaml:"height" validate:"min=800"`
 	}
 
 	ImagesConfig struct {
-		UseBroken             bool        `yaml:"use_broken"`
-		RemovePNGTransparency bool        `yaml:"remove_png_transparency"`
-		ScaleFactor           float64     `yaml:"scale_factor" validate:"gte=0.0"`
-		Optimize              bool        `yaml:"optimize"`
-		JPEGQuality           int         `yaml:"jpeq_quality_level" validate:"min=40,max=100"`
-		Cover                 CoverConfig `yaml:"cover"`
+		UseBroken             bool         `yaml:"use_broken"`
+		RemovePNGTransparency bool         `yaml:"remove_png_transparency"`
+		ScaleFactor           float64      `yaml:"scale_factor" validate:"gte=0.0"`
+		Optimize              bool         `yaml:"optimize"`
+		JPEGQuality           int          `yaml:"jpeq_quality_level" validate:"min=40,max=100"`
+		Screen                ScreenConfig `yaml:"screen"`
+		Cover                 CoverConfig  `yaml:"cover"`
 	}
 
 	FootnotesConfig struct {

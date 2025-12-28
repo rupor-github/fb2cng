@@ -385,7 +385,7 @@ func generateCoverPageDoc(c *content.Content, cfg *config.DocumentConfig, log *z
 		w, h := coverImage.Dim.Width, coverImage.Dim.Height
 		// Fallback to config values if dimensions are not set
 		if w == 0 || h == 0 {
-			w, h = cfg.Images.Cover.Width, cfg.Images.Cover.Height
+			w, h = cfg.Images.Screen.Width, cfg.Images.Screen.Height
 			log.Debug("Cover image dimensions not available, using config values",
 				zap.Int("width", w), zap.Int("height", h))
 		}

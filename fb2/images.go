@@ -16,8 +16,6 @@ import (
 
 	"github.com/disintegration/imaging"
 	"go.uber.org/zap"
-
-	imgutil "fbc/utils/images"
 	_ "golang.org/x/image/bmp"
 	_ "golang.org/x/image/tiff"
 	_ "golang.org/x/image/webp"
@@ -25,6 +23,7 @@ import (
 	"fbc/common"
 	"fbc/config"
 	"fbc/jpegquality"
+	imgutil "fbc/utils/images"
 )
 
 var brokenImage = []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
@@ -33,13 +32,42 @@ var brokenImage = []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="200" he
   <!-- background -->
   <rect x="0" y="0" width="200" height="200" fill="#ffffff"/>
 
-  <!-- border -->
-  <rect x="6" y="6" width="188" height="188" fill="none" stroke="#333" stroke-width="4" rx="4" ry="4"/>
+  <!-- outer border -->
+  <rect x="6" y="6" width="188" height="188"
+        fill="none" stroke="#333333" stroke-width="4"
+        rx="4" ry="4"/>
 
-  <!-- centered text -->
-  <text x="100" y="100" text-anchor="middle" dominant-baseline="middle"
-        font-family="Helvetica, Arial, sans-serif" font-weight="700"
-        font-size="20" fill="#E60000">BROKEN IMAGE</text>
+  <!-- inner image frame -->
+  <rect x="40" y="50" width="120" height="90"
+        fill="none" stroke="#E60000" stroke-width="4"
+        rx="4" ry="4"/>
+
+  <!-- sun -->
+  <circle cx="75" cy="75" r="8" fill="#E60000"/>
+
+  <!-- mountains -->
+  <path d="M45 130
+           L80 85
+           L105 120
+           L130 95
+           L155 130"
+        fill="none"
+        stroke="#E60000"
+        stroke-width="4"
+        stroke-linejoin="round"
+        stroke-linecap="round"/>
+
+  <!-- crack -->
+  <path d="M100 55
+           L92 75
+           L110 95
+           L98 115
+           L108 135"
+        fill="none"
+        stroke="#E60000"
+        stroke-width="4"
+        stroke-linejoin="round"
+        stroke-linecap="round"/>
 </svg>`)
 
 // Image processing functions for FictionBook.
@@ -96,7 +124,7 @@ func (bo *BinaryObject) handleImageError(bi *BookImage, operation string, err er
 		return bi
 	}
 
-	img, rasterErr := imgutil.RasterizeSVGToImage(brokenImage, cfg.Cover.Width, cfg.Cover.Height)
+	img, rasterErr := imgutil.RasterizeSVGToImage(brokenImage, 0, 0)
 	if rasterErr != nil {
 		log.Warn("Unable to rasterize broken placeholder SVG", zap.String("id", bo.ID), zap.Error(rasterErr))
 		return bi
@@ -162,7 +190,15 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 			return bi
 		}
 
-		img, err := imgutil.RasterizeSVGToImage(bo.Data, 0, 0)
+		// Rasterize SVG - as far as I could tell KPV always scales SVG to 2048
+		// (DPI 140) keeping aspect ratio, we will use screen width instead.
+		targetW, targetH := cfg.Screen.Width, 0
+		// For our embedded not-found placeholder keep its intrinsic size
+		// similar to how we handle broke images.
+		if bytes.Equal(bo.Data, notFoundImage) {
+			targetW, targetH = 0, 0
+		}
+		img, err := imgutil.RasterizeSVGToImage(bo.Data, targetW, targetH)
 		if err != nil {
 			return bo.handleImageError(bi, "rasterize", err, kindle, cfg, log)
 		}
@@ -175,7 +211,7 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 
 		// Cover resizing for SVG follows the same rules as raster images.
 		if cover {
-			w, h := cfg.Cover.Width, cfg.Cover.Height
+			w, h := cfg.Screen.Width, cfg.Screen.Height
 			switch cfg.Cover.Resize {
 			case common.ImageResizeModeNone:
 			case common.ImageResizeModeKeepAR:
@@ -233,7 +269,7 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 
 	// Scaling cover image
 	if cover {
-		w, h := cfg.Cover.Width, cfg.Cover.Height
+		w, h := cfg.Screen.Width, cfg.Screen.Height
 		switch cfg.Cover.Resize {
 		case common.ImageResizeModeNone:
 		case common.ImageResizeModeKeepAR:
