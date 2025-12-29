@@ -31,14 +31,17 @@ Supported selector forms (initial target):
 - `tag` (e.g. `p`, `h1`, `strong`)
 - `.class` (e.g. `.paragraph`, `.epigraph`)
 - `tag.class` (e.g. `blockquote.cite`, `p.has-dropcap`)
+- `ancestor descendant` (e.g. `p code`, `.section-title h2`)
+- `selector::before`, `selector::after` (pseudo-elements with `content` property)
 
-Everything else is ignored with warning (descendant/sibling/pseudo selectors).
+Sibling selectors (`+`, `~`) are ignored with warning.
 
 ### Selector → KFX style name resolution
 
 - `.foo` → style name `foo`
 - `tag` → style name `tag` (unless we define an explicit alias, see below)
 - `tag.foo` → style name `foo` (preferred) with fallback to `tag.foo` only if needed to avoid collisions
+- `ancestor descendant` → style name based on rightmost part (e.g., `p code` → `p--code`, `.section-title h2` → `section-title--h2`)
 
 **Important aliases for EPUB parity:**
 - `p` should map to the KFX base paragraph style (currently `paragraph`). We should define an alias rule so that `p { ... }` feeds into style `paragraph` unless explicitly overridden by a more specific selector.
@@ -126,11 +129,16 @@ Everything else is ignored with warning (descendant/sibling/pseudo selectors).
 
 #### Not Supported / Limited
 - CSS counters (`counter-increment`, `counter-reset`)
-- Advanced selectors: `::after`, `::before`, `:first-letter`, `:first-line`
+- Advanced selectors: `:first-letter`, `:first-line`
 - Adjacent sibling selectors (`E + F`, `E ~ F`)
 - CSS Grid, Flexbox (very limited)
 - Transitions, animations
 - Media queries (basic support only)
+
+#### Pseudo-elements (Supported)
+- `::before` - Content inserted before element (requires `content` property)
+- `::after` - Content inserted after element (requires `content` property)
+- Note: Only `content` property with string values is supported for pseudo-elements
 
 ### Media Queries
 
@@ -174,107 +182,48 @@ Per **Media Query Policy** above: `@media` blocks are ignored.
 
 ---
 
-## Phase 1: CSS Parser Foundation
+## Phase 1: CSS Parser Foundation ✅
 
 **Goal**: Create a CSS parser that extracts rule information relevant to KFX conversion.
 
+**Status**: COMPLETED - Using `github.com/tdewolff/parse/v2/css` as lexer.
+
 ### Tasks
 
-- [ ] **1.1 Research CSS Parsing Libraries**
-  - Evaluate Go CSS parsing options:
-    - `github.com/gorilla/css` (simple, maintained) - **ARCHIVED, not recommended**
-    - `github.com/vanng822/css` (more complete) - **Good candidate**
-    - `github.com/andybalholm/cascadia` (selector-focused, no property parsing)
-    - `github.com/tdewolff/parse/v2/css` (fast tokenizer, low-level)
-    - Custom minimal parser (if libraries are overkill)
-  - Decision criteria: minimal dependencies, handles our subset
-  - **Note**: `fb2/stylesheet.go` already has regex for `@font-face`, `url()`, `@import` - could extend
+- [x] **1.1 Research CSS Parsing Libraries**
+  - Selected `github.com/tdewolff/parse/v2/css` - fast tokenizer with proper CSS grammar support
+  - Provides `Parser` with grammar types: BeginRulesetGrammar, DeclarationGrammar, etc.
+  - Handles comments, @-rules, and complex value parsing natively
 
-- [ ] **1.2 Define Supported CSS Subset**
-  - Document which CSS properties we support (based on `default.css` + Amazon KDP support):
-    ```
-    /* Typography - Fully Supported */
-    font-size, font-weight, font-style, font-family, font-variant
-    text-indent, text-align, text-decoration, text-transform
-    line-height, letter-spacing, word-spacing
-    color, vertical-align, white-space
-    
-    /* Box Model - Fully Supported */
-    margin, margin-top, margin-bottom, margin-left, margin-right
-    padding, padding-top, padding-bottom, padding-left, padding-right
-    
-    /* Display/Layout - Partial */
-    display (block, inline, none)
-    float (left, right)
-    
-    /* Page Control - Supported */
-    page-break-before, page-break-after, page-break-inside
-    ```
-  - Document which selectors we support:
-    - Element selectors: `p`, `h1`-`h6`, `blockquote`, `table`, `code`, `th`, `td`, etc.
-    - Class selectors: `.paragraph`, `.epigraph`, `.verse`
-    - Combined: `p.has-dropcap`, `div.image`
-    - **Grouped selectors**: `h2, h3, h4, h5, h6` (line 52-57 of default.css)
-  - Document what we ignore (per Amazon limitations):
-    - Complex selectors (descendant like `p code`, sibling, pseudo-elements)
-    - Most `@media` queries (except `@media amzn-kf8`)
-    - CSS counters, animations, transitions
-    - Grid, flexbox
-  - **Analysis of default.css needed**: Count selectors by type, identify any edge cases
+- [x] **1.2 Define Supported CSS Subset**
+  - Implemented in `convert/kfx/css/types.go` and `doc.go`
+  - Supported selectors: element, class, element.class, grouped, descendant, ::before/::after
+  - Unsupported: sibling (`+`, `~`), child combinator (`>`), attribute selectors, pseudo-classes
+  - @media blocks are skipped entirely
 
-- [ ] **1.2.1 Analyze default.css Selectors**
-  - Create inventory of all selectors in `convert/default.css`:
-    - Simple element selectors (e.g., `p`, `h1`, `code`, `table`, `th`, `td`)
-    - Simple class selectors (e.g., `.dropcap`, `.body-title`, `.epigraph`)
-    - Combined element.class (e.g., `p.has-dropcap`, `span.has-dropcap`, `blockquote.cite`)
-    - Grouped selectors (e.g., `h2, h3, h4, h5, h6`)
-    - **Descendant selectors** (e.g., `p code`, `.section-title h2.section-title-header`) - decide handling
-    - img-prefixed classes (e.g., `img.image-block`, `img.image-inline`)
-  - Count: ~80+ rules in default.css, identify which need special handling
-  
-- [ ] **1.3 Create CSS Types**
+- [x] **1.2.1 Analyze default.css Selectors**
+  - Parser successfully handles all 87 rules from default.css with 0 warnings
+  - Descendant selectors like `p code` and `.section-title h2.section-title-header` are fully supported
+
+- [x] **1.3 Create CSS Types**
   - File: `convert/kfx/css/types.go`
-  - Types needed:
-    ```go
-    type CSSValue struct {
-        Value    float64
-        Unit     string  // "em", "px", "%", "pt", etc.
-        Keyword  string  // "bold", "italic", "center", etc.
-        Raw      string  // Original CSS value string
-    }
-    
-    type CSSRule struct {
-        Selector   string              // ".paragraph", "h1", etc.
-        Properties map[string]CSSValue // "font-size" -> {1.2, "em", "", "1.2em"}
-    }
-    
-    type CSSStylesheet struct {
-        Rules     []CSSRule
-        FontFaces []CSSFontFace   // @font-face declarations
-        // NOTE: @media blocks are always ignored, so we do not represent them.
-    }
-    
-    type CSSFontFace struct {
-        Family string
-        Src    string
-        Style  string // normal, italic
-        Weight string // normal, bold, 400, 700
-    }
-    ```
+  - Types: `CSSValue`, `Selector`, `PseudoElement`, `CSSRule`, `CSSFontFace`, `Stylesheet`
+  - `Selector.StyleName()` generates KFX style names:
+    - Simple: `p` → `p`, `.foo` → `foo`, `p.foo` → `foo`
+    - Descendant: `p code` → `p--code`, `.section-title h2` → `section-title--h2`
+    - Pseudo: `selector::before` → `selector--before`
 
-- [ ] **1.4 Implement CSS Parser**
+- [x] **1.4 Implement CSS Parser**
   - File: `convert/kfx/css/parser.go`
-  - Parse CSS text into `CSSStylesheet`
-  - Extract relevant rules, skip unsupported constructs
-  - Ignore all `@media ... {}` blocks
-  - Handle comments, whitespace, basic syntax
+  - Uses tdewolff/parse lexer for tokenization
+  - Handles grouped selectors, descendant selectors, @font-face, skips @media blocks
+  - Parses dimension values (em, px, %, pt), keywords, colors
 
-- [ ] **1.5 Add Unit Tests**
+- [x] **1.5 Add Unit Tests**
   - File: `convert/kfx/css/parser_test.go`
-  - Test parsing of `default.css` (use `//go:embed` to load actual file)
-  - Test that all `@media` blocks are ignored (content inside is skipped)
-  - Test grouped selectors (`h2, h3, h4`) are split into separate rules
-  - Test edge cases (empty rules, malformed CSS, comments)
+  - 14 tests covering: element/class/combined selectors, grouped selectors,
+    ::before/::after pseudo-elements, @media skipping, @font-face parsing,
+    numeric values, shorthand properties, comments, default.css parsing
   - Test extraction of specific properties
 
 ---
@@ -605,6 +554,12 @@ Existing files to reference (not modify in Phase 1):
 | `page-break-*` | `$131`/`$132` | always/avoid only |
 | `float` | `$140` | left/right for images/dropcaps |
 
+### Pseudo-elements (Supported)
+| Pseudo-element | Support | Notes |
+|----------------|---------|-------|
+| `::before` | ✅ | `content` property with string values |
+| `::after` | ✅ | `content` property with string values |
+
 ### Not Supported (Document)
 | CSS Property | Reason |
 |--------------|--------|
@@ -613,7 +568,6 @@ Existing files to reference (not modify in Phase 1):
 | `position` | KFX reflowable limitation |
 | `transform` | Not applicable to ebooks |
 | `animation` | Not supported in KFX |
-| `::before`/`::after` | Pseudo-elements not supported |
 
 ---
 

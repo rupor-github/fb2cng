@@ -21,6 +21,7 @@ require (
 	github.com/rupor-github/gencfg v1.0.13
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
+	github.com/tdewolff/parse/v2 v2.8.5
 	github.com/urfave/cli/v3 v3.6.1
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.1
