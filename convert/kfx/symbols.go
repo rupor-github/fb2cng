@@ -6,6 +6,11 @@ import (
 	"strings"
 )
 
+// KFXSymbol represents a symbol ID from the YJ_symbols shared symbol table.
+// These are property/type identifiers like $16 (font_size), $157 (style), etc.
+// Not to be confused with EID (element ID) which identifies content entries.
+type KFXSymbol = int
+
 // LargestKnownSymbol is the highest symbol ID in YJ_symbols.
 // This should be updated when new symbols are discovered.
 // As of Kindle Previewer 3.101.0, the highest known symbol is 851.

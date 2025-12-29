@@ -228,119 +228,53 @@ Per **Media Query Policy** above: `@media` blocks are ignored.
 
 ---
 
-## Phase 2: CSS-to-KFX Property Mapping
+## Phase 2: CSS-to-KFX Property Mapping ✅
 
 **Goal**: Create a mapping layer that converts CSS properties to KFX style properties.
 
+**Status**: COMPLETED - All conversion functions implemented and tested.
+
 ### Tasks
 
-- [ ] **2.1 Define CSS-to-KFX Property Map**
+- [x] **2.1 Define CSS-to-KFX Property Map**
   - File: `convert/kfx/css/mapping.go`
-  - Create property name mapping based on Amazon's supported properties:
-    ```go
-    var cssToKFXProperty = map[string]int{
-        // Typography
-        "font-size":       SymFontSize,       // $16
-        "font-weight":     SymFontWeight,     // $13
-        "font-style":      SymFontStyle,      // $12
-        "font-family":     SymFontFamily,     // $11
-        "line-height":     SymLineHeight,     // $42
-        "letter-spacing":  SymLetterspacing,  // $32
-        "color":           SymTextColor,      // $19
-        
-        // Text Layout
-        "text-indent":     SymTextIndent,     // $36
-        "text-align":      SymTextAlignment,  // $34
-        
-        // Box Model
-        "margin-top":      SymMarginTop,      // $47
-        "margin-bottom":   SymMarginBottom,   // $49
-        "margin-left":     SymMarginLeft,     // $48
-        "margin-right":    SymMarginRight,    // $50
-        "padding":         SymPadding,        // $51
-        
-        // Text Decoration
-        "text-decoration": -1, // Special handling: underline->$23, line-through->$27
-        "vertical-align":  SymBaselineShift,  // $31
-    }
-    ```
+  - Implemented `cssToKFXProperty` map with all supported CSS properties
+  - Helper functions: `KFXPropertySymbol()`, `IsShorthandProperty()`, `IsSpecialProperty()`
 
-- [ ] **2.2 Implement Unit Conversion**
+- [x] **2.2 Implement Unit Conversion**
   - File: `convert/kfx/css/units.go`
-  - Convert CSS units to KFX dimension values:
-    ```go
-    func CSSValueToKFX(css CSSValue) (value float64, unit int, err error) {
-        switch css.Unit {
-        case "em":
-            return css.Value, SymUnitEm, nil       // $308
-        case "ex":
-            return css.Value, SymUnitEx, nil       // $309
-        case "%":
-            return css.Value / 100, SymUnitRatio, nil // $310 (percent->ratio)
-        case "px":
-            return css.Value, SymUnitPx, nil       // $319
-        case "pt":
-            return css.Value, SymUnitPt, nil       // $318
-        case "cm":
-            return css.Value, SymUnitCm, nil       // $315
-        case "mm":
-            return css.Value, SymUnitMm, nil       // $316
-        case "in":
-            return css.Value, SymUnitIn, nil       // $317
-        case "":
-            // Unitless - could be ratio for line-height
-            return css.Value, SymUnitRatio, nil
-        default:
-            return 0, 0, fmt.Errorf("unsupported unit: %s", css.Unit)
-        }
-    }
-    ```
+  - `CSSValueToKFX()` converts CSS units to KFX dimension values
+  - Supports: em, ex, %, px, pt, cm, mm, in, unitless
+  - `MakeDimensionValue()` creates KFX struct values
 
-- [ ] **2.3 Implement Value Conversion for Complex Properties**
+- [x] **2.3 Implement Value Conversion for Complex Properties**
   - File: `convert/kfx/css/values.go`
-  - `font-weight`: 
-    - CSS: bold, bolder, lighter, normal, 100-900
-    - KFX: $361 (bold), $362 (semibold), $363 (light), $364 (medium), $350 (normal)
-  - `font-style`:
-    - CSS: italic, oblique, normal
-    - KFX: $382 (italic), $350 (normal)
-  - `text-align`:
-    - CSS: left, right, center, justify, start, end
-    - KFX: $680 (start), $681 (end), $320 (center), $321 (justify)
-  - `text-decoration`:
-    - CSS: underline → KFX $23 (underline)
-    - CSS: line-through → KFX $27 (strikethrough)
-    - CSS: none → clear both
-  - `vertical-align`:
-    - CSS: super → KFX baseline_shift positive
-    - CSS: sub → KFX baseline_shift negative
-  - `display`:
-    - CSS: none → KFX visibility handling
-    - CSS: block, inline → KFX render mode ($601/$602)
-  - `page-break-*`:
-    - CSS: always → KFX $352 (always)
-    - CSS: avoid → KFX $353 (avoid)
+  - `ConvertFontWeight()`: bold/normal/100-900 → KFX symbols
+  - `ConvertFontStyle()`: italic/oblique/normal → KFX symbols
+  - `ConvertTextAlign()`: left/right/center/justify/start/end → KFX symbols
+  - `ConvertTextDecoration()`: underline/line-through/none
+  - `ConvertVerticalAlign()`: super/sub/baseline → baseline_shift
+  - `ConvertDisplay()`: block/inline/none → render mode
+  - `ConvertFloat()`: left/right/none → KFX symbols
+  - `ConvertPageBreak()`: always/avoid/auto → KFX symbols
+  - `ParseColor()`: hex/rgb()/keywords → RGB values
 
-- [ ] **2.4 Handle Shorthand Properties**
-  - `margin: 1em` → expand to all four margins
-  - `margin: 1em 2em` → top/bottom, left/right
-  - `margin: 1em 2em 3em 4em` → top, right, bottom, left
-  - Same for `padding`, `border`
+- [x] **2.4 Handle Shorthand Properties**
+  - Margin shorthand expansion (1-4 values)
+  - `expandBoxShorthand()` handles all box model patterns
 
-- [ ] **2.5 Create Style Converter**
+- [x] **2.5 Create Style Converter**
   - File: `convert/kfx/css/converter.go`
-  - Function: `ConvertCSSRuleToStyleDef(rule CSSRule) (StyleDef, []string)`
-  - Returns StyleDef and list of warnings for unsupported properties
-  - Apply property mapping
-  - Handle compound properties
-  - Handle shorthand expansions
+  - `Converter` type with `ConvertRule()` and `ConvertStylesheet()` methods
+  - Merges rules with same selector
+  - Returns warnings for unsupported properties
 
-- [ ] **2.6 Add Unit Tests**
+- [x] **2.6 Add Unit Tests**
   - File: `convert/kfx/css/converter_test.go`
-  - Test individual property conversions
-  - Test shorthand property expansion
-  - Test keyword value mapping
-  - Test edge cases and error handling
+  - 10+ test functions covering all conversion logic
+  - Tests for font-weight, font-style, text-align, text-decoration
+  - Tests for vertical-align, color parsing, unit conversion
+  - Tests for shorthand expansion and rule merging
 
 ---
 
