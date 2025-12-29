@@ -10,16 +10,11 @@ formatting between EPUB and KFX outputs.
 1. Pass validation via `testdata/input.py` (KFXInput plugin)
 2. Implementation docs are in `docs/`
 3. Follow project coding standards (Go idioms, structured logging, etc.)
-4. Use latest go fearutes - ALWAYS 
-5. instead of gofmt use `goimports-reviser -format -rm-unused -set-alias
+4. Use latest Go features - ALWAYS
+5. Instead of gofmt use `goimports-reviser -format -rm-unused -set-alias
    -company-prefixes github.com/rupor-github -excludes vendor ./...` - it is
    always available
-
-## Media Query Policy
-
-All `@media ... {}` blocks are **always ignored** (not just in v1). If a stylesheet contains `@media`, we may log a single warning like: `CSS @media ignored (kindle-specific rules not applied)`.
-
-Rationale: KFX does not consume CSS directly; we translate a small, stable subset into KFX style fragments. Conditional styling adds significant cascade complexity and is not required to maintain parity with our current EPUB generation.
+6. Module path is `fbc` (not `fb2cng`) - use `fbc/...` for imports
 
 ## Selector Coverage Policy (EPUB parity)
 
@@ -155,6 +150,13 @@ Per **Media Query Policy** above: `@media` blocks are ignored.
 2. **Hardcoded Styles**: `DefaultStyleRegistry()` creates hardcoded KFX-native styles
 3. **Style Application**: `convert/kfx/frag_storyline.go` references styles by name in content entries
 4. **No CSS Parsing**: CSS is completely ignored; styles are duplicated in Go code
+5. **Entry Point**: `convert/kfx/generate.go` `buildFragments()` creates style registry at line 89
+
+### Existing CSS Infrastructure (Can Be Reused)
+1. **Stylesheet Loading**: `fb2/stylesheet.go` - `NormalizeStylesheets()` processes CSS, resolves `url()` refs, handles `@font-face`
+2. **Resource Types**: `fb2/types.go` - `Stylesheet`, `StylesheetResource` structs already defined
+3. **Regex Patterns**: `fb2/stylesheet.go` has `urlPattern`, `fontFacePattern`, `importPattern` - could be extended
+4. **Content Access**: `content.Content.Book.Stylesheets` contains processed CSS (raw string in `Data` field)
 
 ### Key Differences
 | Aspect | EPUB | KFX |
@@ -179,11 +181,13 @@ Per **Media Query Policy** above: `@media` blocks are ignored.
 
 - [ ] **1.1 Research CSS Parsing Libraries**
   - Evaluate Go CSS parsing options:
-    - `github.com/gorilla/css` (simple, maintained)
-    - `github.com/vanng822/css` (more complete)
-    - `github.com/andybalholm/cascadia` (selector-focused)
+    - `github.com/gorilla/css` (simple, maintained) - **ARCHIVED, not recommended**
+    - `github.com/vanng822/css` (more complete) - **Good candidate**
+    - `github.com/andybalholm/cascadia` (selector-focused, no property parsing)
+    - `github.com/tdewolff/parse/v2/css` (fast tokenizer, low-level)
     - Custom minimal parser (if libraries are overkill)
   - Decision criteria: minimal dependencies, handles our subset
+  - **Note**: `fb2/stylesheet.go` already has regex for `@font-face`, `url()`, `@import` - could extend
 
 - [ ] **1.2 Define Supported CSS Subset**
   - Document which CSS properties we support (based on `default.css` + Amazon KDP support):
@@ -206,15 +210,27 @@ Per **Media Query Policy** above: `@media` blocks are ignored.
     page-break-before, page-break-after, page-break-inside
     ```
   - Document which selectors we support:
-    - Element selectors: `p`, `h1`-`h6`, `blockquote`, `table`, etc.
+    - Element selectors: `p`, `h1`-`h6`, `blockquote`, `table`, `code`, `th`, `td`, etc.
     - Class selectors: `.paragraph`, `.epigraph`, `.verse`
     - Combined: `p.has-dropcap`, `div.image`
+    - **Grouped selectors**: `h2, h3, h4, h5, h6` (line 52-57 of default.css)
   - Document what we ignore (per Amazon limitations):
-    - Complex selectors (descendant, sibling, pseudo-elements)
-    - `@media` queries (always ignored)
+    - Complex selectors (descendant like `p code`, sibling, pseudo-elements)
+    - Most `@media` queries (except `@media amzn-kf8`)
     - CSS counters, animations, transitions
     - Grid, flexbox
+  - **Analysis of default.css needed**: Count selectors by type, identify any edge cases
 
+- [ ] **1.2.1 Analyze default.css Selectors**
+  - Create inventory of all selectors in `convert/default.css`:
+    - Simple element selectors (e.g., `p`, `h1`, `code`, `table`, `th`, `td`)
+    - Simple class selectors (e.g., `.dropcap`, `.body-title`, `.epigraph`)
+    - Combined element.class (e.g., `p.has-dropcap`, `span.has-dropcap`, `blockquote.cite`)
+    - Grouped selectors (e.g., `h2, h3, h4, h5, h6`)
+    - **Descendant selectors** (e.g., `p code`, `.section-title h2.section-title-header`) - decide handling
+    - img-prefixed classes (e.g., `img.image-block`, `img.image-inline`)
+  - Count: ~80+ rules in default.css, identify which need special handling
+  
 - [ ] **1.3 Create CSS Types**
   - File: `convert/kfx/css/types.go`
   - Types needed:
@@ -233,7 +249,7 @@ Per **Media Query Policy** above: `@media` blocks are ignored.
     
     type CSSStylesheet struct {
         Rules     []CSSRule
-        FontFaces []CSSFontFace // @font-face declarations
+        FontFaces []CSSFontFace   // @font-face declarations
         // NOTE: @media blocks are always ignored, so we do not represent them.
     }
     
@@ -254,9 +270,10 @@ Per **Media Query Policy** above: `@media` blocks are ignored.
 
 - [ ] **1.5 Add Unit Tests**
   - File: `convert/kfx/css/parser_test.go`
-  - Test parsing of `default.css`
-  - Test that `@media` blocks are ignored and do not affect parsed rules
-  - Test edge cases (empty rules, malformed CSS)
+  - Test parsing of `default.css` (use `//go:embed` to load actual file)
+  - Test that all `@media` blocks are ignored (content inside is skipped)
+  - Test grouped selectors (`h2, h3, h4`) are split into separate rules
+  - Test edge cases (empty rules, malformed CSS, comments)
   - Test extraction of specific properties
 
 ---
@@ -406,9 +423,11 @@ Per **Media Query Policy** above: `@media` blocks are ignored.
 
 - [ ] **3.4 Update KFX Generator**
   - File: `convert/kfx/generate.go`
-  - In `buildFragments()`:
-    - Access stylesheet from `content.Content.Book.Stylesheets`
+  - In `buildFragments()` (around line 88-89):
+    - Replace `styles := DefaultStyleRegistry()` with CSS-based initialization
+    - Access stylesheet from `c.Book.Stylesheets` (already normalized by `fb2/stylesheet.go`)
     - Create `StyleRegistry` from CSS using new function
+    - Fall back to `DefaultStyleRegistry()` if CSS parsing fails
     - Log warnings for unsupported CSS
     - Ensure all referenced styles exist
 
@@ -454,7 +473,6 @@ Per **Media Query Policy** above: `@media` blocks are ignored.
 - [ ] **4.4 Specificity Handling**
   - Simple specificity: element < class < element.class
   - Later rules override earlier (source order)
-  - `@media amzn-kf8` rules have highest priority
 
 - [ ] **4.5 Add Tests for Inheritance**
   - Test property inheritance chains
@@ -473,32 +491,22 @@ Per **Media Query Policy** above: `@media` blocks are ignored.
 - [ ] **5.1 Handle @font-face**
   - Parse font-face declarations from CSS
   - Extract font-family, src, font-weight, font-style
-  - Note: KFX font support is complex and may require separate handling
+  - **Note**: `fb2/stylesheet.go` already extracts @font-face and resolves `url()` refs
+  - KFX font embedding requires $264 (font_data) fragments - investigate format
   - Document limitations vs EPUB font embedding
 
-- [ ] **5.2 Handle @media amzn-kf8**
-  - Parse `@media amzn-kf8` blocks
-  - Apply KF8-specific rules for KFX output
-  - Override base rules with media-specific rules
-  - Ignore `@media amzn-mobi` (legacy format)
-
-- [ ] **5.3 Handle @media amzn-mobi (optional)**
-  - Could be used for fallback values
-  - Lower priority than base rules
-  - Document behavior
-
-- [ ] **5.4 Page Break Properties**
+- [ ] **5.2 Page Break Properties**
   - `page-break-before: always` → section break in KFX
   - `page-break-after: always` → section break
   - `page-break-inside: avoid` → keep content together
   - Map to KFX equivalents ($131 first, $132 last for keep_together)
 
-- [ ] **5.5 Drop Cap Support**
+- [ ] **5.3 Drop Cap Support**
   - Parse `.dropcap` and `.has-dropcap` styles
   - Map to KFX dropcap_lines ($125) and dropcap_chars ($126)
   - Handle float: left for drop caps
 
-- [ ] **5.6 Complex Selectors (Limited)**
+- [ ] **5.4 Complex Selectors (Limited)**
   - Evaluate need for basic descendant selectors
   - `.poem .verse` - verse inside poem context
   - Document as unsupported if too complex
@@ -549,18 +557,23 @@ Per **Media Query Policy** above: `@media` blocks are ignored.
 ```
 convert/kfx/
 ├── css/
-│   ├── types.go           # CSS data structures
+│   ├── doc.go             # Package documentation
+│   ├── types.go           # CSS data structures (CSSValue, CSSRule, CSSStylesheet)
 │   ├── parser.go          # CSS text parser
 │   ├── parser_test.go     # Parser unit tests
-│   ├── mapping.go         # CSS→KFX property mapping
-│   ├── units.go           # Unit conversion (em, px, pt → KFX)
-│   ├── values.go          # Keyword value conversion
-│   ├── converter.go       # Full rule-to-StyleDef converter
-│   ├── converter_test.go  # Converter tests
-│   └── doc.go             # Package documentation
-├── frag_style.go          # (modified) StyleRegistry with CSS support
-├── generate.go            # (modified) Use CSS-based registry
+│   ├── mapping.go         # CSS→KFX property symbol mapping
+│   ├── units.go           # Unit conversion (em, px, pt → KFX dimension values)
+│   ├── values.go          # Keyword value conversion (bold→$361, italic→$382, etc.)
+│   ├── converter.go       # CSSRule → StyleDef converter
+│   └── converter_test.go  # Converter tests
+├── frag_style.go          # (modified) Add NewStyleRegistryFromCSS()
+├── generate.go            # (modified) Call CSS-based registry initialization
 └── ...
+
+Existing files to reference (not modify in Phase 1):
+├── fb2/stylesheet.go      # CSS resource resolution (already working)
+├── fb2/types.go           # Stylesheet, StylesheetResource types
+└── convert/default.css    # Embedded default stylesheet
 ```
 
 ---

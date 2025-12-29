@@ -7,9 +7,9 @@ import (
 	"image/jpeg"
 	"testing"
 
-	"fbc/config"
-
 	"go.uber.org/zap"
+
+	"fbc/config"
 )
 
 func TestEncodeImage_GrayscaleJPEG(t *testing.T) {
