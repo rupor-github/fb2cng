@@ -57,4 +57,4 @@
 //	for _, style := range styles {
 //	    registry.Register(style)
 //	}
-package css
+package kfx

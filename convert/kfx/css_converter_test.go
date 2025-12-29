@@ -1,30 +1,28 @@
-package css
+package kfx
 
 import (
 	"testing"
 
 	"go.uber.org/zap"
-
-	"fbc/convert/kfx"
 )
 
 func TestConvertFontWeight(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    CSSValue
-		expected kfx.KFXSymbol
+		expected KFXSymbol
 		ok       bool
 	}{
-		{"bold keyword", CSSValue{Keyword: "bold"}, kfx.SymBold, true},
-		{"bolder keyword", CSSValue{Keyword: "bolder"}, kfx.SymBold, true},
-		{"lighter keyword", CSSValue{Keyword: "lighter"}, kfx.SymLight, true},
-		{"normal keyword", CSSValue{Keyword: "normal"}, kfx.SymNormal, true},
-		{"numeric 700", CSSValue{Value: 700}, kfx.SymBold, true},
-		{"numeric 600", CSSValue{Value: 600}, kfx.SymSemibold, true},
-		{"numeric 500", CSSValue{Value: 500}, kfx.SymMedium, true},
-		{"numeric 400", CSSValue{Value: 400}, kfx.SymNormal, true},
-		{"numeric 300", CSSValue{Value: 300}, kfx.SymLight, true},
-		{"numeric 200", CSSValue{Value: 200}, kfx.SymLight, true},
+		{"bold keyword", CSSValue{Keyword: "bold"}, SymBold, true},
+		{"bolder keyword", CSSValue{Keyword: "bolder"}, SymBold, true},
+		{"lighter keyword", CSSValue{Keyword: "lighter"}, SymLight, true},
+		{"normal keyword", CSSValue{Keyword: "normal"}, SymNormal, true},
+		{"numeric 700", CSSValue{Value: 700}, SymBold, true},
+		{"numeric 600", CSSValue{Value: 600}, SymSemibold, true},
+		{"numeric 500", CSSValue{Value: 500}, SymMedium, true},
+		{"numeric 400", CSSValue{Value: 400}, SymNormal, true},
+		{"numeric 300", CSSValue{Value: 300}, SymLight, true},
+		{"numeric 200", CSSValue{Value: 200}, SymLight, true},
 	}
 
 	for _, tt := range tests {
@@ -44,12 +42,12 @@ func TestConvertFontStyle(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    CSSValue
-		expected kfx.KFXSymbol
+		expected KFXSymbol
 		ok       bool
 	}{
-		{"italic", CSSValue{Keyword: "italic"}, kfx.SymItalic, true},
-		{"oblique", CSSValue{Keyword: "oblique"}, kfx.SymItalic, true},
-		{"normal", CSSValue{Keyword: "normal"}, kfx.SymNormal, true},
+		{"italic", CSSValue{Keyword: "italic"}, SymItalic, true},
+		{"oblique", CSSValue{Keyword: "oblique"}, SymItalic, true},
+		{"normal", CSSValue{Keyword: "normal"}, SymNormal, true},
 		{"unknown", CSSValue{Keyword: "unknown"}, 0, false},
 	}
 
@@ -70,15 +68,15 @@ func TestConvertTextAlign(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    CSSValue
-		expected kfx.KFXSymbol
+		expected KFXSymbol
 		ok       bool
 	}{
-		{"left", CSSValue{Keyword: "left"}, kfx.SymStart, true},
-		{"start", CSSValue{Keyword: "start"}, kfx.SymStart, true},
-		{"right", CSSValue{Keyword: "right"}, kfx.SymEnd, true},
-		{"end", CSSValue{Keyword: "end"}, kfx.SymEnd, true},
-		{"center", CSSValue{Keyword: "center"}, kfx.SymCenter, true},
-		{"justify", CSSValue{Keyword: "justify"}, kfx.SymJustify, true},
+		{"left", CSSValue{Keyword: "left"}, SymStart, true},
+		{"start", CSSValue{Keyword: "start"}, SymStart, true},
+		{"right", CSSValue{Keyword: "right"}, SymEnd, true},
+		{"end", CSSValue{Keyword: "end"}, SymEnd, true},
+		{"center", CSSValue{Keyword: "center"}, SymCenter, true},
+		{"justify", CSSValue{Keyword: "justify"}, SymJustify, true},
 	}
 
 	for _, tt := range tests {
@@ -184,15 +182,15 @@ func TestCSSValueToKFX(t *testing.T) {
 	tests := []struct {
 		name         string
 		input        CSSValue
-		expectedUnit kfx.KFXSymbol
+		expectedUnit KFXSymbol
 		shouldError  bool
 	}{
-		{"em unit", CSSValue{Value: 1.5, Unit: "em"}, kfx.SymUnitEm, false},
-		{"px unit", CSSValue{Value: 16, Unit: "px"}, kfx.SymUnitPx, false},
-		{"pt unit", CSSValue{Value: 12, Unit: "pt"}, kfx.SymUnitPt, false},
-		{"percent", CSSValue{Value: 150, Unit: "%"}, kfx.SymUnitRatio, false},
-		{"unitless", CSSValue{Value: 1.2, Unit: ""}, kfx.SymUnitRatio, false},
-		{"cm unit", CSSValue{Value: 2.5, Unit: "cm"}, kfx.SymUnitCm, false},
+		{"em unit", CSSValue{Value: 1.5, Unit: "em"}, SymUnitEm, false},
+		{"px unit", CSSValue{Value: 16, Unit: "px"}, SymUnitPx, false},
+		{"pt unit", CSSValue{Value: 12, Unit: "pt"}, SymUnitPt, false},
+		{"percent", CSSValue{Value: 150, Unit: "%"}, SymUnitRatio, false},
+		{"unitless", CSSValue{Value: 1.2, Unit: ""}, SymUnitRatio, false},
+		{"cm unit", CSSValue{Value: 2.5, Unit: "cm"}, SymUnitCm, false},
 		{"unknown unit", CSSValue{Value: 1, Unit: "vw"}, 0, true},
 	}
 
@@ -222,7 +220,7 @@ func TestPercentToRatio(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if unit != kfx.SymUnitRatio {
+	if unit != SymUnitRatio {
 		t.Errorf("expected ratio unit, got %d", unit)
 	}
 	if value != 1.5 {
@@ -237,7 +235,7 @@ func TestConverterConvertRule(t *testing.T) {
 	tests := []struct {
 		name          string
 		rule          CSSRule
-		expectedProps map[kfx.KFXSymbol]any
+		expectedProps map[KFXSymbol]any
 		hasWarnings   bool
 	}{
 		{
@@ -246,7 +244,7 @@ func TestConverterConvertRule(t *testing.T) {
 				Selector:   Selector{Raw: ".strong", Class: "strong"},
 				Properties: map[string]CSSValue{"font-weight": {Keyword: "bold"}},
 			},
-			expectedProps: map[kfx.KFXSymbol]any{kfx.SymFontWeight: kfx.SymBold},
+			expectedProps: map[KFXSymbol]any{SymFontWeight: SymBold},
 			hasWarnings:   false,
 		},
 		{
@@ -255,7 +253,7 @@ func TestConverterConvertRule(t *testing.T) {
 				Selector:   Selector{Raw: ".emphasis", Class: "emphasis"},
 				Properties: map[string]CSSValue{"font-style": {Keyword: "italic"}},
 			},
-			expectedProps: map[kfx.KFXSymbol]any{kfx.SymFontStyle: kfx.SymItalic},
+			expectedProps: map[KFXSymbol]any{SymFontStyle: SymItalic},
 			hasWarnings:   false,
 		},
 		{
@@ -264,7 +262,7 @@ func TestConverterConvertRule(t *testing.T) {
 				Selector:   Selector{Raw: ".centered", Class: "centered"},
 				Properties: map[string]CSSValue{"text-align": {Keyword: "center"}},
 			},
-			expectedProps: map[kfx.KFXSymbol]any{kfx.SymTextAlignment: kfx.SymCenter},
+			expectedProps: map[KFXSymbol]any{SymTextAlignment: SymCenter},
 			hasWarnings:   false,
 		},
 		{
@@ -273,11 +271,11 @@ func TestConverterConvertRule(t *testing.T) {
 				Selector:   Selector{Raw: ".box", Class: "box"},
 				Properties: map[string]CSSValue{"margin": {Raw: "1em 2em 3em 4em"}},
 			},
-			expectedProps: map[kfx.KFXSymbol]any{
-				kfx.SymMarginTop:    kfx.StructValue{},
-				kfx.SymMarginRight:  kfx.StructValue{},
-				kfx.SymMarginBottom: kfx.StructValue{},
-				kfx.SymMarginLeft:   kfx.StructValue{},
+			expectedProps: map[KFXSymbol]any{
+				SymMarginTop:    StructValue{},
+				SymMarginRight:  StructValue{},
+				SymMarginBottom: StructValue{},
+				SymMarginLeft:   StructValue{},
 			},
 			hasWarnings: false,
 		},
@@ -382,7 +380,7 @@ func TestShorthandExpansion(t *testing.T) {
 
 			// Check that all margin properties are set
 			if tt.expectAll {
-				for _, sym := range []kfx.KFXSymbol{kfx.SymMarginTop, kfx.SymMarginRight, kfx.SymMarginBottom, kfx.SymMarginLeft} {
+				for _, sym := range []KFXSymbol{SymMarginTop, SymMarginRight, SymMarginBottom, SymMarginLeft} {
 					if _, ok := result.Style.Properties[sym]; !ok {
 						t.Errorf("missing margin property %d", sym)
 					}
@@ -422,10 +420,10 @@ func TestMergeRulesWithSameSelector(t *testing.T) {
 		}
 
 		// Should have both properties
-		if _, ok := style.Properties[kfx.SymFontWeight]; !ok {
+		if _, ok := style.Properties[SymFontWeight]; !ok {
 			t.Error("missing font-weight property")
 		}
-		if _, ok := style.Properties[kfx.SymFontStyle]; !ok {
+		if _, ok := style.Properties[SymFontStyle]; !ok {
 			t.Error("missing font-style property")
 		}
 	}

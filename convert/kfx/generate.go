@@ -85,8 +85,8 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 
 // buildFragments creates KFX fragments from content.
 func buildFragments(container *Container, c *content.Content, cfg *config.DocumentConfig, log *zap.Logger) error {
-	// Create style registry with default styles
-	styles := DefaultStyleRegistry()
+	// Create style registry from CSS stylesheets
+	styles := buildStyleRegistry(c.Book.Stylesheets, log)
 
 	usedIDs := collectUsedImageIDs(c.Book)
 	usedImages := make(fb2.BookImages, len(usedIDs))
@@ -362,4 +362,46 @@ func collectLinkTargets(fragments *FragmentList) map[string]bool {
 		}
 	}
 	return targets
+}
+
+// buildStyleRegistry creates a style registry from CSS stylesheets.
+// It parses the CSS, converts rules to KFX style definitions, and registers them.
+// Falls back to default styles if no stylesheets are provided.
+func buildStyleRegistry(stylesheets []fb2.Stylesheet, log *zap.Logger) *StyleRegistry {
+	// If no stylesheets, return defaults
+	if len(stylesheets) == 0 {
+		log.Debug("No stylesheets provided, using defaults only")
+		return DefaultStyleRegistry()
+	}
+
+	// Combine all stylesheet data
+	var combinedCSS []byte
+	for _, sheet := range stylesheets {
+		if sheet.Type != "" && sheet.Type != "text/css" {
+			continue
+		}
+		if sheet.Data != "" {
+			combinedCSS = append(combinedCSS, []byte(sheet.Data)...)
+			combinedCSS = append(combinedCSS, '\n')
+		}
+	}
+
+	if len(combinedCSS) == 0 {
+		log.Debug("No CSS data in stylesheets, using defaults only")
+		return DefaultStyleRegistry()
+	}
+
+	// Create registry from CSS
+	registry, warnings := NewStyleRegistryFromCSS(combinedCSS, log)
+
+	// Log warnings at debug level
+	for _, w := range warnings {
+		log.Debug("CSS conversion warning", zap.String("warning", w))
+	}
+
+	log.Info("CSS stylesheets processed",
+		zap.Int("stylesheets", len(stylesheets)),
+		zap.Int("warnings", len(warnings)))
+
+	return registry
 }

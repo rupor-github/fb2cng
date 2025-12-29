@@ -1,26 +1,24 @@
-package css
+package kfx
 
 import (
 	"strconv"
 	"strings"
-
-	"fbc/convert/kfx"
 )
 
 // ConvertFontWeight converts CSS font-weight values to KFX symbols.
 // CSS: bold, bolder, lighter, normal, 100-900
 // KFX: $361 (bold), $362 (semibold), $363 (light), $364 (medium), $350 (normal)
-func ConvertFontWeight(css CSSValue) (kfx.KFXSymbol, bool) {
+func ConvertFontWeight(css CSSValue) (KFXSymbol, bool) {
 	if css.Keyword != "" {
 		switch strings.ToLower(css.Keyword) {
 		case "bold", "bolder":
-			return kfx.SymBold, true // $361
+			return SymBold, true // $361
 		case "lighter":
-			return kfx.SymLight, true // $363
+			return SymLight, true // $363
 		case "normal":
-			return kfx.SymNormal, true // $350
+			return SymNormal, true // $350
 		case "medium":
-			return kfx.SymMedium, true // $364
+			return SymMedium, true // $364
 		}
 	}
 
@@ -29,15 +27,15 @@ func ConvertFontWeight(css CSSValue) (kfx.KFXSymbol, bool) {
 		weight := int(css.Value)
 		switch {
 		case weight >= 700:
-			return kfx.SymBold, true // $361
+			return SymBold, true // $361
 		case weight >= 600:
-			return kfx.SymSemibold, true // $362
+			return SymSemibold, true // $362
 		case weight >= 500:
-			return kfx.SymMedium, true // $364
+			return SymMedium, true // $364
 		case weight <= 300:
-			return kfx.SymLight, true // $363
+			return SymLight, true // $363
 		default:
-			return kfx.SymNormal, true // $350
+			return SymNormal, true // $350
 		}
 	}
 
@@ -47,12 +45,12 @@ func ConvertFontWeight(css CSSValue) (kfx.KFXSymbol, bool) {
 // ConvertFontStyle converts CSS font-style values to KFX symbols.
 // CSS: italic, oblique, normal
 // KFX: $382 (italic), $350 (normal)
-func ConvertFontStyle(css CSSValue) (kfx.KFXSymbol, bool) {
+func ConvertFontStyle(css CSSValue) (KFXSymbol, bool) {
 	switch strings.ToLower(css.Keyword) {
 	case "italic", "oblique":
-		return kfx.SymItalic, true // $382
+		return SymItalic, true // $382
 	case "normal":
-		return kfx.SymNormal, true // $350
+		return SymNormal, true // $350
 	}
 	return 0, false
 }
@@ -60,16 +58,16 @@ func ConvertFontStyle(css CSSValue) (kfx.KFXSymbol, bool) {
 // ConvertTextAlign converts CSS text-align values to KFX symbols.
 // CSS: left, right, center, justify, start, end
 // KFX: $680 (start), $681 (end), $320 (center), $321 (justify)
-func ConvertTextAlign(css CSSValue) (kfx.KFXSymbol, bool) {
+func ConvertTextAlign(css CSSValue) (KFXSymbol, bool) {
 	switch strings.ToLower(css.Keyword) {
 	case "left", "start":
-		return kfx.SymStart, true // $680
+		return SymStart, true // $680
 	case "right", "end":
-		return kfx.SymEnd, true // $681
+		return SymEnd, true // $681
 	case "center":
-		return kfx.SymCenter, true // $320
+		return SymCenter, true // $320
 	case "justify":
-		return kfx.SymJustify, true // $321
+		return SymJustify, true // $321
 	}
 	return 0, false
 }
@@ -105,16 +103,16 @@ func ConvertTextDecoration(css CSSValue) TextDecorationResult {
 // ConvertVerticalAlign converts CSS vertical-align to KFX baseline_shift.
 // CSS: super, sub, baseline, middle, top, bottom, or length
 // KFX: baseline_shift with positive (super) or negative (sub) value
-func ConvertVerticalAlign(css CSSValue) (kfx.StructValue, bool) {
+func ConvertVerticalAlign(css CSSValue) (StructValue, bool) {
 	switch strings.ToLower(css.Keyword) {
 	case "super":
 		// Superscript: positive shift
-		return kfx.DimensionValue(0.5, kfx.SymUnitEm), true
+		return DimensionValue(0.5, SymUnitEm), true
 	case "sub":
 		// Subscript: negative shift
-		return kfx.DimensionValue(-0.3, kfx.SymUnitEm), true
+		return DimensionValue(-0.3, SymUnitEm), true
 	case "baseline":
-		return kfx.DimensionValue(0, kfx.SymUnitEm), true
+		return DimensionValue(0, SymUnitEm), true
 	}
 
 	// Handle percentage or length values
@@ -132,12 +130,12 @@ func ConvertVerticalAlign(css CSSValue) (kfx.StructValue, bool) {
 // Returns the KFX render mode symbol, or handles visibility.
 // CSS: block, inline, none
 // KFX: $602 (block), visibility handling for none
-func ConvertDisplay(css CSSValue) (symbol kfx.KFXSymbol, isVisible bool, ok bool) {
+func ConvertDisplay(css CSSValue) (symbol KFXSymbol, isVisible bool, ok bool) {
 	switch strings.ToLower(css.Keyword) {
 	case "block":
-		return kfx.SymBlock, true, true // $602
+		return SymBlock, true, true // $602
 	case "inline":
-		return kfx.SymInline, true, true // $283
+		return SymInline, true, true // $283
 	case "none":
 		// display:none means invisible
 		return 0, false, true
@@ -148,14 +146,14 @@ func ConvertDisplay(css CSSValue) (symbol kfx.KFXSymbol, isVisible bool, ok bool
 // ConvertFloat converts CSS float values to KFX symbols.
 // CSS: left, right, none
 // KFX: $680 (start/left), $681 (end/right), $349 (none)
-func ConvertFloat(css CSSValue) (kfx.KFXSymbol, bool) {
+func ConvertFloat(css CSSValue) (KFXSymbol, bool) {
 	switch strings.ToLower(css.Keyword) {
 	case "left":
-		return kfx.SymStart, true // $680
+		return SymStart, true // $680
 	case "right":
-		return kfx.SymEnd, true // $681
+		return SymEnd, true // $681
 	case "none":
-		return kfx.SymNone, true // $349
+		return SymNone, true // $349
 	}
 	return 0, false
 }
@@ -163,14 +161,14 @@ func ConvertFloat(css CSSValue) (kfx.KFXSymbol, bool) {
 // ConvertPageBreak converts CSS page-break-* values.
 // CSS: always, avoid, auto
 // KFX: $352 (always), $353 (avoid)
-func ConvertPageBreak(css CSSValue) (kfx.KFXSymbol, bool) {
+func ConvertPageBreak(css CSSValue) (KFXSymbol, bool) {
 	switch strings.ToLower(css.Keyword) {
 	case "always":
-		return kfx.SymAlways, true // $352
+		return SymAlways, true // $352
 	case "avoid":
-		return kfx.SymAvoid, true // $353
+		return SymAvoid, true // $353
 	case "auto":
-		return kfx.SymAuto, true // $383
+		return SymAuto, true // $383
 	}
 	return 0, false
 }
@@ -260,10 +258,10 @@ func ParseColor(css CSSValue) (r, g, b int, ok bool) {
 
 // MakeColorValue creates a KFX color struct from RGB values.
 // KFX color format uses fill_color with RGB components.
-func MakeColorValue(r, g, b int) kfx.StructValue {
+func MakeColorValue(r, g, b int) StructValue {
 	// KFX uses 0.0-1.0 range for color components
-	return kfx.NewStruct().
-		SetFloat(kfx.SymValue, float64(r)/255.0).
+	return NewStruct().
+		SetFloat(SymValue, float64(r)/255.0).
 		Set(85, float64(g)/255.0). // $85 = green component
 		Set(86, float64(b)/255.0)  // $86 = blue component
 }

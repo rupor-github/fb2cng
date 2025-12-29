@@ -1,4 +1,4 @@
-package css
+package kfx
 
 import (
 	"os"
@@ -8,7 +8,7 @@ import (
 )
 
 func TestParser_ParseDefaultCSS(t *testing.T) {
-	defaultCSS, err := os.ReadFile("../../default.css")
+	defaultCSS, err := os.ReadFile("../default.css")
 	if err != nil {
 		t.Fatalf("failed to read default.css: %v", err)
 	}

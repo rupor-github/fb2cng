@@ -1,5 +1,7 @@
 package kfx
 
+import "go.uber.org/zap"
+
 // Style fragment ($157) generation for KFX.
 // Styles define formatting properties applied to content elements.
 // Each style is referenced by name (symbol) in content entries.
@@ -202,6 +204,44 @@ func (sr *StyleRegistry) BuildFragments() []*Fragment {
 		}
 	}
 	return fragments
+}
+
+// RegisterFromCSS adds styles from a parsed CSS stylesheet.
+// Later rules override earlier ones for the same style name.
+func (sr *StyleRegistry) RegisterFromCSS(styles []StyleDef) {
+	for _, def := range styles {
+		sr.Register(def)
+	}
+}
+
+// NewStyleRegistryFromCSS creates a style registry from CSS stylesheet data.
+// It starts with default styles, then overlays styles from the CSS.
+// Returns the registry and any warnings from CSS parsing/conversion.
+func NewStyleRegistryFromCSS(cssData []byte, log *zap.Logger) (*StyleRegistry, []string) {
+	// Start with defaults
+	sr := DefaultStyleRegistry()
+
+	if len(cssData) == 0 {
+		return sr, nil
+	}
+
+	// Parse CSS
+	parser := NewParser(log)
+	sheet := parser.Parse(cssData)
+
+	// Convert to KFX styles
+	converter := NewConverter(log)
+	styles, warnings := converter.ConvertStylesheet(sheet)
+
+	// Register CSS styles (overriding defaults where applicable)
+	sr.RegisterFromCSS(styles)
+
+	log.Debug("CSS styles loaded",
+		zap.Int("rules", len(sheet.Rules)),
+		zap.Int("styles", len(styles)),
+		zap.Int("warnings", len(warnings)))
+
+	return sr, warnings
 }
 
 // DefaultStyleRegistry returns a registry with default FB2-to-KFX styles.

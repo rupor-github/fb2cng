@@ -1,4 +1,4 @@
-package css
+package kfx
 
 // CSSValue represents a parsed CSS property value.
 type CSSValue struct {
