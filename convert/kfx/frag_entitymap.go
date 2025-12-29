@@ -65,9 +65,9 @@ func BuildContainerEntityMap(
 
 // EntityDependency describes dependencies of a fragment on other fragments.
 type EntityDependency struct {
-	FragmentID    int   // The fragment that has dependencies
-	MandatoryDeps []int // Required dependencies (e.g., section -> resources)
-	OptionalDeps  []int // Optional dependencies (e.g., resource -> raw media)
+	FragmentID    KFXSymbol   // The fragment that has dependencies
+	MandatoryDeps []KFXSymbol // Required dependencies (e.g., section -> resources)
+	OptionalDeps  []KFXSymbol // Optional dependencies (e.g., resource -> raw media)
 }
 
 // ComputeEntityDependencies analyzes fragments and computes their dependencies.
@@ -76,7 +76,7 @@ func ComputeEntityDependencies(fragments *FragmentList) []EntityDependency {
 	var deps []EntityDependency
 
 	// Build resource location -> raw media mapping
-	rawMediaByLocation := make(map[string]int)
+	rawMediaByLocation := make(map[string]KFXSymbol)
 	for _, frag := range fragments.GetByType(SymRawMedia) {
 		// Raw media fragments use location ($165) as their key
 		if v, ok := frag.Value.(StructValue); ok {
@@ -101,7 +101,7 @@ func ComputeEntityDependencies(fragments *FragmentList) []EntityDependency {
 		if rawID, exists := rawMediaByLocation[loc]; exists {
 			deps = append(deps, EntityDependency{
 				FragmentID:   frag.FID,
-				OptionalDeps: []int{rawID},
+				OptionalDeps: []KFXSymbol{rawID},
 			})
 		}
 	}

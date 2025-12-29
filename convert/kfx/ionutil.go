@@ -13,7 +13,7 @@ import (
 var ionBVM = []byte{0xE0, 0x01, 0x00, 0xEA}
 
 // sharedSymbolTable is the YJ_symbols shared symbol table for KFX.
-var sharedSymbolTable = createSharedSymbolTable(LargestKnownSymbol)
+var sharedSymbolTable = createSharedSymbolTable(int(LargestKnownSymbol))
 
 // ionProlog is the Ion binary prolog with YJ_symbols import.
 var ionProlog = createIonProlog()
@@ -257,19 +257,19 @@ func (w *IonWriter) WriteSymbolID(id int) error {
 
 // WriteSymbolBySID writes a symbol value with explicit symbol ID.
 // This is used for local symbols that have a fixed ID in the document symbol table.
-func (w *IonWriter) WriteSymbolBySID(name string, sid int) error {
+func (w *IonWriter) WriteSymbolBySID(name string, sid KFXSymbol) error {
 	tok := ion.SymbolToken{Text: &name, LocalSID: int64(sid)}
 	return w.writer.WriteSymbol(tok)
 }
 
 // WriteSymbolField writes a field name by ID (for use in structs).
-func (w *IonWriter) WriteSymbolField(id int) error {
+func (w *IonWriter) WriteSymbolField(id KFXSymbol) error {
 	tok := ion.NewSymbolTokenFromString(fmt.Sprintf("$%d", id))
 	return w.writer.FieldName(tok)
 }
 
 // WriteAnnotation adds an annotation by symbol ID.
-func (w *IonWriter) WriteAnnotation(id int) error {
+func (w *IonWriter) WriteAnnotation(id KFXSymbol) error {
 	tok := ion.NewSymbolTokenFromString(fmt.Sprintf("$%d", id))
 	return w.writer.Annotation(tok)
 }
@@ -325,7 +325,7 @@ func (w *IonWriter) EndList() error {
 }
 
 // WriteIntField writes a struct field with an integer value.
-func (w *IonWriter) WriteIntField(fieldID int, value int64) error {
+func (w *IonWriter) WriteIntField(fieldID KFXSymbol, value int64) error {
 	if err := w.WriteSymbolField(fieldID); err != nil {
 		return err
 	}
@@ -333,7 +333,7 @@ func (w *IonWriter) WriteIntField(fieldID int, value int64) error {
 }
 
 // WriteStringField writes a struct field with a string value.
-func (w *IonWriter) WriteStringField(fieldID int, value string) error {
+func (w *IonWriter) WriteStringField(fieldID KFXSymbol, value string) error {
 	if err := w.WriteSymbolField(fieldID); err != nil {
 		return err
 	}
@@ -341,15 +341,15 @@ func (w *IonWriter) WriteStringField(fieldID int, value string) error {
 }
 
 // WriteSymbolFieldValue writes a struct field with a symbol value.
-func (w *IonWriter) WriteSymbolFieldValue(fieldID int, valueID int) error {
+func (w *IonWriter) WriteSymbolFieldValue(fieldID KFXSymbol, valueID KFXSymbol) error {
 	if err := w.WriteSymbolField(fieldID); err != nil {
 		return err
 	}
-	return w.WriteSymbolID(valueID)
+	return w.WriteSymbolID(int(valueID))
 }
 
 // WriteBlobField writes a struct field with a blob value.
-func (w *IonWriter) WriteBlobField(fieldID int, value []byte) error {
+func (w *IonWriter) WriteBlobField(fieldID KFXSymbol, value []byte) error {
 	if err := w.WriteSymbolField(fieldID); err != nil {
 		return err
 	}

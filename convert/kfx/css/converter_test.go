@@ -12,7 +12,7 @@ func TestConvertFontWeight(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    CSSValue
-		expected int
+		expected kfx.KFXSymbol
 		ok       bool
 	}{
 		{"bold keyword", CSSValue{Keyword: "bold"}, kfx.SymBold, true},
@@ -44,7 +44,7 @@ func TestConvertFontStyle(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    CSSValue
-		expected int
+		expected kfx.KFXSymbol
 		ok       bool
 	}{
 		{"italic", CSSValue{Keyword: "italic"}, kfx.SymItalic, true},
@@ -70,7 +70,7 @@ func TestConvertTextAlign(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    CSSValue
-		expected int
+		expected kfx.KFXSymbol
 		ok       bool
 	}{
 		{"left", CSSValue{Keyword: "left"}, kfx.SymStart, true},
@@ -184,7 +184,7 @@ func TestCSSValueToKFX(t *testing.T) {
 	tests := []struct {
 		name         string
 		input        CSSValue
-		expectedUnit int
+		expectedUnit kfx.KFXSymbol
 		shouldError  bool
 	}{
 		{"em unit", CSSValue{Value: 1.5, Unit: "em"}, kfx.SymUnitEm, false},
@@ -237,7 +237,7 @@ func TestConverterConvertRule(t *testing.T) {
 	tests := []struct {
 		name          string
 		rule          CSSRule
-		expectedProps map[int]any
+		expectedProps map[kfx.KFXSymbol]any
 		hasWarnings   bool
 	}{
 		{
@@ -246,7 +246,7 @@ func TestConverterConvertRule(t *testing.T) {
 				Selector:   Selector{Raw: ".strong", Class: "strong"},
 				Properties: map[string]CSSValue{"font-weight": {Keyword: "bold"}},
 			},
-			expectedProps: map[int]any{kfx.SymFontWeight: kfx.SymBold},
+			expectedProps: map[kfx.KFXSymbol]any{kfx.SymFontWeight: kfx.SymBold},
 			hasWarnings:   false,
 		},
 		{
@@ -255,7 +255,7 @@ func TestConverterConvertRule(t *testing.T) {
 				Selector:   Selector{Raw: ".emphasis", Class: "emphasis"},
 				Properties: map[string]CSSValue{"font-style": {Keyword: "italic"}},
 			},
-			expectedProps: map[int]any{kfx.SymFontStyle: kfx.SymItalic},
+			expectedProps: map[kfx.KFXSymbol]any{kfx.SymFontStyle: kfx.SymItalic},
 			hasWarnings:   false,
 		},
 		{
@@ -264,7 +264,7 @@ func TestConverterConvertRule(t *testing.T) {
 				Selector:   Selector{Raw: ".centered", Class: "centered"},
 				Properties: map[string]CSSValue{"text-align": {Keyword: "center"}},
 			},
-			expectedProps: map[int]any{kfx.SymTextAlignment: kfx.SymCenter},
+			expectedProps: map[kfx.KFXSymbol]any{kfx.SymTextAlignment: kfx.SymCenter},
 			hasWarnings:   false,
 		},
 		{
@@ -273,7 +273,7 @@ func TestConverterConvertRule(t *testing.T) {
 				Selector:   Selector{Raw: ".box", Class: "box"},
 				Properties: map[string]CSSValue{"margin": {Raw: "1em 2em 3em 4em"}},
 			},
-			expectedProps: map[int]any{
+			expectedProps: map[kfx.KFXSymbol]any{
 				kfx.SymMarginTop:    kfx.StructValue{},
 				kfx.SymMarginRight:  kfx.StructValue{},
 				kfx.SymMarginBottom: kfx.StructValue{},
@@ -382,7 +382,7 @@ func TestShorthandExpansion(t *testing.T) {
 
 			// Check that all margin properties are set
 			if tt.expectAll {
-				for _, sym := range []int{kfx.SymMarginTop, kfx.SymMarginRight, kfx.SymMarginBottom, kfx.SymMarginLeft} {
+				for _, sym := range []kfx.KFXSymbol{kfx.SymMarginTop, kfx.SymMarginRight, kfx.SymMarginBottom, kfx.SymMarginLeft} {
 					if _, ok := result.Style.Properties[sym]; !ok {
 						t.Errorf("missing margin property %d", sym)
 					}

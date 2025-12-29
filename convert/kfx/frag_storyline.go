@@ -171,7 +171,7 @@ func NewPageTemplateEntry(eid int, storylineName string, width, height int) Stru
 // ContentRef represents a reference to content within a storyline.
 type ContentRef struct {
 	EID           int             // Element ID ($155)
-	Type          int             // Content type symbol ($269=text, $270=container, $271=image, etc.)
+	Type          KFXSymbol       // Content type symbol ($269=text, $270=container, $271=image, etc.)
 	ContentName   string          // Name of the content fragment
 	ContentOffset int             // Offset within content fragment ($403)
 	ResourceName  string          // For images: external_resource fragment id/name ($175)
@@ -267,7 +267,7 @@ func NewStorylineBuilder(storyName, sectionName string, startEID int) *Storyline
 }
 
 // AddContent adds a content reference to the storyline.
-func (sb *StorylineBuilder) AddContent(contentType int, contentName string, contentOffset int, style string) int {
+func (sb *StorylineBuilder) AddContent(contentType KFXSymbol, contentName string, contentOffset int, style string) int {
 	eid := sb.eidCounter
 	sb.eidCounter++
 
@@ -283,7 +283,7 @@ func (sb *StorylineBuilder) AddContent(contentType int, contentName string, cont
 }
 
 // AddContentAndEvents adds content with style events.
-func (sb *StorylineBuilder) AddContentAndEvents(contentType int, contentName string, contentOffset int, style string, events []StyleEventRef) int {
+func (sb *StorylineBuilder) AddContentAndEvents(contentType KFXSymbol, contentName string, contentOffset int, style string, events []StyleEventRef) int {
 	eid := sb.eidCounter
 	sb.eidCounter++
 

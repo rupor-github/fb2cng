@@ -8,7 +8,7 @@ import (
 
 // CSSValueToKFX converts a CSS value with units to KFX dimension representation.
 // Returns the numeric value and the KFX unit symbol.
-func CSSValueToKFX(css CSSValue) (value float64, unit int, err error) {
+func CSSValueToKFX(css CSSValue) (value float64, unit kfx.KFXSymbol, err error) {
 	switch css.Unit {
 	case "em":
 		return css.Value, kfx.SymUnitEm, nil // $308
@@ -42,30 +42,4 @@ func MakeDimensionValue(css CSSValue) (kfx.StructValue, error) {
 		return nil, err
 	}
 	return kfx.DimensionValue(value, unit), nil
-}
-
-// UnitSymbolName returns the name of a unit symbol for debugging.
-func UnitSymbolName(unit int) string {
-	switch unit {
-	case kfx.SymUnitEm:
-		return "em"
-	case kfx.SymUnitEx:
-		return "ex"
-	case kfx.SymUnitRatio:
-		return "ratio"
-	case kfx.SymUnitPercent:
-		return "percent"
-	case kfx.SymUnitPx:
-		return "px"
-	case kfx.SymUnitPt:
-		return "pt"
-	case kfx.SymUnitCm:
-		return "cm"
-	case kfx.SymUnitMm:
-		return "mm"
-	case kfx.SymUnitIn:
-		return "in"
-	default:
-		return fmt.Sprintf("$%d", unit)
-	}
 }

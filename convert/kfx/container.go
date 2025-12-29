@@ -232,7 +232,7 @@ func ReadContainer(data []byte) (*Container, error) {
 			}
 
 			entityData := data[entityStart:entityEnd]
-			frag, err := c.parseEntity(entityData, lstProlog, int(entry.NumType), int(entry.NumID))
+			frag, err := c.parseEntity(entityData, lstProlog, KFXSymbol(entry.NumType), KFXSymbol(entry.NumID))
 			if err != nil {
 				return nil, fmt.Errorf("parse entity type=%d id=%d: %w", entry.NumType, entry.NumID, err)
 			}
@@ -258,7 +258,7 @@ func ReadContainer(data []byte) (*Container, error) {
 }
 
 // parseEntity parses a single ENTY record.
-func (c *Container) parseEntity(data, lstProlog []byte, typeNum, idNum int) (*Fragment, error) {
+func (c *Container) parseEntity(data, lstProlog []byte, ftype, fid KFXSymbol) (*Fragment, error) {
 	if len(data) < MinEntityLen {
 		return nil, fmt.Errorf("entity too small: %d bytes", len(data))
 	}
@@ -284,12 +284,8 @@ func (c *Container) parseEntity(data, lstProlog []byte, typeNum, idNum int) (*Fr
 	// Payload is after entity header
 	payload := data[header.Size:]
 
-	// Determine fragment type and id
-	ftype := typeNum
-	fid := idNum
-
-	// If idNum is $348 (Null), this is a root fragment
-	if idNum == SymNull {
+	// If fid is $348 (Null), this is a root fragment
+	if fid == SymNull {
 		fid = ftype
 	}
 
@@ -374,7 +370,7 @@ func (c *Container) parseKfxgenMetadata(data []byte) {
 // classifyContainerFormat determines the container format type.
 func (c *Container) classifyContainerFormat() {
 	// Check for main container types
-	mainTypes := []int{SymStoryline, SymSection, SymDocumentData} // $259, $260, $538
+	mainTypes := []KFXSymbol{SymStoryline, SymSection, SymDocumentData} // $259, $260, $538
 	for _, t := range mainTypes {
 		if len(c.Fragments.GetByType(t)) > 0 {
 			c.ContainerFormat = "KFX main"
@@ -383,7 +379,7 @@ func (c *Container) classifyContainerFormat() {
 	}
 
 	// Check for metadata container types
-	metaTypes := []int{SymMetadata, SymContEntityMap, SymBookMetadata} // $258, $419, $490
+	metaTypes := []KFXSymbol{SymMetadata, SymContEntityMap, SymBookMetadata} // $258, $419, $490
 	for _, t := range metaTypes {
 		if len(c.Fragments.GetByType(t)) > 0 {
 			c.ContainerFormat = "KFX metadata"
@@ -465,11 +461,11 @@ func (c *Container) collectSymbolsFromValue(v any, seen map[string]bool) {
 // GetLocalSymbolID returns the symbol ID for a local symbol name.
 // Local symbols are numbered starting after the imported YJ_symbols max_id.
 // YJ_symbols max_id = 851, so local symbols start at 852.
-func (c *Container) GetLocalSymbolID(name string) int {
+func (c *Container) GetLocalSymbolID(name string) KFXSymbol {
 	for i, s := range c.LocalSymbols {
 		if s == name {
 			// YJ_symbols max_id (851) + 1 + local index
-			return LargestKnownSymbol + 1 + i
+			return LargestKnownSymbol + 1 + KFXSymbol(i)
 		}
 	}
 	return -1 // Not found
@@ -505,7 +501,7 @@ func (c *Container) WriteContainer() ([]byte, error) {
 		var entry [EntityDirEntrySize]byte
 
 		// Resolve fragment ID
-		var idNum int
+		var idNum KFXSymbol
 		if frag.IsRoot() {
 			idNum = SymNull // $348
 		} else if frag.FIDName != "" {
@@ -716,6 +712,9 @@ func (c *Container) writeValue(w *IonWriter, value any) error {
 		return w.WriteString(v)
 	case []byte:
 		return w.WriteBlob(v)
+	case KFXSymbol:
+		// KFXSymbol stored as a value (e.g., font-weight: $bold)
+		return w.WriteSymbolID(int(v))
 	case SymbolValue:
 		return w.WriteSymbolID(int(v))
 	case SymbolByNameValue:
@@ -728,7 +727,7 @@ func (c *Container) writeValue(w *IonWriter, value any) error {
 		return w.WriteSymbolBySID(name, sid)
 	case StructValue:
 		return c.writeStruct(w, v)
-	case map[int]any:
+	case map[KFXSymbol]any:
 		return c.writeStruct(w, v)
 	case map[string]any:
 		return c.writeStructString(w, v)
@@ -741,12 +740,12 @@ func (c *Container) writeValue(w *IonWriter, value any) error {
 	}
 }
 
-func (c *Container) writeStruct(w *IonWriter, m map[int]any) error {
+func (c *Container) writeStruct(w *IonWriter, m map[KFXSymbol]any) error {
 	if err := w.BeginStruct(); err != nil {
 		return err
 	}
 	// Sort keys for deterministic output
-	keys := make([]int, 0, len(m))
+	keys := make([]KFXSymbol, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
 	}

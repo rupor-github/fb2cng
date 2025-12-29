@@ -182,7 +182,7 @@ func CollectPositionItems(fragments *FragmentList, sectionNames sectionNameList)
 				continue
 			}
 
-			if int(typeSym) == SymImage {
+			if KFXSymbol(typeSym) == SymImage {
 				out = append(out, PositionItem{EID: eid, Length: 1})
 				continue
 			}

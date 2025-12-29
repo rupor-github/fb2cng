@@ -85,7 +85,7 @@ func (c *Container) String() string {
 				}
 
 				// Sort by resolved FID
-				return aFID - bFID
+				return int(aFID - bFID)
 			})
 
 			// Add type markers
@@ -101,7 +101,7 @@ func (c *Container) String() string {
 					tw.Line(3, "[root]")
 				} else {
 					// Determine the symbol ID and name for display
-					var fidID int
+					var fidID KFXSymbol
 					var fidName string
 
 					if f.FIDName != "" {
@@ -183,7 +183,7 @@ func (c *Container) String() string {
 		// Show local symbols range if present
 		if len(c.LocalSymbols) > 0 {
 			startID := LargestKnownSymbol + 1
-			endID := startID + len(c.LocalSymbols) - 1
+			endID := startID + KFXSymbol(len(c.LocalSymbols)) - 1
 			tw.Line(2, "Local: symbols $%d-$%d (%d document-specific symbols)",
 				startID, endID, len(c.LocalSymbols))
 		}
@@ -193,7 +193,7 @@ func (c *Container) String() string {
 		tw.Line(0, "")
 		tw.Line(1, "LocalSymbols: %d", len(c.LocalSymbols))
 		for i, sym := range c.LocalSymbols {
-			tw.Line(2, "$%d: %s", LargestKnownSymbol+1+i, sym)
+			tw.Line(2, "$%d: %s", LargestKnownSymbol+1+KFXSymbol(i), sym)
 		}
 	}
 
@@ -223,7 +223,7 @@ func (c *Container) getFormatReason() string {
 
 	// Check for main container types
 	mainTypes := []struct {
-		sym  int
+		sym  KFXSymbol
 		name string
 	}{
 		{SymStoryline, "has $storyline"},
@@ -238,7 +238,7 @@ func (c *Container) getFormatReason() string {
 
 	// Check for metadata container types
 	metaTypes := []struct {
-		sym  int
+		sym  KFXSymbol
 		name string
 	}{
 		{SymMetadata, "has $metadata"},
@@ -280,7 +280,7 @@ func (c *Container) getFragmentStats() (root, raw, singleton int) {
 }
 
 // getTypeMarkers returns marker string for a fragment type.
-func (c *Container) getTypeMarkers(ftype int) string {
+func (c *Container) getTypeMarkers(ftype KFXSymbol) string {
 	markers := []string{}
 
 	if ROOT_FRAGMENT_TYPES[ftype] {
@@ -309,9 +309,9 @@ func formatValue(tw *debug.TreeWriter, depth int, value any) {
 	case RawValue:
 		tw.Line(depth, "raw(%d bytes)", len(v))
 	case StructValue:
-		formatStructValueInt(tw, depth, map[int]any(v))
-	case map[int]any:
-		formatStructValueInt(tw, depth, v)
+		formatStructValueKFX(tw, depth, v)
+	case map[KFXSymbol]any:
+		formatStructValueKFX(tw, depth, v)
 	case map[string]any:
 		formatStructValueString(tw, depth, v)
 	case ListValue:
@@ -336,7 +336,7 @@ func formatSimpleValue(v any) string {
 	case string:
 		return fmt.Sprintf("%q", val)
 	case SymbolValue:
-		return FormatSymbol(int(val))
+		return FormatSymbol(KFXSymbol(val))
 	case SymbolByNameValue:
 		return fmt.Sprintf("sym:%q", string(val))
 	default:
@@ -344,14 +344,14 @@ func formatSimpleValue(v any) string {
 	}
 }
 
-func formatStructValueInt(tw *debug.TreeWriter, depth int, m map[int]any) {
+func formatStructValueKFX(tw *debug.TreeWriter, depth int, m map[KFXSymbol]any) {
 	if len(m) == 0 {
 		tw.Line(depth, "{}")
 		return
 	}
 
 	// Sort keys
-	keys := make([]int, 0, len(m))
+	keys := make([]KFXSymbol, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
 	}
@@ -524,7 +524,7 @@ func (c *Container) DumpFragments() string {
 			}
 
 			// Sort by resolved FID
-			return aFID - bFID
+			return int(aFID - bFID)
 		})
 
 		fmt.Fprintf(&sb, "### %s (%d fragments)\n\n", FormatSymbol(ftype), len(sortedFrags))
@@ -534,7 +534,7 @@ func (c *Container) DumpFragments() string {
 				sb.WriteString("  [root fragment]\n")
 			} else {
 				// Determine the symbol ID and name for display
-				var fidID int
+				var fidID KFXSymbol
 				var fidName string
 
 				if f.FIDName != "" {
@@ -610,13 +610,13 @@ func formatValueCompact(v any) string {
 		}
 		return fmt.Sprintf("<blob %d bytes>", len(b))
 	case SymbolValue:
-		return FormatSymbol(int(val))
+		return FormatSymbol(KFXSymbol(val))
 	case SymbolByNameValue:
 		return fmt.Sprintf("sym:%q", string(val))
 	case StructValue:
-		return formatStructCompactInt(map[int]any(val))
-	case map[int]any:
-		return formatStructCompactInt(val)
+		return formatStructCompactKFX(val)
+	case map[KFXSymbol]any:
+		return formatStructCompactKFX(val)
 	case map[string]any:
 		return formatStructCompactString(val)
 	case ListValue:
@@ -628,11 +628,11 @@ func formatValueCompact(v any) string {
 	}
 }
 
-func formatStructCompactInt(m map[int]any) string {
+func formatStructCompactKFX(m map[KFXSymbol]any) string {
 	if len(m) == 0 {
 		return "{}"
 	}
-	keys := make([]int, 0, len(m))
+	keys := make([]KFXSymbol, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
 	}

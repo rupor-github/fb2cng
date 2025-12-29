@@ -9,288 +9,288 @@ import (
 // KFXSymbol represents a symbol ID from the YJ_symbols shared symbol table.
 // These are property/type identifiers like $16 (font_size), $157 (style), etc.
 // Not to be confused with EID (element ID) which identifies content entries.
-type KFXSymbol = int
+type KFXSymbol int
 
 // LargestKnownSymbol is the highest symbol ID in YJ_symbols.
 // This should be updated when new symbols are discovered.
 // As of Kindle Previewer 3.101.0, the highest known symbol is 851.
-const LargestKnownSymbol = 851
+const LargestKnownSymbol KFXSymbol = 851
 
 // Symbol IDs from the YJ_symbols shared symbol table.
 // These correspond to the enum values from Kindle Previewer's EpubToKFXConverter.
 // See docs/symdict.md for the full mapping.
 const (
 	// Ion system symbols (1-9 reserved by Ion)
-	SymIonSymbolTable = 3 // $ion_symbol_table
+	SymIonSymbolTable KFXSymbol = 3 // $ion_symbol_table
 
 	// Style/formatting properties ($10-$155)
-	SymLanguage      = 10  // language
-	SymFontFamily    = 11  // font_family
-	SymFontStyle     = 12  // font_style
-	SymFontWeight    = 13  // font_weight
-	SymFontSize      = 16  // font_size
-	SymTextColor     = 19  // text_color
-	SymUnderline     = 23  // underline
-	SymStrikethrough = 27  // strikethrough
-	SymBaselineShift = 31  // baseline_shift
-	SymLetterspacing = 32  // letterspacing
-	SymTextAlignment = 34  // text_alignment
-	SymTextIndent    = 36  // text_indent
-	SymLeftIndent    = 37  // left_indent
-	SymRightIndent   = 38  // right_indent
-	SymSpaceBefore   = 39  // space_before
-	SymSpaceAfter    = 40  // space_after
-	SymLineHeight    = 42  // line_height
-	SymMargin        = 46  // margin
-	SymMarginTop     = 47  // margin_top
-	SymMarginLeft    = 48  // margin_left
-	SymMarginBottom  = 49  // margin_bottom
-	SymMarginRight   = 50  // margin_right
-	SymPadding       = 51  // padding
-	SymWidth         = 56  // width
-	SymHeight        = 57  // height
-	SymTop           = 58  // top
-	SymLeft          = 59  // left
-	SymBottom        = 60  // bottom
-	SymRight         = 61  // right
-	SymFillColor     = 70  // fill_color
-	SymFillOpacity   = 72  // fill_opacity
-	SymBorderColor   = 83  // border_color
-	SymBorderStyle   = 88  // border_style
-	SymBorderWeight  = 93  // border_weight
-	SymTransform     = 98  // transform
-	SymColumnCount   = 112 // column_count
-	SymDropcapLines  = 125 // dropcap_lines
-	SymDropcapChars  = 126 // dropcap_chars
-	SymHyphens       = 127 // hyphens
-	SymKeepFirst     = 131 // first (keep_together)
-	SymKeepLast      = 132 // last (keep_together)
-	SymFloat         = 140 // float
-	SymPageTemplates = 141 // page_templates
-	SymStyleEvents   = 142 // style_events
-	SymOffset        = 143 // offset
-	SymLength        = 144 // length
-	SymContent       = 145 // content
-	SymContentList   = 146 // content_list
-	SymTableColSpan  = 148 // table_column_span
-	SymTableRowSpan  = 149 // table_row_span
-	SymHeader        = 151 // header
-	SymTitle         = 153 // title
-	SymDescription   = 154 // description
-	SymUniqueID      = 155 // id
+	SymLanguage      KFXSymbol = 10  // language
+	SymFontFamily    KFXSymbol = 11  // font_family
+	SymFontStyle     KFXSymbol = 12  // font_style
+	SymFontWeight    KFXSymbol = 13  // font_weight
+	SymFontSize      KFXSymbol = 16  // font_size
+	SymTextColor     KFXSymbol = 19  // text_color
+	SymUnderline     KFXSymbol = 23  // underline
+	SymStrikethrough KFXSymbol = 27  // strikethrough
+	SymBaselineShift KFXSymbol = 31  // baseline_shift
+	SymLetterspacing KFXSymbol = 32  // letterspacing
+	SymTextAlignment KFXSymbol = 34  // text_alignment
+	SymTextIndent    KFXSymbol = 36  // text_indent
+	SymLeftIndent    KFXSymbol = 37  // left_indent
+	SymRightIndent   KFXSymbol = 38  // right_indent
+	SymSpaceBefore   KFXSymbol = 39  // space_before
+	SymSpaceAfter    KFXSymbol = 40  // space_after
+	SymLineHeight    KFXSymbol = 42  // line_height
+	SymMargin        KFXSymbol = 46  // margin
+	SymMarginTop     KFXSymbol = 47  // margin_top
+	SymMarginLeft    KFXSymbol = 48  // margin_left
+	SymMarginBottom  KFXSymbol = 49  // margin_bottom
+	SymMarginRight   KFXSymbol = 50  // margin_right
+	SymPadding       KFXSymbol = 51  // padding
+	SymWidth         KFXSymbol = 56  // width
+	SymHeight        KFXSymbol = 57  // height
+	SymTop           KFXSymbol = 58  // top
+	SymLeft          KFXSymbol = 59  // left
+	SymBottom        KFXSymbol = 60  // bottom
+	SymRight         KFXSymbol = 61  // right
+	SymFillColor     KFXSymbol = 70  // fill_color
+	SymFillOpacity   KFXSymbol = 72  // fill_opacity
+	SymBorderColor   KFXSymbol = 83  // border_color
+	SymBorderStyle   KFXSymbol = 88  // border_style
+	SymBorderWeight  KFXSymbol = 93  // border_weight
+	SymTransform     KFXSymbol = 98  // transform
+	SymColumnCount   KFXSymbol = 112 // column_count
+	SymDropcapLines  KFXSymbol = 125 // dropcap_lines
+	SymDropcapChars  KFXSymbol = 126 // dropcap_chars
+	SymHyphens       KFXSymbol = 127 // hyphens
+	SymKeepFirst     KFXSymbol = 131 // first (keep_together)
+	SymKeepLast      KFXSymbol = 132 // last (keep_together)
+	SymFloat         KFXSymbol = 140 // float
+	SymPageTemplates KFXSymbol = 141 // page_templates
+	SymStyleEvents   KFXSymbol = 142 // style_events
+	SymOffset        KFXSymbol = 143 // offset
+	SymLength        KFXSymbol = 144 // length
+	SymContent       KFXSymbol = 145 // content
+	SymContentList   KFXSymbol = 146 // content_list
+	SymTableColSpan  KFXSymbol = 148 // table_column_span
+	SymTableRowSpan  KFXSymbol = 149 // table_row_span
+	SymHeader        KFXSymbol = 151 // header
+	SymTitle         KFXSymbol = 153 // title
+	SymDescription   KFXSymbol = 154 // description
+	SymUniqueID      KFXSymbol = 155 // id
 
 	// Content/document structure ($156-$200)
-	SymLayout        = 156 // layout
-	SymStyle         = 157 // style
-	SymParentStyle   = 158 // parent_style
-	SymType          = 159 // type
-	SymFormat        = 161 // format
-	SymMIME          = 162 // mime
-	SymTarget        = 163 // target
-	SymExtResource   = 164 // external_resource
-	SymLocation      = 165 // location
-	SymReadingOrders = 169 // reading_orders
-	SymSections      = 170 // sections
-	SymStyleName     = 173 // style_name
-	SymSectionName   = 174 // section_name
-	SymResourceName  = 175 // resource_name
-	SymStoryName     = 176 // story_name
-	SymReadOrderName = 178 // reading_order_name
-	SymLinkTo        = 179 // link_to
-	SymAnchorName    = 180 // anchor_name
-	SymContainsIds   = 181 // contains
-	SymLocations     = 182 // locations
-	SymPosition      = 183 // position
-	SymPositionID    = 184 // pid
-	SymElementID     = 185 // eid
-	SymURI           = 186 // uri
+	SymLayout        KFXSymbol = 156 // layout
+	SymStyle         KFXSymbol = 157 // style
+	SymParentStyle   KFXSymbol = 158 // parent_style
+	SymType          KFXSymbol = 159 // type
+	SymFormat        KFXSymbol = 161 // format
+	SymMIME          KFXSymbol = 162 // mime
+	SymTarget        KFXSymbol = 163 // target
+	SymExtResource   KFXSymbol = 164 // external_resource
+	SymLocation      KFXSymbol = 165 // location
+	SymReadingOrders KFXSymbol = 169 // reading_orders
+	SymSections      KFXSymbol = 170 // sections
+	SymStyleName     KFXSymbol = 173 // style_name
+	SymSectionName   KFXSymbol = 174 // section_name
+	SymResourceName  KFXSymbol = 175 // resource_name
+	SymStoryName     KFXSymbol = 176 // story_name
+	SymReadOrderName KFXSymbol = 178 // reading_order_name
+	SymLinkTo        KFXSymbol = 179 // link_to
+	SymAnchorName    KFXSymbol = 180 // anchor_name
+	SymContainsIds   KFXSymbol = 181 // contains
+	SymLocations     KFXSymbol = 182 // locations
+	SymPosition      KFXSymbol = 183 // position
+	SymPositionID    KFXSymbol = 184 // pid
+	SymElementID     KFXSymbol = 185 // eid
+	SymURI           KFXSymbol = 186 // uri
 
 	// Navigation, metadata ($212-$260)
-	SymTOC            = 212 // toc
-	SymOrientation    = 215 // orientation
-	SymBindDirection  = 216 // binding_direction
-	SymIssueDate      = 219 // issue_date
-	SymAuthor         = 222 // author
-	SymISBN           = 223 // ISBN
-	SymASIN           = 224 // ASIN
-	SymPublisher      = 232 // publisher
-	SymCoverPage      = 233 // cover_page
-	SymNavType        = 235 // nav_type
-	SymLandmarks      = 236 // landmarks
-	SymPageList       = 237 // page_list
-	SymLandmarkType   = 238 // landmark_type
-	SymNavContName    = 239 // nav_container_name
-	SymNavUnitName    = 240 // nav_unit_name
-	SymRepresentation = 241 // representation
-	SymLabel          = 244 // label
-	SymIcon           = 245 // icon
-	SymTargetPosition = 246 // target_position
-	SymEntries        = 247 // entries
-	SymEntrySet       = 248 // entry_set
-	SymCDEContentType = 251 // cde_content_type
-	SymContainerList  = 252 // container_list
-	SymEntityDeps     = 253 // entity_dependencies
-	SymMandatoryDeps  = 254 // mandatory_dependencies
-	SymOptionalDeps   = 255 // optional_dependencies
-	SymInherit        = 257 // inherit
-	SymMetadata       = 258 // metadata
-	SymStoryline      = 259 // storyline
-	SymSection        = 260 // section
+	SymTOC            KFXSymbol = 212 // toc
+	SymOrientation    KFXSymbol = 215 // orientation
+	SymBindDirection  KFXSymbol = 216 // binding_direction
+	SymIssueDate      KFXSymbol = 219 // issue_date
+	SymAuthor         KFXSymbol = 222 // author
+	SymISBN           KFXSymbol = 223 // ISBN
+	SymASIN           KFXSymbol = 224 // ASIN
+	SymPublisher      KFXSymbol = 232 // publisher
+	SymCoverPage      KFXSymbol = 233 // cover_page
+	SymNavType        KFXSymbol = 235 // nav_type
+	SymLandmarks      KFXSymbol = 236 // landmarks
+	SymPageList       KFXSymbol = 237 // page_list
+	SymLandmarkType   KFXSymbol = 238 // landmark_type
+	SymNavContName    KFXSymbol = 239 // nav_container_name
+	SymNavUnitName    KFXSymbol = 240 // nav_unit_name
+	SymRepresentation KFXSymbol = 241 // representation
+	SymLabel          KFXSymbol = 244 // label
+	SymIcon           KFXSymbol = 245 // icon
+	SymTargetPosition KFXSymbol = 246 // target_position
+	SymEntries        KFXSymbol = 247 // entries
+	SymEntrySet       KFXSymbol = 248 // entry_set
+	SymCDEContentType KFXSymbol = 251 // cde_content_type
+	SymContainerList  KFXSymbol = 252 // container_list
+	SymEntityDeps     KFXSymbol = 253 // entity_dependencies
+	SymMandatoryDeps  KFXSymbol = 254 // mandatory_dependencies
+	SymOptionalDeps   KFXSymbol = 255 // optional_dependencies
+	SymInherit        KFXSymbol = 257 // inherit
+	SymMetadata       KFXSymbol = 258 // metadata
+	SymStoryline      KFXSymbol = 259 // storyline
+	SymSection        KFXSymbol = 260 // section
 
 	// Content types ($269-$282)
-	SymText      = 269 // text
-	SymContainer = 270 // container
-	SymImage     = 271 // image
-	SymKVG       = 272 // kvg
-	SymShape     = 273 // shape
-	SymPlugin    = 274 // plugin
-	SymKnockout  = 275 // knockout
-	SymList      = 276 // list
-	SymListItem  = 277 // listitem
-	SymTable     = 278 // table
-	SymTableRow  = 279 // table_row
-	SymSidebar   = 280 // sidebar
-	SymFootnote  = 281 // footnote
-	SymFigure    = 282 // figure
-	SymInline    = 283 // inline
+	SymText      KFXSymbol = 269 // text
+	SymContainer KFXSymbol = 270 // container
+	SymImage     KFXSymbol = 271 // image
+	SymKVG       KFXSymbol = 272 // kvg
+	SymShape     KFXSymbol = 273 // shape
+	SymPlugin    KFXSymbol = 274 // plugin
+	SymKnockout  KFXSymbol = 275 // knockout
+	SymList      KFXSymbol = 276 // list
+	SymListItem  KFXSymbol = 277 // listitem
+	SymTable     KFXSymbol = 278 // table
+	SymTableRow  KFXSymbol = 279 // table_row
+	SymSidebar   KFXSymbol = 280 // sidebar
+	SymFootnote  KFXSymbol = 281 // footnote
+	SymFigure    KFXSymbol = 282 // figure
+	SymInline    KFXSymbol = 283 // inline
 
 	// Format types ($284-$287)
-	SymFormatPNG    = 284 // png
-	SymFormatJPG    = 285 // jpg
-	SymFormatGIF    = 286 // gif
-	SymFormatPlugin = 287 // pobject
+	SymFormatPNG    KFXSymbol = 284 // png
+	SymFormatJPG    KFXSymbol = 285 // jpg
+	SymFormatGIF    KFXSymbol = 286 // gif
+	SymFormatPlugin KFXSymbol = 287 // pobject
 
 	// Units and values ($306-$330)
-	SymUnit        = 306 // unit
-	SymValue       = 307 // value
-	SymUnitEm      = 308 // em
-	SymUnitEx      = 309 // ex
-	SymUnitRatio   = 310 // ratio
-	SymUnitPercent = 314 // percent
-	SymUnitCm      = 315 // cm
-	SymUnitMm      = 316 // mm
-	SymUnitIn      = 317 // in
-	SymUnitPt      = 318 // pt
-	SymUnitPx      = 319 // px
-	SymCenter      = 320 // center
-	SymJustify     = 321 // justify
-	SymHorizontal  = 322 // horizontal
-	SymVertical    = 323 // vertical
-	SymFixedFit    = 324 // fixed
-	SymOverflow    = 325 // overflow
-	SymScaleFit    = 326 // scale_fit
-	SymRadial      = 327 // radial
-	SymSolid       = 328 // solid
+	SymUnit        KFXSymbol = 306 // unit
+	SymValue       KFXSymbol = 307 // value
+	SymUnitEm      KFXSymbol = 308 // em
+	SymUnitEx      KFXSymbol = 309 // ex
+	SymUnitRatio   KFXSymbol = 310 // ratio
+	SymUnitPercent KFXSymbol = 314 // percent
+	SymUnitCm      KFXSymbol = 315 // cm
+	SymUnitMm      KFXSymbol = 316 // mm
+	SymUnitIn      KFXSymbol = 317 // in
+	SymUnitPt      KFXSymbol = 318 // pt
+	SymUnitPx      KFXSymbol = 319 // px
+	SymCenter      KFXSymbol = 320 // center
+	SymJustify     KFXSymbol = 321 // justify
+	SymHorizontal  KFXSymbol = 322 // horizontal
+	SymVertical    KFXSymbol = 323 // vertical
+	SymFixedFit    KFXSymbol = 324 // fixed
+	SymOverflow    KFXSymbol = 325 // overflow
+	SymScaleFit    KFXSymbol = 326 // scale_fit
+	SymRadial      KFXSymbol = 327 // radial
+	SymSolid       KFXSymbol = 328 // solid
 
 	// More values ($348-$386)
-	SymNull      = 348 // null (placeholder for root fragments)
-	SymNone      = 349 // none
-	SymNormal    = 350 // normal
-	SymDefault   = 351 // default
-	SymAlways    = 352 // always
-	SymAvoid     = 353 // avoid
-	SymBold      = 361 // bold
-	SymSemibold  = 362 // semibold
-	SymLight     = 363 // light
-	SymMedium    = 364 // medium
-	SymItalic    = 382 // italic
-	SymAuto      = 383 // auto
-	SymPortrait  = 385 // portrait
-	SymLandscape = 386 // landscape
+	SymNull      KFXSymbol = 348 // null (placeholder for root fragments)
+	SymNone      KFXSymbol = 349 // none
+	SymNormal    KFXSymbol = 350 // normal
+	SymDefault   KFXSymbol = 351 // default
+	SymAlways    KFXSymbol = 352 // always
+	SymAvoid     KFXSymbol = 353 // avoid
+	SymBold      KFXSymbol = 361 // bold
+	SymSemibold  KFXSymbol = 362 // semibold
+	SymLight     KFXSymbol = 363 // light
+	SymMedium    KFXSymbol = 364 // medium
+	SymItalic    KFXSymbol = 382 // italic
+	SymAuto      KFXSymbol = 383 // auto
+	SymPortrait  KFXSymbol = 385 // portrait
+	SymLandscape KFXSymbol = 386 // landscape
 
 	// Navigation ($389-$395)
-	SymBookNavigation = 389 // book_navigation
-	SymSectionNav     = 390 // section_navigation (magazine - skip)
-	SymNavContainer   = 391 // nav_container
-	SymNavContainers  = 392 // nav_containers
-	SymNavUnit        = 393 // nav_unit
-	SymCondNavUnit    = 394 // conditional_nav_group_unit (skip)
-	SymResourcePath   = 395 // resource_path
+	SymBookNavigation KFXSymbol = 389 // book_navigation
+	SymSectionNav     KFXSymbol = 390 // section_navigation (magazine - skip)
+	SymNavContainer   KFXSymbol = 391 // nav_container
+	SymNavContainers  KFXSymbol = 392 // nav_containers
+	SymNavUnit        KFXSymbol = 393 // nav_unit
+	SymCondNavUnit    KFXSymbol = 394 // conditional_nav_group_unit (skip)
+	SymResourcePath   KFXSymbol = 395 // resource_path
 
 	// Landmarks ($397-$408)
-	SymTitlePage        = 397 // titlepage
-	SymAcknowledgements = 398 // acknowledgements
-	SymPreface          = 399 // preface
-	SymFrontmatter      = 405 // frontmatter
-	SymBodymatter       = 406 // bodymatter
-	SymBackmatter       = 407 // backmatter
+	SymTitlePage        KFXSymbol = 397 // titlepage
+	SymAcknowledgements KFXSymbol = 398 // acknowledgements
+	SymPreface          KFXSymbol = 399 // preface
+	SymFrontmatter      KFXSymbol = 405 // frontmatter
+	SymBodymatter       KFXSymbol = 406 // bodymatter
+	SymBackmatter       KFXSymbol = 407 // backmatter
 
 	// Container-specific ($409-$419)
-	SymContainerId    = 409 // bcContId
-	SymComprType      = 410 // bcComprType
-	SymDRMScheme      = 411 // bcDRMScheme
-	SymChunkSize      = 412 // bcChunkSize
-	SymIndexTabOffset = 413 // bcIndexTabOffset
-	SymIndexTabLength = 414 // bcIndexTabLength
-	SymDocSymOffset   = 415 // bcDocSymbolOffset
-	SymDocSymLength   = 416 // bcDocSymbolLength
-	SymRawMedia       = 417 // bcRawMedia
-	SymRawFont        = 418 // bcRawFont
-	SymContEntityMap  = 419 // container_entity_map
+	SymContainerId    KFXSymbol = 409 // bcContId
+	SymComprType      KFXSymbol = 410 // bcComprType
+	SymDRMScheme      KFXSymbol = 411 // bcDRMScheme
+	SymChunkSize      KFXSymbol = 412 // bcChunkSize
+	SymIndexTabOffset KFXSymbol = 413 // bcIndexTabOffset
+	SymIndexTabLength KFXSymbol = 414 // bcIndexTabLength
+	SymDocSymOffset   KFXSymbol = 415 // bcDocSymbolOffset
+	SymDocSymLength   KFXSymbol = 416 // bcDocSymbolLength
+	SymRawMedia       KFXSymbol = 417 // bcRawMedia
+	SymRawFont        KFXSymbol = 418 // bcRawFont
+	SymContEntityMap  KFXSymbol = 419 // container_entity_map
 
 	// Resource properties ($422-$425)
-	SymResourceWidth  = 422 // resource_width
-	SymResourceHeight = 423 // resource_height
-	SymCoverImage     = 424 // cover_image
-	SymPageProgDir    = 425 // page_progression_direction
+	SymResourceWidth  KFXSymbol = 422 // resource_width
+	SymResourceHeight KFXSymbol = 423 // resource_height
+	SymCoverImage     KFXSymbol = 424 // cover_image
+	SymPageProgDir    KFXSymbol = 425 // page_progression_direction
 
 	// More metadata ($464-$467)
-	SymVolumeLabel = 464 // volume_label
-	SymParentAsin  = 465 // parent_asin
-	SymAssetId     = 466 // asset_id
-	SymRevisionId  = 467 // revision_id
+	SymVolumeLabel KFXSymbol = 464 // volume_label
+	SymParentAsin  KFXSymbol = 465 // parent_asin
+	SymAssetId     KFXSymbol = 466 // asset_id
+	SymRevisionId  KFXSymbol = 467 // revision_id
 
 	// Book metadata ($490-$495)
-	SymBookMetadata = 490 // book_metadata
-	SymCatMetadata  = 491 // categorised_metadata
-	SymKey          = 492 // key
-	SymPriority     = 493 // priority
-	SymRefines      = 494 // refines
-	SymCategory     = 495 // category
+	SymBookMetadata KFXSymbol = 490 // book_metadata
+	SymCatMetadata  KFXSymbol = 491 // categorised_metadata
+	SymKey          KFXSymbol = 492 // key
+	SymPriority     KFXSymbol = 493 // priority
+	SymRefines      KFXSymbol = 494 // refines
+	SymCategory     KFXSymbol = 495 // category
 
 	// Document data ($538)
-	SymDocumentData = 538 // document_data
+	SymDocumentData KFXSymbol = 538 // document_data
 
 	// Location map ($550)
-	SymLocationMap = 550 // location_map
+	SymLocationMap KFXSymbol = 550 // location_map
 
 	// Position maps ($264-$265)
-	SymPositionMap   = 264 // position_map
-	SymPositionIdMap = 265 // position_id_map
+	SymPositionMap   KFXSymbol = 264 // position_map
+	SymPositionIdMap KFXSymbol = 265 // position_id_map
 
 	// Anchors ($266)
-	SymAnchor = 266 // anchor
+	SymAnchor KFXSymbol = 266 // anchor
 
 	// Version info ($587-$593)
-	SymMajorVersion    = 587 // major_version
-	SymMinorVersion    = 588 // minor_version
-	SymNamespace       = 586 // namespace
-	SymVersionInfo     = 589 // version_info
-	SymFeatures        = 590 // features
-	SymContentFeatures = 585 // content_features
-	SymFormatCapab     = 593 // format_capabilities
-	SymFCapabOffset    = 594 // bcFCapabilitiesOffset
-	SymFCapabLength    = 595 // bcFCapabilitiesLength
+	SymMajorVersion    KFXSymbol = 587 // major_version
+	SymMinorVersion    KFXSymbol = 588 // minor_version
+	SymNamespace       KFXSymbol = 586 // namespace
+	SymVersionInfo     KFXSymbol = 589 // version_info
+	SymFeatures        KFXSymbol = 590 // features
+	SymContentFeatures KFXSymbol = 585 // content_features
+	SymFormatCapab     KFXSymbol = 593 // format_capabilities
+	SymFCapabOffset    KFXSymbol = 594 // bcFCapabilitiesOffset
+	SymFCapabLength    KFXSymbol = 595 // bcFCapabilitiesLength
 
 	// Auxiliary ($597-$598)
-	SymAuxiliaryData = 597 // auxiliary_data
-	SymKfxID         = 598 // kfx_id
+	SymAuxiliaryData KFXSymbol = 597 // auxiliary_data
+	SymKfxID         KFXSymbol = 598 // kfx_id
 
 	// Render mode ($601-$602)
-	SymRender = 601 // render
-	SymBlock  = 602 // block
+	SymRender KFXSymbol = 601 // render
+	SymBlock  KFXSymbol = 602 // block
 
 	// Alt text ($584)
-	SymAltText = 584 // alt_text
+	SymAltText KFXSymbol = 584 // alt_text
 
 	// Start/End ($680-$681)
-	SymStart = 680 // start
-	SymEnd   = 681 // end
+	SymStart KFXSymbol = 680 // start
+	SymEnd   KFXSymbol = 681 // end
 )
 
 // yjSymbolNames maps symbol IDs to their string names.
 // This is used for creating the YJ_symbols shared symbol table.
-var yjSymbolNames = map[int]string{
+var yjSymbolNames = map[KFXSymbol]string{
 	10: "language", 11: "font_family", 12: "font_style", 13: "font_weight",
 	16: "font_size", 19: "text_color", 23: "underline", 27: "strikethrough",
 	31: "baseline_shift", 32: "letterspacing", 34: "text_alignment",
@@ -342,6 +342,7 @@ var yjSymbolNames = map[int]string{
 	490: "book_metadata", 491: "categorised_metadata", 492: "key", 493: "priority",
 	494: "refines", 495: "category",
 	538: "document_data", 550: "location_map",
+	584: "alt_text", 585: "content_features", 586: "namespace",
 	587: "major_version", 588: "minor_version", 589: "version_info", 590: "features",
 	593: "format_capabilities", 594: "bcFCapabilitiesOffset", 595: "bcFCapabilitiesLength",
 	597: "auxiliary_data", 598: "kfx_id", 601: "render", 602: "block",
@@ -349,31 +350,45 @@ var yjSymbolNames = map[int]string{
 }
 
 // yjSymbolIDs maps symbol names to their IDs (reverse of yjSymbolNames).
-var yjSymbolIDs map[string]int
+var yjSymbolIDs map[string]KFXSymbol
 
 func init() {
-	yjSymbolIDs = make(map[string]int, len(yjSymbolNames))
+	yjSymbolIDs = make(map[string]KFXSymbol, len(yjSymbolNames))
 	for id, name := range yjSymbolNames {
 		yjSymbolIDs[name] = id
 	}
 }
 
-// SymbolName returns the string name for a symbol ID.
+// Name returns the string name for a symbol ID.
 // Returns "$NNN" format if the symbol is not in the known table.
-func SymbolName(id int) string {
-	if name, ok := yjSymbolNames[id]; ok {
+func (s KFXSymbol) Name() string {
+	if name, ok := yjSymbolNames[s]; ok {
 		return name
 	}
-	return "$" + strconv.Itoa(id)
+	return "$" + strconv.Itoa(int(s))
+}
+
+// String returns a display string for a symbol ID: "name ($id)" or just "$id".
+// Implements fmt.Stringer interface.
+func (s KFXSymbol) String() string {
+	if name, ok := yjSymbolNames[s]; ok {
+		return fmt.Sprintf("%s ($%d)", name, s)
+	}
+	return fmt.Sprintf("$%d", s)
+}
+
+// Value converts KFXSymbol to SymbolValue for use in struct values.
+func (s KFXSymbol) Value() SymbolValue {
+	return SymbolValue(s)
 }
 
 // SymbolID returns the ID for a symbol name.
 // Returns -1 if the symbol is not in the known table.
-func SymbolID(name string) int {
+func SymbolID(name string) KFXSymbol {
 	// Handle $NNN format
 	if strings.HasPrefix(name, "$") {
 		if id, err := strconv.Atoi(name[1:]); err == nil {
-			return id
+			return KFXSymbol(id)
 		}
 	}
 	if id, ok := yjSymbolIDs[name]; ok {
@@ -383,18 +398,16 @@ func SymbolID(name string) int {
 }
 
 // FormatSymbol returns a display string for a symbol ID: "name ($id)" or just "$id".
-func FormatSymbol[T int | string](id T) string {
+// Deprecated: Use KFXSymbol.String() method instead for KFXSymbol values.
+func FormatSymbol[T KFXSymbol | string](id T) string {
 	switch v := any(id).(type) {
-	case int:
-		if name, ok := yjSymbolNames[v]; ok {
-			return fmt.Sprintf("%s ($%d)", name, v)
-		}
-		return fmt.Sprintf("$%d", v)
+	case KFXSymbol:
+		return v.String()
 	case string:
 		// If it's a $NNN string, decode and format it
 		if strings.HasPrefix(v, "$") {
 			if num, err := strconv.Atoi(v[1:]); err == nil {
-				if name, ok := yjSymbolNames[num]; ok {
+				if name, ok := yjSymbolNames[KFXSymbol(num)]; ok {
 					return fmt.Sprintf("%s ($%d)", name, num)
 				}
 				return v
@@ -408,13 +421,13 @@ func FormatSymbol[T int | string](id T) string {
 }
 
 // RAW_FRAGMENT_TYPES are fragment types whose payloads are stored as raw bytes.
-var RAW_FRAGMENT_TYPES = map[int]bool{
+var RAW_FRAGMENT_TYPES = map[KFXSymbol]bool{
 	SymRawMedia: true, // $417
 	SymRawFont:  true, // $418
 }
 
 // ROOT_FRAGMENT_TYPES are fragment types that use fid == ftype (singleton pattern).
-var ROOT_FRAGMENT_TYPES = map[int]bool{
+var ROOT_FRAGMENT_TYPES = map[KFXSymbol]bool{
 	SymMetadata:        true, // $258
 	SymPositionMap:     true, // $264
 	SymPositionIdMap:   true, // $265
@@ -431,14 +444,14 @@ var ROOT_FRAGMENT_TYPES = map[int]bool{
 
 // CONTAINER_FRAGMENT_TYPES are fragment types that live in the container header,
 // not as ENTY records (except $419 which is special).
-var CONTAINER_FRAGMENT_TYPES = map[int]bool{
+var CONTAINER_FRAGMENT_TYPES = map[KFXSymbol]bool{
 	SymContainer:   true, // $270
 	SymFormatCapab: true, // $593
 	// $ion_symbol_table is also a container fragment but handled separately
 }
 
 // SINGLETON_FRAGMENT_TYPES are root fragment types where only one fragment is expected per book.
-var SINGLETON_FRAGMENT_TYPES = map[int]bool{
+var SINGLETON_FRAGMENT_TYPES = map[KFXSymbol]bool{
 	SymMetadata:        true, // $258
 	SymPositionMap:     true, // $264
 	SymPositionIdMap:   true, // $265
@@ -454,7 +467,7 @@ var SINGLETON_FRAGMENT_TYPES = map[int]bool{
 
 // REQUIRED_BOOK_FRAGMENT_TYPES are fragment types that must be present for a normal book.
 // Note: Some types may be conditionally required based on book type (dictionary, KPF, etc.).
-var REQUIRED_BOOK_FRAGMENT_TYPES = map[int]bool{
+var REQUIRED_BOOK_FRAGMENT_TYPES = map[KFXSymbol]bool{
 	SymMetadata:      true, // $258 - basic metadata (or $490)
 	SymStoryline:     true, // $259 - root content container
 	SymSection:       true, // $260 - at least one section
@@ -466,7 +479,7 @@ var REQUIRED_BOOK_FRAGMENT_TYPES = map[int]bool{
 }
 
 // ALLOWED_BOOK_FRAGMENT_TYPES are optional, known fragment types for books.
-var ALLOWED_BOOK_FRAGMENT_TYPES = map[int]bool{
+var ALLOWED_BOOK_FRAGMENT_TYPES = map[KFXSymbol]bool{
 	SymStyle:           true, // $157 - styles
 	SymExtResource:     true, // $164 - external resource descriptors
 	SymGradient:        true, // $263 - gradients
@@ -488,7 +501,7 @@ var ALLOWED_BOOK_FRAGMENT_TYPES = map[int]bool{
 
 // Additional symbols for fragment types not in the main constants
 const (
-	SymSectionMeta   = 267 // section_metadata
-	SymGradient      = 263 // gradient
-	SymSectionPosMap = 609 // section_position_id_map
+	SymSectionMeta   KFXSymbol = 267 // section_metadata
+	SymGradient      KFXSymbol = 263 // gradient
+	SymSectionPosMap KFXSymbol = 609 // section_position_id_map
 )

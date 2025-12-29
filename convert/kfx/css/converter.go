@@ -32,7 +32,7 @@ func (c *Converter) ConvertRule(rule CSSRule) ConversionResult {
 	result := ConversionResult{
 		Style: kfx.StyleDef{
 			Name:       rule.Selector.StyleName(),
-			Properties: make(map[int]any),
+			Properties: make(map[kfx.KFXSymbol]any),
 		},
 		Warnings: make([]string, 0),
 	}
@@ -146,7 +146,7 @@ func (c *Converter) expandShorthand(name string, value CSSValue, result *Convers
 //   - 3 values: top, left/right, bottom
 //   - 4 values: top, right, bottom, left
 func (c *Converter) expandBoxShorthand(value CSSValue, result *ConversionResult,
-	symTop, symRight, symBottom, symLeft int,
+	symTop, symRight, symBottom, symLeft kfx.KFXSymbol,
 ) {
 	raw := strings.TrimSpace(value.Raw)
 	parts := strings.Fields(raw)
@@ -224,7 +224,7 @@ func (c *Converter) parseShorthandValue(s string) CSSValue {
 }
 
 // setDimensionProperty sets a dimension property from a CSS value.
-func (c *Converter) setDimensionProperty(sym int, value CSSValue, result *ConversionResult) {
+func (c *Converter) setDimensionProperty(sym kfx.KFXSymbol, value CSSValue, result *ConversionResult) {
 	// Handle keywords
 	if value.IsKeyword() {
 		switch strings.ToLower(value.Keyword) {

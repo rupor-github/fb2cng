@@ -6,14 +6,14 @@ package kfx
 
 // StyleDef defines a KFX style with its properties.
 type StyleDef struct {
-	Name       string      // Style name (becomes local symbol)
-	Parent     string      // Parent style name (for inheritance)
-	Properties map[int]any // KFX property symbol -> value
+	Name       string            // Style name (becomes local symbol)
+	Parent     string            // Parent style name (for inheritance)
+	Properties map[KFXSymbol]any // KFX property symbol -> value
 }
 
 // DimensionValue creates a dimension value with unit.
 // Example: DimensionValue(1.2, SymUnitRatio) -> {$307: 1.2, $306: $310}
-func DimensionValue(value float64, unit int) StructValue {
+func DimensionValue(value float64, unit KFXSymbol) StructValue {
 	return NewStruct().
 		SetFloat(SymValue, value). // $307 = value
 		SetSymbol(SymUnit, unit)   // $306 = unit
@@ -23,14 +23,14 @@ func DimensionValue(value float64, unit int) StructValue {
 type StyleBuilder struct {
 	name   string
 	parent string
-	props  map[int]any
+	props  map[KFXSymbol]any
 }
 
 // NewStyle creates a new style builder.
 func NewStyle(name string) *StyleBuilder {
 	return &StyleBuilder{
 		name:  name,
-		props: make(map[int]any),
+		props: make(map[KFXSymbol]any),
 	}
 }
 
@@ -41,73 +41,73 @@ func (sb *StyleBuilder) Inherit(parentName string) *StyleBuilder {
 }
 
 // FontSize sets the font size.
-func (sb *StyleBuilder) FontSize(value float64, unit int) *StyleBuilder {
+func (sb *StyleBuilder) FontSize(value float64, unit KFXSymbol) *StyleBuilder {
 	sb.props[SymFontSize] = DimensionValue(value, unit)
 	return sb
 }
 
 // FontWeight sets the font weight (SymBold, SymNormal, etc.).
-func (sb *StyleBuilder) FontWeight(weight int) *StyleBuilder {
+func (sb *StyleBuilder) FontWeight(weight KFXSymbol) *StyleBuilder {
 	sb.props[SymFontWeight] = weight
 	return sb
 }
 
 // FontStyle sets the font style (SymItalic, SymNormal, etc.).
-func (sb *StyleBuilder) FontStyle(style int) *StyleBuilder {
+func (sb *StyleBuilder) FontStyle(style KFXSymbol) *StyleBuilder {
 	sb.props[SymFontStyle] = style
 	return sb
 }
 
 // LineHeight sets the line height.
-func (sb *StyleBuilder) LineHeight(value float64, unit int) *StyleBuilder {
+func (sb *StyleBuilder) LineHeight(value float64, unit KFXSymbol) *StyleBuilder {
 	sb.props[SymLineHeight] = DimensionValue(value, unit)
 	return sb
 }
 
 // TextAlign sets the text alignment.
-func (sb *StyleBuilder) TextAlign(align int) *StyleBuilder {
+func (sb *StyleBuilder) TextAlign(align KFXSymbol) *StyleBuilder {
 	sb.props[SymTextAlignment] = align
 	return sb
 }
 
 // TextIndent sets the first-line text indent.
-func (sb *StyleBuilder) TextIndent(value float64, unit int) *StyleBuilder {
+func (sb *StyleBuilder) TextIndent(value float64, unit KFXSymbol) *StyleBuilder {
 	sb.props[SymTextIndent] = DimensionValue(value, unit)
 	return sb
 }
 
 // MarginTop sets the top margin.
-func (sb *StyleBuilder) MarginTop(value float64, unit int) *StyleBuilder {
+func (sb *StyleBuilder) MarginTop(value float64, unit KFXSymbol) *StyleBuilder {
 	sb.props[SymMarginTop] = DimensionValue(value, unit)
 	return sb
 }
 
 // MarginBottom sets the bottom margin.
-func (sb *StyleBuilder) MarginBottom(value float64, unit int) *StyleBuilder {
+func (sb *StyleBuilder) MarginBottom(value float64, unit KFXSymbol) *StyleBuilder {
 	sb.props[SymMarginBottom] = DimensionValue(value, unit)
 	return sb
 }
 
 // MarginLeft sets the left margin.
-func (sb *StyleBuilder) MarginLeft(value float64, unit int) *StyleBuilder {
+func (sb *StyleBuilder) MarginLeft(value float64, unit KFXSymbol) *StyleBuilder {
 	sb.props[SymMarginLeft] = DimensionValue(value, unit)
 	return sb
 }
 
 // MarginRight sets the right margin.
-func (sb *StyleBuilder) MarginRight(value float64, unit int) *StyleBuilder {
+func (sb *StyleBuilder) MarginRight(value float64, unit KFXSymbol) *StyleBuilder {
 	sb.props[SymMarginRight] = DimensionValue(value, unit)
 	return sb
 }
 
 // SpaceBefore sets space before the element.
-func (sb *StyleBuilder) SpaceBefore(value float64, unit int) *StyleBuilder {
+func (sb *StyleBuilder) SpaceBefore(value float64, unit KFXSymbol) *StyleBuilder {
 	sb.props[SymSpaceBefore] = DimensionValue(value, unit)
 	return sb
 }
 
 // SpaceAfter sets space after the element.
-func (sb *StyleBuilder) SpaceAfter(value float64, unit int) *StyleBuilder {
+func (sb *StyleBuilder) SpaceAfter(value float64, unit KFXSymbol) *StyleBuilder {
 	sb.props[SymSpaceAfter] = DimensionValue(value, unit)
 	return sb
 }

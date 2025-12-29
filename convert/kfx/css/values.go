@@ -10,7 +10,7 @@ import (
 // ConvertFontWeight converts CSS font-weight values to KFX symbols.
 // CSS: bold, bolder, lighter, normal, 100-900
 // KFX: $361 (bold), $362 (semibold), $363 (light), $364 (medium), $350 (normal)
-func ConvertFontWeight(css CSSValue) (int, bool) {
+func ConvertFontWeight(css CSSValue) (kfx.KFXSymbol, bool) {
 	if css.Keyword != "" {
 		switch strings.ToLower(css.Keyword) {
 		case "bold", "bolder":
@@ -47,7 +47,7 @@ func ConvertFontWeight(css CSSValue) (int, bool) {
 // ConvertFontStyle converts CSS font-style values to KFX symbols.
 // CSS: italic, oblique, normal
 // KFX: $382 (italic), $350 (normal)
-func ConvertFontStyle(css CSSValue) (int, bool) {
+func ConvertFontStyle(css CSSValue) (kfx.KFXSymbol, bool) {
 	switch strings.ToLower(css.Keyword) {
 	case "italic", "oblique":
 		return kfx.SymItalic, true // $382
@@ -60,7 +60,7 @@ func ConvertFontStyle(css CSSValue) (int, bool) {
 // ConvertTextAlign converts CSS text-align values to KFX symbols.
 // CSS: left, right, center, justify, start, end
 // KFX: $680 (start), $681 (end), $320 (center), $321 (justify)
-func ConvertTextAlign(css CSSValue) (int, bool) {
+func ConvertTextAlign(css CSSValue) (kfx.KFXSymbol, bool) {
 	switch strings.ToLower(css.Keyword) {
 	case "left", "start":
 		return kfx.SymStart, true // $680
@@ -132,7 +132,7 @@ func ConvertVerticalAlign(css CSSValue) (kfx.StructValue, bool) {
 // Returns the KFX render mode symbol, or handles visibility.
 // CSS: block, inline, none
 // KFX: $602 (block), visibility handling for none
-func ConvertDisplay(css CSSValue) (symbol int, isVisible bool, ok bool) {
+func ConvertDisplay(css CSSValue) (symbol kfx.KFXSymbol, isVisible bool, ok bool) {
 	switch strings.ToLower(css.Keyword) {
 	case "block":
 		return kfx.SymBlock, true, true // $602
@@ -148,7 +148,7 @@ func ConvertDisplay(css CSSValue) (symbol int, isVisible bool, ok bool) {
 // ConvertFloat converts CSS float values to KFX symbols.
 // CSS: left, right, none
 // KFX: $680 (start/left), $681 (end/right), $349 (none)
-func ConvertFloat(css CSSValue) (int, bool) {
+func ConvertFloat(css CSSValue) (kfx.KFXSymbol, bool) {
 	switch strings.ToLower(css.Keyword) {
 	case "left":
 		return kfx.SymStart, true // $680
@@ -163,7 +163,7 @@ func ConvertFloat(css CSSValue) (int, bool) {
 // ConvertPageBreak converts CSS page-break-* values.
 // CSS: always, avoid, auto
 // KFX: $352 (always), $353 (avoid)
-func ConvertPageBreak(css CSSValue) (int, bool) {
+func ConvertPageBreak(css CSSValue) (kfx.KFXSymbol, bool) {
 	switch strings.ToLower(css.Keyword) {
 	case "always":
 		return kfx.SymAlways, true // $352

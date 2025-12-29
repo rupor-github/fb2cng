@@ -30,7 +30,7 @@ func NewPositionKFXID(kfxID string, offset int64) StructValue {
 // A length with unit is {$307: value, $306: unit_symbol}.
 
 // NewLength creates a length value with unit: {value: v, unit: u}.
-func NewLength(value float64, unit int) StructValue {
+func NewLength(value float64, unit KFXSymbol) StructValue {
 	return NewStruct().
 		Set(SymValue, value).    // $307 = value
 		SetSymbol(SymUnit, unit) // $306 = unit
@@ -128,7 +128,7 @@ func NewNavUnit(label string, targetPos StructValue) StructValue {
 }
 
 // NewNavContainer creates a navigation container (TOC, landmarks, page list).
-func NewNavContainer(navType int, entries []any) StructValue {
+func NewNavContainer(navType KFXSymbol, entries []any) StructValue {
 	return NewStruct().
 		SetSymbol(SymNavType, navType). // $235 = nav_type
 		SetList(SymEntries, entries)    // $247 = entries
@@ -152,7 +152,7 @@ func NewPageListContainer(entries []any) StructValue {
 // Resource builders - for $164 external resource descriptors
 
 // NewExternalResource creates an external resource descriptor.
-func NewExternalResource(location string, format int, width, height int64) StructValue {
+func NewExternalResource(location string, format KFXSymbol, width, height int64) StructValue {
 	res := NewStruct().
 		SetString(SymLocation, location). // $165 = location
 		SetSymbol(SymFormat, format)      // $161 = format
@@ -230,7 +230,7 @@ func NewStoryline(storyName string, sections []any) StructValue {
 
 // NewReadingOrder creates a reading order entry for $538 document_data.
 // The name should be a symbol like SymDefault ($351 = "default").
-func NewReadingOrder(name int, sections []any) StructValue {
+func NewReadingOrder(name KFXSymbol, sections []any) StructValue {
 	ro := NewStruct().SetSymbol(SymReadOrderName, name) // $178 = reading_order_name
 	if len(sections) > 0 {
 		ro.SetList(SymSections, sections) // $170 = sections
@@ -271,13 +271,14 @@ func NewContainerEntityMap(containers []any) StructValue {
 	return NewStruct().SetList(SymContainerList, containers) // $252 = container_list
 }
 
-// Helper to convert symbol name to SymbolValue for use in lists
-func Sym(id int) SymbolValue {
-	return SymbolValue(id)
+// Sym converts symbol ID to SymbolValue for use in lists.
+// Deprecated: Use KFXSymbol.Value() method instead.
+func Sym(id KFXSymbol) SymbolValue {
+	return id.Value()
 }
 
 // NewSymbolList creates a list of symbol values from IDs.
-func NewSymbolList(ids ...int) ListValue {
+func NewSymbolList(ids ...KFXSymbol) ListValue {
 	list := NewList()
 	for _, id := range ids {
 		list.AddSymbol(id)

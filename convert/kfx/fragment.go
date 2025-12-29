@@ -23,10 +23,10 @@ import (
 // This mixed approach balances compatibility (base36 for resources), debuggability
 // (human-readable names), and semantic preservation (original IDs/style names).
 type Fragment struct {
-	FType   int    // Fragment type symbol ID (e.g., SymSection for $260)
-	FID     int    // Fragment ID symbol ID (equals FType for root fragments, or resolved from FIDName)
-	FIDName string // Fragment ID name for non-root fragments (see naming conventions above)
-	Value   any    // Ion value (map[int]any for struct, []any for list, etc.)
+	FType   KFXSymbol // Fragment type symbol ID (e.g., SymSection for $260)
+	FID     KFXSymbol // Fragment ID symbol ID (equals FType for root fragments, or resolved from FIDName)
+	FIDName string    // Fragment ID name for non-root fragments (see naming conventions above)
+	Value   any       // Ion value (map[KFXSymbol]any for struct, []any for list, etc.)
 }
 
 // IsRoot returns true if this is a root fragment (fid == ftype).
@@ -62,8 +62,8 @@ func (f *Fragment) String() string {
 
 // FragmentKey uniquely identifies a fragment by type and id.
 type FragmentKey struct {
-	FType   int
-	FID     int
+	FType   KFXSymbol
+	FID     KFXSymbol
 	FIDName string
 }
 
@@ -81,14 +81,14 @@ func (k FragmentKey) String() string {
 // FragmentList holds a collection of fragments with indexing.
 type FragmentList struct {
 	fragments []*Fragment
-	byType    map[int][]*Fragment       // ftype -> list of fragments
+	byType    map[KFXSymbol][]*Fragment // ftype -> list of fragments
 	byKey     map[FragmentKey]*Fragment // (ftype, fid) -> fragment
 }
 
 // NewFragmentList creates an empty fragment list.
 func NewFragmentList() *FragmentList {
 	return &FragmentList{
-		byType: make(map[int][]*Fragment),
+		byType: make(map[KFXSymbol][]*Fragment),
 		byKey:  make(map[FragmentKey]*Fragment),
 	}
 }
@@ -106,17 +106,17 @@ func (fl *FragmentList) Add(f *Fragment) error {
 }
 
 // Get returns a fragment by type and id.
-func (fl *FragmentList) Get(ftype, fid int) *Fragment {
+func (fl *FragmentList) Get(ftype, fid KFXSymbol) *Fragment {
 	return fl.byKey[FragmentKey{FType: ftype, FID: fid}]
 }
 
 // GetRoot returns a root fragment by type (where fid == ftype).
-func (fl *FragmentList) GetRoot(ftype int) *Fragment {
+func (fl *FragmentList) GetRoot(ftype KFXSymbol) *Fragment {
 	return fl.Get(ftype, ftype)
 }
 
 // GetByType returns all fragments of a given type.
-func (fl *FragmentList) GetByType(ftype int) []*Fragment {
+func (fl *FragmentList) GetByType(ftype KFXSymbol) []*Fragment {
 	return fl.byType[ftype]
 }
 
@@ -131,17 +131,17 @@ func (fl *FragmentList) Len() int {
 }
 
 // Types returns all unique fragment types present.
-func (fl *FragmentList) Types() []int {
-	types := make([]int, 0, len(fl.byType))
+func (fl *FragmentList) Types() []KFXSymbol {
+	types := make([]KFXSymbol, 0, len(fl.byType))
 	for t := range fl.byType {
 		types = append(types, t)
 	}
-	sort.Ints(types)
+	sort.Slice(types, func(i, j int) bool { return types[i] < types[j] })
 	return types
 }
 
 // Remove removes a fragment by key.
-func (fl *FragmentList) Remove(ftype, fid int) bool {
+func (fl *FragmentList) Remove(ftype, fid KFXSymbol) bool {
 	key := FragmentKey{FType: ftype, FID: fid}
 	f, ok := fl.byKey[key]
 	if !ok {
@@ -196,7 +196,7 @@ func (fl *FragmentList) SortedByType() []*Fragment {
 }
 
 // NewFragment creates a new fragment with the given type, id, and value.
-func NewFragment(ftype, fid int, value any) *Fragment {
+func NewFragment(ftype, fid KFXSymbol, value any) *Fragment {
 	return &Fragment{
 		FType: ftype,
 		FID:   fid,
@@ -205,7 +205,7 @@ func NewFragment(ftype, fid int, value any) *Fragment {
 }
 
 // NewRootFragment creates a new root fragment (fid == ftype).
-func NewRootFragment(ftype int, value any) *Fragment {
+func NewRootFragment(ftype KFXSymbol, value any) *Fragment {
 	return &Fragment{
 		FType: ftype,
 		FID:   ftype,
@@ -214,7 +214,7 @@ func NewRootFragment(ftype int, value any) *Fragment {
 }
 
 // StructValue is a helper type for building Ion struct values.
-type StructValue map[int]any
+type StructValue map[KFXSymbol]any
 
 // NewStruct creates a new empty struct value.
 func NewStruct() StructValue {
@@ -222,48 +222,48 @@ func NewStruct() StructValue {
 }
 
 // Set sets a field in the struct.
-func (s StructValue) Set(field int, value any) StructValue {
+func (s StructValue) Set(field KFXSymbol, value any) StructValue {
 	s[field] = value
 	return s
 }
 
 // SetString sets a string field.
-func (s StructValue) SetString(field int, value string) StructValue {
+func (s StructValue) SetString(field KFXSymbol, value string) StructValue {
 	return s.Set(field, value)
 }
 
 // SetInt sets an integer field.
-func (s StructValue) SetInt(field int, value int64) StructValue {
+func (s StructValue) SetInt(field KFXSymbol, value int64) StructValue {
 	return s.Set(field, value)
 }
 
 // SetSymbol sets a symbol field.
-func (s StructValue) SetSymbol(field int, symbolID int) StructValue {
+func (s StructValue) SetSymbol(field KFXSymbol, symbolID KFXSymbol) StructValue {
 	return s.Set(field, SymbolValue(symbolID))
 }
 
 // SetList sets a list field.
-func (s StructValue) SetList(field int, items []any) StructValue {
+func (s StructValue) SetList(field KFXSymbol, items []any) StructValue {
 	return s.Set(field, items)
 }
 
 // SetFloat sets a float64 field.
-func (s StructValue) SetFloat(field int, value float64) StructValue {
+func (s StructValue) SetFloat(field KFXSymbol, value float64) StructValue {
 	return s.Set(field, value)
 }
 
 // SetStruct sets a struct field.
-func (s StructValue) SetStruct(field int, value StructValue) StructValue {
+func (s StructValue) SetStruct(field KFXSymbol, value StructValue) StructValue {
 	return s.Set(field, value)
 }
 
 // Get gets a field value.
-func (s StructValue) Get(field int) any {
+func (s StructValue) Get(field KFXSymbol) any {
 	return s[field]
 }
 
 // GetInt gets an integer field value.
-func (s StructValue) GetInt(field int) (int64, bool) {
+func (s StructValue) GetInt(field KFXSymbol) (int64, bool) {
 	v, ok := s[field]
 	if !ok {
 		return 0, false
@@ -279,7 +279,7 @@ func (s StructValue) GetInt(field int) (int64, bool) {
 }
 
 // GetString gets a string field value.
-func (s StructValue) GetString(field int) (string, bool) {
+func (s StructValue) GetString(field KFXSymbol) (string, bool) {
 	v, ok := s[field]
 	if !ok {
 		return "", false
@@ -303,7 +303,7 @@ func (l *ListValue) Add(item any) *ListValue {
 }
 
 // AddSymbol adds a symbol to the list.
-func (l *ListValue) AddSymbol(symbolID int) *ListValue {
+func (l *ListValue) AddSymbol(symbolID KFXSymbol) *ListValue {
 	return l.Add(SymbolValue(symbolID))
 }
 
@@ -314,7 +314,7 @@ func (l *ListValue) AddString(s string) *ListValue {
 
 // SymbolValue represents a symbol value (as opposed to a string).
 // When writing, this will be encoded as an Ion symbol, not a string.
-type SymbolValue int
+type SymbolValue KFXSymbol
 
 // SymbolByNameValue represents a symbol value by its string name.
 // When writing, the name is resolved to a symbol ID using the local symbol table.
@@ -329,13 +329,13 @@ func SymbolByName(name string) SymbolByNameValue {
 type RawValue []byte
 
 // HasKey checks if a field exists in the struct.
-func (s StructValue) HasKey(field int) bool {
+func (s StructValue) HasKey(field KFXSymbol) bool {
 	_, ok := s[field]
 	return ok
 }
 
 // GetSymbol gets a symbol field value.
-func (s StructValue) GetSymbol(field int) (SymbolValue, bool) {
+func (s StructValue) GetSymbol(field KFXSymbol) (SymbolValue, bool) {
 	v, ok := s[field]
 	if !ok {
 		return 0, false
@@ -345,7 +345,7 @@ func (s StructValue) GetSymbol(field int) (SymbolValue, bool) {
 }
 
 // GetList gets a list field value.
-func (s StructValue) GetList(field int) ([]any, bool) {
+func (s StructValue) GetList(field KFXSymbol) ([]any, bool) {
 	v, ok := s[field]
 	if !ok {
 		return nil, false
@@ -361,7 +361,7 @@ func (s StructValue) GetList(field int) ([]any, bool) {
 }
 
 // GetStruct gets a nested struct field value.
-func (s StructValue) GetStruct(field int) (StructValue, bool) {
+func (s StructValue) GetStruct(field KFXSymbol) (StructValue, bool) {
 	v, ok := s[field]
 	if !ok {
 		return nil, false
@@ -369,7 +369,7 @@ func (s StructValue) GetStruct(field int) (StructValue, bool) {
 	switch val := v.(type) {
 	case StructValue:
 		return val, true
-	case map[int]any:
+	case map[KFXSymbol]any:
 		return StructValue(val), true
 	default:
 		return nil, false
@@ -377,14 +377,14 @@ func (s StructValue) GetStruct(field int) (StructValue, bool) {
 }
 
 // Delete removes a field from the struct.
-func (s StructValue) Delete(field int) StructValue {
+func (s StructValue) Delete(field KFXSymbol) StructValue {
 	delete(s, field)
 	return s
 }
 
 // Keys returns all field IDs in the struct.
-func (s StructValue) Keys() []int {
-	keys := make([]int, 0, len(s))
+func (s StructValue) Keys() []KFXSymbol {
+	keys := make([]KFXSymbol, 0, len(s))
 	for k := range s {
 		keys = append(keys, k)
 	}

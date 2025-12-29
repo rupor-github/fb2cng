@@ -83,7 +83,7 @@ func toBase36(v int) string {
 	return strings.ToUpper(strconv.FormatInt(int64(v), 36))
 }
 
-func imageFormatSymbol(mimeType string) int {
+func imageFormatSymbol(mimeType string) KFXSymbol {
 	m := strings.ToLower(strings.TrimSpace(mimeType))
 	switch m {
 	case "image/jpeg", "image/jpg":
