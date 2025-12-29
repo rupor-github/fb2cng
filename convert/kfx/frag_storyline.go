@@ -356,13 +356,15 @@ func (sb *StorylineBuilder) Build(width, height int) (*Fragment, *Fragment) {
 
 // GenerateStorylineFromBook creates storyline and section fragments from an FB2 book.
 // It uses the provided StyleRegistry to reference styles by name.
-// Returns fragments, next EID, section names for document_data, TOC entries, and per-section EID sets.
-func GenerateStorylineFromBook(book *fb2.FictionBook, styles *StyleRegistry, imageResourceNames map[string]string, startEID int) (*FragmentList, int, []string, []*TOCEntry, map[string][]int, error) {
+// Returns fragments, next EID, section names for document_data, TOC entries, per-section EID sets,
+// and mapping of original FB2 IDs to EIDs (for $266 anchors).
+func GenerateStorylineFromBook(book *fb2.FictionBook, styles *StyleRegistry, imageResourceNames map[string]string, startEID int) (*FragmentList, int, []string, []*TOCEntry, map[string][]int, map[string]int, error) {
 	fragments := NewFragmentList()
 	eidCounter := startEID
 	sectionNames := make([]string, 0)
 	tocEntries := make([]*TOCEntry, 0)
 	sectionEIDs := make(map[string][]int)
+	idToEID := make(map[string]int)
 
 	// All content fragments will be collected here
 	allContentFragments := make(map[string][]string)
@@ -379,9 +381,6 @@ func GenerateStorylineFromBook(book *fb2.FictionBook, styles *StyleRegistry, ima
 	// Process each body
 	for i := range book.Bodies {
 		body := &book.Bodies[i]
-		if body.Footnotes() {
-			continue
-		}
 
 		// Process body intro content (title, epigraphs, image) as separate storyline
 		// This mirrors epub's bodyIntroToXHTML which creates a separate chapter for body intro
@@ -408,8 +407,8 @@ func GenerateStorylineFromBook(book *fb2.FictionBook, styles *StyleRegistry, ima
 				}
 			}
 
-			if err := processBodyIntroContent(book, body, sb, styles, imageResourceNames, ca); err != nil {
-				return nil, 0, nil, nil, nil, err
+			if err := processBodyIntroContent(book, body, sb, styles, imageResourceNames, ca, idToEID); err != nil {
+				return nil, 0, nil, nil, nil, nil, err
 			}
 
 			// Collect content fragments
@@ -436,10 +435,10 @@ func GenerateStorylineFromBook(book *fb2.FictionBook, styles *StyleRegistry, ima
 			storylineFrag, sectionFrag := sb.Build(defaultWidth, defaultHeight)
 
 			if err := fragments.Add(storylineFrag); err != nil {
-				return nil, 0, nil, nil, nil, err
+				return nil, 0, nil, nil, nil, nil, err
 			}
 			if err := fragments.Add(sectionFrag); err != nil {
-				return nil, 0, nil, nil, nil, err
+				return nil, 0, nil, nil, nil, nil, err
 			}
 		}
 
@@ -463,8 +462,8 @@ func GenerateStorylineFromBook(book *fb2.FictionBook, styles *StyleRegistry, ima
 			// Track nested section info for TOC hierarchy
 			var nestedTOCEntries []*TOCEntry
 
-			if err := processStorylineContent(book, section, sb, styles, imageResourceNames, ca, 1, &nestedTOCEntries); err != nil {
-				return nil, 0, nil, nil, nil, err
+			if err := processStorylineContent(book, section, sb, styles, imageResourceNames, ca, 1, &nestedTOCEntries, idToEID); err != nil {
+				return nil, 0, nil, nil, nil, nil, err
 			}
 
 			// Collect content fragments
@@ -492,10 +491,10 @@ func GenerateStorylineFromBook(book *fb2.FictionBook, styles *StyleRegistry, ima
 			storylineFrag, sectionFrag := sb.Build(defaultWidth, defaultHeight)
 
 			if err := fragments.Add(storylineFrag); err != nil {
-				return nil, 0, nil, nil, nil, err
+				return nil, 0, nil, nil, nil, nil, err
 			}
 			if err := fragments.Add(sectionFrag); err != nil {
-				return nil, 0, nil, nil, nil, err
+				return nil, 0, nil, nil, nil, nil, err
 			}
 		}
 	}
@@ -504,11 +503,11 @@ func GenerateStorylineFromBook(book *fb2.FictionBook, styles *StyleRegistry, ima
 	for name, contentList := range allContentFragments {
 		contentFrag := buildContentFragmentByName(name, contentList)
 		if err := fragments.Add(contentFrag); err != nil {
-			return nil, 0, nil, nil, nil, err
+			return nil, 0, nil, nil, nil, nil, err
 		}
 	}
 
-	return fragments, eidCounter, sectionNames, tocEntries, sectionEIDs, nil
+	return fragments, eidCounter, sectionNames, tocEntries, sectionEIDs, idToEID, nil
 }
 
 // processBodyIntroContent processes body intro content using ContentAccumulator.
@@ -528,12 +527,17 @@ func addVignetteImage(book *fb2.FictionBook, sb *StorylineBuilder, styles *Style
 	sb.AddImage(resName, "vignette")
 }
 
-func processBodyIntroContent(book *fb2.FictionBook, body *fb2.Body, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames map[string]string, ca *ContentAccumulator) error {
+func processBodyIntroContent(book *fb2.FictionBook, body *fb2.Body, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames map[string]string, ca *ContentAccumulator, idToEID map[string]int) error {
 	if body.Image != nil {
 		imgID := strings.TrimPrefix(body.Image.Href, "#")
 		if resName, ok := imageResourceNames[imgID]; ok {
 			styles.EnsureStyle("image")
-			sb.AddImage(resName, "image")
+			eid := sb.AddImage(resName, "image")
+			if body.Image.ID != "" {
+				if _, exists := idToEID[body.Image.ID]; !exists {
+					idToEID[body.Image.ID] = eid
+				}
+			}
 		}
 	}
 
@@ -544,7 +548,7 @@ func processBodyIntroContent(book *fb2.FictionBook, body *fb2.Body, sb *Storylin
 		}
 		for _, item := range body.Title.Items {
 			if item.Paragraph != nil {
-				addParagraphWithImages(item.Paragraph, "body-title", sb, styles, imageResourceNames, ca)
+				addParagraphWithImages(item.Paragraph, "body-title", sb, styles, imageResourceNames, ca, idToEID)
 			}
 		}
 		if body.Main() {
@@ -554,11 +558,16 @@ func processBodyIntroContent(book *fb2.FictionBook, body *fb2.Body, sb *Storylin
 
 	// Process body epigraphs
 	for _, epigraph := range body.Epigraphs {
-		for _, item := range epigraph.Flow.Items {
-			processFlowItem(&item, sb, styles, imageResourceNames, ca)
+		if epigraph.Flow.ID != "" {
+			if _, exists := idToEID[epigraph.Flow.ID]; !exists {
+				idToEID[epigraph.Flow.ID] = sb.NextEID()
+			}
+		}
+		for i := range epigraph.Flow.Items {
+			processFlowItem(&epigraph.Flow.Items[i], sb, styles, imageResourceNames, ca, idToEID)
 		}
 		for i := range epigraph.TextAuthors {
-			addParagraphWithImages(&epigraph.TextAuthors[i], "text-author", sb, styles, imageResourceNames, ca)
+			addParagraphWithImages(&epigraph.TextAuthors[i], "text-author", sb, styles, imageResourceNames, ca, idToEID)
 		}
 	}
 
@@ -566,12 +575,23 @@ func processBodyIntroContent(book *fb2.FictionBook, body *fb2.Body, sb *Storylin
 }
 
 // processStorylineContent processes FB2 section content using ContentAccumulator.
-func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames map[string]string, ca *ContentAccumulator, depth int, nestedTOC *[]*TOCEntry) error {
+func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames map[string]string, ca *ContentAccumulator, depth int, nestedTOC *[]*TOCEntry, idToEID map[string]int) error {
+	if section != nil && section.ID != "" {
+		if _, exists := idToEID[section.ID]; !exists {
+			idToEID[section.ID] = sb.NextEID()
+		}
+	}
+
 	if section.Image != nil {
 		imgID := strings.TrimPrefix(section.Image.Href, "#")
 		if resName, ok := imageResourceNames[imgID]; ok {
 			styles.EnsureStyle("image")
-			sb.AddImage(resName, "image")
+			eid := sb.AddImage(resName, "image")
+			if section.Image.ID != "" {
+				if _, exists := idToEID[section.Image.ID]; !exists {
+					idToEID[section.Image.ID] = eid
+				}
+			}
 		}
 	}
 
@@ -586,7 +606,7 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 		styleName := fmt.Sprintf("h%d", min(depth, 6))
 		for _, item := range section.Title.Items {
 			if item.Paragraph != nil {
-				addParagraphWithImages(item.Paragraph, styleName, sb, styles, imageResourceNames, ca)
+				addParagraphWithImages(item.Paragraph, styleName, sb, styles, imageResourceNames, ca, idToEID)
 			}
 		}
 
@@ -599,23 +619,34 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 
 	// Process annotation
 	if section.Annotation != nil {
-		for _, item := range section.Annotation.Items {
-			processFlowItem(&item, sb, styles, imageResourceNames, ca)
+		if section.Annotation.ID != "" {
+			if _, exists := idToEID[section.Annotation.ID]; !exists {
+				idToEID[section.Annotation.ID] = sb.NextEID()
+			}
+		}
+		for i := range section.Annotation.Items {
+			processFlowItem(&section.Annotation.Items[i], sb, styles, imageResourceNames, ca, idToEID)
 		}
 	}
 
 	// Process epigraphs
 	for _, epigraph := range section.Epigraphs {
-		for _, item := range epigraph.Flow.Items {
-			processFlowItem(&item, sb, styles, imageResourceNames, ca)
+		if epigraph.Flow.ID != "" {
+			if _, exists := idToEID[epigraph.Flow.ID]; !exists {
+				idToEID[epigraph.Flow.ID] = sb.NextEID()
+			}
+		}
+		for i := range epigraph.Flow.Items {
+			processFlowItem(&epigraph.Flow.Items[i], sb, styles, imageResourceNames, ca, idToEID)
 		}
 		for i := range epigraph.TextAuthors {
-			addParagraphWithImages(&epigraph.TextAuthors[i], "text-author", sb, styles, imageResourceNames, ca)
+			addParagraphWithImages(&epigraph.TextAuthors[i], "text-author", sb, styles, imageResourceNames, ca, idToEID)
 		}
 	}
 
 	// Process content items
-	for _, item := range section.Content {
+	for i := range section.Content {
+		item := &section.Content[i]
 		if item.Kind == fb2.FlowSection && item.Section != nil {
 			// Nested section - track for TOC hierarchy
 			nestedSection := item.Section
@@ -626,7 +657,7 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 
 			// Process nested section content recursively
 			var childTOC []*TOCEntry
-			if err := processStorylineContent(book, nestedSection, sb, styles, imageResourceNames, ca, depth+1, &childTOC); err != nil {
+			if err := processStorylineContent(book, nestedSection, sb, styles, imageResourceNames, ca, depth+1, &childTOC, idToEID); err != nil {
 				return err
 			}
 
@@ -645,7 +676,7 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 				*nestedTOC = append(*nestedTOC, childTOC...)
 			}
 		} else {
-			processFlowItem(&item, sb, styles, imageResourceNames, ca)
+			processFlowItem(item, sb, styles, imageResourceNames, ca, idToEID)
 		}
 	}
 
@@ -659,11 +690,11 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 }
 
 // processFlowItem processes a flow item using ContentAccumulator.
-func processFlowItem(item *fb2.FlowItem, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames map[string]string, ca *ContentAccumulator) {
-	addContent := func(text, styleName string) {
+func processFlowItem(item *fb2.FlowItem, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames map[string]string, ca *ContentAccumulator, idToEID map[string]int) {
+	addContent := func(text, styleName string) int {
 		styles.EnsureStyle(styleName)
 		contentName, offset := ca.Add(text)
-		sb.AddContent(SymText, contentName, offset, styleName)
+		return sb.AddContent(SymText, contentName, offset, styleName)
 	}
 
 	switch item.Kind {
@@ -673,12 +704,12 @@ func processFlowItem(item *fb2.FlowItem, sb *StorylineBuilder, styles *StyleRegi
 			if styleName == "" {
 				styleName = "paragraph"
 			}
-			addParagraphWithImages(item.Paragraph, styleName, sb, styles, imageResourceNames, ca)
+			addParagraphWithImages(item.Paragraph, styleName, sb, styles, imageResourceNames, ca, idToEID)
 		}
 
 	case fb2.FlowSubtitle:
 		if item.Subtitle != nil {
-			addParagraphWithImages(item.Subtitle, "subtitle", sb, styles, imageResourceNames, ca)
+			addParagraphWithImages(item.Subtitle, "subtitle", sb, styles, imageResourceNames, ca, idToEID)
 		}
 
 	case fb2.FlowEmptyLine:
@@ -686,19 +717,39 @@ func processFlowItem(item *fb2.FlowItem, sb *StorylineBuilder, styles *StyleRegi
 
 	case fb2.FlowPoem:
 		if item.Poem != nil {
-			processPoem(item.Poem, sb, styles, imageResourceNames, ca)
+			if item.Poem.ID != "" {
+				if _, exists := idToEID[item.Poem.ID]; !exists {
+					idToEID[item.Poem.ID] = sb.NextEID()
+				}
+			}
+			processPoem(item.Poem, sb, styles, imageResourceNames, ca, idToEID)
 		}
 
 	case fb2.FlowCite:
 		if item.Cite != nil {
-			processCite(item.Cite, sb, styles, imageResourceNames, ca)
+			if item.Cite.ID != "" {
+				if _, exists := idToEID[item.Cite.ID]; !exists {
+					idToEID[item.Cite.ID] = sb.NextEID()
+				}
+			}
+			processCite(item.Cite, sb, styles, imageResourceNames, ca, idToEID)
 		}
 
 	case fb2.FlowTable:
 		if item.Table != nil {
+			if item.Table.ID != "" {
+				if _, exists := idToEID[item.Table.ID]; !exists {
+					idToEID[item.Table.ID] = sb.NextEID()
+				}
+			}
 			text := tableToText(item.Table)
 			if text != "" {
-				addContent(text, "table")
+				eid := addContent(text, "table")
+				if item.Table.ID != "" {
+					if _, exists := idToEID[item.Table.ID]; !exists {
+						idToEID[item.Table.ID] = eid
+					}
+				}
 			}
 		}
 
@@ -712,7 +763,12 @@ func processFlowItem(item *fb2.FlowItem, sb *StorylineBuilder, styles *StyleRegi
 			return
 		}
 		styles.EnsureStyle("image")
-		sb.AddImage(resName, "image")
+		eid := sb.AddImage(resName, "image")
+		if item.Image.ID != "" {
+			if _, exists := idToEID[item.Image.ID]; !exists {
+				idToEID[item.Image.ID] = eid
+			}
+		}
 
 	case fb2.FlowSection:
 		// Nested sections handled in processStorylineContent
@@ -720,11 +776,11 @@ func processFlowItem(item *fb2.FlowItem, sb *StorylineBuilder, styles *StyleRegi
 }
 
 // processPoem processes poem content using ContentAccumulator.
-func processPoem(poem *fb2.Poem, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames map[string]string, ca *ContentAccumulator) {
+func processPoem(poem *fb2.Poem, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames map[string]string, ca *ContentAccumulator, idToEID map[string]int) {
 	if poem.Title != nil {
 		for _, item := range poem.Title.Items {
 			if item.Paragraph != nil {
-				addParagraphWithImages(item.Paragraph, "poem-title", sb, styles, imageResourceNames, ca)
+				addParagraphWithImages(item.Paragraph, "poem-title", sb, styles, imageResourceNames, ca, idToEID)
 			}
 		}
 	}
@@ -733,50 +789,53 @@ func processPoem(poem *fb2.Poem, sb *StorylineBuilder, styles *StyleRegistry, im
 		if stanza.Title != nil {
 			for _, item := range stanza.Title.Items {
 				if item.Paragraph != nil {
-					addParagraphWithImages(item.Paragraph, "poem-title", sb, styles, imageResourceNames, ca)
+					addParagraphWithImages(item.Paragraph, "poem-title", sb, styles, imageResourceNames, ca, idToEID)
 				}
 			}
 		}
 		for i := range stanza.Verses {
-			addParagraphWithImages(&stanza.Verses[i], "verse", sb, styles, imageResourceNames, ca)
+			addParagraphWithImages(&stanza.Verses[i], "verse", sb, styles, imageResourceNames, ca, idToEID)
 		}
 	}
 
 	for i := range poem.TextAuthors {
-		addParagraphWithImages(&poem.TextAuthors[i], "text-author", sb, styles, imageResourceNames, ca)
+		addParagraphWithImages(&poem.TextAuthors[i], "text-author", sb, styles, imageResourceNames, ca, idToEID)
 	}
 }
 
 // processCite processes cite content using ContentAccumulator.
-func processCite(cite *fb2.Cite, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames map[string]string, ca *ContentAccumulator) {
+func processCite(cite *fb2.Cite, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames map[string]string, ca *ContentAccumulator, idToEID map[string]int) {
 	for _, item := range cite.Items {
 		if item.Kind == fb2.FlowParagraph && item.Paragraph != nil {
-			addParagraphWithImages(item.Paragraph, "cite", sb, styles, imageResourceNames, ca)
+			addParagraphWithImages(item.Paragraph, "cite", sb, styles, imageResourceNames, ca, idToEID)
 		}
 	}
 
 	for i := range cite.TextAuthors {
-		addParagraphWithImages(&cite.TextAuthors[i], "text-author", sb, styles, imageResourceNames, ca)
+		addParagraphWithImages(&cite.TextAuthors[i], "text-author", sb, styles, imageResourceNames, ca, idToEID)
 	}
 }
 
-func addParagraphWithImages(para *fb2.Paragraph, styleName string, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames map[string]string, ca *ContentAccumulator) {
-	addText := func(text string) {
-		if text == "" {
-			return
-		}
-		styles.EnsureStyle(styleName)
-		contentName, offset := ca.Add(text)
-		sb.AddContent(SymText, contentName, offset, styleName)
-	}
+func addParagraphWithImages(para *fb2.Paragraph, styleName string, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames map[string]string, ca *ContentAccumulator, idToEID map[string]int) {
+	var (
+		buf    strings.Builder
+		events []StyleEventRef
+	)
 
-	var buf strings.Builder
 	flush := func() {
 		if buf.Len() == 0 {
 			return
 		}
-		addText(buf.String())
+		styles.EnsureStyle(styleName)
+		contentName, offset := ca.Add(buf.String())
+		eid := sb.AddContentAndEvents(SymText, contentName, offset, styleName, events)
+		if para.ID != "" {
+			if _, exists := idToEID[para.ID]; !exists {
+				idToEID[para.ID] = eid
+			}
+		}
 		buf.Reset()
+		events = nil
 	}
 
 	var walk func(seg *fb2.InlineSegment)
@@ -796,14 +855,28 @@ func addParagraphWithImages(para *fb2.Paragraph, styleName string, sb *Storyline
 			return
 		}
 
+		if seg.Kind == fb2.InlineLink {
+			linkTo := strings.TrimPrefix(seg.Href, "#")
+			start := buf.Len()
+			buf.WriteString(seg.Text)
+			for i := range seg.Children {
+				walk(&seg.Children[i])
+			}
+			end := buf.Len()
+			if linkTo != "" && linkTo != seg.Href && end > start {
+				events = append(events, StyleEventRef{Offset: start, Length: end - start, LinkTo: linkTo})
+			}
+			return
+		}
+
 		buf.WriteString(seg.Text)
-		for _, child := range seg.Children {
-			walk(&child)
+		for i := range seg.Children {
+			walk(&seg.Children[i])
 		}
 	}
 
-	for _, seg := range para.Text {
-		walk(&seg)
+	for i := range para.Text {
+		walk(&para.Text[i])
 	}
 	flush()
 }

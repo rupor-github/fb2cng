@@ -101,7 +101,7 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	// Generate storyline and section fragments from book content
 	// EIDs start at 1000 - this is arbitrary but leaves room for future system IDs
 	startEID := 1000
-	contentFragments, nextEID, sectionNames, tocEntries, sectionEIDs, err := GenerateStorylineFromBook(c.Book, styles, imageResourceNames, startEID)
+	contentFragments, nextEID, sectionNames, tocEntries, sectionEIDs, idToEID, err := GenerateStorylineFromBook(c.Book, styles, imageResourceNames, startEID)
 	if err != nil {
 		return err
 	}
@@ -202,11 +202,8 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	}
 
 	// $266 Anchors (for internal links)
-	referencedAnchors := make(map[string]bool, len(c.LinksRevIndex))
-	for id := range c.LinksRevIndex {
-		referencedAnchors[id] = true
-	}
-	for _, frag := range buildAnchorFragments(tocEntries, referencedAnchors) {
+	referencedAnchors := collectLinkTargets(contentFragments)
+	for _, frag := range buildAnchorFragments(idToEID, referencedAnchors) {
 		if err := container.Fragments.Add(frag); err != nil {
 			return err
 		}
@@ -320,4 +317,49 @@ func hashToAlphanumeric(input string, length int) string {
 		result[i] = charsetCR[idx]
 	}
 	return string(result)
+}
+
+func collectLinkTargets(fragments *FragmentList) map[string]bool {
+	targets := make(map[string]bool)
+	for _, frag := range fragments.GetByType(SymStoryline) {
+		v, ok := frag.Value.(StructValue)
+		if !ok {
+			continue
+		}
+		entries, ok := v.GetList(SymContentList)
+		if !ok {
+			continue
+		}
+		for _, it := range entries {
+			entry, ok := it.(StructValue)
+			if !ok {
+				continue
+			}
+			evs, ok := entry.GetList(SymStyleEvents)
+			if !ok {
+				continue
+			}
+			for _, evAny := range evs {
+				ev, ok := evAny.(StructValue)
+				if !ok {
+					continue
+				}
+				linkTo, ok := ev[SymLinkTo]
+				if !ok {
+					continue
+				}
+				switch x := linkTo.(type) {
+				case SymbolByNameValue:
+					if s := string(x); s != "" {
+						targets[s] = true
+					}
+				case string:
+					if x != "" {
+						targets[x] = true
+					}
+				}
+			}
+		}
+	}
+	return targets
 }
