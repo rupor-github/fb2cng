@@ -11,10 +11,11 @@ formatting between EPUB and KFX outputs.
 2. Implementation docs are in `docs/`
 3. Follow project coding standards (Go idioms, structured logging, etc.)
 4. Use latest Go features - ALWAYS
-5. Instead of gofmt use `goimports-reviser -format -rm-unused -set-alias
+5. For any function or method if present context should always be first argument and zap.Logger last one 
+6. Instead of gofmt use `goimports-reviser -format -rm-unused -set-alias
    -company-prefixes github.com/rupor-github -excludes vendor ./...` - it is
    always available
-6. Module path is `fbc` (not `fb2cng`) - use `fbc/...` for imports
+7. Module path is `fbc` (not `fb2cng`) - use `fbc/...` for imports
 
 ## Selector Coverage Policy (EPUB parity)
 

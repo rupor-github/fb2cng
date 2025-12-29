@@ -2,7 +2,7 @@ package kfx
 
 // BuildAuxiliaryDataFragments creates $597 auxiliary_data fragments.
 // Reference files use these to mark target sections and related synthetic IDs.
-func BuildAuxiliaryDataFragments(ids []string) []*Fragment {
+func BuildAuxiliaryDataFragments(ids sectionNameList) []*Fragment {
 	out := make([]*Fragment, 0, len(ids))
 	for _, id := range ids {
 		if id == "" {

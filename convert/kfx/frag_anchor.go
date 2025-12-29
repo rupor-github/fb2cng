@@ -15,7 +15,7 @@ func isGeneratedSectionName(name string) bool {
 // buildAnchorFragments generates $266 anchor fragments for internal navigation.
 // Fragment naming uses the actual ID from the source document (e.g., section IDs, note IDs).
 // Generated section names (c0, c1, etc.) are filtered to avoid fragment id collisions.
-func buildAnchorFragments(idToEID map[string]int, referenced map[string]bool) []*Fragment {
+func buildAnchorFragments(idToEID eidByFB2ID, referenced map[string]bool) []*Fragment {
 	var out []*Fragment
 	if len(referenced) == 0 || len(idToEID) == 0 {
 		return out

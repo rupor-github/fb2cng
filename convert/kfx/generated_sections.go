@@ -32,7 +32,7 @@ func nextContentBaseCounter(fragments *FragmentList) int {
 	return maxN + 1
 }
 
-func nextSectionIndex(sectionNames []string) int {
+func nextSectionIndex(sectionNames sectionNameList) int {
 	maxN := -1
 	for _, s := range sectionNames {
 		if !strings.HasPrefix(s, "c") {
@@ -84,22 +84,19 @@ func flattenTOCEntries(entries []*TOCEntry, includeUntitled bool) []string {
 	return out
 }
 
-func addGeneratedSections(
-	c *content.Content,
-	cfg *config.DocumentConfig,
-	log *zap.Logger,
-	styles *StyleRegistry,
-	fragments *FragmentList,
-	sectionNames []string,
-	tocEntries []*TOCEntry,
-	sectionEIDs map[string][]int,
-	nextEID int,
-) ([]string, []*TOCEntry, map[string][]int, int, error) {
+// addGeneratedSections optionally injects generated sections (annotation page and/or TOC page).
+//
+// Returns (in order): updated sectionNames, updated tocEntries, updated sectionEIDs, nextEID, error.
+// It also appends the necessary fragments (content/storyline/section) into fragments.
+func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
+	styles *StyleRegistry, fragments *FragmentList, sectionNames sectionNameList,
+	tocEntries []*TOCEntry, sectionEIDs sectionEIDsBySectionName, nextEID int, log *zap.Logger,
+) (sectionNameList, []*TOCEntry, sectionEIDsBySectionName, int, error) {
 	annotationEnabled := cfg.Annotation.Enable && c.Book.Description.TitleInfo.Annotation != nil
 	tocPageEnabled := cfg.TOCPage.Placement != common.TOCPagePlacementNone
 
-	before := make([]string, 0)
-	after := make([]string, 0)
+	before := make(sectionNameList, 0)
+	after := make(sectionNameList, 0)
 
 	sectionIdx := nextSectionIndex(sectionNames)
 	storyIdx := len(sectionNames) + 1
@@ -200,13 +197,13 @@ func addGeneratedSections(
 		}
 
 		if cfg.TOCPage.Placement == common.TOCPagePlacementBefore {
-			before = append([]string{tocSectionName}, before...)
+			before = append(sectionNameList{tocSectionName}, before...)
 		} else {
 			after = append(after, tocSectionName)
 		}
 	}
 
-	newOrder := make([]string, 0, len(sectionNames)+len(before)+len(after))
+	newOrder := make(sectionNameList, 0, len(sectionNames)+len(before)+len(after))
 	newOrder = append(newOrder, before...)
 	newOrder = append(newOrder, sectionNames...)
 	newOrder = append(newOrder, after...)

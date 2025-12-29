@@ -3,7 +3,7 @@ package kfx
 import "testing"
 
 func TestCollectAllEIDs(t *testing.T) {
-	all := CollectAllEIDs(map[string][]int{
+	all := CollectAllEIDs(sectionEIDsBySectionName{
 		"c0": {1002, 1001, 1001},
 		"c1": {1004, 1003},
 	})
@@ -19,7 +19,7 @@ func TestCollectAllEIDs(t *testing.T) {
 }
 
 func TestBuildPositionMap(t *testing.T) {
-	f := BuildPositionMap([]string{"c0"}, map[string][]int{"c0": {1000, 1001, 1002}})
+	f := BuildPositionMap(sectionNameList{"c0"}, sectionEIDsBySectionName{"c0": {1000, 1001, 1002}})
 	if f.FType != SymPositionMap || f.FID != SymPositionMap {
 		t.Fatalf("unexpected fragment key: %v/%v", f.FType, f.FID)
 	}

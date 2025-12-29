@@ -3,7 +3,7 @@ package kfx
 import "sort"
 
 // CollectAllEIDs returns a sorted unique list of all EIDs present in sectionEIDs.
-func CollectAllEIDs(sectionEIDs map[string][]int) []int {
+func CollectAllEIDs(sectionEIDs sectionEIDsBySectionName) []int {
 	seen := make(map[int]struct{})
 	out := make([]int, 0)
 	for _, eids := range sectionEIDs {
@@ -62,7 +62,7 @@ func compressEIDs(eids []int) []any {
 
 // BuildPositionMap creates the $264 position_map root fragment.
 // Value is a list of structs, one per section: {$174: section_id, $181: [eid...]}.
-func BuildPositionMap(sectionNames []string, sectionEIDs map[string][]int) *Fragment {
+func BuildPositionMap(sectionNames sectionNameList, sectionEIDs sectionEIDsBySectionName) *Fragment {
 	entries := make([]any, 0, len(sectionNames))
 	for _, sectionName := range sectionNames {
 		eids := sectionEIDs[sectionName]
@@ -80,7 +80,7 @@ type PositionItem struct {
 }
 
 // CollectPositionItems extracts content entries (including page templates) in reading order.
-func CollectPositionItems(fragments *FragmentList, sectionNames []string) []PositionItem {
+func CollectPositionItems(fragments *FragmentList, sectionNames sectionNameList) []PositionItem {
 	if fragments == nil {
 		return nil
 	}

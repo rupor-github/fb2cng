@@ -111,7 +111,7 @@ func (fb *FictionBook) buildIDIndex(_ *zap.Logger) IDIndex {
 }
 
 // indexHref processes an href and adds it to the index with the appropriate type
-func indexHref(index ReverseLinkIndex, log *zap.Logger, href, linkType string, path []any) {
+func indexHref(index ReverseLinkIndex, href, linkType string, path []any, log *zap.Logger) {
 	if targetID, ok := strings.CutPrefix(href, "#"); ok {
 		// Internal link
 		index[targetID] = append(index[targetID], ElementRef{
@@ -150,18 +150,19 @@ func (fb *FictionBook) buildReverseLinkIndex(log *zap.Logger) ReverseLinkIndex {
 	// Index coverpage links
 	for i := range fb.Description.TitleInfo.Coverpage {
 		href := fb.Description.TitleInfo.Coverpage[i].Href
-		indexHref(index, log, href, "coverpage",
-			[]any{&fb.Description, &fb.Description.TitleInfo, &fb.Description.TitleInfo.Coverpage[i]})
+		indexHref(index, href, "coverpage",
+			[]any{&fb.Description, &fb.Description.TitleInfo, &fb.Description.TitleInfo.Coverpage[i]},
+			log)
 	}
 
 	// Index title-info annotation
 	if fb.Description.TitleInfo.Annotation != nil {
-		fb.indexFlowLinks(index, log, fb.Description.TitleInfo.Annotation, []any{&fb.Description, &fb.Description.TitleInfo, fb.Description.TitleInfo.Annotation})
+		fb.indexFlowLinks(index, fb.Description.TitleInfo.Annotation, []any{&fb.Description, &fb.Description.TitleInfo, fb.Description.TitleInfo.Annotation}, log)
 	}
 
 	// Index description history
 	if fb.Description.DocumentInfo.History != nil {
-		fb.indexFlowLinks(index, log, fb.Description.DocumentInfo.History, []any{&fb.Description, &fb.Description.DocumentInfo, fb.Description.DocumentInfo.History})
+		fb.indexFlowLinks(index, fb.Description.DocumentInfo.History, []any{&fb.Description, &fb.Description.DocumentInfo, fb.Description.DocumentInfo.History}, log)
 	}
 
 	// Index bodies
@@ -171,12 +172,12 @@ func (fb *FictionBook) buildReverseLinkIndex(log *zap.Logger) ReverseLinkIndex {
 		// Index epigraphs
 		for j := range fb.Bodies[i].Epigraphs {
 			epiPath := append(append([]any{}, bodyPath...), &fb.Bodies[i].Epigraphs[j])
-			fb.indexFlowLinks(index, log, &fb.Bodies[i].Epigraphs[j].Flow, append(epiPath, &fb.Bodies[i].Epigraphs[j].Flow))
+			fb.indexFlowLinks(index, &fb.Bodies[i].Epigraphs[j].Flow, append(epiPath, &fb.Bodies[i].Epigraphs[j].Flow), log)
 		}
 
 		// Index sections
 		for j := range fb.Bodies[i].Sections {
-			fb.indexSectionLinks(index, log, &fb.Bodies[i].Sections[j], append(append([]any{}, bodyPath...), &fb.Bodies[i].Sections[j]))
+			fb.indexSectionLinks(index, &fb.Bodies[i].Sections[j], append(append([]any{}, bodyPath...), &fb.Bodies[i].Sections[j]), log)
 		}
 	}
 
@@ -276,61 +277,61 @@ func (fb *FictionBook) indexFlowItemIDs(index IDIndex, item *FlowItem, path []an
 	}
 }
 
-func (fb *FictionBook) indexSectionLinks(index ReverseLinkIndex, log *zap.Logger, s *Section, path []any) {
+func (fb *FictionBook) indexSectionLinks(index ReverseLinkIndex, s *Section, path []any, log *zap.Logger) {
 	// Index title paragraphs
 	if s.Title != nil {
 		titlePath := append(append([]any{}, path...), s.Title)
 		for i := range s.Title.Items {
 			if s.Title.Items[i].Paragraph != nil {
-				fb.indexInlineLinks(index, log, s.Title.Items[i].Paragraph.Text, append(append([]any{}, titlePath...), &s.Title.Items[i], s.Title.Items[i].Paragraph))
+				fb.indexInlineLinks(index, s.Title.Items[i].Paragraph.Text, append(append([]any{}, titlePath...), &s.Title.Items[i], s.Title.Items[i].Paragraph), log)
 			}
 		}
 	}
 
 	for i := range s.Epigraphs {
 		epiPath := append(append([]any{}, path...), &s.Epigraphs[i])
-		fb.indexFlowLinks(index, log, &s.Epigraphs[i].Flow, append(epiPath, &s.Epigraphs[i].Flow))
+		fb.indexFlowLinks(index, &s.Epigraphs[i].Flow, append(epiPath, &s.Epigraphs[i].Flow), log)
 	}
 
 	if s.Annotation != nil {
-		fb.indexFlowLinks(index, log, s.Annotation, append(append([]any{}, path...), s.Annotation))
+		fb.indexFlowLinks(index, s.Annotation, append(append([]any{}, path...), s.Annotation), log)
 	}
 
 	for i := range s.Content {
-		fb.indexFlowItemLinks(index, log, &s.Content[i], append(append([]any{}, path...), &s.Content[i]))
+		fb.indexFlowItemLinks(index, &s.Content[i], append(append([]any{}, path...), &s.Content[i]), log)
 	}
 }
 
-func (fb *FictionBook) indexFlowLinks(index ReverseLinkIndex, log *zap.Logger, flow *Flow, path []any) {
+func (fb *FictionBook) indexFlowLinks(index ReverseLinkIndex, flow *Flow, path []any, log *zap.Logger) {
 	for i := range flow.Items {
-		fb.indexFlowItemLinks(index, log, &flow.Items[i], append(append([]any{}, path...), &flow.Items[i]))
+		fb.indexFlowItemLinks(index, &flow.Items[i], append(append([]any{}, path...), &flow.Items[i]), log)
 	}
 }
 
-func (fb *FictionBook) indexFlowItemLinks(index ReverseLinkIndex, log *zap.Logger, item *FlowItem, path []any) {
+func (fb *FictionBook) indexFlowItemLinks(index ReverseLinkIndex, item *FlowItem, path []any, log *zap.Logger) {
 	switch item.Kind {
 	case FlowParagraph:
 		if item.Paragraph != nil {
-			fb.indexInlineLinks(index, log, item.Paragraph.Text, append(append([]any{}, path...), item.Paragraph))
+			fb.indexInlineLinks(index, item.Paragraph.Text, append(append([]any{}, path...), item.Paragraph), log)
 		}
 	case FlowSubtitle:
 		if item.Subtitle != nil {
-			fb.indexInlineLinks(index, log, item.Subtitle.Text, append(append([]any{}, path...), item.Subtitle))
+			fb.indexInlineLinks(index, item.Subtitle.Text, append(append([]any{}, path...), item.Subtitle), log)
 		}
 	case FlowPoem:
 		if item.Poem != nil {
 			poemPath := append(append([]any{}, path...), item.Poem)
 			for i := range item.Poem.Epigraphs {
 				epiPath := append(append([]any{}, poemPath...), &item.Poem.Epigraphs[i])
-				fb.indexFlowLinks(index, log, &item.Poem.Epigraphs[i].Flow, append(epiPath, &item.Poem.Epigraphs[i].Flow))
+				fb.indexFlowLinks(index, &item.Poem.Epigraphs[i].Flow, append(epiPath, &item.Poem.Epigraphs[i].Flow), log)
 			}
 			for i := range item.Poem.Subtitles {
-				fb.indexInlineLinks(index, log, item.Poem.Subtitles[i].Text, append(append([]any{}, poemPath...), &item.Poem.Subtitles[i]))
+				fb.indexInlineLinks(index, item.Poem.Subtitles[i].Text, append(append([]any{}, poemPath...), &item.Poem.Subtitles[i]), log)
 			}
 			for i := range item.Poem.Stanzas {
 				stanzaPath := append(append([]any{}, poemPath...), &item.Poem.Stanzas[i])
 				for j := range item.Poem.Stanzas[i].Verses {
-					fb.indexInlineLinks(index, log, item.Poem.Stanzas[i].Verses[j].Text, append(stanzaPath, &item.Poem.Stanzas[i].Verses[j]))
+					fb.indexInlineLinks(index, item.Poem.Stanzas[i].Verses[j].Text, append(stanzaPath, &item.Poem.Stanzas[i].Verses[j]), log)
 				}
 			}
 		}
@@ -338,10 +339,10 @@ func (fb *FictionBook) indexFlowItemLinks(index ReverseLinkIndex, log *zap.Logge
 		if item.Cite != nil {
 			citePath := append(append([]any{}, path...), item.Cite)
 			for i := range item.Cite.Items {
-				fb.indexFlowItemLinks(index, log, &item.Cite.Items[i], append(append([]any{}, citePath...), &item.Cite.Items[i]))
+				fb.indexFlowItemLinks(index, &item.Cite.Items[i], append(append([]any{}, citePath...), &item.Cite.Items[i]), log)
 			}
 			for i := range item.Cite.TextAuthors {
-				fb.indexInlineLinks(index, log, item.Cite.TextAuthors[i].Text, append(append([]any{}, citePath...), &item.Cite.TextAuthors[i]))
+				fb.indexInlineLinks(index, item.Cite.TextAuthors[i].Text, append(append([]any{}, citePath...), &item.Cite.TextAuthors[i]), log)
 			}
 		}
 	case FlowTable:
@@ -351,35 +352,36 @@ func (fb *FictionBook) indexFlowItemLinks(index ReverseLinkIndex, log *zap.Logge
 				rowPath := append(append([]any{}, tablePath...), &item.Table.Rows[i])
 				for j := range item.Table.Rows[i].Cells {
 					cellPath := append(append([]any{}, rowPath...), &item.Table.Rows[i].Cells[j])
-					fb.indexInlineLinks(index, log, item.Table.Rows[i].Cells[j].Content, cellPath)
+					fb.indexInlineLinks(index, item.Table.Rows[i].Cells[j].Content, cellPath, log)
 				}
 			}
 		}
 	case FlowImage:
 		if item.Image != nil {
 			href := item.Image.Href
-			indexHref(index, log, href, "block-image",
-				append(append([]any{}, path...), item.Image))
+			indexHref(index, href, "block-image",
+				append(append([]any{}, path...), item.Image),
+				log)
 		}
 	case FlowSection:
 		if item.Section != nil {
-			fb.indexSectionLinks(index, log, item.Section, append(append([]any{}, path...), item.Section))
+			fb.indexSectionLinks(index, item.Section, append(append([]any{}, path...), item.Section), log)
 		}
 	}
 }
 
-func (fb *FictionBook) indexInlineLinks(index ReverseLinkIndex, log *zap.Logger, segments []InlineSegment, path []any) {
+func (fb *FictionBook) indexInlineLinks(index ReverseLinkIndex, segments []InlineSegment, path []any, log *zap.Logger) {
 	for i := range segments {
 		segPath := append(append([]any{}, path...), &segments[i])
 		if segments[i].Kind == InlineLink {
 			href := segments[i].Href
-			indexHref(index, log, href, "inline-link", segPath)
+			indexHref(index, href, "inline-link", segPath, log)
 		} else if segments[i].Kind == InlineImageSegment && segments[i].Image != nil {
 			href := segments[i].Image.Href
-			indexHref(index, log, href, "inline-image", segPath)
+			indexHref(index, href, "inline-image", segPath, log)
 		}
 		if len(segments[i].Children) > 0 {
-			fb.indexInlineLinks(index, log, segments[i].Children, segPath)
+			fb.indexInlineLinks(index, segments[i].Children, segPath, log)
 		}
 	}
 }

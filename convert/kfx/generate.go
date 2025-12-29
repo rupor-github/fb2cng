@@ -101,7 +101,7 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	// Generate storyline and section fragments from book content
 	// EIDs start at 1000 - this is arbitrary but leaves room for future system IDs
 	startEID := 1000
-	contentFragments, nextEID, sectionNames, tocEntries, sectionEIDs, idToEID, err := GenerateStorylineFromBook(c.Book, styles, imageResourceNames, startEID)
+	contentFragments, nextEID, sectionNames, tocEntries, sectionEIDs, idToEID, err := generateStoryline(c.Book, styles, imageResourceNames, startEID)
 	if err != nil {
 		return err
 	}
@@ -109,7 +109,7 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	annotationEnabled := cfg.Annotation.Enable && c.Book.Description.TitleInfo.Annotation != nil
 	tocPageEnabled := cfg.TOCPage.Placement != common.TOCPagePlacementNone
 	if annotationEnabled || tocPageEnabled {
-		sectionNames, tocEntries, sectionEIDs, nextEID, err = addGeneratedSections(c, cfg, log, styles, contentFragments, sectionNames, tocEntries, sectionEIDs, nextEID)
+		sectionNames, tocEntries, sectionEIDs, nextEID, err = addGeneratedSections(c, cfg, styles, contentFragments, sectionNames, tocEntries, sectionEIDs, nextEID, log)
 		if err != nil {
 			return err
 		}
@@ -135,7 +135,7 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	}
 
 	// $490 Book Metadata - categorised metadata (title, author, language, etc.)
-	bookMetadataFrag := BuildBookMetadata(c, cfg, log, container.ContainerID, coverResName)
+	bookMetadataFrag := BuildBookMetadata(c, cfg, container.ContainerID, coverResName, log)
 	if err := container.Fragments.Add(bookMetadataFrag); err != nil {
 		return err
 	}
@@ -257,7 +257,7 @@ func reflowSectionSizeVersion(maxSectionPIDCount int) int {
 	return min(ver, 256)
 }
 
-func computeMaxSectionPIDCount(sectionEIDs map[string][]int, posItems []PositionItem) int {
+func computeMaxSectionPIDCount(sectionEIDs sectionEIDsBySectionName, posItems []PositionItem) int {
 	eidToSection := make(map[int]string)
 	for sec, eids := range sectionEIDs {
 		for _, eid := range eids {
