@@ -91,9 +91,9 @@ func (c *Container) String() string {
 			// Add type markers
 			markers := c.getTypeMarkers(ftype)
 			if markers != "" {
-				tw.Line(2, "%s %s (%d)", FormatSymbol(ftype), markers, len(sortedFrags))
+				tw.Line(2, "%s %s (%d)", ftype, markers, len(sortedFrags))
 			} else {
-				tw.Line(2, "%s (%d)", FormatSymbol(ftype), len(sortedFrags))
+				tw.Line(2, "%s (%d)", ftype, len(sortedFrags))
 			}
 
 			for _, f := range sortedFrags {
@@ -145,7 +145,7 @@ func (c *Container) String() string {
 					if fidName != "" {
 						tw.Line(3, "id=$%d (%s)", fidID, fidName)
 					} else {
-						tw.Line(3, "id=%s", FormatSymbol(fidID))
+						tw.Line(3, "id=%s", fidID)
 					}
 				}
 				formatValue(tw, 4, f.Value)
@@ -336,7 +336,7 @@ func formatSimpleValue(v any) string {
 	case string:
 		return fmt.Sprintf("%q", val)
 	case SymbolValue:
-		return FormatSymbol(KFXSymbol(val))
+		return KFXSymbol(val).String()
 	case SymbolByNameValue:
 		return fmt.Sprintf("sym:%q", string(val))
 	default:
@@ -358,7 +358,7 @@ func formatStructValueKFX(tw *debug.TreeWriter, depth int, m map[KFXSymbol]any) 
 	slices.Sort(keys)
 
 	for _, k := range keys {
-		keyName := FormatSymbol(k)
+		keyName := k.String()
 		val := m[k]
 
 		// Try to format simple values inline
@@ -527,7 +527,7 @@ func (c *Container) DumpFragments() string {
 			return int(aFID - bFID)
 		})
 
-		fmt.Fprintf(&sb, "### %s (%d fragments)\n\n", FormatSymbol(ftype), len(sortedFrags))
+		fmt.Fprintf(&sb, "### %s (%d fragments)\n\n", ftype, len(sortedFrags))
 
 		for _, f := range sortedFrags {
 			if f.IsRoot() {
@@ -578,7 +578,7 @@ func (c *Container) DumpFragments() string {
 				if fidName != "" {
 					fmt.Fprintf(&sb, "  id: $%d (%s)\n", fidID, fidName)
 				} else {
-					fmt.Fprintf(&sb, "  id: %s\n", FormatSymbol(fidID))
+					fmt.Fprintf(&sb, "  id: %s\n", fidID)
 				}
 			}
 			fmt.Fprintf(&sb, "  value: %s\n\n", formatValueCompact(f.Value))
@@ -610,7 +610,7 @@ func formatValueCompact(v any) string {
 		}
 		return fmt.Sprintf("<blob %d bytes>", len(b))
 	case SymbolValue:
-		return FormatSymbol(KFXSymbol(val))
+		return KFXSymbol(val).String()
 	case SymbolByNameValue:
 		return fmt.Sprintf("sym:%q", string(val))
 	case StructValue:
@@ -640,7 +640,7 @@ func formatStructCompactKFX(m map[KFXSymbol]any) string {
 
 	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
-		parts = append(parts, fmt.Sprintf("%s: %s", FormatSymbol(k), formatValueCompact(m[k])))
+		parts = append(parts, fmt.Sprintf("%s: %s", k, formatValueCompact(m[k])))
 	}
 	return "{" + strings.Join(parts, ", ") + "}"
 }

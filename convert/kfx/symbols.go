@@ -397,29 +397,6 @@ func SymbolID(name string) KFXSymbol {
 	return -1
 }
 
-// FormatSymbol returns a display string for a symbol ID: "name ($id)" or just "$id".
-// Deprecated: Use KFXSymbol.String() method instead for KFXSymbol values.
-func FormatSymbol[T KFXSymbol | string](id T) string {
-	switch v := any(id).(type) {
-	case KFXSymbol:
-		return v.String()
-	case string:
-		// If it's a $NNN string, decode and format it
-		if strings.HasPrefix(v, "$") {
-			if num, err := strconv.Atoi(v[1:]); err == nil {
-				if name, ok := yjSymbolNames[KFXSymbol(num)]; ok {
-					return fmt.Sprintf("%s ($%d)", name, num)
-				}
-				return v
-			}
-		}
-		// Return the string as-is (it's a local symbol name)
-		return v
-	default:
-		return fmt.Sprintf("%v", id)
-	}
-}
-
 // RAW_FRAGMENT_TYPES are fragment types whose payloads are stored as raw bytes.
 var RAW_FRAGMENT_TYPES = map[KFXSymbol]bool{
 	SymRawMedia: true, // $417

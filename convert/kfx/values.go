@@ -271,12 +271,6 @@ func NewContainerEntityMap(containers []any) StructValue {
 	return NewStruct().SetList(SymContainerList, containers) // $252 = container_list
 }
 
-// Sym converts symbol ID to SymbolValue for use in lists.
-// Deprecated: Use KFXSymbol.Value() method instead.
-func Sym(id KFXSymbol) SymbolValue {
-	return id.Value()
-}
-
 // NewSymbolList creates a list of symbol values from IDs.
 func NewSymbolList(ids ...KFXSymbol) ListValue {
 	list := NewList()

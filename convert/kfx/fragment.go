@@ -52,12 +52,12 @@ func (f *Fragment) Key() FragmentKey {
 // String returns a debug representation of the fragment.
 func (f *Fragment) String() string {
 	if f.IsRoot() {
-		return fmt.Sprintf("Fragment(%s)", FormatSymbol(f.FType))
+		return fmt.Sprintf("Fragment(%s)", f.FType)
 	}
 	if f.FIDName != "" {
-		return fmt.Sprintf("Fragment(%s, id=%s)", FormatSymbol(f.FType), f.FIDName)
+		return fmt.Sprintf("Fragment(%s, id=%s)", f.FType, f.FIDName)
 	}
-	return fmt.Sprintf("Fragment(%s, id=%s)", FormatSymbol(f.FType), FormatSymbol(f.FID))
+	return fmt.Sprintf("Fragment(%s, id=%s)", f.FType, f.FID)
 }
 
 // FragmentKey uniquely identifies a fragment by type and id.
@@ -70,12 +70,12 @@ type FragmentKey struct {
 // String returns a debug representation of the key.
 func (k FragmentKey) String() string {
 	if k.FIDName != "" {
-		return fmt.Sprintf("%s:%s", FormatSymbol(k.FType), k.FIDName)
+		return fmt.Sprintf("%s:%s", k.FType, k.FIDName)
 	}
 	if k.FType == k.FID {
-		return FormatSymbol(k.FType)
+		return k.FType.String()
 	}
-	return fmt.Sprintf("%s:%s", FormatSymbol(k.FType), FormatSymbol(k.FID))
+	return fmt.Sprintf("%s:%s", k.FType, k.FID)
 }
 
 // FragmentList holds a collection of fragments with indexing.
