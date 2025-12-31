@@ -44,7 +44,7 @@ func buildImageResourceFragments(images fb2.BookImages) ([]*Fragment, []*Fragmen
 			FType:   SymExtResource,
 			FIDName: resourceName,
 			Value: NewExternalResource(location, format, int64(img.Dim.Width), int64(img.Dim.Height)).
-				SetString(SymResourceName, resourceName),
+				SetString(SymResourceName, resourceName), // $175 = resource_name as string
 		})
 
 		raw = append(raw, &Fragment{

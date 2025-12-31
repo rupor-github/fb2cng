@@ -221,7 +221,7 @@ func (g *ContentGenerator) generateParagraph(para *fb2.Paragraph, styleName stri
 
 	// Apply paragraph style
 	if styleName != "" {
-		content.SetString(SymStyle, styleName) // $157 = style
+		content.Set(SymStyle, SymbolByName(styleName)) // $157 = style as symbol
 	}
 
 	// Add style events for inline formatting
@@ -232,10 +232,10 @@ func (g *ContentGenerator) generateParagraph(para *fb2.Paragraph, styleName stri
 				SetInt(SymOffset, int64(ev.Offset)).
 				SetInt(SymLength, int64(ev.Length))
 			if ev.Style != "" {
-				event.SetString(SymStyle, ev.Style)
+				event.Set(SymStyle, SymbolByName(ev.Style)) // $157 = style as symbol
 			}
 			if ev.LinkTo != "" {
-				event.SetString(SymLinkTo, ev.LinkTo)
+				event.Set(SymLinkTo, SymbolByName(ev.LinkTo)) // $179 = link_to as symbol
 			}
 			eventList = append(eventList, event)
 		}
@@ -244,9 +244,9 @@ func (g *ContentGenerator) generateParagraph(para *fb2.Paragraph, styleName stri
 
 	// Add content fragment
 	frag := &Fragment{
-		FType: SymContent, // $145
-		FID:   SymbolID(contentName),
-		Value: content,
+		FType:   SymContent, // $145
+		FIDName: contentName,
+		Value:   content,
 	}
 	if err := g.fragments.Add(frag); err != nil {
 		return err
@@ -390,7 +390,7 @@ func (g *ContentGenerator) generateImage(img *fb2.Image) error {
 	content := NewStruct().
 		SetInt(SymElementID, int64(eid)).        // $185 = eid
 		SetSymbol(SymType, SymImage).            // $159 = type ($271 = image)
-		SetString(SymResourceName, resourceName) // $175 = resource_name
+		SetString(SymResourceName, resourceName) // $175 = resource_name as string
 
 	if img.Alt != "" {
 		content.SetString(SymAltText, img.Alt) // $584 = alt_text
@@ -398,9 +398,9 @@ func (g *ContentGenerator) generateImage(img *fb2.Image) error {
 
 	contentName := g.nextContentName()
 	frag := &Fragment{
-		FType: SymContent,
-		FID:   SymbolID(contentName),
-		Value: content,
+		FType:   SymContent,
+		FIDName: contentName,
+		Value:   content,
 	}
 	return g.fragments.Add(frag)
 }
@@ -414,13 +414,13 @@ func (g *ContentGenerator) generateEmptyLine() error {
 		SetInt(SymElementID, int64(eid)).
 		SetSymbol(SymType, SymText).
 		SetString(SymContent, "\n").
-		SetString(SymStyle, "empty-line")
+		Set(SymStyle, SymbolByName("empty-line")) // $157 = style as symbol
 
 	contentName := g.nextContentName()
 	frag := &Fragment{
-		FType: SymContent,
-		FID:   SymbolID(contentName),
-		Value: content,
+		FType:   SymContent,
+		FIDName: contentName,
+		Value:   content,
 	}
 	return g.fragments.Add(frag)
 }
@@ -530,13 +530,13 @@ func (g *ContentGenerator) generateTable(table *fb2.Table) error {
 		SetInt(SymElementID, int64(eid)).
 		SetSymbol(SymType, SymText).
 		SetString(SymContent, text.String()).
-		SetString(SymStyle, "table")
+		Set(SymStyle, SymbolByName("table")) // $157 = style as symbol
 
 	contentName := g.nextContentName()
 	frag := &Fragment{
-		FType: SymContent,
-		FID:   SymbolID(contentName),
-		Value: content,
+		FType:   SymContent,
+		FIDName: contentName,
+		Value:   content,
 	}
 	return g.fragments.Add(frag)
 }

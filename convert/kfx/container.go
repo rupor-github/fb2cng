@@ -296,7 +296,9 @@ func (c *Container) parseEntity(data, lstProlog []byte, ftype, fid KFXSymbol) (*
 		value = RawValue(payload)
 	} else {
 		// Ion-encoded fragment - read as generic value
-		r := NewIonReader(lstProlog, payload)
+		// Pass local symbols to allow manual resolution of symbol IDs 852+ that were
+		// written without the Ion system symbol offset.
+		r := NewIonReaderWithLocalSymbols(lstProlog, payload, c.LocalSymbols)
 		if !r.Next() {
 			return nil, errors.New("no value in entity payload")
 		}
@@ -308,11 +310,14 @@ func (c *Container) parseEntity(data, lstProlog []byte, ftype, fid KFXSymbol) (*
 	}
 
 	// Try to resolve FIDName from DocSymbolTable for consistent sorting
+	// Entity directory stores symbol IDs WITHOUT Ion system symbol offset (1-9),
+	// but Go's Ion library uses absolute IDs. Add the offset to look up correctly.
 	var fidName string
 	if c.DocSymbolTable != nil && fid != ftype {
-		name, ok := c.DocSymbolTable.FindByID(uint64(fid))
+		// Add Ion system symbols offset (9) to entity directory ID
+		absoluteID := uint64(fid) + uint64(ion.V1SystemSymbolTable.MaxID())
+		name, ok := c.DocSymbolTable.FindByID(absoluteID)
 		if ok && !strings.HasPrefix(name, "$") {
-			// Only use the name if it's not a "$NNN" placeholder
 			fidName = name
 		}
 	}
@@ -459,12 +464,14 @@ func (c *Container) collectSymbolsFromValue(v any, seen map[string]bool) {
 }
 
 // GetLocalSymbolID returns the symbol ID for a local symbol name.
-// Local symbols are numbered starting after the imported YJ_symbols max_id.
-// YJ_symbols max_id = 851, so local symbols start at 852.
+// This is used for entity directory IDs and symbol values in fragment payloads.
+// Local symbols are numbered starting after YJ_symbols (851), so local symbols start at 852.
+// Note: Ion system symbols (1-9) are NOT included in this numbering because KFX readers
+// like kfxlib and sync2kindle expect IDs without the Ion system symbol offset.
 func (c *Container) GetLocalSymbolID(name string) KFXSymbol {
 	for i, s := range c.LocalSymbols {
 		if s == name {
-			// YJ_symbols max_id (851) + 1 + local index
+			// YJ_symbols max_id (851) + 1 + local index = 852 + index
 			return LargestKnownSymbol + 1 + KFXSymbol(i)
 		}
 	}
@@ -500,12 +507,13 @@ func (c *Container) WriteContainer() ([]byte, error) {
 		// Entry: id_idnum (u32), type_idnum (u32), offset (u64), length (u64)
 		var entry [EntityDirEntrySize]byte
 
-		// Resolve fragment ID
+		// Resolve fragment ID for entity directory
+		// Entity directory uses absolute symbol IDs (same as Ion symbol table)
 		var idNum KFXSymbol
 		if frag.IsRoot() {
 			idNum = SymNull // $348
 		} else if frag.FIDName != "" {
-			// Resolve FIDName to symbol ID
+			// Resolve FIDName to absolute symbol ID
 			idNum = c.GetLocalSymbolID(frag.FIDName)
 			if idNum < 0 {
 				return nil, fmt.Errorf("local symbol not found: %s", frag.FIDName)

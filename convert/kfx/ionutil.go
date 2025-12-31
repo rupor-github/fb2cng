@@ -115,19 +115,25 @@ func NewIonWriterLocalSymbols(localSymbols []string) *IonWriter {
 	}
 }
 
-// createCombinedSymbolTable creates a shared symbol table with YJ_symbols plus local symbols.
+// createCombinedSymbolTable creates a shared symbol table for writing fragment payloads.
+// The IDs must match what KFX readers (kfxlib, sync2kindle) expect:
+// - IDs 1-851: YJ_symbols ($10 to $860)
+// - IDs 852+: local symbols
+// Note: Ion system symbols (1-9) are NOT included because KFX readers don't count them.
 func createCombinedSymbolTable(localSymbols []string) ion.SharedSymbolTable {
-	// Get symbols from YJ_symbols
+	// Get symbols from YJ_symbols (851 symbols: "$10" to "$860")
 	baseSymbols := sharedSymbolTable.Symbols()
 
-	// Combine with local symbols
+	// Build combined symbol list: YJ_symbols + local symbols
 	allSymbols := make([]string, 0, len(baseSymbols)+len(localSymbols))
+
+	// Add YJ_symbols (IDs 1-851 in this SharedSymbolTable)
 	allSymbols = append(allSymbols, baseSymbols...)
+
+	// Add local symbols (IDs 852+)
 	allSymbols = append(allSymbols, localSymbols...)
 
-	// Create a new shared symbol table with all symbols
-	// Using version 10 to match YJ_symbols, but this is really a combined table
-	return ion.NewSharedSymbolTable("YJ_symbols", 10, allSymbols)
+	return ion.NewSharedSymbolTable("YJ_combined", 1, allSymbols)
 }
 
 // Bytes returns the serialized Ion binary data including prolog (BVM + symbol table import).
@@ -358,7 +364,8 @@ func (w *IonWriter) WriteBlobField(fieldID KFXSymbol, value []byte) error {
 
 // IonReader wraps ion.Reader with KFX-specific helpers.
 type IonReader struct {
-	reader ion.Reader
+	reader       ion.Reader
+	localSymbols []string // Local symbols for resolving IDs 852+
 }
 
 // NewIonReader creates a new Ion reader from binary data with prolog.
@@ -374,6 +381,22 @@ func NewIonReader(prolog, data []byte) *IonReader {
 	combined = append(combined, ionData...)
 	r := ion.NewReaderCat(bytes.NewReader(combined), ion.NewCatalog(sharedSymbolTable))
 	return &IonReader{reader: r}
+}
+
+// NewIonReaderWithLocalSymbols creates an Ion reader with prolog and local symbol support.
+// This is used to read fragment payloads where symbol IDs 852+ need to be resolved
+// to local symbol names. The prolog defines the symbol table context.
+func NewIonReaderWithLocalSymbols(prolog, data []byte, localSymbols []string) *IonReader {
+	// Strip BVM from data if present and prepend prolog
+	ionData := data
+	if HasIonBVM(data) {
+		ionData = data[len(ionBVM):]
+	}
+	combined := make([]byte, 0, len(prolog)+len(ionData))
+	combined = append(combined, prolog...)
+	combined = append(combined, ionData...)
+	r := ion.NewReaderCat(bytes.NewReader(combined), ion.NewCatalog(sharedSymbolTable))
+	return &IonReader{reader: r, localSymbols: localSymbols}
 }
 
 // NewIonReaderBytes creates a new Ion reader using the default prolog.
@@ -447,12 +470,26 @@ func (r *IonReader) BoolValue() (bool, error) {
 	return *v, nil
 }
 
-// SymbolValue returns the current symbol value as string (e.g., "$409").
+// SymbolValue returns the current symbol value as string (e.g., "$409" or local symbol name).
 func (r *IonReader) SymbolValue() (string, error) {
 	tok, err := r.reader.SymbolValue()
 	if err != nil {
 		return "", err
 	}
+
+	// If we have local symbols and this is a local symbol ID (>= 852),
+	// resolve it using our localSymbols slice instead of the Ion reader's symbol table.
+	// This is needed because the payload was written with IDs 852+ but the doc symbol
+	// table uses IDs 861+, causing a 9-ID offset mismatch.
+	localStartID := int64(LargestKnownSymbol) + 1 // 852
+	if r.localSymbols != nil && tok.LocalSID >= localStartID {
+		idx := int(tok.LocalSID - localStartID)
+		if idx >= 0 && idx < len(r.localSymbols) {
+			return r.localSymbols[idx], nil
+		}
+	}
+
+	// For non-local symbols, use the text from the Ion reader
 	if tok.Text != nil {
 		return *tok.Text, nil
 	}

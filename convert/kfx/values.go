@@ -19,7 +19,7 @@ func NewPosition(eid string, offset int64) StructValue {
 
 // NewPositionKFXID creates a position using kfx_id ($598) instead of id ($155).
 func NewPositionKFXID(kfxID string, offset int64) StructValue {
-	pos := NewStruct().SetString(SymKfxID, kfxID) // $598 = kfx_id
+	pos := NewStruct().SetString(SymKfxID, kfxID) // $598 = kfx_id as string
 	if offset != 0 {
 		pos.SetInt(SymOffset, offset) // $143 = offset
 	}
@@ -215,15 +215,15 @@ func NewCategorisedMetadata(category string, entries []any) StructValue {
 // NewSection creates a section fragment value.
 func NewSection(sectionName string, content []any) StructValue {
 	return NewStruct().
-		SetString(SymSectionName, sectionName). // $174 = section_name
-		SetList(SymContentList, content)        // $146 = content_list
+		Set(SymSectionName, SymbolByName(sectionName)). // $174 = section_name as symbol
+		SetList(SymContentList, content)                // $146 = content_list
 }
 
 // NewStoryline creates a storyline fragment value.
 func NewStoryline(storyName string, sections []any) StructValue {
 	return NewStruct().
-		SetString(SymStoryName, storyName). // $176 = story_name
-		SetList(SymSections, sections)      // $170 = sections
+		Set(SymStoryName, SymbolByName(storyName)). // $176 = story_name as symbol
+		SetList(SymSections, sections)              // $170 = sections
 }
 
 // Reading order builders

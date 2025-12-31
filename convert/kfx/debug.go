@@ -8,6 +8,62 @@ import (
 	"fbc/utils/debug"
 )
 
+// StatsString returns a compact, stats-only representation of the container.
+func (c *Container) StatsString() string {
+	tw := debug.NewTreeWriter()
+
+	tw.Line(0, "KFX Container")
+	tw.Line(1, "Version: %d", c.Version)
+	tw.Line(1, "ContainerID: %q", c.ContainerID)
+
+	formatReason := c.getFormatReason()
+	if formatReason != "" {
+		tw.Line(1, "Format: %q (%s)", c.ContainerFormat, formatReason)
+	} else {
+		tw.Line(1, "Format: %q", c.ContainerFormat)
+	}
+
+	tw.Line(1, "Generator: %s / %s", c.GeneratorApp, c.GeneratorPkg)
+	tw.Line(1, "ChunkSize: %d", c.ChunkSize)
+	tw.Line(1, "Compression: %d", c.CompressionType)
+	tw.Line(1, "DRM: %d", c.DRMScheme)
+
+	if c.Fragments != nil && c.Fragments.Len() > 0 {
+		rootCount, rawCount, singletonCount := c.getFragmentStats()
+		regularCount := c.Fragments.Len() - rootCount
+
+		stats := []string{fmt.Sprintf("%d total", c.Fragments.Len())}
+		if rootCount > 0 {
+			stats = append(stats, fmt.Sprintf("%d root", rootCount))
+		}
+		if rawCount > 0 {
+			stats = append(stats, fmt.Sprintf("%d raw", rawCount))
+		}
+		if singletonCount > 0 && singletonCount != rootCount {
+			stats = append(stats, fmt.Sprintf("%d singleton", singletonCount))
+		}
+		if regularCount > 0 {
+			stats = append(stats, fmt.Sprintf("%d regular", regularCount))
+		}
+
+		tw.Line(1, "Fragments: %s", strings.Join(stats, ", "))
+
+		for _, ftype := range c.Fragments.Types() {
+			tw.Line(2, "%s (%d)", ftype, len(c.Fragments.GetByType(ftype)))
+		}
+	}
+
+	if c.DocSymbolTable != nil {
+		tw.Line(0, "")
+		tw.Line(1, "DocSymbolTable: maxID=%d", c.DocSymbolTable.MaxID())
+	}
+	if len(c.LocalSymbols) > 0 {
+		tw.Line(1, "LocalSymbols: %d", len(c.LocalSymbols))
+	}
+
+	return tw.String()
+}
+
 // String returns a tree-like debug representation of the container.
 func (c *Container) String() string {
 	tw := debug.NewTreeWriter()

@@ -17,7 +17,7 @@ func BuildAuxiliaryDataFragments(ids sectionNameList) []*Fragment {
 			FIDName: fid,
 			Value: NewStruct().
 				SetList(SymMetadata, []any{NewMetadataEntry("IS_TARGET_SECTION", true)}).
-				SetString(SymKfxID, fid),
+				SetString(SymKfxID, fid), // $598 = kfx_id as string
 		})
 	}
 	return out
