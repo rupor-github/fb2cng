@@ -428,3 +428,112 @@ func TestMergeRulesWithSameSelector(t *testing.T) {
 		}
 	}
 }
+
+func TestNewStyleRegistryFromCSS(t *testing.T) {
+	log := zap.NewNop()
+
+	css := []byte(`
+		.paragraph {
+			line-height: 1.5;
+			text-indent: 2em;
+		}
+		h1 {
+			font-size: 2.5em;
+			font-weight: bold;
+		}
+		.custom-style {
+			font-style: italic;
+			margin-top: 1em;
+		}
+	`)
+
+	registry, warnings := NewStyleRegistryFromCSS(css, log)
+
+	t.Logf("Warnings: %v", warnings)
+
+	// Should have default styles plus CSS styles
+	names := registry.Names()
+	t.Logf("Registered styles: %v", names)
+
+	// Check that CSS styles are registered
+	if _, ok := registry.Get("paragraph"); !ok {
+		t.Error("expected 'paragraph' style to be registered")
+	}
+	if _, ok := registry.Get("h1"); !ok {
+		t.Error("expected 'h1' style to be registered")
+	}
+	if _, ok := registry.Get("custom-style"); !ok {
+		t.Error("expected 'custom-style' style to be registered")
+	}
+
+	// Check that CSS values override defaults
+	para, _ := registry.Get("paragraph")
+	if lineHeight, ok := para.Properties[SymLineHeight]; ok {
+		if sv, ok := lineHeight.(StructValue); ok {
+			if val, ok := sv[SymValue].(float64); ok {
+				if val != 1.5 {
+					t.Errorf("expected paragraph line-height 1.5, got %f", val)
+				}
+			}
+		}
+	} else {
+		t.Error("paragraph style should have line-height property")
+	}
+
+	// Check default styles are still present
+	if _, ok := registry.Get("epigraph"); !ok {
+		t.Error("expected default 'epigraph' style to be preserved")
+	}
+	if _, ok := registry.Get("strong"); !ok {
+		t.Error("expected default 'strong' style to be preserved")
+	}
+}
+
+func TestNewStyleRegistryFromCSS_Empty(t *testing.T) {
+	log := zap.NewNop()
+
+	registry, warnings := NewStyleRegistryFromCSS(nil, log)
+
+	if len(warnings) != 0 {
+		t.Errorf("expected no warnings for empty CSS, got %v", warnings)
+	}
+
+	// Should have all default styles
+	if _, ok := registry.Get("paragraph"); !ok {
+		t.Error("expected default 'paragraph' style")
+	}
+	if _, ok := registry.Get("h1"); !ok {
+		t.Error("expected default 'h1' style")
+	}
+}
+
+func TestStyleRegistryBuildFragments(t *testing.T) {
+	log := zap.NewNop()
+
+	css := []byte(`
+		.paragraph { line-height: 1.2; }
+		.custom { font-weight: bold; }
+	`)
+
+	registry, _ := NewStyleRegistryFromCSS(css, log)
+
+	// Mark some styles as used
+	registry.EnsureStyle("paragraph")
+	registry.EnsureStyle("custom")
+	registry.EnsureStyle("emphasis") // default style
+
+	fragments := registry.BuildFragments()
+
+	// Should only output used styles
+	if len(fragments) != 3 {
+		t.Errorf("expected 3 fragments, got %d", len(fragments))
+	}
+
+	// Check fragment types
+	for _, frag := range fragments {
+		if frag.FType != SymStyle {
+			t.Errorf("expected fragment type $157 (style), got %d", frag.FType)
+		}
+		t.Logf("Fragment: %s", frag.FIDName)
+	}
+}
