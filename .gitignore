@@ -23,6 +23,7 @@ release/
 release_*/
 **/*-bcRawMedia/
 misc/version.go
+common/*_code.go
 content/text/dictionaries/*.txt.gz
 content/text/sentences/*.json.gz
 !content/text/sentences/russian.json.gz
