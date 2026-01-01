@@ -1,10 +1,8 @@
-# KFX Structure (reverse engineered from KFXInput)
-
-_Generated: 2025-12-24_
+# KFX Structure (reverse engineered from KFXInput/KFXOutput calibre plugins and KPV files)
 
 Much of the knowledge of the KPF internals comes from Calibre's KFX conversion Input Plugin v2.27.1 created by John Howell <jhowell@acm.org> and copyrighted under GPL v3. Visit https://www.mobileread.com/forums for more details.
 
-This document describes the parts of the KFX on-disk format that are inferred from the code in this workspace. It focuses on:
+This document describes the parts of the KFX on-disk format. It focuses on:
 - The outer KFX container format (`CONT` + `ENTY`)
 - The embedded Amazon Ion Binary encoding used for most payloads
 - The fragment model used by the “YJ” data model (fragment type + fragment id)
@@ -82,6 +80,33 @@ The local symbol table (`LocalSymbolTable`) supports:
 - A translation layer (optional external symbol catalog) to map placeholder `$NNN` names to readable names
 
 Derived from: `kfxlib/ion_symbol_table.py:LocalSymbolTable`, `kfxlib/yj_symbol_catalog.py:YJ_SYMBOLS`, `kfxlib/yj_book.py:YJ_Book.load_symbol_catalog`.
+
+#### 2.3.1 Symbol ID numbering schemes (KFX vs Standard Ion)
+
+**CRITICAL**: KFX files use a non-standard symbol ID numbering scheme that differs from standard Ion implementations.
+
+**KFX numbering (used by kfxlib and Kindle readers)**:
+- IDs 1-851: YJ_symbols shared symbol table (`$10` to `$860`)
+- IDs 852+: Local symbols (book-specific names like chapter IDs, style names)
+- **Ion system symbols (1-9) are NOT counted** in the ID space
+
+**Standard Ion numbering (used by Amazon Ion SDK, including Go's ion-go)**:
+- IDs 1-9: Ion system symbols (`$ion_symbol_table`, `name`, `version`, etc.)
+- IDs 10-860: YJ_symbols (after importing with `max_id: 851`)
+- IDs 861+: Local symbols
+
+This 9-ID offset affects:
+1. **Entity directory**: `id_idnum` and `type_idnum` use KFX numbering (852+ for local symbols)
+2. **Doc symbol table `max_id`**: Stored with Ion system symbol offset, must be adjusted when reading/writing
+3. **Symbol values in payloads**: Written with KFX numbering, require manual resolution when reading
+
+**Example**:
+- A local symbol at index 0 (e.g., "chapter_1"):
+  - KFX ID: 852 (LargestKnownSymbol + 1 = 851 + 1)
+  - Standard Ion ID: 861 (after $ion system symbols + YJ_symbols)
+- When reading a payload with symbol ID 852, if the doc symbol table shows ID 861, manual resolution using the local symbols list is required.
+
+Derived from: `convert/kfx/container.go:GetLocalSymbolID`, `convert/kfx/ionutil.go:createCombinedSymbolTable`, `convert/kfx/ionutil.go:IonReader.SymbolValue`.
 
 ---
 
@@ -233,10 +258,18 @@ Derived from: `kfxlib/kfx_container.py:KfxContainer.deserialize`.
 If `$416` (`bcDocSymbolLength`) is non-zero:
 
 - The blob is parsed as an **Ion Binary** *annotated value* with annotation `$ion_symbol_table`.
-- After parsing, each import in `value["imports"]` that contains a `max_id` has that `max_id` adjusted **down** by `len(SYSTEM_SYMBOL_TABLE.symbols)`.
+- After parsing, each import in `value["imports"]` that contains a `max_id` has that `max_id` adjusted **down** by `len(SYSTEM_SYMBOL_TABLE.symbols)` (typically 9).
 - The resulting symbol table definition is then fed to `self.symtab.create(...)`.
 
 This implies the on-disk doc symbol table uses `max_id` values that include the Ion system symbol table width, while the in-memory `LocalSymbolTable` here wants `max_id` relative to its own numbering.
+
+**Relationship to symbol ID numbering (see §2.3.1)**:
+
+The doc symbol table `max_id` adjustment is part of the KFX vs Standard Ion numbering difference:
+- On disk: YJ_symbols import has `max_id: 860` (includes 9 Ion system symbols)
+- In memory (kfxlib): YJ_symbols `max_id` is 851 (excludes Ion system symbols)
+- When standard Ion libraries read the doc symbol table, local symbols start at ID 861
+- But entity directory and payload symbol values use KFX numbering where local symbols start at ID 852
 
 Derived from: `kfxlib/kfx_container.py:KfxContainer.deserialize` (doc symbol import adjustment) and `kfxlib/yj_symbol_catalog.py:SYSTEM_SYMBOL_TABLE`.
 
@@ -557,11 +590,31 @@ Derived from: `kfxlib/yj_structure.py:BookStructure.check_consistency` (reading 
 
 ### 7.3 `$258` (Metadata) and `$490` (BookMetadata)
 
+**IMPORTANT**: Despite their similar names, these two fragment types serve different purposes:
+
+**`$258` (metadata)** - Contains document structure information:
+- `$169` (reading_orders): List of reading order definitions with section references
+- May also contain some legacy metadata fields (title, author, etc.) in older KFX files
+
+**`$490` (book_metadata)** - Contains categorised metadata about the book:
+- `$491` (categorised_metadata): List of category entries, each containing:
+  - `$495` (category): Category name string (e.g., "kindle_title_metadata", "kindle_audit_metadata")
+  - `$258` (metadata): List of key-value entries within that category
+    - Each entry has `$492` (key) and `$307` (value)
+
+Common `$490` categories in modern KFX:
+- `kindle_title_metadata`: title, author, ASIN, content_id, asset_id, book_id, language, publisher, description, cover_image, cde_content_type, is_sample, override_kindle_font
+- `kindle_audit_metadata`: creator_version, file_creator (converter info)
+- `kindle_ebook_metadata`: selection, nested_span (capability flags)
+- `kindle_capability_metadata`: (usually empty)
+
 The converter reads title/author/etc from either:
 - `$490` → `$491` (categorised_metadata list) → category `kindle_title_metadata` → `$258` list of key/value structs (`$492` key, `$307` value)
 - or `$258` directly, where certain keys are known (e.g. `$153` title, `$222` author, `$224` ASIN, `$10` language, …)
 
-Derived from: `kfxlib/yj_metadata.py:BookMetadata.get_yj_metadata_from_book`, `kfxlib/yj_structure.py:METADATA_SYMBOLS`.
+**Note on requirement rules**: If `$490` is present, `$258` is not strictly required (and vice versa). Modern KFX files typically include both, with `$258` containing reading orders and `$490` containing book metadata.
+
+Derived from: `kfxlib/yj_metadata.py:BookMetadata.get_yj_metadata_from_book`, `kfxlib/yj_structure.py:METADATA_SYMBOLS`, `convert/kfx/frag_metadata.go:BuildMetadata`, `convert/kfx/frag_metadata.go:BuildBookMetadata`.
 
 ### 7.4 `$538` (DocumentData)
 

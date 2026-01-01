@@ -168,6 +168,11 @@ container_info (Ion Binary encoded struct)
 │ type_idnum  = Symbol ID of fragment type ($258, $260, $164, etc.)       │
 │ entity_offset = Offset RELATIVE TO header_len (not file start!)         │
 │ entity_len    = Length of ENTY record in bytes                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│ IMPORTANT: Symbol IDs use KFX numbering (see section 12):               │
+│ - YJ_symbols: IDs 1-851 (no Ion system symbol offset)                   │
+│ - Local symbols: IDs 852+ (e.g., "chapter_1" = 852 if first local)      │
+│ - To look up in doc symbol table, add 9 (Ion system symbols offset)     │
 └─────────────────────────────────────────────────────────────────────────┘
 
     Entity Directory Layout (multiple entries)
@@ -274,7 +279,7 @@ Example: 0x8A = string (type 8) with 10-byte (A) body
 │                                                                         │
 │  REQUIRED ROOT FRAGMENTS (fid == ftype)                                 │
 │  ────────────────────────────────────────                               │
-│  $258   Metadata          - Book metadata (title, author, etc.)         │
+│  $258   Metadata          - Reading orders (section list references)    │
 │  $259   Storyline         - Content sequence                            │
 │  $264   position_map      - EID → section mapping                       │
 │  $265   position_id_map   - PID → (EID, offset) mapping                 │
@@ -297,10 +302,15 @@ Example: 0x8A = string (type 8) with 10-byte (A) body
 │  $145   content           - Content fragments (paragraph text pools)    │
 │  $277   container_block   - Layout container structures                 │
 │  $418   bcRawFont         - Raw font data (embedded fonts)              │
-│  $490   BookMetadata      - Structured metadata (categorized)           │
+│  $490   BookMetadata      - Categorized metadata (title, author, etc.)  │
 │  $585   content_features  - Reflow/canonical format features            │
 │  $593   format_capabilities - KFX format feature flags (header blob)    │
 │  $597   yj.eid_offset     - EID offset information                      │
+│                                                                         │
+│  NOTE: $258 and $490 serve different purposes:                          │
+│  - $258 contains reading_orders ($169) - document structure             │
+│  - $490 contains categorised_metadata ($491) - title, author, etc.      │
+│  Both are typically present in modern KFX files.                        │
 │                                                                         │
 │  NOT IN SIMPLE BOOKS (omitted)                                          │
 │  ────────────────────────────────────────                               │
@@ -328,7 +338,7 @@ Example: 0x8A = string (type 8) with 10-byte (A) body
 ┌─────────────┐           ┌────────────────┐           ┌─────────────┐
 │    $258     │──────────>│     $260       │<──────────│    $419     │
 │  Metadata   │           │   section      │           │ entity_map  │
-│ (title,etc) │           │ (chapter/page) │           │($252 list)  │
+│(read orders)│           │ (chapter/page) │           │($252 list)  │
 └─────────────┘           └───────┬────────┘           └─────────────┘
                                   │
                   ┌───────────────┼───────────────┐
@@ -371,6 +381,12 @@ Example: 0x8A = string (type 8) with 10-byte (A) body
   │($392 list)  │
   └─────────────┘
 
+  ┌─────────────┐
+  │    $490     │  Book Metadata (categorised):
+  │ BookMetadata│  - kindle_title_metadata: title, author, ASIN, etc.
+  │($491 list)  │  - kindle_audit_metadata: creator info
+  └─────────────┘  - kindle_ebook_metadata: capabilities
+
   Position/Location Mapping:
   ┌──────────────┐     ┌──────────────┐     ┌─────────────┐
   │    $264      │────>│    $265      │────>│    $550     │
@@ -379,11 +395,11 @@ Example: 0x8A = string (type 8) with 10-byte (A) body
   └──────────────┘     └──────────────┘     └─────────────┘
 
   Content/Format Features:
-  ┌──────────────┐     ┌──────────────┐
-  │    $585      │     │    $593      │
-  │content_feats │     │format_capabs │
-  │(reflow-*, etc)│     │(kfxgen.*)   │
-  └──────────────┘     └──────────────┘
+  ┌───────────────┐     ┌──────────────┐
+  │    $585       │     │    $593      │
+  │content_feats  │     │format_capabs │
+  │(reflow-*, etc)│     │(kfxgen.*)    │
+  └───────────────┘     └──────────────┘
 ```
 
 ---
@@ -512,10 +528,10 @@ Visual byte map (approximate):
 │  5. Raw media ($417) and raw fonts ($418) are NOT Ion-encoded               │
 │     - Stored as raw bytes directly                                          │
 │                                                                             │
-│  6. Symbol IDs ($NNN) are indexes into the combined symbol table:           │
-│     - $ion system symbols (1-9)                                             │
-│     - YJ_symbols shared catalog                                             │
-│     - Local symbols from $ion_symbol_table                                  │
+│  6. Symbol IDs use KFX numbering (NOT standard Ion numbering):              │
+│     - IDs 1-851: YJ_symbols shared catalog ($10 to $860)                    │
+│     - IDs 852+: Local symbols (book-specific names)                         │
+│     - Ion system symbols (1-9) are NOT counted in KFX ID space              │
 │                                                                             │
 │  7. $270 (container fragment) is NOT stored as an ENTY                      │
 │     - Reconstructed from container_info and kfxgen metadata                 │
@@ -527,6 +543,11 @@ Visual byte map (approximate):
 │                                                                             │
 │ 10. ENTY records have their own internal header_len (≥10 bytes minimum)     │
 │                                                                             │
+│ 11. CRITICAL: KFX symbol IDs vs Standard Ion IDs have a 9-ID offset:        │
+│     - KFX local symbol 0: ID 852 (kfxlib/Kindle expectation)                │
+│     - Standard Ion local symbol 0: ID 861 (after Ion system + YJ_symbols)   │
+│     - Entity directory and symbol values use KFX numbering                  │
+│                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -535,27 +556,36 @@ Visual byte map (approximate):
 ## 12. Symbol Resolution Flow
 
 ```
-            Symbol ID Resolution Process
-            ═══════════════════════════
+            Symbol ID Resolution Process (KFX Numbering)
+            ═════════════════════════════════════════════
 
   Entity Directory         Symbol Table             Fragment
   Entry contains:          resolves to:             becomes:
   ┌─────────────┐         ┌─────────────┐         ┌─────────────┐
-  │ id_idnum=   │────────>│ Symbol #823 │────────>│ fid =       │
-  │    823      │         │ ="chapter_1"│         │ "chapter_1" │
-  │             │         │             │         │             │
+  │ id_idnum=   │────────>│ Symbol #852 │────────>│ fid =       │
+  │    852      │         │ ="chapter_1"│         │ "chapter_1" │
+  │             │         │ (local #0)  │         │             │
   │ type_idnum= │────────>│ Symbol #260 │────────>│ ftype =     │
-  │    260      │         │ ="$260"     │         │ "$260"      │
+  │    260      │         │ ="section"  │         │ "$260"      │
   └─────────────┘         └─────────────┘         └─────────────┘
 
-  Symbol Table Structure:
-  ┌─────────────────────────────────────────────────────────────┐
-  │ Index │  Source           │  Example Symbol                 │
-  ├───────┼───────────────────┼─────────────────────────────────┤
-  │  1-9  │ $ion system       │ $ion_symbol_table, name, ...    │
-  │ 10-   │ YJ_symbols shared │ $258, $260, $269, $417, ...     │
-  │ 600+  │ Local symbols     │ chapter_1, style_body, ...      │
-  └───────┴───────────────────┴─────────────────────────────────┘
+  KFX Symbol ID Numbering (differs from standard Ion):
+  ┌───────────────────────────────────────────────────────────────────────────┐
+  │ KFX ID   │ Standard Ion ID │  Source           │  Example Symbol          │
+  ├──────────┼─────────────────┼───────────────────┼──────────────────────────┤
+  │   N/A    │      1-9        │ $ion system       │ $ion_symbol_table, ...   │
+  │  1-851   │     10-860      │ YJ_symbols shared │ $258, $260, $269, ...    │
+  │  852+    │     861+        │ Local symbols     │ chapter_1, style_body    │
+  └──────────┴─────────────────┴───────────────────┴──────────────────────────┘
+
+  IMPORTANT: KFX readers (kfxlib, sync2kindle, Kindle) expect symbol IDs
+  without the Ion system symbol offset. Entity directory id_idnum/type_idnum
+  and symbol values in payloads use KFX numbering (852+ for local symbols).
+
+  When using standard Ion libraries (like Go's ion-go), you must:
+  1. Add 9 to entity directory IDs to look up in doc symbol table
+  2. Manually resolve symbol IDs 852+ using the local symbols list
+  3. Adjust doc symbol table max_id by ±9 when reading/writing
 ```
 
 ---

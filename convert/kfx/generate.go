@@ -238,8 +238,6 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	return nil
 }
 
-const charsetCR = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-
 // reflowSectionSizeVersion computes the reflow-section-size major version from
 // the maximum per-section PID count.
 //
@@ -278,45 +276,6 @@ func computeMaxSectionPIDCount(sectionEIDs sectionEIDsBySectionName, posItems []
 		}
 	}
 	return max
-}
-
-// randomAlphanumeric generates a random string of the given length
-// containing only uppercase Latin letters (A-Z) and digits (0-9).
-func randomAlphanumeric(length int) string {
-	result := make([]byte, length)
-	charsetLen := big.NewInt(int64(len(charsetCR)))
-
-	for i := range length {
-		num, err := rand.Int(rand.Reader, charsetLen)
-		if err != nil {
-			panic(err)
-		}
-		result[i] = charsetCR[num.Int64()]
-	}
-	return string(result)
-}
-
-// hashToAlphanumeric hashes the input string to produce a deterministic string of exactly
-// `length` bytes containing only uppercase Latin letters (A-Z) and digits (0-9).
-// If the input is empty, a random string is generated instead.
-func hashToAlphanumeric(input string, length int) string {
-	if input == "" {
-		return randomAlphanumeric(length)
-	}
-	if length <= 0 {
-		return ""
-	}
-
-	hash := sha256.Sum256([]byte(input))
-	result := make([]byte, length)
-	for i := range length {
-		// SHA-256 gives 32 bytes; we only currently need 28/32. For any larger length,
-		// repeat hash bytes deterministically.
-		hb := hash[i%len(hash)]
-		idx := hb % byte(len(charsetCR))
-		result[i] = charsetCR[idx]
-	}
-	return string(result)
 }
 
 func collectLinkTargets(fragments *FragmentList) map[string]bool {
@@ -404,4 +363,45 @@ func buildStyleRegistry(stylesheets []fb2.Stylesheet, log *zap.Logger) *StyleReg
 		zap.Int("warnings", len(warnings)))
 
 	return registry
+}
+
+const charsetCR = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+// randomAlphanumeric generates a random string of the given length
+// containing only uppercase Latin letters (A-Z) and digits (0-9).
+func randomAlphanumeric(length int) string {
+	result := make([]byte, length)
+	charsetLen := big.NewInt(int64(len(charsetCR)))
+
+	for i := range length {
+		num, err := rand.Int(rand.Reader, charsetLen)
+		if err != nil {
+			panic(err)
+		}
+		result[i] = charsetCR[num.Int64()]
+	}
+	return string(result)
+}
+
+// hashToAlphanumeric hashes the input string to produce a deterministic string of exactly
+// `length` bytes containing only uppercase Latin letters (A-Z) and digits (0-9).
+// If the input is empty, a random string is generated instead.
+func hashToAlphanumeric(input string, length int) string {
+	if input == "" {
+		return randomAlphanumeric(length)
+	}
+	if length <= 0 {
+		return ""
+	}
+
+	hash := sha256.Sum256([]byte(input))
+	result := make([]byte, length)
+	for i := range length {
+		// SHA-256 gives 32 bytes; we only currently need 28/32. For any larger length,
+		// repeat hash bytes deterministically.
+		hb := hash[i%len(hash)]
+		idx := hb % byte(len(charsetCR))
+		result[i] = charsetCR[idx]
+	}
+	return string(result)
 }
