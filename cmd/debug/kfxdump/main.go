@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/h2non/filetype"
 
@@ -29,6 +30,11 @@ func main() {
 		flag.Usage()
 		os.Exit(2)
 	}
+
+	defer func(startedAt time.Time) {
+		duration := time.Since(startedAt)
+		fmt.Fprintf(os.Stderr, "\nExecution time: %s\n", duration)
+	}(time.Now())
 
 	path := flag.Arg(0)
 	b, err := os.ReadFile(path)
