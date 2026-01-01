@@ -19,7 +19,7 @@ import (
 func main() {
 	bcRawMedia := flag.Bool("bcRawMedia", false, "dump $417 (bcRawMedia) raw bytes into <file>-bcRawMedia directory")
 	styles := flag.Bool("styles", false, "dump $157 (style) fragments into <file>-styles.txt")
-	overwrite := flag.Bool("overwrite", false, "overwrite existing <file>-dump.txt/<file>-styles.txt and replace <file>-bcRawMedia directory")
+	overwrite := flag.Bool("overwrite", false, "overwrite existing output")
 	flag.Usage = func() {
 		_, _ = fmt.Fprintf(os.Stderr, "usage: kfxdump [-bcRawMedia] [--styles] [--overwrite] <file.kfx>\n")
 		flag.PrintDefaults()
@@ -109,10 +109,258 @@ func dumpStylesTxt(container *kfx.Container, inPath string, overwrite bool) erro
 }
 
 func dumpStyleFragments(c *kfx.Container) (string, int) {
-	return dumpFragmentsByType(c, kfx.SymStyle)
+	// First, collect style usage information
+	styleUsage := collectStyleUsage(c)
+
+	return dumpFragmentsByTypeWithUsage(c, kfx.SymStyle, styleUsage)
 }
 
-func dumpFragmentsByType(c *kfx.Container, ftype kfx.KFXSymbol) (string, int) {
+// StyleUsageInfo tracks which fragments use a particular style.
+type StyleUsageInfo struct {
+	// Fragments that reference this style via $157 (style field)
+	DirectUsers []string
+	// Fragments that reference this style via $142 (style_events)
+	StyleEventUsers []string
+}
+
+// collectStyleUsage scans all fragments to find style references.
+func collectStyleUsage(c *kfx.Container) map[string]*StyleUsageInfo {
+	usage := make(map[string]*StyleUsageInfo)
+
+	if c.Fragments == nil {
+		return usage
+	}
+
+	// Scan all fragments for style references
+	for _, frag := range c.Fragments.All() {
+		fragID := formatFragmentID(c, frag)
+
+		// Skip style fragments themselves
+		if frag.FType == kfx.SymStyle {
+			continue
+		}
+
+		// Recursively find all style references in this fragment
+		directStyles, eventStyles := findAllStyleReferences(frag.Value)
+
+		for _, styleName := range directStyles {
+			if usage[styleName] == nil {
+				usage[styleName] = &StyleUsageInfo{}
+			}
+			usage[styleName].DirectUsers = append(usage[styleName].DirectUsers, fragID)
+		}
+
+		for _, styleName := range eventStyles {
+			if usage[styleName] == nil {
+				usage[styleName] = &StyleUsageInfo{}
+			}
+			usage[styleName].StyleEventUsers = append(usage[styleName].StyleEventUsers, fragID)
+		}
+	}
+
+	return usage
+}
+
+// findAllStyleReferences recursively finds all style references in a value.
+// Returns (direct style references via $157, style event references via $142).
+func findAllStyleReferences(v any) (directStyles, eventStyles []string) {
+	seenDirect := make(map[string]bool)
+	seenEvent := make(map[string]bool)
+
+	var walk func(val any)
+	walk = func(val any) {
+		switch m := val.(type) {
+		case kfx.StructValue:
+			// Check for $157 (style) field
+			if styleVal, ok := m[kfx.SymStyle]; ok {
+				if name := extractSymbolName(styleVal); name != "" && !seenDirect[name] {
+					seenDirect[name] = true
+					directStyles = append(directStyles, name)
+				}
+			}
+			// Check for $142 (style_events) field
+			if eventsVal, ok := m[kfx.SymStyleEvents]; ok {
+				for _, styleName := range extractStylesFromEventList(eventsVal) {
+					if !seenEvent[styleName] {
+						seenEvent[styleName] = true
+						eventStyles = append(eventStyles, styleName)
+					}
+				}
+			}
+			// Recurse into all values
+			for _, subVal := range m {
+				walk(subVal)
+			}
+
+		case map[kfx.KFXSymbol]any:
+			// Check for $157 (style) field
+			if styleVal, ok := m[kfx.SymStyle]; ok {
+				if name := extractSymbolName(styleVal); name != "" && !seenDirect[name] {
+					seenDirect[name] = true
+					directStyles = append(directStyles, name)
+				}
+			}
+			// Check for $142 (style_events) field
+			if eventsVal, ok := m[kfx.SymStyleEvents]; ok {
+				for _, styleName := range extractStylesFromEventList(eventsVal) {
+					if !seenEvent[styleName] {
+						seenEvent[styleName] = true
+						eventStyles = append(eventStyles, styleName)
+					}
+				}
+			}
+			// Recurse into all values
+			for _, subVal := range m {
+				walk(subVal)
+			}
+
+		case map[string]any:
+			// Check for $157 (style) field
+			if styleVal, ok := m["$157"]; ok {
+				if name := extractSymbolName(styleVal); name != "" && !seenDirect[name] {
+					seenDirect[name] = true
+					directStyles = append(directStyles, name)
+				}
+			}
+			// Check for $142 (style_events) field
+			if eventsVal, ok := m["$142"]; ok {
+				for _, styleName := range extractStylesFromEventList(eventsVal) {
+					if !seenEvent[styleName] {
+						seenEvent[styleName] = true
+						eventStyles = append(eventStyles, styleName)
+					}
+				}
+			}
+			// Recurse into all values
+			for _, subVal := range m {
+				walk(subVal)
+			}
+
+		case []any:
+			for _, item := range m {
+				walk(item)
+			}
+
+		case kfx.ListValue:
+			for _, item := range m {
+				walk(item)
+			}
+		}
+	}
+
+	walk(v)
+	return directStyles, eventStyles
+}
+
+// formatFragmentID returns a readable identifier for a fragment.
+func formatFragmentID(c *kfx.Container, frag *kfx.Fragment) string {
+	if frag.IsRoot() {
+		return fmt.Sprintf("%s (root)", frag.FType.Name())
+	}
+	if frag.FIDName != "" {
+		return fmt.Sprintf("%s:%s", frag.FType.Name(), frag.FIDName)
+	}
+	// Try to resolve FID to name
+	if c.DocSymbolTable != nil {
+		if name, ok := c.DocSymbolTable.FindByID(uint64(frag.FID)); ok && !strings.HasPrefix(name, "$") {
+			return fmt.Sprintf("%s:%s", frag.FType.Name(), name)
+		}
+	}
+	return fmt.Sprintf("%s:$%d", frag.FType.Name(), frag.FID)
+}
+
+// extractStylesFromEventList extracts style names from a list of style events.
+func extractStylesFromEventList(v any) []string {
+	list := toListAny(v)
+	if list == nil {
+		return nil
+	}
+
+	var styles []string
+	seen := make(map[string]bool)
+
+	for _, item := range list {
+		// Each event item should have a $157 (style) field
+		if m := toMapAny(item); m != nil {
+			for key, val := range m {
+				keyID := keyToSymbolID(key)
+				if keyID == int(kfx.SymStyle) { // $157
+					if styleName := extractSymbolName(val); styleName != "" && !seen[styleName] {
+						seen[styleName] = true
+						styles = append(styles, styleName)
+					}
+				}
+			}
+		}
+	}
+	return styles
+}
+
+// toMapAny converts various map types to map[string]any for uniform access.
+func toMapAny(v any) map[string]any {
+	switch m := v.(type) {
+	case kfx.StructValue:
+		result := make(map[string]any, len(m))
+		for k, val := range m {
+			result[fmt.Sprintf("$%d", k)] = val
+		}
+		return result
+	case map[kfx.KFXSymbol]any:
+		result := make(map[string]any, len(m))
+		for k, val := range m {
+			result[fmt.Sprintf("$%d", k)] = val
+		}
+		return result
+	case map[string]any:
+		return m
+	default:
+		return nil
+	}
+}
+
+// toListAny converts various list types to []any.
+func toListAny(v any) []any {
+	switch l := v.(type) {
+	case []any:
+		return l
+	case kfx.ListValue:
+		return []any(l)
+	default:
+		return nil
+	}
+}
+
+// keyToSymbolID extracts a symbol ID from a map key.
+func keyToSymbolID(key string) int {
+	if strings.HasPrefix(key, "$") {
+		if id, err := strconv.Atoi(key[1:]); err == nil {
+			return id
+		}
+	}
+	return -1
+}
+
+// extractSymbolName extracts a style name from a symbol value.
+func extractSymbolName(v any) string {
+	switch s := v.(type) {
+	case kfx.SymbolValue:
+		return kfx.KFXSymbol(s).Name()
+	case kfx.SymbolByNameValue:
+		return string(s)
+	case string:
+		// Handle "$NNN" format
+		if strings.HasPrefix(s, "$") {
+			if id, err := strconv.Atoi(s[1:]); err == nil {
+				return kfx.KFXSymbol(id).Name()
+			}
+		}
+		return s
+	default:
+		return ""
+	}
+}
+
+func dumpFragmentsByTypeWithUsage(c *kfx.Container, ftype kfx.KFXSymbol, styleUsage map[string]*StyleUsageInfo) (string, int) {
 	var sb strings.Builder
 
 	fmt.Fprintf(&sb, "=== KFX Fragments: %s ===\n\n", ftype)
@@ -153,6 +401,8 @@ func dumpFragmentsByType(c *kfx.Container, ftype kfx.KFXSymbol) (string, int) {
 	fmt.Fprintf(&sb, "### %s (%d fragments)\n\n", ftype, len(sortedFrags))
 
 	for _, f := range sortedFrags {
+		styleName := "" // Track style name for usage lookup
+
 		if f.IsRoot() {
 			sb.WriteString("  [root fragment]\n")
 		} else {
@@ -161,6 +411,7 @@ func dumpFragmentsByType(c *kfx.Container, ftype kfx.KFXSymbol) (string, int) {
 
 			if f.FIDName != "" {
 				fidName = f.FIDName
+				styleName = fidName // Style name is the FIDName
 				if len(c.LocalSymbols) > 0 {
 					fidID = c.GetLocalSymbolID(f.FIDName)
 					if fidID < 0 {
@@ -185,6 +436,7 @@ func dumpFragmentsByType(c *kfx.Container, ftype kfx.KFXSymbol) (string, int) {
 					name, ok := c.DocSymbolTable.FindByID(uint64(fidID))
 					if ok && !strings.HasPrefix(name, "$") {
 						fidName = name
+						styleName = fidName
 					}
 				}
 			}
@@ -201,6 +453,28 @@ func dumpFragmentsByType(c *kfx.Container, ftype kfx.KFXSymbol) (string, int) {
 		if css := formatStyleAsCSS(f.Value); css != "" {
 			sb.WriteString(css)
 		}
+
+		// Add usage information if available
+		if styleName != "" && styleUsage != nil {
+			if usage := styleUsage[styleName]; usage != nil {
+				sb.WriteString("  Usage:\n")
+				if len(usage.DirectUsers) > 0 {
+					fmt.Fprintf(&sb, "    Direct ($157): %d fragment(s)\n", len(usage.DirectUsers))
+					for _, user := range usage.DirectUsers {
+						fmt.Fprintf(&sb, "      %s\n", user)
+					}
+				}
+				if len(usage.StyleEventUsers) > 0 {
+					fmt.Fprintf(&sb, "    Style events ($142): %d fragment(s)\n", len(usage.StyleEventUsers))
+					for _, user := range usage.StyleEventUsers {
+						fmt.Fprintf(&sb, "      %s\n", user)
+					}
+				}
+			} else {
+				sb.WriteString("  Usage: UNUSED (no references found)\n")
+			}
+		}
+
 		sb.WriteString("\n")
 	}
 
@@ -216,29 +490,28 @@ func formatStyleAsCSS(v any) string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("  /* CSS-like:\n")
+	sb.WriteString("  CSS:\n")
 
 	// Extract style name for selector
 	styleName := extractStringValue(props["style_name"])
 	if styleName != "" {
-		fmt.Fprintf(&sb, "     .%s {\n", styleName)
+		fmt.Fprintf(&sb, "    .%s {\n", styleName)
 	} else {
-		sb.WriteString("     {\n")
+		sb.WriteString("    {\n")
 	}
 
 	// Show parent style inheritance if present
 	if parentStyle := extractStringValue(props["parent_style"]); parentStyle != "" {
-		fmt.Fprintf(&sb, "       /* inherits: .%s */\n", parentStyle)
+		fmt.Fprintf(&sb, "      inherits: .%s\n", parentStyle)
 	}
 
 	// Extract and format CSS properties
 	cssProps := extractCSSProperties(props)
 	for _, prop := range cssProps {
-		fmt.Fprintf(&sb, "       %s: %s;\n", prop.name, prop.value)
+		fmt.Fprintf(&sb, "      %s: %s;\n", prop.name, prop.value)
 	}
 
-	sb.WriteString("     }\n")
-	sb.WriteString("  */\n")
+	sb.WriteString("    }\n")
 
 	return sb.String()
 }
