@@ -142,7 +142,9 @@ Sibling selectors (`+`, `~`) are ignored with warning.
 
 ### Media Queries
 
-Per **Media Query Policy** above: `@media` blocks are ignored.
+Per **Media Query Policy** above: `@media` blocks are ignored with the following exception:
+
+- [ ] **Handle Amazon-specific @media queries**: During KFX generation, `amzn-kf8` and `amzn-et` are set to true. Parse and apply rules from `@media amzn-kf8` and `@media amzn-et` blocks. Rules from `@media amzn-mobi` are always ignored. Rules inside qualifying media queries should be processed and merged with regular stylesheet rules. The CSS parser must properly evaluate media query expressions including logical operators (e.g., `@media amzn-kf8 and not amzn-et` evaluates to false during KFX generation since both amzn-kf8 and amzn-et are true).
 
 ---
 
