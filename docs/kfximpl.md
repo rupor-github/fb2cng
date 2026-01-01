@@ -153,7 +153,7 @@ Key symbol ranges from `docs/symdict.md`:
 
 ## Notes
 
-### Omitted Features (as requested)
+### Omitted Features
 
 - $267 (SectionMetadata) - magazine specific
 - $387 (PreviewImages) - magazine specific

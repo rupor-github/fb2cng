@@ -2,9 +2,7 @@ Actual names for symbols could be obtained by looking at EpubToKFXConverter-4.0.
 
 # KFX/Ion Symbol Dictionary
 
-_Generated: 2025-12-24_
-
-This file maps the `$NNN` Ion symbol IDs referenced by the Python code in this workspace to the corresponding enum name and string from the Kindle Previewer 3 converter enum.
+This file maps the `$NNN` Ion symbol IDs referenced by the Python code in Caliber KFXInput plugin to the corresponding enum name and string from the Kindle Previewer 3 converter enum.
 
 Derived from: `EpubToKFXConverter-4.0.jar` (Kindle Previewer 3), enum class file `com.amazon.kaf.c/B.class`.
 
