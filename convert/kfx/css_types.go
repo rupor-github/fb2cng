@@ -1,5 +1,81 @@
 package kfx
 
+import "strings"
+
+// MediaQuery represents a parsed @media query condition.
+// Supports Amazon-specific media types: amzn-mobi, amzn-kf8, amzn-et.
+type MediaQuery struct {
+	Raw      string         // Original media query string
+	Type     string         // Media type (e.g., "amzn-mobi", "amzn-kf8")
+	Negated  bool           // true if "not" modifier was used on main type
+	Features []MediaFeature // Additional conditions (e.g., "and not amzn-et")
+}
+
+// MediaFeature represents a single media feature condition in a media query.
+type MediaFeature struct {
+	Name    string // Feature name (e.g., "amzn-et")
+	Negated bool   // true if "not" modifier was used
+}
+
+// Evaluate returns true if this media query matches the given context.
+// For KFX generation, amzn-kf8=true and amzn-et=true (Enhanced Typesetting).
+// amzn-mobi is always false for KFX.
+func (mq MediaQuery) Evaluate(kf8, et bool) bool {
+	// Evaluate main type
+	var typeMatches bool
+	switch strings.ToLower(mq.Type) {
+	case "amzn-kf8":
+		typeMatches = kf8
+	case "amzn-et":
+		typeMatches = et
+	case "amzn-mobi":
+		typeMatches = false // Always false for KFX
+	case "all", "screen":
+		typeMatches = true // Generic media types match
+	default:
+		typeMatches = false // Unknown media type
+	}
+
+	if mq.Negated {
+		typeMatches = !typeMatches
+	}
+
+	if !typeMatches {
+		return false
+	}
+
+	// Evaluate all features (AND logic)
+	for _, f := range mq.Features {
+		var featureMatches bool
+		switch strings.ToLower(f.Name) {
+		case "amzn-kf8":
+			featureMatches = kf8
+		case "amzn-et":
+			featureMatches = et
+		case "amzn-mobi":
+			featureMatches = false
+		default:
+			featureMatches = false
+		}
+
+		if f.Negated {
+			featureMatches = !featureMatches
+		}
+
+		if !featureMatches {
+			return false
+		}
+	}
+
+	return true
+}
+
+// EvaluateForKFX returns true if this media query matches KFX generation context.
+// In KFX context: amzn-kf8=true, amzn-et=true.
+func (mq MediaQuery) EvaluateForKFX() bool {
+	return mq.Evaluate(true, true)
+}
+
 // CSSValue represents a parsed CSS property value.
 type CSSValue struct {
 	Raw     string  // Original CSS value string (e.g., "1.2em", "bold", "#ff0000")

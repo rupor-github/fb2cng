@@ -52,9 +52,17 @@ func (p *Parser) Parse(data []byte) *Stylesheet {
 			atRule := string(data)
 			switch atRule {
 			case "@media":
-				// Skip entire @media block
-				p.skipAtRuleBlock(parser)
-				p.log.Debug("skipping @media block")
+				// Parse @media query and evaluate for KFX context
+				mq := p.parseMediaQueryFromTokens(parser.Values())
+				if mq.EvaluateForKFX() {
+					// Process rules inside @media block
+					p.log.Debug("processing @media block", zap.String("query", mq.Raw))
+					p.parseMediaBlock(parser, sheet)
+				} else {
+					// Skip entire @media block
+					p.skipAtRuleBlock(parser)
+					p.log.Debug("skipping @media block", zap.String("query", mq.Raw))
+				}
 			case "@font-face":
 				// Parse @font-face
 				ff := p.parseFontFace(parser)
@@ -418,6 +426,108 @@ func (p *Parser) parseFontFace(parser *css.Parser) CSSFontFace {
 			case "font-weight":
 				ff.Weight = valStr
 			}
+		}
+	}
+}
+
+// parseMediaQueryFromTokens parses a media query from CSS tokens.
+// Handles queries like "amzn-kf8", "amzn-kf8 and not amzn-et", etc.
+func (p *Parser) parseMediaQueryFromTokens(tokens []css.Token) MediaQuery {
+	mq := MediaQuery{}
+
+	// Build raw string for logging
+	var rawParts []string
+	for _, t := range tokens {
+		if t.TokenType != css.WhitespaceToken {
+			rawParts = append(rawParts, string(t.Data))
+		} else if len(rawParts) > 0 {
+			rawParts = append(rawParts, " ")
+		}
+	}
+	mq.Raw = strings.TrimSpace(strings.Join(rawParts, ""))
+
+	// Parse tokens into media query components
+	// Format: [not] type [and [not] feature]...
+	var idents []string
+	for _, t := range tokens {
+		if t.TokenType == css.IdentToken {
+			idents = append(idents, strings.ToLower(string(t.Data)))
+		}
+	}
+
+	if len(idents) == 0 {
+		return mq
+	}
+
+	i := 0
+	// Check for leading "not"
+	if idents[i] == "not" {
+		mq.Negated = true
+		i++
+	}
+
+	// Get main media type
+	if i < len(idents) {
+		mq.Type = idents[i]
+		i++
+	}
+
+	// Parse "and [not] feature" pairs
+	for i < len(idents) {
+		if idents[i] == "and" {
+			i++
+			if i >= len(idents) {
+				break
+			}
+
+			feature := MediaFeature{}
+			if idents[i] == "not" {
+				feature.Negated = true
+				i++
+				if i >= len(idents) {
+					break
+				}
+			}
+			feature.Name = idents[i]
+			mq.Features = append(mq.Features, feature)
+			i++
+		} else {
+			i++
+		}
+	}
+
+	return mq
+}
+
+// parseMediaBlock parses rules inside an @media block and adds them to the stylesheet.
+func (p *Parser) parseMediaBlock(parser *css.Parser, sheet *Stylesheet) {
+	var currentSelectors []string
+
+	for {
+		gt, _, data := parser.Next()
+
+		switch gt {
+		case css.ErrorGrammar, css.EndAtRuleGrammar:
+			return
+
+		case css.BeginRulesetGrammar:
+			currentSelectors = p.parseSelectors(data, parser.Values())
+			props := p.parseDeclarations(parser, sheet)
+
+			// Create rules for each selector
+			for _, selStr := range currentSelectors {
+				sel := p.parseSelector(selStr, sheet)
+				if sel.IsSimple() {
+					propsCopy := make(map[string]CSSValue, len(props))
+					maps.Copy(propsCopy, props)
+					rule := CSSRule{
+						Selector:   sel,
+						Properties: propsCopy,
+					}
+					sheet.Rules = append(sheet.Rules, rule)
+				}
+			}
+			currentSelectors = nil
 		}
 	}
 }

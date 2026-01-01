@@ -205,7 +205,7 @@ func TestParser_PseudoElementAfter(t *testing.T) {
 	}
 }
 
-func TestParser_MediaBlockSkipped(t *testing.T) {
+func TestParser_MediaBlockKF8Included(t *testing.T) {
 	log := zap.NewNop()
 	p := NewParser(log)
 
@@ -218,9 +218,52 @@ func TestParser_MediaBlockSkipped(t *testing.T) {
 	`)
 	sheet := p.Parse(css)
 
-	// Should have 2 rules (p and .test), @media block should be skipped
+	// Should have 3 rules: p (margin: 0), p (margin: 1em from @media), .test
+	// @media amzn-kf8 is now processed for KFX output
+	if len(sheet.Rules) != 3 {
+		t.Fatalf("expected 3 rules (@media amzn-kf8 included), got %d", len(sheet.Rules))
+	}
+
+	// First rule should be p with margin: 0
+	if sheet.Rules[0].Selector.Element != "p" {
+		t.Errorf("expected first rule to be 'p', got '%s'", sheet.Rules[0].Selector.Element)
+	}
+	val0, _ := sheet.Rules[0].GetProperty("margin")
+	if val0.Raw != "0" {
+		t.Errorf("expected first p margin: 0, got '%s'", val0.Raw)
+	}
+
+	// Second rule should be p with margin: 1em (from @media amzn-kf8)
+	if sheet.Rules[1].Selector.Element != "p" {
+		t.Errorf("expected second rule to be 'p', got '%s'", sheet.Rules[1].Selector.Element)
+	}
+	val1, _ := sheet.Rules[1].GetProperty("margin")
+	if val1.Raw != "1em" {
+		t.Errorf("expected second p margin: 1em, got '%s'", val1.Raw)
+	}
+
+	// Third rule should be .test
+	if sheet.Rules[2].Selector.Class != "test" {
+		t.Errorf("expected third rule to be '.test', got '%s'", sheet.Rules[2].Selector.Class)
+	}
+}
+
+func TestParser_MediaBlockMobiSkipped(t *testing.T) {
+	log := zap.NewNop()
+	p := NewParser(log)
+
+	css := []byte(`
+		p { margin: 0; }
+		@media amzn-mobi {
+			p { margin: 2em; }
+		}
+		.test { color: red; }
+	`)
+	sheet := p.Parse(css)
+
+	// Should have 2 rules: p and .test. @media amzn-mobi should be skipped
 	if len(sheet.Rules) != 2 {
-		t.Fatalf("expected 2 rules (media block skipped), got %d", len(sheet.Rules))
+		t.Fatalf("expected 2 rules (@media amzn-mobi skipped), got %d", len(sheet.Rules))
 	}
 
 	// First rule should be p with margin: 0
@@ -231,6 +274,111 @@ func TestParser_MediaBlockSkipped(t *testing.T) {
 	// Second rule should be .test
 	if sheet.Rules[1].Selector.Class != "test" {
 		t.Errorf("expected second rule to be '.test', got '%s'", sheet.Rules[1].Selector.Class)
+	}
+}
+
+func TestParser_MediaBlockKF8AndNotET(t *testing.T) {
+	log := zap.NewNop()
+	p := NewParser(log)
+
+	css := []byte(`
+		p { margin: 0; }
+		@media amzn-kf8 and not amzn-et {
+			p { margin: 3em; }
+		}
+		.test { color: red; }
+	`)
+	sheet := p.Parse(css)
+
+	// Should have 2 rules: p and .test
+	// @media amzn-kf8 and not amzn-et should be skipped because:
+	// amzn-kf8=true AND NOT amzn-et=true → true AND false → false
+	if len(sheet.Rules) != 2 {
+		t.Fatalf("expected 2 rules (@media amzn-kf8 and not amzn-et skipped), got %d", len(sheet.Rules))
+	}
+
+	// First rule should be p with margin: 0
+	if sheet.Rules[0].Selector.Element != "p" {
+		t.Errorf("expected first rule to be 'p', got '%s'", sheet.Rules[0].Selector.Element)
+	}
+
+	// Second rule should be .test
+	if sheet.Rules[1].Selector.Class != "test" {
+		t.Errorf("expected second rule to be '.test', got '%s'", sheet.Rules[1].Selector.Class)
+	}
+}
+
+func TestParser_MediaBlockKF8AndET(t *testing.T) {
+	log := zap.NewNop()
+	p := NewParser(log)
+
+	css := []byte(`
+		p { margin: 0; }
+		@media amzn-kf8 and amzn-et {
+			p { margin: 4em; }
+		}
+		.test { color: red; }
+	`)
+	sheet := p.Parse(css)
+
+	// Should have 3 rules: p (margin: 0), p (margin: 4em from @media), .test
+	// @media amzn-kf8 and amzn-et should be included because:
+	// amzn-kf8=true AND amzn-et=true → true AND true → true
+	if len(sheet.Rules) != 3 {
+		t.Fatalf("expected 3 rules (@media amzn-kf8 and amzn-et included), got %d", len(sheet.Rules))
+	}
+
+	// First rule should be p with margin: 0
+	if sheet.Rules[0].Selector.Element != "p" {
+		t.Errorf("expected first rule to be 'p', got '%s'", sheet.Rules[0].Selector.Element)
+	}
+	val0, _ := sheet.Rules[0].GetProperty("margin")
+	if val0.Raw != "0" {
+		t.Errorf("expected first p margin: 0, got '%s'", val0.Raw)
+	}
+
+	// Second rule should be p with margin: 4em (from @media amzn-kf8 and amzn-et)
+	if sheet.Rules[1].Selector.Element != "p" {
+		t.Errorf("expected second rule to be 'p', got '%s'", sheet.Rules[1].Selector.Element)
+	}
+	val1, _ := sheet.Rules[1].GetProperty("margin")
+	if val1.Raw != "4em" {
+		t.Errorf("expected second p margin: 4em, got '%s'", val1.Raw)
+	}
+
+	// Third rule should be .test
+	if sheet.Rules[2].Selector.Class != "test" {
+		t.Errorf("expected third rule to be '.test', got '%s'", sheet.Rules[2].Selector.Class)
+	}
+}
+
+func TestParser_MediaBlockNotMobi(t *testing.T) {
+	log := zap.NewNop()
+	p := NewParser(log)
+
+	css := []byte(`
+		p { margin: 0; }
+		@media not amzn-mobi {
+			p { margin: 5em; }
+		}
+		.test { color: red; }
+	`)
+	sheet := p.Parse(css)
+
+	// Should have 3 rules: p (margin: 0), p (margin: 5em from @media), .test
+	// @media not amzn-mobi should be included because:
+	// NOT amzn-mobi=false → NOT false → true
+	if len(sheet.Rules) != 3 {
+		t.Fatalf("expected 3 rules (@media not amzn-mobi included), got %d", len(sheet.Rules))
+	}
+
+	// Second rule should be p with margin: 5em (from @media not amzn-mobi)
+	if sheet.Rules[1].Selector.Element != "p" {
+		t.Errorf("expected second rule to be 'p', got '%s'", sheet.Rules[1].Selector.Element)
+	}
+	val1, _ := sheet.Rules[1].GetProperty("margin")
+	if val1.Raw != "5em" {
+		t.Errorf("expected second p margin: 5em, got '%s'", val1.Raw)
 	}
 }
 
@@ -449,5 +597,120 @@ func TestStylesheet_StyleNames(t *testing.T) {
 		if !expected[name] {
 			t.Errorf("unexpected style name: %s", name)
 		}
+	}
+}
+
+func TestMediaQuery_Evaluate(t *testing.T) {
+	tests := []struct {
+		name     string
+		mq       MediaQuery
+		kf8      bool
+		et       bool
+		expected bool
+	}{
+		{
+			name:     "amzn-kf8 matches KFX",
+			mq:       MediaQuery{Type: "amzn-kf8"},
+			kf8:      true,
+			et:       true,
+			expected: true,
+		},
+		{
+			name:     "amzn-mobi never matches KFX",
+			mq:       MediaQuery{Type: "amzn-mobi"},
+			kf8:      true,
+			et:       true,
+			expected: false,
+		},
+		{
+			name:     "amzn-et matches KFX",
+			mq:       MediaQuery{Type: "amzn-et"},
+			kf8:      true,
+			et:       true,
+			expected: true,
+		},
+		{
+			name: "amzn-kf8 and not amzn-et does not match KFX",
+			mq: MediaQuery{
+				Type:     "amzn-kf8",
+				Features: []MediaFeature{{Name: "amzn-et", Negated: true}},
+			},
+			kf8:      true,
+			et:       true,
+			expected: false,
+		},
+		{
+			name: "amzn-kf8 and amzn-et matches KFX",
+			mq: MediaQuery{
+				Type:     "amzn-kf8",
+				Features: []MediaFeature{{Name: "amzn-et", Negated: false}},
+			},
+			kf8:      true,
+			et:       true,
+			expected: true,
+		},
+		{
+			name:     "not amzn-mobi matches KFX",
+			mq:       MediaQuery{Type: "amzn-mobi", Negated: true},
+			kf8:      true,
+			et:       true,
+			expected: true,
+		},
+		{
+			name:     "screen matches (generic type)",
+			mq:       MediaQuery{Type: "screen"},
+			kf8:      true,
+			et:       true,
+			expected: true,
+		},
+		{
+			name:     "all matches (generic type)",
+			mq:       MediaQuery{Type: "all"},
+			kf8:      true,
+			et:       true,
+			expected: true,
+		},
+		{
+			name:     "unknown type does not match",
+			mq:       MediaQuery{Type: "print"},
+			kf8:      true,
+			et:       true,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.mq.Evaluate(tt.kf8, tt.et)
+			if got != tt.expected {
+				t.Errorf("MediaQuery.Evaluate(%v, %v) = %v, want %v", tt.kf8, tt.et, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestMediaQuery_EvaluateForKFX(t *testing.T) {
+	// Test the convenience method that uses kf8=true, et=true
+	tests := []struct {
+		name     string
+		mq       MediaQuery
+		expected bool
+	}{
+		{"amzn-kf8", MediaQuery{Type: "amzn-kf8"}, true},
+		{"amzn-mobi", MediaQuery{Type: "amzn-mobi"}, false},
+		{"amzn-et", MediaQuery{Type: "amzn-et"}, true},
+		{
+			"amzn-kf8 and not amzn-et",
+			MediaQuery{Type: "amzn-kf8", Features: []MediaFeature{{Name: "amzn-et", Negated: true}}},
+			false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.mq.EvaluateForKFX(); got != tt.expected {
+				t.Errorf("EvaluateForKFX() = %v, want %v", got, tt.expected)
+			}
+		})
 	}
 }
