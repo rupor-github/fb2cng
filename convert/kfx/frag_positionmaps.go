@@ -19,8 +19,9 @@ func CollectAllEIDs(sectionEIDs sectionEIDsBySectionName) []int {
 	return out
 }
 
-// compressEIDs encodes consecutive EIDs as ranges [base, count] to reduce size.
-// KFXInput accepts either scalar EIDs or [base, count] pairs.
+// compressEIDs returns a flat sorted list of EIDs for position_map.
+// While [base, count] compression was attempted previously, KPV output shows
+// that a flat list of all EIDs is expected.
 func compressEIDs(eids []int) []any {
 	if len(eids) == 0 {
 		return nil
@@ -31,31 +32,9 @@ func compressEIDs(eids []int) []any {
 	sort.Ints(sorted)
 
 	out := make([]any, 0, len(sorted))
-	base := sorted[0]
-	prev := sorted[0]
-	count := 1
-
-	flush := func() {
-		if count <= 1 {
-			out = append(out, int64(base))
-			return
-		}
-		out = append(out, []any{int64(base), int64(count)})
+	for _, eid := range sorted {
+		out = append(out, int64(eid))
 	}
-
-	for i := 1; i < len(sorted); i++ {
-		eid := sorted[i]
-		if eid == prev+1 {
-			prev = eid
-			count++
-			continue
-		}
-		flush()
-		base = eid
-		prev = eid
-		count = 1
-	}
-	flush()
 
 	return out
 }

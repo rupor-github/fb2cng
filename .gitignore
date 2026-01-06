@@ -15,12 +15,14 @@
 *.fb2
 *.kfx
 *.txt
+*.pyc
 
 # build specific
 build/
 build_*/
 release/
 release_*/
+**/__pycache__/*
 **/*-bcRawMedia/
 misc/version.go
 common/*_code.go

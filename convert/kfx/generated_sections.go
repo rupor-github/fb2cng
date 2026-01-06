@@ -53,9 +53,9 @@ func addText(sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator
 	if text == "" {
 		return
 	}
-	styles.EnsureStyle(style)
+	resolved := styles.ResolveStyle(style)
 	name, off := ca.Add(text)
-	sb.AddContent(SymText, name, off, style)
+	sb.AddContent(SymText, name, off, resolved)
 }
 
 func flattenTOCEntries(entries []*TOCEntry, includeUntitled bool) []string {
@@ -131,7 +131,7 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 		sectionEIDs[sectionName] = sb.AllEIDs()
 		nextEID = sb.NextEID()
 
-		storyFrag, secFrag := sb.Build(600, 800)
+		storyFrag, secFrag := sb.Build()
 		if err := fragments.Add(storyFrag); err != nil {
 			return nil, nil, nil, 0, err
 		}
@@ -188,7 +188,7 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 		sectionEIDs[tocSectionName] = sb.AllEIDs()
 		nextEID = sb.NextEID()
 
-		storyFrag, secFrag := sb.Build(600, 800)
+		storyFrag, secFrag := sb.Build()
 		if err := fragments.Add(storyFrag); err != nil {
 			return nil, nil, nil, 0, err
 		}

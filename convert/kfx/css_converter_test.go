@@ -140,8 +140,8 @@ func TestConvertVerticalAlign(t *testing.T) {
 			if ok != tt.hasValue {
 				t.Errorf("expected ok=%v, got ok=%v", tt.hasValue, ok)
 			}
-			if ok && result == nil {
-				t.Error("expected non-nil result")
+			if ok && !result.UseBaselineStyle && !result.UseBaselineShift {
+				t.Error("expected valid result with baseline_style or baseline_shift")
 			}
 		})
 	}
@@ -188,9 +188,11 @@ func TestCSSValueToKFX(t *testing.T) {
 		{"em unit", CSSValue{Value: 1.5, Unit: "em"}, SymUnitEm, false},
 		{"px unit", CSSValue{Value: 16, Unit: "px"}, SymUnitPx, false},
 		{"pt unit", CSSValue{Value: 12, Unit: "pt"}, SymUnitPt, false},
-		{"percent", CSSValue{Value: 150, Unit: "%"}, SymUnitRatio, false},
-		{"unitless", CSSValue{Value: 1.2, Unit: ""}, SymUnitRatio, false},
+		{"percent", CSSValue{Value: 150, Unit: "%"}, SymUnitPercent, false},
+		{"unitless", CSSValue{Value: 1.2, Unit: ""}, SymUnitLh, false},
 		{"cm unit", CSSValue{Value: 2.5, Unit: "cm"}, SymUnitCm, false},
+		{"rem unit", CSSValue{Value: 0.75, Unit: "rem"}, SymUnitRem, false},
+		{"lh unit", CSSValue{Value: 1.0, Unit: "lh"}, SymUnitLh, false},
 		{"unknown unit", CSSValue{Value: 1, Unit: "vw"}, 0, true},
 	}
 
@@ -213,18 +215,18 @@ func TestCSSValueToKFX(t *testing.T) {
 	}
 }
 
-func TestPercentToRatio(t *testing.T) {
-	// 150% should become 1.5 ratio
+func TestPercentUnit(t *testing.T) {
+	// 150% should stay as 150 percent (not converted to ratio)
 	css := CSSValue{Value: 150, Unit: "%"}
 	value, unit, err := CSSValueToKFX(css)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if unit != SymUnitRatio {
-		t.Errorf("expected ratio unit, got %d", unit)
+	if unit != SymUnitPercent {
+		t.Errorf("expected percent unit ($314), got %d", unit)
 	}
-	if value != 1.5 {
-		t.Errorf("expected value 1.5, got %f", value)
+	if value != 150 {
+		t.Errorf("expected value 150, got %f", value)
 	}
 }
 
@@ -499,8 +501,8 @@ func TestNewStyleRegistryFromCSS_Empty(t *testing.T) {
 	}
 
 	// Should have all default styles
-	if _, ok := registry.Get("paragraph"); !ok {
-		t.Error("expected default 'paragraph' style")
+	if _, ok := registry.Get("p"); !ok {
+		t.Error("expected default 'p' style")
 	}
 	if _, ok := registry.Get("h1"); !ok {
 		t.Error("expected default 'h1' style")

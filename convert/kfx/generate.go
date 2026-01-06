@@ -96,12 +96,12 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 		}
 	}
 
-	externalRes, rawMedia, imageResourceNames := buildImageResourceFragments(usedImages)
+	externalRes, rawMedia, imageResourceInfo := buildImageResourceFragments(usedImages)
 
 	// Generate storyline and section fragments from book content
 	// EIDs start at 1000 - this is arbitrary but leaves room for future system IDs
 	startEID := 1000
-	contentFragments, nextEID, sectionNames, tocEntries, sectionEIDs, idToEID, err := generateStoryline(c.Book, styles, imageResourceNames, startEID)
+	contentFragments, nextEID, sectionNames, tocEntries, sectionEIDs, idToEID, err := generateStoryline(c.Book, styles, imageResourceInfo, startEID, c.FootnotesIndex)
 	if err != nil {
 		return err
 	}
@@ -127,10 +127,10 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 
 	// Cover image resource name (e.g. "e6") for metadata.
 	coverResName := ""
-	if len(c.Book.Description.TitleInfo.Coverpage) > 0 && imageResourceNames != nil {
+	if len(c.Book.Description.TitleInfo.Coverpage) > 0 && imageResourceInfo != nil {
 		coverID := strings.TrimPrefix(c.Book.Description.TitleInfo.Coverpage[0].Href, "#")
-		if rn, ok := imageResourceNames[coverID]; ok {
-			coverResName = rn
+		if info, ok := imageResourceInfo[coverID]; ok {
+			coverResName = info.ResourceName
 		}
 	}
 

@@ -100,30 +100,49 @@ func ConvertTextDecoration(css CSSValue) TextDecorationResult {
 	return result
 }
 
-// ConvertVerticalAlign converts CSS vertical-align to KFX baseline_shift.
-// CSS: super, sub, baseline, middle, top, bottom, or length
-// KFX: baseline_shift with positive (super) or negative (sub) value
-func ConvertVerticalAlign(css CSSValue) (StructValue, bool) {
+// VerticalAlignResult holds the result of converting vertical-align.
+type VerticalAlignResult struct {
+	UseBaselineStyle bool      // true if using $44 baseline_style
+	BaselineStyle    KFXSymbol // $370 superscript or $371 subscript
+	UseBaselineShift bool      // true if using $31 baseline_shift
+	BaselineShift    StructValue
+}
+
+// ConvertVerticalAlign converts CSS vertical-align to KFX properties.
+// CSS: super, sub -> KFX: baseline_style ($44)
+// CSS: baseline, length/percent values -> KFX: baseline_shift ($31)
+// KPV uses baseline_style for super/sub which is more compatible.
+func ConvertVerticalAlign(css CSSValue) (VerticalAlignResult, bool) {
+	result := VerticalAlignResult{}
+
 	switch strings.ToLower(css.Keyword) {
 	case "super":
-		// Superscript: positive shift
-		return DimensionValue(0.5, SymUnitEm), true
+		// Use baseline_style: superscript (KPV compatible)
+		result.UseBaselineStyle = true
+		result.BaselineStyle = SymSuperscript
+		return result, true
 	case "sub":
-		// Subscript: negative shift
-		return DimensionValue(-0.3, SymUnitEm), true
+		// Use baseline_style: subscript (KPV compatible)
+		result.UseBaselineStyle = true
+		result.BaselineStyle = SymSubscript
+		return result, true
 	case "baseline":
-		return DimensionValue(0, SymUnitEm), true
+		result.UseBaselineShift = true
+		result.BaselineShift = DimensionValue(0, SymUnitEm)
+		return result, true
 	}
 
 	// Handle percentage or length values
 	if css.IsNumeric() {
 		dim, err := MakeDimensionValue(css)
 		if err == nil {
-			return dim, true
+			result.UseBaselineShift = true
+			result.BaselineShift = dim
+			return result, true
 		}
 	}
 
-	return nil, false
+	return result, false
 }
 
 // ConvertDisplay converts CSS display values.

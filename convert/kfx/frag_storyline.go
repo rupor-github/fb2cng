@@ -156,16 +156,13 @@ func BuildSection(sectionName string, pageTemplates []any) *Fragment {
 }
 
 // NewPageTemplateEntry creates a page template entry for section's $141.
-// Based on reference: {$155: eid, $176: storyline_name, $66: w, $67: h, $156: layout, $140: float, $159: $270}
-func NewPageTemplateEntry(eid int, storylineName string, width, height int) StructValue {
+// Based on KPV reference: {$155: eid, $159: $269, $176: storyline_name}
+// The page template simply references the storyline by name and uses text type.
+func NewPageTemplateEntry(eid int, storylineName string) StructValue {
 	return NewStruct().
-		SetInt(SymUniqueID, int64(eid)).                // $155 = id
-		Set(SymStoryName, SymbolByName(storylineName)). // $176 = story_name ref
-		SetInt(SymWidth, int64(width)).                 // $66 = width
-		SetInt(SymHeight, int64(height)).               // $67 = height
-		SetSymbol(SymLayout, SymScaleFit).              // $156 = layout = $326 (scale_fit)
-		SetSymbol(SymFloat, SymCenter).                 // $140 = float = $320 (center)
-		SetSymbol(SymType, SymContainer)                // $159 = type = $270 (container)
+		SetInt(SymUniqueID, int64(eid)).               // $155 = id
+		SetSymbol(SymType, SymText).                   // $159 = type = $269 (text)
+		Set(SymStoryName, SymbolByName(storylineName)) // $176 = story_name ref
 }
 
 // ContentRef represents a reference to content within a storyline.
@@ -175,17 +172,20 @@ type ContentRef struct {
 	ContentName   string          // Name of the content fragment
 	ContentOffset int             // Offset within content fragment ($403)
 	ResourceName  string          // For images: external_resource fragment id/name ($175)
+	AltText       string          // For images: alt text ($584)
 	Style         string          // Optional style name
 	StyleEvents   []StyleEventRef // Optional inline style events ($142)
 	Children      []any           // Optional nested content for containers
+	HeadingLevel  int             // For headings: 1-6 for h1-h6 ($790), 0 means not a heading
 }
 
 // StyleEventRef represents a style event for inline formatting ($142).
 type StyleEventRef struct {
-	Offset int    // $143 - start offset
-	Length int    // $144 - length
-	Style  string // $157 - style name
-	LinkTo string // $179 - link target (optional)
+	Offset         int    // $143 - start offset
+	Length         int    // $144 - length
+	Style          string // $157 - style name
+	LinkTo         string // $179 - link target (optional)
+	IsFootnoteLink bool   // If true, adds $616: $617 (yj.display: yj.note)
 }
 
 // NewContentEntry creates a content entry for storyline's $146.
@@ -197,6 +197,11 @@ func NewContentEntry(ref ContentRef) StructValue {
 
 	if ref.Style != "" {
 		entry.Set(SymStyle, SymbolByName(ref.Style)) // $157 = style as symbol
+	}
+
+	// Heading level for h1-h6 elements
+	if ref.HeadingLevel > 0 {
+		entry.SetInt(SymYjHeadingLevel, int64(ref.HeadingLevel)) // $790 = yj.semantics.heading_level
 	}
 
 	// Style events for inline formatting
@@ -212,6 +217,9 @@ func NewContentEntry(ref ContentRef) StructValue {
 			if se.LinkTo != "" {
 				ev.Set(SymLinkTo, SymbolByName(se.LinkTo)) // $179 = link_to
 			}
+			if se.IsFootnoteLink {
+				ev.SetSymbol(SymYjDisplay, SymYjNote) // $616 = $617 (yj.display = yj.note)
+			}
 			events = append(events, ev)
 		}
 		entry.SetList(SymStyleEvents, events) // $142 = style_events
@@ -219,6 +227,7 @@ func NewContentEntry(ref ContentRef) StructValue {
 
 	if ref.Type == SymImage {
 		entry.Set(SymResourceName, SymbolByName(ref.ResourceName)) // $175 = resource_name (symbol reference)
+		entry.SetString(SymAltText, ref.AltText)                   // $584 = alt_text
 	} else {
 		// Content reference - nested struct with name and offset
 		contentRef := map[string]any{
@@ -299,7 +308,25 @@ func (sb *StorylineBuilder) AddContentAndEvents(contentType KFXSymbol, contentNa
 	return eid
 }
 
-func (sb *StorylineBuilder) AddImage(resourceName string, style string) int {
+// AddContentWithHeading adds content with style events and heading level.
+func (sb *StorylineBuilder) AddContentWithHeading(contentType KFXSymbol, contentName string, contentOffset int, style string, events []StyleEventRef, headingLevel int) int {
+	eid := sb.eidCounter
+	sb.eidCounter++
+
+	sb.contentEntries = append(sb.contentEntries, ContentRef{
+		EID:           eid,
+		Type:          contentType,
+		ContentName:   contentName,
+		ContentOffset: contentOffset,
+		Style:         style,
+		StyleEvents:   events,
+		HeadingLevel:  headingLevel,
+	})
+
+	return eid
+}
+
+func (sb *StorylineBuilder) AddImage(resourceName, style, altText string) int {
 	eid := sb.eidCounter
 	sb.eidCounter++
 
@@ -308,6 +335,7 @@ func (sb *StorylineBuilder) AddImage(resourceName string, style string) int {
 		Type:         SymImage,
 		ResourceName: resourceName,
 		Style:        style,
+		AltText:      altText,
 	})
 
 	return eid
@@ -333,7 +361,7 @@ func (sb *StorylineBuilder) NextEID() int {
 
 // Build creates the storyline and section fragments.
 // Returns storyline fragment, section fragment.
-func (sb *StorylineBuilder) Build(width, height int) (*Fragment, *Fragment) {
+func (sb *StorylineBuilder) Build() (*Fragment, *Fragment) {
 	// Build content entries for storyline
 	entries := make([]any, 0, len(sb.contentEntries))
 	for _, ref := range sb.contentEntries {
@@ -345,7 +373,7 @@ func (sb *StorylineBuilder) Build(width, height int) (*Fragment, *Fragment) {
 
 	// Create page template entry for section - uses dedicated EID
 	pageTemplates := []any{
-		NewPageTemplateEntry(sb.pageTemplateEID, sb.name, width, height),
+		NewPageTemplateEntry(sb.pageTemplateEID, sb.name),
 	}
 
 	// Create section fragment
@@ -359,7 +387,7 @@ func (sb *StorylineBuilder) Build(width, height int) (*Fragment, *Fragment) {
 // Returns fragments, next EID, section names for document_data, TOC entries, per-section EID sets,
 // and mapping of original FB2 IDs to EIDs (for $266 anchors).
 func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
-	imageResourceNames imageResourceNameByID, startEID int,
+	imageResources imageResourceInfoByID, startEID int, footnotesIndex fb2.FootnoteRefs,
 ) (*FragmentList, int, sectionNameList, []*TOCEntry, sectionEIDsBySectionName, eidByFB2ID, error) {
 	fragments := NewFragmentList()
 	eidCounter := startEID
@@ -372,17 +400,25 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 	allContentFragments := make(map[string][]string)
 	contentCount := 0
 
-	// Default dimensions (will be adjusted by Kindle)
+	// Default screen width for image style calculations
 	defaultWidth := 600
-	defaultHeight := 800
 
 	sectionCount := 0
 
 	coverAdded := false
 
+	// Collect footnote bodies for processing at the end
+	var footnoteBodies []*fb2.Body
+
 	// Process each body
 	for i := range book.Bodies {
 		body := &book.Bodies[i]
+
+		// Collect footnote bodies for later processing (at the end, like EPUB does)
+		if body.Footnotes() {
+			footnoteBodies = append(footnoteBodies, body)
+			continue
+		}
 
 		// Process body intro content (title, epigraphs, image) as separate storyline
 		// This mirrors epub's bodyIntroToXHTML which creates a separate chapter for body intro
@@ -401,15 +437,17 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 
 			// Add cover image once at the very beginning (references external_resource)
 			if !coverAdded && len(book.Description.TitleInfo.Coverpage) > 0 {
-				coverID := strings.TrimPrefix(book.Description.TitleInfo.Coverpage[0].Href, "#")
-				if resName, ok := imageResourceNames[coverID]; ok {
-					styles.EnsureStyle("image")
-					sb.AddImage(resName, "image")
+				cover := &book.Description.TitleInfo.Coverpage[0]
+				coverID := strings.TrimPrefix(cover.Href, "#")
+				if imgInfo, ok := imageResources[coverID]; ok {
+					// Cover uses full width style
+					resolved := styles.ResolveImageStyle(imgInfo.Width, defaultWidth)
+					sb.AddImage(imgInfo.ResourceName, resolved, cover.Alt)
 					coverAdded = true
 				}
 			}
 
-			if err := processBodyIntroContent(book, body, sb, styles, imageResourceNames, ca, idToEID); err != nil {
+			if err := processBodyIntroContent(book, body, sb, styles, imageResources, ca, idToEID, defaultWidth, footnotesIndex); err != nil {
 				return nil, 0, nil, nil, nil, nil, err
 			}
 
@@ -434,7 +472,7 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 			eidCounter = sb.NextEID()
 
 			// Build storyline and section fragments
-			storylineFrag, sectionFrag := sb.Build(defaultWidth, defaultHeight)
+			storylineFrag, sectionFrag := sb.Build()
 
 			if err := fragments.Add(storylineFrag); err != nil {
 				return nil, 0, nil, nil, nil, nil, err
@@ -464,7 +502,7 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 			// Track nested section info for TOC hierarchy
 			var nestedTOCEntries []*TOCEntry
 
-			if err := processStorylineContent(book, section, sb, styles, imageResourceNames, ca, 1, &nestedTOCEntries, idToEID); err != nil {
+			if err := processStorylineContent(book, section, sb, styles, imageResources, ca, 1, &nestedTOCEntries, idToEID, defaultWidth, footnotesIndex); err != nil {
 				return nil, 0, nil, nil, nil, nil, err
 			}
 
@@ -490,7 +528,7 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 			eidCounter = sb.NextEID()
 
 			// Build storyline and section fragments
-			storylineFrag, sectionFrag := sb.Build(defaultWidth, defaultHeight)
+			storylineFrag, sectionFrag := sb.Build()
 
 			if err := fragments.Add(storylineFrag); err != nil {
 				return nil, 0, nil, nil, nil, nil, err
@@ -498,6 +536,80 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 			if err := fragments.Add(sectionFrag); err != nil {
 				return nil, 0, nil, nil, nil, nil, err
 			}
+		}
+	}
+
+	// Process footnote bodies at the end - each footnote section becomes part of a single storyline
+	// This ensures footnote IDs (n_1, n_2, etc.) are registered in idToEID for anchor generation
+	if len(footnoteBodies) > 0 {
+		sectionCount++
+		storyName := fmt.Sprintf("l%d", sectionCount)
+		sectionName := fmt.Sprintf("c%d", sectionCount-1)
+		sectionNames = append(sectionNames, sectionName)
+
+		sb := NewStorylineBuilder(storyName, sectionName, eidCounter)
+		contentCount++
+		ca := NewContentAccumulator(contentCount)
+
+		// Process all footnote bodies into a single storyline
+		for _, body := range footnoteBodies {
+			// Process body title if present
+			if body.Title != nil {
+				for _, item := range body.Title.Items {
+					if item.Paragraph != nil {
+						addParagraphWithImages(item.Paragraph, "footnote-title", sb, styles, imageResources, ca, idToEID, defaultWidth, footnotesIndex)
+					}
+				}
+			}
+
+			// Process each section in the footnote body
+			for j := range body.Sections {
+				section := &body.Sections[j]
+				// Register the section ID for anchor generation
+				if section.ID != "" {
+					if _, exists := idToEID[section.ID]; !exists {
+						idToEID[section.ID] = sb.NextEID()
+					}
+				}
+
+				// Process section title
+				if section.Title != nil {
+					for _, item := range section.Title.Items {
+						if item.Paragraph != nil {
+							addParagraphWithImages(item.Paragraph, "footnote-title", sb, styles, imageResources, ca, idToEID, defaultWidth, footnotesIndex)
+						}
+					}
+				}
+
+				// Process section content (paragraphs, poems, etc.)
+				for k := range section.Content {
+					processFlowItem(&section.Content[k], "footnote", sb, styles, imageResources, ca, idToEID, defaultWidth, footnotesIndex)
+				}
+			}
+		}
+
+		maps.Copy(allContentFragments, ca.Finish())
+		sectionEIDs[sectionName] = sb.AllEIDs()
+
+		// Create TOC entry for footnotes (not included in main TOC)
+		tocEntry := &TOCEntry{
+			ID:           sectionName,
+			Title:        "Notes",
+			SectionName:  sectionName,
+			StoryName:    storyName,
+			FirstEID:     sb.FirstEID(),
+			IncludeInTOC: false, // Don't include footnotes in TOC
+		}
+		tocEntries = append(tocEntries, tocEntry)
+
+		eidCounter = sb.NextEID()
+		storylineFrag, sectionFrag := sb.Build()
+
+		if err := fragments.Add(storylineFrag); err != nil {
+			return nil, 0, nil, nil, nil, nil, err
+		}
+		if err := fragments.Add(sectionFrag); err != nil {
+			return nil, 0, nil, nil, nil, nil, err
 		}
 	}
 
@@ -513,7 +625,7 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 }
 
 // processBodyIntroContent processes body intro content using ContentAccumulator.
-func addVignetteImage(book *fb2.FictionBook, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames imageResourceNameByID, pos common.VignettePos) {
+func addVignetteImage(book *fb2.FictionBook, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, pos common.VignettePos, screenWidth int) {
 	if book == nil || !book.IsVignetteEnabled(pos) {
 		return
 	}
@@ -521,20 +633,20 @@ func addVignetteImage(book *fb2.FictionBook, sb *StorylineBuilder, styles *Style
 	if vigID == "" {
 		return
 	}
-	resName, ok := imageResourceNames[vigID]
+	imgInfo, ok := imageResources[vigID]
 	if !ok {
 		return
 	}
-	styles.EnsureStyle("vignette")
-	sb.AddImage(resName, "vignette")
+	resolved := styles.ResolveImageStyle(imgInfo.Width, screenWidth)
+	sb.AddImage(imgInfo.ResourceName, resolved, "") // Vignettes are decorative, no alt text
 }
 
-func processBodyIntroContent(book *fb2.FictionBook, body *fb2.Body, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames imageResourceNameByID, ca *ContentAccumulator, idToEID eidByFB2ID) error {
+func processBodyIntroContent(book *fb2.FictionBook, body *fb2.Body, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) error {
 	if body.Image != nil {
 		imgID := strings.TrimPrefix(body.Image.Href, "#")
-		if resName, ok := imageResourceNames[imgID]; ok {
-			styles.EnsureStyle("image")
-			eid := sb.AddImage(resName, "image")
+		if imgInfo, ok := imageResources[imgID]; ok {
+			resolved := styles.ResolveImageStyle(imgInfo.Width, screenWidth)
+			eid := sb.AddImage(imgInfo.ResourceName, resolved, body.Image.Alt)
 			if body.Image.ID != "" {
 				if _, exists := idToEID[body.Image.ID]; !exists {
 					idToEID[body.Image.ID] = eid
@@ -546,15 +658,15 @@ func processBodyIntroContent(book *fb2.FictionBook, body *fb2.Body, sb *Storylin
 	// Process body title
 	if body.Title != nil {
 		if body.Main() {
-			addVignetteImage(book, sb, styles, imageResourceNames, common.VignettePosBookTitleTop)
+			addVignetteImage(book, sb, styles, imageResources, common.VignettePosBookTitleTop, screenWidth)
 		}
 		for _, item := range body.Title.Items {
 			if item.Paragraph != nil {
-				addParagraphWithImages(item.Paragraph, "body-title", sb, styles, imageResourceNames, ca, idToEID)
+				addParagraphWithImages(item.Paragraph, "body-title", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 			}
 		}
 		if body.Main() {
-			addVignetteImage(book, sb, styles, imageResourceNames, common.VignettePosBookTitleBottom)
+			addVignetteImage(book, sb, styles, imageResources, common.VignettePosBookTitleBottom, screenWidth)
 		}
 	}
 
@@ -566,10 +678,10 @@ func processBodyIntroContent(book *fb2.FictionBook, body *fb2.Body, sb *Storylin
 			}
 		}
 		for i := range epigraph.Flow.Items {
-			processFlowItem(&epigraph.Flow.Items[i], sb, styles, imageResourceNames, ca, idToEID)
+			processFlowItem(&epigraph.Flow.Items[i], "epigraph", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 		for i := range epigraph.TextAuthors {
-			addParagraphWithImages(&epigraph.TextAuthors[i], "text-author", sb, styles, imageResourceNames, ca, idToEID)
+			addParagraphWithImages(&epigraph.TextAuthors[i], "p text-author", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 	}
 
@@ -577,7 +689,7 @@ func processBodyIntroContent(book *fb2.FictionBook, body *fb2.Body, sb *Storylin
 }
 
 // processStorylineContent processes FB2 section content using ContentAccumulator.
-func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames imageResourceNameByID, ca *ContentAccumulator, depth int, nestedTOC *[]*TOCEntry, idToEID eidByFB2ID) error {
+func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, depth int, nestedTOC *[]*TOCEntry, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) error {
 	if section != nil && section.ID != "" {
 		if _, exists := idToEID[section.ID]; !exists {
 			idToEID[section.ID] = sb.NextEID()
@@ -586,9 +698,9 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 
 	if section.Image != nil {
 		imgID := strings.TrimPrefix(section.Image.Href, "#")
-		if resName, ok := imageResourceNames[imgID]; ok {
-			styles.EnsureStyle("image")
-			eid := sb.AddImage(resName, "image")
+		if imgInfo, ok := imageResources[imgID]; ok {
+			resolved := styles.ResolveImageStyle(imgInfo.Width, screenWidth)
+			eid := sb.AddImage(imgInfo.ResourceName, resolved, section.Image.Alt)
 			if section.Image.ID != "" {
 				if _, exists := idToEID[section.Image.ID]; !exists {
 					idToEID[section.Image.ID] = eid
@@ -600,22 +712,22 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 	// Process title
 	if section.Title != nil {
 		if depth == 1 {
-			addVignetteImage(book, sb, styles, imageResourceNames, common.VignettePosChapterTitleTop)
+			addVignetteImage(book, sb, styles, imageResources, common.VignettePosChapterTitleTop, screenWidth)
 		} else {
-			addVignetteImage(book, sb, styles, imageResourceNames, common.VignettePosSectionTitleTop)
+			addVignetteImage(book, sb, styles, imageResources, common.VignettePosSectionTitleTop, screenWidth)
 		}
 
 		styleName := fmt.Sprintf("h%d", min(depth, 6))
 		for _, item := range section.Title.Items {
 			if item.Paragraph != nil {
-				addParagraphWithImages(item.Paragraph, styleName, sb, styles, imageResourceNames, ca, idToEID)
+				addParagraphWithImages(item.Paragraph, styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 			}
 		}
 
 		if depth == 1 {
-			addVignetteImage(book, sb, styles, imageResourceNames, common.VignettePosChapterTitleBottom)
+			addVignetteImage(book, sb, styles, imageResources, common.VignettePosChapterTitleBottom, screenWidth)
 		} else {
-			addVignetteImage(book, sb, styles, imageResourceNames, common.VignettePosSectionTitleBottom)
+			addVignetteImage(book, sb, styles, imageResources, common.VignettePosSectionTitleBottom, screenWidth)
 		}
 	}
 
@@ -627,7 +739,7 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 			}
 		}
 		for i := range section.Annotation.Items {
-			processFlowItem(&section.Annotation.Items[i], sb, styles, imageResourceNames, ca, idToEID)
+			processFlowItem(&section.Annotation.Items[i], "annotation", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 	}
 
@@ -639,10 +751,10 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 			}
 		}
 		for i := range epigraph.Flow.Items {
-			processFlowItem(&epigraph.Flow.Items[i], sb, styles, imageResourceNames, ca, idToEID)
+			processFlowItem(&epigraph.Flow.Items[i], "epigraph", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 		for i := range epigraph.TextAuthors {
-			addParagraphWithImages(&epigraph.TextAuthors[i], "text-author", sb, styles, imageResourceNames, ca, idToEID)
+			addParagraphWithImages(&epigraph.TextAuthors[i], "p text-author", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 	}
 
@@ -659,7 +771,7 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 
 			// Process nested section content recursively
 			var childTOC []*TOCEntry
-			if err := processStorylineContent(book, nestedSection, sb, styles, imageResourceNames, ca, depth+1, &childTOC, idToEID); err != nil {
+			if err := processStorylineContent(book, nestedSection, sb, styles, imageResources, ca, depth+1, &childTOC, idToEID, screenWidth, footnotesIndex); err != nil {
 				return err
 			}
 
@@ -678,44 +790,60 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 				*nestedTOC = append(*nestedTOC, childTOC...)
 			}
 		} else {
-			processFlowItem(item, sb, styles, imageResourceNames, ca, idToEID)
+			processFlowItem(item, "section", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 	}
 
 	if depth == 1 {
-		addVignetteImage(book, sb, styles, imageResourceNames, common.VignettePosChapterEnd)
+		addVignetteImage(book, sb, styles, imageResources, common.VignettePosChapterEnd, screenWidth)
 	} else {
-		addVignetteImage(book, sb, styles, imageResourceNames, common.VignettePosSectionEnd)
+		addVignetteImage(book, sb, styles, imageResources, common.VignettePosSectionEnd, screenWidth)
 	}
 
 	return nil
 }
 
 // processFlowItem processes a flow item using ContentAccumulator.
-func processFlowItem(item *fb2.FlowItem, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames imageResourceNameByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
+// context parameter specifies the parent context (e.g., "section", "cite", "annotation", "epigraph")
+// and is used for context-specific subtitle styles like EPUB does.
+func processFlowItem(item *fb2.FlowItem, context string, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
 	addContent := func(text, styleName string) int {
-		styles.EnsureStyle(styleName)
+		resolved := styles.ResolveStyle(styleName)
 		contentName, offset := ca.Add(text)
-		return sb.AddContent(SymText, contentName, offset, styleName)
+		return sb.AddContent(SymText, contentName, offset, resolved)
 	}
 
 	switch item.Kind {
 	case fb2.FlowParagraph:
 		if item.Paragraph != nil {
-			styleName := item.Paragraph.Style
-			if styleName == "" {
-				styleName = "paragraph"
+			// Always start with base "p" style, add context style for styled contexts,
+			// then add custom class if present. This mimics CSS cascade.
+			styleName := "p"
+			// Add context style for contexts that have specific paragraph styling
+			// (epigraph, annotation, cite all have font/margin styles that apply to contained paragraphs)
+			switch context {
+			case "epigraph", "annotation", "cite":
+				styleName = styleName + " " + context
 			}
-			addParagraphWithImages(item.Paragraph, styleName, sb, styles, imageResourceNames, ca, idToEID)
+			if item.Paragraph.Style != "" {
+				styleName = styleName + " " + item.Paragraph.Style
+			}
+			addParagraphWithImages(item.Paragraph, styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 
 	case fb2.FlowSubtitle:
 		if item.Subtitle != nil {
-			addParagraphWithImages(item.Subtitle, "subtitle", sb, styles, imageResourceNames, ca, idToEID)
+			// Use context-specific subtitle style like EPUB (e.g., "section-subtitle", "cite-subtitle")
+			// Start with base "p" to get text-align, line-height etc, then add context-subtitle
+			styleName := "p " + context + "-subtitle"
+			if item.Subtitle.Style != "" {
+				styleName = styleName + " " + item.Subtitle.Style
+			}
+			addParagraphWithImages(item.Subtitle, styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 
 	case fb2.FlowEmptyLine:
-		addContent("\n", "empty-line")
+		addContent("\n", "emptyline") // Matches CSS ".emptyline" class
 
 	case fb2.FlowPoem:
 		if item.Poem != nil {
@@ -724,7 +852,7 @@ func processFlowItem(item *fb2.FlowItem, sb *StorylineBuilder, styles *StyleRegi
 					idToEID[item.Poem.ID] = sb.NextEID()
 				}
 			}
-			processPoem(item.Poem, sb, styles, imageResourceNames, ca, idToEID)
+			processPoem(item.Poem, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 
 	case fb2.FlowCite:
@@ -734,7 +862,7 @@ func processFlowItem(item *fb2.FlowItem, sb *StorylineBuilder, styles *StyleRegi
 					idToEID[item.Cite.ID] = sb.NextEID()
 				}
 			}
-			processCite(item.Cite, sb, styles, imageResourceNames, ca, idToEID)
+			processCite(item.Cite, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 
 	case fb2.FlowTable:
@@ -760,12 +888,12 @@ func processFlowItem(item *fb2.FlowItem, sb *StorylineBuilder, styles *StyleRegi
 			return
 		}
 		imgID := strings.TrimPrefix(item.Image.Href, "#")
-		resName, ok := imageResourceNames[imgID]
+		imgInfo, ok := imageResources[imgID]
 		if !ok {
 			return
 		}
-		styles.EnsureStyle("image")
-		eid := sb.AddImage(resName, "image")
+		resolved := styles.ResolveImageStyle(imgInfo.Width, screenWidth)
+		eid := sb.AddImage(imgInfo.ResourceName, resolved, item.Image.Alt)
 		if item.Image.ID != "" {
 			if _, exists := idToEID[item.Image.ID]; !exists {
 				idToEID[item.Image.ID] = eid
@@ -778,59 +906,114 @@ func processFlowItem(item *fb2.FlowItem, sb *StorylineBuilder, styles *StyleRegi
 }
 
 // processPoem processes poem content using ContentAccumulator.
-func processPoem(poem *fb2.Poem, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames imageResourceNameByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
+// Matches EPUB's appendPoemElement handling: title, epigraphs, subtitles, stanzas, text-authors, date.
+func processPoem(poem *fb2.Poem, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
+	// Process poem title
 	if poem.Title != nil {
 		for _, item := range poem.Title.Items {
 			if item.Paragraph != nil {
-				addParagraphWithImages(item.Paragraph, "poem-title", sb, styles, imageResourceNames, ca, idToEID)
+				addParagraphWithImages(item.Paragraph, "p poem-title", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 			}
 		}
 	}
 
+	// Process poem epigraphs
+	for _, epigraph := range poem.Epigraphs {
+		if epigraph.Flow.ID != "" {
+			if _, exists := idToEID[epigraph.Flow.ID]; !exists {
+				idToEID[epigraph.Flow.ID] = sb.NextEID()
+			}
+		}
+		for i := range epigraph.Flow.Items {
+			processFlowItem(&epigraph.Flow.Items[i], "epigraph", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+		}
+		for i := range epigraph.TextAuthors {
+			addParagraphWithImages(&epigraph.TextAuthors[i], "p text-author", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+		}
+	}
+
+	// Process poem subtitles (matches EPUB's poem.Subtitles handling)
+	for i := range poem.Subtitles {
+		addParagraphWithImages(&poem.Subtitles[i], "p poem-subtitle", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+	}
+
+	// Process stanzas
 	for _, stanza := range poem.Stanzas {
+		// Stanza title (matches EPUB's "stanza-title" class)
 		if stanza.Title != nil {
 			for _, item := range stanza.Title.Items {
 				if item.Paragraph != nil {
-					addParagraphWithImages(item.Paragraph, "poem-title", sb, styles, imageResourceNames, ca, idToEID)
+					addParagraphWithImages(item.Paragraph, "p stanza-title", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 				}
 			}
 		}
+		// Stanza subtitle (matches EPUB's "stanza-subtitle" class)
+		if stanza.Subtitle != nil {
+			addParagraphWithImages(stanza.Subtitle, "p stanza-subtitle", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+		}
+		// Verses
 		for i := range stanza.Verses {
-			addParagraphWithImages(&stanza.Verses[i], "verse", sb, styles, imageResourceNames, ca, idToEID)
+			addParagraphWithImages(&stanza.Verses[i], "p verse", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 	}
 
+	// Process text authors
 	for i := range poem.TextAuthors {
-		addParagraphWithImages(&poem.TextAuthors[i], "text-author", sb, styles, imageResourceNames, ca, idToEID)
+		addParagraphWithImages(&poem.TextAuthors[i], "p text-author", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+	}
+
+	// Process poem date (matches EPUB's ".date" class)
+	if poem.Date != nil {
+		var dateText string
+		if poem.Date.Display != "" {
+			dateText = poem.Date.Display
+		} else if !poem.Date.Value.IsZero() {
+			dateText = poem.Date.Value.Format("2006-01-02")
+		}
+		if dateText != "" {
+			resolved := styles.ResolveStyle("p date")
+			contentName, offset := ca.Add(dateText)
+			sb.AddContent(SymText, contentName, offset, resolved)
+		}
 	}
 }
 
 // processCite processes cite content using ContentAccumulator.
-func processCite(cite *fb2.Cite, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames imageResourceNameByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
-	for _, item := range cite.Items {
-		if item.Kind == fb2.FlowParagraph && item.Paragraph != nil {
-			addParagraphWithImages(item.Paragraph, "cite", sb, styles, imageResourceNames, ca, idToEID)
-		}
+// Matches EPUB's appendCiteElement handling: processes all flow items with "cite" context,
+// followed by text-authors.
+func processCite(cite *fb2.Cite, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
+	// Process all cite flow items with "cite" context (enables cite-subtitle, etc.)
+	for i := range cite.Items {
+		processFlowItem(&cite.Items[i], "cite", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 	}
 
+	// Process text authors
 	for i := range cite.TextAuthors {
-		addParagraphWithImages(&cite.TextAuthors[i], "text-author", sb, styles, imageResourceNames, ca, idToEID)
+		addParagraphWithImages(&cite.TextAuthors[i], "p text-author", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 	}
 }
 
-func addParagraphWithImages(para *fb2.Paragraph, styleName string, sb *StorylineBuilder, styles *StyleRegistry, imageResourceNames imageResourceNameByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
+func addParagraphWithImages(para *fb2.Paragraph, styleName string, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
 	var (
 		buf    strings.Builder
 		events []StyleEventRef
 	)
 
+	// Determine heading level from style name
+	headingLevel := styleToHeadingLevel(styleName)
+
 	flush := func() {
 		if buf.Len() == 0 {
 			return
 		}
-		styles.EnsureStyle(styleName)
+		resolved := styles.ResolveStyle(styleName)
 		contentName, offset := ca.Add(buf.String())
-		eid := sb.AddContentAndEvents(SymText, contentName, offset, styleName, events)
+		var eid int
+		if headingLevel > 0 {
+			eid = sb.AddContentWithHeading(SymText, contentName, offset, resolved, events, headingLevel)
+		} else {
+			eid = sb.AddContentAndEvents(SymText, contentName, offset, resolved, events)
+		}
 		if para.ID != "" {
 			if _, exists := idToEID[para.ID]; !exists {
 				idToEID[para.ID] = eid
@@ -840,47 +1023,119 @@ func addParagraphWithImages(para *fb2.Paragraph, styleName string, sb *Storyline
 		events = nil
 	}
 
-	var walk func(seg *fb2.InlineSegment)
-	walk = func(seg *fb2.InlineSegment) {
+	var walk func(seg *fb2.InlineSegment, inlineStyle string)
+	walk = func(seg *fb2.InlineSegment, inlineStyle string) {
+		// Handle inline images - flush current content and add image
 		if seg.Kind == fb2.InlineImageSegment {
 			flush()
 			if seg.Image == nil {
 				return
 			}
 			imgID := strings.TrimPrefix(seg.Image.Href, "#")
-			resName, ok := imageResourceNames[imgID]
+			imgInfo, ok := imageResources[imgID]
 			if !ok {
 				return
 			}
-			styles.EnsureStyle("image")
-			sb.AddImage(resName, "image")
+			resolved := styles.ResolveImageStyle(imgInfo.Width, screenWidth)
+			sb.AddImage(imgInfo.ResourceName, resolved, seg.Image.Alt)
 			return
 		}
 
-		if seg.Kind == fb2.InlineLink {
-			linkTo := strings.TrimPrefix(seg.Href, "#")
-			start := buf.Len()
-			buf.WriteString(seg.Text)
-			for i := range seg.Children {
-				walk(&seg.Children[i])
+		// Determine style for this segment based on its kind
+		var segStyle string
+		switch seg.Kind {
+		case fb2.InlineStrong:
+			segStyle = "strong"
+		case fb2.InlineEmphasis:
+			segStyle = "emphasis"
+		case fb2.InlineStrikethrough:
+			segStyle = "strikethrough"
+		case fb2.InlineSub:
+			segStyle = "sub"
+		case fb2.InlineSup:
+			segStyle = "sup"
+		case fb2.InlineCode:
+			segStyle = "code"
+		case fb2.InlineNamedStyle:
+			segStyle = seg.Style
+		case fb2.InlineLink:
+			// Links use link-footnote or link-internal style
+			if strings.HasPrefix(seg.Href, "#") {
+				segStyle = "link-footnote"
+			} else {
+				segStyle = "link-external"
 			}
-			end := buf.Len()
-			if linkTo != "" && linkTo != seg.Href && end > start {
-				events = append(events, StyleEventRef{Offset: start, Length: end - start, LinkTo: linkTo})
-			}
-			return
 		}
 
+		// Track position for style event
+		start := buf.Len()
+
+		// Add text content
 		buf.WriteString(seg.Text)
+
+		// Process children with current style context
 		for i := range seg.Children {
-			walk(&seg.Children[i])
+			walk(&seg.Children[i], segStyle)
+		}
+
+		end := buf.Len()
+
+		// Create style event if we have styled content
+		if segStyle != "" && end > start {
+			resolved := styles.ResolveStyle(segStyle)
+			event := StyleEventRef{
+				Offset: start,
+				Length: end - start,
+				Style:  resolved,
+			}
+			// Add link target for links and detect footnote links
+			if seg.Kind == fb2.InlineLink {
+				linkTo := strings.TrimPrefix(seg.Href, "#")
+				if linkTo != "" && linkTo != seg.Href {
+					event.LinkTo = linkTo
+					// Check if this is a footnote link using FootnotesIndex (like EPUB does)
+					if _, isFootnote := footnotesIndex[linkTo]; isFootnote {
+						event.IsFootnoteLink = true
+					}
+				}
+			}
+			events = append(events, event)
 		}
 	}
 
 	for i := range para.Text {
-		walk(&para.Text[i])
+		walk(&para.Text[i], "")
 	}
 	flush()
+}
+
+// styleToHeadingLevel extracts heading level from style name.
+// Returns 1-6 for heading styles, 0 for non-heading styles.
+// Recognized patterns:
+//   - "body-title" -> 1 (book title)
+//   - "h1", "h2", ..., "h6" -> 1, 2, ..., 6 (section titles by depth)
+//   - "chapter-title" -> 1
+//   - "section-title" -> 2
+func styleToHeadingLevel(styleName string) int {
+	// Check for body-title (h1)
+	if strings.Contains(styleName, "body-title") || strings.Contains(styleName, "chapter-title") {
+		return 1
+	}
+
+	// Check for h1-h6 patterns
+	for i := 1; i <= 6; i++ {
+		pattern := fmt.Sprintf("h%d", i)
+		if strings.Contains(styleName, pattern) {
+			return i
+		}
+	}
+
+	// section-title defaults to h2
+	if strings.Contains(styleName, "section-title") {
+		return 2
+	}
+
+	return 0
 }
 
 // tableToText extracts text representation from a table.

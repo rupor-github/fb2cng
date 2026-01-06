@@ -260,8 +260,12 @@ func (c *Converter) convertSpecialProperty(name string, value CSSValue, result *
 		}
 
 	case "vertical-align":
-		if dim, ok := ConvertVerticalAlign(value); ok {
-			result.Style.Properties[SymBaselineShift] = dim
+		if vaResult, ok := ConvertVerticalAlign(value); ok {
+			if vaResult.UseBaselineStyle {
+				result.Style.Properties[SymBaselineStyle] = vaResult.BaselineStyle
+			} else if vaResult.UseBaselineShift {
+				result.Style.Properties[SymBaselineShift] = vaResult.BaselineShift
+			}
 		}
 
 	case "display":

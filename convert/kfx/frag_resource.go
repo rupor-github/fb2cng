@@ -9,7 +9,7 @@ import (
 	"fbc/fb2"
 )
 
-func buildImageResourceFragments(images fb2.BookImages) ([]*Fragment, []*Fragment, imageResourceNameByID) {
+func buildImageResourceFragments(images fb2.BookImages) ([]*Fragment, []*Fragment, imageResourceInfoByID) {
 	if len(images) == 0 {
 		return nil, nil, nil
 	}
@@ -22,7 +22,7 @@ func buildImageResourceFragments(images fb2.BookImages) ([]*Fragment, []*Fragmen
 
 	external := make([]*Fragment, 0, len(images))
 	raw := make([]*Fragment, 0, len(images))
-	resourceNameByImageID := make(imageResourceNameByID, len(images))
+	resourceInfoByImageID := make(imageResourceInfoByID, len(images))
 
 	idx := 0
 	for _, id := range ids {
@@ -53,10 +53,14 @@ func buildImageResourceFragments(images fb2.BookImages) ([]*Fragment, []*Fragmen
 			Value:   RawValue(img.Data),
 		})
 
-		resourceNameByImageID[id] = resourceName
+		resourceInfoByImageID[id] = imageResourceInfo{
+			ResourceName: resourceName,
+			Width:        img.Dim.Width,
+			Height:       img.Dim.Height,
+		}
 	}
 
-	return external, raw, resourceNameByImageID
+	return external, raw, resourceInfoByImageID
 }
 
 func makeResourceLocation(idx int) string {
