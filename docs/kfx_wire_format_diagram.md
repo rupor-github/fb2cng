@@ -510,7 +510,128 @@ Visual byte map (approximate):
 
 ---
 
-## 11. Key Points Summary
+## 11. Section and Storyline Structure (KPV-Compatible)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    $260 SECTION FRAGMENT STRUCTURE                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Section Fragment (fid = section_name, ftype = $260):                       │
+│  {                                                                          │
+│    $174: section_name,       // Section ID matching fid                     │
+│    $141: [                   // page_templates list                         │
+│      {                                                                      │
+│        $155: <eid>,          // Page template EID                           │
+│        $159: $269,           // Type = text (CRITICAL: not $270!)           │
+│        $176: storyline_name  // Reference to $259 fragment                  │
+│      }                                                                      │
+│    ]                                                                        │
+│  }                                                                          │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  CRITICAL: Page Template Type ($159) must be $269 (text)            │    │
+│  │                                                                     │    │
+│  │  KPV-Compatible:    { $155: eid, $159: $269, $176: name }           │    │
+│  │  Non-Compatible:    { $155: eid, $159: $270, $176: name,            │    │
+│  │                       $140: $320, $156: $326, $56: 600, $57: 800 }  │    │
+│  │                                                                     │    │
+│  │  Using $270 (container) type causes Kindle to show only first       │    │
+│  │  page of each section. Always use $269 (text) type.                 │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    $259 STORYLINE FRAGMENT STRUCTURE                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Storyline Fragment (fid = story_name, ftype = $259):                       │
+│  {                                                                          │
+│    $176: story_name,         // Storyline ID matching fid                   │
+│    $146: [                   // content_list                                │
+│      // Text content entry                                                  │
+│      {                                                                      │
+│        $155: <eid>,          // Element ID                                  │
+│        $159: $269,           // Type = text                                 │
+│        $157: style_name,     // Optional style reference                    │
+│        $790: <level>,        // Heading level 1-6 (KPV parity, optional)    │
+│        $145: {               // Content reference                           │
+│          name: content_X,    // Content fragment name                       │
+│          $403: <offset>      // Offset within content fragment              │
+│        },                                                                   │
+│        $142: [...]           // Optional style events (inline formatting)   │
+│      },                                                                     │
+│      // Image content entry                                                 │
+│      {                                                                      │
+│        $155: <eid>,          // Element ID                                  │
+│        $159: $271,           // Type = image                                │
+│        $175: resource_name,  // External resource fragment reference        │
+│        $584: "alt text"      // Alt text (KPV parity)                       │
+│      }                                                                      │
+│    ]                                                                        │
+│  }                                                                          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    $142 STYLE EVENTS (INLINE FORMATTING)                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Style Event Entry (element in $142 list):                                  │
+│  {                                                                          │
+│    $143: <offset>,           // Start offset in text                        │
+│    $144: <length>,           // Span length                                 │
+│    $157: style_name,         // Style reference (e.g., "emphasis")          │
+│    $179: anchor_name,        // Optional link target                        │
+│    $616: $617                // For footnote links: yj.display = yj.note    │
+│  }                                                                          │
+│                                                                             │
+│  Footnote Link Detection (KPV parity):                                      │
+│  ─────────────────────────────────────                                      │
+│  Links to footnote bodies should include $616: $617 marker.                 │
+│  This enables Kindle's popup footnote display feature.                      │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 12. Position Map Format (KPV-Compatible)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    $264 POSITION_MAP EID LIST FORMAT                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Position Map ($264) value is a list of per-section entries:                │
+│  [                                                                          │
+│    {                                                                        │
+│      $174: section_1,        // Section name                                │
+│      $181: [1, 2, 3, 4, 5]   // Flat list of EIDs (KPV format)              │
+│    },                                                                       │
+│    {                                                                        │
+│      $174: section_2,                                                       │
+│      $181: [6, 7, 8, 9]                                                     │
+│    }                                                                        │
+│  ]                                                                          │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  EID List Format Comparison:                                        │    │
+│  │                                                                     │    │
+│  │  KPV-Compatible (flat list):     $181: [1, 2, 3, 4, 5]              │    │
+│  │  Legacy (compressed pairs):      $181: [[1, 5]]                     │    │
+│  │                                                                     │    │
+│  │  The compressed [base, count] format expands to base..base+count-1  │    │
+│  │  but flat lists are preferred for KPV compatibility.                │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 13. Key Points Summary
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -553,7 +674,7 @@ Visual byte map (approximate):
 
 ---
 
-## 12. Symbol Resolution Flow
+## 14. Symbol Resolution Flow
 
 ```
             Symbol ID Resolution Process (KFX Numbering)

@@ -640,6 +640,44 @@ Raw bytes are stored as separate fragments:
 
 Derived from: `kfxlib/yj_structure.py:BookStructure.check_consistency` (resource scan), `kfxlib/unpack_container.py:ZipUnpackContainer.deserialize/serialize`, `kfxlib/kfx_container.py:KfxContainerEntity.deserialize`.
 
+### 7.5.1 `$260` (Section) and `$259` (Storyline) fragments
+
+**`$260` (section)** - Represents a section (chapter/page) in the book:
+- `$174` (section_name): section identifier matching the fragment id
+- `$141` (page_templates): list of page template entries
+
+**Page template entry structure** (entries in `$141`):
+
+Per Kindle Previewer (KPV) reference format, page templates use a minimal 3-field structure:
+- `$155` (id): EID for the page template
+- `$159` (type): content type, always `$269` (text) for standard book sections
+- `$176` (story_name): reference to the storyline fragment containing content
+
+**NOTE**: Earlier implementations used a more complex structure with `$270` (container type), `$140` (float), `$156` (layout), `$56`/`$57` (dimensions). This caused rendering issues where only the first page of content would display. The KPV-compatible format uses only the 3 fields above with text type (`$269`).
+
+**`$259` (storyline)** - Contains the actual content for a section:
+- `$176` (story_name): storyline identifier matching the fragment id
+- `$146` (content_list): list of content entries
+
+**Content entry structure** (entries in `$146`):
+- `$155` (id): unique EID for this content element
+- `$159` (type): content type symbol (`$269`=text, `$271`=image, `$270`=container)
+- `$157` (style): optional style name reference
+- `$145` (content): for text, a struct with `name` (content fragment reference) and `$403` (offset)
+- `$175` (resource): for images, external resource fragment id
+- `$584` (alt_text): for images, accessibility text (KPV parity)
+- `$142` (style_events): optional inline formatting events
+- `$790` (yj.semantics.heading_level): for headings, level 1-6 (KPV parity)
+
+**Style event structure** (entries in `$142`):
+- `$143` (offset): start offset within text
+- `$144` (length): span length
+- `$157` (style): style name reference
+- `$179` (link_target): optional link anchor reference
+- `$616` (yj.display): for footnote links, set to `$617` (yj.note) (KPV parity)
+
+Derived from: `convert/kfx/frag_storyline.go`, KPV reference files.
+
 ### 7.6 Position and location mapping fragments
 
 This codebase models Kindle positions using these concepts:
@@ -672,14 +710,16 @@ When present (non-dictionary/non-KPF-prepub path), `$264` is a list of Ion struc
 
 - `$174`: section id (the `$260` fragment id)
 - `$181`: list of EIDs belonging to that section
-   - each element is either:
-      - a scalar EID (handled as-is), or
-      - an Ion list treated as `[base_eid, count]` and expanded to `base_eid..base_eid+count-1`.
-        - Note: the implementation does not validate the list length here; it directly indexes `[0]` and `[1]`.
+
+**EID list encoding in `$181`**:
+
+Kindle Previewer (KPV) outputs a **flat list of scalar EIDs** (e.g., `[1, 2, 3, 4, 5]`).
+
+Some readers also support compressed `[base_eid, count]` pairs that expand to `base_eid..base_eid+count-1`, but this format is **not recommended** for compatibility with KPV validation. This converter generates flat EID lists matching KPV behavior.
 
 This map is used for validation (detect extra/missing sections and mismatched EIDs).
 
-Derived from: `kfxlib/yj_position_location.py:BookPosLoc.collect_position_map_info` (handling of `$264`).
+Derived from: `kfxlib/yj_position_location.py:BookPosLoc.collect_position_map_info`, `convert/kfx/frag_positionmaps.go`.
 
 #### 7.6.3 `$265` position_id_map and sectionized position maps
 
@@ -1195,7 +1235,7 @@ The major_version for reflow-section-size is derived from the maximum per-sectio
 
 This is used by KFXInput for validation and by Kindle for rendering optimization.
 
-Derived from: Reference KFX files in `/mnt/d/test/`, `convert/kfx/frag_contentfeatures.go`.
+Derived from: Reference KFX files, `convert/kfx/frag_contentfeatures.go`.
 
 ---
 
