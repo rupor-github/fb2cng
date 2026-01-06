@@ -310,6 +310,13 @@ func (sb *StyleBuilder) MarginRightPercent(value float64) *StyleBuilder {
 	return sb
 }
 
+// LayoutHintTitle sets layout-hints to [treat_as_title] for KPV compatibility.
+// This is critical for proper title rendering on Kindle devices.
+func (sb *StyleBuilder) LayoutHintTitle() *StyleBuilder {
+	sb.props[SymLayoutHints] = []any{SymbolValue(SymTreatAsTitle)}
+	return sb
+}
+
 // Build creates the StyleDef.
 func (sb *StyleBuilder) Build() StyleDef {
 	return StyleDef{
@@ -656,29 +663,59 @@ func DefaultStyleRegistry() *StyleRegistry {
 		TextAlign(SymCenter).
 		Build())
 
-	// Heading styles (h1-h6) - KPV uses rem for font-size
+	// Heading styles (h1-h6) - KPV uses rem for font-size and layout-hints for titles
 	sr.Register(NewStyle("h1").
-		FontSize(1.4, SymUnitLh).
+		FontSize(1.5, SymUnitRem).
+		FontWeight(SymBold).
+		TextAlign(SymCenter).
+		LineHeight(1.0, SymUnitLh).
+		TextIndent(0, SymUnitPercent).
+		LayoutHintTitle().
 		Build())
 
 	sr.Register(NewStyle("h2").
-		FontSize(1.2, SymUnitLh).
+		FontSize(1.25, SymUnitRem).
+		FontWeight(SymBold).
+		TextAlign(SymCenter).
+		LineHeight(1.0, SymUnitLh).
+		TextIndent(0, SymUnitPercent).
+		LayoutHintTitle().
 		Build())
 
 	sr.Register(NewStyle("h3").
-		FontSize(1.2, SymUnitLh).
+		FontSize(1.125, SymUnitRem).
+		FontWeight(SymBold).
+		TextAlign(SymCenter).
+		LineHeight(1.0, SymUnitLh).
+		TextIndent(0, SymUnitPercent).
+		LayoutHintTitle().
 		Build())
 
 	sr.Register(NewStyle("h4").
-		FontSize(1.2, SymUnitLh).
+		FontSize(1.0, SymUnitRem).
+		FontWeight(SymBold).
+		TextAlign(SymCenter).
+		LineHeight(1.0, SymUnitLh).
+		TextIndent(0, SymUnitPercent).
+		LayoutHintTitle().
 		Build())
 
 	sr.Register(NewStyle("h5").
-		FontSize(1.2, SymUnitLh).
+		FontSize(1.0, SymUnitRem).
+		FontWeight(SymBold).
+		TextAlign(SymCenter).
+		LineHeight(1.0, SymUnitLh).
+		TextIndent(0, SymUnitPercent).
+		LayoutHintTitle().
 		Build())
 
 	sr.Register(NewStyle("h6").
-		FontSize(1.2, SymUnitLh).
+		FontSize(1.0, SymUnitRem).
+		FontWeight(SymBold).
+		TextAlign(SymCenter).
+		LineHeight(1.0, SymUnitLh).
+		TextIndent(0, SymUnitPercent).
+		LayoutHintTitle().
 		Build())
 
 	// has-dropcap style for paragraphs with drop caps
@@ -712,13 +749,15 @@ func DefaultStyleRegistry() *StyleRegistry {
 		Build())
 
 	// Subtitle style - matches CSS ".subtitle { }" and ".section-subtitle { }"
+	// KPV uses layout-hints: [treat_as_title] for subtitle styling
 	sr.Register(NewStyle("subtitle").
 		Inherit("p").
 		FontWeight(SymBold).
 		TextAlign(SymCenter).
 		TextIndent(0, SymUnitPercent).
-		MarginTop(1.0, SymUnitEm).
-		MarginBottom(1.0, SymUnitEm).
+		MarginTop(0.833333, SymUnitLh).
+		MarginBottom(0.833333, SymUnitLh).
+		LayoutHintTitle().
 		Build())
 
 	// Context-specific subtitle styles - matches EPUB's "context-subtitle" pattern
@@ -879,56 +918,70 @@ func DefaultStyleRegistry() *StyleRegistry {
 
 	// Body/chapter/section title wrappers - matches CSS ".body-title { }", ".chapter-title { }", ".section-title { }"
 	// Uses KPV-compatible break properties: yj-break-after: avoid, yj-break-before: auto
+	// Uses lh units for margins (KPV style)
 	sr.Register(NewStyle("body-title").
 		Inherit("p").
 		TextIndent(0, SymUnitPercent).
-		MarginTop(2.0, SymUnitEm).
-		MarginBottom(1.0, SymUnitEm).
+		MarginTop(1.66667, SymUnitLh).
+		MarginBottom(0.833333, SymUnitLh).
 		YjBreakAfter(SymAvoid).
 		YjBreakBefore(SymAuto).
+		BreakInsideAvoid().
 		Build())
 
 	sr.Register(NewStyle("chapter-title").
 		Inherit("p").
 		TextIndent(0, SymUnitPercent).
-		MarginTop(2.0, SymUnitEm).
-		MarginBottom(1.0, SymUnitEm).
+		MarginTop(1.66667, SymUnitLh).
+		MarginBottom(0.833333, SymUnitLh).
 		YjBreakAfter(SymAvoid).
 		YjBreakBefore(SymAuto).
+		BreakInsideAvoid().
 		Build())
 
 	sr.Register(NewStyle("section-title").
 		Inherit("p").
 		TextIndent(0, SymUnitPercent).
-		MarginTop(2.0, SymUnitEm).
-		MarginBottom(1.0, SymUnitEm).
+		MarginTop(0.833333, SymUnitLh).
+		MarginBottom(0.5, SymUnitLh).
 		YjBreakAfter(SymAvoid).
 		YjBreakBefore(SymAuto).
+		BreakInsideAvoid().
 		Build())
 
 	// Title header styles - matches CSS ".body-title-header { }", ".chapter-title-header { }", ".section-title-header { }"
+	// KPV uses layout-hints: [treat_as_title] and rem units for proper title display
 	sr.Register(NewStyle("body-title-header").
 		Inherit("p").
-		TextIndent(0, SymUnitPercent).
-		TextAlign(SymCenter).
+		FontSize(1.25, SymUnitRem).
 		FontWeight(SymBold).
+		TextAlign(SymCenter).
+		TextIndent(0, SymUnitPercent).
+		LineHeight(1.0, SymUnitLh).
 		YjBreakAfter(SymAvoid).
+		LayoutHintTitle().
 		Build())
 
 	sr.Register(NewStyle("chapter-title-header").
 		Inherit("p").
-		TextIndent(0, SymUnitPercent).
-		TextAlign(SymCenter).
+		FontSize(1.25, SymUnitRem).
 		FontWeight(SymBold).
+		TextAlign(SymCenter).
+		TextIndent(0, SymUnitPercent).
+		LineHeight(1.0, SymUnitLh).
 		YjBreakAfter(SymAvoid).
+		LayoutHintTitle().
 		Build())
 
 	sr.Register(NewStyle("section-title-header").
 		Inherit("p").
-		TextIndent(0, SymUnitPercent).
-		TextAlign(SymCenter).
+		FontSize(1.125, SymUnitRem).
 		FontWeight(SymBold).
+		TextAlign(SymCenter).
+		TextIndent(0, SymUnitPercent).
+		LineHeight(1.0, SymUnitLh).
 		YjBreakAfter(SymAvoid).
+		LayoutHintTitle().
 		Build())
 
 	// Date style - matches CSS ".date { }"

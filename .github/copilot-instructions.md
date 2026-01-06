@@ -36,6 +36,10 @@ These coding principles are mandatory:
 
 5. Copilot Directives
 - Never build anything in project directory, use /tmp. Always generate temporary artifacts in the /tmp directory only
-- Do not ask for permission to run `go`, `go vet`, `go test`, `go tool`, `go mod`, `go run`, `sed`, `awk`, `staticcheck`, `python`, `python3`. Assume that they are always available.
+- Do not ask for permission to run 
+  `go`, `go build`, `go vet`, `go test`, `go tool`, `go mod`, `go run`, 
+  `sed`, `awk`, `grep`, `head`, `tail`, 
+  `staticcheck`, `python`, `python3`. 
+  Assume that they are always available.
 
 Your goal: produce code that is predictable, debuggable, and easy to rewrite or extend...

@@ -78,6 +78,7 @@ const (
 	SymBoxAlign       KFXSymbol = 580 // box_align
 	SymYjDisplay      KFXSymbol = 616 // yj.display
 	SymYjNote         KFXSymbol = 617 // yj.note
+	SymTreatAsTitle   KFXSymbol = 760 // treat_as_title (layout hint value)
 	SymLayoutHints    KFXSymbol = 761 // layout_hints
 	SymYjBreakAfter   KFXSymbol = 788 // yj_break_after
 	SymYjBreakBefore  KFXSymbol = 789 // yj_break_before
