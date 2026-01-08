@@ -252,6 +252,11 @@ func (s StructValue) SetFloat(field KFXSymbol, value float64) StructValue {
 	return s.Set(field, value)
 }
 
+// SetBool sets a boolean field.
+func (s StructValue) SetBool(field KFXSymbol, value bool) StructValue {
+	return s.Set(field, value)
+}
+
 // SetStruct sets a struct field.
 func (s StructValue) SetStruct(field KFXSymbol, value StructValue) StructValue {
 	return s.Set(field, value)

@@ -36,7 +36,8 @@ func CSSValueToKFX(css CSSValue) (value float64, unit KFXSymbol, err error) {
 	case "lh":
 		return css.Value, SymUnitLh, nil // $310
 	case "":
-		// Unitless - typically ratio for line-height
+		// Unitless - typically ratio for line-height, but also valid for zero values
+		// The caller should handle property-specific unit selection
 		return css.Value, SymUnitLh, nil // $310 (lh)
 	default:
 		return 0, 0, fmt.Errorf("unsupported unit: %s", css.Unit)

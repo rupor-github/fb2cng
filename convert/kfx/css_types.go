@@ -1,6 +1,9 @@
 package kfx
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+)
 
 // MediaQuery represents a parsed @media query condition.
 // Supports Amazon-specific media types: amzn-mobi, amzn-kf8, amzn-et.
@@ -85,8 +88,25 @@ type CSSValue struct {
 }
 
 // IsNumeric returns true if the value has a numeric component.
+// This includes explicit zero values like "0" or "0px".
 func (v CSSValue) IsNumeric() bool {
-	return v.Unit != "" || (v.Value != 0 && v.Keyword == "")
+	// If there's a unit, it's definitely numeric
+	if v.Unit != "" {
+		return true
+	}
+	// Non-zero value with no keyword is numeric
+	if v.Value != 0 && v.Keyword == "" {
+		return true
+	}
+	// Check if Raw looks like a numeric value (handles "0" case)
+	// We check if Raw is not empty and starts with a digit, dot, or minus
+	if v.Raw != "" && v.Keyword == "" {
+		firstChar := rune(v.Raw[0])
+		if unicode.IsDigit(firstChar) || firstChar == '.' || firstChar == '-' || firstChar == '+' {
+			return true
+		}
+	}
+	return false
 }
 
 // IsKeyword returns true if the value is a keyword (no numeric component).

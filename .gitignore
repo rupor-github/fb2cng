@@ -16,12 +16,14 @@
 *.kfx
 *.txt
 *.pyc
+todo.md
 
 # build specific
 build/
 build_*/
 release/
 release_*/
+**/todo.md
 **/__pycache__/*
 **/*-bcRawMedia/
 misc/version.go
@@ -32,5 +34,6 @@ content/text/sentences/*.json.gz
 !content/text/sentences/hungarian.json.gz
 !content/text/sentences/icelandic.json.gz
 !content/text/sentences/korean.json.gz
+!vendor/*.md
 !vendor/*.txt
 !testdata/_Test.fb2

@@ -89,6 +89,65 @@ func CollectPositionItems(fragments *FragmentList, sectionNames sectionNameList)
 
 	out := make([]PositionItem, 0)
 
+	// processEntry extracts position info from a storyline entry (handles nested children)
+	var processEntry func(entry StructValue)
+	processEntry = func(entry StructValue) {
+		eid64, ok := entry[SymUniqueID].(int64)
+		if !ok {
+			return
+		}
+		eid := int(eid64)
+
+		typeSym, ok := entry[SymType].(SymbolValue)
+		if !ok {
+			return
+		}
+
+		// Check for nested children (wrapper containers)
+		if children, ok := entry[SymContentList].([]any); ok && len(children) > 0 {
+			// Wrapper container: emit wrapper EID first, then process children
+			out = append(out, PositionItem{EID: eid, Length: 1})
+			for _, child := range children {
+				if childEntry, ok := child.(StructValue); ok {
+					processEntry(childEntry)
+				}
+			}
+			return
+		}
+
+		if KFXSymbol(typeSym) == SymImage {
+			out = append(out, PositionItem{EID: eid, Length: 1})
+			return
+		}
+
+		ref, ok := entry[SymContent].(map[string]any)
+		if !ok {
+			return
+		}
+		nameVal, ok := ref["name"].(SymbolByNameValue)
+		if !ok {
+			return
+		}
+		offAny, ok := ref["$403"]
+		if !ok {
+			return
+		}
+		off, ok := offAny.(int64)
+		if !ok {
+			offInt, ok2 := offAny.(int)
+			if !ok2 {
+				return
+			}
+			off = int64(offInt)
+		}
+
+		paras := content[string(nameVal)]
+		if int(off) < 0 || int(off) >= len(paras) {
+			return
+		}
+		out = append(out, PositionItem{EID: eid, Length: len([]rune(paras[off]))})
+	}
+
 	// Build section -> (pageTemplateEID, storyName)
 	sections := make(map[string]struct {
 		pageTemplateEID int
@@ -150,48 +209,7 @@ func CollectPositionItems(fragments *FragmentList, sectionNames sectionNameList)
 			if !ok {
 				continue
 			}
-			eid64, ok := entry[SymUniqueID].(int64)
-			if !ok {
-				continue
-			}
-			eid := int(eid64)
-
-			typeSym, ok := entry[SymType].(SymbolValue)
-			if !ok {
-				continue
-			}
-
-			if KFXSymbol(typeSym) == SymImage {
-				out = append(out, PositionItem{EID: eid, Length: 1})
-				continue
-			}
-
-			ref, ok := entry[SymContent].(map[string]any)
-			if !ok {
-				continue
-			}
-			nameVal, ok := ref["name"].(SymbolByNameValue)
-			if !ok {
-				continue
-			}
-			offAny, ok := ref["$403"]
-			if !ok {
-				continue
-			}
-			off, ok := offAny.(int64)
-			if !ok {
-				offInt, ok2 := offAny.(int)
-				if !ok2 {
-					continue
-				}
-				off = int64(offInt)
-			}
-
-			paras := content[string(nameVal)]
-			if int(off) < 0 || int(off) >= len(paras) {
-				continue
-			}
-			out = append(out, PositionItem{EID: eid, Length: len([]rune(paras[off]))})
+			processEntry(entry)
 		}
 	}
 

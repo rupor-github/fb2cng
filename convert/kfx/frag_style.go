@@ -317,6 +317,20 @@ func (sb *StyleBuilder) LayoutHintTitle() *StyleBuilder {
 	return sb
 }
 
+// BoxAlign sets the box_align property for block-level centering.
+// Use SymCenter for centering blocks within their container.
+func (sb *StyleBuilder) BoxAlign(align KFXSymbol) *StyleBuilder {
+	sb.props[SymBoxAlign] = SymbolValue(align)
+	return sb
+}
+
+// SizingBounds sets the sizing_bounds property.
+// Use SymContentBounds for content-based sizing.
+func (sb *StyleBuilder) SizingBounds(bounds KFXSymbol) *StyleBuilder {
+	sb.props[SymSizingBounds] = SymbolValue(bounds)
+	return sb
+}
+
 // Build creates the StyleDef.
 func (sb *StyleBuilder) Build() StyleDef {
 	return StyleDef{
@@ -357,6 +371,8 @@ type StyleRegistry struct {
 
 	resolved        map[string]string // signature -> resolved style name
 	resolvedCounter int
+
+	tracer *StyleTracer // Optional tracer for debugging style resolution
 }
 
 // NewStyleRegistry creates a new style registry.
@@ -370,6 +386,11 @@ func NewStyleRegistry() *StyleRegistry {
 	}
 }
 
+// SetTracer sets the style tracer for debugging.
+func (sr *StyleRegistry) SetTracer(t *StyleTracer) {
+	sr.tracer = t
+}
+
 // Register adds a style to the registry.
 // If a style with the same name already exists, the properties are merged,
 // with new properties overriding existing ones (CSS cascade behavior).
@@ -378,6 +399,7 @@ func (sr *StyleRegistry) Register(def StyleDef) {
 	if !exists {
 		sr.order = append(sr.order, def.Name)
 		sr.styles[def.Name] = def
+		sr.tracer.TraceRegister(def.Name, def.Properties)
 		return
 	}
 
@@ -401,6 +423,7 @@ func (sr *StyleRegistry) Register(def StyleDef) {
 		Parent:     parent,
 		Properties: merged,
 	}
+	sr.tracer.TraceRegister(def.Name+" (merged)", merged)
 }
 
 // Get returns a style definition by name.
@@ -424,6 +447,10 @@ func (sr *StyleRegistry) EnsureBaseStyle(name string) {
 
 	// Try to infer parent style from naming conventions
 	parent := sr.inferParentStyle(name)
+
+	// Log auto-creation of unknown styles (not defined in CSS)
+	sr.tracer.TraceAutoCreate(name, parent)
+
 	sr.Register(NewStyle(name).
 		Inherit(parent).
 		Build())
@@ -461,6 +488,7 @@ func (sr *StyleRegistry) ResolveStyle(styleSpec string) string {
 	sig := styleSignature(merged)
 	if name, ok := sr.resolved[sig]; ok {
 		sr.used[name] = true
+		sr.tracer.TraceResolve(styleSpec, name+" (cached)", merged)
 		return name
 	}
 
@@ -468,6 +496,7 @@ func (sr *StyleRegistry) ResolveStyle(styleSpec string) string {
 	sr.resolved[sig] = name
 	sr.used[name] = true
 	sr.Register(StyleDef{Name: name, Properties: merged})
+	sr.tracer.TraceResolve(styleSpec, name, merged)
 	return name
 }
 
@@ -511,7 +540,17 @@ func (sr *StyleRegistry) ResolveImageStyle(imageWidth, screenWidth int) string {
 
 // inferParentStyle attempts to determine a parent style based on naming patterns.
 // This handles dynamically-created styles like "section-subtitle" -> inherits "subtitle".
+//
+// Block-level wrapper styles (epigraph, poem, stanza, cite, annotation, footnote, etc.)
+// do NOT inherit from "p" to avoid polluting container styles with paragraph properties.
+// Unknown styles inherit from "kfx-unknown" (minimal empty style) to avoid unwanted formatting.
 func (sr *StyleRegistry) inferParentStyle(name string) string {
+	// Block-level container styles should NOT inherit from anything
+	// These are wrappers that correspond to EPUB <div class="..."> elements
+	if isBlockStyleName(name) {
+		return ""
+	}
+
 	// Check for suffix patterns: "xxx-subtitle" -> "subtitle", "xxx-title" -> base title style
 	suffixes := []string{"-subtitle", "-title", "-header", "-first", "-next", "-break"}
 	for _, suffix := range suffixes {
@@ -523,12 +562,35 @@ func (sr *StyleRegistry) inferParentStyle(name string) string {
 		}
 	}
 
-	// Default to "p" (base paragraph style) for unknown styles
-	if _, exists := sr.styles["p"]; exists {
-		return "p"
+	// Default to "kfx-unknown" (minimal style) for unknown styles
+	// This avoids polluting unknown styles with "p" properties like text-align: justify
+	if _, exists := sr.styles["kfx-unknown"]; exists {
+		return "kfx-unknown"
 	}
 
 	return ""
+}
+
+// isBlockStyleName returns true if the style name represents a block-level container.
+// Block containers wrap content and should not inherit paragraph text properties.
+// This matches EPUB's <div class="..."> elements vs <p> or <span> elements.
+func isBlockStyleName(name string) bool {
+	// Exact matches for known block wrapper names from EPUB generation
+	switch name {
+	case "epigraph", "poem", "stanza", "cite", "annotation", "footnote",
+		"section", "image", "vignette", "emptyline",
+		"body-title", "chapter-title", "section-title",
+		"footnote-body", "main-body", "other-body",
+		"poem-title", "stanza-title", "footnote-title", "toc-title":
+		return true
+	}
+
+	// Vignette position variants (vignette-chapter-title-top, etc.)
+	if strings.HasPrefix(name, "vignette-") {
+		return true
+	}
+
+	return false
 }
 
 // BuildFragments creates style fragments for all used styles.
@@ -598,10 +660,11 @@ func (sr *StyleRegistry) RegisterFromCSS(styles []StyleDef) {
 }
 
 // NewStyleRegistryFromCSS creates a style registry from CSS stylesheet data.
-// It starts with default styles, then overlays styles from the CSS.
+// It starts with default HTML element styles, overlays styles from CSS,
+// then applies KFX-specific post-processing for Kindle compatibility.
 // Returns the registry and any warnings from CSS parsing/conversion.
 func NewStyleRegistryFromCSS(cssData []byte, log *zap.Logger) (*StyleRegistry, []string) {
-	// Start with defaults
+	// Start with HTML element defaults only
 	sr := DefaultStyleRegistry()
 
 	if len(cssData) == 0 {
@@ -612,12 +675,15 @@ func NewStyleRegistryFromCSS(cssData []byte, log *zap.Logger) (*StyleRegistry, [
 	parser := NewParser(log)
 	sheet := parser.Parse(cssData)
 
-	// Convert to KFX styles
+	// Convert to KFX styles (includes drop cap detection)
 	converter := NewConverter(log)
 	styles, warnings := converter.ConvertStylesheet(sheet)
 
 	// Register CSS styles (overriding defaults where applicable)
 	sr.RegisterFromCSS(styles)
+
+	// Apply KFX-specific post-processing (layout-hints, yj-break, etc.)
+	sr.PostProcessForKFX()
 
 	log.Debug("CSS styles loaded",
 		zap.Int("rules", len(sheet.Rules)),
@@ -627,17 +693,30 @@ func NewStyleRegistryFromCSS(cssData []byte, log *zap.Logger) (*StyleRegistry, [
 	return sr, warnings
 }
 
-// DefaultStyleRegistry returns a registry with default FB2-to-KFX styles.
-// These styles map FB2 semantic elements to KFX formatting.
-// Uses KPV-compatible units:
-//   - % (SymUnitPercent) for text-indent
-//   - lh (SymUnitLh) for margins (line-height units)
-//   - rem (SymUnitRem) for font sizes in inline styles
-//   - Always includes line-height: 1lh on block-level styles
+// DefaultStyleRegistry returns a registry with default HTML element styles for KFX.
+// This only includes HTML element selectors (p, h1-h6, code, blockquote, etc.)
+// and basic inline styles (strong, em, sub, sup). Class selectors come from CSS.
+//
+// KFX-specific properties like layout-hints are applied during post-processing,
+// not here, to allow CSS to override base styles first.
 func DefaultStyleRegistry() *StyleRegistry {
 	sr := NewStyleRegistry()
 
-	// Base paragraph style - matches CSS "p { }" selector
+	// ============================================================
+	// Minimal fallback style for unknown classes
+	// ============================================================
+
+	// "kfx-unknown" is a catch-all base style for classes not defined in CSS.
+	// It has absolutely minimal properties to avoid polluting derived styles
+	// with unwanted formatting (unlike "p" which has text-align: justify, margins, etc.)
+	sr.Register(NewStyle("kfx-unknown").
+		Build())
+
+	// ============================================================
+	// Block-level HTML elements
+	// ============================================================
+
+	// Base paragraph style - HTML <p> element
 	// KPV uses: text-indent: 3.125%, line-height: 1lh, text-align: justify
 	sr.Register(NewStyle("p").
 		LineHeight(1.0, SymUnitLh).
@@ -645,232 +724,142 @@ func DefaultStyleRegistry() *StyleRegistry {
 		TextAlign(SymJustify).
 		MarginTop(0, SymUnitLh).
 		MarginBottom(0.25, SymUnitLh).
-		MarginLeft(0, SymUnitLh).
-		MarginRight(0, SymUnitLh).
+		// Note: margin-left and margin-right omitted - KPV doesn't include zero margins
 		Build())
 
-	// Code style - matches CSS "code { }" selector
-	sr.Register(NewStyle("code").
-		Inherit("p").
-		FontFamily("monospace").
-		FontSize(0.7, SymUnitLh).
-		TextAlign(SymStart).
-		TextIndent(0, SymUnitPercent).
-		Build())
-
-	// Image style - matches CSS ".image { }"
-	sr.Register(NewStyle("image").
-		TextAlign(SymCenter).
-		Build())
-
-	// Heading styles (h1-h6) - KPV uses rem for font-size and layout-hints for titles
+	// Heading styles (h1-h6) - HTML heading elements
+	// Minimal styles for combining with title header classes
+	// Margins and line-height omitted - those come from the header class CSS
+	// layout-hints added during post-processing
 	sr.Register(NewStyle("h1").
 		FontSize(1.5, SymUnitRem).
 		FontWeight(SymBold).
 		TextAlign(SymCenter).
-		LineHeight(1.0, SymUnitLh).
 		TextIndent(0, SymUnitPercent).
-		LayoutHintTitle().
 		Build())
 
 	sr.Register(NewStyle("h2").
 		FontSize(1.25, SymUnitRem).
 		FontWeight(SymBold).
 		TextAlign(SymCenter).
-		LineHeight(1.0, SymUnitLh).
 		TextIndent(0, SymUnitPercent).
-		LayoutHintTitle().
 		Build())
 
 	sr.Register(NewStyle("h3").
 		FontSize(1.125, SymUnitRem).
 		FontWeight(SymBold).
 		TextAlign(SymCenter).
-		LineHeight(1.0, SymUnitLh).
 		TextIndent(0, SymUnitPercent).
-		LayoutHintTitle().
 		Build())
 
 	sr.Register(NewStyle("h4").
 		FontSize(1.0, SymUnitRem).
 		FontWeight(SymBold).
 		TextAlign(SymCenter).
-		LineHeight(1.0, SymUnitLh).
 		TextIndent(0, SymUnitPercent).
-		LayoutHintTitle().
 		Build())
 
 	sr.Register(NewStyle("h5").
 		FontSize(1.0, SymUnitRem).
 		FontWeight(SymBold).
 		TextAlign(SymCenter).
-		LineHeight(1.0, SymUnitLh).
 		TextIndent(0, SymUnitPercent).
-		LayoutHintTitle().
 		Build())
 
 	sr.Register(NewStyle("h6").
 		FontSize(1.0, SymUnitRem).
 		FontWeight(SymBold).
 		TextAlign(SymCenter).
-		LineHeight(1.0, SymUnitLh).
 		TextIndent(0, SymUnitPercent).
-		LayoutHintTitle().
 		Build())
 
-	// has-dropcap style for paragraphs with drop caps
-	// KPV uses dropcap-chars and dropcap-lines properties
-	sr.Register(NewStyle("has-dropcap").
-		Inherit("p").
-		Dropcap(1, 3).
-		TextIndent(0, SymUnitPercent).
-		MarginBottom(0.333333, SymUnitLh).
-		Build())
-
-	// Epigraph style - uses percentage-based margins like KPV
-	sr.Register(NewStyle("epigraph").
-		Inherit("p").
-		FontStyle(SymItalic).
-		TextIndent(0, SymUnitPercent).
-		MarginLeftPercent(9.375).
-		MarginTop(0.833333, SymUnitLh).
-		MarginBottom(0.25, SymUnitLh).
-		Build())
-
-	// Text author style (for epigraphs, poems, cites)
-	// KPV uses yj-break-before: avoid to keep author with preceding content
-	sr.Register(NewStyle("text-author").
-		Inherit("p").
-		TextAlign(SymEnd).
-		FontStyle(SymItalic).
-		FontWeight(SymBold).
-		TextIndent(0, SymUnitPercent).
-		YjBreakBefore(SymAvoid).
-		Build())
-
-	// Subtitle style - matches CSS ".subtitle { }" and ".section-subtitle { }"
-	// KPV uses layout-hints: [treat_as_title] for subtitle styling
-	sr.Register(NewStyle("subtitle").
-		Inherit("p").
-		FontWeight(SymBold).
-		TextAlign(SymCenter).
-		TextIndent(0, SymUnitPercent).
-		MarginTop(0.833333, SymUnitLh).
-		MarginBottom(0.833333, SymUnitLh).
-		LayoutHintTitle().
-		Build())
-
-	// Context-specific subtitle styles - matches EPUB's "context-subtitle" pattern
-	sr.Register(NewStyle("section-subtitle").
-		Inherit("subtitle").
-		Build())
-
-	sr.Register(NewStyle("cite-subtitle").
-		Inherit("p").
+	// Code/preformatted - HTML <code> and <pre> elements
+	sr.Register(NewStyle("code").
+		FontFamily("monospace").
+		FontSize(0.875, SymUnitEm).
 		TextAlign(SymStart).
-		MarginTop(0.5, SymUnitEm).
-		MarginBottom(0.5, SymUnitEm).
+		TextIndent(0, SymUnitPercent).
 		Build())
 
-	sr.Register(NewStyle("annotation-subtitle").
-		Inherit("subtitle").
-		Build())
-
-	sr.Register(NewStyle("epigraph-subtitle").
-		Inherit("subtitle").
-		Build())
-
-	// Empty line / blank space style - matches CSS ".emptyline { }"
-	sr.Register(NewStyle("emptyline").
+	sr.Register(NewStyle("pre").
+		FontFamily("monospace").
+		FontSize(0.875, SymUnitEm).
+		TextAlign(SymStart).
+		TextIndent(0, SymUnitPercent).
+		LineHeight(1.0, SymUnitLh).
 		MarginTop(1.0, SymUnitEm).
 		MarginBottom(1.0, SymUnitEm).
-		MarginLeft(1.0, SymUnitEm).
-		MarginRight(1.0, SymUnitEm).
-		Render(SymBlock).
 		Build())
 
-	// Poem styles - inherits from p for line-height
-	sr.Register(NewStyle("poem").
-		Inherit("p").
-		MarginLeft(2.0, SymUnitEm).
-		TextIndent(0, SymUnitPercent).
-		MarginTop(1.0, SymUnitLh).
-		MarginBottom(1.0, SymUnitLh).
-		Build())
-
-	sr.Register(NewStyle("poem-title").
-		Inherit("poem").
-		FontWeight(SymBold).
-		TextAlign(SymCenter).
-		Build())
-
-	// Poem subtitle - matches EPUB's ".poem-subtitle { }"
-	sr.Register(NewStyle("poem-subtitle").
-		Inherit("subtitle").
-		MarginLeft(2.0, SymUnitEm).
-		Build())
-
-	sr.Register(NewStyle("stanza").
-		Inherit("poem").
-		MarginTop(0.5, SymUnitLh).
-		Build())
-
-	// Stanza title - matches EPUB's "stanza-title" class
-	sr.Register(NewStyle("stanza-title").
-		Inherit("poem").
-		FontWeight(SymBold).
-		TextAlign(SymCenter).
-		Build())
-
-	// Stanza subtitle - matches EPUB's ".stanza-subtitle { }"
-	sr.Register(NewStyle("stanza-subtitle").
-		Inherit("subtitle").
-		MarginLeft(2.0, SymUnitEm).
-		Build())
-
-	sr.Register(NewStyle("verse").
-		Inherit("p").
-		MarginTop(0.25, SymUnitEm).
-		MarginBottom(0.25, SymUnitEm).
-		MarginLeft(2.0, SymUnitEm).
-		TextIndent(0, SymUnitPercent).
-		Build())
-
-	// Citation style
-	sr.Register(NewStyle("cite").
-		Inherit("p").
+	// Blockquote - HTML <blockquote> element
+	sr.Register(NewStyle("blockquote").
 		MarginLeft(2.0, SymUnitEm).
 		MarginRight(2.0, SymUnitEm).
+		MarginTop(1.0, SymUnitEm).
+		MarginBottom(1.0, SymUnitEm).
 		TextIndent(0, SymUnitPercent).
-		FontStyle(SymItalic).
 		Build())
 
-	// Table style
+	// Table elements - HTML <table>, <th>, <td>
 	sr.Register(NewStyle("table").
-		Inherit("p").
 		TextIndent(0, SymUnitPercent).
 		MarginTop(1.0, SymUnitEm).
 		MarginBottom(1.0, SymUnitEm).
 		MarginLeftAuto().
 		MarginRightAuto().
-		KeepTogether().
-		Width(1.0, SymUnitLh).
 		Build())
 
-	// Inline styles for text formatting
+	sr.Register(NewStyle("th").
+		FontWeight(SymBold).
+		TextAlign(SymCenter).
+		Build())
+
+	sr.Register(NewStyle("td").
+		TextAlign(SymStart).
+		Build())
+
+	// ============================================================
+	// Inline HTML elements
+	// ============================================================
+
+	// Strong/bold - HTML <strong> and <b> elements
 	sr.Register(NewStyle("strong").
 		FontWeight(SymBold).
 		Build())
 
-	sr.Register(NewStyle("emphasis").
+	sr.Register(NewStyle("b").
+		FontWeight(SymBold).
+		Build())
+
+	// Emphasis/italic - HTML <em> and <i> elements
+	sr.Register(NewStyle("em").
 		FontStyle(SymItalic).
 		Build())
 
-	sr.Register(NewStyle("strikethrough").
+	sr.Register(NewStyle("i").
+		FontStyle(SymItalic).
+		Build())
+
+	// Underline - HTML <u> element
+	sr.Register(NewStyle("u").
+		Underline(true).
+		Build())
+
+	// Strikethrough - HTML <s>, <strike>, <del> elements
+	sr.Register(NewStyle("s").
 		Strikethrough(true).
 		Build())
 
-	// Subscript and superscript styles - KPV uses baseline-style
+	sr.Register(NewStyle("strike").
+		Strikethrough(true).
+		Build())
+
+	sr.Register(NewStyle("del").
+		Strikethrough(true).
+		Build())
+
+	// Subscript and superscript - HTML <sub> and <sup> elements
+	// KPV uses baseline-style for these
 	sr.Register(NewStyle("sub").
 		BaselineStyle(SymSubscript).
 		FontSize(0.75, SymUnitEm).
@@ -881,144 +870,183 @@ func DefaultStyleRegistry() *StyleRegistry {
 		FontSize(0.75, SymUnitEm).
 		Build())
 
-	// Footnote style
-	sr.Register(NewStyle("footnote").
-		Inherit("p").
-		FontSize(0.85, SymUnitEm).
+	// Small text - HTML <small> element
+	sr.Register(NewStyle("small").
+		FontSize(0.875, SymUnitEm).
 		Build())
 
-	// Footnote title style
-	sr.Register(NewStyle("footnote-title").
-		Inherit("p").
-		FontWeight(SymBold).
-		Build())
+	// ============================================================
+	// FB2-specific inline styles (class names used in default.css)
+	// ============================================================
 
-	// Annotation style
-	sr.Register(NewStyle("annotation").
-		Inherit("p").
+	// Emphasis - FB2 <emphasis> element, maps to .emphasis class
+	sr.Register(NewStyle("emphasis").
 		FontStyle(SymItalic).
-		TextIndent(0, SymUnitPercent).
-		MarginBottom(1.0, SymUnitLh).
 		Build())
 
-	// Annotation page title
-	sr.Register(NewStyle("annotation-title").
-		Inherit("h2").
+	// Strikethrough - FB2 <strikethrough> element, maps to .strikethrough class
+	sr.Register(NewStyle("strikethrough").
+		Strikethrough(true).
 		Build())
 
-	// TOC page styles - matches CSS ".toc-title { }" and toc elements
-	sr.Register(NewStyle("toc-title").
-		Inherit("h2").
-		Build())
-	sr.Register(NewStyle("toc-item").
-		Inherit("p").
-		TextIndent(0, SymUnitPercent).
-		MarginLeft(1.0, SymUnitEm).
-		Build())
+	// ============================================================
+	// Internal styles (used by generator, not HTML elements)
+	// ============================================================
 
-	// Body/chapter/section title wrappers - matches CSS ".body-title { }", ".chapter-title { }", ".section-title { }"
-	// Uses KPV-compatible break properties: yj-break-after: avoid, yj-break-before: auto
-	// Uses lh units for margins (KPV style)
-	sr.Register(NewStyle("body-title").
-		Inherit("p").
-		TextIndent(0, SymUnitPercent).
-		MarginTop(1.66667, SymUnitLh).
-		MarginBottom(0.833333, SymUnitLh).
-		YjBreakAfter(SymAvoid).
-		YjBreakBefore(SymAuto).
-		BreakInsideAvoid().
-		Build())
-
-	sr.Register(NewStyle("chapter-title").
-		Inherit("p").
-		TextIndent(0, SymUnitPercent).
-		MarginTop(1.66667, SymUnitLh).
-		MarginBottom(0.833333, SymUnitLh).
-		YjBreakAfter(SymAvoid).
-		YjBreakBefore(SymAuto).
-		BreakInsideAvoid().
-		Build())
-
-	sr.Register(NewStyle("section-title").
-		Inherit("p").
-		TextIndent(0, SymUnitPercent).
-		MarginTop(0.833333, SymUnitLh).
-		MarginBottom(0.5, SymUnitLh).
-		YjBreakAfter(SymAvoid).
-		YjBreakBefore(SymAuto).
-		BreakInsideAvoid().
-		Build())
-
-	// Title header styles - matches CSS ".body-title-header { }", ".chapter-title-header { }", ".section-title-header { }"
-	// KPV uses layout-hints: [treat_as_title] and rem units for proper title display
-	sr.Register(NewStyle("body-title-header").
-		Inherit("p").
-		FontSize(1.25, SymUnitRem).
-		FontWeight(SymBold).
+	// Image container style
+	sr.Register(NewStyle("image").
 		TextAlign(SymCenter).
 		TextIndent(0, SymUnitPercent).
-		LineHeight(1.0, SymUnitLh).
-		YjBreakAfter(SymAvoid).
-		LayoutHintTitle().
-		Build())
-
-	sr.Register(NewStyle("chapter-title-header").
-		Inherit("p").
-		FontSize(1.25, SymUnitRem).
-		FontWeight(SymBold).
-		TextAlign(SymCenter).
-		TextIndent(0, SymUnitPercent).
-		LineHeight(1.0, SymUnitLh).
-		YjBreakAfter(SymAvoid).
-		LayoutHintTitle().
-		Build())
-
-	sr.Register(NewStyle("section-title-header").
-		Inherit("p").
-		FontSize(1.125, SymUnitRem).
-		FontWeight(SymBold).
-		TextAlign(SymCenter).
-		TextIndent(0, SymUnitPercent).
-		LineHeight(1.0, SymUnitLh).
-		YjBreakAfter(SymAvoid).
-		LayoutHintTitle().
-		Build())
-
-	// Date style - matches CSS ".date { }"
-	sr.Register(NewStyle("date").
-		Inherit("p").
-		TextAlign(SymEnd).
-		TextIndent(0, SymUnitPercent).
-		MarginTop(0.5, SymUnitEm).
-		MarginBottom(0.5, SymUnitEm).
-		Build())
-
-	// Link styles - matches CSS ".link-external { }", ".link-internal { }", ".link-footnote { }"
-	sr.Register(NewStyle("link-external").
-		Build())
-
-	sr.Register(NewStyle("link-internal").
-		Build())
-
-	// Footnote link style - KPV uses baseline-style: superscript, font-size in rem
-	// We use baseline-style instead of baseline-shift for KPV compatibility
-	sr.Register(NewStyle("link-footnote").
-		FontStyle(SymNormal).
-		FontSize(0.75, SymUnitRem).
-		BaselineStyle(SymSuperscript).
-		LineHeight(1.33, SymUnitLh).
-		Build())
-
-	sr.Register(NewStyle("link-backlink").
-		FontWeight(SymBold).
-		Build())
-
-	// Vignette image style
-	sr.Register(NewStyle("vignette").
-		Inherit("image").
-		MarginTop(0.5, SymUnitEm).
-		MarginBottom(0.5, SymUnitEm).
 		Build())
 
 	return sr
+}
+
+// PostProcessForKFX applies Kindle-specific enhancements to styles after CSS conversion.
+// This handles KFX-specific properties that don't have direct CSS equivalents or
+// need special handling:
+//   - layout-hints: [treat_as_title] for headings and title-like styles
+//   - yj-break-before/yj-break-after for page break handling
+//   - break-inside for keep-together behavior
+//
+// Note: Drop cap properties are handled during CSS conversion (see Converter.ConvertStylesheet)
+// because they require access to the full stylesheet to detect .has-dropcap .dropcap patterns.
+func (sr *StyleRegistry) PostProcessForKFX() {
+	for name, def := range sr.styles {
+		enhanced := sr.applyKFXEnhancements(name, def)
+		if len(enhanced.Properties) != len(def.Properties) {
+			sr.tracer.TracePostProcess(name, "KFX enhancements applied", enhanced.Properties)
+		}
+		sr.styles[name] = enhanced
+	}
+}
+
+// applyKFXEnhancements applies Kindle-specific enhancements to a style definition.
+func (sr *StyleRegistry) applyKFXEnhancements(name string, def StyleDef) StyleDef {
+	// Make a copy of properties to avoid modifying the original
+	props := make(map[KFXSymbol]any, len(def.Properties))
+	for k, v := range def.Properties {
+		props[k] = v
+	}
+
+	// Apply layout-hints for headings and title-like styles
+	if sr.shouldHaveLayoutHintTitle(name, props) {
+		if _, exists := props[SymLayoutHints]; !exists {
+			props[SymLayoutHints] = []any{SymbolValue(SymTreatAsTitle)}
+		}
+	}
+
+	// Convert page-break properties to KFX yj-break properties
+	sr.convertPageBreaksToYjBreaks(name, props)
+
+	// Apply break-inside: avoid for title wrappers
+	if sr.shouldHaveBreakInsideAvoid(name, props) {
+		if _, exists := props[SymBreakInside]; !exists {
+			props[SymBreakInside] = SymbolValue(SymAvoid)
+		}
+	}
+
+	// Note: box_align is NOT used for title wrappers.
+	// Reference KFX files rely on text_alignment: center on the content text itself,
+	// not box_align on the wrapper container.
+
+	return StyleDef{
+		Name:       def.Name,
+		Parent:     def.Parent,
+		Properties: props,
+	}
+}
+
+// shouldHaveLayoutHintTitle determines if a style should have layout-hints: [treat_as_title].
+// This applies to:
+//   - HTML heading elements (h1-h6)
+//   - Styles with "-title-header" suffix (body-title-header, chapter-title-header, etc.)
+//   - Styles named "subtitle" or with "-subtitle" suffix (if centered)
+func (sr *StyleRegistry) shouldHaveLayoutHintTitle(name string, props map[KFXSymbol]any) bool {
+	// HTML heading elements
+	switch name {
+	case "h1", "h2", "h3", "h4", "h5", "h6":
+		return true
+	}
+
+	// Title header styles
+	if strings.HasSuffix(name, "-title-header") {
+		return true
+	}
+
+	// Subtitle styles - only apply to centered, bold subtitles
+	if name == "subtitle" || strings.HasSuffix(name, "-subtitle") {
+		// Check if it's centered (cite-subtitle is left-aligned and shouldn't get layout-hint)
+		if align, ok := props[SymTextAlignment]; ok {
+			if align == SymbolValue(SymCenter) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// shouldHaveBreakInsideAvoid determines if a style should have break-inside: avoid.
+// This applies to title wrapper styles to keep titles together.
+func (sr *StyleRegistry) shouldHaveBreakInsideAvoid(name string, _ map[KFXSymbol]any) bool {
+	// Title wrapper styles
+	switch name {
+	case "body-title", "chapter-title", "section-title":
+		return true
+	}
+	// Other *-title styles but not *-title-header (those are inline)
+	if strings.HasSuffix(name, "-title") && !strings.HasSuffix(name, "-title-header") {
+		return true
+	}
+	return false
+}
+
+// convertPageBreaksToYjBreaks converts CSS page-break properties to KFX yj-break properties.
+// The CSS converter sets SymKeepFirst/SymKeepLast as intermediate markers.
+// This function converts them to proper yj-break-* properties and also handles
+// title wrapper styles that need yj-break-after: avoid.
+func (sr *StyleRegistry) convertPageBreaksToYjBreaks(name string, props map[KFXSymbol]any) {
+	// Convert SymKeepFirst (from page-break-before) to yj-break-before
+	if keepFirst, ok := props[SymKeepFirst]; ok {
+		if _, exists := props[SymYjBreakBefore]; !exists {
+			switch v := keepFirst.(type) {
+			case SymbolValue:
+				props[SymYjBreakBefore] = v
+			case KFXSymbol:
+				props[SymYjBreakBefore] = SymbolValue(v)
+			}
+		}
+	}
+
+	// Convert SymKeepLast (from page-break-after) to yj-break-after
+	if keepLast, ok := props[SymKeepLast]; ok {
+		if _, exists := props[SymYjBreakAfter]; !exists {
+			switch v := keepLast.(type) {
+			case SymbolValue:
+				props[SymYjBreakAfter] = v
+			case KFXSymbol:
+				props[SymYjBreakAfter] = SymbolValue(v)
+			}
+		}
+	}
+
+	// For title wrappers, ensure yj-break-after: avoid to keep title with content
+	if sr.isTitleWrapper(name) {
+		if _, exists := props[SymYjBreakAfter]; !exists {
+			props[SymYjBreakAfter] = SymbolValue(SymAvoid)
+		}
+		if _, exists := props[SymYjBreakBefore]; !exists {
+			props[SymYjBreakBefore] = SymbolValue(SymAuto)
+		}
+	}
+}
+
+// isTitleWrapper checks if a style name represents a title wrapper element.
+func (sr *StyleRegistry) isTitleWrapper(name string) bool {
+	switch name {
+	case "body-title", "chapter-title", "section-title":
+		return true
+	}
+	return false
 }

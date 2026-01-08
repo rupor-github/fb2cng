@@ -593,6 +593,68 @@ Visual byte map (approximate):
 │  This enables Kindle's popup footnote display feature.                      │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    $157 STYLE PROPERTY DIMENSIONS                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Dimension Value Structure:                                                 │
+│  {                                                                          │
+│    $307: <magnitude>,        // Numeric value (float)                       │
+│    $306: <unit_symbol>       // Unit type symbol                            │
+│  }                                                                          │
+│                                                                             │
+│  Unit Symbols:                                                              │
+│  ─────────────                                                              │
+│  $308 = em        (relative to font size)                                   │
+│  $309 = px        (pixels)                                                  │
+│  $310 = lh        (line-height units)                                       │
+│  $311 = pt        (points)                                                  │
+│  $314 = %         (percent)                                                 │
+│  $505 = rem       (relative to root font size)                              │
+│                                                                             │
+│  KPV Unit Conventions (CRITICAL):                                           │
+│  ─────────────────────────────────                                          │
+│  Kindle Previewer uses specific units for different properties.             │
+│  Using incorrect units can break rendering (e.g., text-align).              │
+│                                                                             │
+│  ┌────────────────┬──────────┬──────────────────────────────────────────┐   │
+│  │ CSS Property   │ KPV Unit │ Notes                                    │   │
+│  ├────────────────┼──────────┼──────────────────────────────────────────┤   │
+│  │ font-size      │ rem      │ NOT %. Using % breaks text-align!        │   │
+│  │ margin-top     │ lh       │ Line-height units for vertical spacing   │   │
+│  │ margin-bottom  │ lh       │ Line-height units for vertical spacing   │   │
+│  │ margin-left    │ %        │ Percentage for horizontal spacing        │   │
+│  │ margin-right   │ %        │ Percentage for horizontal spacing        │   │
+│  │ text-indent    │ %        │ Percentage                               │   │
+│  │ line-height    │ lh       │ Line-height units                        │   │
+│  └────────────────┴──────────┴──────────────────────────────────────────┘   │
+│                                                                             │
+│  Unit Conversion from CSS:                                                  │
+│  ─────────────────────────────                                              │
+│  em → lh (vertical):   1:1 ratio      (1em → 1lh)                           │
+│  em → %  (horizontal): 1:6.25 ratio   (1em → 6.25%)                         │
+│  %  → rem (font-size): divide by 100  (140% → 1.4rem)                       │
+│  em → rem (font-size): 1:1 ratio      (1em → 1rem)                          │
+│                                                                             │
+│  Zero Value Omission:                                                       │
+│  ────────────────────                                                       │
+│  KPV does NOT include style properties with zero values.                    │
+│  Example: margin-left: 0 is omitted entirely, NOT encoded as:               │
+│    $48: { $307: 0, $306: "$314" }                                           │
+│                                                                             │
+│  Example Style Fragment:                                                    │
+│  {                                                                          │
+│    $173: "body-title-header",     // Style name                             │
+│    $16:  { $307: 1.4, $306: $505 }, // font-size: 1.4rem                    │
+│    $34:  $320,                    // text-align: center                     │
+│    $36:  { $307: 0, $306: $314 }, // text-indent: 0%                        │
+│    $13:  $361,                    // font-weight: bold                      │
+│    $47:  { $307: 2, $306: $310 }, // margin-top: 2lh                        │
+│    $49:  { $307: 1, $306: $310 }  // margin-bottom: 1lh                     │
+│  }                                                                          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -668,6 +730,12 @@ Visual byte map (approximate):
 │     - KFX local symbol 0: ID 852 (kfxlib/Kindle expectation)                │
 │     - Standard Ion local symbol 0: ID 861 (after Ion system + YJ_symbols)   │
 │     - Entity directory and symbol values use KFX numbering                  │
+│                                                                             │
+│ 12. CRITICAL: Style dimension units must match KPV conventions:             │
+│     - font-size: use rem (NOT %). Percent breaks text-align rendering       │
+│     - margin-top/bottom: use lh (line-height units)                         │
+│     - margin-left/right: use % (percent)                                    │
+│     - Zero values should be omitted entirely from style properties          │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```

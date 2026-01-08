@@ -98,8 +98,42 @@ func (c *Converter) convertProperty(name string, value CSSValue, result *Convers
 		// Font family is stored as string, actual font resolution is separate
 		result.Style.Properties[SymFontFamily] = value.Raw
 
+	case "font-size":
+		// KPV converts percentage font-sizes to rem (140% -> 1.4rem)
+		// This is important for title rendering - percent units cause alignment issues
+		if value.IsNumeric() {
+			if value.Unit == "%" {
+				// Convert percentage to rem: 140% -> 1.4rem
+				remValue := value.Value / 100.0
+				result.Style.Properties[kfxSym] = DimensionValue(remValue, SymUnitRem)
+			} else {
+				dim, err := MakeDimensionValue(value)
+				if err != nil {
+					result.Warnings = append(result.Warnings, "unable to convert "+name+": "+err.Error())
+					return
+				}
+				result.Style.Properties[kfxSym] = dim
+			}
+		}
+
+	case "text-indent":
+		// text-indent uses percent for unitless values (matching KPV behavior)
+		if value.IsNumeric() {
+			if value.Unit == "" {
+				// Unitless - use percent (KPV uses "text-indent: 0%" for zero values)
+				result.Style.Properties[kfxSym] = DimensionValue(value.Value, SymUnitPercent)
+			} else {
+				dim, err := MakeDimensionValue(value)
+				if err != nil {
+					result.Warnings = append(result.Warnings, "unable to convert "+name+": "+err.Error())
+					return
+				}
+				result.Style.Properties[kfxSym] = dim
+			}
+		}
+
 	default:
-		// Dimension properties (font-size, margins, line-height, text-indent, etc.)
+		// Dimension properties (font-size, margins, line-height, etc.)
 		if value.IsNumeric() || value.Unit != "" || (value.Value != 0) {
 			dim, err := MakeDimensionValue(value)
 			if err != nil {
@@ -222,6 +256,12 @@ func (c *Converter) parseShorthandValue(s string) CSSValue {
 }
 
 // setDimensionProperty sets a dimension property from a CSS value.
+// KPV uses specific units for different properties:
+//   - margin-top, margin-bottom: lh (line-height units)
+//   - margin-left, margin-right: % (percent)
+//   - font-size: rem
+//   - text-indent: %
+//   - line-height: lh
 func (c *Converter) setDimensionProperty(sym KFXSymbol, value CSSValue, result *ConversionResult) {
 	// Handle keywords
 	if value.IsKeyword() {
@@ -234,13 +274,71 @@ func (c *Converter) setDimensionProperty(sym KFXSymbol, value CSSValue, result *
 		return
 	}
 
-	// Handle numeric values
-	dim, err := MakeDimensionValue(value)
-	if err != nil {
-		result.Warnings = append(result.Warnings, "unable to convert dimension: "+err.Error())
+	// Skip zero values - KPV doesn't include them
+	if value.Value == 0 {
 		return
 	}
-	result.Style.Properties[sym] = dim
+
+	// Convert em to KPV-preferred units based on property
+	convertedValue := value.Value
+	var convertedUnit KFXSymbol
+
+	switch sym {
+	case SymMarginTop, SymMarginBottom:
+		// Vertical margins: em -> lh (1em ≈ 1lh for typical line-height)
+		if value.Unit == "em" {
+			convertedUnit = SymUnitLh
+		} else {
+			var err error
+			_, convertedUnit, err = CSSValueToKFX(value)
+			if err != nil {
+				result.Warnings = append(result.Warnings, "unable to convert margin: "+err.Error())
+				return
+			}
+		}
+
+	case SymMarginLeft, SymMarginRight:
+		// Horizontal margins: em -> % (1em ≈ 6.25% typical)
+		// Note: This is approximate - KPV likely uses more sophisticated conversion
+		if value.Unit == "em" {
+			convertedValue = value.Value * 6.25 // Approximate em to % conversion
+			convertedUnit = SymUnitPercent
+		} else {
+			var err error
+			_, convertedUnit, err = CSSValueToKFX(value)
+			if err != nil {
+				result.Warnings = append(result.Warnings, "unable to convert margin: "+err.Error())
+				return
+			}
+		}
+
+	case SymFontSize:
+		// Font-size: % -> rem, em -> rem
+		if value.Unit == "%" {
+			convertedValue = value.Value / 100.0
+			convertedUnit = SymUnitRem
+		} else if value.Unit == "em" {
+			convertedUnit = SymUnitRem
+		} else {
+			var err error
+			_, convertedUnit, err = CSSValueToKFX(value)
+			if err != nil {
+				result.Warnings = append(result.Warnings, "unable to convert font-size: "+err.Error())
+				return
+			}
+		}
+
+	default:
+		// Default: preserve CSS units
+		var err error
+		_, convertedUnit, err = CSSValueToKFX(value)
+		if err != nil {
+			result.Warnings = append(result.Warnings, "unable to convert dimension: "+err.Error())
+			return
+		}
+	}
+
+	result.Style.Properties[sym] = DimensionValue(convertedValue, convertedUnit)
 }
 
 // convertSpecialProperty handles properties that need custom conversion logic.
@@ -269,18 +367,20 @@ func (c *Converter) convertSpecialProperty(name string, value CSSValue, result *
 		}
 
 	case "display":
-		sym, visible, ok := ConvertDisplay(value)
-		if ok {
-			if !visible {
-				// display:none - we don't have a direct KFX equivalent
-				// Log a warning but don't set anything
-				c.log.Debug("display:none not directly supported in KFX")
-				return
-			}
-			if sym != 0 {
-				result.Style.Properties[SymRender] = sym
-			}
-		}
+		// NOTE: KPV doesn't convert display to render - disabled for now
+		// sym, visible, ok := ConvertDisplay(value)
+		// if ok {
+		// 	if !visible {
+		// 		// display:none - we don't have a direct KFX equivalent
+		// 		// Log a warning but don't set anything
+		// 		c.log.Debug("display:none not directly supported in KFX")
+		// 		return
+		// 	}
+		// 	if sym != 0 {
+		// 		result.Style.Properties[SymRender] = sym
+		// 	}
+		// }
+		_ = value // suppress unused warning
 
 	case "page-break-before":
 		if sym, ok := ConvertPageBreak(value); ok {
@@ -302,6 +402,8 @@ func (c *Converter) convertSpecialProperty(name string, value CSSValue, result *
 }
 
 // ConvertStylesheet converts an entire CSS stylesheet to KFX style definitions.
+// This includes special handling for drop caps: it detects .has-dropcap .dropcap
+// patterns and extracts font-size to calculate dropcap-lines for the parent style.
 func (c *Converter) ConvertStylesheet(sheet *Stylesheet) ([]StyleDef, []string) {
 	styles := make([]StyleDef, 0, len(sheet.Rules))
 	allWarnings := make([]string, 0)
@@ -309,6 +411,9 @@ func (c *Converter) ConvertStylesheet(sheet *Stylesheet) ([]StyleDef, []string) 
 	// Track seen style names to merge properties for same selector
 	styleMap := make(map[string]*StyleDef)
 	var styleOrder []string
+
+	// First pass: detect drop cap patterns and extract font-size
+	dropcapInfo := c.detectDropcapPatterns(sheet)
 
 	for _, rule := range sheet.Rules {
 		result := c.ConvertRule(rule)
@@ -320,6 +425,13 @@ func (c *Converter) ConvertStylesheet(sheet *Stylesheet) ([]StyleDef, []string) 
 		}
 
 		styleName := result.Style.Name
+
+		// Apply drop cap properties if this is a has-dropcap style
+		if info, ok := dropcapInfo[styleName]; ok {
+			result.Style.Properties[SymDropcapChars] = info.chars
+			result.Style.Properties[SymDropcapLines] = info.lines
+		}
+
 		if existing, ok := styleMap[styleName]; ok {
 			// Merge properties (later rules override)
 			for k, v := range result.Style.Properties {
@@ -342,4 +454,65 @@ func (c *Converter) ConvertStylesheet(sheet *Stylesheet) ([]StyleDef, []string) 
 	allWarnings = append(allWarnings, sheet.Warnings...)
 
 	return styles, allWarnings
+}
+
+// dropcapConfig holds drop cap configuration extracted from CSS.
+type dropcapConfig struct {
+	chars int // Number of characters (usually 1)
+	lines int // Number of lines to span (derived from font-size)
+}
+
+// detectDropcapPatterns scans the stylesheet for drop cap patterns.
+// It looks for selectors matching *.has-dropcap .dropcap (or similar)
+// and extracts font-size to calculate dropcap-lines.
+// Returns a map from parent style name (e.g., "has-dropcap") to dropcap config.
+func (c *Converter) detectDropcapPatterns(sheet *Stylesheet) map[string]dropcapConfig {
+	result := make(map[string]dropcapConfig)
+
+	for _, rule := range sheet.Rules {
+		// Look for descendant selectors where descendant is "dropcap"
+		if rule.Selector.Ancestor == nil {
+			continue
+		}
+
+		descendantName := rule.Selector.descendantBaseName()
+		if descendantName != "dropcap" {
+			continue
+		}
+
+		// Get the parent style name
+		parentName := rule.Selector.Ancestor.StyleName()
+
+		// Extract font-size to calculate lines
+		fontSize, hasFontSize := rule.GetProperty("font-size")
+		if !hasFontSize {
+			// Default to 3 lines if no font-size specified
+			result[parentName] = dropcapConfig{chars: 1, lines: 3}
+			continue
+		}
+
+		// Calculate lines from font-size
+		// Typical drop cap: font-size: 3.2em means ~3 lines
+		lines := 3 // default
+		if fontSize.Value > 0 {
+			// Round to nearest integer
+			lines = int(fontSize.Value + 0.5)
+			if lines < 2 {
+				lines = 2
+			}
+			if lines > 10 {
+				lines = 10
+			}
+		}
+
+		result[parentName] = dropcapConfig{chars: 1, lines: lines}
+
+		c.log.Debug("detected drop cap pattern",
+			zap.String("parent", parentName),
+			zap.Float64("font-size", fontSize.Value),
+			zap.String("unit", fontSize.Unit),
+			zap.Int("lines", lines))
+	}
+
+	return result
 }

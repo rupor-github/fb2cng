@@ -85,8 +85,14 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 
 // buildFragments creates KFX fragments from content.
 func buildFragments(container *Container, c *content.Content, cfg *config.DocumentConfig, log *zap.Logger) error {
+	// Create style tracer if debug mode is enabled
+	var tracer *StyleTracer
+	if c.Debug {
+		tracer = NewStyleTracer(c.WorkDir)
+	}
+
 	// Create style registry from CSS stylesheets
-	styles := buildStyleRegistry(c.Book.Stylesheets, log)
+	styles := buildStyleRegistry(c.Book.Stylesheets, tracer, log)
 
 	usedIDs := collectUsedImageIDs(c.Book)
 	usedImages := make(fb2.BookImages, len(usedIDs))
@@ -233,6 +239,13 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 		return err
 	}
 
+	// Flush style trace if enabled
+	if tracer != nil {
+		if tracePath := tracer.Flush(); tracePath != "" {
+			log.Debug("Style trace written", zap.String("path", tracePath))
+		}
+	}
+
 	log.Debug("Built fragments", zap.Int("count", container.Fragments.Len()))
 
 	return nil
@@ -280,20 +293,21 @@ func computeMaxSectionPIDCount(sectionEIDs sectionEIDsBySectionName, posItems []
 
 func collectLinkTargets(fragments *FragmentList) map[string]bool {
 	targets := make(map[string]bool)
-	for _, frag := range fragments.GetByType(SymStoryline) {
-		v, ok := frag.Value.(StructValue)
-		if !ok {
-			continue
-		}
-		entries, ok := v.GetList(SymContentList)
-		if !ok {
-			continue
-		}
+
+	// Helper function to recursively collect link targets from entries
+	var collectFromEntries func(entries []any)
+	collectFromEntries = func(entries []any) {
 		for _, it := range entries {
 			entry, ok := it.(StructValue)
 			if !ok {
 				continue
 			}
+
+			// Check for nested content_list (wrapper containers)
+			if nestedEntries, ok := entry.GetList(SymContentList); ok && len(nestedEntries) > 0 {
+				collectFromEntries(nestedEntries)
+			}
+
 			evs, ok := entry.GetList(SymStyleEvents)
 			if !ok {
 				continue
@@ -320,13 +334,26 @@ func collectLinkTargets(fragments *FragmentList) map[string]bool {
 			}
 		}
 	}
+
+	for _, frag := range fragments.GetByType(SymStoryline) {
+		v, ok := frag.Value.(StructValue)
+		if !ok {
+			continue
+		}
+		entries, ok := v.GetList(SymContentList)
+		if !ok {
+			continue
+		}
+		collectFromEntries(entries)
+	}
 	return targets
 }
 
 // buildStyleRegistry creates a style registry from CSS stylesheets.
 // It parses the CSS, converts rules to KFX style definitions, and registers them.
 // Falls back to default styles if no stylesheets are provided.
-func buildStyleRegistry(stylesheets []fb2.Stylesheet, log *zap.Logger) *StyleRegistry {
+// If tracer is non-nil, style operations will be logged to the trace.
+func buildStyleRegistry(stylesheets []fb2.Stylesheet, tracer *StyleTracer, log *zap.Logger) *StyleRegistry {
 	// If no stylesheets, return defaults
 	if len(stylesheets) == 0 {
 		log.Debug("No stylesheets provided, using defaults only")
@@ -352,6 +379,7 @@ func buildStyleRegistry(stylesheets []fb2.Stylesheet, log *zap.Logger) *StyleReg
 
 	// Create registry from CSS
 	registry, warnings := NewStyleRegistryFromCSS(combinedCSS, log)
+	registry.SetTracer(tracer)
 
 	// Log warnings at debug level
 	for _, w := range warnings {

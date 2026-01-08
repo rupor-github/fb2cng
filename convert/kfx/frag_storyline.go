@@ -2,12 +2,66 @@ package kfx
 
 import (
 	"fmt"
-	"maps"
 	"strings"
 
 	"fbc/common"
 	"fbc/fb2"
 )
+
+// StyleContext tracks the ancestor chain for CSS cascade emulation.
+// In EPUB, nested elements like <div class="poem"><div class="stanza"><p class="verse">
+// allow CSS rules like ".poem .stanza .verse {}" to apply. KFX flattens this hierarchy,
+// so we must explicitly track and combine ancestor contexts when resolving styles.
+type StyleContext struct {
+	ancestors []string // Ancestor context names in order (e.g., ["poem", "stanza"])
+}
+
+// NewStyleContext creates a new empty style context.
+func NewStyleContext() StyleContext {
+	return StyleContext{ancestors: nil}
+}
+
+// Push returns a new StyleContext with the given context added to the ancestor chain.
+// This is used when descending into nested elements (e.g., entering a poem or stanza).
+func (sc StyleContext) Push(context string) StyleContext {
+	if context == "" {
+		return sc
+	}
+	newAncestors := make([]string, len(sc.ancestors), len(sc.ancestors)+1)
+	copy(newAncestors, sc.ancestors)
+	newAncestors = append(newAncestors, context)
+	return StyleContext{ancestors: newAncestors}
+}
+
+// Resolve combines the ancestor chain with a base style and optional element style
+// to produce a full style specification for ResolveStyle.
+// Example: ancestors=["poem", "stanza"], baseStyle="p", elementStyle="verse"
+// Result: "p poem stanza verse"
+func (sc StyleContext) Resolve(baseStyle, elementStyle string) string {
+	parts := make([]string, 0, 1+len(sc.ancestors)+1)
+	if baseStyle != "" {
+		parts = append(parts, baseStyle)
+	}
+	parts = append(parts, sc.ancestors...)
+	if elementStyle != "" {
+		parts = append(parts, elementStyle)
+	}
+	return strings.Join(parts, " ")
+}
+
+// ResolveWithCustomStyle combines ancestors with a custom style (no base style).
+// Used for elements that already have a complete style name.
+func (sc StyleContext) ResolveWithCustomStyle(styleName string) string {
+	if len(sc.ancestors) == 0 {
+		return styleName
+	}
+	parts := make([]string, 0, len(sc.ancestors)+1)
+	parts = append(parts, sc.ancestors...)
+	if styleName != "" {
+		parts = append(parts, styleName)
+	}
+	return strings.Join(parts, " ")
+}
 
 // TOCEntry represents a table of contents entry with hierarchical structure.
 // This mirrors the chapterData structure in epub for consistent TOC generation.
@@ -32,29 +86,26 @@ const MaxContentFragmentSize = 8192
 // ContentAccumulator accumulates paragraph content into named content fragments,
 // automatically splitting into chunks when size limits are exceeded.
 //
-// Fragment naming pattern: "content_{N}" where N is sequential (e.g., content_1, content_2).
-// When chunked: "content_{N}_{M}" where M is chunk number (e.g., content_1_1, content_1_2).
+// Fragment naming pattern: "content_{N}" where N is sequential (e.g., content_1, content_2, content_3).
 // This human-readable format is used instead of base36 for better debuggability.
 type ContentAccumulator struct {
-	baseCounter  int                 // Base counter for naming (e.g., 1 for content_1)
-	currentName  string              // Current content fragment name
-	currentList  []string            // Current content list (each entry is one paragraph)
-	currentSize  int                 // Current accumulated size in bytes
-	fragments    map[string][]string // All completed content fragments
-	chunkCounter int                 // Counter for chunk suffixes (0 = no suffix)
+	counter     int                 // Global counter for sequential naming
+	currentName string              // Current content fragment name
+	currentList []string            // Current content list (each entry is one paragraph)
+	currentSize int                 // Current accumulated size in bytes
+	fragments   map[string][]string // All completed content fragments
 }
 
 // NewContentAccumulator creates a new content accumulator.
-// Fragment names follow pattern "content_{baseCounter}" for readability.
-func NewContentAccumulator(baseCounter int) *ContentAccumulator {
-	name := fmt.Sprintf("content_%d", baseCounter)
+// Fragment names follow pattern "content_{N}" with sequential numbering.
+func NewContentAccumulator(startCounter int) *ContentAccumulator {
+	name := fmt.Sprintf("content_%d", startCounter)
 	return &ContentAccumulator{
-		baseCounter:  baseCounter,
-		currentName:  name,
-		currentList:  make([]string, 0),
-		currentSize:  0,
-		fragments:    make(map[string][]string),
-		chunkCounter: 0,
+		counter:     startCounter,
+		currentName: name,
+		currentList: make([]string, 0),
+		currentSize: 0,
+		fragments:   make(map[string][]string),
 	}
 }
 
@@ -88,14 +139,14 @@ func (ca *ContentAccumulator) Add(text string) (name string, offset int) {
 	return name, offset
 }
 
-// finishCurrentChunk saves the current chunk and starts a new one.
+// finishCurrentChunk saves the current chunk and starts a new one with sequential naming.
 func (ca *ContentAccumulator) finishCurrentChunk() {
 	if len(ca.currentList) > 0 {
 		ca.fragments[ca.currentName] = ca.currentList
 	}
 
-	ca.chunkCounter++
-	ca.currentName = fmt.Sprintf("content_%d_%d", ca.baseCounter, ca.chunkCounter)
+	ca.counter++
+	ca.currentName = fmt.Sprintf("content_%d", ca.counter)
 	ca.currentList = make([]string, 0)
 	ca.currentSize = 0
 }
@@ -177,6 +228,7 @@ type ContentRef struct {
 	StyleEvents   []StyleEventRef // Optional inline style events ($142)
 	Children      []any           // Optional nested content for containers
 	HeadingLevel  int             // For headings: 1-6 for h1-h6 ($790), 0 means not a heading
+	RawEntry      StructValue     // Pre-built entry (for complex structures like tables)
 }
 
 // StyleEventRef represents a style event for inline formatting ($142).
@@ -191,6 +243,11 @@ type StyleEventRef struct {
 // NewContentEntry creates a content entry for storyline's $146.
 // Based on reference: {$155: eid, $157: style, $159: type, $145: {name: content_X, $403: offset}}
 func NewContentEntry(ref ContentRef) StructValue {
+	// If a pre-built entry is provided, use it directly
+	if ref.RawEntry != nil {
+		return ref.RawEntry
+	}
+
 	entry := NewStruct().
 		SetInt(SymUniqueID, int64(ref.EID)). // $155 = id
 		SetSymbol(SymType, ref.Type)         // $159 = type
@@ -228,8 +285,9 @@ func NewContentEntry(ref ContentRef) StructValue {
 	if ref.Type == SymImage {
 		entry.Set(SymResourceName, SymbolByName(ref.ResourceName)) // $175 = resource_name (symbol reference)
 		entry.SetString(SymAltText, ref.AltText)                   // $584 = alt_text
-	} else {
+	} else if ref.ContentName != "" {
 		// Content reference - nested struct with name and offset
+		// Only add if we have a content name (containers with children don't have content)
 		contentRef := map[string]any{
 			"name": SymbolByName(ref.ContentName),
 			"$403": ref.ContentOffset,
@@ -252,14 +310,77 @@ type StorylineBuilder struct {
 	contentEntries  []ContentRef
 	eidCounter      int
 	pageTemplateEID int // Separate EID for page template container
+
+	// Block wrapper support - when activeBlock is non-nil, content is added to it
+	activeBlock *BlockBuilder
+}
+
+// BlockBuilder collects content entries for a wrapper/container element.
+// It mirrors how EPUB generates <div class="..."> wrappers.
+type BlockBuilder struct {
+	styleSpec string         // Raw style specification (e.g., "poem", "cite") - resolved in EndBlock
+	styles    *StyleRegistry // Style registry for deferred resolution
+	eid       int            // EID for the wrapper container
+	children  []ContentRef   // Nested content entries
 }
 
 // AllEIDs returns all EIDs used by this section (page template + content entries).
+// For wrapper containers (entries with Children), wrapper EID comes first in DFS order,
+// followed by all child EIDs - this matches how position_id_map is validated.
 func (sb *StorylineBuilder) AllEIDs() []int {
 	eids := make([]int, 0, len(sb.contentEntries)+1)
 	eids = append(eids, sb.pageTemplateEID)
 	for _, ref := range sb.contentEntries {
-		eids = append(eids, ref.EID)
+		if ref.RawEntry != nil {
+			// Pre-built entry (e.g., table): recursively collect all EIDs
+			eids = append(eids, collectStructEIDs(ref.RawEntry)...)
+		} else if len(ref.Children) > 0 {
+			// Wrapper container: include wrapper EID first, then child EIDs
+			eids = append(eids, ref.EID)
+			eids = append(eids, collectChildEIDs(ref.Children)...)
+		} else {
+			// Regular content: include the entry's EID
+			eids = append(eids, ref.EID)
+		}
+	}
+	return eids
+}
+
+// collectStructEIDs recursively extracts EIDs from a StructValue and its nested content.
+func collectStructEIDs(sv StructValue) []int {
+	var eids []int
+
+	// Get this struct's EID
+	if eid, exists := sv[SymUniqueID]; exists {
+		if eidInt, ok := eid.(int64); ok {
+			eids = append(eids, int(eidInt))
+		}
+	}
+
+	// Recursively collect from content_list ($146)
+	if contentList, exists := sv[SymContentList]; exists {
+		if children, ok := contentList.([]any); ok {
+			for _, child := range children {
+				if childSV, ok := child.(StructValue); ok {
+					eids = append(eids, collectStructEIDs(childSV)...)
+				}
+			}
+		}
+	}
+
+	return eids
+}
+
+// collectChildEIDs extracts EIDs from nested content entries.
+func collectChildEIDs(children []any) []int {
+	if len(children) == 0 {
+		return nil
+	}
+	eids := make([]int, 0, len(children))
+	for _, child := range children {
+		if sv, ok := child.(StructValue); ok {
+			eids = append(eids, collectStructEIDs(sv)...)
+		}
 	}
 	return eids
 }
@@ -275,28 +396,105 @@ func NewStorylineBuilder(storyName, sectionName string, startEID int) *Storyline
 	}
 }
 
-// AddContent adds a content reference to the storyline.
+// StartBlock begins a new wrapper/container block.
+// All content added until EndBlock is called will be nested inside this wrapper.
+// The styleSpec is the raw style name (e.g., "poem", "cite") - resolution is deferred
+// until EndBlock to avoid registering styles for empty wrappers.
+// Returns the EID of the wrapper for reference.
+func (sb *StorylineBuilder) StartBlock(styleSpec string, styles *StyleRegistry) int {
+	if sb.activeBlock != nil {
+		// Nested blocks not supported - end current block first
+		sb.EndBlock()
+	}
+
+	eid := sb.eidCounter
+	sb.eidCounter++
+
+	sb.activeBlock = &BlockBuilder{
+		styleSpec: styleSpec,
+		styles:    styles,
+		eid:       eid,
+		children:  make([]ContentRef, 0),
+	}
+
+	return eid
+}
+
+// EndBlock closes the current wrapper block and adds it to the storyline.
+// The wrapper becomes a container entry with nested children.
+// Empty wrappers (with no children) are discarded to avoid position_map validation errors.
+// Style resolution is deferred until here to prevent registering styles for discarded wrappers.
+func (sb *StorylineBuilder) EndBlock() {
+	if sb.activeBlock == nil {
+		return
+	}
+
+	// Skip empty wrappers - they have no content and cause position_map validation errors
+	if len(sb.activeBlock.children) == 0 {
+		sb.activeBlock = nil
+		return
+	}
+
+	// Resolve style only now that we know the wrapper will be used
+	resolvedStyle := ""
+	if sb.activeBlock.styles != nil && sb.activeBlock.styleSpec != "" {
+		resolvedStyle = sb.activeBlock.styles.ResolveStyle(sb.activeBlock.styleSpec)
+	}
+
+	// Convert children to content entries for the $146 list
+	children := make([]any, 0, len(sb.activeBlock.children))
+	for _, child := range sb.activeBlock.children {
+		children = append(children, NewContentEntry(child))
+	}
+
+	// Add the wrapper as a container entry
+	sb.contentEntries = append(sb.contentEntries, ContentRef{
+		EID:      sb.activeBlock.eid,
+		Type:     SymText, // Container wrappers use $269 (text) type in KFX
+		Style:    resolvedStyle,
+		Children: children,
+	})
+
+	sb.activeBlock = nil
+}
+
+// InBlock returns true if currently building inside a wrapper block.
+func (sb *StorylineBuilder) InBlock() bool {
+	return sb.activeBlock != nil
+}
+
+// addEntry is the internal method that routes content to the appropriate destination.
+func (sb *StorylineBuilder) addEntry(ref ContentRef) int {
+	if sb.activeBlock != nil {
+		// Add to current block's children
+		sb.activeBlock.children = append(sb.activeBlock.children, ref)
+	} else {
+		// Add directly to storyline
+		sb.contentEntries = append(sb.contentEntries, ref)
+	}
+	return ref.EID
+}
+
+// AddContent adds a content reference to the storyline (or current block).
 func (sb *StorylineBuilder) AddContent(contentType KFXSymbol, contentName string, contentOffset int, style string) int {
 	eid := sb.eidCounter
 	sb.eidCounter++
 
-	sb.contentEntries = append(sb.contentEntries, ContentRef{
+	return sb.addEntry(ContentRef{
 		EID:           eid,
 		Type:          contentType,
 		ContentName:   contentName,
 		ContentOffset: contentOffset,
 		Style:         style,
 	})
-
-	return eid
 }
 
-// AddContentAndEvents adds content with style events.
+// AddContentAndEvents adds content with style events (to storyline or current block).
 func (sb *StorylineBuilder) AddContentAndEvents(contentType KFXSymbol, contentName string, contentOffset int, style string, events []StyleEventRef) int {
 	eid := sb.eidCounter
 	sb.eidCounter++
 
-	sb.contentEntries = append(sb.contentEntries, ContentRef{
+	return sb.addEntry(ContentRef{
 		EID:           eid,
 		Type:          contentType,
 		ContentName:   contentName,
@@ -304,16 +502,14 @@ func (sb *StorylineBuilder) AddContentAndEvents(contentType KFXSymbol, contentNa
 		Style:         style,
 		StyleEvents:   events,
 	})
-
-	return eid
 }
 
-// AddContentWithHeading adds content with style events and heading level.
+// AddContentWithHeading adds content with style events and heading level (to storyline or current block).
 func (sb *StorylineBuilder) AddContentWithHeading(contentType KFXSymbol, contentName string, contentOffset int, style string, events []StyleEventRef, headingLevel int) int {
 	eid := sb.eidCounter
 	sb.eidCounter++
 
-	sb.contentEntries = append(sb.contentEntries, ContentRef{
+	return sb.addEntry(ContentRef{
 		EID:           eid,
 		Type:          contentType,
 		ContentName:   contentName,
@@ -322,23 +518,133 @@ func (sb *StorylineBuilder) AddContentWithHeading(contentType KFXSymbol, content
 		StyleEvents:   events,
 		HeadingLevel:  headingLevel,
 	})
-
-	return eid
 }
 
+// AddImage adds an image reference (to storyline or current block).
 func (sb *StorylineBuilder) AddImage(resourceName, style, altText string) int {
 	eid := sb.eidCounter
 	sb.eidCounter++
 
-	sb.contentEntries = append(sb.contentEntries, ContentRef{
+	return sb.addEntry(ContentRef{
 		EID:          eid,
 		Type:         SymImage,
 		ResourceName: resourceName,
 		Style:        style,
 		AltText:      altText,
 	})
+}
 
-	return eid
+// AddTable adds a table with proper KFX structure.
+// Structure: table($278) -> body($454) -> rows($279) -> cells($270) -> text($269)
+func (sb *StorylineBuilder) AddTable(table *fb2.Table, styles *StyleRegistry, ca *ContentAccumulator) int {
+	tableEID := sb.eidCounter
+	sb.eidCounter++
+
+	// Build rows
+	var rowEntries []any
+	for _, row := range table.Rows {
+		rowEID := sb.eidCounter
+		sb.eidCounter++
+
+		// Build cells for this row
+		var cellEntries []any
+		for _, cell := range row.Cells {
+			cellEID := sb.eidCounter
+			sb.eidCounter++
+
+			// Get cell text content
+			var cellText strings.Builder
+			for _, seg := range cell.Content {
+				cellText.WriteString(seg.AsText())
+			}
+			text := cellText.String()
+
+			// Add text to content accumulator
+			contentName, offset := ca.Add(text)
+
+			// Determine cell style based on header/alignment
+			var cellStyle string
+			if cell.Header {
+				cellStyle = styles.ResolveStyle("th")
+			} else {
+				cellStyle = styles.ResolveStyle("td")
+			}
+
+			// Create text entry inside cell
+			textEID := sb.eidCounter
+			sb.eidCounter++
+			textEntry := NewStruct().
+				SetInt(SymUniqueID, int64(textEID)).
+				SetSymbol(SymType, SymText).
+				Set(SymStyle, SymbolByName(cellStyle))
+
+			// Add content reference
+			contentRef := map[string]any{
+				"name": SymbolByName(contentName),
+				"$403": offset,
+			}
+			textEntry.Set(SymContent, contentRef)
+
+			// Create cell container with nested text
+			cellEntry := NewStruct().
+				SetInt(SymUniqueID, int64(cellEID)).
+				SetSymbol(SymType, SymContainer).         // $270
+				SetSymbol(SymLayout, SymVertical).        // $156 = $323 (vertical)
+				SetList(SymContentList, []any{textEntry}) // Nested text content
+
+			// Add colspan/rowspan if specified
+			if cell.ColSpan > 1 {
+				cellEntry.SetInt(SymTableColSpan, int64(cell.ColSpan))
+			}
+			if cell.RowSpan > 1 {
+				cellEntry.SetInt(SymTableRowSpan, int64(cell.RowSpan))
+			}
+
+			cellEntries = append(cellEntries, cellEntry)
+		}
+
+		// Create row entry
+		rowEntry := NewStruct().
+			SetInt(SymUniqueID, int64(rowEID)).
+			SetSymbol(SymType, SymTableRow). // $279
+			SetList(SymContentList, cellEntries)
+
+		rowEntries = append(rowEntries, rowEntry)
+	}
+
+	// Create body wrapper
+	bodyEID := sb.eidCounter
+	sb.eidCounter++
+	bodyEntry := NewStruct().
+		SetInt(SymUniqueID, int64(bodyEID)).
+		SetSymbol(SymType, SymTableBody). // $454
+		SetList(SymContentList, rowEntries)
+
+	// Create table entry with proper structure
+	tableStyle := styles.ResolveStyle("table")
+	tableEntry := NewStruct().
+		SetInt(SymUniqueID, int64(tableEID)).
+		SetSymbol(SymType, SymTable). // $278
+		Set(SymStyle, SymbolByName(tableStyle)).
+		SetBool(SymTableBorderCollapse, true). // $150 = true
+		SetList(SymContentList, []any{bodyEntry})
+
+	// Add to storyline
+	if sb.activeBlock != nil {
+		sb.activeBlock.children = append(sb.activeBlock.children, ContentRef{
+			EID:      tableEID,
+			Type:     SymTable,
+			RawEntry: tableEntry,
+		})
+	} else {
+		sb.contentEntries = append(sb.contentEntries, ContentRef{
+			EID:      tableEID,
+			Type:     SymTable,
+			RawEntry: tableEntry,
+		})
+	}
+
+	return tableEID
 }
 
 // FirstEID returns the first EID used by this storyline content.
@@ -396,9 +702,9 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 	sectionEIDs := make(sectionEIDsBySectionName)
 	idToEID := make(eidByFB2ID)
 
-	// All content fragments will be collected here
-	allContentFragments := make(map[string][]string)
-	contentCount := 0
+	// Single shared content accumulator for the entire book.
+	// KPV consolidates content across all storylines into fewer, larger fragments.
+	ca := NewContentAccumulator(1)
 
 	// Default screen width for image style calculations
 	defaultWidth := 600
@@ -424,16 +730,12 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 		// This mirrors epub's bodyIntroToXHTML which creates a separate chapter for body intro
 		if body.Title != nil {
 			sectionCount++
-			storyName := fmt.Sprintf("l%d", sectionCount)
-			sectionName := fmt.Sprintf("c%d", sectionCount-1)
+			storyName := "l" + toBase36(sectionCount)
+			sectionName := "c" + toBase36(sectionCount-1)
 			sectionNames = append(sectionNames, sectionName)
 
 			// Create storyline builder for body intro
 			sb := NewStorylineBuilder(storyName, sectionName, eidCounter)
-
-			// Process body intro content with accumulator
-			contentCount++
-			ca := NewContentAccumulator(contentCount)
 
 			// Add cover image once at the very beginning (references external_resource)
 			if !coverAdded && len(book.Description.TitleInfo.Coverpage) > 0 {
@@ -450,9 +752,6 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 			if err := processBodyIntroContent(book, body, sb, styles, imageResources, ca, idToEID, defaultWidth, footnotesIndex); err != nil {
 				return nil, 0, nil, nil, nil, nil, err
 			}
-
-			// Collect content fragments
-			maps.Copy(allContentFragments, ca.Finish())
 
 			sectionEIDs[sectionName] = sb.AllEIDs()
 
@@ -487,17 +786,13 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 			section := &body.Sections[j]
 			sectionCount++
 
-			// Generate names: "l1", "l2", ... for storylines; "c0", "c1", ... for sections
-			storyName := fmt.Sprintf("l%d", sectionCount)
-			sectionName := fmt.Sprintf("c%d", sectionCount-1)
+			// Generate names using base36: "l1", "l2", ... "lA", "lB", ... for storylines
+			storyName := "l" + toBase36(sectionCount)
+			sectionName := "c" + toBase36(sectionCount-1)
 			sectionNames = append(sectionNames, sectionName)
 
 			// Create storyline builder
 			sb := NewStorylineBuilder(storyName, sectionName, eidCounter)
-
-			// Process section content with accumulator
-			contentCount++
-			ca := NewContentAccumulator(contentCount)
 
 			// Track nested section info for TOC hierarchy
 			var nestedTOCEntries []*TOCEntry
@@ -505,9 +800,6 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 			if err := processStorylineContent(book, section, sb, styles, imageResources, ca, 1, &nestedTOCEntries, idToEID, defaultWidth, footnotesIndex); err != nil {
 				return nil, 0, nil, nil, nil, nil, err
 			}
-
-			// Collect content fragments
-			maps.Copy(allContentFragments, ca.Finish())
 
 			sectionEIDs[sectionName] = sb.AllEIDs()
 
@@ -543,17 +835,15 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 	// This ensures footnote IDs (n_1, n_2, etc.) are registered in idToEID for anchor generation
 	if len(footnoteBodies) > 0 {
 		sectionCount++
-		storyName := fmt.Sprintf("l%d", sectionCount)
-		sectionName := fmt.Sprintf("c%d", sectionCount-1)
+		storyName := "l" + toBase36(sectionCount)
+		sectionName := "c" + toBase36(sectionCount-1)
 		sectionNames = append(sectionNames, sectionName)
 
 		sb := NewStorylineBuilder(storyName, sectionName, eidCounter)
-		contentCount++
-		ca := NewContentAccumulator(contentCount)
 
 		// Process all footnote bodies into a single storyline
 		for _, body := range footnoteBodies {
-			// Process body title if present
+			// Process body title if present (not wrapped, same as EPUB)
 			if body.Title != nil {
 				for _, item := range body.Title.Items {
 					if item.Paragraph != nil {
@@ -563,8 +853,13 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 			}
 
 			// Process each section in the footnote body
+			// Each section gets wrapped in a container (mirrors EPUB's <div class="footnote">)
 			for j := range body.Sections {
 				section := &body.Sections[j]
+
+				// Start wrapper block for this footnote section
+				sb.StartBlock("footnote", styles)
+
 				// Register the section ID for anchor generation
 				if section.ID != "" {
 					if _, exists := idToEID[section.ID]; !exists {
@@ -582,13 +877,16 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 				}
 
 				// Process section content (paragraphs, poems, etc.)
+				footnoteCtx := NewStyleContext().Push("footnote")
 				for k := range section.Content {
-					processFlowItem(&section.Content[k], "footnote", sb, styles, imageResources, ca, idToEID, defaultWidth, footnotesIndex)
+					processFlowItem(&section.Content[k], footnoteCtx, "footnote", sb, styles, imageResources, ca, idToEID, defaultWidth, footnotesIndex)
 				}
+
+				// End wrapper block for this footnote section
+				sb.EndBlock()
 			}
 		}
 
-		maps.Copy(allContentFragments, ca.Finish())
 		sectionEIDs[sectionName] = sb.AllEIDs()
 
 		// Create TOC entry for footnotes (not included in main TOC)
@@ -613,8 +911,8 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 		}
 	}
 
-	// Create content fragments from accumulated content
-	for name, contentList := range allContentFragments {
+	// Create content fragments from accumulated content (single shared accumulator)
+	for name, contentList := range ca.Finish() {
 		contentFrag := buildContentFragmentByName(name, contentList)
 		if err := fragments.Add(contentFrag); err != nil {
 			return nil, 0, nil, nil, nil, nil, err
@@ -655,34 +953,43 @@ func processBodyIntroContent(book *fb2.FictionBook, body *fb2.Body, sb *Storylin
 		}
 	}
 
-	// Process body title
+	// Process body title with wrapper (mirrors EPUB's <div class="body-title">)
 	if body.Title != nil {
+		// Start wrapper block - this is the KFX equivalent of <div class="body-title">
+		sb.StartBlock("body-title", styles)
+
 		if body.Main() {
 			addVignetteImage(book, sb, styles, imageResources, common.VignettePosBookTitleTop, screenWidth)
 		}
-		for _, item := range body.Title.Items {
-			if item.Paragraph != nil {
-				addParagraphWithImages(item.Paragraph, "body-title", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
-			}
-		}
+		// Add title as single combined heading entry (matches KPV behavior)
+		// Uses body-title-header as base for -first/-next styles, heading level 1
+		addTitleAsHeading(body.Title, "body-title-header", 1, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		if body.Main() {
 			addVignetteImage(book, sb, styles, imageResources, common.VignettePosBookTitleBottom, screenWidth)
 		}
+
+		// End wrapper block
+		sb.EndBlock()
 	}
 
-	// Process body epigraphs
+	// Process body epigraphs - each wrapped in <div class="epigraph">
+	epigraphCtx := NewStyleContext().Push("epigraph")
 	for _, epigraph := range body.Epigraphs {
+		// Start wrapper block - mirrors EPUB's <div class="epigraph">
+		wrapperEID := sb.StartBlock("epigraph", styles)
 		if epigraph.Flow.ID != "" {
 			if _, exists := idToEID[epigraph.Flow.ID]; !exists {
-				idToEID[epigraph.Flow.ID] = sb.NextEID()
+				idToEID[epigraph.Flow.ID] = wrapperEID
 			}
 		}
 		for i := range epigraph.Flow.Items {
-			processFlowItem(&epigraph.Flow.Items[i], "epigraph", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			processFlowItem(&epigraph.Flow.Items[i], epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 		for i := range epigraph.TextAuthors {
-			addParagraphWithImages(&epigraph.TextAuthors[i], "p text-author", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			styleName := epigraphCtx.Resolve("p", "text-author")
+			addParagraphWithImages(&epigraph.TextAuthors[i], styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
+		sb.EndBlock()
 	}
 
 	return nil
@@ -709,56 +1016,87 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 		}
 	}
 
-	// Process title
+	// Process title with wrapper (mirrors EPUB's <div class="chapter-title"> or <div class="section-title">)
 	if section.Title != nil {
+		// Determine wrapper class, header class base, and heading level based on depth
+		var wrapperClass, headerClassBase string
+		var headingLevel int
+		if depth == 1 {
+			wrapperClass = "chapter-title"
+			headerClassBase = "chapter-title-header"
+			headingLevel = 1
+		} else {
+			wrapperClass = "section-title"
+			headerClassBase = "section-title-header"
+			// Map depth to heading level: 2->h2, 3->h3, 4+->h4
+			headingLevel = depth
+			if headingLevel > 4 {
+				headingLevel = 4
+			}
+		}
+
+		// Start wrapper block - this is the KFX equivalent of <div class="chapter-title"> or <div class="section-title">
+		sb.StartBlock(wrapperClass, styles)
+
+		// Add top vignette
 		if depth == 1 {
 			addVignetteImage(book, sb, styles, imageResources, common.VignettePosChapterTitleTop, screenWidth)
 		} else {
 			addVignetteImage(book, sb, styles, imageResources, common.VignettePosSectionTitleTop, screenWidth)
 		}
 
-		styleName := fmt.Sprintf("h%d", min(depth, 6))
-		for _, item := range section.Title.Items {
-			if item.Paragraph != nil {
-				addParagraphWithImages(item.Paragraph, styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
-			}
-		}
+		// Add title as single combined heading entry (matches KPV behavior)
+		addTitleAsHeading(section.Title, headerClassBase, headingLevel, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 
+		// Add bottom vignette
 		if depth == 1 {
 			addVignetteImage(book, sb, styles, imageResources, common.VignettePosChapterTitleBottom, screenWidth)
 		} else {
 			addVignetteImage(book, sb, styles, imageResources, common.VignettePosSectionTitleBottom, screenWidth)
 		}
+
+		// End wrapper block
+		sb.EndBlock()
 	}
 
-	// Process annotation
+	// Process annotation - wrapped in <div class="annotation">
 	if section.Annotation != nil {
+		// Start wrapper block - mirrors EPUB's <div class="annotation">
+		wrapperEID := sb.StartBlock("annotation", styles)
 		if section.Annotation.ID != "" {
 			if _, exists := idToEID[section.Annotation.ID]; !exists {
-				idToEID[section.Annotation.ID] = sb.NextEID()
+				idToEID[section.Annotation.ID] = wrapperEID
 			}
 		}
+		annotationCtx := NewStyleContext().Push("annotation")
 		for i := range section.Annotation.Items {
-			processFlowItem(&section.Annotation.Items[i], "annotation", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			processFlowItem(&section.Annotation.Items[i], annotationCtx, "annotation", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
+		sb.EndBlock()
 	}
 
-	// Process epigraphs
+	// Process epigraphs - each wrapped in <div class="epigraph">
+	epigraphCtx := NewStyleContext().Push("epigraph")
 	for _, epigraph := range section.Epigraphs {
+		// Start wrapper block - mirrors EPUB's <div class="epigraph">
+		wrapperEID := sb.StartBlock("epigraph", styles)
 		if epigraph.Flow.ID != "" {
 			if _, exists := idToEID[epigraph.Flow.ID]; !exists {
-				idToEID[epigraph.Flow.ID] = sb.NextEID()
+				idToEID[epigraph.Flow.ID] = wrapperEID
 			}
 		}
 		for i := range epigraph.Flow.Items {
-			processFlowItem(&epigraph.Flow.Items[i], "epigraph", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			processFlowItem(&epigraph.Flow.Items[i], epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 		for i := range epigraph.TextAuthors {
-			addParagraphWithImages(&epigraph.TextAuthors[i], "p text-author", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			styleName := epigraphCtx.Resolve("p", "text-author")
+			addParagraphWithImages(&epigraph.TextAuthors[i], styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
+		sb.EndBlock()
 	}
 
 	// Process content items
+	sectionCtx := NewStyleContext().Push("section")
 	for i := range section.Content {
 		item := &section.Content[i]
 		if item.Kind == fb2.FlowSection && item.Section != nil {
@@ -790,7 +1128,7 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 				*nestedTOC = append(*nestedTOC, childTOC...)
 			}
 		} else {
-			processFlowItem(item, "section", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			processFlowItem(item, sectionCtx, "section", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 	}
 
@@ -804,9 +1142,9 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 }
 
 // processFlowItem processes a flow item using ContentAccumulator.
-// context parameter specifies the parent context (e.g., "section", "cite", "annotation", "epigraph")
-// and is used for context-specific subtitle styles like EPUB does.
-func processFlowItem(item *fb2.FlowItem, context string, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
+// ctx tracks the full ancestor context chain for CSS cascade emulation.
+// contextName is the immediate context name (e.g., "section", "cite") used for subtitle naming.
+func processFlowItem(item *fb2.FlowItem, ctx StyleContext, contextName string, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
 	addContent := func(text, styleName string) int {
 		resolved := styles.ResolveStyle(styleName)
 		contentName, offset := ca.Add(text)
@@ -816,15 +1154,9 @@ func processFlowItem(item *fb2.FlowItem, context string, sb *StorylineBuilder, s
 	switch item.Kind {
 	case fb2.FlowParagraph:
 		if item.Paragraph != nil {
-			// Always start with base "p" style, add context style for styled contexts,
-			// then add custom class if present. This mimics CSS cascade.
-			styleName := "p"
-			// Add context style for contexts that have specific paragraph styling
-			// (epigraph, annotation, cite all have font/margin styles that apply to contained paragraphs)
-			switch context {
-			case "epigraph", "annotation", "cite":
-				styleName = styleName + " " + context
-			}
+			// Use full context chain for CSS cascade emulation.
+			// Base "p" + ancestor contexts + optional custom class from FB2.
+			styleName := ctx.Resolve("p", "")
 			if item.Paragraph.Style != "" {
 				styleName = styleName + " " + item.Paragraph.Style
 			}
@@ -833,9 +1165,9 @@ func processFlowItem(item *fb2.FlowItem, context string, sb *StorylineBuilder, s
 
 	case fb2.FlowSubtitle:
 		if item.Subtitle != nil {
-			// Use context-specific subtitle style like EPUB (e.g., "section-subtitle", "cite-subtitle")
-			// Start with base "p" to get text-align, line-height etc, then add context-subtitle
-			styleName := "p " + context + "-subtitle"
+			// Subtitles use <p> in EPUB, so use p as base here too
+			// Context-specific subtitle style adds alignment, margins
+			styleName := ctx.Resolve("p", contextName+"-subtitle")
 			if item.Subtitle.Style != "" {
 				styleName = styleName + " " + item.Subtitle.Style
 			}
@@ -843,42 +1175,42 @@ func processFlowItem(item *fb2.FlowItem, context string, sb *StorylineBuilder, s
 		}
 
 	case fb2.FlowEmptyLine:
-		addContent("\n", "emptyline") // Matches CSS ".emptyline" class
+		// emptyline uses context chain for proper cascade
+		styleName := ctx.Resolve("", "emptyline")
+		addContent("\n", styleName)
 
 	case fb2.FlowPoem:
 		if item.Poem != nil {
+			// Start wrapper block - mirrors EPUB's <div class="poem">
+			wrapperEID := sb.StartBlock("poem", styles)
 			if item.Poem.ID != "" {
 				if _, exists := idToEID[item.Poem.ID]; !exists {
-					idToEID[item.Poem.ID] = sb.NextEID()
+					idToEID[item.Poem.ID] = wrapperEID
 				}
 			}
-			processPoem(item.Poem, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			processPoem(item.Poem, ctx.Push("poem"), sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			sb.EndBlock()
 		}
 
 	case fb2.FlowCite:
 		if item.Cite != nil {
+			// Start wrapper block - mirrors EPUB's <blockquote class="cite">
+			wrapperEID := sb.StartBlock("cite", styles)
 			if item.Cite.ID != "" {
 				if _, exists := idToEID[item.Cite.ID]; !exists {
-					idToEID[item.Cite.ID] = sb.NextEID()
+					idToEID[item.Cite.ID] = wrapperEID
 				}
 			}
-			processCite(item.Cite, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			processCite(item.Cite, ctx.Push("cite"), sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			sb.EndBlock()
 		}
 
 	case fb2.FlowTable:
 		if item.Table != nil {
+			eid := sb.AddTable(item.Table, styles, ca)
 			if item.Table.ID != "" {
 				if _, exists := idToEID[item.Table.ID]; !exists {
-					idToEID[item.Table.ID] = sb.NextEID()
-				}
-			}
-			text := tableToText(item.Table)
-			if text != "" {
-				eid := addContent(text, "table")
-				if item.Table.ID != "" {
-					if _, exists := idToEID[item.Table.ID]; !exists {
-						idToEID[item.Table.ID] = eid
-					}
+					idToEID[item.Table.ID] = eid
 				}
 			}
 		}
@@ -907,59 +1239,77 @@ func processFlowItem(item *fb2.FlowItem, context string, sb *StorylineBuilder, s
 
 // processPoem processes poem content using ContentAccumulator.
 // Matches EPUB's appendPoemElement handling: title, epigraphs, subtitles, stanzas, text-authors, date.
-func processPoem(poem *fb2.Poem, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
-	// Process poem title
+// ctx contains the ancestor context chain (e.g., may already include "cite" if poem is inside cite).
+func processPoem(poem *fb2.Poem, ctx StyleContext, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
+	// Process poem title - uses current context + poem-title
 	if poem.Title != nil {
 		for _, item := range poem.Title.Items {
 			if item.Paragraph != nil {
-				addParagraphWithImages(item.Paragraph, "p poem-title", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+				styleName := ctx.Resolve("p", "poem-title")
+				addParagraphWithImages(item.Paragraph, styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 			}
 		}
 	}
 
-	// Process poem epigraphs
+	// Process poem epigraphs - each wrapped in <div class="epigraph">
+	epigraphCtx := ctx.Push("epigraph")
 	for _, epigraph := range poem.Epigraphs {
+		// Start wrapper block - mirrors EPUB's <div class="epigraph">
+		wrapperEID := sb.StartBlock("epigraph", styles)
 		if epigraph.Flow.ID != "" {
 			if _, exists := idToEID[epigraph.Flow.ID]; !exists {
-				idToEID[epigraph.Flow.ID] = sb.NextEID()
+				idToEID[epigraph.Flow.ID] = wrapperEID
 			}
 		}
 		for i := range epigraph.Flow.Items {
-			processFlowItem(&epigraph.Flow.Items[i], "epigraph", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			processFlowItem(&epigraph.Flow.Items[i], epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 		for i := range epigraph.TextAuthors {
-			addParagraphWithImages(&epigraph.TextAuthors[i], "p text-author", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			styleName := epigraphCtx.Resolve("p", "text-author")
+			addParagraphWithImages(&epigraph.TextAuthors[i], styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
+		sb.EndBlock()
 	}
 
 	// Process poem subtitles (matches EPUB's poem.Subtitles handling)
 	for i := range poem.Subtitles {
-		addParagraphWithImages(&poem.Subtitles[i], "p poem-subtitle", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+		styleName := ctx.Resolve("p", "poem-subtitle")
+		addParagraphWithImages(&poem.Subtitles[i], styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 	}
 
-	// Process stanzas
+	// Process stanzas - each wrapped in <div class="stanza">
+	stanzaCtx := ctx.Push("stanza")
 	for _, stanza := range poem.Stanzas {
+		// Start wrapper block - mirrors EPUB's <div class="stanza">
+		sb.StartBlock("stanza", styles)
+
 		// Stanza title (matches EPUB's "stanza-title" class)
 		if stanza.Title != nil {
 			for _, item := range stanza.Title.Items {
 				if item.Paragraph != nil {
-					addParagraphWithImages(item.Paragraph, "p stanza-title", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+					styleName := stanzaCtx.Resolve("p", "stanza-title")
+					addParagraphWithImages(item.Paragraph, styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 				}
 			}
 		}
 		// Stanza subtitle (matches EPUB's "stanza-subtitle" class)
 		if stanza.Subtitle != nil {
-			addParagraphWithImages(stanza.Subtitle, "p stanza-subtitle", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			styleName := stanzaCtx.Resolve("p", "stanza-subtitle")
+			addParagraphWithImages(stanza.Subtitle, styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
-		// Verses
+		// Verses - use stanza context
 		for i := range stanza.Verses {
-			addParagraphWithImages(&stanza.Verses[i], "p verse", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			styleName := stanzaCtx.Resolve("p", "verse")
+			addParagraphWithImages(&stanza.Verses[i], styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
+
+		sb.EndBlock()
 	}
 
 	// Process text authors
 	for i := range poem.TextAuthors {
-		addParagraphWithImages(&poem.TextAuthors[i], "p text-author", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+		styleName := ctx.Resolve("p", "text-author")
+		addParagraphWithImages(&poem.TextAuthors[i], styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 	}
 
 	// Process poem date (matches EPUB's ".date" class)
@@ -971,7 +1321,8 @@ func processPoem(poem *fb2.Poem, sb *StorylineBuilder, styles *StyleRegistry, im
 			dateText = poem.Date.Value.Format("2006-01-02")
 		}
 		if dateText != "" {
-			resolved := styles.ResolveStyle("p date")
+			styleName := ctx.Resolve("p", "date")
+			resolved := styles.ResolveStyle(styleName)
 			contentName, offset := ca.Add(dateText)
 			sb.AddContent(SymText, contentName, offset, resolved)
 		}
@@ -981,15 +1332,17 @@ func processPoem(poem *fb2.Poem, sb *StorylineBuilder, styles *StyleRegistry, im
 // processCite processes cite content using ContentAccumulator.
 // Matches EPUB's appendCiteElement handling: processes all flow items with "cite" context,
 // followed by text-authors.
-func processCite(cite *fb2.Cite, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
-	// Process all cite flow items with "cite" context (enables cite-subtitle, etc.)
+// ctx contains the ancestor context chain (already includes "cite" pushed by caller).
+func processCite(cite *fb2.Cite, ctx StyleContext, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
+	// Process all cite flow items with full context chain
 	for i := range cite.Items {
-		processFlowItem(&cite.Items[i], "cite", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+		processFlowItem(&cite.Items[i], ctx, "cite", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 	}
 
 	// Process text authors
 	for i := range cite.TextAuthors {
-		addParagraphWithImages(&cite.TextAuthors[i], "p text-author", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+		styleName := ctx.Resolve("p", "text-author")
+		addParagraphWithImages(&cite.TextAuthors[i], styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 	}
 }
 
@@ -1109,6 +1462,188 @@ func addParagraphWithImages(para *fb2.Paragraph, styleName string, sb *Storyline
 	flush()
 }
 
+// addTitleAsHeading creates a single combined content entry for multi-paragraph titles.
+// This matches KPV behavior where all title lines are combined with newlines and
+// style events are used for -first/-next styling within the combined entry.
+// The heading level ($790) is applied only to this combined entry.
+func addTitleAsHeading(title *fb2.Title, headerStyleBase string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
+	if title == nil || len(title.Items) == 0 {
+		return
+	}
+
+	// Check if title contains inline images - if so, fall back to separate paragraphs
+	// since KFX can't mix text and images in a single content entry
+	if titleHasInlineImages(title) {
+		addTitleAsSeparateParagraphs(title, headerStyleBase, headingLevel, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+		return
+	}
+
+	var (
+		buf              strings.Builder
+		events           []StyleEventRef
+		firstParagraph   = true
+		prevWasEmptyLine = false
+		firstParaID      string // Store ID of first paragraph for EID mapping
+	)
+
+	// Process inline segment and accumulate style events
+	var processSegment func(seg *fb2.InlineSegment, inlineStyle string)
+	processSegment = func(seg *fb2.InlineSegment, inlineStyle string) {
+		// Inline images should have been filtered out by titleHasInlineImages check
+		if seg.Kind == fb2.InlineImageSegment {
+			return
+		}
+
+		// Determine style for this segment based on its kind
+		var segStyle string
+		switch seg.Kind {
+		case fb2.InlineStrong:
+			segStyle = "strong"
+		case fb2.InlineEmphasis:
+			segStyle = "emphasis"
+		case fb2.InlineStrikethrough:
+			segStyle = "strikethrough"
+		case fb2.InlineSub:
+			segStyle = "sub"
+		case fb2.InlineSup:
+			segStyle = "sup"
+		case fb2.InlineCode:
+			segStyle = "code"
+		case fb2.InlineNamedStyle:
+			segStyle = seg.Style
+		case fb2.InlineLink:
+			if strings.HasPrefix(seg.Href, "#") {
+				segStyle = "link-footnote"
+			} else {
+				segStyle = "link-external"
+			}
+		}
+
+		// Track position for style event
+		start := buf.Len()
+
+		// Add text content
+		buf.WriteString(seg.Text)
+
+		// Process children with current style context
+		for i := range seg.Children {
+			processSegment(&seg.Children[i], segStyle)
+		}
+
+		end := buf.Len()
+
+		// Create style event if we have styled content
+		if segStyle != "" && end > start {
+			resolved := styles.ResolveStyle(segStyle)
+			event := StyleEventRef{
+				Offset: start,
+				Length: end - start,
+				Style:  resolved,
+			}
+			// Add link target for links and detect footnote links
+			if seg.Kind == fb2.InlineLink {
+				linkTo := strings.TrimPrefix(seg.Href, "#")
+				if linkTo != "" && linkTo != seg.Href {
+					event.LinkTo = linkTo
+					if _, isFootnote := footnotesIndex[linkTo]; isFootnote {
+						event.IsFootnoteLink = true
+					}
+				}
+			}
+			events = append(events, event)
+		}
+	}
+
+	// Process each title item
+	for _, item := range title.Items {
+		if item.Paragraph != nil {
+			// Add newline between paragraphs with -break style (but not before first, not after empty line)
+			if !firstParagraph && !prevWasEmptyLine {
+				breakStart := buf.Len()
+				buf.WriteString("\n")
+				breakEnd := buf.Len()
+
+				// Add style event for the break newline (like EPUB's <br class="...-break">)
+				breakStyle := headerStyleBase + "-break"
+				resolved := styles.ResolveStyle(breakStyle)
+				events = append(events, StyleEventRef{
+					Offset: breakStart,
+					Length: breakEnd - breakStart,
+					Style:  resolved,
+				})
+			}
+
+			// Determine style for this paragraph (-first or -next)
+			var paraStyle string
+			if firstParagraph {
+				paraStyle = headerStyleBase + "-first"
+				firstParaID = item.Paragraph.ID
+				firstParagraph = false
+			} else {
+				paraStyle = headerStyleBase + "-next"
+			}
+
+			// Add style event for entire paragraph span
+			paraStart := buf.Len()
+
+			// Process paragraph content
+			for i := range item.Paragraph.Text {
+				processSegment(&item.Paragraph.Text[i], "")
+			}
+
+			paraEnd := buf.Len()
+
+			// Add paragraph-level style event (like EPUB's span class)
+			if paraEnd > paraStart {
+				resolved := styles.ResolveStyle(paraStyle)
+				events = append(events, StyleEventRef{
+					Offset: paraStart,
+					Length: paraEnd - paraStart,
+					Style:  resolved,
+				})
+			}
+
+			prevWasEmptyLine = false
+		} else if item.EmptyLine {
+			// Add newline for empty line with style event (like EPUB's <br class="...-emptyline">)
+			emptylineStart := buf.Len()
+			buf.WriteString("\n")
+			emptylineEnd := buf.Len()
+
+			// Add style event for the emptyline character
+			emptylineStyle := headerStyleBase + "-emptyline"
+			resolved := styles.ResolveStyle(emptylineStyle)
+			events = append(events, StyleEventRef{
+				Offset: emptylineStart,
+				Length: emptylineEnd - emptylineStart,
+				Style:  resolved,
+			})
+
+			prevWasEmptyLine = true
+		}
+	}
+
+	// Create the combined content entry with heading level
+	if buf.Len() == 0 {
+		return
+	}
+
+	// Combine heading element style (h1-h6) with header class style
+	// This matches EPUB where <h1 class="body-title-header"> gets both h1 and class styling
+	headingElementStyle := fmt.Sprintf("h%d", headingLevel)
+	combinedStyleSpec := headingElementStyle + " " + headerStyleBase
+	resolved := styles.ResolveStyle(combinedStyleSpec)
+	contentName, offset := ca.Add(buf.String())
+	eid := sb.AddContentWithHeading(SymText, contentName, offset, resolved, events, headingLevel)
+
+	// Map first paragraph ID to the combined entry's EID
+	if firstParaID != "" {
+		if _, exists := idToEID[firstParaID]; !exists {
+			idToEID[firstParaID] = eid
+		}
+	}
+}
+
 // styleToHeadingLevel extracts heading level from style name.
 // Returns 1-6 for heading styles, 0 for non-heading styles.
 // Recognized patterns:
@@ -1138,24 +1673,66 @@ func styleToHeadingLevel(styleName string) int {
 	return 0
 }
 
-// tableToText extracts text representation from a table.
-func tableToText(table *fb2.Table) string {
-	var buf strings.Builder
-	for _, row := range table.Rows {
-		for i, cell := range row.Cells {
-			if i > 0 {
-				buf.WriteString("\t")
+// titleHasInlineImages checks if any title paragraph contains inline images.
+// Used to decide whether to use combined heading or separate paragraph approach.
+func titleHasInlineImages(title *fb2.Title) bool {
+	for _, item := range title.Items {
+		if item.Paragraph != nil {
+			if paragraphHasInlineImages(item.Paragraph) {
+				return true
 			}
-			buf.WriteString(cell.AsPlainText())
 		}
-		buf.WriteString("\n")
 	}
-	return buf.String()
+	return false
+}
+
+// paragraphHasInlineImages recursively checks if a paragraph has inline images.
+func paragraphHasInlineImages(para *fb2.Paragraph) bool {
+	for i := range para.Text {
+		if segmentHasInlineImages(&para.Text[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+// segmentHasInlineImages recursively checks if a segment or its children contain images.
+func segmentHasInlineImages(seg *fb2.InlineSegment) bool {
+	if seg.Kind == fb2.InlineImageSegment {
+		return true
+	}
+	for i := range seg.Children {
+		if segmentHasInlineImages(&seg.Children[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+// addTitleAsSeparateParagraphs adds title paragraphs as separate entries (fallback for titles with images).
+// This is the original behavior before combined heading support was added.
+func addTitleAsSeparateParagraphs(title *fb2.Title, headerStyleBase string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
+	firstParagraph := true
+	for _, item := range title.Items {
+		if item.Paragraph != nil {
+			// Determine style for this paragraph (-first or -next)
+			var paraStyle string
+			if firstParagraph {
+				paraStyle = headerStyleBase + "-first"
+				firstParagraph = false
+			} else {
+				paraStyle = headerStyleBase + "-next"
+			}
+			// Combine heading level indicator with paragraph style
+			fullStyle := fmt.Sprintf("h%d %s", headingLevel, paraStyle)
+			addParagraphWithImages(item.Paragraph, fullStyle, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+		}
+	}
 }
 
 // buildContentFragmentByName creates a content ($145) fragment with string name.
 // The name parameter comes from ContentAccumulator and follows the pattern "content_{N}"
-// or "content_{N}_{M}" for chunked content. This human-readable naming convention
+// with sequential numbering. This human-readable naming convention
 // is maintained throughout the conversion for easier debugging and inspection.
 func buildContentFragmentByName(name string, contentList []string) *Fragment {
 	// Use string-keyed map for content with local symbol names

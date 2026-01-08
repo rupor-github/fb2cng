@@ -1,10 +1,63 @@
 package kfx
 
 import (
+	"os"
 	"testing"
 
 	"go.uber.org/zap"
 )
+
+// TestTitleStylesFromCSS verifies that title styles from default.css have proper formatting.
+func TestTitleStylesFromCSS(t *testing.T) {
+	css, err := os.ReadFile("../../convert/default.css")
+	if err != nil {
+		// Try alternate path for when running from different directory
+		css, err = os.ReadFile("../default.css")
+		if err != nil {
+			t.Skip("Could not read default.css, skipping test")
+		}
+	}
+
+	log := zap.NewNop()
+	registry, _ := NewStyleRegistryFromCSS(css, log)
+
+	// Title header styles should have text-align: center from CSS
+	titleStyles := []string{
+		"body-title-header",
+		"chapter-title-header",
+		"section-title-header",
+	}
+
+	for _, styleName := range titleStyles {
+		t.Run(styleName, func(t *testing.T) {
+			def, ok := registry.Get(styleName)
+			if !ok {
+				t.Fatalf("style %q not found in registry", styleName)
+			}
+
+			// Check text-align is center ($320)
+			// CSS converter stores KFXSymbol directly, not wrapped
+			if align, ok := def.Properties[SymTextAlignment]; ok {
+				isCenter := align == SymCenter || align == SymbolValue(SymCenter)
+				if !isCenter {
+					t.Errorf("expected text-align: center, got %v (type %T)", align, align)
+				}
+			} else {
+				t.Error("text-align property not set")
+			}
+
+			// Check font-weight is bold ($361)
+			if weight, ok := def.Properties[SymFontWeight]; ok {
+				isBold := weight == SymBold || weight == SymbolValue(SymBold)
+				if !isBold {
+					t.Errorf("expected font-weight: bold, got %v (type %T)", weight, weight)
+				}
+			} else {
+				t.Error("font-weight property not set")
+			}
+		})
+	}
+}
 
 func TestConvertFontWeight(t *testing.T) {
 	tests := []struct {
@@ -482,12 +535,14 @@ func TestNewStyleRegistryFromCSS(t *testing.T) {
 		t.Error("paragraph style should have line-height property")
 	}
 
-	// Check default styles are still present
-	if _, ok := registry.Get("epigraph"); !ok {
-		t.Error("expected default 'epigraph' style to be preserved")
-	}
+	// Check default HTML element styles are still present
+	// Note: class selectors like "epigraph" are no longer in DefaultStyleRegistry,
+	// they come from CSS. Only HTML element selectors are defaults.
 	if _, ok := registry.Get("strong"); !ok {
 		t.Error("expected default 'strong' style to be preserved")
+	}
+	if _, ok := registry.Get("p"); !ok {
+		t.Error("expected default 'p' style to be preserved")
 	}
 }
 
@@ -500,12 +555,16 @@ func TestNewStyleRegistryFromCSS_Empty(t *testing.T) {
 		t.Errorf("expected no warnings for empty CSS, got %v", warnings)
 	}
 
-	// Should have all default styles
+	// Should have all default HTML element styles
 	if _, ok := registry.Get("p"); !ok {
 		t.Error("expected default 'p' style")
 	}
 	if _, ok := registry.Get("h1"); !ok {
 		t.Error("expected default 'h1' style")
+	}
+	// Class selectors like "epigraph" are NOT in defaults - they come from CSS
+	if _, ok := registry.Get("epigraph"); ok {
+		t.Error("'epigraph' should not be in DefaultStyleRegistry (it comes from CSS)")
 	}
 }
 
@@ -522,7 +581,7 @@ func TestStyleRegistryBuildFragments(t *testing.T) {
 	// Mark some styles as used
 	registry.EnsureStyle("paragraph")
 	registry.EnsureStyle("custom")
-	registry.EnsureStyle("emphasis") // default style
+	registry.EnsureStyle("strong") // default HTML element style (not "emphasis" which is no longer default)
 
 	fragments := registry.BuildFragments()
 

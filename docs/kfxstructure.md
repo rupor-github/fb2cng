@@ -1239,6 +1239,54 @@ Derived from: Reference KFX files, `convert/kfx/frag_contentfeatures.go`.
 
 ---
 
+### 7.10 Length units and KPV conventions
+
+KFX uses a dimension struct `{ $307: magnitude, $306: unit }` for all length values in style properties.
+
+#### 7.10.1 Unit symbols
+
+| Symbol | CSS Unit | Description |
+|--------|----------|-------------|
+| `$308` (`SymUnitEm`) | `em` | Relative to font size |
+| `$310` (`SymUnitLh`) | `lh` | Relative to line-height |
+| `$314` (`SymUnitPercent`) | `%` | Percentage |
+| `$505` (`SymUnitRem`) | `rem` | Relative to root font size |
+| `$309` (`SymUnitPx`) | `px` | Pixels |
+| `$311` (`SymUnitPt`) | `pt` | Points |
+
+#### 7.10.2 KPV unit conventions (reverse-engineered)
+
+**CRITICAL**: Kindle Previewer (KPV) uses specific unit types for different CSS properties. Using incorrect units can cause rendering issues (e.g., `text-align: center` not working with percentage font-sizes).
+
+| CSS Property | KPV Unit | Notes |
+|--------------|----------|-------|
+| `font-size` | `rem` | **NOT `%`**. Using `%` breaks text-align rendering |
+| `margin-top` | `lh` | Line-height units for vertical spacing |
+| `margin-bottom` | `lh` | Line-height units for vertical spacing |
+| `margin-left` | `%` | Percentage for horizontal spacing |
+| `margin-right` | `%` | Percentage for horizontal spacing |
+| `text-indent` | `%` | Percentage |
+| `line-height` | `lh` | Line-height units |
+
+#### 7.10.3 Unit conversion ratios
+
+When converting from CSS `em` units to KPV-preferred units:
+
+| Conversion | Ratio | Example |
+|------------|-------|---------|
+| `em` → `lh` (vertical) | 1:1 | `1em` → `1lh` |
+| `em` → `%` (horizontal) | 1:6.25 | `1em` → `6.25%` |
+| `%` → `rem` (font-size) | divide by 100 | `140%` → `1.4rem` |
+| `em` → `rem` (font-size) | 1:1 | `1em` → `1rem` |
+
+#### 7.10.4 Zero value omission
+
+KPV does NOT include style properties with zero values. For example, `margin-left: 0` is omitted entirely from the style definition rather than being encoded as `{ $48: { $307: 0, $306: "$314" } }`.
+
+Derived from: Reference KFX comparison, `convert/kfx/css_converter.go:setDimensionProperty`.
+
+---
+
 ---
 
 ## 8. Symbol dictionary
