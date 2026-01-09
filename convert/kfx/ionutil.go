@@ -300,6 +300,11 @@ func (w *IonWriter) WriteFloat(v float64) error {
 	return w.writer.WriteFloat(v)
 }
 
+// WriteDecimal writes an arbitrary-precision decimal value.
+func (w *IonWriter) WriteDecimal(v *ion.Decimal) error {
+	return w.writer.WriteDecimal(v)
+}
+
 // WriteBool writes a boolean value.
 func (w *IonWriter) WriteBool(v bool) error {
 	return w.writer.WriteBool(v)
@@ -572,8 +577,8 @@ func (r *IonReader) ReadValue() (any, error) {
 		if v == nil {
 			return nil, nil
 		}
-		// Return as string representation for now
-		return v.String(), nil
+		// Return as *ion.Decimal to preserve type information for debugging
+		return v, nil
 	case ion.TimestampType:
 		v, err := r.reader.TimestampValue()
 		if err != nil {
@@ -586,7 +591,11 @@ func (r *IonReader) ReadValue() (any, error) {
 	case ion.StringType:
 		return r.StringValue()
 	case ion.SymbolType:
-		return r.SymbolValue()
+		s, err := r.SymbolValue()
+		if err != nil {
+			return nil, err
+		}
+		return ReadSymbolValue(s), nil
 	case ion.BlobType, ion.ClobType:
 		return r.reader.ByteValue()
 	case ion.ListType:

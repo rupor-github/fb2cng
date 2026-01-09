@@ -124,9 +124,9 @@ func TestConvertTextAlign(t *testing.T) {
 		expected KFXSymbol
 		ok       bool
 	}{
-		{"left", CSSValue{Keyword: "left"}, SymStart, true},
+		{"left", CSSValue{Keyword: "left"}, SymLeft, true},
 		{"start", CSSValue{Keyword: "start"}, SymStart, true},
-		{"right", CSSValue{Keyword: "right"}, SymEnd, true},
+		{"right", CSSValue{Keyword: "right"}, SymRight, true},
 		{"end", CSSValue{Keyword: "end"}, SymEnd, true},
 		{"center", CSSValue{Keyword: "center"}, SymCenter, true},
 		{"justify", CSSValue{Keyword: "justify"}, SymJustify, true},

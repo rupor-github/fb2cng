@@ -31,9 +31,7 @@ func NewPositionKFXID(kfxID string, offset int64) StructValue {
 
 // NewLength creates a length value with unit: {value: v, unit: u}.
 func NewLength(value float64, unit KFXSymbol) StructValue {
-	return NewStruct().
-		Set(SymValue, value).    // $307 = value
-		SetSymbol(SymUnit, unit) // $306 = unit
+	return DimensionValue(value, unit)
 }
 
 // NewLengthEm creates a length in em units.

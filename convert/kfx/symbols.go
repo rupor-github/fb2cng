@@ -48,6 +48,10 @@ const (
 	SymMarginBottom        KFXSymbol = 49  // margin_bottom
 	SymMarginRight         KFXSymbol = 50  // margin_right
 	SymPadding             KFXSymbol = 51  // padding
+	SymPaddingTop          KFXSymbol = 52  // padding_top
+	SymPaddingLeft         KFXSymbol = 53  // padding_left
+	SymPaddingBottom       KFXSymbol = 54  // padding_bottom
+	SymPaddingRight        KFXSymbol = 55  // padding_right
 	SymWidth               KFXSymbol = 56  // width
 	SymHeight              KFXSymbol = 57  // height
 	SymTop                 KFXSymbol = 58  // top
@@ -196,6 +200,8 @@ const (
 	SymScaleFit    KFXSymbol = 326       // scale_fit
 	SymRadial      KFXSymbol = 327       // radial
 	SymSolid       KFXSymbol = 328       // solid
+	SymDashed      KFXSymbol = 330       // dashed
+	SymDotted      KFXSymbol = 331       // dotted
 
 	// More units ($505-$507)
 	SymUnitRem KFXSymbol = 505 // rem (root em)

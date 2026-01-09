@@ -558,7 +558,7 @@ Visual byte map (approximate):
 │        $790: <level>,        // Heading level 1-6 (KPV parity, optional)    │
 │        $145: {               // Content reference                           │
 │          name: content_X,    // Content fragment name                       │
-│          $403: <offset>      // Offset within content fragment              │
+│          $403: <offset>      // Array index within content_list             │
 │        },                                                                   │
 │        $142: [...]           // Optional style events (inline formatting)   │
 │      },                                                                     │
@@ -580,12 +580,25 @@ Visual byte map (approximate):
 │                                                                             │
 │  Style Event Entry (element in $142 list):                                  │
 │  {                                                                          │
-│    $143: <offset>,           // Start offset in text                        │
-│    $144: <length>,           // Span length                                 │
+│    $143: <offset>,           // Start offset in text (CHARACTER offset)     │
+│    $144: <length>,           // Span length (in CHARACTERS)                 │
 │    $157: style_name,         // Style reference (e.g., "emphasis")          │
 │    $179: anchor_name,        // Optional link target                        │
 │    $616: $617                // For footnote links: yj.display = yj.note    │
 │  }                                                                          │
+│                                                                             │
+│  CRITICAL - Character vs Byte Offsets:                                      │
+│  ─────────────────────────────────────                                      │
+│  Offsets ($143) and lengths ($144) are measured in Unicode code points      │
+│  (characters/runes), NOT bytes! This is critical for multi-byte UTF-8:      │
+│                                                                             │
+│    Text: "Автор 1.1"                                                        │
+│    - "Автор" = 5 chars, 10 UTF-8 bytes (Cyrillic)                           │
+│    - " " = 1 char, 1 byte                                                   │
+│    - "1.1" = 3 chars, 3 bytes                                               │
+│                                                                             │
+│    Style event for "1.1": $143: 6, $144: 3 (chars, NOT bytes!)              │
+│    Wrong (byte offset): $143: 11, $144: 3                                   │
 │                                                                             │
 │  Footnote Link Detection (KPV parity):                                      │
 │  ─────────────────────────────────────                                      │
@@ -600,9 +613,16 @@ Visual byte map (approximate):
 │                                                                             │
 │  Dimension Value Structure:                                                 │
 │  {                                                                          │
-│    $307: <magnitude>,        // Numeric value (float)                       │
+│    $307: <magnitude>,        // MUST be Ion DecimalType (NOT float/string)  │
 │    $306: <unit_symbol>       // Unit type symbol                            │
 │  }                                                                          │
+│                                                                             │
+│  CRITICAL - Ion Type for $307:                                              │
+│  ─────────────────────────────                                              │
+│  The $307 field MUST be encoded as Ion DecimalType. KPV will crash or       │
+│  render incorrectly if $307 is Ion Float, Ion Int, or Ion String.           │
+│  Use ion.MustParseDecimal() or equivalent to create proper decimals.        │
+│  Decimal notation examples: "2.5d-1" for 0.25, "1." for 1.0, "8d-1" for 0.8 │
 │                                                                             │
 │  Unit Symbols:                                                              │
 │  ─────────────                                                              │
@@ -626,14 +646,19 @@ Visual byte map (approximate):
 │  │ margin-bottom  │ lh       │ Line-height units for vertical spacing   │   │
 │  │ margin-left    │ %        │ Percentage for horizontal spacing        │   │
 │  │ margin-right   │ %        │ Percentage for horizontal spacing        │   │
-│  │ text-indent    │ %        │ Percentage                               │   │
+│  │ text-indent    │ %        │ Percentage (1em → 3.125%)                │   │
 │  │ line-height    │ lh       │ Line-height units                        │   │
+│  │ padding-top    │ lh       │ Line-height units for table cells        │   │
+│  │ padding-bottom │ lh       │ Line-height units for table cells        │   │
+│  │ padding-left   │ %        │ Percentage for table cells               │   │
+│  │ padding-right  │ %        │ Percentage for table cells               │   │
 │  └────────────────┴──────────┴──────────────────────────────────────────┘   │
 │                                                                             │
 │  Unit Conversion from CSS:                                                  │
 │  ─────────────────────────────                                              │
 │  em → lh (vertical):   1:1 ratio      (1em → 1lh)                           │
 │  em → %  (horizontal): 1:6.25 ratio   (1em → 6.25%)                         │
+│  em → %  (text-indent): 1:3.125 ratio (1em → 3.125%)                        │
 │  %  → rem (font-size): divide by 100  (140% → 1.4rem)                       │
 │  em → rem (font-size): 1:1 ratio      (1em → 1rem)                          │
 │                                                                             │
@@ -642,6 +667,39 @@ Visual byte map (approximate):
 │  KPV does NOT include style properties with zero values.                    │
 │  Example: margin-left: 0 is omitted entirely, NOT encoded as:               │
 │    $48: { $307: 0, $306: "$314" }                                           │
+│                                                                             │
+│  Padding Properties ($52-$55):                                              │
+│  ─────────────────────────────                                              │
+│  $52 = padding_top     (dimension with lh units)                            │
+│  $53 = padding_left    (dimension with % units)                             │
+│  $54 = padding_bottom  (dimension with lh units)                            │
+│  $55 = padding_right   (dimension with % units)                             │
+│  Used primarily for table cell styling.                                     │
+│                                                                             │
+│  Border Properties ($83, $88, $93):                                         │
+│  ─────────────────────────────────                                          │
+│  $83 = border_color    (packed ARGB integer, e.g., 0xFF000000 for black)    │
+│  $88 = border_style    (symbol: $328=solid, $330=dashed, $331=dotted)       │
+│  $93 = border_weight   (dimension with pt units)                            │
+│                                                                             │
+│  Color Format (ARGB Integer):                                               │
+│  ────────────────────────────                                               │
+│  Colors stored as packed 32-bit ARGB: 0xAARRGGBB                             │
+│  Examples: black=0xFF000000 (4278190080), white=0xFFFFFFFF                   │
+│  Applies to: $83 (border_color), $19 (text_color), $70 (fill_color)         │
+│                                                                             │
+│  Orphans/Widows ($131/$132) - NOT USED:                                     │
+│  ───────────────────────────────────────                                    │
+│  KPV does NOT generate $131 (orphans) or $132 (widows) properties.          │
+│  Page break control uses $788 (yj_break_after) and $789 (yj_break_before).  │
+│                                                                             │
+│  Text-Align Symbol Mapping (CRITICAL):                                      │
+│  ──────────────────────────────────────                                     │
+│  CSS text-align uses PHYSICAL symbols ($59/$61), NOT logical ($680/$681):   │
+│    left    → $59  (SymLeft)     right   → $61  (SymRight)                   │
+│    center  → $320 (SymCenter)   justify → $321 (SymJustify)                 │
+│    start   → $680 (SymStart)    end     → $681 (SymEnd) [rarely used]       │
+│  KPV reference files consistently use $59/$61 for left/right alignment.     │
 │                                                                             │
 │  Example Style Fragment:                                                    │
 │  {                                                                          │
@@ -652,6 +710,18 @@ Visual byte map (approximate):
 │    $13:  $361,                    // font-weight: bold                      │
 │    $47:  { $307: 2, $306: $310 }, // margin-top: 2lh                        │
 │    $49:  { $307: 1, $306: $310 }  // margin-bottom: 1lh                     │
+│  }                                                                          │
+│                                                                             │
+│  Example Table Cell Style:                                                  │
+│  {                                                                          │
+│    $173: "table-cell",                                                      │
+│    $83:  4278190080,               // border-color: black (0xFF000000)      │
+│    $88:  $328,                     // border-style: solid                   │
+│    $93:  { $307: 0.45, $306: $318 }, // border-width: 0.45pt                │
+│    $52:  { $307: 0.4, $306: $310 },  // padding-top: 0.4lh                  │
+│    $53:  { $307: 1.5, $306: $314 },  // padding-left: 1.5%                  │
+│    $54:  { $307: 0.4, $306: $310 },  // padding-bottom: 0.4lh               │
+│    $55:  { $307: 1.5, $306: $314 }   // padding-right: 1.5%                 │
 │  }                                                                          │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -735,7 +805,21 @@ Visual byte map (approximate):
 │     - font-size: use rem (NOT %). Percent breaks text-align rendering       │
 │     - margin-top/bottom: use lh (line-height units)                         │
 │     - margin-left/right: use % (percent)                                    │
+│     - text-indent: use % (1em = 3.125%)                                     │
 │     - Zero values should be omitted entirely from style properties          │
+│                                                                             │
+│ 13. CRITICAL: Color values use packed ARGB integers (0xAARRGGBB):           │
+│     - black = 0xFF000000 (4278190080)                                       │
+│     - white = 0xFFFFFFFF (4294967295)                                       │
+│     - Applies to $83 (border_color), $19 (text_color), $70 (fill_color)     │
+│                                                                             │
+│ 14. CRITICAL: KPV does NOT use orphans ($131) or widows ($132):             │
+│     - Use $788 (yj_break_after) and $789 (yj_break_before) instead          │
+│     - If CSS converter generates $131/$132, convert and delete them         │
+│                                                                             │
+│ 15. Table styling requires padding ($52-$55) and border ($83, $88, $93):    │
+│     - Padding: $52 top, $53 left, $54 bottom, $55 right                     │
+│     - Border: $83 color (ARGB int), $88 style (symbol), $93 weight (dim)    │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```

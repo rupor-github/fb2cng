@@ -57,12 +57,16 @@ func ConvertFontStyle(css CSSValue) (KFXSymbol, bool) {
 
 // ConvertTextAlign converts CSS text-align values to KFX symbols.
 // CSS: left, right, center, justify, start, end
-// KFX: $680 (start), $681 (end), $320 (center), $321 (justify)
+// KFX: $59 (left), $680 (start), $61 (right), $681 (end), $320 (center), $321 (justify)
 func ConvertTextAlign(css CSSValue) (KFXSymbol, bool) {
 	switch strings.ToLower(css.Keyword) {
-	case "left", "start":
+	case "left":
+		return SymLeft, true // $59
+	case "start":
 		return SymStart, true // $680
-	case "right", "end":
+	case "right":
+		return SymRight, true // $61
+	case "end":
 		return SymEnd, true // $681
 	case "center":
 		return SymCenter, true // $320
@@ -128,7 +132,7 @@ func ConvertVerticalAlign(css CSSValue) (VerticalAlignResult, bool) {
 		return result, true
 	case "baseline":
 		result.UseBaselineShift = true
-		result.BaselineShift = DimensionValue(0, SymUnitEm)
+		result.BaselineShift = DimensionValueKPV(0, SymUnitEm)
 		return result, true
 	}
 
@@ -143,6 +147,26 @@ func ConvertVerticalAlign(css CSSValue) (VerticalAlignResult, bool) {
 	}
 
 	return result, false
+}
+
+// ConvertBorderStyle converts CSS border-style values to KFX symbols.
+// CSS: solid, dashed, dotted, double, groove, ridge, inset, outset, none, hidden
+// KFX: $328 (solid), $323 (dashed), $324 (dotted), $349 (none)
+func ConvertBorderStyle(style string) (KFXSymbol, bool) {
+	switch strings.ToLower(style) {
+	case "solid":
+		return SymSolid, true // $328
+	case "dashed":
+		return SymDashed, true // $323
+	case "dotted":
+		return SymDotted, true // $324
+	case "none", "hidden":
+		return SymNone, true // $349
+	case "double", "groove", "ridge", "inset", "outset":
+		// Fall back to solid for unsupported styles
+		return SymSolid, true
+	}
+	return 0, false
 }
 
 // ConvertDisplay converts CSS display values.
@@ -164,13 +188,13 @@ func ConvertDisplay(css CSSValue) (symbol KFXSymbol, isVisible bool, ok bool) {
 
 // ConvertFloat converts CSS float values to KFX symbols.
 // CSS: left, right, none
-// KFX: $680 (start/left), $681 (end/right), $349 (none)
+// KFX: $59 (left), $61 (right), $349 (none)
 func ConvertFloat(css CSSValue) (KFXSymbol, bool) {
 	switch strings.ToLower(css.Keyword) {
 	case "left":
-		return SymStart, true // $680
+		return SymLeft, true // $59
 	case "right":
-		return SymEnd, true // $681
+		return SymRight, true // $61
 	case "none":
 		return SymNone, true // $349
 	}
@@ -275,12 +299,8 @@ func ParseColor(css CSSValue) (r, g, b int, ok bool) {
 	return 0, 0, 0, false
 }
 
-// MakeColorValue creates a KFX color struct from RGB values.
-// KFX color format uses fill_color with RGB components.
-func MakeColorValue(r, g, b int) StructValue {
-	// KFX uses 0.0-1.0 range for color components
-	return NewStruct().
-		SetFloat(SymValue, float64(r)/255.0).
-		Set(85, float64(g)/255.0). // $85 = green component
-		Set(86, float64(b)/255.0)  // $86 = blue component
+// MakeColorValue creates a KFX color value from RGB values.
+// KFX color format uses a packed ARGB integer (alpha always 255).
+func MakeColorValue(r, g, b int) int64 {
+	return int64(0xFF000000 | (r << 16) | (g << 8) | b)
 }

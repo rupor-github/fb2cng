@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/amazon-ion/ion-go/ion"
 	"github.com/h2non/filetype"
 
 	"fbc/convert/kfx"
@@ -347,6 +348,15 @@ func extractSymbolName(v any) string {
 		return kfx.KFXSymbol(s).Name()
 	case kfx.SymbolByNameValue:
 		return string(s)
+	case kfx.ReadSymbolValue:
+		// ReadSymbolValue is already a string like "$320" or "style_name"
+		str := string(s)
+		if strings.HasPrefix(str, "$") {
+			if id, err := strconv.Atoi(str[1:]); err == nil {
+				return kfx.KFXSymbol(id).Name()
+			}
+		}
+		return str
 	case string:
 		// Handle "$NNN" format
 		if strings.HasPrefix(s, "$") {
@@ -838,10 +848,16 @@ func formatValueCompact(v any) string {
 		return "null"
 	case bool:
 		return fmt.Sprintf("%v", val)
-	case int, int64, int32:
-		return fmt.Sprintf("%d", val)
+	case int:
+		return fmt.Sprintf("int(%d)", val)
+	case int64:
+		return fmt.Sprintf("int(%d)", val)
+	case int32:
+		return fmt.Sprintf("int(%d)", val)
 	case float64:
-		return fmt.Sprintf("%g", val)
+		return fmt.Sprintf("float(%g)", val)
+	case *ion.Decimal:
+		return fmt.Sprintf("decimal(%s)", val.String())
 	case string:
 		return fmt.Sprintf("%q", val)
 	case []byte, kfx.RawValue:
@@ -854,9 +870,11 @@ func formatValueCompact(v any) string {
 		}
 		return fmt.Sprintf("<blob %d bytes>", len(b))
 	case kfx.SymbolValue:
-		return kfx.KFXSymbol(val).String()
+		return fmt.Sprintf("symbol(%s)", kfx.KFXSymbol(val).String())
 	case kfx.SymbolByNameValue:
-		return fmt.Sprintf("sym:%q", string(val))
+		return fmt.Sprintf("symbol(%q)", string(val))
+	case kfx.ReadSymbolValue:
+		return fmt.Sprintf("symbol(%s)", string(val))
 	case kfx.StructValue:
 		return formatStructCompactKFX(val)
 	case map[kfx.KFXSymbol]any:

@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/amazon-ion/ion-go/ion"
+
 	"fbc/utils/debug"
 )
 
@@ -358,7 +360,7 @@ func (c *Container) getTypeMarkers(ftype KFXSymbol) string {
 // formatValue formats a value for debug output in a compact way.
 func formatValue(tw *debug.TreeWriter, depth int, value any) {
 	switch v := value.(type) {
-	case nil, bool, int, int64, int32, float64, string, SymbolValue, SymbolByNameValue:
+	case nil, bool, int, int64, int32, float64, string, SymbolValue, SymbolByNameValue, ReadSymbolValue, *ion.Decimal:
 		tw.Line(depth, "%s", formatSimpleValue(v))
 	case []byte:
 		tw.Line(depth, "blob(%d bytes)", len(v))
@@ -385,16 +387,24 @@ func formatSimpleValue(v any) string {
 		return "null"
 	case bool:
 		return fmt.Sprintf("%v", val)
-	case int, int64, int32:
-		return fmt.Sprintf("%d", val)
+	case int:
+		return fmt.Sprintf("int(%d)", val)
+	case int64:
+		return fmt.Sprintf("int(%d)", val)
+	case int32:
+		return fmt.Sprintf("int(%d)", val)
 	case float64:
-		return fmt.Sprintf("%g", val)
+		return fmt.Sprintf("float(%g)", val)
+	case *ion.Decimal:
+		return fmt.Sprintf("decimal(%s)", val.String())
 	case string:
 		return fmt.Sprintf("%q", val)
 	case SymbolValue:
-		return KFXSymbol(val).String()
+		return fmt.Sprintf("symbol(%s)", KFXSymbol(val).String())
 	case SymbolByNameValue:
-		return fmt.Sprintf("sym:%q", string(val))
+		return fmt.Sprintf("symbol(%q)", string(val))
+	case ReadSymbolValue:
+		return fmt.Sprintf("symbol(%s)", string(val))
 	default:
 		return fmt.Sprintf("<%T>", v)
 	}
@@ -526,7 +536,7 @@ func formatListValueWithKey(tw *debug.TreeWriter, depth int, key string, items [
 
 func isSimpleValue(v any) bool {
 	switch v.(type) {
-	case nil, bool, int, int64, int32, float64, string, SymbolValue, SymbolByNameValue:
+	case nil, bool, int, int64, int32, float64, string, SymbolValue, SymbolByNameValue, ReadSymbolValue, *ion.Decimal:
 		return true
 	default:
 		return false
@@ -650,10 +660,16 @@ func formatValueCompact(v any) string {
 		return "null"
 	case bool:
 		return fmt.Sprintf("%v", val)
-	case int, int64, int32:
-		return fmt.Sprintf("%d", val)
+	case int:
+		return fmt.Sprintf("int(%d)", val)
+	case int64:
+		return fmt.Sprintf("int(%d)", val)
+	case int32:
+		return fmt.Sprintf("int(%d)", val)
 	case float64:
-		return fmt.Sprintf("%g", val)
+		return fmt.Sprintf("float(%g)", val)
+	case *ion.Decimal:
+		return fmt.Sprintf("decimal(%s)", val.String())
 	case string:
 		return fmt.Sprintf("%q", val)
 	case []byte, RawValue:
@@ -666,9 +682,11 @@ func formatValueCompact(v any) string {
 		}
 		return fmt.Sprintf("<blob %d bytes>", len(b))
 	case SymbolValue:
-		return KFXSymbol(val).String()
+		return fmt.Sprintf("symbol(%s)", KFXSymbol(val).String())
 	case SymbolByNameValue:
-		return fmt.Sprintf("sym:%q", string(val))
+		return fmt.Sprintf("symbol(%q)", string(val))
+	case ReadSymbolValue:
+		return fmt.Sprintf("symbol(%s)", string(val))
 	case StructValue:
 		return formatStructCompactKFX(val)
 	case map[KFXSymbol]any:

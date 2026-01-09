@@ -716,6 +716,8 @@ func (c *Container) writeValue(w *IonWriter, value any) error {
 		return w.WriteInt(v)
 	case float64:
 		return w.WriteFloat(v)
+	case *ion.Decimal:
+		return w.WriteDecimal(v)
 	case string:
 		return w.WriteString(v)
 	case []byte:

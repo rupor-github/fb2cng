@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/amazon-ion/ion-go/ion"
 )
 
 // StyleTracer records style resolution and assignment operations for debugging.
@@ -215,39 +217,43 @@ func traceFormatProperties(props map[KFXSymbol]any) string {
 func traceFormatValue(v any) string {
 	switch val := v.(type) {
 	case KFXSymbol:
-		return traceSymbolName(val)
+		return fmt.Sprintf("symbol(%s)", traceSymbolName(val))
 	case SymbolValue:
-		return traceSymbolName(KFXSymbol(val))
+		return fmt.Sprintf("symbol(%s)", traceSymbolName(KFXSymbol(val)))
+	case ReadSymbolValue:
+		return fmt.Sprintf("symbol(%s)", string(val))
 	case uint16:
 		// KFXSymbol is uint16, check if it's a known symbol
 		if name, ok := yjSymbolNames[KFXSymbol(val)]; ok {
-			return name
+			return fmt.Sprintf("symbol(%s)", name)
 		}
-		return fmt.Sprintf("%d", val)
+		return fmt.Sprintf("int(%d)", val)
 	case int64:
 		// Check if this int64 is a known symbol value
 		if name, ok := yjSymbolNames[KFXSymbol(val)]; ok {
-			return name
+			return fmt.Sprintf("symbol(%s)", name)
 		}
-		return fmt.Sprintf("%d", val)
+		return fmt.Sprintf("int(%d)", val)
 	case int:
 		// Check if this int is a known symbol value
 		if name, ok := yjSymbolNames[KFXSymbol(val)]; ok {
-			return name
+			return fmt.Sprintf("symbol(%s)", name)
 		}
-		return fmt.Sprintf("%d", val)
+		return fmt.Sprintf("int(%d)", val)
 	case float64:
 		// Check if this float64 represents a symbol value (no fractional part)
 		if val == float64(int64(val)) {
 			if name, ok := yjSymbolNames[KFXSymbol(int64(val))]; ok {
-				return name
+				return fmt.Sprintf("symbol(%s)", name)
 			}
 		}
-		return fmt.Sprintf("%v", val)
+		return fmt.Sprintf("float(%v)", val)
+	case *ion.Decimal:
+		return fmt.Sprintf("decimal(%s)", val.String())
 	case StructValue:
 		if unit, ok := val[SymUnit]; ok {
 			if value, ok := val[SymValue]; ok {
-				return fmt.Sprintf("%v%s", value, unitSuffix(unit))
+				return fmt.Sprintf("%v%s", traceFormatValue(value), unitSuffix(unit))
 			}
 		}
 		return fmt.Sprintf("%v", val)

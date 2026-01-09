@@ -330,6 +330,10 @@ func SymbolByName(name string) SymbolByNameValue {
 	return SymbolByNameValue(name)
 }
 
+// ReadSymbolValue represents a symbol value read from Ion binary.
+// The string contains the symbol text (e.g., "$320" or "style_name").
+type ReadSymbolValue string
+
 // RawValue represents raw bytes for $417/$418 fragments.
 type RawValue []byte
 

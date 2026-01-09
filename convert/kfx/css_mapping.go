@@ -13,13 +13,14 @@ type CSSToKFXMap map[string]KFXSymbol
 // A value of SymbolSpecialHandling (-1) means the property requires special handling.
 var cssToKFXProperty = CSSToKFXMap{
 	// Typography
-	"font-size":      SymFontSize,      // $16
-	"font-weight":    SymFontWeight,    // $13
-	"font-style":     SymFontStyle,     // $12
-	"font-family":    SymFontFamily,    // $11
-	"line-height":    SymLineHeight,    // $42
-	"letter-spacing": SymLetterspacing, // $32
-	"color":          SymTextColor,     // $19
+	"font-size":        SymFontSize,      // $16
+	"font-weight":      SymFontWeight,    // $13
+	"font-style":       SymFontStyle,     // $12
+	"font-family":      SymFontFamily,    // $11
+	"line-height":      SymLineHeight,    // $42
+	"letter-spacing":   SymLetterspacing, // $32
+	"color":            SymTextColor,     // $19
+	"background-color": SymFillColor,     // $70
 
 	// Text Layout
 	"text-indent": SymTextIndent,    // $36
@@ -32,10 +33,10 @@ var cssToKFXProperty = CSSToKFXMap{
 	"margin-right":  SymMarginRight,  // $50
 
 	// Box Model - Padding
-	"padding-top":    SymPadding, // $51 (KFX uses single padding symbol)
-	"padding-bottom": SymPadding,
-	"padding-left":   SymPadding,
-	"padding-right":  SymPadding,
+	"padding-top":    SymPaddingTop,    // $52
+	"padding-left":   SymPaddingLeft,   // $53
+	"padding-bottom": SymPaddingBottom, // $54
+	"padding-right":  SymPaddingRight,  // $55
 
 	// Spacing (alternative to margins in KFX)
 	"space-before": SymSpaceBefore, // $39
@@ -44,6 +45,11 @@ var cssToKFXProperty = CSSToKFXMap{
 	// Dimensions
 	"width":  SymWidth,  // $56
 	"height": SymHeight, // $57
+
+	// Borders
+	"border-style": SymBorderStyle,  // $88
+	"border-width": SymBorderWeight, // $93
+	"border-color": SymBorderColor,  // $83
 
 	// Text Decoration - special handling
 	"text-decoration": -1, // underline->$23, line-through->$27
@@ -59,6 +65,9 @@ var cssToKFXProperty = CSSToKFXMap{
 	"page-break-before": -1, // always/avoid
 	"page-break-after":  -1,
 	"page-break-inside": -1,
+	"break-before":      -1,
+	"break-after":       -1,
+	"break-inside":      -1,
 
 	// Dropcap support
 	"dropcap-lines": SymDropcapLines, // $125
@@ -67,6 +76,7 @@ var cssToKFXProperty = CSSToKFXMap{
 	// Shorthands that need expansion
 	"margin":  -1, // expands to margin-top/right/bottom/left
 	"padding": -1, // expands to padding-top/right/bottom/left
+	"border":  -1, // expands to border-width/style/color
 }
 
 // KFXPropertySymbol returns the KFX symbol for a CSS property.
@@ -82,7 +92,7 @@ func KFXPropertySymbol(cssProperty string) KFXSymbol {
 // IsShorthandProperty returns true if the CSS property is a shorthand that needs expansion.
 func IsShorthandProperty(cssProperty string) bool {
 	switch cssProperty {
-	case "margin", "padding":
+	case "margin", "padding", "border":
 		return true
 	}
 	return false
@@ -92,7 +102,8 @@ func IsShorthandProperty(cssProperty string) bool {
 func IsSpecialProperty(cssProperty string) bool {
 	switch cssProperty {
 	case "text-decoration", "vertical-align", "display",
-		"page-break-before", "page-break-after", "page-break-inside":
+		"page-break-before", "page-break-after", "page-break-inside",
+		"break-before", "break-after", "break-inside":
 		return true
 	}
 	return false

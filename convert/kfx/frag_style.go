@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/amazon-ion/ion-go/ion"
 	"go.uber.org/zap"
 )
 
@@ -25,21 +26,21 @@ type StyleDef struct {
 	Properties map[KFXSymbol]any // KFX property symbol -> value
 }
 
-// DimensionValue creates a dimension value with unit.
-// Example: DimensionValue(1.2, SymUnitRatio) -> {$307: 1.2, $306: $310}
+// DimensionValue creates a KPV-compatible dimension value with unit.
+// Example: DimensionValue(1.2, SymUnitRatio) -> {$307: "1.2", $306: $310}
 func DimensionValue(value float64, unit KFXSymbol) StructValue {
+	// KPV uses Ion decimals (not strings) for $307.
+	dec := ion.MustParseDecimal(formatKPVNumber(value))
 	return NewStruct().
-		SetFloat(SymValue, value). // $307 = value
-		SetSymbol(SymUnit, unit)   // $306 = unit
+		Set(SymValue, dec). // $307 = Ion decimal
+		SetSymbol(SymUnit, unit)
 }
 
 // DimensionValueKPV creates a KPV-compatible dimension value.
 // Uses string representation for the value to match KPV output format.
 // KPV uses formats like "3.125" for percent and "2.5d-1" for 0.25lh.
 func DimensionValueKPV(value float64, unit KFXSymbol) StructValue {
-	return NewStruct().
-		SetString(SymValue, formatKPVNumber(value)). // $307 = value as string
-		SetSymbol(SymUnit, unit)                     // $306 = unit
+	return DimensionValue(value, unit)
 }
 
 // formatKPVNumber formats a number in KPV's style.
@@ -51,8 +52,37 @@ func formatKPVNumber(v float64) string {
 	if v == 1 {
 		return "1."
 	}
-	// For values < 1, KPV often uses d-1 notation (e.g., "2.5d-1" for 0.25)
-	// But we'll use simple format for now as it's also valid
+
+	// KPV generally emits integers with a trailing dot (e.g. "100.").
+	if v == float64(int64(v)) {
+		return fmt.Sprintf("%d.", int64(v))
+	}
+
+	// KPV typically uses "d" scientific notation for values < 1 (e.g. 0.25 -> "2.5d-1").
+	av := v
+	if av < 0 {
+		av = -av
+	}
+	if av > 0 && av < 1 {
+		exp := 0
+		mant := v
+		for {
+			am := mant
+			if am < 0 {
+				am = -am
+			}
+			if am >= 1 {
+				break
+			}
+			mant *= 10
+			exp--
+			if exp < -12 {
+				break
+			}
+		}
+		return fmt.Sprintf("%gd%d", mant, exp)
+	}
+
 	return fmt.Sprintf("%g", v)
 }
 
@@ -91,6 +121,8 @@ func encodeStyleValue(v any) string {
 		return "i:" + strconv.FormatInt(x, 10)
 	case float64:
 		return "f:" + strconv.FormatFloat(x, 'g', -1, 64)
+	case *ion.Decimal:
+		return "dec:" + x.String()
 	case KFXSymbol:
 		return "sym:" + strconv.Itoa(int(x))
 	case SymbolValue:
@@ -478,7 +510,11 @@ func (sr *StyleRegistry) ResolveStyle(styleSpec string) string {
 	}
 
 	merged := make(map[KFXSymbol]any)
-	for _, part := range parts {
+	// Process parts in reverse order so that the first part (the element being styled)
+	// takes precedence over later parts (the context). For "p section", we want
+	// paragraph properties to override section container properties.
+	for i := len(parts) - 1; i >= 0; i-- {
+		part := parts[i]
 		sr.EnsureBaseStyle(part)
 		def := sr.styles[part]
 		resolved := sr.resolveInheritance(def)
@@ -777,14 +813,14 @@ func DefaultStyleRegistry() *StyleRegistry {
 	sr.Register(NewStyle("code").
 		FontFamily("monospace").
 		FontSize(0.875, SymUnitEm).
-		TextAlign(SymStart).
+		TextAlign(SymLeft).
 		TextIndent(0, SymUnitPercent).
 		Build())
 
 	sr.Register(NewStyle("pre").
 		FontFamily("monospace").
 		FontSize(0.875, SymUnitEm).
-		TextAlign(SymStart).
+		TextAlign(SymLeft).
 		TextIndent(0, SymUnitPercent).
 		LineHeight(1.0, SymUnitLh).
 		MarginTop(1.0, SymUnitEm).
@@ -815,7 +851,7 @@ func DefaultStyleRegistry() *StyleRegistry {
 		Build())
 
 	sr.Register(NewStyle("td").
-		TextAlign(SymStart).
+		TextAlign(SymLeft).
 		Build())
 
 	// ============================================================
@@ -1006,6 +1042,7 @@ func (sr *StyleRegistry) shouldHaveBreakInsideAvoid(name string, _ map[KFXSymbol
 // The CSS converter sets SymKeepFirst/SymKeepLast as intermediate markers.
 // This function converts them to proper yj-break-* properties and also handles
 // title wrapper styles that need yj-break-after: avoid.
+// The intermediate markers are removed after conversion since KPV doesn't output them.
 func (sr *StyleRegistry) convertPageBreaksToYjBreaks(name string, props map[KFXSymbol]any) {
 	// Convert SymKeepFirst (from page-break-before) to yj-break-before
 	if keepFirst, ok := props[SymKeepFirst]; ok {
@@ -1017,6 +1054,7 @@ func (sr *StyleRegistry) convertPageBreaksToYjBreaks(name string, props map[KFXS
 				props[SymYjBreakBefore] = SymbolValue(v)
 			}
 		}
+		delete(props, SymKeepFirst)
 	}
 
 	// Convert SymKeepLast (from page-break-after) to yj-break-after
@@ -1029,6 +1067,7 @@ func (sr *StyleRegistry) convertPageBreaksToYjBreaks(name string, props map[KFXS
 				props[SymYjBreakAfter] = SymbolValue(v)
 			}
 		}
+		delete(props, SymKeepLast)
 	}
 
 	// For title wrappers, ensure yj-break-after: avoid to keep title with content

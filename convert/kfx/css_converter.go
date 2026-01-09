@@ -117,11 +117,15 @@ func (c *Converter) convertProperty(name string, value CSSValue, result *Convers
 		}
 
 	case "text-indent":
-		// text-indent uses percent for unitless values (matching KPV behavior)
+		// text-indent uses percent (matching KPV behavior)
+		// KPV converts em to percent: 1em ≈ 3.125%
 		if value.IsNumeric() {
-			if value.Unit == "" {
-				// Unitless - use percent (KPV uses "text-indent: 0%" for zero values)
+			if value.Unit == "" || value.Unit == "%" {
+				// Unitless or percent - use percent directly
 				result.Style.Properties[kfxSym] = DimensionValue(value.Value, SymUnitPercent)
+			} else if value.Unit == "em" {
+				// Convert em to percent: 1em = 3.125%
+				result.Style.Properties[kfxSym] = DimensionValue(value.Value*3.125, SymUnitPercent)
 			} else {
 				dim, err := MakeDimensionValue(value)
 				if err != nil {
@@ -165,9 +169,11 @@ func (c *Converter) expandShorthand(name string, value CSSValue, result *Convers
 			SymMarginTop, SymMarginRight, SymMarginBottom, SymMarginLeft)
 
 	case "padding":
-		// KFX has limited padding support - we'll use margins as fallback
-		// For now, just log that we encountered padding
-		c.log.Debug("padding shorthand not fully supported in KFX", zap.String("value", value.Raw))
+		c.expandBoxShorthand(value, result,
+			SymPaddingTop, SymPaddingRight, SymPaddingBottom, SymPaddingLeft)
+
+	case "border":
+		c.expandBorderShorthand(value, result)
 	}
 }
 
@@ -217,6 +223,42 @@ func (c *Converter) expandBoxShorthand(value CSSValue, result *ConversionResult,
 	c.setDimensionProperty(symRight, right, result)
 	c.setDimensionProperty(symBottom, bottom, result)
 	c.setDimensionProperty(symLeft, left, result)
+}
+
+// expandBorderShorthand expands CSS border shorthand to individual properties.
+// CSS border format: [width] [style] [color]
+// Example: "1px solid black" -> border-width: 1px, border-style: solid, border-color: black
+func (c *Converter) expandBorderShorthand(value CSSValue, result *ConversionResult) {
+	raw := strings.TrimSpace(value.Raw)
+	parts := strings.Fields(raw)
+
+	for _, part := range parts {
+		part = strings.ToLower(part)
+
+		// Check for border style keywords
+		switch part {
+		case "solid", "dashed", "dotted", "double", "groove", "ridge", "inset", "outset", "none", "hidden":
+			if sym, ok := ConvertBorderStyle(part); ok {
+				result.Style.Properties[SymBorderStyle] = sym
+			}
+			continue
+		}
+
+		// Check for color (named color or hex)
+		if r, g, b, ok := ParseColor(CSSValue{Raw: part, Keyword: part}); ok {
+			result.Style.Properties[SymBorderColor] = MakeColorValue(r, g, b)
+			continue
+		}
+
+		// Try to parse as dimension (border width)
+		parsed := c.parseShorthandValue(part)
+		if parsed.Value != 0 || parsed.Unit != "" {
+			dim, err := MakeDimensionValue(parsed)
+			if err == nil {
+				result.Style.Properties[SymBorderWeight] = dim
+			}
+		}
+	}
 }
 
 // parseShorthandValue parses a single value from a shorthand property.
@@ -352,10 +394,15 @@ func (c *Converter) convertSpecialProperty(name string, value CSSValue, result *
 		if dec.Strikethrough {
 			result.Style.Properties[SymStrikethrough] = true
 		}
-		if dec.None {
-			result.Style.Properties[SymUnderline] = false
-			result.Style.Properties[SymStrikethrough] = false
-		}
+		// NOTE: text-decoration: none - we intentionally don't set false values.
+		// KFX defaults to no decoration, and explicitly setting false can cause
+		// issues with some Kindle renderers (e.g., footnotes appearing as strikethrough).
+		// If you need to override inherited decoration, set the appropriate true value instead.
+		// The original code that set false values:
+		// if dec.None {
+		// 	result.Style.Properties[SymUnderline] = false
+		// 	result.Style.Properties[SymStrikethrough] = false
+		// }
 
 	case "vertical-align":
 		if vaResult, ok := ConvertVerticalAlign(value); ok {

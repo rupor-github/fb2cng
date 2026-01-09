@@ -663,18 +663,20 @@ Per Kindle Previewer (KPV) reference format, page templates use a minimal 3-fiel
 - `$155` (id): unique EID for this content element
 - `$159` (type): content type symbol (`$269`=text, `$271`=image, `$270`=container)
 - `$157` (style): optional style name reference
-- `$145` (content): for text, a struct with `name` (content fragment reference) and `$403` (offset)
+- `$145` (content): for text, a struct with `name` (content fragment reference) and `$403` (array index/offset within the content_list)
 - `$175` (resource): for images, external resource fragment id
 - `$584` (alt_text): for images, accessibility text (KPV parity)
 - `$142` (style_events): optional inline formatting events
 - `$790` (yj.semantics.heading_level): for headings, level 1-6 (KPV parity)
 
 **Style event structure** (entries in `$142`):
-- `$143` (offset): start offset within text
-- `$144` (length): span length
+- `$143` (offset): start offset within text (**character/rune offset**, not byte offset)
+- `$144` (length): span length in characters/runes
 - `$157` (style): style name reference
 - `$179` (link_target): optional link anchor reference
 - `$616` (yj.display): for footnote links, set to `$617` (yj.note) (KPV parity)
+
+**Important**: Offsets and lengths in style events (`$143`, `$144`) are measured in **Unicode code points (characters/runes)**, not bytes. For text containing multi-byte characters (e.g., Cyrillic, CJK), the character offset will differ from the byte offset. For example, the Russian text "Автор" is 5 characters but 10 bytes in UTF-8.
 
 Derived from: `convert/kfx/frag_storyline.go`, KPV reference files.
 
@@ -1107,8 +1109,13 @@ The converter looks for a *style name* in three places and performs `$157` expan
 Each element of the `$142` list is treated as an Ion struct/dict; the converter unconditionally pops required keys and will raise if they are missing.
 
 - Required fields:
-   - `$143` (int): start offset
-   - `$144` (int): length (the converter raises if `<= 0` when creating the style-span wrapper)
+   - `$143` (int): start offset in **characters/runes** (not bytes)
+   - `$144` (int): length in **characters/runes** (the converter raises if `<= 0` when creating the style-span wrapper)
+
+**Character vs Byte Offsets**: KFX style events use Unicode code point (character/rune) offsets, not byte offsets. This distinction is critical for text containing multi-byte UTF-8 characters. For example:
+- The Russian word "Автор" (5 Cyrillic characters) occupies 10 bytes in UTF-8
+- A style event starting after "Автор\n" would have `$143: 6` (6 characters), not `$143: 11` (11 bytes)
+- Implementations must count runes/characters, not bytes, when calculating offsets
 
 - Optional “style reference”:
    - `$157` (symbol/string): a `$157` style fragment id/name to expand into this event
@@ -1243,6 +1250,12 @@ Derived from: Reference KFX files, `convert/kfx/frag_contentfeatures.go`.
 
 KFX uses a dimension struct `{ $307: magnitude, $306: unit }` for all length values in style properties.
 
+**CRITICAL - Ion Type for $307**: The `$307` (value/magnitude) field **MUST** be encoded as **Ion DecimalType**, not Ion Float or Ion String. Kindle Previewer (KPV) will crash or render incorrectly if `$307` is encoded as any other Ion type. When scanning reference KFX files, all numeric dimension values appear exclusively as Ion Decimal (zero Ion Floats).
+
+Implementation note: Use `ion.MustParseDecimal()` or equivalent to create proper Ion Decimal values. The decimal representation should follow KPV conventions (e.g., `"2.5d-1"` for 0.25, `"1."` for 1.0).
+
+Derived from: Reference KFX analysis, `convert/kfx/frag_style.go:DimensionValue`.
+
 #### 7.10.1 Unit symbols
 
 | Symbol | CSS Unit | Description |
@@ -1278,12 +1291,107 @@ When converting from CSS `em` units to KPV-preferred units:
 | `em` → `%` (horizontal) | 1:6.25 | `1em` → `6.25%` |
 | `%` → `rem` (font-size) | divide by 100 | `140%` → `1.4rem` |
 | `em` → `rem` (font-size) | 1:1 | `1em` → `1rem` |
+| `em` → `%` (text-indent) | 1:3.125 | `1em` → `3.125%` |
 
 #### 7.10.4 Zero value omission
 
 KPV does NOT include style properties with zero values. For example, `margin-left: 0` is omitted entirely from the style definition rather than being encoded as `{ $48: { $307: 0, $306: "$314" } }`.
 
 Derived from: Reference KFX comparison, `convert/kfx/css_converter.go:setDimensionProperty`.
+
+#### 7.10.5 Padding properties ($52-$55)
+
+KFX supports individual padding properties for table cells and other block elements:
+
+| Symbol | Property | Notes |
+|--------|----------|-------|
+| `$52` | `padding_top` | Vertical padding in `lh` units |
+| `$53` | `padding_left` | Horizontal padding in `%` |
+| `$54` | `padding_bottom` | Vertical padding in `lh` units |
+| `$55` | `padding_right` | Horizontal padding in `%` |
+
+These are primarily used for table cell styling. The shorthand `padding` CSS property expands to these four individual properties.
+
+Derived from: Reference KFX analysis, `convert/kfx/css_converter.go:expandBoxShorthand`.
+
+#### 7.10.6 Border properties ($83, $88, $93)
+
+KFX supports border styling for tables and other elements:
+
+| Symbol | Property | Value Type |
+|--------|----------|------------|
+| `$83` | `border_color` | Packed ARGB integer (see §7.10.7) |
+| `$88` | `border_style` | Symbol: `$328` (solid), `$330` (dashed), `$331` (dotted), `$349` (none) |
+| `$93` | `border_weight` | Dimension struct with `pt` units |
+
+The CSS `border` shorthand expands to these three properties. Border style values:
+- `$328` - solid
+- `$330` - dashed  
+- `$331` - dotted
+- `$349` - none
+
+Derived from: Reference KFX analysis, `convert/kfx/css_converter.go:expandBorderShorthand`.
+
+#### 7.10.7 Color format (packed ARGB integer)
+
+**CRITICAL**: KFX stores colors as packed 32-bit ARGB integers, NOT as structs with RGB components.
+
+Format: `0xAARRGGBB` where:
+- `AA` = Alpha (always `0xFF` for opaque)
+- `RR` = Red (0x00-0xFF)
+- `GG` = Green (0x00-0xFF)
+- `BB` = Blue (0x00-0xFF)
+
+Examples:
+- Black: `0xFF000000` = `4278190080`
+- White: `0xFFFFFFFF` = `4294967295`
+- Gray (#808080): `0xFF808080` = `4286611584`
+
+This applies to:
+- `$83` (border_color)
+- `$19` (text_color)
+- `$70` (fill_color / background_color)
+
+Derived from: Reference KFX analysis, `convert/kfx/css_values.go:MakeColorValue`.
+
+#### 7.10.8 Orphans/widows NOT used by KPV
+
+**CRITICAL**: KPV-generated KFX files do NOT include orphans (`$131`) or widows (`$132`) properties, despite these symbols existing in the KFX symbol table.
+
+The CSS `page-break-inside: avoid` maps to:
+- `$135` (break_inside): `$353` (avoid)
+
+Page break avoidance for keeping content together is handled via:
+- `$788` (yj_break_after): `$353` (avoid) or `$383` (auto)
+- `$789` (yj_break_before): `$353` (avoid) or `$383` (auto)
+
+If your CSS converter generates `$131`/`$132` as intermediate markers (e.g., from `page-break-after: avoid`), these should be converted to `$788`/`$789` and then deleted before serialization.
+
+Derived from: Reference KFX comparison, `convert/kfx/frag_style.go:convertPageBreaksToYjBreaks`.
+
+#### 7.10.9 Text-align and float symbol mapping
+
+**CRITICAL**: CSS `text-align` property uses **physical direction symbols** (`$59` left, `$61` right), NOT logical direction symbols (`$680` start, `$681` end).
+
+| CSS Value | KFX Symbol | Symbol Name | Notes |
+|-----------|------------|-------------|-------|
+| `left` | `$59` | `SymLeft` | Physical left alignment |
+| `right` | `$61` | `SymRight` | Physical right alignment |
+| `center` | `$320` | `SymCenter` | Center alignment |
+| `justify` | `$321` | `SymJustify` | Justified text |
+| `start` | `$680` | `SymStart` | Logical start (rarely used) |
+| `end` | `$681` | `SymEnd` | Logical end (rarely used) |
+
+For `float` property (currently unused in reference KFX files, but supported):
+| CSS Value | KFX Symbol | Symbol Name |
+|-----------|------------|-------------|
+| `left` | `$59` | `SymLeft` |
+| `right` | `$61` | `SymRight` |
+| `none` | `$349` | `SymNone` |
+
+Reference KFX files from KPV consistently use `$59`/`$61` for left/right alignment, not the logical `$680`/`$681` symbols. Using `$680`/`$681` for text-align may cause rendering inconsistencies.
+
+Derived from: Reference KFX comparison, `convert/kfx/css_values.go:ConvertTextAlign`, `convert/kfx/css_values.go:ConvertFloat`.
 
 ---
 

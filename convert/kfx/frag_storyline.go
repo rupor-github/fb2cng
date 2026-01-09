@@ -3,10 +3,109 @@ package kfx
 import (
 	"fmt"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"fbc/common"
 	"fbc/fb2"
 )
+
+// normalizingWriter accumulates text with whitespace normalization.
+// It collapses consecutive whitespace to single spaces while tracking
+// the rune count for style event offsets. Leading and trailing whitespace
+// is automatically trimmed using the pendingSpace approach.
+type normalizingWriter struct {
+	buf          strings.Builder
+	runeCount    int
+	pendingSpace bool // Deferred space - only written if followed by non-space
+	preserveWS   bool // When true, write text as-is (for code blocks)
+}
+
+// newNormalizingWriter creates a new normalizing writer.
+func newNormalizingWriter() *normalizingWriter {
+	return &normalizingWriter{}
+}
+
+// WriteString writes text, normalizing whitespace unless preserveWS is set.
+// Returns the rune count of what was actually written.
+func (nw *normalizingWriter) WriteString(s string) int {
+	if s == "" {
+		return 0
+	}
+
+	if nw.preserveWS {
+		// In preserve mode, write any pending space first
+		if nw.pendingSpace {
+			nw.buf.WriteRune(' ')
+			nw.runeCount++
+			nw.pendingSpace = false
+		}
+		nw.buf.WriteString(s)
+		count := utf8.RuneCountInString(s)
+		nw.runeCount += count
+		return count
+	}
+
+	written := 0
+	for _, r := range s {
+		if unicode.IsSpace(r) {
+			// Only mark pending space if we've written content
+			if nw.buf.Len() > 0 || nw.pendingSpace {
+				nw.pendingSpace = true
+			}
+		} else {
+			// Write pending space before this non-space character
+			if nw.pendingSpace {
+				nw.buf.WriteRune(' ')
+				nw.runeCount++
+				written++
+				nw.pendingSpace = false
+			}
+			nw.buf.WriteRune(r)
+			nw.runeCount++
+			written++
+		}
+	}
+	return written
+}
+
+// SetPreserveWhitespace sets whether to preserve whitespace (for code blocks).
+func (nw *normalizingWriter) SetPreserveWhitespace(preserve bool) {
+	nw.preserveWS = preserve
+}
+
+// WriteRaw writes a string directly without normalization.
+// Used for structural characters like newlines between title paragraphs.
+// Discards any pending space and resets trailing state.
+func (nw *normalizingWriter) WriteRaw(s string) {
+	nw.pendingSpace = false // Discard pending space before structural break
+	nw.buf.WriteString(s)
+	nw.runeCount += utf8.RuneCountInString(s)
+}
+
+// String returns the accumulated text. No trimming needed since pending space
+// approach ensures no leading/trailing whitespace is written.
+func (nw *normalizingWriter) String() string {
+	return nw.buf.String()
+}
+
+// Len returns the byte length of accumulated text.
+func (nw *normalizingWriter) Len() int {
+	return nw.buf.Len()
+}
+
+// RuneCount returns the current rune count (matches string length in runes).
+func (nw *normalizingWriter) RuneCount() int {
+	return nw.runeCount
+}
+
+// Reset clears the writer for reuse.
+func (nw *normalizingWriter) Reset() {
+	nw.buf.Reset()
+	nw.runeCount = 0
+	nw.pendingSpace = false
+	nw.preserveWS = false
+}
 
 // StyleContext tracks the ancestor chain for CSS cascade emulation.
 // In EPUB, nested elements like <div class="poem"><div class="stanza"><p class="verse">
@@ -1145,12 +1244,6 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 // ctx tracks the full ancestor context chain for CSS cascade emulation.
 // contextName is the immediate context name (e.g., "section", "cite") used for subtitle naming.
 func processFlowItem(item *fb2.FlowItem, ctx StyleContext, contextName string, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
-	addContent := func(text, styleName string) int {
-		resolved := styles.ResolveStyle(styleName)
-		contentName, offset := ca.Add(text)
-		return sb.AddContent(SymText, contentName, offset, resolved)
-	}
-
 	switch item.Kind {
 	case fb2.FlowParagraph:
 		if item.Paragraph != nil {
@@ -1175,9 +1268,12 @@ func processFlowItem(item *fb2.FlowItem, ctx StyleContext, contextName string, s
 		}
 
 	case fb2.FlowEmptyLine:
-		// emptyline uses context chain for proper cascade
-		styleName := ctx.Resolve("", "emptyline")
-		addContent("\n", styleName)
+		// Empty lines in KFX are handled via block margins on surrounding content,
+		// not via explicit newline content entries. Reference KFX files from
+		// Kindle Previewer don't have standalone "\n" content entries.
+		// The emptyline style should set appropriate margin-top/margin-bottom
+		// on adjacent elements instead.
+		return
 
 	case fb2.FlowPoem:
 		if item.Poem != nil {
@@ -1348,7 +1444,7 @@ func processCite(cite *fb2.Cite, ctx StyleContext, sb *StorylineBuilder, styles 
 
 func addParagraphWithImages(para *fb2.Paragraph, styleName string, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
 	var (
-		buf    strings.Builder
+		nw     = newNormalizingWriter() // Normalizes whitespace and tracks rune count
 		events []StyleEventRef
 	)
 
@@ -1356,11 +1452,11 @@ func addParagraphWithImages(para *fb2.Paragraph, styleName string, sb *Storyline
 	headingLevel := styleToHeadingLevel(styleName)
 
 	flush := func() {
-		if buf.Len() == 0 {
+		if nw.Len() == 0 {
 			return
 		}
 		resolved := styles.ResolveStyle(styleName)
-		contentName, offset := ca.Add(buf.String())
+		contentName, offset := ca.Add(nw.String())
 		var eid int
 		if headingLevel > 0 {
 			eid = sb.AddContentWithHeading(SymText, contentName, offset, resolved, events, headingLevel)
@@ -1372,7 +1468,7 @@ func addParagraphWithImages(para *fb2.Paragraph, styleName string, sb *Storyline
 				idToEID[para.ID] = eid
 			}
 		}
-		buf.Reset()
+		nw.Reset()
 		events = nil
 	}
 
@@ -1409,6 +1505,7 @@ func addParagraphWithImages(para *fb2.Paragraph, styleName string, sb *Storyline
 			segStyle = "sup"
 		case fb2.InlineCode:
 			segStyle = "code"
+			nw.SetPreserveWhitespace(true) // Preserve whitespace in code
 		case fb2.InlineNamedStyle:
 			segStyle = seg.Style
 		case fb2.InlineLink:
@@ -1420,18 +1517,23 @@ func addParagraphWithImages(para *fb2.Paragraph, styleName string, sb *Storyline
 			}
 		}
 
-		// Track position for style event
-		start := buf.Len()
+		// Track position for style event using rune count (KFX uses character offsets)
+		start := nw.RuneCount()
 
-		// Add text content
-		buf.WriteString(seg.Text)
+		// Add text content (normalizingWriter handles whitespace and rune counting)
+		nw.WriteString(seg.Text)
 
 		// Process children with current style context
 		for i := range seg.Children {
 			walk(&seg.Children[i], segStyle)
 		}
 
-		end := buf.Len()
+		// Restore whitespace handling after code block
+		if seg.Kind == fb2.InlineCode {
+			nw.SetPreserveWhitespace(false)
+		}
+
+		end := nw.RuneCount()
 
 		// Create style event if we have styled content
 		if segStyle != "" && end > start {
@@ -1479,7 +1581,7 @@ func addTitleAsHeading(title *fb2.Title, headerStyleBase string, headingLevel in
 	}
 
 	var (
-		buf              strings.Builder
+		nw               = newNormalizingWriter() // Normalizes whitespace and tracks rune count
 		events           []StyleEventRef
 		firstParagraph   = true
 		prevWasEmptyLine = false
@@ -1509,6 +1611,7 @@ func addTitleAsHeading(title *fb2.Title, headerStyleBase string, headingLevel in
 			segStyle = "sup"
 		case fb2.InlineCode:
 			segStyle = "code"
+			nw.SetPreserveWhitespace(true) // Preserve whitespace in code
 		case fb2.InlineNamedStyle:
 			segStyle = seg.Style
 		case fb2.InlineLink:
@@ -1519,18 +1622,23 @@ func addTitleAsHeading(title *fb2.Title, headerStyleBase string, headingLevel in
 			}
 		}
 
-		// Track position for style event
-		start := buf.Len()
+		// Track position for style event using rune count (KFX uses character offsets)
+		start := nw.RuneCount()
 
-		// Add text content
-		buf.WriteString(seg.Text)
+		// Add text content (normalizingWriter handles whitespace and rune counting)
+		nw.WriteString(seg.Text)
 
 		// Process children with current style context
 		for i := range seg.Children {
 			processSegment(&seg.Children[i], segStyle)
 		}
 
-		end := buf.Len()
+		// Restore whitespace handling after code block
+		if seg.Kind == fb2.InlineCode {
+			nw.SetPreserveWhitespace(false)
+		}
+
+		end := nw.RuneCount()
 
 		// Create style event if we have styled content
 		if segStyle != "" && end > start {
@@ -1559,16 +1667,15 @@ func addTitleAsHeading(title *fb2.Title, headerStyleBase string, headingLevel in
 		if item.Paragraph != nil {
 			// Add newline between paragraphs with -break style (but not before first, not after empty line)
 			if !firstParagraph && !prevWasEmptyLine {
-				breakStart := buf.Len()
-				buf.WriteString("\n")
-				breakEnd := buf.Len()
+				breakStart := nw.RuneCount()
+				nw.WriteRaw("\n") // Use WriteRaw for structural newline
 
 				// Add style event for the break newline (like EPUB's <br class="...-break">)
 				breakStyle := headerStyleBase + "-break"
 				resolved := styles.ResolveStyle(breakStyle)
 				events = append(events, StyleEventRef{
 					Offset: breakStart,
-					Length: breakEnd - breakStart,
+					Length: 1,
 					Style:  resolved,
 				})
 			}
@@ -1584,14 +1691,14 @@ func addTitleAsHeading(title *fb2.Title, headerStyleBase string, headingLevel in
 			}
 
 			// Add style event for entire paragraph span
-			paraStart := buf.Len()
+			paraStart := nw.RuneCount()
 
 			// Process paragraph content
 			for i := range item.Paragraph.Text {
 				processSegment(&item.Paragraph.Text[i], "")
 			}
 
-			paraEnd := buf.Len()
+			paraEnd := nw.RuneCount()
 
 			// Add paragraph-level style event (like EPUB's span class)
 			if paraEnd > paraStart {
@@ -1606,16 +1713,15 @@ func addTitleAsHeading(title *fb2.Title, headerStyleBase string, headingLevel in
 			prevWasEmptyLine = false
 		} else if item.EmptyLine {
 			// Add newline for empty line with style event (like EPUB's <br class="...-emptyline">)
-			emptylineStart := buf.Len()
-			buf.WriteString("\n")
-			emptylineEnd := buf.Len()
+			emptylineStart := nw.RuneCount()
+			nw.WriteRaw("\n") // Use WriteRaw for structural newline
 
 			// Add style event for the emptyline character
 			emptylineStyle := headerStyleBase + "-emptyline"
 			resolved := styles.ResolveStyle(emptylineStyle)
 			events = append(events, StyleEventRef{
 				Offset: emptylineStart,
-				Length: emptylineEnd - emptylineStart,
+				Length: 1,
 				Style:  resolved,
 			})
 
@@ -1624,7 +1730,7 @@ func addTitleAsHeading(title *fb2.Title, headerStyleBase string, headingLevel in
 	}
 
 	// Create the combined content entry with heading level
-	if buf.Len() == 0 {
+	if nw.Len() == 0 {
 		return
 	}
 
@@ -1633,7 +1739,7 @@ func addTitleAsHeading(title *fb2.Title, headerStyleBase string, headingLevel in
 	headingElementStyle := fmt.Sprintf("h%d", headingLevel)
 	combinedStyleSpec := headingElementStyle + " " + headerStyleBase
 	resolved := styles.ResolveStyle(combinedStyleSpec)
-	contentName, offset := ca.Add(buf.String())
+	contentName, offset := ca.Add(nw.String())
 	eid := sb.AddContentWithHeading(SymText, contentName, offset, resolved, events, headingLevel)
 
 	// Map first paragraph ID to the combined entry's EID
