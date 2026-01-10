@@ -1856,16 +1856,27 @@ func anySlice(s []string) []any {
 // BuildNavigation creates a $389 book_navigation fragment from TOC entries.
 // This creates a hierarchical TOC structure similar to epub's NCX/nav.
 // The $389 fragment value is a list of reading order navigation entries.
-func BuildNavigation(tocEntries []*TOCEntry, startEID int) *Fragment {
+// If posItems and pageSize are provided (pageSize > 0), an APPROXIMATE_PAGE_LIST
+// is also included in the navigation.
+func BuildNavigation(tocEntries []*TOCEntry, startEID int, posItems []PositionItem, pageSize int) *Fragment {
 	// Build TOC entries recursively
 	entries := buildNavEntries(tocEntries, startEID)
 
 	// Create TOC navigation container
 	tocContainer := NewTOCContainer(entries)
 
-	// Create nav_containers list with just TOC for now
-	// Could add landmarks, page_list later
+	// Create nav_containers list starting with TOC
 	navContainers := []any{tocContainer}
+
+	// Add APPROXIMATE_PAGE_LIST if page mapping is enabled
+	if pageSize > 0 && len(posItems) > 0 {
+		pages := CalculateApproximatePages(posItems, pageSize)
+		if len(pages) > 0 {
+			pageEntries := buildPageListEntries(pages)
+			pageListContainer := NewApproximatePageListContainer(pageEntries)
+			navContainers = append(navContainers, pageListContainer)
+		}
+	}
 
 	// Build reading order navigation entry
 	// Structure: {$178: $351 (default), $392: [nav_containers]}
@@ -1905,6 +1916,82 @@ func buildNavEntries(tocEntries []*TOCEntry, startEID int) []any {
 				navUnit.SetList(SymEntries, childEntries) // $247 = nested entries
 			}
 		}
+
+		entries = append(entries, navUnit)
+	}
+
+	return entries
+}
+
+// PageEntry represents an approximate page position in the book.
+type PageEntry struct {
+	PageNumber int   // 1-based page number
+	EID        int   // Element ID where this page starts
+	Offset     int64 // Offset within the element's text (in runes)
+}
+
+// CalculateApproximatePages computes page positions from position items.
+// Each page is approximately pageSize runes. Returns page entries with
+// EID and offset for navigation.
+func CalculateApproximatePages(posItems []PositionItem, pageSize int) []PageEntry {
+	if len(posItems) == 0 || pageSize <= 0 {
+		return nil
+	}
+
+	var pages []PageEntry
+	pageNumber := 1
+	runesInPage := 0
+
+	for _, item := range posItems {
+		itemLen := item.Length
+		if itemLen <= 0 {
+			itemLen = 1
+		}
+
+		// Calculate how many runes we've consumed within this item
+		runesConsumed := int64(0)
+
+		for runesConsumed < int64(itemLen) {
+			runesRemaining := int64(itemLen) - runesConsumed
+			runesNeeded := int64(pageSize - runesInPage)
+
+			if runesInPage == 0 {
+				// Start of a new page - record position
+				pages = append(pages, PageEntry{
+					PageNumber: pageNumber,
+					EID:        item.EID,
+					Offset:     runesConsumed,
+				})
+			}
+
+			if runesRemaining >= runesNeeded {
+				// This item fills the page
+				runesConsumed += runesNeeded
+				runesInPage = 0
+				pageNumber++
+			} else {
+				// This item doesn't fill the page
+				runesConsumed += runesRemaining
+				runesInPage += int(runesRemaining)
+			}
+		}
+	}
+
+	return pages
+}
+
+// buildPageListEntries creates navigation entries for APPROXIMATE_PAGE_LIST.
+func buildPageListEntries(pages []PageEntry) []any {
+	entries := make([]any, 0, len(pages))
+
+	for _, page := range pages {
+		// Create target position: {$143: offset, $155: eid}
+		targetPos := NewStruct().
+			SetInt(SymOffset, page.Offset).      // $143 = offset
+			SetInt(SymUniqueID, int64(page.EID)) // $155 = id (EID as int)
+
+		// Create nav unit with page number as label
+		navUnit := NewNavUnit(fmt.Sprintf("%d", page.PageNumber), targetPos)
 
 		entries = append(entries, navUnit)
 	}

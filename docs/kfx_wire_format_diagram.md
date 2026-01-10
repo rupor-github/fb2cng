@@ -283,7 +283,7 @@ Example: 0x8A = string (type 8) with 10-byte (A) body
 │  $259   Storyline         - Content sequence                            │
 │  $264   position_map      - EID → section mapping                       │
 │  $265   position_id_map   - PID → (EID, offset) mapping                 │
-│  $389   book_navigation   - Navigation per reading order                │
+│  $389   book_navigation   - Navigation (TOC, page list) per read order  │
 │  $419   container_entity_map - Fragment/container associations          │
 │  $538   document_data     - Reading orders, document structure          │
 │  $550   location_map      - Location list for pagination                │
@@ -378,8 +378,9 @@ Example: 0x8A = string (type 8) with 10-byte (A) body
   ┌─────────────┐                                  │
   │    $389     │──────────────────────────────────┘
   │book_navig'n │     anchor references
-  │($392 list)  │
-  └─────────────┘
+  │($392 list)  │     Contains nav_containers:
+  └─────────────┘     - TOC ($235=$212)
+                      - APPROXIMATE_PAGE_LIST ($235=$237, $239=local symbol)
 
   ┌─────────────┐
   │    $490     │  Book Metadata (categorised):
@@ -684,8 +685,8 @@ Visual byte map (approximate):
 │                                                                             │
 │  Color Format (ARGB Integer):                                               │
 │  ────────────────────────────                                               │
-│  Colors stored as packed 32-bit ARGB: 0xAARRGGBB                             │
-│  Examples: black=0xFF000000 (4278190080), white=0xFFFFFFFF                   │
+│  Colors stored as packed 32-bit ARGB: 0xAARRGGBB                            │
+│  Examples: black=0xFF000000 (4278190080), white=0xFFFFFFFF                  │
 │  Applies to: $83 (border_color), $19 (text_color), $70 (fill_color)         │
 │                                                                             │
 │  Orphans/Widows ($131/$132) - NOT USED:                                     │

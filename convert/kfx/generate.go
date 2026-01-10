@@ -172,9 +172,14 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 		return err
 	}
 
-	// Build navigation containers (TOC) from TOC entries
+	// Build navigation containers (TOC + APPROXIMATE_PAGE_LIST) from TOC entries
 	if len(tocEntries) > 0 {
-		navFrag := BuildNavigation(tocEntries, nextEID)
+		// Pass page size from config if page map is enabled
+		pageSize := 0
+		if cfg.PageMap.Enable {
+			pageSize = cfg.PageMap.Size
+		}
+		navFrag := BuildNavigation(tocEntries, nextEID, posItems, pageSize)
 		if err := container.Fragments.Add(navFrag); err != nil {
 			return err
 		}

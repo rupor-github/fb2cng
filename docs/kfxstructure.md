@@ -954,6 +954,19 @@ Page list (`nav_type == $237`):
    - If `nav_container_name == APPROXIMATE_PAGE_LIST` and `not (KEEP_APPROX_PG_NUMS or DEBUG_PAGES)` then page-list entries with a non-empty label do **not** produce anchors/pagemap entries.
    - The first time this happens, it logs `"Removing approximate page numbers previously produced by KFX Output"` and sets an internal flag so the warning is emitted only once.
 
+##### APPROXIMATE_PAGE_LIST Structure
+
+When generating approximate page numbers, the page list container uses a special `nav_container_name`:
+
+- Structure: `{$235: symbol($237), $239: symbol(APPROXIMATE_PAGE_LIST), $247: [entries...]}`
+- The `$239` field contains `APPROXIMATE_PAGE_LIST` as a local symbol (not a known YJ_symbols entry)
+- Each page entry has the form: `{$241: {$244: "page_number"}, $246: {$143: offset, $155: eid}}`
+  - `$241.$244`: page number as string label (e.g., "1", "2", "3")
+  - `$246.$143`: character offset within the target element's text (in runes)
+  - `$246.$155`: target EID (element ID) where this page starts
+
+Page positions are typically calculated by accumulating text length across content elements and creating page boundaries at regular intervals (e.g., every ~1000-2500 characters).
+
 Derived from: `kfxlib/yj_to_epub_navigation.py:process_nav_container`.
 
 #### 7.7.8 Heading navigation (`nav_type == $798`)

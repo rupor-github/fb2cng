@@ -147,6 +147,15 @@ func NewPageListContainer(entries []any) StructValue {
 	return NewNavContainer(SymPageList, entries) // $237 = page_list
 }
 
+// NewApproximatePageListContainer creates a page list container with APPROXIMATE_PAGE_LIST name.
+// This is used for KFX-generated approximate page numbers.
+func NewApproximatePageListContainer(entries []any) StructValue {
+	return NewStruct().
+		SetSymbol(SymNavType, SymPageList).                         // $235 = page_list
+		Set(SymNavContName, SymbolByName("APPROXIMATE_PAGE_LIST")). // $239 = nav_container_name (local symbol)
+		SetList(SymEntries, entries)                                // $247 = entries
+}
+
 // Resource builders - for $164 external resource descriptors
 
 // NewExternalResource creates an external resource descriptor.
