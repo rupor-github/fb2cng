@@ -188,7 +188,6 @@ func TestStyleContext(t *testing.T) {
 		}
 	})
 
-
 	t.Run("immutability - push returns new context", func(t *testing.T) {
 		ctx1 := NewStyleContext().Push("poem")
 		ctx2 := ctx1.Push("stanza")

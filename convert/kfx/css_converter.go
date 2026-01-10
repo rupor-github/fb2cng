@@ -122,23 +122,19 @@ func (c *Converter) convertProperty(name string, value CSSValue, result *Convers
 		}
 
 	case "text-indent":
-		// text-indent uses percent (matching KPV behavior)
-		// KPV converts em to percent: 1em ≈ 3.125%
+		// No special handling: keep original unit (em/px/%) if provided.
+		// Unitless values are treated as percent, matching earlier behavior.
 		if value.IsNumeric() {
-			if value.Unit == "" || value.Unit == "%" {
-				// Unitless or percent - use percent directly
+			if value.Unit == "" {
 				result.Style.Properties[kfxSym] = DimensionValue(value.Value, SymUnitPercent)
-			} else if value.Unit == "em" {
-				// Convert em to percent: 1em = 3.125%
-				result.Style.Properties[kfxSym] = DimensionValue(value.Value*3.125, SymUnitPercent)
-			} else {
-				dim, err := MakeDimensionValue(value)
-				if err != nil {
-					result.Warnings = append(result.Warnings, "unable to convert "+name+": "+err.Error())
-					return
-				}
-				result.Style.Properties[kfxSym] = dim
+				return
 			}
+			dim, err := MakeDimensionValue(value)
+			if err != nil {
+				result.Warnings = append(result.Warnings, "unable to convert "+name+": "+err.Error())
+				return
+			}
+			result.Style.Properties[kfxSym] = dim
 		}
 
 	default:

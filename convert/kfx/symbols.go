@@ -581,7 +581,6 @@ func (s KFXSymbol) String() string {
 	return fmt.Sprintf("$%d", s)
 }
 
-
 // SymbolID returns the ID for a symbol name.
 // Returns -1 if the symbol is not in the known table.
 func SymbolID(name string) KFXSymbol {

@@ -687,6 +687,8 @@ func formatDimension(v any) string {
 	case string:
 		// Handle Ion decimal notation like "2.08333d-1"
 		valStr = formatIonDecimal(vv)
+	case *ion.Decimal:
+		valStr = formatIonDecimal(vv.String())
 	default:
 		valStr = fmt.Sprintf("%v", vv)
 	}
@@ -697,6 +699,8 @@ func formatDimension(v any) string {
 		unitStr = kfxSymbolToCSS(kfx.KFXSymbol(u))
 	case kfx.KFXSymbol:
 		unitStr = kfxSymbolToCSS(u)
+	case kfx.ReadSymbolValue:
+		unitStr = unitNameToCSS(string(u))
 	case string:
 		unitStr = unitNameToCSS(u)
 	default:
@@ -758,6 +762,8 @@ func formatCSSSymbol(v any) string {
 		return kfxSymbolToCSS(kfx.KFXSymbol(s))
 	case kfx.KFXSymbol:
 		return kfxSymbolToCSS(s)
+	case kfx.ReadSymbolValue:
+		return unitNameToCSS(string(s))
 	case string:
 		// Handle "$320" style string representation
 		if len(s) > 1 && s[0] == '$' {

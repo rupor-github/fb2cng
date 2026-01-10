@@ -148,7 +148,6 @@ func (sc StyleContext) Resolve(baseStyle, elementStyle string) string {
 	return strings.Join(parts, " ")
 }
 
-
 // TOCEntry represents a table of contents entry with hierarchical structure.
 // This mirrors the chapterData structure in epub for consistent TOC generation.
 type TOCEntry struct {
