@@ -3,7 +3,6 @@ package kfx
 import (
 	"bytes"
 	"fmt"
-	"io"
 
 	"github.com/amazon-ion/ion-go/ion"
 )
@@ -637,53 +636,6 @@ func (r *IonReader) readStruct() (map[string]any, error) {
 
 func (r *IonReader) readSexp() ([]any, error) {
 	return r.readList()
-}
-
-// VarUInt reads a variable-length unsigned integer from a reader.
-func VarUInt(r io.Reader) (uint64, int, error) {
-	var result uint64
-	var bytesRead int
-	for {
-		var b [1]byte
-		n, err := r.Read(b[:])
-		if err != nil {
-			return 0, bytesRead, err
-		}
-		bytesRead += n
-		result = (result << 7) | uint64(b[0]&0x7F)
-		if b[0]&0x80 != 0 {
-			return result, bytesRead, nil
-		}
-	}
-}
-
-// WriteVarUInt writes a variable-length unsigned integer to a writer.
-func WriteVarUInt(w io.Writer, v uint64) (int, error) {
-	if v == 0 {
-		return w.Write([]byte{0x80})
-	}
-
-	var buf [10]byte
-	n := 0
-	for v > 0 {
-		buf[n] = byte(v & 0x7F)
-		v >>= 7
-		n++
-	}
-
-	written := 0
-	for i := n - 1; i >= 0; i-- {
-		b := buf[i]
-		if i == 0 {
-			b |= 0x80
-		}
-		nw, err := w.Write([]byte{b})
-		written += nw
-		if err != nil {
-			return written, err
-		}
-	}
-	return written, nil
 }
 
 // HasIonBVM checks if data starts with Ion Binary Version Marker.
