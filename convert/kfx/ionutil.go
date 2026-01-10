@@ -2,7 +2,6 @@ package kfx
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"io"
 
@@ -52,10 +51,7 @@ func GetSharedSymbolTable() ion.SharedSymbolTable {
 // The prolog should be from GetIonProlog() or from the document's symbol table.
 func DecodeIon(prolog, data []byte, v any) error {
 	// Strip BVM from data if present and prepend prolog
-	ionData := data
-	if HasIonBVM(data) {
-		ionData = data[len(ionBVM):]
-	}
+	ionData := StripIonBVM(data)
 	// Create new slice to avoid modifying original prolog's underlying array
 	combined := make([]byte, 0, len(prolog)+len(ionData))
 	combined = append(combined, prolog...)
@@ -163,11 +159,7 @@ func (w *IonWriter) BytesWithBVM() ([]byte, error) {
 		return nil, err
 	}
 	raw := stripIonProlog(data)
-	// Prepend BVM to raw data
-	result := make([]byte, 0, len(ionBVM)+len(raw))
-	result = append(result, ionBVM...)
-	result = append(result, raw...)
-	return result, nil
+	return PrependIonBVM(raw), nil
 }
 
 // stripIonProlog removes the Ion BVM and symbol table annotation from the beginning of Ion data.
@@ -376,10 +368,7 @@ type IonReader struct {
 // NewIonReader creates a new Ion reader from binary data with prolog.
 func NewIonReader(prolog, data []byte) *IonReader {
 	// Strip BVM from data if present and prepend prolog
-	ionData := data
-	if HasIonBVM(data) {
-		ionData = data[len(ionBVM):]
-	}
+	ionData := StripIonBVM(data)
 	// Create new slice to avoid modifying original prolog's underlying array
 	combined := make([]byte, 0, len(prolog)+len(ionData))
 	combined = append(combined, prolog...)
@@ -393,10 +382,7 @@ func NewIonReader(prolog, data []byte) *IonReader {
 // to local symbol names. The prolog defines the symbol table context.
 func NewIonReaderWithLocalSymbols(prolog, data []byte, localSymbols []string) *IonReader {
 	// Strip BVM from data if present and prepend prolog
-	ionData := data
-	if HasIonBVM(data) {
-		ionData = data[len(ionBVM):]
-	}
+	ionData := StripIonBVM(data)
 	combined := make([]byte, 0, len(prolog)+len(ionData))
 	combined = append(combined, prolog...)
 	combined = append(combined, ionData...)
@@ -700,45 +686,16 @@ func WriteVarUInt(w io.Writer, v uint64) (int, error) {
 	return written, nil
 }
 
-// ReadLittleEndianU16 reads a little-endian uint16.
-func ReadLittleEndianU16(data []byte) uint16 {
-	return binary.LittleEndian.Uint16(data)
-}
-
-// ReadLittleEndianU32 reads a little-endian uint32.
-func ReadLittleEndianU32(data []byte) uint32 {
-	return binary.LittleEndian.Uint32(data)
-}
-
-// ReadLittleEndianU64 reads a little-endian uint64.
-func ReadLittleEndianU64(data []byte) uint64 {
-	return binary.LittleEndian.Uint64(data)
-}
-
-// WriteLittleEndianU16 writes a little-endian uint16.
-func WriteLittleEndianU16(buf []byte, v uint16) {
-	binary.LittleEndian.PutUint16(buf, v)
-}
-
-// WriteLittleEndianU32 writes a little-endian uint32.
-func WriteLittleEndianU32(buf []byte, v uint32) {
-	binary.LittleEndian.PutUint32(buf, v)
-}
-
-// WriteLittleEndianU64 writes a little-endian uint64.
-func WriteLittleEndianU64(buf []byte, v uint64) {
-	binary.LittleEndian.PutUint64(buf, v)
-}
-
 // HasIonBVM checks if data starts with Ion Binary Version Marker.
 func HasIonBVM(data []byte) bool {
-	return len(data) >= 4 && bytes.Equal(data[:4], ionBVM)
+	bvmLen := len(ionBVM)
+	return len(data) >= bvmLen && bytes.Equal(data[:bvmLen], ionBVM)
 }
 
 // StripIonBVM removes the Ion BVM from the beginning of data if present.
 func StripIonBVM(data []byte) []byte {
 	if HasIonBVM(data) {
-		return data[4:]
+		return data[len(ionBVM):]
 	}
 	return data
 }
@@ -748,8 +705,9 @@ func PrependIonBVM(data []byte) []byte {
 	if HasIonBVM(data) {
 		return data
 	}
-	result := make([]byte, len(data)+4)
+	bvmLen := len(ionBVM)
+	result := make([]byte, len(data)+bvmLen)
 	copy(result, ionBVM)
-	copy(result[4:], data)
+	copy(result[bvmLen:], data)
 	return result
 }

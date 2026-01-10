@@ -19,7 +19,7 @@ func TestTitleStylesFromCSS(t *testing.T) {
 	}
 
 	log := zap.NewNop()
-	registry, _ := NewStyleRegistryFromCSS(css, log)
+	registry, _ := NewStyleRegistryFromCSS(css, nil, log)
 
 	// Title header styles should have text-align: center from CSS
 	titleStyles := []string{
@@ -502,7 +502,7 @@ func TestNewStyleRegistryFromCSS(t *testing.T) {
 		}
 	`)
 
-	registry, warnings := NewStyleRegistryFromCSS(css, log)
+	registry, warnings := NewStyleRegistryFromCSS(css, nil, log)
 
 	t.Logf("Warnings: %v", warnings)
 
@@ -549,7 +549,7 @@ func TestNewStyleRegistryFromCSS(t *testing.T) {
 func TestNewStyleRegistryFromCSS_Empty(t *testing.T) {
 	log := zap.NewNop()
 
-	registry, warnings := NewStyleRegistryFromCSS(nil, log)
+	registry, warnings := NewStyleRegistryFromCSS(nil, nil, log)
 
 	if len(warnings) != 0 {
 		t.Errorf("expected no warnings for empty CSS, got %v", warnings)
@@ -576,7 +576,7 @@ func TestStyleRegistryBuildFragments(t *testing.T) {
 		.custom { font-weight: bold; }
 	`)
 
-	registry, _ := NewStyleRegistryFromCSS(css, log)
+	registry, _ := NewStyleRegistryFromCSS(css, nil, log)
 
 	// Mark some styles as used
 	registry.EnsureStyle("paragraph")

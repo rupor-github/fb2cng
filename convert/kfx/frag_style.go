@@ -680,6 +680,8 @@ func (sr *StyleRegistry) resolveInheritance(def StyleDef) StyleDef {
 		}
 	}
 
+	sr.tracer.TraceInheritance(def.Name, def.Parent, merged)
+
 	return StyleDef{
 		Name:       def.Name,
 		Parent:     "", // Flattened - no parent needed
@@ -699,9 +701,10 @@ func (sr *StyleRegistry) RegisterFromCSS(styles []StyleDef) {
 // It starts with default HTML element styles, overlays styles from CSS,
 // then applies KFX-specific post-processing for Kindle compatibility.
 // Returns the registry and any warnings from CSS parsing/conversion.
-func NewStyleRegistryFromCSS(cssData []byte, log *zap.Logger) (*StyleRegistry, []string) {
+func NewStyleRegistryFromCSS(cssData []byte, tracer *StyleTracer, log *zap.Logger) (*StyleRegistry, []string) {
 	// Start with HTML element defaults only
 	sr := DefaultStyleRegistry()
+	sr.SetTracer(tracer)
 
 	if len(cssData) == 0 {
 		return sr, nil
@@ -713,6 +716,7 @@ func NewStyleRegistryFromCSS(cssData []byte, log *zap.Logger) (*StyleRegistry, [
 
 	// Convert to KFX styles (includes drop cap detection)
 	converter := NewConverter(log)
+	converter.SetTracer(tracer)
 	styles, warnings := converter.ConvertStylesheet(sheet)
 
 	// Register CSS styles (overriding defaults where applicable)

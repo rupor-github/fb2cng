@@ -581,10 +581,6 @@ func (s KFXSymbol) String() string {
 	return fmt.Sprintf("$%d", s)
 }
 
-// Value converts KFXSymbol to SymbolValue for use in struct values.
-func (s KFXSymbol) Value() SymbolValue {
-	return SymbolValue(s)
-}
 
 // SymbolID returns the ID for a symbol name.
 // Returns -1 if the symbol is not in the known table.

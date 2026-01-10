@@ -1,7 +1,9 @@
 package kfx
 
-// BuildContainerFragment creates a $270 fragment from Container state.
-// This is used when the container already has its configuration set.
+// BuildContainerFragment creates a $270 fragment from Container state. This is
+// used when the container already has its configuration set.
+// NOTE: $270 (container) fragment is not stored as an ENTY; synthesize it for
+// tooling/debug.
 func BuildContainerFragment(c *Container) *Fragment {
 	container := NewStruct()
 

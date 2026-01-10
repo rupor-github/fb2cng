@@ -8,7 +8,8 @@ import (
 
 // Converter converts CSS rules to KFX style definitions.
 type Converter struct {
-	log *zap.Logger
+	log    *zap.Logger
+	tracer *StyleTracer
 }
 
 // NewConverter creates a new CSS-to-KFX converter.
@@ -17,6 +18,10 @@ func NewConverter(log *zap.Logger) *Converter {
 		log = zap.NewNop()
 	}
 	return &Converter{log: log.Named("css-converter")}
+}
+
+func (c *Converter) SetTracer(t *StyleTracer) {
+	c.tracer = t
 }
 
 // ConversionResult holds the result of converting a CSS rule to KFX.
@@ -478,6 +483,8 @@ func (c *Converter) ConvertStylesheet(sheet *Stylesheet) ([]StyleDef, []string) 
 			result.Style.Properties[SymDropcapChars] = info.chars
 			result.Style.Properties[SymDropcapLines] = info.lines
 		}
+
+		c.tracer.TraceCSSConvert(rule.Selector.Raw, result.Style.Properties)
 
 		if existing, ok := styleMap[styleName]; ok {
 			// Merge properties (later rules override)

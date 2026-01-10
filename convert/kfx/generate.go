@@ -357,7 +357,9 @@ func buildStyleRegistry(stylesheets []fb2.Stylesheet, tracer *StyleTracer, log *
 	// If no stylesheets, return defaults
 	if len(stylesheets) == 0 {
 		log.Debug("No stylesheets provided, using defaults only")
-		return DefaultStyleRegistry()
+		sr := DefaultStyleRegistry()
+		sr.SetTracer(tracer)
+		return sr
 	}
 
 	// Combine all stylesheet data
@@ -374,12 +376,13 @@ func buildStyleRegistry(stylesheets []fb2.Stylesheet, tracer *StyleTracer, log *
 
 	if len(combinedCSS) == 0 {
 		log.Debug("No CSS data in stylesheets, using defaults only")
-		return DefaultStyleRegistry()
+		sr := DefaultStyleRegistry()
+		sr.SetTracer(tracer)
+		return sr
 	}
 
 	// Create registry from CSS
-	registry, warnings := NewStyleRegistryFromCSS(combinedCSS, log)
-	registry.SetTracer(tracer)
+	registry, warnings := NewStyleRegistryFromCSS(combinedCSS, tracer, log)
 
 	// Log warnings at debug level
 	for _, w := range warnings {

@@ -64,16 +64,6 @@ type containerInfo struct {
 	FCapabLen   int    `ion:"$595"`
 }
 
-func (c *containerInfo) Validate() error {
-	if c.ComprType != 0 {
-		return fmt.Errorf("unsupported KFX container compression type: %d", c.ComprType)
-	}
-	if c.DRMScheme != 0 {
-		return fmt.Errorf("unsupported KFX container DRM: %d", c.DRMScheme)
-	}
-	return nil
-}
-
 // entityHeader is the fixed-size ENTY header.
 type entityHeader struct {
 	Signature [4]byte
@@ -98,16 +88,6 @@ func (e *entityHeader) Validate() error {
 type entityInfo struct {
 	ComprType int `ion:"$410"`
 	DRMScheme int `ion:"$411"`
-}
-
-func (e *entityInfo) Validate() error {
-	if e.ComprType != 0 {
-		return fmt.Errorf("unsupported KFX entity compression type: %d", e.ComprType)
-	}
-	if e.DRMScheme != 0 {
-		return fmt.Errorf("unsupported KFX entity DRM: %d", e.DRMScheme)
-	}
-	return nil
 }
 
 // indexTableEntry is a single entity directory entry.
@@ -253,6 +233,11 @@ func ReadContainer(data []byte) (*Container, error) {
 
 	// Determine container format
 	c.classifyContainerFormat()
+
+	// $270 (container) fragment is not stored as an ENTY; synthesize it for tooling/debug.
+	if c.Fragments != nil && c.Fragments.GetRoot(SymContainer) == nil {
+		_ = c.Fragments.Add(BuildContainerFragment(c))
+	}
 
 	return c, nil
 }
@@ -522,10 +507,10 @@ func (c *Container) WriteContainer() ([]byte, error) {
 			idNum = frag.FID
 		}
 
-		WriteLittleEndianU32(entry[0:4], uint32(idNum))
-		WriteLittleEndianU32(entry[4:8], uint32(frag.FType))
-		WriteLittleEndianU64(entry[8:16], uint64(entityPayloads.Len()))
-		WriteLittleEndianU64(entry[16:24], uint64(len(entityData)))
+		binary.LittleEndian.PutUint32(entry[0:4], uint32(idNum))
+		binary.LittleEndian.PutUint32(entry[4:8], uint32(frag.FType))
+		binary.LittleEndian.PutUint64(entry[8:16], uint64(entityPayloads.Len()))
+		binary.LittleEndian.PutUint64(entry[16:24], uint64(len(entityData)))
 		entityDir.Write(entry[:])
 
 		entityPayloads.Write(entityData)
@@ -588,10 +573,10 @@ func (c *Container) WriteContainer() ([]byte, error) {
 	// Fixed header (18 bytes)
 	buf.WriteString(ContainerSignature)
 	var header [14]byte
-	WriteLittleEndianU16(header[0:2], ContainerVersion)
-	WriteLittleEndianU32(header[2:6], headerLen)
-	WriteLittleEndianU32(header[6:10], containerInfoOffset)
-	WriteLittleEndianU32(header[10:14], uint32(len(containerInfo)))
+	binary.LittleEndian.PutUint16(header[0:2], ContainerVersion)
+	binary.LittleEndian.PutUint32(header[2:6], headerLen)
+	binary.LittleEndian.PutUint32(header[6:10], containerInfoOffset)
+	binary.LittleEndian.PutUint32(header[10:14], uint32(len(containerInfo)))
 	buf.Write(header[:])
 
 	// Entity directory
@@ -624,7 +609,7 @@ func (c *Container) serializeEntity(frag *Fragment) ([]byte, error) {
 
 	// Version (u16)
 	var version [2]byte
-	WriteLittleEndianU16(version[:], EntityVersion)
+	binary.LittleEndian.PutUint16(version[:], EntityVersion)
 	buf.Write(version[:])
 
 	// Placeholder for header_len (u32)
@@ -640,7 +625,7 @@ func (c *Container) serializeEntity(frag *Fragment) ([]byte, error) {
 
 	// Update header_len
 	headerLen := uint32(buf.Len())
-	WriteLittleEndianU32(buf.Bytes()[headerLenPos:], headerLen)
+	binary.LittleEndian.PutUint32(buf.Bytes()[headerLenPos:], headerLen)
 
 	// Payload
 	if frag.IsRaw() {

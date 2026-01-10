@@ -108,7 +108,7 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 		storyIdx++
 		sectionIdx++
 
-		sb := NewStorylineBuilder(storyName, sectionName, nextEID)
+		sb := NewStorylineBuilder(storyName, sectionName, nextEID, styles)
 		ca := NewContentAccumulator(contentCounter)
 		contentCounter++
 
@@ -160,7 +160,7 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 		storyIdx++
 		sectionIdx++
 
-		sb := NewStorylineBuilder(storyName, tocSectionName, nextEID)
+		sb := NewStorylineBuilder(storyName, tocSectionName, nextEID, styles)
 		ca := NewContentAccumulator(contentCounter)
 		contentCounter++
 

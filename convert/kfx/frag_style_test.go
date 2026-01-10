@@ -108,7 +108,7 @@ func TestInferParentStyleWithCSS(t *testing.T) {
 		}
 	`)
 
-	sr, _ := NewStyleRegistryFromCSS(css, log)
+	sr, _ := NewStyleRegistryFromCSS(css, nil, log)
 
 	// Now "subtitle" exists from CSS, so inferParentStyle should find it
 	tests := []struct {
@@ -188,21 +188,6 @@ func TestStyleContext(t *testing.T) {
 		}
 	})
 
-	t.Run("ResolveWithCustomStyle", func(t *testing.T) {
-		ctx := NewStyleContext().Push("poem").Push("stanza")
-		result := ctx.ResolveWithCustomStyle("custom-class")
-		if result != "poem stanza custom-class" {
-			t.Errorf("Expected 'poem stanza custom-class', got %q", result)
-		}
-	})
-
-	t.Run("ResolveWithCustomStyle empty ancestors", func(t *testing.T) {
-		ctx := NewStyleContext()
-		result := ctx.ResolveWithCustomStyle("custom-class")
-		if result != "custom-class" {
-			t.Errorf("Expected 'custom-class', got %q", result)
-		}
-	})
 
 	t.Run("immutability - push returns new context", func(t *testing.T) {
 		ctx1 := NewStyleContext().Push("poem")

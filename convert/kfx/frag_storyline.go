@@ -148,19 +148,6 @@ func (sc StyleContext) Resolve(baseStyle, elementStyle string) string {
 	return strings.Join(parts, " ")
 }
 
-// ResolveWithCustomStyle combines ancestors with a custom style (no base style).
-// Used for elements that already have a complete style name.
-func (sc StyleContext) ResolveWithCustomStyle(styleName string) string {
-	if len(sc.ancestors) == 0 {
-		return styleName
-	}
-	parts := make([]string, 0, len(sc.ancestors)+1)
-	parts = append(parts, sc.ancestors...)
-	if styleName != "" {
-		parts = append(parts, styleName)
-	}
-	return strings.Join(parts, " ")
-}
 
 // TOCEntry represents a table of contents entry with hierarchical structure.
 // This mirrors the chapterData structure in epub for consistent TOC generation.
@@ -206,16 +193,6 @@ func NewContentAccumulator(startCounter int) *ContentAccumulator {
 		currentSize: 0,
 		fragments:   make(map[string][]string),
 	}
-}
-
-// CurrentName returns the current content fragment name.
-func (ca *ContentAccumulator) CurrentName() string {
-	return ca.currentName
-}
-
-// CurrentOffset returns the current offset (index) within the current content fragment.
-func (ca *ContentAccumulator) CurrentOffset() int {
-	return len(ca.currentList)
 }
 
 // Add adds a paragraph/text entry to the accumulator.
@@ -406,6 +383,7 @@ func NewContentEntry(ref ContentRef) StructValue {
 type StorylineBuilder struct {
 	name            string // Storyline name (e.g., "l1")
 	sectionName     string // Associated section name (e.g., "c0")
+	styles          *StyleRegistry
 	contentEntries  []ContentRef
 	eidCounter      int
 	pageTemplateEID int // Separate EID for page template container
@@ -486,10 +464,11 @@ func collectChildEIDs(children []any) []int {
 
 // NewStorylineBuilder creates a new storyline builder.
 // Allocates the first EID for the page template container.
-func NewStorylineBuilder(storyName, sectionName string, startEID int) *StorylineBuilder {
+func NewStorylineBuilder(storyName, sectionName string, startEID int, styles *StyleRegistry) *StorylineBuilder {
 	return &StorylineBuilder{
 		name:            storyName,
 		sectionName:     sectionName,
+		styles:          styles,
 		pageTemplateEID: startEID,     // First EID goes to page template
 		eidCounter:      startEID + 1, // Content EIDs start after page template
 	}
@@ -546,6 +525,10 @@ func (sb *StorylineBuilder) EndBlock() {
 		children = append(children, NewContentEntry(child))
 	}
 
+	if resolvedStyle != "" {
+		sb.activeBlock.styles.tracer.TraceAssign("wrapper", fmt.Sprintf("%d", sb.activeBlock.eid), resolvedStyle, sb.sectionName+"/"+sb.name)
+	}
+
 	// Add the wrapper as a container entry
 	sb.contentEntries = append(sb.contentEntries, ContentRef{
 		EID:      sb.activeBlock.eid,
@@ -555,11 +538,6 @@ func (sb *StorylineBuilder) EndBlock() {
 	})
 
 	sb.activeBlock = nil
-}
-
-// InBlock returns true if currently building inside a wrapper block.
-func (sb *StorylineBuilder) InBlock() bool {
-	return sb.activeBlock != nil
 }
 
 // addEntry is the internal method that routes content to the appropriate destination.
@@ -579,6 +557,10 @@ func (sb *StorylineBuilder) AddContent(contentType KFXSymbol, contentName string
 	eid := sb.eidCounter
 	sb.eidCounter++
 
+	if style != "" && sb.styles != nil {
+		sb.styles.tracer.TraceAssign(traceSymbolName(contentType), fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name)
+	}
+
 	return sb.addEntry(ContentRef{
 		EID:           eid,
 		Type:          contentType,
@@ -592,6 +574,10 @@ func (sb *StorylineBuilder) AddContent(contentType KFXSymbol, contentName string
 func (sb *StorylineBuilder) AddContentAndEvents(contentType KFXSymbol, contentName string, contentOffset int, style string, events []StyleEventRef) int {
 	eid := sb.eidCounter
 	sb.eidCounter++
+
+	if style != "" && sb.styles != nil {
+		sb.styles.tracer.TraceAssign(traceSymbolName(contentType), fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name)
+	}
 
 	return sb.addEntry(ContentRef{
 		EID:           eid,
@@ -608,6 +594,10 @@ func (sb *StorylineBuilder) AddContentWithHeading(contentType KFXSymbol, content
 	eid := sb.eidCounter
 	sb.eidCounter++
 
+	if style != "" && sb.styles != nil {
+		sb.styles.tracer.TraceAssign(traceSymbolName(contentType), fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name)
+	}
+
 	return sb.addEntry(ContentRef{
 		EID:           eid,
 		Type:          contentType,
@@ -623,6 +613,10 @@ func (sb *StorylineBuilder) AddContentWithHeading(contentType KFXSymbol, content
 func (sb *StorylineBuilder) AddImage(resourceName, style, altText string) int {
 	eid := sb.eidCounter
 	sb.eidCounter++
+
+	if style != "" && sb.styles != nil {
+		sb.styles.tracer.TraceAssign(traceSymbolName(SymImage), fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name)
+	}
 
 	return sb.addEntry(ContentRef{
 		EID:          eid,
@@ -721,6 +715,7 @@ func (sb *StorylineBuilder) AddTable(table *fb2.Table, styles *StyleRegistry, ca
 
 	// Create table entry with proper structure
 	tableStyle := styles.ResolveStyle("table")
+	styles.tracer.TraceAssign(traceSymbolName(SymTable), fmt.Sprintf("%d", tableEID), tableStyle, sb.sectionName+"/"+sb.name)
 	tableEntry := NewStruct().
 		SetInt(SymUniqueID, int64(tableEID)).
 		SetSymbol(SymType, SymTable). // $278
@@ -752,11 +747,6 @@ func (sb *StorylineBuilder) FirstEID() int {
 		return sb.contentEntries[0].EID
 	}
 	return sb.eidCounter
-}
-
-// PageTemplateEID returns the EID allocated for the page template.
-func (sb *StorylineBuilder) PageTemplateEID() int {
-	return sb.pageTemplateEID
 }
 
 // NextEID returns the next EID that will be assigned.
@@ -834,7 +824,7 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 			sectionNames = append(sectionNames, sectionName)
 
 			// Create storyline builder for body intro
-			sb := NewStorylineBuilder(storyName, sectionName, eidCounter)
+			sb := NewStorylineBuilder(storyName, sectionName, eidCounter, styles)
 
 			// Add cover image once at the very beginning (references external_resource)
 			if !coverAdded && len(book.Description.TitleInfo.Coverpage) > 0 {
@@ -891,7 +881,7 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 			sectionNames = append(sectionNames, sectionName)
 
 			// Create storyline builder
-			sb := NewStorylineBuilder(storyName, sectionName, eidCounter)
+			sb := NewStorylineBuilder(storyName, sectionName, eidCounter, styles)
 
 			// Track nested section info for TOC hierarchy
 			var nestedTOCEntries []*TOCEntry
@@ -938,7 +928,7 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 		sectionName := "c" + toBase36(sectionCount-1)
 		sectionNames = append(sectionNames, sectionName)
 
-		sb := NewStorylineBuilder(storyName, sectionName, eidCounter)
+		sb := NewStorylineBuilder(storyName, sectionName, eidCounter, styles)
 
 		// Process all footnote bodies into a single storyline
 		for _, body := range footnoteBodies {
