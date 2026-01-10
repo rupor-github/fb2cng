@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/beevik/etree"
-	"github.com/gosimple/slug"
 	fixzip "github.com/hidez8891/zip"
 	"go.uber.org/zap"
 
@@ -474,7 +473,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		}
 	}
 	if cfg.Metainformation.Transliterate {
-		title = slug.Make(title)
+		title = fb2.Transliterate(title)
 	}
 	dcTitle.SetText(title)
 
@@ -497,7 +496,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 			}
 		}
 		if cfg.Metainformation.Transliterate {
-			authorName = slug.Make(authorName)
+			authorName = fb2.Transliterate(authorName)
 		}
 		dcCreator.SetText(authorName)
 

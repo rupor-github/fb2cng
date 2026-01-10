@@ -7,12 +7,12 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gosimple/slug"
 	"go.uber.org/zap"
 
 	"fbc/common"
 	"fbc/config"
 	"fbc/content"
+	"fbc/fb2"
 	"fbc/state"
 )
 
@@ -48,7 +48,7 @@ func makeOutputDir(src, dst string, env *state.LocalEnv) string {
 func makeDefaultFileName(src string, format common.OutputFmt, env *state.LocalEnv) string {
 	baseName := strings.TrimSuffix(filepath.Base(src), filepath.Ext(src))
 	if env.Cfg.Document.FileNameTransliterate {
-		baseName = slug.Make(baseName)
+		baseName = fb2.Slugify(baseName)
 	}
 	return config.CleanFileName(baseName) + format.Ext()
 }
@@ -100,7 +100,7 @@ func splitPathSegments(path string) []string {
 
 func cleanPathSegment(segment string, env *state.LocalEnv) string {
 	if env.Cfg.Document.FileNameTransliterate {
-		segment = slug.Make(segment)
+		segment = fb2.Slugify(segment)
 	}
 	return config.CleanFileName(segment)
 }

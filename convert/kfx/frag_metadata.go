@@ -70,6 +70,9 @@ func BuildBookMetadata(c *content.Content, cfg *config.DocumentConfig, container
 			title = expanded
 		}
 	}
+	if cfg.Metainformation.Transliterate {
+		title = fb2.Transliterate(title)
+	}
 	if title != "" {
 		titleMetadata = append(titleMetadata, NewMetadataEntry("title", title))
 	}
@@ -89,6 +92,9 @@ func BuildBookMetadata(c *content.Content, cfg *config.DocumentConfig, container
 			} else {
 				authorName = expanded
 			}
+		}
+		if cfg.Metainformation.Transliterate {
+			authorName = fb2.Transliterate(authorName)
 		}
 		if authorName != "" {
 			titleMetadata = append(titleMetadata, NewMetadataEntry("author", authorName))
