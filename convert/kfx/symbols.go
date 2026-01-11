@@ -234,6 +234,7 @@ const (
 	SymNavUnit        KFXSymbol = 393 // nav_unit
 	SymCondNavUnit    KFXSymbol = 394 // conditional_nav_group_unit (skip)
 	SymResourcePath   KFXSymbol = 395 // resource_path
+	SymSRL            KFXSymbol = 396 // srl (start reading location)
 
 	// Landmarks ($397-$408)
 	SymTitlePage        KFXSymbol = 397 // titlepage

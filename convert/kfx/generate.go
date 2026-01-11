@@ -107,7 +107,7 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	// Generate storyline and section fragments from book content
 	// EIDs start at 1000 - this is arbitrary but leaves room for future system IDs
 	startEID := 1000
-	contentFragments, nextEID, sectionNames, tocEntries, sectionEIDs, idToEID, err := generateStoryline(c.Book, styles, imageResourceInfo, startEID, c.FootnotesIndex)
+	contentFragments, nextEID, sectionNames, tocEntries, sectionEIDs, idToEID, landmarks, err := generateStoryline(c.Book, styles, imageResourceInfo, startEID, c.FootnotesIndex)
 	if err != nil {
 		return err
 	}
@@ -115,7 +115,7 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	annotationEnabled := cfg.Annotation.Enable && c.Book.Description.TitleInfo.Annotation != nil
 	tocPageEnabled := cfg.TOCPage.Placement != common.TOCPagePlacementNone
 	if annotationEnabled || tocPageEnabled {
-		sectionNames, tocEntries, sectionEIDs, nextEID, err = addGeneratedSections(c, cfg, styles, contentFragments, sectionNames, tocEntries, sectionEIDs, nextEID, log)
+		sectionNames, tocEntries, sectionEIDs, nextEID, landmarks, err = addGeneratedSections(c, cfg, styles, contentFragments, sectionNames, tocEntries, sectionEIDs, nextEID, landmarks, log)
 		if err != nil {
 			return err
 		}
@@ -172,14 +172,14 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 		return err
 	}
 
-	// Build navigation containers (TOC + APPROXIMATE_PAGE_LIST) from TOC entries
+	// Build navigation containers (TOC + landmarks + APPROXIMATE_PAGE_LIST) from TOC entries
 	if len(tocEntries) > 0 {
 		// Pass page size from config if page map is enabled
 		pageSize := 0
 		if cfg.PageMap.Enable {
 			pageSize = cfg.PageMap.Size
 		}
-		navFrag := BuildNavigation(tocEntries, nextEID, posItems, pageSize)
+		navFrag := BuildNavigation(tocEntries, nextEID, posItems, pageSize, landmarks)
 		if err := container.Fragments.Add(navFrag); err != nil {
 			return err
 		}

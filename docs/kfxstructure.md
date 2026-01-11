@@ -626,19 +626,22 @@ Derived from: `kfxlib/yj_structure.py:BookStructure.check_consistency` (document
 ### 7.5 `$164` (External resource descriptor) + `$417` (RawMedia) / `$418` (RawFont)
 
 The resource descriptor fragment `$164` is used to locate and validate resource bytes stored separately in raw entities:
+- `$175` (`resource_name`): resource identifier - **must be a symbol**, not a string (KPV requirement)
 - `$165` (`location`): key used to look up the raw resource entity (`$417`/`$418`)
 - `$161` (`format`): file format symbol (e.g. `$285` jpg, `$284` png, `$565` pdf, `$548` jxr)
-- `$162` (`MIME`): mime-like symbol used by the converter to infer extensions
-- `$422`/`$423` (width/height) or `$66`/`$67` fallback
+- `$162` (`mime_type`): MIME type string (use `"image/jpg"` not `"image/jpeg"` for JPEG images)
+- `$422`/`$423` (resource_width/resource_height): image dimensions in pixels
 - `$636`: tiling structure (list of rows of tile locations)
 - `$564`: PDF page number base (0-based, code uses +1 for display)
 - `$797`: overlapped tiles flag/metadata (presence indicates overlap)
+
+**Important**: The `$175` field must be encoded as an Ion **symbol**, not a string. KPV validates this and may fail to display images if `$175` is a string. Similarly, `$162` should use `"image/jpg"` (not `"image/jpeg"`) to match KPV's expected format.
 
 Raw bytes are stored as separate fragments:
 - `$417` (bcRawMedia) with `fid == location` and value = raw bytes
 - `$418` (bcRawFont) similarly for fonts
 
-Derived from: `kfxlib/yj_structure.py:BookStructure.check_consistency` (resource scan), `kfxlib/unpack_container.py:ZipUnpackContainer.deserialize/serialize`, `kfxlib/kfx_container.py:KfxContainerEntity.deserialize`.
+Derived from: `kfxlib/yj_structure.py:BookStructure.check_consistency` (resource scan), `kfxlib/unpack_container.py:ZipUnpackContainer.deserialize/serialize`, `kfxlib/kfx_container.py:KfxContainerEntity.deserialize`, `convert/kfx/frag_resource.go`.
 
 ### 7.5.1 `$260` (Section) and `$259` (Storyline) fragments
 
@@ -664,8 +667,8 @@ Per Kindle Previewer (KPV) reference format, page templates use a minimal 3-fiel
 - `$159` (type): content type symbol (`$269`=text, `$271`=image, `$270`=container)
 - `$157` (style): optional style name reference
 - `$145` (content): for text, a struct with `name` (content fragment reference) and `$403` (array index/offset within the content_list)
-- `$175` (resource): for images, external resource fragment id
-- `$584` (alt_text): for images, accessibility text (KPV parity)
+- `$175` (resource_name): for images, external resource fragment id as **symbol** (not string)
+- `$584` (alt_text): for images, accessibility text (only included when non-empty, per KPV parity)
 - `$142` (style_events): optional inline formatting events
 - `$790` (yj.semantics.heading_level): for headings, level 1-6 (KPV parity)
 
@@ -679,6 +682,38 @@ Per Kindle Previewer (KPV) reference format, page templates use a minimal 3-fiel
 **Important**: Offsets and lengths in style events (`$143`, `$144`) are measured in **Unicode code points (characters/runes)**, not bytes. For text containing multi-byte characters (e.g., Cyrillic, CJK), the character offset will differ from the byte offset. For example, the Russian text "Автор" is 5 characters but 10 bytes in UTF-8.
 
 Derived from: `convert/kfx/frag_storyline.go`, KPV reference files.
+
+### 7.5.2 Cover section structure
+
+Cover images require special handling in KFX to enable full-screen scaling. Unlike regular text sections, the cover uses a **container type** (`$270`) page template with explicit dimensions.
+
+**Cover section (`$260`) page template structure**:
+- `$140` (float): alignment, typically `$320` (center)
+- `$155` (id): unique EID for the page template
+- `$156` (layout): scaling mode, typically `$326` (scale_fit)
+- `$159` (type): **must be `$270` (container)**, not `$269` (text)
+- `$176` (story_name): reference to the cover storyline
+- `$66` (container_width): image width in pixels
+- `$67` (container_height): image height in pixels
+
+**Cover storyline (`$259`) content entry**:
+- `$155` (id): unique EID for the image content
+- `$159` (type): `$271` (image)
+- `$175` (resource_name): external resource fragment id (as symbol, not string)
+- `$157` (style): minimal style with `font-size: 1rem`, `line-height: 1.0101lh`
+- `$584` (alt_text): only included when non-empty
+
+**Critical**: For the cover image to scale properly (fill the screen without white borders), it **must** be registered in the landmarks navigation container with type `$233` (cover_page). Without this landmark entry, KPV treats the cover as regular content and does not apply full-screen scaling.
+
+**External resource (`$164`) for cover**:
+- `$161` (format): format symbol (`$285`=jpg, `$284`=png, `$286`=gif)
+- `$162` (mime_type): MIME type string (use `"image/jpg"` not `"image/jpeg"`)
+- `$165` (location): resource path string (e.g., `"resource/rsrc1"`)
+- `$175` (resource_name): resource name as **symbol** (not string)
+- `$422` (resource_width): image width in pixels
+- `$423` (resource_height): image height in pixels
+
+Derived from: `convert/kfx/frag_storyline.go:NewCoverPageTemplateEntry`, `convert/kfx/frag_resource.go`, KPV reference files.
 
 ### 7.6 Position and location mapping fragments
 
@@ -945,6 +980,40 @@ Derived from: `kfxlib/yj_to_epub_navigation.py:register_anchor/process_position/
 Landmarks (`nav_type == $236`):
 
 - Uses `$238` to pick a `guide_type` (e.g. cover/text/toc), falling back to the raw value if unknown.
+
+##### Landmarks container structure
+
+The landmarks container is included in `$389` (book_navigation) alongside TOC and page list:
+
+```
+{$235: symbol($236), $247: [landmark_entries...]}
+```
+
+Each landmark entry has the form:
+- `$238` (landmark_type): type symbol identifying the landmark purpose
+- `$241` (representation): struct containing `$244` (label) with display text
+- `$246` (target_position): struct with `$143: 0` (offset) and `$155: eid` (target EID)
+
+**Standard landmark types**:
+- `$233` (cover_page): Cover image - **required for proper cover scaling**
+- `$212` (toc): Table of Contents page
+- `$396` (srl): Start Reading Location - where reading begins after cover/frontmatter
+
+**Important**: The cover landmark (`$238: symbol($233)`) is **critical** for enabling full-screen cover display. Without this landmark, KPV does not recognize the cover section as special and renders it with standard margins/borders instead of scaling to fill the screen. The landmark must point to the cover section's page template EID.
+
+Example landmarks container:
+```
+{
+  $235: symbol($236),  // nav_type = landmarks
+  $247: [
+    {$238: symbol($233), $241: {$244: "cover-nav-unit"}, $246: {$143: 0, $155: 1000}},
+    {$238: symbol($212), $241: {$244: "Table of Contents"}, $246: {$143: 0, $155: 1867}},
+    {$238: symbol($396), $241: {$244: "Start"}, $246: {$143: 0, $155: 1003}}
+  ]
+}
+```
+
+Derived from: `convert/kfx/frag_storyline.go:buildLandmarksContainer`, `convert/kfx/values.go:NewLandmarkEntry`, KPV reference files.
 
 Page list (`nav_type == $237`):
 

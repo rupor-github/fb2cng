@@ -814,13 +814,14 @@ func (sb *StorylineBuilder) BuildStorylineOnly() *Fragment {
 // and mapping of original FB2 IDs to EIDs (for $266 anchors).
 func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 	imageResources imageResourceInfoByID, startEID int, footnotesIndex fb2.FootnoteRefs,
-) (*FragmentList, int, sectionNameList, []*TOCEntry, sectionEIDsBySectionName, eidByFB2ID, error) {
+) (*FragmentList, int, sectionNameList, []*TOCEntry, sectionEIDsBySectionName, eidByFB2ID, LandmarkInfo, error) {
 	fragments := NewFragmentList()
 	eidCounter := startEID
 	sectionNames := make(sectionNameList, 0)
 	tocEntries := make([]*TOCEntry, 0)
 	sectionEIDs := make(sectionEIDsBySectionName)
 	idToEID := make(eidByFB2ID)
+	landmarks := LandmarkInfo{}
 
 	// Single shared content accumulator for the entire book.
 	// KPV consolidates content across all storylines into fewer, larger fragments.
@@ -857,17 +858,21 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 			// Build cover storyline fragment
 			storylineFrag := sb.BuildStorylineOnly()
 			if err := fragments.Add(storylineFrag); err != nil {
-				return nil, 0, nil, nil, nil, nil, err
+				return nil, 0, nil, nil, nil, nil, landmarks, err
 			}
 
 			// Build cover section with container type and image dimensions
 			// Reference KFX: {$140: $320, $155: eid, $156: $326, $159: $270, $176: storyline, $66: width, $67: height}
 			// The page template EID should be unique (not the same as the image content EID)
-			pageTemplate := NewCoverPageTemplateEntry(sb.PageTemplateEID(), storyName, imgInfo.Width, imgInfo.Height)
+			pageTemplateEID := sb.PageTemplateEID()
+			pageTemplate := NewCoverPageTemplateEntry(pageTemplateEID, storyName, imgInfo.Width, imgInfo.Height)
 			sectionFrag := BuildSection(sectionName, []any{pageTemplate})
 			if err := fragments.Add(sectionFrag); err != nil {
-				return nil, 0, nil, nil, nil, nil, err
+				return nil, 0, nil, nil, nil, nil, landmarks, err
 			}
+
+			// Track cover EID for landmarks
+			landmarks.CoverEID = pageTemplateEID
 		}
 	}
 
@@ -893,7 +898,7 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 			sb := NewStorylineBuilder(storyName, sectionName, eidCounter, styles)
 
 			if err := processBodyIntroContent(book, body, sb, styles, imageResources, ca, idToEID, defaultWidth, footnotesIndex); err != nil {
-				return nil, 0, nil, nil, nil, nil, err
+				return nil, 0, nil, nil, nil, nil, landmarks, err
 			}
 
 			sectionEIDs[sectionName] = sb.AllEIDs()
@@ -910,6 +915,11 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 			}
 			tocEntries = append(tocEntries, tocEntry)
 
+			// Track start reading location (first body intro is the "Start" landmark)
+			if landmarks.StartEID == 0 {
+				landmarks.StartEID = sb.FirstEID()
+			}
+
 			// Update EID counter
 			eidCounter = sb.NextEID()
 
@@ -917,10 +927,10 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 			storylineFrag, sectionFrag := sb.Build()
 
 			if err := fragments.Add(storylineFrag); err != nil {
-				return nil, 0, nil, nil, nil, nil, err
+				return nil, 0, nil, nil, nil, nil, landmarks, err
 			}
 			if err := fragments.Add(sectionFrag); err != nil {
-				return nil, 0, nil, nil, nil, nil, err
+				return nil, 0, nil, nil, nil, nil, landmarks, err
 			}
 		}
 
@@ -941,7 +951,7 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 			var nestedTOCEntries []*TOCEntry
 
 			if err := processStorylineContent(book, section, sb, styles, imageResources, ca, 1, &nestedTOCEntries, idToEID, defaultWidth, footnotesIndex); err != nil {
-				return nil, 0, nil, nil, nil, nil, err
+				return nil, 0, nil, nil, nil, nil, landmarks, err
 			}
 
 			sectionEIDs[sectionName] = sb.AllEIDs()
@@ -966,10 +976,10 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 			storylineFrag, sectionFrag := sb.Build()
 
 			if err := fragments.Add(storylineFrag); err != nil {
-				return nil, 0, nil, nil, nil, nil, err
+				return nil, 0, nil, nil, nil, nil, landmarks, err
 			}
 			if err := fragments.Add(sectionFrag); err != nil {
-				return nil, 0, nil, nil, nil, nil, err
+				return nil, 0, nil, nil, nil, nil, landmarks, err
 			}
 		}
 	}
@@ -1047,10 +1057,10 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 		storylineFrag, sectionFrag := sb.Build()
 
 		if err := fragments.Add(storylineFrag); err != nil {
-			return nil, 0, nil, nil, nil, nil, err
+			return nil, 0, nil, nil, nil, nil, landmarks, err
 		}
 		if err := fragments.Add(sectionFrag); err != nil {
-			return nil, 0, nil, nil, nil, nil, err
+			return nil, 0, nil, nil, nil, nil, landmarks, err
 		}
 	}
 
@@ -1058,11 +1068,11 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 	for name, contentList := range ca.Finish() {
 		contentFrag := buildContentFragmentByName(name, contentList)
 		if err := fragments.Add(contentFrag); err != nil {
-			return nil, 0, nil, nil, nil, nil, err
+			return nil, 0, nil, nil, nil, nil, landmarks, err
 		}
 	}
 
-	return fragments, eidCounter, sectionNames, tocEntries, sectionEIDs, idToEID, nil
+	return fragments, eidCounter, sectionNames, tocEntries, sectionEIDs, idToEID, landmarks, nil
 }
 
 // processBodyIntroContent processes body intro content using ContentAccumulator.
@@ -1913,7 +1923,8 @@ func anySlice(s []string) []any {
 // The $389 fragment value is a list of reading order navigation entries.
 // If posItems and pageSize are provided (pageSize > 0), an APPROXIMATE_PAGE_LIST
 // is also included in the navigation.
-func BuildNavigation(tocEntries []*TOCEntry, startEID int, posItems []PositionItem, pageSize int) *Fragment {
+// If landmarks has non-zero EIDs, a landmarks container is added.
+func BuildNavigation(tocEntries []*TOCEntry, startEID int, posItems []PositionItem, pageSize int, landmarks LandmarkInfo) *Fragment {
 	// Build TOC entries recursively
 	entries := buildNavEntries(tocEntries, startEID)
 
@@ -1922,6 +1933,11 @@ func BuildNavigation(tocEntries []*TOCEntry, startEID int, posItems []PositionIt
 
 	// Create nav_containers list starting with TOC
 	navContainers := []any{tocContainer}
+
+	// Add landmarks container if we have any landmark positions
+	if landmarksContainer := buildLandmarksContainer(landmarks); landmarksContainer != nil {
+		navContainers = append(navContainers, landmarksContainer)
+	}
 
 	// Add APPROXIMATE_PAGE_LIST if page mapping is enabled
 	if pageSize > 0 && len(posItems) > 0 {
@@ -1947,6 +1963,40 @@ func BuildNavigation(tocEntries []*TOCEntry, startEID int, posItems []PositionIt
 		FID:   SymBookNavigation, // Root fragment - FID == FType
 		Value: bookNavList,
 	}
+}
+
+// buildLandmarksContainer creates a landmarks navigation container from LandmarkInfo.
+// Returns nil if no landmarks are configured.
+func buildLandmarksContainer(landmarks LandmarkInfo) StructValue {
+	landmarkEntries := make([]any, 0, 3)
+
+	// Add cover landmark (if cover exists)
+	if landmarks.CoverEID > 0 {
+		landmarkEntries = append(landmarkEntries,
+			NewLandmarkEntry(SymCoverPage, "cover-nav-unit", landmarks.CoverEID))
+	}
+
+	// Add TOC landmark (if TOC page exists)
+	if landmarks.TOCEID > 0 {
+		label := landmarks.TOCLabel
+		if label == "" {
+			label = "Table of Contents"
+		}
+		landmarkEntries = append(landmarkEntries,
+			NewLandmarkEntry(SymTOC, label, landmarks.TOCEID))
+	}
+
+	// Add start reading location (if configured)
+	if landmarks.StartEID > 0 {
+		landmarkEntries = append(landmarkEntries,
+			NewLandmarkEntry(SymSRL, "Start", landmarks.StartEID))
+	}
+
+	if len(landmarkEntries) == 0 {
+		return nil
+	}
+
+	return NewLandmarksContainer(landmarkEntries)
 }
 
 // buildNavEntries recursively builds navigation unit entries from TOC entries.

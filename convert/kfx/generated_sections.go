@@ -86,12 +86,12 @@ func flattenTOCEntries(entries []*TOCEntry, includeUntitled bool) []string {
 
 // addGeneratedSections optionally injects generated sections (annotation page and/or TOC page).
 //
-// Returns (in order): updated sectionNames, updated tocEntries, updated sectionEIDs, nextEID, error.
+// Returns (in order): updated sectionNames, updated tocEntries, updated sectionEIDs, nextEID, updated landmarks, error.
 // It also appends the necessary fragments (content/storyline/section) into fragments.
 func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 	styles *StyleRegistry, fragments *FragmentList, sectionNames sectionNameList,
-	tocEntries []*TOCEntry, sectionEIDs sectionEIDsBySectionName, nextEID int, log *zap.Logger,
-) (sectionNameList, []*TOCEntry, sectionEIDsBySectionName, int, error) {
+	tocEntries []*TOCEntry, sectionEIDs sectionEIDsBySectionName, nextEID int, landmarks LandmarkInfo, log *zap.Logger,
+) (sectionNameList, []*TOCEntry, sectionEIDsBySectionName, int, LandmarkInfo, error) {
 	annotationEnabled := cfg.Annotation.Enable && c.Book.Description.TitleInfo.Annotation != nil
 	tocPageEnabled := cfg.TOCPage.Placement != common.TOCPagePlacementNone
 
@@ -124,7 +124,7 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 
 		for name, list := range ca.Finish() {
 			if err := fragments.Add(buildContentFragmentByName(name, list)); err != nil {
-				return nil, nil, nil, 0, err
+				return nil, nil, nil, 0, landmarks, err
 			}
 		}
 
@@ -133,10 +133,10 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 
 		storyFrag, secFrag := sb.Build()
 		if err := fragments.Add(storyFrag); err != nil {
-			return nil, nil, nil, 0, err
+			return nil, nil, nil, 0, landmarks, err
 		}
 		if err := fragments.Add(secFrag); err != nil {
-			return nil, nil, nil, 0, err
+			return nil, nil, nil, 0, landmarks, err
 		}
 
 		annotationEntry := &TOCEntry{
@@ -181,7 +181,7 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 
 		for name, list := range ca.Finish() {
 			if err := fragments.Add(buildContentFragmentByName(name, list)); err != nil {
-				return nil, nil, nil, 0, err
+				return nil, nil, nil, 0, landmarks, err
 			}
 		}
 
@@ -190,11 +190,15 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 
 		storyFrag, secFrag := sb.Build()
 		if err := fragments.Add(storyFrag); err != nil {
-			return nil, nil, nil, 0, err
+			return nil, nil, nil, 0, landmarks, err
 		}
 		if err := fragments.Add(secFrag); err != nil {
-			return nil, nil, nil, 0, err
+			return nil, nil, nil, 0, landmarks, err
 		}
+
+		// Track TOC EID for landmarks
+		landmarks.TOCEID = sb.FirstEID()
+		landmarks.TOCLabel = c.Book.Description.TitleInfo.BookTitle.Value
 
 		if cfg.TOCPage.Placement == common.TOCPagePlacementBefore {
 			before = append(sectionNameList{tocSectionName}, before...)
@@ -216,5 +220,5 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 		newOrder = append(newOrder, sectionNames...)
 	}
 	newOrder = append(newOrder, after...)
-	return newOrder, tocEntries, sectionEIDs, nextEID, nil
+	return newOrder, tocEntries, sectionEIDs, nextEID, landmarks, nil
 }

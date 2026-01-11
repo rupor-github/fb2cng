@@ -4,6 +4,15 @@ package kfx
 // used in KFX fragments. These builders create properly structured values for
 // positions, lengths, style properties, content nodes, and navigation.
 
+// LandmarkInfo holds EIDs for landmark navigation entries.
+// Zero values indicate the landmark is not present.
+type LandmarkInfo struct {
+	CoverEID int    // Page template EID of the cover section
+	TOCEID   int    // First EID of the TOC page section
+	StartEID int    // First EID of the start reading location (body intro)
+	TOCLabel string // Display label for TOC landmark (e.g., "Table of Contents")
+}
+
 // Position builders - for anchors and navigation targets
 // A position is a struct with EID ($155 or $598) and optional offset ($143).
 
@@ -140,6 +149,28 @@ func NewTOCContainer(entries []any) StructValue {
 // NewLandmarksContainer creates a landmarks navigation container.
 func NewLandmarksContainer(entries []any) StructValue {
 	return NewNavContainer(SymLandmarks, entries) // $236 = landmarks
+}
+
+// NewLandmarkEntry creates a landmark entry with type, label and target position.
+// landmarkType is the landmark type symbol (e.g., SymCoverPage, SymTOC, SymSRL).
+// label is the display text for the landmark.
+// eid is the target element ID as integer.
+func NewLandmarkEntry(landmarkType KFXSymbol, label string, eid int) StructValue {
+	// Target position: {$143: 0, $155: eid}
+	targetPos := NewStruct().
+		SetInt(SymOffset, 0).           // $143 = offset (always 0 for landmarks)
+		SetInt(SymUniqueID, int64(eid)) // $155 = id
+
+	entry := NewStruct().
+		SetSymbol(SymLandmarkType, landmarkType) // $238 = landmark_type
+
+	if label != "" {
+		repr := NewStruct().SetString(SymLabel, label) // $244 = label
+		entry.SetStruct(SymRepresentation, repr)       // $241 = representation
+	}
+
+	entry.SetStruct(SymTargetPosition, targetPos) // $246 = target_position
+	return entry
 }
 
 // NewPageListContainer creates a page list navigation container.

@@ -380,7 +380,19 @@ Example: 0x8A = string (type 8) with 10-byte (A) body
   │book_navig'n │     anchor references
   │($392 list)  │     Contains nav_containers:
   └─────────────┘     - TOC ($235=$212)
+                      - Landmarks ($235=$236) - REQUIRED for cover scaling
                       - APPROXIMATE_PAGE_LIST ($235=$237, $239=local symbol)
+
+  Landmarks Container Structure ($235=$236):
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │ $247 entries list:                                                  │
+  │   Cover:  {$238: $233, $241: {$244: "label"}, $246: {$155: eid}}    │
+  │   TOC:    {$238: $212, $241: {$244: "label"}, $246: {$155: eid}}    │
+  │   Start:  {$238: $396, $241: {$244: "Start"}, $246: {$155: eid}}    │
+  │                                                                     │
+  │ NOTE: Cover landmark ($238=$233) is REQUIRED for KPV to properly    │
+  │       scale cover images to fill the screen without white borders.  │
+  └─────────────────────────────────────────────────────────────────────┘
 
   ┌─────────────┐
   │    $490     │  Book Metadata (categorised):
@@ -449,7 +461,7 @@ Visual byte map (approximate):
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │ OFFSET    LENGTH   CONTENT                                                  │
-│ ──────────────────────────────────────────────────────────────────────────  │
+│ ────────────────────────────────────────────────────────────────────────────│
 │ 0x0000    18       Fixed Header                                             │
 │                    "CONT" + version=2 + header_len + offsets                │
 │                                                                             │
@@ -487,9 +499,9 @@ Visual byte map (approximate):
 │                     {key: kfxgen_payload_sha1, value: "abc123..."},         │
 │                     {key: kfxgen_acr, value: "CR!ABCD..."}]                 │
 │                                                                             │
-│ ═══════════════════════════════════════════════════════════════════════════ │
+│ ════════════════════════════════════════════════════════════════════════════│
 │ 0x0472    (varies) header_len boundary                                      │
-│ ═══════════════════════════════════════════════════════════════════════════ │
+│ ════════════════════════════════════════════════════════════════════════════│
 │                                                                             │
 │ 0x0472    varies   ENTY Record: $538 document_data                          │
 │                    "ENTY" + entity_info + Ion struct payload                │
@@ -567,11 +579,62 @@ Visual byte map (approximate):
 │      {                                                                      │
 │        $155: <eid>,          // Element ID                                  │
 │        $159: $271,           // Type = image                                │
-│        $175: resource_name,  // External resource fragment reference        │
-│        $584: "alt text"      // Alt text (KPV parity)                       │
+│        $175: resource_name,  // Resource ref as SYMBOL (not string!)        │
+│        $584: "alt text"      // Alt text (only if non-empty)                │
 │      }                                                                      │
 │    ]                                                                        │
 │  }                                                                          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    COVER SECTION STRUCTURE (SPECIAL)                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Cover sections use DIFFERENT structure than regular text sections.         │
+│  This enables full-screen cover display without white borders.              │
+│                                                                             │
+│  Cover Section Fragment ($260, first section "c0"):                         │
+│  {                                                                          │
+│    $174: "c0",                 // Section name                              │
+│    $141: [                     // page_templates list                       │
+│      {                                                                      │
+│        $140: $320,             // float = center                            │
+│        $155: <eid>,            // Page template EID                         │
+│        $156: $326,             // layout = scale_fit                        │
+│        $159: $270,             // Type = CONTAINER (not $269 text!)         │
+│        $176: storyline_name,   // Reference to cover storyline              │
+│        $66: <width>,           // Container width (pixels)                  │
+│        $67: <height>           // Container height (pixels)                 │
+│      }                                                                      │
+│    ]                                                                        │
+│  }                                                                          │
+│                                                                             │
+│  Cover Storyline ($259):                                                    │
+│  {                                                                          │
+│    $176: storyline_name,                                                    │
+│    $146: [                     // Single image entry                        │
+│      {                                                                      │
+│        $155: <eid>,            // Element ID                                │
+│        $159: $271,             // Type = image                              │
+│        $175: resource_name,    // Resource ref as SYMBOL (not string)       │
+│        $157: cover_style       // Minimal style: font-size 1rem, lh 1.01lh  │
+│        // NOTE: No $584 (alt_text) unless non-empty                         │
+│      }                                                                      │
+│    ]                                                                        │
+│  }                                                                          │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  CRITICAL: For cover to scale properly (fill screen):               │    │
+│  │                                                                     │    │
+│  │  1. Section type ($159) must be $270 (container), NOT $269 (text)   │    │
+│  │  2. Must include $66/$67 (container dimensions)                     │    │
+│  │  3. Must have cover landmark in $389 navigation:                    │    │
+│  │     {$238: $233, $241: {$244: "label"}, $246: {$155: cover_eid}}    │    │
+│  │                                                                     │    │
+│  │  Without the landmark, KPV does not recognize the section as a      │    │
+│  │  cover and renders it with standard margins/white borders.          │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 
@@ -730,7 +793,57 @@ Visual byte map (approximate):
 
 ---
 
-## 12. Position Map Format (KPV-Compatible)
+## 12. External Resource Structure (`$164`)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    $164 EXTERNAL RESOURCE DESCRIPTOR                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  External Resource Fragment (fid = resource_name, ftype = $164):            │
+│  {                                                                          │
+│    $175: resource_name,        // MUST be SYMBOL (not string!)              │
+│    $161: format_symbol,        // $285=jpg, $284=png, $286=gif              │
+│    $162: "image/jpg",          // MIME type (use "image/jpg" not "jpeg")    │
+│    $165: "resource/rsrc1",     // Location path (string)                    │
+│    $422: <width>,              // Resource width in pixels (optional)       │
+│    $423: <height>              // Resource height in pixels (optional)      │
+│  }                                                                          │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  CRITICAL: $175 must be Ion SYMBOL type, not STRING                 │    │
+│  │                                                                     │    │
+│  │  Correct:   $175: symbol(e1)     // Ion symbol                      │    │
+│  │  Wrong:     $175: "e1"           // Ion string - KPV may fail!      │    │
+│  │                                                                     │    │
+│  │  CRITICAL: Use "image/jpg" for JPEG files, NOT "image/jpeg"         │    │
+│  │  KPV reference files use "image/jpg" consistently.                  │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+│  Format Symbols:                                                            │
+│  ───────────────                                                            │
+│  $285 = jpg (JPEG image)                                                    │
+│  $284 = png (PNG image)                                                     │
+│  $286 = gif (GIF image)                                                     │
+│  $565 = pdf (PDF document)                                                  │
+│  $548 = jxr (JPEG XR image)                                                 │
+│                                                                             │
+│  Example:                                                                   │
+│  {                                                                          │
+│    $175: symbol(e1),           // Resource name as SYMBOL                   │
+│    $161: $285,                 // Format = jpg                              │
+│    $162: "image/jpg",          // MIME type                                 │
+│    $165: "resource/rsrc1",     // Location                                  │
+│    $422: 1264,                 // Width                                     │
+│    $423: 1680                  // Height                                    │
+│  }                                                                          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 13. Position Map Format (KPV-Compatible)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -764,7 +877,7 @@ Visual byte map (approximate):
 
 ---
 
-## 13. Key Points Summary
+## 14. Key Points Summary
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -827,7 +940,7 @@ Visual byte map (approximate):
 
 ---
 
-## 14. Symbol Resolution Flow
+## 15. Symbol Resolution Flow
 
 ```
             Symbol ID Resolution Process (KFX Numbering)
