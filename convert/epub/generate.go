@@ -978,8 +978,8 @@ func buildNCXNavPoints(parent *etree.Element, section *fb2.Section, filename str
 
 	for _, item := range section.Content {
 		if item.Kind == fb2.FlowSection && item.Section != nil {
-			titleText := item.Section.AsTitleText("")
-			if titleText != "" {
+			if item.Section.HasTitle() {
+				titleText := item.Section.AsTitleText("")
 				*playOrder++
 				sectionID := item.Section.ID
 				navPoint := parent.CreateElement("navPoint")
@@ -1085,8 +1085,8 @@ func buildTOCPageOLItems(parentOL *etree.Element, section *fb2.Section, filename
 
 	for _, item := range section.Content {
 		if item.Kind == fb2.FlowSection && item.Section != nil {
-			titleText := item.Section.AsTitleText("")
-			if titleText != "" {
+			if item.Section.HasTitle() {
+				titleText := item.Section.AsTitleText("")
 				li := parentOL.CreateElement("li")
 				li.CreateAttr("class", "toc-item toc-section")
 				a := li.CreateElement("a")

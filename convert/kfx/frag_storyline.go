@@ -1190,7 +1190,6 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 		if item.Kind == fb2.FlowSection && item.Section != nil {
 			// Nested section - track for TOC hierarchy
 			nestedSection := item.Section
-			titleText := nestedSection.AsTitleText("")
 
 			// Track the EID where this nested section starts
 			firstEID := sb.NextEID()
@@ -1201,8 +1200,9 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 				return err
 			}
 
-			// Create TOC entry for nested section
-			if titleText != "" {
+			// Create TOC entry for nested section only if it has a title
+			if nestedSection.HasTitle() {
+				titleText := nestedSection.AsTitleText("")
 				tocEntry := &TOCEntry{
 					ID:           nestedSection.ID,
 					Title:        titleText,

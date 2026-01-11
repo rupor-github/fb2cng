@@ -450,6 +450,16 @@ type Section struct {
 	Content    []FlowItem
 }
 
+// HasTitle returns true if the section has a title that produces text.
+// This is used by TOC generation to decide whether to create a TOC entry
+// or merge children into the parent level.
+func (s *Section) HasTitle() bool {
+	if s.Title == nil {
+		return false
+	}
+	return s.Title.AsTOCText("") != ""
+}
+
 // AsTitleText extracts the title text from the section with fallback.
 func (s *Section) AsTitleText(fallback string) string {
 	if s.Title != nil {
