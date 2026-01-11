@@ -187,9 +187,9 @@ func (b *tocListBuilder) buildTOCList(entries []*tocPageEntry, isNested bool) (S
 	// Push list context for nested lists
 	var listContext StyleContext
 	if isNested {
-		listContext = b.styleContext.Push("toc-nested")
+		listContext = b.styleContext.Push("div", "toc-nested", b.styles)
 	} else {
-		listContext = b.styleContext.Push("toc-list")
+		listContext = b.styleContext.Push("div", "toc-list", b.styles)
 	}
 
 	// Save current context and set new one for children
@@ -207,7 +207,7 @@ func (b *tocListBuilder) buildTOCList(entries []*tocPageEntry, isNested bool) (S
 	b.styleContext = savedContext
 
 	// Resolve list style using accumulated context
-	listStyle := b.styles.ResolveStyle(listContext.Resolve("", ""))
+	listStyle := b.styles.ResolveStyle(listContext.Resolve("", "", b.styles))
 
 	// Build list entry: {$100: $343 (numeric), $146: [...], $155: eid, $159: $276 (list)}
 	list := NewStruct().
@@ -270,10 +270,10 @@ func (b *tocListBuilder) buildTOCTextEntry(entry *tocPageEntry) (StructValue, in
 	// Resolve styles using context - accumulates ancestor styles
 	// Context has toc-list (and optionally toc-nested for nested items)
 	// Item style adds "toc-item toc-section" to the context
-	itemStyleSpec := b.styleContext.Resolve("", "toc-item toc-section")
+	itemStyleSpec := b.styleContext.Resolve("", "toc-item toc-section", b.styles)
 	itemStyle := b.styles.ResolveStyle(itemStyleSpec)
 	// Link style also inherits context for proper cascade
-	linkStyleSpec := b.styleContext.Resolve("", "link-toc")
+	linkStyleSpec := b.styleContext.Resolve("", "link-toc", b.styles)
 	linkStyle := b.styles.ResolveStyle(linkStyleSpec)
 
 	// Build style event for link (covers entire text)

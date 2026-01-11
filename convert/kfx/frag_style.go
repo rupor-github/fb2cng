@@ -501,6 +501,18 @@ func (sr *StyleRegistry) nextResolvedStyleName() string {
 	return "s" + toBase36(sr.resolvedCounter)
 }
 
+// containerStyles are CSS classes that represent structural containers in FB2/EPUB.
+// These should NOT contribute margins to child content elements, as their margins
+// are meant for the container block itself (in EPUB), not inherited content.
+var containerStyles = map[string]bool{
+	"section":    true,
+	"cite":       true,
+	"epigraph":   true,
+	"poem":       true,
+	"stanza":     true,
+	"annotation": true,
+}
+
 // ResolveStyle resolves a (possibly multi-part) style spec into a fully-resolved KPV-like style name.
 // Later parts override earlier ones.
 func (sr *StyleRegistry) ResolveStyle(styleSpec string) string {
@@ -510,15 +522,69 @@ func (sr *StyleRegistry) ResolveStyle(styleSpec string) string {
 	}
 
 	merged := make(map[KFXSymbol]any)
-	// Process parts in reverse order so that the first part (the element being styled)
-	// takes precedence over later parts (the context). For "p section", we want
-	// paragraph properties to override section container properties.
-	for i := len(parts) - 1; i >= 0; i-- {
-		part := parts[i]
+	// Track margins separately - we may need to use intermediate margins
+	// if the final element doesn't define any.
+	var lastMargins map[KFXSymbol]any
+
+	// Process parts in order: base element first, then context, then specific class.
+	// Later parts override earlier ones (via maps.Copy), so for "p section section-subtitle":
+	// 1. p properties are set (including margins)
+	// 2. section properties override p (margins filtered - it's a container)
+	// 3. section-subtitle properties override section
+	//
+	// Container classes (section, cite, etc.) have their margins filtered because
+	// in CSS, margins don't inherit from containers to children. Title wrappers
+	// (body-title, chapter-title) are NOT containers - they're styling wrappers
+	// whose margins should propagate to the header content.
+	lastIdx := len(parts) - 1
+	for i, part := range parts {
 		sr.EnsureBaseStyle(part)
 		def := sr.styles[part]
 		resolved := sr.resolveInheritance(def)
-		maps.Copy(merged, resolved.Properties)
+
+		// Filter margins from container classes (intermediate or final)
+		isContainer := containerStyles[part]
+		if i > 0 && isContainer {
+			// DON'T save container margins - they should never propagate
+			// Merge non-margin properties from containers
+			for k, v := range resolved.Properties {
+				if k == SymMarginTop || k == SymMarginBottom || k == SymMarginLeft || k == SymMarginRight {
+					continue
+				}
+				merged[k] = v
+			}
+		} else if i > 0 && i < lastIdx {
+			// Non-container intermediate: track margins for potential use by final element
+			for _, sym := range []KFXSymbol{SymMarginTop, SymMarginBottom, SymMarginLeft, SymMarginRight} {
+				if v, ok := resolved.Properties[sym]; ok {
+					if lastMargins == nil {
+						lastMargins = make(map[KFXSymbol]any)
+					}
+					lastMargins[sym] = v
+				}
+			}
+			// Merge non-margin properties
+			for k, v := range resolved.Properties {
+				if k == SymMarginTop || k == SymMarginBottom || k == SymMarginLeft || k == SymMarginRight {
+					continue
+				}
+				merged[k] = v
+			}
+		} else {
+			maps.Copy(merged, resolved.Properties)
+		}
+	}
+
+	// If the final result has no margins but intermediate parts did, use those
+	// This allows title wrappers (body-title, etc.) to provide margins to headers
+	if lastMargins != nil {
+		for _, sym := range []KFXSymbol{SymMarginTop, SymMarginBottom, SymMarginLeft, SymMarginRight} {
+			if _, hasMargin := merged[sym]; !hasMargin {
+				if v, ok := lastMargins[sym]; ok {
+					merged[sym] = v
+				}
+			}
+		}
 	}
 
 	sig := styleSignature(merged)
@@ -533,6 +599,23 @@ func (sr *StyleRegistry) ResolveStyle(styleSpec string) string {
 	sr.used[name] = true
 	sr.Register(StyleDef{Name: name, Properties: merged})
 	sr.tracer.TraceResolve(styleSpec, name, merged)
+	return name
+}
+
+// RegisterResolved takes a merged property map, generates a unique style name,
+// registers the style, and returns the name. This is used by StyleContext.Resolve
+// to register styles built with proper CSS inheritance rules.
+func (sr *StyleRegistry) RegisterResolved(props map[KFXSymbol]any) string {
+	sig := styleSignature(props)
+	if name, ok := sr.resolved[sig]; ok {
+		sr.used[name] = true
+		return name
+	}
+
+	name := sr.nextResolvedStyleName()
+	sr.resolved[sig] = name
+	sr.used[name] = true
+	sr.Register(StyleDef{Name: name, Properties: props})
 	return name
 }
 
@@ -789,9 +872,8 @@ func DefaultStyleRegistry() *StyleRegistry {
 		LineHeight(1.0, SymUnitLh).
 		TextIndent(3.125, SymUnitPercent).
 		TextAlign(SymJustify).
-		MarginTop(0, SymUnitLh).
 		MarginBottom(0.25, SymUnitLh).
-		// Note: margin-left and margin-right omitted - KPV doesn't include zero margins
+		// Note: margin-top, margin-left, margin-right omitted - KPV doesn't include zero margins
 		Build())
 
 	// Heading styles (h1-h6) - HTML heading elements

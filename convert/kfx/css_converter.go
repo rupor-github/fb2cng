@@ -328,8 +328,12 @@ func (c *Converter) setDimensionProperty(sym KFXSymbol, value CSSValue, result *
 
 	switch sym {
 	case SymMarginTop, SymMarginBottom:
-		// Vertical margins: em -> lh (1em ≈ 1lh for typical line-height)
+		// Vertical margins: em -> lh
+		// KPV uses lh (line-height) units. With typical 1.2 line-height:
+		// 1lh = 1.2em, so 1em = 0.833lh (1/1.2)
+		// Reference KPV files show 0.3em CSS → 0.25lh KFX (0.3/1.2 = 0.25)
 		if value.Unit == "em" {
+			convertedValue = value.Value / 1.2 // Convert em to lh assuming 1.2 line-height
 			convertedUnit = SymUnitLh
 		} else {
 			var err error
@@ -431,20 +435,22 @@ func (c *Converter) convertSpecialProperty(name string, value CSSValue, result *
 		_ = value // suppress unused warning
 
 	case "page-break-before":
-		if sym, ok := ConvertPageBreak(value); ok {
+		// In KFX, page-break-before: always is handled by section boundaries, not styles.
+		// Only convert "avoid" to yj-break-before: avoid
+		if sym, ok := ConvertPageBreak(value); ok && sym == SymAvoid {
 			result.Style.Properties[SymKeepFirst] = sym
 		}
 
 	case "page-break-after":
-		if sym, ok := ConvertPageBreak(value); ok {
+		// Only convert "avoid" - "always" is handled by section boundaries
+		if sym, ok := ConvertPageBreak(value); ok && sym == SymAvoid {
 			result.Style.Properties[SymKeepLast] = sym
 		}
 
 	case "page-break-inside":
 		if sym, ok := ConvertPageBreak(value); ok && sym == SymAvoid {
-			// page-break-inside: avoid means keep together
-			result.Style.Properties[SymKeepFirst] = SymAvoid
-			result.Style.Properties[SymKeepLast] = SymAvoid
+			// page-break-inside: avoid means the element should not break internally
+			result.Style.Properties[SymBreakInside] = SymbolValue(SymAvoid)
 		}
 	}
 }

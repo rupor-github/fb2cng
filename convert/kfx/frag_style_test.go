@@ -1,6 +1,7 @@
 package kfx
 
 import (
+	"strings"
 	"testing"
 
 	"go.uber.org/zap"
@@ -132,74 +133,149 @@ func TestInferParentStyleWithCSS(t *testing.T) {
 }
 
 func TestStyleContext(t *testing.T) {
-	t.Run("empty context", func(t *testing.T) {
+	// Helper to create a registry with test styles
+	makeRegistry := func() *StyleRegistry {
+		sr := NewStyleRegistry()
+		// Register styles with properties for testing inheritance
+		sr.Register(StyleDef{Name: "p", Properties: map[KFXSymbol]any{
+			SymFontSize:     DimensionValue(1, SymUnitRatio),
+			SymMarginBottom: DimensionValue(0.25, SymUnitRatio),
+		}})
+		sr.Register(StyleDef{Name: "poem", Properties: map[KFXSymbol]any{
+			SymTextAlignment: SymbolValue(SymLeft),
+			SymMarginLeft:    DimensionValue(6.25, SymUnitPercent),
+		}})
+		sr.Register(StyleDef{Name: "stanza", Properties: map[KFXSymbol]any{
+			SymLineHeight: DimensionValue(1.4, SymUnitRatio),
+		}})
+		sr.Register(StyleDef{Name: "verse", Properties: map[KFXSymbol]any{
+			SymTextIndent: DimensionValue(0, SymUnitPt),
+		}})
+		sr.Register(StyleDef{Name: "epigraph", Properties: map[KFXSymbol]any{
+			SymFontStyle:  SymbolValue(SymItalic),
+			SymMarginLeft: DimensionValue(12.5, SymUnitPercent),
+		}})
+		sr.Register(StyleDef{Name: "cite", Properties: map[KFXSymbol]any{
+			SymFontStyle:  SymbolValue(SymItalic),
+			SymMarginLeft: DimensionValue(6.25, SymUnitPercent),
+		}})
+		return sr
+	}
+
+	t.Run("empty context with element style", func(t *testing.T) {
+		sr := makeRegistry()
 		ctx := NewStyleContext()
-		result := ctx.Resolve("p", "verse")
-		if result != "p verse" {
-			t.Errorf("Expected 'p verse', got %q", result)
+		result := ctx.Resolve("p", "verse", sr)
+		// Should return a registered style name
+		if result == "" {
+			t.Error("Expected non-empty style name")
+		}
+		// Verify it starts with 's' (resolved style prefix)
+		if !strings.HasPrefix(result, "s") {
+			t.Errorf("Expected resolved style name starting with 's', got %q", result)
 		}
 	})
 
-	t.Run("single ancestor", func(t *testing.T) {
-		ctx := NewStyleContext().Push("poem")
-		result := ctx.Resolve("p", "verse")
-		if result != "p poem verse" {
-			t.Errorf("Expected 'p poem verse', got %q", result)
+	t.Run("inherited properties accumulate through Push", func(t *testing.T) {
+		sr := makeRegistry()
+		// Push poem (has text-align:left which inherits) then resolve
+		ctx := NewStyleContext().Push("div", "poem", sr)
+
+		// Check that context accumulated inherited properties
+		if _, ok := ctx.inherited[SymTextAlignment]; !ok {
+			t.Error("Expected text-align to be inherited from poem")
+		}
+		// Margin should NOT be inherited
+		if _, ok := ctx.inherited[SymMarginLeft]; ok {
+			t.Error("margin-left should NOT be inherited")
 		}
 	})
 
-	t.Run("multiple ancestors", func(t *testing.T) {
-		ctx := NewStyleContext().Push("poem").Push("stanza")
-		result := ctx.Resolve("p", "verse")
-		if result != "p poem stanza verse" {
-			t.Errorf("Expected 'p poem stanza verse', got %q", result)
+	t.Run("chained Push accumulates inherited properties", func(t *testing.T) {
+		sr := makeRegistry()
+		ctx := NewStyleContext().
+			Push("div", "poem", sr).
+			Push("div", "stanza", sr)
+
+		// Both poem's text-align and stanza's line-height should be accumulated
+		if _, ok := ctx.inherited[SymTextAlignment]; !ok {
+			t.Error("Expected text-align from poem to be inherited")
+		}
+		if _, ok := ctx.inherited[SymLineHeight]; !ok {
+			t.Error("Expected line-height from stanza to be inherited")
 		}
 	})
 
-	t.Run("deeply nested", func(t *testing.T) {
-		ctx := NewStyleContext().Push("cite").Push("poem").Push("stanza")
-		result := ctx.Resolve("p", "verse")
-		if result != "p cite poem stanza verse" {
-			t.Errorf("Expected 'p cite poem stanza verse', got %q", result)
+	t.Run("Resolve merges inherited context with element properties", func(t *testing.T) {
+		sr := makeRegistry()
+		ctx := NewStyleContext().Push("div", "poem", sr)
+		styleName := ctx.Resolve("p", "verse", sr)
+
+		// The resolved style should exist in registry
+		def, ok := sr.Get(styleName)
+		if !ok {
+			t.Fatalf("Resolved style %q not found in registry", styleName)
+		}
+
+		// Check that p's margin-bottom is present (non-inherited from p)
+		if _, ok := def.Properties[SymMarginBottom]; !ok {
+			t.Error("Expected margin-bottom from p element style")
+		}
+
+		// Check that poem's text-align is present (inherited through context)
+		if _, ok := def.Properties[SymTextAlignment]; !ok {
+			t.Error("Expected text-align inherited from poem context")
+		}
+
+		// Check that verse's text-indent is present
+		if _, ok := def.Properties[SymTextIndent]; !ok {
+			t.Error("Expected text-indent from verse class")
 		}
 	})
 
-	t.Run("empty element style", func(t *testing.T) {
-		ctx := NewStyleContext().Push("epigraph")
-		result := ctx.Resolve("p", "")
-		if result != "p epigraph" {
-			t.Errorf("Expected 'p epigraph', got %q", result)
+	t.Run("scope chain properties applied to resolved style", func(t *testing.T) {
+		sr := makeRegistry()
+		// poem has margin-left - in KFX this should propagate to content
+		// because KFX flattens nested structures
+		ctx := NewStyleContext().Push("div", "poem", sr)
+		styleName := ctx.Resolve("p", "", sr)
+
+		def, ok := sr.Get(styleName)
+		if !ok {
+			t.Fatalf("Resolved style %q not found in registry", styleName)
+		}
+
+		// poem's margin-left SHOULD be in the resolved style for p
+		// (KFX needs to flatten nested structure margins onto content)
+		if _, ok := def.Properties[SymMarginLeft]; !ok {
+			t.Error("margin-left from scope chain should be applied to content element in KFX")
 		}
 	})
 
-	t.Run("empty base style", func(t *testing.T) {
-		ctx := NewStyleContext().Push("poem")
-		result := ctx.Resolve("", "verse")
-		if result != "poem verse" {
-			t.Errorf("Expected 'poem verse', got %q", result)
-		}
-	})
+	t.Run("same resolution returns same style name", func(t *testing.T) {
+		sr := makeRegistry()
+		ctx := NewStyleContext().Push("div", "poem", sr)
 
-	t.Run("push empty context is no-op", func(t *testing.T) {
-		ctx := NewStyleContext().Push("poem").Push("").Push("stanza")
-		result := ctx.Resolve("p", "verse")
-		if result != "p poem stanza verse" {
-			t.Errorf("Expected 'p poem stanza verse', got %q", result)
+		name1 := ctx.Resolve("p", "verse", sr)
+		name2 := ctx.Resolve("p", "verse", sr)
+
+		if name1 != name2 {
+			t.Errorf("Same resolution should return same style name: %q vs %q", name1, name2)
 		}
 	})
 
 	t.Run("immutability - push returns new context", func(t *testing.T) {
-		ctx1 := NewStyleContext().Push("poem")
-		ctx2 := ctx1.Push("stanza")
+		sr := makeRegistry()
+		ctx1 := NewStyleContext().Push("div", "poem", sr)
+		ctx2 := ctx1.Push("div", "stanza", sr)
 
-		result1 := ctx1.Resolve("p", "verse")
-		result2 := ctx2.Resolve("p", "verse")
-
-		if result1 != "p poem verse" {
-			t.Errorf("ctx1 should be 'p poem verse', got %q", result1)
+		// ctx1 should NOT have stanza's line-height
+		if _, ok := ctx1.inherited[SymLineHeight]; ok {
+			t.Error("ctx1 should not have line-height after ctx2 push")
 		}
-		if result2 != "p poem stanza verse" {
-			t.Errorf("ctx2 should be 'p poem stanza verse', got %q", result2)
+		// ctx2 should have it
+		if _, ok := ctx2.inherited[SymLineHeight]; !ok {
+			t.Error("ctx2 should have line-height from stanza")
 		}
 	})
 }

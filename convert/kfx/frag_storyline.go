@@ -107,45 +107,171 @@ func (nw *normalizingWriter) Reset() {
 	nw.preserveWS = false
 }
 
-// StyleContext tracks the ancestor chain for CSS cascade emulation.
-// In EPUB, nested elements like <div class="poem"><div class="stanza"><p class="verse">
-// allow CSS rules like ".poem .stanza .verse {}" to apply. KFX flattens this hierarchy,
-// so we must explicitly track and combine ancestor contexts when resolving styles.
+// StyleScope represents a single level in the element hierarchy.
+// It captures both the element tag and its classes at that level.
+type StyleScope struct {
+	Tag     string   // HTML element tag: "div", "p", "h1", "span", etc.
+	Classes []string // CSS classes applied to this element
+}
+
+// StyleContext accumulates inherited CSS properties as we descend the element hierarchy.
+// This mimics how browsers propagate inherited properties from parent to child.
+//
+// In CSS, some properties (font-*, color, text-align, line-height, etc.) automatically
+// inherit from parent to child elements. Other properties (margin, padding, border, etc.)
+// do NOT inherit - they apply only to the element where they're defined.
+//
+// When resolving a style for an element:
+// 1. Inherited properties come from the accumulated context (ancestors)
+// 2. Non-inherited properties come only from the element's own tag/classes
 type StyleContext struct {
-	ancestors []string // Ancestor context names in order (e.g., ["poem", "stanza"])
+	// Inherited properties accumulated from ancestors.
+	// Only CSS-inherited properties are stored here.
+	inherited map[KFXSymbol]any
+
+	// Full scope chain from root to current level (for debugging/future use)
+	scopes []StyleScope
 }
 
-// NewStyleContext creates a new empty style context.
+// NewStyleContext creates an empty context (root level).
 func NewStyleContext() StyleContext {
-	return StyleContext{ancestors: nil}
+	return StyleContext{
+		inherited: make(map[KFXSymbol]any),
+		scopes:    nil,
+	}
 }
 
-// Push returns a new StyleContext with the given context added to the ancestor chain.
-// This is used when descending into nested elements (e.g., entering a poem or stanza).
-func (sc StyleContext) Push(context string) StyleContext {
-	if context == "" {
-		return sc
+// Push enters a new element scope and returns a new context with that element's
+// inherited properties added. Non-inherited properties are ignored for inheritance.
+//
+// tag: HTML element type ("div", "p", "h1", etc.)
+// classes: space-separated CSS classes ("section poem" or "" for none)
+// registry: style registry to look up property definitions
+func (sc StyleContext) Push(tag, classes string, registry *StyleRegistry) StyleContext {
+	// Copy existing inherited properties
+	newInherited := make(map[KFXSymbol]any, len(sc.inherited))
+	for k, v := range sc.inherited {
+		newInherited[k] = v
 	}
-	newAncestors := make([]string, len(sc.ancestors), len(sc.ancestors)+1)
-	copy(newAncestors, sc.ancestors)
-	newAncestors = append(newAncestors, context)
-	return StyleContext{ancestors: newAncestors}
+
+	// Add inherited properties from tag defaults
+	if tag != "" {
+		if def, ok := registry.Get(tag); ok {
+			resolved := registry.resolveInheritance(def)
+			for sym, val := range resolved.Properties {
+				if isInheritedProperty(sym) {
+					newInherited[sym] = val
+				}
+			}
+		}
+	}
+
+	// Parse and add inherited properties from each class
+	var classList []string
+	if classes != "" {
+		classList = strings.Fields(classes)
+		for _, class := range classList {
+			if def, ok := registry.Get(class); ok {
+				resolved := registry.resolveInheritance(def)
+				for sym, val := range resolved.Properties {
+					if isInheritedProperty(sym) {
+						newInherited[sym] = val
+					}
+				}
+			}
+		}
+	}
+
+	// Append to scope chain
+	newScopes := append(sc.scopes, StyleScope{Tag: tag, Classes: classList})
+
+	return StyleContext{
+		inherited: newInherited,
+		scopes:    newScopes,
+	}
 }
 
-// Resolve combines the ancestor chain with a base style and optional element style
-// to produce a full style specification for ResolveStyle.
-// Example: ancestors=["poem", "stanza"], baseStyle="p", elementStyle="verse"
-// Result: "p poem stanza verse"
-func (sc StyleContext) Resolve(baseStyle, elementStyle string) string {
-	parts := make([]string, 0, 1+len(sc.ancestors)+1)
-	if baseStyle != "" {
-		parts = append(parts, baseStyle)
+// Resolve creates the final style for an element within this context.
+// Since KFX flattens styles (no nested containers), we apply ALL properties
+// from the scope chain, not just inherited ones. This ensures wrapper margins
+// propagate to content elements.
+//
+// Order of application (later overrides earlier):
+// 1. Inherited properties accumulated through Push calls
+// 2. All properties from scope chain classes (wrappers like body-title, section, etc.)
+// 3. Element tag defaults (all properties)
+// 4. Element's classes (all properties, in order)
+//
+// tag: HTML element type ("p", "h1", "span", etc.)
+// classes: space-separated CSS classes (or "" for none)
+// registry: style registry for lookups and registration
+// Returns the registered style name.
+func (sc StyleContext) Resolve(tag, classes string, registry *StyleRegistry) string {
+	merged := make(map[KFXSymbol]any)
+
+	// 1. Start with inherited properties from context
+	for k, v := range sc.inherited {
+		merged[k] = v
 	}
-	parts = append(parts, sc.ancestors...)
-	if elementStyle != "" {
-		parts = append(parts, elementStyle)
+
+	// 2. Apply ALL properties from scope chain classes (not just inherited)
+	// This ensures wrapper margins (body-title, section, etc.) propagate to content
+	for _, scope := range sc.scopes {
+		for _, class := range scope.Classes {
+			if def, ok := registry.Get(class); ok {
+				resolved := registry.resolveInheritance(def)
+				for k, v := range resolved.Properties {
+					merged[k] = v
+				}
+			}
+		}
 	}
-	return strings.Join(parts, " ")
+
+	// 3. Apply element tag defaults (all properties)
+	if tag != "" {
+		if def, ok := registry.Get(tag); ok {
+			resolved := registry.resolveInheritance(def)
+			for k, v := range resolved.Properties {
+				merged[k] = v
+			}
+		}
+	}
+
+	// 4. Apply element's classes (all properties, in order)
+	if classes != "" {
+		for _, class := range strings.Fields(classes) {
+			if def, ok := registry.Get(class); ok {
+				resolved := registry.resolveInheritance(def)
+				for k, v := range resolved.Properties {
+					merged[k] = v
+				}
+			}
+		}
+	}
+
+	// 5. Register and return
+	return registry.RegisterResolved(merged)
+}
+
+// isInheritedProperty returns true for CSS properties that inherit by default.
+// Reference: https://developer.mozilla.org/en-US/docs/Web/CSS/inheritance
+func isInheritedProperty(sym KFXSymbol) bool {
+	switch sym {
+	// Font properties
+	case SymFontFamily, SymFontSize, SymFontWeight, SymFontStyle:
+		return true
+	// Text properties
+	case SymTextAlignment, SymTextIndent, SymLineHeight:
+		return true
+	// Color
+	case SymTextColor:
+		return true
+	// Spacing that inherits
+	case SymLetterspacing:
+		return true
+	default:
+		return false
+	}
 }
 
 // TOCEntry represents a table of contents entry with hierarchical structure.
@@ -1046,7 +1172,7 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 				}
 
 				// Process section content (paragraphs, poems, etc.)
-				footnoteCtx := NewStyleContext().Push("footnote")
+				footnoteCtx := NewStyleContext().Push("div", "footnote", styles)
 				for k := range section.Content {
 					processFlowItem(&section.Content[k], footnoteCtx, "footnote", sb, styles, imageResources, ca, idToEID, defaultWidth, footnotesIndex)
 				}
@@ -1135,7 +1261,9 @@ func processBodyIntroContent(book *fb2.FictionBook, body *fb2.Body, sb *Storylin
 		}
 		// Add title as single combined heading entry (matches KPV behavior)
 		// Uses body-title-header as base for -first/-next styles, heading level 1
-		addTitleAsHeading(body.Title, "body-title-header", 1, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+		// Context includes wrapper class for margin inheritance
+		titleCtx := NewStyleContext().Push("div", "body-title", styles)
+		addTitleAsHeading(body.Title, titleCtx, "body-title-header", 1, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		if body.Main() {
 			addVignetteImage(book, sb, styles, imageResources, common.VignettePosBookTitleBottom, screenWidth)
 		}
@@ -1145,7 +1273,7 @@ func processBodyIntroContent(book *fb2.FictionBook, body *fb2.Body, sb *Storylin
 	}
 
 	// Process body epigraphs - each wrapped in <div class="epigraph">
-	epigraphCtx := NewStyleContext().Push("epigraph")
+	epigraphCtx := NewStyleContext().Push("div", "epigraph", styles)
 	for _, epigraph := range body.Epigraphs {
 		// Start wrapper block - mirrors EPUB's <div class="epigraph">
 		wrapperEID := sb.StartBlock("epigraph", styles)
@@ -1158,7 +1286,7 @@ func processBodyIntroContent(book *fb2.FictionBook, body *fb2.Body, sb *Storylin
 			processFlowItem(&epigraph.Flow.Items[i], epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 		for i := range epigraph.TextAuthors {
-			styleName := epigraphCtx.Resolve("p", "text-author")
+			styleName := epigraphCtx.Resolve("p", "text-author", styles)
 			addParagraphWithImages(&epigraph.TextAuthors[i], styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 		sb.EndBlock()
@@ -1218,7 +1346,9 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 		}
 
 		// Add title as single combined heading entry (matches KPV behavior)
-		addTitleAsHeading(section.Title, headerClassBase, headingLevel, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+		// Context includes wrapper class for margin inheritance
+		titleCtx := NewStyleContext().Push("div", wrapperClass, styles)
+		addTitleAsHeading(section.Title, titleCtx, headerClassBase, headingLevel, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 
 		// Add bottom vignette
 		if depth == 1 {
@@ -1240,7 +1370,7 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 				idToEID[section.Annotation.ID] = wrapperEID
 			}
 		}
-		annotationCtx := NewStyleContext().Push("annotation")
+		annotationCtx := NewStyleContext().Push("div", "annotation", styles)
 		for i := range section.Annotation.Items {
 			processFlowItem(&section.Annotation.Items[i], annotationCtx, "annotation", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
@@ -1248,7 +1378,7 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 	}
 
 	// Process epigraphs - each wrapped in <div class="epigraph">
-	epigraphCtx := NewStyleContext().Push("epigraph")
+	epigraphCtx := NewStyleContext().Push("div", "epigraph", styles)
 	for _, epigraph := range section.Epigraphs {
 		// Start wrapper block - mirrors EPUB's <div class="epigraph">
 		wrapperEID := sb.StartBlock("epigraph", styles)
@@ -1261,14 +1391,14 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 			processFlowItem(&epigraph.Flow.Items[i], epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 		for i := range epigraph.TextAuthors {
-			styleName := epigraphCtx.Resolve("p", "text-author")
+			styleName := epigraphCtx.Resolve("p", "text-author", styles)
 			addParagraphWithImages(&epigraph.TextAuthors[i], styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 		sb.EndBlock()
 	}
 
 	// Process content items
-	sectionCtx := NewStyleContext().Push("section")
+	sectionCtx := NewStyleContext().Push("div", "section", styles)
 	var lastTitledEntry *TOCEntry
 	for i := range section.Content {
 		item := &section.Content[i]
@@ -1329,7 +1459,7 @@ func processFlowItem(item *fb2.FlowItem, ctx StyleContext, contextName string, s
 		if item.Paragraph != nil {
 			// Use full context chain for CSS cascade emulation.
 			// Base "p" + ancestor contexts + optional custom class from FB2.
-			styleName := ctx.Resolve("p", "")
+			styleName := ctx.Resolve("p", "", styles)
 			if item.Paragraph.Style != "" {
 				styleName = styleName + " " + item.Paragraph.Style
 			}
@@ -1340,7 +1470,7 @@ func processFlowItem(item *fb2.FlowItem, ctx StyleContext, contextName string, s
 		if item.Subtitle != nil {
 			// Subtitles use <p> in EPUB, so use p as base here too
 			// Context-specific subtitle style adds alignment, margins
-			styleName := ctx.Resolve("p", contextName+"-subtitle")
+			styleName := ctx.Resolve("p", contextName+"-subtitle", styles)
 			if item.Subtitle.Style != "" {
 				styleName = styleName + " " + item.Subtitle.Style
 			}
@@ -1364,7 +1494,7 @@ func processFlowItem(item *fb2.FlowItem, ctx StyleContext, contextName string, s
 					idToEID[item.Poem.ID] = wrapperEID
 				}
 			}
-			processPoem(item.Poem, ctx.Push("poem"), sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			processPoem(item.Poem, ctx.Push("div", "poem", styles), sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 			sb.EndBlock()
 		}
 
@@ -1377,7 +1507,7 @@ func processFlowItem(item *fb2.FlowItem, ctx StyleContext, contextName string, s
 					idToEID[item.Cite.ID] = wrapperEID
 				}
 			}
-			processCite(item.Cite, ctx.Push("cite"), sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			processCite(item.Cite, ctx.Push("blockquote", "cite", styles), sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 			sb.EndBlock()
 		}
 
@@ -1421,14 +1551,14 @@ func processPoem(poem *fb2.Poem, ctx StyleContext, sb *StorylineBuilder, styles 
 	if poem.Title != nil {
 		for _, item := range poem.Title.Items {
 			if item.Paragraph != nil {
-				styleName := ctx.Resolve("p", "poem-title")
+				styleName := ctx.Resolve("p", "poem-title", styles)
 				addParagraphWithImages(item.Paragraph, styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 			}
 		}
 	}
 
 	// Process poem epigraphs - each wrapped in <div class="epigraph">
-	epigraphCtx := ctx.Push("epigraph")
+	epigraphCtx := ctx.Push("div", "epigraph", styles)
 	for _, epigraph := range poem.Epigraphs {
 		// Start wrapper block - mirrors EPUB's <div class="epigraph">
 		wrapperEID := sb.StartBlock("epigraph", styles)
@@ -1441,7 +1571,7 @@ func processPoem(poem *fb2.Poem, ctx StyleContext, sb *StorylineBuilder, styles 
 			processFlowItem(&epigraph.Flow.Items[i], epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 		for i := range epigraph.TextAuthors {
-			styleName := epigraphCtx.Resolve("p", "text-author")
+			styleName := epigraphCtx.Resolve("p", "text-author", styles)
 			addParagraphWithImages(&epigraph.TextAuthors[i], styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 		sb.EndBlock()
@@ -1449,12 +1579,12 @@ func processPoem(poem *fb2.Poem, ctx StyleContext, sb *StorylineBuilder, styles 
 
 	// Process poem subtitles (matches EPUB's poem.Subtitles handling)
 	for i := range poem.Subtitles {
-		styleName := ctx.Resolve("p", "poem-subtitle")
+		styleName := ctx.Resolve("p", "poem-subtitle", styles)
 		addParagraphWithImages(&poem.Subtitles[i], styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 	}
 
 	// Process stanzas - each wrapped in <div class="stanza">
-	stanzaCtx := ctx.Push("stanza")
+	stanzaCtx := ctx.Push("div", "stanza", styles)
 	for _, stanza := range poem.Stanzas {
 		// Start wrapper block - mirrors EPUB's <div class="stanza">
 		sb.StartBlock("stanza", styles)
@@ -1463,19 +1593,19 @@ func processPoem(poem *fb2.Poem, ctx StyleContext, sb *StorylineBuilder, styles 
 		if stanza.Title != nil {
 			for _, item := range stanza.Title.Items {
 				if item.Paragraph != nil {
-					styleName := stanzaCtx.Resolve("p", "stanza-title")
+					styleName := stanzaCtx.Resolve("p", "stanza-title", styles)
 					addParagraphWithImages(item.Paragraph, styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 				}
 			}
 		}
 		// Stanza subtitle (matches EPUB's "stanza-subtitle" class)
 		if stanza.Subtitle != nil {
-			styleName := stanzaCtx.Resolve("p", "stanza-subtitle")
+			styleName := stanzaCtx.Resolve("p", "stanza-subtitle", styles)
 			addParagraphWithImages(stanza.Subtitle, styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 		// Verses - use stanza context
 		for i := range stanza.Verses {
-			styleName := stanzaCtx.Resolve("p", "verse")
+			styleName := stanzaCtx.Resolve("p", "verse", styles)
 			addParagraphWithImages(&stanza.Verses[i], styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 
@@ -1484,7 +1614,7 @@ func processPoem(poem *fb2.Poem, ctx StyleContext, sb *StorylineBuilder, styles 
 
 	// Process text authors
 	for i := range poem.TextAuthors {
-		styleName := ctx.Resolve("p", "text-author")
+		styleName := ctx.Resolve("p", "text-author", styles)
 		addParagraphWithImages(&poem.TextAuthors[i], styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 	}
 
@@ -1497,7 +1627,7 @@ func processPoem(poem *fb2.Poem, ctx StyleContext, sb *StorylineBuilder, styles 
 			dateText = poem.Date.Value.Format("2006-01-02")
 		}
 		if dateText != "" {
-			styleName := ctx.Resolve("p", "date")
+			styleName := ctx.Resolve("p", "date", styles)
 			resolved := styles.ResolveStyle(styleName)
 			contentName, offset := ca.Add(dateText)
 			sb.AddContent(SymText, contentName, offset, resolved)
@@ -1517,7 +1647,7 @@ func processCite(cite *fb2.Cite, ctx StyleContext, sb *StorylineBuilder, styles 
 
 	// Process text authors
 	for i := range cite.TextAuthors {
-		styleName := ctx.Resolve("p", "text-author")
+		styleName := ctx.Resolve("p", "text-author", styles)
 		addParagraphWithImages(&cite.TextAuthors[i], styleName, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 	}
 }
@@ -1648,7 +1778,8 @@ func addParagraphWithImages(para *fb2.Paragraph, styleName string, sb *Storyline
 // This matches KPV behavior where all title lines are combined with newlines and
 // style events are used for -first/-next styling within the combined entry.
 // The heading level ($790) is applied only to this combined entry.
-func addTitleAsHeading(title *fb2.Title, headerStyleBase string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
+// ctx provides the style context (wrapper class like "body-title") for proper margin inheritance.
+func addTitleAsHeading(title *fb2.Title, ctx StyleContext, headerStyleBase string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
 	if title == nil || len(title.Items) == 0 {
 		return
 	}
@@ -1656,7 +1787,7 @@ func addTitleAsHeading(title *fb2.Title, headerStyleBase string, headingLevel in
 	// Check if title contains inline images - if so, fall back to separate paragraphs
 	// since KFX can't mix text and images in a single content entry
 	if titleHasInlineImages(title) {
-		addTitleAsSeparateParagraphs(title, headerStyleBase, headingLevel, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+		addTitleAsSeparateParagraphs(title, ctx, headerStyleBase, headingLevel, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		return
 	}
 
@@ -1814,10 +1945,11 @@ func addTitleAsHeading(title *fb2.Title, headerStyleBase string, headingLevel in
 		return
 	}
 
-	// Combine heading element style (h1-h6) with header class style
-	// This matches EPUB where <h1 class="body-title-header"> gets both h1 and class styling
+	// Combine heading element style (h1-h6) with context and header class style
+	// ctx contains the wrapper class (e.g., "body-title") which provides margins
+	// This produces "h1 body-title body-title-header" so margins are inherited
 	headingElementStyle := fmt.Sprintf("h%d", headingLevel)
-	combinedStyleSpec := headingElementStyle + " " + headerStyleBase
+	combinedStyleSpec := ctx.Resolve(headingElementStyle, headerStyleBase, styles)
 	resolved := styles.ResolveStyle(combinedStyleSpec)
 	contentName, offset := ca.Add(nw.String())
 	eid := sb.AddContentWithHeading(SymText, contentName, offset, resolved, events, headingLevel)
@@ -1897,7 +2029,9 @@ func segmentHasInlineImages(seg *fb2.InlineSegment) bool {
 
 // addTitleAsSeparateParagraphs adds title paragraphs as separate entries (fallback for titles with images).
 // This is the original behavior before combined heading support was added.
-func addTitleAsSeparateParagraphs(title *fb2.Title, headerStyleBase string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
+// Note: EmptyLine items are ignored as spacing is handled via block margins.
+// ctx provides the style context (wrapper class like "body-title") for proper margin inheritance.
+func addTitleAsSeparateParagraphs(title *fb2.Title, ctx StyleContext, headerStyleBase string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
 	firstParagraph := true
 	for _, item := range title.Items {
 		if item.Paragraph != nil {
@@ -1909,10 +2043,12 @@ func addTitleAsSeparateParagraphs(title *fb2.Title, headerStyleBase string, head
 			} else {
 				paraStyle = headerStyleBase + "-next"
 			}
-			// Combine heading level indicator with paragraph style
-			fullStyle := fmt.Sprintf("h%d %s", headingLevel, paraStyle)
+			// Combine heading level indicator with context and paragraph style
+			headingElementStyle := fmt.Sprintf("h%d", headingLevel)
+			fullStyle := ctx.Resolve(headingElementStyle, paraStyle, styles)
 			addParagraphWithImages(item.Paragraph, fullStyle, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
+		// EmptyLine items are ignored - spacing is handled via block margins like regular flow content
 	}
 }
 
