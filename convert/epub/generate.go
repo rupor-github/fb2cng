@@ -910,7 +910,7 @@ func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 
 		// Add nested sections to TOC
 		if chapter.Section != nil {
-			buildNCXNavPoints(navPoint, chapter.Section, chapter.Filename, &playOrder, c)
+			buildNCXNavPoints(navPoint, chapter.Section, chapter.Filename, &playOrder, c, nil)
 		}
 	}
 
@@ -973,9 +973,7 @@ func writeDataToZip(zw *zip.Writer, name string, data []byte) error {
 	return err
 }
 
-func buildNCXNavPoints(parent *etree.Element, section *fb2.Section, filename string, playOrder *int, c *content.Content) {
-	var lastNavPoint *etree.Element
-
+func buildNCXNavPoints(parent *etree.Element, section *fb2.Section, filename string, playOrder *int, c *content.Content, lastNavPoint *etree.Element) {
 	for _, item := range section.Content {
 		if item.Kind == fb2.FlowSection && item.Section != nil {
 			if item.Section.HasTitle() {
@@ -993,13 +991,22 @@ func buildNCXNavPoints(parent *etree.Element, section *fb2.Section, filename str
 				navContent := navPoint.CreateElement("content")
 				navContent.CreateAttr("src", filename+"#"+sectionID)
 
-				buildNCXNavPoints(navPoint, item.Section, filename, playOrder, c)
-				lastNavPoint = navPoint
+				buildNCXNavPoints(navPoint, item.Section, filename, playOrder, c, nil)
 			} else {
+				// Untitled section: nest children inside the last titled sibling if one exists
 				if lastNavPoint != nil {
-					buildNCXNavPoints(lastNavPoint, item.Section, filename, playOrder, c)
+					buildNCXNavPoints(lastNavPoint, item.Section, filename, playOrder, c, nil)
 				} else {
-					buildNCXNavPoints(parent, item.Section, filename, playOrder, c)
+					// No preceding titled sibling, children go to parent level
+					buildNCXNavPoints(parent, item.Section, filename, playOrder, c, nil)
+				}
+			}
+			// Track the last navPoint we created at this level
+			if item.Section.HasTitle() {
+				// Find the navPoint we just created (last child of parent)
+				children := parent.ChildElements()
+				if len(children) > 0 {
+					lastNavPoint = children[len(children)-1]
 				}
 			}
 		}
@@ -1071,7 +1078,7 @@ func buildTOCPageOL(parent *etree.Element, section *fb2.Section, filename string
 	}
 
 	hadItems := len(nestedOL.ChildElements()) > 0
-	buildTOCPageOLItems(nestedOL, section, filename, c)
+	buildTOCPageOLItems(nestedOL, section, filename, c, nil)
 
 	if !hadItems && len(nestedOL.ChildElements()) == 0 {
 		parent.RemoveChild(nestedOL)
@@ -1080,9 +1087,7 @@ func buildTOCPageOL(parent *etree.Element, section *fb2.Section, filename string
 }
 
 // buildTOCPageOLItems adds TOC entries for subsections to the ordered list
-func buildTOCPageOLItems(parentOL *etree.Element, section *fb2.Section, filename string, c *content.Content) {
-	var lastLI *etree.Element
-
+func buildTOCPageOLItems(parentOL *etree.Element, section *fb2.Section, filename string, c *content.Content, lastLI *etree.Element) {
 	for _, item := range section.Content {
 		if item.Kind == fb2.FlowSection && item.Section != nil {
 			if item.Section.HasTitle() {
@@ -1098,14 +1103,46 @@ func buildTOCPageOLItems(parentOL *etree.Element, section *fb2.Section, filename
 				buildTOCPageOL(li, item.Section, filename, c)
 				lastLI = li
 			} else {
+				// Untitled section: nest children inside the last titled sibling if one exists
 				if lastLI != nil {
-					buildTOCPageOL(lastLI, item.Section, filename, c)
+					buildTOCPageOLIntoLI(lastLI, item.Section, filename, c)
 				} else {
-					buildTOCPageOLItems(parentOL, item.Section, filename, c)
+					// No preceding titled sibling, children go to parent level
+					buildTOCPageOLItems(parentOL, item.Section, filename, c, nil)
 				}
 			}
 		}
 	}
+}
+
+// buildTOCPageOLIntoLI creates nested OL inside an LI for untitled section's children
+func buildTOCPageOLIntoLI(li *etree.Element, section *fb2.Section, filename string, c *content.Content) {
+	// Check if there are titled children to add
+	hasTitledChildren := false
+	for _, item := range section.Content {
+		if item.Kind == fb2.FlowSection && item.Section != nil {
+			hasTitledChildren = true
+			break
+		}
+	}
+	if !hasTitledChildren {
+		return
+	}
+
+	// Find or create nested OL
+	var nestedOL *etree.Element
+	for _, child := range li.ChildElements() {
+		if child.Tag == "ol" {
+			nestedOL = child
+			break
+		}
+	}
+	if nestedOL == nil {
+		nestedOL = li.CreateElement("ol")
+		nestedOL.CreateAttr("class", "toc-list toc-nested")
+	}
+
+	buildTOCPageOLItems(nestedOL, section, filename, c, nil)
 }
 
 // getChapterAnchorSuffix returns the anchor suffix (including #) for chapter links in TOC/Nav/NCX.

@@ -1250,6 +1250,7 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 
 	// Process content items
 	sectionCtx := NewStyleContext().Push("section")
+	var lastTitledEntry *TOCEntry
 	for i := range section.Content {
 		item := &section.Content[i]
 		if item.Kind == fb2.FlowSection && item.Section != nil {
@@ -1276,9 +1277,15 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 					Children:     childTOC,
 				}
 				*nestedTOC = append(*nestedTOC, tocEntry)
+				lastTitledEntry = tocEntry
 			} else if len(childTOC) > 0 {
-				// Section without title - promote children to parent level
-				*nestedTOC = append(*nestedTOC, childTOC...)
+				// Section without title - nest children inside the last titled sibling if one exists
+				if lastTitledEntry != nil {
+					lastTitledEntry.Children = append(lastTitledEntry.Children, childTOC...)
+				} else {
+					// No preceding titled sibling, promote children to parent level
+					*nestedTOC = append(*nestedTOC, childTOC...)
+				}
 			}
 		} else {
 			processFlowItem(item, sectionCtx, "section", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
