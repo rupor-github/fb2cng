@@ -66,6 +66,7 @@ const (
 	SymBorderStyle         KFXSymbol = 88  // border_style
 	SymBorderWeight        KFXSymbol = 93  // border_weight
 	SymTransform           KFXSymbol = 98  // transform
+	SymListStyle           KFXSymbol = 100 // list_style
 	SymColumnCount         KFXSymbol = 112 // column_count
 	SymDropcapLines        KFXSymbol = 125 // dropcap_lines
 	SymDropcapChars        KFXSymbol = 126 // dropcap_chars
@@ -204,6 +205,12 @@ const (
 	SymSolid       KFXSymbol = 328       // solid
 	SymDashed      KFXSymbol = 330       // dashed
 	SymDotted      KFXSymbol = 331       // dotted
+
+	// List style values ($340-$347)
+	SymListStyleDisc   KFXSymbol = 340 // disc (bullet)
+	SymListStyleSquare KFXSymbol = 341 // square
+	SymListStyleCircle KFXSymbol = 342 // circle
+	SymListStyleNumber KFXSymbol = 343 // numeric
 
 	// More units ($505-$507)
 	SymUnitRem KFXSymbol = 505 // rem (root em)

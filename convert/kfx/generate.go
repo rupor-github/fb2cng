@@ -115,7 +115,7 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	annotationEnabled := cfg.Annotation.Enable && c.Book.Description.TitleInfo.Annotation != nil
 	tocPageEnabled := cfg.TOCPage.Placement != common.TOCPagePlacementNone
 	if annotationEnabled || tocPageEnabled {
-		sectionNames, tocEntries, sectionEIDs, nextEID, landmarks, err = addGeneratedSections(c, cfg, styles, contentFragments, sectionNames, tocEntries, sectionEIDs, nextEID, landmarks, log)
+		sectionNames, tocEntries, sectionEIDs, nextEID, landmarks, idToEID, err = addGeneratedSections(c, cfg, styles, contentFragments, sectionNames, tocEntries, sectionEIDs, nextEID, landmarks, idToEID, log)
 		if err != nil {
 			return err
 		}

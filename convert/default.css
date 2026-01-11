@@ -143,6 +143,10 @@ h6 {
     text-indent: 0;
 }
 
+/* Table of Contents item */
+.toc-item {
+    text-align: left;
+}
 /* TOC title header (h1 in nav.xhtml or toc-page.xhtml) */
 .toc-title {
     text-indent: 0;

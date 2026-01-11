@@ -58,10 +58,73 @@ func addText(sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator
 	sb.AddContent(SymText, name, off, resolved)
 }
 
-func flattenTOCEntries(entries []*TOCEntry, includeUntitled bool) []string {
-	var out []string
-	var walk func(es []*TOCEntry, depth int)
-	walk = func(es []*TOCEntry, depth int) {
+// addTOCTitle adds the TOC page title (book title + optional authors) as a single paragraph
+// with style events for -first and -next spans, similar to body intro titles.
+func addTOCTitle(sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, bookTitle, authors string) {
+	if bookTitle == "" {
+		return
+	}
+
+	var text string
+	var events []StyleEventRef
+
+	// Add book title with toc-title-first style
+	titleStart := 0
+	titleLen := len([]rune(bookTitle))
+	text = bookTitle
+
+	firstStyle := styles.ResolveStyle("toc-title-first")
+	events = append(events, StyleEventRef{
+		Offset: titleStart,
+		Length: titleLen,
+		Style:  firstStyle,
+	})
+
+	// Add authors if provided
+	if authors != "" {
+		// Add line break between title and authors
+		breakStart := len([]rune(text))
+		text += "\n"
+
+		breakStyle := styles.ResolveStyle("toc-title-break")
+		events = append(events, StyleEventRef{
+			Offset: breakStart,
+			Length: 1,
+			Style:  breakStyle,
+		})
+
+		// Add authors with toc-title-next style
+		authorsStart := len([]rune(text))
+		authorsLen := len([]rune(authors))
+		text += authors
+
+		nextStyle := styles.ResolveStyle("toc-title-next")
+		events = append(events, StyleEventRef{
+			Offset: authorsStart,
+			Length: authorsLen,
+			Style:  nextStyle,
+		})
+	}
+
+	// Add as single paragraph with toc-title base style and h1 heading level
+	resolved := styles.ResolveStyle("h1 toc-title")
+	name, off := ca.Add(text)
+	sb.AddContentWithHeading(SymText, name, off, resolved, events, 1)
+}
+
+// tocPageEntry represents a single TOC page entry with link information.
+type tocPageEntry struct {
+	Title    string          // Display text
+	AnchorID string          // Anchor ID to link to (FB2 section ID)
+	FirstEID int             // Target EID for the anchor
+	Children []*tocPageEntry // Nested entries (for hierarchy)
+}
+
+// buildTOCEntryTree returns TOC entries as a tree structure for hierarchical list generation.
+func buildTOCEntryTree(entries []*TOCEntry, includeUntitled bool) []*tocPageEntry {
+	var build func(es []*TOCEntry) []*tocPageEntry
+	build = func(es []*TOCEntry) []*tocPageEntry {
+		var out []*tocPageEntry
 		for _, e := range es {
 			if e == nil {
 				continue
@@ -73,25 +136,201 @@ func flattenTOCEntries(entries []*TOCEntry, includeUntitled bool) []string {
 			if t == "" {
 				t = "Untitled"
 			}
-			indent := strings.Repeat("  ", max(depth-1, 0))
-			out = append(out, fmt.Sprintf("%s• %s", indent, t))
-			if len(e.Children) > 0 {
-				walk(e.Children, depth+1)
+			entry := &tocPageEntry{
+				Title:    t,
+				AnchorID: e.ID,
+				FirstEID: e.FirstEID,
 			}
+			if len(e.Children) > 0 {
+				entry.Children = build(e.Children)
+			}
+			out = append(out, entry)
+		}
+		return out
+	}
+	return build(entries)
+}
+
+// collectTOCAnchors recursively collects anchor IDs from a TOC entry tree.
+func collectTOCAnchors(entries []*tocPageEntry, idToEID eidByFB2ID) {
+	for _, e := range entries {
+		if e.AnchorID != "" && e.FirstEID > 0 {
+			idToEID[e.AnchorID] = e.FirstEID
+		}
+		if len(e.Children) > 0 {
+			collectTOCAnchors(e.Children, idToEID)
 		}
 	}
-	walk(entries, 1)
-	return out
+}
+
+// tocListBuilder helps build hierarchical TOC lists with proper EID allocation.
+type tocListBuilder struct {
+	eidCounter   int
+	styles       *StyleRegistry
+	ca           *ContentAccumulator
+	styleContext StyleContext // Tracks ancestor styles for proper cascade
+}
+
+// buildTOCList builds a hierarchical list structure for TOC entries.
+// Returns the list StructValue and all EIDs used (for position_id_map).
+func (b *tocListBuilder) buildTOCList(entries []*tocPageEntry, isNested bool) (StructValue, []int) {
+	if len(entries) == 0 {
+		return nil, nil
+	}
+
+	listEID := b.eidCounter
+	b.eidCounter++
+
+	var allEIDs []int
+	allEIDs = append(allEIDs, listEID)
+
+	// Push list context for nested lists
+	var listContext StyleContext
+	if isNested {
+		listContext = b.styleContext.Push("toc-nested")
+	} else {
+		listContext = b.styleContext.Push("toc-list")
+	}
+
+	// Save current context and set new one for children
+	savedContext := b.styleContext
+	b.styleContext = listContext
+
+	var items []any
+	for _, entry := range entries {
+		item, itemEIDs := b.buildTOCListItem(entry)
+		items = append(items, item)
+		allEIDs = append(allEIDs, itemEIDs...)
+	}
+
+	// Restore context
+	b.styleContext = savedContext
+
+	// Resolve list style using accumulated context
+	listStyle := b.styles.ResolveStyle(listContext.Resolve("", ""))
+
+	// Build list entry: {$100: $343 (numeric), $146: [...], $155: eid, $159: $276 (list)}
+	list := NewStruct().
+		SetInt(SymUniqueID, int64(listEID)).
+		SetSymbol(SymType, SymList).                 // $159 = $276 (list)
+		SetSymbol(SymListStyle, SymListStyleNumber). // $100 = $343 (numeric list style)
+		SetList(SymContentList, items)               // $146 = content_list
+	if listStyle != "" {
+		list.Set(SymStyle, SymbolByName(listStyle))
+	}
+
+	return list, allEIDs
+}
+
+// buildTOCListItem builds a single listitem with optional nested list.
+func (b *tocListBuilder) buildTOCListItem(entry *tocPageEntry) (StructValue, []int) {
+	itemEID := b.eidCounter
+	b.eidCounter++
+
+	var allEIDs []int
+	allEIDs = append(allEIDs, itemEID)
+
+	// Build text content with link
+	textEntry, textEID := b.buildTOCTextEntry(entry)
+	allEIDs = append(allEIDs, textEID)
+
+	var children []any
+	children = append(children, textEntry)
+
+	// If this entry has children, build nested list
+	if len(entry.Children) > 0 {
+		nestedList, nestedEIDs := b.buildTOCList(entry.Children, true)
+		children = append(children, nestedList)
+		allEIDs = append(allEIDs, nestedEIDs...)
+	}
+
+	// Build listitem entry: {$146: [...], $155: eid, $159: $277 (listitem)}
+	item := NewStruct().
+		SetInt(SymUniqueID, int64(itemEID)).
+		SetSymbol(SymType, SymListItem).  // $159 = $277 (listitem)
+		SetList(SymContentList, children) // $146 = content_list
+
+	return item, allEIDs
+}
+
+// buildTOCTextEntry builds a text entry with link for a TOC item.
+func (b *tocListBuilder) buildTOCTextEntry(entry *tocPageEntry) (StructValue, int) {
+	textEID := b.eidCounter
+	b.eidCounter++
+
+	// Add text to content accumulator
+	contentName, offset := b.ca.Add(entry.Title)
+
+	// Build content reference
+	contentRef := map[string]any{
+		"name": SymbolByName(contentName),
+		"$403": offset,
+	}
+
+	// Resolve styles using context - accumulates ancestor styles
+	// Context has toc-list (and optionally toc-nested for nested items)
+	// Item style adds "toc-item toc-section" to the context
+	itemStyleSpec := b.styleContext.Resolve("", "toc-item toc-section")
+	itemStyle := b.styles.ResolveStyle(itemStyleSpec)
+	// Link style also inherits context for proper cascade
+	linkStyleSpec := b.styleContext.Resolve("", "link-toc")
+	linkStyle := b.styles.ResolveStyle(linkStyleSpec)
+
+	// Build style event for link (covers entire text)
+	textLen := len([]rune(entry.Title))
+	event := NewStruct().
+		SetInt(SymOffset, 0).
+		SetInt(SymLength, int64(textLen))
+	if linkStyle != "" {
+		event.Set(SymStyle, SymbolByName(linkStyle))
+	}
+	if entry.AnchorID != "" {
+		event.Set(SymLinkTo, SymbolByName(entry.AnchorID))
+	}
+
+	// Build text entry
+	text := NewStruct().
+		SetInt(SymUniqueID, int64(textEID)).
+		SetSymbol(SymType, SymText).          // $159 = $269 (text)
+		Set(SymContent, contentRef).          // $145 = content
+		SetList(SymStyleEvents, []any{event}) // $142 = style_events
+	if itemStyle != "" {
+		text.Set(SymStyle, SymbolByName(itemStyle))
+	}
+
+	return text, textEID
+}
+
+// addTOCList adds the complete TOC list structure to the storyline.
+func addTOCList(sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, entries []*tocPageEntry) {
+	if len(entries) == 0 {
+		return
+	}
+
+	builder := &tocListBuilder{
+		eidCounter:   sb.NextEID(),
+		styles:       styles,
+		ca:           ca,
+		styleContext: NewStyleContext(),
+	}
+
+	list, _ := builder.buildTOCList(entries, false)
+
+	// Update storyline's EID counter
+	sb.SetNextEID(builder.eidCounter)
+
+	// Add the list as a raw entry
+	sb.AddRawEntry(list)
 }
 
 // addGeneratedSections optionally injects generated sections (annotation page and/or TOC page).
 //
-// Returns (in order): updated sectionNames, updated tocEntries, updated sectionEIDs, nextEID, updated landmarks, error.
+// Returns (in order): updated sectionNames, updated tocEntries, updated sectionEIDs, nextEID, updated landmarks, updated idToEID, error.
 // It also appends the necessary fragments (content/storyline/section) into fragments.
 func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 	styles *StyleRegistry, fragments *FragmentList, sectionNames sectionNameList,
-	tocEntries []*TOCEntry, sectionEIDs sectionEIDsBySectionName, nextEID int, landmarks LandmarkInfo, log *zap.Logger,
-) (sectionNameList, []*TOCEntry, sectionEIDsBySectionName, int, LandmarkInfo, error) {
+	tocEntries []*TOCEntry, sectionEIDs sectionEIDsBySectionName, nextEID int, landmarks LandmarkInfo, idToEID eidByFB2ID, log *zap.Logger,
+) (sectionNameList, []*TOCEntry, sectionEIDsBySectionName, int, LandmarkInfo, eidByFB2ID, error) {
 	annotationEnabled := cfg.Annotation.Enable && c.Book.Description.TitleInfo.Annotation != nil
 	tocPageEnabled := cfg.TOCPage.Placement != common.TOCPagePlacementNone
 
@@ -124,7 +363,7 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 
 		for name, list := range ca.Finish() {
 			if err := fragments.Add(buildContentFragmentByName(name, list)); err != nil {
-				return nil, nil, nil, 0, landmarks, err
+				return nil, nil, nil, 0, landmarks, nil, err
 			}
 		}
 
@@ -133,10 +372,10 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 
 		storyFrag, secFrag := sb.Build()
 		if err := fragments.Add(storyFrag); err != nil {
-			return nil, nil, nil, 0, landmarks, err
+			return nil, nil, nil, 0, landmarks, nil, err
 		}
 		if err := fragments.Add(secFrag); err != nil {
-			return nil, nil, nil, 0, landmarks, err
+			return nil, nil, nil, 0, landmarks, nil, err
 		}
 
 		annotationEntry := &TOCEntry{
@@ -164,24 +403,27 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 		ca := NewContentAccumulator(contentCounter)
 		contentCounter++
 
-		addText(sb, styles, ca, c.Book.Description.TitleInfo.BookTitle.Value, "toc-title")
+		// Build TOC title with style events (similar to body intro)
+		var authors string
 		if cfg.TOCPage.AuthorsTemplate != "" {
 			expanded, err := c.Book.ExpandTemplateMetainfo(config.AuthorsTemplateFieldName, cfg.TOCPage.AuthorsTemplate, c.SrcName, c.OutputFormat)
 			if err != nil {
 				log.Warn("Unable to prepare list of authors for TOC", zap.Error(err))
 			} else {
-				addText(sb, styles, ca, expanded, "toc-title")
+				authors = expanded
 			}
 		}
+		addTOCTitle(sb, styles, ca, c.Book.Description.TitleInfo.BookTitle.Value, authors)
 
-		lines := flattenTOCEntries(tocEntries, cfg.TOCPage.ChaptersWithoutTitle)
-		for _, line := range lines {
-			addText(sb, styles, ca, line, "toc-item")
-		}
+		entries := buildTOCEntryTree(tocEntries, cfg.TOCPage.ChaptersWithoutTitle)
+		// Register TOC entry anchors in idToEID for anchor fragment generation
+		collectTOCAnchors(entries, idToEID)
+		// Build hierarchical list structure
+		addTOCList(sb, styles, ca, entries)
 
 		for name, list := range ca.Finish() {
 			if err := fragments.Add(buildContentFragmentByName(name, list)); err != nil {
-				return nil, nil, nil, 0, landmarks, err
+				return nil, nil, nil, 0, landmarks, nil, err
 			}
 		}
 
@@ -190,10 +432,10 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 
 		storyFrag, secFrag := sb.Build()
 		if err := fragments.Add(storyFrag); err != nil {
-			return nil, nil, nil, 0, landmarks, err
+			return nil, nil, nil, 0, landmarks, nil, err
 		}
 		if err := fragments.Add(secFrag); err != nil {
-			return nil, nil, nil, 0, landmarks, err
+			return nil, nil, nil, 0, landmarks, nil, err
 		}
 
 		// Track TOC EID for landmarks
@@ -220,5 +462,5 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 		newOrder = append(newOrder, sectionNames...)
 	}
 	newOrder = append(newOrder, after...)
-	return newOrder, tocEntries, sectionEIDs, nextEID, landmarks, nil
+	return newOrder, tocEntries, sectionEIDs, nextEID, landmarks, idToEID, nil
 }

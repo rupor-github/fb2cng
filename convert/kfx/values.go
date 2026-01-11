@@ -192,9 +192,9 @@ func NewApproximatePageListContainer(entries []any) StructValue {
 // NewExternalResource creates an external resource descriptor.
 func NewExternalResource(location string, format KFXSymbol, mimeType string, width, height int64) StructValue {
 	res := NewStruct().
-		SetSymbol(SymFormat, format).     // $161 = format
-		SetString(SymMIME, mimeType).     // $162 = mime type
-		SetString(SymLocation, location)  // $165 = location
+		SetSymbol(SymFormat, format).    // $161 = format
+		SetString(SymMIME, mimeType).    // $162 = mime type
+		SetString(SymLocation, location) // $165 = location
 	if width > 0 {
 		res.SetInt(SymResourceWidth, width) // $422 = resource_width
 	}

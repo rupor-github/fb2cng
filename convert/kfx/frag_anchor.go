@@ -1,20 +1,9 @@
 package kfx
 
-func isGeneratedSectionName(name string) bool {
-	if len(name) < 2 || name[0] != 'c' {
-		return false
-	}
-	for i := 1; i < len(name); i++ {
-		if name[i] < '0' || name[i] > '9' {
-			return false
-		}
-	}
-	return true
-}
-
 // buildAnchorFragments generates $266 anchor fragments for internal navigation.
 // Fragment naming uses the actual ID from the source document (e.g., section IDs, note IDs).
-// Generated section names (c0, c1, etc.) are filtered to avoid fragment id collisions.
+// For TOC page links, anchor IDs may match section names (c0, c1, etc.) - this is allowed
+// since anchor fragments ($266) use a different fragment type than section fragments ($260).
 func buildAnchorFragments(idToEID eidByFB2ID, referenced map[string]bool) []*Fragment {
 	var out []*Fragment
 	if len(referenced) == 0 || len(idToEID) == 0 {
@@ -22,7 +11,7 @@ func buildAnchorFragments(idToEID eidByFB2ID, referenced map[string]bool) []*Fra
 	}
 
 	for id := range referenced {
-		if id == "" || isGeneratedSectionName(id) {
+		if id == "" {
 			continue
 		}
 		eid, ok := idToEID[id]

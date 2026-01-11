@@ -770,6 +770,19 @@ func (sb *StorylineBuilder) NextEID() int {
 	return sb.eidCounter
 }
 
+// SetNextEID updates the EID counter (used when building complex structures externally).
+func (sb *StorylineBuilder) SetNextEID(eid int) {
+	sb.eidCounter = eid
+}
+
+// AddRawEntry adds a pre-built StructValue entry to the storyline.
+// This is used for complex structures like lists that are built externally.
+func (sb *StorylineBuilder) AddRawEntry(entry StructValue) {
+	sb.contentEntries = append(sb.contentEntries, ContentRef{
+		RawEntry: entry,
+	})
+}
+
 // PageTemplateEID returns the EID allocated for the page template container.
 func (sb *StorylineBuilder) PageTemplateEID() int {
 	return sb.pageTemplateEID
@@ -904,9 +917,11 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 			sectionEIDs[sectionName] = sb.AllEIDs()
 
 			// Create TOC entry for body intro
+			// Use "a-" prefix for anchor ID to avoid collision with section fragment ID
 			title := body.Title.AsTOCText("Untitled")
+			anchorID := "a-" + sectionName
 			tocEntry := &TOCEntry{
-				ID:           sectionName,
+				ID:           anchorID,
 				Title:        title,
 				SectionName:  sectionName,
 				StoryName:    storyName,
@@ -914,6 +929,7 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 				IncludeInTOC: true,
 			}
 			tocEntries = append(tocEntries, tocEntry)
+			idToEID[anchorID] = sb.FirstEID()
 
 			// Track start reading location (first body intro is the "Start" landmark)
 			if landmarks.StartEID == 0 {
@@ -1043,8 +1059,10 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 		sectionEIDs[sectionName] = sb.AllEIDs()
 
 		// Create TOC entry for footnotes (not included in main TOC)
+		// Use "a-" prefix for anchor ID to avoid collision with section fragment ID
+		anchorID := "a-" + sectionName
 		tocEntry := &TOCEntry{
-			ID:           sectionName,
+			ID:           anchorID,
 			Title:        "Notes",
 			SectionName:  sectionName,
 			StoryName:    storyName,
@@ -1052,6 +1070,7 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 			IncludeInTOC: false, // Don't include footnotes in TOC
 		}
 		tocEntries = append(tocEntries, tocEntry)
+		idToEID[anchorID] = sb.FirstEID()
 
 		eidCounter = sb.NextEID()
 		storylineFrag, sectionFrag := sb.Build()

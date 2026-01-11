@@ -582,7 +582,7 @@ func (sr *StyleRegistry) ResolveImageStyle(imageWidth, screenWidth int) string {
 func (sr *StyleRegistry) ResolveCoverImageStyle() string {
 	// Build minimal properties matching KPV cover image style exactly
 	props := map[KFXSymbol]any{
-		SymFontSize:   DimensionValue(1, SymUnitRem),      // font-size: 1rem
+		SymFontSize:   DimensionValue(1, SymUnitRem),     // font-size: 1rem
 		SymLineHeight: DimensionValue(1.0101, SymUnitLh), // line-height: 1.0101lh
 	}
 
@@ -772,9 +772,11 @@ func DefaultStyleRegistry() *StyleRegistry {
 	// ============================================================
 
 	// "kfx-unknown" is a catch-all base style for classes not defined in CSS.
-	// It has absolutely minimal properties to avoid polluting derived styles
+	// It has minimal properties to avoid polluting derived styles
 	// with unwanted formatting (unlike "p" which has text-align: justify, margins, etc.)
+	// LineHeight is required to ensure proper text rendering.
 	sr.Register(NewStyle("kfx-unknown").
+		LineHeight(1.0, SymUnitLh).
 		Build())
 
 	// ============================================================
