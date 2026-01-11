@@ -203,9 +203,18 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 		}
 	}
 
+	// Build the final section order.
+	// The first section typically contains the cover image and should remain first.
+	// "before" sections (TOC/annotation) go AFTER the cover but BEFORE the rest of content.
+	// "after" sections go at the end.
 	newOrder := make(sectionNameList, 0, len(sectionNames)+len(before)+len(after))
-	newOrder = append(newOrder, before...)
-	newOrder = append(newOrder, sectionNames...)
+	if len(before) > 0 && len(sectionNames) > 0 {
+		newOrder = append(newOrder, sectionNames[0]) // Keep cover section first
+		newOrder = append(newOrder, before...)       // Insert TOC/annotation after cover
+		newOrder = append(newOrder, sectionNames[1:]...)
+	} else {
+		newOrder = append(newOrder, sectionNames...)
+	}
 	newOrder = append(newOrder, after...)
 	return newOrder, tocEntries, sectionEIDs, nextEID, nil
 }
