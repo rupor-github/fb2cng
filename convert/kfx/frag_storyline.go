@@ -291,6 +291,21 @@ func NewPageTemplateEntry(eid int, storylineName string) StructValue {
 		Set(SymStoryName, SymbolByName(storylineName)) // $176 = story_name ref
 }
 
+// NewCoverPageTemplateEntry creates a page template entry for a cover section.
+// Based on reference KFX cover section: {$140: $320, $155: eid, $156: $326, $159: $270, $176: storyline, $66: width, $67: height}
+// The layout mode ($156) uses scale_fit ($326) which preserves aspect ratio.
+// Note: KFX doesn't have a direct equivalent to EPUB's "stretch" mode, so scale_fit is used for all modes.
+func NewCoverPageTemplateEntry(eid int, storylineName string, width, height int) StructValue {
+	return NewStruct().
+		SetSymbol(SymFloat, SymCenter).                 // $140 = center ($320)
+		SetInt(SymUniqueID, int64(eid)).                // $155 = id
+		SetSymbol(SymLayout, SymScaleFit).              // $156 = scale_fit ($326)
+		SetSymbol(SymType, SymContainer).               // $159 = container ($270)
+		Set(SymStoryName, SymbolByName(storylineName)). // $176 = story_name ref
+		SetInt(SymContainerWidth, int64(width)).        // $66 = container width
+		SetInt(SymContainerHeight, int64(height))       // $67 = container height
+}
+
 // ContentRef represents a reference to content within a storyline.
 type ContentRef struct {
 	EID           int             // Element ID ($155)
@@ -359,7 +374,9 @@ func NewContentEntry(ref ContentRef) StructValue {
 
 	if ref.Type == SymImage {
 		entry.Set(SymResourceName, SymbolByName(ref.ResourceName)) // $175 = resource_name (symbol reference)
-		entry.SetString(SymAltText, ref.AltText)                   // $584 = alt_text
+		if ref.AltText != "" {
+			entry.SetString(SymAltText, ref.AltText) // $584 = alt_text (only if non-empty)
+		}
 	} else if ref.ContentName != "" {
 		// Content reference - nested struct with name and offset
 		// Only add if we have a content name (containers with children don't have content)
@@ -753,6 +770,11 @@ func (sb *StorylineBuilder) NextEID() int {
 	return sb.eidCounter
 }
 
+// PageTemplateEID returns the EID allocated for the page template container.
+func (sb *StorylineBuilder) PageTemplateEID() int {
+	return sb.pageTemplateEID
+}
+
 // Build creates the storyline and section fragments.
 // Returns storyline fragment, section fragment.
 func (sb *StorylineBuilder) Build() (*Fragment, *Fragment) {
@@ -774,6 +796,16 @@ func (sb *StorylineBuilder) Build() (*Fragment, *Fragment) {
 	sectionFrag := BuildSection(sb.sectionName, pageTemplates)
 
 	return storylineFrag, sectionFrag
+}
+
+// BuildStorylineOnly creates only the storyline fragment without the section.
+// Used for cover sections where the section uses container type instead of text type.
+func (sb *StorylineBuilder) BuildStorylineOnly() *Fragment {
+	entries := make([]any, 0, len(sb.contentEntries))
+	for _, ref := range sb.contentEntries {
+		entries = append(entries, NewContentEntry(ref))
+	}
+	return BuildStoryline(sb.name, entries)
 }
 
 // generateStoryline creates storyline and section fragments from an FB2 book.
@@ -799,10 +831,45 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 
 	sectionCount := 0
 
-	coverAdded := false
-
 	// Collect footnote bodies for processing at the end
 	var footnoteBodies []*fb2.Body
+
+	// Create separate cover section at the very beginning (like reference KFX)
+	// Cover is a container-type section with just the image, not embedded in body intro
+	if len(book.Description.TitleInfo.Coverpage) > 0 {
+		cover := &book.Description.TitleInfo.Coverpage[0]
+		coverID := strings.TrimPrefix(cover.Href, "#")
+		if imgInfo, ok := imageResources[coverID]; ok {
+			sectionCount++
+			storyName := "l" + toBase36(sectionCount)
+			sectionName := "c" + toBase36(sectionCount-1)
+			sectionNames = append(sectionNames, sectionName)
+
+			// Create storyline with just the cover image
+			sb := NewStorylineBuilder(storyName, sectionName, eidCounter, styles)
+			// Use minimal cover style - no width constraints since page template defines dimensions
+			resolved := styles.ResolveCoverImageStyle()
+			sb.AddImage(imgInfo.ResourceName, resolved, cover.Alt)
+
+			sectionEIDs[sectionName] = sb.AllEIDs()
+			eidCounter = sb.NextEID()
+
+			// Build cover storyline fragment
+			storylineFrag := sb.BuildStorylineOnly()
+			if err := fragments.Add(storylineFrag); err != nil {
+				return nil, 0, nil, nil, nil, nil, err
+			}
+
+			// Build cover section with container type and image dimensions
+			// Reference KFX: {$140: $320, $155: eid, $156: $326, $159: $270, $176: storyline, $66: width, $67: height}
+			// The page template EID should be unique (not the same as the image content EID)
+			pageTemplate := NewCoverPageTemplateEntry(sb.PageTemplateEID(), storyName, imgInfo.Width, imgInfo.Height)
+			sectionFrag := BuildSection(sectionName, []any{pageTemplate})
+			if err := fragments.Add(sectionFrag); err != nil {
+				return nil, 0, nil, nil, nil, nil, err
+			}
+		}
+	}
 
 	// Process each body
 	for i := range book.Bodies {
@@ -824,18 +891,6 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 
 			// Create storyline builder for body intro
 			sb := NewStorylineBuilder(storyName, sectionName, eidCounter, styles)
-
-			// Add cover image once at the very beginning (references external_resource)
-			if !coverAdded && len(book.Description.TitleInfo.Coverpage) > 0 {
-				cover := &book.Description.TitleInfo.Coverpage[0]
-				coverID := strings.TrimPrefix(cover.Href, "#")
-				if imgInfo, ok := imageResources[coverID]; ok {
-					// Cover uses full width style
-					resolved := styles.ResolveImageStyle(imgInfo.Width, defaultWidth)
-					sb.AddImage(imgInfo.ResourceName, resolved, cover.Alt)
-					coverAdded = true
-				}
-			}
 
 			if err := processBodyIntroContent(book, body, sb, styles, imageResources, ca, idToEID, defaultWidth, footnotesIndex); err != nil {
 				return nil, 0, nil, nil, nil, nil, err

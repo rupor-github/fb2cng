@@ -43,8 +43,8 @@ func buildImageResourceFragments(images fb2.BookImages) ([]*Fragment, []*Fragmen
 		external = append(external, &Fragment{
 			FType:   SymExtResource,
 			FIDName: resourceName,
-			Value: NewExternalResource(location, format, int64(img.Dim.Width), int64(img.Dim.Height)).
-				SetString(SymResourceName, resourceName), // $175 = resource_name as string
+			Value: NewExternalResource(location, format, formatSymbolToMIME(format), int64(img.Dim.Width), int64(img.Dim.Height)).
+				Set(SymResourceName, SymbolByName(resourceName)), // $175 = resource_name as symbol
 		})
 
 		raw = append(raw, &Fragment{
@@ -98,5 +98,20 @@ func imageFormatSymbol(mimeType string) KFXSymbol {
 		return SymFormatGIF
 	default:
 		return -1
+	}
+}
+
+// formatSymbolToMIME returns the canonical MIME type for a format symbol.
+// KFX uses "image/jpg" (not "image/jpeg") to match reference output.
+func formatSymbolToMIME(format KFXSymbol) string {
+	switch format {
+	case SymFormatJPG:
+		return "image/jpg"
+	case SymFormatPNG:
+		return "image/png"
+	case SymFormatGIF:
+		return "image/gif"
+	default:
+		return ""
 	}
 }

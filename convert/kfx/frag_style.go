@@ -574,6 +574,31 @@ func (sr *StyleRegistry) ResolveImageStyle(imageWidth, screenWidth int) string {
 	return name
 }
 
+// ResolveCoverImageStyle creates a minimal style for cover images in container-type sections.
+// Unlike ResolveImageStyle, this doesn't include width constraints since the page template
+// already defines the container dimensions. Reference KFX cover image style has:
+//   - font_size: 1rem (in unit $505)
+//   - line_height: 1.0101lh
+func (sr *StyleRegistry) ResolveCoverImageStyle() string {
+	// Build minimal properties matching KPV cover image style exactly
+	props := map[KFXSymbol]any{
+		SymFontSize:   DimensionValue(1, SymUnitRem),      // font-size: 1rem
+		SymLineHeight: DimensionValue(1.0101, SymUnitLh), // line-height: 1.0101lh
+	}
+
+	sig := styleSignature(props)
+	if name, ok := sr.resolved[sig]; ok {
+		sr.used[name] = true
+		return name
+	}
+
+	name := sr.nextResolvedStyleName()
+	sr.resolved[sig] = name
+	sr.used[name] = true
+	sr.Register(StyleDef{Name: name, Properties: props})
+	return name
+}
+
 // inferParentStyle attempts to determine a parent style based on naming patterns.
 // This handles dynamically-created styles like "section-subtitle" -> inherits "subtitle".
 //

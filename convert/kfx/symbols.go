@@ -58,6 +58,8 @@ const (
 	SymLeft                KFXSymbol = 59  // left
 	SymBottom              KFXSymbol = 60  // bottom
 	SymRight               KFXSymbol = 61  // right
+	SymContainerWidth      KFXSymbol = 66  // container width (for page templates)
+	SymContainerHeight     KFXSymbol = 67  // container height (for page templates)
 	SymFillColor           KFXSymbol = 70  // fill_color
 	SymFillOpacity         KFXSymbol = 72  // fill_opacity
 	SymBorderColor         KFXSymbol = 83  // border_color

@@ -159,10 +159,11 @@ func NewApproximatePageListContainer(entries []any) StructValue {
 // Resource builders - for $164 external resource descriptors
 
 // NewExternalResource creates an external resource descriptor.
-func NewExternalResource(location string, format KFXSymbol, width, height int64) StructValue {
+func NewExternalResource(location string, format KFXSymbol, mimeType string, width, height int64) StructValue {
 	res := NewStruct().
-		SetString(SymLocation, location). // $165 = location
-		SetSymbol(SymFormat, format)      // $161 = format
+		SetSymbol(SymFormat, format).     // $161 = format
+		SetString(SymMIME, mimeType).     // $162 = mime type
+		SetString(SymLocation, location)  // $165 = location
 	if width > 0 {
 		res.SetInt(SymResourceWidth, width) // $422 = resource_width
 	}
@@ -174,17 +175,17 @@ func NewExternalResource(location string, format KFXSymbol, width, height int64)
 
 // NewImageResourcePNG creates an external resource for a PNG image.
 func NewImageResourcePNG(location string, width, height int64) StructValue {
-	return NewExternalResource(location, SymFormatPNG, width, height) // $284 = png
+	return NewExternalResource(location, SymFormatPNG, "image/png", width, height)
 }
 
 // NewImageResourceJPG creates an external resource for a JPEG image.
 func NewImageResourceJPG(location string, width, height int64) StructValue {
-	return NewExternalResource(location, SymFormatJPG, width, height) // $285 = jpg
+	return NewExternalResource(location, SymFormatJPG, "image/jpg", width, height)
 }
 
 // NewImageResourceGIF creates an external resource for a GIF image.
 func NewImageResourceGIF(location string, width, height int64) StructValue {
-	return NewExternalResource(location, SymFormatGIF, width, height) // $286 = gif
+	return NewExternalResource(location, SymFormatGIF, "image/gif", width, height)
 }
 
 // Anchor builders - for $266 anchor fragments
