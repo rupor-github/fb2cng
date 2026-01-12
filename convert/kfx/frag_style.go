@@ -510,7 +510,7 @@ var containerStyles = map[string]bool{
 }
 
 // ResolveStyle resolves a (possibly multi-part) style spec into a fully-resolved KPV-like style name.
-// Later parts override earlier ones.
+// Later parts override earlier ones. All resolved styles inherit from kfx-unknown as the base.
 func (sr *StyleRegistry) ResolveStyle(styleSpec string) string {
 	parts := strings.Fields(styleSpec)
 	if len(parts) == 0 {
@@ -518,6 +518,15 @@ func (sr *StyleRegistry) ResolveStyle(styleSpec string) string {
 	}
 
 	merged := make(map[KFXSymbol]any)
+
+	// Start with kfx-unknown as the base for all resolved styles
+	// This ensures minimal required properties (like line-height: 1lh) are always present
+	sr.EnsureBaseStyle("kfx-unknown")
+	if unknown, exists := sr.styles["kfx-unknown"]; exists {
+		resolved := sr.resolveInheritance(unknown)
+		maps.Copy(merged, resolved.Properties)
+	}
+
 	// Track margins separately - we may need to use intermediate margins
 	// if the final element doesn't define any.
 	var lastMargins map[KFXSymbol]any
@@ -601,8 +610,18 @@ func (sr *StyleRegistry) ResolveStyle(styleSpec string) string {
 // RegisterResolved takes a merged property map, generates a unique style name,
 // registers the style, and returns the name. This is used by StyleContext.Resolve
 // to register styles built with proper CSS inheritance rules.
+// All resolved styles inherit from kfx-unknown as the base.
 func (sr *StyleRegistry) RegisterResolved(props map[KFXSymbol]any) string {
-	sig := styleSignature(props)
+	// Start with kfx-unknown as the base, then overlay provided props
+	merged := make(map[KFXSymbol]any)
+	sr.EnsureBaseStyle("kfx-unknown")
+	if unknown, exists := sr.styles["kfx-unknown"]; exists {
+		resolved := sr.resolveInheritance(unknown)
+		maps.Copy(merged, resolved.Properties)
+	}
+	maps.Copy(merged, props) // Provided props override kfx-unknown
+
+	sig := styleSignature(merged)
 	if name, ok := sr.resolved[sig]; ok {
 		sr.used[name] = true
 		return name
@@ -611,7 +630,7 @@ func (sr *StyleRegistry) RegisterResolved(props map[KFXSymbol]any) string {
 	name := sr.nextResolvedStyleName()
 	sr.resolved[sig] = name
 	sr.used[name] = true
-	sr.Register(StyleDef{Name: name, Properties: props})
+	sr.Register(StyleDef{Name: name, Properties: merged})
 	return name
 }
 
@@ -635,9 +654,9 @@ func (sr *StyleRegistry) ResolveImageStyle(imageWidth, screenWidth int) string {
 
 	// Build properties matching KPV image style output
 	props := map[KFXSymbol]any{
-		SymBoxAlign:   SymbolValue(SymCenter),                       // box-align: center
-		SymLineHeight: DimensionValue(1, SymUnitRatio),              // line-height: 1lh
-		SymWidth:      DimensionValue(widthPercent, SymUnitPercent), // width: XX.XXX%
+		SymBoxAlign:     SymbolValue(SymCenter),                       // box-align: center
+		SymSizingBounds: SymbolValue(SymContentBounds),                // sizing_bounds: content_bounds
+		SymWidth:        DimensionValue(widthPercent, SymUnitPercent), // width: XX.XXX%
 	}
 
 	sig := styleSignature(props)
@@ -863,7 +882,7 @@ func DefaultStyleRegistry() *StyleRegistry {
 	// Base paragraph style - HTML <p> element
 	// KPV uses: text-indent: 3.125%, line-height: 1lh, text-align: justify
 	sr.Register(NewStyle("p").
-		LineHeight(1.0, SymUnitLh).
+		// LineHeight(1.0, SymUnitLh).
 		TextIndent(3.125, SymUnitPercent).
 		TextAlign(SymJustify).
 		MarginBottom(0.25, SymUnitLh).
@@ -1175,15 +1194,10 @@ func (sr *StyleRegistry) convertPageBreaksToYjBreaks(name string, props map[KFXS
 		delete(props, SymKeepLast)
 	}
 
-	// For title wrappers, ensure yj-break-after: avoid to keep title with content
-	if sr.isTitleWrapper(name) {
-		if _, exists := props[SymYjBreakAfter]; !exists {
-			props[SymYjBreakAfter] = SymbolValue(SymAvoid)
-		}
-		if _, exists := props[SymYjBreakBefore]; !exists {
-			props[SymYjBreakBefore] = SymbolValue(SymAuto)
-		}
-	}
+	// KPV pattern for break properties:
+	// Pattern 1: break-inside: avoid + yj-break-after: avoid (no yj-break-before)
+	// Pattern 2: yj-break-before: auto + yj-break-after: avoid (no break-inside)
+	// These are mutually exclusive. Do NOT add yj-break-before when break-inside exists.
 }
 
 // isTitleWrapper checks if a style name represents a title wrapper element.

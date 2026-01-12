@@ -124,7 +124,8 @@ func (c *Converter) convertProperty(name string, value CSSValue, result *Convers
 
 	case "text-indent":
 		// KPV uses % for text-indent. Convert em → % using KPVEmToPercentTextIndent ratio.
-		if value.IsNumeric() {
+		// Ignore zero values.
+		if value.IsNumeric() && value.Value != 0 {
 			if value.Unit == "" || value.Unit == "%" {
 				result.Style.Properties[kfxSym] = DimensionValue(value.Value, SymUnitPercent)
 				return

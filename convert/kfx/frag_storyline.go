@@ -211,13 +211,19 @@ func (sc StyleContext) Resolve(tag, classes string, registry *StyleRegistry) str
 	// 1. Start with inherited properties from context
 	maps.Copy(merged, sc.inherited)
 
-	// 2. Apply ALL properties from scope chain classes (not just inherited)
-	// This ensures wrapper margins (body-title, section, etc.) propagate to content
+	// 2. Apply inherited properties from scope chain classes
+	// In CSS, only certain properties (font, text, color) inherit from parent to child.
+	// Non-inherited properties (margin, padding, border, break) apply only to the element.
+	// Since KFX flattens hierarchy, we copy inherited properties from wrapper scopes.
 	for _, scope := range sc.scopes {
 		for _, class := range scope.Classes {
 			if def, ok := registry.Get(class); ok {
 				resolved := registry.resolveInheritance(def)
-				maps.Copy(merged, resolved.Properties)
+				for k, v := range resolved.Properties {
+					if isInheritedProperty(k) {
+						merged[k] = v
+					}
+				}
 			}
 		}
 	}
