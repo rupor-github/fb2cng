@@ -437,12 +437,8 @@ func (sr *StyleRegistry) Register(def StyleDef) {
 
 	// Merge properties: existing properties are preserved, new ones override
 	merged := make(map[KFXSymbol]any, len(existing.Properties)+len(def.Properties))
-	for k, v := range existing.Properties {
-		merged[k] = v
-	}
-	for k, v := range def.Properties {
-		merged[k] = v
-	}
+	maps.Copy(merged, existing.Properties)
+	maps.Copy(merged, def.Properties)
 
 	// Inherit parent from new def if specified
 	parent := existing.Parent
@@ -783,9 +779,7 @@ func (sr *StyleRegistry) resolveInheritance(def StyleDef) StyleDef {
 	// Merge properties from root ancestor to child (child overrides parent)
 	merged := make(map[KFXSymbol]any)
 	for i := len(chain) - 1; i >= 0; i-- {
-		for sym, val := range chain[i].Properties {
-			merged[sym] = val
-		}
+		maps.Copy(merged, chain[i].Properties)
 	}
 
 	sr.tracer.TraceInheritance(def.Name, def.Parent, merged)
@@ -1074,9 +1068,7 @@ func (sr *StyleRegistry) PostProcessForKFX() {
 func (sr *StyleRegistry) applyKFXEnhancements(name string, def StyleDef) StyleDef {
 	// Make a copy of properties to avoid modifying the original
 	props := make(map[KFXSymbol]any, len(def.Properties))
-	for k, v := range def.Properties {
-		props[k] = v
-	}
+	maps.Copy(props, def.Properties)
 
 	// Apply layout-hints for headings and title-like styles
 	if sr.shouldHaveLayoutHintTitle(name, props) {

@@ -140,7 +140,7 @@ func (p *Parser) parseSelectors(data []byte, values []css.Token) []string {
 }
 
 // parseDeclarations parses property declarations until EndRulesetGrammar.
-func (p *Parser) parseDeclarations(parser *css.Parser, sheet *Stylesheet) map[string]CSSValue {
+func (p *Parser) parseDeclarations(parser *css.Parser, _ *Stylesheet) map[string]CSSValue {
 	props := make(map[string]CSSValue)
 
 	for {

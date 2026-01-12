@@ -2,6 +2,7 @@ package kfx
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -150,9 +151,7 @@ func NewStyleContext() StyleContext {
 func (sc StyleContext) Push(tag, classes string, registry *StyleRegistry) StyleContext {
 	// Copy existing inherited properties
 	newInherited := make(map[KFXSymbol]any, len(sc.inherited))
-	for k, v := range sc.inherited {
-		newInherited[k] = v
-	}
+	maps.Copy(newInherited, sc.inherited)
 
 	// Add inherited properties from tag defaults
 	if tag != "" {
@@ -210,9 +209,7 @@ func (sc StyleContext) Resolve(tag, classes string, registry *StyleRegistry) str
 	merged := make(map[KFXSymbol]any)
 
 	// 1. Start with inherited properties from context
-	for k, v := range sc.inherited {
-		merged[k] = v
-	}
+	maps.Copy(merged, sc.inherited)
 
 	// 2. Apply ALL properties from scope chain classes (not just inherited)
 	// This ensures wrapper margins (body-title, section, etc.) propagate to content
@@ -220,9 +217,7 @@ func (sc StyleContext) Resolve(tag, classes string, registry *StyleRegistry) str
 		for _, class := range scope.Classes {
 			if def, ok := registry.Get(class); ok {
 				resolved := registry.resolveInheritance(def)
-				for k, v := range resolved.Properties {
-					merged[k] = v
-				}
+				maps.Copy(merged, resolved.Properties)
 			}
 		}
 	}
@@ -231,20 +226,16 @@ func (sc StyleContext) Resolve(tag, classes string, registry *StyleRegistry) str
 	if tag != "" {
 		if def, ok := registry.Get(tag); ok {
 			resolved := registry.resolveInheritance(def)
-			for k, v := range resolved.Properties {
-				merged[k] = v
-			}
+			maps.Copy(merged, resolved.Properties)
 		}
 	}
 
 	// 4. Apply element's classes (all properties, in order)
 	if classes != "" {
-		for _, class := range strings.Fields(classes) {
+		for class := range strings.FieldsSeq(classes) {
 			if def, ok := registry.Get(class); ok {
 				resolved := registry.resolveInheritance(def)
-				for k, v := range resolved.Properties {
-					merged[k] = v
-				}
+				maps.Copy(merged, resolved.Properties)
 			}
 		}
 	}
@@ -1329,10 +1320,7 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 			wrapperClass = "section-title"
 			headerClassBase = "section-title-header"
 			// Map depth to heading level: 2->h2, 3->h3, 4+->h4
-			headingLevel = depth
-			if headingLevel > 4 {
-				headingLevel = 4
-			}
+			headingLevel = min(depth, 4)
 		}
 
 		// Start wrapper block - this is the KFX equivalent of <div class="chapter-title"> or <div class="section-title">
@@ -1682,8 +1670,8 @@ func addParagraphWithImages(para *fb2.Paragraph, styleName string, sb *Storyline
 		events = nil
 	}
 
-	var walk func(seg *fb2.InlineSegment, inlineStyle string)
-	walk = func(seg *fb2.InlineSegment, inlineStyle string) {
+	var walk func(seg *fb2.InlineSegment)
+	walk = func(seg *fb2.InlineSegment) {
 		// Handle inline images - flush current content and add image
 		if seg.Kind == fb2.InlineImageSegment {
 			flush()
@@ -1735,7 +1723,7 @@ func addParagraphWithImages(para *fb2.Paragraph, styleName string, sb *Storyline
 
 		// Process children with current style context
 		for i := range seg.Children {
-			walk(&seg.Children[i], segStyle)
+			walk(&seg.Children[i])
 		}
 
 		// Restore whitespace handling after code block
@@ -1769,7 +1757,7 @@ func addParagraphWithImages(para *fb2.Paragraph, styleName string, sb *Storyline
 	}
 
 	for i := range para.Text {
-		walk(&para.Text[i], "")
+		walk(&para.Text[i])
 	}
 	flush()
 }
@@ -1800,8 +1788,8 @@ func addTitleAsHeading(title *fb2.Title, ctx StyleContext, headerStyleBase strin
 	)
 
 	// Process inline segment and accumulate style events
-	var processSegment func(seg *fb2.InlineSegment, inlineStyle string)
-	processSegment = func(seg *fb2.InlineSegment, inlineStyle string) {
+	var processSegment func(seg *fb2.InlineSegment)
+	processSegment = func(seg *fb2.InlineSegment) {
 		// Inline images should have been filtered out by titleHasInlineImages check
 		if seg.Kind == fb2.InlineImageSegment {
 			return
@@ -1841,7 +1829,7 @@ func addTitleAsHeading(title *fb2.Title, ctx StyleContext, headerStyleBase strin
 
 		// Process children with current style context
 		for i := range seg.Children {
-			processSegment(&seg.Children[i], segStyle)
+			processSegment(&seg.Children[i])
 		}
 
 		// Restore whitespace handling after code block
@@ -1906,7 +1894,7 @@ func addTitleAsHeading(title *fb2.Title, ctx StyleContext, headerStyleBase strin
 
 			// Process paragraph content
 			for i := range item.Paragraph.Text {
-				processSegment(&item.Paragraph.Text[i], "")
+				processSegment(&item.Paragraph.Text[i])
 			}
 
 			paraEnd := nw.RuneCount()

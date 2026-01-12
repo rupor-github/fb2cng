@@ -1,6 +1,7 @@
 package kfx
 
 import (
+	"maps"
 	"strings"
 
 	"go.uber.org/zap"
@@ -231,9 +232,7 @@ func (c *Converter) expandBoxShorthand(value CSSValue, result *ConversionResult,
 // Example: "1px solid black" -> border-width: 1px, border-style: solid, border-color: black
 func (c *Converter) expandBorderShorthand(value CSSValue, result *ConversionResult) {
 	raw := strings.TrimSpace(value.Raw)
-	parts := strings.Fields(raw)
-
-	for _, part := range parts {
+	for part := range strings.FieldsSeq(raw) {
 		part = strings.ToLower(part)
 
 		// Check for border style keywords
@@ -361,12 +360,13 @@ func (c *Converter) setDimensionProperty(sym KFXSymbol, value CSSValue, result *
 
 	case SymFontSize:
 		// Font-size: % -> rem, em -> rem
-		if value.Unit == "%" {
+		switch value.Unit {
+		case "%":
 			convertedValue = value.Value / 100.0
+			fallthrough
+		case "em":
 			convertedUnit = SymUnitRem
-		} else if value.Unit == "em" {
-			convertedUnit = SymUnitRem
-		} else {
+		default:
 			var err error
 			_, convertedUnit, err = CSSValueToKFX(value)
 			if err != nil {
@@ -490,9 +490,7 @@ func (c *Converter) ConvertStylesheet(sheet *Stylesheet) ([]StyleDef, []string) 
 
 		if existing, ok := styleMap[styleName]; ok {
 			// Merge properties (later rules override)
-			for k, v := range result.Style.Properties {
-				existing.Properties[k] = v
-			}
+			maps.Copy(existing.Properties, result.Style.Properties)
 		} else {
 			// New style
 			styleCopy := result.Style
@@ -552,13 +550,7 @@ func (c *Converter) detectDropcapPatterns(sheet *Stylesheet) map[string]dropcapC
 		lines := 3 // default
 		if fontSize.Value > 0 {
 			// Round to nearest integer
-			lines = int(fontSize.Value + 0.5)
-			if lines < 2 {
-				lines = 2
-			}
-			if lines > 10 {
-				lines = 10
-			}
+			lines = max(2, min(10, int(fontSize.Value+0.5)))
 		}
 
 		result[parentName] = dropcapConfig{chars: 1, lines: lines}
