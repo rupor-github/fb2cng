@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"errors"
 	"flag"
 	"fmt"
@@ -15,19 +16,35 @@ import (
 	"github.com/h2non/filetype"
 
 	"fbc/convert/kfx"
+	"fbc/utils/debug"
 )
 
 func main() {
-	bcRawMedia := flag.Bool("bcRawMedia", false, "dump $417 (bcRawMedia) raw bytes into <file>-bcRawMedia directory")
+	all := flag.Bool("all", false, "enable all dump flags (-dump, -resources, -styles, -storyline)")
+	dump := flag.Bool("dump", false, "dump all fragments into <file>-dump.txt")
+	resources := flag.Bool("resources", false, "dump $417 (bcRawMedia) raw bytes into <file>-resources.zip")
 	styles := flag.Bool("styles", false, "dump $157 (style) fragments into <file>-styles.txt")
+	storyline := flag.Bool("storyline", false, "dump $259 (storyline) fragments into <file>-storyline.txt with expanded symbols and styles")
 	overwrite := flag.Bool("overwrite", false, "overwrite existing output")
 	flag.Usage = func() {
-		_, _ = fmt.Fprintf(os.Stderr, "usage: kfxdump [-bcRawMedia] [--styles] [--overwrite] <file.kfx>\n")
+		_, _ = fmt.Fprintf(os.Stderr, "usage: kfxdump [-all] [-dump] [-resources] [-styles] [-storyline] [-overwrite] <file.kfx> [outdir]\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
 
-	if flag.NArg() != 1 {
+	if flag.NArg() < 1 || flag.NArg() > 2 {
+		flag.Usage()
+		os.Exit(2)
+	}
+
+	if *all {
+		*dump = true
+		*resources = true
+		*styles = true
+		*storyline = true
+	}
+
+	if !*dump && !*resources && !*styles && !*storyline {
 		flag.Usage()
 		os.Exit(2)
 	}
@@ -38,6 +55,11 @@ func main() {
 	}(time.Now())
 
 	path := flag.Arg(0)
+	outDir := ""
+	if flag.NArg() == 2 {
+		outDir = flag.Arg(1)
+	}
+
 	b, err := os.ReadFile(path)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "read %s: %v\n", path, err)
@@ -50,31 +72,44 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := dumpDumpTxt(container, path, *overwrite); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "dump: %v\n", err)
-		os.Exit(1)
+	if *dump {
+		if err := dumpDumpTxt(container, path, outDir, *overwrite); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "dump: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println(container.StatsString())
 	}
-	fmt.Println(container.StatsString())
 
-	if *bcRawMedia {
-		if err := dumpBcRawMedia(container, path, *overwrite); err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "dump bcRawMedia: %v\n", err)
+	if *resources {
+		if err := dumpResources(container, path, outDir, *overwrite); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "dump resources: %v\n", err)
 			os.Exit(1)
 		}
 	}
 
 	if *styles {
-		if err := dumpStylesTxt(container, path, *overwrite); err != nil {
+		if err := dumpStylesTxt(container, path, outDir, *overwrite); err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "dump styles: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	if *storyline {
+		if err := dumpStorylineTxt(container, path, outDir, *overwrite); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "dump storyline: %v\n", err)
 			os.Exit(1)
 		}
 	}
 }
 
-func dumpDumpTxt(container *kfx.Container, inPath string, overwrite bool) error {
+func dumpDumpTxt(container *kfx.Container, inPath, outDir string, overwrite bool) error {
 	base := filepath.Base(inPath)
 	stem := strings.TrimSuffix(base, filepath.Ext(base))
-	outPath := filepath.Join(filepath.Dir(inPath), stem+"-dump.txt")
+	dir := filepath.Dir(inPath)
+	if outDir != "" {
+		dir = outDir
+	}
+	outPath := filepath.Join(dir, stem+"-dump.txt")
 	if _, err := os.Stat(outPath); err == nil {
 		if !overwrite {
 			return fmt.Errorf("output file already exists: %s", outPath)
@@ -87,10 +122,14 @@ func dumpDumpTxt(container *kfx.Container, inPath string, overwrite bool) error 
 	return os.WriteFile(outPath, []byte(dump), 0o644)
 }
 
-func dumpStylesTxt(container *kfx.Container, inPath string, overwrite bool) error {
+func dumpStylesTxt(container *kfx.Container, inPath, outDir string, overwrite bool) error {
 	base := filepath.Base(inPath)
 	stem := strings.TrimSuffix(base, filepath.Ext(base))
-	outPath := filepath.Join(filepath.Dir(inPath), stem+"-styles.txt")
+	dir := filepath.Dir(inPath)
+	if outDir != "" {
+		dir = outDir
+	}
+	outPath := filepath.Join(dir, stem+"-styles.txt")
 	if _, err := os.Stat(outPath); err == nil {
 		if !overwrite {
 			return fmt.Errorf("output file already exists: %s", outPath)
@@ -109,11 +148,848 @@ func dumpStylesTxt(container *kfx.Container, inPath string, overwrite bool) erro
 	return nil
 }
 
+func dumpStorylineTxt(container *kfx.Container, inPath, outDir string, overwrite bool) error {
+	base := filepath.Base(inPath)
+	stem := strings.TrimSuffix(base, filepath.Ext(base))
+	dir := filepath.Dir(inPath)
+	if outDir != "" {
+		dir = outDir
+	}
+	outPath := filepath.Join(dir, stem+"-storyline.txt")
+	if _, err := os.Stat(outPath); err == nil {
+		if !overwrite {
+			return fmt.Errorf("output file already exists: %s", outPath)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	dump, count := dumpStorylineFragments(container)
+	dump += "\n"
+	if err := os.WriteFile(outPath, []byte(dump), 0o644); err != nil {
+		return err
+	}
+
+	_, _ = fmt.Fprintf(os.Stderr, "storyline: wrote %d fragment(s) into %s\n", count, outPath)
+	return nil
+}
+
 func dumpStyleFragments(c *kfx.Container) (string, int) {
 	// First, collect style usage information
 	styleUsage := collectStyleUsage(c)
 
 	return dumpFragmentsByTypeWithUsage(c, kfx.SymStyle, styleUsage)
+}
+
+func dumpStorylineFragments(c *kfx.Container) (string, int) {
+	// Collect style definitions for inline expansion
+	styleDefs := collectStyleDefinitions(c)
+	// Collect content fragments for text preview
+	contentDefs := collectContentDefinitions(c)
+	// Collect resource fragments for resource info
+	resourceDefs := collectResourceDefinitions(c)
+
+	return dumpStorylineFragmentsExpanded(c, styleDefs, contentDefs, resourceDefs)
+}
+
+// collectStyleDefinitions builds a map of style name -> CSS representation.
+func collectStyleDefinitions(c *kfx.Container) map[string]string {
+	defs := make(map[string]string)
+	if c.Fragments == nil {
+		return defs
+	}
+
+	for _, frag := range c.Fragments.GetByType(kfx.SymStyle) {
+		styleName := ""
+		if frag.FIDName != "" {
+			styleName = frag.FIDName
+		} else if c.DocSymbolTable != nil {
+			if name, ok := c.DocSymbolTable.FindByID(uint64(frag.FID)); ok && !strings.HasPrefix(name, "$") {
+				styleName = name
+			}
+		}
+		if styleName == "" {
+			continue
+		}
+
+		// Get a compact CSS-like summary of the style
+		css := formatStyleAsCSSCompact(frag.Value)
+		if css == "" {
+			css = "(empty)"
+		}
+		defs[styleName] = css
+	}
+	return defs
+}
+
+// formatStyleAsCSSCompact returns a one-line CSS-like representation of a style.
+func formatStyleAsCSSCompact(v any) string {
+	props := normalizeStyleMap(v)
+	if props == nil {
+		return ""
+	}
+
+	cssProps := extractCSSProperties(props)
+	if len(cssProps) == 0 {
+		return ""
+	}
+
+	parts := make([]string, 0, len(cssProps))
+	for _, p := range cssProps {
+		parts = append(parts, p.name+": "+p.value)
+	}
+	return strings.Join(parts, "; ")
+}
+
+// ContentInfo holds text snippets for a content fragment.
+type ContentInfo struct {
+	Name  string   // Content fragment name
+	Texts []string // Text snippets (truncated)
+}
+
+// collectContentDefinitions builds a map of content name -> text snippets.
+func collectContentDefinitions(c *kfx.Container) map[string]*ContentInfo {
+	defs := make(map[string]*ContentInfo)
+	if c.Fragments == nil {
+		return defs
+	}
+
+	for _, frag := range c.Fragments.GetByType(kfx.SymContent) {
+		contentName := ""
+		if frag.FIDName != "" {
+			contentName = frag.FIDName
+		} else if c.DocSymbolTable != nil {
+			if name, ok := c.DocSymbolTable.FindByID(uint64(frag.FID)); ok && !strings.HasPrefix(name, "$") {
+				contentName = name
+			}
+		}
+		if contentName == "" {
+			continue
+		}
+
+		info := &ContentInfo{Name: contentName}
+
+		// Extract content_list ($146) which contains the text strings
+		switch m := frag.Value.(type) {
+		case kfx.StructValue:
+			if listVal, ok := m[kfx.SymContentList]; ok {
+				list := toListAny(listVal)
+				for _, item := range list {
+					if s, ok := item.(string); ok {
+						info.Texts = append(info.Texts, truncateText(s, 60))
+					}
+				}
+			}
+		case map[kfx.KFXSymbol]any:
+			if listVal, ok := m[kfx.SymContentList]; ok {
+				list := toListAny(listVal)
+				for _, item := range list {
+					if s, ok := item.(string); ok {
+						info.Texts = append(info.Texts, truncateText(s, 60))
+					}
+				}
+			}
+		case map[string]any:
+			// Content list is stored as "$146"
+			if listVal, ok := m["$146"]; ok {
+				list := toListAny(listVal)
+				for _, item := range list {
+					if s, ok := item.(string); ok {
+						info.Texts = append(info.Texts, truncateText(s, 60))
+					}
+				}
+			}
+		}
+
+		defs[contentName] = info
+	}
+	return defs
+}
+
+// ResourceInfo holds info about an external resource.
+type ResourceInfo struct {
+	Name     string // Resource name
+	Location string // File path ($165)
+	Format   string // Format type ($161)
+	MIME     string // MIME type ($162)
+	Width    int64  // Width ($422)
+	Height   int64  // Height ($423)
+}
+
+// collectResourceDefinitions builds a map of resource name -> resource info.
+func collectResourceDefinitions(c *kfx.Container) map[string]*ResourceInfo {
+	defs := make(map[string]*ResourceInfo)
+	if c.Fragments == nil {
+		return defs
+	}
+
+	for _, frag := range c.Fragments.GetByType(kfx.SymExtResource) {
+		resourceName := ""
+		if frag.FIDName != "" {
+			resourceName = frag.FIDName
+		} else if c.DocSymbolTable != nil {
+			if name, ok := c.DocSymbolTable.FindByID(uint64(frag.FID)); ok && !strings.HasPrefix(name, "$") {
+				resourceName = name
+			}
+		}
+		if resourceName == "" {
+			continue
+		}
+
+		info := &ResourceInfo{Name: resourceName}
+
+		// Handle StructValue directly for better access
+		switch m := frag.Value.(type) {
+		case kfx.StructValue:
+			if loc, ok := m[kfx.SymLocation]; ok {
+				if s, ok := loc.(string); ok {
+					info.Location = s
+				}
+			}
+			if fmt, ok := m[kfx.SymFormat]; ok {
+				info.Format = extractSymbolName(fmt)
+			}
+			if mime, ok := m[kfx.SymMIME]; ok {
+				if s, ok := mime.(string); ok {
+					info.MIME = s
+				}
+			}
+			if w, ok := m[kfx.KFXSymbol(422)]; ok {
+				info.Width = toInt64(w)
+			}
+			if h, ok := m[kfx.KFXSymbol(423)]; ok {
+				info.Height = toInt64(h)
+			}
+		case map[kfx.KFXSymbol]any:
+			if loc, ok := m[kfx.SymLocation]; ok {
+				if s, ok := loc.(string); ok {
+					info.Location = s
+				}
+			}
+			if fmt, ok := m[kfx.SymFormat]; ok {
+				info.Format = extractSymbolName(fmt)
+			}
+			if mime, ok := m[kfx.SymMIME]; ok {
+				if s, ok := mime.(string); ok {
+					info.MIME = s
+				}
+			}
+			if w, ok := m[kfx.KFXSymbol(422)]; ok {
+				info.Width = toInt64(w)
+			}
+			if h, ok := m[kfx.KFXSymbol(423)]; ok {
+				info.Height = toInt64(h)
+			}
+		case map[string]any:
+			// Handle "$NNN" string keys
+			if loc, ok := m["$165"]; ok {
+				if s, ok := loc.(string); ok {
+					info.Location = s
+				}
+			}
+			if fmt, ok := m["$161"]; ok {
+				info.Format = extractSymbolName(fmt)
+			}
+			if mime, ok := m["$162"]; ok {
+				if s, ok := mime.(string); ok {
+					info.MIME = s
+				}
+			}
+			if w, ok := m["$422"]; ok {
+				info.Width = toInt64(w)
+			}
+			if h, ok := m["$423"]; ok {
+				info.Height = toInt64(h)
+			}
+		}
+
+		defs[resourceName] = info
+	}
+	return defs
+}
+
+// truncateText truncates a string to maxLen, adding "..." if truncated.
+// Also replaces newlines with spaces for compact display.
+func truncateText(s string, maxLen int) string {
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\r", "")
+	if len(s) > maxLen {
+		return s[:maxLen] + "..."
+	}
+	return s
+}
+
+// toInt64 converts various numeric types to int64.
+func toInt64(v any) int64 {
+	switch n := v.(type) {
+	case int:
+		return int64(n)
+	case int64:
+		return n
+	case int32:
+		return int64(n)
+	case float64:
+		return int64(n)
+	default:
+		return 0
+	}
+}
+
+// expandCtx holds all the context needed for expanding storyline values.
+type expandCtx struct {
+	c            *kfx.Container
+	styleDefs    map[string]string
+	contentDefs  map[string]*ContentInfo
+	resourceDefs map[string]*ResourceInfo
+}
+
+func dumpStorylineFragmentsExpanded(c *kfx.Container, styleDefs map[string]string, contentDefs map[string]*ContentInfo, resourceDefs map[string]*ResourceInfo) (string, int) {
+	tw := debug.NewTreeWriter()
+
+	ctx := &expandCtx{
+		c:            c,
+		styleDefs:    styleDefs,
+		contentDefs:  contentDefs,
+		resourceDefs: resourceDefs,
+	}
+
+	tw.Line(0, "=== KFX Storyline Fragments (Expanded) ===")
+	tw.Line(0, "")
+
+	if c.Fragments == nil {
+		tw.Line(0, "(no fragments)")
+		return tw.String(), 0
+	}
+
+	frags := c.Fragments.GetByType(kfx.SymStoryline)
+	if len(frags) == 0 {
+		tw.Line(0, "(no fragments)")
+		return tw.String(), 0
+	}
+
+	// Sort storyline fragments
+	sortedFrags := make([]*kfx.Fragment, len(frags))
+	copy(sortedFrags, frags)
+	slices.SortFunc(sortedFrags, func(a, b *kfx.Fragment) int {
+		if a.IsRoot() && !b.IsRoot() {
+			return -1
+		}
+		if !a.IsRoot() && b.IsRoot() {
+			return 1
+		}
+		aFID := a.FID
+		if a.FIDName != "" && aFID == 0 {
+			aFID = c.GetLocalSymbolID(a.FIDName)
+		}
+		bFID := b.FID
+		if b.FIDName != "" && bFID == 0 {
+			bFID = c.GetLocalSymbolID(b.FIDName)
+		}
+		return int(aFID - bFID)
+	})
+
+	tw.Line(0, "$259 (storyline) - %d fragment(s)", len(sortedFrags))
+
+	for _, f := range sortedFrags {
+		if f.IsRoot() {
+			tw.Line(1, "[root]")
+		} else {
+			var fidID kfx.KFXSymbol
+			var fidName string
+
+			if f.FIDName != "" {
+				fidName = f.FIDName
+				if len(c.LocalSymbols) > 0 {
+					fidID = c.GetLocalSymbolID(f.FIDName)
+					if fidID < 0 && f.FID > 0 {
+						fidID = f.FID
+					}
+				} else if f.FID > 0 {
+					fidID = f.FID
+				}
+			} else {
+				fidID = f.FID
+				if c.DocSymbolTable != nil {
+					name, ok := c.DocSymbolTable.FindByID(uint64(fidID))
+					if ok && !strings.HasPrefix(name, "$") {
+						fidName = name
+					}
+				}
+			}
+
+			if fidName != "" {
+				tw.Line(1, "id=$%d (%s)", fidID, fidName)
+			} else {
+				tw.Line(1, "id=$%d", fidID)
+			}
+		}
+
+		// Format the storyline value with expanded symbols and styles
+		formatValueTree(tw, ctx, f.Value, 2)
+	}
+
+	return tw.String(), len(sortedFrags)
+}
+
+// formatValueTree formats a value in tree format with expanded styles/content/resources.
+func formatValueTree(tw *debug.TreeWriter, ctx *expandCtx, v any, depth int) {
+	switch val := v.(type) {
+	case nil:
+		tw.Line(depth, "null")
+
+	case bool:
+		tw.Line(depth, "%v", val)
+
+	case int:
+		tw.Line(depth, "int(%d)", val)
+
+	case int64:
+		tw.Line(depth, "int(%d)", val)
+
+	case int32:
+		tw.Line(depth, "int(%d)", val)
+
+	case float64:
+		tw.Line(depth, "float(%g)", val)
+
+	case *ion.Decimal:
+		tw.Line(depth, "decimal(%s)", val.String())
+
+	case string:
+		tw.Line(depth, "%q", val)
+
+	case []byte:
+		tw.Line(depth, "blob(%d bytes)", len(val))
+
+	case kfx.RawValue:
+		tw.Line(depth, "raw(%d bytes)", len(val))
+
+	case kfx.SymbolValue:
+		tw.Line(depth, "symbol(%s)", kfx.KFXSymbol(val).String())
+
+	case kfx.SymbolByNameValue:
+		name := string(val)
+		if css, ok := ctx.styleDefs[name]; ok {
+			tw.Line(depth, "symbol(%q) /* %s */", name, css)
+		} else {
+			tw.Line(depth, "symbol(%q)", name)
+		}
+
+	case kfx.ReadSymbolValue:
+		symStr := string(val)
+		if strings.HasPrefix(symStr, "$") {
+			if id, err := strconv.Atoi(symStr[1:]); err == nil {
+				tw.Line(depth, "symbol(%s)", kfx.KFXSymbol(id).String())
+			} else {
+				tw.Line(depth, "symbol(%s)", symStr)
+			}
+		} else {
+			if css, ok := ctx.styleDefs[symStr]; ok {
+				tw.Line(depth, "symbol(%q) /* %s */", symStr, css)
+			} else {
+				tw.Line(depth, "symbol(%q)", symStr)
+			}
+		}
+
+	case kfx.StructValue:
+		formatStructTree(tw, ctx, val, depth)
+
+	case map[kfx.KFXSymbol]any:
+		formatStructTree(tw, ctx, val, depth)
+
+	case map[string]any:
+		formatMapStringTree(tw, ctx, val, depth)
+
+	case kfx.ListValue:
+		formatListTree(tw, ctx, []any(val), depth)
+
+	case []any:
+		formatListTree(tw, ctx, val, depth)
+
+	default:
+		tw.Line(depth, "<%T>", v)
+	}
+}
+
+// formatSimpleValueStr returns a simple value as string, or empty if not simple.
+func formatSimpleValueStr(ctx *expandCtx, v any) string {
+	switch val := v.(type) {
+	case nil:
+		return "null"
+	case bool:
+		return fmt.Sprintf("%v", val)
+	case int:
+		return fmt.Sprintf("int(%d)", val)
+	case int64:
+		return fmt.Sprintf("int(%d)", val)
+	case int32:
+		return fmt.Sprintf("int(%d)", val)
+	case float64:
+		return fmt.Sprintf("float(%g)", val)
+	case *ion.Decimal:
+		return fmt.Sprintf("decimal(%s)", val.String())
+	case string:
+		return fmt.Sprintf("%q", val)
+	case []byte:
+		return fmt.Sprintf("blob(%d bytes)", len(val))
+	case kfx.RawValue:
+		return fmt.Sprintf("raw(%d bytes)", len(val))
+	case kfx.SymbolValue:
+		return fmt.Sprintf("symbol(%s)", kfx.KFXSymbol(val).String())
+	case kfx.SymbolByNameValue:
+		name := string(val)
+		if css, ok := ctx.styleDefs[name]; ok {
+			return fmt.Sprintf("symbol(%q) /* %s */", name, css)
+		}
+		return fmt.Sprintf("symbol(%q)", name)
+	case kfx.ReadSymbolValue:
+		symStr := string(val)
+		if strings.HasPrefix(symStr, "$") {
+			if id, err := strconv.Atoi(symStr[1:]); err == nil {
+				return fmt.Sprintf("symbol(%s)", kfx.KFXSymbol(id).String())
+			}
+			return fmt.Sprintf("symbol(%s)", symStr)
+		}
+		if css, ok := ctx.styleDefs[symStr]; ok {
+			return fmt.Sprintf("symbol(%q) /* %s */", symStr, css)
+		}
+		return fmt.Sprintf("symbol(%q)", symStr)
+	default:
+		return ""
+	}
+}
+
+func isSimpleValueExpanded(v any) bool {
+	switch v.(type) {
+	case nil, bool, int, int64, int32, float64, string, *ion.Decimal,
+		[]byte, kfx.RawValue, kfx.SymbolValue, kfx.SymbolByNameValue, kfx.ReadSymbolValue:
+		return true
+	default:
+		return false
+	}
+}
+
+func formatStructTree(tw *debug.TreeWriter, ctx *expandCtx, m map[kfx.KFXSymbol]any, depth int) {
+	if len(m) == 0 {
+		return
+	}
+
+	// Sort keys for deterministic output
+	keys := make([]kfx.KFXSymbol, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+
+	for _, k := range keys {
+		val := m[k]
+		keyName := k.String()
+
+		// Special handling for style-related keys
+		switch k {
+		case kfx.SymStyle, kfx.SymParentStyle:
+			styleName := extractSymbolName(val)
+			if css, ok := ctx.styleDefs[styleName]; ok {
+				tw.Line(depth, "%s: symbol(%q) /* %s */", keyName, styleName, css)
+			} else {
+				tw.Line(depth, "%s: symbol(%q)", keyName, styleName)
+			}
+		case kfx.SymResourceName:
+			resourceName := extractSymbolName(val)
+			if info, ok := ctx.resourceDefs[resourceName]; ok {
+				parts := []string{}
+				if info.Location != "" {
+					parts = append(parts, info.Location)
+				}
+				if info.Width > 0 && info.Height > 0 {
+					parts = append(parts, fmt.Sprintf("%dx%d", info.Width, info.Height))
+				}
+				if info.MIME != "" {
+					parts = append(parts, info.MIME)
+				}
+				if len(parts) > 0 {
+					tw.Line(depth, "%s: symbol(%q) /* %s */", keyName, resourceName, strings.Join(parts, ", "))
+				} else {
+					tw.Line(depth, "%s: symbol(%q)", keyName, resourceName)
+				}
+			} else {
+				tw.Line(depth, "%s: symbol(%q)", keyName, resourceName)
+			}
+		case kfx.SymContent:
+			tw.Line(depth, "%s:", keyName)
+			formatContentRefTree(tw, ctx, val, depth+1)
+		case kfx.SymStyleEvents:
+			formatStyleEventsTree(tw, ctx, keyName, val, depth)
+		case kfx.SymContentList:
+			formatContentListTree(tw, ctx, keyName, val, depth)
+		default:
+			if isSimpleValueExpanded(val) {
+				tw.Line(depth, "%s: %s", keyName, formatSimpleValueStr(ctx, val))
+			} else if list, ok := val.(kfx.ListValue); ok {
+				formatListWithKeyTree(tw, ctx, keyName, []any(list), depth)
+			} else if list, ok := val.([]any); ok {
+				formatListWithKeyTree(tw, ctx, keyName, list, depth)
+			} else {
+				tw.Line(depth, "%s:", keyName)
+				formatValueTree(tw, ctx, val, depth+1)
+			}
+		}
+	}
+}
+
+func formatMapStringTree(tw *debug.TreeWriter, ctx *expandCtx, m map[string]any, depth int) {
+	if len(m) == 0 {
+		return
+	}
+
+	// Sort keys for deterministic output
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+
+	for _, k := range keys {
+		val := m[k]
+
+		// Try to resolve "$NNN" keys to symbol names
+		keyName := k
+		var symID int
+		if strings.HasPrefix(k, "$") {
+			if id, err := strconv.Atoi(k[1:]); err == nil {
+				keyName = kfx.KFXSymbol(id).String()
+				symID = id
+			}
+		}
+
+		// Special handling based on symbol ID
+		switch kfx.KFXSymbol(symID) {
+		case kfx.SymStyle, kfx.SymParentStyle:
+			styleName := extractSymbolName(val)
+			if css, ok := ctx.styleDefs[styleName]; ok {
+				tw.Line(depth, "%s: symbol(%q) /* %s */", keyName, styleName, css)
+			} else {
+				tw.Line(depth, "%s: symbol(%q)", keyName, styleName)
+			}
+		case kfx.SymResourceName:
+			resourceName := extractSymbolName(val)
+			if info, ok := ctx.resourceDefs[resourceName]; ok {
+				parts := []string{}
+				if info.Location != "" {
+					parts = append(parts, info.Location)
+				}
+				if info.Width > 0 && info.Height > 0 {
+					parts = append(parts, fmt.Sprintf("%dx%d", info.Width, info.Height))
+				}
+				if info.MIME != "" {
+					parts = append(parts, info.MIME)
+				}
+				if len(parts) > 0 {
+					tw.Line(depth, "%s: symbol(%q) /* %s */", keyName, resourceName, strings.Join(parts, ", "))
+				} else {
+					tw.Line(depth, "%s: symbol(%q)", keyName, resourceName)
+				}
+			} else {
+				tw.Line(depth, "%s: symbol(%q)", keyName, resourceName)
+			}
+		case kfx.SymContent:
+			tw.Line(depth, "%s:", keyName)
+			formatContentRefTree(tw, ctx, val, depth+1)
+		case kfx.SymStyleEvents:
+			formatStyleEventsTree(tw, ctx, keyName, val, depth)
+		case kfx.SymContentList:
+			formatContentListTree(tw, ctx, keyName, val, depth)
+		default:
+			if isSimpleValueExpanded(val) {
+				tw.Line(depth, "%s: %s", keyName, formatSimpleValueStr(ctx, val))
+			} else if list, ok := val.(kfx.ListValue); ok {
+				formatListWithKeyTree(tw, ctx, keyName, []any(list), depth)
+			} else if list, ok := val.([]any); ok {
+				formatListWithKeyTree(tw, ctx, keyName, list, depth)
+			} else {
+				tw.Line(depth, "%s:", keyName)
+				formatValueTree(tw, ctx, val, depth+1)
+			}
+		}
+	}
+}
+
+func formatListTree(tw *debug.TreeWriter, ctx *expandCtx, items []any, depth int) {
+	if len(items) == 0 {
+		return
+	}
+
+	for i, item := range items {
+		if isSimpleValueExpanded(item) {
+			tw.Line(depth, "[%d]: %s", i, formatSimpleValueStr(ctx, item))
+		} else {
+			tw.Line(depth, "[%d]:", i)
+			formatValueTree(tw, ctx, item, depth+1)
+		}
+	}
+}
+
+func formatListWithKeyTree(tw *debug.TreeWriter, ctx *expandCtx, key string, items []any, depth int) {
+	tw.Line(depth, "%s: (%d)", key, len(items))
+	for i, item := range items {
+		if isSimpleValueExpanded(item) {
+			tw.Line(depth+1, "[%d]: %s", i, formatSimpleValueStr(ctx, item))
+		} else {
+			tw.Line(depth+1, "[%d]:", i)
+			formatValueTree(tw, ctx, item, depth+2)
+		}
+	}
+}
+
+// formatContentRefTree formats a content reference ($145) with text preview.
+func formatContentRefTree(tw *debug.TreeWriter, ctx *expandCtx, v any, depth int) {
+	m := toMapAny(v)
+	if m == nil {
+		tw.Line(depth, "%v", v)
+		return
+	}
+
+	// Extract name and index for text preview lookup
+	var contentName string
+	var contentIndex int64 = -1
+
+	if nameVal, ok := m["name"]; ok {
+		contentName = extractSymbolName(nameVal)
+	}
+	if idxVal, ok := m["$403"]; ok {
+		contentIndex = toInt64(idxVal)
+	}
+
+	// Get text preview if available
+	var textPreview string
+	if contentName != "" && contentIndex >= 0 {
+		if info, ok := ctx.contentDefs[contentName]; ok {
+			if int(contentIndex) < len(info.Texts) {
+				textPreview = info.Texts[contentIndex]
+			}
+		}
+	}
+
+	// Print name
+	if contentName != "" {
+		tw.Line(depth, "name: %q", contentName)
+	}
+
+	// Print index with optional text preview
+	if contentIndex >= 0 {
+		if textPreview != "" {
+			tw.Line(depth, "index ($403): %d /* %q */", contentIndex, textPreview)
+		} else {
+			tw.Line(depth, "index ($403): %d", contentIndex)
+		}
+	}
+
+	// Print any other fields
+	for k, val := range m {
+		if k == "name" || k == "$403" {
+			continue
+		}
+		keyName := k
+		if strings.HasPrefix(k, "$") {
+			if id, err := strconv.Atoi(k[1:]); err == nil {
+				keyName = kfx.KFXSymbol(id).String()
+			}
+		}
+		tw.Line(depth, "%s: %v", keyName, val)
+	}
+}
+
+// formatStyleEventsTree formats style events ($142) with CSS expansion.
+func formatStyleEventsTree(tw *debug.TreeWriter, ctx *expandCtx, key string, v any, depth int) {
+	list := toListAny(v)
+	if list == nil {
+		tw.Line(depth, "%s: (empty)", key)
+		return
+	}
+
+	tw.Line(depth, "%s: (%d)", key, len(list))
+
+	for i, item := range list {
+		m := toMapAny(item)
+		if m == nil {
+			tw.Line(depth+1, "[%d]: %v", i, item)
+			continue
+		}
+
+		// Build a compact representation
+		parts := []string{}
+
+		// Offset ($143)
+		if offset, ok := m["$143"]; ok {
+			parts = append(parts, fmt.Sprintf("offset=%v", offset))
+		}
+		// Length ($144)
+		if length, ok := m["$144"]; ok {
+			parts = append(parts, fmt.Sprintf("len=%v", length))
+		}
+		// Style ($157)
+		if styleVal, ok := m["$157"]; ok {
+			styleName := extractSymbolName(styleVal)
+			if styleName != "" {
+				if css, ok := ctx.styleDefs[styleName]; ok {
+					parts = append(parts, fmt.Sprintf("style=%q /* %s */", styleName, css))
+				} else {
+					parts = append(parts, fmt.Sprintf("style=%q", styleName))
+				}
+			}
+		}
+		// Link_to ($179)
+		if linkVal, ok := m["$179"]; ok {
+			linkName := extractSymbolName(linkVal)
+			if linkName != "" {
+				parts = append(parts, fmt.Sprintf("link_to=%q", linkName))
+			}
+		}
+		// yj.display ($616)
+		if displayVal, ok := m["$616"]; ok {
+			displayName := extractSymbolName(displayVal)
+			if displayName != "" {
+				parts = append(parts, fmt.Sprintf("yj.display=%s", displayName))
+			}
+		}
+
+		// Any other fields
+		for k, val := range m {
+			switch k {
+			case "$143", "$144", "$157", "$179", "$616":
+				continue
+			}
+			keyName := k
+			if strings.HasPrefix(k, "$") {
+				if id, err := strconv.Atoi(k[1:]); err == nil {
+					keyName = kfx.KFXSymbol(id).String()
+				}
+			}
+			parts = append(parts, fmt.Sprintf("%s=%v", keyName, val))
+		}
+
+		tw.Line(depth+1, "[%d]: %s", i, strings.Join(parts, ", "))
+	}
+}
+
+// formatContentListTree formats content_list ($146) with expanded styles.
+func formatContentListTree(tw *debug.TreeWriter, ctx *expandCtx, key string, v any, depth int) {
+	list := toListAny(v)
+	if list == nil {
+		tw.Line(depth, "%s: (empty)", key)
+		return
+	}
+
+	tw.Line(depth, "%s: (%d)", key, len(list))
+
+	for i, item := range list {
+		if isSimpleValueExpanded(item) {
+			tw.Line(depth+1, "[%d]: %s", i, formatSimpleValueStr(ctx, item))
+		} else {
+			tw.Line(depth+1, "[%d]:", i)
+			formatValueTree(tw, ctx, item, depth+2)
+		}
+	}
 }
 
 // StyleUsageInfo tracks which fragments use a particular style.
@@ -941,64 +1817,74 @@ func formatListCompact(items []any) string {
 	return "[" + strings.Join(parts, ", ") + "]"
 }
 
-func dumpBcRawMedia(container *kfx.Container, inPath string, overwrite bool) error {
+func dumpResources(container *kfx.Container, inPath, outDir string, overwrite bool) error {
 	base := filepath.Base(inPath)
 	stem := strings.TrimSuffix(base, filepath.Ext(base))
-	outDir := filepath.Join(filepath.Dir(inPath), stem+"-bcRawMedia")
-	if st, err := os.Stat(outDir); err == nil {
+	dir := filepath.Dir(inPath)
+	if outDir != "" {
+		dir = outDir
+	}
+	outPath := filepath.Join(dir, stem+"-resources.zip")
+	if _, err := os.Stat(outPath); err == nil {
 		if !overwrite {
-			return fmt.Errorf("output directory already exists: %s", outDir)
+			return fmt.Errorf("output file already exists: %s", outPath)
 		}
-		if !st.IsDir() {
-			return fmt.Errorf("output path exists and is not a directory: %s", outDir)
-		}
-		if err := os.RemoveAll(outDir); err != nil {
+		if err := os.Remove(outPath); err != nil {
 			return err
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	if err := os.Mkdir(outDir, 0o755); err != nil {
+
+	f, err := os.Create(outPath)
+	if err != nil {
 		return err
 	}
+	defer f.Close()
 
+	zw := zip.NewWriter(f)
+	defer zw.Close()
+
+	usedNames := make(map[string]int)
 	written := 0
-	for _, f := range container.Fragments.GetByType(kfx.SymRawMedia) {
-		blob, ok := asBlob(f.Value)
+	for _, frag := range container.Fragments.GetByType(kfx.SymRawMedia) {
+		blob, ok := asBlob(frag.Value)
 		if !ok || len(blob) == 0 {
 			continue
 		}
 
 		idName := ""
-		if f.FIDName != "" {
-			idName = f.FIDName
+		if frag.FIDName != "" {
+			idName = frag.FIDName
 		} else if container.DocSymbolTable != nil {
-			if n, ok := container.DocSymbolTable.FindByID(uint64(f.FID)); ok {
+			if n, ok := container.DocSymbolTable.FindByID(uint64(frag.FID)); ok {
 				idName = n
 			}
 		}
 
-		idPrefix := fmt.Sprintf("%d", f.FID)
+		idPrefix := fmt.Sprintf("%d", frag.FID)
 		if idName != "" {
 			idPrefix += "_" + sanitizeFileComponent(idName)
 		}
 
 		ext := extFromFiletype(blob)
-		outPath := filepath.Join(outDir, idPrefix+ext)
-		for i := 2; ; i++ {
-			if _, err := os.Stat(outPath); err != nil {
-				break
-			}
-			outPath = filepath.Join(outDir, idPrefix+fmt.Sprintf("_%d", i)+ext)
+		entryName := idPrefix + ext
+		if count := usedNames[entryName]; count > 0 {
+			entryName = idPrefix + fmt.Sprintf("_%d", count+1) + ext
 		}
+		usedNames[idPrefix+ext]++
 
-		if err := os.WriteFile(outPath, blob, 0o644); err != nil {
+		w, err := zw.Create(entryName)
+		if err != nil {
+			return err
+		}
+		if _, err := w.Write(blob); err != nil {
 			return err
 		}
 		written++
 	}
 
-	_, _ = fmt.Fprintf(os.Stderr, "bcRawMedia: wrote %d file(s) into %s/\n", written, outDir)
+	_, _ = fmt.Fprintf(os.Stderr, "resources: wrote %d file(s) into %s\n", written, outPath)
 	return nil
 }
 
