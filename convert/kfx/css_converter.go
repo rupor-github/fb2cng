@@ -110,7 +110,7 @@ func (c *Converter) convertProperty(name string, value CSSValue, result *Convers
 		if value.IsNumeric() {
 			if value.Unit == "%" {
 				// Convert percentage to rem: 140% -> 1.4rem
-				remValue := value.Value / 100.0
+				remValue := value.Value / KPVPercentToRem
 				result.Style.Properties[kfxSym] = DimensionValue(remValue, SymUnitRem)
 			} else {
 				dim, err := MakeDimensionValue(value)
@@ -123,11 +123,14 @@ func (c *Converter) convertProperty(name string, value CSSValue, result *Convers
 		}
 
 	case "text-indent":
-		// No special handling: keep original unit (em/px/%) if provided.
-		// Unitless values are treated as percent, matching earlier behavior.
+		// KPV uses % for text-indent. Convert em → % using KPVEmToPercentTextIndent ratio.
 		if value.IsNumeric() {
-			if value.Unit == "" {
+			if value.Unit == "" || value.Unit == "%" {
 				result.Style.Properties[kfxSym] = DimensionValue(value.Value, SymUnitPercent)
+				return
+			}
+			if value.Unit == "em" {
+				result.Style.Properties[kfxSym] = DimensionValue(value.Value*KPVEmToPercentTextIndent, SymUnitPercent)
 				return
 			}
 			dim, err := MakeDimensionValue(value)
@@ -137,6 +140,32 @@ func (c *Converter) convertProperty(name string, value CSSValue, result *Convers
 			}
 			result.Style.Properties[kfxSym] = dim
 		}
+
+	case "line-height":
+		// KPV uses lh units for line-height. Convert em → lh using KPVLineHeightRatio.
+		if value.IsNumeric() {
+			if value.Unit == "" || value.Unit == "lh" {
+				// Unitless or already lh - use lh unit
+				result.Style.Properties[kfxSym] = DimensionValue(value.Value, SymUnitLh)
+				return
+			}
+			if value.Unit == "em" {
+				// Convert em to lh
+				result.Style.Properties[kfxSym] = DimensionValue(value.Value/KPVLineHeightRatio, SymUnitLh)
+				return
+			}
+			dim, err := MakeDimensionValue(value)
+			if err != nil {
+				result.Warnings = append(result.Warnings, "unable to convert "+name+": "+err.Error())
+				return
+			}
+			result.Style.Properties[kfxSym] = dim
+		}
+
+	case "margin-top", "margin-bottom", "margin-left", "margin-right",
+		"padding-top", "padding-bottom", "padding-left", "padding-right":
+		// Route through setDimensionProperty for proper KPV unit conversion
+		c.setDimensionProperty(kfxSym, value, result)
 
 	default:
 		// Dimension properties (font-size, margins, line-height, etc.)
@@ -298,9 +327,9 @@ func (c *Converter) parseShorthandValue(s string) CSSValue {
 }
 
 // setDimensionProperty sets a dimension property from a CSS value.
-// KPV uses specific units for different properties:
-//   - margin-top, margin-bottom: lh (line-height units)
-//   - margin-left, margin-right: % (percent)
+// KPV uses specific units for different properties (see kpv_units.go):
+//   - Vertical spacing (margin-top/bottom, padding-top/bottom): lh
+//   - Horizontal spacing (margin-left/right, padding-left/right): %
 //   - font-size: rem
 //   - text-indent: %
 //   - line-height: lh
@@ -321,48 +350,44 @@ func (c *Converter) setDimensionProperty(sym KFXSymbol, value CSSValue, result *
 		return
 	}
 
-	// Convert em to KPV-preferred units based on property
+	// Convert em to KPV-preferred units based on property type
 	convertedValue := value.Value
 	var convertedUnit KFXSymbol
 
-	switch sym {
-	case SymMarginTop, SymMarginBottom:
-		// Vertical margins: em -> lh
-		// KPV uses lh (line-height) units. With typical 1.2 line-height:
-		// 1lh = 1.2em, so 1em = 0.833lh (1/1.2)
-		// Reference KPV files show 0.3em CSS → 0.25lh KFX (0.3/1.2 = 0.25)
+	switch {
+	case isVerticalSpacingProperty(sym):
+		// Vertical spacing: em -> lh using KPVLineHeightRatio
 		if value.Unit == "em" {
-			convertedValue = value.Value / 1.2 // Convert em to lh assuming 1.2 line-height
+			convertedValue = value.Value / KPVLineHeightRatio
 			convertedUnit = SymUnitLh
 		} else {
 			var err error
 			_, convertedUnit, err = CSSValueToKFX(value)
 			if err != nil {
-				result.Warnings = append(result.Warnings, "unable to convert margin: "+err.Error())
+				result.Warnings = append(result.Warnings, "unable to convert vertical spacing: "+err.Error())
 				return
 			}
 		}
 
-	case SymMarginLeft, SymMarginRight:
-		// Horizontal margins: em -> % (1em ≈ 6.25% typical)
-		// Note: This is approximate - KPV likely uses more sophisticated conversion
+	case isHorizontalSpacingProperty(sym):
+		// Horizontal spacing: em -> % using KPVEmToPercentHorizontal
 		if value.Unit == "em" {
-			convertedValue = value.Value * 6.25 // Approximate em to % conversion
+			convertedValue = value.Value * KPVEmToPercentHorizontal
 			convertedUnit = SymUnitPercent
 		} else {
 			var err error
 			_, convertedUnit, err = CSSValueToKFX(value)
 			if err != nil {
-				result.Warnings = append(result.Warnings, "unable to convert margin: "+err.Error())
+				result.Warnings = append(result.Warnings, "unable to convert horizontal spacing: "+err.Error())
 				return
 			}
 		}
 
-	case SymFontSize:
+	case sym == SymFontSize:
 		// Font-size: % -> rem, em -> rem
 		switch value.Unit {
 		case "%":
-			convertedValue = value.Value / 100.0
+			convertedValue = value.Value / KPVPercentToRem
 			fallthrough
 		case "em":
 			convertedUnit = SymUnitRem
