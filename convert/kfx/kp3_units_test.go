@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestRoundKPVDecimal(t *testing.T) {
+func TestRoundDecimal(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    float64
@@ -44,19 +44,19 @@ func TestRoundKPVDecimal(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := RoundKPVDecimal(tt.input)
+			result := RoundDecimal(tt.input)
 			// Use epsilon comparison for floating point
 			if math.Abs(result-tt.expected) > 1e-9 {
-				t.Errorf("RoundKPVDecimal(%v) = %v, want %v", tt.input, result, tt.expected)
+				t.Errorf("RoundDecimal(%v) = %v, want %v", tt.input, result, tt.expected)
 			}
 		})
 	}
 }
 
-func TestKPVDecimalPrecisionConstant(t *testing.T) {
+func TestDecimalPrecisionConstant(t *testing.T) {
 	// Verify the constant matches Amazon's setScale(3)
-	if KPVDecimalPrecision != 3 {
-		t.Errorf("KPVDecimalPrecision = %d, want 3 (to match Amazon's setScale(3))", KPVDecimalPrecision)
+	if DecimalPrecision != 3 {
+		t.Errorf("DecimalPrecision = %d, want 3 (to match Amazon's setScale(3))", DecimalPrecision)
 	}
 }
 
@@ -94,18 +94,18 @@ func TestIsHorizontalSpacingProperty(t *testing.T) {
 	}
 }
 
-func TestKPVUnitConversionConstants(t *testing.T) {
+func TestUnitConversionConstants(t *testing.T) {
 	// Verify constants have expected values
 	tests := []struct {
 		name     string
 		value    float64
 		expected float64
 	}{
-		{"KPVDefaultLineHeightLh", KPVDefaultLineHeightLh, 1.0},
-		{"KPVLineHeightRatio", KPVLineHeightRatio, 1.2},
-		{"KPVEmToPercentHorizontal", KPVEmToPercentHorizontal, 3.125},
-		{"KPVEmToPercentTextIndent", KPVEmToPercentTextIndent, 3.125},
-		{"KPVPercentToRem", KPVPercentToRem, 100.0},
+		{"DefaultLineHeightLh", DefaultLineHeightLh, 1.0},
+		{"LineHeightRatio", LineHeightRatio, 1.2},
+		{"EmToPercentHorizontal", EmToPercentHorizontal, 3.125},
+		{"EmToPercentTextIndent", EmToPercentTextIndent, 3.125},
+		{"PercentToRem", PercentToRem, 100.0},
 	}
 
 	for _, tt := range tests {
@@ -117,35 +117,35 @@ func TestKPVUnitConversionConstants(t *testing.T) {
 	}
 }
 
-// TestKPVUnitConversions tests that common CSS-to-KFX unit conversions work correctly
-func TestKPVUnitConversions(t *testing.T) {
+// TestUnitConversions tests that common CSS-to-KFX unit conversions work correctly
+func TestUnitConversions(t *testing.T) {
 	t.Run("em_to_lh_vertical", func(t *testing.T) {
 		// 0.3em CSS → 0.25lh KFX (0.3 / 1.2 = 0.25)
 		emValue := 0.3
-		lhValue := emValue / KPVLineHeightRatio
+		lhValue := emValue / LineHeightRatio
 		expected := 0.25
 		if math.Abs(lhValue-expected) > 1e-9 {
-			t.Errorf("em to lh: %v / %v = %v, want %v", emValue, KPVLineHeightRatio, lhValue, expected)
+			t.Errorf("em to lh: %v / %v = %v, want %v", emValue, LineHeightRatio, lhValue, expected)
 		}
 	})
 
 	t.Run("em_to_percent_horizontal", func(t *testing.T) {
 		// 1em CSS → 3.125% KFX
 		emValue := 1.0
-		percentValue := emValue * KPVEmToPercentHorizontal
+		percentValue := emValue * EmToPercentHorizontal
 		expected := 3.125
 		if math.Abs(percentValue-expected) > 1e-9 {
-			t.Errorf("em to %%: %v * %v = %v, want %v", emValue, KPVEmToPercentHorizontal, percentValue, expected)
+			t.Errorf("em to %%: %v * %v = %v, want %v", emValue, EmToPercentHorizontal, percentValue, expected)
 		}
 	})
 
 	t.Run("percent_to_rem_font_size", func(t *testing.T) {
 		// 140% CSS → 1.4rem KFX
 		percentValue := 140.0
-		remValue := percentValue / KPVPercentToRem
+		remValue := percentValue / PercentToRem
 		expected := 1.4
 		if math.Abs(remValue-expected) > 1e-9 {
-			t.Errorf("percent to rem: %v / %v = %v, want %v", percentValue, KPVPercentToRem, remValue, expected)
+			t.Errorf("percent to rem: %v / %v = %v, want %v", percentValue, PercentToRem, remValue, expected)
 		}
 	})
 }

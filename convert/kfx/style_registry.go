@@ -31,7 +31,7 @@ func NewStyleRegistry() *StyleRegistry {
 		usage:         make(map[string]styleUsage),
 		resolved:      make(map[string]string),
 		externalLinks: NewExternalLinkRegistry(),
-		// Start from 55 so the first style is "s1J" (base36(55) == 1J), like KPV samples.
+		// Start from 55 so the first style is "s1J" (base36(55) == 1J), like KP3 samples.
 		resolvedCounter: 54,
 	}
 }
@@ -120,7 +120,7 @@ func (sr *StyleRegistry) Names() []string {
 
 // EnsureBaseStyle ensures a style exists, creating a minimal one if needed.
 // Unlike EnsureStyle it does NOT mark the style as used for output.
-// This is used for resolving style combinations into KPV-like "s.." styles.
+// This is used for resolving style combinations into KP3-like "s.." styles.
 func (sr *StyleRegistry) EnsureBaseStyle(name string) {
 	if _, exists := sr.styles[name]; exists {
 		return
@@ -220,7 +220,7 @@ var containerStyles = map[string]bool{
 	"annotation": true,
 }
 
-// ResolveStyle resolves a (possibly multi-part) style spec into a fully-resolved KPV-like style name.
+// ResolveStyle resolves a (possibly multi-part) style spec into a fully-resolved KP3-like style name.
 // Later parts override earlier ones. All resolved styles inherit from kfx-unknown as the base.
 func (sr *StyleRegistry) ResolveStyle(styleSpec string) string {
 	parts := strings.Fields(styleSpec)
@@ -547,8 +547,8 @@ func (sr *StyleRegistry) RegisterResolved(props map[KFXSymbol]any) string {
 	return name
 }
 
-// ResolveImageStyle creates a KPV-compatible image style with specific width percentage.
-// KPV calculates image width as percentage of screen width and creates unique styles
+// ResolveImageStyle creates a KP3-compatible image style with specific width percentage.
+// KP3 calculates image width as percentage of screen width and creates unique styles
 // for each distinct width value. This produces styles like:
 //
 //	.sXX { box-align: center; line-height: 1lh; width: 84.766%; }
@@ -559,12 +559,12 @@ func (sr *StyleRegistry) ResolveImageStyle(imageWidth, screenWidth int) string {
 		screenWidth = 1280 // Default Kindle screen width
 	}
 
-	// Calculate width percentage (KPV uses 3 decimal places)
+	// Calculate width percentage (KP3 uses 3 decimal places)
 	widthPercent := float64(imageWidth) / float64(screenWidth) * 100
 	return sr.ResolveImagePercentStyle(widthPercent)
 }
 
-// ResolveImagePercentStyle creates a KPV-compatible image style with explicit width percent.
+// ResolveImagePercentStyle creates a KP3-compatible image style with explicit width percent.
 func (sr *StyleRegistry) ResolveImagePercentStyle(widthPercent float64) string {
 	if widthPercent > 100 {
 		widthPercent = 100
@@ -733,10 +733,10 @@ func (sr *StyleRegistry) ResolveVignetteImageStyleWithPosition(pos ElementPositi
 //   - font_size: 1rem (in unit $505)
 //   - line_height: 1.0101lh
 func (sr *StyleRegistry) ResolveCoverImageStyle() string {
-	// Build minimal properties matching KPV cover image style exactly
+	// Build minimal properties matching KP3 cover image style exactly
 	props := map[KFXSymbol]any{
-		SymFontSize:   DimensionValue(1, SymUnitRem),                     // font-size: 1rem
-		SymLineHeight: DimensionValue(KPVDefaultLineHeightLh, SymUnitLh), // line-height: 1.0101lh
+		SymFontSize:   DimensionValue(1, SymUnitRem),                  // font-size: 1rem
+		SymLineHeight: DimensionValue(DefaultLineHeightLh, SymUnitLh), // line-height: 1.0101lh
 	}
 
 	sig := styleSignature(props)
@@ -837,7 +837,7 @@ func ensureDefaultLineHeight(props map[KFXSymbol]any) map[KFXSymbol]any {
 	}
 	updated := make(map[KFXSymbol]any, len(props)+1)
 	maps.Copy(updated, props)
-	updated[SymLineHeight] = DimensionValue(KPVDefaultLineHeightLh, SymUnitLh)
+	updated[SymLineHeight] = DimensionValue(DefaultLineHeightLh, SymUnitLh)
 	return updated
 }
 
@@ -1011,13 +1011,13 @@ func DefaultStyleRegistry() *StyleRegistry {
 	// ============================================================
 
 	// Base paragraph style - HTML <p> element
-	// KPV uses: text-indent: 3.125%, line-height: 1lh, text-align: justify
+	// KP3 uses: text-indent: 3.125%, line-height: 1lh, text-align: justify
 	sr.Register(NewStyle("p").
 		// LineHeight(1.0, SymUnitLh).
 		TextIndent(3.125, SymUnitPercent).
 		TextAlign(SymJustify).
 		MarginBottom(0.25, SymUnitLh).
-		// Note: margin-top, margin-left, margin-right omitted - KPV doesn't include zero margins
+		// Note: margin-top, margin-left, margin-right omitted - KP3 doesn't include zero margins
 		Build())
 
 	// Heading styles (h1-h6) - HTML heading elements
@@ -1152,7 +1152,7 @@ func DefaultStyleRegistry() *StyleRegistry {
 		Build())
 
 	// Subscript and superscript - HTML <sub> and <sup> elements
-	// KPV uses baseline-style for these.
+	// KP3 uses baseline-style for these.
 	// IMPORTANT: Use rem (not em) to prevent relative merging when nested with
 	// other inline styles like link-footnote. Using em causes compounding:
 	// sup(0.75em) × link-footnote(0.8em) = 0.6em, which is wrong.
@@ -1316,7 +1316,7 @@ func (sr *StyleRegistry) shouldHaveBreakInsideAvoid(name string, _ map[KFXSymbol
 // The CSS converter sets SymKeepFirst/SymKeepLast as intermediate markers.
 // This function converts them to proper yj-break-* properties and also handles
 // title wrapper styles that need yj-break-after: avoid.
-// The intermediate markers are removed after conversion since KPV doesn't output them.
+// The intermediate markers are removed after conversion since KP3 doesn't output them.
 func (sr *StyleRegistry) convertPageBreaksToYjBreaks(props map[KFXSymbol]any) {
 	// Convert SymKeepFirst (from page-break-before) to yj-break-before
 	if keepFirst, ok := props[SymKeepFirst]; ok {
@@ -1344,7 +1344,7 @@ func (sr *StyleRegistry) convertPageBreaksToYjBreaks(props map[KFXSymbol]any) {
 		delete(props, SymKeepLast)
 	}
 
-	// KPV pattern for break properties:
+	// KP3 pattern for break properties:
 	// Pattern 1: break-inside: avoid + yj-break-after: avoid (no yj-break-before)
 	// Pattern 2: yj-break-before: auto + yj-break-after: avoid (no break-inside)
 	// These are mutually exclusive. Remove yj-break-before when break-inside: avoid exists.

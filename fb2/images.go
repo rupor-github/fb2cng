@@ -185,7 +185,7 @@ func (bo *BinaryObject) encodeImage(img image.Image, imgType string, cfg *config
 // intact if no changes where requested. If image is decodable it will always
 // attempt to normalize mime type. Never returns an error - uses placeholder
 // for broken images.
-// NOTE: today KPV always seems to scale images to 2048 width and height, we do
+// NOTE: today KP3 always seems to scale images to 2048 width and height, we do
 // not do it
 func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfig, log *zap.Logger) *BookImage {
 
@@ -201,7 +201,7 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 			return bi
 		}
 
-		// Rasterize SVG - as far as I could tell KPV always scales SVG to 2048
+		// Rasterize SVG - as far as I could tell KP3 always scales SVG to 2048
 		// (DPI 140) keeping aspect ratio, we will use screen width instead.
 		targetW, targetH := cfg.Screen.Width, 0
 

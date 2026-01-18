@@ -23,7 +23,7 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 	landmarks := LandmarkInfo{}
 
 	// Single shared content accumulator for the entire book.
-	// KPV consolidates content across all storylines into fewer, larger fragments.
+	// KP3 consolidates content across all storylines into fewer, larger fragments.
 	ca := NewContentAccumulator(1)
 
 	// Default screen width for image style calculations
@@ -406,7 +406,7 @@ func processBodyIntroContent(book *fb2.FictionBook, body *fb2.Body, sb *Storylin
 		if body.Main() {
 			addVignetteImage(book, sb, styles, imageResources, common.VignettePosBookTitleTop, screenWidth, positions.VignetteTop)
 		}
-		// Add title as single combined heading entry (matches KPV behavior)
+		// Add title as single combined heading entry (matches KP3 behavior)
 		// Uses body-title-header as base for -first/-next styles, heading level 1
 		// Context includes wrapper class for margin inheritance
 		titleCtx := NewStyleContext().Push("div", "body-title", styles)

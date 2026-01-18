@@ -18,7 +18,7 @@ func convertStyleMapLineHeight(cssVal CSSValue, rawVal string) (StructValue, boo
 		return DimensionValue(cssVal.Value, SymUnitLh), true
 	}
 	if cssVal.Unit == "em" {
-		return DimensionValue(cssVal.Value/KPVLineHeightRatio, SymUnitLh), true
+		return DimensionValue(cssVal.Value/LineHeightRatio, SymUnitLh), true
 	}
 	value, unit, err := CSSValueToKFX(cssVal)
 	if err != nil {
@@ -40,11 +40,11 @@ func convertStyleMapDimension(sym KFXSymbol, cssVal CSSValue) (StructValue, bool
 	switch {
 	case isVerticalSpacingProperty(sym):
 		if cssVal.Unit == "em" {
-			return DimensionValue(cssVal.Value/KPVLineHeightRatio, SymUnitLh), true
+			return DimensionValue(cssVal.Value/LineHeightRatio, SymUnitLh), true
 		}
 	case isHorizontalSpacingProperty(sym):
 		if cssVal.Unit == "em" {
-			return DimensionValue(cssVal.Value*KPVEmToPercentHorizontal, SymUnitPercent), true
+			return DimensionValue(cssVal.Value*EmToPercentHorizontal, SymUnitPercent), true
 		}
 	}
 	value, unit, err := CSSValueToKFX(cssVal)

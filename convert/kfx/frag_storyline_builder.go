@@ -56,7 +56,7 @@ func BuildSection(sectionName string, pageTemplates []any) *Fragment {
 }
 
 // NewPageTemplateEntry creates a page template entry for section's $141.
-// Based on KPV reference: {$155: eid, $159: $269, $176: storyline_name}
+// Based on KP3 reference: {$155: eid, $159: $269, $176: storyline_name}
 // The page template simply references the storyline by name and uses text type.
 func NewPageTemplateEntry(eid int, storylineName string) StructValue {
 	return NewStruct().

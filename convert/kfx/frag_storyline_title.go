@@ -8,7 +8,7 @@ import (
 )
 
 // addTitleAsHeading creates a single combined content entry for multi-paragraph titles.
-// This matches KPV behavior where all title lines are combined with newlines and
+// This matches KP3 behavior where all title lines are combined with newlines and
 // style events are used for -first/-next styling within the combined entry.
 // The heading level ($790) is applied only to this combined entry.
 // ctx provides the style context (wrapper class like "body-title") for descendant rules and inheritance.

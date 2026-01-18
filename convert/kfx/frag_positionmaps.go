@@ -20,7 +20,7 @@ func CollectAllEIDs(sectionEIDs sectionEIDsBySectionName) []int {
 }
 
 // compressEIDs returns a flat sorted list of EIDs for position_map.
-// While [base, count] compression was attempted previously, KPV output shows
+// While [base, count] compression was attempted previously, KP3 output shows
 // that a flat list of all EIDs is expected.
 func compressEIDs(eids []int) []any {
 	if len(eids) == 0 {

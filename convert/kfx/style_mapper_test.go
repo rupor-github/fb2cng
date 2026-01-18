@@ -447,7 +447,7 @@ func TestStyleMapperMapWrappersMerges(t *testing.T) {
 	if !ok {
 		t.Fatalf("could not parse merged margin-left")
 	}
-	expected := (1 + 2) * KPVEmToPercentHorizontal
+	expected := (1 + 2) * EmToPercentHorizontal
 	if val != expected {
 		t.Fatalf("expected merged margin-left %v, got %v", expected, val)
 	}

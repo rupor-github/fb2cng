@@ -11,7 +11,7 @@ import (
 	"github.com/srwiley/rasterx"
 )
 
-const defaultSVGSize = 2048 // Default size to use when SVG viewBox has no size to match KPV
+const defaultSVGSize = 2048 // Default size to use when SVG viewBox has no size to match KP3
 
 // RasterizeSVGToImage rasterizes SVG to an RGBA image.
 //

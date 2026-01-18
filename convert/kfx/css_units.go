@@ -6,7 +6,7 @@ import (
 
 // CSSValueToKFX converts a CSS value with units to KFX dimension representation.
 // Returns the numeric value and the KFX unit symbol.
-// Note: KPV uses specific units for different properties:
+// Note: KP3 uses specific units for different properties:
 //   - text-indent: % (percent)
 //   - margins: lh (line-height units)
 //   - font-size in inline styles: rem

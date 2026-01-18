@@ -270,24 +270,24 @@ type VerticalAlignResult struct {
 // ConvertVerticalAlign converts CSS vertical-align to KFX properties.
 // CSS: super, sub -> KFX: baseline_style ($44)
 // CSS: baseline, length/percent values -> KFX: baseline_shift ($31)
-// KPV uses baseline_style for super/sub which is more compatible.
+// KP3 uses baseline_style for super/sub which is more compatible.
 func ConvertVerticalAlign(css CSSValue) (VerticalAlignResult, bool) {
 	result := VerticalAlignResult{}
 
 	switch strings.ToLower(css.Keyword) {
 	case "super":
-		// Use baseline_style: superscript (KPV compatible)
+		// Use baseline_style: superscript (KP3 compatible)
 		result.UseBaselineStyle = true
 		result.BaselineStyle = SymSuperscript
 		return result, true
 	case "sub":
-		// Use baseline_style: subscript (KPV compatible)
+		// Use baseline_style: subscript (KP3 compatible)
 		result.UseBaselineStyle = true
 		result.BaselineStyle = SymSubscript
 		return result, true
 	case "baseline":
 		result.UseBaselineShift = true
-		result.BaselineShift = DimensionValueKPV(0, SymUnitEm)
+		result.BaselineShift = DimensionValue(0, SymUnitEm)
 		return result, true
 	}
 

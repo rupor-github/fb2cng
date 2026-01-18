@@ -390,7 +390,7 @@ Example: 0x8A = string (type 8) with 10-byte (A) body
   │   TOC:    {$238: $212, $241: {$244: "label"}, $246: {$155: eid}}    │
   │   Start:  {$238: $396, $241: {$244: "Start"}, $246: {$155: eid}}    │
   │                                                                     │
-  │ NOTE: Cover landmark ($238=$233) is REQUIRED for KPV to properly    │
+  │ NOTE: Cover landmark ($238=$233) is REQUIRED for KP3 to properly    │
   │       scale cover images to fill the screen without white borders.  │
   └─────────────────────────────────────────────────────────────────────┘
 
@@ -523,7 +523,7 @@ Visual byte map (approximate):
 
 ---
 
-## 11. Section and Storyline Structure (KPV-Compatible)
+## 11. Section and Storyline Structure (KP3-Compatible)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -545,7 +545,7 @@ Visual byte map (approximate):
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
 │  │  CRITICAL: Page Template Type ($159) must be $269 (text)            │    │
 │  │                                                                     │    │
-│  │  KPV-Compatible:    { $155: eid, $159: $269, $176: name }           │    │
+│  │  KP3-Compatible:    { $155: eid, $159: $269, $176: name }           │    │
 │  │  Non-Compatible:    { $155: eid, $159: $270, $176: name,            │    │
 │  │                       $140: $320, $156: $326, $56: 600, $57: 800 }  │    │
 │  │                                                                     │    │
@@ -568,7 +568,7 @@ Visual byte map (approximate):
 │        $155: <eid>,          // Element ID                                  │
 │        $159: $269,           // Type = text                                 │
 │        $157: style_name,     // Optional style reference                    │
-│        $790: <level>,        // Heading level 1-6 (KPV parity, optional)    │
+│        $790: <level>,        // Heading level 1-6 (KP3 parity, optional)    │
 │        $145: {               // Content reference                           │
 │          name: content_X,    // Content fragment name                       │
 │          $403: <offset>      // Array index within content_list             │
@@ -632,7 +632,7 @@ Visual byte map (approximate):
 │  │  3. Must have cover landmark in $389 navigation:                    │    │
 │  │     {$238: $233, $241: {$244: "label"}, $246: {$155: cover_eid}}    │    │
 │  │                                                                     │    │
-│  │  Without the landmark, KPV does not recognize the section as a      │    │
+│  │  Without the landmark, KP3 does not recognize the section as a      │    │
 │  │  cover and renders it with standard margins/white borders.          │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
 │                                                                             │
@@ -670,7 +670,7 @@ Visual byte map (approximate):
 │  - For internal links: points to a position anchor                          │
 │  - For external links: points to an external URI anchor (see section 13)    │
 │                                                                             │
-│  Footnote Link Detection (KPV parity):                                      │
+│  Footnote Link Detection (KP3 parity):                                      │
 │  ─────────────────────────────────────                                      │
 │  Links to footnote bodies should include $616: $617 marker.                 │
 │  This enables Kindle's popup footnote display feature.                      │
@@ -689,7 +689,7 @@ Visual byte map (approximate):
 │                                                                             │
 │  CRITICAL - Ion Type for $307:                                              │
 │  ─────────────────────────────                                              │
-│  The $307 field MUST be encoded as Ion DecimalType. KPV will crash or       │
+│  The $307 field MUST be encoded as Ion DecimalType. KP3 will crash or       │
 │  render incorrectly if $307 is Ion Float, Ion Int, or Ion String.           │
 │  Use ion.MustParseDecimal() or equivalent to create proper decimals.        │
 │  Decimal notation examples: "2.5d-1" for 0.25, "1." for 1.0, "8d-1" for 0.8 │
@@ -717,13 +717,13 @@ Visual byte map (approximate):
 │  $314 = %         (percent)                                                 │
 │  $505 = rem       (relative to root font size)                              │
 │                                                                             │
-│  KPV Unit Conventions (CRITICAL):                                           │
+│  KP3 Unit Conventions (CRITICAL):                                           │
 │  ─────────────────────────────────                                          │
 │  Kindle Previewer uses specific units for different properties.             │
 │  Using incorrect units can break rendering (e.g., text-align).              │
 │                                                                             │
 │  ┌────────────────┬──────────┬──────────────────────────────────────────┐   │
-│  │ CSS Property   │ KPV Unit │ Notes                                    │   │
+│  │ CSS Property   │ KP3 Unit │ Notes                                    │   │
 │  ├────────────────┼──────────┼──────────────────────────────────────────┤   │
 │  │ font-size      │ rem      │ NOT %. Using % breaks text-align!        │   │
 │  │ margin-top     │ lh       │ Line-height units for vertical spacing   │   │
@@ -748,7 +748,7 @@ Visual byte map (approximate):
 │                                                                             │
 │  Zero Value Omission:                                                       │
 │  ────────────────────                                                       │
-│  KPV does NOT include style properties with zero values.                    │
+│  KP3 does NOT include style properties with zero values.                    │
 │  Example: margin-left: 0 is omitted entirely, NOT encoded as:               │
 │    $48: { $307: 0, $306: "$314" }                                           │
 │                                                                             │
@@ -774,7 +774,7 @@ Visual byte map (approximate):
 │                                                                             │
 │  Orphans/Widows ($131/$132) - NOT USED:                                     │
 │  ───────────────────────────────────────                                    │
-│  KPV does NOT generate $131 (orphans) or $132 (widows) properties.          │
+│  KP3 does NOT generate $131 (orphans) or $132 (widows) properties.          │
 │  Page break control uses $788 (yj_break_after) and $789 (yj_break_before).  │
 │                                                                             │
 │  Text-Align Symbol Mapping (CRITICAL):                                      │
@@ -783,7 +783,7 @@ Visual byte map (approximate):
 │    left    → $59  (SymLeft)     right   → $61  (SymRight)                   │
 │    center  → $320 (SymCenter)   justify → $321 (SymJustify)                 │
 │    start   → $680 (SymStart)    end     → $681 (SymEnd) [rarely used]       │
-│  KPV reference files consistently use $59/$61 for left/right alignment.     │
+│  KP3 reference files consistently use $59/$61 for left/right alignment.     │
 │                                                                             │
 │  Example Style Fragment:                                                    │
 │  {                                                                          │
@@ -834,10 +834,10 @@ Visual byte map (approximate):
 │  │  CRITICAL: $175 must be Ion SYMBOL type, not STRING                 │    │
 │  │                                                                     │    │
 │  │  Correct:   $175: symbol(e1)     // Ion symbol                      │    │
-│  │  Wrong:     $175: "e1"           // Ion string - KPV may fail!      │    │
+│  │  Wrong:     $175: "e1"           // Ion string - KP3 may fail!      │    │
 │  │                                                                     │    │
 │  │  CRITICAL: Use "image/jpg" for JPEG files, NOT "image/jpeg"         │    │
-│  │  KPV reference files use "image/jpg" consistently.                  │    │
+│  │  KP3 reference files use "image/jpg" consistently.                  │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
 │                                                                             │
 │  Format Symbols:                                                            │
@@ -928,7 +928,7 @@ Visual byte map (approximate):
 
 ---
 
-## 14. Position Map Format (KPV-Compatible)
+## 14. Position Map Format (KP3-Compatible)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -939,7 +939,7 @@ Visual byte map (approximate):
 │  [                                                                          │
 │    {                                                                        │
 │      $174: section_1,        // Section name                                │
-│      $181: [1, 2, 3, 4, 5]   // Flat list of EIDs (KPV format)              │
+│      $181: [1, 2, 3, 4, 5]   // Flat list of EIDs (KP3 format)              │
 │    },                                                                       │
 │    {                                                                        │
 │      $174: section_2,                                                       │
@@ -950,11 +950,11 @@ Visual byte map (approximate):
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
 │  │  EID List Format Comparison:                                        │    │
 │  │                                                                     │    │
-│  │  KPV-Compatible (flat list):     $181: [1, 2, 3, 4, 5]              │    │
+│  │  KP3-Compatible (flat list):     $181: [1, 2, 3, 4, 5]              │    │
 │  │  Legacy (compressed pairs):      $181: [[1, 5]]                     │    │
 │  │                                                                     │    │
 │  │  The compressed [base, count] format expands to base..base+count-1  │    │
-│  │  but flat lists are preferred for KPV compatibility.                │    │
+│  │  but flat lists are preferred for KP3 compatibility.                │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -1247,7 +1247,7 @@ Visual byte map (approximate):
 │     - Standard Ion local symbol 0: ID 861 (after Ion system + YJ_symbols)   │
 │     - Entity directory and symbol values use KFX numbering                  │
 │                                                                             │
-│ 12. CRITICAL: Style dimension units must match KPV conventions:             │
+│ 12. CRITICAL: Style dimension units must match KP3 conventions:             │
 │     - font-size: use rem (NOT %). Percent breaks text-align rendering       │
 │     - margin-top/bottom: use lh (line-height units)                         │
 │     - margin-left/right: use % (percent)                                    │
@@ -1259,7 +1259,7 @@ Visual byte map (approximate):
 │     - white = 0xFFFFFFFF (4294967295)                                       │
 │     - Applies to $83 (border_color), $19 (text_color), $70 (fill_color)     │
 │                                                                             │
-│ 14. CRITICAL: KPV does NOT use orphans ($131) or widows ($132):             │
+│ 14. CRITICAL: KP3 does NOT use orphans ($131) or widows ($132):             │
 │     - Use $788 (yj_break_after) and $789 (yj_break_before) instead          │
 │     - If CSS converter generates $131/$132, convert and delete them         │
 │                                                                             │

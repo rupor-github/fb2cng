@@ -64,7 +64,7 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 		// Add top vignette with position-aware style
 		addVignetteImage(book, sb, styles, imageResources, vigTopPos, screenWidth, positions.VignetteTop)
 
-		// Add title as single combined heading entry (matches KPV behavior)
+		// Add title as single combined heading entry (matches KP3 behavior)
 		// Context includes wrapper class for margin inheritance
 		titleCtx := NewStyleContext().Push("div", wrapperClass, styles)
 		markTitleStylesUsed(wrapperClass, headerClassBase, styles)

@@ -1,4 +1,4 @@
-# KFX Structure (reverse engineered from KFXInput/KFXOutput calibre plugins and KPV files)
+# KFX Structure (reverse engineered from KFXInput/KFXOutput calibre plugins and KP3 files)
 
 Much of the knowledge of the KPF internals comes from Calibre's KFX conversion Input Plugin v2.27.1 created by John Howell <jhowell@acm.org> and copyrighted under GPL v3. Visit https://www.mobileread.com/forums for more details.
 
@@ -626,7 +626,7 @@ Derived from: `kfxlib/yj_structure.py:BookStructure.check_consistency` (document
 ### 7.5 `$164` (External resource descriptor) + `$417` (RawMedia) / `$418` (RawFont)
 
 The resource descriptor fragment `$164` is used to locate and validate resource bytes stored separately in raw entities:
-- `$175` (`resource_name`): resource identifier - **must be a symbol**, not a string (KPV requirement)
+- `$175` (`resource_name`): resource identifier - **must be a symbol**, not a string (KP3 requirement)
 - `$165` (`location`): key used to look up the raw resource entity (`$417`/`$418`)
 - `$161` (`format`): file format symbol (e.g. `$285` jpg, `$284` png, `$565` pdf, `$548` jxr)
 - `$162` (`mime_type`): MIME type string (use `"image/jpg"` not `"image/jpeg"` for JPEG images)
@@ -635,7 +635,7 @@ The resource descriptor fragment `$164` is used to locate and validate resource 
 - `$564`: PDF page number base (0-based, code uses +1 for display)
 - `$797`: overlapped tiles flag/metadata (presence indicates overlap)
 
-**Important**: The `$175` field must be encoded as an Ion **symbol**, not a string. KPV validates this and may fail to display images if `$175` is a string. Similarly, `$162` should use `"image/jpg"` (not `"image/jpeg"`) to match KPV's expected format.
+**Important**: The `$175` field must be encoded as an Ion **symbol**, not a string. KP3 validates this and may fail to display images if `$175` is a string. Similarly, `$162` should use `"image/jpg"` (not `"image/jpeg"`) to match KP3's expected format.
 
 Raw bytes are stored as separate fragments:
 - `$417` (bcRawMedia) with `fid == location` and value = raw bytes
@@ -651,12 +651,12 @@ Derived from: `kfxlib/yj_structure.py:BookStructure.check_consistency` (resource
 
 **Page template entry structure** (entries in `$141`):
 
-Per Kindle Previewer (KPV) reference format, page templates use a minimal 3-field structure:
+Per Kindle Previewer (KP3) reference format, page templates use a minimal 3-field structure:
 - `$155` (id): EID for the page template
 - `$159` (type): content type, always `$269` (text) for standard book sections
 - `$176` (story_name): reference to the storyline fragment containing content
 
-**NOTE**: Earlier implementations used a more complex structure with `$270` (container type), `$140` (float), `$156` (layout), `$56`/`$57` (dimensions). This caused rendering issues where only the first page of content would display. The KPV-compatible format uses only the 3 fields above with text type (`$269`).
+**NOTE**: Earlier implementations used a more complex structure with `$270` (container type), `$140` (float), `$156` (layout), `$56`/`$57` (dimensions). This caused rendering issues where only the first page of content would display. The KP3-compatible format uses only the 3 fields above with text type (`$269`).
 
 **`$259` (storyline)** - Contains the actual content for a section:
 - `$176` (story_name): storyline identifier matching the fragment id
@@ -668,9 +668,9 @@ Per Kindle Previewer (KPV) reference format, page templates use a minimal 3-fiel
 - `$157` (style): optional style name reference
 - `$145` (content): for text, a struct with `name` (content fragment reference) and `$403` (array index/offset within the content_list)
 - `$175` (resource_name): for images, external resource fragment id as **symbol** (not string)
-- `$584` (alt_text): for images, accessibility text (only included when non-empty, per KPV parity)
+- `$584` (alt_text): for images, accessibility text (only included when non-empty, per KP3 parity)
 - `$142` (style_events): optional inline formatting events
-- `$790` (yj.semantics.heading_level): for headings, level 1-6 (KPV parity)
+- `$790` (yj.semantics.heading_level): for headings, level 1-6 (KP3 parity)
 
 **Style event structure** (entries in `$142`):
 - `$143` (offset): start offset within text (**character/rune offset**, not byte offset)
@@ -679,11 +679,11 @@ Per Kindle Previewer (KPV) reference format, page templates use a minimal 3-fiel
 - `$179` (link_to): optional link anchor reference (symbol pointing to a `$266` anchor fragment)
    - For internal links: points to the anchor ID of a position anchor
    - For external links: points to the anchor ID of an external URI anchor (see §7.7.1)
-- `$616` (yj.display): for footnote links, set to `$617` (yj.note) (KPV parity)
+- `$616` (yj.display): for footnote links, set to `$617` (yj.note) (KP3 parity)
 
 **Important**: Offsets and lengths in style events (`$143`, `$144`) are measured in **Unicode code points (characters/runes)**, not bytes. For text containing multi-byte characters (e.g., Cyrillic, CJK), the character offset will differ from the byte offset. For example, the Russian text "Автор" is 5 characters but 10 bytes in UTF-8.
 
-Derived from: `convert/kfx/frag_storyline.go`, KPV reference files.
+Derived from: `convert/kfx/frag_storyline.go`, KP3 reference files.
 
 ### 7.5.2 Cover section structure
 
@@ -705,7 +705,7 @@ Cover images require special handling in KFX to enable full-screen scaling. Unli
 - `$157` (style): minimal style with `font-size: 1rem`, `line-height: 1.0101lh`
 - `$584` (alt_text): only included when non-empty
 
-**Critical**: For the cover image to scale properly (fill the screen without white borders), it **must** be registered in the landmarks navigation container with type `$233` (cover_page). Without this landmark entry, KPV treats the cover as regular content and does not apply full-screen scaling.
+**Critical**: For the cover image to scale properly (fill the screen without white borders), it **must** be registered in the landmarks navigation container with type `$233` (cover_page). Without this landmark entry, KP3 treats the cover as regular content and does not apply full-screen scaling.
 
 **External resource (`$164`) for cover**:
 - `$161` (format): format symbol (`$285`=jpg, `$284`=png, `$286`=gif)
@@ -715,7 +715,7 @@ Cover images require special handling in KFX to enable full-screen scaling. Unli
 - `$422` (resource_width): image width in pixels
 - `$423` (resource_height): image height in pixels
 
-Derived from: `convert/kfx/frag_storyline.go:NewCoverPageTemplateEntry`, `convert/kfx/frag_resource.go`, KPV reference files.
+Derived from: `convert/kfx/frag_storyline.go:NewCoverPageTemplateEntry`, `convert/kfx/frag_resource.go`, KP3 reference files.
 
 ### 7.6 Position and location mapping fragments
 
@@ -752,9 +752,9 @@ When present (non-dictionary/non-KPF-prepub path), `$264` is a list of Ion struc
 
 **EID list encoding in `$181`**:
 
-Kindle Previewer (KPV) outputs a **flat list of scalar EIDs** (e.g., `[1, 2, 3, 4, 5]`).
+Kindle Previewer (KP3) outputs a **flat list of scalar EIDs** (e.g., `[1, 2, 3, 4, 5]`).
 
-Some readers also support compressed `[base_eid, count]` pairs that expand to `base_eid..base_eid+count-1`, but this format is **not recommended** for compatibility with KPV validation. This converter generates flat EID lists matching KPV behavior.
+Some readers also support compressed `[base_eid, count]` pairs that expand to `base_eid..base_eid+count-1`, but this format is **not recommended** for compatibility with KP3 validation. This converter generates flat EID lists matching KP3 behavior.
 
 This map is used for validation (detect extra/missing sections and mismatched EIDs).
 
@@ -1231,7 +1231,7 @@ Each landmark entry has the form:
 - `$212` (toc): Table of Contents page
 - `$396` (srl): Start Reading Location - where reading begins after cover/frontmatter
 
-**Important**: The cover landmark (`$238: symbol($233)`) is **critical** for enabling full-screen cover display. Without this landmark, KPV does not recognize the cover section as special and renders it with standard margins/borders instead of scaling to fill the screen. The landmark must point to the cover section's page template EID.
+**Important**: The cover landmark (`$238: symbol($233)`) is **critical** for enabling full-screen cover display. Without this landmark, KP3 does not recognize the cover section as special and renders it with standard margins/borders instead of scaling to fill the screen. The landmark must point to the cover section's page template EID.
 
 Example landmarks container:
 ```
@@ -1245,7 +1245,7 @@ Example landmarks container:
 }
 ```
 
-Derived from: `convert/kfx/frag_storyline.go:buildLandmarksContainer`, `convert/kfx/values.go:NewLandmarkEntry`, KPV reference files.
+Derived from: `convert/kfx/frag_storyline.go:buildLandmarksContainer`, `convert/kfx/values.go:NewLandmarkEntry`, KP3 reference files.
 
 Page list (`nav_type == $237`):
 
@@ -1645,13 +1645,13 @@ Derived from: Reference KFX files, `convert/kfx/frag_contentfeatures.go`.
 
 ---
 
-### 7.10 Length units and KPV conventions
+### 7.10 Length units and KP3 conventions
 
 KFX uses a dimension struct `{ $307: magnitude, $306: unit }` for all length values in style properties.
 
-**CRITICAL - Ion Type for $307**: The `$307` (value/magnitude) field **MUST** be encoded as **Ion DecimalType**, not Ion Float or Ion String. Kindle Previewer (KPV) will crash or render incorrectly if `$307` is encoded as any other Ion type. When scanning reference KFX files, all numeric dimension values appear exclusively as Ion Decimal (zero Ion Floats).
+**CRITICAL - Ion Type for $307**: The `$307` (value/magnitude) field **MUST** be encoded as **Ion DecimalType**, not Ion Float or Ion String. Kindle Previewer (KP3) will crash or render incorrectly if `$307` is encoded as any other Ion type. When scanning reference KFX files, all numeric dimension values appear exclusively as Ion Decimal (zero Ion Floats).
 
-Implementation note: Use `ion.MustParseDecimal()` or equivalent to create proper Ion Decimal values. The decimal representation should follow KPV conventions (e.g., `"2.5d-1"` for 0.25, `"1."` for 1.0).
+Implementation note: Use `ion.MustParseDecimal()` or equivalent to create proper Ion Decimal values. The decimal representation should follow KP3 conventions (e.g., `"2.5d-1"` for 0.25, `"1."` for 1.0).
 
 **CRITICAL - Decimal Precision Requirement**: KP3 requires decimal values in `$307` to have **at most 3 significant decimal digits**. Amazon's KFX processing code uses `setScale(3, RoundingMode.HALF_UP)` for dimension calculations (found in `com/amazon/yj/F/a/b.java` and other style processing classes). Values with excessive precision (e.g., from float64 division like `1/1.2 = 0.8333333333333334`) cause **rendering failures** where images may not display and styles may not apply correctly.
 
@@ -1668,7 +1668,7 @@ Broken (excessive precision):
 
 This affects all dimension values (`$307`) including image widths, margins, font sizes, and any other style properties using decimal magnitudes.
 
-Derived from: Reference KFX analysis, `convert/kfx/frag_style.go:DimensionValue`, `formatKPVNumber`.
+Derived from: Reference KFX analysis, `convert/kfx/frag_style.go:DimensionValue`, `formatKP3Number`.
 
 #### 7.10.1 Unit symbols
 
@@ -1681,11 +1681,11 @@ Derived from: Reference KFX analysis, `convert/kfx/frag_style.go:DimensionValue`
 | `$309` (`SymUnitPx`) | `px` | Pixels |
 | `$311` (`SymUnitPt`) | `pt` | Points |
 
-#### 7.10.2 KPV unit conventions (reverse-engineered)
+#### 7.10.2 KP3 unit conventions (reverse-engineered)
 
-**CRITICAL**: Kindle Previewer (KPV) uses specific unit types for different CSS properties. Using incorrect units can cause rendering issues (e.g., `text-align: center` not working with percentage font-sizes).
+**CRITICAL**: Kindle Previewer (KP3) uses specific unit types for different CSS properties. Using incorrect units can cause rendering issues (e.g., `text-align: center` not working with percentage font-sizes).
 
-| CSS Property | KPV Unit | Notes |
+| CSS Property | KP3 Unit | Notes |
 |--------------|----------|-------|
 | `font-size` | `rem` | **NOT `%`**. Using `%` breaks text-align rendering |
 | `margin-top` | `lh` | Line-height units for vertical spacing |
@@ -1697,7 +1697,7 @@ Derived from: Reference KFX analysis, `convert/kfx/frag_style.go:DimensionValue`
 
 #### 7.10.3 Unit conversion ratios
 
-When converting from CSS `em` units to KPV-preferred units:
+When converting from CSS `em` units to KP3-preferred units:
 
 | Conversion | Ratio | Example |
 |------------|-------|---------|
@@ -1709,7 +1709,7 @@ When converting from CSS `em` units to KPV-preferred units:
 
 #### 7.10.4 Zero value omission
 
-KPV does NOT include style properties with zero values. For example, `margin-left: 0` is omitted entirely from the style definition rather than being encoded as `{ $48: { $307: 0, $306: "$314" } }`.
+KP3 does NOT include style properties with zero values. For example, `margin-left: 0` is omitted entirely from the style definition rather than being encoded as `{ $48: { $307: 0, $306: "$314" } }`.
 
 Derived from: Reference KFX comparison, `convert/kfx/css_converter.go:setDimensionProperty`.
 
@@ -1768,9 +1768,9 @@ This applies to:
 
 Derived from: Reference KFX analysis, `convert/kfx/css_values.go:MakeColorValue`.
 
-#### 7.10.8 Orphans/widows NOT used by KPV
+#### 7.10.8 Orphans/widows NOT used by KP3
 
-**CRITICAL**: KPV-generated KFX files do NOT include orphans (`$131`) or widows (`$132`) properties, despite these symbols existing in the KFX symbol table.
+**CRITICAL**: KP3-generated KFX files do NOT include orphans (`$131`) or widows (`$132`) properties, despite these symbols existing in the KFX symbol table.
 
 The CSS `page-break-inside: avoid` maps to:
 - `$135` (break_inside): `$353` (avoid)
@@ -1803,7 +1803,7 @@ For `float` property (currently unused in reference KFX files, but supported):
 | `right` | `$61` | `SymRight` |
 | `none` | `$349` | `SymNone` |
 
-Reference KFX files from KPV consistently use `$59`/`$61` for left/right alignment, not the logical `$680`/`$681` symbols. Using `$680`/`$681` for text-align may cause rendering inconsistencies.
+Reference KFX files from KP3 consistently use `$59`/`$61` for left/right alignment, not the logical `$680`/`$681` symbols. Using `$680`/`$681` for text-align may cause rendering inconsistencies.
 
 Derived from: Reference KFX comparison, `convert/kfx/css_values.go:ConvertTextAlign`, `convert/kfx/css_values.go:ConvertFloat`.
 

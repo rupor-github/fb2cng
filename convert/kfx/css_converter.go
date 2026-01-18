@@ -262,12 +262,12 @@ func (c *Converter) convertProperty(name string, value CSSValue, props map[KFXSy
 		c.mergeProp(props, SymFontFamily, value.Raw)
 
 	case "font-size":
-		// KPV converts percentage font-sizes to rem (140% -> 1.4rem)
+		// KP3 converts percentage font-sizes to rem (140% -> 1.4rem)
 		// This is important for title rendering - percent units cause alignment issues
 		if value.IsNumeric() {
 			if value.Unit == "%" {
 				// Convert percentage to rem: 140% -> 1.4rem
-				remValue := value.Value / KPVPercentToRem
+				remValue := value.Value / PercentToRem
 				c.mergeProp(props, kfxSym, DimensionValue(remValue, SymUnitRem))
 			} else {
 				dim, err := MakeDimensionValue(value)
@@ -280,7 +280,7 @@ func (c *Converter) convertProperty(name string, value CSSValue, props map[KFXSy
 		}
 
 	case "text-indent":
-		// KPV uses % for text-indent. Convert em → % using KPVEmToPercentTextIndent ratio.
+		// KP3 uses % for text-indent. Convert em → % using EmToPercentTextIndent ratio.
 		// Ignore zero values.
 		if value.IsNumeric() && value.Value != 0 {
 			if value.Unit == "" || value.Unit == "%" {
@@ -288,7 +288,7 @@ func (c *Converter) convertProperty(name string, value CSSValue, props map[KFXSy
 				return
 			}
 			if value.Unit == "em" {
-				c.mergeProp(props, kfxSym, DimensionValue(value.Value*KPVEmToPercentTextIndent, SymUnitPercent))
+				c.mergeProp(props, kfxSym, DimensionValue(value.Value*EmToPercentTextIndent, SymUnitPercent))
 				return
 			}
 			dim, err := MakeDimensionValue(value)
@@ -300,7 +300,7 @@ func (c *Converter) convertProperty(name string, value CSSValue, props map[KFXSy
 		}
 
 	case "line-height":
-		// KPV uses lh units for line-height. Convert em → lh using KPVLineHeightRatio.
+		// KP3 uses lh units for line-height. Convert em → lh using LineHeightRatio.
 		if value.IsNumeric() {
 			if value.Unit == "" || value.Unit == "lh" {
 				// Unitless or already lh - use lh unit
@@ -309,7 +309,7 @@ func (c *Converter) convertProperty(name string, value CSSValue, props map[KFXSy
 			}
 			if value.Unit == "em" {
 				// Convert em to lh
-				c.mergeProp(props, kfxSym, DimensionValue(value.Value/KPVLineHeightRatio, SymUnitLh))
+				c.mergeProp(props, kfxSym, DimensionValue(value.Value/LineHeightRatio, SymUnitLh))
 				return
 			}
 			dim, err := MakeDimensionValue(value)
@@ -322,7 +322,7 @@ func (c *Converter) convertProperty(name string, value CSSValue, props map[KFXSy
 
 	case "margin-top", "margin-bottom", "margin-left", "margin-right",
 		"padding-top", "padding-bottom", "padding-left", "padding-right":
-		// Route through setDimensionProperty for proper KPV unit conversion
+		// Route through setDimensionProperty for proper KP3 unit conversion
 		c.setDimensionProperty(kfxSym, value, props, warnings)
 
 	default:
@@ -505,7 +505,7 @@ func (c *Converter) parseShorthandValue(s string) CSSValue {
 }
 
 // setDimensionProperty sets a dimension property from a CSS value.
-// KPV uses specific units for different properties (see kpv_units.go):
+// KP3 uses specific units for different properties (see kpv_units.go):
 //   - Vertical spacing (margin-top/bottom, padding-top/bottom): lh
 //   - Horizontal spacing (margin-left/right, padding-left/right): %
 //   - font-size: rem
@@ -523,20 +523,20 @@ func (c *Converter) setDimensionProperty(sym KFXSymbol, value CSSValue, props ma
 		return
 	}
 
-	// Skip zero values - KPV doesn't include them
+	// Skip zero values - KP3 doesn't include them
 	if value.Value == 0 {
 		return
 	}
 
-	// Convert em to KPV-preferred units based on property type
+	// Convert em to KP3-preferred units based on property type
 	convertedValue := value.Value
 	var convertedUnit KFXSymbol
 
 	switch {
 	case isVerticalSpacingProperty(sym):
-		// Vertical spacing: em -> lh using KPVLineHeightRatio
+		// Vertical spacing: em -> lh using LineHeightRatio
 		if value.Unit == "em" {
-			convertedValue = value.Value / KPVLineHeightRatio
+			convertedValue = value.Value / LineHeightRatio
 			convertedUnit = SymUnitLh
 		} else {
 			var err error
@@ -548,9 +548,9 @@ func (c *Converter) setDimensionProperty(sym KFXSymbol, value CSSValue, props ma
 		}
 
 	case isHorizontalSpacingProperty(sym):
-		// Horizontal spacing: em -> % using KPVEmToPercentHorizontal
+		// Horizontal spacing: em -> % using EmToPercentHorizontal
 		if value.Unit == "em" {
-			convertedValue = value.Value * KPVEmToPercentHorizontal
+			convertedValue = value.Value * EmToPercentHorizontal
 			convertedUnit = SymUnitPercent
 		} else {
 			var err error
@@ -565,7 +565,7 @@ func (c *Converter) setDimensionProperty(sym KFXSymbol, value CSSValue, props ma
 		// Font-size: % -> rem, em -> rem
 		switch value.Unit {
 		case "%":
-			convertedValue = value.Value / KPVPercentToRem
+			convertedValue = value.Value / PercentToRem
 			fallthrough
 		case "em":
 			convertedUnit = SymUnitRem
@@ -653,7 +653,7 @@ func (c *Converter) convertSpecialProperty(name string, value CSSValue, props ma
 		}
 
 	case "display":
-		// NOTE: KPV doesn't convert display to render - disabled for now
+		// NOTE: KP3 doesn't convert display to render - disabled for now
 		// sym, visible, ok := ConvertDisplay(value)
 		// if ok {
 		// 	if !visible {

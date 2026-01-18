@@ -13,7 +13,7 @@ import (
 // Styles define formatting properties applied to content elements.
 // Each style is referenced by name (symbol) in content entries.
 //
-// KPV-compatible approach: Generate unique styles for each unique property combination.
+// KP3-compatible approach: Generate unique styles for each unique property combination.
 // Style names are short auto-generated identifiers like "s1", "s2", etc.
 // This matches how Kindle Previewer generates styles from EPUB.
 
@@ -160,30 +160,23 @@ const (
 	styleUsageWrapper
 )
 
-// DimensionValue creates a KPV-compatible dimension value with unit.
+// DimensionValue creates a KP3-compatible dimension value with unit.
 // Example: DimensionValue(1.2, SymUnitRatio) -> {$307: "1.2", $306: $310}
 func DimensionValue(value float64, unit KFXSymbol) StructValue {
-	// KPV uses Ion decimals (not strings) for $307.
-	dec := ion.MustParseDecimal(formatKPVNumber(value))
+	// KP3 uses Ion decimals (not strings) for $307.
+	dec := ion.MustParseDecimal(formatNumber(value))
 	return NewStruct().
 		Set(SymValue, dec). // $307 = Ion decimal
 		SetSymbol(SymUnit, unit)
 }
 
-// DimensionValueKPV creates a KPV-compatible dimension value.
-// Uses string representation for the value to match KPV output format.
-// KPV uses formats like "3.125" for percent and "2.5d-1" for 0.25lh.
-func DimensionValueKPV(value float64, unit KFXSymbol) StructValue {
-	return DimensionValue(value, unit)
-}
-
-// formatKPVNumber formats a number in KPV's style.
-// KPV uses scientific notation "d-1" for small decimals.
+// formatNumber formats a number in KP3's style.
+// KP3 uses scientific notation "d-1" for small decimals.
 // KP3 uses at most 3 significant decimal digits - more precision causes rendering issues.
-// See KPVDecimalPrecision in kpv_units.go for details.
-func formatKPVNumber(v float64) string {
-	// Round to KPVDecimalPrecision decimal places to match KP3 precision
-	v = RoundKPVDecimal(v)
+// See DecimalPrecision in kpv_units.go for details.
+func formatNumber(v float64) string {
+	// Round to DecimalPrecision decimal places to match KP3 precision
+	v = RoundDecimal(v)
 
 	if v == 0 {
 		return "0."
@@ -192,12 +185,12 @@ func formatKPVNumber(v float64) string {
 		return "1."
 	}
 
-	// KPV generally emits integers with a trailing dot (e.g. "100.").
+	// KP3 generally emits integers with a trailing dot (e.g. "100.").
 	if v == float64(int64(v)) {
 		return fmt.Sprintf("%d.", int64(v))
 	}
 
-	// KPV typically uses "d" scientific notation for values < 1 (e.g. 0.25 -> "2.5d-1").
+	// KP3 typically uses "d" scientific notation for values < 1 (e.g. 0.25 -> "2.5d-1").
 	av := v
 	if av < 0 {
 		av = -av
@@ -432,19 +425,19 @@ func (sb *StyleBuilder) KeepTogether() *StyleBuilder {
 	return sb
 }
 
-// BreakInsideAvoid sets break-inside to avoid (KPV style).
+// BreakInsideAvoid sets break-inside to avoid (KP3 style).
 func (sb *StyleBuilder) BreakInsideAvoid() *StyleBuilder {
 	sb.props[SymBreakInside] = SymbolValue(SymAvoid)
 	return sb
 }
 
-// YjBreakBefore sets yj-break-before property for KPV compatibility.
+// YjBreakBefore sets yj-break-before property for KP3 compatibility.
 func (sb *StyleBuilder) YjBreakBefore(mode KFXSymbol) *StyleBuilder {
 	sb.props[SymYjBreakBefore] = SymbolValue(mode)
 	return sb
 }
 
-// YjBreakAfter sets yj-break-after property for KPV compatibility.
+// YjBreakAfter sets yj-break-after property for KP3 compatibility.
 func (sb *StyleBuilder) YjBreakAfter(mode KFXSymbol) *StyleBuilder {
 	sb.props[SymYjBreakAfter] = SymbolValue(mode)
 	return sb
@@ -481,7 +474,7 @@ func (sb *StyleBuilder) MarginRightPercent(value float64) *StyleBuilder {
 	return sb
 }
 
-// LayoutHintTitle sets layout-hints to [treat_as_title] for KPV compatibility.
+// LayoutHintTitle sets layout-hints to [treat_as_title] for KP3 compatibility.
 // This is critical for proper title rendering on Kindle devices.
 func (sb *StyleBuilder) LayoutHintTitle() *StyleBuilder {
 	sb.props[SymLayoutHints] = []any{SymbolValue(SymTreatAsTitle)}
