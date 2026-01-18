@@ -1,7 +1,9 @@
 package kfx
 
 import (
+	"fmt"
 	"maps"
+	"reflect"
 	"strings"
 
 	"go.uber.org/zap"
@@ -31,6 +33,84 @@ type ConversionResult struct {
 	Warnings []string
 }
 
+var zeroSizeProps = map[string]bool{
+	"width":      true,
+	"height":     true,
+	"min-width":  true,
+	"max-width":  true,
+	"min-height": true,
+	"max-height": true,
+}
+
+func normalizeCSSProperties(props map[string]CSSValue, tracer *StyleTracer, context string) map[string]CSSValue {
+	if len(props) == 0 {
+		return props
+	}
+
+	normalized := make(map[string]CSSValue, len(props))
+	changed := false
+
+	for name, val := range props {
+		if shouldDropZeroSize(name, val) || isEmptyCSSValue(val) {
+			changed = true
+			continue
+		}
+		normalized[name] = val
+	}
+
+	if tracer != nil && tracer.IsEnabled() && changed && context != "" {
+		tracer.TraceNormalize(context, cssValuesToStrings(props), cssValuesToStrings(normalized))
+	}
+
+	return normalized
+}
+
+func shouldDropZeroSize(name string, val CSSValue) bool {
+	if !zeroSizeProps[name] {
+		return false
+	}
+	if !val.IsNumeric() {
+		return false
+	}
+	if val.Value == 0 && val.Keyword == "" {
+		return true
+	}
+	if val.Raw != "" {
+		raw := strings.TrimSpace(val.Raw)
+		if raw == "0" || raw == "0px" || raw == "0%" || raw == "0em" || raw == "0rem" {
+			return true
+		}
+	}
+	return false
+}
+
+func isEmptyCSSValue(val CSSValue) bool {
+	return val.Raw == "" && val.Keyword == "" && val.Value == 0 && val.Unit == ""
+}
+
+func cssValuesToStrings(src map[string]CSSValue) map[string]string {
+	out := make(map[string]string, len(src))
+	for k, v := range src {
+		if s := formatCSSValue(v); s != "" {
+			out[k] = s
+		}
+	}
+	return out
+}
+
+func formatCSSValue(val CSSValue) string {
+	switch {
+	case val.Raw != "":
+		return val.Raw
+	case val.Keyword != "":
+		return val.Keyword
+	case val.Value != 0 || val.Unit != "":
+		return fmt.Sprintf("%g%s", val.Value, val.Unit)
+	default:
+		return ""
+	}
+}
+
 // ConvertRule converts a single CSS rule to a KFX StyleDef.
 func (c *Converter) ConvertRule(rule CSSRule) ConversionResult {
 	result := ConversionResult{
@@ -41,25 +121,40 @@ func (c *Converter) ConvertRule(rule CSSRule) ConversionResult {
 		Warnings: make([]string, 0),
 	}
 
-	// Process each CSS property
-	for propName, propValue := range rule.Properties {
-		c.convertProperty(propName, propValue, &result)
+	props := normalizeCSSProperties(rule.Properties, c.tracer, rule.Selector.Raw)
+
+	for propName, propValue := range props {
+		before := snapshotProps(result.Style.Properties)
+		c.convertProperty(propName, propValue, result.Style.Properties, &result.Warnings)
+		if c.tracer != nil && c.tracer.IsEnabled() {
+			emitted := diffProps(before, result.Style.Properties)
+			if len(emitted) > 0 {
+				c.tracer.TraceMap(propName, "", emitted)
+			}
+		}
+	}
+
+	if rule.Selector.Ancestor != nil && result.Style.Parent == "" {
+		descendantName := rule.Selector.descendantBaseName()
+		if descendantName != "" && descendantName != result.Style.Name {
+			result.Style.Parent = descendantName
+		}
 	}
 
 	return result
 }
 
 // convertProperty converts a single CSS property to KFX properties.
-func (c *Converter) convertProperty(name string, value CSSValue, result *ConversionResult) {
+func (c *Converter) convertProperty(name string, value CSSValue, props map[KFXSymbol]any, warnings *[]string) {
 	// Handle shorthand properties first
 	if IsShorthandProperty(name) {
-		c.expandShorthand(name, value, result)
+		c.expandShorthand(name, value, props, warnings)
 		return
 	}
 
 	// Handle special properties
 	if IsSpecialProperty(name) {
-		c.convertSpecialProperty(name, value, result)
+		c.convertSpecialProperty(name, value, props, warnings)
 		return
 	}
 
@@ -75,34 +170,96 @@ func (c *Converter) convertProperty(name string, value CSSValue, result *Convers
 	switch name {
 	case "font-weight":
 		if sym, ok := ConvertFontWeight(value); ok {
-			result.Style.Properties[SymFontWeight] = sym
+			c.mergeProp(props, SymFontWeight, sym)
 		}
 
 	case "font-style":
 		if sym, ok := ConvertFontStyle(value); ok {
-			result.Style.Properties[SymFontStyle] = sym
+			c.mergeProp(props, SymFontStyle, sym)
 		}
 
 	case "text-align":
 		if sym, ok := ConvertTextAlign(value); ok {
-			result.Style.Properties[SymTextAlignment] = sym
+			c.mergeProp(props, SymTextAlignment, sym)
+		}
+
+	case "writing-mode", "-webkit-writing-mode":
+		if sym, ok := ConvertWritingMode(value); ok {
+			c.mergeProp(props, SymWritingMode, sym)
+		}
+
+	case "text-orientation":
+		if sym, ok := ConvertTextOrientation(value); ok {
+			c.mergeProp(props, SymTextOrientation, sym)
+		}
+
+	case "text-combine-upright", "text-combine":
+		if sym, ok := ConvertTextCombine(value); ok {
+			c.mergeProp(props, SymTextCombine, sym)
+		}
+
+	case "text-emphasis-style", "-webkit-text-emphasis-style":
+		if sym, ok := ConvertTextEmphasisStyle(value); ok {
+			c.mergeProp(props, SymTextEmphasisStyle, sym)
+		}
+
+	case "text-emphasis-color", "-webkit-text-emphasis-color":
+		if r, g, b, ok := ParseColor(value); ok {
+			c.mergeProp(props, SymTextEmphasisColor, MakeColorValue(r, g, b))
+		} else {
+			*warnings = append(*warnings, "unable to parse text-emphasis-color: "+value.Raw)
 		}
 
 	case "float":
 		if sym, ok := ConvertFloat(value); ok {
-			result.Style.Properties[SymFloat] = sym
+			c.mergeProp(props, SymFloat, sym)
 		}
+
+	case "clear":
+		if sym, ok := ConvertClear(value); ok {
+			c.mergeProp(props, SymFloatClear, sym)
+		}
+
+	case "yj-break-before", "yj-break-after":
+		// KFX-specific break properties from stylemap
+		if sym, ok := convertYjBreak(value); ok {
+			c.mergeProp(props, kfxSym, sym)
+		}
+
+	case "underline", "overline", "strikethrough":
+		// Text decoration boolean properties from stylemap.
+		// These come from stylemap entries that set them directly.
+		// The value is typically "true" or the property name itself.
+		if !strings.EqualFold(value.Keyword, "none") && !strings.EqualFold(value.Raw, "none") {
+			c.mergeProp(props, kfxSym, true)
+		}
+
+	case "baseline-style":
+		// Baseline style from vertical-align mapping in stylemap.
+		// Values: center, top, bottom
+		if sym, ok := ConvertBaselineStyle(value); ok {
+			c.mergeProp(props, kfxSym, sym)
+		}
+
+	case "table-border-collapse":
+		// Table border collapse: true/false
+		val := strings.ToLower(firstNonEmpty(value.Keyword, value.Raw))
+		c.mergeProp(props, kfxSym, strings.EqualFold(val, "true") || strings.EqualFold(val, "collapse"))
+
+	case "border-spacing-vertical", "border-spacing-horizontal":
+		// Table border spacing dimensions
+		c.setDimensionProperty(kfxSym, value, props, warnings)
 
 	case "color":
 		if r, g, b, ok := ParseColor(value); ok {
-			result.Style.Properties[SymTextColor] = MakeColorValue(r, g, b)
+			c.mergeProp(props, SymTextColor, MakeColorValue(r, g, b))
 		} else {
-			result.Warnings = append(result.Warnings, "unable to parse color: "+value.Raw)
+			*warnings = append(*warnings, "unable to parse color: "+value.Raw)
 		}
 
 	case "font-family":
 		// Font family is stored as string, actual font resolution is separate
-		result.Style.Properties[SymFontFamily] = value.Raw
+		c.mergeProp(props, SymFontFamily, value.Raw)
 
 	case "font-size":
 		// KPV converts percentage font-sizes to rem (140% -> 1.4rem)
@@ -111,14 +268,14 @@ func (c *Converter) convertProperty(name string, value CSSValue, result *Convers
 			if value.Unit == "%" {
 				// Convert percentage to rem: 140% -> 1.4rem
 				remValue := value.Value / KPVPercentToRem
-				result.Style.Properties[kfxSym] = DimensionValue(remValue, SymUnitRem)
+				c.mergeProp(props, kfxSym, DimensionValue(remValue, SymUnitRem))
 			} else {
 				dim, err := MakeDimensionValue(value)
 				if err != nil {
-					result.Warnings = append(result.Warnings, "unable to convert "+name+": "+err.Error())
+					*warnings = append(*warnings, "unable to convert "+name+": "+err.Error())
 					return
 				}
-				result.Style.Properties[kfxSym] = dim
+				c.mergeProp(props, kfxSym, dim)
 			}
 		}
 
@@ -127,19 +284,19 @@ func (c *Converter) convertProperty(name string, value CSSValue, result *Convers
 		// Ignore zero values.
 		if value.IsNumeric() && value.Value != 0 {
 			if value.Unit == "" || value.Unit == "%" {
-				result.Style.Properties[kfxSym] = DimensionValue(value.Value, SymUnitPercent)
+				c.mergeProp(props, kfxSym, DimensionValue(value.Value, SymUnitPercent))
 				return
 			}
 			if value.Unit == "em" {
-				result.Style.Properties[kfxSym] = DimensionValue(value.Value*KPVEmToPercentTextIndent, SymUnitPercent)
+				c.mergeProp(props, kfxSym, DimensionValue(value.Value*KPVEmToPercentTextIndent, SymUnitPercent))
 				return
 			}
 			dim, err := MakeDimensionValue(value)
 			if err != nil {
-				result.Warnings = append(result.Warnings, "unable to convert "+name+": "+err.Error())
+				*warnings = append(*warnings, "unable to convert "+name+": "+err.Error())
 				return
 			}
-			result.Style.Properties[kfxSym] = dim
+			c.mergeProp(props, kfxSym, dim)
 		}
 
 	case "line-height":
@@ -147,41 +304,41 @@ func (c *Converter) convertProperty(name string, value CSSValue, result *Convers
 		if value.IsNumeric() {
 			if value.Unit == "" || value.Unit == "lh" {
 				// Unitless or already lh - use lh unit
-				result.Style.Properties[kfxSym] = DimensionValue(value.Value, SymUnitLh)
+				c.mergeProp(props, kfxSym, DimensionValue(value.Value, SymUnitLh))
 				return
 			}
 			if value.Unit == "em" {
 				// Convert em to lh
-				result.Style.Properties[kfxSym] = DimensionValue(value.Value/KPVLineHeightRatio, SymUnitLh)
+				c.mergeProp(props, kfxSym, DimensionValue(value.Value/KPVLineHeightRatio, SymUnitLh))
 				return
 			}
 			dim, err := MakeDimensionValue(value)
 			if err != nil {
-				result.Warnings = append(result.Warnings, "unable to convert "+name+": "+err.Error())
+				*warnings = append(*warnings, "unable to convert "+name+": "+err.Error())
 				return
 			}
-			result.Style.Properties[kfxSym] = dim
+			c.mergeProp(props, kfxSym, dim)
 		}
 
 	case "margin-top", "margin-bottom", "margin-left", "margin-right",
 		"padding-top", "padding-bottom", "padding-left", "padding-right":
 		// Route through setDimensionProperty for proper KPV unit conversion
-		c.setDimensionProperty(kfxSym, value, result)
+		c.setDimensionProperty(kfxSym, value, props, warnings)
 
 	default:
 		// Dimension properties (font-size, margins, line-height, etc.)
 		if value.IsNumeric() || value.Unit != "" || (value.Value != 0) {
 			dim, err := MakeDimensionValue(value)
 			if err != nil {
-				result.Warnings = append(result.Warnings, "unable to convert "+name+": "+err.Error())
+				*warnings = append(*warnings, "unable to convert "+name+": "+err.Error())
 				return
 			}
-			result.Style.Properties[kfxSym] = dim
+			c.mergeProp(props, kfxSym, dim)
 		} else if value.IsKeyword() {
 			// Some dimension properties accept keywords like "auto"
 			switch strings.ToLower(value.Keyword) {
 			case "auto":
-				result.Style.Properties[kfxSym] = SymAuto
+				c.mergeProp(props, kfxSym, SymAuto)
 			case "inherit":
 				// Skip inherit - KFX handles inheritance differently
 			default:
@@ -193,19 +350,39 @@ func (c *Converter) convertProperty(name string, value CSSValue, result *Convers
 	}
 }
 
+func (c *Converter) mergeProp(props map[KFXSymbol]any, sym KFXSymbol, val any) {
+	mergePropertyWithRules(props, sym, val, mergeContextInline, c.tracer)
+}
+
+func snapshotProps(src map[KFXSymbol]any) map[KFXSymbol]any {
+	out := make(map[KFXSymbol]any, len(src))
+	maps.Copy(out, src)
+	return out
+}
+
+func diffProps(before, after map[KFXSymbol]any) map[KFXSymbol]any {
+	out := make(map[KFXSymbol]any)
+	for k, v := range after {
+		if ov, ok := before[k]; !ok || !reflect.DeepEqual(ov, v) {
+			out[k] = v
+		}
+	}
+	return out
+}
+
 // expandShorthand expands CSS shorthand properties into individual properties.
-func (c *Converter) expandShorthand(name string, value CSSValue, result *ConversionResult) {
+func (c *Converter) expandShorthand(name string, value CSSValue, props map[KFXSymbol]any, warnings *[]string) {
 	switch name {
 	case "margin":
-		c.expandBoxShorthand(value, result,
+		c.expandBoxShorthand(value, props, warnings,
 			SymMarginTop, SymMarginRight, SymMarginBottom, SymMarginLeft)
 
 	case "padding":
-		c.expandBoxShorthand(value, result,
+		c.expandBoxShorthand(value, props, warnings,
 			SymPaddingTop, SymPaddingRight, SymPaddingBottom, SymPaddingLeft)
 
 	case "border":
-		c.expandBorderShorthand(value, result)
+		c.expandBorderShorthand(value, props, warnings)
 	}
 }
 
@@ -215,7 +392,7 @@ func (c *Converter) expandShorthand(name string, value CSSValue, result *Convers
 //   - 2 values: top/bottom, left/right
 //   - 3 values: top, left/right, bottom
 //   - 4 values: top, right, bottom, left
-func (c *Converter) expandBoxShorthand(value CSSValue, result *ConversionResult,
+func (c *Converter) expandBoxShorthand(value CSSValue, props map[KFXSymbol]any, warnings *[]string,
 	symTop, symRight, symBottom, symLeft KFXSymbol,
 ) {
 	raw := strings.TrimSpace(value.Raw)
@@ -246,21 +423,21 @@ func (c *Converter) expandBoxShorthand(value CSSValue, result *ConversionResult,
 	case 4:
 		top, right, bottom, left = parsedValues[0], parsedValues[1], parsedValues[2], parsedValues[3]
 	default:
-		result.Warnings = append(result.Warnings, "invalid shorthand value: "+raw)
+		*warnings = append(*warnings, "invalid shorthand value: "+raw)
 		return
 	}
 
 	// Convert and set each value
-	c.setDimensionProperty(symTop, top, result)
-	c.setDimensionProperty(symRight, right, result)
-	c.setDimensionProperty(symBottom, bottom, result)
-	c.setDimensionProperty(symLeft, left, result)
+	c.setDimensionProperty(symTop, top, props, warnings)
+	c.setDimensionProperty(symRight, right, props, warnings)
+	c.setDimensionProperty(symBottom, bottom, props, warnings)
+	c.setDimensionProperty(symLeft, left, props, warnings)
 }
 
 // expandBorderShorthand expands CSS border shorthand to individual properties.
 // CSS border format: [width] [style] [color]
 // Example: "1px solid black" -> border-width: 1px, border-style: solid, border-color: black
-func (c *Converter) expandBorderShorthand(value CSSValue, result *ConversionResult) {
+func (c *Converter) expandBorderShorthand(value CSSValue, props map[KFXSymbol]any, _ *[]string) {
 	raw := strings.TrimSpace(value.Raw)
 	for part := range strings.FieldsSeq(raw) {
 		part = strings.ToLower(part)
@@ -269,14 +446,14 @@ func (c *Converter) expandBorderShorthand(value CSSValue, result *ConversionResu
 		switch part {
 		case "solid", "dashed", "dotted", "double", "groove", "ridge", "inset", "outset", "none", "hidden":
 			if sym, ok := ConvertBorderStyle(part); ok {
-				result.Style.Properties[SymBorderStyle] = sym
+				c.mergeProp(props, SymBorderStyle, sym)
 			}
 			continue
 		}
 
 		// Check for color (named color or hex)
 		if r, g, b, ok := ParseColor(CSSValue{Raw: part, Keyword: part}); ok {
-			result.Style.Properties[SymBorderColor] = MakeColorValue(r, g, b)
+			c.mergeProp(props, SymBorderColor, MakeColorValue(r, g, b))
 			continue
 		}
 
@@ -285,7 +462,7 @@ func (c *Converter) expandBorderShorthand(value CSSValue, result *ConversionResu
 		if parsed.Value != 0 || parsed.Unit != "" {
 			dim, err := MakeDimensionValue(parsed)
 			if err == nil {
-				result.Style.Properties[SymBorderWeight] = dim
+				c.mergeProp(props, SymBorderWeight, dim)
 			}
 		}
 	}
@@ -334,12 +511,12 @@ func (c *Converter) parseShorthandValue(s string) CSSValue {
 //   - font-size: rem
 //   - text-indent: %
 //   - line-height: lh
-func (c *Converter) setDimensionProperty(sym KFXSymbol, value CSSValue, result *ConversionResult) {
+func (c *Converter) setDimensionProperty(sym KFXSymbol, value CSSValue, props map[KFXSymbol]any, warnings *[]string) {
 	// Handle keywords
 	if value.IsKeyword() {
 		switch strings.ToLower(value.Keyword) {
 		case "auto":
-			result.Style.Properties[sym] = SymAuto
+			c.mergeProp(props, sym, SymAuto)
 		case "0", "inherit", "initial":
 			// Skip or use default
 		}
@@ -365,7 +542,7 @@ func (c *Converter) setDimensionProperty(sym KFXSymbol, value CSSValue, result *
 			var err error
 			_, convertedUnit, err = CSSValueToKFX(value)
 			if err != nil {
-				result.Warnings = append(result.Warnings, "unable to convert vertical spacing: "+err.Error())
+				*warnings = append(*warnings, "unable to convert vertical spacing: "+err.Error())
 				return
 			}
 		}
@@ -379,7 +556,7 @@ func (c *Converter) setDimensionProperty(sym KFXSymbol, value CSSValue, result *
 			var err error
 			_, convertedUnit, err = CSSValueToKFX(value)
 			if err != nil {
-				result.Warnings = append(result.Warnings, "unable to convert horizontal spacing: "+err.Error())
+				*warnings = append(*warnings, "unable to convert horizontal spacing: "+err.Error())
 				return
 			}
 		}
@@ -396,7 +573,7 @@ func (c *Converter) setDimensionProperty(sym KFXSymbol, value CSSValue, result *
 			var err error
 			_, convertedUnit, err = CSSValueToKFX(value)
 			if err != nil {
-				result.Warnings = append(result.Warnings, "unable to convert font-size: "+err.Error())
+				*warnings = append(*warnings, "unable to convert font-size: "+err.Error())
 				return
 			}
 		}
@@ -406,24 +583,55 @@ func (c *Converter) setDimensionProperty(sym KFXSymbol, value CSSValue, result *
 		var err error
 		_, convertedUnit, err = CSSValueToKFX(value)
 		if err != nil {
-			result.Warnings = append(result.Warnings, "unable to convert dimension: "+err.Error())
+			*warnings = append(*warnings, "unable to convert dimension: "+err.Error())
 			return
 		}
 	}
 
-	result.Style.Properties[sym] = DimensionValue(convertedValue, convertedUnit)
+	c.mergeProp(props, sym, DimensionValue(convertedValue, convertedUnit))
+}
+
+func normalizeBreakValue(val CSSValue) CSSValue {
+	switch strings.ToLower(val.Keyword) {
+	case "page":
+		val.Keyword = "always"
+	case "avoid-page":
+		val.Keyword = "avoid"
+	}
+	return val
+}
+
+func (c *Converter) applyBreakBefore(value CSSValue, props map[KFXSymbol]any) {
+	value = normalizeBreakValue(value)
+	if sym, ok := ConvertPageBreak(value); ok && sym == SymAvoid {
+		c.mergeProp(props, SymKeepFirst, sym)
+	}
+}
+
+func (c *Converter) applyBreakAfter(value CSSValue, props map[KFXSymbol]any) {
+	value = normalizeBreakValue(value)
+	if sym, ok := ConvertPageBreak(value); ok && sym == SymAvoid {
+		c.mergeProp(props, SymKeepLast, sym)
+	}
+}
+
+func (c *Converter) applyBreakInside(value CSSValue, props map[KFXSymbol]any) {
+	value = normalizeBreakValue(value)
+	if sym, ok := ConvertPageBreak(value); ok && sym == SymAvoid {
+		c.mergeProp(props, SymBreakInside, SymbolValue(SymAvoid))
+	}
 }
 
 // convertSpecialProperty handles properties that need custom conversion logic.
-func (c *Converter) convertSpecialProperty(name string, value CSSValue, result *ConversionResult) {
+func (c *Converter) convertSpecialProperty(name string, value CSSValue, props map[KFXSymbol]any, _ *[]string) {
 	switch name {
 	case "text-decoration":
 		dec := ConvertTextDecoration(value)
 		if dec.Underline {
-			result.Style.Properties[SymUnderline] = true
+			c.mergeProp(props, SymUnderline, true)
 		}
 		if dec.Strikethrough {
-			result.Style.Properties[SymStrikethrough] = true
+			c.mergeProp(props, SymStrikethrough, true)
 		}
 		// NOTE: text-decoration: none - we intentionally don't set false values.
 		// KFX defaults to no decoration, and explicitly setting false can cause
@@ -438,9 +646,9 @@ func (c *Converter) convertSpecialProperty(name string, value CSSValue, result *
 	case "vertical-align":
 		if vaResult, ok := ConvertVerticalAlign(value); ok {
 			if vaResult.UseBaselineStyle {
-				result.Style.Properties[SymBaselineStyle] = vaResult.BaselineStyle
+				c.mergeProp(props, SymBaselineStyle, vaResult.BaselineStyle)
 			} else if vaResult.UseBaselineShift {
-				result.Style.Properties[SymBaselineShift] = vaResult.BaselineShift
+				c.mergeProp(props, SymBaselineShift, vaResult.BaselineShift)
 			}
 		}
 
@@ -463,20 +671,32 @@ func (c *Converter) convertSpecialProperty(name string, value CSSValue, result *
 	case "page-break-before":
 		// In KFX, page-break-before: always is handled by section boundaries, not styles.
 		// Only convert "avoid" to yj-break-before: avoid
-		if sym, ok := ConvertPageBreak(value); ok && sym == SymAvoid {
-			result.Style.Properties[SymKeepFirst] = sym
-		}
+		c.applyBreakBefore(value, props)
 
 	case "page-break-after":
 		// Only convert "avoid" - "always" is handled by section boundaries
-		if sym, ok := ConvertPageBreak(value); ok && sym == SymAvoid {
-			result.Style.Properties[SymKeepLast] = sym
-		}
+		c.applyBreakAfter(value, props)
 
 	case "page-break-inside":
-		if sym, ok := ConvertPageBreak(value); ok && sym == SymAvoid {
-			// page-break-inside: avoid means the element should not break internally
-			result.Style.Properties[SymBreakInside] = SymbolValue(SymAvoid)
+		c.applyBreakInside(value, props)
+
+	case "break-before":
+		c.applyBreakBefore(value, props)
+
+	case "break-after":
+		c.applyBreakAfter(value, props)
+
+	case "break-inside":
+		c.applyBreakInside(value, props)
+
+	case "text-emphasis-position", "-webkit-text-emphasis-position":
+		if horiz, vert, ok := ConvertTextEmphasisPosition(value); ok {
+			if horiz != 0 {
+				c.mergeProp(props, SymTextEmphasisPositionHorizontal, horiz)
+			}
+			if vert != 0 {
+				c.mergeProp(props, SymTextEmphasisPositionVertical, vert)
+			}
 		}
 	}
 }
@@ -515,8 +735,7 @@ func (c *Converter) ConvertStylesheet(sheet *Stylesheet) ([]StyleDef, []string) 
 		c.tracer.TraceCSSConvert(rule.Selector.Raw, result.Style.Properties)
 
 		if existing, ok := styleMap[styleName]; ok {
-			// Merge properties (later rules override)
-			maps.Copy(existing.Properties, result.Style.Properties)
+			mergeAllWithRules(existing.Properties, result.Style.Properties, mergeContextInline, c.tracer)
 		} else {
 			// New style
 			styleCopy := result.Style

@@ -1,11 +1,17 @@
 package kfx
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
 	"go.uber.org/zap"
 )
+
+// isResolvedStyleName checks if a style name looks like a resolved style (base36 format like "s1J").
+func isResolvedStyleName(name string) bool {
+	return strings.HasPrefix(name, "s") && len(name) >= 2
+}
 
 func TestResolveInheritance(t *testing.T) {
 	sr := NewStyleRegistry()
@@ -30,14 +36,23 @@ func TestResolveInheritance(t *testing.T) {
 		MarginLeft(2.0, SymUnitEm).
 		Build())
 
-	// Mark styles as used
-	sr.EnsureStyle("poem-subtitle")
+	// Use ResolveStyle to get a resolved style name (base36 format)
+	// This triggers inheritance resolution and deduplication
+	resolvedName := sr.ResolveStyle("poem-subtitle")
 
-	// Build fragments (this triggers inheritance resolution)
+	// Mark the resolved style as used for text (like production code does)
+	sr.MarkUsage(resolvedName, styleUsageText)
+
+	// Build fragments - only resolved styles (base36 names) are emitted
 	fragments := sr.BuildFragments()
 
 	if len(fragments) != 1 {
 		t.Fatalf("Expected 1 fragment, got %d", len(fragments))
+	}
+
+	// Verify the resolved name format
+	if !isResolvedStyleName(resolvedName) {
+		t.Errorf("Expected resolved style name (base36 format), got %q", resolvedName)
 	}
 
 	// Get the resolved style
@@ -233,10 +248,9 @@ func TestStyleContext(t *testing.T) {
 		}
 	})
 
-	t.Run("scope chain properties applied to resolved style", func(t *testing.T) {
+	t.Run("scope chain margins stay on wrapper", func(t *testing.T) {
 		sr := makeRegistry()
-		// poem has margin-left - in KFX this should propagate to content
-		// because KFX flattens nested structures
+		// poem has margin-left - it should remain on the wrapper, not the child style
 		ctx := NewStyleContext().Push("div", "poem", sr)
 		styleName := ctx.Resolve("p", "", sr)
 
@@ -245,10 +259,8 @@ func TestStyleContext(t *testing.T) {
 			t.Fatalf("Resolved style %q not found in registry", styleName)
 		}
 
-		// poem's margin-left SHOULD be in the resolved style for p
-		// (KFX needs to flatten nested structure margins onto content)
-		if _, ok := def.Properties[SymMarginLeft]; !ok {
-			t.Error("margin-left from scope chain should be applied to content element in KFX")
+		if _, ok := def.Properties[SymMarginLeft]; ok {
+			t.Error("margin-left from wrapper should not be applied to child style")
 		}
 	})
 
@@ -276,6 +288,95 @@ func TestStyleContext(t *testing.T) {
 		// ctx2 should have it
 		if _, ok := ctx2.inherited[SymLineHeight]; !ok {
 			t.Error("ctx2 should have line-height from stanza")
+		}
+	})
+
+	t.Run("register uses merge rules", func(t *testing.T) {
+		sr := NewStyleRegistry()
+		sr.Register(StyleDef{
+			Name: "p",
+			Properties: map[KFXSymbol]any{
+				SymMarginLeft: DimensionValue(1, SymUnitPercent),
+			},
+		})
+		sr.Register(StyleDef{
+			Name: "p",
+			Properties: map[KFXSymbol]any{
+				SymMarginLeft: DimensionValue(2, SymUnitPercent),
+			},
+		})
+
+		def, ok := sr.Get("p")
+		if !ok {
+			t.Fatalf("style p not found")
+		}
+		if got := def.Properties[SymMarginLeft]; got == nil {
+			t.Fatalf("margin-left missing after merge")
+		} else if reflect.DeepEqual(got, DimensionValue(3, SymUnitPercent)) == false {
+			t.Fatalf("expected cumulative margin-left 3%%, got %v", got)
+		}
+	})
+
+	t.Run("PushBlock inherits margins to children", func(t *testing.T) {
+		sr := makeRegistry()
+		// PushBlock with poem (has margin-left) should pass it to children
+		ctx := NewStyleContext().PushBlock("div", "poem", sr)
+
+		// Margin-left SHOULD be inherited in block context
+		if _, ok := ctx.inherited[SymMarginLeft]; !ok {
+			t.Error("PushBlock should inherit margin-left from poem")
+		}
+		// Text-align should also be inherited (standard CSS inheritance)
+		if _, ok := ctx.inherited[SymTextAlignment]; !ok {
+			t.Error("Expected text-align to be inherited from poem")
+		}
+	})
+
+	t.Run("PushBlock child style includes container margin", func(t *testing.T) {
+		sr := makeRegistry()
+		// PushBlock with poem (has margin-left) then resolve child paragraph
+		ctx := NewStyleContext().PushBlock("div", "poem", sr)
+		styleName := ctx.Resolve("p", "", sr)
+
+		def, ok := sr.Get(styleName)
+		if !ok {
+			t.Fatalf("Resolved style %q not found in registry", styleName)
+		}
+
+		// margin-left from poem SHOULD be in the child style when using PushBlock
+		if _, ok := def.Properties[SymMarginLeft]; !ok {
+			t.Error("PushBlock child should have margin-left from poem container")
+		}
+	})
+
+	t.Run("chained PushBlock accumulates margins", func(t *testing.T) {
+		sr := makeRegistry()
+		ctx := NewStyleContext().
+			PushBlock("div", "poem", sr).
+			PushBlock("div", "stanza", sr)
+
+		// Both poem's margin and stanza's properties should be accumulated
+		if _, ok := ctx.inherited[SymMarginLeft]; !ok {
+			t.Error("Expected margin-left from poem to be block-inherited")
+		}
+		if _, ok := ctx.inherited[SymLineHeight]; !ok {
+			t.Error("Expected line-height from stanza to be inherited")
+		}
+	})
+
+	t.Run("Push vs PushBlock margin inheritance difference", func(t *testing.T) {
+		sr := makeRegistry()
+
+		// Push does NOT inherit margins
+		pushCtx := NewStyleContext().Push("div", "poem", sr)
+		if _, ok := pushCtx.inherited[SymMarginLeft]; ok {
+			t.Error("Push should NOT inherit margin-left")
+		}
+
+		// PushBlock DOES inherit margins
+		pushBlockCtx := NewStyleContext().PushBlock("div", "poem", sr)
+		if _, ok := pushBlockCtx.inherited[SymMarginLeft]; !ok {
+			t.Error("PushBlock SHOULD inherit margin-left")
 		}
 	})
 }

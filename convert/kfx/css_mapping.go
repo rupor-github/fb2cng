@@ -43,23 +43,38 @@ var cssToKFXProperty = CSSToKFXMap{
 	"space-after":  SymSpaceAfter,  // $40
 
 	// Dimensions
-	"width":  SymWidth,  // $56
-	"height": SymHeight, // $57
+	"width":      SymWidth,     // $56
+	"height":     SymHeight,    // $57
+	"min-width":  SymMinWidth,  // $63
+	"max-height": SymMaxHeight, // $64
+	"max-width":  SymMaxWidth,  // $65
 
 	// Borders
-	"border-style": SymBorderStyle,  // $88
-	"border-width": SymBorderWeight, // $93
-	"border-color": SymBorderColor,  // $83
+	"border-style":                SymBorderStyle,  // $88
+	"border-width":                SymBorderWeight, // $93
+	"border-color":                SymBorderColor,  // $83
+	"writing-mode":                SymWritingMode,  // $560
+	"-webkit-writing-mode":        SymWritingMode,
+	"text-orientation":            SymTextOrientation, // $706
+	"text-combine":                SymTextCombine,     // $707
+	"text-combine-upright":        SymTextCombine,
+	"text-emphasis-style":         SymTextEmphasisStyle, // $717
+	"-webkit-text-emphasis-style": SymTextEmphasisStyle,
+	"text-emphasis-color":         SymTextEmphasisColor, // $718
+	"-webkit-text-emphasis-color": SymTextEmphasisColor,
 
 	// Text Decoration - special handling
-	"text-decoration": -1, // underline->$23, line-through->$27
-	"vertical-align":  -1, // super/sub -> baseline_shift
+	"text-decoration":                -1, // underline->$23, line-through->$27
+	"vertical-align":                 -1, // super/sub -> baseline_shift
+	"text-emphasis-position":         -1, // needs split to horizontal/vertical symbols
+	"-webkit-text-emphasis-position": -1,
 
 	// Display/Render
 	"display": -1, // block->$602, none handled specially
 
 	// Float
-	"float": SymFloat, // $140
+	"float": SymFloat,      // $140
+	"clear": SymFloatClear, // $628 yj.float_clear
 
 	// Page breaks
 	"page-break-before": -1, // always/avoid
@@ -69,9 +84,26 @@ var cssToKFXProperty = CSSToKFXMap{
 	"break-after":       -1,
 	"break-inside":      -1,
 
+	// KFX-specific page break properties (from stylemap)
+	"yj-break-before": SymYjBreakBefore, // $789
+	"yj-break-after":  SymYjBreakAfter,  // $788
+
 	// Dropcap support
 	"dropcap-lines": SymDropcapLines, // $125
 	"dropcap-chars": SymDropcapChars, // $126
+
+	// Table properties (from stylemap)
+	"table-border-collapse":     SymTableBorderCollapse,     // $150
+	"border-spacing-vertical":   SymBorderSpacingVertical,   // $456
+	"border-spacing-horizontal": SymBorderSpacingHorizontal, // $457
+
+	// Text decoration properties (KFX-specific, from stylemap)
+	"underline":     SymUnderline,     // $23
+	"overline":      SymOverline,      // $554
+	"strikethrough": SymStrikethrough, // $27
+
+	// Baseline style (from vertical-align mapping in stylemap)
+	"baseline-style": SymBaselineStyle, // $44
 
 	// Shorthands that need expansion
 	"margin":  -1, // expands to margin-top/right/bottom/left
@@ -103,7 +135,8 @@ func IsSpecialProperty(cssProperty string) bool {
 	switch cssProperty {
 	case "text-decoration", "vertical-align", "display",
 		"page-break-before", "page-break-after", "page-break-inside",
-		"break-before", "break-after", "break-inside":
+		"break-before", "break-after", "break-inside",
+		"text-emphasis-position", "-webkit-text-emphasis-position":
 		return true
 	}
 	return false

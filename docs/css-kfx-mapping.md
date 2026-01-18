@@ -184,4 +184,27 @@ The mapper aggressively normalizes CSS so wrappers, containers, and inline tags 
 4. `g.a` scrubs/augments the property list based on container context (viewport alignment, list/table semantics, image exceptions) and enforces numeric bounds.
 5. `com.amazon.yj.style.merger.b`, guided by `stylelist.ion`, merges container-level styles, wrapper styles, and inline tag styles so the final YJ/KFX style set respects CSS cascade semantics (sum margins/paddings, choose larger of competing auto margins, keep explicit overrides, etc.).
 
+7. Quick extraction from KP3 configs (`stylemap.txt`, `stylelist.txt`)
+---------------------------------------------------------------------
+* `converter_classname` entries present: `UserAgentStyleAddingTransformer`, `BGColorTransformer`, `BGRepeatTransformer`, `BorderRadiusTransformer`, `ImageBorderTransformer`, `LineHeightTransformer`, `MarginAutoTransformer`, `MaxCropPercentageTransformer`, `NonBlockingBlockImageTransformer`, `PageBleedTransformer`, `ShapeOutsideTransformer`, `TextCombineTransformer`, `TextDecorationTransformer`, `TextEmphasisStyleTransformer`, `TransformerForWebkitTransform`, `WritingModeTransformer`, `XYStyleTransformer`, `WidowsOrphansTransformer`, `LanguageTransformer`, shadow transformers (`shadow.BoxShadowTransformer`, `shadow.TextShadowTransformer`), `LinkStyleTransformer`. Many rows include `css_styles` to inject UA defaults (e.g., body/dd/center wrappers).
+* `stylelist` mergers observed: `YJHorizontalPositionRuleMerger` for `yj.float_clear`; cumulative for `layout_hints`; margins/paddings mix of cumulative/override/override-maximum with a special cumulative-in-same-container for `margin_left`; `font_size` relative (em) and catch-all `*,true,*,percent` relative; `baseline_shift` cumulative; default override for wildcard entries.
+* Rule behaviors confirmed in KP3 Java:
+  - `YJCumulativeRuleMerger` reconciles units (including writing-mode conversions when enabled), sums measures, and deduplicates string lists; the “same container” variant asserts identical parents and just sums.
+  - `YJRelativeRuleMerger` converts the incoming value using the parent context before combining (e.g., percent → px against parent size).
+  - `YJOverrideMaximumRuleMerger` picks the greater magnitude after optional clamping, keeping the original when equal; unit mismatches fall back to parent-aware conversion when allowed.
+  - `YJHorizontalPositionRuleMerger` collapses `clear` pairs so `none` + `left/right` resolves to the non-`none` side, conflicting sides become `both`.
+  - `YJBaselineStyleRuleMerger` prefers non-`normal` values; otherwise the incoming value wins.
+* Raw `stylelist.txt` entries (KP3 3.101.0) for precise wiring:
+  - `yj.float_clear,false,*,*,true` → `YJHorizontalPositionRuleMerger`
+  - `layout_hints,false` → cumulative
+  - `margin_top,true,*,*,*,*,true` → cumulative; `margin_top,true,*,*,true` → override-maximum; `margin_top,true` → override
+  - `margin_bottom,true,*,*,*,true` → override-maximum; `margin_bottom,true` → override
+  - `margin_left,true,*,*,*,*,*,false` → cumulative; `margin_left,true,*,*,*,*,*,true` → cumulative-in-same-container; `margin_right,true` → cumulative
+  - `padding_top,true,*,*,*,*,true` → cumulative; `padding_top,true,*,*,true` → cumulative; `padding_top,true` → override
+  - `padding_bottom,true,*,*,*,true` → cumulative; `padding_bottom,true` → override; `padding_left/right,true` → cumulative
+  - `baseline_style,*` → baseline-style rule
+  - `font_size,true,*,em` and catch-all `*,true,*,percent` → relative
+  - `baseline_shift,true,percent,percent` → cumulative
+  - Wildcards: `*,false` → override (non-measure defaults); `*,true` → override (measure defaults)
+
 This pipeline ensures wrappers, containers, and individual tags all travel through the same normalization + mapping machinery, but the configuration files let us fine-tune (a) which CSS signals produce which KFX properties, and (b) how competing declarations are merged once they land in the YJ document.

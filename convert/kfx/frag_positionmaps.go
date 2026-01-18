@@ -53,9 +53,32 @@ func BuildPositionMap(sectionNames sectionNameList, sectionEIDs sectionEIDsBySec
 	return NewRootFragment(SymPositionMap, ListValue(entries))
 }
 
+// InlineImagePos tracks an inline image's position within mixed content.
+type InlineImagePos struct {
+	EID    int // Image element ID
+	Offset int // Character offset in parent text where image appears
+}
+
+// PositionItem represents a content element for position tracking.
 type PositionItem struct {
 	EID    int
 	Length int // approximate text length (runes)
+
+	// For mixed content (text with inline images):
+	// InlineImages contains the EIDs and offsets of embedded images.
+	// When set, this entry will generate KP3-style granular position entries.
+	InlineImages []InlineImagePos
+}
+
+// HasInlineImages returns true if any position item has inline images,
+// indicating the book uses offset-based position entries.
+func HasInlineImages(items []PositionItem) bool {
+	for _, it := range items {
+		if len(it.InlineImages) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // CollectPositionItems extracts content entries (including page templates) in reading order.
@@ -103,9 +126,64 @@ func CollectPositionItems(fragments *FragmentList, sectionNames sectionNameList)
 			return
 		}
 
-		// Check for nested children (wrapper containers)
+		// Check for content_list - could be wrapper container OR mixed text+images
 		if children, ok := entry[SymContentList].([]any); ok && len(children) > 0 {
-			// Wrapper container: emit wrapper EID first, then process children
+			// Analyze content_list to determine handling:
+			// - Mixed content: text entry with strings (possibly interleaved with inline images)
+			// - Image-only text: text entry with only inline image(s), no strings
+			// - Wrapper-style: container with only StructValue children (like title blocks)
+			hasStrings := false
+			hasInlineImages := false
+			isTextType := KFXSymbol(typeSym) == SymText
+
+			for _, child := range children {
+				if _, isString := child.(string); isString {
+					hasStrings = true
+				} else if childSV, ok := child.(StructValue); ok {
+					if childType, ok := childSV[SymType].(SymbolValue); ok && KFXSymbol(childType) == SymImage {
+						if render, ok := childSV[SymRender].(SymbolValue); ok && KFXSymbol(render) == SymInline {
+							hasInlineImages = true
+						}
+					}
+				}
+			}
+
+			// Text entries with inline images (with or without text) use mixed content handling
+			if isTextType && (hasStrings || hasInlineImages) {
+				// Mixed content: collect text lengths and inline image positions
+				// KP3 generates granular position entries for mixed content
+				textLen := 0
+				var inlineImages []InlineImagePos
+
+				for _, child := range children {
+					if s, ok := child.(string); ok {
+						textLen += len([]rune(s))
+					} else if childSV, ok := child.(StructValue); ok {
+						// Check if this is an inline image
+						if childEID, ok := childSV[SymUniqueID].(int64); ok {
+							if childType, ok := childSV[SymType].(SymbolValue); ok && KFXSymbol(childType) == SymImage {
+								inlineImages = append(inlineImages, InlineImagePos{
+									EID:    int(childEID),
+									Offset: textLen, // Current text offset where image appears
+								})
+								textLen++ // Image consumes 1 position in the stream
+							}
+						}
+					}
+				}
+
+				if textLen < 1 {
+					textLen = 1
+				}
+				out = append(out, PositionItem{
+					EID:          eid,
+					Length:       textLen,
+					InlineImages: inlineImages,
+				})
+				return
+			}
+
+			// Wrapper-style container: emit wrapper EID first, then process children
 			out = append(out, PositionItem{EID: eid, Length: 1})
 			for _, child := range children {
 				if childEntry, ok := child.(StructValue); ok {
@@ -219,21 +297,103 @@ func CollectPositionItems(fragments *FragmentList, sectionNames sectionNameList)
 // BuildPositionIDMap creates the $265 position_id_map root fragment.
 // Reference KFX uses a list of structs: { $184 pid, $185 eid }.
 // We emit a sparse mapping (entry per EID start) with pid gaps based on text length.
+// For mixed content (text with inline images), we emit KP3-style granular entries:
+// - Parent entry at start
+// - For each inline image: before/image/after entries with offset tracking
+// For image-only text entries (no actual text, just inline images), we emit simpler entries:
+// - One entry for wrapper EID at current PID
+// - One entry for each image EID at the SAME PID
+// - No offset entries
 func BuildPositionIDMap(allEIDs []int, items []PositionItem) *Fragment {
 	entries := make([]any, 0, len(allEIDs)+1)
 
 	pid := int64(0)
 	if len(items) > 0 {
 		for _, it := range items {
-			entries = append(entries, NewStruct().
-				SetInt(SymPositionID, pid).
-				SetInt(SymElementID, int64(it.EID)),
-			)
-			step := int64(it.Length)
-			if step < 1 {
-				step = 1
+			if len(it.InlineImages) > 0 {
+				// Check if this is image-only (no actual text content)
+				// Image-only: all images at offset 0 and length equals number of images
+				isImageOnly := true
+				for _, img := range it.InlineImages {
+					if img.Offset != 0 {
+						isImageOnly = false
+						break
+					}
+				}
+				// Also check that total length equals number of images (no text)
+				if it.Length != len(it.InlineImages) {
+					isImageOnly = false
+				}
+
+				if isImageOnly {
+					// Image-only text entry: emit wrapper and images at same PID
+					// KP3 emits: {pid, wrapper_eid}, {pid, image_eid}
+					entries = append(entries, NewStruct().
+						SetInt(SymPositionID, pid).
+						SetInt(SymElementID, int64(it.EID)),
+					)
+					for _, img := range it.InlineImages {
+						entries = append(entries, NewStruct().
+							SetInt(SymPositionID, pid).
+							SetInt(SymElementID, int64(img.EID)),
+						)
+					}
+					// Advance PID by 1 for the image(s)
+					pid++
+				} else {
+					// Mixed content: emit granular KP3-style entries
+					startPID := pid
+
+					// 1. Entry for parent element at start
+					entries = append(entries, NewStruct().
+						SetInt(SymPositionID, startPID).
+						SetInt(SymElementID, int64(it.EID)),
+					)
+
+					// 2. For each inline image, emit before/image/after entries
+					for _, img := range it.InlineImages {
+						imgPID := startPID + int64(img.Offset)
+
+						// Entry before image (with offset from parent start)
+						entries = append(entries, NewStruct().
+							SetInt(SymOffset, int64(img.Offset)).
+							SetInt(SymPositionID, imgPID).
+							SetInt(SymElementID, int64(it.EID)),
+						)
+
+						// Entry for inline image itself
+						entries = append(entries, NewStruct().
+							SetInt(SymPositionID, imgPID).
+							SetInt(SymElementID, int64(img.EID)),
+						)
+
+						// Entry after image (offset+1, pid+1, parent eid)
+						entries = append(entries, NewStruct().
+							SetInt(SymOffset, int64(img.Offset+1)).
+							SetInt(SymPositionID, imgPID+1).
+							SetInt(SymElementID, int64(it.EID)),
+						)
+					}
+
+					// Advance pid by total text length
+					step := int64(it.Length)
+					if step < 1 {
+						step = 1
+					}
+					pid += step
+				}
+			} else {
+				// Regular content: single entry
+				entries = append(entries, NewStruct().
+					SetInt(SymPositionID, pid).
+					SetInt(SymElementID, int64(it.EID)),
+				)
+				step := int64(it.Length)
+				if step < 1 {
+					step = 1
+				}
+				pid += step
 			}
-			pid += step
 		}
 	} else {
 		for _, eid := range allEIDs {

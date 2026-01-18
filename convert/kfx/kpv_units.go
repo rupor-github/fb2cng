@@ -1,5 +1,7 @@
 package kfx
 
+import "math"
+
 // KPV Unit Conversion Constants
 //
 // Kindle Previewer (KPV) uses specific unit types for different CSS properties.
@@ -12,15 +14,30 @@ package kfx
 // See docs/kfxstructure.md §7.10.2 "KPV unit conventions" for full documentation.
 
 const (
+	// KPVDecimalPrecision is the maximum number of decimal places for Ion decimal values.
+	// Amazon's KFX processing code uses setScale(3, RoundingMode.HALF_UP) for dimension
+	// calculations (found in com/amazon/yj/F/a/b.java and other style processing classes).
+	// Values with more than 3 decimal places may cause rendering issues in KP3.
+	// From observation, KPV seems to handle up to 6 decimal places reliably.
+	//
+	// Example: 63.33333333333333 → 63.333 (3 decimal places)
+	KPVDecimalPrecision = 3
+	// KPVDefaultLineHeightLh is the default line-height used for text styles.
+	// KP3 uses 1lh for the majority of base text styles.
+	// Some specific styles (like inline images with baseline-style) may use 1.0101lh.
+	KPVDefaultLineHeightLh = 1.0
+
 	// KPVLineHeightRatio is the assumed line-height multiplier (1lh = 1.2em).
 	// Used to convert em → lh for vertical spacing properties.
 	// Example: 0.3em CSS → 0.25lh KFX (0.3 / 1.2 = 0.25)
+	// KP3 uses 1.2em as the base line-height for vertical margin calculations.
 	KPVLineHeightRatio = 1.2
 
 	// KPVEmToPercentHorizontal is the em-to-percent ratio for horizontal spacing.
 	// Used for margin-left, margin-right, padding-left, padding-right.
-	// Example: 1em CSS → 6.25% KFX
-	KPVEmToPercentHorizontal = 6.25
+	// KP3 uses a base width of 32em, so 1em = 100/32 = 3.125%
+	// Example: 1em CSS → 3.125% KFX, 2em CSS → 6.25% KFX
+	KPVEmToPercentHorizontal = 3.125
 
 	// KPVEmToPercentTextIndent is the em-to-percent ratio for text-indent.
 	// Text indent uses a different ratio than horizontal margins.
@@ -66,4 +83,18 @@ func isHorizontalSpacingProperty(sym KFXSymbol) bool {
 		return true
 	}
 	return false
+}
+
+// RoundKPVDecimal rounds a float64 to KPVDecimalPrecision decimal places.
+// Amazon's KFX code uses 3 decimal places (setScale(3, RoundingMode.HALF_UP))
+// for dimension values. Using more precision can cause rendering failures in KP3.
+//
+// Examples:
+//
+//	RoundKPVDecimal(63.33333333333333) → 63.333
+//	RoundKPVDecimal(0.25) → 0.25 (unchanged, already within precision)
+//	RoundKPVDecimal(84.765625) → 84.766
+func RoundKPVDecimal(v float64) float64 {
+	multiplier := math.Pow(10, KPVDecimalPrecision)
+	return math.Round(v*multiplier) / multiplier
 }

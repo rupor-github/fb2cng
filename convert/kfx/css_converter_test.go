@@ -334,6 +334,15 @@ func TestConverterConvertRule(t *testing.T) {
 			},
 			hasWarnings: false,
 		},
+		{
+			name: "clear both",
+			rule: CSSRule{
+				Selector:   Selector{Raw: ".clear", Class: "clear"},
+				Properties: map[string]CSSValue{"clear": {Keyword: "both"}},
+			},
+			expectedProps: map[KFXSymbol]any{SymFloatClear: SymBoth},
+			hasWarnings:   false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -356,6 +365,45 @@ func TestConverterConvertRule(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBreakAliasConversion(t *testing.T) {
+	log := zap.NewNop()
+	conv := NewConverter(log)
+
+	rule := CSSRule{
+		Selector: Selector{Raw: ".break", Class: "break"},
+		Properties: map[string]CSSValue{
+			"break-before": {Keyword: "avoid-page"},
+			"break-after":  {Keyword: "avoid"},
+			"break-inside": {Keyword: "avoid"},
+		},
+	}
+
+	result := conv.ConvertRule(rule)
+
+	checkSym := func(prop KFXSymbol, expected KFXSymbol) {
+		val, ok := result.Style.Properties[prop]
+		if !ok {
+			t.Fatalf("missing property %d", prop)
+		}
+		switch v := val.(type) {
+		case KFXSymbol:
+			if v != expected {
+				t.Fatalf("property %d expected %d got %d", prop, expected, v)
+			}
+		case SymbolValue:
+			if KFXSymbol(v) != expected {
+				t.Fatalf("property %d expected %d got %d (SymbolValue)", prop, expected, v)
+			}
+		default:
+			t.Fatalf("property %d unexpected type %T", prop, val)
+		}
+	}
+
+	checkSym(SymKeepFirst, SymAvoid)
+	checkSym(SymKeepLast, SymAvoid)
+	checkSym(SymBreakInside, SymAvoid)
 }
 
 func TestConverterConvertStylesheet(t *testing.T) {
@@ -535,14 +583,15 @@ func TestNewStyleRegistryFromCSS(t *testing.T) {
 		t.Error("paragraph style should have line-height property")
 	}
 
-	// Check default HTML element styles are still present
-	// Note: class selectors like "epigraph" are no longer in DefaultStyleRegistry,
-	// they come from CSS. Only HTML element selectors are defaults.
+	// Check default HTML element styles and seeded wrapper defaults are present
 	if _, ok := registry.Get("strong"); !ok {
 		t.Error("expected default 'strong' style to be preserved")
 	}
 	if _, ok := registry.Get("p"); !ok {
 		t.Error("expected default 'p' style to be preserved")
+	}
+	if _, ok := registry.Get("epigraph"); !ok {
+		t.Error("expected seeded default 'epigraph' wrapper style")
 	}
 }
 
@@ -562,9 +611,9 @@ func TestNewStyleRegistryFromCSS_Empty(t *testing.T) {
 	if _, ok := registry.Get("h1"); !ok {
 		t.Error("expected default 'h1' style")
 	}
-	// Class selectors like "epigraph" are NOT in defaults - they come from CSS
-	if _, ok := registry.Get("epigraph"); ok {
-		t.Error("'epigraph' should not be in DefaultStyleRegistry (it comes from CSS)")
+	// Seeded wrapper defaults should also be present
+	if _, ok := registry.Get("epigraph"); !ok {
+		t.Error("expected seeded default 'epigraph' style")
 	}
 }
 
@@ -578,23 +627,42 @@ func TestStyleRegistryBuildFragments(t *testing.T) {
 
 	registry, _ := NewStyleRegistryFromCSS(css, nil, log)
 
-	// Mark some styles as used
-	registry.EnsureStyle("paragraph")
-	registry.EnsureStyle("custom")
-	registry.EnsureStyle("strong") // default HTML element style (not "emphasis" which is no longer default)
+	// Use ResolveStyle to get resolved style names (base36 format)
+	// This is how styles are typically used in actual code
+	name1 := registry.ResolveStyle("paragraph")
+	name2 := registry.ResolveStyle("custom")
+	name3 := registry.ResolveStyle("strong") // default HTML element style
+
+	// Mark styles as used for text
+	registry.MarkUsage(name1, styleUsageText)
+	registry.MarkUsage(name2, styleUsageText)
+	registry.MarkUsage(name3, styleUsageText)
 
 	fragments := registry.BuildFragments()
 
-	// Should only output used styles
-	if len(fragments) != 3 {
-		t.Errorf("expected 3 fragments, got %d", len(fragments))
+	// Note: "custom" and "strong" both have font-weight: bold and may deduplicate
+	// to the same resolved style. So we expect 2 fragments, not 3.
+	// This is correct behavior - style deduplication.
+	if len(fragments) < 2 {
+		t.Errorf("expected at least 2 fragments, got %d", len(fragments))
 	}
 
-	// Check fragment types
+	// Check fragment types and names
+	names := make(map[string]bool)
 	for _, frag := range fragments {
 		if frag.FType != SymStyle {
 			t.Errorf("expected fragment type $157 (style), got %d", frag.FType)
 		}
+		names[frag.FIDName] = true
 		t.Logf("Fragment: %s", frag.FIDName)
+	}
+
+	// Verify the resolved names are in the fragments
+	if !names[name1] {
+		t.Errorf("expected fragment %s not found", name1)
+	}
+	// name2 and name3 may be the same due to deduplication
+	if !names[name2] && !names[name3] {
+		t.Errorf("expected at least one of %s or %s", name2, name3)
 	}
 }

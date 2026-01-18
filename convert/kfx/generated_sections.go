@@ -1,7 +1,6 @@
 package kfx
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -38,10 +37,13 @@ func nextSectionIndex(sectionNames sectionNameList) int {
 		if !strings.HasPrefix(s, "c") {
 			continue
 		}
-		n, err := strconv.Atoi(strings.TrimPrefix(s, "c"))
+		rest := strings.TrimPrefix(s, "c")
+		// Try base36 first (handles "cA", "cB", etc.)
+		n64, err := strconv.ParseInt(rest, 36, 64)
 		if err != nil {
 			continue
 		}
+		n := int(n64)
 		if n > maxN {
 			maxN = n
 		}
@@ -65,6 +67,8 @@ func addTOCTitle(sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumul
 		return
 	}
 
+	descendantPrefix := "toc--toc-title"
+
 	var text string
 	var events []StyleEventRef
 
@@ -73,11 +77,15 @@ func addTOCTitle(sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumul
 	titleLen := len([]rune(bookTitle))
 	text = bookTitle
 
-	firstStyle := styles.ResolveStyle("toc-title-first")
+	firstStyle := descendantPrefix + "-first"
+	resolvedFirst := styles.ResolveStyle(firstStyle)
+	if styles != nil {
+		styles.MarkUsage(resolvedFirst, styleUsageText)
+	}
 	events = append(events, StyleEventRef{
 		Offset: titleStart,
 		Length: titleLen,
-		Style:  firstStyle,
+		Style:  resolvedFirst,
 	})
 
 	// Add authors if provided
@@ -86,11 +94,15 @@ func addTOCTitle(sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumul
 		breakStart := len([]rune(text))
 		text += "\n"
 
-		breakStyle := styles.ResolveStyle("toc-title-break")
+		breakStyle := descendantPrefix + "-break"
+		resolvedBreak := styles.ResolveStyle(breakStyle)
+		if styles != nil {
+			styles.MarkUsage(resolvedBreak, styleUsageText)
+		}
 		events = append(events, StyleEventRef{
 			Offset: breakStart,
 			Length: 1,
-			Style:  breakStyle,
+			Style:  resolvedBreak,
 		})
 
 		// Add authors with toc-title-next style
@@ -98,18 +110,26 @@ func addTOCTitle(sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumul
 		authorsLen := len([]rune(authors))
 		text += authors
 
-		nextStyle := styles.ResolveStyle("toc-title-next")
+		nextStyle := descendantPrefix + "-next"
+		resolvedNext := styles.ResolveStyle(nextStyle)
+		if styles != nil {
+			styles.MarkUsage(resolvedNext, styleUsageText)
+		}
 		events = append(events, StyleEventRef{
 			Offset: authorsStart,
 			Length: authorsLen,
-			Style:  nextStyle,
+			Style:  resolvedNext,
 		})
 	}
 
 	// Add as single paragraph with toc-title base style and h1 heading level
-	resolved := styles.ResolveStyle("h1 toc-title")
+	baseStyle := descendantPrefix
+	resolvedBase := styles.ResolveStyle(baseStyle)
+	if styles != nil {
+		styles.MarkUsage(resolvedBase, styleUsageText)
+	}
 	name, off := ca.Add(text)
-	sb.AddContentWithHeading(SymText, name, off, resolved, events, 1)
+	sb.AddContentWithHeading(SymText, name, off, resolvedBase, events, 1)
 }
 
 // tocPageEntry represents a single TOC page entry with link information.
@@ -208,6 +228,9 @@ func (b *tocListBuilder) buildTOCList(entries []*tocPageEntry, isNested bool) (S
 
 	// Resolve list style using accumulated context
 	listStyle := b.styles.ResolveStyle(listContext.Resolve("", "", b.styles))
+	if b.styles != nil {
+		b.styles.MarkUsage(listStyle, styleUsageWrapper)
+	}
 
 	// Build list entry: {$100: $343 (numeric), $146: [...], $155: eid, $159: $276 (list)}
 	list := NewStruct().
@@ -272,9 +295,15 @@ func (b *tocListBuilder) buildTOCTextEntry(entry *tocPageEntry) (StructValue, in
 	// Item style adds "toc-item toc-section" to the context
 	itemStyleSpec := b.styleContext.Resolve("", "toc-item toc-section", b.styles)
 	itemStyle := b.styles.ResolveStyle(itemStyleSpec)
+	if b.styles != nil {
+		b.styles.MarkUsage(itemStyle, styleUsageText)
+	}
 	// Link style also inherits context for proper cascade
 	linkStyleSpec := b.styleContext.Resolve("", "link-toc", b.styles)
 	linkStyle := b.styles.ResolveStyle(linkStyleSpec)
+	if b.styles != nil {
+		b.styles.MarkUsage(linkStyle, styleUsageText)
+	}
 
 	// Build style event for link (covers entire text)
 	textLen := len([]rune(entry.Title))
@@ -329,7 +358,8 @@ func addTOCList(sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumula
 // It also appends the necessary fragments (content/storyline/section) into fragments.
 func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 	styles *StyleRegistry, fragments *FragmentList, sectionNames sectionNameList,
-	tocEntries []*TOCEntry, sectionEIDs sectionEIDsBySectionName, nextEID int, landmarks LandmarkInfo, idToEID eidByFB2ID, log *zap.Logger,
+	tocEntries []*TOCEntry, sectionEIDs sectionEIDsBySectionName, nextEID int, landmarks LandmarkInfo, idToEID eidByFB2ID,
+	imageResources imageResourceInfoByID, log *zap.Logger,
 ) (sectionNameList, []*TOCEntry, sectionEIDsBySectionName, int, LandmarkInfo, eidByFB2ID, error) {
 	annotationEnabled := cfg.Annotation.Enable && c.Book.Description.TitleInfo.Annotation != nil
 	tocPageEnabled := cfg.TOCPage.Placement != common.TOCPagePlacementNone
@@ -342,8 +372,8 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 	contentCounter := nextContentBaseCounter(fragments)
 
 	if annotationEnabled {
-		storyName := fmt.Sprintf("l%d", storyIdx)
-		sectionName := fmt.Sprintf("c%d", sectionIdx)
+		storyName := "l" + toBase36(storyIdx)
+		sectionName := "c" + toBase36(sectionIdx)
 		storyIdx++
 		sectionIdx++
 
@@ -351,14 +381,16 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 		ca := NewContentAccumulator(contentCounter)
 		contentCounter++
 
+		// Add annotation title
 		addText(sb, styles, ca, cfg.Annotation.Title, "annotation-title")
+
+		// Process annotation items with full formatting support (links, emphasis, etc.)
+		// Use the same processFlowItem mechanism as body content for consistent rendering
+		annotationCtx := NewStyleContext().PushBlock("div", "annotation", styles)
+		screenWidth := 600 // Default screen width for style calculations
 		for i := range c.Book.Description.TitleInfo.Annotation.Items {
 			item := &c.Book.Description.TitleInfo.Annotation.Items[i]
-			text := item.AsPlainText()
-			if text == "" {
-				continue
-			}
-			addText(sb, styles, ca, text, "annotation")
+			processFlowItem(item, annotationCtx, "annotation", sb, styles, imageResources, ca, idToEID, screenWidth, c.FootnotesIndex)
 		}
 
 		for name, list := range ca.Finish() {
@@ -394,8 +426,8 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 
 	var tocSectionName string
 	if tocPageEnabled {
-		storyName := fmt.Sprintf("l%d", storyIdx)
-		tocSectionName = fmt.Sprintf("c%d", sectionIdx)
+		storyName := "l" + toBase36(storyIdx)
+		tocSectionName = "c" + toBase36(sectionIdx)
 		storyIdx++
 		sectionIdx++
 

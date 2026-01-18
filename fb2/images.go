@@ -183,7 +183,10 @@ func (bo *BinaryObject) encodeImage(img image.Image, imgType string, cfg *config
 
 // PrepareImage performs required image modifications leaving original data
 // intact if no changes where requested. If image is decodable it will always
-// attempt to normalize mime type. Never returns an error - uses placeholder for broken images.
+// attempt to normalize mime type. Never returns an error - uses placeholder
+// for broken images.
+// NOTE: today KPV always seems to scale images to 2048 width and height, we do
+// not do it
 func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfig, log *zap.Logger) *BookImage {
 
 	bi := &BookImage{
@@ -201,6 +204,7 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 		// Rasterize SVG - as far as I could tell KPV always scales SVG to 2048
 		// (DPI 140) keeping aspect ratio, we will use screen width instead.
 		targetW, targetH := cfg.Screen.Width, 0
+
 		// For our embedded not-found placeholder keep its intrinsic size
 		// similar to how we handle broke images.
 		if bytes.Equal(bo.Data, notFoundImage) {
@@ -317,7 +321,7 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 	}
 
 	// PNG transparency
-	if cfg.RemovePNGTransparency {
+	if kindle || cfg.RemovePNGTransparency {
 		if imgType == "png" {
 			opaque := func(im image.Image) bool {
 				if oimg, ok := im.(interface{ Opaque() bool }); ok {

@@ -129,6 +129,49 @@ func (t *StyleTracer) TraceCSSConvert(selector string, props map[KFXSymbol]any) 
 	t.sections["css_converted"]++
 }
 
+// TraceNormalize logs normalization of a wrapper's CSS map.
+func (t *StyleTracer) TraceNormalize(wrapper string, original map[string]string, normalized map[string]string) {
+	if !t.IsEnabled() {
+		return
+	}
+	t.entries = append(t.entries, traceEntry{
+		operation: "NORMALIZE",
+		styleName: wrapper,
+		details:   "original: " + traceFormatCSS(original) + "\nnormalized: " + traceFormatCSS(normalized),
+	})
+	t.sections["normalized"]++
+}
+
+// TraceMap logs HTML key → KFX property emissions, including transformer info.
+func (t *StyleTracer) TraceMap(key string, transformer string, emitted map[KFXSymbol]any) {
+	if !t.IsEnabled() {
+		return
+	}
+	info := key
+	if transformer != "" {
+		info = key + " via " + transformer
+	}
+	t.entries = append(t.entries, traceEntry{
+		operation: "MAP",
+		styleName: info,
+		details:   traceFormatProperties(emitted),
+	})
+	t.sections["mapped"]++
+}
+
+// TraceMerge logs stylelist-driven merges for a property.
+func (t *StyleTracer) TraceMerge(prop string, rule string, existing any, incoming any, result any) {
+	if !t.IsEnabled() {
+		return
+	}
+	t.entries = append(t.entries, traceEntry{
+		operation: "MERGE",
+		styleName: prop,
+		details:   fmt.Sprintf("rule=%s existing=%v incoming=%v result=%v", rule, traceFormatValue(existing), traceFormatValue(incoming), traceFormatValue(result)),
+	})
+	t.sections["merged"]++
+}
+
 // TraceAutoCreate logs when a style is auto-created because it wasn't defined in CSS.
 // This helps identify unknown classes from FB2 that may need CSS definitions.
 func (t *StyleTracer) TraceAutoCreate(name string, inferredParent string) {
@@ -145,6 +188,28 @@ func (t *StyleTracer) TraceAutoCreate(name string, inferredParent string) {
 		details:   parentInfo,
 	})
 	t.sections["auto_created"]++
+}
+
+// TracePositionFilter logs when properties are filtered based on element position.
+// This helps debug position-aware style resolution (KP3's CSS margin collapsing behavior).
+func (t *StyleTracer) TracePositionFilter(styleSpec string, pos string, removed []string) {
+	if !t.IsEnabled() {
+		return
+	}
+	details := fmt.Sprintf("position: %s", pos)
+	if len(removed) > 0 {
+		details += fmt.Sprintf(", removed: %s", strings.Join(removed, ", "))
+	} else {
+		details += ", no properties filtered"
+	}
+	t.entries = append(t.entries, traceEntry{
+		operation: "POSFILTER",
+		styleName: styleSpec,
+		details:   details,
+	})
+	t.sections["position_filtered"]++
+	// Track position stats
+	t.sections["pos_"+pos]++
 }
 
 // Flush writes the trace to a file and clears the buffer.
@@ -209,6 +274,23 @@ func traceFormatProperties(props map[KFXSymbol]any) string {
 		v := props[k]
 		name := traceSymbolName(k)
 		parts = append(parts, fmt.Sprintf("%s: %v", name, traceFormatValue(v)))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// traceFormatCSS formats a CSS property map for trace output.
+func traceFormatCSS(props map[string]string) string {
+	if len(props) == 0 {
+		return "(none)"
+	}
+	keys := make([]string, 0, len(props))
+	for k := range props {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var parts []string
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s: %s", k, props[k]))
 	}
 	return strings.Join(parts, ", ")
 }
@@ -278,23 +360,29 @@ func traceSymbolName(sym KFXSymbol) string {
 
 // unitSuffix returns the CSS-like suffix for a unit symbol.
 func unitSuffix(unit any) string {
-	if u, ok := unit.(KFXSymbol); ok {
-		switch u {
-		case SymUnitEm:
-			return "em"
-		case SymUnitPercent:
-			return "%"
-		case SymUnitLh:
-			return "lh"
-		case SymUnitPx:
-			return "px"
-		case SymUnitPt:
-			return "pt"
-		case SymUnitRem:
-			return "rem"
-		default:
-			return fmt.Sprintf("($%d)", u)
-		}
+	var u KFXSymbol
+	switch v := unit.(type) {
+	case KFXSymbol:
+		u = v
+	case SymbolValue:
+		u = KFXSymbol(v)
+	default:
+		return ""
 	}
-	return ""
+	switch u {
+	case SymUnitEm:
+		return "em"
+	case SymUnitPercent:
+		return "%"
+	case SymUnitLh:
+		return "lh"
+	case SymUnitPx:
+		return "px"
+	case SymUnitPt:
+		return "pt"
+	case SymUnitRem:
+		return "rem"
+	default:
+		return fmt.Sprintf("($%d)", u)
+	}
 }

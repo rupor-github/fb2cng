@@ -676,7 +676,9 @@ Per Kindle Previewer (KPV) reference format, page templates use a minimal 3-fiel
 - `$143` (offset): start offset within text (**character/rune offset**, not byte offset)
 - `$144` (length): span length in characters/runes
 - `$157` (style): style name reference
-- `$179` (link_target): optional link anchor reference
+- `$179` (link_to): optional link anchor reference (symbol pointing to a `$266` anchor fragment)
+   - For internal links: points to the anchor ID of a position anchor
+   - For external links: points to the anchor ID of an external URI anchor (see §7.7.1)
 - `$616` (yj.display): for footnote links, set to `$617` (yj.note) (KPV parity)
 
 **Important**: Offsets and lengths in style events (`$143`, `$144`) are measured in **Unicode code points (characters/runes)**, not bytes. For text containing multi-byte characters (e.g., Cyrillic, CJK), the character offset will differ from the byte offset. For example, the Russian text "Автор" is 5 characters but 10 bytes in UTF-8.
@@ -864,6 +866,219 @@ Derived from: `kfxlib/yj_position_location.py:BookPosLoc.collect_position_map_in
 | `$550` | `IonList` of length 1 with `IonStruct` | Struct keys `$182` and `$178` only; `$182` list entries are structs with `$155` (EID) and optional `$143` (offset) | If present, used to compute and validate LOC→PID mapping via position maps |
 | `$621` | `IonList` of length 1 with `IonStruct` | Struct keys `$182` and `$178` only; `$182` is list of integer PIDs | If `$550` exists, PIDs are cross-checked; else used to infer EID/offset by inverse lookup |
 
+#### 7.6.9 Inline image position tracking in `$265` position_id_map
+
+When a paragraph contains inline images (mixed text and image content), KP3 generates granular position entries that track the exact character offset of each image within the text stream. This enables precise position resolution for navigation and anchors.
+
+**Mixed content structure in storylines**:
+
+In a `$259` storyline's `$146` content_list, a text entry with inline images uses a nested content_list containing interleaved strings and image structs:
+
+```
+{
+  $155: <parent_eid>,      // Parent paragraph EID
+  $159: $269,              // Type = text
+  $146: [                  // Mixed content_list (NOT $145 content reference)
+    "Text before image ",  // String segment
+    {                      // Inline image
+      $155: <image_eid>,
+      $159: $271,          // Type = image
+      $175: resource_name  // Resource reference
+    },
+    " text after image"    // String segment
+  ]
+}
+```
+
+**Position ID map entries for mixed content**:
+
+For each paragraph with inline images, the `$265` position_id_map contains multiple entries:
+
+1. **Parent entry at start**: `{ $184: start_pid, $185: parent_eid }`
+2. **For each inline image**:
+   - **Before image entry**: `{ $143: offset, $184: pid, $185: parent_eid }` (offset = character position where image appears)
+   - **Image entry**: `{ $184: pid, $185: image_eid }` (same PID as before entry)
+   - **After image entry**: `{ $143: offset+1, $184: pid+1, $185: parent_eid }` (offset incremented by 1)
+
+**Offset calculation rules**:
+
+- Text characters contribute 1 to the offset counter (measured in Unicode code points/runes)
+- Each inline image also consumes 1 position in the offset counter
+- The "before image" offset equals the cumulative text length before the image
+- The "after image" offset equals the "before image" offset + 1
+
+**Example**: For text "Тэг [img] может быть вложен" with an inline image after "Тэг ":
+
+| Entry Type | $143 (offset) | $184 (pid) | $185 (eid) | Notes |
+|---|---|---|---|---|
+| Parent | - | 11609 | 879 | Start of paragraph |
+| Before 1st image | 4 | 11613 | 879 | After "Тэг " (4 chars) |
+| 1st inline image | - | 11613 | 1550 | Image EID |
+| After 1st image | 5 | 11614 | 879 | offset=4+1 |
+| Before 2nd image | 31 | 11640 | 879 | After next text segment |
+| 2nd inline image | - | 11640 | 1264 | Image EID |
+| After 2nd image | 32 | 11641 | 879 | offset=31+1 |
+
+**format_capabilities requirement**:
+
+When the `$265` position_id_map contains any entries with the `$143` (offset) field, the `format_capabilities` fragment must include:
+
+```
+{$492: "kfxgen.pidMapWithOffset", version: 1}
+```
+
+This signals to readers (like KFXInput) that offset-based position entries are present. If this capability is missing but offset entries exist, validation will fail with an error like:
+`FC kfxgen.pidMapWithOffset=None with eid offset present=True`
+
+Derived from: `convert/kfx/frag_positionmaps.go:CollectPositionItems`, `BuildPositionIDMap`, `convert/kfx/frag_capabilities.go:FormatFeaturesWithPIDMapOffset`, KP3 reference files.
+
+#### 7.6.10 Image-only text entries (special case)
+
+When a text entry contains **only** inline images with no actual text (e.g., a title paragraph with just an image), KP3 uses simplified position tracking rather than the granular before/image/after pattern used for mixed content.
+
+**Structure identification**:
+
+Image-only text entries are identified by:
+- Entry type is `$269` (text)
+- Entry has `$146` (content_list) containing only image struct(s), no strings
+- All inline images have offset 0 (since there's no preceding text)
+- Total content length equals the number of images
+
+**Position ID map entries for image-only content**:
+
+For image-only text entries, KP3 emits simpler entries:
+
+| Entry Type | $143 (offset) | $184 (pid) | $185 (eid) | Notes |
+|---|---|---|---|---|
+| Wrapper | - | N | wrapper_eid | Text entry wrapper |
+| Image | - | N | image_eid | Same PID as wrapper |
+
+Key differences from mixed content:
+- **No offset entries** ($143 field is absent)
+- **Same PID** for wrapper and image entries
+- **No before/after entries** with offsets
+- PID advances by 1 after processing
+
+**Example**: Title paragraph with only an inline image:
+
+```
+Storyline entry:
+{
+  $155: 1305,          // Wrapper EID
+  $159: $269,          // Type = text
+  $146: [              // content_list with image only
+    {
+      $155: 1306,      // Image EID
+      $159: $271,      // Type = image
+      $175: img_name   // Resource reference
+    }
+  ]
+}
+
+KP3 position_id_map entries:
+{ $184: 11391, $185: 1305 }    // Wrapper at PID 11391
+{ $184: 11391, $185: 1306 }    // Image at same PID 11391
+```
+
+**Contrast with mixed content** (text + image):
+
+For a paragraph like "Text [img] more text", KP3 emits:
+```
+{ $184: 11391, $185: 1305 }               // Wrapper start
+{ $143: 5, $184: 11396, $185: 1305 }      // Before image (offset=5)
+{ $184: 11396, $185: 1306 }               // Image
+{ $143: 6, $184: 11397, $185: 1305 }      // After image (offset=6)
+```
+
+Derived from: `convert/kfx/frag_positionmaps.go:BuildPositionIDMap`, KP3 reference files.
+
+#### 7.6.11 Image-only block styling requirements
+
+When a paragraph contains **only** an inline image (no text content), the image must inherit block-level styling from its parent paragraph for proper display. This is critical for elements like subtitles or titles that contain only an image.
+
+**Problem symptoms**:
+- Image-only paragraphs don't display in Kindle Previewer (KP3)
+- Images appear but without proper margins/spacing
+- Centered subtitles with images align incorrectly
+
+**Required style properties for image-only blocks**:
+
+When generating a style for an image that is the sole content of a block element:
+
+1. **Inherit from parent block style**:
+   - `margin-top` (`$47`) - vertical spacing above
+   - `margin-bottom` (`$49`) - vertical spacing below
+   - `margin-left` (`$48`) - horizontal spacing left
+   - `margin-right` (`$50`) - horizontal spacing right
+   - `break-before` (`$789`) - page break control
+   - `break-after` (`$788`) - page break control
+   - `font-weight` (`$13`) - affects line-box calculation
+
+2. **Filter out inapplicable properties**:
+   - `text-indent` (`$36`) - doesn't apply to images
+   - `text-align` (`$34`) - replaced with box-align
+   - `line-height` - override with 1lh (see below)
+
+3. **Add image-specific properties**:
+   - `baseline-style: center` (`$44` = `$320`) - vertical alignment
+   - `box-align: center` (`$587` = `$320`) - horizontal centering (replaces text-align)
+   - `width: X%` (`$56` with `$314` unit) - width as percentage of screen
+   - `line-height: 1lh` (`$39` = 1 `$310`) - required for proper layout
+
+**Width calculation**:
+```go
+widthPercent := float64(imageWidth) / float64(screenWidth) * 100
+// Clamp to 0-100%
+if widthPercent > 100 { widthPercent = 100 }
+if widthPercent < 0 { widthPercent = 0 }
+```
+
+**Example merged style** for a centered subtitle image:
+
+```
+Source block style (subtitle):
+{
+  $34: $320,           // text-align: center
+  $13: $361,           // font-weight: bold  
+  $47: {$307: 1.5, $306: $310}  // margin-top: 1.5lh
+}
+
+Resulting image style:
+{
+  $13: $361,           // font-weight: bold (inherited)
+  $47: {$307: 1.5, $306: $310}, // margin-top: 1.5lh (inherited)
+  $44: $320,           // baseline-style: center (added)
+  $587: $320,          // box-align: center (replaces text-align)
+  $56: {$307: 63.333333, $306: $314}, // width: 63.333333%
+  $39: {$307: 1., $306: $310}  // line-height: 1lh (required)
+}
+```
+
+**Detection logic** in storyline processing:
+
+```go
+// Detect image-only block (no text content)
+hasTextContent := false
+hasInlineImages := false
+for _, item := range contentList {
+    switch v := item.(type) {
+    case string:
+        if strings.TrimSpace(v) != "" {
+            hasTextContent = true
+        }
+    case map[string]any:
+        if v["$159"] == "$271" { // Type = image
+            hasInlineImages = true
+        }
+    }
+}
+imageOnlyBlock := !hasTextContent && hasInlineImages
+```
+
+When `imageOnlyBlock` is true, use `ResolveBlockImageStyle()` instead of basic `ResolveImageStyle()` to generate the combined style.
+
+Derived from: `convert/kfx/frag_style.go:ResolveBlockImageStyle`, `convert/kfx/frag_storyline_process.go:addParagraphWithImages`, KP3 reference files.
+
 ### 7.7 Navigation fragments (`$389`, `$391`, `$394`, `$390`)
 
 This repository consumes navigation primarily to generate:
@@ -879,17 +1094,34 @@ Derived from: `kfxlib/yj_to_epub_navigation.py:KFX_EPUB_Navigation.process_ancho
 
 Anchor fragments are collected first. Each `$266` entry is validated and then interpreted as either:
 
-- External URI anchor:
-   - `$186`: URI string (special-cased: `"http://"` and `"https://"` are treated as empty)
+- **External URI anchor** (for external links like http/https URLs):
+   - `$180` (anchor_name): The anchor ID (symbol) - used by style events via `$179` (link_to)
+   - `$186` (uri): The external URL string (e.g., `"http://www.example.org/..."`)
+   
+   **Important**: In KP3 reference KFX, external links work via anchor indirection:
+   1. An anchor fragment is created with both `$180` (anchor_name) and `$186` (uri)
+   2. Style events reference this anchor via `$179` (link_to) pointing to the anchor_name
+   3. This differs from putting `$186` directly on style events (which doesn't work)
+   
+   Example external link anchor fragment:
+   ```
+   Fragment: fid="aEXT0", ftype=$266
+   Value: { $180: symbol(aEXT0), $186: "http://www.example.org/page" }
+   ```
+   
+   The corresponding style event references it:
+   ```
+   { $143: 10, $144: 5, $157: "link-external", $179: symbol(aEXT0) }
+   ```
 
-- Position anchor:
+- **Position anchor** (for internal links within the book):
    - `$183`: a position struct (see §7.6.1); the converter registers the anchor at that position
 
 Other observed keys:
 
 - `$597` is tolerated and discarded.
 
-Derived from: `kfxlib/yj_to_epub_navigation.py:KFX_EPUB_Navigation.process_anchors`.
+Derived from: `kfxlib/yj_to_epub_navigation.py:KFX_EPUB_Navigation.process_anchors`, `convert/kfx/frag_anchor.go`.
 
 #### 7.7.2 `$390` section_navigation (nav containers per section)
 
@@ -1230,6 +1462,91 @@ Important processing order (behavioral semantics):
 
 Derived from: `kfxlib/yj_to_epub_content.py:KFX_EPUB_Content.process_content` (style_events loop), `find_or_create_style_event_element`, `add_kfx_style`, and `kfxlib/yj_to_epub_properties.py:KFX_EPUB_Properties.process_content_properties`.
 
+##### 7.8.3.2 Style event ordering and non-overlapping requirement (CRITICAL)
+
+**CRITICAL**: KP3 (Kindle Previewer 3) enforces strict rules about style event ordering and overlap. Violating these rules causes severe rendering issues including incorrect font sizes, broken alignment, and visual corruption.
+
+**Non-overlapping requirement**:
+
+KP3's internal code explicitly throws an exception if overlapping style events are detected:
+```java
+throw new IllegalArgumentException("Cannot create Overlapping Style Events. Offset = " + offset + ", Length = " + length);
+```
+
+Style events **MUST NOT** overlap. If the original content has nested inline styles (e.g., a link inside a code block), the encompassing style must be **segmented** around the nested element.
+
+**Correct approach - Segmentation**:
+
+For text like `"Hello <code>foo<link>1.17</link>bar</code> World"` (30 chars total):
+- DO NOT create overlapping events:
+  ```
+  BAD: [0]: offset=6, len=15, code-style      // encompasses link
+       [1]: offset=9, len=4, link-style       // overlaps with code
+  ```
+- DO segment the outer style around inner elements:
+  ```
+  GOOD: [0]: offset=6, len=3, code-style      // "foo" before link
+        [1]: offset=9, len=4, link-style      // "1.17" (link)
+        [2]: offset=13, len=3, code-style     // "bar" after link
+  ```
+
+**Ordering requirement**:
+
+Events are stored sorted by:
+1. **Offset ascending** (primary sort key)
+2. **Length ascending** (secondary sort key, for events at same offset - shorter first)
+
+KP3's insertion algorithm (from decompiled Java):
+```java
+private int insertionIndex(int offset, int length) {
+    for (int i = 0; i < events.size(); i++) {
+        StyleEvent ev = events.get(i);
+        int evOffset = ev.offset();
+        int evLength = ev.length();
+        if (evOffset > offset || (evOffset == offset && evLength < length)) {
+            return i;
+        }
+    }
+    return -1; // append at end
+}
+```
+
+**Relationship between container style and style events**:
+
+The container/entry-level `$157` (style) field provides the **base style** for text not covered by any style event. Style events provide **additional/override styles** for specific spans.
+
+This means:
+- If text has NO inline formatting: no `$142` list needed, just container `$157`
+- If text HAS inline formatting: `$142` contains ONLY the inline-styled portions
+- The container style automatically applies to gaps between style events
+
+**Example from KP3 reference** (code block with footnote link):
+
+Text: `"     <xsl:template match=\"fb:code\">1.17         <xsl:element..."` (223 chars)
+
+```
+style_events ($142): (3)
+  [0]: offset=0, len=35, style="s19S"   /* monospace code style - before link */
+  [1]: offset=35, len=4, style="s19T"   /* superscript+monospace link style */
+  [2]: offset=39, len=184, style="s19S" /* monospace code style - after link */
+```
+
+Note that:
+1. The code style is segmented: 0-34, then 39-222
+2. The link style at offset 35 includes monospace properties (merged)
+3. No overlapping events exist
+4. Events are ordered by offset ascending
+
+**Style property inheritance in nested contexts**:
+
+When an inline element (like a link) appears inside a styled context (like a code block), the inline element's style should **include/inherit** properties from the outer context. In the example above, `s19T` (the link style) includes `font-family: monospace` from the surrounding code context.
+
+This can be achieved by:
+1. Creating combined styles in the style registry that merge outer + inner properties
+2. Or by ensuring the style events cover all text and each carries its full computed style
+
+Derived from: KP3 decompiled source (`com.amazon.B.d.e.b.A.java`), reference KFX analysis, `convert/kfx/frag_storyline_builder.go:SegmentStyleEvents`.
+
 3. **First-line style**: if a content struct contains `$622`, it is treated as a first-line style struct.
    - If `$622` is present, it is popped into `first_line_style`.
    - The converter pops `$173` from `first_line_style` (if present) and uses it as the style name for `add_kfx_style(...)`, then pops `$173` again (ensuring it is removed).
@@ -1336,7 +1653,22 @@ KFX uses a dimension struct `{ $307: magnitude, $306: unit }` for all length val
 
 Implementation note: Use `ion.MustParseDecimal()` or equivalent to create proper Ion Decimal values. The decimal representation should follow KPV conventions (e.g., `"2.5d-1"` for 0.25, `"1."` for 1.0).
 
-Derived from: Reference KFX analysis, `convert/kfx/frag_style.go:DimensionValue`.
+**CRITICAL - Decimal Precision Requirement**: KP3 requires decimal values in `$307` to have **at most 3 significant decimal digits**. Amazon's KFX processing code uses `setScale(3, RoundingMode.HALF_UP)` for dimension calculations (found in `com/amazon/yj/F/a/b.java` and other style processing classes). Values with excessive precision (e.g., from float64 division like `1/1.2 = 0.8333333333333334`) cause **rendering failures** where images may not display and styles may not apply correctly.
+
+Example precision issue:
+```
+Working (3 decimal places):
+  $307: decimal(8.33d-1)       // 0.833 - 3 digits ✓
+  $307: decimal(63.333)        // 3 digits ✓
+
+Broken (excessive precision):
+  $307: decimal(8.333333333333334d-1)  // 16 digits ✗ - IMAGE FAILS TO DISPLAY
+  $307: decimal(63.33333333333333)     // 14 digits ✗ - IMAGE FAILS TO DISPLAY
+```
+
+This affects all dimension values (`$307`) including image widths, margins, font sizes, and any other style properties using decimal magnitudes.
+
+Derived from: Reference KFX analysis, `convert/kfx/frag_style.go:DimensionValue`, `formatKPVNumber`.
 
 #### 7.10.1 Unit symbols
 

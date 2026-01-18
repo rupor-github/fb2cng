@@ -115,7 +115,7 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	annotationEnabled := cfg.Annotation.Enable && c.Book.Description.TitleInfo.Annotation != nil
 	tocPageEnabled := cfg.TOCPage.Placement != common.TOCPagePlacementNone
 	if annotationEnabled || tocPageEnabled {
-		sectionNames, tocEntries, sectionEIDs, nextEID, landmarks, idToEID, err = addGeneratedSections(c, cfg, styles, contentFragments, sectionNames, tocEntries, sectionEIDs, nextEID, landmarks, idToEID, log)
+		sectionNames, tocEntries, sectionEIDs, nextEID, landmarks, idToEID, err = addGeneratedSections(c, cfg, styles, contentFragments, sectionNames, tocEntries, sectionEIDs, nextEID, landmarks, idToEID, imageResourceInfo, log)
 		if err != nil {
 			return err
 		}
@@ -220,8 +220,20 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 		}
 	}
 
+	// $266 Anchors (for external links - URLs with anchor_name + uri)
+	for _, frag := range styles.BuildExternalLinkFragments() {
+		if err := container.Fragments.Add(frag); err != nil {
+			return err
+		}
+	}
+
 	// $593 FormatCapabilities - keep minimal (KFXInput reads kfxgen.* here)
-	container.FormatCapabilities = BuildFormatCapabilities(DefaultFormatFeatures()).Value
+	// Include pidMapWithOffset when inline images use offset-based position entries
+	formatFeatures := DefaultFormatFeatures()
+	if HasInlineImages(posItems) {
+		formatFeatures = FormatFeaturesWithPIDMapOffset()
+	}
+	container.FormatCapabilities = BuildFormatCapabilities(formatFeatures).Value
 
 	// $585 content_features - reflow/canonical features live here in reference files
 	maxSectionPIDCount := computeMaxSectionPIDCount(sectionEIDs, posItems)

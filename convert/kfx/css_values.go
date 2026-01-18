@@ -76,6 +76,161 @@ func ConvertTextAlign(css CSSValue) (KFXSymbol, bool) {
 	return 0, false
 }
 
+// ConvertWritingMode maps writing-mode values to KFX symbols.
+// CSS: horizontal-tb, vertical-rl, vertical-lr
+// KFX: $557 (horizontal_tb), $559 (vertical_rl), $558 (vertical_lr)
+func ConvertWritingMode(css CSSValue) (KFXSymbol, bool) {
+	val := strings.ToLower(firstNonEmpty(css.Keyword, css.Raw))
+	switch val {
+	case "horizontal-tb", "horizontal_tb":
+		return SymHorizontalTb, true
+	case "vertical-rl", "vertical_rl":
+		return SymVerticalRl, true
+	case "vertical-lr", "vertical_lr":
+		return SymVerticalLr, true
+	}
+	if sym, ok := symbolIDFromString(val); ok {
+		return sym, true
+	}
+	return 0, false
+}
+
+// ConvertTextCombine maps text-combine-upright to KFX symbols.
+func ConvertTextCombine(css CSSValue) (KFXSymbol, bool) {
+	val := strings.ToLower(firstNonEmpty(css.Keyword, css.Raw))
+	if val == "" {
+		return 0, false
+	}
+	if sym, ok := symbolIDFromString(val); ok {
+		return sym, true
+	}
+	return 0, false
+}
+
+// ConvertTextOrientation converts text-orientation to KFX symbols.
+func ConvertTextOrientation(css CSSValue) (KFXSymbol, bool) {
+	val := strings.ToLower(firstNonEmpty(css.Keyword, css.Raw))
+	switch val {
+	case "mixed":
+		return SymAuto, true
+	case "upright":
+		return SymUpright, true
+	case "sideways", "sideways-rl", "sideways-lr":
+		return SymSideways, true
+	}
+	if sym, ok := symbolIDFromString(val); ok {
+		return sym, true
+	}
+	return 0, false
+}
+
+// ConvertTextEmphasisStyle maps text-emphasis-style to KFX symbols.
+func ConvertTextEmphasisStyle(css CSSValue) (KFXSymbol, bool) {
+	val := strings.ToLower(firstNonEmpty(css.Keyword, css.Raw))
+	if val == "" {
+		return 0, false
+	}
+
+	fill := "filled"
+	shape := ""
+	for _, token := range strings.Fields(val) {
+		switch token {
+		case "filled", "open":
+			fill = token
+		case "dot", "circle", "double-circle", "triangle", "sesame":
+			shape = token
+		}
+	}
+
+	if shape == "" {
+		shape = val
+	}
+
+	switch fill {
+	case "open":
+		switch shape {
+		case "dot":
+			return SymOpenDot, true
+		case "circle":
+			return SymOpenCircle, true
+		case "double-circle", "doublecircle":
+			return SymOpenDoubleCircle, true
+		case "triangle":
+			return SymOpenTriangle, true
+		case "sesame":
+			return SymOpenSesame, true
+		}
+	default:
+		switch shape {
+		case "dot":
+			return SymFilledDot, true
+		case "circle":
+			return SymFilledCircle, true
+		case "double-circle", "doublecircle":
+			return SymFilledDoubleCircle, true
+		case "triangle":
+			return SymFilledTriangle, true
+		case "sesame":
+			return SymFilledSesame, true
+		}
+	}
+
+	if sym, ok := symbolIDFromString(val); ok {
+		return sym, true
+	}
+
+	return 0, false
+}
+
+// ConvertTextEmphasisPosition splits position into horizontal/vertical symbols.
+func ConvertTextEmphasisPosition(css CSSValue) (KFXSymbol, KFXSymbol, bool) {
+	val := strings.ToLower(firstNonEmpty(css.Keyword, css.Raw))
+	if val == "" {
+		return 0, 0, false
+	}
+
+	var horiz, vert KFXSymbol
+	for _, part := range strings.FieldsFunc(val, func(r rune) bool { return r == ' ' || r == ',' }) {
+		switch part {
+		case "over", "top":
+			vert = SymTop
+		case "under", "bottom":
+			vert = SymBottom
+		case "left":
+			horiz = SymLeft
+		case "right":
+			horiz = SymRight
+		}
+	}
+
+	if horiz == 0 && vert == 0 {
+		return 0, 0, false
+	}
+	return horiz, vert, true
+}
+
+// ConvertListStyle converts list-style-type values to KFX symbols.
+func ConvertListStyle(value string) (KFXSymbol, bool) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "disc":
+		return SymListStyleDisc, true
+	case "square":
+		return SymListStyleSquare, true
+	case "circle":
+		return SymListStyleCircle, true
+	case "none":
+		return SymNone, true
+	case "decimal", "numeric":
+		return SymListStyleNumber, true
+	}
+
+	if id := SymbolID(strings.ToLower(value)); id != -1 {
+		return id, true
+	}
+
+	return 0, false
+}
+
 // TextDecorationResult holds the result of parsing text-decoration.
 type TextDecorationResult struct {
 	Underline     bool
@@ -198,6 +353,26 @@ func ConvertFloat(css CSSValue) (KFXSymbol, bool) {
 	case "none":
 		return SymNone, true // $349
 	}
+	if sym, ok := symbolIDFromString(strings.ReplaceAll(strings.ToLower(css.Keyword), "-", "_")); ok {
+		return sym, true
+	}
+	return 0, false
+}
+
+// ConvertClear converts CSS clear values to KFX symbols for yj.float_clear.
+// CSS: left, right, both, none
+// KFX: $59 (left), $61 (right), $421 (both), $349 (none)
+func ConvertClear(css CSSValue) (KFXSymbol, bool) {
+	switch strings.ToLower(css.Keyword) {
+	case "left":
+		return SymLeft, true
+	case "right":
+		return SymRight, true
+	case "both":
+		return SymBoth, true
+	case "none":
+		return SymNone, true
+	}
 	return 0, false
 }
 
@@ -212,6 +387,46 @@ func ConvertPageBreak(css CSSValue) (KFXSymbol, bool) {
 		return SymAvoid, true // $353
 	case "auto":
 		return SymAuto, true // $383
+	}
+	return 0, false
+}
+
+// convertYjBreak converts yj-break-before/yj-break-after values.
+// Values come from stylemap: always, avoid, auto
+// KFX: $352 (always), $353 (avoid), $383 (auto)
+func convertYjBreak(css CSSValue) (KFXSymbol, bool) {
+	val := strings.ToLower(firstNonEmpty(css.Keyword, css.Raw))
+	switch val {
+	case "always":
+		return SymAlways, true
+	case "avoid":
+		return SymAvoid, true
+	case "auto":
+		return SymAuto, true
+	}
+	return 0, false
+}
+
+// ConvertBaselineStyle converts baseline-style values from stylemap.
+// Used by vertical-align mapping in stylemap for super/sub positioning.
+// Values: center, top, bottom, superscript, subscript
+// KFX: $320 (center), $58 (top), $60 (bottom), $370 (superscript), $371 (subscript)
+func ConvertBaselineStyle(css CSSValue) (KFXSymbol, bool) {
+	val := strings.ToLower(firstNonEmpty(css.Keyword, css.Raw))
+	switch val {
+	case "center":
+		return SymCenter, true
+	case "top":
+		return SymTop, true
+	case "bottom":
+		return SymBottom, true
+	case "superscript", "super":
+		return SymSuperscript, true
+	case "subscript", "sub":
+		return SymSubscript, true
+	}
+	if sym, ok := symbolIDFromString(val); ok {
+		return sym, true
 	}
 	return 0, false
 }
@@ -241,12 +456,16 @@ func ParseColor(css CSSValue) (r, g, b int, ok bool) {
 		}
 	}
 
-	// Handle rgb() function
-	if strings.HasPrefix(strings.ToLower(raw), "rgb(") {
-		inner := strings.TrimPrefix(strings.ToLower(raw), "rgb(")
+	// Handle rgb()/rgba() functions (alpha ignored)
+	lowerRaw := strings.ToLower(raw)
+	if strings.HasPrefix(lowerRaw, "rgb(") || strings.HasPrefix(lowerRaw, "rgba(") {
+		inner := strings.TrimPrefix(lowerRaw, "rgba(")
+		if inner == lowerRaw {
+			inner = strings.TrimPrefix(lowerRaw, "rgb(")
+		}
 		inner = strings.TrimSuffix(inner, ")")
 		parts := strings.Split(inner, ",")
-		if len(parts) == 3 {
+		if len(parts) >= 3 {
 			rVal, _ := strconv.Atoi(strings.TrimSpace(parts[0]))
 			gVal, _ := strconv.Atoi(strings.TrimSpace(parts[1]))
 			bVal, _ := strconv.Atoi(strings.TrimSpace(parts[2]))

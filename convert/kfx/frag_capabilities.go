@@ -38,3 +38,12 @@ func DefaultFormatFeatures() []FormatFeature {
 		{Key: "kfxgen.textBlock", Version: 1},
 	}
 }
+
+// FormatFeaturesWithPIDMapOffset returns format features including pidMapWithOffset
+// for books with inline images that use offset-based position entries.
+func FormatFeaturesWithPIDMapOffset() []FormatFeature {
+	return []FormatFeature{
+		{Key: "kfxgen.textBlock", Version: 1},
+		{Key: "kfxgen.pidMapWithOffset", Version: 1},
+	}
+}

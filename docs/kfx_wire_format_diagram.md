@@ -647,7 +647,7 @@ Visual byte map (approximate):
 │    $143: <offset>,           // Start offset in text (CHARACTER offset)     │
 │    $144: <length>,           // Span length (in CHARACTERS)                 │
 │    $157: style_name,         // Style reference (e.g., "emphasis")          │
-│    $179: anchor_name,        // Optional link target                        │
+│    $179: anchor_name,        // Optional link target (see section 13)       │
 │    $616: $617                // For footnote links: yj.display = yj.note    │
 │  }                                                                          │
 │                                                                             │
@@ -663,6 +663,12 @@ Visual byte map (approximate):
 │                                                                             │
 │    Style event for "1.1": $143: 6, $144: 3 (chars, NOT bytes!)              │
 │    Wrong (byte offset): $143: 11, $144: 3                                   │
+│                                                                             │
+│  Link Target ($179):                                                        │
+│  ───────────────────                                                        │
+│  The $179 field references an anchor fragment ($266) by its anchor_name.    │
+│  - For internal links: points to a position anchor                          │
+│  - For external links: points to an external URI anchor (see section 13)    │
 │                                                                             │
 │  Footnote Link Detection (KPV parity):                                      │
 │  ─────────────────────────────────────                                      │
@@ -687,6 +693,20 @@ Visual byte map (approximate):
 │  render incorrectly if $307 is Ion Float, Ion Int, or Ion String.           │
 │  Use ion.MustParseDecimal() or equivalent to create proper decimals.        │
 │  Decimal notation examples: "2.5d-1" for 0.25, "1." for 1.0, "8d-1" for 0.8 │
+│                                                                             │
+│  CRITICAL - Decimal Precision (MAX 3 DIGITS):                               │
+│  ────────────────────────────────────────────                               │
+│  KP3 requires decimal values to have AT MOST 3 significant decimal digits.  │
+│  Amazon's code uses setScale(3, RoundingMode.HALF_UP) for dimensions.       │
+│  Excessive precision causes RENDERING FAILURES (images don't display).      │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  Working (3 digits):    $307: decimal(8.33d-1)        // 0.833      │    │
+│  │                         $307: decimal(63.333)         // 63.333     │    │
+│  │                                                                     │    │
+│  │  BROKEN (too many):     $307: decimal(8.333333333333334d-1)         │    │
+│  │                         $307: decimal(63.33333333333333)            │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
 │                                                                             │
 │  Unit Symbols:                                                              │
 │  ─────────────                                                              │
@@ -843,7 +863,72 @@ Visual byte map (approximate):
 
 ---
 
-## 13. Position Map Format (KPV-Compatible)
+## 13. Anchor Structure (`$266`)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    $266 ANCHOR FRAGMENT STRUCTURE                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Anchor fragments support two types: position anchors and external URI      │
+│  anchors. Both are referenced from style events via $179 (link_to).         │
+│                                                                             │
+│  POSITION ANCHOR (for internal book links):                                 │
+│  ─────────────────────────────────────────                                  │
+│  Fragment: fid = anchor_id, ftype = $266                                    │
+│  {                                                                          │
+│    $183: {                       // Position struct                         │
+│      $155: <eid>,                // Target content EID                      │
+│      $143: <offset>              // Optional offset within content          │
+│    }                                                                        │
+│  }                                                                          │
+│                                                                             │
+│  EXTERNAL URI ANCHOR (for http/https links):                                │
+│  ───────────────────────────────────────────                                │
+│  Fragment: fid = anchor_id, ftype = $266                                    │
+│  {                                                                          │
+│    $180: anchor_name,            // Anchor ID as SYMBOL                     │
+│    $186: "http://example.org/..." // External URL string                    │
+│  }                                                                          │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  CRITICAL: External Links Work via Anchor Indirection               │    │
+│  │                                                                     │    │
+│  │  Correct approach (KP3 reference):                                  │    │
+│  │    1. Create $266 anchor with $180 (anchor_name) + $186 (uri)       │    │
+│  │    2. Style event references anchor via $179 (link_to)              │    │
+│  │                                                                     │    │
+│  │  Wrong approach (doesn't work):                                     │    │
+│  │    Put $186 directly on style event (external links not clickable)  │    │
+│  │                                                                     │    │
+│  │  Example:                                                           │    │
+│  │  ─────────                                                          │    │
+│  │  Anchor fragment (fid="aEXT0"):                                     │    │
+│  │    { $180: symbol(aEXT0), $186: "http://www.example.org/" }         │    │
+│  │                                                                     │    │
+│  │  Style event referencing it:                                        │    │
+│  │    { $143: 10, $144: 5, $157: "link-external", $179: symbol(aEXT0) }│    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+│  Link Types and Style Event Structure:                                      │
+│  ─────────────────────────────────────                                      │
+│  Internal link (footnote):                                                  │
+│    { $143: offset, $144: length, $157: "link-footnote",                     │
+│      $179: symbol(anchor_id), $616: $617 }                                  │
+│                                                                             │
+│  External link (URL):                                                       │
+│    { $143: offset, $144: length, $157: "link-external",                     │
+│      $179: symbol(external_anchor_id) }                                     │
+│                                                                             │
+│  NOTE: $616: $617 (yj.display: yj.note) is added only for footnote links    │
+│  to enable Kindle's popup footnote display feature.                         │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 14. Position Map Format (KPV-Compatible)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -877,7 +962,254 @@ Visual byte map (approximate):
 
 ---
 
-## 14. Key Points Summary
+## 14.1 Inline Images in Mixed Content (Position Tracking)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    INLINE IMAGES IN STORYLINE CONTENT                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  When a paragraph contains inline images (text with embedded images),       │
+│  the storyline entry uses a nested content_list ($146) instead of a         │
+│  content reference ($145).                                                  │
+│                                                                             │
+│  Mixed Content Entry Structure:                                             │
+│  ─────────────────────────────                                              │
+│  {                                                                          │
+│    $155: <parent_eid>,         // Parent paragraph EID                      │
+│    $159: $269,                 // Type = text                               │
+│    $157: style_name,           // Optional style                            │
+│    $146: [                     // Mixed content_list (NOT $145!)            │
+│      "Text before image ",     // String segment                            │
+│      {                         // Inline image struct                       │
+│        $155: <image_eid>,      // Image element EID                         │
+│        $159: $271,             // Type = image                              │
+│        $175: resource_name     // Resource ref as SYMBOL                    │
+│      },                                                                     │
+│      " text after image ",     // String segment                            │
+│      {                         // Another inline image                      │
+│        $155: <image_eid_2>,                                                 │
+│        $159: $271,                                                          │
+│        $175: resource_name_2                                                │
+│      },                                                                     │
+│      " more text"              // Final string segment                      │
+│    ]                                                                        │
+│  }                                                                          │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  KEY DIFFERENCE:                                                    │    │
+│  │                                                                     │    │
+│  │  Regular text:  $145: {name: content_X, $403: offset}               │    │
+│  │  Mixed content: $146: ["text", {image}, "text", ...]                │    │
+│  │                                                                     │    │
+│  │  The presence of $146 with string+struct items indicates mixed      │    │
+│  │  content requiring granular position tracking.                      │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    $265 POSITION_ID_MAP FOR INLINE IMAGES                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  For paragraphs with inline images, KP3 generates granular position         │
+│  entries that track each image's exact character offset within the text.    │
+│                                                                             │
+│  Entry Types:                                                               │
+│  ────────────                                                               │
+│  1. Parent entry:      { $184: pid, $185: parent_eid }                      │
+│  2. Before image:      { $143: offset, $184: pid, $185: parent_eid }        │
+│  3. Image entry:       { $184: pid, $185: image_eid }                       │
+│  4. After image:       { $143: offset+1, $184: pid+1, $185: parent_eid }    │
+│                                                                             │
+│  Symbol Reference:                                                          │
+│  ─────────────────                                                          │
+│  $143 = offset (character position within parent text)                      │
+│  $184 = position_id (PID - global position counter)                         │
+│  $185 = element_id (EID - content element identifier)                       │
+│                                                                             │
+│  Offset Calculation Rules:                                                  │
+│  ─────────────────────────                                                  │
+│  - Text characters: +1 per Unicode code point (rune)                        │
+│  - Inline images: +1 per image (images consume position space!)             │
+│  - "Before image" offset = cumulative text length before image              │
+│  - "After image" offset = "before image" offset + 1                         │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  CRITICAL: Images Consume Position Space                            │    │
+│  │                                                                     │    │
+│  │  When calculating offsets for subsequent images, each preceding     │    │
+│  │  image adds 1 to the offset counter:                                │    │
+│  │                                                                     │    │
+│  │  Text: "AAAA" [img1] "BBBBBBBBBB" [img2] "CCCC"                     │    │
+│  │         ↑4    ↑+1    ↑10         ↑+1                                │    │
+│  │                                                                     │    │
+│  │  1st image offset: 4 (after "AAAA")                                 │    │
+│  │  2nd image offset: 4 + 1 + 10 = 15 (not 14!)                        │    │
+│  │                                                                     │    │
+│  │  Wrong:   offset = sum(text_lengths)                                │    │
+│  │  Correct: offset = sum(text_lengths) + count(preceding_images)      │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+│  Example Position Entries (KP3 Reference):                                  │
+│  ─────────────────────────────────────────                                  │
+│  Text: "Тэг [img1] может быть вложен [img2] и [img3]..."                    │
+│                                                                             │
+│  Entry                        │ $143  │ $184  │ $185  │ Notes               │
+│  ─────────────────────────────┼───────┼───────┼───────┼─────────────────────│
+│  Parent at start              │   -   │ 11609 │  879  │ Paragraph start     │
+│  Before 1st image             │   4   │ 11613 │  879  │ After "Тэг "        │
+│  1st inline image             │   -   │ 11613 │ 1550  │ Same PID as before  │
+│  After 1st image              │   5   │ 11614 │  879  │ offset+1, pid+1     │
+│  Before 2nd image             │  31   │ 11640 │  879  │ Text + img1 offset  │
+│  2nd inline image             │   -   │ 11640 │ 1264  │                     │
+│  After 2nd image              │  32   │ 11641 │  879  │                     │
+│  Before 3rd image             │  35   │ 11644 │  879  │ Text + img1 + img2  │
+│  3rd inline image             │   -   │ 11644 │ 1551  │                     │
+│  After 3rd image              │  36   │ 11645 │  879  │                     │
+│                                                                             │
+│  PID Calculation:                                                           │
+│  ────────────────                                                           │
+│  For each entry: pid = start_pid + offset                                   │
+│  - Before image:  pid = start_pid + image_offset                            │
+│  - Image:         pid = start_pid + image_offset (same as before)           │
+│  - After image:   pid = start_pid + image_offset + 1                        │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    FORMAT_CAPABILITIES FOR OFFSET ENTRIES                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  When $265 position_id_map contains entries with $143 (offset field),       │
+│  the format_capabilities ($593) MUST include:                               │
+│                                                                             │
+│  { $492: "kfxgen.pidMapWithOffset", version: 1 }                            │
+│                                                                             │
+│  Format Capabilities List Example:                                          │
+│  ─────────────────────────────────                                          │
+│  [                                                                          │
+│    { $492: "kfxgen.textBlock", version: 1 },                                │
+│    { $492: "kfxgen.pidMapWithOffset", version: 1 }  // Required for offsets │
+│  ]                                                                          │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  VALIDATION: KFXInput checks this capability                        │    │
+│  │                                                                     │    │
+│  │  If offset entries exist but capability is missing:                 │    │
+│  │    ERROR: FC kfxgen.pidMapWithOffset=None with eid offset present   │    │
+│  │                                                                     │    │
+│  │  Detection logic:                                                   │    │
+│  │    has_offset = any($265 entry has $143 field)                      │    │
+│  │    capability = format_capabilities["kfxgen.pidMapWithOffset"] == 1 │    │
+│  │    if has_offset != capability: ERROR                               │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    IMAGE-ONLY TEXT ENTRIES (SPECIAL CASE)                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  When a text entry contains ONLY inline images (no actual text), KP3 uses   │
+│  simplified position tracking. This commonly occurs with title paragraphs   │
+│  that display only an image.                                                │
+│                                                                             │
+│  Image-Only Entry Structure:                                                │
+│  ───────────────────────────                                                │
+│  {                                                                          │
+│    $155: <wrapper_eid>,        // Parent paragraph EID                      │
+│    $159: $269,                 // Type = text                               │
+│    $146: [                     // content_list with ONLY image(s)           │
+│      {                         // No string elements!                       │
+│        $155: <image_eid>,                                                   │
+│        $159: $271,                                                          │
+│        $175: resource_name                                                  │
+│      }                                                                      │
+│    ]                                                                        │
+│  }                                                                          │
+│                                                                             │
+│  Detection Criteria:                                                        │
+│  ───────────────────                                                        │
+│  - Entry type is $269 (text)                                                │
+│  - $146 contains ONLY image struct(s), no strings                           │
+│  - All images have offset 0 (no preceding text)                             │
+│  - Total length == number of images                                         │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  CRITICAL DIFFERENCE: Image-Only vs Mixed Content                   │    │
+│  │                                                                     │    │
+│  │  Image-Only (no text):                                              │    │
+│  │    { $184: pid, $185: wrapper_eid }    // Wrapper                   │    │
+│  │    { $184: pid, $185: image_eid }      // Image (SAME PID!)         │    │
+│  │    → PID advances by 1                                              │    │
+│  │    → NO offset ($143) entries                                       │    │
+│  │                                                                     │    │
+│  │  Mixed Content (text + images):                                     │    │
+│  │    { $184: pid, $185: wrapper_eid }              // Wrapper         │    │
+│  │    { $143: 5, $184: pid+5, $185: wrapper_eid }   // Before image    │    │
+│  │    { $184: pid+5, $185: image_eid }              // Image           │    │
+│  │    { $143: 6, $184: pid+6, $185: wrapper_eid }   // After image     │    │
+│  │    → PID advances by total text length                              │    │
+│  │    → HAS offset ($143) entries                                      │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+│  Position ID Map Comparison:                                                │
+│  ───────────────────────────                                                │
+│                                                                             │
+│  IMAGE-ONLY (wrapper EID 1305, image EID 1306):                             │
+│  │ Entry Type    │ $143  │ $184  │ $185 │ Notes                             │
+│  ├───────────────┼───────┼───────┼──────┼───────────────────────────────────│
+│  │ Wrapper       │   -   │ 11391 │ 1305 │ Text entry                        │
+│  │ Image         │   -   │ 11391 │ 1306 │ SAME PID as wrapper               │
+│  │ (next entry)  │   -   │ 11392 │ ...  │ PID advanced by 1                 │
+│                                                                             │
+│  MIXED CONTENT "Text [img] more" (wrapper EID 1305, image EID 1306):        │
+│  │ Entry Type    │ $143  │ $184  │ $185 │ Notes                             │
+│  ├───────────────┼───────┼───────┼──────┼───────────────────────────────────│
+│  │ Wrapper       │   -   │ 11391 │ 1305 │ Text entry start                  │
+│  │ Before image  │   5   │ 11396 │ 1305 │ After "Text " (5 chars)           │
+│  │ Image         │   -   │ 11396 │ 1306 │ Same PID as before                │
+│  │ After image   │   6   │ 11397 │ 1305 │ offset+1, pid+1                   │
+│  │ (next entry)  │   -   │ 11401 │ ...  │ PID = start + total length        │
+│                                                                             │
+│  Wrong (generates validation errors):                                       │
+│  ─────────────────────────────────────                                      │
+│  Treating image-only as mixed content produces incorrect entries:           │
+│  │ Wrapper       │   -   │ 11391 │ 1305 │                                   │
+│  │ Before image  │   0   │ 11391 │ 1305 │ WRONG: offset entry not needed    │
+│  │ Image         │   -   │ 11391 │ 1306 │                                   │
+│  │ After image   │   1   │ 11392 │ 1305 │ WRONG: after entry not needed     │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    $264 POSITION_MAP FOR INLINE IMAGES                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  The $264 position_map must include BOTH parent EIDs AND inline image       │
+│  EIDs in the section's EID list ($181):                                     │
+│                                                                             │
+│  {                                                                          │
+│    $174: section_name,                                                      │
+│    $181: [                                                                  │
+│      ...,                                                                   │
+│      <parent_eid>,     // Paragraph containing inline images                │
+│      <image_eid_1>,    // First inline image EID                            │
+│      <image_eid_2>,    // Second inline image EID                           │
+│      ...                                                                    │
+│    ]                                                                        │
+│  }                                                                          │
+│                                                                             │
+│  EID Order: Parent EID first, then inline image EIDs in document order.     │
+│  This ensures proper position resolution during EPUB conversion.            │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 15. Key Points Summary
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -934,6 +1266,20 @@ Visual byte map (approximate):
 │ 15. Table styling requires padding ($52-$55) and border ($83, $88, $93):    │
 │     - Padding: $52 top, $53 left, $54 bottom, $55 right                     │
 │     - Border: $83 color (ARGB int), $88 style (symbol), $93 weight (dim)    │
+│                                                                             │
+│ 16. CRITICAL: Inline images in mixed content require special handling:      │
+│     - Use $146 content_list (not $145) with interleaved strings + images    │
+│     - Each inline image consumes 1 position in the offset counter           │
+│     - $265 must include granular before/image/after entries with $143       │
+│     - $264 must include both parent and inline image EIDs                   │
+│     - format_capabilities must include kfxgen.pidMapWithOffset=1            │
+│                                                                             │
+│ 17. CRITICAL: Image-only text entries (no text, only inline images):        │
+│     - Detected when $146 has only image struct(s), no strings               │
+│     - Use SIMPLIFIED position entries: wrapper + image at SAME PID          │
+│     - NO offset ($143) entries - do NOT use before/after pattern            │
+│     - PID advances by 1 (not by text length)                                │
+│     - Common in title paragraphs with decorative images                     │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
