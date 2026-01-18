@@ -1209,6 +1209,248 @@ Visual byte map (approximate):
 
 ---
 
+## 14.2 Table Structure in Storyline Content
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    TABLE STRUCTURE IN $259 STORYLINE                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Tables use a nested container structure with dedicated type symbols:       │
+│    $278 = table          (outermost table wrapper)                          │
+│    $454 = table_body     (body section containing rows)                     │
+│    $279 = table_row      (row containing cells)                             │
+│    $270 = container      (cell wrapper with border/padding style)           │
+│    $269 = text           (cell text content)                                │
+│    $271 = image          (cell image content)                               │
+│                                                                             │
+│  Complete Table Structure:                                                  │
+│  ─────────────────────────                                                  │
+│  {                                                                          │
+│    $155: <table_eid>,              // Table element ID                      │
+│    $159: $278,                     // Type = table                          │
+│    $157: table_style,              // Table style reference                 │
+│    $150: false,                    // table_border_collapse                 │
+│    $456: {$307: 0, $306: $310},    // border_spacing_vertical (lh)          │
+│    $457: {$307: 0, $306: $314},    // border_spacing_horizontal (%)         │
+│    $629: [$581, $326],             // yj.table_features: [pan_zoom, scale]  │
+│    $630: $632,                     // yj.table_selection_mode: yj.regional  │
+│    $146: [                         // content_list: single body entry       │
+│      {                                                                      │
+│        $155: <body_eid>,           // Body element ID                       │
+│        $159: $454,                 // Type = table_body                     │
+│        $146: [                     // content_list: row entries             │
+│          { ...row 1... },                                                   │
+│          { ...row 2... },                                                   │
+│        ]                                                                    │
+│      }                                                                      │
+│    ]                                                                        │
+│  }                                                                          │
+│                                                                             │
+│  Row Structure ($279):                                                      │
+│  ─────────────────────                                                      │
+│  {                                                                          │
+│    $155: <row_eid>,                // Row element ID                        │
+│    $159: $279,                     // Type = table_row                      │
+│    $146: [                         // content_list: cell entries            │
+│      { ...cell 1... },                                                      │
+│      { ...cell 2... },                                                      │
+│    ]                                                                        │
+│  }                                                                          │
+│                                                                             │
+│  Cell Container Structure ($270):                                           │
+│  ─────────────────────────────────                                          │
+│  {                                                                          │
+│    $155: <cell_eid>,               // Cell container element ID             │
+│    $159: $270,                     // Type = container                      │
+│    $156: $323,                     // layout = vertical                     │
+│    $157: cell_container_style,     // Style with border/padding/valign      │
+│    $148: 2,                        // table_column_span (optional)          │
+│    $149: 2,                        // table_row_span (optional)             │
+│    $146: [                         // content_list: cell content            │
+│      { ...text or image entry... }                                          │
+│    ]                                                                        │
+│  }                                                                          │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  CRITICAL: Table cells are TRUE containers ($270)                   │    │
+│  │                                                                     │    │
+│  │  Unlike regular text sections (which use $269 for page templates),  │    │
+│  │  table cells MUST use container type ($270) with layout: vertical.  │    │
+│  │  Cell content (text/images) is nested in the container's $146.      │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    TABLE CELL CONTENT TYPES                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Table cells can contain three types of content:                            │
+│                                                                             │
+│  1. TEXT-ONLY CELL (uses $145 content reference):                           │
+│  ─────────────────────────────────────────────────                          │
+│  {                                                                          │
+│    $155: <text_eid>,                                                        │
+│    $159: $269,                     // Type = text                           │
+│    $157: text_style,               // Style with text-align                 │
+│    $145: {                         // Content reference                     │
+│      name: content_X,                                                       │
+│      $403: <offset>                // Index in content fragment             │
+│    },                                                                       │
+│    $142: [...]                     // Optional style events for formatting  │
+│  }                                                                          │
+│                                                                             │
+│  2. IMAGE-ONLY CELL (direct image entries):                                 │
+│  ──────────────────────────────────────────                                 │
+│  Cell content_list contains image entry directly (no text wrapper):         │
+│  {                                                                          │
+│    $155: <image_eid>,                                                       │
+│    $159: $271,                     // Type = image                          │
+│    $157: image_style,              // Style with box-align for alignment    │
+│    $175: resource_name,            // Resource ref as SYMBOL                │
+│    $584: "alt text"                // Optional alt text                     │
+│  }                                                                          │
+│                                                                             │
+│  3. MIXED CONTENT CELL (text + inline images, uses $146 content_list):      │
+│  ──────────────────────────────────────────────────────────────────────     │
+│  {                                                                          │
+│    $155: <text_eid>,                                                        │
+│    $159: $269,                     // Type = text                           │
+│    $157: text_style,               // Style with text-align                 │
+│    $146: [                         // Mixed content_list (NOT $145!)        │
+│      "Text before ",               // String segment                        │
+│      {                             // Inline image                          │
+│        $155: <image_eid>,                                                   │
+│        $159: $271,                 // Type = image                          │
+│        $175: resource_name,        // Resource ref as SYMBOL                │
+│        $601: $283                  // render: inline                        │
+│      },                                                                     │
+│      " text after"                 // String segment                        │
+│    ],                                                                       │
+│    $142: [...]                     // Style events (offsets relative to     │
+│  }                                 //   concatenated text, not images)      │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  DETECTION LOGIC for cell content type:                             │    │
+│  │                                                                     │    │
+│  │  hasText   = cell contains any non-whitespace text segments         │    │
+│  │  hasImages = cell contains any inline image segments                │    │
+│  │                                                                     │    │
+│  │  if hasImages && !hasText:  → IMAGE-ONLY (direct image entries)     │    │
+│  │  if hasImages && hasText:   → MIXED CONTENT (content_list format)   │    │
+│  │  if !hasImages:             → TEXT-ONLY (content reference)         │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  MIXED CONTENT: Style Events and Offsets                            │    │
+│  │                                                                     │    │
+│  │  Style event offsets ($143) in mixed content are calculated the     │    │
+│  │  same way as in paragraphs:                                         │    │
+│  │  - Offsets are relative to CONCATENATED TEXT only                   │    │
+│  │  - Inline images do NOT consume offset positions for style events   │    │
+│  │  - But images DO consume position space in $265 position_id_map     │    │
+│  │                                                                     │    │
+│  │  Example: "<b>Bold</b> [img] <i>italic</i>"                         │    │
+│  │    Style events:                                                    │    │
+│  │      { $143: 0, $144: 4, $157: "strong" }      // "Bold"            │    │
+│  │      { $143: 5, $144: 6, $157: "emphasis" }    // "italic"          │    │
+│  │    Note: offset 5 is right after "Bold " (5 chars), image ignored   │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  IMPORTANT: Spanning styles NOT promoted in table cells             │    │
+│  │                                                                     │    │
+│  │  Unlike paragraphs where a style spanning 100% of content gets      │    │
+│  │  promoted to the block style, table cells ALWAYS use style_events   │    │
+│  │  even when the style covers the entire cell content.                │    │
+│  │                                                                     │    │
+│  │  Cell: <td><strong>Bold text</strong></td>                          │    │
+│  │  KP3 generates:                                                     │    │
+│  │    { $157: "td-text", $142: [{$143:0, $144:9, $157:"strong"}] }     │    │
+│  │  NOT:                                                               │    │
+│  │    { $157: "td-text-strong" }  // Wrong - KP3 doesn't do this       │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    TABLE CELL STYLING                                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Table cells use two separate styles:                                       │
+│                                                                             │
+│  1. CONTAINER STYLE (on $270 cell container):                               │
+│     - border-color ($83): ARGB integer (e.g., 0xFF000000 for black)         │
+│     - border-style ($88): symbol ($328=solid, $330=dashed, etc.)            │
+│     - border-width ($93): dimension with pt units                           │
+│     - padding-top ($52), padding-bottom ($54): lh units                     │
+│     - padding-left ($53), padding-right ($55): % units                      │
+│     - yj.vertical-align ($586): $320 (center), $324 (top), $325 (bottom)    │
+│                                                                             │
+│  2. TEXT/IMAGE STYLE (on content inside cell):                              │
+│     For text ($269):                                                        │
+│     - text-align ($34): $59 (left), $320 (center), $61 (right), $321 (just) │
+│     - line-height ($39): typically 1lh                                      │
+│                                                                             │
+│     For images ($271):                                                      │
+│     - box-align ($587): $59 (left), $320 (center), $61 (right)              │
+│                                                                             │
+│  Header vs Data Cell Styles:                                                │
+│  ────────────────────────────                                               │
+│  - th-container / td-container: Border, padding, vertical-align             │
+│  - th-text / td-text: Text alignment (th defaults center, td left)          │
+│  - th-image / td-image: Image alignment (th defaults center, td left)       │
+│                                                                             │
+│  Example Container Style (th-container):                                    │
+│  {                                                                          │
+│    $173: "th-container",                                                    │
+│    $83:  4278190080,               // border-color: black                   │
+│    $88:  $328,                     // border-style: solid                   │
+│    $93:  { $307: 0.45, $306: $318 }, // border-width: 0.45pt                │
+│    $52:  { $307: 0.417, $306: $310 }, // padding-top: 0.417lh               │
+│    $53:  { $307: 1.563, $306: $314 }, // padding-left: 1.563%               │
+│    $54:  { $307: 0.417, $306: $310 }, // padding-bottom: 0.417lh            │
+│    $55:  { $307: 1.563, $306: $314 }, // padding-right: 1.563%              │
+│    $586: $320                      // yj.vertical-align: center             │
+│  }                                                                          │
+│                                                                             │
+│  Example Text Style (th-text):                                              │
+│  {                                                                          │
+│    $173: "th-text",                                                         │
+│    $34:  $320,                     // text-align: center                    │
+│    $39:  { $307: 1, $306: $310 }   // line-height: 1lh                      │
+│  }                                                                          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    TABLE POSITION MAP HANDLING                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Table structures ($278, $454, $279) do NOT appear in $264/$265 maps.       │
+│  Only the cell content EIDs (text $269, image $271) are tracked.            │
+│                                                                             │
+│  Empty Cells Special Case:                                                  │
+│  ─────────────────────────                                                  │
+│  When a table cell has no content (empty $146 content_list), the cell       │
+│  container ($270) MUST still appear in $264 position_map but NOT in         │
+│  $265 position_id_map. This prevents validation errors.                     │
+│                                                                             │
+│  Detection: Entry has $159=$270 (container) AND $156 (layout) field,        │
+│  but empty or missing $146 content_list.                                    │
+│                                                                             │
+│  $264 (position_map):                                                       │
+│    $181: [..., <empty_cell_eid>, ...]   // Include empty cell container     │
+│                                                                             │
+│  $265 (position_id_map):                                                    │
+│    // Empty cell OMITTED - no PID entry generated                           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## 15. Key Points Summary
 
 ```

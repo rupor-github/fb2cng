@@ -63,6 +63,13 @@ func convertStyleMapProp(prop string, cssVal CSSValue, rawVal string, unit strin
 		return nil, false
 	}
 
+	// Skip CSS shorthand properties - they are already expanded by the CSS converter.
+	// Otherwise we'd end up with both "padding" ($51) AND "padding_top" ($52), etc.
+	cssProp := strings.ReplaceAll(prop, "_", "-")
+	if IsShorthandProperty(cssProp) {
+		return nil, false
+	}
+
 	switch prop {
 	case "text_alignment":
 		if sym, ok := ConvertTextAlign(cssVal); ok {

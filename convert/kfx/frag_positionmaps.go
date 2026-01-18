@@ -132,9 +132,16 @@ func CollectPositionItems(fragments *FragmentList, sectionNames sectionNameList)
 			// - Mixed content: text entry with strings (possibly interleaved with inline images)
 			// - Image-only text: text entry with only inline image(s), no strings
 			// - Wrapper-style: container with only StructValue children (like title blocks)
+			// - Table structure: table/body/row/cell containers need position entries with length=1
 			hasStrings := false
 			hasInlineImages := false
 			isTextType := KFXSymbol(typeSym) == SymText
+			kfxType := KFXSymbol(typeSym)
+
+			// Table structural types and cell containers need position entries (length=1),
+			// then recurse into children
+			isTableStructure := kfxType == SymTable || kfxType == SymTableBody || kfxType == SymTableRow
+			isTableCell := kfxType == SymContainer && entry[SymLayout] != nil
 
 			for _, child := range children {
 				if _, isString := child.(string); isString {
@@ -146,6 +153,18 @@ func CollectPositionItems(fragments *FragmentList, sectionNames sectionNameList)
 						}
 					}
 				}
+			}
+
+			// Table structural types and cell containers: emit position entry with length=1,
+			// then recurse into children. This matches how KP3 handles table content.
+			if isTableStructure || isTableCell {
+				out = append(out, PositionItem{EID: eid, Length: 1})
+				for _, child := range children {
+					if childEntry, ok := child.(StructValue); ok {
+						processEntry(childEntry)
+					}
+				}
+				return
 			}
 
 			// Text entries with inline images (with or without text) use mixed content handling
@@ -193,7 +212,15 @@ func CollectPositionItems(fragments *FragmentList, sectionNames sectionNameList)
 			return
 		}
 
-		if KFXSymbol(typeSym) == SymImage {
+		// Handle empty table cells (container with layout but no content_list)
+		// These still need position entries with length=1
+		kfxType := KFXSymbol(typeSym)
+		if kfxType == SymContainer && entry[SymLayout] != nil {
+			out = append(out, PositionItem{EID: eid, Length: 1})
+			return
+		}
+
+		if kfxType == SymImage {
 			out = append(out, PositionItem{EID: eid, Length: 1})
 			return
 		}
@@ -375,24 +402,16 @@ func BuildPositionIDMap(allEIDs []int, items []PositionItem) *Fragment {
 						)
 					}
 
-					// Advance pid by total text length
-					step := int64(it.Length)
-					if step < 1 {
-						step = 1
-					}
-					pid += step
+					// Advance pid by total text length (allow 0 for empty content)
+					pid += int64(it.Length)
 				}
 			} else {
-				// Regular content: single entry
+				// Regular content: single entry (allow 0-length for empty content)
 				entries = append(entries, NewStruct().
 					SetInt(SymPositionID, pid).
 					SetInt(SymElementID, int64(it.EID)),
 				)
-				step := int64(it.Length)
-				if step < 1 {
-					step = 1
-				}
-				pid += step
+				pid += int64(it.Length)
 			}
 		}
 	} else {

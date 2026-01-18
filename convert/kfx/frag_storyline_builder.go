@@ -451,10 +451,11 @@ func (sb *StorylineBuilder) AllEIDs() []int {
 // For mixed content (text type with content_list containing raw strings), we include both
 // the parent EID and all inline image EIDs, since KP3 includes them in position_map.
 // For wrapper-style content_list (all items are StructValue), we recurse into children.
+// Table structural types and cell containers are INCLUDED in position_map with length=1.
 func collectStructEIDs(sv StructValue) []int {
 	var eids []int
 
-	// Get this struct's EID
+	// Get this struct's EID (include all types, including table structure)
 	if eid, exists := sv[SymUniqueID]; exists {
 		if eidInt, ok := eid.(int64); ok {
 			eids = append(eids, int(eidInt))
@@ -485,7 +486,7 @@ func collectStructEIDs(sv StructValue) []int {
 			if childSV, ok := child.(StructValue); ok {
 				// Check if this is an inline image
 				if childEID, ok := childSV[SymUniqueID].(int64); ok {
-					if typeSym, ok := childSV[SymType].(SymbolValue); ok && KFXSymbol(typeSym) == SymImage {
+					if childType, ok := childSV[SymType].(SymbolValue); ok && KFXSymbol(childType) == SymImage {
 						eids = append(eids, int(childEID))
 					}
 				}
@@ -590,7 +591,7 @@ func (sb *StorylineBuilder) EndBlock() {
 	// This produces different styles for first vs non-first elements (CSS margin collapsing)
 	resolvedStyle := ""
 	if block.styles != nil && block.styleSpec != "" {
-		resolvedStyle = block.styles.ResolveStyleWithPosition(block.styleSpec, block.position)
+		resolvedStyle = block.styles.ResolveStyle(block.styleSpec, block.position)
 		block.styles.MarkUsage(resolvedStyle, styleUsageWrapper)
 	}
 
@@ -639,7 +640,7 @@ func (bb *BlockBuilder) resolveChildStylesWithPosition() {
 		pos := PositionFromIndex(i, count)
 
 		// Resolve style with position filtering
-		child.Style = bb.styles.ResolveStyleWithPosition(child.StyleSpec, pos)
+		child.Style = bb.styles.ResolveStyle(child.StyleSpec, pos)
 
 		// Mark usage based on content type
 		usage := styleUsageText
@@ -928,7 +929,10 @@ func (sb *StorylineBuilder) AddImageDeferred(resourceName, styleSpec, altText st
 
 // AddTable adds a table with proper KFX structure.
 // Structure: table($278) -> body($454) -> rows($279) -> cells($270) -> text($269)
-func (sb *StorylineBuilder) AddTable(table *fb2.Table, styles *StyleRegistry, ca *ContentAccumulator) int {
+// Cell containers have border/padding/vertical-align styles.
+// Text inside cells has text-align style and style_events for inline formatting.
+// Image-only cells contain image elements directly.
+func (sb *StorylineBuilder) AddTable(table *fb2.Table, styles *StyleRegistry, ca *ContentAccumulator, footnotesIndex fb2.FootnoteRefs, imageResources imageResourceInfoByID) int {
 	tableEID := sb.eidCounter
 	sb.eidCounter++
 
@@ -944,48 +948,66 @@ func (sb *StorylineBuilder) AddTable(table *fb2.Table, styles *StyleRegistry, ca
 			cellEID := sb.eidCounter
 			sb.eidCounter++
 
-			// Get cell text content
-			var cellText strings.Builder
-			for _, seg := range cell.Content {
-				cellText.WriteString(seg.AsText())
-			}
-			text := cellText.String()
+			// Check if cell contains text and/or images
+			hasText := cellContentHasText(cell.Content)
+			cellImages := extractCellImages(cell.Content)
+			hasImages := len(cellImages) > 0
 
-			// Add text to content accumulator
-			contentName, offset := ca.Add(text)
-
-			// Determine cell style based on header/alignment
-			var cellStyle string
+			// Determine container style (border/padding/vertical-align)
+			containerStyle := styles.ResolveStyle("td-container")
 			if cell.Header {
-				cellStyle = styles.ResolveStyle("th")
+				containerStyle = styles.ResolveStyle("th-container")
+			}
+			styles.MarkUsage(containerStyle, styleUsageWrapper)
+
+			// Determine ancestor tag and text style based on header flag
+			ancestorTag := "td"
+			textStyleBase := "td-text"
+			if cell.Header {
+				ancestorTag = "th"
+				textStyleBase = "th-text"
+			}
+
+			// Determine text style with alignment
+			textStyle := textStyleBase
+			if cell.Align != "" {
+				prefix := "td"
+				if cell.Header {
+					prefix = "th"
+				}
+				switch cell.Align {
+				case "center":
+					textStyle = prefix + "-text-center"
+				case "right":
+					textStyle = prefix + "-text-right"
+				case "left":
+					textStyle = prefix + "-text-left"
+				case "justify":
+					textStyle = prefix + "-text-justify"
+				}
+			}
+			resolvedTextStyle := styles.ResolveStyle(textStyle)
+
+			var contentList []any
+
+			if hasImages && !hasText {
+				// Image-only cell: create image entries directly
+				contentList = sb.buildImageOnlyCellContent(cell, cellImages, imageResources, styles)
+			} else if hasImages && hasText {
+				// Mixed content cell: use content_list format with interleaved text and images
+				contentList = sb.buildMixedCellContent(cell, imageResources, styles, footnotesIndex, ancestorTag, resolvedTextStyle)
 			} else {
-				cellStyle = styles.ResolveStyle("td")
-			}
-			if styles != nil {
-				styles.MarkUsage(cellStyle, styleUsageText)
+				// Text-only cell: create text entry with content reference
+				contentList = sb.buildTextOnlyCellContent(cell, ca, styles, footnotesIndex, ancestorTag, resolvedTextStyle)
 			}
 
-			// Create text entry inside cell
-			textEID := sb.eidCounter
-			sb.eidCounter++
-			textEntry := NewStruct().
-				SetInt(SymUniqueID, int64(textEID)).
-				SetSymbol(SymType, SymText).
-				Set(SymStyle, SymbolByName(cellStyle))
-
-			// Add content reference
-			contentRef := map[string]any{
-				"name": SymbolByName(contentName),
-				"$403": offset,
-			}
-			textEntry.Set(SymContent, contentRef)
-
-			// Create cell container with nested text
+			// Create cell container with nested content
 			cellEntry := NewStruct().
 				SetInt(SymUniqueID, int64(cellEID)).
-				SetSymbol(SymType, SymContainer).         // $270
-				SetSymbol(SymLayout, SymVertical).        // $156 = $323 (vertical)
-				SetList(SymContentList, []any{textEntry}) // Nested text content
+				SetSymbol(SymType, SymContainer).            // $270
+				SetSymbol(SymLayout, SymVertical).           // $156 = $323 (vertical)
+				Set(SymStyle, SymbolByName(containerStyle)). // Container style with border/padding
+				SetList(SymContentList, contentList)         // Nested content (text or images)
 
 			// Add colspan/rowspan if specified
 			if cell.ColSpan > 1 {
@@ -1016,14 +1038,31 @@ func (sb *StorylineBuilder) AddTable(table *fb2.Table, styles *StyleRegistry, ca
 		SetList(SymContentList, rowEntries)
 
 	// Create table entry with proper structure
+	// Amazon reference: table has yj.table_features=[pan_zoom, scale_fit] which enables
+	// table scaling to fit within page bounds instead of spanning multiple pages.
 	tableStyle := styles.ResolveStyle("table")
 	styles.tracer.TraceAssign(traceSymbolName(SymTable), fmt.Sprintf("%d", tableEID), tableStyle, sb.sectionName+"/"+sb.name)
 	styles.MarkUsage(tableStyle, styleUsageWrapper)
+
+	// Get table element properties from CSS (KP3 moves these from style to element)
+	tableProps := styles.GetTableElementProps()
+
+	// Create table features list: [pan_zoom, scale_fit]
+	// scale_fit ($326) enables table scaling to fit the page
+	tableFeatures := []any{
+		SymbolValue(SymPanZoom),  // $581
+		SymbolValue(SymScaleFit), // $326
+	}
+
 	tableEntry := NewStruct().
 		SetInt(SymUniqueID, int64(tableEID)).
 		SetSymbol(SymType, SymTable). // $278
 		Set(SymStyle, SymbolByName(tableStyle)).
-		SetBool(SymTableBorderCollapse, true). // $150 = true
+		SetBool(SymTableBorderCollapse, tableProps.BorderCollapse). // $150
+		Set(SymBorderSpacingVertical, tableProps.BorderSpacingV).   // $456
+		Set(SymBorderSpacingHorizontal, tableProps.BorderSpacingH). // $457
+		SetList(SymYjTableFeatures, tableFeatures).                 // $629 = [pan_zoom, scale_fit]
+		SetSymbol(SymYjTableSelectionMode, SymYjRegional).          // $630 = yj.regional
 		SetList(SymContentList, []any{bodyEntry})
 
 	// Add to storyline
@@ -1042,6 +1081,202 @@ func (sb *StorylineBuilder) AddTable(table *fb2.Table, styles *StyleRegistry, ca
 	}
 
 	return tableEID
+}
+
+// buildImageOnlyCellContent creates content entries for a cell containing only images.
+func (sb *StorylineBuilder) buildImageOnlyCellContent(cell fb2.TableCell, cellImages []string, imageResources imageResourceInfoByID, styles *StyleRegistry) []any {
+	var contentList []any
+
+	for _, imgID := range cellImages {
+		imgInfo, ok := imageResources[imgID]
+		if !ok {
+			continue
+		}
+
+		imgEID := sb.eidCounter
+		sb.eidCounter++
+
+		// Determine image style based on header flag and alignment
+		imgStyleBase := "td-image"
+		if cell.Header {
+			imgStyleBase = "th-image"
+		}
+		if cell.Align != "" {
+			prefix := "td-image"
+			if cell.Header {
+				prefix = "th-image"
+			}
+			switch cell.Align {
+			case "center":
+				imgStyleBase = prefix + "-center"
+			case "right":
+				imgStyleBase = prefix + "-right"
+			case "left":
+				imgStyleBase = prefix + "-left"
+			}
+		}
+		imgStyle := styles.ResolveStyle(imgStyleBase)
+		styles.MarkUsage(imgStyle, styleUsageImage)
+
+		// Get alt text from the original segment
+		altText := ""
+		for _, seg := range cell.Content {
+			if seg.Kind == fb2.InlineImageSegment && seg.Image != nil {
+				imgHref := strings.TrimPrefix(seg.Image.Href, "#")
+				if imgHref == imgID {
+					altText = seg.Image.Alt
+					break
+				}
+			}
+		}
+
+		imgEntry := NewStruct().
+			SetInt(SymUniqueID, int64(imgEID)).
+			SetSymbol(SymType, SymImage).
+			Set(SymStyle, SymbolByName(imgStyle)).
+			Set(SymResourceName, SymbolByName(imgInfo.ResourceName)).
+			SetString(SymAltText, altText)
+
+		contentList = append(contentList, imgEntry)
+	}
+
+	return contentList
+}
+
+// buildTextOnlyCellContent creates a text entry for a cell containing only text.
+func (sb *StorylineBuilder) buildTextOnlyCellContent(cell fb2.TableCell, ca *ContentAccumulator, styles *StyleRegistry, footnotesIndex fb2.FootnoteRefs, ancestorTag, resolvedTextStyle string) []any {
+	// Process cell content using shared inline segment processing
+	nw := newNormalizingWriter()
+	events := processInlineSegments(cell.Content, nw, styles, footnotesIndex, ancestorTag)
+
+	text := nw.String()
+	contentName, offset := ca.Add(text)
+
+	styles.MarkUsage(resolvedTextStyle, styleUsageText)
+
+	// Segment and deduplicate style events
+	segmentedEvents := SegmentNestedStyleEvents(events)
+	for _, ev := range segmentedEvents {
+		styles.MarkUsage(ev.Style, styleUsageText)
+	}
+
+	// Create text entry inside cell
+	textEID := sb.eidCounter
+	sb.eidCounter++
+	textEntry := NewStruct().
+		SetInt(SymUniqueID, int64(textEID)).
+		SetSymbol(SymType, SymText).
+		Set(SymStyle, SymbolByName(resolvedTextStyle))
+
+	// Add content reference
+	contentRef := map[string]any{
+		"name": SymbolByName(contentName),
+		"$403": offset,
+	}
+	textEntry.Set(SymContent, contentRef)
+
+	// Add style events for inline formatting (bold, italic, etc.)
+	if len(segmentedEvents) > 0 {
+		eventList := make([]any, 0, len(segmentedEvents))
+		for _, se := range segmentedEvents {
+			event := NewStruct().
+				SetInt(SymOffset, int64(se.Offset)).
+				SetInt(SymLength, int64(se.Length)).
+				Set(SymStyle, SymbolByName(se.Style))
+			if se.LinkTo != "" {
+				event.Set(SymLinkTo, SymbolByName(se.LinkTo))
+			}
+			if se.IsFootnoteLink {
+				event.SetSymbol(SymYjDisplay, SymYjNote)
+			}
+			eventList = append(eventList, event)
+		}
+		textEntry.SetList(SymStyleEvents, eventList)
+	}
+
+	return []any{textEntry}
+}
+
+// buildMixedCellContent creates a text entry with content_list for mixed content cells.
+// This uses the same structure as AddMixedContent: interleaved text strings and inline images.
+func (sb *StorylineBuilder) buildMixedCellContent(cell fb2.TableCell, imageResources imageResourceInfoByID, styles *StyleRegistry, footnotesIndex fb2.FootnoteRefs, ancestorTag, resolvedTextStyle string) []any {
+	// Process cell content using shared mixed content processing
+	result := processMixedInlineSegments(cell.Content, styles, footnotesIndex, ancestorTag, imageResources)
+
+	styles.MarkUsage(resolvedTextStyle, styleUsageText)
+
+	// Segment and deduplicate style events
+	segmentedEvents := SegmentNestedStyleEvents(result.Events)
+	for _, ev := range segmentedEvents {
+		styles.MarkUsage(ev.Style, styleUsageText)
+	}
+
+	// Create text entry with content_list (similar to AddMixedContent)
+	textEID := sb.eidCounter
+	sb.eidCounter++
+
+	// Build content_list array with text strings and image entries
+	contentListItems := make([]any, 0, len(result.Items))
+	for _, item := range result.Items {
+		if item.IsImage {
+			// Create inline image entry
+			imgEid := sb.eidCounter
+			sb.eidCounter++
+
+			if item.Style != "" {
+				styles.tracer.TraceAssign(traceSymbolName(SymImage)+" (inline/table)", fmt.Sprintf("%d", imgEid), item.Style, sb.sectionName+"/"+sb.name)
+				styles.MarkUsage(item.Style, styleUsageImage)
+			}
+
+			imgEntry := NewStruct().
+				SetInt(SymUniqueID, int64(imgEid)).
+				SetSymbol(SymType, SymImage).
+				Set(SymResourceName, SymbolByName(item.ResourceName)).
+				SetSymbol(SymRender, SymInline) // render: inline
+
+			if item.Style != "" {
+				imgEntry.Set(SymStyle, SymbolByName(item.Style))
+			}
+			if item.AltText != "" {
+				imgEntry.SetString(SymAltText, item.AltText)
+			}
+
+			contentListItems = append(contentListItems, imgEntry)
+		} else {
+			// Raw text string
+			contentListItems = append(contentListItems, item.Text)
+		}
+	}
+
+	// Build the entry with content_list
+	textEntry := NewStruct().
+		SetInt(SymUniqueID, int64(textEID)).
+		SetSymbol(SymType, SymText).
+		SetList(SymContentList, contentListItems).
+		Set(SymStyle, SymbolByName(resolvedTextStyle))
+
+	// Add style events if present
+	if len(segmentedEvents) > 0 {
+		eventList := make([]any, 0, len(segmentedEvents))
+		for _, se := range segmentedEvents {
+			ev := NewStruct().
+				SetInt(SymOffset, int64(se.Offset)).
+				SetInt(SymLength, int64(se.Length))
+			if se.Style != "" {
+				ev.Set(SymStyle, SymbolByName(se.Style))
+			}
+			if se.LinkTo != "" {
+				ev.Set(SymLinkTo, SymbolByName(se.LinkTo))
+			}
+			if se.IsFootnoteLink {
+				ev.SetSymbol(SymYjDisplay, SymYjNote)
+			}
+			eventList = append(eventList, ev)
+		}
+		textEntry.SetList(SymStyleEvents, eventList)
+	}
+
+	return []any{textEntry}
 }
 
 // FirstEID returns the first EID used by this storyline content.

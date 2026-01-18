@@ -1079,6 +1079,54 @@ When `imageOnlyBlock` is true, use `ResolveBlockImageStyle()` instead of basic `
 
 Derived from: `convert/kfx/frag_style.go:ResolveBlockImageStyle`, `convert/kfx/frag_storyline_process.go:addParagraphWithImages`, KP3 reference files.
 
+#### 7.6.12 Table structure in storyline content
+
+Tables in KFX use a hierarchical structure within the storyline's `$146` (content_list). The table hierarchy is: `$278` (table) → `$454` (table body) → `$279` (table row) → `$270` (cell container) → content (text entry, image entry, or mixed).
+
+**Table entry fields**:
+
+- `$155` (id): Unique EID for the table
+- `$159` (type): `$278` (table)
+- `$157` (style): Style reference (optional)
+- `$146` (content_list): Contains table body, which contains rows, which contain cells
+
+**Table cell content types**:
+
+KFX table cells support three content patterns:
+
+1. **Image-only cells** - Cell contains only images, no text. The cell container (`$270`) contains image entries (`$271`) directly in its `$146` content_list.
+
+2. **Text-only cells** - Cell contains only text (with optional inline formatting). The cell container contains a text entry (`$269`) with `$145` content reference and optional `$142` style events.
+
+3. **Mixed content cells** - Cell contains text interleaved with inline images. The cell container contains a text entry (`$269`) with `$146` content_list (NOT `$145` content reference). The content_list contains interleaved strings and inline image structs.
+
+**Key differences from paragraph mixed content**:
+
+1. **No spanning style promotion**: Unlike paragraphs where a style covering 100% of content can be promoted to block level, table cells ALWAYS use `$142` (style_events) even when a single style spans all content. This matches Amazon KP3 reference output.
+
+2. **Simpler position tracking**: Table cells use simpler position tracking without the before/image/after offset entries used for paragraph mixed content.
+
+3. **Cell container type**: Table cells always use `$270` (container) type with nested content, unlike paragraphs which use `$269` (text) directly.
+
+**Content detection**:
+
+Cell content type is determined by checking for text content and images. If no text but has images → image-only cell. If no images → text-only cell. If both text and images → mixed content cell.
+
+**Style events in mixed content cells**:
+
+When a mixed content cell has inline formatting (e.g., bold text before an image), style events are calculated based on character offsets within the text segments only. The inline image does NOT consume a character position in the style event offset calculation (unlike position maps where images do consume positions).
+
+**Mixed content `$146` structure**:
+
+For mixed content, the `$146` field contains interleaved strings and image structs. Each inline image struct contains:
+
+- `$155` (id): Unique EID for the image
+- `$159` (type): `$271` (image)
+- `$175` (resource_name): Resource reference as **symbol** (not string)
+- `$601` (yj_word_class): `$283` (yj_word_class_image) - marks this as an inline image
+
+Derived from: `convert/kfx/frag_storyline_builder.go:AddTable`, `buildMixedCellContent`, `convert/kfx/frag_storyline_helpers.go:processMixedInlineSegments`, KP3 reference files.
+
 ### 7.7 Navigation fragments (`$389`, `$391`, `$394`, `$390`)
 
 This repository consumes navigation primarily to generate:

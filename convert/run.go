@@ -381,7 +381,7 @@ func processBook(ctx context.Context, r io.Reader, src string, dst string, forma
 		if err := epub.Generate(ctx, c, outputName, &env.Cfg.Document, log); err != nil {
 			return fmt.Errorf("unable to generate output: %w", err)
 		}
-	case common.OutputFmtKfx:
+	case common.OutputFmtKfx, common.OutputFmtAzw8:
 		if err := kfx.Generate(ctx, c, outputName, &env.Cfg.Document, log); err != nil {
 			return fmt.Errorf("unable to generate output: %w", err)
 		}

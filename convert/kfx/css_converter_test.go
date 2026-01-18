@@ -1,9 +1,12 @@
 package kfx
 
 import (
+	"math"
+	"math/big"
 	"os"
 	"testing"
 
+	"github.com/amazon-ion/ion-go/ion"
 	"go.uber.org/zap"
 )
 
@@ -614,6 +617,176 @@ func TestNewStyleRegistryFromCSS_Empty(t *testing.T) {
 	// Seeded wrapper defaults should also be present
 	if _, ok := registry.Get("epigraph"); !ok {
 		t.Error("expected seeded default 'epigraph' style")
+	}
+}
+
+func TestFontSizeKeywords(t *testing.T) {
+	log := zap.NewNop()
+	parser := NewParser(log)
+	conv := NewConverter(log)
+
+	tests := []struct {
+		name     string
+		css      string
+		expected float64 // Expected em value
+	}{
+		{
+			name:     "smaller keyword",
+			css:      `.test { font-size: smaller; }`,
+			expected: 0.833, // Amazon's 5/6 value (rounded to 3 decimals)
+		},
+		{
+			name:     "larger keyword",
+			css:      `.test { font-size: larger; }`,
+			expected: 1.2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sheet := parser.Parse([]byte(tt.css))
+			styles, _ := conv.ConvertStylesheet(sheet)
+
+			if len(styles) != 1 {
+				t.Fatalf("expected 1 style, got %d", len(styles))
+			}
+
+			style := styles[0]
+			fontSize, ok := style.Properties[SymFontSize]
+			if !ok {
+				t.Fatal("expected font-size property")
+			}
+
+			sv, ok := fontSize.(StructValue)
+			if !ok {
+				t.Fatalf("expected StructValue, got %T", fontSize)
+			}
+
+			// Value is stored as *ion.Decimal, convert to float64 for comparison
+			val := getStructValueAsFloat64(sv, SymValue)
+			if val < 0 {
+				t.Fatalf("failed to get font-size value from %v", sv)
+			}
+
+			// Compare with tolerance due to decimal precision
+			if diff := val - tt.expected; diff < -0.001 || diff > 0.001 {
+				t.Errorf("expected font-size value ~%f, got %f", tt.expected, val)
+			}
+
+			// Unit is stored as SymbolValue (SetSymbol wraps it)
+			unit, ok := sv[SymUnit].(SymbolValue)
+			if !ok {
+				t.Fatalf("expected unit to be SymbolValue, got %T", sv[SymUnit])
+			}
+
+			// Should be em unit ($308)
+			if KFXSymbol(unit) != SymUnitEm {
+				t.Errorf("expected em unit ($308), got %v", unit)
+			}
+		})
+	}
+}
+
+// getStructValueAsFloat64 extracts a float64 from a StructValue's SymValue field.
+// Returns -1 if extraction fails.
+func getStructValueAsFloat64(sv StructValue, sym KFXSymbol) float64 {
+	rawVal, ok := sv[sym]
+	if !ok {
+		return -1
+	}
+	switch v := rawVal.(type) {
+	case float64:
+		return v
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case *ion.Decimal:
+		return decimalToFloat64Test(v)
+	default:
+		return -1
+	}
+}
+
+// decimalToFloat64Test converts ion.Decimal to float64 for testing.
+func decimalToFloat64Test(d *ion.Decimal) float64 {
+	if d == nil {
+		return 0
+	}
+	coeff, exp := d.CoEx()
+	bf := new(big.Float).SetInt(coeff)
+	if exp != 0 {
+		pow := new(big.Float).SetFloat64(math.Pow10(int(exp)))
+		bf.Mul(bf, pow)
+	}
+	f, _ := bf.Float64()
+	return f
+}
+
+func TestWhiteSpaceProperty(t *testing.T) {
+	log := zap.NewNop()
+	parser := NewParser(log)
+	conv := NewConverter(log)
+
+	tests := []struct {
+		name        string
+		css         string
+		expectProp  bool   // Whether white_space property should be set
+		expectValue string // Expected value if set
+	}{
+		{
+			name:        "nowrap sets white_space",
+			css:         `.test { white-space: nowrap; }`,
+			expectProp:  true,
+			expectValue: "nowrap",
+		},
+		{
+			name:       "normal does not set white_space",
+			css:        `.test { white-space: normal; font-weight: bold; }`,
+			expectProp: false,
+		},
+		{
+			name:       "pre does not set white_space (handled at content level)",
+			css:        `.test { white-space: pre; font-weight: bold; }`,
+			expectProp: false,
+		},
+		{
+			name:       "pre-wrap does not set white_space",
+			css:        `.test { white-space: pre-wrap; font-weight: bold; }`,
+			expectProp: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sheet := parser.Parse([]byte(tt.css))
+			styles, _ := conv.ConvertStylesheet(sheet)
+
+			if len(styles) != 1 {
+				t.Fatalf("expected 1 style, got %d", len(styles))
+			}
+
+			style := styles[0]
+			whiteSpace, hasProp := style.Properties[SymWhiteSpace]
+
+			if tt.expectProp {
+				if !hasProp {
+					t.Fatal("expected white_space property to be set")
+				}
+				// Check it's nowrap symbol
+				if sv, ok := whiteSpace.(SymbolValue); ok {
+					if KFXSymbol(sv) != SymNowrap {
+						t.Errorf("expected nowrap symbol, got %v", sv)
+					}
+				} else {
+					t.Errorf("expected SymbolValue, got %T", whiteSpace)
+				}
+			} else {
+				if hasProp {
+					t.Errorf("expected white_space property to NOT be set, but got %v", whiteSpace)
+				}
+			}
+		})
 	}
 }
 

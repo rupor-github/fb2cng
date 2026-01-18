@@ -33,13 +33,19 @@ type ConversionResult struct {
 	Warnings []string
 }
 
-var zeroSizeProps = map[string]bool{
-	"width":      true,
-	"height":     true,
-	"min-width":  true,
-	"max-width":  true,
-	"min-height": true,
-	"max-height": true,
+// zeroValueProps lists CSS properties that should be dropped when their value is zero.
+// Based on Amazon's YJHtmlMapper (com.amazon.yjhtmlmapper.g.a) which filters these
+// properties with zero values as they are effectively no-ops.
+var zeroValueProps = map[string]bool{
+	"font-size":      true,
+	"padding-right":  true,
+	"padding-left":   true,
+	"padding-top":    true,
+	"padding-bottom": true,
+	"margin-right":   true,
+	"margin-left":    true,
+	"margin-top":     true,
+	"margin-bottom":  true,
 }
 
 func normalizeCSSProperties(props map[string]CSSValue, tracer *StyleTracer, context string) map[string]CSSValue {
@@ -51,7 +57,7 @@ func normalizeCSSProperties(props map[string]CSSValue, tracer *StyleTracer, cont
 	changed := false
 
 	for name, val := range props {
-		if shouldDropZeroSize(name, val) || isEmptyCSSValue(val) {
+		if shouldDropZeroValue(name, val) || isEmptyCSSValue(val) {
 			changed = true
 			continue
 		}
@@ -65,8 +71,8 @@ func normalizeCSSProperties(props map[string]CSSValue, tracer *StyleTracer, cont
 	return normalized
 }
 
-func shouldDropZeroSize(name string, val CSSValue) bool {
-	if !zeroSizeProps[name] {
+func shouldDropZeroValue(name string, val CSSValue) bool {
+	if !zeroValueProps[name] {
 		return false
 	}
 	if !val.IsNumeric() {
@@ -257,11 +263,37 @@ func (c *Converter) convertProperty(name string, value CSSValue, props map[KFXSy
 			*warnings = append(*warnings, "unable to parse color: "+value.Raw)
 		}
 
+	case "background-color":
+		if r, g, b, ok := ParseColor(value); ok {
+			c.mergeProp(props, SymFillColor, MakeColorValue(r, g, b))
+		} else {
+			*warnings = append(*warnings, "unable to parse background-color: "+value.Raw)
+		}
+
+	case "border-color":
+		if r, g, b, ok := ParseColor(value); ok {
+			c.mergeProp(props, SymBorderColor, MakeColorValue(r, g, b))
+		} else {
+			*warnings = append(*warnings, "unable to parse border-color: "+value.Raw)
+		}
+
 	case "font-family":
 		// Font family is stored as string, actual font resolution is separate
 		c.mergeProp(props, SymFontFamily, value.Raw)
 
 	case "font-size":
+		// Handle keyword values first
+		// Amazon converts: smaller -> 0.8333em (5/6), larger -> 1.2em
+		switch strings.ToLower(value.Keyword) {
+		case "smaller":
+			// Amazon uses 0.8333333333333334em (5/6)
+			c.mergeProp(props, kfxSym, DimensionValue(0.8333333333333334, SymUnitEm))
+			return
+		case "larger":
+			// Amazon uses 1.2em for larger
+			c.mergeProp(props, kfxSym, DimensionValue(1.2, SymUnitEm))
+			return
+		}
 		// KP3 converts percentage font-sizes to rem (140% -> 1.4rem)
 		// This is important for title rendering - percent units cause alignment issues
 		if value.IsNumeric() {
@@ -383,6 +415,9 @@ func (c *Converter) expandShorthand(name string, value CSSValue, props map[KFXSy
 
 	case "border":
 		c.expandBorderShorthand(value, props, warnings)
+
+	case "background":
+		c.expandBackgroundShorthand(value, props, warnings)
 	}
 }
 
@@ -464,6 +499,31 @@ func (c *Converter) expandBorderShorthand(value CSSValue, props map[KFXSymbol]an
 			if err == nil {
 				c.mergeProp(props, SymBorderWeight, dim)
 			}
+		}
+	}
+}
+
+// expandBackgroundShorthand expands CSS background shorthand.
+// For KFX, we only extract the background-color component.
+// CSS background shorthand can contain: color, image, position, size, repeat, attachment, origin, clip
+// We only care about color values (hex, rgb, rgba, named colors).
+func (c *Converter) expandBackgroundShorthand(value CSSValue, props map[KFXSymbol]any, warnings *[]string) {
+	raw := strings.TrimSpace(value.Raw)
+	if raw == "" || raw == "none" || raw == "transparent" {
+		return
+	}
+
+	// Split into parts and look for a color value
+	parts := strings.Fields(raw)
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+
+		// Check if this part is a color
+		if r, g, b, ok := ParseColor(CSSValue{Raw: part, Keyword: part}); ok {
+			// Convert to KFX color format (ARGB)
+			color := int64(0xFF<<24 | r<<16 | g<<8 | b)
+			c.mergeProp(props, SymFillColor, color)
+			return
 		}
 	}
 }
@@ -623,6 +683,10 @@ func (c *Converter) applyBreakInside(value CSSValue, props map[KFXSymbol]any) {
 }
 
 // convertSpecialProperty handles properties that need custom conversion logic.
+// NOTE: CSS "display" is intentionally NOT converted to KFX "render" style property.
+// Amazon's code (com/amazon/yjhtmlmapper/e/j.java:172) removes display from CSS styles.
+// The display property is only used internally for element classification (block vs inline).
+// KFX "render" property is only set on content entries (like inline images), not from CSS.
 func (c *Converter) convertSpecialProperty(name string, value CSSValue, props map[KFXSymbol]any, _ *[]string) {
 	switch name {
 	case "text-decoration":
@@ -633,16 +697,6 @@ func (c *Converter) convertSpecialProperty(name string, value CSSValue, props ma
 		if dec.Strikethrough {
 			c.mergeProp(props, SymStrikethrough, true)
 		}
-		// NOTE: text-decoration: none - we intentionally don't set false values.
-		// KFX defaults to no decoration, and explicitly setting false can cause
-		// issues with some Kindle renderers (e.g., footnotes appearing as strikethrough).
-		// If you need to override inherited decoration, set the appropriate true value instead.
-		// The original code that set false values:
-		// if dec.None {
-		// 	result.Style.Properties[SymUnderline] = false
-		// 	result.Style.Properties[SymStrikethrough] = false
-		// }
-
 	case "vertical-align":
 		if vaResult, ok := ConvertVerticalAlign(value); ok {
 			if vaResult.UseBaselineStyle {
@@ -651,23 +705,6 @@ func (c *Converter) convertSpecialProperty(name string, value CSSValue, props ma
 				c.mergeProp(props, SymBaselineShift, vaResult.BaselineShift)
 			}
 		}
-
-	case "display":
-		// NOTE: KP3 doesn't convert display to render - disabled for now
-		// sym, visible, ok := ConvertDisplay(value)
-		// if ok {
-		// 	if !visible {
-		// 		// display:none - we don't have a direct KFX equivalent
-		// 		// Log a warning but don't set anything
-		// 		c.log.Debug("display:none not directly supported in KFX")
-		// 		return
-		// 	}
-		// 	if sym != 0 {
-		// 		result.Style.Properties[SymRender] = sym
-		// 	}
-		// }
-		_ = value // suppress unused warning
-
 	case "page-break-before":
 		// In KFX, page-break-before: always is handled by section boundaries, not styles.
 		// Only convert "avoid" to yj-break-before: avoid
@@ -697,6 +734,15 @@ func (c *Converter) convertSpecialProperty(name string, value CSSValue, props ma
 			if vert != 0 {
 				c.mergeProp(props, SymTextEmphasisPositionVertical, vert)
 			}
+		}
+
+	case "white-space":
+		// Amazon converts white-space to a line-wrap boolean:
+		// - nowrap -> white_space: nowrap
+		// - other values (normal, pre, pre-wrap, pre-line) -> no KFX output (default wrapping)
+		// Whitespace preservation (for pre) is handled at content generation level.
+		if strings.ToLower(value.Keyword) == "nowrap" || strings.ToLower(value.Raw) == "nowrap" {
+			c.mergeProp(props, SymWhiteSpace, SymbolValue(SymNowrap))
 		}
 	}
 }

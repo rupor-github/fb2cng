@@ -146,7 +146,13 @@ func (m *StyleMapper) filterIgnorable(sel Selector, props map[string]CSSValue) m
 }
 
 func isIgnorable(sel Selector, propName string, val CSSValue) bool {
+	// Known KFX properties are never ignorable
 	if KFXPropertySymbol(propName) != SymbolUnknown {
+		return false
+	}
+
+	// Shorthand properties are never ignorable - they expand to known properties
+	if IsShorthandProperty(propName) {
 		return false
 	}
 

@@ -252,7 +252,7 @@ func processFlowItem(item *fb2.FlowItem, ctx StyleContext, contextName string, s
 
 	case fb2.FlowTable:
 		if item.Table != nil {
-			eid := sb.AddTable(item.Table, styles, ca)
+			eid := sb.AddTable(item.Table, styles, ca, footnotesIndex, imageResources)
 			if item.Table.ID != "" {
 				if _, exists := idToEID[item.Table.ID]; !exists {
 					idToEID[item.Table.ID] = eid

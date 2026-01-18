@@ -139,6 +139,16 @@ func collectImageIDsFlowItem(item *fb2.FlowItem, used map[string]bool) {
 				collectInlineImageIDsParagraph(&item.Cite.TextAuthors[i], used)
 			}
 		}
+	case fb2.FlowTable:
+		if item.Table != nil {
+			for _, row := range item.Table.Rows {
+				for _, cell := range row.Cells {
+					for i := range cell.Content {
+						collectInlineImageIDsSegment(&cell.Content[i], used)
+					}
+				}
+			}
+		}
 	}
 }
 

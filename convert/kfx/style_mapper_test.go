@@ -5,7 +5,7 @@ import "testing"
 func TestStyleMapperDelegatesToConverter(t *testing.T) {
 	mapper := NewStyleMapper(nil, nil)
 
-	props, warnings := mapper.MapCSS(Selector{Raw: ".cls", Class: "cls"}, map[string]CSSValue{
+	props, warnings := mapper.MapRule(Selector{Raw: ".cls", Class: "cls"}, map[string]CSSValue{
 		"font-weight": {Keyword: "bold"},
 		"clear":       {Keyword: "both"},
 	})
@@ -68,7 +68,7 @@ func TestStyleMapperMapWrapper(t *testing.T) {
 func TestStyleMapperWidowsOrphansTransformer(t *testing.T) {
 	mapper := NewStyleMapper(nil, nil)
 
-	props, warnings := mapper.MapCSS(Selector{Raw: "p", Element: "p"}, map[string]CSSValue{
+	props, warnings := mapper.MapRule(Selector{Raw: "p", Element: "p"}, map[string]CSSValue{
 		"widows":  {Value: 2},
 		"orphans": {Value: 3},
 	})
@@ -98,14 +98,14 @@ func TestStyleMapperWidowsOrphansTransformer(t *testing.T) {
 func TestStyleMapperSnapBlockOnlyForImages(t *testing.T) {
 	mapper := NewStyleMapper(nil, nil)
 
-	props, _ := mapper.MapCSS(Selector{Raw: "div", Element: "div"}, map[string]CSSValue{
+	props, _ := mapper.MapRule(Selector{Raw: "div", Element: "div"}, map[string]CSSValue{
 		"float": {Keyword: "snap-block"},
 	})
 	if _, ok := props[SymFloat]; ok {
 		t.Fatalf("snap-block float should be ignored for non-img elements")
 	}
 
-	propsImg, _ := mapper.MapCSS(Selector{Raw: "img", Element: "img"}, map[string]CSSValue{
+	propsImg, _ := mapper.MapRule(Selector{Raw: "img", Element: "img"}, map[string]CSSValue{
 		"float": {Keyword: "snap-block"},
 	})
 	if val, ok := propsImg[SymFloat]; !ok {
@@ -118,7 +118,7 @@ func TestStyleMapperSnapBlockOnlyForImages(t *testing.T) {
 func TestStyleMapperLineBreakMapsStringEnum(t *testing.T) {
 	mapper := NewStyleMapper(nil, nil)
 
-	props, _ := mapper.MapCSS(Selector{Raw: "p", Element: "p"}, map[string]CSSValue{
+	props, _ := mapper.MapRule(Selector{Raw: "p", Element: "p"}, map[string]CSSValue{
 		"line-break": {Keyword: "loose"},
 	})
 
@@ -135,7 +135,7 @@ func TestStyleMapperLineBreakMapsStringEnum(t *testing.T) {
 func TestStyleMapperImageBorderAttribute(t *testing.T) {
 	mapper := NewStyleMapper(nil, nil)
 
-	props, warnings := mapper.MapCSS(Selector{Raw: "img", Element: "img"}, map[string]CSSValue{
+	props, warnings := mapper.MapRule(Selector{Raw: "img", Element: "img"}, map[string]CSSValue{
 		"border": {Value: 2, Unit: "px"},
 	})
 	if len(warnings) != 0 {
@@ -160,7 +160,7 @@ func TestStyleMapperImageBorderAttribute(t *testing.T) {
 func TestStyleMapperMarkColors(t *testing.T) {
 	mapper := NewStyleMapper(nil, nil)
 
-	props, warnings := mapper.MapCSS(Selector{Raw: "mark", Element: "mark"}, map[string]CSSValue{})
+	props, warnings := mapper.MapRule(Selector{Raw: "mark", Element: "mark"}, map[string]CSSValue{})
 	if len(warnings) != 0 {
 		t.Fatalf("unexpected warnings: %v", warnings)
 	}
@@ -180,7 +180,7 @@ func TestStyleMapperMarkColors(t *testing.T) {
 func TestStyleMapperBorderColorAttributes(t *testing.T) {
 	mapper := NewStyleMapper(nil, nil)
 
-	props, warnings := mapper.MapCSS(Selector{Raw: "div", Element: "div"}, map[string]CSSValue{
+	props, warnings := mapper.MapRule(Selector{Raw: "div", Element: "div"}, map[string]CSSValue{
 		"border-top-color":  {Raw: "#010203"},
 		"outline-color":     {Raw: "rgb(4,5,6)"},
 		"column-rule-color": {Raw: "rgba(7,8,9,0.5)"},
@@ -210,7 +210,7 @@ func TestStyleMapperBorderColorAttributes(t *testing.T) {
 func TestStyleMapperBGColorTransformer(t *testing.T) {
 	mapper := NewStyleMapper(nil, nil)
 
-	props, warnings := mapper.MapCSS(Selector{Raw: "body", Element: "body"}, map[string]CSSValue{
+	props, warnings := mapper.MapRule(Selector{Raw: "body", Element: "body"}, map[string]CSSValue{
 		"bgcolor": {Raw: "#112233"},
 	})
 	if len(warnings) != 0 {
@@ -227,7 +227,7 @@ func TestStyleMapperBGColorTransformer(t *testing.T) {
 func TestStyleMapperBGRepeatTransformer(t *testing.T) {
 	mapper := NewStyleMapper(nil, nil)
 
-	props, warnings := mapper.MapCSS(Selector{Raw: "div", Element: "div"}, map[string]CSSValue{
+	props, warnings := mapper.MapRule(Selector{Raw: "div", Element: "div"}, map[string]CSSValue{
 		"background-repeat-x": {Keyword: "repeat"},
 		"background-repeat-y": {Keyword: "no-repeat"},
 	})
@@ -245,7 +245,7 @@ func TestStyleMapperBGRepeatTransformer(t *testing.T) {
 func TestStyleMapperXYStyleTransformer(t *testing.T) {
 	mapper := NewStyleMapper(nil, nil)
 
-	props, warnings := mapper.MapCSS(Selector{Raw: "div", Element: "div"}, map[string]CSSValue{
+	props, warnings := mapper.MapRule(Selector{Raw: "div", Element: "div"}, map[string]CSSValue{
 		"background-sizex": {Value: 10, Unit: "px"},
 		"background-sizey": {Value: 20, Unit: "px"},
 	})
@@ -272,7 +272,7 @@ func TestStyleMapperYJExtensions(t *testing.T) {
 	mapper := NewStyleMapper(nil, nil)
 
 	shape := "M0,0 L1,1"
-	props, warnings := mapper.MapCSS(Selector{Raw: "div", Element: "div"}, map[string]CSSValue{
+	props, warnings := mapper.MapRule(Selector{Raw: "div", Element: "div"}, map[string]CSSValue{
 		"-amzn-shape-outside":       {Raw: shape},
 		"-amzn-max-crop-percentage": {Raw: "5,5,5,5"},
 		"-webkit-box-shadow":        {Raw: "0 0 1px #000"},
@@ -355,7 +355,7 @@ func TestStyleMapperYJExtensions(t *testing.T) {
 func TestStyleMapperPageBleed(t *testing.T) {
 	mapper := NewStyleMapper(nil, nil)
 
-	props, warnings := mapper.MapCSS(Selector{Raw: "div", Element: "div"}, map[string]CSSValue{
+	props, warnings := mapper.MapRule(Selector{Raw: "div", Element: "div"}, map[string]CSSValue{
 		"-amzn-page-align": {Raw: "left,right"},
 	})
 	if len(warnings) != 0 {
@@ -383,7 +383,7 @@ func TestStyleMapperPageBleed(t *testing.T) {
 func TestStyleMapperBackgroundXYTransforms(t *testing.T) {
 	mapper := NewStyleMapper(nil, nil)
 
-	props, warnings := mapper.MapCSS(Selector{Raw: "div", Element: "div"}, map[string]CSSValue{
+	props, warnings := mapper.MapRule(Selector{Raw: "div", Element: "div"}, map[string]CSSValue{
 		"background-position": {Raw: "10% 20%"},
 		"background-size":     {Raw: "auto 50%"},
 	})

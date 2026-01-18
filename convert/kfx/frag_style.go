@@ -310,6 +310,20 @@ func (sb *StyleBuilder) FontSize(value float64, unit KFXSymbol) *StyleBuilder {
 	return sb
 }
 
+// FontSizeSmaller sets font-size to 'smaller' (0.8333em = 5/6).
+// This matches Amazon's CSS conversion: font-size: smaller -> 0.8333em.
+func (sb *StyleBuilder) FontSizeSmaller() *StyleBuilder {
+	sb.props[SymFontSize] = DimensionValue(0.8333333333333334, SymUnitEm)
+	return sb
+}
+
+// FontSizeLarger sets font-size to 'larger' (1.2em).
+// This matches Amazon's CSS conversion: font-size: larger -> 1.2em.
+func (sb *StyleBuilder) FontSizeLarger() *StyleBuilder {
+	sb.props[SymFontSize] = DimensionValue(1.2, SymUnitEm)
+	return sb
+}
+
 // FontWeight sets the font weight (SymBold, SymNormal, etc.).
 func (sb *StyleBuilder) FontWeight(weight KFXSymbol) *StyleBuilder {
 	sb.props[SymFontWeight] = SymbolValue(weight)
@@ -325,6 +339,20 @@ func (sb *StyleBuilder) FontStyle(style KFXSymbol) *StyleBuilder {
 // LineHeight sets the line height.
 func (sb *StyleBuilder) LineHeight(value float64, unit KFXSymbol) *StyleBuilder {
 	sb.props[SymLineHeight] = DimensionValue(value, unit)
+	return sb
+}
+
+// LineHeightNormal sets line-height to 'normal' (keyword, not dimension).
+// Used for elements like sub/sup where Amazon uses line-height: normal.
+func (sb *StyleBuilder) LineHeightNormal() *StyleBuilder {
+	sb.props[SymLineHeight] = SymbolValue(SymNormal)
+	return sb
+}
+
+// WhiteSpaceNowrap sets white-space to 'nowrap' to prevent line wrapping.
+// This matches Amazon's CSS conversion: white-space: nowrap -> $716: $715.
+func (sb *StyleBuilder) WhiteSpaceNowrap() *StyleBuilder {
+	sb.props[SymWhiteSpace] = SymbolValue(SymNowrap)
 	return sb
 }
 
@@ -418,6 +446,18 @@ func (sb *StyleBuilder) Width(value float64, unit KFXSymbol) *StyleBuilder {
 	return sb
 }
 
+// MinWidth sets the min_width property.
+func (sb *StyleBuilder) MinWidth(value float64, unit KFXSymbol) *StyleBuilder {
+	sb.props[SymMinWidth] = DimensionValue(value, unit)
+	return sb
+}
+
+// MaxWidth sets the max_width property.
+func (sb *StyleBuilder) MaxWidth(value float64, unit KFXSymbol) *StyleBuilder {
+	sb.props[SymMaxWidth] = DimensionValue(value, unit)
+	return sb
+}
+
 // KeepTogether sets orphans/widows to avoid.
 func (sb *StyleBuilder) KeepTogether() *StyleBuilder {
 	sb.props[SymKeepFirst] = SymbolValue(SymAvoid)
@@ -492,6 +532,49 @@ func (sb *StyleBuilder) BoxAlign(align KFXSymbol) *StyleBuilder {
 // Use SymContentBounds for content-based sizing.
 func (sb *StyleBuilder) SizingBounds(bounds KFXSymbol) *StyleBuilder {
 	sb.props[SymSizingBounds] = SymbolValue(bounds)
+	return sb
+}
+
+// PaddingTop sets the top padding.
+func (sb *StyleBuilder) PaddingTop(value float64, unit KFXSymbol) *StyleBuilder {
+	sb.props[SymPaddingTop] = DimensionValue(value, unit)
+	return sb
+}
+
+// PaddingBottom sets the bottom padding.
+func (sb *StyleBuilder) PaddingBottom(value float64, unit KFXSymbol) *StyleBuilder {
+	sb.props[SymPaddingBottom] = DimensionValue(value, unit)
+	return sb
+}
+
+// PaddingLeft sets the left padding.
+func (sb *StyleBuilder) PaddingLeft(value float64, unit KFXSymbol) *StyleBuilder {
+	sb.props[SymPaddingLeft] = DimensionValue(value, unit)
+	return sb
+}
+
+// PaddingRight sets the right padding.
+func (sb *StyleBuilder) PaddingRight(value float64, unit KFXSymbol) *StyleBuilder {
+	sb.props[SymPaddingRight] = DimensionValue(value, unit)
+	return sb
+}
+
+// BorderStyle sets the border style (solid, none, etc.).
+func (sb *StyleBuilder) BorderStyle(style KFXSymbol) *StyleBuilder {
+	sb.props[SymBorderStyle] = SymbolValue(style)
+	return sb
+}
+
+// BorderWidth sets the border width.
+func (sb *StyleBuilder) BorderWidth(value float64, unit KFXSymbol) *StyleBuilder {
+	sb.props[SymBorderWeight] = DimensionValue(value, unit)
+	return sb
+}
+
+// YjVerticalAlign sets the yj.vertical_align property for table cell vertical alignment.
+// Use SymCenter for vertical centering within table cells.
+func (sb *StyleBuilder) YjVerticalAlign(align KFXSymbol) *StyleBuilder {
+	sb.props[SymYjVerticalAlign] = SymbolValue(align)
 	return sb
 }
 

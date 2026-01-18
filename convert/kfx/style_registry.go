@@ -220,9 +220,75 @@ var containerStyles = map[string]bool{
 	"annotation": true,
 }
 
+// tableElementProperties are properties that KFX requires to be on the table element,
+// NOT in the style. KP3 moves these from style to element during table processing.
+// See com/amazon/adapter/common/l/a/c/e.java lines 16-18 in KP3 source.
+var tableElementProperties = map[KFXSymbol]bool{
+	SymTableBorderCollapse:     true,
+	SymBorderSpacingHorizontal: true,
+	SymBorderSpacingVertical:   true,
+}
+
+// TableElementProps holds properties that should be set on the table element,
+// extracted from CSS before filtering them from the style.
+type TableElementProps struct {
+	BorderCollapse    bool
+	BorderSpacingH    any // DimensionValue or nil
+	BorderSpacingV    any // DimensionValue or nil
+	HasBorderCollapse bool
+}
+
+// GetTableElementProps extracts table element properties from the resolved "table" style.
+// These properties are moved from style to element per KP3 behavior.
+// Returns extracted values with defaults for missing properties.
+func (sr *StyleRegistry) GetTableElementProps() TableElementProps {
+	result := TableElementProps{
+		BorderCollapse:    true,                           // default: collapse
+		BorderSpacingH:    DimensionValue(0.9, SymUnitPt), // default: 0.9pt (Amazon reference)
+		BorderSpacingV:    DimensionValue(0.9, SymUnitPt), // default: 0.9pt
+		HasBorderCollapse: false,
+	}
+
+	// Get the merged "table" style properties before filtering
+	sr.EnsureBaseStyle("table")
+	def, exists := sr.styles["table"]
+	if !exists {
+		return result
+	}
+	resolved := sr.resolveInheritance(def)
+
+	// Extract border_spacing if present in CSS
+	if v, ok := resolved.Properties[SymBorderSpacingHorizontal]; ok {
+		result.BorderSpacingH = v
+	}
+	if v, ok := resolved.Properties[SymBorderSpacingVertical]; ok {
+		result.BorderSpacingV = v
+	}
+
+	// Extract table_border_collapse if present
+	// CSS border-collapse: collapse -> true, separate -> false
+	if v, ok := resolved.Properties[SymTableBorderCollapse]; ok {
+		result.HasBorderCollapse = true
+		if bv, ok := v.(bool); ok {
+			result.BorderCollapse = bv
+		}
+	}
+
+	return result
+}
+
 // ResolveStyle resolves a (possibly multi-part) style spec into a fully-resolved KP3-like style name.
 // Later parts override earlier ones. All resolved styles inherit from kfx-unknown as the base.
-func (sr *StyleRegistry) ResolveStyle(styleSpec string) string {
+//
+// An optional ElementPosition can be provided for position-based property filtering:
+//   - First element: margin-top removed
+//   - Last element: margin-bottom removed
+//   - First+Last (only element): both margins removed
+//   - Middle or no position: no filtering
+//
+// Elements that don't pass position (tables, TOC entries, style events) are treated as "middle"
+// because they either don't participate in vertical margin collapsing or handle spacing differently.
+func (sr *StyleRegistry) ResolveStyle(styleSpec string, pos ...ElementPosition) string {
 	parts := strings.Fields(styleSpec)
 	if len(parts) == 0 {
 		return ""
@@ -305,10 +371,43 @@ func (sr *StyleRegistry) ResolveStyle(styleSpec string) string {
 		}
 	}
 
+	// Apply position-based filtering if position was provided
+	var position ElementPosition
+	var hasPosition bool
+	if len(pos) > 0 {
+		position = pos[0]
+		hasPosition = position.IsFirst || position.IsLast
+	}
+
+	if hasPosition {
+		filtered, removedProps := filterPropertiesByPositionWithRemoved(merged, position)
+		if sr.tracer.IsEnabled() && len(removedProps) > 0 {
+			var removedNames []string
+			for _, sym := range removedProps {
+				removedNames = append(removedNames, traceSymbolNameForStyle(sym))
+			}
+			posName := positionSuffix(position)[2 : len(positionSuffix(position))-1]
+			sr.tracer.TracePositionFilter(styleSpec, posName, removedNames)
+		}
+		merged = filtered
+	}
+
+	// For table styles, remove properties that KFX requires to be on the element, not in the style.
+	// KP3 moves these from style to element during table processing.
+	if parts[0] == "table" {
+		for prop := range tableElementProperties {
+			delete(merged, prop)
+		}
+	}
+
 	sig := styleSignature(merged)
 	if name, ok := sr.resolved[sig]; ok {
 		sr.used[name] = true
-		sr.tracer.TraceResolve(styleSpec, name+" (cached)", merged)
+		suffix := ""
+		if hasPosition {
+			suffix = positionSuffix(position)
+		}
+		sr.tracer.TraceResolve(styleSpec+suffix, name+" (cached)", merged)
 		return name
 	}
 
@@ -316,7 +415,11 @@ func (sr *StyleRegistry) ResolveStyle(styleSpec string) string {
 	sr.resolved[sig] = name
 	sr.used[name] = true
 	sr.Register(StyleDef{Name: name, Properties: merged})
-	sr.tracer.TraceResolve(styleSpec, name, merged)
+	suffix := ""
+	if hasPosition {
+		suffix = positionSuffix(position)
+	}
+	sr.tracer.TraceResolve(styleSpec+suffix, name, merged)
 	return name
 }
 
@@ -385,6 +488,13 @@ func (sr *StyleRegistry) ResolveStyleNoMark(styleSpec string) string {
 		}
 	}
 
+	// For table styles, remove properties that KFX requires to be on the element, not in the style.
+	if parts[0] == "table" {
+		for prop := range tableElementProperties {
+			delete(merged, prop)
+		}
+	}
+
 	sig := styleSignature(merged)
 	if name, ok := sr.resolved[sig]; ok {
 		// Don't mark used - caller will do that if needed
@@ -397,112 +507,6 @@ func (sr *StyleRegistry) ResolveStyleNoMark(styleSpec string) string {
 	// Don't mark used - caller will do that if needed
 	sr.Register(StyleDef{Name: name, Properties: merged})
 	sr.tracer.TraceResolve(styleSpec, name+" (no-mark)", merged)
-	return name
-}
-
-// ResolveStyleWithPosition resolves a style spec with position-based property filtering.
-// This applies KP3's position-aware CSS processing where first/last elements in a container
-// have certain properties (margins, padding, break behavior) filtered out.
-//
-// This is the primary method for resolving styles in content generation - it should be
-// preferred over ResolveStyle when the element's position within its container is known.
-//
-// The position filtering happens AFTER style merging but BEFORE registration, so different
-// positions may produce different registered styles even for the same styleSpec.
-func (sr *StyleRegistry) ResolveStyleWithPosition(styleSpec string, pos ElementPosition) string {
-	parts := strings.Fields(styleSpec)
-	if len(parts) == 0 {
-		return ""
-	}
-
-	merged := make(map[KFXSymbol]any)
-
-	// Start with kfx-unknown as the base for all resolved styles
-	sr.EnsureBaseStyle("kfx-unknown")
-	if unknown, exists := sr.styles["kfx-unknown"]; exists {
-		resolved := sr.resolveInheritance(unknown)
-		sr.mergeProperties(merged, resolved.Properties)
-	}
-
-	// Track margins separately for intermediate parts
-	var lastMargins map[KFXSymbol]any
-
-	// Process style parts (same as ResolveStyle)
-	lastIdx := len(parts) - 1
-	for i, part := range parts {
-		sr.EnsureBaseStyle(part)
-		def := sr.styles[part]
-		resolved := sr.resolveInheritance(def)
-
-		isContainer := containerStyles[part]
-		if i > 0 && isContainer {
-			for k, v := range resolved.Properties {
-				if k == SymMarginTop || k == SymMarginBottom || k == SymMarginLeft || k == SymMarginRight {
-					continue
-				}
-				sr.mergeProperty(merged, k, v)
-			}
-		} else if i > 0 && i < lastIdx {
-			for _, sym := range []KFXSymbol{SymMarginTop, SymMarginBottom, SymMarginLeft, SymMarginRight} {
-				if v, ok := resolved.Properties[sym]; ok {
-					if lastMargins == nil {
-						lastMargins = make(map[KFXSymbol]any)
-					}
-					sr.mergeProperty(lastMargins, sym, v)
-				}
-			}
-			for k, v := range resolved.Properties {
-				if k == SymMarginTop || k == SymMarginBottom || k == SymMarginLeft || k == SymMarginRight {
-					continue
-				}
-				sr.mergeProperty(merged, k, v)
-			}
-		} else {
-			for k, v := range resolved.Properties {
-				sr.mergeProperty(merged, k, v)
-			}
-		}
-	}
-
-	// Apply intermediate margins if final element doesn't have them
-	if lastMargins != nil {
-		for _, sym := range []KFXSymbol{SymMarginTop, SymMarginBottom, SymMarginLeft, SymMarginRight} {
-			if _, hasMargin := merged[sym]; !hasMargin {
-				if v, ok := lastMargins[sym]; ok {
-					sr.mergeProperty(merged, sym, v)
-				}
-			}
-		}
-	}
-
-	// Apply position-based filtering BEFORE signature generation
-	// This ensures different positions create different styles
-	filtered, removedProps := filterPropertiesByPositionWithRemoved(merged, pos)
-
-	// Trace position filtering if any properties were removed or tracer wants position stats
-	if sr.tracer.IsEnabled() {
-		var removedNames []string
-		for _, sym := range removedProps {
-			removedNames = append(removedNames, traceSymbolNameForStyle(sym))
-		}
-		posName := positionSuffix(pos)[2 : len(positionSuffix(pos))-1] // extract "first", "middle", etc.
-		sr.tracer.TracePositionFilter(styleSpec, posName, removedNames)
-	}
-
-	merged = filtered
-
-	sig := styleSignature(merged)
-	if name, ok := sr.resolved[sig]; ok {
-		sr.used[name] = true
-		sr.tracer.TraceResolve(styleSpec+positionSuffix(pos), name+" (cached)", merged)
-		return name
-	}
-
-	name := sr.nextResolvedStyleName()
-	sr.resolved[sig] = name
-	sr.used[name] = true
-	sr.Register(StyleDef{Name: name, Properties: merged})
-	sr.tracer.TraceResolve(styleSpec+positionSuffix(pos), name, merged)
 	return name
 }
 
@@ -1011,104 +1015,196 @@ func DefaultStyleRegistry() *StyleRegistry {
 	// ============================================================
 
 	// Base paragraph style - HTML <p> element
-	// KP3 uses: text-indent: 3.125%, line-height: 1lh, text-align: justify
+	// Amazon reference: only sets display: block (no styling defaults)
+	// FB2-specific formatting (text-indent, justify, margins) comes from CSS
 	sr.Register(NewStyle("p").
-		// LineHeight(1.0, SymUnitLh).
-		TextIndent(3.125, SymUnitPercent).
-		TextAlign(SymJustify).
-		MarginBottom(0.25, SymUnitLh).
-		// Note: margin-top, margin-left, margin-right omitted - KP3 doesn't include zero margins
 		Build())
 
 	// Heading styles (h1-h6) - HTML heading elements
-	// Minimal styles for combining with title header classes
-	// Margins and line-height omitted - those come from the header class CSS
+	// Amazon Java reference: font-size and font-weight only, no text-align
+	// Font sizes: h1=2.0em, h2=1.5em, h3=1.17em, h4=1.0em, h5=0.83em, h6=0.67em
 	// layout-hints added during post-processing
 	sr.Register(NewStyle("h1").
-		FontSize(1.5, SymUnitRem).
+		FontSize(2.0, SymUnitEm).
 		FontWeight(SymBold).
-		TextAlign(SymCenter).
-		TextIndent(0, SymUnitPercent).
 		Build())
 
 	sr.Register(NewStyle("h2").
-		FontSize(1.25, SymUnitRem).
+		FontSize(1.5, SymUnitEm).
 		FontWeight(SymBold).
-		TextAlign(SymCenter).
-		TextIndent(0, SymUnitPercent).
 		Build())
 
 	sr.Register(NewStyle("h3").
-		FontSize(1.125, SymUnitRem).
+		FontSize(1.17, SymUnitEm).
 		FontWeight(SymBold).
-		TextAlign(SymCenter).
-		TextIndent(0, SymUnitPercent).
 		Build())
 
 	sr.Register(NewStyle("h4").
-		FontSize(1.0, SymUnitRem).
+		FontSize(1.0, SymUnitEm).
 		FontWeight(SymBold).
-		TextAlign(SymCenter).
-		TextIndent(0, SymUnitPercent).
 		Build())
 
 	sr.Register(NewStyle("h5").
-		FontSize(1.0, SymUnitRem).
+		FontSize(0.83, SymUnitEm).
 		FontWeight(SymBold).
-		TextAlign(SymCenter).
-		TextIndent(0, SymUnitPercent).
 		Build())
 
 	sr.Register(NewStyle("h6").
-		FontSize(1.0, SymUnitRem).
+		FontSize(0.67, SymUnitEm).
 		FontWeight(SymBold).
-		TextAlign(SymCenter).
-		TextIndent(0, SymUnitPercent).
 		Build())
 
 	// Code/preformatted - HTML <code> and <pre> elements
+	// Amazon reference for code: font-family: monospace only
 	sr.Register(NewStyle("code").
 		FontFamily("monospace").
-		FontSize(0.875, SymUnitEm).
-		TextAlign(SymLeft).
-		TextIndent(0, SymUnitPercent).
 		Build())
 
+	// Amazon reference for pre: font-family: monospace, white-space: pre
+	// Note: white-space is handled at content level, not in style
 	sr.Register(NewStyle("pre").
 		FontFamily("monospace").
-		FontSize(0.875, SymUnitEm).
-		TextAlign(SymLeft).
-		TextIndent(0, SymUnitPercent).
-		LineHeight(1.0, SymUnitLh).
-		MarginTop(1.0, SymUnitEm).
-		MarginBottom(1.0, SymUnitEm).
 		Build())
 
 	// Blockquote - HTML <blockquote> element
+	// Amazon reference: margin-left: 40px, margin-right: 40px only
 	sr.Register(NewStyle("blockquote").
-		MarginLeft(2.0, SymUnitEm).
-		MarginRight(2.0, SymUnitEm).
-		MarginTop(1.0, SymUnitEm).
-		MarginBottom(1.0, SymUnitEm).
-		TextIndent(0, SymUnitPercent).
+		MarginLeft(40, SymUnitPx).
+		MarginRight(40, SymUnitPx).
 		Build())
 
 	// Table elements - HTML <table>, <th>, <td>
+	// KFX tables require separate styles for container and text elements:
+	//   - Container: border, padding, vertical-align (NO text properties)
+	//   - Text: text-align only (NO border/padding)
+	// These are kept separate from CSS-parsed td/th to avoid property contamination.
+
+	// Table style - applied to the table element ($278)
+	// Amazon reference sFE: box-align: center; line-height: 1lh; margin-top: 0.833333lh;
+	//   max-width: 100%; min-width: 100%; sizing-bounds: content_bounds; text-indent: 0%; width: 32em
+	// The sizing-bounds: content_bounds + yj.table_features: [pan_zoom, scale_fit] enables
+	// table scaling to fit within page bounds instead of spanning multiple pages.
 	sr.Register(NewStyle("table").
+		BoxAlign(SymCenter).
+		LineHeight(1, SymUnitLh).
+		MarginTop(0.833, SymUnitLh).
+		Width(32, SymUnitEm).
+		MinWidth(100, SymUnitPercent).
+		MaxWidth(100, SymUnitPercent).
+		SizingBounds(SymContentBounds).
 		TextIndent(0, SymUnitPercent).
-		MarginTop(1.0, SymUnitEm).
-		MarginBottom(1.0, SymUnitEm).
-		MarginLeftAuto().
-		MarginRightAuto().
 		Build())
 
-	sr.Register(NewStyle("th").
-		FontWeight(SymBold).
+	// Cell container style - applied to the cell container ($270)
+	// Amazon reference sBP: border-style: solid; border-width: 0.45pt;
+	//   padding: 0.416667lh / 1.563%; yj.vertical-align: center
+	// Inherits from "td" to pick up CSS properties like background-color.
+	sr.Register(NewStyle("td-container").
+		Inherit("td").
+		BorderStyle(SymSolid).
+		BorderWidth(0.45, SymUnitPt).
+		PaddingTop(0.416667, SymUnitLh).
+		PaddingBottom(0.416667, SymUnitLh).
+		PaddingLeft(1.563, SymUnitPercent).
+		PaddingRight(1.563, SymUnitPercent).
+		YjVerticalAlign(SymCenter).
+		Build())
+
+	// Header cell container style - inherits from "th" for CSS properties (background-color, etc.)
+	// Local properties provide defaults that CSS can override.
+	sr.Register(NewStyle("th-container").
+		Inherit("th").
+		BorderStyle(SymSolid).
+		BorderWidth(0.45, SymUnitPt).
+		PaddingTop(0.416667, SymUnitLh).
+		PaddingBottom(0.416667, SymUnitLh).
+		PaddingLeft(1.563, SymUnitPercent).
+		PaddingRight(1.563, SymUnitPercent).
+		YjVerticalAlign(SymCenter).
+		Build())
+
+	// Cell text style - applied to text inside cell
+	// Amazon reference s1F: text-align: left (ONLY text-align, nothing else)
+	sr.Register(NewStyle("td-text").
+		TextAlign(SymLeft).
+		Build())
+
+	// Cell text alignment variants
+	sr.Register(NewStyle("td-text-center").
 		TextAlign(SymCenter).
 		Build())
 
-	sr.Register(NewStyle("td").
+	sr.Register(NewStyle("td-text-right").
+		TextAlign(SymRight).
+		Build())
+
+	sr.Register(NewStyle("td-text-justify").
+		TextAlign(SymJustify).
+		Build())
+
+	// Header cell text style - centered by default (bold applied via style_events)
+	sr.Register(NewStyle("th-text").
+		TextAlign(SymCenter).
+		Build())
+
+	// Header cell text alignment variants
+	sr.Register(NewStyle("th-text-center").
+		TextAlign(SymCenter).
+		Build())
+
+	sr.Register(NewStyle("th-text-left").
 		TextAlign(SymLeft).
+		Build())
+
+	sr.Register(NewStyle("th-text-right").
+		TextAlign(SymRight).
+		Build())
+
+	sr.Register(NewStyle("th-text-justify").
+		TextAlign(SymJustify).
+		Build())
+
+	// Data cell text alignment variants (including explicit left)
+	sr.Register(NewStyle("td-text-left").
+		TextAlign(SymLeft).
+		Build())
+
+	// Table cell image styles with alignment variants
+	// th-image uses center by default (header cells are centered)
+	sr.Register(NewStyle("th-image").
+		BoxAlign(SymCenter).
+		Build())
+	sr.Register(NewStyle("th-image-center").
+		BoxAlign(SymCenter).
+		Build())
+	sr.Register(NewStyle("th-image-left").
+		BoxAlign(SymLeft).
+		Build())
+	sr.Register(NewStyle("th-image-right").
+		BoxAlign(SymRight).
+		Build())
+
+	// td-image uses left by default (data cells are left-aligned)
+	sr.Register(NewStyle("td-image").
+		BoxAlign(SymLeft).
+		Build())
+	sr.Register(NewStyle("td-image-center").
+		BoxAlign(SymCenter).
+		Build())
+	sr.Register(NewStyle("td-image-left").
+		BoxAlign(SymLeft).
+		Build())
+	sr.Register(NewStyle("td-image-right").
+		BoxAlign(SymRight).
+		Build())
+
+	// CSS-parsed td/th styles - these exist for CSS compatibility but are NOT
+	// used directly for table rendering (td-container/td-text are used instead)
+	sr.Register(NewStyle("th").
+		FontWeight(SymBold).
+		Build())
+
+	sr.Register(NewStyle("td").
 		Build())
 
 	// ============================================================
@@ -1152,24 +1248,27 @@ func DefaultStyleRegistry() *StyleRegistry {
 		Build())
 
 	// Subscript and superscript - HTML <sub> and <sup> elements
-	// KP3 uses baseline-style for these.
+	// Amazon reference: vertical-align: sub/super, line-height: normal, font-size: smaller
+	// We use baseline_style for vertical-align, line-height: normal, and 0.75rem for "smaller"
 	// IMPORTANT: Use rem (not em) to prevent relative merging when nested with
 	// other inline styles like link-footnote. Using em causes compounding:
 	// sup(0.75em) × link-footnote(0.8em) = 0.6em, which is wrong.
-	// KP3 reference uses 0.75rem for these styles.
 	sr.Register(NewStyle("sub").
 		BaselineStyle(SymSubscript).
+		LineHeightNormal().
 		FontSize(0.75, SymUnitRem).
 		Build())
 
 	sr.Register(NewStyle("sup").
 		BaselineStyle(SymSuperscript).
+		LineHeightNormal().
 		FontSize(0.75, SymUnitRem).
 		Build())
 
 	// Small text - HTML <small> element
+	// Amazon reference: font-size: smaller
 	sr.Register(NewStyle("small").
-		FontSize(0.875, SymUnitEm).
+		FontSizeSmaller().
 		Build())
 
 	// ============================================================

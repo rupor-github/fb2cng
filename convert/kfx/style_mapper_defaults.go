@@ -533,7 +533,7 @@ func _mapStructuralSelector(sel Selector, props map[string]CSSValue, mapper *Sty
 	if mapper == nil {
 		return StyleDef{}, nil
 	}
-	mappedProps, warnings := mapper.MapCSS(sel, props)
+	mappedProps, warnings := mapper.MapRule(sel, props)
 	return StyleDef{
 		Name:       sel.StyleName(),
 		Properties: mappedProps,

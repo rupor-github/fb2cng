@@ -54,7 +54,7 @@ func (m *StyleMapper) MapStylesheet(sheet *Stylesheet) ([]StyleDef, []string) {
 	}
 
 	for _, rule := range sheet.Rules {
-		props, warnings := m.MapCSS(rule.Selector, rule.Properties)
+		props, warnings := m.MapRule(rule.Selector, rule.Properties)
 		allWarnings = append(allWarnings, warnings...)
 
 		if len(props) == 0 {
@@ -103,7 +103,7 @@ func (m *StyleMapper) MapStylesheet(sheet *Stylesheet) ([]StyleDef, []string) {
 // Multiple classes are flattened using the first class as the primary selector component.
 func (m *StyleMapper) MapWrapper(tag string, classes []string, props map[string]CSSValue) (StyleDef, []string) {
 	selector := selectorFromTagClasses(tag, classes)
-	styleProps, warnings := m.MapCSS(selector, props)
+	styleProps, warnings := m.MapRule(selector, props)
 	return StyleDef{
 		Name:       selector.StyleName(),
 		Properties: styleProps,
@@ -140,10 +140,11 @@ func (m *StyleMapper) MapWrappers(wrappers []WrapperCSS) ([]StyleDef, []string) 
 	return out, warnings
 }
 
-// MapCSS converts a normalized CSS map for a tag/class selector into KFX properties.
-// Further stylemap/transformer logic will plug into this path; for now we delegate
-// to the CSS converter to keep behavior unchanged while providing a staging hook.
-func (m *StyleMapper) MapCSS(selector Selector, props map[string]CSSValue) (map[KFXSymbol]any, []string) {
+// MapRule converts a single CSS rule (selector + properties) into KFX properties.
+// Used internally by MapStylesheet and MapWrapper, but exported for testing
+// and for callers that need to convert individual rules programmatically.
+// It applies stylemap lookups and transformers on top of the base CSS conversion.
+func (m *StyleMapper) MapRule(selector Selector, props map[string]CSSValue) (map[KFXSymbol]any, []string) {
 	props = m.applyStyleMapCSS(selector, props)
 
 	result := m.converter.ConvertRule(CSSRule{

@@ -25,17 +25,19 @@ type TOCPagePlacement int
 type VignettePos string
 
 // Specification of requested output type.
-// ENUM(epub2, epub3, kepub, kfx)
+// ENUM(epub2, epub3, kepub, kfx, azw8)
 type OutputFmt int
 
 func (o OutputFmt) ForKindle() bool {
-	return o == OutputFmtKfx
+	return o == OutputFmtKfx || o == OutputFmtAzw8
 }
 
 func (o OutputFmt) Ext() string {
 	switch o {
 	case OutputFmtKfx:
 		return ".kfx"
+	case OutputFmtAzw8:
+		return ".azw8"
 	case OutputFmtEpub2, OutputFmtEpub3:
 		return ".epub"
 	case OutputFmtKepub:

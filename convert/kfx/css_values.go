@@ -133,7 +133,7 @@ func ConvertTextEmphasisStyle(css CSSValue) (KFXSymbol, bool) {
 
 	fill := "filled"
 	shape := ""
-	for _, token := range strings.Fields(val) {
+	for token := range strings.FieldsSeq(val) {
 		switch token {
 		case "filled", "open":
 			fill = token
@@ -322,23 +322,6 @@ func ConvertBorderStyle(style string) (KFXSymbol, bool) {
 		return SymSolid, true
 	}
 	return 0, false
-}
-
-// ConvertDisplay converts CSS display values.
-// Returns the KFX render mode symbol, or handles visibility.
-// CSS: block, inline, none
-// KFX: $602 (block), visibility handling for none
-func ConvertDisplay(css CSSValue) (symbol KFXSymbol, isVisible bool, ok bool) {
-	switch strings.ToLower(css.Keyword) {
-	case "block":
-		return SymBlock, true, true // $602
-	case "inline":
-		return SymInline, true, true // $283
-	case "none":
-		// display:none means invisible
-		return 0, false, true
-	}
-	return 0, true, false
 }
 
 // ConvertFloat converts CSS float values to KFX symbols.

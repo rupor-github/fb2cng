@@ -69,8 +69,13 @@ var cssToKFXProperty = CSSToKFXMap{
 	"text-emphasis-position":         -1, // needs split to horizontal/vertical symbols
 	"-webkit-text-emphasis-position": -1,
 
-	// Display/Render
-	"display": -1, // block->$602, none handled specially
+	// White-space - special handling
+	// Amazon converts to line-wrap boolean: nowrap=false, others=true (default)
+	"white-space": -1,
+
+	// NOTE: CSS "display" is intentionally NOT mapped to KFX.
+	// Amazon removes it from CSS styles (com/amazon/yjhtmlmapper/e/j.java:172).
+	// It's only used internally for element classification, not output to KFX.
 
 	// Float
 	"float": SymFloat,      // $140
@@ -124,7 +129,7 @@ func KFXPropertySymbol(cssProperty string) KFXSymbol {
 // IsShorthandProperty returns true if the CSS property is a shorthand that needs expansion.
 func IsShorthandProperty(cssProperty string) bool {
 	switch cssProperty {
-	case "margin", "padding", "border":
+	case "margin", "padding", "border", "background":
 		return true
 	}
 	return false
@@ -136,7 +141,8 @@ func IsSpecialProperty(cssProperty string) bool {
 	case "text-decoration", "vertical-align", "display",
 		"page-break-before", "page-break-after", "page-break-inside",
 		"break-before", "break-after", "break-inside",
-		"text-emphasis-position", "-webkit-text-emphasis-position":
+		"text-emphasis-position", "-webkit-text-emphasis-position",
+		"white-space":
 		return true
 	}
 	return false

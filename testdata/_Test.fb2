@@ -730,7 +730,7 @@
           <td align="center">Значение 1.5</td>
           <td align="center">Значение 1.6</td>
           <td align="center">
-            <image alt="Буква Б" l:href="#bb.png"></image>
+            <strong>Жирный</strong> <image alt="Буква Б" l:href="#bb.png"></image> <emphasis>курсив</emphasis>
           </td>
           <td align="center">Значение 1.8</td>
           <td align="center">Значение 1.9</td>

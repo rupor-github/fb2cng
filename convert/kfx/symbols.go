@@ -97,6 +97,11 @@ const (
 	SymYjDisplay               KFXSymbol = 616 // yj.display
 	SymYjNote                  KFXSymbol = 617 // yj.note
 	SymFloatClear              KFXSymbol = 628 // yj.float_clear
+	SymYjVerticalAlign         KFXSymbol = 633 // yj.vertical_align (for table cell vertical alignment)
+	SymYjTableFeatures         KFXSymbol = 629 // yj.table_features
+	SymYjTableSelectionMode    KFXSymbol = 630 // yj.table_selection_mode
+	SymYjRegional              KFXSymbol = 632 // yj.regional (value for yj.table_selection_mode)
+	SymPanZoom                 KFXSymbol = 581 // pan_zoom (value for yj.table_features)
 	SymTreatAsTitle            KFXSymbol = 760 // treat_as_title (layout hint value)
 	SymLayoutHints             KFXSymbol = 761 // layout_hints
 	SymYjBreakAfter            KFXSymbol = 788 // yj_break_after
@@ -345,6 +350,10 @@ const (
 	SymWritingMode     KFXSymbol = 560 // writing_mode
 	SymTextOrientation KFXSymbol = 706 // text_orientation
 	SymTextCombine     KFXSymbol = 707 // text_combine
+
+	// White-space ($715-$716)
+	SymNowrap     KFXSymbol = 715 // nowrap
+	SymWhiteSpace KFXSymbol = 716 // white_space
 
 	// Text emphasis ($717-$720)
 	SymTextEmphasisStyle              KFXSymbol = 717 // text_emphasis_style

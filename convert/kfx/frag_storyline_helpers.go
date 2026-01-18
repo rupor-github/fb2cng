@@ -91,3 +91,271 @@ func segmentHasTextContent(seg *fb2.InlineSegment) bool {
 	}
 	return false
 }
+
+// cellContentHasText checks if table cell content contains any actual text (not just images).
+func cellContentHasText(content []fb2.InlineSegment) bool {
+	for i := range content {
+		if segmentHasTextContent(&content[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+// extractCellImages extracts image references from cell content.
+// Returns the image hrefs (without # prefix) for all images found.
+func extractCellImages(content []fb2.InlineSegment) []string {
+	var images []string
+	var walk func(seg *fb2.InlineSegment)
+	walk = func(seg *fb2.InlineSegment) {
+		if seg.Kind == fb2.InlineImageSegment && seg.Image != nil {
+			href := strings.TrimPrefix(seg.Image.Href, "#")
+			if href != "" {
+				images = append(images, href)
+			}
+		}
+		for i := range seg.Children {
+			walk(&seg.Children[i])
+		}
+	}
+	for i := range content {
+		walk(&content[i])
+	}
+	return images
+}
+
+// inlineStyleInfo tracks style and optional link info during inline segment processing.
+type inlineStyleInfo struct {
+	Style          string
+	LinkTo         string // Link target (internal anchor ID or external link anchor ID)
+	IsFootnoteLink bool
+}
+
+// MixedContentResult holds the output of processMixedInlineSegments.
+type MixedContentResult struct {
+	Items  []InlineContentItem // Content items (text chunks and inline images)
+	Events []StyleEventRef     // Style events for inline formatting
+}
+
+// processMixedInlineSegments processes inline segments that may contain mixed content
+// (text interleaved with images). This is used for both paragraphs and table cells.
+//
+// Parameters:
+//   - segments: the inline segments to process
+//   - styles: style registry for resolving and registering styles
+//   - footnotesIndex: map of footnote IDs for detecting footnote links
+//   - ancestorTag: the ancestor HTML tag for style resolution (e.g., "p", "td", "th")
+//   - imageResources: image resource info for resolving inline images
+//
+// Returns MixedContentResult with items and style events.
+func processMixedInlineSegments(
+	segments []fb2.InlineSegment,
+	styles *StyleRegistry,
+	footnotesIndex fb2.FootnoteRefs,
+	ancestorTag string,
+	imageResources imageResourceInfoByID,
+) MixedContentResult {
+	var (
+		items  []InlineContentItem
+		events []StyleEventRef
+		nw     = newNormalizingWriter()
+	)
+
+	// flushText adds current accumulated text to items
+	flushText := func() {
+		if nw.Len() == 0 && !nw.HasPendingSpace() {
+			return
+		}
+		text := nw.String()
+		hadPendingSpace := nw.ConsumePendingSpace()
+		if text != "" || hadPendingSpace {
+			if hadPendingSpace {
+				text += " "
+			}
+			items = append(items, InlineContentItem{
+				Text: text,
+			})
+		}
+		nw.Reset()
+	}
+
+	var walk func(seg *fb2.InlineSegment, styleContext []inlineStyleInfo)
+	walk = func(seg *fb2.InlineSegment, styleContext []inlineStyleInfo) {
+		// Handle inline images - flush text and add image item
+		if seg.Kind == fb2.InlineImageSegment {
+			flushText()
+			if seg.Image == nil {
+				return
+			}
+			imgID := strings.TrimPrefix(seg.Image.Href, "#")
+			imgInfo, ok := imageResources[imgID]
+			if !ok {
+				// Image not found - fall back to alt text
+				if seg.Image.Alt != "" {
+					nw.WriteString(seg.Image.Alt)
+				} else {
+					nw.WriteString("[image]")
+				}
+				return
+			}
+			// Create inline image style with em-based dimensions
+			imgStyle := styles.ResolveInlineImageStyle(imgInfo.Width, imgInfo.Height)
+			items = append(items, InlineContentItem{
+				IsImage:      true,
+				ResourceName: imgInfo.ResourceName,
+				Style:        imgStyle,
+				AltText:      seg.Image.Alt,
+			})
+			// Mark that we're continuing after an image, so leading spaces
+			// in subsequent text are preserved as word separators
+			nw.SetPendingSpace()
+			return
+		}
+
+		// Determine style for this segment based on its kind
+		var segStyle string
+		var isLink bool
+		var linkTo string
+		var isFootnoteLink bool
+
+		switch seg.Kind {
+		case fb2.InlineStrong:
+			segStyle = "strong"
+		case fb2.InlineEmphasis:
+			segStyle = "emphasis"
+		case fb2.InlineStrikethrough:
+			segStyle = "strikethrough"
+		case fb2.InlineSub:
+			segStyle = "sub"
+		case fb2.InlineSup:
+			segStyle = "sup"
+		case fb2.InlineCode:
+			segStyle = "code"
+			nw.SetPreserveWhitespace(true)
+		case fb2.InlineNamedStyle:
+			segStyle = seg.Style
+		case fb2.InlineLink:
+			isLink = true
+			if after, found := strings.CutPrefix(seg.Href, "#"); found {
+				linkTo = after
+				if _, isNote := footnotesIndex[linkTo]; isNote {
+					segStyle = "link-footnote"
+					isFootnoteLink = true
+				} else {
+					segStyle = "link-internal"
+				}
+			} else {
+				segStyle = "link-external"
+				linkTo = styles.RegisterExternalLink(seg.Href)
+			}
+		}
+
+		// Track position for style event using rune count
+		start := nw.RuneCount()
+
+		// Add text content
+		nw.WriteString(seg.Text)
+
+		// Build new style context for children
+		childContext := styleContext
+		if segStyle != "" {
+			info := inlineStyleInfo{Style: segStyle}
+			if isLink {
+				info.LinkTo = linkTo
+				info.IsFootnoteLink = isFootnoteLink
+			}
+			childContext = append(append([]inlineStyleInfo(nil), styleContext...), info)
+		}
+
+		// Process children with updated style context
+		for i := range seg.Children {
+			walk(&seg.Children[i], childContext)
+		}
+
+		// Restore whitespace handling after code block
+		if seg.Kind == fb2.InlineCode {
+			nw.SetPreserveWhitespace(false)
+		}
+
+		end := nw.RuneCount()
+
+		// Create style event if we have styled content
+		if segStyle != "" && end > start {
+			var styleNames []string
+			for _, ctx := range styleContext {
+				styleNames = append(styleNames, ctx.Style)
+			}
+			styleNames = append(styleNames, segStyle)
+
+			var mergedStyle string
+			if len(styleNames) > 1 {
+				mergedSpec := strings.Join(styleNames, " ")
+				mergedStyle = resolveInlineStyle(styles, ancestorTag, mergedSpec)
+			} else {
+				mergedStyle = resolveInlineStyle(styles, ancestorTag, segStyle)
+			}
+
+			event := StyleEventRef{
+				Offset: start,
+				Length: end - start,
+				Style:  mergedStyle,
+			}
+
+			if isLink {
+				event.LinkTo = linkTo
+				event.IsFootnoteLink = isFootnoteLink
+			} else {
+				for i := len(styleContext) - 1; i >= 0; i-- {
+					if styleContext[i].LinkTo != "" {
+						event.LinkTo = styleContext[i].LinkTo
+						event.IsFootnoteLink = styleContext[i].IsFootnoteLink
+						break
+					}
+				}
+			}
+
+			events = append(events, event)
+		}
+	}
+
+	// Process all segments
+	for i := range segments {
+		walk(&segments[i], nil)
+	}
+
+	// Flush any remaining text
+	if nw.Len() > 0 {
+		flushText()
+	}
+
+	return MixedContentResult{
+		Items:  items,
+		Events: events,
+	}
+}
+
+// processInlineSegments processes inline segments for text-only content (no inline images).
+// This is a convenience wrapper used when inline images should be converted to alt text.
+// For mixed content with actual inline images, use processMixedInlineSegments instead.
+//
+// Parameters:
+//   - segments: the inline segments to process
+//   - nw: normalizing writer for text accumulation
+//   - styles: style registry for resolving and registering styles
+//   - footnotesIndex: map of footnote IDs for detecting footnote links
+//   - ancestorTag: the ancestor HTML tag for style resolution (e.g., "p", "td")
+//
+// Returns the accumulated style events.
+func processInlineSegments(segments []fb2.InlineSegment, nw *normalizingWriter, styles *StyleRegistry, footnotesIndex fb2.FootnoteRefs, ancestorTag string) []StyleEventRef {
+	// Use the shared implementation with nil imageResources (images become alt text)
+	result := processMixedInlineSegments(segments, styles, footnotesIndex, ancestorTag, nil)
+
+	// Concatenate all text items into the provided normalizing writer
+	for _, item := range result.Items {
+		if !item.IsImage {
+			nw.WriteString(item.Text)
+		}
+	}
+
+	return result.Events
+}
