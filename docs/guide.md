@@ -20,7 +20,8 @@
 - **EPUB2** - Standard EPUB format with wide device compatibility
 - **EPUB3** - Modern EPUB format with enhanced features
 - **KEPUB** - EPUB2 optimized for Kobo devices
-- **KFX** - Kindle format (in development)
+- **KFX** - Kindle format with `.kfx` extension
+- **AZW8** - Kindle format with `.azw8` extension (same as KFX, different extension)
 
 ### Key Features
 
@@ -59,7 +60,7 @@ This converts `book.fb2` to EPUB2 format in the current directory.
 fbc convert --to epub3 book.fb2
 ```
 
-Supported formats: `epub2`, `epub3`, `kepub`, `kfx`
+Supported formats: `epub2`, `epub3`, `kepub`, `kfx`, `azw8`
 
 ### Convert with output directory
 
@@ -96,7 +97,7 @@ fbc convert [options] SOURCE [DESTINATION]
 
 #### Convert Options
 
-- `--to TYPE` - Output format: `epub2` (default), `epub3`, `kepub`, `kfx`
+- `--to TYPE` - Output format: `epub2` (default), `epub3`, `kepub`, `kfx`, `azw8`
 - `--nodirs, --nd` - Don't preserve input directory structure in output
 - `--overwrite, --ow` - Overwrite existing files
 - `--force-zip-cp ENCODING` - Force encoding for non-UTF8 archive file names (e.g., `windows-1251`, `cp866`)
@@ -811,7 +812,7 @@ debug: false
 - `debug` (boolean, default: false) - Enable debug mode for fbc.exe, generates diagnostic report
 - `output_format` (string, optional) - Override default output format. Allowed values:
   - For `fb2epub.exe`: `epub2`, `epub3`, `kepub`
-  - For `fb2mobi.exe`: `kfx`
+  - For `fb2mobi.exe`: `kfx`, `azw8`
   - If incompatible format is specified, default is used with warning in logs
 
 **When connector.yaml is not needed:**
