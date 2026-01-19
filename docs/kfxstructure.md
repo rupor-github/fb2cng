@@ -1,6 +1,6 @@
-# KFX Structure (reverse engineered from KFXInput/KFXOutput calibre plugins and KP3 files)
+# KFX Structure (reverse engineered from KFXInput/KFXOutput calibre plugins, KP3 EpubToKFXConverter-4.0.jar and files produced by KP3)
 
-Much of the knowledge of the KPF internals comes from Calibre's KFX conversion Input Plugin v2.27.1 created by John Howell <jhowell@acm.org> and copyrighted under GPL v3. Visit https://www.mobileread.com/forums for more details.
+A lot of initial knowledge of the KFX internals comes from Calibre's KFX conversion Input Plugin v2.27.1 created by John Howell <jhowell@acm.org> and copyrighted under GPL v3. Visit https://www.mobileread.com/forums for more details.
 
 This document describes the parts of the KFX on-disk format. It focuses on:
 - The outer KFX container format (`CONT` + `ENTY`)
