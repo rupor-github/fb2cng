@@ -77,21 +77,17 @@ func defaultTitlePieceProps() map[string]map[string]CSSValue {
 			"display":     {Keyword: "inline"},
 			"text-indent": {Value: 0},
 		},
+		// toc-title: simple title style for generated TOC page
+		// Used directly as content style (gets layout-hints: [treat_as_title])
 		"toc-title": {
-			"text-indent": {Value: 0},
-			"text-align":  {Keyword: "center"},
-			"font-weight": {Keyword: "bold"},
+			"margin-top":    {Value: 1, Unit: "em"},
+			"margin-bottom": {Value: 1, Unit: "em"},
+			"text-indent":   {Value: 0},
+			"text-align":    {Keyword: "center"},
+			"font-weight":   {Keyword: "bold"},
+			"font-size":     {Value: 1.25, Unit: "rem"},
 		},
-		"toc-title-emptyline": {
-			"display":       {Keyword: "block"},
-			"margin-top":    {Value: 0.8, Unit: "em"},
-			"margin-right":  {Value: 0, Unit: "em"},
-			"margin-bottom": {Value: 0.8, Unit: "em"},
-			"margin-left":   {Value: 0, Unit: "em"},
-		},
-		"toc-title-break": {
-			"display": {Keyword: "block"},
-		},
+		// toc-title style events for multi-line titles (book title + authors)
 		"toc-title-first": {
 			"display":     {Keyword: "inline"},
 			"text-indent": {Value: 0},
@@ -99,6 +95,16 @@ func defaultTitlePieceProps() map[string]map[string]CSSValue {
 		"toc-title-next": {
 			"display":     {Keyword: "inline"},
 			"text-indent": {Value: 0},
+		},
+		"toc-title-break": {
+			"display": {Keyword: "block"},
+		},
+		"toc-title-emptyline": {
+			"display":       {Keyword: "block"},
+			"margin-top":    {Value: 0.8, Unit: "em"},
+			"margin-right":  {Value: 0, Unit: "em"},
+			"margin-bottom": {Value: 0.8, Unit: "em"},
+			"margin-left":   {Value: 0, Unit: "em"},
 		},
 		"section-subtitle": {
 			"page-break-before": {Keyword: "auto"},
@@ -209,10 +215,10 @@ func defaultWrapperCSS() []WrapperCSS {
 
 	for _, class := range []string{
 		"toc-title",
-		"toc-title-emptyline",
-		"toc-title-break",
 		"toc-title-first",
 		"toc-title-next",
+		"toc-title-break",
+		"toc-title-emptyline",
 		"section-subtitle",
 	} {
 		if props, ok := titleProps[class]; ok {
@@ -298,12 +304,15 @@ func defaultWrapperCSS() []WrapperCSS {
 		}},
 		// annotation: margins come from default.css
 		{Classes: []string{"annotation"}, Properties: map[string]CSSValue{}},
+		// annotation-title: simple title style for generated annotation page
+		// Used directly as content style (gets layout-hints: [treat_as_title])
 		{Classes: []string{"annotation-title"}, Properties: map[string]CSSValue{
 			"margin-top":    {Value: 1, Unit: "em"},
 			"margin-bottom": {Value: 1, Unit: "em"},
 			"text-align":    {Keyword: "center"},
 			"text-indent":   {Value: 0},
 			"font-weight":   {Keyword: "bold"},
+			"font-size":     {Value: 1.25, Unit: "rem"},
 		}},
 		{Classes: []string{"annotation-subtitle"}, Properties: map[string]CSSValue{
 			"text-align":    {Keyword: "center"},
@@ -391,7 +400,8 @@ func defaultWrapperCSS() []WrapperCSS {
 			"margin-bottom":     {Value: 0.5, Unit: "em"},
 			"page-break-before": {Keyword: "avoid"},
 		}},
-		// emptyline: margins come from default.css
+		// emptyline: styling comes from CSS (.emptyline { margin: 1em; }).
+		// Only display: block is needed as a fallback if CSS doesn't define it.
 		{Classes: []string{"emptyline"}, Properties: map[string]CSSValue{
 			"display": {Keyword: "block"},
 		}},
@@ -402,23 +412,66 @@ func defaultWrapperCSS() []WrapperCSS {
 		{Classes: []string{"footnote"}, Properties: map[string]CSSValue{
 			"text-indent": {Value: 0},
 		}},
+		// footnote-title: simple title style for footnote body/section titles
+		// Used directly as content style (gets layout-hints: [treat_as_title])
+		// Note: text-align is center to match KP3 reference
 		{Classes: []string{"footnote-title"}, Properties: map[string]CSSValue{
 			"margin-top":    {Value: 1, Unit: "em"},
 			"margin-right":  {Value: 0, Unit: "em"},
 			"margin-bottom": {Value: 0.5, Unit: "em"},
 			"margin-left":   {Value: 0, Unit: "em"},
-			"text-align":    {Keyword: "left"},
+			"text-align":    {Keyword: "center"},
+			"text-indent":   {Value: 0},
 			"font-weight":   {Keyword: "bold"},
+			"font-size":     {Value: 1.25, Unit: "rem"},
 		}},
+		// footnote-title style events for multi-paragraph titles
 		{Classes: []string{"footnote-title-first"}, Properties: map[string]CSSValue{
 			"text-indent":   {Value: 0},
-			"margin-top":    {Value: 0.2, Unit: "em"},
-			"margin-bottom": {Value: 0.2, Unit: "em"},
+			"margin-top":    {Value: 0, Unit: "em"},
+			"margin-bottom": {Value: 0, Unit: "em"},
 		}},
 		{Classes: []string{"footnote-title-next"}, Properties: map[string]CSSValue{
 			"text-indent":   {Value: 0},
-			"margin-top":    {Value: 0.2, Unit: "em"},
-			"margin-bottom": {Value: 0.2, Unit: "em"},
+			"margin-top":    {Value: 0, Unit: "em"},
+			"margin-bottom": {Value: 0, Unit: "em"},
+		}},
+		{Classes: []string{"footnote-title-break"}, Properties: map[string]CSSValue{
+			"display": {Keyword: "block"},
+		}},
+		{Classes: []string{"footnote-title-emptyline"}, Properties: map[string]CSSValue{
+			"display":       {Keyword: "block"},
+			"margin-top":    {Value: 0.5, Unit: "em"},
+			"margin-bottom": {Value: 0.5, Unit: "em"},
+		}},
+		// footnote-section-title: style for footnote section titles (e.g., "1.1", "1.2")
+		// Unlike footnote-title (body title), this is a simple bold paragraph without heading semantics.
+		// KP3 reference: text-align: justify, no layout-hints, no heading_level
+		{Classes: []string{"footnote-section-title"}, Properties: map[string]CSSValue{
+			"margin-top":    {Value: 1, Unit: "em"},
+			"margin-bottom": {Value: 0.5, Unit: "em"},
+			"text-align":    {Keyword: "justify"},
+			"text-indent":   {Value: 0},
+			"font-weight":   {Keyword: "bold"},
+		}},
+		// footnote-section-title style events for multi-paragraph titles
+		{Classes: []string{"footnote-section-title-first"}, Properties: map[string]CSSValue{
+			"text-indent":   {Value: 0},
+			"margin-top":    {Value: 0, Unit: "em"},
+			"margin-bottom": {Value: 0, Unit: "em"},
+		}},
+		{Classes: []string{"footnote-section-title-next"}, Properties: map[string]CSSValue{
+			"text-indent":   {Value: 0},
+			"margin-top":    {Value: 0, Unit: "em"},
+			"margin-bottom": {Value: 0, Unit: "em"},
+		}},
+		{Classes: []string{"footnote-section-title-break"}, Properties: map[string]CSSValue{
+			"display": {Keyword: "block"},
+		}},
+		{Classes: []string{"footnote-section-title-emptyline"}, Properties: map[string]CSSValue{
+			"display":       {Keyword: "block"},
+			"margin-top":    {Value: 0.5, Unit: "em"},
+			"margin-bottom": {Value: 0.5, Unit: "em"},
 		}},
 		{Classes: []string{"footnote-more"}, Properties: map[string]CSSValue{
 			"text-decoration": {Keyword: "none"},

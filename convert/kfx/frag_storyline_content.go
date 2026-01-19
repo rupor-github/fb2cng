@@ -219,12 +219,15 @@ func processFlowItem(item *fb2.FlowItem, ctx StyleContext, contextName string, s
 		}
 
 	case fb2.FlowEmptyLine:
-		// Empty lines in KFX are handled via block margins on surrounding content,
-		// not via explicit newline content entries. Reference KFX files from
-		// Kindle Previewer don't have standalone "\n" content entries.
-		// The emptyline style should set appropriate margin-top/margin-bottom
-		// on adjacent elements instead.
-		return
+		// Create a content entry with minimal content for vertical spacing.
+		// The emptyline style provides margin-top/margin-bottom for visual separation.
+		// Note: KP3 reference uses margin adjustment on following elements instead,
+		// but explicit empty line entries are simpler and achieve the same visual result.
+		styleName := styles.ResolveStyle("emptyline")
+		styles.MarkUsage(styleName, styleUsageText)
+		// Use a single space as content - empty strings may be stripped
+		contentName, offset := ca.Add(" ")
+		sb.AddContent(SymText, contentName, offset, styleName)
 
 	case fb2.FlowPoem:
 		if item.Poem != nil {
@@ -286,14 +289,10 @@ func processFlowItem(item *fb2.FlowItem, ctx StyleContext, contextName string, s
 // Matches EPUB's appendPoemElement handling: title, epigraphs, subtitles, stanzas, text-authors, date.
 // ctx contains the ancestor context chain (e.g., may already include "cite" if poem is inside cite).
 func processPoem(poem *fb2.Poem, ctx StyleContext, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
-	// Process poem title - uses current context + poem-title
+	// Process poem title - uses addTitleAsParagraphs for proper -first/-next styling
+	// (matches EPUB's appendTitleAsDiv pattern)
 	if poem.Title != nil {
-		for _, item := range poem.Title.Items {
-			if item.Paragraph != nil {
-				styleName := ctx.Resolve("p", "poem-title", styles)
-				addParagraphWithImages(item.Paragraph, styleName, 0, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
-			}
-		}
+		addTitleAsParagraphs(poem.Title, ctx, "poem-title", 0, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 	}
 
 	// Process poem epigraphs - KFX doesn't use wrapper blocks for epigraphs.
@@ -327,14 +326,10 @@ func processPoem(poem *fb2.Poem, ctx StyleContext, sb *StorylineBuilder, styles 
 	// Content is flat with styling applied directly to each verse line.
 	stanzaCtx := ctx.PushBlock("div", "stanza", styles)
 	for _, stanza := range poem.Stanzas {
-		// Stanza title (matches EPUB's "stanza-title" class)
+		// Stanza title - uses addTitleAsParagraphs for proper -first/-next styling
+		// (matches EPUB's appendTitleAsDiv pattern)
 		if stanza.Title != nil {
-			for _, item := range stanza.Title.Items {
-				if item.Paragraph != nil {
-					styleName := stanzaCtx.Resolve("p", "stanza-title", styles)
-					addParagraphWithImages(item.Paragraph, styleName, 0, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
-				}
-			}
+			addTitleAsParagraphs(stanza.Title, stanzaCtx, "stanza-title", 0, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 		// Stanza subtitle (matches EPUB's "stanza-subtitle" class)
 		if stanza.Subtitle != nil {

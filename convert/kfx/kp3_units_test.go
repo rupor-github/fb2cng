@@ -105,7 +105,7 @@ func TestUnitConversionConstants(t *testing.T) {
 		{"LineHeightRatio", LineHeightRatio, 1.2},
 		{"EmToPercentHorizontal", EmToPercentHorizontal, 3.125},
 		{"EmToPercentTextIndent", EmToPercentTextIndent, 3.125},
-		{"PercentToRem", PercentToRem, 100.0},
+		{"FontSizeCompressionFactor", FontSizeCompressionFactor, 160.0},
 	}
 
 	for _, tt := range tests {
@@ -140,12 +140,24 @@ func TestUnitConversions(t *testing.T) {
 	})
 
 	t.Run("percent_to_rem_font_size", func(t *testing.T) {
-		// 140% CSS → 1.4rem KFX
-		percentValue := 140.0
-		remValue := percentValue / PercentToRem
-		expected := 1.4
-		if math.Abs(remValue-expected) > 1e-9 {
-			t.Errorf("percent to rem: %v / %v = %v, want %v", percentValue, PercentToRem, remValue, expected)
+		// Test KP3's font-size compression formula
+		// Values > 100% are compressed: rem = 1 + (percent - 100) / 160
+		// Values <= 100% use direct conversion: rem = percent / 100
+		tests := []struct {
+			percent  float64
+			expected float64
+		}{
+			{140.0, 1.25},  // compressed: 1 + (140-100)/160 = 1.25
+			{120.0, 1.125}, // compressed: 1 + (120-100)/160 = 1.125
+			{100.0, 1.0},   // direct: 100/100 = 1.0
+			{80.0, 0.8},    // direct: 80/100 = 0.8
+			{70.0, 0.7},    // direct: 70/100 = 0.7
+		}
+		for _, tt := range tests {
+			remValue := PercentToRem(tt.percent)
+			if math.Abs(remValue-tt.expected) > 1e-9 {
+				t.Errorf("PercentToRem(%v) = %v, want %v", tt.percent, remValue, tt.expected)
+			}
 		}
 	})
 }

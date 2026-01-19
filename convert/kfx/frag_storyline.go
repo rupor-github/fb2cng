@@ -197,13 +197,17 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 
 		sb := NewStorylineBuilder(storyName, sectionName, eidCounter, styles)
 
-		// Process body title if present (not wrapped, same as EPUB)
-		if body.Title != nil {
-			for _, item := range body.Title.Items {
-				if item.Paragraph != nil {
-					addParagraphWithImages(item.Paragraph, "footnote-title", 0, sb, styles, imageResources, ca, idToEID, defaultWidth, footnotesIndex)
-				}
+		// Process body title if present with proper heading semantics
+		// Uses footnote-title style directly (gets layout-hints: [treat_as_title])
+		if body.Title != nil && len(body.Title.Items) > 0 {
+			// Create context for title
+			titleCtx := NewStyleContext().PushBlock("div", "footnote-title", styles)
+			if styles != nil {
+				styles.EnsureBaseStyle("footnote-title")
 			}
+
+			// Use addTitleAsHeading for proper heading level and layout-hints
+			addTitleAsHeading(body.Title, titleCtx, "footnote-title", 2, sb, styles, imageResources, ca, idToEID, defaultWidth, footnotesIndex, PositionFirst())
 		}
 
 		// Process each section in the footnote body
@@ -213,12 +217,14 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 
 			// Process section title FIRST (without registering ID yet)
 			// This matches EPUB behavior where the ID is on the body content, not the title
-			if section.Title != nil {
-				for _, item := range section.Title.Items {
-					if item.Paragraph != nil {
-						addParagraphWithImages(item.Paragraph, "footnote-title", 0, sb, styles, imageResources, ca, idToEID, defaultWidth, footnotesIndex)
-					}
+			// Unlike body titles, section titles are styled paragraphs, not semantic headings
+			// (matching EPUB's appendTitleAsDiv pattern and KP3 reference output)
+			if section.Title != nil && len(section.Title.Items) > 0 {
+				titleCtx := NewStyleContext().PushBlock("div", "footnote-section-title", styles)
+				if styles != nil {
+					styles.EnsureBaseStyle("footnote-section-title")
 				}
+				addTitleAsParagraphs(section.Title, titleCtx, "footnote-section-title", 0, sb, styles, imageResources, ca, idToEID, defaultWidth, footnotesIndex)
 			}
 
 			// NOW register the section ID - it will point to first body content EID

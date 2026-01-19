@@ -51,87 +51,6 @@ func nextSectionIndex(sectionNames sectionNameList) int {
 	return maxN + 1
 }
 
-func addText(sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, text, style string) {
-	if text == "" {
-		return
-	}
-	resolved := styles.ResolveStyle(style)
-	name, off := ca.Add(text)
-	sb.AddContent(SymText, name, off, resolved)
-}
-
-// addTOCTitle adds the TOC page title (book title + optional authors) as a single paragraph
-// with style events for -first and -next spans, similar to body intro titles.
-func addTOCTitle(sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, bookTitle, authors string) {
-	if bookTitle == "" {
-		return
-	}
-
-	descendantPrefix := "toc--toc-title"
-
-	var text string
-	var events []StyleEventRef
-
-	// Add book title with toc-title-first style
-	titleStart := 0
-	titleLen := len([]rune(bookTitle))
-	text = bookTitle
-
-	firstStyle := descendantPrefix + "-first"
-	resolvedFirst := styles.ResolveStyle(firstStyle)
-	if styles != nil {
-		styles.MarkUsage(resolvedFirst, styleUsageText)
-	}
-	events = append(events, StyleEventRef{
-		Offset: titleStart,
-		Length: titleLen,
-		Style:  resolvedFirst,
-	})
-
-	// Add authors if provided
-	if authors != "" {
-		// Add line break between title and authors
-		breakStart := len([]rune(text))
-		text += "\n"
-
-		breakStyle := descendantPrefix + "-break"
-		resolvedBreak := styles.ResolveStyle(breakStyle)
-		if styles != nil {
-			styles.MarkUsage(resolvedBreak, styleUsageText)
-		}
-		events = append(events, StyleEventRef{
-			Offset: breakStart,
-			Length: 1,
-			Style:  resolvedBreak,
-		})
-
-		// Add authors with toc-title-next style
-		authorsStart := len([]rune(text))
-		authorsLen := len([]rune(authors))
-		text += authors
-
-		nextStyle := descendantPrefix + "-next"
-		resolvedNext := styles.ResolveStyle(nextStyle)
-		if styles != nil {
-			styles.MarkUsage(resolvedNext, styleUsageText)
-		}
-		events = append(events, StyleEventRef{
-			Offset: authorsStart,
-			Length: authorsLen,
-			Style:  resolvedNext,
-		})
-	}
-
-	// Add as single paragraph with toc-title base style and h1 heading level
-	baseStyle := descendantPrefix
-	resolvedBase := styles.ResolveStyle(baseStyle)
-	if styles != nil {
-		styles.MarkUsage(resolvedBase, styleUsageText)
-	}
-	name, off := ca.Add(text)
-	sb.AddContentWithHeading(SymText, name, off, resolvedBase, events, 1)
-}
-
 // tocPageEntry represents a single TOC page entry with link information.
 type tocPageEntry struct {
 	Title    string          // Display text
@@ -381,8 +300,9 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 		ca := NewContentAccumulator(contentCounter)
 		contentCounter++
 
-		// Add annotation title
-		addText(sb, styles, ca, cfg.Annotation.Title, "annotation-title")
+		// Add annotation title with proper heading semantics
+		// Uses annotation-title style directly (gets layout-hints: [treat_as_title])
+		addSimpleTitleAsHeading(cfg.Annotation.Title, "annotation-title", 1, sb, styles, ca)
 
 		// Process annotation items with full formatting support (links, emphasis, etc.)
 		// Use the same processFlowItem mechanism as body content for consistent rendering
@@ -435,7 +355,8 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 		ca := NewContentAccumulator(contentCounter)
 		contentCounter++
 
-		// Build TOC title with style events (similar to body intro)
+		// Build TOC title using titleFromStrings + addTitleAsHeading
+		// This creates a proper fb2.Title structure from book title and optional authors
 		var authors string
 		if cfg.TOCPage.AuthorsTemplate != "" {
 			expanded, err := c.Book.ExpandTemplateMetainfo(config.AuthorsTemplateFieldName, cfg.TOCPage.AuthorsTemplate, c.SrcName, c.OutputFormat)
@@ -445,7 +366,12 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 				authors = expanded
 			}
 		}
-		addTOCTitle(sb, styles, ca, c.Book.Description.TitleInfo.BookTitle.Value, authors)
+		bookTitle := c.Book.Description.TitleInfo.BookTitle.Value
+		if tocTitle := titleFromStrings(bookTitle, authors); tocTitle != nil {
+			titleCtx := NewStyleContext().PushBlock("div", "toc-title", styles)
+			markTitleStylesUsed("", "toc-title", styles)
+			addTitleAsHeading(tocTitle, titleCtx, "toc-title", 1, sb, styles, nil, ca, nil, 0, nil, PositionFirst())
+		}
 
 		entries := buildTOCEntryTree(tocEntries, cfg.TOCPage.ChaptersWithoutTitle)
 		// Register TOC entry anchors in idToEID for anchor fragment generation

@@ -45,9 +45,20 @@ const (
 	// Example: 1em CSS → 3.125% KFX
 	EmToPercentTextIndent = 3.125
 
-	// PercentToRem is the divisor for converting percentage to rem (for font-size).
-	// Example: 140% CSS → 1.4rem KFX (140 / 100 = 1.4)
-	PercentToRem = 100.0
+	// FontSizeCompressionFactor is the divisor for KP3's font-size percentage compression.
+	// KP3 compresses percentage font-sizes using the formula:
+	//   rem = 1 + (percent - 100) / FontSizeCompressionFactor
+	//
+	// This compresses the range of font-sizes towards 1rem:
+	//   140% → 1.25rem (not 1.4rem)
+	//   120% → 1.125rem (not 1.2rem)
+	//   100% → 1rem
+	//   80%  → 0.875rem (not 0.8rem)
+	//   70%  → 0.8125rem (not 0.7rem)
+	//
+	// The formula can also be written as: rem = 1 + (percent - 100) / 100 * 0.625
+	// where 0.625 = 100 / FontSizeCompressionFactor
+	FontSizeCompressionFactor = 160.0
 )
 
 // KP3 Unit Preference by Property
@@ -98,4 +109,27 @@ func isHorizontalSpacingProperty(sym KFXSymbol) bool {
 func RoundDecimal(v float64) float64 {
 	multiplier := math.Pow(10, DecimalPrecision)
 	return math.Round(v*multiplier) / multiplier
+}
+
+// PercentToRem converts a CSS percentage font-size to KP3 rem.
+//
+// KP3 applies compression only to font-sizes ABOVE 100%:
+//   - Values > 100%: rem = 1 + (percent - 100) / FontSizeCompressionFactor
+//   - Values <= 100%: rem = percent / 100 (direct conversion)
+//
+// This compresses large font-sizes towards 1rem while preserving small ones:
+//   - 140% → 1.25rem (compressed from 1.4)
+//   - 120% → 1.125rem (compressed from 1.2)
+//   - 100% → 1rem
+//   - 80%  → 0.8rem (direct, not compressed)
+//   - 70%  → 0.7rem (direct, not compressed)
+//
+// The result is rounded to DecimalPrecision decimal places.
+func PercentToRem(percent float64) float64 {
+	if percent > 100 {
+		// Compress values above 100% towards 1rem
+		return RoundDecimal(1 + (percent-100)/FontSizeCompressionFactor)
+	}
+	// Direct conversion for values at or below 100%
+	return RoundDecimal(percent / 100)
 }

@@ -1,6 +1,7 @@
 package kfx
 
 import (
+	"fmt"
 	"maps"
 	"math"
 	"strings"
@@ -769,11 +770,31 @@ func (sr *StyleRegistry) inferParentStyle(name string) string {
 		return ""
 	}
 
-	// Check for suffix patterns: "xxx-subtitle" -> "subtitle", "xxx-title" -> base title style
-	suffixes := []string{"-subtitle", "-title", "-header", "-first", "-next", "-break"}
-	for _, suffix := range suffixes {
+	// Pattern 1: Paragraph variants inherit from their base style
+	// "chapter-title-header-first" -> "chapter-title-header"
+	// "body-title-header-next" -> "body-title-header"
+	variantSuffixes := []string{"-first", "-next", "-break"}
+	for _, suffix := range variantSuffixes {
 		if len(name) > len(suffix) && name[len(name)-len(suffix):] == suffix {
-			baseName := suffix[1:] // Remove leading dash
+			baseName := name[:len(name)-len(suffix)] // Strip suffix to get base
+			// Don't inherit from block containers
+			if isBlockStyleName(baseName) {
+				continue
+			}
+			if _, exists := sr.styles[baseName]; exists {
+				return baseName
+			}
+		}
+	}
+
+	// Pattern 2: Suffix-named styles can inherit from a base style named after the suffix
+	// "section-subtitle" -> "subtitle" (if subtitle style exists)
+	// "custom-subtitle" -> "subtitle" (if subtitle style exists)
+	// This provides a fallback inheritance for styles that follow the X-suffix naming pattern
+	baseSuffixes := []string{"-subtitle"}
+	for _, suffix := range baseSuffixes {
+		if len(name) > len(suffix) && name[len(name)-len(suffix):] == suffix {
+			baseName := suffix[1:] // "subtitle" from "-subtitle"
 			if _, exists := sr.styles[baseName]; exists {
 				return baseName
 			}
@@ -982,6 +1003,10 @@ func NewStyleRegistryFromCSS(cssData []byte, tracer *StyleTracer, log *zap.Logge
 		sr.RegisterFromCSS(structuralStyles)
 		warnings = append(warnings, structuralWarnings...)
 	}
+
+	// Apply inferred parent relationships based on naming conventions
+	// This must happen after all styles are registered but before post-processing
+	sr.ApplyInferredParents()
 
 	// Apply KFX-specific post-processing (layout-hints, yj-break, etc.)
 	sr.PostProcessForKFX()
@@ -1248,22 +1273,38 @@ func DefaultStyleRegistry() *StyleRegistry {
 		Build())
 
 	// Subscript and superscript - HTML <sub> and <sup> elements
-	// Amazon reference: vertical-align: sub/super, line-height: normal, font-size: smaller
-	// We use baseline_style for vertical-align, line-height: normal, and 0.75rem for "smaller"
+	// We use baseline_style for vertical-align and 0.75rem for "smaller" font-size.
+	// NOTE: We intentionally do NOT set line-height here. Setting line-height: normal
+	// causes inconsistent vertical spacing when sub/sup appears in titles or other
+	// contexts with specific line-height values. By omitting line-height, the style
+	// inherits from its context, maintaining consistent vertical rhythm.
+	// KP3 similarly uses explicit line-height values calculated for each context.
 	// IMPORTANT: Use rem (not em) to prevent relative merging when nested with
 	// other inline styles like link-footnote. Using em causes compounding:
 	// sup(0.75em) × link-footnote(0.8em) = 0.6em, which is wrong.
 	sr.Register(NewStyle("sub").
 		BaselineStyle(SymSubscript).
-		LineHeightNormal().
 		FontSize(0.75, SymUnitRem).
 		Build())
 
 	sr.Register(NewStyle("sup").
 		BaselineStyle(SymSuperscript).
-		LineHeightNormal().
 		FontSize(0.75, SymUnitRem).
 		Build())
+
+	// Heading-context sub/sup: When sub/sup appears in headings (h1-h6), we apply
+	// only the baseline-style without font-size reduction. This matches KP3 behavior
+	// where title paragraphs wrapped in <sub>/<sup> render at full title size with
+	// just the vertical alignment applied.
+	for i := 1; i <= 6; i++ {
+		hTag := fmt.Sprintf("h%d", i)
+		sr.Register(NewStyle(hTag + "--sub").
+			BaselineStyle(SymSubscript).
+			Build())
+		sr.Register(NewStyle(hTag + "--sup").
+			BaselineStyle(SymSuperscript).
+			Build())
+	}
 
 	// Small text - HTML <small> element
 	// Amazon reference: font-size: smaller
@@ -1296,6 +1337,37 @@ func DefaultStyleRegistry() *StyleRegistry {
 		Build())
 
 	return sr
+}
+
+// ApplyInferredParents sets up parent relationships for styles based on naming conventions.
+// This enables inheritance for suffix variants like "chapter-title-header-first" to inherit
+// from "chapter-title-header". Must be called after all styles are registered but before
+// any style resolution occurs.
+//
+// Naming conventions:
+//   - "-first", "-next", "-break" suffixes inherit from their base style
+//     e.g., "chapter-title-header-first" -> "chapter-title-header"
+func (sr *StyleRegistry) ApplyInferredParents() {
+	for name, def := range sr.styles {
+		// Skip styles that already have an explicit parent
+		if def.Parent != "" {
+			continue
+		}
+
+		// Try to infer parent from naming conventions
+		parent := sr.inferParentStyle(name)
+		if parent == "" {
+			continue
+		}
+
+		// Update the style with the inferred parent
+		sr.styles[name] = StyleDef{
+			Name:       def.Name,
+			Parent:     parent,
+			Properties: def.Properties,
+		}
+		sr.tracer.TraceInheritSetup(name, parent)
+	}
 }
 
 // PostProcessForKFX applies Kindle-specific enhancements to styles after CSS conversion.
@@ -1362,6 +1434,7 @@ func (sr *StyleRegistry) applyKFXEnhancements(name string, def StyleDef) StyleDe
 // This applies to:
 //   - HTML heading elements (h1-h6)
 //   - Styles ending with "-title-header" (body-title-header, chapter-title-header, etc.)
+//   - Simple title styles for generated sections (annotation-title, toc-title, footnote-title)
 //   - Styles named "subtitle" or with "-subtitle" suffix (if centered)
 //
 // NOTE: Styles with additional suffixes like "-title-header-first", "-title-header-next",
@@ -1380,6 +1453,13 @@ func (sr *StyleRegistry) shouldHaveLayoutHintTitle(name string, props map[KFXSym
 	// Examples that should NOT match: "chapter-title-header-first", "chapter-title-header-next",
 	// "chapter-title-header-break", "chapter-title-header-emptyline"
 	if strings.HasSuffix(name, "-title-header") {
+		return true
+	}
+
+	// Simple title styles for generated sections (annotation-title, toc-title, footnote-title)
+	// These are used directly as content styles without -header suffix
+	switch name {
+	case "annotation-title", "toc-title", "footnote-title":
 		return true
 	}
 

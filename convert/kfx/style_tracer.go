@@ -190,6 +190,20 @@ func (t *StyleTracer) TraceAutoCreate(name string, inferredParent string) {
 	t.sections["auto_created"]++
 }
 
+// TraceInheritSetup logs when a parent relationship is inferred for a style.
+// This happens during the ApplyInferredParents phase after CSS loading.
+func (t *StyleTracer) TraceInheritSetup(name string, parent string) {
+	if !t.IsEnabled() {
+		return
+	}
+	t.entries = append(t.entries, traceEntry{
+		operation: "INHERIT_SETUP",
+		styleName: name,
+		details:   "parent inferred: " + parent,
+	})
+	t.sections["inherit_setup"]++
+}
+
 // TracePositionFilter logs when properties are filtered based on element position.
 // This helps debug position-aware style resolution (KP3's CSS margin collapsing behavior).
 func (t *StyleTracer) TracePositionFilter(styleSpec string, pos string, removed []string) {

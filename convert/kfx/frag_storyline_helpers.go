@@ -24,6 +24,21 @@ func resolveInlineStyle(styles *StyleRegistry, ancestorTag string, styleSpec str
 		}
 		return styles.EnsureStyleNoMark(name)
 	}
+	// For multi-part style specs, apply descendant lookup to each part
+	// so that e.g. "emphasis sub" in h1 context uses "h1--sub" (which has no font-size)
+	// instead of "sub" (which has font-size: 0.75rem).
+	if ancestorTag != "" {
+		resolvedParts := make([]string, len(parts))
+		for i, name := range parts {
+			descendant := ancestorTag + "--" + name
+			if _, ok := styles.Get(descendant); ok {
+				resolvedParts[i] = descendant
+			} else {
+				resolvedParts[i] = name
+			}
+		}
+		return styles.ResolveStyleNoMark(strings.Join(resolvedParts, " "))
+	}
 	return styles.ResolveStyleNoMark(styleSpec)
 }
 

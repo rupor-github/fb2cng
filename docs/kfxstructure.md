@@ -1735,7 +1735,7 @@ Derived from: Reference KFX analysis, `convert/kfx/frag_style.go:DimensionValue`
 
 | CSS Property | KP3 Unit | Notes |
 |--------------|----------|-------|
-| `font-size` | `rem` | **NOT `%`**. Using `%` breaks text-align rendering |
+| `font-size` | `rem` | **NOT `%`**. Using `%` breaks text-align rendering. See §7.10.3 for compression formula. |
 | `margin-top` | `lh` | Line-height units for vertical spacing |
 | `margin-bottom` | `lh` | Line-height units for vertical spacing |
 | `margin-left` | `%` | Percentage for horizontal spacing |
@@ -1751,9 +1751,29 @@ When converting from CSS `em` units to KP3-preferred units:
 |------------|-------|---------|
 | `em` → `lh` (vertical) | 1:1 | `1em` → `1lh` |
 | `em` → `%` (horizontal) | 1:6.25 | `1em` → `6.25%` |
-| `%` → `rem` (font-size) | divide by 100 | `140%` → `1.4rem` |
 | `em` → `rem` (font-size) | 1:1 | `1em` → `1rem` |
 | `em` → `%` (text-indent) | 1:3.125 | `1em` → `3.125%` |
+
+**Font-size percentage compression**: KP3 applies a compression formula to percentage font-sizes, bringing large values closer to 1rem. This is different from simple division:
+
+| CSS | Direct (÷100) | KP3 Actual | Formula |
+|-----|---------------|------------|---------|
+| `140%` | 1.4rem | **1.25rem** | compressed |
+| `120%` | 1.2rem | **1.125rem** | compressed |
+| `100%` | 1.0rem | 1.0rem | identity |
+| `80%` | 0.8rem | 0.8rem | direct |
+| `70%` | 0.7rem | 0.7rem | direct |
+
+The compression formula (values > 100% only):
+```
+rem = 1 + (percent - 100) / 160
+```
+
+For values ≤ 100%, direct conversion is used: `rem = percent / 100`.
+
+This compression brings heading sizes closer to body text while preserving the relative hierarchy. The factor 160 was reverse-engineered from KP3 reference output analysis.
+
+Derived from: KP3 Java source analysis (`com/amazon/Q/a/d/b/i.java`), reference KFX comparison, `convert/kfx/kp3_units.go:PercentToRem`.
 
 #### 7.10.4 Zero value omission
 

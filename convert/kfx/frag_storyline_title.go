@@ -34,7 +34,7 @@ func addTitleAsHeading(title *fb2.Title, ctx StyleContext, headerStyleBase strin
 	// Check if title contains inline images - if so, fall back to separate paragraphs
 	// since KFX can't mix text and images in a single content entry
 	if titleHasInlineImages(title) {
-		addTitleAsSeparateParagraphs(title, ctx, headerStyleBase, headingLevel, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+		addTitleAsParagraphs(title, ctx, headerStyleBase, headingLevel, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		return
 	}
 
@@ -292,6 +292,44 @@ func addTitleAsHeading(title *fb2.Title, ctx StyleContext, headerStyleBase strin
 	}
 }
 
+// addSimpleTitleAsHeading creates a title entry for a simple string (used for generated section titles).
+// This provides the same semantic styling as addTitleAsHeading but for cases where we have a plain
+// string instead of an fb2.Title structure.
+//
+// Parameters:
+//   - text: The title text
+//   - styleName: The style name for the heading (e.g., "annotation-title", "toc-title")
+//   - headingLevel: The semantic heading level (1-6)
+//   - sb: StorylineBuilder to add the entry to
+//   - styles: StyleRegistry for style resolution
+//   - ca: ContentAccumulator for text content
+//
+// The function adds content with the specified style, layout-hints: [treat_as_title],
+// and yj.semantics.heading_level for accessibility/navigation.
+// Unlike addTitleAsHeading, this doesn't use a wrapper block - matching KP3 behavior
+// for simple generated section titles.
+func addSimpleTitleAsHeading(text, styleName string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator) {
+	if text == "" {
+		return
+	}
+
+	// Ensure the style exists
+	if styles != nil {
+		styles.EnsureBaseStyle(styleName)
+	}
+
+	// Resolve the style (gets layout-hints via shouldHaveLayoutHintTitle for *-title patterns)
+	resolved := styleName
+	if styles != nil {
+		resolved = styles.ResolveStyle(styleName)
+		styles.MarkUsage(resolved, styleUsageText)
+	}
+
+	// Add content with heading level
+	contentName, offset := ca.Add(text)
+	sb.AddContentWithHeading(SymText, contentName, offset, resolved, nil, headingLevel)
+}
+
 func markTitleStylesUsed(wrapperClass, headerBase string, styles *StyleRegistry) {
 	if styles == nil {
 		return
@@ -337,27 +375,78 @@ func styleToHeadingLevel(styleName string) int {
 	return 0
 }
 
-// addTitleAsSeparateParagraphs adds title paragraphs as separate entries (fallback for titles with images).
-// This is the original behavior before combined heading support was added.
+// addTitleAsParagraphs adds title paragraphs as separate entries.
+// This is the KFX equivalent of EPUB's appendTitleAsDiv.
+//
+// When headingLevel > 0, paragraphs get heading semantics (used as fallback for
+// addTitleAsHeading when titles contain inline images).
+//
+// When headingLevel == 0, paragraphs are styled without heading semantics
+// (used for poem, stanza, and footnote section titles).
+//
+// Parameters:
+//   - title: The FB2 title structure containing paragraphs and empty lines
+//   - ctx: Style context for property inheritance
+//   - styleBase: Base style name (e.g., "poem-title", "section-title-header") - suffixed with -first/-next
+//   - headingLevel: Semantic heading level (1-6), or 0 for no heading semantics
+//   - sb: StorylineBuilder to add entries to
+//   - styles: StyleRegistry for style resolution
+//   - imageResources: Image resource info for inline images
+//   - ca: ContentAccumulator for text content
+//   - idToEID: Map for ID to EID tracking
+//   - screenWidth: Screen width for image sizing
+//   - footnotesIndex: Footnote reference index
+//
 // Note: EmptyLine items are ignored as spacing is handled via block margins.
-// ctx provides the style context (wrapper class like "body-title") for proper margin inheritance.
-func addTitleAsSeparateParagraphs(title *fb2.Title, ctx StyleContext, headerStyleBase string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
+func addTitleAsParagraphs(title *fb2.Title, ctx StyleContext, styleBase string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
+	if title == nil || len(title.Items) == 0 {
+		return
+	}
+
 	firstParagraph := true
 	for _, item := range title.Items {
 		if item.Paragraph != nil {
 			// Determine style for this paragraph (-first or -next)
 			var paraStyle string
 			if firstParagraph {
-				paraStyle = headerStyleBase + "-first"
+				paraStyle = styleBase + "-first"
 				firstParagraph = false
 			} else {
-				paraStyle = headerStyleBase + "-next"
+				paraStyle = styleBase + "-next"
 			}
-			// Combine heading level indicator with context and paragraph style
-			headingElementStyle := fmt.Sprintf("h%d", headingLevel)
-			fullStyle := ctx.Resolve(headingElementStyle, paraStyle, styles)
+
+			// Resolve style: use heading element tag (h1-h6) when headingLevel > 0
+			var fullStyle string
+			if headingLevel > 0 {
+				headingElementStyle := fmt.Sprintf("h%d", headingLevel)
+				fullStyle = ctx.Resolve(headingElementStyle, paraStyle, styles)
+			} else {
+				fullStyle = ctx.Resolve("p", paraStyle, styles)
+			}
+
 			addParagraphWithImages(item.Paragraph, fullStyle, headingLevel, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
 		}
 		// EmptyLine items are ignored - spacing is handled via block margins like regular flow content
 	}
+}
+
+// titleFromStrings creates an fb2.Title from one or more strings.
+// Each non-empty string becomes a paragraph in the title.
+// This is useful for generated content (like TOC page titles) that needs
+// to be processed through addTitleAsHeading.
+func titleFromStrings(lines ...string) *fb2.Title {
+	var items []fb2.TitleItem
+	for _, line := range lines {
+		if line != "" {
+			items = append(items, fb2.TitleItem{
+				Paragraph: &fb2.Paragraph{
+					Text: []fb2.InlineSegment{{Text: line}},
+				},
+			})
+		}
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	return &fb2.Title{Items: items}
 }

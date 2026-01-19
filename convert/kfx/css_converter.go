@@ -294,12 +294,14 @@ func (c *Converter) convertProperty(name string, value CSSValue, props map[KFXSy
 			c.mergeProp(props, kfxSym, DimensionValue(1.2, SymUnitEm))
 			return
 		}
-		// KP3 converts percentage font-sizes to rem (140% -> 1.4rem)
+		// KP3 compresses percentage font-sizes towards 1rem using the formula:
+		// rem = 1 + (percent - 100) / 160
 		// This is important for title rendering - percent units cause alignment issues
 		if value.IsNumeric() {
 			if value.Unit == "%" {
-				// Convert percentage to rem: 140% -> 1.4rem
-				remValue := value.Value / PercentToRem
+				// Convert percentage to rem with KP3's compression formula
+				// 140% -> 1.25rem, 120% -> 1.125rem, 100% -> 1rem
+				remValue := PercentToRem(value.Value)
 				c.mergeProp(props, kfxSym, DimensionValue(remValue, SymUnitRem))
 			} else {
 				dim, err := MakeDimensionValue(value)
@@ -622,11 +624,12 @@ func (c *Converter) setDimensionProperty(sym KFXSymbol, value CSSValue, props ma
 		}
 
 	case sym == SymFontSize:
-		// Font-size: % -> rem, em -> rem
+		// Font-size: % -> rem with compression, em -> rem
 		switch value.Unit {
 		case "%":
-			convertedValue = value.Value / PercentToRem
-			fallthrough
+			// Use KP3's compression formula: rem = 1 + (percent - 100) / 160
+			convertedValue = PercentToRem(value.Value)
+			convertedUnit = SymUnitRem
 		case "em":
 			convertedUnit = SymUnitRem
 		default:
