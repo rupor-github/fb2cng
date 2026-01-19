@@ -244,21 +244,19 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 
 		sectionEIDs[sectionName] = sb.AllEIDs()
 
-		// Create TOC entry for this footnote body (not included in main TOC)
+		// Create TOC entry for this footnote body
 		// Use "a-" prefix for anchor ID to avoid collision with section fragment ID
-		// Use body name for title if available (e.g., "notes", "comments"), otherwise "Notes"
+		// Use body title if available (e.g., "Примечания"), fallback to body.Name (e.g., "notes")
+		// Include in TOC only if body has a meaningful title (matching EPUB behavior)
 		anchorID := "a-" + sectionName
-		title := "Notes"
-		if body.Name != "" {
-			title = body.Name
-		}
+		bodyTitle := body.AsTitleText(body.Name)
 		tocEntry := &TOCEntry{
 			ID:           anchorID,
-			Title:        title,
+			Title:        bodyTitle,
 			SectionName:  sectionName,
 			StoryName:    storyName,
 			FirstEID:     sb.FirstEID(),
-			IncludeInTOC: false, // Don't include footnotes in TOC
+			IncludeInTOC: bodyTitle != "", // Include in TOC if body has a title
 		}
 		tocEntries = append(tocEntries, tocEntry)
 		idToEID[anchorID] = sb.FirstEID()
