@@ -94,15 +94,21 @@ h6 {
 }
 .body-title-header-emptyline {
     display: block;
+    text-align: center;
+    font-weight: bold;
     margin: 0.8em 0;
 }
 .body-title-header-break {
     display: block;
+    text-align: center;
+    font-weight: bold;
 }
 .body-title-header-first,
 .body-title-header-next {
     display: inline;
     text-indent: 0;
+    text-align: center;
+    font-weight: bold;
 }
 
 /* Chapter title header (h1 inside chapter-title wrapper for depth 1 sections) */

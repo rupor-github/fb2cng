@@ -160,8 +160,9 @@ document:
     # any processing, allowing reader to decide what to do
     use_broken: false
 
-    # Kindle eInc devices do not handle transparent PNG images well
-    remove_png_transparency: false
+    # Kindle eInk devices do not handle transparent images well. This option
+    # removes transparency from PNG and GIF images by flattening to white background.
+    remove_transparency: false
 
     # Resize all images (but cover) with specified ratio
     scale_factor: 1.0

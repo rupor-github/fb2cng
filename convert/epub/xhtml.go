@@ -614,45 +614,53 @@ func appendFloatFootnoteSectionContentEpub2(parent *etree.Element, c *content.Co
 }
 
 // appendFloatFootnoteSectionContentEpub3 appends footnote section content in EPUB3 float mode
-// EPUB3 Float mode uses <aside epub:type="footnote">
+// EPUB3 Float mode uses <aside epub:type="footnote"> with class="footnote" on each paragraph
 func appendFloatFootnoteSectionContentEpub3(parent *etree.Element, c *content.Content, section *fb2.Section, log *zap.Logger) error {
 	if section.Title != nil {
 		appendTitleAsDiv(parent, c, section.Title, "footnote-title")
 	}
 
-	sectionElem := parent.CreateElement("aside")
-	sectionElem.CreateAttr("epub:type", "footnote")
+	asideElem := parent.CreateElement("aside")
+	asideElem.CreateAttr("epub:type", "footnote")
 	if section.ID != "" {
-		sectionElem.CreateAttr("id", section.ID)
+		asideElem.CreateAttr("id", section.ID)
 	}
 	if section.Lang != "" {
-		sectionElem.CreateAttr("xml:lang", section.Lang)
+		asideElem.CreateAttr("xml:lang", section.Lang)
 	}
 
-	if err := appendEpigraphs(sectionElem, c, section.Epigraphs, 1, log); err != nil {
+	if err := appendEpigraphs(asideElem, c, section.Epigraphs, 1, log); err != nil {
 		return err
 	}
 
 	if section.Image != nil {
-		appendImageElement(sectionElem, c, section.Image)
+		appendImageElement(asideElem, c, section.Image)
 	}
 
 	if section.Annotation != nil {
-		div := sectionElem.CreateElement("div")
+		div := asideElem.CreateElement("div")
 		div.CreateAttr("class", "annotation")
 		if err := appendFlowItems(div, c, section.Annotation.Items, 1, "annotation", log); err != nil {
 			return err
 		}
 	}
 
-	if err := appendFlowItems(sectionElem, c, section.Content, 1, "section", log); err != nil {
+	if err := appendFlowItems(asideElem, c, section.Content, 1, "section", log); err != nil {
 		return err
 	}
 
-	// If there's more than one paragraph in aside, add indicator to the first one
+	// Add class="footnote" to all paragraphs and collect them for "more" indicator
 	paragraphs := make([]*etree.Element, 0)
-	for _, child := range sectionElem.ChildElements() {
+	for _, child := range asideElem.ChildElements() {
 		if child.Tag == "p" {
+			// Add or append "footnote" class to paragraph
+			existingClass := child.SelectAttrValue("class", "")
+			if existingClass != "" {
+				child.RemoveAttr("class")
+				child.CreateAttr("class", existingClass+" footnote")
+			} else {
+				child.CreateAttr("class", "footnote")
+			}
 			paragraphs = append(paragraphs, child)
 		}
 	}
@@ -669,17 +677,18 @@ func appendFloatFootnoteSectionContentEpub3(parent *etree.Element, c *content.Co
 		firstPara.InsertChildAt(0, moreSpan)
 	}
 
-	// Add back-references for EPUB3 float mode
+	// Add back-references for EPUB3 float mode - OUTSIDE the aside element
+	// This ensures backlinks are not part of the footnote popup content
 	if section.ID != "" {
 		if refs, exists := c.BackLinkIndex[section.ID]; exists && len(refs) > 0 {
-			// Add back-reference links
-			backDiv := parent.CreateElement("p")
+			// Add back-reference links paragraph (without footnote class)
+			backPara := parent.CreateElement("p")
 
 			for i, ref := range refs {
 				if i > 0 {
-					backDiv.CreateText(text.NBSP)
+					backPara.CreateText(text.NBSP)
 				}
-				backLink := backDiv.CreateElement("a")
+				backLink := backPara.CreateElement("a")
 				backLink.CreateAttr("class", "link-backlink")
 				// Include filename in href for cross-file back-references
 				href := ref.Filename + "#" + ref.RefID

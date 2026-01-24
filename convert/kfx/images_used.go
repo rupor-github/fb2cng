@@ -26,9 +26,9 @@ func collectUsedImageIDs(book *fb2.FictionBook) map[string]bool {
 
 	for i := range book.Bodies {
 		body := &book.Bodies[i]
-		if body.Footnotes() {
-			continue
-		}
+
+		// Collect images from all bodies including footnote bodies.
+		// Footnote bodies may contain inline images in cites, subtitles, etc.
 
 		if body.Image != nil {
 			id := strings.TrimPrefix(body.Image.Href, "#")

@@ -4,15 +4,26 @@ import (
 	"strings"
 
 	"fbc/common"
+	"fbc/content"
 	"fbc/fb2"
 )
+
+// sectionWorkItem represents a section to be processed as a storyline.
+// Used by the work queue to flatten nested titled sections into separate storylines.
+type sectionWorkItem struct {
+	section      *fb2.Section
+	depth        int       // Original depth in the FB2 hierarchy (1 for top-level)
+	parentEntry  *TOCEntry // Parent TOC entry for hierarchy tracking
+	isTopLevel   bool      // True if this is a direct child of <body>
+	isChapterEnd bool      // True if this is the last storyline of a chapter (gets chapter-end vignette)
+}
 
 // generateStoryline creates storyline and section fragments from an FB2 book.
 // It uses the provided StyleRegistry to reference styles by name.
 // Returns fragments, next EID, section names for document_data, TOC entries, per-section EID sets,
 // and mapping of original FB2 IDs to EIDs (for $266 anchors).
-func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
-	imageResources imageResourceInfoByID, startEID int, footnotesIndex fb2.FootnoteRefs,
+func generateStoryline(c *content.Content, styles *StyleRegistry,
+	imageResources imageResourceInfoByID, startEID int,
 ) (*FragmentList, int, sectionNameList, []*TOCEntry, sectionEIDsBySectionName, eidByFB2ID, LandmarkInfo, error) {
 	fragments := NewFragmentList()
 	eidCounter := startEID
@@ -26,9 +37,6 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 	// KP3 consolidates content across all storylines into fewer, larger fragments.
 	ca := NewContentAccumulator(1)
 
-	// Default screen width for image style calculations
-	defaultWidth := 600
-
 	sectionCount := 0
 
 	// Collect footnote bodies for processing at the end
@@ -36,8 +44,8 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 
 	// Create separate cover section at the very beginning (like reference KFX)
 	// Cover is a container-type section with just the image, not embedded in body intro
-	if len(book.Description.TitleInfo.Coverpage) > 0 {
-		cover := &book.Description.TitleInfo.Coverpage[0]
+	if len(c.Book.Description.TitleInfo.Coverpage) > 0 {
+		cover := &c.Book.Description.TitleInfo.Coverpage[0]
 		coverID := strings.TrimPrefix(cover.Href, "#")
 		if imgInfo, ok := imageResources[coverID]; ok {
 			sectionCount++
@@ -76,8 +84,8 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 	}
 
 	// Process each body
-	for i := range book.Bodies {
-		body := &book.Bodies[i]
+	for i := range c.Book.Bodies {
+		body := &c.Book.Bodies[i]
 
 		// Collect footnote bodies for later processing (at the end, like EPUB does)
 		if body.Footnotes() {
@@ -96,7 +104,7 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 			// Create storyline builder for body intro
 			sb := NewStorylineBuilder(storyName, sectionName, eidCounter, styles)
 
-			if err := processBodyIntroContent(book, body, sb, styles, imageResources, ca, idToEID, defaultWidth, footnotesIndex); err != nil {
+			if err := processBodyIntroContent(c, body, sb, styles, imageResources, ca, idToEID); err != nil {
 				return nil, 0, nil, nil, nil, nil, landmarks, err
 			}
 
@@ -136,9 +144,32 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 			}
 		}
 
-		// Process top-level sections as chapters (like epub does)
+		// Process top-level sections and their nested titled sections as separate storylines.
+		// Use a work queue to flatten the hierarchy - each titled section becomes its own storyline.
+		// This matches kfxlib behavior where chapter granularity determines storyline boundaries.
+		var workQueue []sectionWorkItem
+
+		// Initialize queue with top-level sections.
+		// Each top-level section is initially marked as isChapterEnd=true.
+		// If the section has nested titled sections that become separate storylines,
+		// isChapterEnd is transferred to the LAST nested section (see below).
 		for j := range body.Sections {
-			section := &body.Sections[j]
+			workQueue = append(workQueue, sectionWorkItem{
+				section:      &body.Sections[j],
+				depth:        1,
+				parentEntry:  nil,
+				isTopLevel:   true,
+				isChapterEnd: true, // May be transferred to last nested storyline
+			})
+		}
+
+		// Process sections from the queue
+		for len(workQueue) > 0 {
+			// Pop first item (FIFO for document order)
+			work := workQueue[0]
+			workQueue = workQueue[1:]
+
+			section := work.section
 			sectionCount++
 
 			// Generate names using base36: "l1", "l2", ... "lA", "lB", ... for storylines
@@ -149,11 +180,19 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 			// Create storyline builder
 			sb := NewStorylineBuilder(storyName, sectionName, eidCounter, styles)
 
-			// Track nested section info for TOC hierarchy
-			var nestedTOCEntries []*TOCEntry
+			// Process section content, collecting nested titled sections for later processing.
+			var nestedTitledSections []sectionWorkItem
+			var directChildTOC []*TOCEntry
 
-			if err := processStorylineContent(book, section, sb, styles, imageResources, ca, 1, &nestedTOCEntries, idToEID, defaultWidth, footnotesIndex); err != nil {
+			if err := processStorylineSectionContent(c, section, sb, styles, imageResources, ca, work.depth, &directChildTOC, &nestedTitledSections, idToEID); err != nil {
 				return nil, 0, nil, nil, nil, nil, landmarks, err
+			}
+
+			// Determine if this storyline should have a chapter-end vignette.
+			// A storyline gets the vignette if it's marked as chapter-end AND has no nested
+			// titled sections that will become separate storylines (which would inherit the vignette).
+			if work.isChapterEnd && len(nestedTitledSections) == 0 {
+				addEndVignette(c.Book, sb, styles, imageResources, common.VignettePosChapterEnd)
 			}
 
 			sectionEIDs[sectionName] = sb.AllEIDs()
@@ -167,9 +206,15 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 				StoryName:    storyName,
 				FirstEID:     sb.FirstEID(),
 				IncludeInTOC: title != "",
-				Children:     nestedTOCEntries,
+				Children:     directChildTOC, // Direct children (untitled nested sections)
 			}
-			tocEntries = append(tocEntries, tocEntry)
+
+			// Link to parent TOC hierarchy
+			if work.parentEntry != nil {
+				work.parentEntry.Children = append(work.parentEntry.Children, tocEntry)
+			} else {
+				tocEntries = append(tocEntries, tocEntry)
+			}
 
 			// Update EID counter
 			eidCounter = sb.NextEID()
@@ -182,6 +227,23 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 			}
 			if err := fragments.Add(sectionFrag); err != nil {
 				return nil, 0, nil, nil, nil, nil, landmarks, err
+			}
+
+			// Add nested titled sections to queue for processing as separate storylines.
+			// They become children in the TOC hierarchy of the current entry.
+			// IMPORTANT: Prepend to queue (not append) to maintain document order.
+			// With append, sibling sections would be processed before nested children.
+			// With prepend, we process depth-first which preserves FB2 document order.
+			//
+			// Transfer isChapterEnd to the LAST nested section - only the final storyline
+			// in a chapter chain gets the chapter-end vignette.
+			for i := range nestedTitledSections {
+				nestedTitledSections[i].parentEntry = tocEntry
+				// Only the last nested section inherits isChapterEnd
+				nestedTitledSections[i].isChapterEnd = work.isChapterEnd && (i == len(nestedTitledSections)-1)
+			}
+			if len(nestedTitledSections) > 0 {
+				workQueue = append(nestedTitledSections, workQueue...)
 			}
 		}
 	}
@@ -198,48 +260,46 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 		sb := NewStorylineBuilder(storyName, sectionName, eidCounter, styles)
 
 		// Process body title if present with proper heading semantics
-		// Uses footnote-title style directly (gets layout-hints: [treat_as_title])
+		// Uses body-title-header style (same as EPUB, matching KP3 reference)
+		// This gets layout-hints: [treat_as_title] via shouldHaveLayoutHints
+		//
+		// KP3 reference structure for footnote body titles:
+		//   content_list: [{wrapper with margin-top from body-title}]
+		//     content_list: [{title without margin-top}]
+		//
+		// The wrapper block provides the vertical spacing (margin-top: 2em from body-title CSS),
+		// while the title inside has no margin-top (stripped via TitleBlock position).
 		if body.Title != nil && len(body.Title.Items) > 0 {
-			// Create context for title
-			titleCtx := NewStyleContext().PushBlock("div", "footnote-title", styles)
-			if styles != nil {
-				styles.EnsureBaseStyle("footnote-title")
-			}
+			// Start wrapper block with body-title style (has margin-top: 2em)
+			sb.StartBlock("body-title", styles)
 
-			// Use addTitleAsHeading for proper heading level and layout-hints
-			addTitleAsHeading(body.Title, titleCtx, "footnote-title", 2, sb, styles, imageResources, ca, idToEID, defaultWidth, footnotesIndex, PositionFirst())
+			// Create context for title inside wrapper - Push() for inheritance only
+			// Position-based style filtering is deferred to build time
+			titleCtx := NewStyleContext(styles).Push("div", "body-title")
+			markTitleStylesUsed("", "body-title-header", styles)
+
+			addTitleAsHeading(c, body.Title, titleCtx, "body-title-header", 1, sb, styles, imageResources, ca, idToEID)
+
+			sb.EndBlock()
 		}
 
-		// Process each section in the footnote body
-		// KFX doesn't use wrapper blocks for footnotes - content is flat with styling applied directly.
+		// Process each section in the footnote body using the unified processing function.
+		// This ensures consistent handling of all section elements: title, epigraphs,
+		// image, annotation, and content.
 		for j := range body.Sections {
 			section := &body.Sections[j]
 
-			// Process section title FIRST (without registering ID yet)
-			// This matches EPUB behavior where the ID is on the body content, not the title
-			// Unlike body titles, section titles are styled paragraphs, not semantic headings
-			// (matching EPUB's appendTitleAsDiv pattern and KP3 reference output)
-			if section.Title != nil && len(section.Title.Items) > 0 {
-				titleCtx := NewStyleContext().PushBlock("div", "footnote-section-title", styles)
-				if styles != nil {
-					styles.EnsureBaseStyle("footnote-section-title")
+			// Create backlinks callback that looks up refs from BackLinkIndex
+			addBacklinks := func(c *content.Content, sectionID string, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, idToEID eidByFB2ID) {
+				if c.BacklinkStr == "" {
+					return
 				}
-				addTitleAsParagraphs(section.Title, titleCtx, "footnote-section-title", 0, sb, styles, imageResources, ca, idToEID, defaultWidth, footnotesIndex)
-			}
-
-			// NOW register the section ID - it will point to first body content EID
-			// This ensures footnote popups show the body content, not the title
-			if section.ID != "" {
-				if _, exists := idToEID[section.ID]; !exists {
-					idToEID[section.ID] = sb.NextEID()
+				if refs, ok := c.BackLinkIndex[sectionID]; ok && len(refs) > 0 {
+					addBacklinkParagraph(c, refs, sb, styles, ca, idToEID)
 				}
 			}
 
-			// Process section content (paragraphs, poems, etc.)
-			footnoteCtx := NewStyleContext().PushBlock("div", "footnote", styles)
-			for k := range section.Content {
-				processFlowItem(&section.Content[k], footnoteCtx, "footnote", sb, styles, imageResources, ca, idToEID, defaultWidth, footnotesIndex)
-			}
+			processFootnoteSectionContent(c, section, sb, styles, imageResources, ca, idToEID, addParagraphWithMoreIndicator, addBacklinks)
 		}
 
 		sectionEIDs[sectionName] = sb.AllEIDs()
@@ -283,89 +343,13 @@ func generateStoryline(book *fb2.FictionBook, styles *StyleRegistry,
 	return fragments, eidCounter, sectionNames, tocEntries, sectionEIDs, idToEID, landmarks, nil
 }
 
-// titleBlockPositions calculates element positions for a title block.
-// A title block may contain: vignette-top (optional), title (required), vignette-bottom (optional).
-// Returns positions for: vignetteTop, title, vignetteBottom.
-type titleBlockPositions struct {
-	VignetteTop    ElementPosition
-	Title          ElementPosition
-	VignetteBottom ElementPosition
-}
-
-func calcTitleBlockPositions(book *fb2.FictionBook, hasTopVignette, hasBottomVignette bool) titleBlockPositions {
-	// Count actual elements
-	count := 1 // title is always present
-	if hasTopVignette && book.IsVignetteEnabled(common.VignettePosBookTitleTop) {
-		count++
-	}
-	if hasBottomVignette && book.IsVignetteEnabled(common.VignettePosBookTitleBottom) {
-		count++
-	}
-
-	// Single element: first and last
-	if count == 1 {
-		return titleBlockPositions{
-			Title: PositionFirstAndLast(),
-		}
-	}
-
-	// Two elements: first + last
-	if count == 2 {
-		if hasTopVignette && book.IsVignetteEnabled(common.VignettePosBookTitleTop) {
-			return titleBlockPositions{
-				VignetteTop: PositionFirst(),
-				Title:       PositionLast(),
-			}
-		}
-		return titleBlockPositions{
-			Title:          PositionFirst(),
-			VignetteBottom: PositionLast(),
-		}
-	}
-
-	// Three elements: first, middle, last
-	return titleBlockPositions{
-		VignetteTop:    PositionFirst(),
-		Title:          PositionMiddle(),
-		VignetteBottom: PositionLast(),
-	}
-}
-
-// calcChapterTitlePositions calculates positions for chapter/section title blocks.
-func calcChapterTitlePositions(book *fb2.FictionBook, vigTopPos, vigBottomPos common.VignettePos) titleBlockPositions {
-	hasTop := book != nil && book.IsVignetteEnabled(vigTopPos)
-	hasBottom := book != nil && book.IsVignetteEnabled(vigBottomPos)
-
-	count := 1 // title always present
-	if hasTop {
-		count++
-	}
-	if hasBottom {
-		count++
-	}
-
-	if count == 1 {
-		return titleBlockPositions{Title: PositionFirstAndLast()}
-	}
-	if count == 2 {
-		if hasTop {
-			return titleBlockPositions{VignetteTop: PositionFirst(), Title: PositionLast()}
-		}
-		return titleBlockPositions{Title: PositionFirst(), VignetteBottom: PositionLast()}
-	}
-	return titleBlockPositions{
-		VignetteTop:    PositionFirst(),
-		Title:          PositionMiddle(),
-		VignetteBottom: PositionLast(),
-	}
-}
-
 // addVignetteImage adds a vignette image to the storyline if enabled.
-func addVignetteImage(book *fb2.FictionBook, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, vigPos common.VignettePos, screenWidth int, elemPos ElementPosition) {
+// Uses deferred style resolution - the "image-vignette" style will be resolved
+// with position filtering at build time when inside a wrapper block.
+func addVignetteImage(book *fb2.FictionBook, sb *StorylineBuilder, imageResources imageResourceInfoByID, vigPos common.VignettePos) {
 	if book == nil || !book.IsVignetteEnabled(vigPos) {
 		return
 	}
-	_ = screenWidth
 	vigID := book.VignetteIDs[vigPos]
 	if vigID == "" {
 		return
@@ -375,20 +359,41 @@ func addVignetteImage(book *fb2.FictionBook, sb *StorylineBuilder, styles *Style
 		return
 	}
 
-	// Resolve vignette style with position-aware filtering
+	// Use deferred resolution - position filtering applied at build time
+	sb.AddImageDeferred(imgInfo.ResourceName, "image-vignette", "") // Vignettes are decorative, no alt text
+}
+
+// addEndVignette adds an end-of-section vignette image directly to the storyline.
+// Unlike title vignettes, end vignettes are not in a wrapper block and use explicit
+// position filtering to remove margin-top (spacing comes from preceding element).
+func addEndVignette(book *fb2.FictionBook, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, vigPos common.VignettePos) {
+	if book == nil || !book.IsVignetteEnabled(vigPos) {
+		return
+	}
+	vigID := book.VignetteIDs[vigPos]
+	if vigID == "" {
+		return
+	}
+	imgInfo, ok := imageResources[vigID]
+	if !ok {
+		return
+	}
+
+	// Resolve end vignette style - uses image-vignette-end which has no margin-top
+	// End vignettes get their spacing from the preceding element's margin-bottom
 	resolved := ""
 	if styles != nil {
-		resolved = styles.ResolveVignetteImageStyleWithPosition(elemPos)
+		resolved = styles.EnsureStyle("image-vignette-end")
 	}
 	sb.AddImage(imgInfo.ResourceName, resolved, "") // Vignettes are decorative, no alt text
 }
 
 // processBodyIntroContent processes body intro content (title, epigraphs, image).
-func processBodyIntroContent(book *fb2.FictionBook, body *fb2.Body, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) error {
+func processBodyIntroContent(c *content.Content, body *fb2.Body, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) error {
 	if body.Image != nil {
 		imgID := strings.TrimPrefix(body.Image.Href, "#")
 		if imgInfo, ok := imageResources[imgID]; ok {
-			resolved := styles.ResolveImageStyle(imgInfo.Width, screenWidth)
+			resolved := styles.ResolveBlockImageStyle(imgInfo.Width, c.ScreenWidth, "image", nil, nil)
 			eid := sb.AddImage(imgInfo.ResourceName, resolved, body.Image.Alt)
 			if body.Image.ID != "" {
 				if _, exists := idToEID[body.Image.ID]; !exists {
@@ -400,24 +405,21 @@ func processBodyIntroContent(book *fb2.FictionBook, body *fb2.Body, sb *Storylin
 
 	// Process body title with wrapper (mirrors EPUB's <div class="body-title">)
 	if body.Title != nil {
-		// Calculate element positions for this title block
-		positions := calcTitleBlockPositions(book, body.Main(), body.Main())
-
 		// Start wrapper block - this is the KFX equivalent of <div class="body-title">
-		// Use PositionMiddle() to preserve both margin-top and margin-bottom since content follows
-		sb.StartBlock("body-title", styles, PositionMiddle())
+		// Position-based style filtering is deferred to Build() time when actual position is known
+		sb.StartBlock("body-title", styles)
 
 		if body.Main() {
-			addVignetteImage(book, sb, styles, imageResources, common.VignettePosBookTitleTop, screenWidth, positions.VignetteTop)
+			addVignetteImage(c.Book, sb, imageResources, common.VignettePosBookTitleTop)
 		}
 		// Add title as single combined heading entry (matches KP3 behavior)
 		// Uses body-title-header as base for -first/-next styles, heading level 1
 		// Context includes wrapper class for margin inheritance
-		titleCtx := NewStyleContext().Push("div", "body-title", styles)
+		titleCtx := NewStyleContext(styles).Push("div", "body-title")
 		markTitleStylesUsed("body-title", "body-title-header", styles)
-		addTitleAsHeading(body.Title, titleCtx, "body-title-header", 1, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex, positions.Title)
+		addTitleAsHeading(c, body.Title, titleCtx, "body-title-header", 1, sb, styles, imageResources, ca, idToEID)
 		if body.Main() {
-			addVignetteImage(book, sb, styles, imageResources, common.VignettePosBookTitleBottom, screenWidth, positions.VignetteBottom)
+			addVignetteImage(c.Book, sb, imageResources, common.VignettePosBookTitleBottom)
 		}
 
 		// End wrapper block
@@ -427,7 +429,6 @@ func processBodyIntroContent(book *fb2.FictionBook, body *fb2.Body, sb *Storylin
 	// Process body epigraphs - KFX doesn't use wrapper blocks for epigraphs.
 	// Instead, apply epigraph styling directly to each paragraph as flat siblings.
 	// This matches KP3 reference output where margin-left is on each paragraph.
-	epigraphCtx := NewStyleContext().PushBlock("div", "epigraph", styles)
 	for _, epigraph := range body.Epigraphs {
 		// If epigraph has an ID, assign it to the first content item
 		if epigraph.Flow.ID != "" {
@@ -437,14 +438,324 @@ func processBodyIntroContent(book *fb2.FictionBook, body *fb2.Body, sb *Storylin
 			}
 		}
 
+		// Calculate total item count for position filtering (flow items + text authors)
+		totalItems := len(epigraph.Flow.Items) + len(epigraph.TextAuthors)
+		epigraphCtx := NewStyleContext(styles).PushBlock("div", "epigraph", totalItems)
+
 		for i := range epigraph.Flow.Items {
-			processFlowItem(&epigraph.Flow.Items[i], epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			processFlowItem(c, &epigraph.Flow.Items[i], epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID)
+			epigraphCtx = epigraphCtx.Advance()
 		}
 		for i := range epigraph.TextAuthors {
-			styleName := epigraphCtx.Resolve("p", "text-author", styles)
-			addParagraphWithImages(&epigraph.TextAuthors[i], styleName, 0, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			addParagraphWithImages(c, &epigraph.TextAuthors[i], epigraphCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
+			epigraphCtx = epigraphCtx.Advance()
 		}
 	}
 
 	return nil
+}
+
+// addBacklinkParagraph adds a single backlink paragraph at the end of a footnote section.
+// All references to the footnote are combined into one paragraph with NBSP separators,
+// matching the EPUB implementation.
+func addBacklinkParagraph(c *content.Content, refs []content.BackLinkRef, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, _ eidByFB2ID) {
+	if len(refs) == 0 || c.BacklinkStr == "" {
+		return
+	}
+
+	// Resolve styles:
+	// - Paragraph style: basic paragraph without footnote class (backlink is outside footnote)
+	// - Link style: link-backlink with link color properties (for style_events)
+	paraStyle := "p"
+	linkStyle := "link-backlink"
+	if styles != nil {
+		styles.EnsureBaseStyle(linkStyle)
+	}
+	resolvedLink := linkStyle
+	if styles != nil {
+		// Link style uses StyleContext for style_events (standalone, no container context)
+		resolvedLink = NewStyleContext(styles).Resolve("", linkStyle)
+	}
+	// Don't pre-resolve paraStyle - will be done in Build() with position filtering
+
+	// Build the combined text with NBSP separators between backlinks
+	// e.g., "[<]\u00A0[<]\u00A0[<]" for 3 references
+	const nbsp = "\u00A0"
+	backlinkRunes := []rune(c.BacklinkStr)
+	backlinkLen := len(backlinkRunes)
+
+	var textBuilder strings.Builder
+	var events []StyleEventRef
+	offset := 0
+
+	for i, ref := range refs {
+		if i > 0 {
+			textBuilder.WriteString(nbsp)
+			offset++ // NBSP is 1 rune
+		}
+
+		textBuilder.WriteString(c.BacklinkStr)
+
+		// Create style event for this backlink with link to the reference location
+		events = append(events, StyleEventRef{
+			Offset:         offset,
+			Length:         backlinkLen,
+			Style:          resolvedLink,
+			LinkTo:         ref.RefID,
+			IsFootnoteLink: false, // Not a footnote link, it's a backlink
+		})
+
+		offset += backlinkLen
+	}
+
+	// Add content text
+	contentName, contentOffset := ca.Add(textBuilder.String())
+
+	// Mark link style usage (paragraph style will be marked in Build() after position filtering)
+	if styles != nil {
+		styles.MarkUsage(resolvedLink, styleUsageText)
+	}
+
+	// Add the content entry: paragraph uses container style, events use link style
+	// Pass empty resolved style - will be resolved in Build() with position filtering
+	sb.AddContentAndEvents(SymText, contentName, contentOffset, paraStyle, "", events)
+}
+
+// countFootnoteParagraphs counts the number of paragraphs in footnote content.
+// Used to determine if "more paragraphs" indicator should be shown.
+func countFootnoteParagraphs(content []fb2.FlowItem) int {
+	count := 0
+	for i := range content {
+		if content[i].Paragraph != nil {
+			count++
+		}
+		// Count paragraphs inside poems and cites as well
+		if content[i].Poem != nil {
+			for j := range content[i].Poem.Stanzas {
+				count += len(content[i].Poem.Stanzas[j].Verses)
+			}
+		}
+		if content[i].Cite != nil {
+			count += countFootnoteParagraphs(content[i].Cite.Items)
+		}
+	}
+	return count
+}
+
+// addParagraphWithMoreIndicator adds a paragraph with a "more paragraphs" indicator at the start.
+// The indicator is styled with "footnote-more" and prepended to the paragraph content.
+func addParagraphWithMoreIndicator(c *content.Content, para *fb2.Paragraph, ctx StyleContext, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
+	// Resolve the footnote paragraph style
+	styleSpec := ctx.StyleSpec("p", "paragraph")
+
+	// Check for single spanning style that can be merged into block style
+	spanningStyle := detectSingleSpanningStyle(para.Text)
+	if spanningStyle != "" {
+		styleSpec = styleSpec + " " + spanningStyle
+	}
+
+	// Check if paragraph has inline images
+	hasTextContent := paragraphHasTextContent(para)
+	hasInlineImages := paragraphHasInlineImages(para)
+
+	// Build text content with more indicator prefix
+	nw := newNormalizingWriter()
+	moreStr := c.MoreParaStr
+
+	// Add "more" indicator at the start
+	nw.WriteString(moreStr)
+
+	// Resolve styles
+	moreStyle := "footnote-more"
+	if styles != nil {
+		styles.EnsureBaseStyle(moreStyle)
+		moreStyle = NewStyleContext(styles).Resolve("", moreStyle)
+	}
+
+	// Process inline segments
+	var events []StyleEventRef
+	var backlinkRefIDs []string
+
+	// Create inline style context for this footnote paragraph.
+	// This ensures inline styles inherit properties from the paragraph context.
+	inlineCtx := ctx.Push("p", "paragraph "+spanningStyle)
+
+	// Add style event for the "more" indicator
+	moreLen := nw.RuneCount()
+	if moreLen > 0 {
+		events = append(events, StyleEventRef{
+			Offset: 0,
+			Length: moreLen,
+			Style:  moreStyle,
+		})
+	}
+
+	// Process paragraph text segments
+	type inlineStyleInfo struct {
+		Style          string
+		LinkTo         string
+		IsFootnoteLink bool
+	}
+
+	spanningStyleParts := strings.Fields(spanningStyle)
+	var walk func(seg *fb2.InlineSegment, styleContext []inlineStyleInfo, spanningDepth int)
+	walk = func(seg *fb2.InlineSegment, styleContext []inlineStyleInfo, spanningDepth int) {
+		// Skip inline images for now (handled separately)
+		if seg.Kind == fb2.InlineImageSegment {
+			return
+		}
+
+		// Determine style for this segment
+		var segStyle string
+		var isLink bool
+		var linkTo string
+		var isFootnoteLink bool
+
+		switch seg.Kind {
+		case fb2.InlineStrong:
+			segStyle = "strong"
+		case fb2.InlineEmphasis:
+			segStyle = "emphasis"
+		case fb2.InlineStrikethrough:
+			segStyle = "strikethrough"
+		case fb2.InlineSub:
+			segStyle = "sub"
+		case fb2.InlineSup:
+			segStyle = "sup"
+		case fb2.InlineCode:
+			segStyle = "code"
+			nw.SetPreserveWhitespace(true)
+		case fb2.InlineNamedStyle:
+			segStyle = seg.Style
+		case fb2.InlineLink:
+			isLink = true
+			if after, found := strings.CutPrefix(seg.Href, "#"); found {
+				linkTo = after
+				if _, isNote := c.FootnotesIndex[linkTo]; isNote {
+					segStyle = "link-footnote"
+					isFootnoteLink = true
+					ref := c.AddFootnoteBackLinkRef(linkTo)
+					backlinkRefIDs = append(backlinkRefIDs, ref.RefID)
+				} else {
+					segStyle = "link-internal"
+				}
+			} else {
+				segStyle = "link-external"
+				linkTo = styles.RegisterExternalLink(seg.Href)
+			}
+		}
+
+		start := nw.RuneCount()
+		nw.WriteString(seg.Text)
+
+		// Build child context
+		childContext := styleContext
+		if segStyle != "" {
+			info := inlineStyleInfo{Style: segStyle}
+			if isLink {
+				info.LinkTo = linkTo
+				info.IsFootnoteLink = isFootnoteLink
+			}
+			childContext = append(append([]inlineStyleInfo(nil), styleContext...), info)
+		}
+
+		// Process children
+		childSpanningDepth := spanningDepth
+		if spanningDepth < len(spanningStyleParts) && segStyle == spanningStyleParts[spanningDepth] {
+			childSpanningDepth++
+		}
+		for i := range seg.Children {
+			walk(&seg.Children[i], childContext, childSpanningDepth)
+		}
+
+		if seg.Kind == fb2.InlineCode {
+			nw.SetPreserveWhitespace(false)
+		}
+
+		end := nw.RuneCount()
+
+		// Create style event
+		isSpanningStyle := spanningDepth < len(spanningStyleParts) && segStyle == spanningStyleParts[spanningDepth]
+		if segStyle != "" && end > start && !isSpanningStyle {
+			var styleNames []string
+			for _, sctx := range styleContext {
+				styleNames = append(styleNames, sctx.Style)
+			}
+			styleNames = append(styleNames, segStyle)
+
+			// Resolve inline style using the paragraph context (inlineCtx).
+			// This ensures inline styles inherit font-size from the container.
+			mergedSpec := strings.Join(styleNames, " ")
+			mergedStyle := inlineCtx.ResolveNoMark("", mergedSpec)
+
+			event := StyleEventRef{
+				Offset: start,
+				Length: end - start,
+				Style:  mergedStyle,
+			}
+
+			if isLink {
+				event.LinkTo = linkTo
+				event.IsFootnoteLink = isFootnoteLink
+			} else {
+				for i := len(styleContext) - 1; i >= 0; i-- {
+					if styleContext[i].LinkTo != "" {
+						event.LinkTo = styleContext[i].LinkTo
+						event.IsFootnoteLink = styleContext[i].IsFootnoteLink
+						break
+					}
+				}
+			}
+
+			events = append(events, event)
+		}
+	}
+
+	// Walk paragraph text (skip images for text-only processing)
+	if hasInlineImages && hasTextContent {
+		// For mixed content, fall back to standard processing with more indicator prepended
+		// This is a simplified path - complex mixed content goes through standard flow
+		for i := range para.Text {
+			walk(&para.Text[i], nil, 0)
+		}
+	} else if !hasInlineImages {
+		// Text only paragraph
+		for i := range para.Text {
+			walk(&para.Text[i], nil, 0)
+		}
+	}
+
+	if nw.Len() == 0 {
+		// No text content, fall back to standard processing
+		addParagraphWithImages(c, para, ctx, "paragraph", 0, sb, styles, imageResources, ca, idToEID)
+		return
+	}
+
+	// Resolve style - don't pre-resolve, will be done in Build() with position filtering
+	resolved := ""
+
+	contentName, offset := ca.Add(nw.String())
+
+	// Segment events
+	segmentedEvents := SegmentNestedStyleEvents(events)
+	if styles != nil {
+		for _, ev := range segmentedEvents {
+			styles.MarkUsage(ev.Style, styleUsageText)
+		}
+	}
+
+	// Use AddFootnoteContentAndEvents to add position:footer and yj.classification:footnote markers
+	// These markers identify the first paragraph of footnote content for Kindle's footnote rendering
+	eid := sb.AddFootnoteContentAndEvents(SymText, contentName, offset, styleSpec, resolved, segmentedEvents)
+	if para.ID != "" {
+		if _, exists := idToEID[para.ID]; !exists {
+			idToEID[para.ID] = eid
+		}
+	}
+	// Register backlink ref IDs
+	for _, refID := range backlinkRefIDs {
+		if _, exists := idToEID[refID]; !exists {
+			idToEID[refID] = eid
+		}
+	}
 }

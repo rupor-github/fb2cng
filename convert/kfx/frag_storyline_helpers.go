@@ -3,44 +3,9 @@ package kfx
 import (
 	"strings"
 
+	"fbc/content"
 	"fbc/fb2"
 )
-
-// resolveInlineStyle resolves an inline style spec to a generated style name.
-// It does NOT mark the style as used - the caller must call MarkUsage for styles
-// that actually survive processing (e.g., after segmentation deduplication).
-func resolveInlineStyle(styles *StyleRegistry, ancestorTag string, styleSpec string) string {
-	if styles == nil || styleSpec == "" {
-		return styleSpec
-	}
-	parts := strings.Fields(styleSpec)
-	if len(parts) == 1 {
-		name := parts[0]
-		if ancestorTag != "" {
-			descendant := ancestorTag + "--" + name
-			if _, ok := styles.Get(descendant); ok {
-				return styles.EnsureStyleNoMark(descendant)
-			}
-		}
-		return styles.EnsureStyleNoMark(name)
-	}
-	// For multi-part style specs, apply descendant lookup to each part
-	// so that e.g. "emphasis sub" in h1 context uses "h1--sub" (which has no font-size)
-	// instead of "sub" (which has font-size: 0.75rem).
-	if ancestorTag != "" {
-		resolvedParts := make([]string, len(parts))
-		for i, name := range parts {
-			descendant := ancestorTag + "--" + name
-			if _, ok := styles.Get(descendant); ok {
-				resolvedParts[i] = descendant
-			} else {
-				resolvedParts[i] = name
-			}
-		}
-		return styles.ResolveStyleNoMark(strings.Join(resolvedParts, " "))
-	}
-	return styles.ResolveStyleNoMark(styleSpec)
-}
 
 // titleHasInlineImages checks if any title paragraph contains inline images.
 // Used to decide whether to use combined heading or separate paragraph approach.
@@ -148,8 +113,9 @@ type inlineStyleInfo struct {
 
 // MixedContentResult holds the output of processMixedInlineSegments.
 type MixedContentResult struct {
-	Items  []InlineContentItem // Content items (text chunks and inline images)
-	Events []StyleEventRef     // Style events for inline formatting
+	Items          []InlineContentItem // Content items (text chunks and inline images)
+	Events         []StyleEventRef     // Style events for inline formatting
+	BacklinkRefIDs []string            // RefIDs of backlinks to register with EID after element creation
 }
 
 // processMixedInlineSegments processes inline segments that may contain mixed content
@@ -158,22 +124,24 @@ type MixedContentResult struct {
 // Parameters:
 //   - segments: the inline segments to process
 //   - styles: style registry for resolving and registering styles
-//   - footnotesIndex: map of footnote IDs for detecting footnote links
-//   - ancestorTag: the ancestor HTML tag for style resolution (e.g., "p", "td", "th")
+//   - c: content context for footnote index
+//   - inlineCtx: StyleContext with the container element (p, h1, td, etc.) already pushed,
+//     so inline styles inherit properties like font-size from the container
 //   - imageResources: image resource info for resolving inline images
 //
 // Returns MixedContentResult with items and style events.
 func processMixedInlineSegments(
 	segments []fb2.InlineSegment,
 	styles *StyleRegistry,
-	footnotesIndex fb2.FootnoteRefs,
-	ancestorTag string,
+	c *content.Content,
+	inlineCtx StyleContext,
 	imageResources imageResourceInfoByID,
 ) MixedContentResult {
 	var (
-		items  []InlineContentItem
-		events []StyleEventRef
-		nw     = newNormalizingWriter()
+		items          []InlineContentItem
+		events         []StyleEventRef
+		backlinkRefIDs []string
+		nw             = newNormalizingWriter()
 	)
 
 	// flushText adds current accumulated text to items
@@ -221,9 +189,10 @@ func processMixedInlineSegments(
 				Style:        imgStyle,
 				AltText:      seg.Image.Alt,
 			})
-			// Mark that we're continuing after an image, so leading spaces
-			// in subsequent text are preserved as word separators
-			nw.SetPendingSpace()
+			// Mark that we're continuing after an inline image.
+			// This allows leading whitespace in subsequent text to be preserved
+			// (if it exists in the source), but does NOT unconditionally add space.
+			nw.SetContinueAfterInline()
 			return
 		}
 
@@ -253,9 +222,13 @@ func processMixedInlineSegments(
 			isLink = true
 			if after, found := strings.CutPrefix(seg.Href, "#"); found {
 				linkTo = after
-				if _, isNote := footnotesIndex[linkTo]; isNote {
+				if _, isNote := c.FootnotesIndex[linkTo]; isNote {
 					segStyle = "link-footnote"
 					isFootnoteLink = true
+					// Register this footnote reference for backlink generation
+					ref := c.AddFootnoteBackLinkRef(linkTo)
+					// Collect RefID to return to caller for EID registration
+					backlinkRefIDs = append(backlinkRefIDs, ref.RefID)
 				} else {
 					segStyle = "link-internal"
 				}
@@ -297,18 +270,15 @@ func processMixedInlineSegments(
 		// Create style event if we have styled content
 		if segStyle != "" && end > start {
 			var styleNames []string
-			for _, ctx := range styleContext {
-				styleNames = append(styleNames, ctx.Style)
+			for _, sctx := range styleContext {
+				styleNames = append(styleNames, sctx.Style)
 			}
 			styleNames = append(styleNames, segStyle)
 
-			var mergedStyle string
-			if len(styleNames) > 1 {
-				mergedSpec := strings.Join(styleNames, " ")
-				mergedStyle = resolveInlineStyle(styles, ancestorTag, mergedSpec)
-			} else {
-				mergedStyle = resolveInlineStyle(styles, ancestorTag, segStyle)
-			}
+			// Resolve inline style using the container context (inlineCtx).
+			// This ensures inline styles inherit font-size from the container.
+			mergedSpec := strings.Join(styleNames, " ")
+			mergedStyle := inlineCtx.ResolveNoMark("", mergedSpec)
 
 			event := StyleEventRef{
 				Offset: start,
@@ -344,9 +314,16 @@ func processMixedInlineSegments(
 	}
 
 	return MixedContentResult{
-		Items:  items,
-		Events: events,
+		Items:          items,
+		Events:         events,
+		BacklinkRefIDs: backlinkRefIDs,
 	}
+}
+
+// TextOnlyResult holds the result of processing inline segments for text-only content.
+type TextOnlyResult struct {
+	Events         []StyleEventRef // Style events for inline formatting
+	BacklinkRefIDs []string        // Collected backlink RefIDs for footnote references
 }
 
 // processInlineSegments processes inline segments for text-only content (no inline images).
@@ -354,16 +331,16 @@ func processMixedInlineSegments(
 // For mixed content with actual inline images, use processMixedInlineSegments instead.
 //
 // Parameters:
+//   - c: content context for footnote index
 //   - segments: the inline segments to process
 //   - nw: normalizing writer for text accumulation
 //   - styles: style registry for resolving and registering styles
-//   - footnotesIndex: map of footnote IDs for detecting footnote links
-//   - ancestorTag: the ancestor HTML tag for style resolution (e.g., "p", "td")
+//   - inlineCtx: StyleContext with the container element already pushed
 //
-// Returns the accumulated style events.
-func processInlineSegments(segments []fb2.InlineSegment, nw *normalizingWriter, styles *StyleRegistry, footnotesIndex fb2.FootnoteRefs, ancestorTag string) []StyleEventRef {
+// Returns the accumulated style events and backlink RefIDs for EID registration.
+func processInlineSegments(c *content.Content, segments []fb2.InlineSegment, nw *normalizingWriter, styles *StyleRegistry, inlineCtx StyleContext) TextOnlyResult {
 	// Use the shared implementation with nil imageResources (images become alt text)
-	result := processMixedInlineSegments(segments, styles, footnotesIndex, ancestorTag, nil)
+	result := processMixedInlineSegments(segments, styles, c, inlineCtx, nil)
 
 	// Concatenate all text items into the provided normalizing writer
 	for _, item := range result.Items {
@@ -372,5 +349,8 @@ func processInlineSegments(segments []fb2.InlineSegment, nw *normalizingWriter, 
 		}
 	}
 
-	return result.Events
+	return TextOnlyResult{
+		Events:         result.Events,
+		BacklinkRefIDs: result.BacklinkRefIDs,
+	}
 }

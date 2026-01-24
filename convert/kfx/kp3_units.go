@@ -34,16 +34,36 @@ const (
 	// KP3 uses 1.2em as the base line-height for vertical margin calculations.
 	LineHeightRatio = 1.2
 
+	// KP3BaseWidthEm is the base content width in em units used by KP3 for horizontal
+	// calculations. KP3 assumes a viewport of 32em for horizontal-tb writing mode.
+	// This value is defined as constant 'b' in com/amazon/yj/F/a/b.java.
+	KP3BaseWidthEm = 32.0
+
+	// KP3PixelsPerEm is the pixels-per-em ratio used by KP3 (standard web default).
+	// This value is defined as constant 'i' in com/amazon/yj/F/a/b.java.
+	KP3PixelsPerEm = 16.0
+
+	// KP3ContentWidthPx is the standard content width in pixels used by KP3 for
+	// calculating block image width percentages. This is KP3's "IDEAL" viewport:
+	// KP3BaseWidthEm × KP3PixelsPerEm = 32em × 16px/em = 512px.
+	//
+	// All block images in text flow use this as their reference width, regardless
+	// of the actual screen dimensions. This constant is defined as 'd' in
+	// com/amazon/yj/F/a/b.java: public static final Double d = b * i; // 512.0
+	//
+	// See also com/amazon/yj/style/merger/e/a.java: public static final int m = 512;
+	KP3ContentWidthPx = KP3BaseWidthEm * KP3PixelsPerEm // 512.0
+
 	// EmToPercentHorizontal is the em-to-percent ratio for horizontal spacing.
 	// Used for margin-left, margin-right, padding-left, padding-right.
 	// KP3 uses a base width of 32em, so 1em = 100/32 = 3.125%
 	// Example: 1em CSS → 3.125% KFX, 2em CSS → 6.25% KFX
-	EmToPercentHorizontal = 3.125
+	EmToPercentHorizontal = 100.0 / KP3BaseWidthEm // 3.125
 
 	// EmToPercentTextIndent is the em-to-percent ratio for text-indent.
 	// Text indent uses a different ratio than horizontal margins.
 	// Example: 1em CSS → 3.125% KFX
-	EmToPercentTextIndent = 3.125
+	EmToPercentTextIndent = 100.0 / KP3BaseWidthEm // 3.125
 
 	// FontSizeCompressionFactor is the divisor for KP3's font-size percentage compression.
 	// KP3 compresses percentage font-sizes using the formula:
@@ -132,4 +152,23 @@ func PercentToRem(percent float64) float64 {
 	}
 	// Direct conversion for values at or below 100%
 	return RoundDecimal(percent / 100)
+}
+
+// ImageWidthPercent calculates the width percentage for a block image.
+// KP3 uses a fixed 512px content width (KP3ContentWidthPx) for all block image
+// calculations, regardless of the actual screen dimensions.
+//
+// The formula is: widthPercent = imageWidthPx * 100 / KP3ContentWidthPx
+//
+// The result is clamped to [0, 100] and rounded to DecimalPrecision decimal places.
+//
+// Examples:
+//
+//	ImageWidthPercent(380) → 74.219%  (380 * 100 / 512)
+//	ImageWidthPercent(240) → 46.875%  (240 * 100 / 512)
+//	ImageWidthPercent(512) → 100%     (clamped)
+//	ImageWidthPercent(600) → 100%     (clamped)
+func ImageWidthPercent(imageWidthPx int) float64 {
+	percent := float64(imageWidthPx) / KP3ContentWidthPx * 100
+	return RoundDecimal(min(max(percent, 0), 100))
 }

@@ -25,9 +25,10 @@ func main() {
 	resources := flag.Bool("resources", false, "dump $417 (bcRawMedia) raw bytes into <file>-resources.zip")
 	styles := flag.Bool("styles", false, "dump $157 (style) fragments into <file>-styles.txt")
 	storyline := flag.Bool("storyline", false, "dump $259 (storyline) fragments into <file>-storyline.txt with expanded symbols and styles")
+	margins := flag.Bool("margins", false, "dump vertical margin tree into <file>-margins.txt for easy comparison")
 	overwrite := flag.Bool("overwrite", false, "overwrite existing output")
 	flag.Usage = func() {
-		_, _ = fmt.Fprintf(os.Stderr, "usage: kfxdump [-all] [-dump] [-resources] [-styles] [-storyline] [-overwrite] <file.kfx> [outdir]\n")
+		_, _ = fmt.Fprintf(os.Stderr, "usage: kfxdump [-all] [-dump] [-resources] [-styles] [-storyline] [-margins] [-overwrite] <file.kfx> [outdir]\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -42,9 +43,10 @@ func main() {
 		*resources = true
 		*styles = true
 		*storyline = true
+		*margins = true
 	}
 
-	if !*dump && !*resources && !*styles && !*storyline {
+	if !*dump && !*resources && !*styles && !*storyline && !*margins {
 		flag.Usage()
 		os.Exit(2)
 	}
@@ -97,6 +99,13 @@ func main() {
 	if *storyline {
 		if err := dumpStorylineTxt(container, path, outDir, *overwrite); err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "dump storyline: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	if *margins {
+		if err := dumpMarginsTxt(container, path, outDir, *overwrite); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "dump margins: %v\n", err)
 			os.Exit(1)
 		}
 	}
@@ -174,6 +183,32 @@ func dumpStorylineTxt(container *kfx.Container, inPath, outDir string, overwrite
 	return nil
 }
 
+func dumpMarginsTxt(container *kfx.Container, inPath, outDir string, overwrite bool) error {
+	base := filepath.Base(inPath)
+	stem := strings.TrimSuffix(base, filepath.Ext(base))
+	dir := filepath.Dir(inPath)
+	if outDir != "" {
+		dir = outDir
+	}
+	outPath := filepath.Join(dir, stem+"-margins.txt")
+	if _, err := os.Stat(outPath); err == nil {
+		if !overwrite {
+			return fmt.Errorf("output file already exists: %s", outPath)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	dump, count := dumpMarginTree(container)
+	dump += "\n"
+	if err := os.WriteFile(outPath, []byte(dump), 0o644); err != nil {
+		return err
+	}
+
+	_, _ = fmt.Fprintf(os.Stderr, "margins: wrote %d storyline(s) into %s\n", count, outPath)
+	return nil
+}
+
 func dumpStyleFragments(c *kfx.Container) (string, int) {
 	// First, collect style usage information
 	styleUsage := collectStyleUsage(c)
@@ -190,6 +225,293 @@ func dumpStorylineFragments(c *kfx.Container) (string, int) {
 	resourceDefs := collectResourceDefinitions(c)
 
 	return dumpStorylineFragmentsExpanded(c, styleDefs, contentDefs, resourceDefs)
+}
+
+// dumpMarginTree generates a focused view of vertical margins for easy comparison.
+// Output format shows only margin-top/margin-bottom for each element in the storyline.
+func dumpMarginTree(c *kfx.Container) (string, int) {
+	// Collect style definitions for margin extraction
+	styleMargins := collectStyleMargins(c)
+	// Collect content fragments for text preview
+	contentDefs := collectContentDefinitions(c)
+	// Collect resource fragments for alt text
+	resourceDefs := collectResourceDefinitions(c)
+
+	tw := debug.NewTreeWriter()
+	tw.Line(0, "=== KFX Vertical Margin Tree ===")
+	tw.Line(0, "")
+
+	if c.Fragments == nil {
+		tw.Line(0, "(no fragments)")
+		return tw.String(), 0
+	}
+
+	frags := c.Fragments.GetByType(kfx.SymStoryline)
+	if len(frags) == 0 {
+		tw.Line(0, "(no fragments)")
+		return tw.String(), 0
+	}
+
+	// Sort storyline fragments
+	sortedFrags := make([]*kfx.Fragment, len(frags))
+	copy(sortedFrags, frags)
+	slices.SortFunc(sortedFrags, func(a, b *kfx.Fragment) int {
+		if a.IsRoot() && !b.IsRoot() {
+			return -1
+		}
+		if !a.IsRoot() && b.IsRoot() {
+			return 1
+		}
+		aFID := a.FID
+		if a.FIDName != "" && aFID == 0 {
+			aFID = c.GetLocalSymbolID(a.FIDName)
+		}
+		bFID := b.FID
+		if b.FIDName != "" && bFID == 0 {
+			bFID = c.GetLocalSymbolID(b.FIDName)
+		}
+		return int(aFID - bFID)
+	})
+
+	ctx := &marginCtx{
+		c:            c,
+		styleMargins: styleMargins,
+		contentDefs:  contentDefs,
+		resourceDefs: resourceDefs,
+	}
+
+	for _, f := range sortedFrags {
+		// Get storyline name
+		storyName := ""
+		if f.FIDName != "" {
+			storyName = f.FIDName
+		} else if c.DocSymbolTable != nil {
+			if name, ok := c.DocSymbolTable.FindByID(uint64(f.FID)); ok && !strings.HasPrefix(name, "$") {
+				storyName = name
+			}
+		}
+
+		tw.Line(0, "storyline: %s", storyName)
+
+		// Extract content_list from storyline
+		contentList := extractContentList(f.Value)
+		formatMarginElements(tw, ctx, contentList, 1, "")
+		tw.Line(0, "")
+	}
+
+	return tw.String(), len(sortedFrags)
+}
+
+// marginCtx holds context for margin tree formatting.
+type marginCtx struct {
+	c            *kfx.Container
+	styleMargins map[string]*marginInfo
+	contentDefs  map[string]*ContentInfo
+	resourceDefs map[string]*ResourceInfo
+}
+
+// marginInfo holds margin values for a style.
+type marginInfo struct {
+	marginTop    string
+	marginBottom string
+	marginLeft   string
+}
+
+// collectStyleMargins extracts margin values from all style definitions.
+func collectStyleMargins(c *kfx.Container) map[string]*marginInfo {
+	margins := make(map[string]*marginInfo)
+	if c.Fragments == nil {
+		return margins
+	}
+
+	for _, frag := range c.Fragments.GetByType(kfx.SymStyle) {
+		styleName := ""
+		if frag.FIDName != "" {
+			styleName = frag.FIDName
+		} else if c.DocSymbolTable != nil {
+			if name, ok := c.DocSymbolTable.FindByID(uint64(frag.FID)); ok && !strings.HasPrefix(name, "$") {
+				styleName = name
+			}
+		}
+		if styleName == "" {
+			continue
+		}
+
+		info := &marginInfo{}
+		props := kfx.NormalizeStyleMap(frag.Value)
+		if props == nil {
+			continue
+		}
+
+		// Extract margin values
+		if mt, ok := props["margin_top"]; ok {
+			info.marginTop = kfx.FormatDimensionAsCSS(mt)
+		}
+		if mb, ok := props["margin_bottom"]; ok {
+			info.marginBottom = kfx.FormatDimensionAsCSS(mb)
+		}
+		if ml, ok := props["margin_left"]; ok {
+			info.marginLeft = kfx.FormatDimensionAsCSS(ml)
+		}
+
+		margins[styleName] = info
+	}
+	return margins
+}
+
+// extractContentList extracts the content_list array from a storyline value.
+func extractContentList(v any) []any {
+	m := toMapAny(v)
+	if m == nil {
+		return nil
+	}
+	// Look for $146 (content_list)
+	if cl, ok := m["$146"]; ok {
+		return toListAny(cl)
+	}
+	return nil
+}
+
+// formatMarginElements formats a list of content elements showing only margins.
+func formatMarginElements(tw *debug.TreeWriter, ctx *marginCtx, items []any, depth int, indexPrefix string) {
+	for i, item := range items {
+		idx := fmt.Sprintf("%d", i)
+		if indexPrefix != "" {
+			idx = indexPrefix + "." + idx
+		}
+		formatMarginElement(tw, ctx, item, depth, idx)
+	}
+}
+
+// formatMarginElement formats a single content element showing margins.
+func formatMarginElement(tw *debug.TreeWriter, ctx *marginCtx, v any, depth int, idx string) {
+	m := toMapAny(v)
+	if m == nil {
+		return
+	}
+
+	// Get element type
+	elemType := "unknown"
+	if typeVal, ok := m["$159"]; ok {
+		elemType = extractSymbolName(typeVal)
+	}
+
+	// Get style name and margins
+	styleName := ""
+	if styleVal, ok := m["$157"]; ok {
+		styleName = extractSymbolName(styleVal)
+	}
+
+	var mi *marginInfo
+	if styleName != "" {
+		mi = ctx.styleMargins[styleName]
+	}
+
+	// Get text preview or resource name
+	preview := ""
+	switch elemType {
+	case "text", "$269":
+		preview = getTextPreview(ctx, m)
+	case "image", "$271":
+		preview = getImageAlt(ctx, m)
+	}
+
+	// Check if this is a container (has nested content_list)
+	nestedList := extractContentList(v)
+	isContainer := len(nestedList) > 0
+
+	// Build margin string
+	marginStr := formatMarginStr(mi)
+
+	// Output the element
+	if isContainer {
+		// Container element - show it as a wrapper
+		childCount := len(nestedList)
+		tw.Line(depth, "[%s] container (%d items)%s", idx, childCount, marginStr)
+
+		// Recursively format children
+		formatMarginElements(tw, ctx, nestedList, depth+1, idx)
+	} else {
+		// Leaf element
+		previewStr := ""
+		if preview != "" {
+			previewStr = fmt.Sprintf(" %q", truncateText(preview, 40))
+		}
+		tw.Line(depth, "[%s] %s%s%s", idx, elemType, previewStr, marginStr)
+	}
+}
+
+// formatMarginStr formats margin info as a compact string.
+func formatMarginStr(mi *marginInfo) string {
+	if mi == nil {
+		return ""
+	}
+
+	parts := []string{}
+	if mi.marginTop != "" && mi.marginTop != "0" {
+		parts = append(parts, fmt.Sprintf("mt=%s", mi.marginTop))
+	}
+	if mi.marginBottom != "" && mi.marginBottom != "0" {
+		parts = append(parts, fmt.Sprintf("mb=%s", mi.marginBottom))
+	}
+	if mi.marginLeft != "" && mi.marginLeft != "0" && mi.marginLeft != "0%" {
+		parts = append(parts, fmt.Sprintf("ml=%s", mi.marginLeft))
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+	return " (" + strings.Join(parts, ", ") + ")"
+}
+
+// getTextPreview extracts text preview from content reference.
+func getTextPreview(ctx *marginCtx, m map[string]any) string {
+	// Check for content reference ($145)
+	if contentVal, ok := m["$145"]; ok {
+		cm := toMapAny(contentVal)
+		if cm == nil {
+			return ""
+		}
+		// Get content name and index
+		contentName := ""
+		if nameVal, ok := cm["name"]; ok {
+			contentName = extractSymbolName(nameVal)
+		}
+		var contentIndex int64 = -1
+		if idxVal, ok := cm["$403"]; ok {
+			contentIndex = toInt64(idxVal)
+		}
+		// Look up in content definitions
+		if contentName != "" && contentIndex >= 0 {
+			if info, ok := ctx.contentDefs[contentName]; ok {
+				if int(contentIndex) < len(info.Texts) {
+					return info.Texts[contentIndex]
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// getImageAlt extracts alt text or resource name for an image.
+func getImageAlt(ctx *marginCtx, m map[string]any) string {
+	// Check for alt_text ($584)
+	if altVal, ok := m["$584"]; ok {
+		if s, ok := altVal.(string); ok {
+			return s
+		}
+	}
+	// Fall back to resource name
+	if resVal, ok := m["$175"]; ok {
+		resName := extractSymbolName(resVal)
+		if info, ok := ctx.resourceDefs[resName]; ok {
+			if info.Location != "" {
+				return info.Location
+			}
+		}
+		return resName
+	}
+	return ""
 }
 
 // collectStyleDefinitions builds a map of style name -> CSS representation.
@@ -213,32 +535,13 @@ func collectStyleDefinitions(c *kfx.Container) map[string]string {
 		}
 
 		// Get a compact CSS-like summary of the style
-		css := formatStyleAsCSSCompact(frag.Value)
+		css := kfx.FormatStylePropsAsCSS(frag.Value)
 		if css == "" {
 			css = "(empty)"
 		}
 		defs[styleName] = css
 	}
 	return defs
-}
-
-// formatStyleAsCSSCompact returns a one-line CSS-like representation of a style.
-func formatStyleAsCSSCompact(v any) string {
-	props := normalizeStyleMap(v)
-	if props == nil {
-		return ""
-	}
-
-	cssProps := extractCSSProperties(props)
-	if len(cssProps) == 0 {
-		return ""
-	}
-
-	parts := make([]string, 0, len(cssProps))
-	for _, p := range cssProps {
-		parts = append(parts, p.name+": "+p.value)
-	}
-	return strings.Join(parts, "; ")
 }
 
 // ContentInfo holds text snippets for a content fragment.
@@ -1305,7 +1608,7 @@ func dumpFragmentsByTypeWithUsage(c *kfx.Container, ftype kfx.KFXSymbol, styleUs
 							fidID = f.FID
 						} else {
 							fmt.Fprintf(&sb, "  id: (unresolved) (%s)\n", f.FIDName)
-							fmt.Fprintf(&sb, "  value: %s\n\n", formatValueCompact(f.Value))
+							fmt.Fprintf(&sb, "  value: %s\n\n", kfx.FormatValueCompact(f.Value))
 							continue
 						}
 					}
@@ -1313,7 +1616,7 @@ func dumpFragmentsByTypeWithUsage(c *kfx.Container, ftype kfx.KFXSymbol, styleUs
 					fidID = f.FID
 				} else {
 					fmt.Fprintf(&sb, "  id: (unresolved) (%s)\n", f.FIDName)
-					fmt.Fprintf(&sb, "  value: %s\n\n", formatValueCompact(f.Value))
+					fmt.Fprintf(&sb, "  value: %s\n\n", kfx.FormatValueCompact(f.Value))
 					continue
 				}
 			} else {
@@ -1333,10 +1636,10 @@ func dumpFragmentsByTypeWithUsage(c *kfx.Container, ftype kfx.KFXSymbol, styleUs
 				fmt.Fprintf(&sb, "  id: %s\n", fidID)
 			}
 		}
-		fmt.Fprintf(&sb, "  value: %s\n", formatValueCompact(f.Value))
+		fmt.Fprintf(&sb, "  value: %s\n", kfx.FormatValueCompact(f.Value))
 
 		// Add CSS-like decoded output for style fragments
-		if css := formatStyleAsCSS(f.Value); css != "" {
+		if css := kfx.FormatStylePropsAsCSSMultiLine(f.Value); css != "" {
 			sb.WriteString(css)
 		}
 
@@ -1365,456 +1668,6 @@ func dumpFragmentsByTypeWithUsage(c *kfx.Container, ftype kfx.KFXSymbol, styleUs
 	}
 
 	return sb.String(), len(sortedFrags)
-}
-
-// formatStyleAsCSS converts a KFX style value to CSS-like syntax.
-func formatStyleAsCSS(v any) string {
-	// Normalize to map with KFX property names as keys
-	props := normalizeStyleMap(v)
-	if props == nil {
-		return ""
-	}
-
-	var sb strings.Builder
-	sb.WriteString("  CSS:\n")
-
-	// Extract style name for selector
-	styleName := extractStringValue(props["style_name"])
-	if styleName != "" {
-		fmt.Fprintf(&sb, "    .%s {\n", styleName)
-	} else {
-		sb.WriteString("    {\n")
-	}
-
-	// Show parent style inheritance if present
-	if parentStyle := extractStringValue(props["parent_style"]); parentStyle != "" {
-		fmt.Fprintf(&sb, "      inherits: .%s\n", parentStyle)
-	}
-
-	// Extract and format CSS properties
-	cssProps := extractCSSProperties(props)
-	for _, prop := range cssProps {
-		fmt.Fprintf(&sb, "      %s: %s;\n", prop.name, prop.value)
-	}
-
-	sb.WriteString("    }\n")
-
-	return sb.String()
-}
-
-// normalizeStyleMap converts style value to map[string]any with KFX property names as keys.
-func normalizeStyleMap(v any) map[string]any {
-	switch m := v.(type) {
-	case kfx.StructValue:
-		result := make(map[string]any, len(m))
-		for k, val := range m {
-			result[k.Name()] = val
-		}
-		return result
-	case map[kfx.KFXSymbol]any:
-		result := make(map[string]any, len(m))
-		for k, val := range m {
-			result[k.Name()] = val
-		}
-		return result
-	case map[string]any:
-		result := make(map[string]any, len(m))
-		for k, val := range m {
-			// Convert "$NNN" keys to property names
-			if strings.HasPrefix(k, "$") {
-				if id, err := strconv.Atoi(k[1:]); err == nil {
-					result[kfx.KFXSymbol(id).Name()] = val
-					continue
-				}
-			}
-			result[k] = val
-		}
-		return result
-	default:
-		return nil
-	}
-}
-
-// cssNameOverrides maps KFX property names to CSS names where simple underscore-to-hyphen doesn't work.
-var cssNameOverrides = map[string]string{
-	"text_alignment": "text-align",
-	"letterspacing":  "letter-spacing",
-	"text_color":     "color",
-	"fill_color":     "background-color",
-	"fill_opacity":   "opacity",
-	"border_weight":  "border-width",
-	"baseline_shift": "vertical-align",
-	"first":          "orphans",
-	"last":           "widows",
-}
-
-// skipProperties are KFX properties that shouldn't be output as CSS.
-var skipProperties = map[string]bool{
-	"style_name":   true,
-	"parent_style": true,
-}
-
-// kfxNameToCSS converts a KFX property name to CSS property name.
-func kfxNameToCSS(name string) string {
-	if override, ok := cssNameOverrides[name]; ok {
-		return override
-	}
-	return strings.ReplaceAll(name, "_", "-")
-}
-
-type cssProp struct {
-	name  string
-	value string
-}
-
-// extractCSSProperties extracts CSS-like properties from a normalized KFX style map.
-func extractCSSProperties(m map[string]any) []cssProp {
-	var props []cssProp
-
-	// Get sorted keys for deterministic output
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		if !skipProperties[k] {
-			keys = append(keys, k)
-		}
-	}
-	slices.Sort(keys)
-
-	for _, kfxName := range keys {
-		v := m[kfxName]
-		cssName := kfxNameToCSS(kfxName)
-		cssValue := formatPropertyValue(v)
-		props = append(props, cssProp{cssName, cssValue})
-	}
-
-	return props
-}
-
-// formatPropertyValue formats a KFX property value for CSS output.
-func formatPropertyValue(v any) string {
-	// Check if it's a dimension value (has value/unit structure)
-	if isDimensionValue(v) {
-		return formatDimension(v)
-	}
-	// Otherwise format as symbol or plain value
-	return formatCSSSymbol(v)
-}
-
-// isDimensionValue checks if a value is a KFX dimension (has value and unit fields).
-func isDimensionValue(v any) bool {
-	switch m := v.(type) {
-	case kfx.StructValue:
-		_, hasValue := m[kfx.SymValue]
-		_, hasUnit := m[kfx.SymUnit]
-		return hasValue && hasUnit
-	case map[kfx.KFXSymbol]any:
-		_, hasValue := m[kfx.SymValue]
-		_, hasUnit := m[kfx.SymUnit]
-		return hasValue && hasUnit
-	case map[string]any:
-		_, hasValue := m["value"]
-		_, hasValue2 := m["$307"]
-		_, hasUnit := m["unit"]
-		_, hasUnit2 := m["$306"]
-		return (hasValue || hasValue2) && (hasUnit || hasUnit2)
-	default:
-		return false
-	}
-}
-
-// formatDimension formats a KFX dimension value {value: X, unit: Y} to CSS.
-func formatDimension(v any) string {
-	var value, unit any
-
-	// Handle different map types
-	switch m := v.(type) {
-	case kfx.StructValue:
-		value = m[kfx.SymValue] // $307
-		unit = m[kfx.SymUnit]   // $306
-	case map[kfx.KFXSymbol]any:
-		value = m[kfx.SymValue]
-		unit = m[kfx.SymUnit]
-	case map[string]any:
-		// Handle both "value"/"unit" and "$307"/"$306" keys
-		if v, ok := m["value"]; ok {
-			value = v
-		} else if v, ok := m["$307"]; ok {
-			value = v
-		}
-		if u, ok := m["unit"]; ok {
-			unit = u
-		} else if u, ok := m["$306"]; ok {
-			unit = u
-		}
-	default:
-		return formatCSSValue(v)
-	}
-
-	if value == nil {
-		return formatCSSValue(v)
-	}
-
-	var valStr string
-	switch vv := value.(type) {
-	case float64:
-		valStr = formatCSSFloat(vv)
-	case int, int64, int32:
-		valStr = fmt.Sprintf("%d", vv)
-	case string:
-		// Handle Ion decimal notation like "2.08333d-1"
-		valStr = formatIonDecimal(vv)
-	case *ion.Decimal:
-		valStr = formatIonDecimal(vv.String())
-	default:
-		valStr = fmt.Sprintf("%v", vv)
-	}
-
-	unitStr := ""
-	switch u := unit.(type) {
-	case kfx.SymbolValue:
-		unitStr = kfxSymbolToCSS(kfx.KFXSymbol(u))
-	case kfx.KFXSymbol:
-		unitStr = kfxSymbolToCSS(u)
-	case kfx.ReadSymbolValue:
-		unitStr = unitNameToCSS(string(u))
-	case string:
-		unitStr = unitNameToCSS(u)
-	default:
-		unitStr = fmt.Sprintf("%v", u)
-	}
-
-	return valStr + unitStr
-}
-
-// formatCSSFloat formats a float for CSS output (no scientific notation).
-func formatCSSFloat(f float64) string {
-	if f == float64(int(f)) {
-		return fmt.Sprintf("%d", int(f))
-	}
-	// Use %f and trim trailing zeros
-	s := fmt.Sprintf("%.6f", f)
-	s = strings.TrimRight(s, "0")
-	s = strings.TrimRight(s, ".")
-	return s
-}
-
-// formatIonDecimal converts Ion decimal notation (e.g., "2.08333d-1") to CSS number.
-func formatIonDecimal(s string) string {
-	// Check for Ion decimal notation with 'd' or 'D' exponent
-	if idx := strings.IndexAny(s, "dD"); idx >= 0 {
-		// Replace 'd' with 'e' for Go's float parser
-		normalized := strings.Replace(s, "d", "e", 1)
-		normalized = strings.Replace(normalized, "D", "e", 1)
-		if f, err := strconv.ParseFloat(normalized, 64); err == nil {
-			return formatCSSFloat(f)
-		}
-	}
-	// Try parsing as regular float
-	if f, err := strconv.ParseFloat(s, 64); err == nil {
-		return formatCSSFloat(f)
-	}
-	return s
-}
-
-// unitNameToCSS converts a unit name (like "em", "ratio", "$308") to CSS unit.
-func unitNameToCSS(u string) string {
-	// Check overrides first
-	if override, ok := cssValueOverrides[u]; ok {
-		return override
-	}
-	// Handle "$308" style string representation
-	if len(u) > 1 && u[0] == '$' {
-		if id, err := strconv.Atoi(u[1:]); err == nil {
-			return kfxSymbolToCSS(kfx.KFXSymbol(id))
-		}
-	}
-	return u
-}
-
-// formatCSSSymbol formats a KFX symbol value to CSS keyword.
-func formatCSSSymbol(v any) string {
-	switch s := v.(type) {
-	case kfx.SymbolValue:
-		return kfxSymbolToCSS(kfx.KFXSymbol(s))
-	case kfx.KFXSymbol:
-		return kfxSymbolToCSS(s)
-	case kfx.ReadSymbolValue:
-		return unitNameToCSS(string(s))
-	case string:
-		// Handle "$320" style string representation
-		if len(s) > 1 && s[0] == '$' {
-			if id, err := strconv.Atoi(s[1:]); err == nil {
-				return kfxSymbolToCSS(kfx.KFXSymbol(id))
-			}
-		}
-		return s
-	case []any:
-		return formatCSSList(s)
-	case kfx.ListValue:
-		return formatCSSList([]any(s))
-	default:
-		return fmt.Sprintf("%v", v)
-	}
-}
-
-// formatCSSList formats a list of values for CSS output.
-func formatCSSList(items []any) string {
-	if len(items) == 0 {
-		return "[]"
-	}
-	parts := make([]string, len(items))
-	for i, item := range items {
-		parts[i] = formatCSSSymbol(item)
-	}
-	return "[" + strings.Join(parts, ", ") + "]"
-}
-
-// cssValueOverrides maps KFX symbol names to CSS values where they differ.
-var cssValueOverrides = map[string]string{
-	"semibold": "600",
-	"light":    "300",
-	"medium":   "500",
-	"percent":  "%",
-	"ratio":    "", // unitless
-}
-
-// kfxSymbolToCSS converts a KFX symbol to CSS keyword.
-func kfxSymbolToCSS(sym kfx.KFXSymbol) string {
-	name := sym.Name()
-	if override, ok := cssValueOverrides[name]; ok {
-		return override
-	}
-	return name
-}
-
-// formatCSSValue formats a generic value for CSS output.
-func formatCSSValue(v any) string {
-	switch val := v.(type) {
-	case nil:
-		return "none"
-	case bool:
-		return fmt.Sprintf("%v", val)
-	case int, int64, int32:
-		return fmt.Sprintf("%d", val)
-	case float64:
-		if val == float64(int(val)) {
-			return fmt.Sprintf("%d", int(val))
-		}
-		return fmt.Sprintf("%g", val)
-	case string:
-		return fmt.Sprintf("%q", val)
-	case kfx.SymbolValue:
-		return kfxSymbolToCSS(kfx.KFXSymbol(val))
-	case kfx.SymbolByNameValue:
-		return string(val)
-	default:
-		return fmt.Sprintf("%v", val)
-	}
-}
-
-// extractStringValue extracts a string from various value types.
-func extractStringValue(v any) string {
-	switch n := v.(type) {
-	case string:
-		return n
-	case kfx.SymbolByNameValue:
-		return string(n)
-	default:
-		return ""
-	}
-}
-
-func formatValueCompact(v any) string {
-	switch val := v.(type) {
-	case nil:
-		return "null"
-	case bool:
-		return fmt.Sprintf("%v", val)
-	case int:
-		return fmt.Sprintf("int(%d)", val)
-	case int64:
-		return fmt.Sprintf("int(%d)", val)
-	case int32:
-		return fmt.Sprintf("int(%d)", val)
-	case float64:
-		return fmt.Sprintf("float(%g)", val)
-	case *ion.Decimal:
-		return fmt.Sprintf("decimal(%s)", val.String())
-	case string:
-		return fmt.Sprintf("%q", val)
-	case []byte, kfx.RawValue:
-		var b []byte
-		switch vv := val.(type) {
-		case []byte:
-			b = vv
-		case kfx.RawValue:
-			b = vv
-		}
-		return fmt.Sprintf("<blob %d bytes>", len(b))
-	case kfx.SymbolValue:
-		return fmt.Sprintf("symbol(%s)", kfx.KFXSymbol(val).String())
-	case kfx.SymbolByNameValue:
-		return fmt.Sprintf("symbol(%q)", string(val))
-	case kfx.ReadSymbolValue:
-		return fmt.Sprintf("symbol(%s)", string(val))
-	case kfx.StructValue:
-		return formatStructCompactKFX(val)
-	case map[kfx.KFXSymbol]any:
-		return formatStructCompactKFX(val)
-	case map[string]any:
-		return formatStructCompactString(val)
-	case kfx.ListValue:
-		return formatListCompact([]any(val))
-	case []any:
-		return formatListCompact(val)
-	default:
-		return fmt.Sprintf("<%T>", v)
-	}
-}
-
-func formatStructCompactKFX(m map[kfx.KFXSymbol]any) string {
-	if len(m) == 0 {
-		return "{}"
-	}
-	keys := make([]kfx.KFXSymbol, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-
-	parts := make([]string, 0, len(keys))
-	for _, k := range keys {
-		parts = append(parts, fmt.Sprintf("%s: %s", k, formatValueCompact(m[k])))
-	}
-	return "{" + strings.Join(parts, ", ") + "}"
-}
-
-func formatStructCompactString(m map[string]any) string {
-	if len(m) == 0 {
-		return "{}"
-	}
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-
-	parts := make([]string, 0, len(keys))
-	for _, k := range keys {
-		parts = append(parts, fmt.Sprintf("%s: %s", k, formatValueCompact(m[k])))
-	}
-	return "{" + strings.Join(parts, ", ") + "}"
-}
-
-func formatListCompact(items []any) string {
-	if len(items) == 0 {
-		return "[]"
-	}
-	parts := make([]string, len(items))
-	for i, item := range items {
-		parts[i] = formatValueCompact(item)
-	}
-	return "[" + strings.Join(parts, ", ") + "]"
 }
 
 func dumpResources(container *kfx.Container, inPath, outDir string, overwrite bool) error {

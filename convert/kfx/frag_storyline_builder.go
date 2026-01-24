@@ -1,11 +1,11 @@
 package kfx
 
 import (
-	"cmp"
 	"fmt"
 	"slices"
 	"strings"
 
+	"fbc/content"
 	"fbc/fb2"
 )
 
@@ -82,19 +82,22 @@ func NewCoverPageTemplateEntry(eid int, storylineName string, width, height int)
 
 // ContentRef represents a reference to content within a storyline.
 type ContentRef struct {
-	EID           int             // Element ID ($155)
-	Type          KFXSymbol       // Content type symbol ($269=text, $270=container, $271=image, etc.)
-	ContentName   string          // Name of the content fragment
-	ContentOffset int             // Offset within content fragment ($403)
-	ResourceName  string          // For images: external_resource fragment id/name ($175)
-	AltText       string          // For images: alt text ($584)
-	RenderInline  bool            // For inline images: set render ($601) = inline ($283)
-	Style         string          // Resolved style name (set by StyleSpec resolution or directly)
-	StyleSpec     string          // Raw style specification for deferred resolution
-	StyleEvents   []StyleEventRef // Optional inline style events ($142)
-	Children      []any           // Optional nested content for containers
-	HeadingLevel  int             // For headings: 1-6 for h1-h6 ($790), 0 means not a heading
-	RawEntry      StructValue     // Pre-built entry (for complex structures like tables)
+	EID             int             // Element ID ($155)
+	Type            KFXSymbol       // Content type symbol ($269=text, $270=container, $271=image, etc.)
+	ContentName     string          // Name of the content fragment
+	ContentOffset   int             // Offset within content fragment ($403)
+	ResourceName    string          // For images: external_resource fragment id/name ($175)
+	AltText         string          // For images: alt text ($584)
+	RenderInline    bool            // For inline images: set render ($601) = inline ($283)
+	Style           string          // Resolved style name (set by StyleSpec resolution or directly)
+	StyleSpec       string          // Raw style specification for deferred resolution
+	StyleEvents     []StyleEventRef // Optional inline style events ($142)
+	Children        []any           // Optional nested content for containers (already converted)
+	childRefs       []ContentRef    // Original child refs for deferred resolution (internal use)
+	styleCtx        *StyleContext   // Style context for child resolution (set by EndBlock)
+	HeadingLevel    int             // For headings: 1-6 for h1-h6 ($790), 0 means not a heading
+	RawEntry        StructValue     // Pre-built entry (for complex structures like tables)
+	FootnoteContent bool            // If true, adds position:footer and yj.classification:footnote markers
 }
 
 // InlineContentItem represents either a text string or an inline image in mixed content.
@@ -115,80 +118,6 @@ type StyleEventRef struct {
 	Style          string // $157 - style name
 	LinkTo         string // $179 - link target (internal anchor ID or external link anchor ID)
 	IsFootnoteLink bool   // If true, adds $616: $617 (yj.display: yj.note)
-}
-
-// SegmentStyleEvents takes inline style events and a base style, and returns
-// non-overlapping events. The base style fills gaps between inline events.
-// This matches KP3 behavior which throws "Cannot create Overlapping Style Events"
-// if overlaps are detected.
-//
-// For example, if text is "Hello World Link Here" (21 chars) with:
-//   - inline event at offset=12, len=4 (link style)
-//   - base style covering the whole text
-//
-// Instead of overlapping events, we produce:
-//   - offset=0, len=12, base style (before link)
-//   - offset=12, len=4, link style
-//   - offset=16, len=5, base style (after link)
-//
-// Events are returned sorted by offset ascending, then length ascending.
-func SegmentStyleEvents(inlineEvents []StyleEventRef, baseStyle string, totalLength int) []StyleEventRef {
-	if totalLength <= 0 {
-		return nil
-	}
-
-	// If no inline events, just return base style covering everything
-	if len(inlineEvents) == 0 {
-		if baseStyle == "" {
-			return nil
-		}
-		return []StyleEventRef{{Offset: 0, Length: totalLength, Style: baseStyle}}
-	}
-
-	// Sort inline events by offset, then by length (shorter first at same offset)
-	sorted := make([]StyleEventRef, len(inlineEvents))
-	copy(sorted, inlineEvents)
-	slices.SortFunc(sorted, func(a, b StyleEventRef) int {
-		if c := cmp.Compare(a.Offset, b.Offset); c != 0 {
-			return c
-		}
-		return cmp.Compare(a.Length, b.Length)
-	})
-
-	// Build segmented events list
-	var result []StyleEventRef
-	pos := 0
-
-	for _, ev := range sorted {
-		// Skip events that start before current position (shouldn't happen with proper input)
-		if ev.Offset < pos {
-			continue
-		}
-
-		// Fill gap before this event with base style
-		if baseStyle != "" && ev.Offset > pos {
-			result = append(result, StyleEventRef{
-				Offset: pos,
-				Length: ev.Offset - pos,
-				Style:  baseStyle,
-			})
-		}
-
-		// Add the inline event
-		result = append(result, ev)
-		pos = ev.Offset + ev.Length
-	}
-
-	// Fill remaining gap after last event with base style
-	if baseStyle != "" && pos < totalLength {
-		result = append(result, StyleEventRef{
-			Offset: pos,
-			Length: totalLength - pos,
-			Style:  baseStyle,
-		})
-	}
-
-	return result
 }
 
 // SegmentNestedStyleEvents takes a list of possibly overlapping style events
@@ -394,6 +323,13 @@ func NewContentEntry(ref ContentRef) StructValue {
 		entry.SetList(SymContentList, ref.Children) // $146 = content_list
 	}
 
+	// Footnote content markers: position: footer, yj.classification: footnote
+	// These identify the first paragraph of footnote content for Kindle's footnote rendering
+	if ref.FootnoteContent {
+		entry.SetSymbol(SymPosition, SymFooter)           // $183 = $455 (position = footer)
+		entry.SetSymbol(SymYjClassification, SymFootnote) // $615 = $281 (yj.classification = footnote)
+	}
+
 	return entry
 }
 
@@ -413,16 +349,18 @@ type StorylineBuilder struct {
 // BlockBuilder collects content entries for a wrapper/container element.
 // It mirrors how EPUB generates <div class="..."> wrappers.
 //
-// Style resolution is deferred until EndBlock() to enable position-aware resolution.
-// This allows KP3-compatible margin filtering where first elements lose margin-top
-// and non-first elements lose margin-bottom (CSS margin collapsing).
+// Style resolution is deferred until Build() time to enable position-aware resolution.
+// This allows KP3-compatible margin filtering (CSS margin collapsing):
+//   - First element: KEEPS margin-top, loses margin-bottom
+//   - Last element: loses margin-top, KEEPS margin-bottom
+//   - Single element: KEEPS both margins
+//   - Middle elements: loses both margins
 type BlockBuilder struct {
-	styleSpec        string          // Raw style specification (e.g., "poem", "cite") - resolved in EndBlock
-	styles           *StyleRegistry  // Style registry for deferred resolution
-	eid              int             // EID for the wrapper container
-	children         []ContentRef    // Nested content entries (styles resolved in EndBlock)
-	position         ElementPosition // This block's position within its parent container
-	childrenPosAware bool            // If true, resolve child styles with position filtering
+	styleSpec string         // Raw style specification (e.g., "poem", "cite") - resolved at Build() time
+	styles    *StyleRegistry // Style registry for deferred resolution
+	ctx       StyleContext   // Style context for child resolution (includes wrapper scope)
+	eid       int            // EID for the wrapper container
+	children  []ContentRef   // Nested content entries (styles resolved at Build() time)
 }
 
 // AllEIDs returns all EIDs used by this section (page template + content entries).
@@ -531,49 +469,49 @@ func NewStorylineBuilder(storyName, sectionName string, startEID int, styles *St
 	}
 }
 
-// StartBlock begins a new wrapper/container block with position-aware styling.
-// The position parameter specifies where this block sits within its parent container,
-// which affects style resolution (e.g., first elements lose margin-top, non-first lose margin-bottom).
+// StartBlock begins a new wrapper/container block.
 // All content added until EndBlock is called will be nested inside this wrapper.
-// The styleSpec is the raw style name (e.g., "poem", "cite") - resolution is deferred
-// until EndBlock to avoid registering styles for empty wrappers.
+// The styleSpec is the raw style name (e.g., "chapter-title", "body-title") - resolution
+// is deferred until Build() time when the actual position in the storyline is known.
+// Children get position-based style filtering via StyleContext:
+//   - First child: gets wrapper's margin-top, loses margin-bottom
+//   - Last child: loses margin-top, gets wrapper's margin-bottom
+//   - Single child: gets wrapper's margins
+//   - Middle children: lose both vertical margins
+//
 // Returns the EID of the wrapper for reference.
-func (sb *StorylineBuilder) StartBlock(styleSpec string, styles *StyleRegistry, pos ElementPosition) int {
-	return sb.startBlockInternal(styleSpec, styles, pos, false)
-}
-
-// StartBlockWithChildPositions begins a wrapper block where child elements also get position-aware styling.
-// This is used for containers where children should have margin filtering based on their position
-// within this block (not just the block itself).
-func (sb *StorylineBuilder) StartBlockWithChildPositions(styleSpec string, styles *StyleRegistry, pos ElementPosition) int {
-	return sb.startBlockInternal(styleSpec, styles, pos, true)
-}
-
-// startBlockInternal is the internal implementation for starting blocks.
-func (sb *StorylineBuilder) startBlockInternal(styleSpec string, styles *StyleRegistry, pos ElementPosition, childrenPosAware bool) int {
+func (sb *StorylineBuilder) StartBlock(styleSpec string, styles *StyleRegistry) int {
 	eid := sb.eidCounter
 	sb.eidCounter++
 
+	// Create StyleContext for child resolution - children will be counted in EndBlock
+	// The context will be finalized with proper item count when EndBlock is called
+	ctx := NewStyleContext(styles).Push("div", styleSpec)
+
 	sb.blockStack = append(sb.blockStack, &BlockBuilder{
-		styleSpec:        styleSpec,
-		styles:           styles,
-		eid:              eid,
-		children:         make([]ContentRef, 0),
-		position:         pos,
-		childrenPosAware: childrenPosAware,
+		styleSpec: styleSpec,
+		styles:    styles,
+		ctx:       ctx,
+		eid:       eid,
+		children:  make([]ContentRef, 0),
 	})
 
 	return eid
 }
 
+// StartBlockWithChildPositions is an alias for StartBlock.
+// Deprecated: Use StartBlock directly - all blocks now apply position-aware styling to children.
+func (sb *StorylineBuilder) StartBlockWithChildPositions(styleSpec string, styles *StyleRegistry) int {
+	return sb.StartBlock(styleSpec, styles)
+}
+
 // EndBlock closes the current wrapper block and adds it to the storyline.
 // The wrapper becomes a container entry with nested children.
 // Empty wrappers (with no children) are discarded to avoid position_map validation errors.
-// Style resolution is deferred until here to prevent registering styles for discarded wrappers.
 //
-// The wrapper's style is resolved with its position context (set in StartBlock), so different
-// positions produce different styles (e.g., first section keeps margin-bottom, others don't).
-// If childrenPosAware was set, child styles are also resolved with position filtering.
+// Style resolution is deferred until Build() time when the actual position in the
+// storyline is known. This enables KP3-compatible margin filtering based on position.
+// Child styles are resolved via StyleContext at Build() time.
 func (sb *StorylineBuilder) EndBlock() {
 	if len(sb.blockStack) == 0 {
 		return
@@ -587,67 +525,35 @@ func (sb *StorylineBuilder) EndBlock() {
 		return
 	}
 
-	// Resolve wrapper style with position context
-	// This produces different styles for first vs non-first elements (CSS margin collapsing)
-	resolvedStyle := ""
-	if block.styles != nil && block.styleSpec != "" {
-		resolvedStyle = block.styles.ResolveStyle(block.styleSpec, block.position)
-		block.styles.MarkUsage(resolvedStyle, styleUsageWrapper)
-	}
-
-	// Resolve child styles with position awareness if enabled
-	if block.childrenPosAware && block.styles != nil {
-		block.resolveChildStylesWithPosition()
-	}
-
 	// Convert children to content entries for the $146 list
+	// Child style resolution is deferred to Build() time
 	children := make([]any, 0, len(block.children))
 	for _, child := range block.children {
 		children = append(children, NewContentEntry(child))
 	}
 
-	if resolvedStyle != "" {
-		block.styles.tracer.TraceAssign("wrapper", fmt.Sprintf("%d", block.eid), resolvedStyle, sb.sectionName+"/"+sb.name)
+	// Finalize the StyleContext with proper item count and title-block margin mode
+	// Title blocks use margin-top based spacing (first loses margin-top, non-last lose margin-bottom)
+	childCount := len(block.children)
+	ctx := block.ctx.PushBlock("", "", childCount, true) // titleBlockMargins=true
+
+	// Create wrapper with StyleSpec for deferred resolution at Build() time
+	wrapperRef := ContentRef{
+		EID:       block.eid,
+		Type:      SymText, // Container wrappers use $269 (text) type in KFX
+		StyleSpec: block.styleSpec,
+		Children:  children,
 	}
 
-	wrapperRef := ContentRef{
-		EID:      block.eid,
-		Type:     SymText, // Container wrappers use $269 (text) type in KFX
-		Style:    resolvedStyle,
-		Children: children,
-	}
+	// Store children refs and context for deferred style resolution at Build() time.
+	// Child styles are resolved via StyleContext.Resolve() with proper position filtering.
+	wrapperRef.childRefs = block.children
+	wrapperRef.styleCtx = &ctx
+
 	if len(sb.blockStack) > 0 {
 		sb.blockStack[len(sb.blockStack)-1].children = append(sb.blockStack[len(sb.blockStack)-1].children, wrapperRef)
 	} else {
 		sb.contentEntries = append(sb.contentEntries, wrapperRef)
-	}
-}
-
-// resolveChildStylesWithPosition resolves StyleSpec fields to Style with position filtering.
-// This implements KP3's position-aware CSS processing where first/last elements in a block
-// have margins/padding/break properties filtered out.
-func (bb *BlockBuilder) resolveChildStylesWithPosition() {
-	count := len(bb.children)
-	for i := range bb.children {
-		child := &bb.children[i]
-
-		// Only resolve if StyleSpec is set and Style is not already resolved
-		if child.StyleSpec == "" || child.Style != "" {
-			continue
-		}
-
-		// Calculate position for this child
-		pos := PositionFromIndex(i, count)
-
-		// Resolve style with position filtering
-		child.Style = bb.styles.ResolveStyle(child.StyleSpec, pos)
-
-		// Mark usage based on content type
-		usage := styleUsageText
-		if child.Type == SymImage {
-			usage = styleUsageImage
-		}
-		bb.styles.MarkUsage(child.Style, usage)
 	}
 }
 
@@ -664,13 +570,19 @@ func (sb *StorylineBuilder) addEntry(ref ContentRef) int {
 }
 
 // AddContent adds a content reference to the storyline (or current block).
-func (sb *StorylineBuilder) AddContent(contentType KFXSymbol, contentName string, contentOffset int, style string) int {
+// The styleSpec is the original style specification (e.g., "p section") used for
+// position-based re-resolution at build time. The style is the pre-resolved style name.
+func (sb *StorylineBuilder) AddContent(contentType KFXSymbol, contentName string, contentOffset int, styleSpec, style string) int {
 	eid := sb.eidCounter
 	sb.eidCounter++
 
 	if style != "" && sb.styles != nil {
 		sb.styles.tracer.TraceAssign(traceSymbolName(contentType), fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name)
-		sb.styles.MarkUsage(style, styleUsageText)
+		// Only mark usage now if no styleSpec (immediate style, won't be re-resolved)
+		// Deferred styles (with styleSpec) are marked after position filtering in Build()
+		if styleSpec == "" {
+			sb.styles.MarkUsage(style, styleUsageText)
+		}
 	}
 
 	return sb.addEntry(ContentRef{
@@ -678,18 +590,24 @@ func (sb *StorylineBuilder) AddContent(contentType KFXSymbol, contentName string
 		Type:          contentType,
 		ContentName:   contentName,
 		ContentOffset: contentOffset,
+		StyleSpec:     styleSpec,
 		Style:         style,
 	})
 }
 
 // AddContentAndEvents adds content with style events (to storyline or current block).
-func (sb *StorylineBuilder) AddContentAndEvents(contentType KFXSymbol, contentName string, contentOffset int, style string, events []StyleEventRef) int {
+// The styleSpec is the original style specification used for position-based re-resolution.
+func (sb *StorylineBuilder) AddContentAndEvents(contentType KFXSymbol, contentName string, contentOffset int, styleSpec, style string, events []StyleEventRef) int {
 	eid := sb.eidCounter
 	sb.eidCounter++
 
 	if style != "" && sb.styles != nil {
 		sb.styles.tracer.TraceAssign(traceSymbolName(contentType), fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name)
-		sb.styles.MarkUsage(style, styleUsageText)
+		// Only mark usage now if no styleSpec (immediate style, won't be re-resolved)
+		// Deferred styles (with styleSpec) are marked after position filtering in Build()
+		if styleSpec == "" {
+			sb.styles.MarkUsage(style, styleUsageText)
+		}
 	}
 
 	return sb.addEntry(ContentRef{
@@ -697,19 +615,53 @@ func (sb *StorylineBuilder) AddContentAndEvents(contentType KFXSymbol, contentNa
 		Type:          contentType,
 		ContentName:   contentName,
 		ContentOffset: contentOffset,
+		StyleSpec:     styleSpec,
 		Style:         style,
 		StyleEvents:   events,
 	})
 }
 
+// AddFootnoteContentAndEvents adds footnote content with style events and position/classification markers.
+// This is used for the first paragraph of footnote content (with "more" indicator if present).
+// It adds position:footer ($183=$455) and yj.classification:footnote ($615=$281) markers
+// that identify the content as footnote body text for Kindle's footnote rendering.
+func (sb *StorylineBuilder) AddFootnoteContentAndEvents(contentType KFXSymbol, contentName string, contentOffset int, styleSpec, style string, events []StyleEventRef) int {
+	eid := sb.eidCounter
+	sb.eidCounter++
+
+	if style != "" && sb.styles != nil {
+		sb.styles.tracer.TraceAssign(traceSymbolName(contentType)+" (footnote)", fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name)
+		// Only mark usage now if no styleSpec (immediate style, won't be re-resolved)
+		// Deferred styles (with styleSpec) are marked after position filtering in Build()
+		if styleSpec == "" {
+			sb.styles.MarkUsage(style, styleUsageText)
+		}
+	}
+
+	return sb.addEntry(ContentRef{
+		EID:             eid,
+		Type:            contentType,
+		ContentName:     contentName,
+		ContentOffset:   contentOffset,
+		StyleSpec:       styleSpec,
+		Style:           style,
+		StyleEvents:     events,
+		FootnoteContent: true,
+	})
+}
+
 // AddContentWithHeading adds content with style events and heading level (to storyline or current block).
-func (sb *StorylineBuilder) AddContentWithHeading(contentType KFXSymbol, contentName string, contentOffset int, style string, events []StyleEventRef, headingLevel int) int {
+func (sb *StorylineBuilder) AddContentWithHeading(contentType KFXSymbol, contentName string, contentOffset int, styleSpec, style string, events []StyleEventRef, headingLevel int) int {
 	eid := sb.eidCounter
 	sb.eidCounter++
 
 	if style != "" && sb.styles != nil {
 		sb.styles.tracer.TraceAssign(traceSymbolName(contentType), fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name)
-		sb.styles.MarkUsage(style, styleUsageText)
+		// Only mark usage now if no styleSpec (immediate style, won't be re-resolved)
+		// Deferred styles (with styleSpec) are marked after position filtering in Build()
+		if styleSpec == "" {
+			sb.styles.MarkUsage(style, styleUsageText)
+		}
 	}
 
 	return sb.addEntry(ContentRef{
@@ -717,6 +669,7 @@ func (sb *StorylineBuilder) AddContentWithHeading(contentType KFXSymbol, content
 		Type:          contentType,
 		ContentName:   contentName,
 		ContentOffset: contentOffset,
+		StyleSpec:     styleSpec,
 		Style:         style,
 		StyleEvents:   events,
 		HeadingLevel:  headingLevel,
@@ -772,11 +725,14 @@ func (sb *StorylineBuilder) AddInlineImage(resourceName, style, altText string) 
 // The items slice contains InlineContentItem elements which are either text strings or inline images.
 // Style events apply to the text portions only (offsets are relative to concatenated text).
 // If headingLevel > 0, the entry includes yj.semantics.heading_level for TOC navigation.
-func (sb *StorylineBuilder) AddMixedContent(style string, items []InlineContentItem, events []StyleEventRef, headingLevel int) int {
+// The styleSpec parameter enables deferred style resolution with position filtering in Build().
+// If styleSpec is non-empty, style resolution is deferred; otherwise style is used directly.
+func (sb *StorylineBuilder) AddMixedContent(styleSpec, style string, items []InlineContentItem, events []StyleEventRef, headingLevel int) int {
 	eid := sb.eidCounter
 	sb.eidCounter++
 
-	if style != "" && sb.styles != nil {
+	// For immediate styles (no styleSpec), mark usage now
+	if style != "" && styleSpec == "" && sb.styles != nil {
 		sb.styles.tracer.TraceAssign(traceSymbolName(SymText)+" (mixed)", fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name)
 		sb.styles.MarkUsage(style, styleUsageText)
 	}
@@ -850,10 +806,11 @@ func (sb *StorylineBuilder) AddMixedContent(style string, items []InlineContentI
 		entry.SetInt(SymYjHeadingLevel, int64(headingLevel))
 	}
 
-	// Add as raw entry
+	// Add as raw entry with optional styleSpec for deferred resolution
 	return sb.addEntry(ContentRef{
-		EID:      eid,
-		RawEntry: entry,
+		EID:       eid,
+		StyleSpec: styleSpec,
+		RawEntry:  entry,
 	})
 }
 
@@ -932,7 +889,8 @@ func (sb *StorylineBuilder) AddImageDeferred(resourceName, styleSpec, altText st
 // Cell containers have border/padding/vertical-align styles.
 // Text inside cells has text-align style and style_events for inline formatting.
 // Image-only cells contain image elements directly.
-func (sb *StorylineBuilder) AddTable(table *fb2.Table, styles *StyleRegistry, ca *ContentAccumulator, footnotesIndex fb2.FootnoteRefs, imageResources imageResourceInfoByID) int {
+// The idToEID map is used to register backlink RefIDs for footnote references in cells.
+func (sb *StorylineBuilder) AddTable(c *content.Content, table *fb2.Table, styles *StyleRegistry, ca *ContentAccumulator, imageResources imageResourceInfoByID, idToEID map[string]int) int {
 	tableEID := sb.eidCounter
 	sb.eidCounter++
 
@@ -954,9 +912,9 @@ func (sb *StorylineBuilder) AddTable(table *fb2.Table, styles *StyleRegistry, ca
 			hasImages := len(cellImages) > 0
 
 			// Determine container style (border/padding/vertical-align)
-			containerStyle := styles.ResolveStyle("td-container")
+			containerStyle := NewStyleContext(styles).Resolve("", "td-container")
 			if cell.Header {
-				containerStyle = styles.ResolveStyle("th-container")
+				containerStyle = NewStyleContext(styles).Resolve("", "th-container")
 			}
 			styles.MarkUsage(containerStyle, styleUsageWrapper)
 
@@ -986,7 +944,7 @@ func (sb *StorylineBuilder) AddTable(table *fb2.Table, styles *StyleRegistry, ca
 					textStyle = prefix + "-text-justify"
 				}
 			}
-			resolvedTextStyle := styles.ResolveStyle(textStyle)
+			resolvedTextStyle := NewStyleContext(styles).Resolve("", textStyle)
 
 			var contentList []any
 
@@ -995,10 +953,10 @@ func (sb *StorylineBuilder) AddTable(table *fb2.Table, styles *StyleRegistry, ca
 				contentList = sb.buildImageOnlyCellContent(cell, cellImages, imageResources, styles)
 			} else if hasImages && hasText {
 				// Mixed content cell: use content_list format with interleaved text and images
-				contentList = sb.buildMixedCellContent(cell, imageResources, styles, footnotesIndex, ancestorTag, resolvedTextStyle)
+				contentList = sb.buildMixedCellContent(c, cell, imageResources, styles, ancestorTag, resolvedTextStyle, idToEID)
 			} else {
 				// Text-only cell: create text entry with content reference
-				contentList = sb.buildTextOnlyCellContent(cell, ca, styles, footnotesIndex, ancestorTag, resolvedTextStyle)
+				contentList = sb.buildTextOnlyCellContent(c, cell, ca, styles, ancestorTag, resolvedTextStyle, idToEID)
 			}
 
 			// Create cell container with nested content
@@ -1040,7 +998,7 @@ func (sb *StorylineBuilder) AddTable(table *fb2.Table, styles *StyleRegistry, ca
 	// Create table entry with proper structure
 	// Amazon reference: table has yj.table_features=[pan_zoom, scale_fit] which enables
 	// table scaling to fit within page bounds instead of spanning multiple pages.
-	tableStyle := styles.ResolveStyle("table")
+	tableStyle := NewStyleContext(styles).Resolve("", "table")
 	styles.tracer.TraceAssign(traceSymbolName(SymTable), fmt.Sprintf("%d", tableEID), tableStyle, sb.sectionName+"/"+sb.name)
 	styles.MarkUsage(tableStyle, styleUsageWrapper)
 
@@ -1115,7 +1073,7 @@ func (sb *StorylineBuilder) buildImageOnlyCellContent(cell fb2.TableCell, cellIm
 				imgStyleBase = prefix + "-left"
 			}
 		}
-		imgStyle := styles.ResolveStyle(imgStyleBase)
+		imgStyle := NewStyleContext(styles).ResolveImage(imgStyleBase)
 		styles.MarkUsage(imgStyle, styleUsageImage)
 
 		// Get alt text from the original segment
@@ -1144,10 +1102,14 @@ func (sb *StorylineBuilder) buildImageOnlyCellContent(cell fb2.TableCell, cellIm
 }
 
 // buildTextOnlyCellContent creates a text entry for a cell containing only text.
-func (sb *StorylineBuilder) buildTextOnlyCellContent(cell fb2.TableCell, ca *ContentAccumulator, styles *StyleRegistry, footnotesIndex fb2.FootnoteRefs, ancestorTag, resolvedTextStyle string) []any {
+func (sb *StorylineBuilder) buildTextOnlyCellContent(c *content.Content, cell fb2.TableCell, ca *ContentAccumulator, styles *StyleRegistry, ancestorTag, resolvedTextStyle string, idToEID map[string]int) []any {
+	// Create inline style context for table cell content.
+	// This ensures inline styles inherit properties from the cell context.
+	inlineCtx := NewStyleContext(styles).Push(ancestorTag, "")
+
 	// Process cell content using shared inline segment processing
 	nw := newNormalizingWriter()
-	events := processInlineSegments(cell.Content, nw, styles, footnotesIndex, ancestorTag)
+	result := processInlineSegments(c, cell.Content, nw, styles, inlineCtx)
 
 	text := nw.String()
 	contentName, offset := ca.Add(text)
@@ -1155,7 +1117,7 @@ func (sb *StorylineBuilder) buildTextOnlyCellContent(cell fb2.TableCell, ca *Con
 	styles.MarkUsage(resolvedTextStyle, styleUsageText)
 
 	// Segment and deduplicate style events
-	segmentedEvents := SegmentNestedStyleEvents(events)
+	segmentedEvents := SegmentNestedStyleEvents(result.Events)
 	for _, ev := range segmentedEvents {
 		styles.MarkUsage(ev.Style, styleUsageText)
 	}
@@ -1163,6 +1125,14 @@ func (sb *StorylineBuilder) buildTextOnlyCellContent(cell fb2.TableCell, ca *Con
 	// Create text entry inside cell
 	textEID := sb.eidCounter
 	sb.eidCounter++
+
+	// Register backlink RefIDs with this text EID so backlink paragraphs can link back
+	for _, refID := range result.BacklinkRefIDs {
+		if _, exists := idToEID[refID]; !exists {
+			idToEID[refID] = textEID
+		}
+	}
+
 	textEntry := NewStruct().
 		SetInt(SymUniqueID, int64(textEID)).
 		SetSymbol(SymType, SymText).
@@ -1199,9 +1169,13 @@ func (sb *StorylineBuilder) buildTextOnlyCellContent(cell fb2.TableCell, ca *Con
 
 // buildMixedCellContent creates a text entry with content_list for mixed content cells.
 // This uses the same structure as AddMixedContent: interleaved text strings and inline images.
-func (sb *StorylineBuilder) buildMixedCellContent(cell fb2.TableCell, imageResources imageResourceInfoByID, styles *StyleRegistry, footnotesIndex fb2.FootnoteRefs, ancestorTag, resolvedTextStyle string) []any {
+func (sb *StorylineBuilder) buildMixedCellContent(c *content.Content, cell fb2.TableCell, imageResources imageResourceInfoByID, styles *StyleRegistry, ancestorTag, resolvedTextStyle string, idToEID map[string]int) []any {
+	// Create inline style context for table cell content.
+	// This ensures inline styles inherit properties from the cell context.
+	inlineCtx := NewStyleContext(styles).Push(ancestorTag, "")
+
 	// Process cell content using shared mixed content processing
-	result := processMixedInlineSegments(cell.Content, styles, footnotesIndex, ancestorTag, imageResources)
+	result := processMixedInlineSegments(cell.Content, styles, c, inlineCtx, imageResources)
 
 	styles.MarkUsage(resolvedTextStyle, styleUsageText)
 
@@ -1214,6 +1188,13 @@ func (sb *StorylineBuilder) buildMixedCellContent(cell fb2.TableCell, imageResou
 	// Create text entry with content_list (similar to AddMixedContent)
 	textEID := sb.eidCounter
 	sb.eidCounter++
+
+	// Register backlink RefIDs with this text EID so backlink paragraphs can link back
+	for _, refID := range result.BacklinkRefIDs {
+		if _, exists := idToEID[refID]; !exists {
+			idToEID[refID] = textEID
+		}
+	}
 
 	// Build content_list array with text strings and image entries
 	contentListItems := make([]any, 0, len(result.Items))
@@ -1315,9 +1296,178 @@ func (sb *StorylineBuilder) PageTemplateEID() int {
 	return sb.pageTemplateEID
 }
 
+// applyStorylinePositionFiltering resolves deferred styles for top-level content entries.
+//
+// Based on KP3 Java code analysis (com/amazon/yj/i/b/d.java and b.java), position-based
+// margin filtering is ONLY applied when content is FRAGMENTED (split due to 64K limits
+// or page breaks). Regular consecutive elements that are not fragmented should KEEP
+// their margins.
+//
+// Since fb2cng doesn't fragment content, top-level entries are resolved WITHOUT
+// position filtering (using PositionFirstAndLast to keep all margins).
+//
+// Position filtering IS applied to children within wrapper blocks, as those represent
+// content within a container where margin collapsing makes sense.
+//
+// For wrapper entries (with Children), the wrapper style is resolved and child styles
+// are also resolved with position filtering applied to children.
+// For RawEntry entries, the style field in the pre-built structure is updated.
+func (sb *StorylineBuilder) applyStorylinePositionFiltering() {
+	if len(sb.contentEntries) == 0 || sb.styles == nil {
+		return
+	}
+
+	// Resolve all entries with StyleSpec WITHOUT position filtering
+	// Top-level entries keep all their margins since they are not fragmented
+	for i := range sb.contentEntries {
+		entry := &sb.contentEntries[i]
+
+		if entry.StyleSpec == "" {
+			continue
+		}
+
+		// Resolve style WITHOUT position filtering - keep all margins
+		// Use fresh StyleContext (no container stack) so margins are preserved
+		tag, classes := parseStyleSpec(entry.StyleSpec)
+		resolvedStyle := NewStyleContext(sb.styles).Resolve(tag, classes)
+
+		if entry.RawEntry != nil {
+			// For RawEntry, update the style field in the pre-built structure
+			entry.RawEntry = entry.RawEntry.Set(SymStyle, SymbolByName(resolvedStyle))
+			entry.Style = resolvedStyle
+		} else {
+			entry.Style = resolvedStyle
+		}
+
+		// For wrapper entries with childRefs, resolve child styles
+		if len(entry.childRefs) > 0 {
+			sb.resolveChildStyles(entry)
+		}
+
+		// Trace assignment for wrappers
+		if len(entry.Children) > 0 {
+			sb.styles.tracer.TraceAssign("wrapper", fmt.Sprintf("%d", entry.EID), resolvedStyle, sb.sectionName+"/"+sb.name)
+			sb.styles.MarkUsage(resolvedStyle, styleUsageWrapper)
+		}
+	}
+}
+
+// resolveChildStyles resolves StyleSpec fields in child refs to Style.
+// Uses StyleContext.Resolve() for text elements and ResolveStyle() for images.
+//
+// The wrapper's styleCtx (set in EndBlock) provides for text elements:
+// - Proper CSS inheritance from wrapper to children
+// - Container margin distribution (first/last/middle)
+// - Title-block margin mode (spacing via margin-top)
+//
+// Images use ResolveStyle() directly because they need different handling:
+// - No line-height inheritance (images use height: auto)
+// - Direct style lookup without CSS text inheritance
+func (sb *StorylineBuilder) resolveChildStyles(wrapper *ContentRef) {
+	count := len(wrapper.childRefs)
+	if count == 0 {
+		return
+	}
+
+	// Get the StyleContext set by EndBlock
+	ctx := wrapper.styleCtx
+	if ctx == nil {
+		// This should never happen - EndBlock always sets styleCtx
+		panic("resolveChildStyles: wrapper has no StyleContext")
+	}
+
+	// Rebuild Children with resolved styles
+	wrapper.Children = make([]any, 0, count)
+
+	for i := range wrapper.childRefs {
+		child := &wrapper.childRefs[i]
+
+		// Only resolve if StyleSpec is set and Style is not already resolved
+		if child.StyleSpec != "" && child.Style == "" {
+			if child.Type == SymImage {
+				// Images: use StyleContext.ResolveImage() for position filtering
+				// without text-specific inheritance (no line-height from kfx-unknown)
+				_, classes := parseStyleSpec(child.StyleSpec)
+				child.Style = ctx.ResolveImage(classes)
+				sb.styles.MarkUsage(child.Style, styleUsageImage)
+			} else {
+				// Text elements: use StyleContext.Resolve() for proper inheritance
+				tag, classes := parseStyleSpec(child.StyleSpec)
+				child.Style = ctx.Resolve(tag, classes)
+				sb.styles.MarkUsage(child.Style, styleUsageText)
+			}
+
+			// For RawEntry children (e.g., mixed content with images), update the style in the entry
+			if child.RawEntry != nil {
+				child.RawEntry = child.RawEntry.Set(SymStyle, SymbolByName(child.Style))
+			}
+		}
+
+		// Advance context position for next child (affects text elements)
+		*ctx = ctx.Advance()
+
+		// Convert to content entry
+		wrapper.Children = append(wrapper.Children, NewContentEntry(*child))
+	}
+}
+
+// parseStyleSpec parses a style specification into tag and classes.
+// StyleSpec format: "tag class1 class2" where tag is an HTML element (h1-h6, p, etc.)
+// or just "class1 class2" for non-element styles.
+// Returns (tag, "class1 class2") or ("", "class1 class2") if no tag.
+func parseStyleSpec(spec string) (tag, classes string) {
+	parts := strings.Fields(spec)
+	if len(parts) == 0 {
+		return "", ""
+	}
+
+	// Check if first part is an HTML element tag
+	first := parts[0]
+	if isHTMLTag(first) {
+		tag = first
+		if len(parts) > 1 {
+			classes = strings.Join(parts[1:], " ")
+		}
+		return tag, classes
+	}
+
+	// No tag, all parts are classes
+	return "", spec
+}
+
+// isHTMLTag returns true if the string is a known HTML element tag.
+func isHTMLTag(s string) bool {
+	switch s {
+	case "h1", "h2", "h3", "h4", "h5", "h6", "p", "div", "span",
+		"pre", "code", "blockquote", "ol", "ul", "li",
+		"table", "tr", "td", "th", "img",
+		"strong", "b", "em", "i", "u", "s", "sub", "sup":
+		return true
+	}
+	return false
+}
+
 // Build creates the storyline and section fragments.
 // Returns storyline fragment, section fragment.
+//
+// Before building, resolves deferred styles for all content entries.
+// Top-level entries are resolved WITHOUT position filtering (they keep all margins)
+// because they are not fragmented. Children within wrapper blocks get position-based
+// margin filtering.
 func (sb *StorylineBuilder) Build() (*Fragment, *Fragment) {
+	// Apply position-based style filtering to top-level entries
+	sb.applyStorylinePositionFiltering()
+
+	// Mark usage for all deferred styles (those with StyleSpec) after position filtering
+	// This ensures we only mark the final resolved styles, not pre-filtered versions
+	if sb.styles != nil {
+		for _, ref := range sb.contentEntries {
+			if ref.StyleSpec != "" && ref.Style != "" {
+				sb.styles.MarkUsage(ref.Style, styleUsageText)
+			}
+		}
+	}
+
 	// Build content entries for storyline
 	entries := make([]any, 0, len(sb.contentEntries))
 	for _, ref := range sb.contentEntries {

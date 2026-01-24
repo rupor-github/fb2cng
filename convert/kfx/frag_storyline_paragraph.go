@@ -1,24 +1,47 @@
 package kfx
 
 import (
+	"fmt"
 	"strings"
 
+	"fbc/content"
 	"fbc/fb2"
 )
 
 // addParagraphWithImages processes a paragraph with potential inline images.
-func addParagraphWithImages(para *fb2.Paragraph, styleName string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
+// ctx provides the style context with optional position for margin filtering.
+// extraClasses are additional CSS classes to append to the style (e.g., paragraph's custom style).
+func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleContext, extraClasses string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
 	// Check for single spanning style that can be merged into block style
 	// This matches KP3 behavior where <p><em>text</em></p> gets font-style:italic in block style
 	spanningStyle := detectSingleSpanningStyle(para.Text)
+	spanningClasses := extraClasses
 	if spanningStyle != "" {
 		// Merge the spanning style into the block style name
-		styleName = styleName + " " + spanningStyle
+		if spanningClasses != "" {
+			spanningClasses = spanningClasses + " " + spanningStyle
+		} else {
+			spanningClasses = spanningStyle
+		}
 	}
+
+	// Determine the element tag - use heading tag (h1-h6) for heading contexts, otherwise p
+	tag := "p"
+	if headingLevel > 0 {
+		tag = fmt.Sprintf("h%d", headingLevel)
+	}
+
+	// Build the full styleSpec for this paragraph
+	styleSpec := ctx.StyleSpec(tag, spanningClasses)
 
 	// If headingLevel not passed explicitly, try to detect from style name
 	if headingLevel == 0 {
-		headingLevel = styleToHeadingLevel(styleName)
+		headingLevel = styleToHeadingLevel(styleSpec)
+		// Re-check: if we detected a heading level, rebuild styleSpec with proper tag
+		if headingLevel > 0 {
+			tag = fmt.Sprintf("h%d", headingLevel)
+			styleSpec = ctx.StyleSpec(tag, spanningClasses)
+		}
 	}
 
 	// Determine if images in this paragraph should be inline or block.
@@ -32,28 +55,56 @@ func addParagraphWithImages(para *fb2.Paragraph, styleName string, headingLevel 
 	// 2. Image-only paragraphs in heading context - KP3 wraps these in text entry with content_list
 	//    so the image becomes "inline within the title" with render: inline
 	if hasInlineImages && (hasTextContent || headingLevel > 0) {
-		addParagraphWithMixedContent(para, styleName, spanningStyle, headingLevel, sb, styles, imageResources, idToEID, footnotesIndex)
+		addParagraphWithMixedContent(c, para, ctx, spanningClasses, headingLevel, sb, styles, imageResources, idToEID)
 		return
+	}
+
+	// Check for image-only block early - these use ResolveBlockImageStyle() which handles
+	// its own style resolution, so we don't need to call ctx.Resolve() for them.
+	// This avoids creating unused styles that would become unreferenced fragments.
+	imageOnlyBlock := !hasTextContent && hasInlineImages
+
+	// For image-only blocks that are NOT standalone images (i.e., images inside p, footnote, etc.),
+	// we need to resolve text-indent and margin-left from the CSS cascade and pass them to
+	// ResolveBlockImageStyle. This allows the image to be properly aligned:
+	// - text-indent becomes margin-left for alignment with text (KP3 behavior for footnote images)
+	// - margin-left from container (e.g., cite) is inherited for proper indentation
+	var blockTextIndent any
+	var blockMarginLeft any
+	if imageOnlyBlock && !strings.Contains(styleSpec, "image") {
+		// Resolve text-indent and margin-left from the full CSS cascade (context + tag + classes)
+		blockTextIndent = ctx.ResolveProperty(tag, spanningClasses, SymTextIndent)
+		blockMarginLeft = ctx.ResolveProperty(tag, spanningClasses, SymMarginLeft)
+	}
+
+	// Determine if we should resolve style immediately (with position) or defer
+	// If context has position, resolve now with position filtering.
+	// Otherwise, defer resolution to Build() time.
+	// Skip for image-only blocks - they use ResolveBlockImageStyle() which creates its own style.
+	var resolvedStyle string
+	var deferredStyleSpec string
+	if ctx.HasPosition() && !imageOnlyBlock {
+		// Immediate resolution with position filtering
+		resolvedStyle = ctx.Resolve(tag, spanningClasses)
+	} else if !imageOnlyBlock {
+		// Deferred resolution - store styleSpec for Build() time
+		deferredStyleSpec = styleSpec
 	}
 
 	// Otherwise, use the original approach (text-only or block image paragraphs)
 	var (
-		nw     = newNormalizingWriter() // Normalizes whitespace and tracks rune count
-		events []StyleEventRef
+		nw             = newNormalizingWriter() // Normalizes whitespace and tracks rune count
+		events         []StyleEventRef
+		backlinkRefIDs []string // RefIDs to register after EID is assigned
 	)
+
+	// Create inline style context by pushing the paragraph tag and classes.
+	// This ensures inline styles (like sub/sup) inherit font-size from the container.
+	inlineCtx := ctx.Push(tag, spanningClasses)
 
 	flush := func() {
 		if nw.Len() == 0 {
 			return
-		}
-		resolved := styleName
-		// Use mapped descendant style directly for section subtitles so the mapped name is emitted.
-		if styles != nil {
-			if strings.HasPrefix(styleName, "section--section-subtitle") && !strings.Contains(styleName, " ") {
-				resolved = styles.EnsureStyle(styleName)
-			} else {
-				resolved = styles.ResolveStyle(styleName)
-			}
 		}
 		contentName, offset := ca.Add(nw.String())
 
@@ -69,17 +120,24 @@ func addParagraphWithImages(para *fb2.Paragraph, styleName string, headingLevel 
 
 		var eid int
 		if headingLevel > 0 {
-			eid = sb.AddContentWithHeading(SymText, contentName, offset, resolved, segmentedEvents, headingLevel)
+			eid = sb.AddContentWithHeading(SymText, contentName, offset, deferredStyleSpec, resolvedStyle, segmentedEvents, headingLevel)
 		} else {
-			eid = sb.AddContentAndEvents(SymText, contentName, offset, resolved, segmentedEvents)
+			eid = sb.AddContentAndEvents(SymText, contentName, offset, deferredStyleSpec, resolvedStyle, segmentedEvents)
 		}
 		if para.ID != "" {
 			if _, exists := idToEID[para.ID]; !exists {
 				idToEID[para.ID] = eid
 			}
 		}
+		// Register any backlink ref IDs collected during processing
+		for _, refID := range backlinkRefIDs {
+			if _, exists := idToEID[refID]; !exists {
+				idToEID[refID] = eid
+			}
+		}
 		nw.Reset()
 		events = nil
+		backlinkRefIDs = nil
 	}
 
 	// inlineStyleInfo tracks style and optional link info during inline walks.
@@ -97,9 +155,8 @@ func addParagraphWithImages(para *fb2.Paragraph, styleName string, headingLevel 
 	// If spanningStyle is non-empty, it means the outermost style(s) were already merged into the
 	// block style, so we track depth to skip creating style events at the spanning level.
 	//
-	// imageOnlyBlock indicates this is an image-only paragraph where the image should inherit
-	// block-level styling (margins, break properties) from the paragraph style.
-	imageOnlyBlock := !hasTextContent && hasInlineImages
+	// imageOnlyBlock (defined above) indicates this is an image-only paragraph where the image
+	// should inherit block-level styling (margins, break properties) from the paragraph style.
 	spanningStyleParts := strings.Fields(spanningStyle)
 	var walk func(seg *fb2.InlineSegment, styleContext []inlineStyleInfo, spanningDepth int)
 	walk = func(seg *fb2.InlineSegment, styleContext []inlineStyleInfo, spanningDepth int) {
@@ -117,11 +174,14 @@ func addParagraphWithImages(para *fb2.Paragraph, styleName string, headingLevel 
 			// For image-only paragraphs (like subtitles with only an image),
 			// inherit block-level styling from the paragraph style.
 			// This matches KP3's behavior where such images get margins, break properties, etc.
+			// For non-standalone images (inside p, footnote, cite, etc.):
+			// - blockTextIndent provides text-indent to use as margin-left for left-alignment
+			// - blockMarginLeft provides inherited container margin (e.g., from cite)
 			var resolved string
 			if imageOnlyBlock {
-				resolved = styles.ResolveBlockImageStyle(imgInfo.Width, screenWidth, styleName)
+				resolved = styles.ResolveBlockImageStyle(imgInfo.Width, c.ScreenWidth, styleSpec, blockTextIndent, blockMarginLeft)
 			} else {
-				resolved = styles.ResolveImageStyle(imgInfo.Width, screenWidth)
+				resolved = styles.ResolveImageStyle(imgInfo.Width, c.ScreenWidth)
 			}
 			sb.AddImage(imgInfo.ResourceName, resolved, seg.Image.Alt)
 			return
@@ -156,9 +216,15 @@ func addParagraphWithImages(para *fb2.Paragraph, styleName string, headingLevel 
 			isLink = true
 			if after, found := strings.CutPrefix(seg.Href, "#"); found {
 				linkTo = after
-				if _, isNote := footnotesIndex[linkTo]; isNote {
+				if _, isNote := c.FootnotesIndex[linkTo]; isNote {
 					segStyle = "link-footnote"
 					isFootnoteLink = true
+					// Register this footnote reference for backlink generation
+					// The ref.RefID becomes the anchor that backlinks point to
+					ref := c.AddFootnoteBackLinkRef(linkTo)
+					// Collect RefID to register with EID after flush
+					backlinkRefIDs = append(backlinkRefIDs, ref.RefID)
+					// linkTo stays as the footnote ID (after) - it's what we link TO
 				} else {
 					segStyle = "link-internal"
 				}
@@ -210,19 +276,16 @@ func addParagraphWithImages(para *fb2.Paragraph, styleName string, headingLevel 
 			// Merge context styles with current style for nested inline elements.
 			// E.g., link inside code gets "code link-footnote" merged.
 			var styleNames []string
-			for _, ctx := range styleContext {
-				styleNames = append(styleNames, ctx.Style)
+			for _, sctx := range styleContext {
+				styleNames = append(styleNames, sctx.Style)
 			}
 			styleNames = append(styleNames, segStyle)
 
-			var mergedStyle string
-			if len(styleNames) > 1 {
-				// Build space-separated style spec: "context1 context2 ... currentStyle"
-				mergedSpec := strings.Join(styleNames, " ")
-				mergedStyle = resolveInlineStyle(styles, "p", mergedSpec)
-			} else {
-				mergedStyle = resolveInlineStyle(styles, "p", segStyle)
-			}
+			// Resolve inline style using the paragraph context (inlineCtx).
+			// This ensures inline styles inherit font-size from the container.
+			mergedSpec := strings.Join(styleNames, " ")
+			mergedStyle := inlineCtx.ResolveNoMark("", mergedSpec)
+
 			// Note: MarkUsage is called later after SegmentNestedStyleEvents(),
 			// to avoid marking styles that get deduplicated during segmentation.
 			event := StyleEventRef{
@@ -262,12 +325,44 @@ func addParagraphWithImages(para *fb2.Paragraph, styleName string, headingLevel 
 // It creates a single content entry with content_list that interleaves text and images,
 // matching KP3's structure where inline images flow with text.
 // For heading contexts, this wraps images in a text-type entry so they render as "inline within title".
-func addParagraphWithMixedContent(para *fb2.Paragraph, styleName, spanningStyle string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, idToEID eidByFB2ID, footnotesIndex fb2.FootnoteRefs) {
+// ctx provides the style context with optional position for margin filtering.
+// spanningClasses are CSS classes from spanning styles (already detected by caller).
+func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx StyleContext, spanningClasses string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, idToEID eidByFB2ID) {
+	// Determine the element tag - use heading tag (h1-h6) for heading contexts, otherwise p
+	tag := "p"
+	if headingLevel > 0 {
+		tag = fmt.Sprintf("h%d", headingLevel)
+	}
+
+	// Build the full styleSpec for this paragraph
+	styleSpec := ctx.StyleSpec(tag, spanningClasses)
+
+	// Determine if we should resolve style immediately (with position) or defer
+	var resolvedStyle string
+	var deferredStyleSpec string
+	if ctx.HasPosition() {
+		// Immediate resolution with position filtering
+		resolvedStyle = ctx.Resolve(tag, spanningClasses)
+	} else {
+		// Deferred resolution - store styleSpec for Build() time
+		deferredStyleSpec = styleSpec
+	}
+
+	// Parse spanningClasses for spanning style depth tracking
+	spanningStyleParts := strings.Fields(spanningClasses)
 	var (
-		items  []InlineContentItem // Collected content items (text and images)
-		nw     = newNormalizingWriter()
-		events []StyleEventRef
+		items          []InlineContentItem // Collected content items (text and images)
+		nw             = newNormalizingWriter()
+		events         []StyleEventRef
+		backlinkRefIDs []string // RefIDs to register after EID is assigned
 	)
+
+	// Create inline style context by pushing the paragraph tag and classes.
+	// This ensures inline styles (like sub/sup) inherit font-size from the container.
+	inlineCtx := ctx.Push(tag, spanningClasses)
+
+	// Track cumulative rune count across flushes for style_event offsets
+	var cumulativeRuneCount int
 
 	// Flush current text to items slice, preserving trailing spaces for inline images
 	flushText := func() {
@@ -285,6 +380,8 @@ func addParagraphWithMixedContent(para *fb2.Paragraph, styleName, spanningStyle 
 				Text: text,
 			})
 		}
+		// Accumulate rune count before resetting
+		cumulativeRuneCount += nw.RuneCount()
 		nw.Reset()
 	}
 
@@ -295,11 +392,18 @@ func addParagraphWithMixedContent(para *fb2.Paragraph, styleName, spanningStyle 
 		IsFootnoteLink bool
 	}
 
-	spanningStyleParts := strings.Fields(spanningStyle)
 	var walk func(seg *fb2.InlineSegment, styleContext []inlineStyleInfo, spanningDepth int)
 	walk = func(seg *fb2.InlineSegment, styleContext []inlineStyleInfo, spanningDepth int) {
 		// Handle inline images - flush current text and add image item
 		if seg.Kind == fb2.InlineImageSegment {
+			// Check if there's a pending space that will be added during flush
+			hasPendingSpace := nw.HasPendingSpace()
+			// Capture the offset before flushing (includes all text so far)
+			imgOffset := cumulativeRuneCount + nw.RuneCount()
+			// Account for the trailing space that flushText() will add
+			if hasPendingSpace {
+				imgOffset++
+			}
 			flushText()
 			if seg.Image == nil {
 				return
@@ -309,6 +413,28 @@ func addParagraphWithMixedContent(para *fb2.Paragraph, styleName, spanningStyle 
 			if !ok {
 				return
 			}
+
+			// Check if image is inside a link context - if so, create a style_event
+			// to make the image clickable. KP3 uses an empty style with link_to.
+			// The offset is at the current text position, and length covers the
+			// "virtual" space the image occupies in the text stream.
+			for i := len(styleContext) - 1; i >= 0; i-- {
+				if styleContext[i].LinkTo != "" {
+					// Create style_event for the linked image
+					// Kindle requires the $157 (style) field to be present for links to work,
+					// even if the style is empty.
+					emptyStyle := styles.MarkUsage("kfx-link-empty", styleUsageText)
+					events = append(events, StyleEventRef{
+						Offset:         imgOffset,
+						Length:         1,
+						Style:          emptyStyle,
+						LinkTo:         styleContext[i].LinkTo,
+						IsFootnoteLink: styleContext[i].IsFootnoteLink,
+					})
+					break
+				}
+			}
+
 			// Create inline image style with em-based dimensions
 			imgStyle := styles.ResolveInlineImageStyle(imgInfo.Width, imgInfo.Height)
 			items = append(items, InlineContentItem{
@@ -317,9 +443,10 @@ func addParagraphWithMixedContent(para *fb2.Paragraph, styleName, spanningStyle 
 				Style:        imgStyle,
 				AltText:      seg.Image.Alt,
 			})
-			// Mark that we're continuing after an image, so leading spaces in
-			// subsequent text are preserved as word separators
-			nw.SetPendingSpace()
+			// Mark that we're continuing after an inline image.
+			// This allows leading whitespace in subsequent text to be preserved
+			// (if it exists in the source), but does NOT unconditionally add space.
+			nw.SetContinueAfterInline()
 			return
 		}
 
@@ -348,9 +475,13 @@ func addParagraphWithMixedContent(para *fb2.Paragraph, styleName, spanningStyle 
 			isLink = true
 			if after, found := strings.CutPrefix(seg.Href, "#"); found {
 				linkTo = after
-				if _, isNote := footnotesIndex[linkTo]; isNote {
+				if _, isNote := c.FootnotesIndex[linkTo]; isNote {
 					segStyle = "link-footnote"
 					isFootnoteLink = true
+					// Register this footnote reference for backlink generation
+					ref := c.AddFootnoteBackLinkRef(linkTo)
+					// Collect RefID to register with EID after the element is created
+					backlinkRefIDs = append(backlinkRefIDs, ref.RefID)
 				} else {
 					segStyle = "link-internal"
 				}
@@ -360,8 +491,8 @@ func addParagraphWithMixedContent(para *fb2.Paragraph, styleName, spanningStyle 
 			}
 		}
 
-		// Track position for style event using rune count
-		start := nw.RuneCount()
+		// Track position for style event using rune count (cumulative across flushes)
+		start := cumulativeRuneCount + nw.RuneCount()
 
 		// Add text content
 		nw.WriteString(seg.Text)
@@ -390,24 +521,21 @@ func addParagraphWithMixedContent(para *fb2.Paragraph, styleName, spanningStyle 
 			nw.SetPreserveWhitespace(false)
 		}
 
-		end := nw.RuneCount()
+		end := cumulativeRuneCount + nw.RuneCount()
 
 		// Create style event if we have styled content
 		isSpanningStyle := spanningDepth < len(spanningStyleParts) && segStyle == spanningStyleParts[spanningDepth]
 		if segStyle != "" && end > start && !isSpanningStyle {
 			var styleNames []string
-			for _, ctx := range styleContext {
-				styleNames = append(styleNames, ctx.Style)
+			for _, sctx := range styleContext {
+				styleNames = append(styleNames, sctx.Style)
 			}
 			styleNames = append(styleNames, segStyle)
 
-			var mergedStyle string
-			if len(styleNames) > 1 {
-				mergedSpec := strings.Join(styleNames, " ")
-				mergedStyle = resolveInlineStyle(styles, "p", mergedSpec)
-			} else {
-				mergedStyle = resolveInlineStyle(styles, "p", segStyle)
-			}
+			// Resolve inline style using the paragraph context (inlineCtx).
+			// This ensures inline styles inherit font-size from the container.
+			mergedSpec := strings.Join(styleNames, " ")
+			mergedStyle := inlineCtx.ResolveNoMark("", mergedSpec)
 
 			event := StyleEventRef{
 				Offset: start,
@@ -442,12 +570,7 @@ func addParagraphWithMixedContent(para *fb2.Paragraph, styleName, spanningStyle 
 		flushText()
 	}
 
-	// Resolve the block style
-	resolved := styleName
-	if styles != nil {
-		resolved = styles.ResolveStyle(styleName)
-	}
-
+	// Don't pre-resolve the block style - pass styleSpec for deferred resolution with position filtering
 	// Apply segmentation to events
 	segmentedEvents := SegmentNestedStyleEvents(events)
 
@@ -459,10 +582,17 @@ func addParagraphWithMixedContent(para *fb2.Paragraph, styleName, spanningStyle 
 	}
 
 	// Add as mixed content entry with optional heading level
-	eid := sb.AddMixedContent(resolved, items, segmentedEvents, headingLevel)
+	// Pass deferredStyleSpec and resolvedStyle (one or the other will be non-empty based on position context)
+	eid := sb.AddMixedContent(deferredStyleSpec, resolvedStyle, items, segmentedEvents, headingLevel)
 	if para.ID != "" {
 		if _, exists := idToEID[para.ID]; !exists {
 			idToEID[para.ID] = eid
+		}
+	}
+	// Register any backlink ref IDs collected during processing
+	for _, refID := range backlinkRefIDs {
+		if _, exists := idToEID[refID]; !exists {
+			idToEID[refID] = eid
 		}
 	}
 }

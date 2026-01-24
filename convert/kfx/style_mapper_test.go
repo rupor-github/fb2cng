@@ -48,23 +48,6 @@ func TestStyleMapperStylesheet(t *testing.T) {
 	}
 }
 
-func TestStyleMapperMapWrapper(t *testing.T) {
-	mapper := NewStyleMapper(nil, nil)
-
-	def, warnings := mapper.MapWrapper("p", []string{"body-title"}, map[string]CSSValue{
-		"text-align": {Keyword: "center"},
-	})
-	if len(warnings) != 0 {
-		t.Fatalf("unexpected warnings: %v", warnings)
-	}
-	if def.Name != "body-title" {
-		t.Fatalf("expected style name body-title, got %s", def.Name)
-	}
-	if align, ok := def.Properties[SymTextAlignment]; !ok || (align != SymCenter && align != SymbolValue(SymCenter)) {
-		t.Fatalf("expected text-align center, got %v", def.Properties[SymTextAlignment])
-	}
-}
-
 func TestStyleMapperWidowsOrphansTransformer(t *testing.T) {
 	mapper := NewStyleMapper(nil, nil)
 
@@ -410,83 +393,6 @@ func TestStyleMapperBackgroundXYTransforms(t *testing.T) {
 	checkDim("background_sizey", 50, SymUnitPercent)
 }
 
-func TestStyleMapperMapWrappersMerges(t *testing.T) {
-	mapper := NewStyleMapper(nil, nil)
-
-	wrappers := []WrapperCSS{
-		{
-			Tag:     "p",
-			Classes: []string{"merge"},
-			Properties: map[string]CSSValue{
-				"margin-left": {Value: 1, Unit: "em"},
-			},
-		},
-		{
-			Tag:     "p",
-			Classes: []string{"merge"},
-			Properties: map[string]CSSValue{
-				"margin-left": {Value: 2, Unit: "em"},
-			},
-		},
-	}
-
-	styles, warnings := mapper.MapWrappers(wrappers)
-	if len(warnings) != 0 {
-		t.Fatalf("unexpected warnings: %v", warnings)
-	}
-	if len(styles) != 1 {
-		t.Fatalf("expected 1 style, got %d", len(styles))
-	}
-
-	left, ok := styles[0].Properties[SymMarginLeft]
-	if !ok {
-		t.Fatalf("missing merged margin-left")
-	}
-	// Should be cumulative with horizontal em->% conversion
-	val, _, ok := measureParts(left)
-	if !ok {
-		t.Fatalf("could not parse merged margin-left")
-	}
-	expected := (1 + 2) * EmToPercentHorizontal
-	if val != expected {
-		t.Fatalf("expected merged margin-left %v, got %v", expected, val)
-	}
-}
-
-func TestDefaultWrapperStyles(t *testing.T) {
-	mapper := NewStyleMapper(nil, nil)
-
-	defs, warnings := mapDefaultWrapperStyles(mapper)
-	if len(warnings) != 0 {
-		t.Fatalf("unexpected warnings: %v", warnings)
-	}
-
-	index := make(map[string]StyleDef, len(defs))
-	for _, def := range defs {
-		index[def.Name] = def
-	}
-
-	for _, name := range []string{
-		"body-title",
-		"chapter-title",
-		"section-title",
-		"body-title-header",
-		"chapter-title-header",
-		"section-title-header",
-	} {
-		if _, ok := index[name]; !ok {
-			t.Fatalf("missing default wrapper style %s", name)
-		}
-	}
-
-	if _, ok := index["body-title"].Properties[SymMarginTop]; !ok {
-		t.Fatalf("body-title should include margin-top")
-	}
-	if _, ok := index["body-title-header"].Properties[SymTextAlignment]; !ok {
-		t.Fatalf("body-title-header should include text alignment")
-	}
-}
-
 func snapBlockSymbol(t *testing.T) KFXSymbol {
 	t.Helper()
 	sym, ok := symbolIDFromString("snap_block")
@@ -503,20 +409,4 @@ func mustSymbol(t *testing.T, name string) KFXSymbol {
 		t.Fatalf("missing symbol %s", name)
 	}
 	return sym
-}
-
-func TestStyleMapperAppliesDefaultStyleMap(t *testing.T) {
-	mapper := NewStyleMapper(nil, nil)
-
-	def, warnings := mapper.MapWrapper("center", nil, map[string]CSSValue{})
-	if len(warnings) != 0 {
-		t.Fatalf("unexpected warnings: %v", warnings)
-	}
-	align, ok := def.Properties[SymTextAlignment]
-	if !ok {
-		t.Fatalf("expected text alignment from stylemap")
-	}
-	if align != SymCenter && align != SymbolValue(SymCenter) {
-		t.Fatalf("expected center alignment, got %v", align)
-	}
 }

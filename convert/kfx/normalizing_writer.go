@@ -11,11 +11,12 @@ import (
 // the rune count for style event offsets. Leading and trailing whitespace
 // is automatically trimmed using the pendingSpace approach.
 type normalizingWriter struct {
-	buf               strings.Builder
-	runeCount         int
-	pendingSpace      bool // Deferred space - only written if followed by non-space
-	preserveWS        bool // When true, write text as-is (for code blocks)
-	suppressNextSpace bool // Suppress next pending space (after structural breaks)
+	buf                 strings.Builder
+	runeCount           int
+	pendingSpace        bool // Deferred space - only written if followed by non-space
+	preserveWS          bool // When true, write text as-is (for code blocks)
+	suppressNextSpace   bool // Suppress next pending space (after structural breaks)
+	continueAfterInline bool // Allow first whitespace to set pendingSpace even when buf is empty
 }
 
 // newNormalizingWriter creates a new normalizing writer.
@@ -50,9 +51,13 @@ func (nw *normalizingWriter) WriteString(s string) int {
 			// Only mark pending space if we've written content and not suppressing.
 			// Keep suppressNextSpace active until we hit non-whitespace content,
 			// so all whitespace after structural breaks is suppressed.
-			if (nw.buf.Len() > 0 || nw.pendingSpace) && !nw.suppressNextSpace {
+			// Also allow setting pendingSpace when continueAfterInline is set
+			// (for preserving leading whitespace after inline images).
+			if (nw.buf.Len() > 0 || nw.pendingSpace || nw.continueAfterInline) && !nw.suppressNextSpace {
 				nw.pendingSpace = true
 			}
+			// Clear continueAfterInline after first whitespace is processed
+			nw.continueAfterInline = false
 			// Note: DO NOT clear suppressNextSpace here - it stays active until
 			// we encounter actual content (non-whitespace).
 		} else {
@@ -63,7 +68,8 @@ func (nw *normalizingWriter) WriteString(s string) int {
 				written++
 			}
 			nw.pendingSpace = false
-			nw.suppressNextSpace = false // Only clear when we write actual content
+			nw.suppressNextSpace = false   // Only clear when we write actual content
+			nw.continueAfterInline = false // Also clear on non-space content
 			nw.buf.WriteRune(r)
 			nw.runeCount++
 			written++
@@ -110,6 +116,7 @@ func (nw *normalizingWriter) Reset() {
 	nw.runeCount = 0
 	nw.pendingSpace = false
 	nw.preserveWS = false
+	nw.continueAfterInline = false
 }
 
 // HasPendingSpace returns true if there's a pending space that hasn't been written.
@@ -130,4 +137,13 @@ func (nw *normalizingWriter) ConsumePendingSpace() bool {
 // SetPendingSpace marks that a space should precede the next non-space content.
 func (nw *normalizingWriter) SetPendingSpace() {
 	nw.pendingSpace = true
+}
+
+// SetContinueAfterInline marks that we're continuing after an inline element (like an image).
+// This allows the first whitespace character in subsequent text to set pendingSpace
+// even when the buffer is empty, preserving source whitespace semantics.
+// Unlike SetPendingSpace(), this does NOT unconditionally add a space - it only
+// preserves a space if the next text actually starts with whitespace.
+func (nw *normalizingWriter) SetContinueAfterInline() {
+	nw.continueAfterInline = true
 }

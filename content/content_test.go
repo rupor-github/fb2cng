@@ -416,7 +416,7 @@ func TestContent_PNGTransparencyRemoval(t *testing.T) {
 	c, ctx := setupTestContent(t)
 	env := state.EnvFromContext(ctx)
 
-	env.Cfg.Document.Images.RemovePNGTransparency = true
+	env.Cfg.Document.Images.RemoveTransparency = true
 
 	// Create transparent PNG
 	img := image.NewRGBA(image.Rect(0, 0, 50, 50))

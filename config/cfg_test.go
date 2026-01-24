@@ -34,7 +34,7 @@ document:
   fix_zip: true
   images:
     use_broken: false
-    remove_png_transparency: true
+    remove_transparency: true
     scale_factor: 1.5
     optimize: true
     jpeq_quality_level: 85
@@ -192,11 +192,11 @@ func TestDump(t *testing.T) {
 		Document: DocumentConfig{
 			FixZip: true,
 			Images: ImagesConfig{
-				UseBroken:             false,
-				RemovePNGTransparency: true,
-				ScaleFactor:           1.0,
-				Optimize:              true,
-				JPEGQuality:           80,
+				UseBroken:          false,
+				RemoveTransparency: true,
+				ScaleFactor:        1.0,
+				Optimize:           true,
+				JPEGQuality:        80,
 			},
 			Footnotes: FootnotesConfig{
 				Mode:      0,
@@ -278,18 +278,18 @@ func TestConfig_DefaultValues(t *testing.T) {
 
 func TestImagesConfig(t *testing.T) {
 	img := ImagesConfig{
-		UseBroken:             true,
-		RemovePNGTransparency: false,
-		ScaleFactor:           2.0,
-		Optimize:              true,
-		JPEGQuality:           90,
+		UseBroken:          true,
+		RemoveTransparency: false,
+		ScaleFactor:        2.0,
+		Optimize:           true,
+		JPEGQuality:        90,
 	}
 
 	if !img.UseBroken {
 		t.Error("UseBroken should be true")
 	}
-	if img.RemovePNGTransparency {
-		t.Error("RemovePNGTransparency should be false")
+	if img.RemoveTransparency {
+		t.Error("RemoveTransparency should be false")
 	}
 	if img.ScaleFactor != 2.0 {
 		t.Errorf("ScaleFactor = %f, want 2.0", img.ScaleFactor)

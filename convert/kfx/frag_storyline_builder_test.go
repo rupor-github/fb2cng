@@ -127,11 +127,13 @@ func TestSegmentNestedStyleEvents_SameOffset(t *testing.T) {
 }
 
 func TestSegmentStyleEvents_Basic(t *testing.T) {
-	// Test the original SegmentStyleEvents function
+	// Test segmenting with a base style - this is equivalent to:
+	// SegmentNestedStyleEvents with a base event [0-15] + inline event [5-8]
 	events := []StyleEventRef{
-		{Offset: 5, Length: 3, Style: "link"},
+		{Offset: 0, Length: 15, Style: "code"}, // base style
+		{Offset: 5, Length: 3, Style: "link"},  // inline event
 	}
-	result := SegmentStyleEvents(events, "code", 15)
+	result := SegmentNestedStyleEvents(events)
 
 	if len(result) != 3 {
 		t.Fatalf("expected 3 events, got %d: %+v", len(result), result)

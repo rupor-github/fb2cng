@@ -209,12 +209,6 @@ func (r CSSRule) GetProperty(name string) (CSSValue, bool) {
 	return v, ok
 }
 
-// HasProperty returns true if the rule has the specified property.
-func (r CSSRule) HasProperty(name string) bool {
-	_, ok := r.Properties[name]
-	return ok
-}
-
 // CSSFontFace represents an @font-face declaration.
 type CSSFontFace struct {
 	Family string // font-family value
@@ -235,17 +229,6 @@ func (s *Stylesheet) RulesBySelector(selector string) []CSSRule {
 	var matches []CSSRule
 	for _, r := range s.Rules {
 		if r.Selector.Raw == selector {
-			matches = append(matches, r)
-		}
-	}
-	return matches
-}
-
-// RulesByStyleName returns all rules that would produce the given style name.
-func (s *Stylesheet) RulesByStyleName(styleName string) []CSSRule {
-	var matches []CSSRule
-	for _, r := range s.Rules {
-		if r.Selector.StyleName() == styleName {
 			matches = append(matches, r)
 		}
 	}

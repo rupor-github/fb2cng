@@ -122,3 +122,40 @@ func TestIonDataLoaded(t *testing.T) {
 		t.Logf("  with Unit: %d", withUnit)
 	})
 }
+
+// TestH1StyleMapEntries dumps all stylemap entries for h1 tag
+func TestH1StyleMapEntries(t *testing.T) {
+	sm := NewDefaultStyleMap()
+	// Check h1 tag entries
+	key := HTMLKey{Tag: "h1"}
+	entries := sm.EntriesFor(key)
+	t.Logf("h1 tag entries: %d", len(entries))
+	for _, e := range entries {
+		t.Logf("  Property=%s, Value=%s, Unit=%s, Transformer=%s",
+			e.Property, e.Value, e.Unit, e.Transformer)
+	}
+}
+
+// TestMarginTopStyleListRules dumps stylelist rules for margin-top
+func TestMarginTopStyleListRules(t *testing.T) {
+	t.Logf("Stylelist entries with margin-top:")
+	for _, e := range defaultStyleListEntries {
+		if e.Key != "" && (len(e.Key) < 10 || e.Key[:10] == "margin_top" || e.Key[:10] == "margin-top") {
+			t.Logf("  Key=%s, Class=%s", e.Key, e.Class)
+		}
+	}
+}
+
+// TestMarginLeftStyleListRules dumps stylelist rules for margin_left
+func TestMarginLeftStyleListRules(t *testing.T) {
+	t.Logf("Stylelist entries with margin_left:")
+	for _, e := range defaultStyleListEntries {
+		if e.Key != "" && (len(e.Key) >= 11 && (e.Key[:11] == "margin_left" || e.Key[:11] == "margin-left")) {
+			t.Logf("  Key=%s, Class=%s", e.Key, e.Class)
+		}
+	}
+	t.Logf("\nAll stylelist entries:")
+	for _, e := range defaultStyleListEntries {
+		t.Logf("  Key=%s, Class=%s", e.Key, e.Class)
+	}
+}

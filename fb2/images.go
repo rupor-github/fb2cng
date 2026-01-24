@@ -320,9 +320,10 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 		imageChanged = true
 	}
 
-	// PNG transparency
-	if kindle || cfg.RemovePNGTransparency {
-		if imgType == "png" {
+	// Handle transparency for formats that support it (PNG, GIF)
+	// JPEG doesn't support transparency, so we must flatten to white background
+	if kindle || cfg.RemoveTransparency {
+		if imgType == "png" || imgType == "gif" {
 			opaque := func(im image.Image) bool {
 				if oimg, ok := im.(interface{ Opaque() bool }); ok {
 					return oimg.Opaque()
@@ -331,12 +332,18 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 			}(img)
 
 			if !opaque {
-				log.Debug("Removing PNG transparency", zap.String("id", bo.ID))
+				log.Debug("Removing image transparency", zap.String("id", bo.ID), zap.String("type", imgType))
 				opaqueImg := image.NewRGBA(img.Bounds())
 				draw.Draw(opaqueImg, img.Bounds(), &image.Uniform{color.RGBA{255, 255, 255, 255}}, image.Point{}, draw.Src)
 				draw.Draw(opaqueImg, img.Bounds(), img, image.Point{}, draw.Over)
 				img = opaqueImg
 				imageChanged = true
+				// GIF must be converted to PNG for re-encoding since encodeImage doesn't support GIF
+				// (This will be overridden to JPEG below if kindle=true)
+				if imgType == "gif" {
+					imgType = "png"
+					bi.MimeType = "image/png"
+				}
 			}
 		}
 	}

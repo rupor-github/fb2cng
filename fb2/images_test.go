@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"image"
 	"image/color"
+	"image/gif"
 	"image/jpeg"
 	"image/png"
 	"testing"
@@ -53,16 +54,49 @@ func createTestPNG(t *testing.T, width, height int, transparent bool) []byte {
 	return buf.Bytes()
 }
 
+// createTestGIF creates a simple GIF image for testing
+// When transparent is true, every other pixel uses a transparent color
+func createTestGIF(t *testing.T, width, height int, transparent bool) []byte {
+	t.Helper()
+	// Create a palette with some colors, optionally including transparent
+	palette := color.Palette{
+		color.RGBA{255, 0, 0, 255},   // red
+		color.RGBA{0, 255, 0, 255},   // green
+		color.RGBA{0, 0, 255, 255},   // blue
+		color.RGBA{255, 255, 0, 255}, // yellow
+	}
+	if transparent {
+		palette = append(palette, color.RGBA{0, 0, 0, 0}) // transparent (index 4)
+	}
+
+	img := image.NewPaletted(image.Rect(0, 0, width, height), palette)
+	for y := range height {
+		for x := range width {
+			if transparent && x%2 == 0 {
+				img.SetColorIndex(x, y, 4) // transparent
+			} else {
+				img.SetColorIndex(x, y, uint8((x+y)%4)) // cycle through solid colors
+			}
+		}
+	}
+
+	var buf bytes.Buffer
+	if err := gif.Encode(&buf, img, nil); err != nil {
+		t.Fatalf("failed to encode GIF: %v", err)
+	}
+	return buf.Bytes()
+}
+
 func TestBinaryObject_PrepareImage_BasicJPEG(t *testing.T) {
 	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	cfg := &config.ImagesConfig{
-		JPEGQuality:           85,
-		Optimize:              false,
-		UseBroken:             false,
-		RemovePNGTransparency: false,
-		ScaleFactor:           1.0,
-		Screen:                config.ScreenConfig{Width: 1600, Height: 2560},
-		Cover:                 config.CoverConfig{Resize: common.ImageResizeModeNone},
+		JPEGQuality:        85,
+		Optimize:           false,
+		UseBroken:          false,
+		RemoveTransparency: false,
+		ScaleFactor:        1.0,
+		Screen:             config.ScreenConfig{Width: 1600, Height: 2560},
+		Cover:              config.CoverConfig{Resize: common.ImageResizeModeNone},
 	}
 
 	jpegData := createTestJPEG(t, 100, 100, 90)
@@ -87,13 +121,13 @@ func TestBinaryObject_PrepareImage_BasicJPEG(t *testing.T) {
 func TestBinaryObject_PrepareImage_BasicPNG(t *testing.T) {
 	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	cfg := &config.ImagesConfig{
-		JPEGQuality:           85,
-		Optimize:              false,
-		UseBroken:             false,
-		RemovePNGTransparency: false,
-		ScaleFactor:           1.0,
-		Screen:                config.ScreenConfig{Width: 1600, Height: 2560},
-		Cover:                 config.CoverConfig{Resize: common.ImageResizeModeNone},
+		JPEGQuality:        85,
+		Optimize:           false,
+		UseBroken:          false,
+		RemoveTransparency: false,
+		ScaleFactor:        1.0,
+		Screen:             config.ScreenConfig{Width: 1600, Height: 2560},
+		Cover:              config.CoverConfig{Resize: common.ImageResizeModeNone},
 	}
 
 	pngData := createTestPNG(t, 50, 50, false)
@@ -112,13 +146,13 @@ func TestBinaryObject_PrepareImage_BasicPNG(t *testing.T) {
 func TestBinaryObject_PrepareImage_CoverResizeKeepAR(t *testing.T) {
 	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	cfg := &config.ImagesConfig{
-		JPEGQuality:           85,
-		Optimize:              false,
-		UseBroken:             false,
-		RemovePNGTransparency: false,
-		ScaleFactor:           1.0,
-		Screen:                config.ScreenConfig{Width: 800, Height: 1200},
-		Cover:                 config.CoverConfig{Resize: common.ImageResizeModeKeepAR},
+		JPEGQuality:        85,
+		Optimize:           false,
+		UseBroken:          false,
+		RemoveTransparency: false,
+		ScaleFactor:        1.0,
+		Screen:             config.ScreenConfig{Width: 800, Height: 1200},
+		Cover:              config.CoverConfig{Resize: common.ImageResizeModeKeepAR},
 	}
 
 	// Create a small image that should be resized
@@ -151,13 +185,13 @@ func TestBinaryObject_PrepareImage_CoverResizeKeepAR(t *testing.T) {
 func TestBinaryObject_PrepareImage_CoverResizeStretch(t *testing.T) {
 	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	cfg := &config.ImagesConfig{
-		JPEGQuality:           85,
-		Optimize:              false,
-		UseBroken:             false,
-		RemovePNGTransparency: false,
-		ScaleFactor:           1.0,
-		Screen:                config.ScreenConfig{Width: 600, Height: 900},
-		Cover:                 config.CoverConfig{Resize: common.ImageResizeModeStretch},
+		JPEGQuality:        85,
+		Optimize:           false,
+		UseBroken:          false,
+		RemoveTransparency: false,
+		ScaleFactor:        1.0,
+		Screen:             config.ScreenConfig{Width: 600, Height: 900},
+		Cover:              config.CoverConfig{Resize: common.ImageResizeModeStretch},
 	}
 
 	jpegData := createTestJPEG(t, 100, 100, 90)
@@ -183,13 +217,13 @@ func TestBinaryObject_PrepareImage_CoverResizeStretch(t *testing.T) {
 func TestBinaryObject_PrepareImage_CoverNoResize(t *testing.T) {
 	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	cfg := &config.ImagesConfig{
-		JPEGQuality:           85,
-		Optimize:              false,
-		UseBroken:             false,
-		RemovePNGTransparency: false,
-		ScaleFactor:           1.0,
-		Screen:                config.ScreenConfig{Width: 800, Height: 1200},
-		Cover:                 config.CoverConfig{Resize: common.ImageResizeModeNone},
+		JPEGQuality:        85,
+		Optimize:           false,
+		UseBroken:          false,
+		RemoveTransparency: false,
+		ScaleFactor:        1.0,
+		Screen:             config.ScreenConfig{Width: 800, Height: 1200},
+		Cover:              config.CoverConfig{Resize: common.ImageResizeModeNone},
 	}
 
 	originalWidth, originalHeight := 100, 150
@@ -216,13 +250,13 @@ func TestBinaryObject_PrepareImage_CoverNoResize(t *testing.T) {
 func TestBinaryObject_PrepareImage_ScaleFactor(t *testing.T) {
 	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	cfg := &config.ImagesConfig{
-		JPEGQuality:           85,
-		Optimize:              false,
-		UseBroken:             false,
-		RemovePNGTransparency: false,
-		ScaleFactor:           0.5,
-		Screen:                config.ScreenConfig{Width: 1600, Height: 2560},
-		Cover:                 config.CoverConfig{Resize: common.ImageResizeModeNone},
+		JPEGQuality:        85,
+		Optimize:           false,
+		UseBroken:          false,
+		RemoveTransparency: false,
+		ScaleFactor:        0.5,
+		Screen:             config.ScreenConfig{Width: 1600, Height: 2560},
+		Cover:              config.CoverConfig{Resize: common.ImageResizeModeNone},
 	}
 
 	jpegData := createTestJPEG(t, 100, 200, 90)
@@ -246,16 +280,16 @@ func TestBinaryObject_PrepareImage_ScaleFactor(t *testing.T) {
 	}
 }
 
-func TestBinaryObject_PrepareImage_RemovePNGTransparency(t *testing.T) {
+func TestBinaryObject_PrepareImage_RemoveTransparency(t *testing.T) {
 	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	cfg := &config.ImagesConfig{
-		JPEGQuality:           85,
-		Optimize:              false,
-		UseBroken:             false,
-		RemovePNGTransparency: true,
-		ScaleFactor:           1.0,
-		Screen:                config.ScreenConfig{Width: 1600, Height: 2560},
-		Cover:                 config.CoverConfig{Resize: common.ImageResizeModeNone},
+		JPEGQuality:        85,
+		Optimize:           false,
+		UseBroken:          false,
+		RemoveTransparency: true,
+		ScaleFactor:        1.0,
+		Screen:             config.ScreenConfig{Width: 1600, Height: 2560},
+		Cover:              config.CoverConfig{Resize: common.ImageResizeModeNone},
 	}
 
 	pngData := createTestPNG(t, 50, 50, true)
@@ -280,16 +314,106 @@ func TestBinaryObject_PrepareImage_RemovePNGTransparency(t *testing.T) {
 	}
 }
 
+func TestBinaryObject_PrepareImage_RemoveGIFTransparency(t *testing.T) {
+	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+	cfg := &config.ImagesConfig{
+		JPEGQuality:        85,
+		Optimize:           false,
+		UseBroken:          false,
+		RemoveTransparency: true,
+		ScaleFactor:        1.0,
+		Screen:             config.ScreenConfig{Width: 1600, Height: 2560},
+		Cover:              config.CoverConfig{Resize: common.ImageResizeModeNone},
+	}
+
+	gifData := createTestGIF(t, 50, 50, true)
+	bo := &BinaryObject{
+		ID:          "transparent-gif",
+		ContentType: "image/gif",
+		Data:        gifData,
+	}
+
+	bi := bo.PrepareImage(false, false, cfg, log)
+
+	// GIF with transparency removed should be converted to PNG
+	// (since encodeImage doesn't support GIF encoding)
+	if bi.MimeType != "image/png" {
+		t.Errorf("expected mime type image/png after transparency removal, got %s", bi.MimeType)
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(bi.Data))
+	if err != nil {
+		t.Fatalf("failed to decode result image: %v", err)
+	}
+
+	// Check if image is opaque after transparency removal
+	if opaqueChecker, ok := img.(interface{ Opaque() bool }); ok {
+		if !opaqueChecker.Opaque() {
+			t.Error("expected image to be opaque after transparency removal")
+		}
+	}
+}
+
+func TestBinaryObject_PrepareImage_GIFToJPEGKindle(t *testing.T) {
+	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+	cfg := &config.ImagesConfig{
+		JPEGQuality:        85,
+		Optimize:           false,
+		UseBroken:          false,
+		RemoveTransparency: false,
+		ScaleFactor:        1.0,
+		Screen:             config.ScreenConfig{Width: 1600, Height: 2560},
+		Cover:              config.CoverConfig{Resize: common.ImageResizeModeNone},
+	}
+
+	// Create a GIF with transparency
+	gifData := createTestGIF(t, 50, 50, true)
+	bo := &BinaryObject{
+		ID:          "transparent-gif-kindle",
+		ContentType: "image/gif",
+		Data:        gifData,
+	}
+
+	// With kindle=true, GIF should be converted to JPEG with transparency flattened
+	bi := bo.PrepareImage(true, false, cfg, log)
+
+	if bi.MimeType != "image/jpeg" {
+		t.Errorf("expected mime type image/jpeg for Kindle, got %s", bi.MimeType)
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(bi.Data))
+	if err != nil {
+		t.Fatalf("failed to decode JPEG: %v", err)
+	}
+
+	// JPEG is always opaque, but verify the conversion succeeded
+	if img.Bounds().Dx() != 50 || img.Bounds().Dy() != 50 {
+		t.Errorf("expected 50x50 image, got %dx%d", img.Bounds().Dx(), img.Bounds().Dy())
+	}
+
+	// Check that transparent areas are now white (not black)
+	// In our test GIF, even x coordinates (0, 2, 4, ...) are transparent
+	// Sample pixel at (0, 1) which should have been transparent
+	r, g, b, _ := img.At(0, 1).RGBA()
+	// JPEG compression causes color bleeding, so we just check it's bright (> 180)
+	// rather than pure white. The key is it shouldn't be black (< 50)
+	threshold := uint32(180 << 8) // ~180 in 16-bit color space
+	if r < threshold || g < threshold || b < threshold {
+		t.Errorf("expected bright (white) background for transparent areas, got RGB(%d, %d, %d)",
+			r>>8, g>>8, b>>8)
+	}
+}
+
 func TestBinaryObject_PrepareImage_JPEGQualityOptimization(t *testing.T) {
 	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	cfg := &config.ImagesConfig{
-		JPEGQuality:           50,
-		Optimize:              true,
-		UseBroken:             false,
-		RemovePNGTransparency: false,
-		ScaleFactor:           1.0,
-		Screen:                config.ScreenConfig{Width: 1600, Height: 2560},
-		Cover:                 config.CoverConfig{Resize: common.ImageResizeModeNone},
+		JPEGQuality:        50,
+		Optimize:           true,
+		UseBroken:          false,
+		RemoveTransparency: false,
+		ScaleFactor:        1.0,
+		Screen:             config.ScreenConfig{Width: 1600, Height: 2560},
+		Cover:              config.CoverConfig{Resize: common.ImageResizeModeNone},
 	}
 
 	// Create high quality JPEG
@@ -313,13 +437,13 @@ func TestBinaryObject_PrepareImage_JPEGQualityOptimization(t *testing.T) {
 func TestBinaryObject_PrepareImage_KindleConversion(t *testing.T) {
 	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	cfg := &config.ImagesConfig{
-		JPEGQuality:           85,
-		Optimize:              false,
-		UseBroken:             false,
-		RemovePNGTransparency: false,
-		ScaleFactor:           1.0,
-		Screen:                config.ScreenConfig{Width: 1600, Height: 2560},
-		Cover:                 config.CoverConfig{Resize: common.ImageResizeModeNone},
+		JPEGQuality:        85,
+		Optimize:           false,
+		UseBroken:          false,
+		RemoveTransparency: false,
+		ScaleFactor:        1.0,
+		Screen:             config.ScreenConfig{Width: 1600, Height: 2560},
+		Cover:              config.CoverConfig{Resize: common.ImageResizeModeNone},
 	}
 
 	// PNG should be converted to JPEG for Kindle
@@ -340,13 +464,13 @@ func TestBinaryObject_PrepareImage_KindleConversion(t *testing.T) {
 func TestBinaryObject_PrepareImage_SVGRasterizeForKindle(t *testing.T) {
 	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	cfg := &config.ImagesConfig{
-		JPEGQuality:           85,
-		Optimize:              true,
-		UseBroken:             false,
-		RemovePNGTransparency: false,
-		ScaleFactor:           0.5,
-		Screen:                config.ScreenConfig{Width: 800, Height: 1200},
-		Cover:                 config.CoverConfig{Resize: common.ImageResizeModeStretch},
+		JPEGQuality:        85,
+		Optimize:           true,
+		UseBroken:          false,
+		RemoveTransparency: false,
+		ScaleFactor:        0.5,
+		Screen:             config.ScreenConfig{Width: 800, Height: 1200},
+		Cover:              config.CoverConfig{Resize: common.ImageResizeModeStretch},
 	}
 
 	svgData := []byte(`<svg xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100"/></svg>`)
@@ -369,13 +493,13 @@ func TestBinaryObject_PrepareImage_SVGRasterizeForKindle(t *testing.T) {
 func TestBinaryObject_PrepareImage_NotFoundPlaceholderSVGIntrinsicSizeForKindle(t *testing.T) {
 	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	cfg := &config.ImagesConfig{
-		JPEGQuality:           85,
-		Optimize:              false,
-		UseBroken:             false,
-		RemovePNGTransparency: false,
-		ScaleFactor:           1.0,
-		Screen:                config.ScreenConfig{Width: 8000, Height: 1200},
-		Cover:                 config.CoverConfig{Resize: common.ImageResizeModeNone},
+		JPEGQuality:        85,
+		Optimize:           false,
+		UseBroken:          false,
+		RemoveTransparency: false,
+		ScaleFactor:        1.0,
+		Screen:             config.ScreenConfig{Width: 8000, Height: 1200},
+		Cover:              config.CoverConfig{Resize: common.ImageResizeModeNone},
 	}
 
 	bo := &BinaryObject{
@@ -396,13 +520,13 @@ func TestBinaryObject_PrepareImage_NotFoundPlaceholderSVGIntrinsicSizeForKindle(
 func TestBinaryObject_PrepareImage_InvalidImage(t *testing.T) {
 	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	cfg := &config.ImagesConfig{
-		JPEGQuality:           85,
-		Optimize:              false,
-		UseBroken:             false,
-		RemovePNGTransparency: false,
-		ScaleFactor:           1.0,
-		Screen:                config.ScreenConfig{Width: 800, Height: 1200},
-		Cover:                 config.CoverConfig{Resize: common.ImageResizeModeStretch},
+		JPEGQuality:        85,
+		Optimize:           false,
+		UseBroken:          false,
+		RemoveTransparency: false,
+		ScaleFactor:        1.0,
+		Screen:             config.ScreenConfig{Width: 800, Height: 1200},
+		Cover:              config.CoverConfig{Resize: common.ImageResizeModeStretch},
 	}
 
 	bo := &BinaryObject{
@@ -427,13 +551,13 @@ func TestBinaryObject_PrepareImage_InvalidImage(t *testing.T) {
 func TestBinaryObject_PrepareImage_UseBrokenFlag(t *testing.T) {
 	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	cfg := &config.ImagesConfig{
-		JPEGQuality:           85,
-		Optimize:              false,
-		UseBroken:             true,
-		RemovePNGTransparency: false,
-		ScaleFactor:           1.0,
-		Screen:                config.ScreenConfig{Width: 800, Height: 1200},
-		Cover:                 config.CoverConfig{Resize: common.ImageResizeModeStretch},
+		JPEGQuality:        85,
+		Optimize:           false,
+		UseBroken:          true,
+		RemoveTransparency: false,
+		ScaleFactor:        1.0,
+		Screen:             config.ScreenConfig{Width: 800, Height: 1200},
+		Cover:              config.CoverConfig{Resize: common.ImageResizeModeStretch},
 	}
 
 	bo := &BinaryObject{
@@ -455,13 +579,13 @@ func TestBinaryObject_PrepareImage_UseBrokenFlag(t *testing.T) {
 func TestFictionBook_PrepareImages(t *testing.T) {
 	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	cfg := &config.ImagesConfig{
-		JPEGQuality:           85,
-		Optimize:              false,
-		UseBroken:             false,
-		RemovePNGTransparency: false,
-		ScaleFactor:           1.0,
-		Screen:                config.ScreenConfig{Width: 1600, Height: 2560},
-		Cover:                 config.CoverConfig{Resize: common.ImageResizeModeNone},
+		JPEGQuality:        85,
+		Optimize:           false,
+		UseBroken:          false,
+		RemoveTransparency: false,
+		ScaleFactor:        1.0,
+		Screen:             config.ScreenConfig{Width: 1600, Height: 2560},
+		Cover:              config.CoverConfig{Resize: common.ImageResizeModeNone},
 	}
 
 	jpegData := createTestJPEG(t, 100, 100, 90)
@@ -496,13 +620,13 @@ func TestFictionBook_PrepareImages(t *testing.T) {
 func TestFictionBook_PrepareImages_DuplicateIDs(t *testing.T) {
 	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	cfg := &config.ImagesConfig{
-		JPEGQuality:           85,
-		Optimize:              false,
-		UseBroken:             false,
-		RemovePNGTransparency: false,
-		ScaleFactor:           1.0,
-		Screen:                config.ScreenConfig{Width: 1600, Height: 2560},
-		Cover:                 config.CoverConfig{Resize: common.ImageResizeModeNone},
+		JPEGQuality:        85,
+		Optimize:           false,
+		UseBroken:          false,
+		RemoveTransparency: false,
+		ScaleFactor:        1.0,
+		Screen:             config.ScreenConfig{Width: 1600, Height: 2560},
+		Cover:              config.CoverConfig{Resize: common.ImageResizeModeNone},
 	}
 
 	jpegData := createTestJPEG(t, 100, 100, 90)
@@ -526,13 +650,13 @@ func TestFictionBook_PrepareImages_DuplicateIDs(t *testing.T) {
 func TestFictionBook_PrepareImages_CoverDetection(t *testing.T) {
 	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	cfg := &config.ImagesConfig{
-		JPEGQuality:           85,
-		Optimize:              false,
-		UseBroken:             false,
-		RemovePNGTransparency: false,
-		ScaleFactor:           1.0,
-		Screen:                config.ScreenConfig{Width: 800, Height: 1200},
-		Cover:                 config.CoverConfig{Resize: common.ImageResizeModeKeepAR},
+		JPEGQuality:        85,
+		Optimize:           false,
+		UseBroken:          false,
+		RemoveTransparency: false,
+		ScaleFactor:        1.0,
+		Screen:             config.ScreenConfig{Width: 800, Height: 1200},
+		Cover:              config.CoverConfig{Resize: common.ImageResizeModeKeepAR},
 	}
 
 	// Create a small cover image

@@ -298,12 +298,19 @@ func (c *Converter) convertProperty(name string, value CSSValue, props map[KFXSy
 		// rem = 1 + (percent - 100) / 160
 		// This is important for title rendering - percent units cause alignment issues
 		if value.IsNumeric() {
-			if value.Unit == "%" {
+			switch value.Unit {
+			case "%":
 				// Convert percentage to rem with KP3's compression formula
 				// 140% -> 1.25rem, 120% -> 1.125rem, 100% -> 1rem
 				remValue := PercentToRem(value.Value)
 				c.mergeProp(props, kfxSym, DimensionValue(remValue, SymUnitRem))
-			} else {
+			case "em":
+				// Convert em to rem: em is relative to parent element font-size, which defaults to 1rem.
+				// During CSS cascade (merging same style name), em values should override as rem to
+				// prevent YJRelativeRuleMerger from multiplying em with existing rem values.
+				// This matches KP3 behavior where all font-sizes in output are in rem units.
+				c.mergeProp(props, kfxSym, DimensionValue(value.Value, SymUnitRem))
+			default:
 				dim, err := MakeDimensionValue(value)
 				if err != nil {
 					*warnings = append(*warnings, "unable to convert "+name+": "+err.Error())
@@ -315,8 +322,9 @@ func (c *Converter) convertProperty(name string, value CSSValue, props map[KFXSy
 
 	case "text-indent":
 		// KP3 uses % for text-indent. Convert em → % using EmToPercentTextIndent ratio.
-		// Ignore zero values.
-		if value.IsNumeric() && value.Value != 0 {
+		// Note: text-indent: 0 is meaningful in KFX - it explicitly sets no indentation,
+		// which overrides any inherited text-indent. KP3 uses "text-indent: 0%" explicitly.
+		if value.IsNumeric() {
 			if value.Unit == "" || value.Unit == "%" {
 				c.mergeProp(props, kfxSym, DimensionValue(value.Value, SymUnitPercent))
 				return
@@ -509,17 +517,14 @@ func (c *Converter) expandBorderShorthand(value CSSValue, props map[KFXSymbol]an
 // For KFX, we only extract the background-color component.
 // CSS background shorthand can contain: color, image, position, size, repeat, attachment, origin, clip
 // We only care about color values (hex, rgb, rgba, named colors).
-func (c *Converter) expandBackgroundShorthand(value CSSValue, props map[KFXSymbol]any, warnings *[]string) {
+func (c *Converter) expandBackgroundShorthand(value CSSValue, props map[KFXSymbol]any, _ *[]string) {
 	raw := strings.TrimSpace(value.Raw)
 	if raw == "" || raw == "none" || raw == "transparent" {
 		return
 	}
 
 	// Split into parts and look for a color value
-	parts := strings.Fields(raw)
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-
+	for part := range strings.FieldsSeq(raw) {
 		// Check if this part is a color
 		if r, g, b, ok := ParseColor(CSSValue{Raw: part, Keyword: part}); ok {
 			// Convert to KFX color format (ARGB)
@@ -585,8 +590,18 @@ func (c *Converter) setDimensionProperty(sym KFXSymbol, value CSSValue, props ma
 		return
 	}
 
-	// Skip zero values - KP3 doesn't include them
+	// For zero values, we still need to emit them to override any defaults
+	// (e.g., User-Agent stylesheet sets margin-top: 1em for <p>, and CSS may override with 0).
+	// KP3 uses the appropriate unit for each property type.
 	if value.Value == 0 {
+		switch {
+		case isVerticalSpacingProperty(sym):
+			c.mergeProp(props, sym, DimensionValue(0, SymUnitLh))
+		case isHorizontalSpacingProperty(sym):
+			c.mergeProp(props, sym, DimensionValue(0, SymUnitPercent))
+		default:
+			c.mergeProp(props, sym, DimensionValue(0, SymUnitEm))
+		}
 		return
 	}
 

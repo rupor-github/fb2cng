@@ -98,9 +98,15 @@ func mergeRuleForClass(class string) (propertyMergeRule, bool) {
 	switch class {
 	case "com.amazon.yj.style.merger.rules.YJHorizontalPositionRuleMerger":
 		return propertyMergeRule{"horizontal-position", mergeHorizontalPosition}, true
-	case "com.amazon.yj.style.merger.rules.YJCumulativeRuleMerger",
-		"com.amazon.yj.style.merger.rules.YJCumulativeInSameContainerRuleMerger":
+	case "com.amazon.yj.style.merger.rules.YJCumulativeRuleMerger":
 		return propertyMergeRule{"cumulative", mergeCumulative}, true
+	case "com.amazon.yj.style.merger.rules.YJCumulativeInSameContainerRuleMerger":
+		// KP3's YJCumulativeInSameContainerRuleMerger validates that both styles come from
+		// the same container before accumulating. Container identity tracking is now handled
+		// in StyleContext.PushBlock (marginOrigins) and StyleContext.handleContainerAwareMargins.
+		// The merge function itself uses override semantics because by the time we reach here,
+		// same-container margins have already been filtered or accumulated correctly.
+		return propertyMergeRule{"cumulative-same-container", mergeOverride}, true
 	case "com.amazon.yj.style.merger.rules.YJOverrideMaximumRuleMerger":
 		return propertyMergeRule{"override-maximum", mergeOverrideMaximum}, true
 	case "com.amazon.yj.style.merger.rules.YJRelativeRuleMerger":

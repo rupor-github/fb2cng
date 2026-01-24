@@ -244,10 +244,9 @@ document:
   stylesheet_path: "mystyle.css"
 ```
 
-**Important:** Your custom stylesheet is **prepended** to the default stylesheet, so you can:
-- Override default styles by using the same CSS selectors
-- Add new styles while keeping default formatting
-- Customize specific elements without rewriting everything
+**Important:** Your custom stylesheet **replaces** the default stylesheet entirely. You should either:
+- Copy and modify the default stylesheet ([`convert/default.css`](../convert/default.css)) as a starting point
+- Write a complete stylesheet that covers all the elements you need styled
 
 #### Default Stylesheet Classes
 
@@ -421,8 +420,8 @@ document:
     # Use broken images without processing
     use_broken: false
     
-    # Remove PNG transparency (for Kindle eInk)
-    remove_png_transparency: false
+    # Remove transparency from PNG/GIF images (for Kindle eInk)
+    remove_transparency: false
     
     # Resize all images (1.0 = no change)
     scale_factor: 1.0

@@ -13,12 +13,13 @@ import (
 // serialization. Different fragment types use different naming patterns optimized for
 // their purpose:
 //
-//   - Resources: Base36-encoded (e.g., "resource/rsrcA", "e1G") - matches Amazon KFX format
-//   - Content: Descriptive format "content_{N}" or "content_{N}_{M}" - human-readable for debugging
-//   - Storyline: Simple format "l{N}" (e.g., l1, l2) - readable sequential identifiers
-//   - Section: Simple format "c{N}" (e.g., c0, c1) - readable sequential identifiers
-//   - Styles: Semantic names from stylesheet (e.g., "body", "emphasis") - preserves meaning
-//   - Anchors: Original document IDs (e.g., "note123") - maintains link integrity
+//   - Resources: Base36 format "resource/rsrc{N}" (e.g., "resource/rsrcA") - matches Amazon KFX format
+//   - Content: Descriptive format "content_{N}" - human-readable for debugging
+//   - Storyline: Base36 format "l{N}" (e.g., l1, l2, lA, lB) - readable sequential identifiers
+//   - Section: Base36 format "c{N}" (e.g., c0, c1, cA, cB) - readable sequential identifiers
+//   - Styles: Base36 format "s{N}" (e.g., s1, s2, sA, sB) - generated during style resolution
+//   - Anchors (internal): Original document IDs (e.g., "note123") - maintains link integrity
+//   - Anchors (external): Base36 format "aEXT{N}" (e.g., aEXT0, aEXT1, aEXTA) - for external URLs
 //
 // This mixed approach balances compatibility (base36 for resources), debuggability
 // (human-readable names), and semantic preservation (original IDs/style names).

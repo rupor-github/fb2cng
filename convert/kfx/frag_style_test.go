@@ -36,9 +36,9 @@ func TestResolveInheritance(t *testing.T) {
 		MarginLeft(2.0, SymUnitEm).
 		Build())
 
-	// Use ResolveStyle to get a resolved style name (base36 format)
+	// Use StyleContext.Resolve to get a resolved style name (base36 format)
 	// This triggers inheritance resolution and deduplication
-	resolvedName := sr.ResolveStyle("poem-subtitle")
+	resolvedName := NewStyleContext(sr).Resolve("", "poem-subtitle")
 
 	// Mark the resolved style as used for text (like production code does)
 	sr.MarkUsage(resolvedName, styleUsageText)
@@ -179,8 +179,8 @@ func TestStyleContext(t *testing.T) {
 
 	t.Run("empty context with element style", func(t *testing.T) {
 		sr := makeRegistry()
-		ctx := NewStyleContext()
-		result := ctx.Resolve("p", "verse", sr)
+		ctx := NewStyleContext(sr)
+		result := ctx.Resolve("p", "verse")
 		// Should return a registered style name
 		if result == "" {
 			t.Error("Expected non-empty style name")
@@ -194,7 +194,7 @@ func TestStyleContext(t *testing.T) {
 	t.Run("inherited properties accumulate through Push", func(t *testing.T) {
 		sr := makeRegistry()
 		// Push poem (has text-align:left which inherits) then resolve
-		ctx := NewStyleContext().Push("div", "poem", sr)
+		ctx := NewStyleContext(sr).Push("div", "poem")
 
 		// Check that context accumulated inherited properties
 		if _, ok := ctx.inherited[SymTextAlignment]; !ok {
@@ -208,9 +208,9 @@ func TestStyleContext(t *testing.T) {
 
 	t.Run("chained Push accumulates inherited properties", func(t *testing.T) {
 		sr := makeRegistry()
-		ctx := NewStyleContext().
-			Push("div", "poem", sr).
-			Push("div", "stanza", sr)
+		ctx := NewStyleContext(sr).
+			Push("div", "poem").
+			Push("div", "stanza")
 
 		// Both poem's text-align and stanza's line-height should be accumulated
 		if _, ok := ctx.inherited[SymTextAlignment]; !ok {
@@ -223,8 +223,8 @@ func TestStyleContext(t *testing.T) {
 
 	t.Run("Resolve merges inherited context with element properties", func(t *testing.T) {
 		sr := makeRegistry()
-		ctx := NewStyleContext().Push("div", "poem", sr)
-		styleName := ctx.Resolve("p", "verse", sr)
+		ctx := NewStyleContext(sr).Push("div", "poem")
+		styleName := ctx.Resolve("p", "verse")
 
 		// The resolved style should exist in registry
 		def, ok := sr.Get(styleName)
@@ -251,8 +251,8 @@ func TestStyleContext(t *testing.T) {
 	t.Run("scope chain margins stay on wrapper", func(t *testing.T) {
 		sr := makeRegistry()
 		// poem has margin-left - it should remain on the wrapper, not the child style
-		ctx := NewStyleContext().Push("div", "poem", sr)
-		styleName := ctx.Resolve("p", "", sr)
+		ctx := NewStyleContext(sr).Push("div", "poem")
+		styleName := ctx.Resolve("p", "")
 
 		def, ok := sr.Get(styleName)
 		if !ok {
@@ -266,10 +266,10 @@ func TestStyleContext(t *testing.T) {
 
 	t.Run("same resolution returns same style name", func(t *testing.T) {
 		sr := makeRegistry()
-		ctx := NewStyleContext().Push("div", "poem", sr)
+		ctx := NewStyleContext(sr).Push("div", "poem")
 
-		name1 := ctx.Resolve("p", "verse", sr)
-		name2 := ctx.Resolve("p", "verse", sr)
+		name1 := ctx.Resolve("p", "verse")
+		name2 := ctx.Resolve("p", "verse")
 
 		if name1 != name2 {
 			t.Errorf("Same resolution should return same style name: %q vs %q", name1, name2)
@@ -278,8 +278,8 @@ func TestStyleContext(t *testing.T) {
 
 	t.Run("immutability - push returns new context", func(t *testing.T) {
 		sr := makeRegistry()
-		ctx1 := NewStyleContext().Push("div", "poem", sr)
-		ctx2 := ctx1.Push("div", "stanza", sr)
+		ctx1 := NewStyleContext(sr).Push("div", "poem")
+		ctx2 := ctx1.Push("div", "stanza")
 
 		// ctx1 should NOT have stanza's line-height
 		if _, ok := ctx1.inherited[SymLineHeight]; ok {
@@ -291,7 +291,10 @@ func TestStyleContext(t *testing.T) {
 		}
 	})
 
-	t.Run("register uses merge rules", func(t *testing.T) {
+	t.Run("register uses CSS cascade override", func(t *testing.T) {
+		// CSS cascade: later rules override earlier ones for the same selector.
+		// When the same style is registered twice, properties should be merged
+		// with later values overriding earlier ones (not accumulated).
 		sr := NewStyleRegistry()
 		sr.Register(StyleDef{
 			Name: "p",
@@ -310,17 +313,18 @@ func TestStyleContext(t *testing.T) {
 		if !ok {
 			t.Fatalf("style p not found")
 		}
+		// CSS cascade: second value should override first, not accumulate
 		if got := def.Properties[SymMarginLeft]; got == nil {
 			t.Fatalf("margin-left missing after merge")
-		} else if reflect.DeepEqual(got, DimensionValue(3, SymUnitPercent)) == false {
-			t.Fatalf("expected cumulative margin-left 3%%, got %v", got)
+		} else if reflect.DeepEqual(got, DimensionValue(2, SymUnitPercent)) == false {
+			t.Fatalf("expected CSS cascade override margin-left 2%%, got %v", got)
 		}
 	})
 
 	t.Run("PushBlock inherits margins to children", func(t *testing.T) {
 		sr := makeRegistry()
 		// PushBlock with poem (has margin-left) should pass it to children
-		ctx := NewStyleContext().PushBlock("div", "poem", sr)
+		ctx := NewStyleContext(sr).PushBlock("div", "poem", 1)
 
 		// Margin-left SHOULD be inherited in block context
 		if _, ok := ctx.inherited[SymMarginLeft]; !ok {
@@ -335,8 +339,8 @@ func TestStyleContext(t *testing.T) {
 	t.Run("PushBlock child style includes container margin", func(t *testing.T) {
 		sr := makeRegistry()
 		// PushBlock with poem (has margin-left) then resolve child paragraph
-		ctx := NewStyleContext().PushBlock("div", "poem", sr)
-		styleName := ctx.Resolve("p", "", sr)
+		ctx := NewStyleContext(sr).PushBlock("div", "poem", 1)
+		styleName := ctx.Resolve("p", "")
 
 		def, ok := sr.Get(styleName)
 		if !ok {
@@ -351,9 +355,9 @@ func TestStyleContext(t *testing.T) {
 
 	t.Run("chained PushBlock accumulates margins", func(t *testing.T) {
 		sr := makeRegistry()
-		ctx := NewStyleContext().
-			PushBlock("div", "poem", sr).
-			PushBlock("div", "stanza", sr)
+		ctx := NewStyleContext(sr).
+			PushBlock("div", "poem", 1).
+			PushBlock("div", "stanza", 1)
 
 		// Both poem's margin and stanza's properties should be accumulated
 		if _, ok := ctx.inherited[SymMarginLeft]; !ok {
@@ -364,19 +368,128 @@ func TestStyleContext(t *testing.T) {
 		}
 	})
 
+	t.Run("PushBlock accumulates margins from different containers", func(t *testing.T) {
+		sr := NewStyleRegistry()
+		// poem with margin-left: 6.25%
+		sr.Register(StyleDef{Name: "poem", Properties: map[KFXSymbol]any{
+			SymMarginLeft: DimensionValue(6.25, SymUnitPercent),
+		}})
+		// verse with margin-left: 3.125%
+		sr.Register(StyleDef{Name: "verse", Properties: map[KFXSymbol]any{
+			SymMarginLeft: DimensionValue(3.125, SymUnitPercent),
+		}})
+
+		// Push poem, then push verse as nested container
+		ctx := NewStyleContext(sr).
+			PushBlock("div", "poem", 1).
+			PushBlock("div", "verse", 1)
+
+		// Margins from different containers should accumulate: 6.25% + 3.125% = 9.375%
+		marginLeft := ctx.inherited[SymMarginLeft]
+		if marginLeft == nil {
+			t.Fatal("Expected margin-left to be inherited")
+		}
+		val, unit, ok := measureParts(marginLeft)
+		if !ok || unit != SymUnitPercent {
+			t.Fatalf("Expected percent unit, got %v", marginLeft)
+		}
+		expected := 9.375
+		if val != expected {
+			t.Errorf("Expected accumulated margin-left %.3f%%, got %.3f%%", expected, val)
+		}
+	})
+
+	t.Run("same container margin is not double-counted in resolveProperties", func(t *testing.T) {
+		sr := NewStyleRegistry()
+		// cite with margin-left: 6.25%
+		sr.Register(StyleDef{Name: "cite", Properties: map[KFXSymbol]any{
+			SymMarginLeft: DimensionValue(6.25, SymUnitPercent),
+		}})
+		// p is a simple paragraph
+		sr.Register(StyleDef{Name: "p", Properties: map[KFXSymbol]any{
+			SymTextIndent: DimensionValue(1, SymUnitRatio),
+		}})
+
+		// PushBlock with cite class, then resolve a paragraph with cite class
+		// The cite margin should NOT be applied twice (container + class)
+		ctx := NewStyleContext(sr).PushBlock("div", "cite", 1)
+		styleName := ctx.Resolve("p", "cite")
+
+		def, ok := sr.Get(styleName)
+		if !ok {
+			t.Fatalf("Style %q not found", styleName)
+		}
+
+		marginLeft := def.Properties[SymMarginLeft]
+		if marginLeft == nil {
+			t.Fatal("Expected margin-left in resolved style")
+		}
+		val, unit, ok := measureParts(marginLeft)
+		if !ok || unit != SymUnitPercent {
+			t.Fatalf("Expected percent unit, got %v", marginLeft)
+		}
+		// Should be 6.25%, NOT 12.5% (double-counted)
+		expected := 6.25
+		if val != expected {
+			t.Errorf("Expected margin-left %.2f%% (not double-counted), got %.2f%%", expected, val)
+		}
+	})
+
 	t.Run("Push vs PushBlock margin inheritance difference", func(t *testing.T) {
 		sr := makeRegistry()
 
 		// Push does NOT inherit margins
-		pushCtx := NewStyleContext().Push("div", "poem", sr)
+		pushCtx := NewStyleContext(sr).Push("div", "poem")
 		if _, ok := pushCtx.inherited[SymMarginLeft]; ok {
 			t.Error("Push should NOT inherit margin-left")
 		}
 
 		// PushBlock DOES inherit margins
-		pushBlockCtx := NewStyleContext().PushBlock("div", "poem", sr)
+		pushBlockCtx := NewStyleContext(sr).PushBlock("div", "poem", 1)
 		if _, ok := pushBlockCtx.inherited[SymMarginLeft]; !ok {
 			t.Error("PushBlock SHOULD inherit margin-left")
+		}
+	})
+
+	t.Run("element tag zero margin does not override inherited container margin", func(t *testing.T) {
+		// This tests the fix for the bug where p { margin-left: 0 } would
+		// override the inherited container margin from poem/stanza.
+		sr := NewStyleRegistry()
+		// poem with margin-left: 9.375%
+		sr.Register(StyleDef{Name: "poem", Properties: map[KFXSymbol]any{
+			SymMarginLeft: DimensionValue(9.375, SymUnitPercent),
+		}})
+		// p with margin-left: 0 (explicitly)
+		sr.Register(StyleDef{Name: "p", Properties: map[KFXSymbol]any{
+			SymMarginLeft: DimensionValue(0, SymUnitPercent),
+		}})
+		// verse with margin-left: 6.25%
+		sr.Register(StyleDef{Name: "verse", Properties: map[KFXSymbol]any{
+			SymMarginLeft: DimensionValue(6.25, SymUnitPercent),
+		}})
+
+		// Simulate: poem > p.verse
+		poemCtx := NewStyleContext(sr).PushBlock("div", "poem", 1)
+		styleName := poemCtx.Resolve("p", "verse")
+
+		def, ok := sr.Get(styleName)
+		if !ok {
+			t.Fatalf("Style %q not found", styleName)
+		}
+
+		marginLeft := def.Properties[SymMarginLeft]
+		if marginLeft == nil {
+			t.Fatal("Expected margin-left in resolved style")
+		}
+		val, unit, ok := measureParts(marginLeft)
+		if !ok || unit != SymUnitPercent {
+			t.Fatalf("Expected percent unit, got %v", marginLeft)
+		}
+		// Expected: poem 9.375% + verse 6.25% = 15.625%
+		// The p's margin-left: 0 should NOT override the inherited poem margin
+		expected := 15.625
+		if val != expected {
+			t.Errorf("Expected accumulated margin-left %.3f%%, got %.3f%%", expected, val)
 		}
 	})
 }

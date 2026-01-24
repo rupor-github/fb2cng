@@ -98,7 +98,8 @@ var cssToKFXProperty = CSSToKFXMap{
 	"dropcap-chars": SymDropcapChars, // $126
 
 	// Table properties (from stylemap)
-	"table-border-collapse":     SymTableBorderCollapse,     // $150
+	"border-collapse":           SymTableBorderCollapse,     // $150 (standard CSS)
+	"table-border-collapse":     SymTableBorderCollapse,     // $150 (KFX internal name)
 	"border-spacing-vertical":   SymBorderSpacingVertical,   // $456
 	"border-spacing-horizontal": SymBorderSpacingHorizontal, // $457
 
@@ -146,13 +147,4 @@ func IsSpecialProperty(cssProperty string) bool {
 		return true
 	}
 	return false
-}
-
-// SupportedProperties returns the list of CSS properties we can convert.
-func SupportedProperties() []string {
-	props := make([]string, 0, len(cssToKFXProperty))
-	for name := range cssToKFXProperty {
-		props = append(props, name)
-	}
-	return props
 }

@@ -19,39 +19,39 @@ import (
 
 // ElementPosition tracks an element's position within its container.
 // KP3 (Kindle Previewer 3) applies position-based CSS property filtering based on
-// where an element sits within its parent container. This affects margin collapsing
-// and break behavior at container boundaries.
+// where an element sits within its parent container.
 //
-// From KP3 reference (com/amazon/yj/style/merger/e/e.java):
-//   - First element: margin-top, padding-top, break-before, clear REMOVED
-//   - Last element: margin-bottom, padding-bottom, break-after REMOVED
-//   - Middle elements: all properties KEPT
-//   - Single element (first+last): both sets of properties REMOVED
+// For title blocks (wrappers containing vignettes and text), KP3 uses inverted
+// margin-top logic where spacing between elements comes from margin-top on
+// following elements rather than margin-bottom on preceding elements:
+//   - First element: LOSES margin-top (nothing precedes it)
+//   - Non-first elements: KEEPS margin-top (creates spacing after preceding element)
+//   - margin-bottom is not filtered (all elements keep it)
+//
+// Reference: com/amazon/yj/i/b/c/a.java and com/amazon/yj/i/b/d.java
 type ElementPosition struct {
-	IsFirst bool // First element in container - removes top margin/padding/break-before
-	IsLast  bool // Last element in container - removes bottom margin/padding/break-after
+	IsFirst    bool // First element in container
+	IsLast     bool // Last element in container
+	TitleBlock bool // Title block context - uses inverted margin-top logic
 }
 
 // PositionFirstAndLast returns a position for a single element in its container.
-// Both first and last filtering applies - removes both top and bottom margins.
+// Both first and last - no filtering applied (keeps all margins).
 func PositionFirstAndLast() ElementPosition {
 	return ElementPosition{IsFirst: true, IsLast: true}
 }
 
 // PositionFirst returns a position for the first of multiple elements.
-// Only first-element filtering applies - removes top margin but keeps bottom.
 func PositionFirst() ElementPosition {
 	return ElementPosition{IsFirst: true, IsLast: false}
 }
 
 // PositionMiddle returns a position for a middle element (not first, not last).
-// No filtering - all properties are kept.
 func PositionMiddle() ElementPosition {
 	return ElementPosition{IsFirst: false, IsLast: false}
 }
 
 // PositionLast returns a position for the last of multiple elements.
-// Only last-element filtering applies - removes bottom margin but keeps top.
 func PositionLast() ElementPosition {
 	return ElementPosition{IsFirst: false, IsLast: true}
 }
@@ -75,74 +75,56 @@ func PositionFromIndex(index, count int) ElementPosition {
 	}
 }
 
-// FilterPropertiesByPosition applies KP3's position-based property selection.
-// This selectively excludes margin/break properties based on element position in container.
-//
-// KP3 behavior observed from reference output:
-//   - First element in container: excludes margin-top (no space above needed at container start)
-//   - Last element in container: excludes margin-bottom (no space below needed at container end)
-//   - First+Last (only element): excludes BOTH margins
-//   - Middle elements: keeps all margins
-//
-// If the input props is nil, returns nil.
-// Returns a new map with selected properties (original is not modified).
-func FilterPropertiesByPosition(props map[KFXSymbol]any, pos ElementPosition) map[KFXSymbol]any {
-	filtered, _ := filterPropertiesByPositionWithRemoved(props, pos)
-	return filtered
+// String returns a human-readable position name for debugging/tracing.
+func (p ElementPosition) String() string {
+	if p.IsFirst && p.IsLast {
+		return "only"
+	}
+	if p.IsFirst {
+		return "first"
+	}
+	if p.IsLast {
+		return "last"
+	}
+	return "middle"
 }
 
-// filterPropertiesByPositionWithRemoved is the internal implementation that also returns
-// which properties were excluded. This is used for tracing/debugging.
-func filterPropertiesByPositionWithRemoved(props map[KFXSymbol]any, pos ElementPosition) (map[KFXSymbol]any, []KFXSymbol) {
+// applyTitleBlockFiltering applies title-block margin filtering to a property map.
+// This is the single source of truth for title-block margin logic, used by both
+// StyleContext.Resolve() and ResolveStyle().
+//
+// Title-block mode (used for poems/stanzas and wrapper blocks with vignettes):
+//   - First element: REMOVES margin-top (container/wrapper provides spacing)
+//   - Non-first elements: KEEPS margin-top (creates spacing after preceding element)
+//   - Non-last elements: REMOVES margin-bottom (spacing is via margin-top on next element)
+//   - Last element: KEEPS margin-bottom (or gets container's margin-bottom)
+//
+// The function modifies props in place and returns a list of removed property symbols.
+// If props is nil or empty, returns nil.
+func applyTitleBlockFiltering(props map[KFXSymbol]any, pos ElementPosition) []KFXSymbol {
 	if len(props) == 0 {
-		return props, nil
+		return nil
 	}
 
-	// Middle elements (neither first nor last): no exclusions
-	if !pos.IsFirst && !pos.IsLast {
-		return props, nil
-	}
+	var removed []KFXSymbol
 
-	// Build set of properties to exclude based on position
-	toExclude := make(map[KFXSymbol]bool)
-
-	// First elements exclude margin-top (no space above needed at container start)
+	// First element: remove margin-top
 	if pos.IsFirst {
-		toExclude[SymMarginTop] = true
-	}
-
-	// Last elements exclude margin-bottom (no space below needed at container end)
-	if pos.IsLast {
-		toExclude[SymMarginBottom] = true
-	}
-
-	// Check which properties actually exist and will be excluded
-	var excludedProps []KFXSymbol
-	for sym := range toExclude {
-		if _, exists := props[sym]; exists {
-			excludedProps = append(excludedProps, sym)
+		if _, exists := props[SymMarginTop]; exists {
+			delete(props, SymMarginTop)
+			removed = append(removed, SymMarginTop)
 		}
 	}
-	if len(excludedProps) == 0 {
-		return props, nil
-	}
 
-	// Create copy without excluded properties
-	filtered := make(map[KFXSymbol]any, len(props))
-	for sym, val := range props {
-		if !toExclude[sym] {
-			filtered[sym] = val
+	// Non-last elements: remove margin-bottom
+	if !pos.IsLast {
+		if _, exists := props[SymMarginBottom]; exists {
+			delete(props, SymMarginBottom)
+			removed = append(removed, SymMarginBottom)
 		}
 	}
-	return filtered, excludedProps
-}
 
-// traceSymbolNameForStyle returns a human-readable name for a KFX symbol used in style tracing.
-func traceSymbolNameForStyle(sym KFXSymbol) string {
-	if name, ok := yjSymbolNames[sym]; ok {
-		return name
-	}
-	return fmt.Sprintf("$%d", sym)
+	return removed
 }
 
 // StyleDef defines a KFX style with its properties.
@@ -150,6 +132,14 @@ type StyleDef struct {
 	Name       string            // Style name (becomes local symbol)
 	Parent     string            // Parent style name (for inheritance)
 	Properties map[KFXSymbol]any // KFX property symbol -> value
+
+	// DescendantReplacement marks this style as using "replacement" semantics for
+	// descendant selectors. When true, if a descendant selector like "h1--sub" exists,
+	// it completely replaces the base class (e.g., "sub") rather than just overriding
+	// specific properties. This is used for styles like sub/sup/small where the
+	// heading-context version should inherit font-size from the heading rather than
+	// using the base class's explicit font-size.
+	DescendantReplacement bool
 }
 
 type styleUsage uint8
@@ -285,9 +275,10 @@ func encodeStyleValue(v any) string {
 
 // StyleBuilder helps construct style definitions.
 type StyleBuilder struct {
-	name   string
-	parent string
-	props  map[KFXSymbol]any
+	name                  string
+	parent                string
+	props                 map[KFXSymbol]any
+	descendantReplacement bool
 }
 
 // NewStyle creates a new style builder.
@@ -301,6 +292,16 @@ func NewStyle(name string) *StyleBuilder {
 // Inherit sets the parent style for inheritance.
 func (sb *StyleBuilder) Inherit(parentName string) *StyleBuilder {
 	sb.parent = parentName
+	return sb
+}
+
+// DescendantReplacement marks this style as using replacement semantics for
+// descendant selectors. When a descendant selector like "h1--sub" exists for
+// this style, it completely replaces the base class rather than just overriding.
+// Use this for styles with explicit font-size that should inherit from context
+// when inside headings (sub, sup, small).
+func (sb *StyleBuilder) DescendantReplacement() *StyleBuilder {
+	sb.descendantReplacement = true
 	return sb
 }
 
@@ -581,9 +582,10 @@ func (sb *StyleBuilder) YjVerticalAlign(align KFXSymbol) *StyleBuilder {
 // Build creates the StyleDef.
 func (sb *StyleBuilder) Build() StyleDef {
 	return StyleDef{
-		Name:       sb.name,
-		Parent:     sb.parent,
-		Properties: sb.props,
+		Name:                  sb.name,
+		Parent:                sb.parent,
+		Properties:            sb.props,
+		DescendantReplacement: sb.descendantReplacement,
 	}
 }
 

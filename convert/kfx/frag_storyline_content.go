@@ -4,11 +4,28 @@ import (
 	"strings"
 
 	"fbc/common"
+	"fbc/content"
 	"fbc/fb2"
 )
 
-// processStorylineContent processes FB2 section content using ContentAccumulator.
-func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, depth int, nestedTOC *[]*TOCEntry, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) error {
+// maxStorylineSplitDepth controls the maximum section depth at which titled sections
+// become separate storylines. Sections at this depth or shallower with titles get
+// their own storyline; deeper sections are processed inline regardless of title.
+//
+// Value of 2 means:
+//   - Depth 1 (top-level sections): titled sections → separate storylines
+//   - Depth 2 (nested in depth-1): titled sections → separate storylines
+//   - Depth 3+: processed inline (same storyline as parent)
+const maxStorylineSplitDepth = 2
+
+// processStorylineSectionContent processes FB2 section content for a single storyline.
+// Titled nested sections up to maxStorylineSplitDepth are collected for the caller to
+// process as separate storylines, while deeper sections are processed inline.
+//
+// Parameters:
+//   - nestedTitledSections: receives titled nested sections that should become separate storylines
+//   - directChildTOC: receives TOC entries for sections processed inline
+func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, depth int, directChildTOC *[]*TOCEntry, nestedTitledSections *[]sectionWorkItem, idToEID eidByFB2ID) error {
 	if section != nil && section.ID != "" {
 		if _, exists := idToEID[section.ID]; !exists {
 			idToEID[section.ID] = sb.NextEID()
@@ -18,7 +35,7 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 	if section.Image != nil {
 		imgID := strings.TrimPrefix(section.Image.Href, "#")
 		if imgInfo, ok := imageResources[imgID]; ok {
-			resolved := styles.ResolveImageStyle(imgInfo.Width, screenWidth)
+			resolved := styles.ResolveBlockImageStyle(imgInfo.Width, c.ScreenWidth, "image", nil, nil)
 			eid := sb.AddImage(imgInfo.ResourceName, resolved, section.Image.Alt)
 			if section.Image.ID != "" {
 				if _, exists := idToEID[section.Image.ID]; !exists {
@@ -49,29 +66,21 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 			vigBottomPos = common.VignettePosSectionTitleBottom
 		}
 
-		// Calculate element positions for this title block
-		positions := calcChapterTitlePositions(book, vigTopPos, vigBottomPos)
-
 		// Start wrapper block - this is the KFX equivalent of <div class="chapter-title"> or <div class="section-title">
-		// Body/chapter titles (depth 1) use PositionMiddle() to preserve margin-bottom
-		// Section titles (depth 2+) use PositionLast() to exclude margin-bottom (KP3 behavior)
-		wrapperPos := PositionMiddle()
-		if depth > 1 {
-			wrapperPos = PositionLast()
-		}
-		sb.StartBlock(wrapperClass, styles, wrapperPos)
+		// Children get position-based style filtering: first keeps top margin, last keeps bottom, middle loses both.
+		sb.StartBlock(wrapperClass, styles)
 
-		// Add top vignette with position-aware style
-		addVignetteImage(book, sb, styles, imageResources, vigTopPos, screenWidth, positions.VignetteTop)
+		// Add top vignette - style resolved with position filtering at build time
+		addVignetteImage(c.Book, sb, imageResources, vigTopPos)
 
 		// Add title as single combined heading entry (matches KP3 behavior)
 		// Context includes wrapper class for margin inheritance
-		titleCtx := NewStyleContext().Push("div", wrapperClass, styles)
+		titleCtx := NewStyleContext(styles).Push("div", wrapperClass)
 		markTitleStylesUsed(wrapperClass, headerClassBase, styles)
-		addTitleAsHeading(section.Title, titleCtx, headerClassBase, headingLevel, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex, positions.Title)
+		addTitleAsHeading(c, section.Title, titleCtx, headerClassBase, headingLevel, sb, styles, imageResources, ca, idToEID)
 
-		// Add bottom vignette with position-aware style
-		addVignetteImage(book, sb, styles, imageResources, vigBottomPos, screenWidth, positions.VignetteBottom)
+		// Add bottom vignette - style resolved with position filtering at build time
+		addVignetteImage(c.Book, sb, imageResources, vigBottomPos)
 
 		// End wrapper block
 		sb.EndBlock()
@@ -79,6 +88,8 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 
 	// Process annotation - KFX doesn't use wrapper blocks for annotations.
 	// Content is flat with styling applied directly to each paragraph.
+	// Position filtering is applied so first item gets wrapper's margin-top,
+	// last item gets margin-bottom, middle items lose both vertical margins.
 	if section.Annotation != nil {
 		// If annotation has an ID, assign it to the first content item
 		if section.Annotation.ID != "" {
@@ -86,16 +97,18 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 				idToEID[section.Annotation.ID] = sb.NextEID()
 			}
 		}
-		annotationCtx := NewStyleContext().PushBlock("div", "annotation", styles)
+		itemCount := len(section.Annotation.Items)
+		annotationCtx := NewStyleContext(styles).PushBlock("div", "annotation", itemCount)
 		for i := range section.Annotation.Items {
-			processFlowItem(&section.Annotation.Items[i], annotationCtx, "annotation", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			processFlowItem(c, &section.Annotation.Items[i], annotationCtx, "annotation", sb, styles, imageResources, ca, idToEID)
+			annotationCtx = annotationCtx.Advance()
 		}
 	}
 
 	// Process epigraphs - KFX doesn't use wrapper blocks for epigraphs.
 	// Instead, apply epigraph styling directly to each paragraph as flat siblings.
 	// This matches KP3 reference output where margin-left is on each paragraph.
-	epigraphCtx := NewStyleContext().PushBlock("div", "epigraph", styles)
+	// Position filtering is applied within each epigraph's items.
 	for _, epigraph := range section.Epigraphs {
 		// If epigraph has an ID, assign it to the first content item
 		if epigraph.Flow.ID != "" {
@@ -105,79 +118,94 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 			}
 		}
 
+		// Calculate total item count for position filtering (flow items + text authors)
+		totalItems := len(epigraph.Flow.Items) + len(epigraph.TextAuthors)
+		epigraphCtx := NewStyleContext(styles).PushBlock("div", "epigraph", totalItems)
+
 		for i := range epigraph.Flow.Items {
-			processFlowItem(&epigraph.Flow.Items[i], epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			processFlowItem(c, &epigraph.Flow.Items[i], epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID)
+			epigraphCtx = epigraphCtx.Advance()
 		}
 		for i := range epigraph.TextAuthors {
-			styleName := epigraphCtx.Resolve("p", "text-author", styles)
-			addParagraphWithImages(&epigraph.TextAuthors[i], styleName, 0, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			addParagraphWithImages(c, &epigraph.TextAuthors[i], epigraphCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
+			epigraphCtx = epigraphCtx.Advance()
 		}
 	}
 
 	// Process content items
-	sectionCtx := NewStyleContext().Push("div", "section", styles)
+	sectionCtx := NewStyleContext(styles).Push("div", "section")
 	var lastTitledEntry *TOCEntry
-
-	// Pre-count nested sections for position-aware styling
-	nestedSectionCount := 0
-	for i := range section.Content {
-		if section.Content[i].Kind == fb2.FlowSection && section.Content[i].Section != nil {
-			nestedSectionCount++
-		}
-	}
-	_ = nestedSectionCount // May be used for future position-aware styling
 
 	for i := range section.Content {
 		item := &section.Content[i]
 		if item.Kind == fb2.FlowSection && item.Section != nil {
-			// Nested section - track for TOC hierarchy
-			// KFX doesn't use wrapper blocks for sections - content is flat.
 			nestedSection := item.Section
 
-			// Assign section ID to the first content item that will be created
-			firstEID := sb.NextEID()
-			if nestedSection.ID != "" {
-				if _, exists := idToEID[nestedSection.ID]; !exists {
-					idToEID[nestedSection.ID] = firstEID
-				}
-			}
+			// Only split storylines for titled sections up to maxStorylineSplitDepth.
+			// Deeper sections are processed inline regardless of title.
+			shouldSplit := nestedSection.HasTitle() && depth < maxStorylineSplitDepth
 
-			// Process nested section content recursively (no wrapper block)
-			var childTOC []*TOCEntry
-			if err := processStorylineContent(book, nestedSection, sb, styles, imageResources, ca, depth+1, &childTOC, idToEID, screenWidth, footnotesIndex); err != nil {
-				return err
-			}
-
-			// Create TOC entry for nested section only if it has a title
-			if nestedSection.HasTitle() {
-				titleText := nestedSection.AsTitleText("")
-				tocEntry := &TOCEntry{
-					ID:           nestedSection.ID,
-					Title:        titleText,
-					FirstEID:     firstEID,
-					IncludeInTOC: true,
-					Children:     childTOC,
+			if shouldSplit {
+				// Titled section within split depth -> becomes a separate storyline
+				// Add to the work queue for the caller to process
+				*nestedTitledSections = append(*nestedTitledSections, sectionWorkItem{
+					section:     nestedSection,
+					depth:       depth + 1,
+					parentEntry: nil, // Will be set by caller
+					isTopLevel:  false,
+				})
+			} else {
+				// Process inline in this storyline:
+				// - Untitled sections at any depth
+				// - Titled sections at depth 3+
+				firstEID := sb.NextEID()
+				if nestedSection.ID != "" {
+					if _, exists := idToEID[nestedSection.ID]; !exists {
+						idToEID[nestedSection.ID] = firstEID
+					}
 				}
-				*nestedTOC = append(*nestedTOC, tocEntry)
-				lastTitledEntry = tocEntry
-			} else if len(childTOC) > 0 {
-				// Section without title - nest children inside the last titled sibling if one exists
-				if lastTitledEntry != nil {
-					lastTitledEntry.Children = append(lastTitledEntry.Children, childTOC...)
-				} else {
-					// No preceding titled sibling, promote children to parent level
-					*nestedTOC = append(*nestedTOC, childTOC...)
+
+				// Process nested section content recursively (same storyline)
+				var childTOC []*TOCEntry
+				var childTitledSections []sectionWorkItem
+				if err := processStorylineSectionContent(c, nestedSection, sb, styles, imageResources, ca, depth+1, &childTOC, &childTitledSections, idToEID); err != nil {
+					return err
+				}
+
+				// Add section-end vignette for inline titled sections (depth > 1)
+				// This mirrors EPUB behavior at convert/epub/xhtml.go:797-798
+				// Section-end vignette appears at the end of an inline titled section.
+				if nestedSection.HasTitle() && depth+1 > 1 {
+					addVignetteImage(c.Book, sb, imageResources, common.VignettePosSectionEnd)
+				}
+
+				// Any titled sections within split depth found in children still need separate storylines
+				*nestedTitledSections = append(*nestedTitledSections, childTitledSections...)
+
+				// Create TOC entry for nested section if it has a title
+				if nestedSection.HasTitle() {
+					titleText := nestedSection.AsTitleText("")
+					tocEntry := &TOCEntry{
+						ID:           nestedSection.ID,
+						Title:        titleText,
+						FirstEID:     firstEID,
+						IncludeInTOC: true,
+						Children:     childTOC,
+					}
+					*directChildTOC = append(*directChildTOC, tocEntry)
+					lastTitledEntry = tocEntry
+				} else if len(childTOC) > 0 {
+					// Untitled section - nest children under last titled sibling
+					if lastTitledEntry != nil {
+						lastTitledEntry.Children = append(lastTitledEntry.Children, childTOC...)
+					} else {
+						*directChildTOC = append(*directChildTOC, childTOC...)
+					}
 				}
 			}
 		} else {
-			processFlowItem(item, sectionCtx, "section", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			processFlowItem(c, item, sectionCtx, "section", sb, styles, imageResources, ca, idToEID)
 		}
-	}
-
-	if depth == 1 {
-		addVignetteImage(book, sb, styles, imageResources, common.VignettePosChapterEnd, screenWidth, PositionMiddle())
-	} else {
-		addVignetteImage(book, sb, styles, imageResources, common.VignettePosSectionEnd, screenWidth, PositionMiddle())
 	}
 
 	return nil
@@ -186,48 +214,37 @@ func processStorylineContent(book *fb2.FictionBook, section *fb2.Section, sb *St
 // processFlowItem processes a flow item using ContentAccumulator.
 // ctx tracks the full ancestor context chain for CSS cascade emulation.
 // contextName is the immediate context name (e.g., "section", "cite") used for subtitle naming.
-func processFlowItem(item *fb2.FlowItem, ctx StyleContext, contextName string, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
+func processFlowItem(c *content.Content, item *fb2.FlowItem, ctx StyleContext, contextName string, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
 	switch item.Kind {
 	case fb2.FlowParagraph:
 		if item.Paragraph != nil {
 			// Use full context chain for CSS cascade emulation.
-			// Base "p" + ancestor contexts + optional custom class from FB2.
-			styleName := ctx.Resolve("p", "", styles)
-			if item.Paragraph.Style != "" {
-				styleName = styleName + " " + item.Paragraph.Style
-			}
-			addParagraphWithImages(item.Paragraph, styleName, 0, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			// Pass context directly - it may have position for margin filtering.
+			// Extra classes come from optional custom class in FB2.
+			addParagraphWithImages(c, item.Paragraph, ctx, item.Paragraph.Style, 0, sb, styles, imageResources, ca, idToEID)
 		}
 
 	case fb2.FlowSubtitle:
 		if item.Subtitle != nil {
-			// Subtitles use <p> in EPUB, so use p as base here too
-			// Context-specific subtitle style adds alignment, margins
-			var styleName string
-			if contextName == "section" {
-				if styles != nil {
-					styles.EnsureBaseStyle("section--section-subtitle")
-				}
-				styleName = "section--section-subtitle"
-			} else {
-				styleName = ctx.Resolve("p", contextName+"-subtitle", styles)
-			}
+			// Subtitles use <p> in EPUB, so use p as base here too.
+			// Context-specific subtitle style adds alignment, margins.
+			// Pass the subtitle class via extraClasses so it's applied directly to the paragraph.
+			extraClasses := contextName + "-subtitle"
 			if item.Subtitle.Style != "" {
-				styleName = styleName + " " + item.Subtitle.Style
+				extraClasses = extraClasses + " " + item.Subtitle.Style
 			}
-			addParagraphWithImages(item.Subtitle, styleName, 0, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			addParagraphWithImages(c, item.Subtitle, ctx, extraClasses, 0, sb, styles, imageResources, ca, idToEID)
 		}
 
 	case fb2.FlowEmptyLine:
-		// Create a content entry with minimal content for vertical spacing.
-		// The emptyline style provides margin-top/margin-bottom for visual separation.
-		// Note: KP3 reference uses margin adjustment on following elements instead,
-		// but explicit empty line entries are simpler and achieve the same visual result.
-		styleName := styles.ResolveStyle("emptyline")
-		styles.MarkUsage(styleName, styleUsageText)
-		// Use a single space as content - empty strings may be stripped
-		contentName, offset := ca.Add(" ")
-		sb.AddContent(SymText, contentName, offset, styleName)
+		// KP3 doesn't create content entries for empty-lines. Instead, it adds
+		// the empty-line's margin to the following element's margin-top.
+		// Extract the margin value from the emptyline style and add to pending margin.
+		styleSpec := "emptyline"
+		margin := ctx.GetEmptyLineMargin(styleSpec, styles)
+		if margin > 0 {
+			ctx.AddEmptyLineMargin(margin)
+		}
 
 	case fb2.FlowPoem:
 		if item.Poem != nil {
@@ -238,7 +255,8 @@ func processFlowItem(item *fb2.FlowItem, ctx StyleContext, contextName string, s
 					idToEID[item.Poem.ID] = sb.NextEID()
 				}
 			}
-			processPoem(item.Poem, ctx.PushBlock("div", "poem", styles), sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			// processPoem handles PushBlock internally with proper item counting
+			processPoem(c, item.Poem, ctx, sb, styles, imageResources, ca, idToEID)
 		}
 
 	case fb2.FlowCite:
@@ -250,12 +268,13 @@ func processFlowItem(item *fb2.FlowItem, ctx StyleContext, contextName string, s
 					idToEID[item.Cite.ID] = sb.NextEID()
 				}
 			}
-			processCite(item.Cite, ctx.PushBlock("blockquote", "cite", styles), sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			// processCite handles PushBlock internally with proper item counting
+			processCite(c, item.Cite, ctx, sb, styles, imageResources, ca, idToEID)
 		}
 
 	case fb2.FlowTable:
 		if item.Table != nil {
-			eid := sb.AddTable(item.Table, styles, ca, footnotesIndex, imageResources)
+			eid := sb.AddTable(c, item.Table, styles, ca, imageResources, idToEID)
 			if item.Table.ID != "" {
 				if _, exists := idToEID[item.Table.ID]; !exists {
 					idToEID[item.Table.ID] = eid
@@ -272,7 +291,11 @@ func processFlowItem(item *fb2.FlowItem, ctx StyleContext, contextName string, s
 		if !ok {
 			return
 		}
-		resolved := styles.ResolveImageStyle(imgInfo.Width, screenWidth)
+		// Note: Empty-line margins are NOT applied to standalone flow-level images.
+		// KP3 applies fixed 2.6lh margins to full-width images instead (handled in ResolveBlockImageStyle).
+		// Discard any pending margin from empty-lines.
+		ctx.ConsumePendingMargin()
+		resolved := styles.ResolveBlockImageStyle(imgInfo.Width, c.ScreenWidth, "image", nil, nil)
 		eid := sb.AddImage(imgInfo.ResourceName, resolved, item.Image.Alt)
 		if item.Image.ID != "" {
 			if _, exists := idToEID[item.Image.ID]; !exists {
@@ -281,24 +304,28 @@ func processFlowItem(item *fb2.FlowItem, ctx StyleContext, contextName string, s
 		}
 
 	case fb2.FlowSection:
-		// Nested sections handled in processStorylineContent
+		// Nested sections handled in processStorylineSectionContent
 	}
 }
 
 // processPoem processes poem content using ContentAccumulator.
 // Matches EPUB's appendPoemElement handling: title, epigraphs, subtitles, stanzas, text-authors, date.
 // ctx contains the ancestor context chain (e.g., may already include "cite" if poem is inside cite).
-func processPoem(poem *fb2.Poem, ctx StyleContext, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
+func processPoem(c *content.Content, poem *fb2.Poem, ctx StyleContext, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
+	// Count all top-level items in poem for position-based margin distribution
+	itemCount := countPoemItems(poem)
+
+	// Enter poem container with item count for stack-based margin handling
+	poemCtx := ctx.PushBlock("div", "poem", itemCount)
+
 	// Process poem title - uses addTitleAsParagraphs for proper -first/-next styling
 	// (matches EPUB's appendTitleAsDiv pattern)
 	if poem.Title != nil {
-		addTitleAsParagraphs(poem.Title, ctx, "poem-title", 0, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+		addTitleAsParagraphs(c, poem.Title, poemCtx, "poem-title", 0, sb, styles, imageResources, ca, idToEID)
+		poemCtx = poemCtx.Advance()
 	}
 
-	// Process poem epigraphs - KFX doesn't use wrapper blocks for epigraphs.
-	// Instead, apply epigraph styling directly to each paragraph as flat siblings.
-	// This matches KP3 reference output where margin-left is on each paragraph.
-	epigraphCtx := ctx.PushBlock("div", "epigraph", styles)
+	// Process poem epigraphs - nested container inside poem
 	for _, epigraph := range poem.Epigraphs {
 		// If epigraph has an ID, assign it to the first content item
 		if epigraph.Flow.ID != "" {
@@ -307,46 +334,57 @@ func processPoem(poem *fb2.Poem, ctx StyleContext, sb *StorylineBuilder, styles 
 			}
 		}
 
+		// Count items in this epigraph
+		epigraphItems := len(epigraph.Flow.Items) + len(epigraph.TextAuthors)
+		epigraphCtx := poemCtx.PushBlock("div", "epigraph", epigraphItems)
+
 		for i := range epigraph.Flow.Items {
-			processFlowItem(&epigraph.Flow.Items[i], epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			processFlowItem(c, &epigraph.Flow.Items[i], epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID)
+			epigraphCtx = epigraphCtx.Advance()
 		}
 		for i := range epigraph.TextAuthors {
-			styleName := epigraphCtx.Resolve("p", "text-author", styles)
-			addParagraphWithImages(&epigraph.TextAuthors[i], styleName, 0, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			addParagraphWithImages(c, &epigraph.TextAuthors[i], epigraphCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
+			epigraphCtx = epigraphCtx.Advance()
 		}
+		poemCtx = poemCtx.Advance()
 	}
 
 	// Process poem subtitles (matches EPUB's poem.Subtitles handling)
 	for i := range poem.Subtitles {
-		styleName := ctx.Resolve("p", "poem-subtitle", styles)
-		addParagraphWithImages(&poem.Subtitles[i], styleName, 0, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+		addParagraphWithImages(c, &poem.Subtitles[i], poemCtx, "poem-subtitle", 0, sb, styles, imageResources, ca, idToEID)
+		poemCtx = poemCtx.Advance()
 	}
 
-	// Process stanzas - KFX doesn't use wrapper blocks for stanzas.
-	// Content is flat with styling applied directly to each verse line.
-	stanzaCtx := ctx.PushBlock("div", "stanza", styles)
+	// Process stanzas - nested container inside poem
 	for _, stanza := range poem.Stanzas {
+		// Count items in this stanza
+		stanzaItems := countStanzaItems(&stanza)
+		// Use title-block margins for stanzas - verses use margin-top for spacing
+		stanzaCtx := poemCtx.PushBlock("div", "stanza", stanzaItems, true)
+
 		// Stanza title - uses addTitleAsParagraphs for proper -first/-next styling
 		// (matches EPUB's appendTitleAsDiv pattern)
 		if stanza.Title != nil {
-			addTitleAsParagraphs(stanza.Title, stanzaCtx, "stanza-title", 0, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			addTitleAsParagraphs(c, stanza.Title, stanzaCtx, "stanza-title", 0, sb, styles, imageResources, ca, idToEID)
+			stanzaCtx = stanzaCtx.Advance()
 		}
 		// Stanza subtitle (matches EPUB's "stanza-subtitle" class)
 		if stanza.Subtitle != nil {
-			styleName := stanzaCtx.Resolve("p", "stanza-subtitle", styles)
-			addParagraphWithImages(stanza.Subtitle, styleName, 0, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			addParagraphWithImages(c, stanza.Subtitle, stanzaCtx, "stanza-subtitle", 0, sb, styles, imageResources, ca, idToEID)
+			stanzaCtx = stanzaCtx.Advance()
 		}
-		// Verses - use stanza context
+		// Verses
 		for i := range stanza.Verses {
-			styleName := stanzaCtx.Resolve("p", "verse", styles)
-			addParagraphWithImages(&stanza.Verses[i], styleName, 0, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			addParagraphWithImages(c, &stanza.Verses[i], stanzaCtx, "verse", 0, sb, styles, imageResources, ca, idToEID)
+			stanzaCtx = stanzaCtx.Advance()
 		}
+		poemCtx = poemCtx.Advance()
 	}
 
 	// Process text authors
 	for i := range poem.TextAuthors {
-		styleName := ctx.Resolve("p", "text-author", styles)
-		addParagraphWithImages(&poem.TextAuthors[i], styleName, 0, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+		addParagraphWithImages(c, &poem.TextAuthors[i], poemCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
+		poemCtx = poemCtx.Advance()
 	}
 
 	// Process poem date (matches EPUB's ".date" class)
@@ -358,27 +396,189 @@ func processPoem(poem *fb2.Poem, ctx StyleContext, sb *StorylineBuilder, styles 
 			dateText = poem.Date.Value.Format("2006-01-02")
 		}
 		if dateText != "" {
-			styleName := ctx.Resolve("p", "date", styles)
-			resolved := styles.ResolveStyle(styleName)
+			// Use immediate resolution with container context for proper margin handling.
+			// Date is the last item in poem, so it gets poem's margin-bottom filtered correctly.
+			resolvedStyle := poemCtx.Resolve("p", "date")
 			contentName, offset := ca.Add(dateText)
-			sb.AddContent(SymText, contentName, offset, resolved)
+			sb.AddContent(SymText, contentName, offset, "", resolvedStyle)
 		}
+		// No Advance() after last item - poemCtx goes out of scope
 	}
+}
+
+// countPoemItems returns the total number of top-level items in a poem.
+// This is used to initialize the container frame's itemCount.
+func countPoemItems(poem *fb2.Poem) int {
+	count := 0
+	if poem.Title != nil {
+		count++
+	}
+	count += len(poem.Epigraphs)
+	count += len(poem.Subtitles)
+	count += len(poem.Stanzas)
+	count += len(poem.TextAuthors)
+	if poem.Date != nil {
+		count++
+	}
+	return count
+}
+
+// countStanzaItems returns the total number of items in a stanza.
+func countStanzaItems(stanza *fb2.Stanza) int {
+	count := 0
+	if stanza.Title != nil {
+		count++
+	}
+	if stanza.Subtitle != nil {
+		count++
+	}
+	count += len(stanza.Verses)
+	return count
 }
 
 // processCite processes cite content using ContentAccumulator.
 // Matches EPUB's appendCiteElement handling: processes all flow items with "cite" context,
 // followed by text-authors.
 // ctx contains the ancestor context chain (already includes "cite" pushed by caller).
-func processCite(cite *fb2.Cite, ctx StyleContext, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
+func processCite(c *content.Content, cite *fb2.Cite, ctx StyleContext, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
+	// Count all items in cite for position-based margin distribution
+	itemCount := len(cite.Items) + len(cite.TextAuthors)
+
+	// Enter cite container with item count for stack-based margin handling
+	citeCtx := ctx.PushBlock("blockquote", "cite", itemCount)
+
 	// Process all cite flow items with full context chain
 	for i := range cite.Items {
-		processFlowItem(&cite.Items[i], ctx, "cite", sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+		processFlowItem(c, &cite.Items[i], citeCtx, "cite", sb, styles, imageResources, ca, idToEID)
+		citeCtx = citeCtx.Advance()
 	}
 
 	// Process text authors
 	for i := range cite.TextAuthors {
-		styleName := ctx.Resolve("p", "text-author", styles)
-		addParagraphWithImages(&cite.TextAuthors[i], styleName, 0, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+		addParagraphWithImages(c, &cite.TextAuthors[i], citeCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
+		citeCtx = citeCtx.Advance()
+	}
+}
+
+// processFootnoteSectionContent processes a footnote section content.
+// This mirrors EPUB's appendFootnoteSectionContent function, handling all section elements:
+// title, epigraphs, image, annotation, and content with special footnote handling
+// (more paragraphs indicator and backlinks).
+//
+// Parameters:
+//   - section: the FB2 section to process
+//   - addMoreIndicator: function to add "more paragraphs" indicator to first paragraph
+//   - addBacklinks: function to add backlink paragraph at the end
+func processFootnoteSectionContent(
+	c *content.Content,
+	section *fb2.Section,
+	sb *StorylineBuilder,
+	styles *StyleRegistry,
+	imageResources imageResourceInfoByID,
+	ca *ContentAccumulator,
+	idToEID eidByFB2ID,
+	addMoreIndicator func(c *content.Content, para *fb2.Paragraph, ctx StyleContext, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID),
+	addBacklinks func(c *content.Content, sectionID string, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, idToEID eidByFB2ID),
+) {
+	// Process section title FIRST (without registering ID yet)
+	// This matches EPUB behavior where the ID is on the body content, not the title
+	// Unlike body titles, section titles are styled paragraphs, not semantic headings
+	// (matching EPUB's appendTitleAsDiv pattern with "footnote-title" class)
+	if section.Title != nil && len(section.Title.Items) > 0 {
+		titleCtx := NewStyleContext(styles).PushBlock("div", "footnote-title", 1)
+		if styles != nil {
+			styles.EnsureBaseStyle("footnote-title")
+		}
+		addTitleAsParagraphs(c, section.Title, titleCtx, "footnote-title", 0, sb, styles, imageResources, ca, idToEID)
+	}
+
+	// NOW register the section ID - it will point to first body content EID
+	// This ensures footnote popups show the body content, not the title
+	if section.ID != "" {
+		if _, exists := idToEID[section.ID]; !exists {
+			idToEID[section.ID] = sb.NextEID()
+		}
+	}
+
+	// Process epigraphs - same pattern as regular sections
+	// KFX doesn't use wrapper blocks for epigraphs; apply styling directly to each paragraph.
+	for _, epigraph := range section.Epigraphs {
+		// If epigraph has an ID, assign it to the first content item
+		if epigraph.Flow.ID != "" {
+			if _, exists := idToEID[epigraph.Flow.ID]; !exists {
+				idToEID[epigraph.Flow.ID] = sb.NextEID()
+			}
+		}
+
+		// Calculate total item count for position filtering (flow items + text authors)
+		totalItems := len(epigraph.Flow.Items) + len(epigraph.TextAuthors)
+		epigraphCtx := NewStyleContext(styles).PushBlock("div", "epigraph", totalItems)
+
+		for i := range epigraph.Flow.Items {
+			processFlowItem(c, &epigraph.Flow.Items[i], epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID)
+			epigraphCtx = epigraphCtx.Advance()
+		}
+		for i := range epigraph.TextAuthors {
+			addParagraphWithImages(c, &epigraph.TextAuthors[i], epigraphCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
+			epigraphCtx = epigraphCtx.Advance()
+		}
+	}
+
+	// Process section image if present
+	if section.Image != nil {
+		imgID := strings.TrimPrefix(section.Image.Href, "#")
+		if imgInfo, ok := imageResources[imgID]; ok {
+			resolved := styles.ResolveBlockImageStyle(imgInfo.Width, c.ScreenWidth, "image", nil, nil)
+			eid := sb.AddImage(imgInfo.ResourceName, resolved, section.Image.Alt)
+			if section.Image.ID != "" {
+				if _, exists := idToEID[section.Image.ID]; !exists {
+					idToEID[section.Image.ID] = eid
+				}
+			}
+		}
+	}
+
+	// Process annotation if present
+	if section.Annotation != nil {
+		if section.Annotation.ID != "" {
+			if _, exists := idToEID[section.Annotation.ID]; !exists {
+				idToEID[section.Annotation.ID] = sb.NextEID()
+			}
+		}
+		itemCount := len(section.Annotation.Items)
+		annotationCtx := NewStyleContext(styles).PushBlock("div", "annotation", itemCount)
+		for i := range section.Annotation.Items {
+			processFlowItem(c, &section.Annotation.Items[i], annotationCtx, "annotation", sb, styles, imageResources, ca, idToEID)
+			annotationCtx = annotationCtx.Advance()
+		}
+	}
+
+	// Count paragraphs in section content to determine if "more" indicator is needed
+	paragraphCount := countFootnoteParagraphs(section.Content)
+	needMoreIndicator := paragraphCount > 1 && c.MoreParaStr != "" && addMoreIndicator != nil
+	isFirstParagraph := true
+
+	// Process section content (paragraphs, poems, etc.)
+	footnoteCtx := NewStyleContext(styles).PushBlock("div", "footnote", 1)
+	for i := range section.Content {
+		item := &section.Content[i]
+
+		// Add "more paragraphs" indicator to the first paragraph if needed
+		if needMoreIndicator && isFirstParagraph && item.Paragraph != nil {
+			addMoreIndicator(c, item.Paragraph, footnoteCtx, sb, styles, imageResources, ca, idToEID)
+			isFirstParagraph = false
+			continue
+		}
+
+		processFlowItem(c, item, footnoteCtx, "footnote", sb, styles, imageResources, ca, idToEID)
+		// Mark first paragraph as processed (for poems/cites that may contain paragraphs)
+		if item.Paragraph != nil {
+			isFirstParagraph = false
+		}
+	}
+
+	// Add backlink paragraph if this footnote was referenced
+	if addBacklinks != nil && section.ID != "" {
+		addBacklinks(c, section.ID, sb, styles, ca, idToEID)
 	}
 }

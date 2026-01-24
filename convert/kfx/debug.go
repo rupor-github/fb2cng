@@ -615,7 +615,7 @@ func (c *Container) DumpFragments() string {
 							} else {
 								// FID not resolved yet
 								fmt.Fprintf(&sb, "  id: (unresolved) (%s)\n", f.FIDName)
-								fmt.Fprintf(&sb, "  value: %s\n\n", formatValueCompact(f.Value))
+								fmt.Fprintf(&sb, "  value: %s\n\n", FormatValueCompact(f.Value))
 								continue
 							}
 						}
@@ -625,7 +625,7 @@ func (c *Container) DumpFragments() string {
 					} else {
 						// Can't resolve
 						fmt.Fprintf(&sb, "  id: (unresolved) (%s)\n", f.FIDName)
-						fmt.Fprintf(&sb, "  value: %s\n\n", formatValueCompact(f.Value))
+						fmt.Fprintf(&sb, "  value: %s\n\n", FormatValueCompact(f.Value))
 						continue
 					}
 				} else {
@@ -647,14 +647,15 @@ func (c *Container) DumpFragments() string {
 					fmt.Fprintf(&sb, "  id: %s\n", fidID)
 				}
 			}
-			fmt.Fprintf(&sb, "  value: %s\n\n", formatValueCompact(f.Value))
+			fmt.Fprintf(&sb, "  value: %s\n\n", FormatValueCompact(f.Value))
 		}
 	}
 
 	return sb.String()
 }
 
-func formatValueCompact(v any) string {
+// FormatValueCompact formats a value as a compact single-line string for debug output.
+func FormatValueCompact(v any) string {
 	switch val := v.(type) {
 	case nil:
 		return "null"
@@ -688,21 +689,22 @@ func formatValueCompact(v any) string {
 	case ReadSymbolValue:
 		return fmt.Sprintf("symbol(%s)", string(val))
 	case StructValue:
-		return formatStructCompactKFX(val)
+		return FormatStructCompactKFX(val)
 	case map[KFXSymbol]any:
-		return formatStructCompactKFX(val)
+		return FormatStructCompactKFX(val)
 	case map[string]any:
-		return formatStructCompactString(val)
+		return FormatStructCompactString(val)
 	case ListValue:
-		return formatListCompact([]any(val))
+		return FormatListCompact([]any(val))
 	case []any:
-		return formatListCompact(val)
+		return FormatListCompact(val)
 	default:
 		return fmt.Sprintf("<%T>", v)
 	}
 }
 
-func formatStructCompactKFX(m map[KFXSymbol]any) string {
+// FormatStructCompactKFX formats a KFX struct map as a compact single-line string.
+func FormatStructCompactKFX(m map[KFXSymbol]any) string {
 	if len(m) == 0 {
 		return "{}"
 	}
@@ -714,12 +716,13 @@ func formatStructCompactKFX(m map[KFXSymbol]any) string {
 
 	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
-		parts = append(parts, fmt.Sprintf("%s: %s", k, formatValueCompact(m[k])))
+		parts = append(parts, fmt.Sprintf("%s: %s", k, FormatValueCompact(m[k])))
 	}
 	return "{" + strings.Join(parts, ", ") + "}"
 }
 
-func formatStructCompactString(m map[string]any) string {
+// FormatStructCompactString formats a string-keyed map as a compact single-line string.
+func FormatStructCompactString(m map[string]any) string {
 	if len(m) == 0 {
 		return "{}"
 	}
@@ -731,18 +734,19 @@ func formatStructCompactString(m map[string]any) string {
 
 	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
-		parts = append(parts, fmt.Sprintf("%s: %s", k, formatValueCompact(m[k])))
+		parts = append(parts, fmt.Sprintf("%s: %s", k, FormatValueCompact(m[k])))
 	}
 	return "{" + strings.Join(parts, ", ") + "}"
 }
 
-func formatListCompact(items []any) string {
+// FormatListCompact formats a list as a compact single-line string.
+func FormatListCompact(items []any) string {
 	if len(items) == 0 {
 		return "[]"
 	}
 	parts := make([]string, len(items))
 	for i, item := range items {
-		parts[i] = formatValueCompact(item)
+		parts[i] = FormatValueCompact(item)
 	}
 	return "[" + strings.Join(parts, ", ") + "]"
 }

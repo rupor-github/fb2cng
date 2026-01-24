@@ -2,7 +2,7 @@ package kfx
 
 // This file provides helper functions for constructing common Ion value patterns
 // used in KFX fragments. These builders create properly structured values for
-// positions, lengths, style properties, content nodes, and navigation.
+// navigation, resources, and metadata.
 
 // LandmarkInfo holds EIDs for landmark navigation entries.
 // Zero values indicate the landmark is not present.
@@ -11,111 +11,6 @@ type LandmarkInfo struct {
 	TOCEID   int    // First EID of the TOC page section
 	StartEID int    // First EID of the start reading location (body intro)
 	TOCLabel string // Display label for TOC landmark (e.g., "Table of Contents")
-}
-
-// Position builders - for anchors and navigation targets
-// A position is a struct with EID ($155 or $598) and optional offset ($143).
-
-// NewPosition creates a position struct for anchors/navigation.
-// Position is {$155: eid} or {$598: eid} with optional {$143: offset}.
-func NewPosition(eid string, offset int64) StructValue {
-	pos := NewStruct().SetString(SymUniqueID, eid) // $155 = id
-	if offset != 0 {
-		pos.SetInt(SymOffset, offset) // $143 = offset
-	}
-	return pos
-}
-
-// NewPositionKFXID creates a position using kfx_id ($598) instead of id ($155).
-func NewPositionKFXID(kfxID string, offset int64) StructValue {
-	pos := NewStruct().SetString(SymKfxID, kfxID) // $598 = kfx_id as string
-	if offset != 0 {
-		pos.SetInt(SymOffset, offset) // $143 = offset
-	}
-	return pos
-}
-
-// Length/unit builders - for dimensions and spacing
-// A length with unit is {$307: value, $306: unit_symbol}.
-
-// NewLength creates a length value with unit: {value: v, unit: u}.
-func NewLength(value float64, unit KFXSymbol) StructValue {
-	return DimensionValue(value, unit)
-}
-
-// NewLengthEm creates a length in em units.
-func NewLengthEm(value float64) StructValue {
-	return NewLength(value, SymUnitEm) // $308 = em
-}
-
-// NewLengthPt creates a length in point units.
-func NewLengthPt(value float64) StructValue {
-	return NewLength(value, SymUnitPt) // $318 = pt
-}
-
-// NewLengthPx creates a length in pixel units.
-func NewLengthPx(value float64) StructValue {
-	return NewLength(value, SymUnitPx) // $319 = px
-}
-
-// NewLengthPercent creates a length in percent units.
-func NewLengthPercent(value float64) StructValue {
-	return NewLength(value, SymUnitPercent) // $314 = percent
-}
-
-// NewLengthCm creates a length in centimeter units.
-func NewLengthCm(value float64) StructValue {
-	return NewLength(value, SymUnitCm) // $315 = cm
-}
-
-// NewLengthMm creates a length in millimeter units.
-func NewLengthMm(value float64) StructValue {
-	return NewLength(value, SymUnitMm) // $316 = mm
-}
-
-// NewLengthIn creates a length in inch units.
-func NewLengthIn(value float64) StructValue {
-	return NewLength(value, SymUnitIn) // $317 = in
-}
-
-// Style property builders - for $157 style fragments and inline styles
-
-// NewStyleEvent creates a style event for text styling.
-// Style events are used in $142 (style_events) to apply formatting to text ranges.
-func NewStyleEvent(offset, length int64) StructValue {
-	return NewStruct().
-		SetInt(SymOffset, offset). // $143 = offset
-		SetInt(SymLength, length)  // $144 = length
-}
-
-// SetStyleRef sets the style reference on a style event or content.
-func SetStyleRef(s StructValue, styleName string) StructValue {
-	return s.SetSymbol(SymStyle, SymbolID(styleName)) // $157 = style
-}
-
-// Content node builders - for section content
-
-// NewTextContent creates a text content node.
-// Text content is {$145: "text string"} optionally with style_events.
-func NewTextContent(text string) StructValue {
-	return NewStruct().SetString(SymContent, text) // $145 = content
-}
-
-// NewTextContentWithID creates a text content node with an ID for position mapping.
-func NewTextContentWithID(text, id string) StructValue {
-	return NewTextContent(text).SetString(SymUniqueID, id) // $155 = id
-}
-
-// NewImageContent creates an image content node.
-// Image content references an external resource.
-func NewImageContent(resourceName string) StructValue {
-	return NewStruct().SetSymbol(SymResourceName, SymbolID(resourceName)) // $175 = resource_name
-}
-
-// NewContainerContent creates a container content node.
-// Container wraps other content elements.
-func NewContainerContent() StructValue {
-	return NewStruct()
 }
 
 // Navigation builders - for $389, $391, $393 fragments
@@ -173,11 +68,6 @@ func NewLandmarkEntry(landmarkType KFXSymbol, label string, eid int) StructValue
 	return entry
 }
 
-// NewPageListContainer creates a page list navigation container.
-func NewPageListContainer(entries []any) StructValue {
-	return NewNavContainer(SymPageList, entries) // $237 = page_list
-}
-
 // NewApproximatePageListContainer creates a page list container with APPROXIMATE_PAGE_LIST name.
 // This is used for KFX-generated approximate page numbers.
 func NewApproximatePageListContainer(entries []any) StructValue {
@@ -204,33 +94,6 @@ func NewExternalResource(location string, format KFXSymbol, mimeType string, wid
 	return res
 }
 
-// NewImageResourcePNG creates an external resource for a PNG image.
-func NewImageResourcePNG(location string, width, height int64) StructValue {
-	return NewExternalResource(location, SymFormatPNG, "image/png", width, height)
-}
-
-// NewImageResourceJPG creates an external resource for a JPEG image.
-func NewImageResourceJPG(location string, width, height int64) StructValue {
-	return NewExternalResource(location, SymFormatJPG, "image/jpg", width, height)
-}
-
-// NewImageResourceGIF creates an external resource for a GIF image.
-func NewImageResourceGIF(location string, width, height int64) StructValue {
-	return NewExternalResource(location, SymFormatGIF, "image/gif", width, height)
-}
-
-// Anchor builders - for $266 anchor fragments
-
-// NewPositionAnchor creates an anchor with a position reference.
-func NewPositionAnchor(position StructValue) StructValue {
-	return NewStruct().SetStruct(SymPosition, position) // $183 = position
-}
-
-// NewURIAnchor creates an anchor with an external URI.
-func NewURIAnchor(uri string) StructValue {
-	return NewStruct().SetString(SymURI, uri) // $186 = uri
-}
-
 // Metadata builders - for $258 metadata and $490 book_metadata
 
 // NewMetadataEntry creates a metadata key-value entry for $490 categorised metadata.
@@ -249,22 +112,6 @@ func NewCategorisedMetadata(category string, entries []any) StructValue {
 		SetList(SymMetadata, entries)     // $258 = metadata (list of entries)
 }
 
-// Section and storyline builders
-
-// NewSection creates a section fragment value.
-func NewSection(sectionName string, content []any) StructValue {
-	return NewStruct().
-		Set(SymSectionName, SymbolByName(sectionName)). // $174 = section_name as symbol
-		SetList(SymContentList, content)                // $146 = content_list
-}
-
-// NewStoryline creates a storyline fragment value.
-func NewStoryline(storyName string, sections []any) StructValue {
-	return NewStruct().
-		Set(SymStoryName, SymbolByName(storyName)). // $176 = story_name as symbol
-		SetList(SymSections, sections)              // $170 = sections
-}
-
 // Reading order builders
 
 // NewReadingOrder creates a reading order entry for $538 document_data.
@@ -275,25 +122,6 @@ func NewReadingOrder(name KFXSymbol, sections []any) StructValue {
 		ro.SetList(SymSections, sections) // $170 = sections
 	}
 	return ro
-}
-
-// Format capabilities builders - for $593
-
-// NewFormatCapabilities creates a format capabilities fragment value.
-func NewFormatCapabilities(majorVersion, minorVersion int64) StructValue {
-	return NewStruct().
-		SetInt(SymMajorVersion, majorVersion). // $587 = major_version
-		SetInt(SymMinorVersion, minorVersion)  // $588 = minor_version
-}
-
-// AddFeature adds a feature to format capabilities.
-func AddFeature(fc StructValue, featureName string, value any) StructValue {
-	features, ok := fc.GetStruct(SymFeatures) // $590 = features
-	if !ok {
-		features = NewStruct()
-	}
-	features.Set(SymbolID(featureName), value)
-	return fc.SetStruct(SymFeatures, features)
 }
 
 // Container entity map builders - for $419
@@ -308,22 +136,4 @@ func NewContainerEntry(containerID string, entityIDs []any) StructValue {
 // NewContainerEntityMap creates a container entity map fragment value.
 func NewContainerEntityMap(containers []any) StructValue {
 	return NewStruct().SetList(SymContainerList, containers) // $252 = container_list
-}
-
-// NewSymbolList creates a list of symbol values from IDs.
-func NewSymbolList(ids ...KFXSymbol) ListValue {
-	list := NewList()
-	for _, id := range ids {
-		list.AddSymbol(id)
-	}
-	return list
-}
-
-// StrList creates a list of string values.
-func StrList(strs ...string) ListValue {
-	list := NewList()
-	for _, s := range strs {
-		list.AddString(s)
-	}
-	return list
 }

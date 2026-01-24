@@ -586,16 +586,14 @@ func TestNewStyleRegistryFromCSS(t *testing.T) {
 		t.Error("paragraph style should have line-height property")
 	}
 
-	// Check default HTML element styles and seeded wrapper defaults are present
+	// Check default HTML element styles are present
 	if _, ok := registry.Get("strong"); !ok {
 		t.Error("expected default 'strong' style to be preserved")
 	}
 	if _, ok := registry.Get("p"); !ok {
 		t.Error("expected default 'p' style to be preserved")
 	}
-	if _, ok := registry.Get("epigraph"); !ok {
-		t.Error("expected seeded default 'epigraph' wrapper style")
-	}
+	// Note: wrapper styles like 'epigraph' come from default.css only (not seeded by Go code)
 }
 
 func TestNewStyleRegistryFromCSS_Empty(t *testing.T) {
@@ -614,10 +612,7 @@ func TestNewStyleRegistryFromCSS_Empty(t *testing.T) {
 	if _, ok := registry.Get("h1"); !ok {
 		t.Error("expected default 'h1' style")
 	}
-	// Seeded wrapper defaults should also be present
-	if _, ok := registry.Get("epigraph"); !ok {
-		t.Error("expected seeded default 'epigraph' style")
-	}
+	// Note: wrapper styles like 'epigraph' come from default.css only (not seeded by Go code)
 }
 
 func TestFontSizeKeywords(t *testing.T) {
@@ -800,11 +795,11 @@ func TestStyleRegistryBuildFragments(t *testing.T) {
 
 	registry, _ := NewStyleRegistryFromCSS(css, nil, log)
 
-	// Use ResolveStyle to get resolved style names (base36 format)
+	// Use StyleContext.Resolve to get resolved style names (base36 format)
 	// This is how styles are typically used in actual code
-	name1 := registry.ResolveStyle("paragraph")
-	name2 := registry.ResolveStyle("custom")
-	name3 := registry.ResolveStyle("strong") // default HTML element style
+	name1 := NewStyleContext(registry).Resolve("", "paragraph")
+	name2 := NewStyleContext(registry).Resolve("", "custom")
+	name3 := NewStyleContext(registry).Resolve("", "strong") // default HTML element style
 
 	// Mark styles as used for text
 	registry.MarkUsage(name1, styleUsageText)

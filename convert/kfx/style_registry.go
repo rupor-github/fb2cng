@@ -42,6 +42,11 @@ func (sr *StyleRegistry) SetTracer(t *StyleTracer) {
 	sr.tracer = t
 }
 
+// Tracer returns the style tracer, or nil if none is set.
+func (sr *StyleRegistry) Tracer() *StyleTracer {
+	return sr.tracer
+}
+
 // RegisterExternalLink registers an external URL and returns its anchor ID.
 // Multiple references to the same URL will share the same anchor ID.
 func (sr *StyleRegistry) RegisterExternalLink(url string) string {
@@ -92,7 +97,13 @@ func (sr *StyleRegistry) Register(def StyleDef) {
 
 	merged := make(map[KFXSymbol]any, len(existing.Properties)+len(def.Properties))
 	mergeAllWithRules(merged, existing.Properties, mergeContextInline, sr.tracer)
-	mergeAllWithRules(merged, def.Properties, mergeContextInline, sr.tracer)
+	// Use mergeContextClassOverride for the new definition so CSS values properly
+	// override defaults. With mergeContextInline (allowWritingModeConvert=true),
+	// margin-top/bottom use override-maximum which keeps the larger value.
+	// But CSS semantics require that later rules override earlier ones regardless
+	// of which value is larger. mergeContextClassOverride (allowWritingModeConvert=false)
+	// triggers the override rule for margins, matching CSS cascade behavior.
+	mergeAllWithRules(merged, def.Properties, mergeContextClassOverride, sr.tracer)
 
 	// Inherit parent from new def if specified
 	parent := existing.Parent
@@ -100,10 +111,14 @@ func (sr *StyleRegistry) Register(def StyleDef) {
 		parent = def.Parent
 	}
 
+	// Preserve DescendantReplacement flag (true if either has it)
+	descReplacement := existing.DescendantReplacement || def.DescendantReplacement
+
 	sr.styles[def.Name] = StyleDef{
-		Name:       def.Name,
-		Parent:     parent,
-		Properties: merged,
+		Name:                  def.Name,
+		Parent:                parent,
+		Properties:            merged,
+		DescendantReplacement: descReplacement,
 	}
 	sr.tracer.TraceRegister(def.Name+" (merged)", merged)
 }
@@ -112,6 +127,16 @@ func (sr *StyleRegistry) Register(def StyleDef) {
 func (sr *StyleRegistry) Get(name string) (StyleDef, bool) {
 	def, ok := sr.styles[name]
 	return def, ok
+}
+
+// IsDescendantReplacement returns true if the named style uses replacement semantics
+// for descendant selectors. When true, descendant selectors like "h1--sub" completely
+// replace the base class rather than just overriding specific properties.
+func (sr *StyleRegistry) IsDescendantReplacement(name string) bool {
+	if def, ok := sr.styles[name]; ok {
+		return def.DescendantReplacement
+	}
+	return false
 }
 
 // Names returns all registered style names in order.
@@ -145,32 +170,6 @@ func (sr *StyleRegistry) EnsureStyle(name string) string {
 	return sr.MarkUsage(name, styleUsageText)
 }
 
-// EnsureStyleNoMark resolves a style name to a generated name but does NOT mark it as used.
-// This is used when we need to resolve style names during processing but will mark usage later
-// (e.g., after style event segmentation that may deduplicate some events).
-func (sr *StyleRegistry) EnsureStyleNoMark(name string) string {
-	if name == "" {
-		return ""
-	}
-	sr.EnsureBaseStyle(name)
-
-	// Resolve inheritance to get final properties
-	def := sr.styles[name]
-	resolved := sr.resolveInheritance(def)
-
-	// Check if we already have a generated name for this property set
-	sig := styleSignature(resolved.Properties)
-	if genName, ok := sr.resolved[sig]; ok {
-		return genName
-	}
-
-	// Generate a new name and register the resolved style (but don't mark used)
-	genName := sr.nextResolvedStyleName()
-	sr.resolved[sig] = genName
-	sr.Register(StyleDef{Name: genName, Properties: resolved.Properties})
-	return genName
-}
-
 // MarkUsage ensures a style exists, resolves it to a generated name, and marks usage.
 // Returns the generated style name that should be used in output.
 func (sr *StyleRegistry) MarkUsage(name string, usage styleUsage) string {
@@ -183,8 +182,27 @@ func (sr *StyleRegistry) MarkUsage(name string, usage styleUsage) string {
 	def := sr.styles[name]
 	resolved := sr.resolveInheritance(def)
 
+	// Filter out height: auto - KP3 never outputs this in styles (it's the implied default).
+	// The value may be stored as either KFXSymbol or SymbolValue depending on source.
+	props := resolved.Properties
+	if h, ok := props[SymHeight]; ok {
+		isAuto := false
+		switch v := h.(type) {
+		case SymbolValue:
+			isAuto = KFXSymbol(v) == SymAuto
+		case KFXSymbol:
+			isAuto = v == SymAuto
+		}
+		if isAuto {
+			// Make a copy to avoid modifying the original
+			props = make(map[KFXSymbol]any, len(resolved.Properties))
+			maps.Copy(props, resolved.Properties)
+			delete(props, SymHeight)
+		}
+	}
+
 	// Check if we already have a generated name for this property set
-	sig := styleSignature(resolved.Properties)
+	sig := styleSignature(props)
 	if genName, ok := sr.resolved[sig]; ok {
 		sr.used[genName] = true
 		sr.usage[genName] = sr.usage[genName] | usage
@@ -196,7 +214,7 @@ func (sr *StyleRegistry) MarkUsage(name string, usage styleUsage) string {
 	sr.resolved[sig] = genName
 	sr.used[genName] = true
 	sr.usage[genName] = usage
-	sr.Register(StyleDef{Name: genName, Properties: resolved.Properties})
+	sr.Register(StyleDef{Name: genName, Properties: props})
 	return genName
 }
 
@@ -204,21 +222,13 @@ func (sr *StyleRegistry) hasTextUsage(name string) bool {
 	return sr.usage[name]&styleUsageText != 0
 }
 
+func (sr *StyleRegistry) hasImageUsage(name string) bool {
+	return sr.usage[name]&styleUsageImage != 0
+}
+
 func (sr *StyleRegistry) nextResolvedStyleName() string {
 	sr.resolvedCounter++
 	return "s" + toBase36(sr.resolvedCounter)
-}
-
-// containerStyles are CSS classes that represent structural containers in FB2/EPUB.
-// These should NOT contribute margins to child content elements, as their margins
-// are meant for the container block itself (in EPUB), not inherited content.
-var containerStyles = map[string]bool{
-	"section":    true,
-	"cite":       true,
-	"epigraph":   true,
-	"poem":       true,
-	"stanza":     true,
-	"annotation": true,
 }
 
 // tableElementProperties are properties that KFX requires to be on the table element,
@@ -278,257 +288,14 @@ func (sr *StyleRegistry) GetTableElementProps() TableElementProps {
 	return result
 }
 
-// ResolveStyle resolves a (possibly multi-part) style spec into a fully-resolved KP3-like style name.
-// Later parts override earlier ones. All resolved styles inherit from kfx-unknown as the base.
-//
-// An optional ElementPosition can be provided for position-based property filtering:
-//   - First element: margin-top removed
-//   - Last element: margin-bottom removed
-//   - First+Last (only element): both margins removed
-//   - Middle or no position: no filtering
-//
-// Elements that don't pass position (tables, TOC entries, style events) are treated as "middle"
-// because they either don't participate in vertical margin collapsing or handle spacing differently.
-func (sr *StyleRegistry) ResolveStyle(styleSpec string, pos ...ElementPosition) string {
-	parts := strings.Fields(styleSpec)
-	if len(parts) == 0 {
-		return ""
-	}
-
-	merged := make(map[KFXSymbol]any)
-
-	// Start with kfx-unknown as the base for all resolved styles
-	// This ensures minimal required properties (like line-height: 1lh) are always present
-	sr.EnsureBaseStyle("kfx-unknown")
-	if unknown, exists := sr.styles["kfx-unknown"]; exists {
-		resolved := sr.resolveInheritance(unknown)
-		sr.mergeProperties(merged, resolved.Properties)
-	}
-
-	// Track margins separately - we may need to use intermediate margins
-	// if the final element doesn't define any.
-	var lastMargins map[KFXSymbol]any
-
-	// Process parts in order: base element first, then context, then specific class.
-	// Later parts override earlier ones using stylelist merge rules, so for "p section section-subtitle":
-	// 1. p properties are set (including margins)
-	// 2. section properties override p (margins filtered - it's a container)
-	// 3. section-subtitle properties override section
-	//
-	// Container classes (section, cite, etc.) have their margins filtered because
-	// in CSS, margins don't inherit from containers to children. Title wrappers
-	// (body-title, chapter-title) are NOT containers - they're styling wrappers
-	// whose margins should propagate to the header content.
-	lastIdx := len(parts) - 1
-	for i, part := range parts {
-		sr.EnsureBaseStyle(part)
-		def := sr.styles[part]
-		resolved := sr.resolveInheritance(def)
-
-		// Filter margins from container classes (intermediate or final)
-		isContainer := containerStyles[part]
-		if i > 0 && isContainer {
-			// DON'T save container margins - they should never propagate
-			// Merge non-margin properties from containers
-			for k, v := range resolved.Properties {
-				if k == SymMarginTop || k == SymMarginBottom || k == SymMarginLeft || k == SymMarginRight {
-					continue
-				}
-				sr.mergeProperty(merged, k, v)
-			}
-		} else if i > 0 && i < lastIdx {
-			// Non-container intermediate: track margins for potential use by final element
-			for _, sym := range []KFXSymbol{SymMarginTop, SymMarginBottom, SymMarginLeft, SymMarginRight} {
-				if v, ok := resolved.Properties[sym]; ok {
-					if lastMargins == nil {
-						lastMargins = make(map[KFXSymbol]any)
-					}
-					sr.mergeProperty(lastMargins, sym, v)
-				}
-			}
-			// Merge non-margin properties
-			for k, v := range resolved.Properties {
-				if k == SymMarginTop || k == SymMarginBottom || k == SymMarginLeft || k == SymMarginRight {
-					continue
-				}
-				sr.mergeProperty(merged, k, v)
-			}
-		} else {
-			for k, v := range resolved.Properties {
-				sr.mergeProperty(merged, k, v)
-			}
-		}
-	}
-
-	// If the final result has no margins but intermediate parts did, use those
-	// This allows title wrappers (body-title, etc.) to provide margins to headers
-	if lastMargins != nil {
-		for _, sym := range []KFXSymbol{SymMarginTop, SymMarginBottom, SymMarginLeft, SymMarginRight} {
-			if _, hasMargin := merged[sym]; !hasMargin {
-				if v, ok := lastMargins[sym]; ok {
-					sr.mergeProperty(merged, sym, v)
-				}
-			}
-		}
-	}
-
-	// Apply position-based filtering if position was provided
-	var position ElementPosition
-	var hasPosition bool
-	if len(pos) > 0 {
-		position = pos[0]
-		hasPosition = position.IsFirst || position.IsLast
-	}
-
-	if hasPosition {
-		filtered, removedProps := filterPropertiesByPositionWithRemoved(merged, position)
-		if sr.tracer.IsEnabled() && len(removedProps) > 0 {
-			var removedNames []string
-			for _, sym := range removedProps {
-				removedNames = append(removedNames, traceSymbolNameForStyle(sym))
-			}
-			posName := positionSuffix(position)[2 : len(positionSuffix(position))-1]
-			sr.tracer.TracePositionFilter(styleSpec, posName, removedNames)
-		}
-		merged = filtered
-	}
-
-	// For table styles, remove properties that KFX requires to be on the element, not in the style.
-	// KP3 moves these from style to element during table processing.
-	if parts[0] == "table" {
-		for prop := range tableElementProperties {
-			delete(merged, prop)
-		}
-	}
-
-	sig := styleSignature(merged)
-	if name, ok := sr.resolved[sig]; ok {
-		sr.used[name] = true
-		suffix := ""
-		if hasPosition {
-			suffix = positionSuffix(position)
-		}
-		sr.tracer.TraceResolve(styleSpec+suffix, name+" (cached)", merged)
-		return name
-	}
-
-	name := sr.nextResolvedStyleName()
-	sr.resolved[sig] = name
-	sr.used[name] = true
-	sr.Register(StyleDef{Name: name, Properties: merged})
-	suffix := ""
-	if hasPosition {
-		suffix = positionSuffix(position)
-	}
-	sr.tracer.TraceResolve(styleSpec+suffix, name, merged)
-	return name
-}
-
-// ResolveStyleNoMark resolves a style spec into a generated name but does NOT mark it as used.
-// This is used when style names are needed during processing but usage will be marked later
-// (e.g., after style event segmentation that may deduplicate some events).
-func (sr *StyleRegistry) ResolveStyleNoMark(styleSpec string) string {
-	parts := strings.Fields(styleSpec)
-	if len(parts) == 0 {
-		return ""
-	}
-
-	merged := make(map[KFXSymbol]any)
-
-	sr.EnsureBaseStyle("kfx-unknown")
-	if unknown, exists := sr.styles["kfx-unknown"]; exists {
-		resolved := sr.resolveInheritance(unknown)
-		sr.mergeProperties(merged, resolved.Properties)
-	}
-
-	var lastMargins map[KFXSymbol]any
-
-	lastIdx := len(parts) - 1
-	for i, part := range parts {
-		sr.EnsureBaseStyle(part)
-		def := sr.styles[part]
-		resolved := sr.resolveInheritance(def)
-
-		isContainer := containerStyles[part]
-		if i > 0 && isContainer {
-			for k, v := range resolved.Properties {
-				if k == SymMarginTop || k == SymMarginBottom || k == SymMarginLeft || k == SymMarginRight {
-					continue
-				}
-				sr.mergeProperty(merged, k, v)
-			}
-		} else if i > 0 && i < lastIdx {
-			for _, sym := range []KFXSymbol{SymMarginTop, SymMarginBottom, SymMarginLeft, SymMarginRight} {
-				if v, ok := resolved.Properties[sym]; ok {
-					if lastMargins == nil {
-						lastMargins = make(map[KFXSymbol]any)
-					}
-					sr.mergeProperty(lastMargins, sym, v)
-				}
-			}
-			for k, v := range resolved.Properties {
-				if k == SymMarginTop || k == SymMarginBottom || k == SymMarginLeft || k == SymMarginRight {
-					continue
-				}
-				sr.mergeProperty(merged, k, v)
-			}
-		} else {
-			for k, v := range resolved.Properties {
-				sr.mergeProperty(merged, k, v)
-			}
-		}
-	}
-
-	if lastMargins != nil {
-		for _, sym := range []KFXSymbol{SymMarginTop, SymMarginBottom, SymMarginLeft, SymMarginRight} {
-			if _, hasMargin := merged[sym]; !hasMargin {
-				if v, ok := lastMargins[sym]; ok {
-					sr.mergeProperty(merged, sym, v)
-				}
-			}
-		}
-	}
-
-	// For table styles, remove properties that KFX requires to be on the element, not in the style.
-	if parts[0] == "table" {
-		for prop := range tableElementProperties {
-			delete(merged, prop)
-		}
-	}
-
-	sig := styleSignature(merged)
-	if name, ok := sr.resolved[sig]; ok {
-		// Don't mark used - caller will do that if needed
-		sr.tracer.TraceResolve(styleSpec, name+" (cached, no-mark)", merged)
-		return name
-	}
-
-	name := sr.nextResolvedStyleName()
-	sr.resolved[sig] = name
-	// Don't mark used - caller will do that if needed
-	sr.Register(StyleDef{Name: name, Properties: merged})
-	sr.tracer.TraceResolve(styleSpec, name+" (no-mark)", merged)
-	return name
-}
-
-// positionSuffix returns a descriptive suffix for tracing position-aware resolution.
-func positionSuffix(pos ElementPosition) string {
-	switch {
-	case pos.IsFirst && pos.IsLast:
-		return " [first+last]"
-	case pos.IsFirst:
-		return " [first]"
-	case pos.IsLast:
-		return " [last]"
-	default:
-		return " [middle]"
-	}
-}
-
 // RegisterResolved takes a merged property map, generates a unique style name,
 // registers the style, and returns the name. This is used by StyleContext.Resolve
 // to register styles built with proper CSS inheritance rules.
 // All resolved styles inherit from kfx-unknown as the base.
+//
+// This method also performs standard KFX output filtering:
+// - Removes height: auto (KP3 never outputs this, it's the implied default)
+// - Removes table element properties (these go on the element, not the style)
 func (sr *StyleRegistry) RegisterResolved(props map[KFXSymbol]any) string {
 	// Start with kfx-unknown as the base, then overlay provided props
 	merged := make(map[KFXSymbol]any)
@@ -539,49 +306,95 @@ func (sr *StyleRegistry) RegisterResolved(props map[KFXSymbol]any) string {
 	}
 	sr.mergeProperties(merged, props) // Provided props override kfx-unknown
 
+	return sr.registerFilteredStyle(merged)
+}
+
+// RegisterResolvedRaw registers a style without adding the kfx-unknown base.
+// This is used for image styles that don't need text properties like line-height.
+// Standard KFX output filtering is still applied.
+func (sr *StyleRegistry) RegisterResolvedRaw(props map[KFXSymbol]any) string {
+	// Make a copy to avoid modifying caller's map
+	merged := make(map[KFXSymbol]any, len(props))
+	maps.Copy(merged, props)
+	return sr.registerFilteredStyle(merged)
+}
+
+// RegisterResolvedNoMark is like RegisterResolved but does NOT mark the style as used.
+// This is used when styles are resolved during processing but usage will be marked later
+// (e.g., after style event segmentation that may deduplicate some events).
+func (sr *StyleRegistry) RegisterResolvedNoMark(props map[KFXSymbol]any) string {
+	// Start with kfx-unknown as the base, then overlay provided props
+	merged := make(map[KFXSymbol]any)
+	sr.EnsureBaseStyle("kfx-unknown")
+	if unknown, exists := sr.styles["kfx-unknown"]; exists {
+		resolved := sr.resolveInheritance(unknown)
+		sr.mergeProperties(merged, resolved.Properties)
+	}
+	sr.mergeProperties(merged, props) // Provided props override kfx-unknown
+
+	return sr.registerFilteredStyleNoMark(merged)
+}
+
+// registerFilteredStyle applies standard KFX output filtering, registers the style, and marks it used.
+func (sr *StyleRegistry) registerFilteredStyle(merged map[KFXSymbol]any) string {
+	return sr.doRegisterFilteredStyle(merged, true)
+}
+
+// registerFilteredStyleNoMark applies standard KFX output filtering and registers the style but does NOT mark used.
+func (sr *StyleRegistry) registerFilteredStyleNoMark(merged map[KFXSymbol]any) string {
+	return sr.doRegisterFilteredStyle(merged, false)
+}
+
+// doRegisterFilteredStyle is the common implementation for filtered style registration.
+func (sr *StyleRegistry) doRegisterFilteredStyle(merged map[KFXSymbol]any, markUsed bool) string {
+	// Filter out height: auto - KP3 never outputs this in styles (it's the implied default)
+	if h, ok := merged[SymHeight]; ok {
+		isAuto := false
+		switch v := h.(type) {
+		case SymbolValue:
+			isAuto = KFXSymbol(v) == SymAuto
+		case KFXSymbol:
+			isAuto = v == SymAuto
+		}
+		if isAuto {
+			delete(merged, SymHeight)
+		}
+	}
+
+	// Filter table element properties - KP3 moves these from style to element
+	for prop := range tableElementProperties {
+		delete(merged, prop)
+	}
+
 	sig := styleSignature(merged)
 	if name, ok := sr.resolved[sig]; ok {
-		sr.used[name] = true
+		if markUsed {
+			sr.used[name] = true
+		}
 		return name
 	}
 
 	name := sr.nextResolvedStyleName()
 	sr.resolved[sig] = name
-	sr.used[name] = true
+	if markUsed {
+		sr.used[name] = true
+	}
 	sr.Register(StyleDef{Name: name, Properties: merged})
 	return name
 }
 
 // ResolveImageStyle creates a KP3-compatible image style with specific width percentage.
-// KP3 calculates image width as percentage of screen width and creates unique styles
-// for each distinct width value. This produces styles like:
+// KP3 calculates image width as percentage of content width (512px) and creates unique
+// styles for each distinct width value. This produces styles like:
 //
-//	.sXX { box-align: center; line-height: 1lh; width: 84.766%; }
+//	.sXX { box-align: center; sizing-bounds: content_bounds; width: 74.219%; }
 //
-// screenWidth is the target screen width (e.g., 1280 for Kindle).
+// The screenWidth parameter is ignored - KP3 always uses 512px content width.
 func (sr *StyleRegistry) ResolveImageStyle(imageWidth, screenWidth int) string {
-	if screenWidth <= 0 {
-		screenWidth = 1280 // Default Kindle screen width
-	}
-
-	// Calculate width percentage (KP3 uses 3 decimal places)
-	widthPercent := float64(imageWidth) / float64(screenWidth) * 100
-	return sr.ResolveImagePercentStyle(widthPercent)
-}
-
-// ResolveImagePercentStyle creates a KP3-compatible image style with explicit width percent.
-func (sr *StyleRegistry) ResolveImagePercentStyle(widthPercent float64) string {
-	if widthPercent > 100 {
-		widthPercent = 100
-	}
-	if widthPercent < 0 {
-		widthPercent = 0
-	}
-
 	props := map[KFXSymbol]any{
-		SymBoxAlign:     SymbolValue(SymCenter),                       // box-align: center
-		SymSizingBounds: SymbolValue(SymContentBounds),                // sizing_bounds: content_bounds
-		SymWidth:        DimensionValue(widthPercent, SymUnitPercent), // width: XX.XXX%
+		SymBoxAlign:     SymbolValue(SymCenter),                                        // box-align: center
+		SymSizingBounds: SymbolValue(SymContentBounds),                                 // sizing_bounds: content_bounds
+		SymWidth:        DimensionValue(ImageWidthPercent(imageWidth), SymUnitPercent), // width: XX.XXX%
 	}
 
 	sig := styleSignature(props)
@@ -598,29 +411,46 @@ func (sr *StyleRegistry) ResolveImagePercentStyle(widthPercent float64) string {
 }
 
 // ResolveBlockImageStyle creates a KP3-compatible image style that inherits block-level properties.
-// This is used for images that are the sole content of a block element (e.g., subtitle, title).
+// This is used for images that are the sole content of a block element (e.g., subtitle, title, paragraph).
 // The resulting style combines:
 //   - Block-level properties from the parent style (margins, break properties, font-weight)
-//   - Image-specific properties (width, box-align, baseline-style)
+//   - Image element properties from "image-block" style if blockStyle is "image"
+//   - Image-specific properties (width, baseline-style)
 //
-// Properties that don't apply to images (like text-indent, text-align) are filtered out.
-// text-align: center becomes box-align: center for images.
-func (sr *StyleRegistry) ResolveBlockImageStyle(imageWidth, screenWidth int, blockStyle string) string {
-	if screenWidth <= 0 {
-		screenWidth = 1280
-	}
+// The behavior differs based on whether this is a standalone block image or an image inside
+// another block element:
+//
+// For standalone block images (blockStyle contains "image"):
+//   - Uses box-align: center for centering
+//   - Includes properties from "image-block" CSS style
+//   - Full-width images (>= 512px) get 2.6lh margin-top and margin-bottom (KP3 behavior)
+//
+// For images inside other block elements (paragraph, subtitle, etc.):
+//   - Uses textIndent as margin-left (KP3 aligns such images with paragraph text)
+//   - Applies marginLeft from container (e.g., cite block's margin-left)
+//   - Does NOT add box-align: center
+//   - This matches KP3's behavior where images in paragraphs/subtitles align with text
+//
+// The textIndent parameter is the resolved text-indent value from the containing block's
+// CSS cascade. For non-standalone block images, this value is converted to margin-left.
+// Pass nil if the calling context doesn't have a resolved text-indent.
+//
+// The marginLeft parameter is the resolved margin-left value from the containing block's
+// CSS cascade, including inherited container margins (e.g., from cite or poem blocks).
+// Pass nil if no margin-left should be applied.
+//
+// The screenWidth parameter is ignored - KP3 always uses 512px content width.
+func (sr *StyleRegistry) ResolveBlockImageStyle(imageWidth, screenWidth int, blockStyle string, textIndent, marginLeft any) string {
+	widthPercent := ImageWidthPercent(imageWidth)
 
-	// Calculate width percentage
-	widthPercent := float64(imageWidth) / float64(screenWidth) * 100
-	if widthPercent > 100 {
-		widthPercent = 100
-	}
-	if widthPercent < 0 {
-		widthPercent = 0
-	}
+	// Determine if this is a standalone block image or an image inside another block element
+	isStandaloneBlock := strings.Contains(blockStyle, "image")
 
 	// Start with block style properties
 	props := make(map[KFXSymbol]any)
+
+	// Track if block style has text-align: center - this should become box-align: center for images
+	hasTextAlignCenter := false
 
 	// Resolve the block style to get its properties
 	if blockStyle != "" {
@@ -629,10 +459,20 @@ func (sr *StyleRegistry) ResolveBlockImageStyle(imageWidth, screenWidth int, blo
 			if def, exists := sr.styles[part]; exists {
 				resolved := sr.resolveInheritance(def)
 				for k, v := range resolved.Properties {
-					// Filter out properties that don't apply to images
+					// Filter out properties that don't apply to block images
 					switch k {
-					case SymTextIndent, SymTextAlignment, SymLineHeight:
-						// Skip text-specific properties
+					case SymTextIndent, SymLineHeight,
+						SymWidth, SymHeight, SymMaxWidth, SymMaxHeight, SymMinWidth:
+						// Skip text-specific and dimension properties
+						// text-indent is handled separately via the textIndent parameter
+						// Dimensions are calculated from actual image size, not CSS
+						continue
+					case SymTextAlignment:
+						// Track text-align: center - we'll convert this to box-align: center for images
+						// Value can be either SymCenter or SymbolValue(SymCenter) depending on source
+						if v == SymCenter || v == SymbolValue(SymCenter) {
+							hasTextAlignCenter = true
+						}
 						continue
 					}
 					props[k] = v
@@ -641,13 +481,61 @@ func (sr *StyleRegistry) ResolveBlockImageStyle(imageWidth, screenWidth int, blo
 		}
 	}
 
+	// For standalone images (blockStyle contains "image"), also include properties
+	// from "image-block" style which corresponds to CSS "img.image-block" selector.
+	// This ensures user-defined image styling from CSS is applied in KFX.
+	if isStandaloneBlock {
+		sr.EnsureBaseStyle("image-block")
+		if def, exists := sr.styles["image-block"]; exists {
+			resolved := sr.resolveInheritance(def)
+			for k, v := range resolved.Properties {
+				// Filter out properties that don't apply to block images
+				switch k {
+				case SymTextIndent, SymTextAlignment, SymLineHeight,
+					SymWidth, SymHeight, SymMaxWidth, SymMaxHeight, SymMinWidth:
+					// Skip text-specific and dimension properties
+					// Dimensions are calculated from actual image size, not CSS
+					continue
+				}
+				props[k] = v
+			}
+		}
+	}
+
 	// Add/override with image-specific properties
-	props[SymBaselineStyle] = SymbolValue(SymCenter)               // baseline-style: center
-	props[SymBoxAlign] = SymbolValue(SymCenter)                    // box-align: center
+	// Note: Block images do NOT use baseline-style: center (only inline images do).
+	// KP3 reference shows block images only have box-align: center for centering.
 	props[SymWidth] = DimensionValue(widthPercent, SymUnitPercent) // width: XX.XXX%
+
+	// Determine if image should be centered:
+	// 1. Standalone block images (blockStyle contains "image") always get box-align: center
+	// 2. Images inside elements with text-align: center (like subtitles) also get box-align: center
+	// 3. Otherwise, apply margin-left from container and/or text-indent for alignment
+	if isStandaloneBlock || hasTextAlignCenter {
+		props[SymBoxAlign] = SymbolValue(SymCenter) // box-align: center
+	} else {
+		// Apply container margin-left (e.g., from cite block) if present
+		if marginLeft != nil {
+			props[SymMarginLeft] = marginLeft
+		}
+		// If text-indent is also present, it should be added to margin-left for alignment
+		// For now, text-indent overrides if no margin-left is set
+		if textIndent != nil && marginLeft == nil {
+			props[SymMarginLeft] = textIndent
+		}
+	}
 
 	// Ensure line-height is present (KP3 requires it)
 	props[SymLineHeight] = DimensionValue(1, SymUnitLh) // line-height: 1lh
+
+	// KP3 applies 2.6lh margin-top and margin-bottom to standalone full-width images.
+	// This applies to flow-level images (blockStyle="image") that span the full content width
+	// (image width >= 512px, resulting in width: 100%).
+	// Reference: com/amazon/adapter/f/b.java lines 121-122
+	if isStandaloneBlock && imageWidth >= int(KP3ContentWidthPx) {
+		props[SymMarginTop] = DimensionValue(2.6, SymUnitLh)
+		props[SymMarginBottom] = DimensionValue(2.6, SymUnitLh)
+	}
 
 	sig := styleSignature(props)
 	if name, ok := sr.resolved[sig]; ok {
@@ -672,6 +560,9 @@ func (sr *StyleRegistry) ResolveBlockImageStyle(imageWidth, screenWidth int, blo
 // The pixel dimensions are converted to em using 16px as the base (standard browser default).
 // Example: 110x23 pixels → width: 6.875em, height: 1.4375em
 //
+// This also includes properties from "image-inline" style which corresponds to CSS
+// selector "img.image-inline". This ensures user-defined CSS styling is applied.
+//
 // The caller should also set render: inline ($601 = $283) on the image content entry.
 func (sr *StyleRegistry) ResolveInlineImageStyle(imageWidth, imageHeight int) string {
 	const baseFontSizePx = 16.0 // Standard em base size
@@ -680,44 +571,29 @@ func (sr *StyleRegistry) ResolveInlineImageStyle(imageWidth, imageHeight int) st
 	widthEm := float64(imageWidth) / baseFontSizePx
 	heightEm := float64(imageHeight) / baseFontSizePx
 
-	props := map[KFXSymbol]any{
-		SymBaselineStyle: SymbolValue(SymCenter),              // baseline-style: center
-		SymWidth:         DimensionValue(widthEm, SymUnitEm),  // width in em
-		SymHeight:        DimensionValue(heightEm, SymUnitEm), // height in em
+	// Start with CSS properties from image-inline style
+	props := make(map[KFXSymbol]any)
+
+	sr.EnsureBaseStyle("image-inline")
+	if def, exists := sr.styles["image-inline"]; exists {
+		resolved := sr.resolveInheritance(def)
+		for k, v := range resolved.Properties {
+			// Filter out properties that don't apply to inline images
+			switch k {
+			case SymTextIndent, SymTextAlignment, SymLineHeight,
+				SymWidth, SymHeight, SymMaxWidth, SymMaxHeight, SymMinWidth:
+				// Skip text-specific and dimension properties
+				// Dimensions are calculated from actual image size, not CSS
+				continue
+			}
+			props[k] = v
+		}
 	}
 
-	sig := styleSignature(props)
-	if name, ok := sr.resolved[sig]; ok {
-		sr.used[name] = true
-		return name
-	}
-
-	name := sr.nextResolvedStyleName()
-	sr.resolved[sig] = name
-	sr.used[name] = true
-	sr.Register(StyleDef{Name: name, Properties: props})
-	return name
-}
-
-// ResolveVignetteImageStyle creates the standard vignette image style (100% width)
-// with KP3-compatible top margin.
-func (sr *StyleRegistry) ResolveVignetteImageStyle() string {
-	return sr.ResolveVignetteImageStyleWithPosition(PositionMiddle())
-}
-
-// ResolveVignetteImageStyleWithPosition creates a vignette image style with position filtering.
-// First element: margin-top removed; Last element: margin-bottom removed (none present anyway).
-// This matches KP3's position-based property filtering.
-func (sr *StyleRegistry) ResolveVignetteImageStyleWithPosition(pos ElementPosition) string {
-	props := map[KFXSymbol]any{
-		SymBoxAlign:     SymbolValue(SymCenter),
-		SymSizingBounds: SymbolValue(SymContentBounds),
-		SymWidth:        DimensionValue(100, SymUnitPercent),
-		SymMarginTop:    DimensionValue(0.697917, SymUnitLh),
-	}
-
-	// Apply position-based filtering
-	props = FilterPropertiesByPosition(props, pos)
+	// Add/override with KFX-specific inline image properties
+	props[SymBaselineStyle] = SymbolValue(SymCenter)       // baseline-style: center
+	props[SymWidth] = DimensionValue(widthEm, SymUnitEm)   // width in em
+	props[SymHeight] = DimensionValue(heightEm, SymUnitEm) // height in em
 
 	sig := styleSignature(props)
 	if name, ok := sr.resolved[sig]; ok {
@@ -901,6 +777,9 @@ func (sr *StyleRegistry) BuildFragments() []*Fragment {
 		resolved.Properties = stripZeroMargins(resolved.Properties)
 		if sr.hasTextUsage(name) {
 			resolved.Properties = ensureDefaultLineHeight(resolved.Properties)
+		} else if sr.hasImageUsage(name) {
+			// KP3 includes line-height: 1lh for standalone block images.
+			// Don't strip it, but also don't force default (already set in ResolveBlockImageStyle).
 		} else {
 			// KP3 wrapper styles with break-inside: avoid retain line-height: 1lh.
 			// Only strip line-height from other non-text styles.
@@ -915,9 +794,19 @@ func (sr *StyleRegistry) BuildFragments() []*Fragment {
 
 // resolveInheritance flattens a style by merging all parent properties.
 // Child properties override parent properties. Handles inheritance chains.
+// Always returns a new StyleDef with a copied Properties map to prevent
+// mutations from affecting the original styles in the registry.
 func (sr *StyleRegistry) resolveInheritance(def StyleDef) StyleDef {
 	if def.Parent == "" {
-		return def
+		// Even with no inheritance, we must return a copy of Properties
+		// to prevent callers from mutating the registry's stored style.
+		copied := make(map[KFXSymbol]any, len(def.Properties))
+		maps.Copy(copied, def.Properties)
+		return StyleDef{
+			Name:       def.Name,
+			Parent:     def.Parent,
+			Properties: copied,
+		}
 	}
 
 	// Build inheritance chain (child -> parent -> grandparent -> ...)
@@ -993,25 +882,38 @@ func NewStyleRegistryFromCSS(cssData []byte, tracer *StyleTracer, log *zap.Logge
 			zap.Int("warnings", len(cssWarnings)))
 	}
 
-	// Seed structural wrappers via stylemap defaults so wrapper classes
-	// match KP3 baseline even before user CSS overrides.
-	if wrapperStyles, wrapperWarnings := mapDefaultWrapperStyles(mapper); len(wrapperStyles) > 0 {
-		sr.RegisterFromCSS(wrapperStyles)
-		warnings = append(warnings, wrapperWarnings...)
-	}
-	if structuralStyles, structuralWarnings := mapStructuralWrappers(mapper); len(structuralStyles) > 0 {
-		sr.RegisterFromCSS(structuralStyles)
-		warnings = append(warnings, structuralWarnings...)
-	}
-
-	// Apply inferred parent relationships based on naming conventions
-	// This must happen after all styles are registered but before post-processing
-	sr.ApplyInferredParents()
+	// Register programmatic descendant selectors.
+	// These implement CSS descendant selector semantics (e.g., ".footnote p")
+	// that override element defaults for elements inside specific containers.
+	// This is needed because CSS class rules like ".footnote { text-indent: 0; }"
+	// should not directly apply to child elements - only descendant selectors do.
+	sr.registerDescendantSelectors()
 
 	// Apply KFX-specific post-processing (layout-hints, yj-break, etc.)
 	sr.PostProcessForKFX()
 
 	return sr, warnings
+}
+
+// registerDescendantSelectors adds programmatic descendant selectors.
+// These implement CSS descendant selector semantics (e.g., ".footnote p")
+// that are not expressible in the CSS file but needed for correct KFX output.
+//
+// In CSS, a rule like ".footnote { text-indent: 0; }" applies to the element
+// with class="footnote", not to its children. To affect child paragraphs,
+// you need a descendant selector like ".footnote p { text-indent: 0; }".
+//
+// The style_context.go resolveProperties() function looks up selectors using:
+// - "ancestor--descendant" for descendant selectors (CSS: ".ancestor descendant")
+// - "parent>child" for direct child selectors (CSS: ".parent > child")
+func (sr *StyleRegistry) registerDescendantSelectors() {
+	// .footnote > p { text-indent: 0; }
+	// Direct child paragraphs of footnote should have no text-indent,
+	// overriding p { text-indent: 1em; }. Using direct child selector (>)
+	// ensures nested elements like cite inside footnote keep their default indent.
+	sr.Register(NewStyle("footnote>p").
+		TextIndent(0, SymUnitPercent).
+		Build())
 }
 
 // DefaultStyleRegistry returns a registry with default HTML element styles for KFX.
@@ -1020,6 +922,13 @@ func NewStyleRegistryFromCSS(cssData []byte, tracer *StyleTracer, log *zap.Logge
 //
 // KFX-specific properties like layout-hints are applied during post-processing,
 // not here, to allow CSS to override base styles first.
+//
+// NOTE: When adding vertical spacing properties (margin-top, margin-bottom,
+// padding-top, padding-bottom), use lh units, NOT em units. CSS-parsed styles
+// go through unit conversion (em → lh via LineHeightRatio), but styles registered
+// here bypass that conversion. Using em units here would result in incorrect
+// values compared to CSS-parsed equivalents.
+// Example: 1em in CSS → 0.833lh in KFX (1.0 / LineHeightRatio)
 func DefaultStyleRegistry() *StyleRegistry {
 	sr := NewStyleRegistry()
 
@@ -1035,48 +944,69 @@ func DefaultStyleRegistry() *StyleRegistry {
 		LineHeight(1.0, SymUnitLh).
 		Build())
 
+	// "kfx-link-empty" is an empty style for style_events that only need link_to.
+	// KP3 uses an empty style (only name property) for linked inline images.
+	// Kindle appears to require the $157 (style) field to be present for links to work.
+	sr.Register(StyleDef{Name: "kfx-link-empty", Properties: make(map[KFXSymbol]any)})
+
 	// ============================================================
 	// Block-level HTML elements
 	// ============================================================
 
 	// Base paragraph style - HTML <p> element
-	// Amazon reference: only sets display: block (no styling defaults)
-	// FB2-specific formatting (text-indent, justify, margins) comes from CSS
+	// Amazon reference (stylemap.ion): margin-top: 1em, margin-bottom: 1em
+	// Convert to lh units: 1em / 1.2 = 0.833lh
+	// FB2-specific formatting (text-indent, justify) comes from CSS
 	sr.Register(NewStyle("p").
+		MarginTop(0.833, SymUnitLh).
+		MarginBottom(0.833, SymUnitLh).
 		Build())
 
 	// Heading styles (h1-h6) - HTML heading elements
-	// Amazon Java reference: font-size and font-weight only, no text-align
-	// Font sizes: h1=2.0em, h2=1.5em, h3=1.17em, h4=1.0em, h5=0.83em, h6=0.67em
+	// Amazon reference (stylemap.ion): font-size, font-weight, margin-top, margin-bottom
+	// Font sizes use rem (not em) for KFX output
+	// Margins converted from em to lh: em_value / LineHeightRatio (1.2)
 	// layout-hints added during post-processing
 	sr.Register(NewStyle("h1").
-		FontSize(2.0, SymUnitEm).
+		FontSize(2.0, SymUnitRem).
 		FontWeight(SymBold).
+		MarginTop(0.558, SymUnitLh). // 0.67em / 1.2
+		MarginBottom(0.558, SymUnitLh).
 		Build())
 
 	sr.Register(NewStyle("h2").
-		FontSize(1.5, SymUnitEm).
+		FontSize(1.5, SymUnitRem).
 		FontWeight(SymBold).
+		MarginTop(0.692, SymUnitLh). // 0.83em / 1.2
+		MarginBottom(0.692, SymUnitLh).
 		Build())
 
 	sr.Register(NewStyle("h3").
-		FontSize(1.17, SymUnitEm).
+		FontSize(1.17, SymUnitRem).
 		FontWeight(SymBold).
+		MarginTop(0.833, SymUnitLh). // 1.0em / 1.2
+		MarginBottom(0.833, SymUnitLh).
 		Build())
 
 	sr.Register(NewStyle("h4").
-		FontSize(1.0, SymUnitEm).
+		FontSize(1.0, SymUnitRem).
 		FontWeight(SymBold).
+		MarginTop(1.108, SymUnitLh). // 1.33em / 1.2
+		MarginBottom(1.108, SymUnitLh).
 		Build())
 
 	sr.Register(NewStyle("h5").
-		FontSize(0.83, SymUnitEm).
+		FontSize(0.83, SymUnitRem).
 		FontWeight(SymBold).
+		MarginTop(1.392, SymUnitLh). // 1.67em / 1.2
+		MarginBottom(1.392, SymUnitLh).
 		Build())
 
 	sr.Register(NewStyle("h6").
-		FontSize(0.67, SymUnitEm).
+		FontSize(0.67, SymUnitRem).
 		FontWeight(SymBold).
+		MarginTop(1.942, SymUnitLh). // 2.33em / 1.2
+		MarginBottom(1.942, SymUnitLh).
 		Build())
 
 	// Code/preformatted - HTML <code> and <pre> elements
@@ -1086,16 +1016,39 @@ func DefaultStyleRegistry() *StyleRegistry {
 		Build())
 
 	// Amazon reference for pre: font-family: monospace, white-space: pre
+	// Amazon reference (stylemap.ion): margin-top: 1em, margin-bottom: 1em
 	// Note: white-space is handled at content level, not in style
 	sr.Register(NewStyle("pre").
 		FontFamily("monospace").
+		MarginTop(0.833, SymUnitLh).
+		MarginBottom(0.833, SymUnitLh).
 		Build())
 
 	// Blockquote - HTML <blockquote> element
-	// Amazon reference: margin-left: 40px, margin-right: 40px only
+	// Amazon reference (stylemap.ion): margin-top: 1em, margin-bottom: 1em, margin-left: 40px, margin-right: 40px
+	// Vertical margins converted to lh: 1em / 1.2 = 0.833lh
 	sr.Register(NewStyle("blockquote").
+		MarginTop(0.833, SymUnitLh).
+		MarginBottom(0.833, SymUnitLh).
 		MarginLeft(40, SymUnitPx).
 		MarginRight(40, SymUnitPx).
+		Build())
+
+	// List elements - HTML <ol> and <ul>
+	// From stylemap: margin-top: 1em, margin-bottom: 1em
+	// Convert to lh units using LineHeightRatio (1em / 1.2 = 0.833lh)
+	// to match KP3's vertical spacing unit preference.
+	// list-style is set at content level, not in style
+	listMarginLh := 1.0 / LineHeightRatio // 0.8333...
+
+	sr.Register(NewStyle("ol").
+		MarginTop(listMarginLh, SymUnitLh).
+		MarginBottom(listMarginLh, SymUnitLh).
+		Build())
+
+	sr.Register(NewStyle("ul").
+		MarginTop(listMarginLh, SymUnitLh).
+		MarginBottom(listMarginLh, SymUnitLh).
 		Build())
 
 	// Table elements - HTML <table>, <th>, <td>
@@ -1279,17 +1232,20 @@ func DefaultStyleRegistry() *StyleRegistry {
 	// contexts with specific line-height values. By omitting line-height, the style
 	// inherits from its context, maintaining consistent vertical rhythm.
 	// KP3 similarly uses explicit line-height values calculated for each context.
-	// IMPORTANT: Use rem (not em) to prevent relative merging when nested with
-	// other inline styles like link-footnote. Using em causes compounding:
-	// sup(0.75em) × link-footnote(0.8em) = 0.6em, which is wrong.
+	//
+	// DescendantReplacement: When sub/sup appears in headings, the heading-context
+	// descendant selector (h1--sub, etc.) completely replaces this base style,
+	// allowing font-size to be inherited from the heading.
 	sr.Register(NewStyle("sub").
 		BaselineStyle(SymSubscript).
 		FontSize(0.75, SymUnitRem).
+		DescendantReplacement().
 		Build())
 
 	sr.Register(NewStyle("sup").
 		BaselineStyle(SymSuperscript).
 		FontSize(0.75, SymUnitRem).
+		DescendantReplacement().
 		Build())
 
 	// Heading-context sub/sup: When sub/sup appears in headings (h1-h6), we apply
@@ -1308,9 +1264,21 @@ func DefaultStyleRegistry() *StyleRegistry {
 
 	// Small text - HTML <small> element
 	// Amazon reference: font-size: smaller
+	// DescendantReplacement: When small appears in headings, the heading-context
+	// descendant selector completely replaces this base style, allowing font-size
+	// to be inherited from the heading.
 	sr.Register(NewStyle("small").
 		FontSizeSmaller().
+		DescendantReplacement().
 		Build())
+
+	// Heading-context small: When <small> appears in headings (h1-h6), we apply
+	// no properties, allowing full inheritance from the heading context.
+	for i := 1; i <= 6; i++ {
+		hTag := fmt.Sprintf("h%d", i)
+		sr.Register(NewStyle(hTag + "--small").
+			Build())
+	}
 
 	// ============================================================
 	// FB2-specific inline styles (class names used in default.css)
@@ -1336,38 +1304,26 @@ func DefaultStyleRegistry() *StyleRegistry {
 		TextIndent(0, SymUnitPercent).
 		Build())
 
+	// Vignette image style - decorative images in title blocks.
+	// Uses 100% width and KP3-compatible margin-top for spacing.
+	// Position filtering will remove margin-top for first element in multi-element blocks.
+	// Name matches CSS convention: img.image-vignette
+	sr.Register(NewStyle("image-vignette").
+		BoxAlign(SymCenter).
+		SizingBounds(SymContentBounds).
+		Width(100, SymUnitPercent).
+		MarginTop(0.697917, SymUnitLh). // Matching KP3 reference vignette spacing
+		Build())
+
+	// End vignette image style - decorative images at end of chapters/sections.
+	// Same as image-vignette but WITHOUT margin-top (spacing comes from preceding element).
+	sr.Register(NewStyle("image-vignette-end").
+		BoxAlign(SymCenter).
+		SizingBounds(SymContentBounds).
+		Width(100, SymUnitPercent).
+		Build())
+
 	return sr
-}
-
-// ApplyInferredParents sets up parent relationships for styles based on naming conventions.
-// This enables inheritance for suffix variants like "chapter-title-header-first" to inherit
-// from "chapter-title-header". Must be called after all styles are registered but before
-// any style resolution occurs.
-//
-// Naming conventions:
-//   - "-first", "-next", "-break" suffixes inherit from their base style
-//     e.g., "chapter-title-header-first" -> "chapter-title-header"
-func (sr *StyleRegistry) ApplyInferredParents() {
-	for name, def := range sr.styles {
-		// Skip styles that already have an explicit parent
-		if def.Parent != "" {
-			continue
-		}
-
-		// Try to infer parent from naming conventions
-		parent := sr.inferParentStyle(name)
-		if parent == "" {
-			continue
-		}
-
-		// Update the style with the inferred parent
-		sr.styles[name] = StyleDef{
-			Name:       def.Name,
-			Parent:     parent,
-			Properties: def.Properties,
-		}
-		sr.tracer.TraceInheritSetup(name, parent)
-	}
 }
 
 // PostProcessForKFX applies Kindle-specific enhancements to styles after CSS conversion.
@@ -1419,14 +1375,29 @@ func (sr *StyleRegistry) applyKFXEnhancements(name string, def StyleDef) StyleDe
 		}
 	}
 
+	// Convert text_color to link styles for link-* classes
+	// KFX uses link-unvisited-style and link-visited-style maps containing the color,
+	// not direct text_color on the style
+	if strings.HasPrefix(name, "link-") {
+		if color, hasColor := props[SymTextColor]; hasColor {
+			// Create the nested style map with just the color
+			linkStyleMap := map[KFXSymbol]any{SymTextColor: color}
+			props[SymLinkUnvisitedStyle] = linkStyleMap
+			props[SymLinkVisitedStyle] = linkStyleMap
+			// Remove direct text_color - it should only be in the link style maps
+			delete(props, SymTextColor)
+		}
+	}
+
 	// Note: box_align is NOT used for title wrappers.
 	// Reference KFX files rely on text_alignment: center on the content text itself,
 	// not box_align on the wrapper container.
 
 	return StyleDef{
-		Name:       def.Name,
-		Parent:     def.Parent,
-		Properties: props,
+		Name:                  def.Name,
+		Parent:                def.Parent,
+		Properties:            props,
+		DescendantReplacement: def.DescendantReplacement,
 	}
 }
 

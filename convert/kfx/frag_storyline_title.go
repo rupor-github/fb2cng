@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"fbc/content"
 	"fbc/fb2"
 )
 
@@ -12,8 +13,8 @@ import (
 // style events are used for -first/-next styling within the combined entry.
 // The heading level ($790) is applied only to this combined entry.
 // ctx provides the style context (wrapper class like "body-title") for descendant rules and inheritance.
-// elemPos provides the element's position within its container for position-aware style filtering.
-func addTitleAsHeading(title *fb2.Title, ctx StyleContext, headerStyleBase string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs, elemPos ElementPosition) {
+// Position-based style filtering is deferred to build time when the title is inside a wrapper block.
+func addTitleAsHeading(c *content.Content, title *fb2.Title, ctx StyleContext, headerStyleBase string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
 	if title == nil || len(title.Items) == 0 {
 		return
 	}
@@ -34,16 +35,21 @@ func addTitleAsHeading(title *fb2.Title, ctx StyleContext, headerStyleBase strin
 	// Check if title contains inline images - if so, fall back to separate paragraphs
 	// since KFX can't mix text and images in a single content entry
 	if titleHasInlineImages(title) {
-		addTitleAsParagraphs(title, ctx, headerStyleBase, headingLevel, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+		addTitleAsParagraphs(c, title, ctx, headerStyleBase, headingLevel, sb, styles, imageResources, ca, idToEID)
 		return
 	}
+
+	// Create inline style context by pushing the heading tag and base style.
+	// This ensures inline styles (like sub/sup) inherit font-size from the heading.
+	inlineCtx := ctx.Push(headingTag, headerStyleBase)
 
 	var (
 		nw               = newNormalizingWriter() // Normalizes whitespace and tracks rune count
 		events           []StyleEventRef
 		firstParagraph   = true
 		prevWasEmptyLine = false
-		firstParaID      string // Store ID of first paragraph for EID mapping
+		firstParaID      string   // Store ID of first paragraph for EID mapping
+		backlinkRefIDs   []string // RefIDs to register after EID is assigned
 	)
 
 	// inlineStyleInfo tracks style and optional link info during inline walks.
@@ -93,9 +99,13 @@ func addTitleAsHeading(title *fb2.Title, ctx StyleContext, headerStyleBase strin
 			isLink = true
 			if after, found := strings.CutPrefix(seg.Href, "#"); found {
 				linkTo = after
-				if _, isNote := footnotesIndex[linkTo]; isNote {
+				if _, isNote := c.FootnotesIndex[linkTo]; isNote {
 					segStyle = "link-footnote"
 					isFootnoteLink = true
+					// Register this footnote reference for backlink generation
+					ref := c.AddFootnoteBackLinkRef(linkTo)
+					// Collect RefID to register with EID after the element is created
+					backlinkRefIDs = append(backlinkRefIDs, ref.RefID)
 				} else {
 					segStyle = "link-internal"
 				}
@@ -140,19 +150,16 @@ func addTitleAsHeading(title *fb2.Title, ctx StyleContext, headerStyleBase strin
 			// Merge context styles with current style for nested inline elements.
 			// E.g., link inside code gets "code link-footnote" merged.
 			var styleNames []string
-			for _, ctx := range styleContext {
-				styleNames = append(styleNames, ctx.Style)
+			for _, sctx := range styleContext {
+				styleNames = append(styleNames, sctx.Style)
 			}
 			styleNames = append(styleNames, segStyle)
 
-			var mergedStyle string
-			if len(styleNames) > 1 {
-				// Build space-separated style spec: "context1 context2 ... currentStyle"
-				mergedSpec := strings.Join(styleNames, " ")
-				mergedStyle = resolveInlineStyle(styles, headingTag, mergedSpec)
-			} else {
-				mergedStyle = resolveInlineStyle(styles, headingTag, segStyle)
-			}
+			// Resolve inline style using the heading context (inlineCtx).
+			// This ensures inline styles inherit font-size from the heading.
+			mergedSpec := strings.Join(styleNames, " ")
+			mergedStyle := inlineCtx.ResolveNoMark("", mergedSpec)
+
 			// Note: MarkUsage is called later after SegmentNestedStyleEvents(),
 			// to avoid marking styles that get deduplicated during segmentation.
 			event := StyleEventRef{
@@ -263,13 +270,10 @@ func addTitleAsHeading(title *fb2.Title, ctx StyleContext, headerStyleBase strin
 		return
 	}
 
-	// Combine heading element style (h1-h6) with context and header class style.
-	// Wrapper classes influence the heading through descendant selectors, while
-	// wrapper margins stay on the container block.
-	// Use position-aware resolution to apply KP3's margin filtering.
-	// This single call builds merged properties and applies position filtering before
-	// registration, avoiding the double-registration issue of separate Resolve + ResolveStyleWithPosition.
-	resolved := ctx.ResolveWithPosition(headingTag, headerStyleBase, styles, elemPos)
+	// Build styleSpec for deferred resolution.
+	// Only include the element's own tag and class - the wrapper context is handled
+	// by StyleContext in resolveChildStyles(). This avoids merging wrapper margins.
+	styleSpec := headingTag + " " + headerStyleBase
 	contentName, offset := ca.Add(nw.String())
 
 	// Apply segmentation to eliminate overlapping style events (KP3 requirement)
@@ -282,7 +286,7 @@ func addTitleAsHeading(title *fb2.Title, ctx StyleContext, headerStyleBase strin
 		}
 	}
 
-	eid := sb.AddContentWithHeading(SymText, contentName, offset, resolved, segmentedEvents, headingLevel)
+	eid := sb.AddContentWithHeadingDeferred(SymText, contentName, offset, styleSpec, segmentedEvents, headingLevel)
 
 	// Map first paragraph ID to the combined entry's EID
 	if firstParaID != "" {
@@ -290,44 +294,13 @@ func addTitleAsHeading(title *fb2.Title, ctx StyleContext, headerStyleBase strin
 			idToEID[firstParaID] = eid
 		}
 	}
-}
 
-// addSimpleTitleAsHeading creates a title entry for a simple string (used for generated section titles).
-// This provides the same semantic styling as addTitleAsHeading but for cases where we have a plain
-// string instead of an fb2.Title structure.
-//
-// Parameters:
-//   - text: The title text
-//   - styleName: The style name for the heading (e.g., "annotation-title", "toc-title")
-//   - headingLevel: The semantic heading level (1-6)
-//   - sb: StorylineBuilder to add the entry to
-//   - styles: StyleRegistry for style resolution
-//   - ca: ContentAccumulator for text content
-//
-// The function adds content with the specified style, layout-hints: [treat_as_title],
-// and yj.semantics.heading_level for accessibility/navigation.
-// Unlike addTitleAsHeading, this doesn't use a wrapper block - matching KP3 behavior
-// for simple generated section titles.
-func addSimpleTitleAsHeading(text, styleName string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator) {
-	if text == "" {
-		return
+	// Register any backlink ref IDs collected during processing
+	for _, refID := range backlinkRefIDs {
+		if _, exists := idToEID[refID]; !exists {
+			idToEID[refID] = eid
+		}
 	}
-
-	// Ensure the style exists
-	if styles != nil {
-		styles.EnsureBaseStyle(styleName)
-	}
-
-	// Resolve the style (gets layout-hints via shouldHaveLayoutHintTitle for *-title patterns)
-	resolved := styleName
-	if styles != nil {
-		resolved = styles.ResolveStyle(styleName)
-		styles.MarkUsage(resolved, styleUsageText)
-	}
-
-	// Add content with heading level
-	contentName, offset := ca.Add(text)
-	sb.AddContentWithHeading(SymText, contentName, offset, resolved, nil, headingLevel)
 }
 
 func markTitleStylesUsed(wrapperClass, headerBase string, styles *StyleRegistry) {
@@ -385,6 +358,7 @@ func styleToHeadingLevel(styleName string) int {
 // (used for poem, stanza, and footnote section titles).
 //
 // Parameters:
+//   - c: Content context for footnote tracking
 //   - title: The FB2 title structure containing paragraphs and empty lines
 //   - ctx: Style context for property inheritance
 //   - styleBase: Base style name (e.g., "poem-title", "section-title-header") - suffixed with -first/-next
@@ -394,11 +368,9 @@ func styleToHeadingLevel(styleName string) int {
 //   - imageResources: Image resource info for inline images
 //   - ca: ContentAccumulator for text content
 //   - idToEID: Map for ID to EID tracking
-//   - screenWidth: Screen width for image sizing
-//   - footnotesIndex: Footnote reference index
 //
 // Note: EmptyLine items are ignored as spacing is handled via block margins.
-func addTitleAsParagraphs(title *fb2.Title, ctx StyleContext, styleBase string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, screenWidth int, footnotesIndex fb2.FootnoteRefs) {
+func addTitleAsParagraphs(c *content.Content, title *fb2.Title, ctx StyleContext, styleBase string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
 	if title == nil || len(title.Items) == 0 {
 		return
 	}
@@ -406,25 +378,21 @@ func addTitleAsParagraphs(title *fb2.Title, ctx StyleContext, styleBase string, 
 	firstParagraph := true
 	for _, item := range title.Items {
 		if item.Paragraph != nil {
-			// Determine style for this paragraph (-first or -next)
+			// Determine style for this paragraph.
+			// Include both the base style (e.g., "chapter-title-header" with text-align: center)
+			// and the position-specific style (e.g., "chapter-title-header-first" with display: inline).
+			// This ensures the resolved style gets properties from both CSS classes.
 			var paraStyle string
 			if firstParagraph {
-				paraStyle = styleBase + "-first"
+				paraStyle = styleBase + " " + styleBase + "-first"
 				firstParagraph = false
 			} else {
-				paraStyle = styleBase + "-next"
+				paraStyle = styleBase + " " + styleBase + "-next"
 			}
 
-			// Resolve style: use heading element tag (h1-h6) when headingLevel > 0
-			var fullStyle string
-			if headingLevel > 0 {
-				headingElementStyle := fmt.Sprintf("h%d", headingLevel)
-				fullStyle = ctx.Resolve(headingElementStyle, paraStyle, styles)
-			} else {
-				fullStyle = ctx.Resolve("p", paraStyle, styles)
-			}
-
-			addParagraphWithImages(item.Paragraph, fullStyle, headingLevel, sb, styles, imageResources, ca, idToEID, screenWidth, footnotesIndex)
+			// Pass paraStyle via extraClasses to apply styling directly to the paragraph.
+			// Context (ctx) provides inheritance chain for descendant selector matching.
+			addParagraphWithImages(c, item.Paragraph, ctx, paraStyle, headingLevel, sb, styles, imageResources, ca, idToEID)
 		}
 		// EmptyLine items are ignored - spacing is handled via block margins like regular flow content
 	}

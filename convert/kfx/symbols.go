@@ -33,8 +33,11 @@ const (
 	SymTextBackgroundColor     KFXSymbol = 21  // text_background_color
 	SymTextBackgroundOpacity   KFXSymbol = 22  // text_background_opacity
 	SymUnderline               KFXSymbol = 23  // underline
+	SymUnderlineColor          KFXSymbol = 24  // underline_color
 	SymStrikethrough           KFXSymbol = 27  // strikethrough
+	SymStrikethroughColor      KFXSymbol = 28  // strikethrough_color
 	SymOverline                KFXSymbol = 554 // overline
+	SymOverlineColor           KFXSymbol = 555 // overline_color
 	SymBaselineShift           KFXSymbol = 31  // baseline_shift
 	SymLetterspacing           KFXSymbol = 32  // letterspacing
 	SymTextAlignment           KFXSymbol = 34  // text_alignment
@@ -68,6 +71,7 @@ const (
 	SymContainerHeight         KFXSymbol = 67  // container height (for page templates)
 	SymFillColor               KFXSymbol = 70  // fill_color
 	SymFillOpacity             KFXSymbol = 72  // fill_opacity
+	SymStrokeColor             KFXSymbol = 75  // stroke_color
 	SymBorderColor             KFXSymbol = 83  // border_color
 	SymBorderStyle             KFXSymbol = 88  // border_style
 	SymBorderWeight            KFXSymbol = 93  // border_weight
@@ -77,6 +81,7 @@ const (
 	SymBackgroundPositionX     KFXSymbol = 480 // background_positionx
 	SymBackgroundPositionY     KFXSymbol = 481 // background_positiony
 	SymBackgroundRepeat        KFXSymbol = 484 // background_repeat
+	SymLinkVisitedStyle        KFXSymbol = 576 // link_visited_style
 	SymLinkUnvisitedStyle      KFXSymbol = 577 // link_unvisited_style
 	SymDropcapLines            KFXSymbol = 125 // dropcap_lines
 	SymDropcapChars            KFXSymbol = 126 // dropcap_chars
@@ -94,6 +99,7 @@ const (
 	SymSizingBounds            KFXSymbol = 546 // sizing_bounds
 	SymContentBounds           KFXSymbol = 377 // content_bounds (value for sizing_bounds)
 	SymBoxAlign                KFXSymbol = 580 // box_align
+	SymYjClassification        KFXSymbol = 615 // yj.classification (for footnote content markers)
 	SymYjDisplay               KFXSymbol = 616 // yj.display
 	SymYjNote                  KFXSymbol = 617 // yj.note
 	SymFloatClear              KFXSymbol = 628 // yj.float_clear
@@ -189,6 +195,7 @@ const (
 	SymTable     KFXSymbol = 278 // table
 	SymTableRow  KFXSymbol = 279 // table_row
 	SymTableBody KFXSymbol = 454 // body (table body section)
+	SymFooter    KFXSymbol = 455 // footer (value for position in footnote content)
 	SymSidebar   KFXSymbol = 280 // sidebar
 	SymFootnote  KFXSymbol = 281 // footnote
 	SymFigure    KFXSymbol = 282 // figure

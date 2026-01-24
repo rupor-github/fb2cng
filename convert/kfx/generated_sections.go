@@ -124,11 +124,13 @@ func (b *tocListBuilder) buildTOCList(entries []*tocPageEntry, isNested bool) (S
 	allEIDs = append(allEIDs, listEID)
 
 	// Push list context for nested lists
+	// Use "ol" as element tag to inherit HTML ol defaults (margin-top/bottom: 1em)
+	// from the stylemap. Top-level list uses "toc-list", nested use "toc-nested".
 	var listContext StyleContext
 	if isNested {
-		listContext = b.styleContext.Push("div", "toc-nested", b.styles)
+		listContext = b.styleContext.Push("ol", "toc-nested")
 	} else {
-		listContext = b.styleContext.Push("div", "toc-list", b.styles)
+		listContext = b.styleContext.Push("ol", "toc-list")
 	}
 
 	// Save current context and set new one for children
@@ -145,20 +147,24 @@ func (b *tocListBuilder) buildTOCList(entries []*tocPageEntry, isNested bool) (S
 	// Restore context
 	b.styleContext = savedContext
 
-	// Resolve list style using accumulated context
-	listStyle := b.styles.ResolveStyle(listContext.Resolve("", "", b.styles))
-	if b.styles != nil {
-		b.styles.MarkUsage(listStyle, styleUsageWrapper)
-	}
-
 	// Build list entry: {$100: $343 (numeric), $146: [...], $155: eid, $159: $276 (list)}
 	list := NewStruct().
 		SetInt(SymUniqueID, int64(listEID)).
 		SetSymbol(SymType, SymList).                 // $159 = $276 (list)
 		SetSymbol(SymListStyle, SymListStyleNumber). // $100 = $343 (numeric list style)
 		SetList(SymContentList, items)               // $146 = content_list
-	if listStyle != "" {
-		list.Set(SymStyle, SymbolByName(listStyle))
+
+	// Only top-level list gets the "ol" style with margins.
+	// Nested lists don't have a style - they inherit from parent context.
+	// This matches KP3 reference where only the outermost TOC list has margin styling.
+	if !isNested {
+		listStyle := listContext.Resolve("ol", "toc-list")
+		if b.styles != nil {
+			b.styles.MarkUsage(listStyle, styleUsageWrapper)
+		}
+		if listStyle != "" {
+			list.Set(SymStyle, SymbolByName(listStyle))
+		}
 	}
 
 	return list, allEIDs
@@ -212,14 +218,12 @@ func (b *tocListBuilder) buildTOCTextEntry(entry *tocPageEntry) (StructValue, in
 	// Resolve styles using context - accumulates ancestor styles
 	// Context has toc-list (and optionally toc-nested for nested items)
 	// Item style adds "toc-item toc-section" to the context
-	itemStyleSpec := b.styleContext.Resolve("", "toc-item toc-section", b.styles)
-	itemStyle := b.styles.ResolveStyle(itemStyleSpec)
+	itemStyle := b.styleContext.Resolve("", "toc-item toc-section")
 	if b.styles != nil {
 		b.styles.MarkUsage(itemStyle, styleUsageText)
 	}
 	// Link style also inherits context for proper cascade
-	linkStyleSpec := b.styleContext.Resolve("", "link-toc", b.styles)
-	linkStyle := b.styles.ResolveStyle(linkStyleSpec)
+	linkStyle := b.styleContext.Resolve("", "link-toc")
 	if b.styles != nil {
 		b.styles.MarkUsage(linkStyle, styleUsageText)
 	}
@@ -259,7 +263,7 @@ func addTOCList(sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumula
 		eidCounter:   sb.NextEID(),
 		styles:       styles,
 		ca:           ca,
-		styleContext: NewStyleContext(),
+		styleContext: NewStyleContext(styles),
 	}
 
 	list, _ := builder.buildTOCList(entries, false)
@@ -300,17 +304,25 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 		ca := NewContentAccumulator(contentCounter)
 		contentCounter++
 
-		// Add annotation title with proper heading semantics
-		// Uses annotation-title style directly (gets layout-hints: [treat_as_title])
-		addSimpleTitleAsHeading(cfg.Annotation.Title, "annotation-title", 1, sb, styles, ca)
+		// Add annotation title with proper heading semantics (same pattern as TOC title)
+		// Note: Annotation title is NOT in a wrapper block, so it uses direct resolution
+		// with PositionFirstAndLast() to keep all margins (top-level entry behavior).
+		if annotationTitle := titleFromStrings(cfg.Annotation.Title); annotationTitle != nil {
+			titleCtx := NewStyleContext(styles).PushBlock("div", "annotation-title", 1)
+			markTitleStylesUsed("", "annotation-title", styles)
+			addTitleAsHeading(c, annotationTitle, titleCtx, "annotation-title", 1, sb, styles, nil, ca, nil)
+		}
 
 		// Process annotation items with full formatting support (links, emphasis, etc.)
-		// Use the same processFlowItem mechanism as body content for consistent rendering
-		annotationCtx := NewStyleContext().PushBlock("div", "annotation", styles)
-		screenWidth := 600 // Default screen width for style calculations
+		// Use the same processFlowItem mechanism as body content for consistent rendering.
+		// Position filtering is applied so first item gets wrapper's margin-top,
+		// last item gets margin-bottom, middle items lose both vertical margins.
+		itemCount := len(c.Book.Description.TitleInfo.Annotation.Items)
+		annotationCtx := NewStyleContext(styles).PushBlock("div", "annotation", itemCount)
 		for i := range c.Book.Description.TitleInfo.Annotation.Items {
 			item := &c.Book.Description.TitleInfo.Annotation.Items[i]
-			processFlowItem(item, annotationCtx, "annotation", sb, styles, imageResources, ca, idToEID, screenWidth, c.FootnotesIndex)
+			processFlowItem(c, item, annotationCtx, "annotation", sb, styles, imageResources, ca, idToEID)
+			annotationCtx = annotationCtx.Advance()
 		}
 
 		for name, list := range ca.Finish() {
@@ -368,9 +380,9 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 		}
 		bookTitle := c.Book.Description.TitleInfo.BookTitle.Value
 		if tocTitle := titleFromStrings(bookTitle, authors); tocTitle != nil {
-			titleCtx := NewStyleContext().PushBlock("div", "toc-title", styles)
+			titleCtx := NewStyleContext(styles).PushBlock("div", "toc-title", 1)
 			markTitleStylesUsed("", "toc-title", styles)
-			addTitleAsHeading(tocTitle, titleCtx, "toc-title", 1, sb, styles, nil, ca, nil, 0, nil, PositionFirst())
+			addTitleAsHeading(c, tocTitle, titleCtx, "toc-title", 1, sb, styles, nil, ca, nil)
 		}
 
 		entries := buildTOCEntryTree(tocEntries, cfg.TOCPage.ChaptersWithoutTitle)

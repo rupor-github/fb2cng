@@ -6,16 +6,27 @@ import (
 )
 
 func TestMergePropertyCumulativeMargin(t *testing.T) {
+	// Test margin-left merge behavior with YJCumulativeInSameContainerRuleMerger.
+	// Container identity tracking is now handled in StyleContext.PushBlock and
+	// StyleContext.resolveProperties. The merge function itself uses override semantics.
 	sr := NewStyleRegistry()
 	dst := map[KFXSymbol]any{
 		SymMarginLeft: DimensionValue(2, SymUnitPercent),
 	}
 
+	// Non-zero incoming should override
 	sr.mergeProperty(dst, SymMarginLeft, DimensionValue(3, SymUnitPercent))
 
-	expected := DimensionValue(5, SymUnitPercent)
+	expected := DimensionValue(3, SymUnitPercent)
 	if got := dst[SymMarginLeft]; !reflect.DeepEqual(got, expected) {
-		t.Fatalf("expected merged margin-left %v, got %v", expected, got)
+		t.Fatalf("expected overridden margin-left %v, got %v", expected, got)
+	}
+
+	// Zero incoming also overrides (explicit margin: 0 is valid CSS)
+	sr.mergeProperty(dst, SymMarginLeft, DimensionValue(0, SymUnitPercent))
+	expectedZero := DimensionValue(0, SymUnitPercent)
+	if got := dst[SymMarginLeft]; !reflect.DeepEqual(got, expectedZero) {
+		t.Fatalf("expected zero margin-left %v after zero merge, got %v", expectedZero, got)
 	}
 }
 
@@ -130,12 +141,15 @@ func TestSelectMergeRuleFromStyleList(t *testing.T) {
 			expectedRule: "override-maximum",
 		},
 		{
-			name:         "margin_left inline uses cumulative",
+			// Per KP3's YJCumulativeInSameContainerRuleMerger: styles from different containers
+			// don't accumulate. We implement this as override-non-zero (0 keeps existing,
+			// non-zero overrides). Rule name reflects the KP3 source.
+			name:         "margin_left inline uses cumulative-same-container",
 			sym:          SymMarginLeft,
 			existing:     DimensionValue(1, SymUnitPercent),
 			incoming:     DimensionValue(2, SymUnitPercent),
 			ctx:          mergeContext{allowWritingModeConvert: true, sourceIsInline: true},
-			expectedRule: "cumulative",
+			expectedRule: "cumulative-same-container",
 		},
 		{
 			name:         "font_size em incoming uses relative",

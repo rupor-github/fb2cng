@@ -24,8 +24,12 @@ type mergeContext struct {
 }
 
 var (
-	mergeContextInline  = mergeContext{allowWritingModeConvert: true, sourceIsInline: true}
-	mergeContextWrapper = mergeContext{allowWritingModeConvert: true, sourceIsWrapper: true}
+	mergeContextInline = mergeContext{allowWritingModeConvert: true, sourceIsInline: true}
+	// mergeContextClassOverride is used when applying CSS class styles over tag defaults.
+	// Uses allowWritingModeConvert=false to trigger YJOverridingRuleMerger for margins
+	// instead of YJOverrideMaximumRuleMerger. This ensures class-level margin values
+	// override tag-level defaults (matching CSS specificity behavior).
+	mergeContextClassOverride = mergeContext{allowWritingModeConvert: false, sourceIsInline: true}
 )
 
 func mergePropertyWithRules(dst map[KFXSymbol]any, sym KFXSymbol, incoming any, ctx mergeContext, tracer *StyleTracer) {
@@ -45,6 +49,16 @@ func mergePropertyWithRules(dst map[KFXSymbol]any, sym KFXSymbol, incoming any, 
 func mergeAllWithRules(dst, src map[KFXSymbol]any, ctx mergeContext, tracer *StyleTracer) {
 	for sym, val := range src {
 		mergePropertyWithRules(dst, sym, val, ctx, tracer)
+	}
+}
+
+// mergeAllOverride performs simple CSS cascade merge: later values override earlier ones.
+// This is used when merging CSS rules that produce the same style name (e.g., ".cite" and
+// "blockquote.cite" both producing "cite"). Unlike mergeAllWithRules, this doesn't use
+// stylelist rules which are designed for runtime style merging, not CSS cascade behavior.
+func mergeAllOverride(dst, src map[KFXSymbol]any) {
+	for sym, val := range src {
+		dst[sym] = val
 	}
 }
 

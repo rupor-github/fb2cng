@@ -14,13 +14,6 @@ type StyleMapper struct {
 	styleMap  *StyleMap
 }
 
-// WrapperCSS represents a normalized wrapper with tag, classes, and CSS map.
-type WrapperCSS struct {
-	Tag        string
-	Classes    []string
-	Properties map[string]CSSValue
-}
-
 // NewStyleMapper creates a mapper with an attached tracer-aware converter.
 func NewStyleMapper(log *zap.Logger, tracer *StyleTracer) *StyleMapper {
 	c := NewConverter(log)
@@ -29,11 +22,6 @@ func NewStyleMapper(log *zap.Logger, tracer *StyleTracer) *StyleMapper {
 		converter: c,
 		styleMap:  NewDefaultStyleMap(),
 	}
-}
-
-// SetStyleMap attaches a stylemap for lookup-driven mapping.
-func (m *StyleMapper) SetStyleMap(sm *StyleMap) {
-	m.styleMap = sm
 }
 
 // MapStylesheet converts an entire stylesheet using stylemap-aware mapping.
@@ -83,7 +71,11 @@ func (m *StyleMapper) MapStylesheet(sheet *Stylesheet) ([]StyleDef, []string) {
 		}
 
 		if existing, ok := styleMap[style.Name]; ok {
-			mergeAllWithRules(existing.Properties, style.Properties, mergeContextInline, m.converter.tracer)
+			// When CSS rules produce the same style name (e.g., ".cite" and "blockquote.cite"),
+			// use simple override semantics. In CSS, later rules with equal specificity override
+			// earlier ones, they don't accumulate. The stylelist rules are for runtime style
+			// merging, not CSS cascade behavior.
+			mergeAllOverride(existing.Properties, style.Properties)
 		} else {
 			styleCopy := style
 			styleMap[style.Name] = &styleCopy
@@ -99,49 +91,8 @@ func (m *StyleMapper) MapStylesheet(sheet *Stylesheet) ([]StyleDef, []string) {
 	return styles, allWarnings
 }
 
-// MapWrapper converts a normalized wrapper CSS map (tag + classes) to a StyleDef.
-// Multiple classes are flattened using the first class as the primary selector component.
-func (m *StyleMapper) MapWrapper(tag string, classes []string, props map[string]CSSValue) (StyleDef, []string) {
-	selector := selectorFromTagClasses(tag, classes)
-	styleProps, warnings := m.MapRule(selector, props)
-	return StyleDef{
-		Name:       selector.StyleName(),
-		Properties: styleProps,
-	}, warnings
-}
-
-// MapWrappers converts multiple wrappers and merges styles with the same name using stylelist rules.
-func (m *StyleMapper) MapWrappers(wrappers []WrapperCSS) ([]StyleDef, []string) {
-	warnings := make([]string, 0)
-	merged := make(map[string]map[KFXSymbol]any)
-	order := make([]string, 0)
-
-	for _, w := range wrappers {
-		def, ws := m.MapWrapper(w.Tag, w.Classes, w.Properties)
-		warnings = append(warnings, ws...)
-		if props, ok := merged[def.Name]; ok {
-			if m.converter != nil && m.converter.log != nil {
-				m.converter.log.Debug("merging wrapper style with stylelist rules",
-					zap.String("style", def.Name),
-					zap.Int("existingProperties", len(props)),
-					zap.Int("incomingProperties", len(def.Properties)))
-			}
-			mergeAllWithRules(props, def.Properties, mergeContextWrapper, m.converter.tracer)
-		} else {
-			merged[def.Name] = def.Properties
-			order = append(order, def.Name)
-		}
-	}
-
-	out := make([]StyleDef, 0, len(order))
-	for _, name := range order {
-		out = append(out, StyleDef{Name: name, Properties: merged[name]})
-	}
-	return out, warnings
-}
-
 // MapRule converts a single CSS rule (selector + properties) into KFX properties.
-// Used internally by MapStylesheet and MapWrapper, but exported for testing
+// Used internally by MapStylesheet, but exported for testing
 // and for callers that need to convert individual rules programmatically.
 // It applies stylemap lookups and transformers on top of the base CSS conversion.
 func (m *StyleMapper) MapRule(selector Selector, props map[string]CSSValue) (map[KFXSymbol]any, []string) {

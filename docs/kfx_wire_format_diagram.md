@@ -962,6 +962,81 @@ Visual byte map (approximate):
 
 ---
 
+## 14.0.1 Location Map Format (`$550`)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    $550 LOCATION_MAP STRUCTURE                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Location Map ($550) maps reader "locations" to positions within content.   │
+│  Each location represents approximately 40 PIDs (text character positions). │
+│                                                                             │
+│  Structure:                                                                 │
+│  ──────────                                                                 │
+│  [                                                                          │
+│    {                                                                        │
+│      $178: "default",              // Reading order name                    │
+│      $182: [                       // List of location entries              │
+│        { $155: 1001 },             // Location 0: EID 1001, offset 0        │
+│        { $155: 1001, $143: 40 },   // Location 1: EID 1001, offset 40       │
+│        { $155: 1002 },             // Location 2: EID 1002, offset 0        │
+│        { $155: 1002, $143: 15 },   // Location 3: EID 1002, offset 15       │
+│        ...                                                                  │
+│      ]                                                                      │
+│    }                                                                        │
+│  ]                                                                          │
+│                                                                             │
+│  Location Entry Fields:                                                     │
+│  ──────────────────────                                                     │
+│  $155 (unique_id)  : EID containing this location (required)                │
+│  $143 (offset)     : Character offset within the EID (optional, default 0)  │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  CRITICAL: The $143 offset field                                    │    │
+│  │                                                                     │    │
+│  │  When a location falls in the MIDDLE of an EID (not at the start),  │    │
+│  │  the $143 offset field specifies the character position within      │    │
+│  │  that EID where the location begins.                                │    │
+│  │                                                                     │    │
+│  │  If offset is 0, the $143 field is OMITTED (not set to 0).          │    │
+│  │                                                                     │    │
+│  │  Example: For text "Hello World" (11 chars) starting at EID 1001:   │    │
+│  │    PID  0-10  → Location 0: { $155: 1001 }         (offset 0)       │    │
+│  │    PID 40-50  → Location 1: { $155: 1001, $143: 40 } (offset 40)    │    │
+│  │                                                                     │    │
+│  │  Without $143, all locations would point to EID boundaries only,    │    │
+│  │  resulting in fewer locations than KP3 generates.                   │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+│  Positions-per-Location Constant:                                           │
+│  ────────────────────────────────                                           │
+│  LOC = floor(PID / 40)                                                      │
+│                                                                             │
+│  NOTE: kfxlib uses 110 positions per location, but KP3-generated KFX        │
+│  files use 40. This converter uses 40 for KP3 compatibility.                │
+│                                                                             │
+│  Algorithm (pseudocode):                                                    │
+│  ───────────────────────                                                    │
+│    pid = 0                                                                  │
+│    nextLocationPID = 0                                                      │
+│    for each content item with (EID, length):                                │
+│      itemStart = pid                                                        │
+│      itemEnd = pid + length                                                 │
+│      while nextLocationPID < itemEnd:                                       │
+│        offset = max(0, nextLocationPID - itemStart)                         │
+│        if offset == 0:                                                      │
+│          emit { $155: EID }                                                 │
+│        else:                                                                │
+│          emit { $155: EID, $143: offset }                                   │
+│        nextLocationPID += 40                                                │
+│      pid = itemEnd                                                          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## 14.1 Inline Images in Mixed Content (Position Tracking)
 
 ```

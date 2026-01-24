@@ -107,7 +107,7 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	// Generate storyline and section fragments from book content
 	// EIDs start at 1000 - this is arbitrary but leaves room for future system IDs
 	startEID := 1000
-	contentFragments, nextEID, sectionNames, tocEntries, sectionEIDs, idToEID, landmarks, err := generateStoryline(c.Book, styles, imageResourceInfo, startEID, c.FootnotesIndex)
+	contentFragments, nextEID, sectionNames, tocEntries, sectionEIDs, idToEID, landmarks, err := generateStoryline(c, styles, imageResourceInfo, startEID)
 	if err != nil {
 		return err
 	}
@@ -196,7 +196,7 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	if err := container.Fragments.Add(BuildPositionIDMap(allEIDs, posItems)); err != nil {
 		return err
 	}
-	if err := container.Fragments.Add(BuildLocationMap(allEIDs)); err != nil {
+	if err := container.Fragments.Add(BuildLocationMap(posItems)); err != nil {
 		return err
 	}
 
@@ -379,9 +379,15 @@ func buildStyleRegistry(stylesheets []fb2.Stylesheet, tracer *StyleTracer, log *
 		return sr
 	}
 
+	log.Debug("Processing stylesheets", zap.Int("count", len(stylesheets)))
+
 	// Combine all stylesheet data
 	var combinedCSS []byte
-	for _, sheet := range stylesheets {
+	for i, sheet := range stylesheets {
+		log.Debug("Stylesheet entry",
+			zap.Int("index", i),
+			zap.String("type", sheet.Type),
+			zap.Int("data_len", len(sheet.Data)))
 		if sheet.Type != "" && sheet.Type != "text/css" {
 			continue
 		}
@@ -390,6 +396,8 @@ func buildStyleRegistry(stylesheets []fb2.Stylesheet, tracer *StyleTracer, log *
 			combinedCSS = append(combinedCSS, '\n')
 		}
 	}
+
+	log.Debug("Combined CSS", zap.Int("total_bytes", len(combinedCSS)))
 
 	if len(combinedCSS) == 0 {
 		log.Debug("No CSS data in stylesheets, using defaults only")

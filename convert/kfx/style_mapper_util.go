@@ -5,22 +5,6 @@ import (
 	"strings"
 )
 
-func selectorFromTagClasses(tag string, classes []string) Selector {
-	class := ""
-	if len(classes) > 0 {
-		class = classes[0]
-	}
-	raw := strings.TrimSpace(tag)
-	if class != "" {
-		if raw == "" {
-			raw = "." + class
-		} else {
-			raw = raw + "." + class
-		}
-	}
-	return Selector{Raw: raw, Element: tag, Class: class}
-}
-
 func firstNonEmpty(primary string, rest ...string) string {
 	if primary != "" {
 		return primary

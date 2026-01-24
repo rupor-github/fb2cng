@@ -52,6 +52,8 @@ type Content struct {
 	AdobeDE       bool                 // config: Adobe DE page markers are being generated instead of NCX pageList
 	BacklinkStr   string               // config: backlink indicator
 	MoreParaStr   string               // config: more paragraphs indicator
+	ScreenWidth   int                  // config: target screen width for image sizing
+	ScreenHeight  int                  // config: target screen height for image sizing
 
 	Book           *fb2.FictionBook
 	CoverID        string
@@ -227,6 +229,8 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 		FootnotesMode:  env.Cfg.Document.Footnotes.Mode,
 		BacklinkStr:    string(env.Cfg.Document.Footnotes.Backlinks),
 		MoreParaStr:    string(env.Cfg.Document.Footnotes.MoreParagraphs),
+		ScreenWidth:    env.Cfg.Document.Images.Screen.Width,
+		ScreenHeight:   env.Cfg.Document.Images.Screen.Height,
 		Book:           book,
 		CoverID:        coverID,
 		FootnotesIndex: footnotes,

@@ -60,19 +60,6 @@ func (t *StyleTracer) TraceRegister(name string, props map[KFXSymbol]any) {
 	t.sections["registered"]++
 }
 
-// TraceResolve logs when a multi-part style spec is resolved.
-func (t *StyleTracer) TraceResolve(styleSpec string, resolvedName string, mergedProps map[KFXSymbol]any) {
-	if !t.IsEnabled() {
-		return
-	}
-	t.entries = append(t.entries, traceEntry{
-		operation: "RESOLVE",
-		styleName: styleSpec + " => " + resolvedName,
-		details:   traceFormatProperties(mergedProps),
-	})
-	t.sections["resolved"]++
-}
-
 // TraceInheritance logs inheritance resolution for a style.
 func (t *StyleTracer) TraceInheritance(name string, parent string, finalProps map[KFXSymbol]any) {
 	if !t.IsEnabled() {
@@ -190,40 +177,126 @@ func (t *StyleTracer) TraceAutoCreate(name string, inferredParent string) {
 	t.sections["auto_created"]++
 }
 
-// TraceInheritSetup logs when a parent relationship is inferred for a style.
-// This happens during the ApplyInferredParents phase after CSS loading.
-func (t *StyleTracer) TraceInheritSetup(name string, parent string) {
+// TraceContainerEnter logs when PushBlock() creates a container frame.
+// This helps debug nested container margin handling and position tracking.
+//
+// Parameters:
+//   - tag: HTML element tag (e.g., "div")
+//   - classes: CSS classes (e.g., "poem stanza")
+//   - itemCount: number of items in the container
+//   - marginTop, marginBottom: container's vertical margins in lh units
+//   - isLastInParent: whether this container is the last item in its parent
+//   - titleBlockMargins: whether title-block margin style is used
+//   - scopePath: CSS-like path showing element hierarchy (e.g., "div.poem > div.stanza")
+//   - containerPath: container stack with positions (e.g., "poem[2/3] > stanza[1/14]")
+func (t *StyleTracer) TraceContainerEnter(tag, classes string, itemCount int, marginTop, marginBottom float64, isLastInParent, titleBlockMargins bool, scopePath, containerPath string) {
 	if !t.IsEnabled() {
 		return
 	}
+	styleName := tag
+	if classes != "" {
+		styleName += "." + strings.ReplaceAll(classes, " ", ".")
+	}
+
+	var details strings.Builder
+	details.WriteString(fmt.Sprintf("items: %d", itemCount))
+	if marginTop > 0 || marginBottom > 0 {
+		details.WriteString(fmt.Sprintf(", margins: top=%.2flh bottom=%.2flh", marginTop, marginBottom))
+	}
+	if isLastInParent {
+		details.WriteString(", isLastInParent")
+	}
+	if titleBlockMargins {
+		details.WriteString(", titleBlockMargins")
+	}
+	details.WriteString(fmt.Sprintf("\n  scope: %s", scopePath))
+	if containerPath != "(no containers)" {
+		details.WriteString(fmt.Sprintf("\n  containers: %s", containerPath))
+	}
+
 	t.entries = append(t.entries, traceEntry{
-		operation: "INHERIT_SETUP",
-		styleName: name,
-		details:   "parent inferred: " + parent,
+		operation: "CONTAINER",
+		styleName: styleName,
+		details:   details.String(),
 	})
-	t.sections["inherit_setup"]++
+	t.sections["containers"]++
 }
 
-// TracePositionFilter logs when properties are filtered based on element position.
-// This helps debug position-aware style resolution (KP3's CSS margin collapsing behavior).
-func (t *StyleTracer) TracePositionFilter(styleSpec string, pos string, removed []string) {
+// TracePositionResolve logs position-based margin filtering during style resolution.
+// This helps debug KP3-compatible margin collapsing behavior.
+//
+// Parameters:
+//   - position: element position (first, middle, last, only)
+//   - originalMargins: margins before filtering (top, bottom in lh)
+//   - appliedMargins: margins after filtering (top, bottom in lh)
+//   - containerMargins: container margins applied (top, bottom in lh)
+//   - scopePath: CSS-like path showing element hierarchy
+//   - containerPath: container stack with positions
+func (t *StyleTracer) TracePositionResolve(position string, originalMargins, appliedMargins, containerMargins [2]float64, scopePath, containerPath string) {
 	if !t.IsEnabled() {
 		return
 	}
-	details := fmt.Sprintf("position: %s", pos)
-	if len(removed) > 0 {
-		details += fmt.Sprintf(", removed: %s", strings.Join(removed, ", "))
-	} else {
-		details += ", no properties filtered"
+
+	var details strings.Builder
+	details.WriteString(fmt.Sprintf("position: %s", position))
+
+	// Show original margins if they differ from applied
+	if originalMargins[0] != appliedMargins[0] || originalMargins[1] != appliedMargins[1] {
+		details.WriteString(fmt.Sprintf("\n  original: top=%.2flh bottom=%.2flh", originalMargins[0], originalMargins[1]))
 	}
+
+	details.WriteString(fmt.Sprintf("\n  applied: top=%.2flh bottom=%.2flh", appliedMargins[0], appliedMargins[1]))
+
+	// Show container margins if any were applied
+	if containerMargins[0] > 0 || containerMargins[1] > 0 {
+		details.WriteString(fmt.Sprintf("\n  from container: top=%.2flh bottom=%.2flh", containerMargins[0], containerMargins[1]))
+	}
+
+	details.WriteString(fmt.Sprintf("\n  scope: %s", scopePath))
+	if containerPath != "(no containers)" {
+		details.WriteString(fmt.Sprintf("\n  containers: %s", containerPath))
+	}
+
 	t.entries = append(t.entries, traceEntry{
-		operation: "POSFILTER",
-		styleName: styleSpec,
-		details:   details,
+		operation: "POSITION",
+		styleName: scopePath, // Use scope path as the style name for easier identification
+		details:   details.String(),
 	})
-	t.sections["position_filtered"]++
-	// Track position stats
-	t.sections["pos_"+pos]++
+	t.sections["position_resolved"]++
+	t.sections["pos_"+position]++
+}
+
+// TraceMarginAccumulate logs margin accumulation decisions in container-aware handling.
+// This helps debug YJCumulativeInSameContainerRuleMerger behavior.
+//
+// Parameters:
+//   - marginType: "margin-left" or "margin-right"
+//   - styleName: the style contributing the margin
+//   - action: "skip" (same container), "accumulate" (different container), or "set" (first value)
+//   - existing: existing margin value (nil if none)
+//   - incoming: new margin value being applied
+//   - result: final margin value after action
+//   - scopePath: CSS-like path showing element hierarchy
+func (t *StyleTracer) TraceMarginAccumulate(marginType, styleName, action string, existing, incoming, result any, scopePath string) {
+	if !t.IsEnabled() {
+		return
+	}
+
+	var details strings.Builder
+	details.WriteString(fmt.Sprintf("action: %s", action))
+	if existing != nil {
+		details.WriteString(fmt.Sprintf(", existing: %s", traceFormatValue(existing)))
+	}
+	details.WriteString(fmt.Sprintf(", incoming: %s", traceFormatValue(incoming)))
+	details.WriteString(fmt.Sprintf(", result: %s", traceFormatValue(result)))
+	details.WriteString(fmt.Sprintf("\n  scope: %s", scopePath))
+
+	t.entries = append(t.entries, traceEntry{
+		operation: "MARGIN",
+		styleName: fmt.Sprintf("%s via %s", marginType, styleName),
+		details:   details.String(),
+	})
+	t.sections["margin_"+action]++
 }
 
 // Flush writes the trace to a file and clears the buffer.
