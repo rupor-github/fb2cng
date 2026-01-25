@@ -10,7 +10,7 @@ func (sb *StorylineBuilder) AddContent(contentType KFXSymbol, contentName string
 	sb.eidCounter++
 
 	if style != "" && sb.styles != nil {
-		sb.styles.tracer.TraceAssign(traceSymbolName(contentType), fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name)
+		sb.styles.tracer.TraceAssign(traceSymbolName(contentType), fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name, styleSpec)
 		// Only mark usage now if no styleSpec (immediate style, won't be re-resolved)
 		// Deferred styles (with styleSpec) are marked after position filtering in Build()
 		if styleSpec == "" {
@@ -35,7 +35,7 @@ func (sb *StorylineBuilder) AddContentAndEvents(contentType KFXSymbol, contentNa
 	sb.eidCounter++
 
 	if style != "" && sb.styles != nil {
-		sb.styles.tracer.TraceAssign(traceSymbolName(contentType), fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name)
+		sb.styles.tracer.TraceAssign(traceSymbolName(contentType), fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name, styleSpec)
 		// Only mark usage now if no styleSpec (immediate style, won't be re-resolved)
 		// Deferred styles (with styleSpec) are marked after position filtering in Build()
 		if styleSpec == "" {
@@ -63,7 +63,7 @@ func (sb *StorylineBuilder) AddFootnoteContentAndEvents(contentType KFXSymbol, c
 	sb.eidCounter++
 
 	if style != "" && sb.styles != nil {
-		sb.styles.tracer.TraceAssign(traceSymbolName(contentType)+" (footnote)", fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name)
+		sb.styles.tracer.TraceAssign(traceSymbolName(contentType)+" (footnote)", fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name, styleSpec)
 		// Only mark usage now if no styleSpec (immediate style, won't be re-resolved)
 		// Deferred styles (with styleSpec) are marked after position filtering in Build()
 		if styleSpec == "" {
@@ -89,7 +89,7 @@ func (sb *StorylineBuilder) AddContentWithHeading(contentType KFXSymbol, content
 	sb.eidCounter++
 
 	if style != "" && sb.styles != nil {
-		sb.styles.tracer.TraceAssign(traceSymbolName(contentType), fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name)
+		sb.styles.tracer.TraceAssign(traceSymbolName(contentType), fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name, styleSpec)
 		// Only mark usage now if no styleSpec (immediate style, won't be re-resolved)
 		// Deferred styles (with styleSpec) are marked after position filtering in Build()
 		if styleSpec == "" {
@@ -115,7 +115,7 @@ func (sb *StorylineBuilder) AddImage(resourceName, style, altText string) int {
 	sb.eidCounter++
 
 	if style != "" && sb.styles != nil {
-		sb.styles.tracer.TraceAssign(traceSymbolName(SymImage), fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name)
+		sb.styles.tracer.TraceAssign(traceSymbolName(SymImage), fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name, "")
 		sb.styles.MarkUsage(style, styleUsageImage)
 	}
 
@@ -136,7 +136,7 @@ func (sb *StorylineBuilder) AddInlineImage(resourceName, style, altText string) 
 	sb.eidCounter++
 
 	if style != "" && sb.styles != nil {
-		sb.styles.tracer.TraceAssign(traceSymbolName(SymImage)+" (inline)", fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name)
+		sb.styles.tracer.TraceAssign(traceSymbolName(SymImage)+" (inline)", fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name, "")
 		sb.styles.MarkUsage(style, styleUsageImage)
 	}
 
@@ -166,7 +166,7 @@ func (sb *StorylineBuilder) AddMixedContent(styleSpec, style string, items []Inl
 
 	// For immediate styles (no styleSpec), mark usage now
 	if style != "" && styleSpec == "" && sb.styles != nil {
-		sb.styles.tracer.TraceAssign(traceSymbolName(SymText)+" (mixed)", fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name)
+		sb.styles.tracer.TraceAssign(traceSymbolName(SymText)+" (mixed)", fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name, "")
 		sb.styles.MarkUsage(style, styleUsageText)
 	}
 
@@ -179,7 +179,7 @@ func (sb *StorylineBuilder) AddMixedContent(styleSpec, style string, items []Inl
 			sb.eidCounter++
 
 			if item.Style != "" && sb.styles != nil {
-				sb.styles.tracer.TraceAssign(traceSymbolName(SymImage)+" (inline/mixed)", fmt.Sprintf("%d", imgEid), item.Style, sb.sectionName+"/"+sb.name)
+				sb.styles.tracer.TraceAssign(traceSymbolName(SymImage)+" (inline/mixed)", fmt.Sprintf("%d", imgEid), item.Style, sb.sectionName+"/"+sb.name, "")
 				sb.styles.MarkUsage(item.Style, styleUsageImage)
 			}
 

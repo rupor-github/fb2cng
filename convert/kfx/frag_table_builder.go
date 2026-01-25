@@ -123,7 +123,7 @@ func (sb *StorylineBuilder) AddTable(c *content.Content, table *fb2.Table, style
 	// Amazon reference: table has yj.table_features=[pan_zoom, scale_fit] which enables
 	// table scaling to fit within page bounds instead of spanning multiple pages.
 	tableStyle := NewStyleContext(styles).Resolve("", "table")
-	styles.tracer.TraceAssign(traceSymbolName(SymTable), fmt.Sprintf("%d", tableEID), tableStyle, sb.sectionName+"/"+sb.name)
+	styles.tracer.TraceAssign(traceSymbolName(SymTable), fmt.Sprintf("%d", tableEID), tableStyle, sb.sectionName+"/"+sb.name, "table")
 	styles.MarkUsage(tableStyle, styleUsageWrapper)
 
 	// Get table element properties from CSS (KP3 moves these from style to element)
@@ -329,7 +329,7 @@ func (sb *StorylineBuilder) buildMixedCellContent(c *content.Content, cell fb2.T
 			sb.eidCounter++
 
 			if item.Style != "" {
-				styles.tracer.TraceAssign(traceSymbolName(SymImage)+" (inline/table)", fmt.Sprintf("%d", imgEid), item.Style, sb.sectionName+"/"+sb.name)
+				styles.tracer.TraceAssign(traceSymbolName(SymImage)+" (inline/table)", fmt.Sprintf("%d", imgEid), item.Style, sb.sectionName+"/"+sb.name, "")
 				styles.MarkUsage(item.Style, styleUsageImage)
 			}
 

@@ -111,7 +111,11 @@ func (m *StyleMapper) MapRule(selector Selector, props map[string]CSSValue) (map
 				continue
 			}
 			for _, entry := range entries {
-				m.converter.tracer.TraceMap(match.key.Attr, "stylemap:"+entry.Property, result.Style.Properties)
+				via := "stylemap:" + entry.Property
+				if entry.Transformer != "" {
+					via += " (" + entry.Transformer + ")"
+				}
+				m.converter.tracer.TraceMap(match.key.Attr, via, result.Style.Properties)
 			}
 		}
 	}

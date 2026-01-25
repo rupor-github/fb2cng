@@ -208,8 +208,8 @@ func (sc StyleContext) handleContainerAwareMargins(merged, props map[KFXSymbol]a
 		tracer = sc.registry.Tracer()
 	}
 
-	// Get scope path for tracing
-	scopePath := sc.ScopePath()
+	// Get container path for tracing
+	containerPath := sc.ContainerPath()
 
 	// Create a copy without margins (they'll be handled separately)
 	nonMarginProps := make(map[KFXSymbol]any, len(props))
@@ -225,7 +225,7 @@ func (sc StyleContext) handleContainerAwareMargins(merged, props map[KFXSymbol]a
 			if origin != nil && origin.contributors[styleName] {
 				// Same container: style already contributed, SKIP to avoid double-counting
 				if tracer.IsEnabled() {
-					tracer.TraceMarginAccumulate(marginName, styleName, "skip", origin.value, val, merged[sym], scopePath)
+					tracer.TraceMarginAccumulate(marginName, styleName, "skip", origin.value, val, merged[sym], containerPath)
 				}
 				continue
 			}
@@ -235,20 +235,20 @@ func (sc StyleContext) handleContainerAwareMargins(merged, props map[KFXSymbol]a
 				if accumulated, ok := mergeCumulative(existing, val); ok {
 					merged[sym] = accumulated
 					if tracer.IsEnabled() {
-						tracer.TraceMarginAccumulate(marginName, styleName, "accumulate", existing, val, accumulated, scopePath)
+						tracer.TraceMarginAccumulate(marginName, styleName, "accumulate", existing, val, accumulated, containerPath)
 					}
 				} else {
 					// Fallback: override if can't accumulate
 					merged[sym] = val
 					if tracer.IsEnabled() {
-						tracer.TraceMarginAccumulate(marginName, styleName, "override", existing, val, val, scopePath)
+						tracer.TraceMarginAccumulate(marginName, styleName, "override", existing, val, val, containerPath)
 					}
 				}
 			} else {
 				// No existing value, just set
 				merged[sym] = val
 				if tracer.IsEnabled() {
-					tracer.TraceMarginAccumulate(marginName, styleName, "set", nil, val, val, scopePath)
+					tracer.TraceMarginAccumulate(marginName, styleName, "set", nil, val, val, containerPath)
 				}
 			}
 			continue

@@ -78,14 +78,21 @@ func (t *StyleTracer) TraceInheritance(name string, parent string, finalProps ma
 }
 
 // TraceAssign logs when a style is assigned to content.
-func (t *StyleTracer) TraceAssign(contentType string, contentID string, styleName string, location string) {
+// styleSpec is the original style specification (e.g., "p poem verse") used for resolution.
+// If styleSpec is empty, the style was assigned directly without resolution.
+func (t *StyleTracer) TraceAssign(contentType string, contentID string, styleName string, location string, styleSpec string) {
 	if !t.IsEnabled() {
 		return
+	}
+	var details strings.Builder
+	details.WriteString(fmt.Sprintf("to %s %q at %s", contentType, contentID, location))
+	if styleSpec != "" {
+		details.WriteString(fmt.Sprintf("\n  from spec: %s", styleSpec))
 	}
 	t.entries = append(t.entries, traceEntry{
 		operation: "ASSIGN",
 		styleName: styleName,
-		details:   fmt.Sprintf("to %s %q at %s", contentType, contentID, location),
+		details:   details.String(),
 	})
 	t.sections["assigned"]++
 }
@@ -185,17 +192,26 @@ func (t *StyleTracer) TraceAutoCreate(name string, inferredParent string) {
 //   - classes: CSS classes (e.g., "poem stanza")
 //   - itemCount: number of items in the container
 //   - marginTop, marginBottom: container's vertical margins in lh units
-//   - isLastInParent: whether this container is the last item in its parent
-//   - titleBlockMargins: whether title-block margin style is used
+//   - isLastInParent: whether this container is the last item in its parent (shown in containerPath)
+//   - titleBlockMargins: whether title-block margin style is used (shown in containerPath)
 //   - scopePath: CSS-like path showing element hierarchy (e.g., "div.poem > div.stanza")
-//   - containerPath: container stack with positions (e.g., "poem[2/3] > stanza[1/14]")
+//   - containerPath: container stack with positions and flags (e.g., "poem[2/3] > stanza[1/14] (title-block)")
 func (t *StyleTracer) TraceContainerEnter(tag, classes string, itemCount int, marginTop, marginBottom float64, isLastInParent, titleBlockMargins bool, scopePath, containerPath string) {
 	if !t.IsEnabled() {
 		return
 	}
-	styleName := tag
-	if classes != "" {
-		styleName += "." + strings.ReplaceAll(classes, " ", ".")
+
+	// Build styleName: prefer "tag.classes", fall back to ".classes" or "(anonymous)"
+	var styleName string
+	switch {
+	case tag != "" && classes != "":
+		styleName = tag + "." + strings.ReplaceAll(classes, " ", ".")
+	case tag != "":
+		styleName = tag
+	case classes != "":
+		styleName = "." + strings.ReplaceAll(classes, " ", ".")
+	default:
+		styleName = "(anonymous)"
 	}
 
 	var details strings.Builder
@@ -203,13 +219,7 @@ func (t *StyleTracer) TraceContainerEnter(tag, classes string, itemCount int, ma
 	if marginTop > 0 || marginBottom > 0 {
 		details.WriteString(fmt.Sprintf(", margins: top=%.2flh bottom=%.2flh", marginTop, marginBottom))
 	}
-	if isLastInParent {
-		details.WriteString(", isLastInParent")
-	}
-	if titleBlockMargins {
-		details.WriteString(", titleBlockMargins")
-	}
-	details.WriteString(fmt.Sprintf("\n  scope: %s", scopePath))
+	// Note: isLastInParent and titleBlockMargins flags are shown in containerPath
 	if containerPath != "(no containers)" {
 		details.WriteString(fmt.Sprintf("\n  containers: %s", containerPath))
 	}
@@ -230,7 +240,7 @@ func (t *StyleTracer) TraceContainerEnter(tag, classes string, itemCount int, ma
 //   - originalMargins: margins before filtering (top, bottom in lh)
 //   - appliedMargins: margins after filtering (top, bottom in lh)
 //   - containerMargins: container margins applied (top, bottom in lh)
-//   - scopePath: CSS-like path showing element hierarchy
+//   - scopePath: CSS-like path showing element hierarchy (used as entry identifier)
 //   - containerPath: container stack with positions
 func (t *StyleTracer) TracePositionResolve(position string, originalMargins, appliedMargins, containerMargins [2]float64, scopePath, containerPath string) {
 	if !t.IsEnabled() {
@@ -252,7 +262,6 @@ func (t *StyleTracer) TracePositionResolve(position string, originalMargins, app
 		details.WriteString(fmt.Sprintf("\n  from container: top=%.2flh bottom=%.2flh", containerMargins[0], containerMargins[1]))
 	}
 
-	details.WriteString(fmt.Sprintf("\n  scope: %s", scopePath))
 	if containerPath != "(no containers)" {
 		details.WriteString(fmt.Sprintf("\n  containers: %s", containerPath))
 	}
@@ -276,8 +285,8 @@ func (t *StyleTracer) TracePositionResolve(position string, originalMargins, app
 //   - existing: existing margin value (nil if none)
 //   - incoming: new margin value being applied
 //   - result: final margin value after action
-//   - scopePath: CSS-like path showing element hierarchy
-func (t *StyleTracer) TraceMarginAccumulate(marginType, styleName, action string, existing, incoming, result any, scopePath string) {
+//   - containerPath: container stack with positions and flags
+func (t *StyleTracer) TraceMarginAccumulate(marginType, styleName, action string, existing, incoming, result any, containerPath string) {
 	if !t.IsEnabled() {
 		return
 	}
@@ -289,7 +298,9 @@ func (t *StyleTracer) TraceMarginAccumulate(marginType, styleName, action string
 	}
 	details.WriteString(fmt.Sprintf(", incoming: %s", traceFormatValue(incoming)))
 	details.WriteString(fmt.Sprintf(", result: %s", traceFormatValue(result)))
-	details.WriteString(fmt.Sprintf("\n  scope: %s", scopePath))
+	if containerPath != "(no containers)" {
+		details.WriteString(fmt.Sprintf("\n  containers: %s", containerPath))
+	}
 
 	t.entries = append(t.entries, traceEntry{
 		operation: "MARGIN",

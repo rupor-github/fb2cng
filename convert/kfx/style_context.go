@@ -172,8 +172,19 @@ func formatContainerFrame(name string, frame containerFrame) string {
 	pos := frame.currentItem + 1 // 1-based for display
 	total := frame.itemCount
 	result := name + "[" + itoa(pos) + "/" + itoa(total) + "]"
+
+	// Collect all active flags
+	var flags []string
 	if frame.titleBlockMargins {
-		result += "*" // Mark title-block mode
+		flags = append(flags, "title-block")
+	}
+	if frame.isLastInParent {
+		flags = append(flags, "last-in-parent")
+	}
+
+	// Append flags in parentheses if any are set
+	if len(flags) > 0 {
+		result += " (" + strings.Join(flags, ", ") + ")"
 	}
 	return result
 }

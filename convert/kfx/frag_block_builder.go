@@ -228,7 +228,7 @@ func (sb *StorylineBuilder) applyStorylinePositionFiltering() {
 
 		// Trace assignment for wrappers
 		if len(entry.Children) > 0 {
-			sb.styles.tracer.TraceAssign("wrapper", fmt.Sprintf("%d", entry.EID), resolvedStyle, sb.sectionName+"/"+sb.name)
+			sb.styles.tracer.TraceAssign("wrapper", fmt.Sprintf("%d", entry.EID), resolvedStyle, sb.sectionName+"/"+sb.name, entry.StyleSpec)
 			sb.styles.MarkUsage(resolvedStyle, styleUsageWrapper)
 		}
 	}
