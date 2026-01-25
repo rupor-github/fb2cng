@@ -3,6 +3,7 @@
 A lot of initial knowledge of the KFX internals comes from Calibre's KFX conversion Input Plugin v2.27.1 created by John Howell <jhowell@acm.org> and copyrighted under GPL v3. Visit https://www.mobileread.com/forums for more details.
 
 This document describes the parts of the KFX on-disk format. It focuses on:
+
 - The outer KFX container format (`CONT` + `ENTY`)
 - The embedded Amazon Ion Binary encoding used for most payloads
 - The fragment model used by the “YJ” data model (fragment type + fragment id)
@@ -57,10 +58,12 @@ Derived from: `kfxlib/ion_binary.py:IonBinary.SIGNATURE`, `IonBinary.deserialize
 ### 2.2 Ion Binary value encoding (as implemented here)
 
 Each value starts with a one-byte **descriptor**:
+
 - high nibble: **type signature** (0..15)
 - low nibble: **flag** (0..15)
 
 If the flag is:
+
 - `< 14`: it is the length in bytes of the value body
 - `14`: the length is an Ion VLUInt immediately following the descriptor
 - `15`: “null” for the given signature (except signature 0 which is null itself)
@@ -75,6 +78,7 @@ Ion “symbols” are represented in this project as `IonSymbol` objects (a `str
 Most KFX semantics are expressed via symbol IDs like `$270` rather than literal strings.
 
 The local symbol table (`LocalSymbolTable`) supports:
+
 - Importing shared symbol tables (`$ion` and `YJ_symbols`)
 - Local symbols (`symbols` list)
 - A translation layer (optional external symbol catalog) to map placeholder `$NNN` names to readable names
@@ -86,21 +90,25 @@ Derived from: `kfxlib/ion_symbol_table.py:LocalSymbolTable`, `kfxlib/yj_symbol_c
 **CRITICAL**: KFX files use a non-standard symbol ID numbering scheme that differs from standard Ion implementations.
 
 **KFX numbering (used by kfxlib and Kindle readers)**:
+
 - IDs 1-851: YJ_symbols shared symbol table (`$10` to `$860`)
 - IDs 852+: Local symbols (book-specific names like chapter IDs, style names)
 - **Ion system symbols (1-9) are NOT counted** in the ID space
 
 **Standard Ion numbering (used by Amazon Ion SDK, including Go's ion-go)**:
+
 - IDs 1-9: Ion system symbols (`$ion_symbol_table`, `name`, `version`, etc.)
 - IDs 10-860: YJ_symbols (after importing with `max_id: 851`)
 - IDs 861+: Local symbols
 
 This 9-ID offset affects:
+
 1. **Entity directory**: `id_idnum` and `type_idnum` use KFX numbering (852+ for local symbols)
 2. **Doc symbol table `max_id`**: Stored with Ion system symbol offset, must be adjusted when reading/writing
 3. **Symbol values in payloads**: Written with KFX numbering, require manual resolution when reading
 
 **Example**:
+
 - A local symbol at index 0 (e.g., "chapter_1"):
   - KFX ID: 852 (LargestKnownSymbol + 1 = 851 + 1)
   - Standard Ion ID: 861 (after $ion system symbols + YJ_symbols)
@@ -196,18 +204,18 @@ The `b.jad` names are provided for convenience; the wire identifiers are the num
 
 Derived from: `kfxlib/kfx_container.py:KfxContainer.deserialize`, `kfxlib/kfx_container.py:KfxContainer.serialize`, and `b.jad`.
 
-| Symbol | b.jad Enum | b.jad String | Read behavior | Write behavior |
-|---:|---|---|---|---|
-| `$409` | `ContainerId` | `bcContId` | `container_id = pop($409, "")` | Written from `$270.$409` (container fragment) |
-| `$410` | `CompressionType` | `bcComprType` | `pop($410, 0)`; logs error if non-zero | Always written as `0` |
-| `$411` | `DRMScheme` | `bcDRMScheme` | `pop($411, 0)`; logs error if non-zero | Always written as `0` |
-| `$412` | `ChunkSize` | `bcChunkSize` | `pop($412, 4096)`; logs warning if not 4096 | Always written as `4096` |
-| `$413` | `IndexTabOffset` | `bcIndexTabOffset` | `pop($413, None)` | Written as the absolute offset where the entity directory starts (`len(container)` at that moment) |
-| `$414` | `IndexTabLength` | `bcIndexTabLength` | `pop($414, 0)`; if non-zero, used to read entity directory | Written as byte length of the entity directory (`len(entity_table)`) |
-| `$415` | `DocSymOffset` | `bcDocSymbolOffset` | `pop($415, None)` | Written as the absolute offset where the doc symbol blob starts |
-| `$416` | `DocSymLength` | `bcDocSymbolLength` | `pop($416, 0)`; if non-zero, parses `$ion_symbol_table` value and imports symbols | Written as byte length of the doc symbol blob |
-| `$594` | `FCapabilitiesOffset` | `bcFCapabilitiesOffset` | Only read when `version > 1`; `pop($594, None)` | Only written when `self.symtab.local_min_id > 595`; set to absolute offset where `$593` blob starts |
-| `$595` | `FCapabilitiesLength` | `bcFCapabilitiesLength` | Only read when `version > 1`; `pop($595, 0)`; if non-zero parses annotated `$593` value | Only written when `self.symtab.local_min_id > 595`; set to byte length of the `$593` blob |
+| Symbol | b.jad Enum            | b.jad String            | Read behavior                                                                           | Write behavior                                                                                      |
+| -----: | --------------------- | ----------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `$409` | `ContainerId`         | `bcContId`              | `container_id = pop($409, "")`                                                          | Written from `$270.$409` (container fragment)                                                       |
+| `$410` | `CompressionType`     | `bcComprType`           | `pop($410, 0)`; logs error if non-zero                                                  | Always written as `0`                                                                               |
+| `$411` | `DRMScheme`           | `bcDRMScheme`           | `pop($411, 0)`; logs error if non-zero                                                  | Always written as `0`                                                                               |
+| `$412` | `ChunkSize`           | `bcChunkSize`           | `pop($412, 4096)`; logs warning if not 4096                                             | Always written as `4096`                                                                            |
+| `$413` | `IndexTabOffset`      | `bcIndexTabOffset`      | `pop($413, None)`                                                                       | Written as the absolute offset where the entity directory starts (`len(container)` at that moment)  |
+| `$414` | `IndexTabLength`      | `bcIndexTabLength`      | `pop($414, 0)`; if non-zero, used to read entity directory                              | Written as byte length of the entity directory (`len(entity_table)`)                                |
+| `$415` | `DocSymOffset`        | `bcDocSymbolOffset`     | `pop($415, None)`                                                                       | Written as the absolute offset where the doc symbol blob starts                                     |
+| `$416` | `DocSymLength`        | `bcDocSymbolLength`     | `pop($416, 0)`; if non-zero, parses `$ion_symbol_table` value and imports symbols       | Written as byte length of the doc symbol blob                                                       |
+| `$594` | `FCapabilitiesOffset` | `bcFCapabilitiesOffset` | Only read when `version > 1`; `pop($594, None)`                                         | Only written when `self.symtab.local_min_id > 595`; set to absolute offset where `$593` blob starts |
+| `$595` | `FCapabilitiesLength` | `bcFCapabilitiesLength` | Only read when `version > 1`; `pop($595, 0)`; if non-zero parses annotated `$593` value | Only written when `self.symtab.local_min_id > 595`; set to byte length of the `$593` blob           |
 
 Notes:
 
@@ -257,7 +265,7 @@ Derived from: `kfxlib/kfx_container.py:KfxContainer.deserialize`.
 
 If `$416` (`bcDocSymbolLength`) is non-zero:
 
-- The blob is parsed as an **Ion Binary** *annotated value* with annotation `$ion_symbol_table`.
+- The blob is parsed as an **Ion Binary** _annotated value_ with annotation `$ion_symbol_table`.
 - After parsing, each import in `value["imports"]` that contains a `max_id` has that `max_id` adjusted **down** by `len(SYSTEM_SYMBOL_TABLE.symbols)` (typically 9).
 - The resulting symbol table definition is then fed to `self.symtab.create(...)`.
 
@@ -266,6 +274,7 @@ This implies the on-disk doc symbol table uses `max_id` values that include the 
 **Relationship to symbol ID numbering (see §2.3.1)**:
 
 The doc symbol table `max_id` adjustment is part of the KFX vs Standard Ion numbering difference:
+
 - On disk: YJ_symbols import has `max_id: 860` (includes 9 Ion system symbols)
 - In memory (kfxlib): YJ_symbols `max_id` is 851 (excludes Ion system symbols)
 - When standard Ion libraries read the doc symbol table, local symbols start at ID 861
@@ -284,7 +293,7 @@ Derived from: `kfxlib/kfx_container.py:KfxContainer.serialize`.
 
 If `version > 1` and `$595` (`bcFCapabilitiesLength`) is non-zero:
 
-- The blob is parsed as an **Ion Binary** *annotated value* with annotation `$593`.
+- The blob is parsed as an **Ion Binary** _annotated value_ with annotation `$593`.
 
 Derived from: `kfxlib/kfx_container.py:KfxContainer.deserialize`.
 
@@ -307,8 +316,8 @@ Normalization rules applied before JSON parsing:
 - All byte `0x1B` values are removed.
 - The remaining bytes are decoded as ASCII with `errors="ignore"`.
 - The decoded text is turned into valid JSON by rewriting:
-   - `key :` and `key:` → `"key":`
-   - `value:` → `"value":`
+  - `key :` and `key:` → `"key":`
+  - `value:` → `"value":`
 
 The resulting JSON must deserialize into a list of objects, each containing exactly:
 
@@ -329,10 +338,10 @@ Derived from: `kfxlib/kfx_container.py:KfxContainer.deserialize`.
 Writer behavior:
 
 - The writer constructs a JSON list of objects with keys:
-   - `kfxgen_package_version`
-   - `kfxgen_application_version`
-   - `kfxgen_payload_sha1` (SHA1 of the entity payload region it is about to append)
-   - `kfxgen_acr` (container id)
+  - `kfxgen_package_version`
+  - `kfxgen_application_version`
+  - `kfxgen_payload_sha1` (SHA1 of the entity payload region it is about to append)
+  - `kfxgen_acr` (container id)
 - It uses compact JSON serialization, then rewrites `"key":` → `key:` and `"value":` → `value:`.
 
 Derived from: `kfxlib/kfx_container.py:KfxContainer.serialize`.
@@ -448,8 +457,8 @@ Derived from: `kfxlib/kfx_container.py:KfxContainerEntity.deserialize`, `kfxlib/
 If the decoded payload is an `IonAnnotation`:
 
 - If it has exactly one annotation and that annotation equals `ftype`, and the `fid` resolved from `id_idnum` equals `$348`, the code treats this as a “root fragment encoded with an annotated payload” and normalizes it by:
-   - setting `fid = ftype`
-   - replacing the value with the annotation’s inner value
+  - setting `fid = ftype`
+  - replacing the value with the annotation’s inner value
 - Otherwise, an error is logged (“Entity ... has IonAnnotation as value”).
 
 Note: this normalization changes the fragment key representation. Elsewhere in this repo, a root fragment is represented with a single annotation (i.e., `fid == ftype` via a single-item annotation list), but this branch produces a key where both `fid` and `ftype` are equal. Semantically it is still a root fragment because `fid == ftype` holds.
@@ -477,8 +486,8 @@ Derived from: `kfxlib/kfx_container.py:KfxContainerEntity.deserialize`.
 - `entity_info` Ion struct containing exactly `$410 = 0` and `$411 = 0`
 - then patches `header_len` to the current byte count
 - then writes payload bytes:
-   - for `$417`/`$418`: raw bytes (must be an `IonBLOB`, otherwise it raises)
-   - otherwise: Ion Binary stream of a single value
+  - for `$417`/`$418`: raw bytes (must be an `IonBLOB`, otherwise it raises)
+  - otherwise: Ion Binary stream of a single value
 
 Derived from: `kfxlib/kfx_container.py:KfxContainerEntity.serialize`.
 
@@ -487,7 +496,7 @@ Derived from: `kfxlib/kfx_container.py:KfxContainerEntity.serialize`.
 When building a `CONT` file, the serializer excludes container-level fragments from the entity directory:
 
 - It does **not** emit entities for fragment types in `CONTAINER_FRAGMENT_TYPES = ["$270", "$593", "$ion_symbol_table", "$419"]`,
-- except that it *does* emit `$419` as an entity anyway (explicit special case).
+- except that it _does_ emit `$419` as an entity anyway (explicit special case).
 
 In other words, `$270`/`$593`/`$ion_symbol_table` live in the outer fragment list but are not written as entities, while `$419` is a required fragment but is written as an entity.
 
@@ -533,14 +542,17 @@ The converter uses a “container entity map” fragment to describe which fragm
 ### 6.1 Structure
 
 `$419` value is an Ion struct with fields:
+
 - `$252` (`container_list`): list of container entries
 - `$253` (optional): entity dependency list (see below). It is emitted only if the computed/retained dependency list is non-empty.
 
 Each entry in `$252` is a struct:
+
 - `$155` (`id`): container_id (string/symbol)
 - `$181` (`contains`): list of fragment IDs (fids) present in that container
 
 If `$253` is present, it is a list of structs describing resource dependencies inferred by the builder:
+
 - `$155` (`id`): fragment id which depends on resources
 - `$254`: list of mandatory dependent ids
 - `$255`: list of optional dependent ids
@@ -563,6 +575,7 @@ Many fragments contain additional fields that this converter does not interpret;
 ### 7.1 `$270` (Container)
 
 The converter reconstructs a normalized `$270` fragment during container parsing with fields:
+
 - `$409` container id
 - `$412` chunk size
 - `$410` compression type
@@ -577,13 +590,14 @@ Derived from: `kfxlib/kfx_container.py:KfxContainer.deserialize` (creates `self.
 ### 7.2 Reading order lists (found in `$538` and `$258`)
 
 The code expects a `reading_orders` list under `$169` with each entry having:
+
 - `$178`: reading order name
 - `$170`: list of section IDs in order
 
 Exact source/precedence rules:
 
 - If fragment `$538` (document_data) exists, reading orders are taken from `$538.$169`.
-- If `$538` exists *and* `$258` exists, `$258.$169` is cross-checked for equality; mismatches are logged.
+- If `$538` exists _and_ `$258` exists, `$258.$169` is cross-checked for equality; mismatches are logged.
 - If `$538` does **not** exist, reading orders are taken from `$258.$169` (if present).
 
 Derived from: `kfxlib/yj_structure.py:BookStructure.check_consistency` (reading order validation).
@@ -593,22 +607,26 @@ Derived from: `kfxlib/yj_structure.py:BookStructure.check_consistency` (reading 
 **IMPORTANT**: Despite their similar names, these two fragment types serve different purposes:
 
 **`$258` (metadata)** - Contains document structure information:
+
 - `$169` (reading_orders): List of reading order definitions with section references
 - May also contain some legacy metadata fields (title, author, etc.) in older KFX files
 
 **`$490` (book_metadata)** - Contains categorised metadata about the book:
+
 - `$491` (categorised_metadata): List of category entries, each containing:
   - `$495` (category): Category name string (e.g., "kindle_title_metadata", "kindle_audit_metadata")
   - `$258` (metadata): List of key-value entries within that category
     - Each entry has `$492` (key) and `$307` (value)
 
 Common `$490` categories in modern KFX:
+
 - `kindle_title_metadata`: title, author, ASIN, content_id, asset_id, book_id, language, publisher, description, cover_image, cde_content_type, is_sample, override_kindle_font
 - `kindle_audit_metadata`: creator_version, file_creator (converter info)
 - `kindle_ebook_metadata`: selection, nested_span (capability flags)
 - `kindle_capability_metadata`: (usually empty)
 
 The converter reads title/author/etc from either:
+
 - `$490` → `$491` (categorised_metadata list) → category `kindle_title_metadata` → `$258` list of key/value structs (`$492` key, `$307` value)
 - or `$258` directly, where certain keys are known (e.g. `$153` title, `$222` author, `$224` ASIN, `$10` language, …)
 
@@ -626,6 +644,7 @@ Derived from: `kfxlib/yj_structure.py:BookStructure.check_consistency` (document
 ### 7.5 `$164` (External resource descriptor) + `$417` (RawMedia) / `$418` (RawFont)
 
 The resource descriptor fragment `$164` is used to locate and validate resource bytes stored separately in raw entities:
+
 - `$175` (`resource_name`): resource identifier - **must be a symbol**, not a string (KP3 requirement)
 - `$165` (`location`): key used to look up the raw resource entity (`$417`/`$418`)
 - `$161` (`format`): file format symbol (e.g. `$285` jpg, `$284` png, `$565` pdf, `$548` jxr)
@@ -638,6 +657,7 @@ The resource descriptor fragment `$164` is used to locate and validate resource 
 **Important**: The `$175` field must be encoded as an Ion **symbol**, not a string. KP3 validates this and may fail to display images if `$175` is a string. Similarly, `$162` should use `"image/jpg"` (not `"image/jpeg"`) to match KP3's expected format.
 
 Raw bytes are stored as separate fragments:
+
 - `$417` (bcRawMedia) with `fid == location` and value = raw bytes
 - `$418` (bcRawFont) similarly for fonts
 
@@ -646,12 +666,14 @@ Derived from: `kfxlib/yj_structure.py:BookStructure.check_consistency` (resource
 ### 7.5.1 `$260` (Section) and `$259` (Storyline) fragments
 
 **`$260` (section)** - Represents a section (chapter/page) in the book:
+
 - `$174` (section_name): section identifier matching the fragment id
 - `$141` (page_templates): list of page template entries
 
 **Page template entry structure** (entries in `$141`):
 
 Per Kindle Previewer (KP3) reference format, page templates use a minimal 3-field structure:
+
 - `$155` (id): EID for the page template
 - `$159` (type): content type, always `$269` (text) for standard book sections
 - `$176` (story_name): reference to the storyline fragment containing content
@@ -659,10 +681,12 @@ Per Kindle Previewer (KP3) reference format, page templates use a minimal 3-fiel
 **NOTE**: Earlier implementations used a more complex structure with `$270` (container type), `$140` (float), `$156` (layout), `$56`/`$57` (dimensions). This caused rendering issues where only the first page of content would display. The KP3-compatible format uses only the 3 fields above with text type (`$269`).
 
 **`$259` (storyline)** - Contains the actual content for a section:
+
 - `$176` (story_name): storyline identifier matching the fragment id
 - `$146` (content_list): list of content entries
 
 **Content entry structure** (entries in `$146`):
+
 - `$155` (id): unique EID for this content element
 - `$159` (type): content type symbol (`$269`=text, `$271`=image, `$270`=container)
 - `$157` (style): optional style name reference
@@ -673,12 +697,13 @@ Per Kindle Previewer (KP3) reference format, page templates use a minimal 3-fiel
 - `$790` (yj.semantics.heading_level): for headings, level 1-6 (KP3 parity)
 
 **Style event structure** (entries in `$142`):
+
 - `$143` (offset): start offset within text (**character/rune offset**, not byte offset)
 - `$144` (length): span length in characters/runes
 - `$157` (style): style name reference
 - `$179` (link_to): optional link anchor reference (symbol pointing to a `$266` anchor fragment)
-   - For internal links: points to the anchor ID of a position anchor
-   - For external links: points to the anchor ID of an external URI anchor (see §7.7.1)
+  - For internal links: points to the anchor ID of a position anchor
+  - For external links: points to the anchor ID of an external URI anchor (see §7.7.1)
 - `$616` (yj.display): for footnote links, set to `$617` (yj.note) (KP3 parity)
 
 **Important**: Offsets and lengths in style events (`$143`, `$144`) are measured in **Unicode code points (characters/runes)**, not bytes. For text containing multi-byte characters (e.g., Cyrillic, CJK), the character offset will differ from the byte offset. For example, the Russian text "Автор" is 5 characters but 10 bytes in UTF-8.
@@ -690,6 +715,7 @@ Derived from: `convert/kfx/frag_storyline.go`, KP3 reference files.
 Cover images require special handling in KFX to enable full-screen scaling. Unlike regular text sections, the cover uses a **container type** (`$270`) page template with explicit dimensions.
 
 **Cover section (`$260`) page template structure**:
+
 - `$140` (float): alignment, typically `$320` (center)
 - `$155` (id): unique EID for the page template
 - `$156` (layout): scaling mode, typically `$326` (scale_fit)
@@ -699,6 +725,7 @@ Cover images require special handling in KFX to enable full-screen scaling. Unli
 - `$67` (container_height): image height in pixels
 
 **Cover storyline (`$259`) content entry**:
+
 - `$155` (id): unique EID for the image content
 - `$159` (type): `$271` (image)
 - `$175` (resource_name): external resource fragment id (as symbol, not string)
@@ -708,6 +735,7 @@ Cover images require special handling in KFX to enable full-screen scaling. Unli
 **Critical**: For the cover image to scale properly (fill the screen without white borders), it **must** be registered in the landmarks navigation container with type `$233` (cover_page). Without this landmark entry, KP3 treats the cover as regular content and does not apply full-screen scaling.
 
 **External resource (`$164`) for cover**:
+
 - `$161` (format): format symbol (`$285`=jpg, `$284`=png, `$286`=gif)
 - `$162` (mime_type): MIME type string (use `"image/jpg"` not `"image/jpeg"`)
 - `$165` (location): resource path string (e.g., `"resource/rsrc1"`)
@@ -722,7 +750,7 @@ Derived from: `convert/kfx/frag_storyline.go:NewCoverPageTemplateEntry`, `conver
 This codebase models Kindle positions using these concepts:
 
 - **EID**: an "element id" / location id that identifies a content stream.
-   - In structs, EID is carried in either `$155` or `$598`.
+  - In structs, EID is carried in either `$155` or `$598`.
 - **EID offset**: an integer offset within the EID stream, carried in `$143`.
 - **PID**: a global "position id" counter that advances across sections and content.
 - **LOC**: a "location" is effectively a sampled PID; LOC = floor(PID / 40) (40 positions per location).
@@ -770,9 +798,9 @@ This converter supports two layouts for `$265`:
 
 1. **Flat map**: `$265.value` is an Ion list that is parsed as a single “SPIM-like” stream (see below).
 2. **Sectionized map**: `$265.value` is an Ion struct with `$181` being a list of per-section descriptors:
-    - `$174`: section id
-    - `$184`: section start PID
-    - `$144`: section length (PID count)
+   - `$174`: section id
+   - `$184`: section start PID
+   - `$144`: section length (PID count)
 
 When sectionized, for each section descriptor in `$265.$181` the code looks up a `$609` fragment (`section_position_id_map`) with `fid == section_name`; if it is missing, an error is logged and that section is skipped.
 
@@ -795,15 +823,15 @@ Invariants checked by this implementation:
 
 - The final entry must end with `eid == 0` and `eid_offset == 0`.
 - Offset consistency rule (exact behavior):
-   - Let `eid_start_pid` be the PID where an EID first appears.
-   - Computed `eid_offset` is `pid - eid_start_pid`.
-   - If `eid_offset != (pid - eid_start_pid)`:
-      - If any of these conditions are true:
-         - the book has illustrated-layout conditional page templates, OR
-         - the book declares the `yj_mathml` feature, OR
-         - `has_non_image_render_inline()` returns true,
-         then the converter enforces a weaker invariant: for each EID, offsets must be strictly increasing over time (`eid_offset > previous_offset_for_eid`). Violations are logged as errors.
-      - Otherwise, mismatches are only logged as warnings.
+  - Let `eid_start_pid` be the PID where an EID first appears.
+  - Computed `eid_offset` is `pid - eid_start_pid`.
+  - If `eid_offset != (pid - eid_start_pid)`:
+    - If any of these conditions are true:
+      - the book has illustrated-layout conditional page templates, OR
+      - the book declares the `yj_mathml` feature, OR
+      - `has_non_image_render_inline()` returns true,
+        then the converter enforces a weaker invariant: for each EID, offsets must be strictly increasing over time (`eid_offset > previous_offset_for_eid`). Violations are logged as errors.
+    - Otherwise, mismatches are only logged as warnings.
 
 Related format-capability cross-checks performed by this code:
 
@@ -817,10 +845,10 @@ Derived from: `kfxlib/yj_position_location.py:BookPosLoc.collect_position_map_in
 For dictionaries and KPF-prepub, this codebase expects a different mapping shape:
 
 - `$611` (yj.section_pid_count_map): a root fragment whose value has `$181` list entries with:
-   - `$174`: section id
-   - `$144`: PID count for that section
+  - `$174`: section id
+  - `$144`: PID count for that section
 - For each section, the code looks up a `$609` fragment whose `fid` is `"<section>-spm"`; if missing it logs an error and continues.
-   - The SPIM is interpreted as **one-based PIDs** (`one_based_pid=True`) and EIDs are not forced to ints (`int_eid=False`).
+  - The SPIM is interpreted as **one-based PIDs** (`one_based_pid=True`) and EIDs are not forced to ints (`int_eid=False`).
 
 Derived from: `kfxlib/yj_position_location.py:BookPosLoc.collect_position_map_info` (dictionary/KPF-prepub branch).
 
@@ -829,15 +857,15 @@ Derived from: `kfxlib/yj_position_location.py:BookPosLoc.collect_position_map_in
 This converter consumes up to two “location” representations, with a defined precedence:
 
 - `$550` (location_map): validated to be a list of length 1 containing a struct whose keys are a subset of `{ $182, $178 }` (otherwise logs `Bad location_map`).
-   - `$182` is a list of structs each containing:
-      - `$155`: EID
-      - optional `$143`: EID offset
-   - This is interpreted as an ordered list of “locations”, each resolvable to a PID via the position maps.
+  - `$182` is a list of structs each containing:
+    - `$155`: EID
+    - optional `$143`: EID offset
+  - This is interpreted as an ordered list of “locations”, each resolvable to a PID via the position maps.
 
 - `$621` (yj.location_pid_map): validated to be a list of length 1 containing a struct whose keys are a subset of `{ $182, $178 }` (otherwise logs `Bad yj.location_pid_map`).
-   - `$182` is a list of integer PIDs.
-   - If `$550` was successfully processed first, `$621` is used only to cross-check that its PIDs match the PIDs derived from `$550`.
-   - If `$550` is missing (or produced no location list), `$621` is used as the primary list and is inverted through the position maps to recover `(eid, offset)`.
+  - `$182` is a list of integer PIDs.
+  - If `$550` was successfully processed first, `$621` is used only to cross-check that its PIDs match the PIDs derived from `$550`.
+  - If `$550` is missing (or produced no location list), `$621` is used as the primary list and is inverted through the position maps to recover `(eid, offset)`.
 
 Derived from: `kfxlib/yj_position_location.py:BookPosLoc.collect_location_map_info`.
 
@@ -951,14 +979,14 @@ This is a compact summary of which fields this repo reads/consumes for the posit
 
 Derived from: `kfxlib/yj_position_location.py:BookPosLoc.collect_position_map_info`, `verify_position_info`, `collect_location_map_info`.
 
-| Fragment | Top-level shape (validated) | Fields used / interpreted | Notes / strictness |
-|---:|---|---|---|
-| `$264` | `IonList` of `IonStruct` | Per entry: `$174` (section id), `$181` (EID list); EID list supports scalar EIDs or `[base, count]` ranges | Validation-oriented; logs extra/missing sections and EID mismatches |
-| `$265` | `IonList` **or** `IonStruct` | If list: treated as one SPIM-like stream. If struct: `$181` list of section descriptors (`$174`, `$184` section start PID, `$144` section length) | When sectionized, expects corresponding `$609` per section |
-| `$609` | `IonStruct` | `$174` (section id), `$181` (SPIM entry list). Entry types: list `[pid,eid,(offset)]`, int (pid with implied eid++), or struct `$184/$185/optional $143` | Enforces terminal `eid==0` and `eid_offset==0`; checks monotonicity and offset consistency (with feature-based relaxations) |
-| `$611` | `IonStruct` | `$181` list of `{ $174: section id, $144: section pid count }` | Dictionary/KPF-prepub mode expects `$609` fragments keyed by `"<section>-spm"` |
-| `$550` | `IonList` of length 1 with `IonStruct` | Struct keys `$182` and `$178` only; `$182` list entries are structs with `$155` (EID) and optional `$143` (offset) | If present, used to compute and validate LOC→PID mapping via position maps |
-| `$621` | `IonList` of length 1 with `IonStruct` | Struct keys `$182` and `$178` only; `$182` is list of integer PIDs | If `$550` exists, PIDs are cross-checked; else used to infer EID/offset by inverse lookup |
+| Fragment | Top-level shape (validated)            | Fields used / interpreted                                                                                                                                | Notes / strictness                                                                                                          |
+| -------: | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+|   `$264` | `IonList` of `IonStruct`               | Per entry: `$174` (section id), `$181` (EID list); EID list supports scalar EIDs or `[base, count]` ranges                                               | Validation-oriented; logs extra/missing sections and EID mismatches                                                         |
+|   `$265` | `IonList` **or** `IonStruct`           | If list: treated as one SPIM-like stream. If struct: `$181` list of section descriptors (`$174`, `$184` section start PID, `$144` section length)        | When sectionized, expects corresponding `$609` per section                                                                  |
+|   `$609` | `IonStruct`                            | `$174` (section id), `$181` (SPIM entry list). Entry types: list `[pid,eid,(offset)]`, int (pid with implied eid++), or struct `$184/$185/optional $143` | Enforces terminal `eid==0` and `eid_offset==0`; checks monotonicity and offset consistency (with feature-based relaxations) |
+|   `$611` | `IonStruct`                            | `$181` list of `{ $174: section id, $144: section pid count }`                                                                                           | Dictionary/KPF-prepub mode expects `$609` fragments keyed by `"<section>-spm"`                                              |
+|   `$550` | `IonList` of length 1 with `IonStruct` | Struct keys `$182` and `$178` only; `$182` list entries are structs with `$155` (EID) and optional `$143` (offset)                                       | If present, used to compute and validate LOC→PID mapping via position maps                                                  |
+|   `$621` | `IonList` of length 1 with `IonStruct` | Struct keys `$182` and `$178` only; `$182` is list of integer PIDs                                                                                       | If `$550` exists, PIDs are cross-checked; else used to infer EID/offset by inverse lookup                                   |
 
 #### 7.6.9 Inline image position tracking in `$265` position_id_map
 
@@ -1003,15 +1031,15 @@ For each paragraph with inline images, the `$265` position_id_map contains multi
 
 **Example**: For text "Тэг [img] может быть вложен" with an inline image after "Тэг ":
 
-| Entry Type | $143 (offset) | $184 (pid) | $185 (eid) | Notes |
-|---|---|---|---|---|
-| Parent | - | 11609 | 879 | Start of paragraph |
-| Before 1st image | 4 | 11613 | 879 | After "Тэг " (4 chars) |
-| 1st inline image | - | 11613 | 1550 | Image EID |
-| After 1st image | 5 | 11614 | 879 | offset=4+1 |
-| Before 2nd image | 31 | 11640 | 879 | After next text segment |
-| 2nd inline image | - | 11640 | 1264 | Image EID |
-| After 2nd image | 32 | 11641 | 879 | offset=31+1 |
+| Entry Type       | $143 (offset) | $184 (pid) | $185 (eid) | Notes                   |
+| ---------------- | ------------- | ---------- | ---------- | ----------------------- |
+| Parent           | -             | 11609      | 879        | Start of paragraph      |
+| Before 1st image | 4             | 11613      | 879        | After "Тэг " (4 chars)  |
+| 1st inline image | -             | 11613      | 1550       | Image EID               |
+| After 1st image  | 5             | 11614      | 879        | offset=4+1              |
+| Before 2nd image | 31            | 11640      | 879        | After next text segment |
+| 2nd inline image | -             | 11640      | 1264       | Image EID               |
+| After 2nd image  | 32            | 11641      | 879        | offset=31+1             |
 
 **format_capabilities requirement**:
 
@@ -1033,6 +1061,7 @@ When a text entry contains **only** inline images with no actual text (e.g., a t
 **Structure identification**:
 
 Image-only text entries are identified by:
+
 - Entry type is `$269` (text)
 - Entry has `$146` (content_list) containing only image struct(s), no strings
 - All inline images have offset 0 (since there's no preceding text)
@@ -1042,12 +1071,13 @@ Image-only text entries are identified by:
 
 For image-only text entries, KP3 emits simpler entries:
 
-| Entry Type | $143 (offset) | $184 (pid) | $185 (eid) | Notes |
-|---|---|---|---|---|
-| Wrapper | - | N | wrapper_eid | Text entry wrapper |
-| Image | - | N | image_eid | Same PID as wrapper |
+| Entry Type | $143 (offset) | $184 (pid) | $185 (eid)  | Notes               |
+| ---------- | ------------- | ---------- | ----------- | ------------------- |
+| Wrapper    | -             | N          | wrapper_eid | Text entry wrapper  |
+| Image      | -             | N          | image_eid   | Same PID as wrapper |
 
 Key differences from mixed content:
+
 - **No offset entries** ($143 field is absent)
 - **Same PID** for wrapper and image entries
 - **No before/after entries** with offsets
@@ -1077,6 +1107,7 @@ KP3 position_id_map entries:
 **Contrast with mixed content** (text + image):
 
 For a paragraph like "Text [img] more text", KP3 emits:
+
 ```
 { $184: 11391, $185: 1305 }               // Wrapper start
 { $143: 5, $184: 11396, $185: 1305 }      // Before image (offset=5)
@@ -1091,6 +1122,7 @@ Derived from: `convert/kfx/frag_positionmaps.go:BuildPositionIDMap`, KP3 referen
 When a paragraph contains **only** an inline image (no text content), the image must inherit block-level styling from its parent paragraph for proper display. This is critical for elements like subtitles or titles that contain only an image.
 
 **Problem symptoms**:
+
 - Image-only paragraphs don't display in Kindle Previewer (KP3)
 - Images appear but without proper margins/spacing
 - Centered subtitles with images align incorrectly
@@ -1120,6 +1152,7 @@ When generating a style for an image that is the sole content of a block element
    - `line-height: 1lh` (`$39` = 1 `$310`) - required for proper layout
 
 **Width calculation**:
+
 ```go
 widthPercent := float64(imageWidth) / float64(screenWidth) * 100
 // Clamp to 0-100%
@@ -1133,7 +1166,7 @@ if widthPercent < 0 { widthPercent = 0 }
 Source block style (subtitle):
 {
   $34: $320,           // text-align: center
-  $13: $361,           // font-weight: bold  
+  $13: $361,           // font-weight: bold
   $47: {$307: 1.5, $306: $310}  // margin-top: 1.5lh
 }
 
@@ -1237,27 +1270,29 @@ Derived from: `kfxlib/yj_to_epub_navigation.py:KFX_EPUB_Navigation.process_ancho
 Anchor fragments are collected first. Each `$266` entry is validated and then interpreted as either:
 
 - **External URI anchor** (for external links like http/https URLs):
-   - `$180` (anchor_name): The anchor ID (symbol) - used by style events via `$179` (link_to)
-   - `$186` (uri): The external URL string (e.g., `"http://www.example.org/..."`)
-   
-   **Important**: In KP3 reference KFX, external links work via anchor indirection:
-   1. An anchor fragment is created with both `$180` (anchor_name) and `$186` (uri)
-   2. Style events reference this anchor via `$179` (link_to) pointing to the anchor_name
-   3. This differs from putting `$186` directly on style events (which doesn't work)
-   
-   Example external link anchor fragment:
-   ```
-   Fragment: fid="aEXT0", ftype=$266
-   Value: { $180: symbol(aEXT0), $186: "http://www.example.org/page" }
-   ```
-   
-   The corresponding style event references it:
-   ```
-   { $143: 10, $144: 5, $157: "link-external", $179: symbol(aEXT0) }
-   ```
+  - `$180` (anchor_name): The anchor ID (symbol) - used by style events via `$179` (link_to)
+  - `$186` (uri): The external URL string (e.g., `"http://www.example.org/..."`)
+
+  **Important**: In KP3 reference KFX, external links work via anchor indirection:
+  1.  An anchor fragment is created with both `$180` (anchor_name) and `$186` (uri)
+  2.  Style events reference this anchor via `$179` (link_to) pointing to the anchor_name
+  3.  This differs from putting `$186` directly on style events (which doesn't work)
+
+  Example external link anchor fragment:
+
+  ```
+  Fragment: fid="aEXT0", ftype=$266
+  Value: { $180: symbol(aEXT0), $186: "http://www.example.org/page" }
+  ```
+
+  The corresponding style event references it:
+
+  ```
+  { $143: 10, $144: 5, $157: "link-external", $179: symbol(aEXT0) }
+  ```
 
 - **Position anchor** (for internal links within the book):
-   - `$183`: a position struct (see §7.6.1); the converter registers the anchor at that position
+  - `$183`: a position struct (see §7.6.1); the converter registers the anchor at that position
 
 Other observed keys:
 
@@ -1293,12 +1328,12 @@ Nav containers are stored as `$391` fragments addressed by id.
 Each container is an Ion struct with keys:
 
 - `$239`: nav_container_name override.
-   - Exact behavior: `$239` replaces the *semantic name* (`nav_container_name`) used for downstream processing (e.g. section association via `$390`, approximate-page-list detection, and log messages).
-   - It does **not** affect fragment retrieval: the `$391` fragment is still fetched using the id referenced from `$392` / `imports`.
+  - Exact behavior: `$239` replaces the _semantic name_ (`nav_container_name`) used for downstream processing (e.g. section association via `$390`, approximate-page-list detection, and log messages).
+  - It does **not** affect fragment retrieval: the `$391` fragment is still fetched using the id referenced from `$392` / `imports`.
 - `$235`: nav_container_type
 - One of:
-   - `imports`: list of other `$391` ids to process (recursive include), or
-   - `$247`: list of nav-unit ids (ids of `$393` fragments)
+  - `imports`: list of other `$391` ids to process (recursive include), or
+  - `$247`: list of nav-unit ids (ids of `$393` fragments)
 
 Recognized nav_container_type values (this converter logs an error on others):
 
@@ -1315,9 +1350,9 @@ Derived from: `kfxlib/yj_to_epub_navigation.py:KFX_EPUB_Navigation.process_nav_c
 Each nav unit is a `$393` fragment; the converter treats its value as an Ion struct with:
 
 - `$241` (representation struct, optional):
-   - `$244`: label string
-   - `$245`: icon resource id (`$164`), used to render an icon
-   - `$146`: description as a content list (rendered to text)
+  - `$244`: label string
+  - `$245`: icon resource id (`$164`), used to render an icon
+  - `$146`: description as a content list (rendered to text)
 - `$154` (optional): overrides/sets description string
 
 - `$240` (optional): unit name; defaults to the label or `"page_list_entry"` depending on context
@@ -1325,10 +1360,10 @@ Each nav unit is a `$393` fragment; the converter treats its value as an Ion str
 - `$246` (optional): target position struct (see §7.6.1). If missing, the unit becomes a pure container for children.
 
 - Children:
-   - `$247`: list of nested nav-unit ids
-   - `$248`: list of “entry_set” structs, each containing:
-      - `$247`: list of nested nav-unit ids
-      - `$215`: orientation discriminator; used to include/exclude nested entries based on orientation lock
+  - `$247`: list of nested nav-unit ids
+  - `$248`: list of “entry_set” structs, each containing:
+    - `$247`: list of nested nav-unit ids
+    - `$215`: orientation discriminator; used to include/exclude nested entries based on orientation lock
 
 - `$238` (optional): “landmark_type” or heading-level discriminator depending on nav_container_type
 
@@ -1339,8 +1374,8 @@ Derived from: `kfxlib/yj_to_epub_navigation.py:KFX_EPUB_Navigation.process_nav_u
 During navigation processing:
 
 - When a nav unit has `$246`, the converter registers an anchor for its target position.
-   - Temporary HTML uses `href="anchor:<name>"` URIs.
-   - After HTML generation, `fixup_anchors_and_hrefs()` resolves anchor URIs into file-relative `href` links.
+  - Temporary HTML uses `href="anchor:<name>"` URIs.
+  - After HTML generation, `fixup_anchors_and_hrefs()` resolves anchor URIs into file-relative `href` links.
 
 Anchor registration is position-based:
 
@@ -1364,11 +1399,13 @@ The landmarks container is included in `$389` (book_navigation) alongside TOC an
 ```
 
 Each landmark entry has the form:
+
 - `$238` (landmark_type): type symbol identifying the landmark purpose
 - `$241` (representation): struct containing `$244` (label) with display text
 - `$246` (target_position): struct with `$143: 0` (offset) and `$155: eid` (target EID)
 
 **Standard landmark types**:
+
 - `$233` (cover_page): Cover image - **required for proper cover scaling**
 - `$212` (toc): Table of Contents page
 - `$396` (srl): Start Reading Location - where reading begins after cover/frontmatter
@@ -1376,6 +1413,7 @@ Each landmark entry has the form:
 **Important**: The cover landmark (`$238: symbol($233)`) is **critical** for enabling full-screen cover display. Without this landmark, KP3 does not recognize the cover section as special and renders it with standard margins/borders instead of scaling to fill the screen. The landmark must point to the cover section's page template EID.
 
 Example landmarks container:
+
 ```
 {
   $235: symbol($236),  // nav_type = landmarks
@@ -1394,8 +1432,8 @@ Page list (`nav_type == $237`):
 - Expects `$240` to be `"page_list_entry"`.
 - Uses the label as the page number and registers anchors named like `page_<label>` (prefixed by reading order name when multiple reading orders exist).
 - Exact approximate-page suppression rule:
-   - If `nav_container_name == APPROXIMATE_PAGE_LIST` and `not (KEEP_APPROX_PG_NUMS or DEBUG_PAGES)` then page-list entries with a non-empty label do **not** produce anchors/pagemap entries.
-   - The first time this happens, it logs `"Removing approximate page numbers previously produced by KFX Output"` and sets an internal flag so the warning is emitted only once.
+  - If `nav_container_name == APPROXIMATE_PAGE_LIST` and `not (KEEP_APPROX_PG_NUMS or DEBUG_PAGES)` then page-list entries with a non-empty label do **not** produce anchors/pagemap entries.
+  - The first time this happens, it logs `"Removing approximate page numbers previously produced by KFX Output"` and sets an internal flag so the warning is emitted only once.
 
 ##### APPROXIMATE_PAGE_LIST Structure
 
@@ -1434,14 +1472,14 @@ This is a compact summary of the fields this repo consumes for navigation-relate
 
 Derived from: `kfxlib/yj_to_epub_navigation.py:KFX_EPUB_Navigation.process_anchors`, `process_navigation`, `process_nav_container`, `process_nav_unit`.
 
-| Fragment / value | Shape (validated) | Fields used / popped | Notes / strictness |
-|---:|---|---|---|
-| `$266` anchor | `IonStruct` per anchor id | Either `$186` (external URI) **or** `$183` (position struct); optional `$597` discarded | Remaining keys after processing are treated as unexpected (`check_empty`) |
-| `$390` section_navigation | `IonList` of `IonStruct` | Each entry: `$174` (section id), `$392` (list of `$391` ids) | Entry is checked to be empty after popping these keys |
-| `$389` book_navigation | `IonList` of `IonStruct` | Each entry: `$178` reading order name, `$392` list of `$391` ids | Extra keys after processing are treated as unexpected |
-| `$391` nav_container | `IonStruct` | Pops: `mkfx_id` (ignored), `$239` name override (optional), `$235` type, and then either `imports` (recursive includes) or `$247` list of `$393` ids | Logs error for unknown `$235`; expects no leftover keys |
-| `$393` nav_unit | `IonStruct` | Pops: `mkfx_id` (ignored), `$241` representation (optional), `$154` description (optional), `$240` name (optional), `$246` target position (optional), `$238` landmark/heading discriminator (optional), `$247` children, `$248` entry_sets | Entry_sets: pop `$247` and `$215` (orientation) | Recursive; treats missing `$246` as “container-only”; expects no leftover keys at each nesting level |
-| `$394` conditional_nav_group_unit | mapping | The `$394` table is popped and then `check_empty(...)` is applied | Any remaining keys are logged as unexpected and discarded |
+|                  Fragment / value | Shape (validated)         | Fields used / popped                                                                                                                                                                                                                        | Notes / strictness                                                        |
+| --------------------------------: | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+|                     `$266` anchor | `IonStruct` per anchor id | Either `$186` (external URI) **or** `$183` (position struct); optional `$597` discarded                                                                                                                                                     | Remaining keys after processing are treated as unexpected (`check_empty`) |
+|         `$390` section_navigation | `IonList` of `IonStruct`  | Each entry: `$174` (section id), `$392` (list of `$391` ids)                                                                                                                                                                                | Entry is checked to be empty after popping these keys                     |
+|            `$389` book_navigation | `IonList` of `IonStruct`  | Each entry: `$178` reading order name, `$392` list of `$391` ids                                                                                                                                                                            | Extra keys after processing are treated as unexpected                     |
+|              `$391` nav_container | `IonStruct`               | Pops: `mkfx_id` (ignored), `$239` name override (optional), `$235` type, and then either `imports` (recursive includes) or `$247` list of `$393` ids                                                                                        | Logs error for unknown `$235`; expects no leftover keys                   |
+|                   `$393` nav_unit | `IonStruct`               | Pops: `mkfx_id` (ignored), `$241` representation (optional), `$154` description (optional), `$240` name (optional), `$246` target position (optional), `$238` landmark/heading discriminator (optional), `$247` children, `$248` entry_sets | Entry_sets: pop `$247` and `$215` (orientation)                           | Recursive; treats missing `$246` as “container-only”; expects no leftover keys at each nesting level |
+| `$394` conditional_nav_group_unit | mapping                   | The `$394` table is popped and then `check_empty(...)` is applied                                                                                                                                                                           | Any remaining keys are logged as unexpected and discarded                 |
 
 ### 7.8 Styles: `$157` (KFX style fragments) + inline property blobs
 
@@ -1466,14 +1504,14 @@ The value of a `$157` style fragment is an Ion struct containing **YJ property k
 These are the same property keys that also appear directly on content nodes and style events; in all cases, the conversion logic is keyed off membership in `YJ_PROPERTY_NAMES`.
 
 - The definitive “this is a style property key” set in this converter is:
-   - `YJ_PROPERTY_NAMES = set(YJ_PROPERTY_INFO.keys())`
+  - `YJ_PROPERTY_NAMES = set(YJ_PROPERTY_INFO.keys())`
 - Each `$NNN` property id is mapped to a CSS property name (and optional value map) by `YJ_PROPERTY_INFO`.
 - The conversion is **not** a simple lookup: `property_value(...)` and `convert_yj_properties(...)` apply multiple special-case rules beyond `YJ_PROPERTY_INFO` name/value-map translation, including:
-   - value-map substitution only for `IonSymbol` / `IonBool` (§7.8.2.1)
-   - resource-symbol to `url(...)` translation for certain ids and nested shapes (§7.8.2.2)
-   - numeric and scalar coercions (color normalization, px-suffix rules, special `$173` handling) (§7.8.2.3)
-   - decoding of several composite struct/list shapes (length/color/shadow/transform/polygon, etc.) (§7.8.2.4)
-   - post-processing / synthesis of CSS declarations (converter-level normalization) (§7.8.5)
+  - value-map substitution only for `IonSymbol` / `IonBool` (§7.8.2.1)
+  - resource-symbol to `url(...)` translation for certain ids and nested shapes (§7.8.2.2)
+  - numeric and scalar coercions (color normalization, px-suffix rules, special `$173` handling) (§7.8.2.3)
+  - decoding of several composite struct/list shapes (length/color/shadow/transform/polygon, etc.) (§7.8.2.4)
+  - post-processing / synthesis of CSS declarations (converter-level normalization) (§7.8.5)
 
 Derived from: `kfxlib/yj_to_epub_properties.py:YJ_PROPERTY_INFO`, `YJ_PROPERTY_NAMES`, `KFX_EPUB_Properties.convert_yj_properties`, `KFX_EPUB_Properties.property_value`.
 
@@ -1509,7 +1547,7 @@ Derived from: `kfxlib/yj_to_epub_properties.py:KFX_EPUB_Properties.property_valu
 - `$173` (style-name): if the value is an `IonSymbol`, it is normalized via `unique_part_of_local_symbol(...)`; if the result is empty, the property is treated as absent (`None`).
 - Colors: for property ids in `COLOR_YJ_PROPERTIES`, numeric values are converted through `fix_color_value(...)`. For `$70`, if the alpha channel is zero it forces alpha to `0xFF` before conversion.
 - “Numeric → px” default: for most numeric properties, any non-zero numeric value is converted via `adjust_pixel_value(...)` and suffixed with `px`.
-   - Exceptions: the implementation explicitly *does not* auto-append `px` for a fixed allowlist of numeric ids (e.g. `$112`, `$13`, `$645`, `$72`, `$125`, `$126`, `$42`, etc.) and for SVG mode.
+  - Exceptions: the implementation explicitly _does not_ auto-append `px` for a fixed allowlist of numeric ids (e.g. `$112`, `$13`, `$645`, `$72`, `$125`, `$126`, `$42`, etc.) and for SVG mode.
 
 Derived from: `kfxlib/yj_to_epub_properties.py:KFX_EPUB_Properties.property_value` (numeric branch + exception set).
 
@@ -1518,9 +1556,9 @@ Derived from: `kfxlib/yj_to_epub_properties.py:KFX_EPUB_Properties.property_valu
 When a value is an `IonStruct`, this implementation recognizes these shapes:
 
 - Length struct: `{ $307: magnitude, $306: unit }`.
-   - Units are mapped by `YJ_LENGTH_UNITS`.
-   - If `FIX_PT_TO_PX` is enabled, some positive `pt` magnitudes are converted to `px`.
-   - For `$42` (line-height), if `USE_NORMAL_LINE_HEIGHT` is enabled and the computed value equals `NORMAL_LINE_HEIGHT_EM`, it is normalized to the CSS keyword `normal`.
+  - Units are mapped by `YJ_LENGTH_UNITS`.
+  - If `FIX_PT_TO_PX` is enabled, some positive `pt` magnitudes are converted to `px`.
+  - For `$42` (line-height), if `USE_NORMAL_LINE_HEIGHT` is enabled and the computed value equals `NORMAL_LINE_HEIGHT_EM`, it is normalized to the CSS keyword `normal`.
 - Color struct: `{ $19: <numeric color> }`.
 - Shadow-like struct: contains `$499` and `$500` (and is permitted to contain `$501/$502/$498` and `$336` inset).
 - Transform-origin-like struct: for `$549`, expects `$59` and `$58` (with defaults/validation).
@@ -1543,57 +1581,58 @@ Derived from: `kfxlib/yj_to_epub_properties.py:KFX_EPUB_Properties.property_valu
 
 #### 7.8.3 How content references styles
 
-The converter looks for a *style name* in three places and performs `$157` expansion when present:
+The converter looks for a _style name_ in three places and performs `$157` expansion when present:
 
 1. **Element-level style reference**: if a content struct contains `$157`, the converter pops it, stringifies it, and immediately expands that style into the same dict before further processing.
-    - The converter immediately expands it into inline properties before further processing.
+   - The converter immediately expands it into inline properties before further processing.
 
-    Derived from: `kfxlib/yj_to_epub_content.py:KFX_EPUB_Content.process_content` (`self.add_kfx_style(content, str(content.pop("$157", "")))`).
+   Derived from: `kfxlib/yj_to_epub_content.py:KFX_EPUB_Content.process_content` (`self.add_kfx_style(content, str(content.pop("$157", "")))`).
 
 2. **Inline “style events”**: the converter pops `$142` from the content struct (default `[]`). If the resulting list is non-empty and the content type is not `$269`/`$277`, an error is logged.
-    - Each style-event contains:
-       - `$143` offset (start position in the text/content stream)
-       - `$144` length
-       - optional `$157` style name reference
-       - optional additional YJ properties (direct overrides)
-    - After locating the span of text, the converter expands `$157` into the event dict, then converts remaining properties to CSS and applies them to a generated wrapper element.
+   - Each style-event contains:
+     - `$143` offset (start position in the text/content stream)
+     - `$144` length
+     - optional `$157` style name reference
+     - optional additional YJ properties (direct overrides)
+   - After locating the span of text, the converter expands `$157` into the event dict, then converts remaining properties to CSS and applies them to a generated wrapper element.
 
-    Derived from: `kfxlib/yj_to_epub_content.py:KFX_EPUB_Content.process_content` (style_events loop; `add_kfx_style(style_event, style_event.pop("$157", None))`; `add_style(event_elem, self.process_content_properties(style_event), replace=True)`).
+   Derived from: `kfxlib/yj_to_epub_content.py:KFX_EPUB_Content.process_content` (style_events loop; `add_kfx_style(style_event, style_event.pop("$157", None))`; `add_style(event_elem, self.process_content_properties(style_event), replace=True)`).
 
 ##### 7.8.3.1 `$142` style-event wire schema (implementation-derived)
 
 Each element of the `$142` list is treated as an Ion struct/dict; the converter unconditionally pops required keys and will raise if they are missing.
 
 - Required fields:
-   - `$143` (int): start offset in **characters/runes** (not bytes)
-   - `$144` (int): length in **characters/runes** (the converter raises if `<= 0` when creating the style-span wrapper)
+  - `$143` (int): start offset in **characters/runes** (not bytes)
+  - `$144` (int): length in **characters/runes** (the converter raises if `<= 0` when creating the style-span wrapper)
 
 **Character vs Byte Offsets**: KFX style events use Unicode code point (character/rune) offsets, not byte offsets. This distinction is critical for text containing multi-byte UTF-8 characters. For example:
+
 - The Russian word "Автор" (5 Cyrillic characters) occupies 10 bytes in UTF-8
 - A style event starting after "Автор\n" would have `$143: 6` (6 characters), not `$143: 11` (11 bytes)
 - Implementations must count runes/characters, not bytes, when calculating offsets
 
 - Optional “style reference”:
-   - `$157` (symbol/string): a `$157` style fragment id/name to expand into this event
+  - `$157` (symbol/string): a `$157` style fragment id/name to expand into this event
 
 - Optional “link overlay”:
-   - `$179` (anchor id): if present, the converter wraps the target span in an `<a>` with `href` pointing at that anchor
+  - `$179` (anchor id): if present, the converter wraps the target span in an `<a>` with `href` pointing at that anchor
 
 - Optional “dropcap” marker:
-   - `$125` (int): dropcap_lines; if present, the converter treats the event as a dropcap span and also expects `$144/$143` to be coherent with the dropped characters
+  - `$125` (int): dropcap_lines; if present, the converter treats the event as a dropcap span and also expects `$144/$143` to be coherent with the dropped characters
 
 - Optional “ruby” annotation payload:
-   - `$757` (ruby_name): triggers ruby processing for the span
-   - Either:
-      - `$758` (ruby_id) for a single ruby run, or
-      - `$759` (list of structs), each containing `$758` plus its own `$143/$144` relative offsets/lengths inside the event span
+  - `$757` (ruby_name): triggers ruby processing for the span
+  - Either:
+    - `$758` (ruby_id) for a single ruby run, or
+    - `$759` (list of structs), each containing `$758` plus its own `$143/$144` relative offsets/lengths inside the event span
 
 - Optional “model” discriminator:
-   - `$604` (symbol): if present and not `$606`, a warning is logged
+  - `$604` (symbol): if present and not `$606`, a warning is logged
 
 - Optional additional YJ properties:
-   - Any remaining keys that are members of `YJ_PROPERTY_NAMES` are treated as style properties and converted to CSS.
-   - Any remaining non-property keys are treated as extra data: they are logged by `check_empty(...)` and then discarded (the dict is cleared).
+  - Any remaining keys that are members of `YJ_PROPERTY_NAMES` are treated as style properties and converted to CSS.
+  - Any remaining non-property keys are treated as extra data: they are logged by `check_empty(...)` and then discarded (the dict is cleared).
 
 Important processing order (behavioral semantics):
 
@@ -1611,6 +1650,7 @@ Derived from: `kfxlib/yj_to_epub_content.py:KFX_EPUB_Content.process_content` (s
 **Non-overlapping requirement**:
 
 KP3's internal code explicitly throws an exception if overlapping style events are detected:
+
 ```java
 throw new IllegalArgumentException("Cannot create Overlapping Style Events. Offset = " + offset + ", Length = " + length);
 ```
@@ -1620,6 +1660,7 @@ Style events **MUST NOT** overlap. If the original content has nested inline sty
 **Correct approach - Segmentation**:
 
 For text like `"Hello <code>foo<link>1.17</link>bar</code> World"` (30 chars total):
+
 - DO NOT create overlapping events:
   ```
   BAD: [0]: offset=6, len=15, code-style      // encompasses link
@@ -1635,10 +1676,12 @@ For text like `"Hello <code>foo<link>1.17</link>bar</code> World"` (30 chars tot
 **Ordering requirement**:
 
 Events are stored sorted by:
+
 1. **Offset ascending** (primary sort key)
 2. **Length ascending** (secondary sort key, for events at same offset - shorter first)
 
 KP3's insertion algorithm (from decompiled Java):
+
 ```java
 private int insertionIndex(int offset, int length) {
     for (int i = 0; i < events.size(); i++) {
@@ -1658,6 +1701,7 @@ private int insertionIndex(int offset, int length) {
 The container/entry-level `$157` (style) field provides the **base style** for text not covered by any style event. Style events provide **additional/override styles** for specific spans.
 
 This means:
+
 - If text has NO inline formatting: no `$142` list needed, just container `$157`
 - If text HAS inline formatting: `$142` contains ONLY the inline-styled portions
 - The container style automatically applies to gaps between style events
@@ -1674,6 +1718,7 @@ style_events ($142): (3)
 ```
 
 Note that:
+
 1. The code style is segmented: 0-34, then 39-222
 2. The link style at offset 35 includes monospace properties (merged)
 3. No overlapping events exist
@@ -1684,6 +1729,7 @@ Note that:
 When an inline element (like a link) appears inside a styled context (like a code block), the inline element's style should **include/inherit** properties from the outer context. In the example above, `s19T` (the link style) includes `font-family: monospace` from the surrounding code context.
 
 This can be achieved by:
+
 1. Creating combined styles in the style registry that merge outer + inner properties
 2. Or by ensuring the style events cover all text and each carries its full computed style
 
@@ -1695,12 +1741,12 @@ Derived from: KP3 decompiled source (`com.amazon.B.d.e.b.A.java`), reference KFX
    - It pops `$625` and expects it to be a one-entry struct with `$623: 1`; otherwise it logs an error.
    - It converts remaining properties, prefixes them via `partition(name_prefix="-kfx-firstline", add_prefix=True)`, applies them, then `check_empty(...)` logs and discards leftovers.
 
-    Derived from: `kfxlib/yj_to_epub_content.py:KFX_EPUB_Content.process_content` (handling of `$622`).
+   Derived from: `kfxlib/yj_to_epub_content.py:KFX_EPUB_Content.process_content` (handling of `$622`).
 
 Also observed:
 
 - `$429` is used as a “backdrop style” reference in certain container/layout content.
-   - The converter expands the referenced `$157` style into a temporary dict and expects only a small subset of properties (it explicitly discards `$173`, `$70`, `$72` and errors on leftovers).
+  - The converter expands the referenced `$157` style into a temporary dict and expects only a small subset of properties (it explicitly discards `$173`, `$70`, `$72` and errors on leftovers).
 
 Derived from: `kfxlib/yj_to_epub_content.py:KFX_EPUB_Content.process_content` (backdrop style handling).
 
@@ -1708,7 +1754,7 @@ Derived from: `kfxlib/yj_to_epub_content.py:KFX_EPUB_Content.process_content` (b
 
 When a style name is referenced, the converter merges the corresponding `$157` fragment properties into the target struct:
 
-- Only keys that are *not already present* are copied.
+- Only keys that are _not already present_ are copied.
 - For `IonList` and `IonStruct` values, a deep copy is made before inserting.
 - If a referenced style is missing, it logs an error once per missing style name.
 
@@ -1728,17 +1774,17 @@ This is not part of the KFX on-wire format, but it is how this repository interp
 Additional exact “CSS normalization” behaviors that are easy to miss (these are why some properties are effectively handled differently):
 
 - Duplicate property merges:
-   - `-kfx-attrib-epub-type`: values are combined (union) as long as non-`amzn:` values do not conflict.
-   - `text-decoration`: values are unioned.
-   - Any other property with multiple distinct values is logged as an error; the latest value wins in the final dict.
+  - `-kfx-attrib-epub-type`: values are combined (union) as long as non-`amzn:` values do not conflict.
+  - `text-decoration`: values are unioned.
+  - Any other property with multiple distinct values is logged as an error; the latest value wins in the final dict.
 - Synthesized composite CSS properties:
-   - `background-position` is synthesized from `-kfx-background-positionx`/`-kfx-background-positiony` with defaults `50%`.
-   - `background-size` is synthesized from `-kfx-background-sizex`/`-kfx-background-sizey` with defaults `auto`.
-   - `background-color` is synthesized if either `-kfx-fill-color` or `-kfx-fill-opacity` is present.
-   - `text-emphasis-position` is synthesized from `-kfx-text-emphasis-position-horizontal` and `-kfx-text-emphasis-position-vertical`.
-   - `orphans`/`widows` are synthesized if `-kfx-keep-lines-together` is present (except that `inherit` leaves the field unset).
+  - `background-position` is synthesized from `-kfx-background-positionx`/`-kfx-background-positiony` with defaults `50%`.
+  - `background-size` is synthesized from `-kfx-background-sizex`/`-kfx-background-sizey` with defaults `auto`.
+  - `background-color` is synthesized if either `-kfx-fill-color` or `-kfx-fill-opacity` is present.
+  - `text-emphasis-position` is synthesized from `-kfx-text-emphasis-position-horizontal` and `-kfx-text-emphasis-position-vertical`.
+  - `orphans`/`widows` are synthesized if `-kfx-keep-lines-together` is present (except that `inherit` leaves the field unset).
 - Special-case mapping of `position` values:
-   - If the computed CSS property name is `position` and the value is `oeb-page-foot` / `oeb-page-head`, it is remapped to `display` (only in an EPUB2+`EMIT_OEB_PAGE_PROPS` mode); otherwise it is dropped.
+  - If the computed CSS property name is `position` and the value is `oeb-page-foot` / `oeb-page-head`, it is remapped to `display` (only in an EPUB2+`EMIT_OEB_PAGE_PROPS` mode); otherwise it is dropped.
 
 Derived from: `kfxlib/yj_to_epub_properties.py:KFX_EPUB_Properties.convert_yj_properties` and `property_value`.
 
@@ -1756,9 +1802,9 @@ Derived from: `kfxlib/yj_to_epub.py:KFX_EPUB.__init__` (pops `$157`, removes `us
 
 KFX links require their colors to be specified in nested maps:
 
-| Property | Symbol | Description |
-|----------|--------|-------------|
-| `link_visited_style` | `$576` | Style map for visited links |
+| Property               | Symbol | Description                   |
+| ---------------------- | ------ | ----------------------------- |
+| `link_visited_style`   | `$576` | Style map for visited links   |
 | `link_unvisited_style` | `$577` | Style map for unvisited links |
 
 Each of these contains a nested map with the actual color property:
@@ -1785,6 +1831,7 @@ When rendering link paragraphs (such as footnote backlinks), two separate styles
    - Should have `link-` prefix for CSS-to-KFX conversion to recognize it
 
 **Incorrect approach** (using link style for both):
+
 ```
 // WRONG - link style as paragraph style breaks margins/alignment
 $157: symbol("link-backlink")  // Has link colors but wrong for paragraph
@@ -1794,6 +1841,7 @@ $142: [
 ```
 
 **Correct approach** (separate styles):
+
 ```
 // CORRECT - separate paragraph and link styles
 $157: symbol("s1X")  // Normal paragraph style: margins, text-align, etc.
@@ -1805,6 +1853,7 @@ $142: [
 Example style definitions:
 
 Paragraph style (`s1X`):
+
 ```
 {
   $42: {$306: $310, $307: 1.},        // line-height: 1lh
@@ -1816,6 +1865,7 @@ Paragraph style (`s1X`):
 ```
 
 Link style (`link-backlink`):
+
 ```
 {
   $13: $361,                           // font-weight: bold
@@ -1835,6 +1885,7 @@ When converting CSS styles to KFX format, link colors require special handling. 
 Conversion example:
 
 CSS input:
+
 ```css
 .link-backlink {
   font-weight: bold;
@@ -1843,6 +1894,7 @@ CSS input:
 ```
 
 After standard CSS-to-KFX conversion (intermediate):
+
 ```
 {
   $13: $361,              // font-weight: bold
@@ -1851,6 +1903,7 @@ After standard CSS-to-KFX conversion (intermediate):
 ```
 
 After link enhancement (final):
+
 ```
 {
   $13: $361,                           // font-weight: bold
@@ -1860,6 +1913,7 @@ After link enhancement (final):
 ```
 
 The conversion logic (in `applyKFXEnhancements()`):
+
 ```go
 // For styles with "link-" prefix, convert text_color to link style maps
 if strings.HasPrefix(styleName, "link-") {
@@ -1874,17 +1928,17 @@ if strings.HasPrefix(styleName, "link-") {
 
 ##### Symbol reference
 
-| Symbol | ID | Name | Description |
-|--------|------|------|-------------|
-| `$576` | 576 | `SymLinkVisitedStyle` | Nested map for visited link appearance |
-| `$577` | 577 | `SymLinkUnvisitedStyle` | Nested map for unvisited link appearance |
-| `$19` | 19 | `SymTextColor` | Text color (packed ARGB integer, see §7.10.7) |
+| Symbol | ID  | Name                    | Description                                   |
+| ------ | --- | ----------------------- | --------------------------------------------- |
+| `$576` | 576 | `SymLinkVisitedStyle`   | Nested map for visited link appearance        |
+| `$577` | 577 | `SymLinkUnvisitedStyle` | Nested map for unvisited link appearance      |
+| `$19`  | 19  | `SymTextColor`          | Text color (packed ARGB integer, see §7.10.7) |
 
 Derived from: `convert/kfx/style_registry.go:applyKFXEnhancements`, `convert/kfx/frag_storyline.go:addBacklinkParagraph`, `convert/kfx/symbols.go`.
 
 ### 7.9 `$585` content_features (reflow and canonical format)
 
-The `$585` fragment contains feature declarations for content-related capabilities. In reference KFX files, the reflow-* and CanonicalFormat features are stored here rather than in `$593` format_capabilities.
+The `$585` fragment contains feature declarations for content-related capabilities. In reference KFX files, the reflow-\* and CanonicalFormat features are stored here rather than in `$593` format_capabilities.
 
 **Fragment structure:**
 
@@ -1903,23 +1957,22 @@ Each entry in the `$590` list is a struct containing:
 
 **Common features:**
 
-| Feature Key | Namespace | Description |
-|-------------|-----------|-------------|
-| reflow-style | com.amazon.yjconversion | Indicates reflow styling support |
-| reflow-section-size | com.amazon.yjconversion | Version relates to max section PID count |
-| reflow-language-expansion | com.amazon.yjconversion | Language expansion support |
-| CanonicalFormat | SDK.Marker | Indicates canonical format compliance |
+| Feature Key               | Namespace               | Description                              |
+| ------------------------- | ----------------------- | ---------------------------------------- |
+| reflow-style              | com.amazon.yjconversion | Indicates reflow styling support         |
+| reflow-section-size       | com.amazon.yjconversion | Version relates to max section PID count |
+| reflow-language-expansion | com.amazon.yjconversion | Language expansion support               |
+| CanonicalFormat           | SDK.Marker              | Indicates canonical format compliance    |
 
 **reflow-section-size version calculation:**
 
 The major_version for reflow-section-size is derived from the maximum per-section PID count:
+
 - `version = max(1, ceil(log2(maxSectionPIDCount)) - 11)`
 
 This is used by KFXInput for validation and by Kindle for rendering optimization.
 
 Derived from: Reference KFX files, `convert/kfx/frag_contentfeatures.go`.
-
----
 
 ### 7.10 Length units and KP3 conventions
 
@@ -1932,6 +1985,7 @@ Implementation note: Use `ion.MustParseDecimal()` or equivalent to create proper
 **CRITICAL - Decimal Precision Requirement**: KP3 requires decimal values in `$307` to have **at most 3 significant decimal digits**. Amazon's KFX processing code uses `setScale(3, RoundingMode.HALF_UP)` for dimension calculations (found in `com/amazon/yj/F/a/b.java` and other style processing classes). Values with excessive precision (e.g., from float64 division like `1/1.2 = 0.8333333333333334`) cause **rendering failures** where images may not display and styles may not apply correctly.
 
 Example precision issue:
+
 ```
 Working (3 decimal places):
   $307: decimal(8.33d-1)       // 0.833 - 3 digits ✓
@@ -1948,51 +2002,52 @@ Derived from: Reference KFX analysis, `convert/kfx/frag_style.go:DimensionValue`
 
 #### 7.10.1 Unit symbols
 
-| Symbol | CSS Unit | Description |
-|--------|----------|-------------|
-| `$308` (`SymUnitEm`) | `em` | Relative to font size |
-| `$310` (`SymUnitLh`) | `lh` | Relative to line-height |
-| `$314` (`SymUnitPercent`) | `%` | Percentage |
-| `$505` (`SymUnitRem`) | `rem` | Relative to root font size |
-| `$309` (`SymUnitPx`) | `px` | Pixels |
-| `$311` (`SymUnitPt`) | `pt` | Points |
+| Symbol                    | CSS Unit | Description                |
+| ------------------------- | -------- | -------------------------- |
+| `$308` (`SymUnitEm`)      | `em`     | Relative to font size      |
+| `$310` (`SymUnitLh`)      | `lh`     | Relative to line-height    |
+| `$314` (`SymUnitPercent`) | `%`      | Percentage                 |
+| `$505` (`SymUnitRem`)     | `rem`    | Relative to root font size |
+| `$309` (`SymUnitPx`)      | `px`     | Pixels                     |
+| `$311` (`SymUnitPt`)      | `pt`     | Points                     |
 
 #### 7.10.2 KP3 unit conventions (reverse-engineered)
 
 **CRITICAL**: Kindle Previewer (KP3) uses specific unit types for different CSS properties. Using incorrect units can cause rendering issues (e.g., `text-align: center` not working with percentage font-sizes).
 
-| CSS Property | KP3 Unit | Notes |
-|--------------|----------|-------|
-| `font-size` | `rem` | **NOT `%`**. Using `%` breaks text-align rendering. See §7.10.3 for compression formula. |
-| `margin-top` | `lh` | Line-height units for vertical spacing |
-| `margin-bottom` | `lh` | Line-height units for vertical spacing |
-| `margin-left` | `%` | Percentage for horizontal spacing |
-| `margin-right` | `%` | Percentage for horizontal spacing |
-| `text-indent` | `%` | Percentage |
-| `line-height` | `lh` | Line-height units |
+| CSS Property    | KP3 Unit | Notes                                                                                    |
+| --------------- | -------- | ---------------------------------------------------------------------------------------- |
+| `font-size`     | `rem`    | **NOT `%`**. Using `%` breaks text-align rendering. See §7.10.3 for compression formula. |
+| `margin-top`    | `lh`     | Line-height units for vertical spacing                                                   |
+| `margin-bottom` | `lh`     | Line-height units for vertical spacing                                                   |
+| `margin-left`   | `%`      | Percentage for horizontal spacing                                                        |
+| `margin-right`  | `%`      | Percentage for horizontal spacing                                                        |
+| `text-indent`   | `%`      | Percentage                                                                               |
+| `line-height`   | `lh`     | Line-height units                                                                        |
 
 #### 7.10.3 Unit conversion ratios
 
 When converting from CSS `em` units to KP3-preferred units:
 
-| Conversion | Ratio | Example |
-|------------|-------|---------|
-| `em` → `lh` (vertical) | 1:1 | `1em` → `1lh` |
-| `em` → `%` (horizontal) | 1:6.25 | `1em` → `6.25%` |
-| `em` → `rem` (font-size) | 1:1 | `1em` → `1rem` |
+| Conversion               | Ratio   | Example          |
+| ------------------------ | ------- | ---------------- |
+| `em` → `lh` (vertical)   | 1:1     | `1em` → `1lh`    |
+| `em` → `%` (horizontal)  | 1:6.25  | `1em` → `6.25%`  |
+| `em` → `rem` (font-size) | 1:1     | `1em` → `1rem`   |
 | `em` → `%` (text-indent) | 1:3.125 | `1em` → `3.125%` |
 
 **Font-size percentage compression**: KP3 applies a compression formula to percentage font-sizes, bringing large values closer to 1rem. This is different from simple division:
 
-| CSS | Direct (÷100) | KP3 Actual | Formula |
-|-----|---------------|------------|---------|
-| `140%` | 1.4rem | **1.25rem** | compressed |
-| `120%` | 1.2rem | **1.125rem** | compressed |
-| `100%` | 1.0rem | 1.0rem | identity |
-| `80%` | 0.8rem | 0.8rem | direct |
-| `70%` | 0.7rem | 0.7rem | direct |
+| CSS    | Direct (÷100) | KP3 Actual   | Formula    |
+| ------ | ------------- | ------------ | ---------- |
+| `140%` | 1.4rem        | **1.25rem**  | compressed |
+| `120%` | 1.2rem        | **1.125rem** | compressed |
+| `100%` | 1.0rem        | 1.0rem       | identity   |
+| `80%`  | 0.8rem        | 0.8rem       | direct     |
+| `70%`  | 0.7rem        | 0.7rem       | direct     |
 
 The compression formula (values > 100% only):
+
 ```
 rem = 1 + (percent - 100) / 160
 ```
@@ -2013,12 +2068,12 @@ Derived from: Reference KFX comparison, `convert/kfx/css_converter.go:setDimensi
 
 KFX supports individual padding properties for table cells and other block elements:
 
-| Symbol | Property | Notes |
-|--------|----------|-------|
-| `$52` | `padding_top` | Vertical padding in `lh` units |
-| `$53` | `padding_left` | Horizontal padding in `%` |
-| `$54` | `padding_bottom` | Vertical padding in `lh` units |
-| `$55` | `padding_right` | Horizontal padding in `%` |
+| Symbol | Property         | Notes                          |
+| ------ | ---------------- | ------------------------------ |
+| `$52`  | `padding_top`    | Vertical padding in `lh` units |
+| `$53`  | `padding_left`   | Horizontal padding in `%`      |
+| `$54`  | `padding_bottom` | Vertical padding in `lh` units |
+| `$55`  | `padding_right`  | Horizontal padding in `%`      |
 
 These are primarily used for table cell styling. The shorthand `padding` CSS property expands to these four individual properties.
 
@@ -2028,15 +2083,16 @@ Derived from: Reference KFX analysis, `convert/kfx/css_converter.go:expandBoxSho
 
 KFX supports border styling for tables and other elements:
 
-| Symbol | Property | Value Type |
-|--------|----------|------------|
-| `$83` | `border_color` | Packed ARGB integer (see §7.10.7) |
-| `$88` | `border_style` | Symbol: `$328` (solid), `$330` (dashed), `$331` (dotted), `$349` (none) |
-| `$93` | `border_weight` | Dimension struct with `pt` units |
+| Symbol | Property        | Value Type                                                              |
+| ------ | --------------- | ----------------------------------------------------------------------- |
+| `$83`  | `border_color`  | Packed ARGB integer (see §7.10.7)                                       |
+| `$88`  | `border_style`  | Symbol: `$328` (solid), `$330` (dashed), `$331` (dotted), `$349` (none) |
+| `$93`  | `border_weight` | Dimension struct with `pt` units                                        |
 
 The CSS `border` shorthand expands to these three properties. Border style values:
+
 - `$328` - solid
-- `$330` - dashed  
+- `$330` - dashed
 - `$331` - dotted
 - `$349` - none
 
@@ -2047,17 +2103,20 @@ Derived from: Reference KFX analysis, `convert/kfx/css_converter.go:expandBorder
 **CRITICAL**: KFX stores colors as packed 32-bit ARGB integers, NOT as structs with RGB components.
 
 Format: `0xAARRGGBB` where:
+
 - `AA` = Alpha (always `0xFF` for opaque)
 - `RR` = Red (0x00-0xFF)
 - `GG` = Green (0x00-0xFF)
 - `BB` = Blue (0x00-0xFF)
 
 Examples:
+
 - Black: `0xFF000000` = `4278190080`
 - White: `0xFFFFFFFF` = `4294967295`
 - Gray (#808080): `0xFF808080` = `4286611584`
 
 This applies to:
+
 - `$83` (border_color)
 - `$19` (text_color)
 - `$70` (fill_color / background_color)
@@ -2069,9 +2128,11 @@ Derived from: Reference KFX analysis, `convert/kfx/css_values.go:MakeColorValue`
 **CRITICAL**: KP3-generated KFX files do NOT include orphans (`$131`) or widows (`$132`) properties, despite these symbols existing in the KFX symbol table.
 
 The CSS `page-break-inside: avoid` maps to:
+
 - `$135` (break_inside): `$353` (avoid)
 
 Page break avoidance for keeping content together is handled via:
+
 - `$788` (yj_break_after): `$353` (avoid) or `$383` (auto)
 - `$789` (yj_break_before): `$353` (avoid) or `$383` (auto)
 
@@ -2083,27 +2144,26 @@ Derived from: Reference KFX comparison, `convert/kfx/frag_style.go:convertPageBr
 
 **CRITICAL**: CSS `text-align` property uses **physical direction symbols** (`$59` left, `$61` right), NOT logical direction symbols (`$680` start, `$681` end).
 
-| CSS Value | KFX Symbol | Symbol Name | Notes |
-|-----------|------------|-------------|-------|
-| `left` | `$59` | `SymLeft` | Physical left alignment |
-| `right` | `$61` | `SymRight` | Physical right alignment |
-| `center` | `$320` | `SymCenter` | Center alignment |
-| `justify` | `$321` | `SymJustify` | Justified text |
-| `start` | `$680` | `SymStart` | Logical start (rarely used) |
-| `end` | `$681` | `SymEnd` | Logical end (rarely used) |
+| CSS Value | KFX Symbol | Symbol Name  | Notes                       |
+| --------- | ---------- | ------------ | --------------------------- |
+| `left`    | `$59`      | `SymLeft`    | Physical left alignment     |
+| `right`   | `$61`      | `SymRight`   | Physical right alignment    |
+| `center`  | `$320`     | `SymCenter`  | Center alignment            |
+| `justify` | `$321`     | `SymJustify` | Justified text              |
+| `start`   | `$680`     | `SymStart`   | Logical start (rarely used) |
+| `end`     | `$681`     | `SymEnd`     | Logical end (rarely used)   |
 
 For `float` property (currently unused in reference KFX files, but supported):
+
 | CSS Value | KFX Symbol | Symbol Name |
 |-----------|------------|-------------|
-| `left` | `$59` | `SymLeft` |
-| `right` | `$61` | `SymRight` |
-| `none` | `$349` | `SymNone` |
+| `left`    | `$59`      | `SymLeft`   |
+| `right`   | `$61`      | `SymRight`  |
+| `none`    | `$349`     | `SymNone`   |
 
 Reference KFX files from KP3 consistently use `$59`/`$61` for left/right alignment, not the logical `$680`/`$681` symbols. Using `$680`/`$681` for text-align may cause rendering inconsistencies.
 
 Derived from: Reference KFX comparison, `convert/kfx/css_values.go:ConvertTextAlign`, `convert/kfx/css_values.go:ConvertFloat`.
-
----
 
 ---
 
@@ -2118,6 +2178,7 @@ Derived from: `b.jad` (enum `com.amazon.kaf.c.b`).
 ## 9. YJ book structure (fragments, invariants, references)
 
 This section documents how this repository treats a decoded “book” as a set of YJ fragments, including:
+
 - which fragment types are required/allowed for different book kinds,
 - how fragment ids are validated,
 - how cross-fragment references are discovered,
@@ -2139,7 +2200,7 @@ Derived from: `kfxlib/yj_book.py:YJ_Book.locate_book_datafiles`, `kfxlib/yj_book
 
 Container selection rules were summarized earlier in §1.1, but the key implementations are:
 
-- Ion text container: `.ion` that is *not* Ion Binary
+- Ion text container: `.ion` that is _not_ Ion Binary
 - Zip-unpack container: ZIP with `book.ion`
 - KPF container: `book.kdf` (zip) or `KDF` signature
 - KFX `CONT`: `CONT` signature
@@ -2153,11 +2214,11 @@ This repo stores the book as a flat list of `YJFragment` objects in a `YJFragmen
 
 - `YJFragment` is an `IonAnnotation` whose annotations encode `(fid, ftype)` via `YJFragmentKey`.
 - A `YJFragmentKey` is effectively:
-   - `[ftype]` for “root fragments”, or
-   - `[fid, ftype]` for normal fragments.
+  - `[ftype]` for “root fragments”, or
+  - `[fid, ftype]` for normal fragments.
 - `YJFragmentList` maintains indexes by `ftype` and by full `(fid, ftype)`.
-   - `get(ftype=..., fid=...)` returns a single fragment (or raises if multiple exist unless `first=True`).
-   - `get_all(ftype)` returns all fragments of that type.
+  - `get(ftype=..., fid=...)` returns a single fragment (or raises if multiple exist unless `first=True`).
+  - `get_all(ftype)` returns all fragments of that type.
 
 Derived from: `kfxlib/yj_container.py:YJFragmentKey`, `YJFragment`, `YJFragmentList.get/get_all`.
 
@@ -2175,19 +2236,19 @@ Derived from: `kfxlib/yj_container.py:ROOT_FRAGMENT_TYPES`, `SINGLETON_FRAGMENT_
 The actual required/allowed sets depend on flags and format features computed from metadata and format capabilities:
 
 - Dictionary / Scribe notebook / KPF-prepub:
-   - removes `$419`, `$265`, `$264` from required.
+  - removes `$419`, `$265`, `$264` from required.
 - Non-dictionary/non-notebook:
-   - removes `$611` from required.
-   - if `format_capabilities.kfxgen.positionMaps != 2`, removes `$609` and `$621` from allowed.
+  - removes `$611` from required.
+  - if `format_capabilities.kfxgen.positionMaps != 2`, removes `$609` and `$621` from allowed.
 - Not KPF-prepub: removes `$610` from allowed.
 - Dictionary / notebook / magazine / print replica:
-   - removes `$550` from required.
-   - and for non-dictionary, discards `$621` from allowed.
+  - removes `$550` from required.
+  - and for non-dictionary, discards `$621` from allowed.
 - Not magazine: removes `$267` and `$390` from allowed.
 - KFX v1: removes `$538` (document_data) from required and discards `$265` (position_id_map).
 - Scribe notebook: removes `$389` and `$611` from required and allows `$611`.
 - Metadata fragment pair rule:
-   - if `$490` present, `$258` is not required; if `$258` present, `$490` is not required.
+  - if `$490` present, `$258` is not required; if `$258` present, `$490` is not required.
 
 Derived from: `kfxlib/yj_structure.py:BookStructure.check_consistency` (required/allowed adjustments).
 
@@ -2218,11 +2279,11 @@ When a book contains multiple `$270` container fragments, `check_consistency`:
 - Builds a mapping `container_id -> $270 fragment`.
 - Locates the container id that contains entity type `419` in its `$181` list (this is used to exempt one “extra” container).
 - If `$419` exists:
-   - For each `$252` entry (`container_list`), compares the fragment ids in `$181` against those listed in the corresponding `$270.$181` (after mapping id numbers back to symbols).
-   - Reports missing referenced fragments (excluding `$348`).
-   - Reports extra fragments present in a container but absent from `$419`.
-   - Reports missing containers (logs that the book is incomplete and suggests combining into a KFX-ZIP).
-   - Reports extra containers missing from `$419` (excluding the special “entity_map_container_id”).
+  - For each `$252` entry (`container_list`), compares the fragment ids in `$181` against those listed in the corresponding `$270.$181` (after mapping id numbers back to symbols).
+  - Reports missing referenced fragments (excluding `$348`).
+  - Reports extra fragments present in a container but absent from `$419`.
+  - Reports missing containers (logs that the book is incomplete and suggests combining into a KFX-ZIP).
+  - Reports extra containers missing from `$419` (excluding the special “entity_map_container_id”).
 
 Derived from: `kfxlib/yj_structure.py:BookStructure.check_consistency` (container scanning + `$419` validation).
 
@@ -2248,10 +2309,10 @@ Reference discovery rules (high-level):
 - Traverses Ion values recursively (annotation, list, struct, sexp).
 - Treats certain `IonString` fields as symbol references (notably `$165` and `$636`).
 - Treats most `IonSymbol` occurrences as potential fragment references based on:
-   - `COMMON_FRAGMENT_REFERENCES`
-   - `NESTED_FRAGMENT_REFERENCES`
-   - `SPECIAL_FRAGMENT_REFERENCES` / `SPECIAL_PARENT_FRAGMENT_REFERENCES`
-   - special-case handling for dictionaries and KPF-prepub.
+  - `COMMON_FRAGMENT_REFERENCES`
+  - `NESTED_FRAGMENT_REFERENCES`
+  - `SPECIAL_FRAGMENT_REFERENCES` / `SPECIAL_PARENT_FRAGMENT_REFERENCES`
+  - special-case handling for dictionaries and KPF-prepub.
 - Also detects “EID” definitions/references for consistency checking.
 
 Derived from: `kfxlib/yj_structure.py:BookStructure.check_fragment_usage`, `walk_fragment`, and the reference-map constants.
@@ -2263,10 +2324,10 @@ After graph discovery:
 - Any referenced fragment key that is missing is reported (missing `$597` is only a warning).
 - Any fragment not visited by the graph is treated as unreferenced (error), with some KPF-prepub exceptions.
 - Exact duplicate handling rules in this implementation:
-   - For fragment types `$270` and `$593`, duplicate keys are silently ignored (the first occurrence wins).
-   - For other fragment types (except `$262`/`$387`, which are excluded from the duplicate check), a duplicate key with identical Ion content is logged as a warning (for `$597` it is logged as a known error) and ignored.
-   - A duplicate key with different content is logged as an error and causes an exception to be raised:
-   - “Book appears to have KFX containers from multiple books. (duplicate fragments)”
+  - For fragment types `$270` and `$593`, duplicate keys are silently ignored (the first occurrence wins).
+  - For other fragment types (except `$262`/`$387`, which are excluded from the duplicate check), a duplicate key with identical Ion content is logged as a warning (for `$597` it is logged as a known error) and ignored.
+  - A duplicate key with different content is logged as an error and causes an exception to be raised:
+  - “Book appears to have KFX containers from multiple books. (duplicate fragments)”
 
 Derived from: `kfxlib/yj_structure.py:BookStructure.check_fragment_usage`.
 
@@ -2275,19 +2336,19 @@ Derived from: `kfxlib/yj_structure.py:BookStructure.check_fragment_usage`.
 When `check_fragment_usage(rebuild=True)` is used (e.g. to normalize or reserialize):
 
 - `$270` is synthesized iff `rebuild=True` and the book is neither a dictionary nor a Scribe notebook.
-   - All existing `$270` fragments are removed from the referenced-fragment set.
-   - `container_id` selection order:
-     1) if exactly one distinct non-empty `$270.$409` was present, use it;
-     2) else use `asset_id` (metadata key `$466`) if present;
-     3) else generate a random `CR!` id.
-   - `$161` is set to `"KFX main"`.
-   - `$587` takes the first non-empty value seen in existing `$270` fragments, else defaults to `"kfxlib-<version>"`.
-   - `$588` takes the first non-empty value seen in existing `$270` fragments, else defaults to the empty string.
-   - `version` takes the first non-empty value seen in existing `$270` fragments, else defaults to `KfxContainer.VERSION`.
-- The fragment list is replaced with *only the referenced fragments* (sorted).
+  - All existing `$270` fragments are removed from the referenced-fragment set.
+  - `container_id` selection order:
+    1.  if exactly one distinct non-empty `$270.$409` was present, use it;
+    2.  else use `asset_id` (metadata key `$466`) if present;
+    3.  else generate a random `CR!` id.
+  - `$161` is set to `"KFX main"`.
+  - `$587` takes the first non-empty value seen in existing `$270` fragments, else defaults to `"kfxlib-<version>"`.
+  - `$588` takes the first non-empty value seen in existing `$270` fragments, else defaults to the empty string.
+  - `version` takes the first non-empty value seen in existing `$270` fragments, else defaults to `KfxContainer.VERSION`.
+- The fragment list is replaced with _only the referenced fragments_ (sorted).
 - `$419` is rebuilt as:
-   - `$252 = [ { $155: container_id, $181: [entity_ids...] } ]`
-   - optional `$253` entity dependency list (see below).
+  - `$252 = [ { $155: container_id, $181: [entity_ids...] } ]`
+  - optional `$253` entity dependency list (see below).
 
 Derived from: `kfxlib/yj_structure.py:BookStructure.check_fragment_usage` (rebuild block), `rebuild_container_entity_map`.
 
@@ -2297,12 +2358,12 @@ If dependency computation is enabled during rebuild, `determine_entity_dependenc
 
 - Computes transitive mandatory references for each fragment.
 - Then emits dependency records for two specific dependency edges:
-   - sections (`$260`) depend on external resources (`$164`)
-   - external resources (`$164`) depend on raw media (`$417`)
+  - sections (`$260`) depend on external resources (`$164`)
+  - external resources (`$164`) depend on raw media (`$417`)
 - For each matching fragment, `$253` entries contain:
-   - `$155`: the dependant fragment id
-   - `$254`: mandatory dependent ids
-   - `$255`: optional dependent ids (only for the `$164`→`$417` edge; derived from optional references)
+  - `$155`: the dependant fragment id
+  - `$254`: mandatory dependent ids
+  - `$255`: optional dependent ids (only for the `$164`→`$417` edge; derived from optional references)
 
 Derived from: `kfxlib/yj_structure.py:BookStructure.determine_entity_dependencies`.
 
