@@ -393,7 +393,8 @@ func processBodyIntroContent(c *content.Content, body *fb2.Body, sb *StorylineBu
 	if body.Image != nil {
 		imgID := strings.TrimPrefix(body.Image.Href, "#")
 		if imgInfo, ok := imageResources[imgID]; ok {
-			resolved := styles.ResolveBlockImageStyle(imgInfo.Width, c.ScreenWidth, "image", nil, nil)
+			ctx := NewStyleContext(styles)
+			resolved := ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, "image")
 			eid := sb.AddImage(imgInfo.ResourceName, resolved, body.Image.Alt)
 			if body.Image.ID != "" {
 				if _, exists := idToEID[body.Image.ID]; !exists {

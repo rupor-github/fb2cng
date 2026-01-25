@@ -35,7 +35,8 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 	if section.Image != nil {
 		imgID := strings.TrimPrefix(section.Image.Href, "#")
 		if imgInfo, ok := imageResources[imgID]; ok {
-			resolved := styles.ResolveBlockImageStyle(imgInfo.Width, c.ScreenWidth, "image", nil, nil)
+			ctx := NewStyleContext(styles)
+			resolved := ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, "image")
 			eid := sb.AddImage(imgInfo.ResourceName, resolved, section.Image.Alt)
 			if section.Image.ID != "" {
 				if _, exists := idToEID[section.Image.ID]; !exists {
@@ -292,10 +293,10 @@ func processFlowItem(c *content.Content, item *fb2.FlowItem, ctx StyleContext, c
 			return
 		}
 		// Note: Empty-line margins are NOT applied to standalone flow-level images.
-		// KP3 applies fixed 2.6lh margins to full-width images instead (handled in ResolveBlockImageStyle).
+		// KP3 applies fixed 2.6lh margins to full-width images instead (handled in ResolveImageWithDimensions).
 		// Discard any pending margin from empty-lines.
 		ctx.ConsumePendingMargin()
-		resolved := styles.ResolveBlockImageStyle(imgInfo.Width, c.ScreenWidth, "image", nil, nil)
+		resolved := ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, "image")
 		eid := sb.AddImage(imgInfo.ResourceName, resolved, item.Image.Alt)
 		if item.Image.ID != "" {
 			if _, exists := idToEID[item.Image.ID]; !exists {
@@ -528,7 +529,8 @@ func processFootnoteSectionContent(
 	if section.Image != nil {
 		imgID := strings.TrimPrefix(section.Image.Href, "#")
 		if imgInfo, ok := imageResources[imgID]; ok {
-			resolved := styles.ResolveBlockImageStyle(imgInfo.Width, c.ScreenWidth, "image", nil, nil)
+			ctx := NewStyleContext(styles)
+			resolved := ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, "image")
 			eid := sb.AddImage(imgInfo.ResourceName, resolved, section.Image.Alt)
 			if section.Image.ID != "" {
 				if _, exists := idToEID[section.Image.ID]; !exists {

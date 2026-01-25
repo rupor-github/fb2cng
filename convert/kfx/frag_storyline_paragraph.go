@@ -59,28 +59,15 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 		return
 	}
 
-	// Check for image-only block early - these use ResolveBlockImageStyle() which handles
+	// Check for image-only block early - these use ResolveImageWithDimensions() which handles
 	// its own style resolution, so we don't need to call ctx.Resolve() for them.
 	// This avoids creating unused styles that would become unreferenced fragments.
 	imageOnlyBlock := !hasTextContent && hasInlineImages
 
-	// For image-only blocks that are NOT standalone images (i.e., images inside p, footnote, etc.),
-	// we need to resolve text-indent and margin-left from the CSS cascade and pass them to
-	// ResolveBlockImageStyle. This allows the image to be properly aligned:
-	// - text-indent becomes margin-left for alignment with text (KP3 behavior for footnote images)
-	// - margin-left from container (e.g., cite) is inherited for proper indentation
-	var blockTextIndent any
-	var blockMarginLeft any
-	if imageOnlyBlock && !strings.Contains(styleSpec, "image") {
-		// Resolve text-indent and margin-left from the full CSS cascade (context + tag + classes)
-		blockTextIndent = ctx.ResolveProperty(tag, spanningClasses, SymTextIndent)
-		blockMarginLeft = ctx.ResolveProperty(tag, spanningClasses, SymMarginLeft)
-	}
-
 	// Determine if we should resolve style immediately (with position) or defer
 	// If context has position, resolve now with position filtering.
 	// Otherwise, defer resolution to Build() time.
-	// Skip for image-only blocks - they use ResolveBlockImageStyle() which creates its own style.
+	// Skip for image-only blocks - they use ResolveImageWithDimensions() which creates its own style.
 	var resolvedStyle string
 	var deferredStyleSpec string
 	if ctx.HasPosition() && !imageOnlyBlock {
@@ -175,13 +162,13 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 			// inherit block-level styling from the paragraph style.
 			// This matches KP3's behavior where such images get margins, break properties, etc.
 			// For non-standalone images (inside p, footnote, cite, etc.):
-			// - blockTextIndent provides text-indent to use as margin-left for left-alignment
-			// - blockMarginLeft provides inherited container margin (e.g., from cite)
+			// - ctx already has inherited text-indent and margin-left from container
+			// - ResolveImageWithDimensions handles the alignment appropriately
 			var resolved string
 			if imageOnlyBlock {
-				resolved = styles.ResolveBlockImageStyle(imgInfo.Width, c.ScreenWidth, styleSpec, blockTextIndent, blockMarginLeft)
+				resolved = ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, styleSpec)
 			} else {
-				resolved = styles.ResolveImageStyle(imgInfo.Width, c.ScreenWidth)
+				resolved = ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, "image")
 			}
 			sb.AddImage(imgInfo.ResourceName, resolved, seg.Image.Alt)
 			return
@@ -436,7 +423,7 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 			}
 
 			// Create inline image style with em-based dimensions
-			imgStyle := styles.ResolveInlineImageStyle(imgInfo.Width, imgInfo.Height)
+			imgStyle := inlineCtx.ResolveImageWithDimensions(ImageInline, imgInfo.Width, imgInfo.Height, "")
 			items = append(items, InlineContentItem{
 				IsImage:      true,
 				ResourceName: imgInfo.ResourceName,
