@@ -15,18 +15,26 @@ import "math"
 
 const (
 	// DecimalPrecision is the maximum number of decimal places for Ion decimal values.
-	// Amazon's KFX processing code uses setScale(3, RoundingMode.HALF_UP) for dimension
-	// calculations (found in com/amazon/yj/F/a/b.java and other style processing classes).
-	// Values with more than 3 decimal places may cause rendering issues in KP3.
-	// From observation, KP3 seems to handle up to 6 decimal places reliably.
+	// Amazon's KFX processing code uses setScale(3, RoundingMode.HALF_UP) for certain
+	// intermediate calculations (like percentage conversions), but the final Ion decimal
+	// output uses higher precision. Analysis of KP3-generated KFX files shows values
+	// with 5-6 significant decimal digits (e.g., 0.833333lh, 1.66667lh, 0.55275lh).
 	//
-	// Example: 63.33333333333333 → 63.333 (3 decimal places)
-	DecimalPrecision = 3
+	// Using 5 decimal places matches KP3 output precision and prevents visible
+	// rounding errors in vertical spacing (margin-top/bottom values).
+	//
+	// Example: 1.0/1.2 → 0.83333 (5 decimal places, matching KP3 output)
+	DecimalPrecision = 5
 
-	// DefaultLineHeightLh is the default line-height used for text styles.
-	// KP3 uses 1lh for the majority of base text styles.
-	// Some specific styles (like inline images with baseline-style) may use 1.0101lh.
+	// DefaultLineHeightLh is the default line-height used for text styles
+	// with default font-size (1rem). KP3 uses 1lh for these styles.
 	DefaultLineHeightLh = 1.0
+
+	// AdjustedLineHeightLh is the line-height used for text styles with
+	// non-default font-size. KP3 uses 100/99 ≈ 1.0101lh for these styles.
+	// This affects margin calculations: margins are divided by this factor
+	// in addition to LineHeightRatio when converting from em to lh.
+	AdjustedLineHeightLh = 100.0 / 99.0 // 1.01010101...
 
 	// LineHeightRatio is the assumed line-height multiplier (1lh = 1.2em).
 	// Used to convert em → lh for vertical spacing properties.
@@ -118,14 +126,14 @@ func isHorizontalSpacingProperty(sym KFXSymbol) bool {
 }
 
 // RoundDecimal rounds a float64 to DecimalPrecision decimal places.
-// Amazon's KFX code uses 3 decimal places (setScale(3, RoundingMode.HALF_UP))
-// for dimension values. Using more precision can cause rendering failures in KP3.
+// KP3-generated KFX files use 5-6 decimal places for dimension values.
+// This precision matches KP3 output and prevents visible rounding errors.
 //
 // Examples:
 //
-//	RoundDecimal(63.33333333333333) → 63.333
+//	RoundDecimal(0.8333333333) → 0.83333
+//	RoundDecimal(1.6666666666) → 1.66667
 //	RoundDecimal(0.25) → 0.25 (unchanged, already within precision)
-//	RoundDecimal(84.765625) → 84.766
 func RoundDecimal(v float64) float64 {
 	multiplier := math.Pow(10, DecimalPrecision)
 	return math.Round(v*multiplier) / multiplier

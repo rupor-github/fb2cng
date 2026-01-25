@@ -11,35 +11,35 @@ func TestRoundDecimal(t *testing.T) {
 		input    float64
 		expected float64
 	}{
-		// Basic rounding cases from docstring examples
-		{"repeating_decimal", 63.33333333333333, 63.333},
+		// Basic rounding cases (5 decimal places)
+		{"repeating_decimal", 63.33333333333333, 63.33333},
 		{"already_precise", 0.25, 0.25},
-		{"round_up", 84.765625, 84.766},
+		{"round_up", 84.765625, 84.76563},
 
 		// Edge cases
 		{"zero", 0, 0},
-		{"negative", -1.2345, -1.235},
+		{"negative", -1.2345, -1.2345},
 		{"whole_number", 100.0, 100.0},
-		{"exactly_3_places", 1.234, 1.234},
+		{"exactly_5_places", 1.23456, 1.23456},
 
-		// Half-up rounding behavior (matches Java RoundingMode.HALF_UP)
-		{"half_up_5", 1.2345, 1.235},     // .5 rounds up
-		{"half_up_below", 1.2344, 1.234}, // below .5 rounds down
-		{"half_up_above", 1.2346, 1.235}, // above .5 rounds up
+		// Half-up rounding behavior
+		{"half_up_5", 1.2345651, 1.23457},    // above .5 rounds up
+		{"half_up_below", 1.234564, 1.23456}, // below .5 rounds down
+		{"half_up_above", 1.234566, 1.23457}, // above .5 rounds up
 
 		// Real-world values from image sizing
-		{"image_width_percent", 19.047619047619, 19.048},
-		{"image_height_em", 1.666666666667, 1.667},
-		{"margin_lh", 0.416666666667, 0.417},
+		{"image_width_percent", 19.047619047619, 19.04762},
+		{"image_height_em", 1.666666666667, 1.66667},
+		{"margin_lh", 0.416666666667, 0.41667},
 
 		// Very small values
-		{"tiny_value", 0.0001, 0.0},
-		{"small_value", 0.001, 0.001},
-		{"small_round_up", 0.0005, 0.001},
-		{"small_round_down", 0.0004, 0.0},
+		{"tiny_value", 0.000001, 0.0},
+		{"small_value", 0.00001, 0.00001},
+		{"small_round_up", 0.000005, 0.00001},
+		{"small_round_down", 0.000004, 0.0},
 
 		// Large values
-		{"large_value", 1000.123456, 1000.123},
+		{"large_value", 1000.123456, 1000.12346},
 	}
 
 	for _, tt := range tests {
@@ -54,9 +54,9 @@ func TestRoundDecimal(t *testing.T) {
 }
 
 func TestDecimalPrecisionConstant(t *testing.T) {
-	// Verify the constant matches Amazon's setScale(3)
-	if DecimalPrecision != 3 {
-		t.Errorf("DecimalPrecision = %d, want 3 (to match Amazon's setScale(3))", DecimalPrecision)
+	// Verify the constant is set to 5 for higher precision output
+	if DecimalPrecision != 5 {
+		t.Errorf("DecimalPrecision = %d, want 5", DecimalPrecision)
 	}
 }
 
@@ -102,6 +102,7 @@ func TestUnitConversionConstants(t *testing.T) {
 		expected float64
 	}{
 		{"DefaultLineHeightLh", DefaultLineHeightLh, 1.0},
+		{"AdjustedLineHeightLh", AdjustedLineHeightLh, 100.0 / 99.0},
 		{"LineHeightRatio", LineHeightRatio, 1.2},
 		{"EmToPercentHorizontal", EmToPercentHorizontal, 3.125},
 		{"EmToPercentTextIndent", EmToPercentTextIndent, 3.125},

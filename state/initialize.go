@@ -26,7 +26,7 @@ func newLocalEnv() *LocalEnv {
     M270 50
     C275 55, 275 65, 270 70
   "
-  fill="none" stroke="black" stroke-width="1"/>
+  fill="none" stroke="black" stroke-width="5"/>
 </svg>`),
 			common.VignettePosBookTitleBottom: []byte(`<svg viewBox="0 0 500 80" xmlns="http://www.w3.org/2000/svg">
   <path d="
@@ -43,34 +43,34 @@ func newLocalEnv() *LocalEnv {
     M270 30
     C275 25, 275 15, 270 10
   "
-  fill="none" stroke="black" stroke-width="1"/>
+  fill="none" stroke="black" stroke-width="5"/>
 </svg>`),
 			common.VignettePosChapterTitleTop: []byte(`<svg viewBox="0 0 300 20" xmlns="http://www.w3.org/2000/svg">
   <path d="M10 10
            Q40 0 70 10
            M230 10
            Q260 0 290 10"
-        stroke="black" fill="none" stroke-width="1"/>
-  <line x1="70" y1="10" x2="230" y2="10" stroke="black" stroke-width="1"/>
+        stroke="black" fill="none" stroke-width="5"/>
+  <line x1="70" y1="10" x2="230" y2="10" stroke="black" stroke-width="5"/>
 </svg>`),
 			common.VignettePosChapterTitleBottom: []byte(`<svg viewBox="0 0 300 20" xmlns="http://www.w3.org/2000/svg">
   <path d="M10 10
            Q40 20 70 10
            M230 10
            Q260 20 290 10"
-        stroke="black" fill="none" stroke-width="1"/>
-  <line x1="70" y1="10" x2="230" y2="10" stroke="black" stroke-width="1"/>
+        stroke="black" fill="none" stroke-width="5"/>
+  <line x1="70" y1="10" x2="230" y2="10" stroke="black" stroke-width="5"/>
 </svg>`),
 			common.VignettePosChapterEnd: []byte(`<svg viewBox="0 0 240 20" xmlns="http://www.w3.org/2000/svg">
   <path d="M10 10 H90
            M150 10 H230"
-        stroke="black" stroke-width="1"/>
-  <path d="M120 3 A7 7 0 1 1 119.9 3" fill="none" stroke="black" stroke-width="1"/>
+        stroke="black" stroke-width="5"/>
+  <path d="M120 3 A7 7 0 1 1 119.9 3" fill="none" stroke="black" stroke-width="5"/>
 </svg>`),
 			common.VignettePosSectionTitleTop: []byte(`<svg viewBox="0 0 240 24" xmlns="http://www.w3.org/2000/svg">
   <path d="M20 12 H100
            M140 12 H220"
-        stroke="black" stroke-width="1"/>
+        stroke="black" stroke-width="5"/>
   <path d="M100 12
            C110 2 130 2 140 12
            C130 22 110 22 100 12"
@@ -79,7 +79,7 @@ func newLocalEnv() *LocalEnv {
 			common.VignettePosSectionTitleBottom: []byte(`<svg viewBox="0 0 240 24" xmlns="http://www.w3.org/2000/svg">
   <path d="M20 12 H100
            M140 12 H220"
-        stroke="black" stroke-width="1"/>
+        stroke="black" stroke-width="5"/>
   <path d="M100 12
            C110 2 130 2 140 12
            C130 22 110 22 100 12"

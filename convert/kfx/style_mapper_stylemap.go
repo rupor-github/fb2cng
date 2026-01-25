@@ -24,7 +24,7 @@ func (m *StyleMapper) applyStyleMapCSS(sel Selector, props map[string]CSSValue) 
 				continue
 			}
 			if cssProp, overrideVal, ok := styleMapCSSOverride(entry); ok {
-				if _, exists := merged[cssProp]; !exists {
+				if !cssPropertyCoveredByMerged(merged, cssProp) {
 					val := overrideVal
 					if val == "" {
 						val = firstNonEmpty(entry.Value, entry.ValueList...)
@@ -32,7 +32,7 @@ func (m *StyleMapper) applyStyleMapCSS(sel Selector, props map[string]CSSValue) 
 					merged[cssProp] = parseStyleMapCSSValue(val, entry.Unit)
 				}
 			} else if cssProp, ok := propertyToCSSName(entry.Property); ok {
-				if _, exists := merged[cssProp]; !exists {
+				if !cssPropertyCoveredByMerged(merged, cssProp) {
 					val := firstNonEmpty(entry.Value, entry.ValueList...)
 					if val != "" {
 						merged[cssProp] = parseStyleMapCSSValue(val, entry.Unit)
@@ -45,15 +45,49 @@ func (m *StyleMapper) applyStyleMapCSS(sel Selector, props map[string]CSSValue) 
 				}
 			}
 			for cssName, cssVal := range entry.CSSStyles {
-				if _, exists := merged[cssName]; exists {
+				if cssPropertyCoveredByMerged(merged, cssName) {
 					continue
 				}
-				merged[cssName] = CSSValue{Raw: cssVal}
+				// Parse the CSS value string to properly extract value and unit
+				merged[cssName] = parseStyleMapCSSValue(cssVal, "")
 			}
 		}
 	}
 
 	return merged
+}
+
+// cssPropertyCoveredByMerged returns true if the CSS property is already covered
+// by existing properties in merged, either directly or via a shorthand property.
+// For example, if merged has "margin", then "margin-left" is covered.
+func cssPropertyCoveredByMerged(merged map[string]CSSValue, prop string) bool {
+	if _, exists := merged[prop]; exists {
+		return true
+	}
+	// Check if a shorthand property covers this property
+	shorthand := shorthandForProperty(prop)
+	if shorthand != "" {
+		if _, exists := merged[shorthand]; exists {
+			return true
+		}
+	}
+	return false
+}
+
+// shorthandForProperty returns the shorthand property name that covers the given
+// property, or empty string if none.
+func shorthandForProperty(prop string) string {
+	switch {
+	case strings.HasPrefix(prop, "margin-"):
+		return "margin"
+	case strings.HasPrefix(prop, "padding-"):
+		return "padding"
+	case strings.HasPrefix(prop, "border-"):
+		return "border"
+	case strings.HasPrefix(prop, "background-"):
+		return "background"
+	}
+	return ""
 }
 
 func styleMapKeysFromSelector(sel Selector) []HTMLKey {

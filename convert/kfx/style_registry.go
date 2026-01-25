@@ -530,6 +530,54 @@ func stripLineHeight(props map[KFXSymbol]any) map[KFXSymbol]any {
 	return updated
 }
 
+// adjustLineHeightForFontSize adjusts line-height and vertical margins when
+// font-size differs from the default (1rem). KP3 uses 1.0101lh for styles with
+// non-default font-sizes, and adjusts vertical margins accordingly.
+//
+// The adjustment factor is AdjustedLineHeightLh (100/99 ≈ 1.0101).
+// Vertical margins are recalculated as: margin_lh = margin_lh / AdjustedLineHeightLh
+//
+// This ensures margin values match KP3 output exactly. For example:
+//
+//	CSS: margin-top: 0.67em with font-size: 140%
+//	Without adjustment: 0.67 / 1.2 = 0.55833lh
+//	With adjustment: 0.67 / 1.2 / 1.0101 = 0.55275lh (matches KP3)
+func adjustLineHeightForFontSize(props map[KFXSymbol]any) map[KFXSymbol]any {
+	// Check if font-size exists and differs from default (1rem)
+	fontSize, ok := props[SymFontSize]
+	if !ok {
+		return props
+	}
+
+	fontSizeVal, fontSizeUnit, ok := measureParts(fontSize)
+	if !ok {
+		return props
+	}
+
+	// Only adjust if font-size is in rem and differs from 1.0
+	if fontSizeUnit != SymUnitRem || math.Abs(fontSizeVal-1.0) < 1e-9 {
+		return props
+	}
+
+	updated := make(map[KFXSymbol]any, len(props))
+	maps.Copy(updated, props)
+
+	// Set line-height to AdjustedLineHeightLh
+	updated[SymLineHeight] = DimensionValue(RoundDecimal(AdjustedLineHeightLh), SymUnitLh)
+
+	// Adjust vertical margins
+	for _, sym := range []KFXSymbol{SymMarginTop, SymMarginBottom, SymPaddingTop, SymPaddingBottom} {
+		if margin, ok := updated[sym]; ok {
+			if marginVal, marginUnit, ok := measureParts(margin); ok && marginUnit == SymUnitLh {
+				adjusted := RoundDecimal(marginVal / AdjustedLineHeightLh)
+				updated[sym] = DimensionValue(adjusted, SymUnitLh)
+			}
+		}
+	}
+
+	return updated
+}
+
 func isZeroMeasureValue(val any) bool {
 	v, _, ok := measureParts(val)
 	if !ok {
@@ -551,6 +599,9 @@ func (sr *StyleRegistry) BuildFragments() []*Fragment {
 		resolved := sr.resolveInheritance(def)
 		resolved.Properties = stripZeroMargins(resolved.Properties)
 		if sr.hasTextUsage(name) {
+			// Adjust line-height and margins for non-default font-sizes
+			// Must be done before ensureDefaultLineHeight to set correct line-height value
+			resolved.Properties = adjustLineHeightForFontSize(resolved.Properties)
 			resolved.Properties = ensureDefaultLineHeight(resolved.Properties)
 		} else if sr.hasImageUsage(name) {
 			// KP3 includes line-height: 1lh for standalone block images.
