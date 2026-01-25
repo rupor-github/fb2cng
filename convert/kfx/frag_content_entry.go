@@ -18,6 +18,32 @@ type ContentRef struct {
 	HeadingLevel    int             // For headings: 1-6 for h1-h6 ($790), 0 means not a heading
 	RawEntry        StructValue     // Pre-built entry (for complex structures like tables)
 	FootnoteContent bool            // If true, adds position:footer and yj.classification:footnote markers
+
+	// Container tracking for margin collapsing (post-processing).
+	// These fields are set during content generation and used by CollapseMargins().
+	ContainerID    int            // Unique container ID (0 = top-level/root)
+	ParentID       int            // Parent container ID (0 = root)
+	ContainerKind  ContainerKind  // Type of container (Section, Poem, Stanza, etc.)
+	ContainerFlags ContainerFlags // Flags controlling collapse behavior (TitleBlock, HasBorder, etc.)
+	EntryOrder     int            // Order in which this entry was added (for sibling ordering in tree)
+
+	// Margin values for post-processing margin collapsing.
+	// These are captured from the resolved style during content generation,
+	// then modified by CollapseMargins() in post-processing.
+	// Values are in lh units.
+	//   nil = no margin (will be removed from final style)
+	//   0.0 = explicit zero margin (also removed - KP3 doesn't output zero margins)
+	MarginTop    *float64
+	MarginBottom *float64
+
+	// HasBreakAfterAvoid is true if the element has page-break-after: avoid (yj-break-after: avoid).
+	// Elements with this property keep their margin-bottom and don't collapse with next sibling.
+	HasBreakAfterAvoid bool
+
+	// StripMarginBottom is true if this element's margin-bottom should be stripped.
+	// This is set when an empty-line follows this element, matching KP3 behavior where
+	// the preceding element loses its mb and the empty-line's margin goes to the next element's mt.
+	StripMarginBottom bool
 }
 
 // InlineContentItem represents either a text string or an inline image in mixed content.

@@ -801,10 +801,36 @@ func TestStyleRegistryBuildFragments(t *testing.T) {
 	name2 := NewStyleContext(registry).Resolve("", "custom")
 	name3 := NewStyleContext(registry).Resolve("", "strong") // default HTML element style
 
-	// Mark styles as used for text
-	registry.MarkUsage(name1, styleUsageText)
-	registry.MarkUsage(name2, styleUsageText)
-	registry.MarkUsage(name3, styleUsageText)
+	// ResolveStyle tracks usage type but doesn't mark as "used" for output.
+	// We need to simulate content that references these styles.
+	registry.ResolveStyle(name1, styleUsageText)
+	registry.ResolveStyle(name2, styleUsageText)
+	registry.ResolveStyle(name3, styleUsageText)
+
+	// Create mock content fragments that reference these styles
+	contentFragments := NewFragmentList()
+	contentList := []any{
+		NewStruct().
+			SetInt(SymUniqueID, 1000).
+			Set(SymStyle, SymbolByName(name1)),
+		NewStruct().
+			SetInt(SymUniqueID, 1001).
+			Set(SymStyle, SymbolByName(name2)),
+		NewStruct().
+			SetInt(SymUniqueID, 1002).
+			Set(SymStyle, SymbolByName(name3)),
+	}
+	storyline := &Fragment{
+		FType:   SymStoryline,
+		FIDName: "test",
+		Value: StructValue{
+			SymContentList: contentList, // $146 = content_list
+		},
+	}
+	contentFragments.Add(storyline)
+
+	// Recompute which styles are actually used
+	registry.RecomputeUsedStyles(contentFragments)
 
 	fragments := registry.BuildFragments()
 

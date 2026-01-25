@@ -22,31 +22,13 @@ type marginOrigin struct {
 }
 
 // emptyLineState holds mutable state for empty line margin handling.
-// This is shared across all container frames to allow margin propagation
+// This is shared across all context copies to allow margin propagation
 // across container boundaries (e.g., empty line before a poem affects
 // the poem's first verse).
 type emptyLineState struct {
 	// pendingMargin is the margin from the last empty line that should
 	// be applied to the next content element's margin-top.
 	pendingMargin float64
-
-	// keepMarginBottom, when true, signals that subsequent elements should
-	// keep their margin-bottom even if position filtering would normally
-	// remove it (for middle elements). Once set by an empty line, this
-	// stays true until container processing completes.
-	keepMarginBottom bool
-}
-
-// containerFrame holds margin info for a single container level in the stack.
-// When entering a container (poem, stanza, cite, etc.), a frame is pushed.
-// When processing completes, the frame is effectively "popped" via Go's value semantics.
-type containerFrame struct {
-	marginTop         float64 // Container's margin-top (for first child)
-	marginBottom      float64 // Container's margin-bottom (for last child)
-	itemCount         int     // Total items in this container
-	currentItem       int     // Current item index (0-based)
-	isLastInParent    bool    // Whether this container is the last item in its parent
-	titleBlockMargins bool    // If true, use title-block margin style (spacing via margin-top)
 }
 
 // ImageKind specifies how an image should be styled.
@@ -68,15 +50,13 @@ const (
 // 1. Inherited properties come from the accumulated context (ancestors)
 // 2. Non-inherited properties come only from the element's own tag/classes
 //
-// StyleContext also supports position tracking for block contexts. When processing
-// items within a block (annotation, epigraph, etc.), the containerStack tracks position
-// and applies KP3-compatible position filtering (margin collapsing simulation).
+// Vertical margin collapsing is handled by post-processing in CollapseMargins(),
+// which implements CSS-compliant margin collapsing rules after all content is generated.
 //
 // Empty-line handling: Instead of creating content entries for empty-lines, we store
 // their margin in emptyLineState.pendingMargin. The next element's margin-top is
-// set to the empty-line's margin, and its margin-bottom is preserved (not removed
-// by position filtering), matching KP3 behavior. The emptyLineState is shared across
-// all context copies to allow propagation across container boundaries.
+// set to the empty-line's margin, matching KP3 behavior. The emptyLineState is shared
+// across all context copies to allow propagation across container boundaries.
 //
 // Container identity tracking: For margin-left/right, we track which style names
 // contributed to the inherited value. This implements YJCumulativeInSameContainerRuleMerger:
@@ -99,12 +79,6 @@ type StyleContext struct {
 
 	// Full scope chain from root to current level (for debugging/future use)
 	scopes []StyleScope
-
-	// containerStack is a stack of container frames for nested margin handling.
-	// When entering a container (poem, stanza, cite, etc.), push a frame.
-	// When exiting, it's effectively popped via Go's value semantics.
-	// Top of stack is used for vertical margin distribution.
-	containerStack []containerFrame
 
 	// emptyLine holds shared state for empty line margin handling.
 	// This is a pointer to allow mutation across value copies of StyleContext.
@@ -142,67 +116,6 @@ func (sc StyleContext) ScopePath() string {
 		parts = append(parts, part)
 	}
 	return strings.Join(parts, " > ")
-}
-
-// ContainerPath returns a summary of the container stack with positions.
-// Example: "poem[2/3] > stanza[5/14]" showing current item / total items.
-func (sc StyleContext) ContainerPath() string {
-	if len(sc.containerStack) == 0 {
-		return "(no containers)"
-	}
-	parts := make([]string, 0, len(sc.containerStack))
-	for i, frame := range sc.containerStack {
-		// Try to get a name from the corresponding scope
-		name := "container"
-		if i < len(sc.scopes) {
-			scope := sc.scopes[i]
-			if len(scope.Classes) > 0 {
-				name = scope.Classes[len(scope.Classes)-1] // Use last class as name
-			} else if scope.Tag != "" {
-				name = scope.Tag
-			}
-		}
-		parts = append(parts, formatContainerFrame(name, frame))
-	}
-	return strings.Join(parts, " > ")
-}
-
-// formatContainerFrame formats a single container frame for display.
-func formatContainerFrame(name string, frame containerFrame) string {
-	pos := frame.currentItem + 1 // 1-based for display
-	total := frame.itemCount
-	result := name + "[" + itoa(pos) + "/" + itoa(total) + "]"
-
-	// Collect all active flags
-	var flags []string
-	if frame.titleBlockMargins {
-		flags = append(flags, "title-block")
-	}
-	if frame.isLastInParent {
-		flags = append(flags, "last-in-parent")
-	}
-
-	// Append flags in parentheses if any are set
-	if len(flags) > 0 {
-		result += " (" + strings.Join(flags, ", ") + ")"
-	}
-	return result
-}
-
-// itoa is a simple int-to-string without importing strconv.
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	if n < 0 {
-		return "-" + itoa(-n)
-	}
-	var digits []byte
-	for n > 0 {
-		digits = append([]byte{byte('0' + n%10)}, digits...)
-		n /= 10
-	}
-	return string(digits)
 }
 
 // Push enters a new element scope and returns a new context with that element's
@@ -255,35 +168,4 @@ func (sc StyleContext) Push(tag, classes string) StyleContext {
 		scopes:    newScopes,
 		emptyLine: sc.emptyLine, // Preserve empty-line tracking
 	}
-}
-
-// Advance moves to the next item in the current container.
-// Call this after processing each item in a container.
-// Returns a new StyleContext with updated position in the top container frame.
-//
-// If there's no container stack, this is a no-op.
-func (sc StyleContext) Advance() StyleContext {
-	if len(sc.containerStack) == 0 {
-		return sc // No container stack - nothing to advance
-	}
-
-	// Copy stack and increment current item in top frame
-	newStack := make([]containerFrame, len(sc.containerStack))
-	copy(newStack, sc.containerStack)
-	newStack[len(newStack)-1].currentItem++
-
-	return StyleContext{
-		registry:       sc.registry,
-		inherited:      sc.inherited,
-		marginOrigins:  sc.marginOrigins,
-		scopes:         sc.scopes,
-		containerStack: newStack,
-		emptyLine:      sc.emptyLine,
-	}
-}
-
-// HasPosition returns true if this context has position information set.
-// This is true when a container stack with tracked positions is present.
-func (sc StyleContext) HasPosition() bool {
-	return len(sc.containerStack) > 0
 }

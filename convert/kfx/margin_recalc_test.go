@@ -140,7 +140,10 @@ func TestShorthandPropertyPreventsStylemapOverride(t *testing.T) {
 }
 
 // TestAdjustLineHeightForFontSize verifies that styles with non-default font-size
-// get adjusted line-height (1.0101lh) and correspondingly adjusted vertical margins.
+// get adjusted line-height and correspondingly adjusted vertical margins.
+// KP3 uses different formulas:
+//   - font-size < 1rem: line-height = 1/font-size (keeps absolute spacing constant)
+//   - font-size >= 1rem: line-height = 1.0101lh
 func TestAdjustLineHeightForFontSize(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -169,7 +172,7 @@ func TestAdjustLineHeightForFontSize(t *testing.T) {
 			wantAdjustment: false,
 		},
 		{
-			name: "non-default font-size 1.25rem",
+			name: "large font-size 1.25rem uses 1.0101",
 			props: map[KFXSymbol]any{
 				SymFontSize:  DimensionValue(1.25, SymUnitRem),
 				SymMarginTop: DimensionValue(0.55833, SymUnitLh),
@@ -179,13 +182,23 @@ func TestAdjustLineHeightForFontSize(t *testing.T) {
 			wantAdjustment: true,
 		},
 		{
-			name: "small font-size 0.8rem",
+			name: "small font-size 0.75rem uses 1/font-size",
 			props: map[KFXSymbol]any{
-				SymFontSize:  DimensionValue(0.8, SymUnitRem),
+				SymFontSize:  DimensionValue(0.75, SymUnitRem),
 				SymMarginTop: DimensionValue(0.41667, SymUnitLh),
 			},
-			wantLineHeight: RoundDecimal(AdjustedLineHeightLh),
-			wantMarginTop:  RoundDecimal(0.41667 / AdjustedLineHeightLh),
+			wantLineHeight: RoundDecimal(1.0 / 0.75), // 1.33333
+			wantMarginTop:  RoundDecimal(0.41667 / (1.0 / 0.75)),
+			wantAdjustment: true,
+		},
+		{
+			name: "small font-size 0.6rem uses 1/font-size",
+			props: map[KFXSymbol]any{
+				SymFontSize:  DimensionValue(0.6, SymUnitRem),
+				SymMarginTop: DimensionValue(0.3, SymUnitLh),
+			},
+			wantLineHeight: RoundDecimal(1.0 / 0.6), // 1.66667
+			wantMarginTop:  RoundDecimal(0.3 / (1.0 / 0.6)),
 			wantAdjustment: true,
 		},
 		{
@@ -209,7 +222,7 @@ func TestAdjustLineHeightForFontSize(t *testing.T) {
 				lhVal, lhUnit, _ := measureParts(lh)
 				if !tt.wantAdjustment {
 					t.Errorf("line-height should not be set, got %v%v", lhVal, lhUnit)
-				} else if lhVal != tt.wantLineHeight {
+				} else if math.Abs(lhVal-tt.wantLineHeight) > 1e-5 {
 					t.Errorf("line-height = %v, want %v", lhVal, tt.wantLineHeight)
 				}
 			} else if tt.wantAdjustment {
@@ -219,7 +232,7 @@ func TestAdjustLineHeightForFontSize(t *testing.T) {
 			// Check margin-top
 			if mt, ok := result[SymMarginTop]; ok {
 				mtVal, _, _ := measureParts(mt)
-				if math.Abs(mtVal-tt.wantMarginTop) > 1e-9 {
+				if math.Abs(mtVal-tt.wantMarginTop) > 1e-5 {
 					t.Errorf("margin-top = %v, want %v", mtVal, tt.wantMarginTop)
 				}
 			}

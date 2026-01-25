@@ -184,95 +184,74 @@ func (t *StyleTracer) TraceAutoCreate(name string, inferredParent string) {
 	t.sections["auto_created"]++
 }
 
-// TraceContainerEnter logs when PushBlock() creates a container frame.
-// This helps debug nested container margin handling and position tracking.
+// TraceMarginCollapse logs a margin collapse operation during post-processing.
+// This tracks the CSS margin collapsing algorithm applied after content generation.
 //
 // Parameters:
-//   - tag: HTML element tag (e.g., "div")
-//   - classes: CSS classes (e.g., "poem stanza")
-//   - itemCount: number of items in the container
-//   - marginTop, marginBottom: container's vertical margins in lh units
-//   - isLastInParent: whether this container is the last item in its parent (shown in containerPath)
-//   - titleBlockMargins: whether title-block margin style is used (shown in containerPath)
-//   - scopePath: CSS-like path showing element hierarchy (e.g., "div.poem > div.stanza")
-//   - containerPath: container stack with positions and flags (e.g., "poem[2/3] > stanza[1/14] (title-block)")
-func (t *StyleTracer) TraceContainerEnter(tag, classes string, itemCount int, marginTop, marginBottom float64, isLastInParent, titleBlockMargins bool, scopePath, containerPath string) {
+//   - collapseType: "first-child", "last-child", "sibling", or "empty" (self-collapse)
+//   - nodeID: content entry identifier (EID or descriptive string)
+//   - beforeMT, beforeMB: margins before collapse (nil = no margin)
+//   - afterMT, afterMB: margins after collapse (nil = no margin)
+//   - containerInfo: description of the container context
+func (t *StyleTracer) TraceMarginCollapse(collapseType, nodeID string, beforeMT, beforeMB, afterMT, afterMB *float64, containerInfo string) {
 	if !t.IsEnabled() {
 		return
 	}
 
-	// Build styleName: prefer "tag.classes", fall back to ".classes" or "(anonymous)"
-	var styleName string
-	switch {
-	case tag != "" && classes != "":
-		styleName = tag + "." + strings.ReplaceAll(classes, " ", ".")
-	case tag != "":
-		styleName = tag
-	case classes != "":
-		styleName = "." + strings.ReplaceAll(classes, " ", ".")
-	default:
-		styleName = "(anonymous)"
-	}
-
 	var details strings.Builder
-	details.WriteString(fmt.Sprintf("items: %d", itemCount))
-	if marginTop > 0 || marginBottom > 0 {
-		details.WriteString(fmt.Sprintf(", margins: top=%.2flh bottom=%.2flh", marginTop, marginBottom))
-	}
-	// Note: isLastInParent and titleBlockMargins flags are shown in containerPath
-	if containerPath != "(no containers)" {
-		details.WriteString(fmt.Sprintf("\n  containers: %s", containerPath))
+	details.WriteString(fmt.Sprintf("before: mt=%s mb=%s", formatMarginPtr(beforeMT), formatMarginPtr(beforeMB)))
+	details.WriteString(fmt.Sprintf("\n  after: mt=%s mb=%s", formatMarginPtr(afterMT), formatMarginPtr(afterMB)))
+	if containerInfo != "" {
+		details.WriteString(fmt.Sprintf("\n  container: %s", containerInfo))
 	}
 
 	t.entries = append(t.entries, traceEntry{
-		operation: "CONTAINER",
-		styleName: styleName,
+		operation: "COLLAPSE",
+		styleName: fmt.Sprintf("%s @ %s", collapseType, nodeID),
 		details:   details.String(),
 	})
-	t.sections["containers"]++
+	t.sections["collapse_"+collapseType]++
 }
 
-// TracePositionResolve logs position-based margin filtering during style resolution.
-// This helps debug KP3-compatible margin collapsing behavior.
+// TraceStyleVariant logs creation of a style variant with modified margins.
+// This tracks when applyCollapsedMargins() creates new style variants.
 //
 // Parameters:
-//   - position: element position (first, middle, last, only)
-//   - originalMargins: margins before filtering (top, bottom in lh)
-//   - appliedMargins: margins after filtering (top, bottom in lh)
-//   - containerMargins: container margins applied (top, bottom in lh)
-//   - scopePath: CSS-like path showing element hierarchy (used as entry identifier)
-//   - containerPath: container stack with positions
-func (t *StyleTracer) TracePositionResolve(position string, originalMargins, appliedMargins, containerMargins [2]float64, scopePath, containerPath string) {
+//   - originalStyle: name of the original style before margin modification
+//   - newStyle: name of the new/reused style after margin modification
+//   - nodeID: content entry identifier
+//   - marginTop, marginBottom: final margin values (nil = removed)
+func (t *StyleTracer) TraceStyleVariant(originalStyle, newStyle, nodeID string, marginTop, marginBottom *float64) {
 	if !t.IsEnabled() {
 		return
 	}
 
 	var details strings.Builder
-	details.WriteString(fmt.Sprintf("position: %s", position))
-
-	// Show original margins if they differ from applied
-	if originalMargins[0] != appliedMargins[0] || originalMargins[1] != appliedMargins[1] {
-		details.WriteString(fmt.Sprintf("\n  original: top=%.2flh bottom=%.2flh", originalMargins[0], originalMargins[1]))
+	if originalStyle == newStyle {
+		details.WriteString("(reused existing style)")
+	} else {
+		details.WriteString(fmt.Sprintf("original: %s", originalStyle))
 	}
-
-	details.WriteString(fmt.Sprintf("\n  applied: top=%.2flh bottom=%.2flh", appliedMargins[0], appliedMargins[1]))
-
-	// Show container margins if any were applied
-	if containerMargins[0] > 0 || containerMargins[1] > 0 {
-		details.WriteString(fmt.Sprintf("\n  from container: top=%.2flh bottom=%.2flh", containerMargins[0], containerMargins[1]))
-	}
-
-	if containerPath != "(no containers)" {
-		details.WriteString(fmt.Sprintf("\n  containers: %s", containerPath))
-	}
+	details.WriteString(fmt.Sprintf("\n  margins: mt=%s mb=%s", formatMarginPtr(marginTop), formatMarginPtr(marginBottom)))
 
 	t.entries = append(t.entries, traceEntry{
-		operation: "POSITION",
-		styleName: scopePath, // Use scope path as the style name for easier identification
+		operation: "VARIANT",
+		styleName: newStyle,
 		details:   details.String(),
 	})
-	t.sections["position_resolved"]++
-	t.sections["pos_"+position]++
+	if originalStyle == newStyle {
+		t.sections["style_reused"]++
+	} else {
+		t.sections["style_created"]++
+	}
+}
+
+// formatMarginPtr formats a margin pointer for trace output.
+func formatMarginPtr(m *float64) string {
+	if m == nil {
+		return "nil"
+	}
+	return fmt.Sprintf("%.5flh", *m)
 }
 
 // TraceMarginAccumulate logs margin accumulation decisions in container-aware handling.

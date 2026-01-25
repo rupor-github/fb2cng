@@ -305,11 +305,16 @@ func (c *Converter) convertProperty(name string, value CSSValue, props map[KFXSy
 				remValue := PercentToRem(value.Value)
 				c.mergeProp(props, kfxSym, DimensionValue(remValue, SymUnitRem))
 			case "em":
-				// Convert em to rem: em is relative to parent element font-size, which defaults to 1rem.
-				// During CSS cascade (merging same style name), em values should override as rem to
-				// prevent YJRelativeRuleMerger from multiplying em with existing rem values.
-				// This matches KP3 behavior where all font-sizes in output are in rem units.
-				c.mergeProp(props, kfxSym, DimensionValue(value.Value, SymUnitRem))
+				// Keep em units for font-size to enable relative merging.
+				// When nested inline styles are merged (e.g., sup + link-footnote),
+				// the stylelist rule font_size,true,*,em triggers YJRelativeRuleMerger
+				// which multiplies: sup (0.75rem) * link-footnote (0.8em) = 0.6rem
+				// The em→rem conversion happens at output time in BuildFragments.
+				//
+				// NOTE: This differs from KP3, which creates overlapping style events
+				// and stores 0.75rem in both (ignoring the 0.8em). Our CSS-correct
+				// multiplication produces the same visual result but with proper cascade.
+				c.mergeProp(props, kfxSym, DimensionValue(value.Value, SymUnitEm))
 			default:
 				dim, err := MakeDimensionValue(value)
 				if err != nil {

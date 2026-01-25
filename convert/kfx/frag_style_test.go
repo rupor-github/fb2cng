@@ -41,7 +41,7 @@ func TestResolveInheritance(t *testing.T) {
 	resolvedName := NewStyleContext(sr).Resolve("", "poem-subtitle")
 
 	// Mark the resolved style as used for text (like production code does)
-	sr.MarkUsage(resolvedName, styleUsageText)
+	sr.ResolveStyle(resolvedName, styleUsageText)
 
 	// Build fragments - only resolved styles (base36 names) are emitted
 	fragments := sr.BuildFragments()
@@ -324,7 +324,7 @@ func TestStyleContext(t *testing.T) {
 	t.Run("PushBlock inherits margins to children", func(t *testing.T) {
 		sr := makeRegistry()
 		// PushBlock with poem (has margin-left) should pass it to children
-		ctx := NewStyleContext(sr).PushBlock("div", "poem", 1)
+		ctx := NewStyleContext(sr).PushBlock("div", "poem")
 
 		// Margin-left SHOULD be inherited in block context
 		if _, ok := ctx.inherited[SymMarginLeft]; !ok {
@@ -339,7 +339,7 @@ func TestStyleContext(t *testing.T) {
 	t.Run("PushBlock child style includes container margin", func(t *testing.T) {
 		sr := makeRegistry()
 		// PushBlock with poem (has margin-left) then resolve child paragraph
-		ctx := NewStyleContext(sr).PushBlock("div", "poem", 1)
+		ctx := NewStyleContext(sr).PushBlock("div", "poem")
 		styleName := ctx.Resolve("p", "")
 
 		def, ok := sr.Get(styleName)
@@ -356,8 +356,8 @@ func TestStyleContext(t *testing.T) {
 	t.Run("chained PushBlock accumulates margins", func(t *testing.T) {
 		sr := makeRegistry()
 		ctx := NewStyleContext(sr).
-			PushBlock("div", "poem", 1).
-			PushBlock("div", "stanza", 1)
+			PushBlock("div", "poem").
+			PushBlock("div", "stanza")
 
 		// Both poem's margin and stanza's properties should be accumulated
 		if _, ok := ctx.inherited[SymMarginLeft]; !ok {
@@ -381,8 +381,8 @@ func TestStyleContext(t *testing.T) {
 
 		// Push poem, then push verse as nested container
 		ctx := NewStyleContext(sr).
-			PushBlock("div", "poem", 1).
-			PushBlock("div", "verse", 1)
+			PushBlock("div", "poem").
+			PushBlock("div", "verse")
 
 		// Margins from different containers should accumulate: 6.25% + 3.125% = 9.375%
 		marginLeft := ctx.inherited[SymMarginLeft]
@@ -412,7 +412,7 @@ func TestStyleContext(t *testing.T) {
 
 		// PushBlock with cite class, then resolve a paragraph with cite class
 		// The cite margin should NOT be applied twice (container + class)
-		ctx := NewStyleContext(sr).PushBlock("div", "cite", 1)
+		ctx := NewStyleContext(sr).PushBlock("div", "cite")
 		styleName := ctx.Resolve("p", "cite")
 
 		def, ok := sr.Get(styleName)
@@ -445,7 +445,7 @@ func TestStyleContext(t *testing.T) {
 		}
 
 		// PushBlock DOES inherit margins
-		pushBlockCtx := NewStyleContext(sr).PushBlock("div", "poem", 1)
+		pushBlockCtx := NewStyleContext(sr).PushBlock("div", "poem")
 		if _, ok := pushBlockCtx.inherited[SymMarginLeft]; !ok {
 			t.Error("PushBlock SHOULD inherit margin-left")
 		}
@@ -469,7 +469,7 @@ func TestStyleContext(t *testing.T) {
 		}})
 
 		// Simulate: poem > p.verse
-		poemCtx := NewStyleContext(sr).PushBlock("div", "poem", 1)
+		poemCtx := NewStyleContext(sr).PushBlock("div", "poem")
 		styleName := poemCtx.Resolve("p", "verse")
 
 		def, ok := sr.Get(styleName)

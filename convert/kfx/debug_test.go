@@ -25,7 +25,7 @@ func TestCiteSubtitleImageMargin(t *testing.T) {
 	ctx := NewStyleContext(sr)
 
 	// Enter cite container
-	citeCtx := ctx.PushBlock("blockquote", "cite", 5)
+	citeCtx := ctx.PushBlock("blockquote", "cite")
 	t.Logf("After PushBlock cite:")
 	t.Logf("  inherited margin-left: %v", citeCtx.inherited[SymMarginLeft])
 

@@ -152,7 +152,12 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 		return err
 	}
 
-	// Add style fragments from registry
+	// Recompute which styles are actually used by scanning content fragments.
+	// This must be done after all content is generated (including margin collapsing
+	// which may create new style variants and orphan old ones).
+	styles.RecomputeUsedStyles(contentFragments)
+
+	// Add style fragments from registry (only used styles are included)
 	for _, styleFrag := range styles.BuildFragments() {
 		if err := container.Fragments.Add(styleFrag); err != nil {
 			return err

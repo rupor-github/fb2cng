@@ -26,6 +26,11 @@ const maxStorylineSplitDepth = 2
 //   - nestedTitledSections: receives titled nested sections that should become separate storylines
 //   - directChildTOC: receives TOC entries for sections processed inline
 func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, depth int, directChildTOC *[]*TOCEntry, nestedTitledSections *[]sectionWorkItem, idToEID eidByFB2ID) error {
+	// Enter section container for margin collapsing tracking.
+	// Section content is a standard container (no title-block mode).
+	sb.EnterContainer(ContainerSection, 0)
+	defer sb.ExitContainer()
+
 	if section != nil && section.ID != "" {
 		if _, exists := idToEID[section.ID]; !exists {
 			idToEID[section.ID] = sb.NextEID()
@@ -92,18 +97,24 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 	// Position filtering is applied so first item gets wrapper's margin-top,
 	// last item gets margin-bottom, middle items lose both vertical margins.
 	if section.Annotation != nil {
+		// Enter annotation container for margin collapsing tracking.
+		// Use FlagForceTransferMBToLastChild to always transfer container's margin-bottom to the last paragraph.
+		sb.EnterContainer(ContainerAnnotation, FlagForceTransferMBToLastChild)
+
 		// If annotation has an ID, assign it to the first content item
 		if section.Annotation.ID != "" {
 			if _, exists := idToEID[section.Annotation.ID]; !exists {
 				idToEID[section.Annotation.ID] = sb.NextEID()
 			}
 		}
-		itemCount := len(section.Annotation.Items)
-		annotationCtx := NewStyleContext(styles).PushBlock("div", "annotation", itemCount)
+		annotationCtx := NewStyleContext(styles).PushBlock("div", "annotation")
+		// Store container margins for post-processing
+		sb.SetContainerMargins(annotationCtx.ExtractContainerMargins("div", "annotation"))
 		for i := range section.Annotation.Items {
 			processFlowItem(c, &section.Annotation.Items[i], annotationCtx, "annotation", sb, styles, imageResources, ca, idToEID)
-			annotationCtx = annotationCtx.Advance()
 		}
+
+		sb.ExitContainer() // Exit annotation container
 	}
 
 	// Process epigraphs - KFX doesn't use wrapper blocks for epigraphs.
@@ -111,6 +122,9 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 	// This matches KP3 reference output where margin-left is on each paragraph.
 	// Position filtering is applied within each epigraph's items.
 	for _, epigraph := range section.Epigraphs {
+		// Enter epigraph container for margin collapsing tracking.
+		sb.EnterContainer(ContainerEpigraph, 0)
+
 		// If epigraph has an ID, assign it to the first content item
 		if epigraph.Flow.ID != "" {
 			if _, exists := idToEID[epigraph.Flow.ID]; !exists {
@@ -119,22 +133,26 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 			}
 		}
 
-		// Calculate total item count for position filtering (flow items + text authors)
-		totalItems := len(epigraph.Flow.Items) + len(epigraph.TextAuthors)
-		epigraphCtx := NewStyleContext(styles).PushBlock("div", "epigraph", totalItems)
+		epigraphCtx := NewStyleContext(styles).PushBlock("div", "epigraph")
+		// Store container margins for post-processing
+		sb.SetContainerMargins(epigraphCtx.ExtractContainerMargins("div", "epigraph"))
 
 		for i := range epigraph.Flow.Items {
 			processFlowItem(c, &epigraph.Flow.Items[i], epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID)
-			epigraphCtx = epigraphCtx.Advance()
 		}
 		for i := range epigraph.TextAuthors {
 			addParagraphWithImages(c, &epigraph.TextAuthors[i], epigraphCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
-			epigraphCtx = epigraphCtx.Advance()
 		}
+
+		sb.ExitContainer() // Exit epigraph container
 	}
 
 	// Process content items
-	sectionCtx := NewStyleContext(styles).Push("div", "section")
+	// Note: We don't push "section" into the style context because the .section CSS class
+	// has margins meant for the section CONTAINER, not for elements INSIDE the section.
+	// If we pushed "section", its margin-bottom (1em) would incorrectly override paragraph
+	// margins via the class cascade. Section is purely structural in FB2.
+	sectionCtx := NewStyleContext(styles)
 	var lastTitledEntry *TOCEntry
 
 	for i := range section.Content {
@@ -240,6 +258,9 @@ func processFlowItem(c *content.Content, item *fb2.FlowItem, ctx StyleContext, c
 	case fb2.FlowEmptyLine:
 		// KP3 doesn't create content entries for empty-lines. Instead, it adds
 		// the empty-line's margin to the following element's margin-top.
+		// Additionally, the preceding element's margin-bottom is stripped.
+		// This prevents double-spacing (previous mb + empty-line mt).
+		sb.MarkPreviousEntryStripMB()
 		// Extract the margin value from the emptyline style and add to pending margin.
 		styleSpec := "emptyline"
 		margin := ctx.GetEmptyLineMargin(styleSpec, styles)
@@ -313,21 +334,27 @@ func processFlowItem(c *content.Content, item *fb2.FlowItem, ctx StyleContext, c
 // Matches EPUB's appendPoemElement handling: title, epigraphs, subtitles, stanzas, text-authors, date.
 // ctx contains the ancestor context chain (e.g., may already include "cite" if poem is inside cite).
 func processPoem(c *content.Content, poem *fb2.Poem, ctx StyleContext, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
-	// Count all top-level items in poem for position-based margin distribution
-	itemCount := countPoemItems(poem)
+	// Enter poem container for margin collapsing tracking.
+	// Poem is a standard container (no title-block mode).
+	sb.EnterContainer(ContainerPoem, 0)
+	defer sb.ExitContainer()
 
-	// Enter poem container with item count for stack-based margin handling
-	poemCtx := ctx.PushBlock("div", "poem", itemCount)
+	// Enter poem container for block-level margin accumulation
+	poemCtx := ctx.PushBlock("div", "poem")
+	// Store container margins for post-processing
+	sb.SetContainerMargins(poemCtx.ExtractContainerMargins("div", "poem"))
 
 	// Process poem title - uses addTitleAsParagraphs for proper -first/-next styling
 	// (matches EPUB's appendTitleAsDiv pattern)
 	if poem.Title != nil {
 		addTitleAsParagraphs(c, poem.Title, poemCtx, "poem-title", 0, sb, styles, imageResources, ca, idToEID)
-		poemCtx = poemCtx.Advance()
 	}
 
 	// Process poem epigraphs - nested container inside poem
 	for _, epigraph := range poem.Epigraphs {
+		// Enter epigraph container for margin collapsing tracking.
+		sb.EnterContainer(ContainerEpigraph, 0)
+
 		// If epigraph has an ID, assign it to the first content item
 		if epigraph.Flow.ID != "" {
 			if _, exists := idToEID[epigraph.Flow.ID]; !exists {
@@ -335,57 +362,60 @@ func processPoem(c *content.Content, poem *fb2.Poem, ctx StyleContext, sb *Story
 			}
 		}
 
-		// Count items in this epigraph
-		epigraphItems := len(epigraph.Flow.Items) + len(epigraph.TextAuthors)
-		epigraphCtx := poemCtx.PushBlock("div", "epigraph", epigraphItems)
+		epigraphCtx := poemCtx.PushBlock("div", "epigraph")
+		// Store container margins for post-processing
+		sb.SetContainerMargins(epigraphCtx.ExtractContainerMargins("div", "epigraph"))
 
 		for i := range epigraph.Flow.Items {
 			processFlowItem(c, &epigraph.Flow.Items[i], epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID)
-			epigraphCtx = epigraphCtx.Advance()
 		}
 		for i := range epigraph.TextAuthors {
 			addParagraphWithImages(c, &epigraph.TextAuthors[i], epigraphCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
-			epigraphCtx = epigraphCtx.Advance()
 		}
-		poemCtx = poemCtx.Advance()
+
+		sb.ExitContainer() // Exit epigraph container
 	}
 
 	// Process poem subtitles (matches EPUB's poem.Subtitles handling)
 	for i := range poem.Subtitles {
 		addParagraphWithImages(c, &poem.Subtitles[i], poemCtx, "poem-subtitle", 0, sb, styles, imageResources, ca, idToEID)
-		poemCtx = poemCtx.Advance()
 	}
 
 	// Process stanzas - nested container inside poem
 	for _, stanza := range poem.Stanzas {
-		// Count items in this stanza
-		stanzaItems := countStanzaItems(&stanza)
-		// Use title-block margins for stanzas - verses use margin-top for spacing
-		stanzaCtx := poemCtx.PushBlock("div", "stanza", stanzaItems, true)
+		// Enter stanza container for margin collapsing tracking.
+		// Stanzas use:
+		// - FlagStripMiddleMarginBottom: removes mb from all verses except the last
+		// - FlagTransferMBToLastChild: stanza's mb goes TO last verse (not FROM it)
+		// This matches KP3 behavior where spacing between verses comes from margin-top,
+		// and the last verse carries the accumulated stanza margin-bottom.
+		sb.EnterContainer(ContainerStanza, FlagStripMiddleMarginBottom|FlagTransferMBToLastChild)
+
+		// Use stanza context for block-level margin accumulation
+		stanzaCtx := poemCtx.PushBlock("div", "stanza")
+		// Store container margins for post-processing
+		sb.SetContainerMargins(stanzaCtx.ExtractContainerMargins("div", "stanza"))
 
 		// Stanza title - uses addTitleAsParagraphs for proper -first/-next styling
 		// (matches EPUB's appendTitleAsDiv pattern)
 		if stanza.Title != nil {
 			addTitleAsParagraphs(c, stanza.Title, stanzaCtx, "stanza-title", 0, sb, styles, imageResources, ca, idToEID)
-			stanzaCtx = stanzaCtx.Advance()
 		}
 		// Stanza subtitle (matches EPUB's "stanza-subtitle" class)
 		if stanza.Subtitle != nil {
 			addParagraphWithImages(c, stanza.Subtitle, stanzaCtx, "stanza-subtitle", 0, sb, styles, imageResources, ca, idToEID)
-			stanzaCtx = stanzaCtx.Advance()
 		}
 		// Verses
 		for i := range stanza.Verses {
 			addParagraphWithImages(c, &stanza.Verses[i], stanzaCtx, "verse", 0, sb, styles, imageResources, ca, idToEID)
-			stanzaCtx = stanzaCtx.Advance()
 		}
-		poemCtx = poemCtx.Advance()
+
+		sb.ExitContainer() // Exit stanza container
 	}
 
 	// Process text authors
 	for i := range poem.TextAuthors {
 		addParagraphWithImages(c, &poem.TextAuthors[i], poemCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
-		poemCtx = poemCtx.Advance()
 	}
 
 	// Process poem date (matches EPUB's ".date" class)
@@ -398,43 +428,11 @@ func processPoem(c *content.Content, poem *fb2.Poem, ctx StyleContext, sb *Story
 		}
 		if dateText != "" {
 			// Use immediate resolution with container context for proper margin handling.
-			// Date is the last item in poem, so it gets poem's margin-bottom filtered correctly.
 			resolvedStyle := poemCtx.Resolve("p", "date")
 			contentName, offset := ca.Add(dateText)
 			sb.AddContent(SymText, contentName, offset, "", resolvedStyle)
 		}
-		// No Advance() after last item - poemCtx goes out of scope
 	}
-}
-
-// countPoemItems returns the total number of top-level items in a poem.
-// This is used to initialize the container frame's itemCount.
-func countPoemItems(poem *fb2.Poem) int {
-	count := 0
-	if poem.Title != nil {
-		count++
-	}
-	count += len(poem.Epigraphs)
-	count += len(poem.Subtitles)
-	count += len(poem.Stanzas)
-	count += len(poem.TextAuthors)
-	if poem.Date != nil {
-		count++
-	}
-	return count
-}
-
-// countStanzaItems returns the total number of items in a stanza.
-func countStanzaItems(stanza *fb2.Stanza) int {
-	count := 0
-	if stanza.Title != nil {
-		count++
-	}
-	if stanza.Subtitle != nil {
-		count++
-	}
-	count += len(stanza.Verses)
-	return count
 }
 
 // processCite processes cite content using ContentAccumulator.
@@ -442,22 +440,24 @@ func countStanzaItems(stanza *fb2.Stanza) int {
 // followed by text-authors.
 // ctx contains the ancestor context chain (already includes "cite" pushed by caller).
 func processCite(c *content.Content, cite *fb2.Cite, ctx StyleContext, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
-	// Count all items in cite for position-based margin distribution
-	itemCount := len(cite.Items) + len(cite.TextAuthors)
+	// Enter cite container for margin collapsing tracking.
+	// Cite is a standard container (no title-block mode).
+	sb.EnterContainer(ContainerCite, 0)
+	defer sb.ExitContainer()
 
-	// Enter cite container with item count for stack-based margin handling
-	citeCtx := ctx.PushBlock("blockquote", "cite", itemCount)
+	// Enter cite container for block-level margin accumulation
+	citeCtx := ctx.PushBlock("blockquote", "cite")
+	// Store container margins for post-processing
+	sb.SetContainerMargins(citeCtx.ExtractContainerMargins("blockquote", "cite"))
 
 	// Process all cite flow items with full context chain
 	for i := range cite.Items {
 		processFlowItem(c, &cite.Items[i], citeCtx, "cite", sb, styles, imageResources, ca, idToEID)
-		citeCtx = citeCtx.Advance()
 	}
 
 	// Process text authors
 	for i := range cite.TextAuthors {
 		addParagraphWithImages(c, &cite.TextAuthors[i], citeCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
-		citeCtx = citeCtx.Advance()
 	}
 }
 
@@ -481,12 +481,16 @@ func processFootnoteSectionContent(
 	addMoreIndicator func(c *content.Content, para *fb2.Paragraph, ctx StyleContext, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID),
 	addBacklinks func(c *content.Content, sectionID string, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, idToEID eidByFB2ID),
 ) {
+	// Enter footnote section container for margin collapsing tracking.
+	sb.EnterContainer(ContainerFootnote, 0)
+	defer sb.ExitContainer()
+
 	// Process section title FIRST (without registering ID yet)
 	// This matches EPUB behavior where the ID is on the body content, not the title
 	// Unlike body titles, section titles are styled paragraphs, not semantic headings
 	// (matching EPUB's appendTitleAsDiv pattern with "footnote-title" class)
 	if section.Title != nil && len(section.Title.Items) > 0 {
-		titleCtx := NewStyleContext(styles).PushBlock("div", "footnote-title", 1)
+		titleCtx := NewStyleContext(styles).PushBlock("div", "footnote-title")
 		if styles != nil {
 			styles.EnsureBaseStyle("footnote-title")
 		}
@@ -504,6 +508,9 @@ func processFootnoteSectionContent(
 	// Process epigraphs - same pattern as regular sections
 	// KFX doesn't use wrapper blocks for epigraphs; apply styling directly to each paragraph.
 	for _, epigraph := range section.Epigraphs {
+		// Enter epigraph container for margin collapsing tracking.
+		sb.EnterContainer(ContainerEpigraph, 0)
+
 		// If epigraph has an ID, assign it to the first content item
 		if epigraph.Flow.ID != "" {
 			if _, exists := idToEID[epigraph.Flow.ID]; !exists {
@@ -511,18 +518,18 @@ func processFootnoteSectionContent(
 			}
 		}
 
-		// Calculate total item count for position filtering (flow items + text authors)
-		totalItems := len(epigraph.Flow.Items) + len(epigraph.TextAuthors)
-		epigraphCtx := NewStyleContext(styles).PushBlock("div", "epigraph", totalItems)
+		epigraphCtx := NewStyleContext(styles).PushBlock("div", "epigraph")
+		// Store container margins for post-processing
+		sb.SetContainerMargins(epigraphCtx.ExtractContainerMargins("div", "epigraph"))
 
 		for i := range epigraph.Flow.Items {
 			processFlowItem(c, &epigraph.Flow.Items[i], epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID)
-			epigraphCtx = epigraphCtx.Advance()
 		}
 		for i := range epigraph.TextAuthors {
 			addParagraphWithImages(c, &epigraph.TextAuthors[i], epigraphCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
-			epigraphCtx = epigraphCtx.Advance()
 		}
+
+		sb.ExitContainer() // Exit epigraph container
 	}
 
 	// Process section image if present
@@ -542,17 +549,23 @@ func processFootnoteSectionContent(
 
 	// Process annotation if present
 	if section.Annotation != nil {
+		// Enter annotation container for margin collapsing tracking.
+		// Use FlagForceTransferMBToLastChild to always transfer container's margin-bottom to the last paragraph.
+		sb.EnterContainer(ContainerAnnotation, FlagForceTransferMBToLastChild)
+
 		if section.Annotation.ID != "" {
 			if _, exists := idToEID[section.Annotation.ID]; !exists {
 				idToEID[section.Annotation.ID] = sb.NextEID()
 			}
 		}
-		itemCount := len(section.Annotation.Items)
-		annotationCtx := NewStyleContext(styles).PushBlock("div", "annotation", itemCount)
+		annotationCtx := NewStyleContext(styles).PushBlock("div", "annotation")
+		// Store container margins for post-processing
+		sb.SetContainerMargins(annotationCtx.ExtractContainerMargins("div", "annotation"))
 		for i := range section.Annotation.Items {
 			processFlowItem(c, &section.Annotation.Items[i], annotationCtx, "annotation", sb, styles, imageResources, ca, idToEID)
-			annotationCtx = annotationCtx.Advance()
 		}
+
+		sb.ExitContainer() // Exit annotation container
 	}
 
 	// Count paragraphs in section content to determine if "more" indicator is needed
@@ -561,7 +574,7 @@ func processFootnoteSectionContent(
 	isFirstParagraph := true
 
 	// Process section content (paragraphs, poems, etc.)
-	footnoteCtx := NewStyleContext(styles).PushBlock("div", "footnote", 1)
+	footnoteCtx := NewStyleContext(styles).PushBlock("div", "footnote")
 	for i := range section.Content {
 		item := &section.Content[i]
 

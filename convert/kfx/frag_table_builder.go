@@ -40,7 +40,7 @@ func (sb *StorylineBuilder) AddTable(c *content.Content, table *fb2.Table, style
 			if cell.Header {
 				containerStyle = NewStyleContext(styles).Resolve("", "th-container")
 			}
-			styles.MarkUsage(containerStyle, styleUsageWrapper)
+			styles.ResolveStyle(containerStyle, styleUsageWrapper)
 
 			// Determine ancestor tag and text style based on header flag
 			ancestorTag := "td"
@@ -124,7 +124,7 @@ func (sb *StorylineBuilder) AddTable(c *content.Content, table *fb2.Table, style
 	// table scaling to fit within page bounds instead of spanning multiple pages.
 	tableStyle := NewStyleContext(styles).Resolve("", "table")
 	styles.tracer.TraceAssign(traceSymbolName(SymTable), fmt.Sprintf("%d", tableEID), tableStyle, sb.sectionName+"/"+sb.name, "table")
-	styles.MarkUsage(tableStyle, styleUsageWrapper)
+	styles.ResolveStyle(tableStyle, styleUsageWrapper)
 
 	// Get table element properties from CSS (KP3 moves these from style to element)
 	tableProps := styles.GetTableElementProps()
@@ -155,10 +155,12 @@ func (sb *StorylineBuilder) AddTable(c *content.Content, table *fb2.Table, style
 			RawEntry: tableEntry,
 		})
 	} else {
+		sb.entryOrderCounter++
 		sb.contentEntries = append(sb.contentEntries, ContentRef{
-			EID:      tableEID,
-			Type:     SymTable,
-			RawEntry: tableEntry,
+			EID:        tableEID,
+			Type:       SymTable,
+			RawEntry:   tableEntry,
+			EntryOrder: sb.entryOrderCounter,
 		})
 	}
 
@@ -198,7 +200,7 @@ func (sb *StorylineBuilder) buildImageOnlyCellContent(cell fb2.TableCell, cellIm
 			}
 		}
 		imgStyle := NewStyleContext(styles).ResolveImage(imgStyleBase)
-		styles.MarkUsage(imgStyle, styleUsageImage)
+		styles.ResolveStyle(imgStyle, styleUsageImage)
 
 		// Get alt text from the original segment
 		altText := ""
@@ -238,12 +240,12 @@ func (sb *StorylineBuilder) buildTextOnlyCellContent(c *content.Content, cell fb
 	text := nw.String()
 	contentName, offset := ca.Add(text)
 
-	styles.MarkUsage(resolvedTextStyle, styleUsageText)
+	styles.ResolveStyle(resolvedTextStyle, styleUsageText)
 
 	// Segment and deduplicate style events
 	segmentedEvents := SegmentNestedStyleEvents(result.Events)
 	for _, ev := range segmentedEvents {
-		styles.MarkUsage(ev.Style, styleUsageText)
+		styles.ResolveStyle(ev.Style, styleUsageText)
 	}
 
 	// Create text entry inside cell
@@ -301,12 +303,12 @@ func (sb *StorylineBuilder) buildMixedCellContent(c *content.Content, cell fb2.T
 	// Process cell content using shared mixed content processing
 	result := processMixedInlineSegments(cell.Content, styles, c, inlineCtx, imageResources)
 
-	styles.MarkUsage(resolvedTextStyle, styleUsageText)
+	styles.ResolveStyle(resolvedTextStyle, styleUsageText)
 
 	// Segment and deduplicate style events
 	segmentedEvents := SegmentNestedStyleEvents(result.Events)
 	for _, ev := range segmentedEvents {
-		styles.MarkUsage(ev.Style, styleUsageText)
+		styles.ResolveStyle(ev.Style, styleUsageText)
 	}
 
 	// Create text entry with content_list (similar to AddMixedContent)
@@ -330,7 +332,7 @@ func (sb *StorylineBuilder) buildMixedCellContent(c *content.Content, cell fb2.T
 
 			if item.Style != "" {
 				styles.tracer.TraceAssign(traceSymbolName(SymImage)+" (inline/table)", fmt.Sprintf("%d", imgEid), item.Style, sb.sectionName+"/"+sb.name, "")
-				styles.MarkUsage(item.Style, styleUsageImage)
+				styles.ResolveStyle(item.Style, styleUsageImage)
 			}
 
 			imgEntry := NewStruct().

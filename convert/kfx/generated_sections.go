@@ -160,7 +160,7 @@ func (b *tocListBuilder) buildTOCList(entries []*tocPageEntry, isNested bool) (S
 	if !isNested {
 		listStyle := listContext.Resolve("ol", "toc-list")
 		if b.styles != nil {
-			b.styles.MarkUsage(listStyle, styleUsageWrapper)
+			b.styles.ResolveStyle(listStyle, styleUsageWrapper)
 		}
 		if listStyle != "" {
 			list.Set(SymStyle, SymbolByName(listStyle))
@@ -220,12 +220,12 @@ func (b *tocListBuilder) buildTOCTextEntry(entry *tocPageEntry) (StructValue, in
 	// Item style adds "toc-item toc-section" to the context
 	itemStyle := b.styleContext.Resolve("", "toc-item toc-section")
 	if b.styles != nil {
-		b.styles.MarkUsage(itemStyle, styleUsageText)
+		b.styles.ResolveStyle(itemStyle, styleUsageText)
 	}
 	// Link style also inherits context for proper cascade
 	linkStyle := b.styleContext.Resolve("", "link-toc")
 	if b.styles != nil {
-		b.styles.MarkUsage(linkStyle, styleUsageText)
+		b.styles.ResolveStyle(linkStyle, styleUsageText)
 	}
 
 	// Build style event for link (covers entire text)
@@ -305,25 +305,26 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 		contentCounter++
 
 		// Add annotation title with proper heading semantics (same pattern as TOC title)
-		// Note: Annotation title is NOT in a wrapper block, so it uses direct resolution
-		// with PositionFirstAndLast() to keep all margins (top-level entry behavior).
+		// Note: Annotation title is NOT in a wrapper block, so it uses direct resolution.
 		if annotationTitle := titleFromStrings(cfg.Annotation.Title); annotationTitle != nil {
-			titleCtx := NewStyleContext(styles).PushBlock("div", "annotation-title", 1)
+			titleCtx := NewStyleContext(styles).PushBlock("div", "annotation-title")
 			markTitleStylesUsed("", "annotation-title", styles)
 			addTitleAsHeading(c, annotationTitle, titleCtx, "annotation-title", 1, sb, styles, nil, ca, nil)
 		}
 
 		// Process annotation items with full formatting support (links, emphasis, etc.)
 		// Use the same processFlowItem mechanism as body content for consistent rendering.
-		// Position filtering is applied so first item gets wrapper's margin-top,
-		// last item gets margin-bottom, middle items lose both vertical margins.
-		itemCount := len(c.Book.Description.TitleInfo.Annotation.Items)
-		annotationCtx := NewStyleContext(styles).PushBlock("div", "annotation", itemCount)
+		// Enter annotation container for margin collapsing tracking (same as regular section annotations).
+		// Use FlagForceTransferMBToLastChild to always transfer container's margin-bottom to the last paragraph.
+		sb.EnterContainer(ContainerAnnotation, FlagForceTransferMBToLastChild)
+		annotationCtx := NewStyleContext(styles).PushBlock("div", "annotation")
+		// Store container margins for post-processing
+		sb.SetContainerMargins(annotationCtx.ExtractContainerMargins("div", "annotation"))
 		for i := range c.Book.Description.TitleInfo.Annotation.Items {
 			item := &c.Book.Description.TitleInfo.Annotation.Items[i]
 			processFlowItem(c, item, annotationCtx, "annotation", sb, styles, imageResources, ca, idToEID)
-			annotationCtx = annotationCtx.Advance()
 		}
+		sb.ExitContainer() // Exit annotation container
 
 		for name, list := range ca.Finish() {
 			if err := fragments.Add(buildContentFragmentByName(name, list)); err != nil {
@@ -380,7 +381,7 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 		}
 		bookTitle := c.Book.Description.TitleInfo.BookTitle.Value
 		if tocTitle := titleFromStrings(bookTitle, authors); tocTitle != nil {
-			titleCtx := NewStyleContext(styles).PushBlock("div", "toc-title", 1)
+			titleCtx := NewStyleContext(styles).PushBlock("div", "toc-title")
 			markTitleStylesUsed("", "toc-title", styles)
 			addTitleAsHeading(c, tocTitle, titleCtx, "toc-title", 1, sb, styles, nil, ca, nil)
 		}

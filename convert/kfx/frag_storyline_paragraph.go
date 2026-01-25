@@ -64,18 +64,11 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 	// This avoids creating unused styles that would become unreferenced fragments.
 	imageOnlyBlock := !hasTextContent && hasInlineImages
 
-	// Determine if we should resolve style immediately (with position) or defer
-	// If context has position, resolve now with position filtering.
-	// Otherwise, defer resolution to Build() time.
+	// Resolve style immediately for text paragraphs.
 	// Skip for image-only blocks - they use ResolveImageWithDimensions() which creates its own style.
 	var resolvedStyle string
-	var deferredStyleSpec string
-	if ctx.HasPosition() && !imageOnlyBlock {
-		// Immediate resolution with position filtering
+	if !imageOnlyBlock {
 		resolvedStyle = ctx.Resolve(tag, spanningClasses)
-	} else if !imageOnlyBlock {
-		// Deferred resolution - store styleSpec for Build() time
-		deferredStyleSpec = styleSpec
 	}
 
 	// Otherwise, use the original approach (text-only or block image paragraphs)
@@ -101,15 +94,15 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 		// Mark usage only for styles that survived segmentation
 		if styles != nil {
 			for _, ev := range segmentedEvents {
-				styles.MarkUsage(ev.Style, styleUsageText)
+				styles.ResolveStyle(ev.Style, styleUsageText)
 			}
 		}
 
 		var eid int
 		if headingLevel > 0 {
-			eid = sb.AddContentWithHeading(SymText, contentName, offset, deferredStyleSpec, resolvedStyle, segmentedEvents, headingLevel)
+			eid = sb.AddContentWithHeading(SymText, contentName, offset, "", resolvedStyle, segmentedEvents, headingLevel)
 		} else {
-			eid = sb.AddContentAndEvents(SymText, contentName, offset, deferredStyleSpec, resolvedStyle, segmentedEvents)
+			eid = sb.AddContentAndEvents(SymText, contentName, offset, "", resolvedStyle, segmentedEvents)
 		}
 		if para.ID != "" {
 			if _, exists := idToEID[para.ID]; !exists {
@@ -323,17 +316,10 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 
 	// Build the full styleSpec for this paragraph
 	styleSpec := ctx.StyleSpec(tag, spanningClasses)
+	_ = styleSpec // unused after simplification
 
-	// Determine if we should resolve style immediately (with position) or defer
-	var resolvedStyle string
-	var deferredStyleSpec string
-	if ctx.HasPosition() {
-		// Immediate resolution with position filtering
-		resolvedStyle = ctx.Resolve(tag, spanningClasses)
-	} else {
-		// Deferred resolution - store styleSpec for Build() time
-		deferredStyleSpec = styleSpec
-	}
+	// Resolve style immediately
+	resolvedStyle := ctx.Resolve(tag, spanningClasses)
 
 	// Parse spanningClasses for spanning style depth tracking
 	spanningStyleParts := strings.Fields(spanningClasses)
@@ -410,7 +396,7 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 					// Create style_event for the linked image
 					// Kindle requires the $157 (style) field to be present for links to work,
 					// even if the style is empty.
-					emptyStyle := styles.MarkUsage("kfx-link-empty", styleUsageText)
+					emptyStyle := styles.ResolveStyle("kfx-link-empty", styleUsageText)
 					events = append(events, StyleEventRef{
 						Offset:         imgOffset,
 						Length:         1,
@@ -564,13 +550,12 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 	// Mark usage for segmented styles
 	if styles != nil {
 		for _, ev := range segmentedEvents {
-			styles.MarkUsage(ev.Style, styleUsageText)
+			styles.ResolveStyle(ev.Style, styleUsageText)
 		}
 	}
 
 	// Add as mixed content entry with optional heading level
-	// Pass deferredStyleSpec and resolvedStyle (one or the other will be non-empty based on position context)
-	eid := sb.AddMixedContent(deferredStyleSpec, resolvedStyle, items, segmentedEvents, headingLevel)
+	eid := sb.AddMixedContent("", resolvedStyle, items, segmentedEvents, headingLevel)
 	if para.ID != "" {
 		if _, exists := idToEID[para.ID]; !exists {
 			idToEID[para.ID] = eid

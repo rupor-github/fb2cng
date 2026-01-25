@@ -4,9 +4,6 @@ package kfx
 // This margin will be set as the next element's margin-top when Resolve() is called.
 // The margin value should be in line-height units (lh).
 //
-// Additionally, this sets keepMarginBottom so the next element preserves its
-// margin-bottom even if position filtering would normally remove it.
-//
 // This method modifies shared state, so all copies of this context within
 // the same processing scope will see the changes.
 func (sc StyleContext) AddEmptyLineMargin(margin float64) {
@@ -17,7 +14,6 @@ func (sc StyleContext) AddEmptyLineMargin(margin float64) {
 	// Replace (not accumulate) - empty-line margin overwrites the following
 	// element's margin-top, matching KP3 reference behavior.
 	sc.emptyLine.pendingMargin = margin
-	sc.emptyLine.keepMarginBottom = true
 }
 
 // ConsumePendingMargin returns and clears any accumulated empty-line margin.
@@ -31,21 +27,6 @@ func (sc StyleContext) ConsumePendingMargin() float64 {
 	return margin
 }
 
-// ConsumeKeepMarginBottom returns the keepMarginBottom flag without clearing it.
-// Returns true if the current element should keep its margin-bottom.
-//
-// Once an empty-line is encountered, ALL subsequent elements in the block
-// keep their margin-bottom (not just the immediate next element). The flag
-// stays true until the block processing completes.
-func (sc StyleContext) ConsumeKeepMarginBottom() bool {
-	if sc.emptyLine == nil {
-		return false // Safety check - should never happen
-	}
-	// Don't clear the flag - once set by empty-line, all subsequent
-	// elements in the block should keep their margin-bottom
-	return sc.emptyLine.keepMarginBottom
-}
-
 // HasPendingMargin returns true if there's accumulated empty-line margin to apply.
 func (sc StyleContext) HasPendingMargin() bool {
 	if sc.emptyLine == nil {
@@ -54,18 +35,28 @@ func (sc StyleContext) HasPendingMargin() bool {
 	return sc.emptyLine.pendingMargin > 0
 }
 
-// GetEmptyLineMargin extracts the margin-top value from the emptyline style.
-// This returns only the emptyline's own margin, without any inherited context.
-// Returns the margin value in lh units, or 0 if not found.
+// emptyLineDefaultMarginLh is the default margin for empty-line elements in lh units.
+// KP3 uses 0.5lh regardless of the CSS margin value specified for .emptyline.
+// This was determined by analyzing KP3-generated KFX files where CSS has
+// `.emptyline { margin: 1em; }` (which converts to ~0.8333lh) but the actual
+// margin applied to following elements is always 0.5lh.
+const emptyLineDefaultMarginLh = 0.5
+
+// GetEmptyLineMargin returns the margin value for empty-line elements.
+// KP3 uses a fixed value of 0.5lh for empty-line spacing, regardless of
+// the CSS margin specified. This matches the reference KFX output.
+//
+// Note: The CSS `.emptyline { margin: 1em; }` is still used for EPUB rendering,
+// but KFX uses the hardcoded value that matches KP3's behavior.
 func (sc StyleContext) GetEmptyLineMargin(styleSpec string, registry *StyleRegistry) float64 {
-	// Look up the emptyline style directly without context inheritance
-	if def, ok := registry.Get(styleSpec); ok {
-		resolved := registry.resolveInheritance(def)
-		if mt, ok := resolved.Properties[SymMarginTop]; ok {
-			if val, unit, ok := measureParts(mt); ok && unit == SymUnitLh {
-				return val
-			}
-		}
+	// KP3 uses a fixed 0.5lh margin for empty-lines, not the CSS value.
+	// This was verified by comparing CSS input (margin: 1em → 0.8333lh)
+	// with KP3 output (margin-top: 0.5lh on following elements).
+	//
+	// We still check if the style exists to ensure empty-line handling
+	// is only applied when the emptyline class is actually defined.
+	if _, ok := registry.Get(styleSpec); ok {
+		return emptyLineDefaultMarginLh
 	}
 	return 0
 }

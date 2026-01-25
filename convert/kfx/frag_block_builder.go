@@ -34,6 +34,10 @@ func (sb *StorylineBuilder) StartBlock(styleSpec string, styles *StyleRegistry) 
 	eid := sb.eidCounter
 	sb.eidCounter++
 
+	// Enter title-block container for margin collapsing tracking.
+	// Title blocks use FlagTitleBlockMode: spacing via margin-top, first loses mt, last gets mb.
+	sb.EnterContainer(ContainerTitleBlock, FlagTitleBlockMode)
+
 	// Create StyleContext for child resolution - children will be counted in EndBlock
 	// The context will be finalized with proper item count when EndBlock is called
 	ctx := NewStyleContext(styles).Push("div", styleSpec)
@@ -70,6 +74,9 @@ func (sb *StorylineBuilder) EndBlock() {
 	block := sb.blockStack[len(sb.blockStack)-1]
 	sb.blockStack = sb.blockStack[:len(sb.blockStack)-1]
 
+	// Exit the title-block container (entered in StartBlock).
+	sb.ExitContainer()
+
 	// Skip empty wrappers - they have no content and cause position_map validation errors
 	if len(block.children) == 0 {
 		return
@@ -82,10 +89,8 @@ func (sb *StorylineBuilder) EndBlock() {
 		children = append(children, NewContentEntry(child))
 	}
 
-	// Finalize the StyleContext with proper item count and title-block margin mode
-	// Title blocks use margin-top based spacing (first loses margin-top, non-last lose margin-bottom)
-	childCount := len(block.children)
-	ctx := block.ctx.PushBlock("", "", childCount, true) // titleBlockMargins=true
+	// Finalize the StyleContext for block-level margin accumulation
+	ctx := block.ctx.PushBlock("", "")
 
 	// Create wrapper with StyleSpec for deferred resolution at Build() time
 	wrapperRef := ContentRef{
@@ -96,7 +101,7 @@ func (sb *StorylineBuilder) EndBlock() {
 	}
 
 	// Store children refs and context for deferred style resolution at Build() time.
-	// Child styles are resolved via StyleContext.Resolve() with proper position filtering.
+	// Child styles are resolved via StyleContext.Resolve().
 	wrapperRef.childRefs = block.children
 	wrapperRef.styleCtx = &ctx
 
@@ -108,7 +113,20 @@ func (sb *StorylineBuilder) EndBlock() {
 }
 
 // addEntry is the internal method that routes content to the appropriate destination.
+// It also sets the container tracking fields from the current container stack for margin collapsing.
 func (sb *StorylineBuilder) addEntry(ref ContentRef) int {
+	// Set container tracking fields for margin collapsing post-processing.
+	// These fields are used by buildContentTree() to reconstruct the container hierarchy.
+	ref.ContainerID = sb.CurrentContainerID()
+	ref.ParentID = sb.ParentContainerID()
+	ref.ContainerKind = sb.CurrentContainerKind()
+	ref.ContainerFlags = sb.CurrentContainerFlags()
+
+	// Set entry order for correct sibling ordering in the margin collapsing tree.
+	// This ensures content entries are ordered relative to container entries.
+	sb.entryOrderCounter++
+	ref.EntryOrder = sb.entryOrderCounter
+
 	if len(sb.blockStack) > 0 {
 		// Add to current block's children
 		sb.blockStack[len(sb.blockStack)-1].children = append(sb.blockStack[len(sb.blockStack)-1].children, ref)
@@ -156,12 +174,12 @@ func (sb *StorylineBuilder) resolveChildStyles(wrapper *ContentRef) {
 				// without text-specific inheritance (no line-height from kfx-unknown)
 				_, classes := parseStyleSpec(child.StyleSpec)
 				child.Style = ctx.ResolveImage(classes)
-				sb.styles.MarkUsage(child.Style, styleUsageImage)
+				sb.styles.ResolveStyle(child.Style, styleUsageImage)
 			} else {
 				// Text elements: use StyleContext.Resolve() for proper inheritance
 				tag, classes := parseStyleSpec(child.StyleSpec)
 				child.Style = ctx.Resolve(tag, classes)
-				sb.styles.MarkUsage(child.Style, styleUsageText)
+				sb.styles.ResolveStyle(child.Style, styleUsageText)
 			}
 
 			// For RawEntry children (e.g., mixed content with images), update the style in the entry
@@ -170,11 +188,25 @@ func (sb *StorylineBuilder) resolveChildStyles(wrapper *ContentRef) {
 			}
 		}
 
-		// Advance context position for next child (affects text elements)
-		*ctx = ctx.Advance()
-
 		// Convert to content entry
 		wrapper.Children = append(wrapper.Children, NewContentEntry(*child))
+	}
+}
+
+// rebuildWrapperChildren rebuilds Children for all wrapper entries from childRefs.
+// This is called after margin collapsing to ensure Children have the updated styles.
+// The Children array is built before margin collapsing (in EndBlock or resolveChildStyles),
+// but childRefs are updated by applyCollapsedMargins with new styles.
+func (sb *StorylineBuilder) rebuildWrapperChildren() {
+	for i := range sb.contentEntries {
+		entry := &sb.contentEntries[i]
+		if len(entry.childRefs) > 0 {
+			// Rebuild Children from childRefs with updated styles
+			entry.Children = make([]any, 0, len(entry.childRefs))
+			for _, child := range entry.childRefs {
+				entry.Children = append(entry.Children, NewContentEntry(child))
+			}
+		}
 	}
 }
 
@@ -229,7 +261,7 @@ func (sb *StorylineBuilder) applyStorylinePositionFiltering() {
 		// Trace assignment for wrappers
 		if len(entry.Children) > 0 {
 			sb.styles.tracer.TraceAssign("wrapper", fmt.Sprintf("%d", entry.EID), resolvedStyle, sb.sectionName+"/"+sb.name, entry.StyleSpec)
-			sb.styles.MarkUsage(resolvedStyle, styleUsageWrapper)
+			sb.styles.ResolveStyle(resolvedStyle, styleUsageWrapper)
 		}
 	}
 }

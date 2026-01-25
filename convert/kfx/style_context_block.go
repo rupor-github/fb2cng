@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// PushBlock enters a block container scope with margin distribution based on item count.
+// PushBlock enters a block container scope with margin-left/right accumulation.
 //
 // Unlike Push() which only passes CSS-inherited properties, PushBlock() also passes
 // margin-left and margin-right so children are properly indented within the container.
@@ -19,23 +19,10 @@ import (
 // margin, enabling YJCumulativeInSameContainerRuleMerger to avoid double-counting when
 // the same style is applied again during resolveProperties.
 //
-// itemCount: total number of items that will be processed in this container.
-// Use Advance() after processing each item to move to the next position.
-// Use itemCount=1 for single-element containers where no margin distribution is needed.
-//
-// titleBlockMargins: optional flag to use title-block margin style. When true, spacing
-// between elements is via margin-top on following elements (first element loses margin-top).
-// When false (default), elements keep their margin-bottom for inter-element spacing.
-// Use true for poems/stanzas where verses use margin-top spacing.
-//
-// The container's vertical margins are pushed onto the stack and will be
-// distributed to first/last children when Resolve() is called.
-func (sc StyleContext) PushBlock(tag, classes string, itemCount int, titleBlockMargins ...bool) StyleContext {
-	// Ensure itemCount is at least 1 for single-element containers
-	if itemCount < 1 {
-		itemCount = 1
-	}
-
+// Vertical margins (margin-top/bottom) are handled by post-processing in CollapseMargins(),
+// not by this method. Use ExtractContainerMargins() to get container margins for
+// SetContainerMargins() calls.
+func (sc StyleContext) PushBlock(tag, classes string) StyleContext {
 	// Copy existing inherited properties
 	newInherited := make(map[KFXSymbol]any, len(sc.inherited))
 	maps.Copy(newInherited, sc.inherited)
@@ -52,9 +39,6 @@ func (sc StyleContext) PushBlock(tag, classes string, itemCount int, titleBlockM
 			contributors: newContributors,
 		}
 	}
-
-	// Collect container's resolved properties for margin extraction
-	var containerProps map[KFXSymbol]any
 
 	// mergeBlockProperty applies block-inherited properties with cumulative merge for margins.
 	// This matches KP3's behavior where nested block margins accumulate.
@@ -107,7 +91,6 @@ func (sc StyleContext) PushBlock(tag, classes string, itemCount int, titleBlockM
 	if tag != "" && sc.registry != nil {
 		if def, ok := sc.registry.Get(tag); ok {
 			resolved := sc.registry.resolveInheritance(def)
-			containerProps = resolved.Properties
 			for sym, val := range resolved.Properties {
 				mergeBlockProperty(sym, val, tag)
 			}
@@ -123,12 +106,7 @@ func (sc StyleContext) PushBlock(tag, classes string, itemCount int, titleBlockM
 				sc.registry.EnsureBaseStyle(class)
 				if def, ok := sc.registry.Get(class); ok {
 					resolved := sc.registry.resolveInheritance(def)
-					// Class properties override tag properties
-					if containerProps == nil {
-						containerProps = make(map[KFXSymbol]any)
-					}
 					for sym, val := range resolved.Properties {
-						containerProps[sym] = val
 						mergeBlockProperty(sym, val, class)
 					}
 				}
@@ -140,49 +118,57 @@ func (sc StyleContext) PushBlock(tag, classes string, itemCount int, titleBlockM
 	newScopes := append(sc.scopes, StyleScope{Tag: tag, Classes: classList})
 
 	// Build the new context
-	newCtx := StyleContext{
+	return StyleContext{
 		registry:      sc.registry,
 		inherited:     newInherited,
 		marginOrigins: newMarginOrigins,
 		scopes:        newScopes,
 		emptyLine:     sc.emptyLine, // Preserve empty-line tracking
 	}
+}
 
-	// Push container frame onto stack
-	mt := extractMarginValue(containerProps, SymMarginTop)
-	mb := extractMarginValue(containerProps, SymMarginBottom)
-
-	// Determine if this container is the last item in its parent.
-	// This affects whether the container's margin-bottom should be applied to its last child.
-	isLastInParent := false
-	if len(sc.containerStack) > 0 {
-		parentFrame := sc.containerStack[len(sc.containerStack)-1]
-		isLastInParent = parentFrame.currentItem == parentFrame.itemCount-1
-	} else {
-		// Top-level container (no parent container) - treat as last
-		isLastInParent = true
+// ExtractContainerMargins resolves the CSS for a container and returns its vertical margins.
+// This is used to pass container margins to StorylineBuilder.SetContainerMargins()
+// for post-processing margin collapsing.
+//
+// tag: HTML element type for the container (e.g., "div", "blockquote")
+// classes: space-separated CSS classes (e.g., "poem", "annotation")
+// Returns (marginTop, marginBottom) in line-height units.
+func (sc StyleContext) ExtractContainerMargins(tag, classes string) (mt, mb float64) {
+	if sc.registry == nil {
+		return 0, 0
 	}
 
-	// Check if title-block margin style was requested
-	useTitleBlockMargins := len(titleBlockMargins) > 0 && titleBlockMargins[0]
+	// Collect container's resolved properties
+	var containerProps map[KFXSymbol]any
 
-	// Copy parent's container stack and push new frame
-	newStack := make([]containerFrame, len(sc.containerStack), len(sc.containerStack)+1)
-	copy(newStack, sc.containerStack)
-	newStack = append(newStack, containerFrame{
-		marginTop:         mt,
-		marginBottom:      mb,
-		itemCount:         itemCount,
-		currentItem:       0,
-		isLastInParent:    isLastInParent,
-		titleBlockMargins: useTitleBlockMargins,
-	})
-	newCtx.containerStack = newStack
-
-	// Trace container entry if tracer is enabled
-	if sc.registry != nil && sc.registry.Tracer().IsEnabled() {
-		sc.registry.Tracer().TraceContainerEnter(tag, classes, itemCount, mt, mb, isLastInParent, useTitleBlockMargins, newCtx.ScopePath(), newCtx.ContainerPath())
+	// Get properties from tag
+	if tag != "" {
+		if def, ok := sc.registry.Get(tag); ok {
+			resolved := sc.registry.resolveInheritance(def)
+			containerProps = resolved.Properties
+		}
 	}
 
-	return newCtx
+	// Get properties from classes (override tag properties)
+	if classes != "" {
+		classList := strings.Fields(classes)
+		for _, class := range classList {
+			sc.registry.EnsureBaseStyle(class)
+			if def, ok := sc.registry.Get(class); ok {
+				resolved := sc.registry.resolveInheritance(def)
+				if containerProps == nil {
+					containerProps = make(map[KFXSymbol]any)
+				}
+				for sym, val := range resolved.Properties {
+					containerProps[sym] = val
+				}
+			}
+		}
+	}
+
+	// Extract margin values
+	mt = extractMarginValue(containerProps, SymMarginTop)
+	mb = extractMarginValue(containerProps, SymMarginBottom)
+	return mt, mb
 }

@@ -31,8 +31,9 @@ func (sc StyleContext) ResolveImage(classes string) string {
 		}
 	}
 
-	// Apply vertical margin distribution from container stack
-	sc.applyContainerMargins(merged)
+	// Note: Container margin distribution is now handled by post-processing in
+	// CollapseMargins() for centralized margin logic. Images participate in
+	// margin collapsing like other block elements.
 
 	// Use RegisterResolvedRaw to avoid adding kfx-unknown base (no line-height for images)
 	// Standard filtering (height: auto, table props) is still applied
@@ -52,20 +53,20 @@ func (sc StyleContext) ResolveImage(classes string) string {
 //
 // Block image behavior:
 //   - Standalone block images (blockStyle contains "image"):
-//   - Full-width (≥512px): Fixed 2.6lh margins (KP3 behavior), NO position filtering
-//   - Smaller: Position filtering applies from containerStack
+//   - Full-width (≥512px): Fixed 2.6lh margins (KP3 behavior), NO margin collapsing
+//   - Smaller: Margins from CSS, participate in post-processing margin collapsing
 //   - Always centered (box-align: center)
 //   - Images inside other blocks (paragraph, subtitle, etc.):
 //   - Inherit text-indent as margin-left (KP3 aligns such images with paragraph text)
 //   - Inherit margin-left from container context
-//   - Position filtering applies
+//   - Margins from CSS, participate in margin collapsing
 //   - Centered only if block has text-align: center
 //
 // Inline image behavior:
 //   - Uses em dimensions (width/height converted from pixels using 16px base)
 //   - baseline-style: center for vertical alignment within text
 //   - Applies properties from "image-inline" CSS style
-//   - No position filtering (inline images don't participate in margin collapsing)
+//   - No margin collapsing (inline images don't participate in margin collapsing)
 //
 // Returns the registered style name.
 func (sc StyleContext) ResolveImageWithDimensions(kind ImageKind, imageWidth, imageHeight int, blockStyle string) string {
@@ -199,10 +200,9 @@ func (sc StyleContext) resolveBlockImage(props map[KFXSymbol]any, imageWidth int
 		// NO position filtering - these always get the same margins
 		props[SymMarginTop] = DimensionValue(2.6, SymUnitLh)
 		props[SymMarginBottom] = DimensionValue(2.6, SymUnitLh)
-	} else {
-		// All other block images: apply position-based margins from container stack
-		sc.applyContainerMargins(props)
 	}
+	// Note: For other block images, margins come from CSS and will be processed
+	// by post-processing CollapseMargins() for centralized margin logic.
 
 	return sc.registry.RegisterResolvedRaw(props)
 }

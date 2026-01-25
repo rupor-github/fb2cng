@@ -200,7 +200,7 @@ func addTitleAsHeading(c *content.Content, title *fb2.Title, ctx StyleContext, h
 				breakStyle := descendantPrefix + "-break"
 				resolved := breakStyle
 				if styles != nil {
-					resolved = styles.MarkUsage(breakStyle, styleUsageText)
+					resolved = styles.ResolveStyle(breakStyle, styleUsageText)
 				}
 				events = append(events, StyleEventRef{
 					Offset: breakStart,
@@ -234,7 +234,7 @@ func addTitleAsHeading(c *content.Content, title *fb2.Title, ctx StyleContext, h
 				styleName := descendantPrefix + suffixFromParaStyle(paraStyle, headerStyleBase)
 				resolved := styleName
 				if styles != nil {
-					resolved = styles.MarkUsage(styleName, styleUsageText)
+					resolved = styles.ResolveStyle(styleName, styleUsageText)
 				}
 				events = append(events, StyleEventRef{
 					Offset: paraStart,
@@ -253,7 +253,7 @@ func addTitleAsHeading(c *content.Content, title *fb2.Title, ctx StyleContext, h
 			emptylineStyle := descendantPrefix + "-emptyline"
 			resolved := emptylineStyle
 			if styles != nil {
-				resolved = styles.MarkUsage(emptylineStyle, styleUsageText)
+				resolved = styles.ResolveStyle(emptylineStyle, styleUsageText)
 			}
 			events = append(events, StyleEventRef{
 				Offset: emptylineStart,
@@ -282,7 +282,7 @@ func addTitleAsHeading(c *content.Content, title *fb2.Title, ctx StyleContext, h
 	// Mark usage only for styles that survived segmentation
 	if styles != nil {
 		for _, ev := range segmentedEvents {
-			styles.MarkUsage(ev.Style, styleUsageText)
+			styles.ResolveStyle(ev.Style, styleUsageText)
 		}
 	}
 

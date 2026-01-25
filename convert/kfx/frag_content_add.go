@@ -14,7 +14,7 @@ func (sb *StorylineBuilder) AddContent(contentType KFXSymbol, contentName string
 		// Only mark usage now if no styleSpec (immediate style, won't be re-resolved)
 		// Deferred styles (with styleSpec) are marked after position filtering in Build()
 		if styleSpec == "" {
-			sb.styles.MarkUsage(style, styleUsageText)
+			sb.styles.ResolveStyle(style, styleUsageText)
 		}
 	}
 
@@ -39,7 +39,7 @@ func (sb *StorylineBuilder) AddContentAndEvents(contentType KFXSymbol, contentNa
 		// Only mark usage now if no styleSpec (immediate style, won't be re-resolved)
 		// Deferred styles (with styleSpec) are marked after position filtering in Build()
 		if styleSpec == "" {
-			sb.styles.MarkUsage(style, styleUsageText)
+			sb.styles.ResolveStyle(style, styleUsageText)
 		}
 	}
 
@@ -67,7 +67,7 @@ func (sb *StorylineBuilder) AddFootnoteContentAndEvents(contentType KFXSymbol, c
 		// Only mark usage now if no styleSpec (immediate style, won't be re-resolved)
 		// Deferred styles (with styleSpec) are marked after position filtering in Build()
 		if styleSpec == "" {
-			sb.styles.MarkUsage(style, styleUsageText)
+			sb.styles.ResolveStyle(style, styleUsageText)
 		}
 	}
 
@@ -93,7 +93,7 @@ func (sb *StorylineBuilder) AddContentWithHeading(contentType KFXSymbol, content
 		// Only mark usage now if no styleSpec (immediate style, won't be re-resolved)
 		// Deferred styles (with styleSpec) are marked after position filtering in Build()
 		if styleSpec == "" {
-			sb.styles.MarkUsage(style, styleUsageText)
+			sb.styles.ResolveStyle(style, styleUsageText)
 		}
 	}
 
@@ -116,7 +116,7 @@ func (sb *StorylineBuilder) AddImage(resourceName, style, altText string) int {
 
 	if style != "" && sb.styles != nil {
 		sb.styles.tracer.TraceAssign(traceSymbolName(SymImage), fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name, "")
-		sb.styles.MarkUsage(style, styleUsageImage)
+		sb.styles.ResolveStyle(style, styleUsageImage)
 	}
 
 	return sb.addEntry(ContentRef{
@@ -137,7 +137,7 @@ func (sb *StorylineBuilder) AddInlineImage(resourceName, style, altText string) 
 
 	if style != "" && sb.styles != nil {
 		sb.styles.tracer.TraceAssign(traceSymbolName(SymImage)+" (inline)", fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name, "")
-		sb.styles.MarkUsage(style, styleUsageImage)
+		sb.styles.ResolveStyle(style, styleUsageImage)
 	}
 
 	return sb.addEntry(ContentRef{
@@ -167,7 +167,7 @@ func (sb *StorylineBuilder) AddMixedContent(styleSpec, style string, items []Inl
 	// For immediate styles (no styleSpec), mark usage now
 	if style != "" && styleSpec == "" && sb.styles != nil {
 		sb.styles.tracer.TraceAssign(traceSymbolName(SymText)+" (mixed)", fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name, "")
-		sb.styles.MarkUsage(style, styleUsageText)
+		sb.styles.ResolveStyle(style, styleUsageText)
 	}
 
 	// Build content_list array with text strings and image entries
@@ -180,7 +180,7 @@ func (sb *StorylineBuilder) AddMixedContent(styleSpec, style string, items []Inl
 
 			if item.Style != "" && sb.styles != nil {
 				sb.styles.tracer.TraceAssign(traceSymbolName(SymImage)+" (inline/mixed)", fmt.Sprintf("%d", imgEid), item.Style, sb.sectionName+"/"+sb.name, "")
-				sb.styles.MarkUsage(item.Style, styleUsageImage)
+				sb.styles.ResolveStyle(item.Style, styleUsageImage)
 			}
 
 			imgEntry := NewStruct().
@@ -326,6 +326,8 @@ func (sb *StorylineBuilder) AddRawEntry(entry StructValue) {
 	if len(sb.blockStack) > 0 {
 		sb.blockStack[len(sb.blockStack)-1].children = append(sb.blockStack[len(sb.blockStack)-1].children, ref)
 	} else {
+		sb.entryOrderCounter++
+		ref.EntryOrder = sb.entryOrderCounter
 		sb.contentEntries = append(sb.contentEntries, ref)
 	}
 }

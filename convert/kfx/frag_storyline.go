@@ -383,7 +383,7 @@ func addEndVignette(book *fb2.FictionBook, sb *StorylineBuilder, styles *StyleRe
 	// End vignettes get their spacing from the preceding element's margin-bottom
 	resolved := ""
 	if styles != nil {
-		resolved = styles.EnsureStyle("image-vignette-end")
+		resolved = styles.ResolveStyle("image-vignette-end", styleUsageText)
 	}
 	sb.AddImage(imgInfo.ResourceName, resolved, "") // Vignettes are decorative, no alt text
 }
@@ -439,17 +439,13 @@ func processBodyIntroContent(c *content.Content, body *fb2.Body, sb *StorylineBu
 			}
 		}
 
-		// Calculate total item count for position filtering (flow items + text authors)
-		totalItems := len(epigraph.Flow.Items) + len(epigraph.TextAuthors)
-		epigraphCtx := NewStyleContext(styles).PushBlock("div", "epigraph", totalItems)
+		epigraphCtx := NewStyleContext(styles).PushBlock("div", "epigraph")
 
 		for i := range epigraph.Flow.Items {
 			processFlowItem(c, &epigraph.Flow.Items[i], epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID)
-			epigraphCtx = epigraphCtx.Advance()
 		}
 		for i := range epigraph.TextAuthors {
 			addParagraphWithImages(c, &epigraph.TextAuthors[i], epigraphCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
-			epigraphCtx = epigraphCtx.Advance()
 		}
 	}
 
@@ -514,7 +510,7 @@ func addBacklinkParagraph(c *content.Content, refs []content.BackLinkRef, sb *St
 
 	// Mark link style usage (paragraph style will be marked in Build() after position filtering)
 	if styles != nil {
-		styles.MarkUsage(resolvedLink, styleUsageText)
+		styles.ResolveStyle(resolvedLink, styleUsageText)
 	}
 
 	// Add the content entry: paragraph uses container style, events use link style
@@ -741,7 +737,7 @@ func addParagraphWithMoreIndicator(c *content.Content, para *fb2.Paragraph, ctx 
 	segmentedEvents := SegmentNestedStyleEvents(events)
 	if styles != nil {
 		for _, ev := range segmentedEvents {
-			styles.MarkUsage(ev.Style, styleUsageText)
+			styles.ResolveStyle(ev.Style, styleUsageText)
 		}
 	}
 

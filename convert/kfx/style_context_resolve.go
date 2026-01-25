@@ -208,8 +208,8 @@ func (sc StyleContext) handleContainerAwareMargins(merged, props map[KFXSymbol]a
 		tracer = sc.registry.Tracer()
 	}
 
-	// Get container path for tracing
-	containerPath := sc.ContainerPath()
+	// Get scope path for tracing
+	scopePath := sc.ScopePath()
 
 	// Create a copy without margins (they'll be handled separately)
 	nonMarginProps := make(map[KFXSymbol]any, len(props))
@@ -225,7 +225,7 @@ func (sc StyleContext) handleContainerAwareMargins(merged, props map[KFXSymbol]a
 			if origin != nil && origin.contributors[styleName] {
 				// Same container: style already contributed, SKIP to avoid double-counting
 				if tracer.IsEnabled() {
-					tracer.TraceMarginAccumulate(marginName, styleName, "skip", origin.value, val, merged[sym], containerPath)
+					tracer.TraceMarginAccumulate(marginName, styleName, "skip", origin.value, val, merged[sym], scopePath)
 				}
 				continue
 			}
@@ -235,20 +235,20 @@ func (sc StyleContext) handleContainerAwareMargins(merged, props map[KFXSymbol]a
 				if accumulated, ok := mergeCumulative(existing, val); ok {
 					merged[sym] = accumulated
 					if tracer.IsEnabled() {
-						tracer.TraceMarginAccumulate(marginName, styleName, "accumulate", existing, val, accumulated, containerPath)
+						tracer.TraceMarginAccumulate(marginName, styleName, "accumulate", existing, val, accumulated, scopePath)
 					}
 				} else {
 					// Fallback: override if can't accumulate
 					merged[sym] = val
 					if tracer.IsEnabled() {
-						tracer.TraceMarginAccumulate(marginName, styleName, "override", existing, val, val, containerPath)
+						tracer.TraceMarginAccumulate(marginName, styleName, "override", existing, val, val, scopePath)
 					}
 				}
 			} else {
 				// No existing value, just set
 				merged[sym] = val
 				if tracer.IsEnabled() {
-					tracer.TraceMarginAccumulate(marginName, styleName, "set", nil, val, val, containerPath)
+					tracer.TraceMarginAccumulate(marginName, styleName, "set", nil, val, val, scopePath)
 				}
 			}
 			continue
@@ -318,15 +318,13 @@ func (sc StyleContext) ResolveProperty(tag, classes string, prop KFXSymbol) any 
 // Vertical margins are computed based on container position (from containerStack or
 // legacy wrapperMargins/position mechanism).
 //
-// KP3 position-based margin handling:
-// - First element (not last): ADD wrapper's margin-top, KEEP own margin-bottom
-// - Last element (not first): REMOVE own margin-top, REPLACE own margin-bottom with wrapper's
-// - Single element (first AND last): ADD wrapper's margin-top, REPLACE margin-bottom with wrapper's
-// - Middle elements: REMOVE both margin-top and margin-bottom
-//
 // Empty-line handling:
 // - Element after empty-line gets margin-top from empty-line (replaces own margin-top)
 // - Element after empty-line keeps its margin-bottom (even if middle element)
+//
+// Note: Container margin distribution and title-block filtering are now handled by
+// post-processing in CollapseMargins() for centralized margin logic. This method
+// only handles CSS property resolution and empty-line margin injection.
 //
 // tag: HTML element type ("p", "h1", "span", etc.)
 // classes: space-separated CSS classes (or "" for none)
@@ -334,16 +332,26 @@ func (sc StyleContext) ResolveProperty(tag, classes string, prop KFXSymbol) any 
 func (sc StyleContext) Resolve(tag, classes string) string {
 	merged := sc.resolveProperties(tag, classes)
 
-	// Apply vertical margin distribution from container stack
-	sc.applyContainerMargins(merged)
-
-	// Consume any pending empty-line margin and set as margin-top.
+	// Consume any pending empty-line margin and apply as margin-top.
 	// This implements KP3 behavior where empty-lines don't create content entries
-	// but instead set the following element's margin-top to the empty-line's margin.
-	// The empty-line margin replaces (not adds to) the element's own margin-top.
+	// but instead contribute to the following element's margin-top.
+	//
+	// The empty-line margin is applied using max(emptyline, element's own margin):
+	// - If element has no margin-top or smaller margin-top: use emptyline's 0.5lh
+	// - If element has larger margin-top (e.g., subtitle's 0.8333lh): keep element's margin
 	pendingMargin := sc.ConsumePendingMargin()
 	if pendingMargin > 0 {
-		merged[SymMarginTop] = DimensionValue(pendingMargin, SymUnitLh)
+		existingMargin := 0.0
+		if existing, ok := merged[SymMarginTop]; ok {
+			if val, unit, ok := measureParts(existing); ok && unit == SymUnitLh {
+				existingMargin = val
+			}
+		}
+		// Use the larger of the two margins
+		if pendingMargin > existingMargin {
+			merged[SymMarginTop] = DimensionValue(pendingMargin, SymUnitLh)
+		}
+		// If element has larger margin, keep it (don't override)
 	}
 
 	return sc.registry.RegisterResolved(merged)
@@ -364,97 +372,6 @@ func (sc StyleContext) ResolveNoMark(tag, classes string) string {
 	// used for style events within paragraph text, not block elements.
 
 	return sc.registry.RegisterResolvedNoMark(merged)
-}
-
-// applyContainerMargins applies vertical margin distribution from the container stack.
-//
-// Two margin styles are supported based on frame.titleBlockMargins:
-//
-// Standard style (titleBlockMargins=false): spacing via margin-bottom
-//   - First child: gets container's margin-top, keeps own margin-bottom
-//   - Middle children: keeps own margin-top and margin-bottom
-//   - Last child: keeps own margin-top, gets container's margin-bottom
-//   - Single child: gets container's margins (if provided), else keeps own
-//
-// Title-block style (titleBlockMargins=true): spacing via margin-top
-//   - First child: gets container's margin-top (replacing own), loses margin-bottom
-//   - Non-first/non-last children: keep margin-top (creates spacing), lose margin-bottom
-//   - Last child: keeps margin-top, gets container's margin-bottom
-//   - Single child: gets container's margin-top, gets container's margin-bottom
-func (sc StyleContext) applyContainerMargins(merged map[KFXSymbol]any) {
-	if len(sc.containerStack) == 0 {
-		return
-	}
-
-	frame := sc.containerStack[len(sc.containerStack)-1]
-	pos := PositionFromIndex(frame.currentItem, frame.itemCount)
-
-	// Capture original margins for tracing
-	var tracer *StyleTracer
-	var originalMT, originalMB float64
-	if sc.registry != nil {
-		tracer = sc.registry.Tracer()
-		if tracer.IsEnabled() {
-			originalMT = extractMarginValue(merged, SymMarginTop)
-			originalMB = extractMarginValue(merged, SymMarginBottom)
-		}
-	}
-
-	// Determine if container's margin-bottom should be applied to the last child.
-	// For top-level containers: always apply.
-	// For nested containers: apply only if this container is NOT the last item in parent.
-	applyContainerMarginBottom := len(sc.containerStack) == 1 || !frame.isLastInParent
-
-	// Track which container margins were applied
-	var appliedContainerMT, appliedContainerMB float64
-
-	if frame.titleBlockMargins {
-		// Title-block style: use unified filtering logic
-		applyTitleBlockFiltering(merged, pos)
-
-		// First element: apply container's margin-top (if any)
-		if pos.IsFirst && frame.marginTop > 0 {
-			merged[SymMarginTop] = DimensionValue(frame.marginTop, SymUnitLh)
-			appliedContainerMT = frame.marginTop
-		}
-
-		// Last element gets container's margin-bottom if applicable
-		if pos.IsLast && applyContainerMarginBottom && frame.marginBottom > 0 {
-			merged[SymMarginBottom] = DimensionValue(frame.marginBottom, SymUnitLh)
-			appliedContainerMB = frame.marginBottom
-		}
-	} else {
-		// Standard style: spacing via margin-bottom on elements
-		if pos.IsFirst {
-			// First element: use container's margin-top
-			if frame.marginTop > 0 {
-				merged[SymMarginTop] = DimensionValue(frame.marginTop, SymUnitLh)
-				appliedContainerMT = frame.marginTop
-			}
-		}
-		// Non-first elements keep their margin-top
-		// All elements keep their margin-bottom for inter-element spacing
-
-		// Last element gets container's margin-bottom if applicable
-		if pos.IsLast && applyContainerMarginBottom && frame.marginBottom > 0 {
-			merged[SymMarginBottom] = DimensionValue(frame.marginBottom, SymUnitLh)
-			appliedContainerMB = frame.marginBottom
-		}
-	}
-
-	// Trace position-based margin resolution
-	if tracer.IsEnabled() {
-		appliedMT := extractMarginValue(merged, SymMarginTop)
-		appliedMB := extractMarginValue(merged, SymMarginBottom)
-		tracer.TracePositionResolve(
-			pos.String(),
-			[2]float64{originalMT, originalMB},
-			[2]float64{appliedMT, appliedMB},
-			[2]float64{appliedContainerMT, appliedContainerMB},
-			sc.ScopePath(),
-			sc.ContainerPath(),
-		)
-	}
 }
 
 // StyleSpec returns the raw style specification string for an element within this context.

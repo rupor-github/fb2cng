@@ -89,44 +89,6 @@ func (p ElementPosition) String() string {
 	return "middle"
 }
 
-// applyTitleBlockFiltering applies title-block margin filtering to a property map.
-// This is the single source of truth for title-block margin logic, used by both
-// StyleContext.Resolve() and ResolveStyle().
-//
-// Title-block mode (used for poems/stanzas and wrapper blocks with vignettes):
-//   - First element: REMOVES margin-top (container/wrapper provides spacing)
-//   - Non-first elements: KEEPS margin-top (creates spacing after preceding element)
-//   - Non-last elements: REMOVES margin-bottom (spacing is via margin-top on next element)
-//   - Last element: KEEPS margin-bottom (or gets container's margin-bottom)
-//
-// The function modifies props in place and returns a list of removed property symbols.
-// If props is nil or empty, returns nil.
-func applyTitleBlockFiltering(props map[KFXSymbol]any, pos ElementPosition) []KFXSymbol {
-	if len(props) == 0 {
-		return nil
-	}
-
-	var removed []KFXSymbol
-
-	// First element: remove margin-top
-	if pos.IsFirst {
-		if _, exists := props[SymMarginTop]; exists {
-			delete(props, SymMarginTop)
-			removed = append(removed, SymMarginTop)
-		}
-	}
-
-	// Non-last elements: remove margin-bottom
-	if !pos.IsLast {
-		if _, exists := props[SymMarginBottom]; exists {
-			delete(props, SymMarginBottom)
-			removed = append(removed, SymMarginBottom)
-		}
-	}
-
-	return removed
-}
-
 // StyleDef defines a KFX style with its properties.
 type StyleDef struct {
 	Name       string            // Style name (becomes local symbol)

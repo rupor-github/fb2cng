@@ -58,6 +58,65 @@ func (sr *StyleRegistry) BuildExternalLinkFragments() []*Fragment {
 	return sr.externalLinks.BuildFragments()
 }
 
+// RecomputeUsedStyles scans content fragments and marks which styles are actually referenced.
+// This must be called before BuildFragments to ensure only used styles are included in output.
+//
+// The method recursively scans all fragments looking for $157 (style) symbol references,
+// and marks those styles as used. This handles styles in:
+//   - Content entries ($146)
+//   - Style events ($142)
+//   - Nested containers and children
+func (sr *StyleRegistry) RecomputeUsedStyles(fragments *FragmentList) {
+	// Clear existing usage flags
+	sr.used = make(map[string]bool)
+
+	// Scan all fragments for style references
+	for _, frag := range fragments.All() {
+		sr.scanValueForStyles(frag.Value)
+	}
+}
+
+// scanValueForStyles recursively scans a value for style symbol references.
+func (sr *StyleRegistry) scanValueForStyles(v any) {
+	switch val := v.(type) {
+	case StructValue:
+		sr.scanStructForStyles(val)
+	case map[KFXSymbol]any:
+		sr.scanStructForStyles(val)
+	case []any:
+		for _, item := range val {
+			sr.scanValueForStyles(item)
+		}
+	}
+}
+
+// scanStructForStyles scans a struct value for style references.
+func (sr *StyleRegistry) scanStructForStyles(s map[KFXSymbol]any) {
+	// Check for direct style reference ($157)
+	if styleVal, ok := s[SymStyle]; ok {
+		switch v := styleVal.(type) {
+		case SymbolByNameValue:
+			// Style stored as string name (before serialization)
+			styleName := string(v)
+			if styleName != "" {
+				sr.used[styleName] = true
+			}
+		case SymbolValue:
+			// Style stored as resolved symbol ID (after serialization)
+			// This shouldn't happen in our use case, but handle it for completeness
+			styleName := traceSymbolName(KFXSymbol(v))
+			if styleName != "" {
+				sr.used[styleName] = true
+			}
+		}
+	}
+
+	// Recursively scan all values
+	for _, val := range s {
+		sr.scanValueForStyles(val)
+	}
+}
+
 func (sr *StyleRegistry) mergeProperty(dst map[KFXSymbol]any, sym KFXSymbol, val any) {
 	sr.mergePropertyWithContext(dst, sym, val, mergeContextInline)
 }
@@ -163,16 +222,15 @@ func (sr *StyleRegistry) EnsureBaseStyle(name string) {
 		Build())
 }
 
-// EnsureStyle ensures a style exists, resolves it to a generated name, and marks it as used.
-// Returns the generated style name (like "s1J") that should be used in the KFX output.
-// This is the primary method for single-style usage without merging.
-func (sr *StyleRegistry) EnsureStyle(name string) string {
-	return sr.MarkUsage(name, styleUsageText)
-}
-
-// MarkUsage ensures a style exists, resolves it to a generated name, and marks usage.
-// Returns the generated style name that should be used in output.
-func (sr *StyleRegistry) MarkUsage(name string, usage styleUsage) string {
+// ResolveStyle ensures a style exists, resolves it to a generated name, and tracks usage type.
+// Returns the generated style name (like "s1J") that should be used in KFX output.
+//
+// The usage parameter (styleUsageText, styleUsageImage, styleUsageWrapper) affects how the
+// style is post-processed in BuildFragments (e.g., text styles get line-height adjustments).
+//
+// Note: This does NOT mark the style as "used" for output filtering. Call RecomputeUsedStyles
+// before BuildFragments to determine which styles are actually referenced in the final content.
+func (sr *StyleRegistry) ResolveStyle(name string, usage styleUsage) string {
 	if name == "" {
 		return ""
 	}
@@ -204,7 +262,6 @@ func (sr *StyleRegistry) MarkUsage(name string, usage styleUsage) string {
 	// Check if we already have a generated name for this property set
 	sig := styleSignature(props)
 	if genName, ok := sr.resolved[sig]; ok {
-		sr.used[genName] = true
 		sr.usage[genName] = sr.usage[genName] | usage
 		return genName
 	}
@@ -212,7 +269,6 @@ func (sr *StyleRegistry) MarkUsage(name string, usage styleUsage) string {
 	// Generate a new name and register the resolved style
 	genName := sr.nextResolvedStyleName()
 	sr.resolved[sig] = genName
-	sr.used[genName] = true
 	sr.usage[genName] = usage
 	sr.Register(StyleDef{Name: genName, Properties: props})
 	return genName
@@ -531,17 +587,17 @@ func stripLineHeight(props map[KFXSymbol]any) map[KFXSymbol]any {
 }
 
 // adjustLineHeightForFontSize adjusts line-height and vertical margins when
-// font-size differs from the default (1rem). KP3 uses 1.0101lh for styles with
-// non-default font-sizes, and adjusts vertical margins accordingly.
+// font-size differs from the default (1rem). KP3 uses different formulas based
+// on font-size:
 //
-// The adjustment factor is AdjustedLineHeightLh (100/99 ≈ 1.0101).
-// Vertical margins are recalculated as: margin_lh = margin_lh / AdjustedLineHeightLh
+//   - For font-size < 1rem (e.g., sub/sup): line-height = 1/font-size
+//     This keeps absolute line spacing the same as surrounding 1rem text.
+//     Example: 0.75rem font-size → 1.33333lh (0.75 * 1.33333 = 1.0 absolute)
 //
-// This ensures margin values match KP3 output exactly. For example:
+//   - For font-size >= 1rem (e.g., headings): line-height = 1.0101lh
+//     Uses the standard adjustment factor (100/99 ≈ 1.0101).
 //
-//	CSS: margin-top: 0.67em with font-size: 140%
-//	Without adjustment: 0.67 / 1.2 = 0.55833lh
-//	With adjustment: 0.67 / 1.2 / 1.0101 = 0.55275lh (matches KP3)
+// Vertical margins are recalculated using the line-height adjustment factor.
 func adjustLineHeightForFontSize(props map[KFXSymbol]any) map[KFXSymbol]any {
 	// Check if font-size exists and differs from default (1rem)
 	fontSize, ok := props[SymFontSize]
@@ -562,19 +618,49 @@ func adjustLineHeightForFontSize(props map[KFXSymbol]any) map[KFXSymbol]any {
 	updated := make(map[KFXSymbol]any, len(props))
 	maps.Copy(updated, props)
 
-	// Set line-height to AdjustedLineHeightLh
-	updated[SymLineHeight] = DimensionValue(RoundDecimal(AdjustedLineHeightLh), SymUnitLh)
+	// Calculate line-height based on font-size
+	var adjustedLh float64
+	if fontSizeVal < 1.0 {
+		// For small fonts (sub/sup), use 1/font-size to keep absolute line spacing constant
+		adjustedLh = 1.0 / fontSizeVal
+	} else {
+		// For large fonts (headings), use standard adjustment
+		adjustedLh = AdjustedLineHeightLh
+	}
+	updated[SymLineHeight] = DimensionValue(RoundDecimal(adjustedLh), SymUnitLh)
 
-	// Adjust vertical margins
+	// Adjust vertical margins using the line-height factor
 	for _, sym := range []KFXSymbol{SymMarginTop, SymMarginBottom, SymPaddingTop, SymPaddingBottom} {
 		if margin, ok := updated[sym]; ok {
 			if marginVal, marginUnit, ok := measureParts(margin); ok && marginUnit == SymUnitLh {
-				adjusted := RoundDecimal(marginVal / AdjustedLineHeightLh)
+				adjusted := RoundDecimal(marginVal / adjustedLh)
 				updated[sym] = DimensionValue(adjusted, SymUnitLh)
 			}
 		}
 	}
 
+	return updated
+}
+
+// normalizeFontSizeUnits converts font-size from em to rem for final KFX output.
+// During style merging, em units enable relative multiplication (e.g., 0.75rem * 0.8em = 0.6rem).
+// KFX output requires rem units, so we convert any remaining em values here.
+// An em value at this point means it wasn't merged with a rem value, so we treat 1em = 1rem.
+func normalizeFontSizeUnits(props map[KFXSymbol]any) map[KFXSymbol]any {
+	fontSize, ok := props[SymFontSize]
+	if !ok {
+		return props
+	}
+
+	fontSizeVal, fontSizeUnit, ok := measureParts(fontSize)
+	if !ok || fontSizeUnit != SymUnitEm {
+		return props
+	}
+
+	// Convert em to rem (1em = 1rem at the base level)
+	updated := make(map[KFXSymbol]any, len(props))
+	maps.Copy(updated, props)
+	updated[SymFontSize] = DimensionValue(fontSizeVal, SymUnitRem)
 	return updated
 }
 
@@ -598,6 +684,8 @@ func (sr *StyleRegistry) BuildFragments() []*Fragment {
 		def := sr.styles[name]
 		resolved := sr.resolveInheritance(def)
 		resolved.Properties = stripZeroMargins(resolved.Properties)
+		// Convert any remaining em font-sizes to rem before other adjustments
+		resolved.Properties = normalizeFontSizeUnits(resolved.Properties)
 		if sr.hasTextUsage(name) {
 			// Adjust line-height and margins for non-default font-sizes
 			// Must be done before ensureDefaultLineHeight to set correct line-height value
@@ -1184,7 +1272,11 @@ func (sr *StyleRegistry) applyKFXEnhancements(name string, def StyleDef) StyleDe
 		}
 		// KP3 reference: title text styles have margin-top but NOT margin-bottom.
 		// The margin-bottom is only on the wrapper container, not the text inside.
-		delete(props, SymMarginBottom)
+		// EXCEPTION: Subtitle styles (-subtitle) that have page-break-after: avoid
+		// should KEEP their margin-bottom because they use it for spacing with next element.
+		if !sr.isSubtitleWithBreakAfterAvoid(name, props) {
+			delete(props, SymMarginBottom)
+		}
 	}
 
 	// Convert page-break properties to KFX yj-break properties
@@ -1263,10 +1355,8 @@ func (sr *StyleRegistry) shouldHaveLayoutHintTitle(name string, props map[KFXSym
 	// Subtitle styles - only apply to centered, bold subtitles
 	if name == "subtitle" || strings.HasSuffix(name, "-subtitle") {
 		// Check if it's centered (cite-subtitle is left-aligned and shouldn't get layout-hint)
-		if align, ok := props[SymTextAlignment]; ok {
-			if align == SymbolValue(SymCenter) {
-				return true
-			}
+		if isSymbol(props[SymTextAlignment], SymCenter) {
+			return true
 		}
 	}
 
@@ -1286,6 +1376,19 @@ func (sr *StyleRegistry) shouldHaveBreakInsideAvoid(name string, _ map[KFXSymbol
 		return true
 	}
 	return false
+}
+
+// isSubtitleWithBreakAfterAvoid returns true if this is a subtitle style with page-break-after: avoid.
+// Such styles should keep their margin-bottom because it's used for spacing with the next element,
+// and the element won't participate in sibling margin collapsing.
+func (sr *StyleRegistry) isSubtitleWithBreakAfterAvoid(name string, props map[KFXSymbol]any) bool {
+	// Only applies to subtitle styles
+	if name != "subtitle" && !strings.HasSuffix(name, "-subtitle") {
+		return false
+	}
+	// Check if it has yj-break-after: avoid or the intermediate marker SymKeepLast: avoid
+	// (The CSS converter stores SymKeepLast which is converted to yj-break-after during post-processing)
+	return isSymbol(props[SymYjBreakAfter], SymAvoid) || isSymbol(props[SymKeepLast], SymAvoid)
 }
 
 // convertPageBreaksToYjBreaks converts CSS page-break properties to KFX yj-break properties.
