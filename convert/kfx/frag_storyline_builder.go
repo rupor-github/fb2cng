@@ -100,6 +100,12 @@ type StorylineBuilder struct {
 	// entryOrderCounter tracks the order of content entries and container entries.
 	// This is used to correctly order siblings in the margin collapsing tree.
 	entryOrderCounter int
+
+	// pendingEmptyLineMarginTop holds the empty-line margin to apply to the next content entry.
+	// This is set when an empty-line is processed and consumed when the next entry is added.
+	// The margin is stored in ContentRef.EmptyLineMarginTop and applied during post-processing,
+	// avoiding font-size scaling that would occur if baked into the style.
+	pendingEmptyLineMarginTop *float64
 }
 
 // containerMargins stores the CSS margins for a container.
@@ -316,6 +322,34 @@ func (sb *StorylineBuilder) MarkPreviousEntryStripMB() {
 	}
 	prevIdx := len(sb.contentEntries) - 1
 	sb.contentEntries[prevIdx].StripMarginBottom = true
+}
+
+// SetPreviousEntryEmptyLineMarginBottom sets the empty-line margin as the previous entry's margin-bottom.
+// This is called when an empty-line is followed by an image - KP3 puts the empty-line margin
+// on the PREVIOUS element (as mb) rather than the image (as mt).
+// Does nothing if there are no previous entries.
+func (sb *StorylineBuilder) SetPreviousEntryEmptyLineMarginBottom(margin float64) {
+	if len(sb.contentEntries) == 0 {
+		return
+	}
+	prevIdx := len(sb.contentEntries) - 1
+	sb.contentEntries[prevIdx].EmptyLineMarginBottom = &margin
+}
+
+// SetPendingEmptyLineMarginTop sets the empty-line margin to apply to the next content entry.
+// This is called when an empty-line is processed, and the margin will be stored in the
+// next content entry's EmptyLineMarginTop field when it's added.
+// The margin is applied during post-processing, avoiding font-size scaling.
+func (sb *StorylineBuilder) SetPendingEmptyLineMarginTop(margin float64) {
+	sb.pendingEmptyLineMarginTop = &margin
+}
+
+// consumePendingEmptyLineMarginTop returns and clears the pending empty-line margin-top.
+// Called by addEntry to apply the margin to each new content entry.
+func (sb *StorylineBuilder) consumePendingEmptyLineMarginTop() *float64 {
+	margin := sb.pendingEmptyLineMarginTop
+	sb.pendingEmptyLineMarginTop = nil
+	return margin
 }
 
 // Build creates the storyline and section fragments.

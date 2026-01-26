@@ -110,7 +110,9 @@ func (sb *StorylineBuilder) AddContentWithHeading(contentType KFXSymbol, content
 }
 
 // AddImage adds an image reference (to storyline or current block).
-func (sb *StorylineBuilder) AddImage(resourceName, style, altText string) int {
+// isFloatImage should be true for full-width standalone block images that have fixed
+// margins and don't participate in sibling margin collapsing.
+func (sb *StorylineBuilder) AddImage(resourceName, style, altText string, isFloatImage bool) int {
 	eid := sb.eidCounter
 	sb.eidCounter++
 
@@ -125,6 +127,7 @@ func (sb *StorylineBuilder) AddImage(resourceName, style, altText string) int {
 		ResourceName: resourceName,
 		Style:        style,
 		AltText:      altText,
+		IsFloatImage: isFloatImage,
 	})
 }
 
@@ -239,10 +242,14 @@ func (sb *StorylineBuilder) AddMixedContent(styleSpec, style string, items []Inl
 		entry.SetInt(SymYjHeadingLevel, int64(headingLevel))
 	}
 
-	// Add as raw entry with optional styleSpec for deferred resolution
+	// Add as raw entry with optional styleSpec for deferred resolution.
+	// Set Style on ContentRef so captureMargins can extract margins for collapsing.
+	// The style is also on RawEntry for serialization.
 	return sb.addEntry(ContentRef{
 		EID:       eid,
 		StyleSpec: styleSpec,
+		Style:     style,
+		Type:      SymText,
 		RawEntry:  entry,
 	})
 }

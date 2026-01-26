@@ -332,27 +332,13 @@ func (sc StyleContext) ResolveProperty(tag, classes string, prop KFXSymbol) any 
 func (sc StyleContext) Resolve(tag, classes string) string {
 	merged := sc.resolveProperties(tag, classes)
 
-	// Consume any pending empty-line margin and apply as margin-top.
-	// This implements KP3 behavior where empty-lines don't create content entries
-	// but instead contribute to the following element's margin-top.
+	// NOTE: We do NOT apply the pending empty-line margin here.
+	// Empty-line margins are stored separately in ContentRef.EmptyLineMarginTop
+	// and applied during post-processing (applyEmptyLineMargins) to avoid
+	// font-size scaling that would occur if the margin was baked into the style.
 	//
-	// The empty-line margin is applied using max(emptyline, element's own margin):
-	// - If element has no margin-top or smaller margin-top: use emptyline's 0.5lh
-	// - If element has larger margin-top (e.g., subtitle's 0.8333lh): keep element's margin
-	pendingMargin := sc.ConsumePendingMargin()
-	if pendingMargin > 0 {
-		existingMargin := 0.0
-		if existing, ok := merged[SymMarginTop]; ok {
-			if val, unit, ok := measureParts(existing); ok && unit == SymUnitLh {
-				existingMargin = val
-			}
-		}
-		// Use the larger of the two margins
-		if pendingMargin > existingMargin {
-			merged[SymMarginTop] = DimensionValue(pendingMargin, SymUnitLh)
-		}
-		// If element has larger margin, keep it (don't override)
-	}
+	// The pending margin is consumed (cleared) by the caller after Resolve(),
+	// which then stores it in ContentRef.EmptyLineMarginTop for post-processing.
 
 	return sc.registry.RegisterResolved(merged)
 }

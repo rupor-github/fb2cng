@@ -147,22 +147,16 @@ func (sb *StorylineBuilder) AddTable(c *content.Content, table *fb2.Table, style
 		SetSymbol(SymYjTableSelectionMode, SymYjRegional).          // $630 = yj.regional
 		SetList(SymContentList, []any{bodyEntry})
 
-	// Add to storyline
-	if len(sb.blockStack) > 0 {
-		sb.blockStack[len(sb.blockStack)-1].children = append(sb.blockStack[len(sb.blockStack)-1].children, ContentRef{
-			EID:      tableEID,
-			Type:     SymTable,
-			RawEntry: tableEntry,
-		})
-	} else {
-		sb.entryOrderCounter++
-		sb.contentEntries = append(sb.contentEntries, ContentRef{
-			EID:        tableEID,
-			Type:       SymTable,
-			RawEntry:   tableEntry,
-			EntryOrder: sb.entryOrderCounter,
-		})
-	}
+	// Add to storyline via addEntry to properly handle:
+	// - Container tracking for margin collapsing
+	// - Consuming pending empty-line margin (so it goes to table, not next element)
+	// - Entry ordering for correct sibling positioning
+	sb.addEntry(ContentRef{
+		EID:      tableEID,
+		Type:     SymTable,
+		Style:    tableStyle,
+		RawEntry: tableEntry,
+	})
 
 	return tableEID
 }

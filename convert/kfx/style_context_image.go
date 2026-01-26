@@ -68,16 +68,17 @@ func (sc StyleContext) ResolveImage(classes string) string {
 //   - Applies properties from "image-inline" CSS style
 //   - No margin collapsing (inline images don't participate in margin collapsing)
 //
-// Returns the registered style name.
-func (sc StyleContext) ResolveImageWithDimensions(kind ImageKind, imageWidth, imageHeight int, blockStyle string) string {
+// Returns the registered style name and whether this is a "float image" (full-width standalone).
+// Float images have fixed 2.6lh margins and don't participate in sibling margin collapsing.
+func (sc StyleContext) ResolveImageWithDimensions(kind ImageKind, imageWidth, imageHeight int, blockStyle string) (style string, isFloatImage bool) {
 	if sc.registry == nil {
-		return ""
+		return "", false
 	}
 
 	props := make(map[KFXSymbol]any)
 
 	if kind == ImageInline {
-		return sc.resolveInlineImage(props, imageWidth, imageHeight)
+		return sc.resolveInlineImage(props, imageWidth, imageHeight), false
 	}
 
 	return sc.resolveBlockImage(props, imageWidth, blockStyle)
@@ -117,16 +118,35 @@ func (sc StyleContext) resolveInlineImage(props map[KFXSymbol]any, imageWidth, i
 	return sc.registry.RegisterResolvedRaw(props)
 }
 
+// isContainerContextClass returns true if the given class name represents a container
+// context rather than an element style. Container contexts (like cite, blockquote, poem)
+// have their vertical margins applied to the container wrapper, not to individual elements inside.
+func isContainerContextClass(class string) bool {
+	switch class {
+	case "cite", "blockquote", "poem", "epigraph", "annotation", "stanza", "footnote":
+		return true
+	}
+	return false
+}
+
 // resolveBlockImage handles ImageBlock styling with position-based margin filtering.
-func (sc StyleContext) resolveBlockImage(props map[KFXSymbol]any, imageWidth int, blockStyle string) string {
+// Returns the style name and whether this is a float image (full-width standalone).
+func (sc StyleContext) resolveBlockImage(props map[KFXSymbol]any, imageWidth int, blockStyle string) (string, bool) {
 	widthPercent := ImageWidthPercent(imageWidth)
 	isStandaloneBlock := strings.Contains(blockStyle, "image")
 	isFullWidth := imageWidth >= int(KP3ContentWidthPx)
+	isFloatImage := isStandaloneBlock && isFullWidth // Float images are full-width standalone blocks
 
 	// Track if block style has text-align: center - this should become box-align: center for images
 	hasTextAlignCenter := false
 
-	// Resolve the block style to get its properties
+	// Resolve the block style to get its properties.
+	// For non-standalone images (images inside paragraph/cite/etc.), we need to be careful:
+	// - Vertical margins (mt/mb) should come from ELEMENT styles (e.g., "p", "cite-subtitle"),
+	//   not from CONTAINER CONTEXT styles (e.g., "cite", "blockquote", "poem")
+	// - Container contexts have their vertical margins applied to the container wrapper,
+	//   not to individual elements inside them
+	// - This matches KP3's behavior where image-only paragraphs inside cite get paragraph margins
 	if blockStyle != "" {
 		for part := range strings.FieldsSeq(blockStyle) {
 			sc.registry.EnsureBaseStyle(part)
@@ -147,6 +167,13 @@ func (sc StyleContext) resolveBlockImage(props map[KFXSymbol]any, imageWidth int
 							hasTextAlignCenter = true
 						}
 						continue
+					case SymMarginTop, SymMarginBottom:
+						// For non-standalone images, skip vertical margins from container context classes.
+						// Container margins are handled separately by the container wrapper in post-processing.
+						// Element styles (like "cite-subtitle") should still contribute their margins.
+						if !isStandaloneBlock && isContainerContextClass(part) {
+							continue
+						}
 					}
 					props[k] = v
 				}
@@ -204,5 +231,5 @@ func (sc StyleContext) resolveBlockImage(props map[KFXSymbol]any, imageWidth int
 	// Note: For other block images, margins come from CSS and will be processed
 	// by post-processing CollapseMargins() for centralized margin logic.
 
-	return sc.registry.RegisterResolvedRaw(props)
+	return sc.registry.RegisterResolvedRaw(props), isFloatImage
 }

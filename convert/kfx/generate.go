@@ -241,9 +241,10 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	container.FormatCapabilities = BuildFormatCapabilities(formatFeatures).Value
 
 	// $585 content_features - reflow/canonical features live here in reference files
+	// Collect content feature info to conditionally add features (matching KP3 behavior)
 	maxSectionPIDCount := computeMaxSectionPIDCount(sectionEIDs, posItems)
-	reflowSectionSize := reflowSectionSizeVersion(maxSectionPIDCount)
-	if err := container.Fragments.Add(BuildContentFeatures(reflowSectionSize)); err != nil {
+	contentFeatureInfo := collectContentFeatureInfo(c, imageResourceInfo, maxSectionPIDCount)
+	if err := container.Fragments.Add(BuildContentFeatures(contentFeatureInfo)); err != nil {
 		return err
 	}
 
@@ -311,6 +312,124 @@ func computeMaxSectionPIDCount(sectionEIDs sectionEIDsBySectionName, posItems []
 		}
 	}
 	return max
+}
+
+// collectContentFeatureInfo gathers information about the content to determine
+// which features should be included in content_features ($585).
+// This matches KP3 behavior where features are conditionally added based on content.
+func collectContentFeatureInfo(c *content.Content, imageResources imageResourceInfoByID, maxSectionPIDCount int) *ContentFeatureInfo {
+	info := &ContentFeatureInfo{
+		ReflowSectionSize: reflowSectionSizeVersion(maxSectionPIDCount),
+		Language:          c.Book.Description.TitleInfo.Lang.String(),
+	}
+
+	// Check for tables and collect max image dimensions
+	hasTables, hasTableWithLinks := checkForTables(c.Book)
+	info.HasTables = hasTables
+	info.HasTableWithLinks = hasTableWithLinks
+
+	// Find max image dimensions for HDV detection
+	for _, res := range imageResources {
+		if res.Width > info.MaxImageWidth {
+			info.MaxImageWidth = res.Width
+		}
+		if res.Height > info.MaxImageHeight {
+			info.MaxImageHeight = res.Height
+		}
+	}
+
+	return info
+}
+
+// checkForTables scans the book content for tables and checks if any have links.
+func checkForTables(book *fb2.FictionBook) (hasTables, hasTableWithLinks bool) {
+	// Check all bodies for tables
+	for i := range book.Bodies {
+		if checkSectionsForTables(book.Bodies[i].Sections, &hasTableWithLinks) {
+			hasTables = true
+		}
+	}
+	return hasTables, hasTableWithLinks
+}
+
+// checkSectionsForTables recursively checks sections for tables.
+func checkSectionsForTables(sections []fb2.Section, hasTableWithLinks *bool) bool {
+	hasTables := false
+	for i := range sections {
+		section := &sections[i]
+		// Check section content for tables
+		for _, item := range section.Content {
+			if item.Kind == fb2.FlowTable && item.Table != nil {
+				hasTables = true
+				// Check if table has links
+				if !*hasTableWithLinks && tableHasLinks(item.Table) {
+					*hasTableWithLinks = true
+				}
+			}
+			// Recursively check nested sections
+			if item.Kind == fb2.FlowSection && item.Section != nil {
+				if checkSectionForTables(item.Section, hasTableWithLinks) {
+					hasTables = true
+				}
+			}
+		}
+	}
+	return hasTables
+}
+
+// checkSectionForTables recursively checks a single section for tables.
+func checkSectionForTables(section *fb2.Section, hasTableWithLinks *bool) bool {
+	hasTables := false
+	for _, item := range section.Content {
+		if item.Kind == fb2.FlowTable && item.Table != nil {
+			hasTables = true
+			if !*hasTableWithLinks && tableHasLinks(item.Table) {
+				*hasTableWithLinks = true
+			}
+		}
+		// Recursively check nested sections
+		if item.Kind == fb2.FlowSection && item.Section != nil {
+			if checkSectionForTables(item.Section, hasTableWithLinks) {
+				hasTables = true
+			}
+		}
+	}
+	return hasTables
+}
+
+// tableHasLinks checks if a table contains any links in its cells.
+func tableHasLinks(table *fb2.Table) bool {
+	for _, row := range table.Rows {
+		for _, cell := range row.Cells {
+			if cellHasLinks(cell.Content) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// cellHasLinks checks if cell content contains any links.
+func cellHasLinks(content []fb2.InlineSegment) bool {
+	for _, seg := range content {
+		if segmentHasLinks(&seg) {
+			return true
+		}
+	}
+	return false
+}
+
+// segmentHasLinks recursively checks if an inline segment contains links.
+func segmentHasLinks(seg *fb2.InlineSegment) bool {
+	if seg.Kind == fb2.InlineLink {
+		return true
+	}
+	for i := range seg.Children {
+		if segmentHasLinks(&seg.Children[i]) {
+			return true
+		}
+	}
+	return false
 }
 
 func collectLinkTargets(fragments *FragmentList) map[string]bool {

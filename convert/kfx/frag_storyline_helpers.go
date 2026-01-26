@@ -182,7 +182,7 @@ func processMixedInlineSegments(
 				return
 			}
 			// Create inline image style with em-based dimensions
-			imgStyle := inlineCtx.ResolveImageWithDimensions(ImageInline, imgInfo.Width, imgInfo.Height, "")
+			imgStyle, _ := inlineCtx.ResolveImageWithDimensions(ImageInline, imgInfo.Width, imgInfo.Height, "")
 			items = append(items, InlineContentItem{
 				IsImage:      true,
 				ResourceName: imgInfo.ResourceName,

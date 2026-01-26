@@ -57,7 +57,7 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 			sb := NewStorylineBuilder(storyName, sectionName, eidCounter, styles)
 			// Use minimal cover style - no width constraints since page template defines dimensions
 			resolved := styles.ResolveCoverImageStyle()
-			sb.AddImage(imgInfo.ResourceName, resolved, cover.Alt)
+			sb.AddImage(imgInfo.ResourceName, resolved, cover.Alt, false)
 
 			sectionEIDs[sectionName] = sb.AllEIDs()
 			eidCounter = sb.NextEID()
@@ -385,7 +385,7 @@ func addEndVignette(book *fb2.FictionBook, sb *StorylineBuilder, styles *StyleRe
 	if styles != nil {
 		resolved = styles.ResolveStyle("image-vignette-end", styleUsageText)
 	}
-	sb.AddImage(imgInfo.ResourceName, resolved, "") // Vignettes are decorative, no alt text
+	sb.AddImage(imgInfo.ResourceName, resolved, "", false) // Vignettes are decorative, no alt text
 }
 
 // processBodyIntroContent processes body intro content (title, epigraphs, image).
@@ -394,8 +394,8 @@ func processBodyIntroContent(c *content.Content, body *fb2.Body, sb *StorylineBu
 		imgID := strings.TrimPrefix(body.Image.Href, "#")
 		if imgInfo, ok := imageResources[imgID]; ok {
 			ctx := NewStyleContext(styles)
-			resolved := ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, "image")
-			eid := sb.AddImage(imgInfo.ResourceName, resolved, body.Image.Alt)
+			resolved, isFloatImage := ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, "image")
+			eid := sb.AddImage(imgInfo.ResourceName, resolved, body.Image.Alt, isFloatImage)
 			if body.Image.ID != "" {
 				if _, exists := idToEID[body.Image.ID]; !exists {
 					idToEID[body.Image.ID] = eid

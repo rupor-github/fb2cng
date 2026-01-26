@@ -41,8 +41,8 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 		imgID := strings.TrimPrefix(section.Image.Href, "#")
 		if imgInfo, ok := imageResources[imgID]; ok {
 			ctx := NewStyleContext(styles)
-			resolved := ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, "image")
-			eid := sb.AddImage(imgInfo.ResourceName, resolved, section.Image.Alt)
+			resolved, isFloatImage := ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, "image")
+			eid := sb.AddImage(imgInfo.ResourceName, resolved, section.Image.Alt, isFloatImage)
 			if section.Image.ID != "" {
 				if _, exists := idToEID[section.Image.ID]; !exists {
 					idToEID[section.Image.ID] = eid
@@ -123,7 +123,9 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 	// Position filtering is applied within each epigraph's items.
 	for _, epigraph := range section.Epigraphs {
 		// Enter epigraph container for margin collapsing tracking.
-		sb.EnterContainer(ContainerEpigraph, 0)
+		// Use FlagTransferMBToLastChild so that epigraph's margin-bottom goes to its last child
+		// (text-author if present) rather than bubbling up to sibling collapsing.
+		sb.EnterContainer(ContainerEpigraph, FlagTransferMBToLastChild)
 
 		// If epigraph has an ID, assign it to the first content item
 		if epigraph.Flow.ID != "" {
@@ -237,6 +239,11 @@ func processFlowItem(c *content.Content, item *fb2.FlowItem, ctx StyleContext, c
 	switch item.Kind {
 	case fb2.FlowParagraph:
 		if item.Paragraph != nil {
+			// Consume any pending empty-line margin from StyleContext.
+			// This margin was stored for detecting empty-line-before-image cases.
+			// When text content comes between empty-line and image, clear it so
+			// the image doesn't mistakenly think it was preceded by an empty-line.
+			ctx.ConsumePendingMargin()
 			// Use full context chain for CSS cascade emulation.
 			// Pass context directly - it may have position for margin filtering.
 			// Extra classes come from optional custom class in FB2.
@@ -245,6 +252,8 @@ func processFlowItem(c *content.Content, item *fb2.FlowItem, ctx StyleContext, c
 
 	case fb2.FlowSubtitle:
 		if item.Subtitle != nil {
+			// Consume any pending empty-line margin from StyleContext (see FlowParagraph comment).
+			ctx.ConsumePendingMargin()
 			// Subtitles use <p> in EPUB, so use p as base here too.
 			// Context-specific subtitle style adds alignment, margins.
 			// Pass the subtitle class via extraClasses so it's applied directly to the paragraph.
@@ -261,10 +270,17 @@ func processFlowItem(c *content.Content, item *fb2.FlowItem, ctx StyleContext, c
 		// Additionally, the preceding element's margin-bottom is stripped.
 		// This prevents double-spacing (previous mb + empty-line mt).
 		sb.MarkPreviousEntryStripMB()
-		// Extract the margin value from the emptyline style and add to pending margin.
+		// Extract the margin value from the emptyline style and store it for the next entry.
+		// The margin is stored in StorylineBuilder (for text) and StyleContext (for images).
+		// For text elements: stored in ContentRef.EmptyLineMarginTop, applied during post-processing.
+		// For images: stored via SetPreviousEntryEmptyLineMarginBottom (special handling).
 		styleSpec := "emptyline"
 		margin := ctx.GetEmptyLineMargin(styleSpec, styles)
 		if margin > 0 {
+			// Store in both places:
+			// - StorylineBuilder for the next text entry (applied in addEntry)
+			// - StyleContext for FlowImage detection (consumed in FlowImage case)
+			sb.SetPendingEmptyLineMarginTop(margin)
 			ctx.AddEmptyLineMargin(margin)
 		}
 
@@ -313,12 +329,19 @@ func processFlowItem(c *content.Content, item *fb2.FlowItem, ctx StyleContext, c
 		if !ok {
 			return
 		}
-		// Note: Empty-line margins are NOT applied to standalone flow-level images.
-		// KP3 applies fixed 2.6lh margins to full-width images instead (handled in ResolveImageWithDimensions).
-		// Discard any pending margin from empty-lines.
-		ctx.ConsumePendingMargin()
-		resolved := ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, "image")
-		eid := sb.AddImage(imgInfo.ResourceName, resolved, item.Image.Alt)
+		// When empty-line precedes an image, KP3 puts the empty-line margin on the
+		// PREVIOUS element (as margin-bottom) rather than on the image (as margin-top).
+		// This is different from empty-line followed by text, where the margin goes
+		// to the next element's margin-top.
+		pendingMargin := ctx.ConsumePendingMargin()
+		if pendingMargin > 0 {
+			sb.SetPreviousEntryEmptyLineMarginBottom(pendingMargin)
+			// Also clear the pending margin from StorylineBuilder since we consumed it
+			// (it was set for both places in FlowEmptyLine case)
+			sb.consumePendingEmptyLineMarginTop()
+		}
+		resolved, isFloatImage := ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, "image")
+		eid := sb.AddImage(imgInfo.ResourceName, resolved, item.Image.Alt, isFloatImage)
 		if item.Image.ID != "" {
 			if _, exists := idToEID[item.Image.ID]; !exists {
 				idToEID[item.Image.ID] = eid
@@ -353,7 +376,9 @@ func processPoem(c *content.Content, poem *fb2.Poem, ctx StyleContext, sb *Story
 	// Process poem epigraphs - nested container inside poem
 	for _, epigraph := range poem.Epigraphs {
 		// Enter epigraph container for margin collapsing tracking.
-		sb.EnterContainer(ContainerEpigraph, 0)
+		// Use FlagTransferMBToLastChild so that epigraph's margin-bottom goes to its last child
+		// (text-author if present) rather than bubbling up to sibling collapsing.
+		sb.EnterContainer(ContainerEpigraph, FlagTransferMBToLastChild)
 
 		// If epigraph has an ID, assign it to the first content item
 		if epigraph.Flow.ID != "" {
@@ -441,8 +466,10 @@ func processPoem(c *content.Content, poem *fb2.Poem, ctx StyleContext, sb *Story
 // ctx contains the ancestor context chain (already includes "cite" pushed by caller).
 func processCite(c *content.Content, cite *fb2.Cite, ctx StyleContext, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
 	// Enter cite container for margin collapsing tracking.
-	// Cite is a standard container (no title-block mode).
-	sb.EnterContainer(ContainerCite, 0)
+	// Use FlagTransferMBToLastChild so that the cite's margin-bottom goes to its last child
+	// (text-author if present) rather than bubbling up to sibling collapsing. This matches
+	// KP3 behavior where the last element of a cite keeps the container's margin-bottom.
+	sb.EnterContainer(ContainerCite, FlagTransferMBToLastChild)
 	defer sb.ExitContainer()
 
 	// Enter cite container for block-level margin accumulation
@@ -509,7 +536,9 @@ func processFootnoteSectionContent(
 	// KFX doesn't use wrapper blocks for epigraphs; apply styling directly to each paragraph.
 	for _, epigraph := range section.Epigraphs {
 		// Enter epigraph container for margin collapsing tracking.
-		sb.EnterContainer(ContainerEpigraph, 0)
+		// Use FlagTransferMBToLastChild so that epigraph's margin-bottom goes to its last child
+		// (text-author if present) rather than bubbling up to sibling collapsing.
+		sb.EnterContainer(ContainerEpigraph, FlagTransferMBToLastChild)
 
 		// If epigraph has an ID, assign it to the first content item
 		if epigraph.Flow.ID != "" {
@@ -537,8 +566,8 @@ func processFootnoteSectionContent(
 		imgID := strings.TrimPrefix(section.Image.Href, "#")
 		if imgInfo, ok := imageResources[imgID]; ok {
 			ctx := NewStyleContext(styles)
-			resolved := ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, "image")
-			eid := sb.AddImage(imgInfo.ResourceName, resolved, section.Image.Alt)
+			resolved, isFloatImage := ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, "image")
+			eid := sb.AddImage(imgInfo.ResourceName, resolved, section.Image.Alt, isFloatImage)
 			if section.Image.ID != "" {
 				if _, exists := idToEID[section.Image.ID]; !exists {
 					idToEID[section.Image.ID] = eid

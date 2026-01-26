@@ -74,7 +74,7 @@ func newLocalEnv() *LocalEnv {
   <path d="M100 12
            C110 2 130 2 140 12
            C130 22 110 22 100 12"
-        fill="none" stroke="black" stroke-width="1.2"/>
+        fill="none" stroke="black" stroke-width="3.6"/>
 </svg>`),
 			common.VignettePosSectionTitleBottom: []byte(`<svg viewBox="0 0 240 24" xmlns="http://www.w3.org/2000/svg">
   <path d="M20 12 H100
@@ -83,7 +83,7 @@ func newLocalEnv() *LocalEnv {
   <path d="M100 12
            C110 2 130 2 140 12
            C130 22 110 22 100 12"
-        fill="none" stroke="black" stroke-width="1.2"/>
+        fill="none" stroke="black" stroke-width="3.6"/>
 </svg>`),
 			common.VignettePosSectionEnd: []byte(`<svg viewBox="0 0 200 20" xmlns="http://www.w3.org/2000/svg">
   <path d="M50 10
@@ -92,7 +92,7 @@ func newLocalEnv() *LocalEnv {
            M100 10
            C115 0 135 0 150 10
            C135 20 115 20 100 10"
-        stroke="black" fill="none" stroke-width="1.3"/>
+        stroke="black" fill="none" stroke-width="3.9"/>
 </svg>`),
 		},
 	}

@@ -66,7 +66,7 @@ func TestMarginConversionWithStylemap(t *testing.T) {
 	}
 
 	// Expected: 0.67em / 1.2 = 0.55833lh
-	expected := RoundDecimal(0.67 / LineHeightRatio)
+	expected := RoundSignificant(0.67/LineHeightRatio, SignificantFigures)
 	if marginVal != expected {
 		t.Errorf("Expected margin-top = %f, got %f", expected, marginVal)
 	}
@@ -106,7 +106,7 @@ func TestMarginConversionFullFlow(t *testing.T) {
 	}
 
 	// Expected: 0.67em / 1.2 = 0.55833lh
-	expected := RoundDecimal(0.67 / LineHeightRatio)
+	expected := RoundSignificant(0.67/LineHeightRatio, SignificantFigures)
 	if marginVal != expected {
 		t.Errorf("Expected margin-top = %f, got %f", expected, marginVal)
 	}
@@ -177,8 +177,8 @@ func TestAdjustLineHeightForFontSize(t *testing.T) {
 				SymFontSize:  DimensionValue(1.25, SymUnitRem),
 				SymMarginTop: DimensionValue(0.55833, SymUnitLh),
 			},
-			wantLineHeight: RoundDecimal(AdjustedLineHeightLh), // 1.0101
-			wantMarginTop:  RoundDecimal(0.55833 / AdjustedLineHeightLh),
+			wantLineHeight: RoundDecimals(AdjustedLineHeightLh, LineHeightPrecision), // 1.0101
+			wantMarginTop:  RoundSignificant(0.55833/AdjustedLineHeightLh, SignificantFigures),
 			wantAdjustment: true,
 		},
 		{
@@ -187,8 +187,8 @@ func TestAdjustLineHeightForFontSize(t *testing.T) {
 				SymFontSize:  DimensionValue(0.75, SymUnitRem),
 				SymMarginTop: DimensionValue(0.41667, SymUnitLh),
 			},
-			wantLineHeight: RoundDecimal(1.0 / 0.75), // 1.33333
-			wantMarginTop:  RoundDecimal(0.41667 / (1.0 / 0.75)),
+			wantLineHeight: RoundDecimals(1.0/0.75, LineHeightPrecision), // 1.33333
+			wantMarginTop:  RoundSignificant(0.41667/(1.0/0.75), SignificantFigures),
 			wantAdjustment: true,
 		},
 		{
@@ -197,8 +197,8 @@ func TestAdjustLineHeightForFontSize(t *testing.T) {
 				SymFontSize:  DimensionValue(0.6, SymUnitRem),
 				SymMarginTop: DimensionValue(0.3, SymUnitLh),
 			},
-			wantLineHeight: RoundDecimal(1.0 / 0.6), // 1.66667
-			wantMarginTop:  RoundDecimal(0.3 / (1.0 / 0.6)),
+			wantLineHeight: RoundDecimals(1.0/0.6, LineHeightPrecision), // 1.66667
+			wantMarginTop:  RoundSignificant(0.3/(1.0/0.6), SignificantFigures),
 			wantAdjustment: true,
 		},
 		{
@@ -254,7 +254,7 @@ func TestAdjustedMarginMatchesKP3(t *testing.T) {
 	marginLhAdjusted := marginLhInitial / AdjustedLineHeightLh // 0.55275...
 
 	expected := 0.55275
-	got := RoundDecimal(marginLhAdjusted)
+	got := RoundSignificant(marginLhAdjusted, SignificantFigures)
 
 	if got != expected {
 		t.Errorf("Adjusted margin = %v, want %v (KP3 reference)", got, expected)

@@ -14,17 +14,31 @@ import "math"
 // See docs/kfxstructure.md §7.10.2 "KP3 unit conventions" for full documentation.
 
 const (
-	// DecimalPrecision is the maximum number of decimal places for Ion decimal values.
-	// Amazon's KFX processing code uses setScale(3, RoundingMode.HALF_UP) for certain
-	// intermediate calculations (like percentage conversions), but the final Ion decimal
-	// output uses higher precision. Analysis of KP3-generated KFX files shows values
-	// with 5-6 significant decimal digits (e.g., 0.833333lh, 1.66667lh, 0.55275lh).
+	// SignificantFigures is the number of significant figures for Ion decimal values.
+	// Used for vertical margins (margin-top, margin-bottom) in lh units.
+	// KP3 uses 6 significant figures, not 6 decimal places.
 	//
-	// Using 5 decimal places matches KP3 output precision and prevents visible
-	// rounding errors in vertical spacing (margin-top/bottom values).
+	// This is important for values >= 1:
+	//   - 5/3 with 6 sig figs → 1.66667 (5 decimals)
+	//   - 5/3 with 6 decimal places → 1.666667 (6 decimals) -- WRONG
+	//   - 5/6 with 6 sig figs → 0.833333 (6 decimals) -- same because < 1
 	//
-	// Example: 1.0/1.2 → 0.83333 (5 decimal places, matching KP3 output)
-	DecimalPrecision = 5
+	// Example: 5/3 → 1.66667 (6 significant figures, matching KP3 output)
+	SignificantFigures = 6
+
+	// LineHeightPrecision is the number of decimal places for line-height values.
+	// KP3 uses 4-5 decimal places for line-height (e.g., 1.0101, 1.33249).
+	// Using more precision than KP3 may cause subtle rendering differences.
+	//
+	// Example: 100/99 → 1.0101 (4 decimal places, matching KP3 output)
+	LineHeightPrecision = 5
+
+	// WidthPercentPrecision is the number of decimal places for width percentages.
+	// KP3 uses 3 decimal places for image width percentages (e.g., 19.531, 74.219).
+	// These values are derived from imageWidth / 512 * 100.
+	//
+	// Example: 100/512*100 → 19.531 (3 decimal places, matching KP3 output)
+	WidthPercentPrecision = 3
 
 	// DefaultLineHeightLh is the default line-height used for text styles
 	// with default font-size (1rem). KP3 uses 1lh for these styles.
@@ -125,17 +139,34 @@ func isHorizontalSpacingProperty(sym KFXSymbol) bool {
 	return false
 }
 
-// RoundDecimal rounds a float64 to DecimalPrecision decimal places.
-// KP3-generated KFX files use 5-6 decimal places for dimension values.
-// This precision matches KP3 output and prevents visible rounding errors.
+// RoundDecimals rounds a float64 to the specified number of decimal places.
+// Use with precision constants: LineHeightPrecision, WidthPercentPrecision.
 //
 // Examples:
 //
-//	RoundDecimal(0.8333333333) → 0.83333
-//	RoundDecimal(1.6666666666) → 1.66667
-//	RoundDecimal(0.25) → 0.25 (unchanged, already within precision)
-func RoundDecimal(v float64) float64 {
-	multiplier := math.Pow(10, DecimalPrecision)
+//	RoundDecimals(1.01010101, LineHeightPrecision) → 1.0101     (5 decimals for line-height)
+//	RoundDecimals(19.53125, WidthPercentPrecision) → 19.531     (3 decimals for image widths)
+func RoundDecimals(v float64, decimals int) float64 {
+	multiplier := math.Pow(10, float64(decimals))
+	return math.Round(v*multiplier) / multiplier
+}
+
+// RoundSignificant rounds a float64 to the specified number of significant figures.
+// KP3 uses 6 significant figures for margin values, not 6 decimal places.
+//
+// Examples:
+//
+//	RoundSignificant(1.666666667, SignificantFigures) → 1.66667  (6 sig figs = 5 decimals for values >= 1)
+//	RoundSignificant(0.833333333, SignificantFigures) → 0.833333 (6 sig figs = 6 decimals for values < 1)
+//	RoundSignificant(0.416666667, SignificantFigures) → 0.416667 (6 sig figs = 6 decimals for values < 1)
+func RoundSignificant(v float64, sigFigs int) float64 {
+	if v == 0 {
+		return 0
+	}
+	// Calculate the magnitude (order of magnitude)
+	magnitude := math.Floor(math.Log10(math.Abs(v)))
+	// Calculate multiplier to shift decimal point
+	multiplier := math.Pow(10, float64(sigFigs-1)-magnitude)
 	return math.Round(v*multiplier) / multiplier
 }
 
@@ -152,14 +183,14 @@ func RoundDecimal(v float64) float64 {
 //   - 80%  → 0.8rem (direct, not compressed)
 //   - 70%  → 0.7rem (direct, not compressed)
 //
-// The result is rounded to DecimalPrecision decimal places.
+// The result is rounded to SignificantFigures.
 func PercentToRem(percent float64) float64 {
 	if percent > 100 {
 		// Compress values above 100% towards 1rem
-		return RoundDecimal(1 + (percent-100)/FontSizeCompressionFactor)
+		return RoundSignificant(1+(percent-100)/FontSizeCompressionFactor, SignificantFigures)
 	}
 	// Direct conversion for values at or below 100%
-	return RoundDecimal(percent / 100)
+	return RoundSignificant(percent/100, SignificantFigures)
 }
 
 // ImageWidthPercent calculates the width percentage for a block image.
@@ -168,15 +199,15 @@ func PercentToRem(percent float64) float64 {
 //
 // The formula is: widthPercent = imageWidthPx * 100 / KP3ContentWidthPx
 //
-// The result is clamped to [0, 100] and rounded to DecimalPrecision decimal places.
+// The result is clamped to [0, 100] and rounded to WidthPercentPrecision decimal places.
 //
 // Examples:
 //
-//	ImageWidthPercent(380) → 74.219%  (380 * 100 / 512)
+//	ImageWidthPercent(380) → 74.219%  (380 * 100 / 512, rounded to 3 decimals)
 //	ImageWidthPercent(240) → 46.875%  (240 * 100 / 512)
 //	ImageWidthPercent(512) → 100%     (clamped)
 //	ImageWidthPercent(600) → 100%     (clamped)
 func ImageWidthPercent(imageWidthPx int) float64 {
 	percent := float64(imageWidthPx) / KP3ContentWidthPx * 100
-	return RoundDecimal(min(max(percent, 0), 100))
+	return RoundDecimals(min(max(percent, 0), 100), WidthPercentPrecision)
 }

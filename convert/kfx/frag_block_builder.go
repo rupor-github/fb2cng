@@ -127,6 +127,13 @@ func (sb *StorylineBuilder) addEntry(ref ContentRef) int {
 	sb.entryOrderCounter++
 	ref.EntryOrder = sb.entryOrderCounter
 
+	// Apply any pending empty-line margin-top to this entry.
+	// This margin is stored separately (not baked into the style) to avoid
+	// font-size scaling that would occur if the margin was part of the CSS style.
+	if margin := sb.consumePendingEmptyLineMarginTop(); margin != nil {
+		ref.EmptyLineMarginTop = margin
+	}
+
 	if len(sb.blockStack) > 0 {
 		// Add to current block's children
 		sb.blockStack[len(sb.blockStack)-1].children = append(sb.blockStack[len(sb.blockStack)-1].children, ref)

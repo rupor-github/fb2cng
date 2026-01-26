@@ -44,6 +44,24 @@ type ContentRef struct {
 	// This is set when an empty-line follows this element, matching KP3 behavior where
 	// the preceding element loses its mb and the empty-line's margin goes to the next element's mt.
 	StripMarginBottom bool
+
+	// EmptyLineMarginBottom stores the empty-line margin to apply as this element's margin-bottom.
+	// This is set when an empty-line is followed by an image - KP3 puts the empty-line margin
+	// on the PREVIOUS element (as mb) rather than the image (as mt).
+	// Applied during post-processing in applyEmptyLineMargins.
+	EmptyLineMarginBottom *float64
+
+	// EmptyLineMarginTop stores the empty-line margin to apply as this element's margin-top.
+	// This is set when an empty-line precedes this element (text or other non-image content).
+	// KP3 behavior: the empty-line margin goes to the next element's margin-top, but should
+	// NOT be scaled by font-size (unlike CSS margins). This is applied during post-processing
+	// in applyEmptyLineMargins, after captureMargins captures the style-based margins.
+	EmptyLineMarginTop *float64
+
+	// IsFloatImage marks full-width standalone block images (≥512px).
+	// Float images have fixed 2.6lh margins that do NOT participate in sibling margin collapsing.
+	// They act as barriers between elements - their margins stay on the image itself.
+	IsFloatImage bool
 }
 
 // InlineContentItem represents either a text string or an inline image in mixed content.

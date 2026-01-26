@@ -158,12 +158,13 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 			// - ctx already has inherited text-indent and margin-left from container
 			// - ResolveImageWithDimensions handles the alignment appropriately
 			var resolved string
+			var isFloatImage bool
 			if imageOnlyBlock {
-				resolved = ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, styleSpec)
+				resolved, isFloatImage = ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, styleSpec)
 			} else {
-				resolved = ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, "image")
+				resolved, isFloatImage = ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, "image")
 			}
-			sb.AddImage(imgInfo.ResourceName, resolved, seg.Image.Alt)
+			sb.AddImage(imgInfo.ResourceName, resolved, seg.Image.Alt, isFloatImage)
 			return
 		}
 
@@ -409,7 +410,7 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 			}
 
 			// Create inline image style with em-based dimensions
-			imgStyle := inlineCtx.ResolveImageWithDimensions(ImageInline, imgInfo.Width, imgInfo.Height, "")
+			imgStyle, _ := inlineCtx.ResolveImageWithDimensions(ImageInline, imgInfo.Width, imgInfo.Height, "")
 			items = append(items, InlineContentItem{
 				IsImage:      true,
 				ResourceName: imgInfo.ResourceName,

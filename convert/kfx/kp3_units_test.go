@@ -5,58 +5,89 @@ import (
 	"testing"
 )
 
-func TestRoundDecimal(t *testing.T) {
+func TestRoundDecimals(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    float64
-		expected float64
+		name      string
+		input     float64
+		precision int
+		expected  float64
 	}{
-		// Basic rounding cases (5 decimal places)
-		{"repeating_decimal", 63.33333333333333, 63.33333},
-		{"already_precise", 0.25, 0.25},
-		{"round_up", 84.765625, 84.76563},
+		// LineHeightPrecision (5) - for line-height values
+		{"line_height_1.0101", 1.01010101, LineHeightPrecision, 1.0101},
+		{"line_height_1.33249", 1.332486, LineHeightPrecision, 1.33249},
+
+		// WidthPercentPrecision (3) - for image widths
+		{"width_19.531", 19.53125, WidthPercentPrecision, 19.531},
+		{"width_74.219", 74.21875, WidthPercentPrecision, 74.219},
+		{"width_29.102", 29.1015625, WidthPercentPrecision, 29.102},
 
 		// Edge cases
-		{"zero", 0, 0},
-		{"negative", -1.2345, -1.2345},
-		{"whole_number", 100.0, 100.0},
-		{"exactly_5_places", 1.23456, 1.23456},
+		{"zero", 0, 6, 0},
+		{"negative", -1.2345, 6, -1.2345},
+		{"whole_number", 100.0, 6, 100.0},
 
 		// Half-up rounding behavior
-		{"half_up_5", 1.2345651, 1.23457},    // above .5 rounds up
-		{"half_up_below", 1.234564, 1.23456}, // below .5 rounds down
-		{"half_up_above", 1.234566, 1.23457}, // above .5 rounds up
-
-		// Real-world values from image sizing
-		{"image_width_percent", 19.047619047619, 19.04762},
-		{"image_height_em", 1.666666666667, 1.66667},
-		{"margin_lh", 0.416666666667, 0.41667},
-
-		// Very small values
-		{"tiny_value", 0.000001, 0.0},
-		{"small_value", 0.00001, 0.00001},
-		{"small_round_up", 0.000005, 0.00001},
-		{"small_round_down", 0.000004, 0.0},
-
-		// Large values
-		{"large_value", 1000.123456, 1000.12346},
+		{"half_up_5", 1.23456751, 6, 1.234568},
+		{"half_up_below", 1.2345674, 6, 1.234567},
+		{"half_up_above", 1.2345676, 6, 1.234568},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := RoundDecimal(tt.input)
+			result := RoundDecimals(tt.input, tt.precision)
 			// Use epsilon comparison for floating point
 			if math.Abs(result-tt.expected) > 1e-9 {
-				t.Errorf("RoundDecimal(%v) = %v, want %v", tt.input, result, tt.expected)
+				t.Errorf("RoundDecimals(%v, %d) = %v, want %v", tt.input, tt.precision, result, tt.expected)
 			}
 		})
 	}
 }
 
-func TestDecimalPrecisionConstant(t *testing.T) {
-	// Verify the constant is set to 5 for higher precision output
-	if DecimalPrecision != 5 {
-		t.Errorf("DecimalPrecision = %d, want 5", DecimalPrecision)
+func TestRoundSignificant(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    float64
+		sigFigs  int
+		expected float64
+	}{
+		// SignificantFigures (6) - for vertical margins
+		// Key insight: 6 sig figs for values >= 1 gives fewer decimal places
+		{"margin_5_3", 5.0 / 3.0, SignificantFigures, 1.66667},           // 6 sig figs = 5 decimals
+		{"margin_5_6", 5.0 / 6.0, SignificantFigures, 0.833333},          // 6 sig figs = 6 decimals (< 1)
+		{"margin_1_6", 1.0 / 6.0, SignificantFigures, 0.166667},          // 6 sig figs = 6 decimals (< 1)
+		{"margin_5_12", 5.0 / 12.0, SignificantFigures, 0.416667},        // 6 sig figs = 6 decimals (< 1)
+		{"margin_large", 63.33333333333333, SignificantFigures, 63.3333}, // 6 sig figs = 4 decimals (large)
+
+		// Verify KP3 reference values
+		{"kp3_margin_top", 1.666666666667, SignificantFigures, 1.66667},   // matches 1.66667lh
+		{"kp3_margin_bottom", 0.8333333333, SignificantFigures, 0.833333}, // matches 0.833333lh
+		{"kp3_margin_half", 0.416666666667, SignificantFigures, 0.416667}, // matches 0.416667lh
+
+		// Edge cases
+		{"zero", 0, SignificantFigures, 0},
+		{"already_precise", 0.25, SignificantFigures, 0.25},
+		{"whole_number", 100.0, SignificantFigures, 100.0},
+		{"negative", -1.66667, SignificantFigures, -1.66667},
+
+		// Smaller values (more decimals needed)
+		{"small_value", 0.0833333, SignificantFigures, 0.0833333}, // 6 sig figs = 7 decimals
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := RoundSignificant(tt.input, tt.sigFigs)
+			// Use epsilon comparison for floating point
+			if math.Abs(result-tt.expected) > 1e-9 {
+				t.Errorf("RoundSignificant(%v, %d) = %v, want %v", tt.input, tt.sigFigs, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestSignificantFiguresConstant(t *testing.T) {
+	// Verify the constant is set to 6 for KP3 compatibility
+	if SignificantFigures != 6 {
+		t.Errorf("SignificantFigures = %d, want 6", SignificantFigures)
 	}
 }
 

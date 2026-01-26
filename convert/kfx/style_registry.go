@@ -627,13 +627,13 @@ func adjustLineHeightForFontSize(props map[KFXSymbol]any) map[KFXSymbol]any {
 		// For large fonts (headings), use standard adjustment
 		adjustedLh = AdjustedLineHeightLh
 	}
-	updated[SymLineHeight] = DimensionValue(RoundDecimal(adjustedLh), SymUnitLh)
+	updated[SymLineHeight] = DimensionValue(RoundDecimals(adjustedLh, LineHeightPrecision), SymUnitLh)
 
 	// Adjust vertical margins using the line-height factor
 	for _, sym := range []KFXSymbol{SymMarginTop, SymMarginBottom, SymPaddingTop, SymPaddingBottom} {
 		if margin, ok := updated[sym]; ok {
 			if marginVal, marginUnit, ok := measureParts(margin); ok && marginUnit == SymUnitLh {
-				adjusted := RoundDecimal(marginVal / adjustedLh)
+				adjusted := RoundSignificant(marginVal/adjustedLh, SignificantFigures)
 				updated[sym] = DimensionValue(adjusted, SymUnitLh)
 			}
 		}
@@ -803,6 +803,12 @@ func NewStyleRegistryFromCSS(cssData []byte, tracer *StyleTracer, log *zap.Logge
 	// should not directly apply to child elements - only descendant selectors do.
 	sr.registerDescendantSelectors()
 
+	// Apply KFX-specific style adjustments before post-processing.
+	// This fixes discrepancies between CSS/EPUB behavior and KFX behavior,
+	// such as footnote title margins where the -first/-next variants should
+	// inherit from the base footnote-title style rather than override it.
+	sr.applyKFXStyleAdjustments()
+
 	// Apply KFX-specific post-processing (layout-hints, yj-break, etc.)
 	sr.PostProcessForKFX()
 
@@ -828,6 +834,37 @@ func (sr *StyleRegistry) registerDescendantSelectors() {
 	sr.Register(NewStyle("footnote>p").
 		TextIndent(0, SymUnitPercent).
 		Build())
+}
+
+// applyKFXStyleAdjustments modifies CSS styles for KFX-specific requirements.
+// This is called after CSS is loaded but before KFX post-processing.
+//
+// Unlike registerDescendantSelectors which adds new selector rules, this function
+// modifies existing styles to fix discrepancies between CSS/EPUB behavior and KFX behavior.
+func (sr *StyleRegistry) applyKFXStyleAdjustments() {
+	// Remove vertical margins from footnote-title-first and footnote-title-next.
+	//
+	// In EPUB, footnote titles use a div wrapper with class "footnote-title" that has
+	// margin: 1em 0 0.5em 0, and the p elements inside have class "footnote-title-first"
+	// or "footnote-title-next" with margin: 0.2em 0 (for internal spacing).
+	//
+	// In KFX, there's no div/p hierarchy - styles are applied directly to paragraphs.
+	// When both classes are applied ("footnote-title footnote-title-first"), the more
+	// specific -first/-next margins (0.2em) override the base margins (1em/0.5em).
+	//
+	// The reference KP3 output shows footnote title entries with mt=0.833333lh (1em/1.2)
+	// and mb=0.416667lh (0.5em/1.2), matching the container margins, not the paragraph margins.
+	//
+	// By removing vertical margins from -first/-next, they inherit from footnote-title,
+	// producing correct output that matches KP3.
+	for _, styleName := range []string{"footnote-title-first", "footnote-title-next"} {
+		if def, exists := sr.styles[styleName]; exists {
+			// Remove vertical margin properties so they inherit from footnote-title
+			delete(def.Properties, SymMarginTop)
+			delete(def.Properties, SymMarginBottom)
+			sr.styles[styleName] = def
+		}
+	}
 }
 
 // DefaultStyleRegistry returns a registry with default HTML element styles for KFX.
@@ -872,8 +909,8 @@ func DefaultStyleRegistry() *StyleRegistry {
 	// Convert to lh units: 1em / 1.2 = 0.833lh
 	// FB2-specific formatting (text-indent, justify) comes from CSS
 	sr.Register(NewStyle("p").
-		MarginTop(0.833, SymUnitLh).
-		MarginBottom(0.833, SymUnitLh).
+		MarginTop(0.833333, SymUnitLh).
+		MarginBottom(0.833333, SymUnitLh).
 		Build())
 
 	// Heading styles (h1-h6) - HTML heading elements
@@ -898,8 +935,8 @@ func DefaultStyleRegistry() *StyleRegistry {
 	sr.Register(NewStyle("h3").
 		FontSize(1.17, SymUnitRem).
 		FontWeight(SymBold).
-		MarginTop(0.833, SymUnitLh). // 1.0em / 1.2
-		MarginBottom(0.833, SymUnitLh).
+		MarginTop(0.833333, SymUnitLh). // 1.0em / 1.2
+		MarginBottom(0.833333, SymUnitLh).
 		Build())
 
 	sr.Register(NewStyle("h4").
@@ -934,16 +971,16 @@ func DefaultStyleRegistry() *StyleRegistry {
 	// Note: white-space is handled at content level, not in style
 	sr.Register(NewStyle("pre").
 		FontFamily("monospace").
-		MarginTop(0.833, SymUnitLh).
-		MarginBottom(0.833, SymUnitLh).
+		MarginTop(0.833333, SymUnitLh).
+		MarginBottom(0.833333, SymUnitLh).
 		Build())
 
 	// Blockquote - HTML <blockquote> element
 	// Amazon reference (stylemap.ion): margin-top: 1em, margin-bottom: 1em, margin-left: 40px, margin-right: 40px
 	// Vertical margins converted to lh: 1em / 1.2 = 0.833lh
 	sr.Register(NewStyle("blockquote").
-		MarginTop(0.833, SymUnitLh).
-		MarginBottom(0.833, SymUnitLh).
+		MarginTop(0.833333, SymUnitLh).
+		MarginBottom(0.833333, SymUnitLh).
 		MarginLeft(40, SymUnitPx).
 		MarginRight(40, SymUnitPx).
 		Build())
@@ -979,7 +1016,7 @@ func DefaultStyleRegistry() *StyleRegistry {
 	sr.Register(NewStyle("table").
 		BoxAlign(SymCenter).
 		LineHeight(1, SymUnitLh).
-		MarginTop(0.833, SymUnitLh).
+		MarginTop(0.833333, SymUnitLh).
 		Width(32, SymUnitEm).
 		MinWidth(100, SymUnitPercent).
 		MaxWidth(100, SymUnitPercent).
@@ -1230,11 +1267,13 @@ func DefaultStyleRegistry() *StyleRegistry {
 		Build())
 
 	// End vignette image style - decorative images at end of chapters/sections.
-	// Same as image-vignette but WITHOUT margin-top (spacing comes from preceding element).
+	// KP3 reference shows mt=1.25lh, mb=1.25lh for section-end vignettes.
 	sr.Register(NewStyle("image-vignette-end").
 		BoxAlign(SymCenter).
 		SizingBounds(SymContentBounds).
 		Width(100, SymUnitPercent).
+		MarginTop(1.25, SymUnitLh).
+		MarginBottom(1.25, SymUnitLh).
 		Build())
 
 	return sr
@@ -1272,9 +1311,10 @@ func (sr *StyleRegistry) applyKFXEnhancements(name string, def StyleDef) StyleDe
 		}
 		// KP3 reference: title text styles have margin-top but NOT margin-bottom.
 		// The margin-bottom is only on the wrapper container, not the text inside.
-		// EXCEPTION: Subtitle styles (-subtitle) that have page-break-after: avoid
-		// should KEEP their margin-bottom because they use it for spacing with next element.
-		if !sr.isSubtitleWithBreakAfterAvoid(name, props) {
+		// EXCEPTIONS that should KEEP their margin-bottom:
+		// 1. Subtitle styles with page-break-after: avoid (spacing with next element)
+		// 2. Footnote-title: used directly on paragraphs (no wrapper), needs both margins
+		if !sr.isSubtitleWithBreakAfterAvoid(name, props) && name != "footnote-title" {
 			delete(props, SymMarginBottom)
 		}
 	}
@@ -1324,13 +1364,15 @@ func (sr *StyleRegistry) applyKFXEnhancements(name string, def StyleDef) StyleDe
 //   - HTML heading elements (h1-h6)
 //   - Styles ending with "-title-header" (body-title-header, chapter-title-header, etc.)
 //   - Simple title styles for generated sections (annotation-title, toc-title, footnote-title)
-//   - Styles named "subtitle" or with "-subtitle" suffix (if centered)
 //
 // NOTE: Styles with additional suffixes like "-title-header-first", "-title-header-next",
 // "-title-header-break", "-title-header-emptyline" should NOT get layout-hints because
 // they are used in style_events ($142), not as direct content styles ($157).
 // KP3 reference shows layout-hints only on the direct content style, not on style_events styles.
-func (sr *StyleRegistry) shouldHaveLayoutHintTitle(name string, props map[KFXSymbol]any) bool {
+//
+// NOTE: Subtitle styles (-subtitle) are NOT treated as titles - they are regular paragraphs
+// with special formatting (centered, bold), similar to how EPUB handles them.
+func (sr *StyleRegistry) shouldHaveLayoutHintTitle(name string, _ map[KFXSymbol]any) bool {
 	// HTML heading elements
 	switch name {
 	case "h1", "h2", "h3", "h4", "h5", "h6":
@@ -1350,14 +1392,6 @@ func (sr *StyleRegistry) shouldHaveLayoutHintTitle(name string, props map[KFXSym
 	switch name {
 	case "annotation-title", "toc-title", "footnote-title":
 		return true
-	}
-
-	// Subtitle styles - only apply to centered, bold subtitles
-	if name == "subtitle" || strings.HasSuffix(name, "-subtitle") {
-		// Check if it's centered (cite-subtitle is left-aligned and shouldn't get layout-hint)
-		if isSymbol(props[SymTextAlignment], SymCenter) {
-			return true
-		}
 	}
 
 	return false

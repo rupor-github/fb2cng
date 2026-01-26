@@ -124,11 +124,11 @@ func DimensionValue(value float64, unit KFXSymbol) StructValue {
 
 // formatNumber formats a number in KP3's style.
 // KP3 uses scientific notation "d-1" for small decimals.
-// KP3 uses at most 3 significant decimal digits - more precision causes rendering issues.
-// See DecimalPrecision in kpv_units.go for details.
+// Values should be pre-rounded to the appropriate precision before calling this function.
+// See SignificantFigures, LineHeightPrecision, WidthPercentPrecision in kp3_units.go.
 func formatNumber(v float64) string {
-	// Round to DecimalPrecision decimal places to match KP3 precision
-	v = RoundDecimal(v)
+	// Round to SignificantFigures as a safety net (values should already be rounded)
+	v = RoundSignificant(v, SignificantFigures)
 
 	if v == 0 {
 		return "0."

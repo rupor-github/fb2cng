@@ -224,6 +224,20 @@ type ContentNode struct {
 	// This is set when an empty-line follows this element, matching KP3 behavior.
 	StripMarginBottom bool
 
+	// EmptyLineMarginBottom stores the empty-line margin to apply as this element's margin-bottom.
+	// This is set when an empty-line is followed by an image - KP3 puts the empty-line margin
+	// on the PREVIOUS element (as mb) rather than the image (as mt).
+	EmptyLineMarginBottom *float64
+
+	// EmptyLineMarginTop stores the empty-line margin to apply as this element's margin-top.
+	// This is set when an empty-line precedes a text element. The margin is applied during
+	// post-processing to avoid font-size scaling that would occur if baked into the CSS style.
+	EmptyLineMarginTop *float64
+
+	// IsFloatImage is true for full-width standalone block images (width >= 512px).
+	// These images have fixed 2.6lh margins and act as barriers to sibling margin collapsing.
+	IsFloatImage bool
+
 	// ContainerKind identifies the type of container this node represents.
 	// For leaf content nodes, this is ContainerRoot (not a container).
 	ContainerKind ContainerKind
@@ -612,15 +626,18 @@ func (sb *StorylineBuilder) addContentNodeToTree(tree *ContentTree, containerNod
 
 	// Create content node
 	contentNode := &ContentNode{
-		Index:              parentIndex,
-		EID:                ref.EID,
-		ContentType:        contentType,
-		Style:              ref.Style,
-		MarginTop:          ref.MarginTop,
-		MarginBottom:       ref.MarginBottom,
-		HasBreakAfterAvoid: ref.HasBreakAfterAvoid,
-		StripMarginBottom:  ref.StripMarginBottom,
-		EntryOrder:         ref.EntryOrder,
+		Index:                 parentIndex,
+		EID:                   ref.EID,
+		ContentType:           contentType,
+		Style:                 ref.Style,
+		MarginTop:             ref.MarginTop,
+		MarginBottom:          ref.MarginBottom,
+		HasBreakAfterAvoid:    ref.HasBreakAfterAvoid,
+		StripMarginBottom:     ref.StripMarginBottom,
+		EmptyLineMarginBottom: ref.EmptyLineMarginBottom,
+		EmptyLineMarginTop:    ref.EmptyLineMarginTop,
+		IsFloatImage:          ref.IsFloatImage,
+		EntryOrder:            ref.EntryOrder,
 	}
 
 	// For child refs, store both parent and child index for later lookup
@@ -759,12 +776,71 @@ func (t *ContentTree) collapseEmptyNodes(container *ContentNode) {
 	}
 }
 
-// stripMarkedMarginBottom removes margin-bottom from nodes marked with StripMarginBottom.
+// stripMarkedMarginBottom removes margin-bottom from nodes marked with StripMarginBottom,
+// and applies EmptyLineMarginBottom where set.
+//
 // This is called when an empty-line follows an element, matching KP3 behavior where the
 // preceding element loses its mb and the empty-line's margin goes to the next element's mt.
+//
+// Additionally, if the stripped margin-bottom is larger than the next sibling's margin-top,
+// the next sibling's margin-top is increased to match. This matches KP3 behavior where
+// an empty-line after a subtitle (mb=0.833lh) gives the following paragraph mt=0.833lh
+// instead of the default empty-line margin (0.5lh).
+//
+// When EmptyLineMarginBottom is set (for empty-line followed by image), it replaces
+// the element's margin-bottom with the empty-line margin value.
+//
+// When EmptyLineMarginTop is set (for empty-line followed by text), it applies
+// the empty-line margin to the element's margin-top using max(emptyline_mt, existing_mt).
+// This margin is NOT scaled by font-size since it's applied here, not via CSS style.
 func (t *ContentTree) stripMarkedMarginBottom(container *ContentNode) {
-	for _, child := range container.Children {
-		if child.StripMarginBottom && child.MarginBottom != nil {
+	children := container.Children
+	for i, child := range children {
+		// Handle EmptyLineMarginTop: when empty-line is followed by text,
+		// apply the empty-line margin as margin-top using max(emptyline_mt, existing_mt).
+		// This margin is stored separately to avoid font-size scaling.
+		if child.EmptyLineMarginTop != nil {
+			emptyLineMT := *child.EmptyLineMarginTop
+			existingMT := 0.0
+			if child.MarginTop != nil {
+				existingMT = *child.MarginTop
+			}
+			// Use the larger of the two margins
+			if emptyLineMT > existingMT {
+				if t.tracer != nil && t.tracer.IsEnabled() {
+					beforeMT, beforeMB := child.MarginTop, child.MarginBottom
+					child.MarginTop = ptrFloat64(emptyLineMT)
+					t.tracer.TraceMarginCollapse("emptyline-mt", child.TraceID(),
+						beforeMT, beforeMB, child.MarginTop, child.MarginBottom,
+						container.ContainerKind.String())
+				} else {
+					child.MarginTop = ptrFloat64(emptyLineMT)
+				}
+			}
+			// Continue to check for other flags (StripMarginBottom, etc.)
+		}
+
+		// Handle EmptyLineMarginBottom: when empty-line is followed by image,
+		// KP3 puts the empty-line margin on the PREVIOUS element as margin-bottom.
+		if child.EmptyLineMarginBottom != nil {
+			if t.tracer != nil && t.tracer.IsEnabled() {
+				beforeMT, beforeMB := child.MarginTop, child.MarginBottom
+				child.MarginBottom = child.EmptyLineMarginBottom
+				t.tracer.TraceMarginCollapse("emptyline-mb-before-image", child.TraceID(),
+					beforeMT, beforeMB, child.MarginTop, child.MarginBottom,
+					container.ContainerKind.String())
+			} else {
+				child.MarginBottom = child.EmptyLineMarginBottom
+			}
+			// Don't also strip - EmptyLineMarginBottom takes precedence
+			continue
+		}
+
+		// Float images have fixed margins that don't participate in collapsing.
+		// Skip stripping mb from float images - they keep their 2.6lh margins.
+		if child.StripMarginBottom && child.MarginBottom != nil && !child.IsFloatImage {
+			strippedMB := *child.MarginBottom
+
 			// Trace the strip operation before clearing
 			if t.tracer != nil && t.tracer.IsEnabled() {
 				beforeMT, beforeMB := child.MarginTop, child.MarginBottom
@@ -774,6 +850,28 @@ func (t *ContentTree) stripMarkedMarginBottom(container *ContentNode) {
 					container.ContainerKind.String())
 			} else {
 				child.MarginBottom = nil
+			}
+
+			// Transfer stripped margin to next sibling if it's larger than next's margin-top.
+			// This matches KP3 behavior: empty-line after subtitle gives next element
+			// max(emptyline_margin, subtitle_mb).
+			if i+1 < len(children) {
+				next := children[i+1]
+				nextMT := 0.0
+				if next.MarginTop != nil {
+					nextMT = *next.MarginTop
+				}
+				if strippedMB > nextMT {
+					if t.tracer != nil && t.tracer.IsEnabled() {
+						beforeMT, beforeMB := next.MarginTop, next.MarginBottom
+						next.MarginTop = ptrFloat64(strippedMB)
+						t.tracer.TraceMarginCollapse("transfer-stripped-mb", next.TraceID(),
+							beforeMT, beforeMB, next.MarginTop, next.MarginBottom,
+							container.ContainerKind.String())
+					} else {
+						next.MarginTop = ptrFloat64(strippedMB)
+					}
+				}
 			}
 		}
 	}
@@ -934,11 +1032,27 @@ func (t *ContentTree) collapseLastChildWithContext(container *ContentNode, isLas
 	// For virtual containers, we accumulate the margin-bottom on the container for later
 	// sibling collapsing (virtual containers pass their mb to the next sibling)
 	//
-	// Special case: if the container is ROOT and the last child is a virtual container
-	// (wrapper), don't transfer the child's mb to root. Root is never rendered, so the
-	// margin would be lost. Instead, let the child keep its mb so it renders on the wrapper.
-	if container.ContainerKind == ContainerRoot && last.IsContainer() {
-		// Don't transfer wrapper's mb to root - it would be lost
+	// Special case: if the container is ROOT, don't transfer any child's mb to root.
+	// Root is never rendered, so the margin would be lost. Instead, let the child
+	// keep its mb so it renders on the actual element.
+	if container.ContainerKind == ContainerRoot {
+		// Don't transfer any child's mb to root - it would be lost
+		return
+	}
+	// Special case: virtual containers (Index == -1) that are the last child of ROOT
+	// should not receive the last child's mb. Virtual containers don't have corresponding
+	// content entries, so the margin would be lost (only wrapper entries in WrapperMap
+	// get their margins applied). When a virtual container is at the end of the storyline
+	// (last child of root), the last content element should keep its mb so it renders.
+	//
+	// This matches KP3 behavior where the last element in a storyline keeps its margin-bottom.
+	if container.Index == -1 && isLastChildOfParent && container.Parent != nil && container.Parent.ContainerKind == ContainerRoot {
+		// Virtual container at storyline end - last child keeps its mb
+		return
+	}
+	// Float images have fixed margins (2.6lh) that don't participate in collapsing.
+	// They keep their margins and act as barriers in the margin flow.
+	if last.IsFloatImage {
 		return
 	}
 	if container.MarginBottom != nil && last.MarginBottom != nil {
@@ -1020,30 +1134,150 @@ func (t *ContentTree) collapseSiblings(container *ContentNode) {
 		next := children[i+1]
 		nextBeforeMT, nextBeforeMB := next.MarginTop, next.MarginBottom
 
-		// Only process virtual containers (wrappers) or break-after-avoid followed by container
-		// Content nodes do NOT transfer margins to siblings
+		// Only process virtual containers (wrappers) or break-after-avoid elements
+		// Content nodes do NOT transfer margins to siblings (except special cases below)
 		if !curr.IsContainer() {
-			// For content nodes with break-after-avoid followed by a container,
-			// still transfer margin into the container
-			if curr.HasBreakAfterAvoid && next.IsContainer() && curr.MarginBottom != nil {
+			// For content nodes with break-after-avoid AND margin-bottom, AND next sibling
+			// is a container: transfer the margin to the container's first child.
+			//
+			// KP3 behavior: when an element has break-after: avoid AND margin-bottom,
+			// AND is followed by a container (poem, epigraph, etc.), the current element's
+			// margin-bottom is stripped and transferred to the container's margin-top.
+			// The container's first-child collapsing will then propagate it down to the
+			// first rendered content.
+			//
+			// This does NOT apply when the next sibling is a regular content node -
+			// in that case, both elements keep their own margins.
+			//
+			// If the element has break-after: avoid but NO margin-bottom, no transfer happens.
+			if curr.HasBreakAfterAvoid && curr.MarginBottom != nil && next.IsContainer() {
+				currBeforeMT, currBeforeMB := curr.MarginTop, curr.MarginBottom
+				// Collapse curr's mb with next container's mt (if any) and put result on container
 				if next.MarginTop != nil {
 					collapsed := collapseValues(*curr.MarginBottom, *next.MarginTop)
 					next.MarginTop = ptrFloat64(collapsed)
 				} else {
+					// Transfer curr's mb to container's mt
 					next.MarginTop = curr.MarginBottom
 				}
 				curr.MarginBottom = nil
+				// Trace the transfer on curr (showing mb removal)
+				if t.tracer != nil && t.tracer.IsEnabled() {
+					t.tracer.TraceMarginCollapse("break-after-avoid-to-container", curr.TraceID(),
+						currBeforeMT, currBeforeMB, curr.MarginTop, curr.MarginBottom,
+						container.ContainerKind.String())
+				}
 				t.traceSibling(next, nextBeforeMT, nextBeforeMB, container)
+				continue
+			}
+
+			// CSS sibling margin collapsing between content node and following container:
+			// When a content node is followed by a container (virtual node), we should
+			// collapse curr's mb with container's mt using max(), and put the result on
+			// the container. The container's first-child collapsing will then propagate
+			// the margin to its first child.
+			//
+			// This is different from content → content collapsing because containers
+			// don't render directly - their margins go to their children.
+			if curr.MarginBottom != nil && next.IsContainer() {
+				currBeforeMT, currBeforeMB := curr.MarginTop, curr.MarginBottom
+				// Collapse curr's mb with container's mt (if any)
+				if next.MarginTop != nil {
+					collapsed := collapseValues(*curr.MarginBottom, *next.MarginTop)
+					next.MarginTop = ptrFloat64(collapsed)
+				} else {
+					// Transfer curr's mb to container's mt
+					next.MarginTop = curr.MarginBottom
+				}
+				curr.MarginBottom = nil
+				if t.tracer != nil && t.tracer.IsEnabled() {
+					t.tracer.TraceMarginCollapse("content-to-container-sibling", curr.TraceID(),
+						currBeforeMT, currBeforeMB, curr.MarginTop, curr.MarginBottom,
+						container.ContainerKind.String())
+				}
+				t.traceSibling(next, nextBeforeMT, nextBeforeMB, container)
+				continue
+			}
+
+			// CSS sibling margin collapsing between content nodes:
+			// When curr has mb and next has mt, and next's mt >= curr's mb,
+			// remove curr's mb (it's absorbed into next's larger mt).
+			// This matches standard CSS behavior where adjacent margins collapse to the larger value.
+			//
+			// KP3 behavior: content elements don't transfer margins to siblings, but when the
+			// next sibling has a margin-top that's >= the current element's margin-bottom,
+			// the current element's margin-bottom is removed to avoid double-spacing.
+			// The visual spacing between elements comes from the larger margin (next's mt).
+			//
+			// Exception: Float images (full-width standalone images) act as barriers:
+			// - A float image's mt does NOT absorb the previous element's mb
+			// - The previous element keeps its mb and visual spacing is the SUM of both margins
+			if curr.MarginBottom != nil && next.MarginTop != nil && !next.IsFloatImage {
+				currMB := *curr.MarginBottom
+				nextMT := *next.MarginTop
+				if nextMT >= currMB {
+					// Next's mt absorbs curr's mb - remove curr's mb
+					currBeforeMT, currBeforeMB := curr.MarginTop, curr.MarginBottom
+					curr.MarginBottom = nil
+					if t.tracer != nil && t.tracer.IsEnabled() {
+						t.tracer.TraceMarginCollapse("sibling-absorb-mb", curr.TraceID(),
+							currBeforeMT, currBeforeMB, curr.MarginTop, curr.MarginBottom,
+							container.ContainerKind.String())
+					}
+				}
 			}
 			// Content nodes keep their margins otherwise
 			continue
 		}
 
-		// Virtual container (wrapper) nodes transfer their mb to next sibling's mt
-		// because containers don't render directly; their margins go to content
-		// Exception: containers with FlagTransferMBToLastChild should NOT transfer mb
-		// to siblings - their mb will go to their last child instead
+		// Virtual container (wrapper) nodes: handle margin collapsing with next sibling
+		// Containers don't render directly; their margins go to content.
+		//
+		// For containers with FlagTransferMBToLastChild:
+		// - If next sibling's mt >= container's mb, the sibling absorbs it (remove container's mb)
+		// - Additionally, if next sibling's mt >= last child's mb, absorb that too
+		//   This implements CSS "through-the-container" collapsing where the last child's mb
+		//   collapses with whatever comes after the container.
+		// - Otherwise, the container keeps its mb to transfer to last child later
+		//
+		// For containers without the flag:
+		// - Transfer container's mb to next sibling's mt (standard container collapsing)
 		if curr.ContainerFlags.TransfersMBToLastChild() {
+			// Check if next sibling's mt can absorb the container's mb
+			if curr.MarginBottom != nil && next.MarginTop != nil {
+				currMB := *curr.MarginBottom
+				nextMT := *next.MarginTop
+				if nextMT >= currMB {
+					// Next sibling's mt absorbs container's mb - remove container's mb
+					// This prevents the mb from being transferred to last child
+					currBeforeMT, currBeforeMB := curr.MarginTop, curr.MarginBottom
+					curr.MarginBottom = nil
+					if t.tracer != nil && t.tracer.IsEnabled() {
+						t.tracer.TraceMarginCollapse("container-sibling-absorb-mb", curr.TraceID(),
+							currBeforeMT, currBeforeMB, curr.MarginTop, curr.MarginBottom,
+							container.ContainerKind.String())
+					}
+				}
+			}
+			// Also check if the last child's mb should be absorbed by next sibling's mt
+			// This implements CSS "through-the-container" collapsing
+			if len(curr.Children) > 0 && next.MarginTop != nil {
+				lastChild := curr.Children[len(curr.Children)-1]
+				if lastChild.MarginBottom != nil {
+					lastMB := *lastChild.MarginBottom
+					nextMT := *next.MarginTop
+					if nextMT >= lastMB {
+						// Next sibling's mt absorbs last child's mb
+						beforeMT, beforeMB := lastChild.MarginTop, lastChild.MarginBottom
+						lastChild.MarginBottom = nil
+						if t.tracer != nil && t.tracer.IsEnabled() {
+							t.tracer.TraceMarginCollapse("through-container-absorb-mb", lastChild.TraceID(),
+								beforeMT, beforeMB, lastChild.MarginTop, lastChild.MarginBottom,
+								container.ContainerKind.String())
+						}
+					}
+				}
+			}
 			continue
 		}
 		if curr.MarginBottom != nil {
