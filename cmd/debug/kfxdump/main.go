@@ -315,6 +315,8 @@ type marginInfo struct {
 	marginTop    string
 	marginBottom string
 	marginLeft   string
+	marginRight  string
+	lineHeight   string
 }
 
 // collectStyleMargins extracts margin values from all style definitions.
@@ -352,6 +354,12 @@ func collectStyleMargins(c *kfx.Container) map[string]*marginInfo {
 		}
 		if ml, ok := props["margin_left"]; ok {
 			info.marginLeft = kfx.FormatDimensionAsCSS(ml)
+		}
+		if mr, ok := props["margin_right"]; ok {
+			info.marginRight = kfx.FormatDimensionAsCSS(mr)
+		}
+		if lh, ok := props["line_height"]; ok {
+			info.lineHeight = kfx.FormatDimensionAsCSS(lh)
 		}
 
 		margins[styleName] = info
@@ -456,6 +464,9 @@ func formatMarginStr(mi *marginInfo) string {
 	}
 	if mi.marginLeft != "" && mi.marginLeft != "0" && mi.marginLeft != "0%" {
 		parts = append(parts, fmt.Sprintf("ml=%s", mi.marginLeft))
+	}
+	if mi.lineHeight != "" {
+		parts = append(parts, fmt.Sprintf("lh=%s", mi.lineHeight))
 	}
 
 	if len(parts) == 0 {

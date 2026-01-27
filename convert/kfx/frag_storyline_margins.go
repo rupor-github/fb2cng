@@ -1367,9 +1367,10 @@ func (sb *StorylineBuilder) applyCollapsedMargins(tree *ContentTree) {
 			props[SymMarginBottom] = DimensionValue(*containerNode.MarginBottom, SymUnitLh)
 		}
 
-		// Register the new style
+		// Register the new style, preserving the original style's usage type
 		originalStyle := ref.Style
-		newStyle := sb.styles.RegisterResolvedRaw(props)
+		originalUsage := sb.styles.GetUsage(originalStyle)
+		newStyle := sb.styles.RegisterResolvedRaw(props, originalUsage)
 		ref.Style = newStyle
 
 		// Trace the style variant creation
@@ -1433,9 +1434,10 @@ func (sb *StorylineBuilder) applyCollapsedMargins(tree *ContentTree) {
 			props[SymMarginBottom] = DimensionValue(*node.MarginBottom, SymUnitLh)
 		}
 
-		// Register the new style (deduplication handles identical property sets)
+		// Register the new style, preserving the original style's usage type
 		originalStyle := ref.Style
-		newStyle := sb.styles.RegisterResolvedRaw(props)
+		originalUsage := sb.styles.GetUsage(originalStyle)
+		newStyle := sb.styles.RegisterResolvedRaw(props, originalUsage)
 
 		// Trace the style variant creation
 		if tracer != nil && tracer.IsEnabled() {

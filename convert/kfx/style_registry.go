@@ -282,6 +282,12 @@ func (sr *StyleRegistry) hasImageUsage(name string) bool {
 	return sr.usage[name]&styleUsageImage != 0
 }
 
+// GetUsage returns the usage flags for a style. Used when creating style variants
+// that should inherit the original style's usage type.
+func (sr *StyleRegistry) GetUsage(name string) styleUsage {
+	return sr.usage[name]
+}
+
 func (sr *StyleRegistry) nextResolvedStyleName() string {
 	sr.resolvedCounter++
 	return "s" + toBase36(sr.resolvedCounter)
@@ -349,6 +355,9 @@ func (sr *StyleRegistry) GetTableElementProps() TableElementProps {
 // to register styles built with proper CSS inheritance rules.
 // All resolved styles inherit from kfx-unknown as the base.
 //
+// Since styles registered via Resolve are used for text paragraphs, this automatically
+// records styleUsageText so that ensureDefaultLineHeight is applied during BuildFragments.
+//
 // This method also performs standard KFX output filtering:
 // - Removes height: auto (KP3 never outputs this, it's the implied default)
 // - Removes table element properties (these go on the element, not the style)
@@ -362,17 +371,19 @@ func (sr *StyleRegistry) RegisterResolved(props map[KFXSymbol]any) string {
 	}
 	sr.mergeProperties(merged, props) // Provided props override kfx-unknown
 
-	return sr.registerFilteredStyle(merged)
+	return sr.registerFilteredStyle(merged, styleUsageText)
 }
 
 // RegisterResolvedRaw registers a style without adding the kfx-unknown base.
 // This is used for image styles that don't need text properties like line-height.
 // Standard KFX output filtering is still applied.
-func (sr *StyleRegistry) RegisterResolvedRaw(props map[KFXSymbol]any) string {
+// The usage parameter allows preserving usage type when creating margin variants.
+// Pass 0 for image styles that don't need text usage.
+func (sr *StyleRegistry) RegisterResolvedRaw(props map[KFXSymbol]any, usage styleUsage) string {
 	// Make a copy to avoid modifying caller's map
 	merged := make(map[KFXSymbol]any, len(props))
 	maps.Copy(merged, props)
-	return sr.registerFilteredStyle(merged)
+	return sr.registerFilteredStyle(merged, usage)
 }
 
 // RegisterResolvedNoMark is like RegisterResolved but does NOT mark the style as used.
@@ -388,21 +399,23 @@ func (sr *StyleRegistry) RegisterResolvedNoMark(props map[KFXSymbol]any) string 
 	}
 	sr.mergeProperties(merged, props) // Provided props override kfx-unknown
 
-	return sr.registerFilteredStyleNoMark(merged)
+	return sr.registerFilteredStyleNoMark(merged, styleUsageText)
 }
 
 // registerFilteredStyle applies standard KFX output filtering, registers the style, and marks it used.
-func (sr *StyleRegistry) registerFilteredStyle(merged map[KFXSymbol]any) string {
-	return sr.doRegisterFilteredStyle(merged, true)
+// For text styles (from RegisterResolved), this also records styleUsageText so line-height is ensured.
+func (sr *StyleRegistry) registerFilteredStyle(merged map[KFXSymbol]any, usage styleUsage) string {
+	return sr.doRegisterFilteredStyle(merged, true, usage)
 }
 
 // registerFilteredStyleNoMark applies standard KFX output filtering and registers the style but does NOT mark used.
-func (sr *StyleRegistry) registerFilteredStyleNoMark(merged map[KFXSymbol]any) string {
-	return sr.doRegisterFilteredStyle(merged, false)
+func (sr *StyleRegistry) registerFilteredStyleNoMark(merged map[KFXSymbol]any, usage styleUsage) string {
+	return sr.doRegisterFilteredStyle(merged, false, usage)
 }
 
 // doRegisterFilteredStyle is the common implementation for filtered style registration.
-func (sr *StyleRegistry) doRegisterFilteredStyle(merged map[KFXSymbol]any, markUsed bool) string {
+// The usage parameter tracks what kind of content uses this style (text, image, wrapper).
+func (sr *StyleRegistry) doRegisterFilteredStyle(merged map[KFXSymbol]any, markUsed bool, usage styleUsage) string {
 	// Filter out height: auto - KP3 never outputs this in styles (it's the implied default)
 	if h, ok := merged[SymHeight]; ok {
 		isAuto := false
@@ -427,6 +440,10 @@ func (sr *StyleRegistry) doRegisterFilteredStyle(merged map[KFXSymbol]any, markU
 		if markUsed {
 			sr.used[name] = true
 		}
+		// Record usage type (OR with existing to accumulate multiple usages)
+		if usage != 0 {
+			sr.usage[name] = sr.usage[name] | usage
+		}
 		return name
 	}
 
@@ -434,6 +451,10 @@ func (sr *StyleRegistry) doRegisterFilteredStyle(merged map[KFXSymbol]any, markU
 	sr.resolved[sig] = name
 	if markUsed {
 		sr.used[name] = true
+	}
+	// Record usage type for new style
+	if usage != 0 {
+		sr.usage[name] = usage
 	}
 	sr.Register(StyleDef{Name: name, Properties: merged})
 	return name
@@ -1398,14 +1419,28 @@ func (sr *StyleRegistry) shouldHaveLayoutHintTitle(name string, _ map[KFXSymbol]
 }
 
 // shouldHaveBreakInsideAvoid determines if a style should have break-inside: avoid.
-// This applies to title wrapper styles to keep titles together.
+// This applies to title WRAPPER styles to keep titles together (e.g., chapter-title).
+// It does NOT apply to title CONTENT styles with layout-hints: [treat_as_title]
+// (e.g., annotation-title, toc-title, footnote-title, chapter-title-header).
+//
+// KP3 reference shows:
+//   - Wrapper styles have: break-inside: avoid + yj-break-after: avoid (no layout-hints)
+//   - Content styles have: layout-hints: [treat_as_title] (no break-inside: avoid)
 func (sr *StyleRegistry) shouldHaveBreakInsideAvoid(name string, _ map[KFXSymbol]any) bool {
-	// Title wrapper styles
+	// Title wrapper styles - these are containers, not text content
 	switch name {
 	case "body-title", "chapter-title", "section-title":
 		return true
 	}
-	// Other *-title styles but not *-title-header (those are inline)
+
+	// Exclude content styles that get layout-hints: [treat_as_title]
+	// These are NOT wrappers - they contain the actual title text
+	switch name {
+	case "annotation-title", "toc-title", "footnote-title":
+		return false
+	}
+
+	// Other *-title wrapper styles (but not *-title-header which are content styles)
 	if strings.HasSuffix(name, "-title") && !strings.HasSuffix(name, "-title-header") {
 		return true
 	}

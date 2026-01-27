@@ -188,6 +188,16 @@ func addTitleAsHeading(c *content.Content, title *fb2.Title, ctx StyleContext, h
 		}
 	}
 
+	// Count paragraphs to determine if we need -first/-next style events.
+	// For single-paragraph titles without inline styles, KP3 doesn't add style events.
+	paragraphCount := 0
+	for _, item := range title.Items {
+		if item.Paragraph != nil {
+			paragraphCount++
+		}
+	}
+	needParagraphStyleEvents := paragraphCount > 1
+
 	// Process each title item
 	for _, item := range title.Items {
 		if item.Paragraph != nil {
@@ -229,8 +239,10 @@ func addTitleAsHeading(c *content.Content, title *fb2.Title, ctx StyleContext, h
 
 			paraEnd := nw.RuneCount()
 
-			// Add paragraph-level style event (like EPUB's span class)
-			if paraEnd > paraStart {
+			// Add paragraph-level style event only for multi-paragraph titles.
+			// For single-paragraph titles, the main element style is sufficient
+			// and KP3 doesn't add style events in this case.
+			if needParagraphStyleEvents && paraEnd > paraStart {
 				styleName := descendantPrefix + suffixFromParaStyle(paraStyle, headerStyleBase)
 				resolved := styleName
 				if styles != nil {
