@@ -110,6 +110,51 @@ func (nw *normalizingWriter) RuneCount() int {
 	return nw.runeCount
 }
 
+// RuneCountAfterPendingSpace returns where the next non-whitespace content will
+// start, accounting for any pending space that will be written first.
+// This should be used for style event start offsets to ensure they point to
+// where the styled content actually begins in the output.
+func (nw *normalizingWriter) RuneCountAfterPendingSpace() int {
+	if nw.pendingSpace && !nw.suppressNextSpace {
+		return nw.runeCount + 1
+	}
+	return nw.runeCount
+}
+
+// ContentStartOffset returns where non-whitespace content will start when writing
+// the given text, accounting for pending space and leading whitespace in the text.
+// This is used for accurate style event start offsets.
+func (nw *normalizingWriter) ContentStartOffset(text string) int {
+	if text == "" {
+		return nw.runeCount
+	}
+
+	// In preserve mode, pending space is written before any content
+	if nw.preserveWS {
+		if nw.pendingSpace && !nw.suppressNextSpace {
+			return nw.runeCount + 1
+		}
+		return nw.runeCount
+	}
+
+	// Find the first non-whitespace character in text
+	hasLeadingNonSpace := false
+	for _, r := range text {
+		if !unicode.IsSpace(r) {
+			hasLeadingNonSpace = true
+			break
+		}
+	}
+
+	// If text starts with non-whitespace and there's a pending space,
+	// the space will be written first, so content starts at runeCount+1
+	if hasLeadingNonSpace && nw.pendingSpace && !nw.suppressNextSpace {
+		return nw.runeCount + 1
+	}
+
+	return nw.runeCount
+}
+
 // Reset clears the writer for reuse.
 func (nw *normalizingWriter) Reset() {
 	nw.buf.Reset()

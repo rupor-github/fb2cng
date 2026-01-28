@@ -216,8 +216,17 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 			}
 		}
 
-		// Track position for style event using rune count (KFX uses character offsets)
-		start := nw.RuneCount()
+		// Track position for style event using rune count (KFX uses character offsets).
+		// Use ContentStartOffset to account for pending space that may be written
+		// before this text content - the style event should point to where the
+		// styled content actually starts, not including the preceding space.
+		// When seg.Text is empty (structured elements like <strong>text</strong>),
+		// we need to look at what the first child will write.
+		startText := seg.Text
+		if startText == "" && len(seg.Children) > 0 {
+			startText = findFirstText(seg)
+		}
+		start := nw.ContentStartOffset(startText)
 
 		// Add text content (normalizingWriter handles whitespace and rune counting)
 		nw.WriteString(seg.Text)

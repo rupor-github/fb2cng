@@ -72,6 +72,25 @@ func segmentHasTextContent(seg *fb2.InlineSegment) bool {
 	return false
 }
 
+// findFirstText recursively finds the first non-empty text in a segment tree.
+// This is used for accurate style event offset calculation when the parent segment's
+// Text field is empty but children have text (e.g., <strong>text</strong> where
+// the strong element's Text is "" but Children[0].Text is "text").
+// Returns the first text that will be written, or empty string if none found.
+func findFirstText(seg *fb2.InlineSegment) string {
+	// Check this segment's direct text first
+	if seg.Text != "" {
+		return seg.Text
+	}
+	// Recursively check children
+	for i := range seg.Children {
+		if text := findFirstText(&seg.Children[i]); text != "" {
+			return text
+		}
+	}
+	return ""
+}
+
 // cellContentHasText checks if table cell content contains any actual text (not just images).
 func cellContentHasText(content []fb2.InlineSegment) bool {
 	for i := range content {
@@ -238,8 +257,17 @@ func processMixedInlineSegments(
 			}
 		}
 
-		// Track position for style event using rune count
-		start := nw.RuneCount()
+		// Track position for style event using rune count.
+		// Use ContentStartOffset to account for pending space that may be written
+		// before this text content - the style event should point to where the
+		// styled content actually starts, not including the preceding space.
+		// When seg.Text is empty (structured elements like <strong>text</strong>),
+		// we need to look at what the first child will write.
+		startText := seg.Text
+		if startText == "" && len(seg.Children) > 0 {
+			startText = findFirstText(seg)
+		}
+		start := nw.ContentStartOffset(startText)
 
 		// Add text content
 		nw.WriteString(seg.Text)
