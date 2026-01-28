@@ -128,9 +128,7 @@ func NewContentEntry(ref ContentRef) StructValue {
 
 	if ref.Type == SymImage {
 		entry.Set(SymResourceName, SymbolByName(ref.ResourceName)) // $175 = resource_name (symbol reference)
-		if ref.AltText != "" {
-			entry.SetString(SymAltText, ref.AltText) // $584 = alt_text (only if non-empty)
-		}
+		entry.SetString(SymAltText, ref.AltText)                   // $584 = alt_text (always include, even if empty)
 		if ref.RenderInline {
 			entry.SetSymbol(SymRender, SymInline) // $601 = inline ($283) for inline images
 		}

@@ -262,7 +262,13 @@ func (sr *StyleRegistry) ResolveStyle(name string, usage styleUsage) string {
 	// Check if we already have a generated name for this property set
 	sig := styleSignature(props)
 	if genName, ok := sr.resolved[sig]; ok {
-		sr.usage[genName] = sr.usage[genName] | usage
+		// Don't add styleUsageText to inline-only styles - they should inherit
+		// line-height from parent, not get the default line-height added.
+		if usage == styleUsageText && sr.hasInlineUsage(genName) {
+			// Just mark as used, don't change usage type
+		} else {
+			sr.usage[genName] = sr.usage[genName] | usage
+		}
 		return genName
 	}
 

@@ -338,9 +338,7 @@ func (sb *StorylineBuilder) buildMixedCellContent(c *content.Content, cell fb2.T
 			if item.Style != "" {
 				imgEntry.Set(SymStyle, SymbolByName(item.Style))
 			}
-			if item.AltText != "" {
-				imgEntry.SetString(SymAltText, item.AltText)
-			}
+			imgEntry.SetString(SymAltText, item.AltText) // Always include, even if empty
 
 			contentListItems = append(contentListItems, imgEntry)
 		} else {

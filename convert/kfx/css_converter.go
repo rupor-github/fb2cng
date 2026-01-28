@@ -715,10 +715,10 @@ func (c *Converter) convertSpecialProperty(name string, value CSSValue, props ma
 	case "text-decoration":
 		dec := ConvertTextDecoration(value)
 		if dec.Underline {
-			c.mergeProp(props, SymUnderline, true)
+			c.mergeProp(props, SymUnderline, SymbolValue(SymSolid))
 		}
 		if dec.Strikethrough {
-			c.mergeProp(props, SymStrikethrough, true)
+			c.mergeProp(props, SymStrikethrough, SymbolValue(SymSolid))
 		}
 	case "vertical-align":
 		if vaResult, ok := ConvertVerticalAlign(value); ok {

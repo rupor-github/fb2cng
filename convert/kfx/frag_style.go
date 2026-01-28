@@ -390,14 +390,20 @@ func (sb *StyleBuilder) FontFamily(family string) *StyleBuilder {
 }
 
 // Underline sets the underline property.
+// When enabled, uses "solid" value to match KP3 behavior.
 func (sb *StyleBuilder) Underline(enabled bool) *StyleBuilder {
-	sb.props[SymUnderline] = enabled
+	if enabled {
+		sb.props[SymUnderline] = SymbolValue(SymSolid)
+	}
 	return sb
 }
 
 // Strikethrough sets the strikethrough property.
+// When enabled, uses "solid" value to match KP3 behavior.
 func (sb *StyleBuilder) Strikethrough(enabled bool) *StyleBuilder {
-	sb.props[SymStrikethrough] = enabled
+	if enabled {
+		sb.props[SymStrikethrough] = SymbolValue(SymSolid)
+	}
 	return sb
 }
 

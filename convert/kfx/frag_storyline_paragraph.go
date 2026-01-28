@@ -274,34 +274,41 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 			// Resolve inline style using delta-only approach (KP3 behavior).
 			// Style events contain only properties that differ from the parent
 			// (paragraph style). Block-level properties are excluded.
+			// Returns empty string if no styling delta exists.
 			mergedSpec := strings.Join(styleNames, " ")
 			mergedStyle := inlineCtx.ResolveInlineDelta(mergedSpec)
 
-			// Note: MarkUsage is called later after SegmentNestedStyleEvents(),
-			// to avoid marking styles that get deduplicated during segmentation.
-			event := StyleEventRef{
-				Offset: start,
-				Length: end - start,
-				Style:  mergedStyle,
-			}
-
-			// Inherit link properties from context if not a link itself
-			// This ensures nested elements like <a><sup>text</sup></a> get link info
-			if isLink {
-				event.LinkTo = linkTo
-				event.IsFootnoteLink = isFootnoteLink
+			// Skip creating event if no delta (style is same as parent)
+			if mergedStyle == "" && !isLink {
+				// No styling difference and not a link - skip event
+				// (Links need events for link_to even without style delta)
 			} else {
-				// Check context for link info (innermost link wins)
-				for i := len(styleContext) - 1; i >= 0; i-- {
-					if styleContext[i].LinkTo != "" {
-						event.LinkTo = styleContext[i].LinkTo
-						event.IsFootnoteLink = styleContext[i].IsFootnoteLink
-						break
+				// Note: MarkUsage is called later after SegmentNestedStyleEvents(),
+				// to avoid marking styles that get deduplicated during segmentation.
+				event := StyleEventRef{
+					Offset: start,
+					Length: end - start,
+					Style:  mergedStyle,
+				}
+
+				// Inherit link properties from context if not a link itself
+				// This ensures nested elements like <a><sup>text</sup></a> get link info
+				if isLink {
+					event.LinkTo = linkTo
+					event.IsFootnoteLink = isFootnoteLink
+				} else {
+					// Check context for link info (innermost link wins)
+					for i := len(styleContext) - 1; i >= 0; i-- {
+						if styleContext[i].LinkTo != "" {
+							event.LinkTo = styleContext[i].LinkTo
+							event.IsFootnoteLink = styleContext[i].IsFootnoteLink
+							break
+						}
 					}
 				}
-			}
 
-			events = append(events, event)
+				events = append(events, event)
+			}
 		}
 	}
 

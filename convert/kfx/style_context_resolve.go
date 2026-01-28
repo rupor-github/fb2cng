@@ -485,7 +485,7 @@ func isInlineOnlyProperty(sym KFXSymbol) bool {
 // after style event segmentation that may deduplicate some events.
 //
 // classes: space-separated CSS classes for the inline element (e.g., "strong", "sub link-footnote")
-// Returns the registered style name for the delta-only style.
+// Returns the registered style name for the delta-only style, or empty string if no delta.
 func (sc StyleContext) ResolveInlineDelta(classes string) string {
 	if sc.registry == nil {
 		return ""
@@ -533,6 +533,13 @@ func (sc StyleContext) ResolveInlineDelta(classes string) string {
 
 		// Property differs from parent or parent doesn't have it - include in delta
 		deltaProps[sym] = val
+	}
+
+	// If no delta properties, return empty string - no style event needed.
+	// This matches KP3 behavior where style events are only created for actual
+	// styling differences, not for inherited-only styles.
+	if len(deltaProps) == 0 {
+		return ""
 	}
 
 	// Register as raw delta style (no kfx-unknown base) since delta styles

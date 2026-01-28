@@ -195,9 +195,7 @@ func (sb *StorylineBuilder) AddMixedContent(styleSpec, style string, items []Inl
 			if item.Style != "" {
 				imgEntry.Set(SymStyle, SymbolByName(item.Style))
 			}
-			if item.AltText != "" {
-				imgEntry.SetString(SymAltText, item.AltText)
-			}
+			imgEntry.SetString(SymAltText, item.AltText) // Always include, even if empty
 
 			contentList = append(contentList, imgEntry)
 		} else {

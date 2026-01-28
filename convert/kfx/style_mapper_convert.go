@@ -129,9 +129,10 @@ func convertStyleMapProp(prop string, cssVal CSSValue, rawVal string, unit strin
 			}
 		}
 	case "underline", "overline", "strikethrough":
-		// text-decoration: none sets value="none" in stylemap, don't emit true for that
+		// text-decoration: none sets value="none" in stylemap, don't emit for that
+		// Use "solid" value to match KP3 behavior
 		if rawVal != "none" && !strings.EqualFold(cssVal.Keyword, "none") {
-			out[symbolForDecoration(prop)] = true
+			out[symbolForDecoration(prop)] = SymbolValue(SymSolid)
 		}
 	case "fill_color":
 		if r, g, b, ok := ParseColor(cssVal); ok {

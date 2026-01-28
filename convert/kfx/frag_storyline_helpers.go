@@ -2,6 +2,7 @@ package kfx
 
 import (
 	"strings"
+	"unicode"
 
 	"fbc/content"
 	"fbc/fb2"
@@ -72,14 +73,16 @@ func segmentHasTextContent(seg *fb2.InlineSegment) bool {
 	return false
 }
 
-// findFirstText recursively finds the first non-empty text in a segment tree.
+// findFirstText recursively finds the first text with non-whitespace content in a segment tree.
 // This is used for accurate style event offset calculation when the parent segment's
 // Text field is empty but children have text (e.g., <strong>text</strong> where
 // the strong element's Text is "" but Children[0].Text is "text").
-// Returns the first text that will be written, or empty string if none found.
+// Returns the first text that contains non-whitespace, or empty string if none found.
+// This skips whitespace-only text nodes (like "\n          " between XML tags)
+// to correctly identify where styled content actually starts.
 func findFirstText(seg *fb2.InlineSegment) string {
-	// Check this segment's direct text first
-	if seg.Text != "" {
+	// Check this segment's direct text first - only if it has non-whitespace
+	if seg.Text != "" && hasNonWhitespace(seg.Text) {
 		return seg.Text
 	}
 	// Recursively check children
@@ -89,6 +92,16 @@ func findFirstText(seg *fb2.InlineSegment) string {
 		}
 	}
 	return ""
+}
+
+// hasNonWhitespace returns true if the string contains any non-whitespace character.
+func hasNonWhitespace(s string) bool {
+	for _, r := range s {
+		if !unicode.IsSpace(r) {
+			return true
+		}
+	}
+	return false
 }
 
 // cellContentHasText checks if table cell content contains any actual text (not just images).
