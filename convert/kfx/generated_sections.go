@@ -222,32 +222,49 @@ func (b *tocListBuilder) buildTOCTextEntry(entry *tocPageEntry) (StructValue, in
 	if b.styles != nil {
 		b.styles.ResolveStyle(itemStyle, styleUsageText)
 	}
-	// Link style also inherits context for proper cascade
-	linkStyle := b.styleContext.Resolve("", "link-toc")
-	if b.styles != nil {
-		b.styles.ResolveStyle(linkStyle, styleUsageText)
-	}
 
-	// Build style event for link (covers entire text)
-	textLen := len([]rune(entry.Title))
-	event := NewStruct().
-		SetInt(SymOffset, 0).
-		SetInt(SymLength, int64(textLen))
-	if linkStyle != "" {
-		event.Set(SymStyle, SymbolByName(linkStyle))
-	}
-	if entry.AnchorID != "" {
-		event.Set(SymLinkTo, SymbolByName(entry.AnchorID))
-	}
+	// Resolve link style as inline delta against the item style context.
+	// This matches how regular paragraph links are handled: only include
+	// styling properties that differ from the parent. For TOC links with
+	// just "text-decoration: none" (which maps to no KFX properties),
+	// this returns empty string, avoiding unnecessary style events.
+	//
+	// Push item style context to get inherited properties for delta comparison,
+	// then use ResolveInlineDelta which:
+	// 1. Computes only properties that differ from parent
+	// 2. Excludes line-height unless font-size changes
+	// 3. Returns empty if no meaningful style delta exists
+	//
+	// The style is registered with markUsed=false; actual usage is determined
+	// later by RecomputeUsedStyles which scans the fragments.
+	itemContext := b.styleContext.Push("", "toc-item toc-section")
+	linkStyle := itemContext.ResolveInlineDelta("link-toc")
 
 	// Build text entry
 	text := NewStruct().
 		SetInt(SymUniqueID, int64(textEID)).
-		SetSymbol(SymType, SymText).          // $159 = $269 (text)
-		Set(SymContent, contentRef).          // $145 = content
-		SetList(SymStyleEvents, []any{event}) // $142 = style_events
+		SetSymbol(SymType, SymText). // $159 = $269 (text)
+		Set(SymContent, contentRef)  // $145 = content
 	if itemStyle != "" {
 		text.Set(SymStyle, SymbolByName(itemStyle))
+	}
+
+	// Add style event only if we have a link target or style delta.
+	// KP3 doesn't emit style events when there's no visual styling difference
+	// and no link. For TOC entries with links, we always need the event for
+	// link_to, but style is only included if there's a meaningful delta.
+	if entry.AnchorID != "" || linkStyle != "" {
+		textLen := len([]rune(entry.Title))
+		event := NewStruct().
+			SetInt(SymOffset, 0).
+			SetInt(SymLength, int64(textLen))
+		if linkStyle != "" {
+			event.Set(SymStyle, SymbolByName(linkStyle))
+		}
+		if entry.AnchorID != "" {
+			event.Set(SymLinkTo, SymbolByName(entry.AnchorID))
+		}
+		text.SetList(SymStyleEvents, []any{event}) // $142 = style_events
 	}
 
 	return text, textEID

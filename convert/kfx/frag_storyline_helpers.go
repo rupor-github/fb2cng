@@ -306,7 +306,9 @@ func processMixedInlineSegments(
 			nw.SetPreserveWhitespace(false)
 		}
 
-		end := nw.RuneCount()
+		// Use RuneCountAfterPendingSpace to include trailing whitespace inside
+		// the styled element. KP3 includes such whitespace in the style span.
+		end := nw.RuneCountAfterPendingSpace()
 
 		// Create style event if we have styled content
 		if segStyle != "" && end > start {

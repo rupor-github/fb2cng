@@ -93,15 +93,16 @@ func TestInferParentStyle(t *testing.T) {
 	sr := DefaultStyleRegistry()
 
 	// With the new architecture, DefaultStyleRegistry only has HTML element selectors.
-	// Class selectors like "subtitle" come from CSS, so inferParentStyle falls back to "kfx-unknown".
+	// Class selectors like "subtitle" come from CSS, so inferParentStyle returns ""
+	// (no parent - line-height is added in BuildFragments for text usage).
 	tests := []struct {
 		name     string
 		expected string
 	}{
-		{"custom-subtitle", "kfx-unknown"}, // "subtitle" not in defaults, falls back to "kfx-unknown"
-		{"my-title", "kfx-unknown"},        // "title" doesn't exist as base, falls back to "kfx-unknown"
-		{"unknown-style", "kfx-unknown"},
-		{"section-subtitle", "kfx-unknown"}, // "subtitle" not in defaults, falls back to "kfx-unknown"
+		{"custom-subtitle", ""}, // "subtitle" not in defaults, no parent
+		{"my-title", ""},        // "title" doesn't exist as base, no parent
+		{"unknown-style", ""},
+		{"section-subtitle", ""}, // "subtitle" not in defaults, no parent
 	}
 
 	for _, tt := range tests {
@@ -127,14 +128,15 @@ func TestInferParentStyleWithCSS(t *testing.T) {
 	sr, _ := NewStyleRegistryFromCSS(css, nil, log)
 
 	// Now "subtitle" exists from CSS, so inferParentStyle should find it
+	// Unknown styles have no parent (line-height added in BuildFragments)
 	tests := []struct {
 		name     string
 		expected string
 	}{
 		{"custom-subtitle", "subtitle"},
 		{"section-subtitle", "subtitle"},
-		{"my-title", "kfx-unknown"},      // "title" still doesn't exist
-		{"unknown-style", "kfx-unknown"}, // no matching suffix
+		{"my-title", ""},      // "title" still doesn't exist, no parent
+		{"unknown-style", ""}, // no matching suffix, no parent
 	}
 
 	for _, tt := range tests {

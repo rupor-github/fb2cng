@@ -257,7 +257,11 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 			nw.SetPreserveWhitespace(false)
 		}
 
-		end := nw.RuneCount()
+		// Use RuneCountAfterPendingSpace to include trailing whitespace inside
+		// the styled element. KP3 includes such whitespace in the style span.
+		// E.g., for <sup>\n  <a>1.17</a>\n</sup>, the sup span should include
+		// the trailing whitespace after </a> but before </sup>.
+		end := nw.RuneCountAfterPendingSpace()
 
 		// Create style event if we have styled content
 		// Skip if this style was already merged into block style (spanningDepth tracks this)
@@ -512,7 +516,9 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 			nw.SetPreserveWhitespace(false)
 		}
 
-		end := cumulativeRuneCount + nw.RuneCount()
+		// Use RuneCountAfterPendingSpace to include trailing whitespace inside
+		// the styled element. KP3 includes such whitespace in the style span.
+		end := cumulativeRuneCount + nw.RuneCountAfterPendingSpace()
 
 		// Create style event if we have styled content
 		isSpanningStyle := spanningDepth < len(spanningStyleParts) && segStyle == spanningStyleParts[spanningDepth]

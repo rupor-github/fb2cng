@@ -340,7 +340,7 @@ func (sc StyleContext) Resolve(tag, classes string) string {
 	// The pending margin is consumed (cleared) by the caller after Resolve(),
 	// which then stores it in ContentRef.EmptyLineMarginTop for post-processing.
 
-	return sc.registry.RegisterResolved(merged)
+	return sc.registry.RegisterResolved(merged, styleUsageText, true)
 }
 
 // ResolveNoMark creates the final style for an element but does NOT mark it as used.
@@ -357,7 +357,7 @@ func (sc StyleContext) ResolveNoMark(tag, classes string) string {
 	// Inline styles are resolved without position context since they're
 	// used for style events within paragraph text, not block elements.
 
-	return sc.registry.RegisterResolvedNoMark(merged)
+	return sc.registry.RegisterResolved(merged, styleUsageText, false)
 }
 
 // StyleSpec returns the raw style specification string for an element within this context.
@@ -520,8 +520,18 @@ func (sc StyleContext) ResolveInlineDelta(classes string) string {
 		// For normal bold/italic, line-height should be inherited from parent.
 		// For sub/sup with different font-size, line-height needs to be set
 		// to maintain proper vertical rhythm (KP3 uses 1.33249lh for superscript).
-		if sym == SymLineHeight && !fontSizeChanged {
-			continue
+		//
+		// Also skip line-height if the parent doesn't have it - the parent's
+		// line-height will be added during BuildFragments (via ensureDefaultLineHeight
+		// or adjustLineHeightForFontSize), so including it in the delta would be
+		// redundant or incorrect.
+		if sym == SymLineHeight {
+			if !fontSizeChanged {
+				continue
+			}
+			if _, hasParent := sc.inherited[sym]; !hasParent {
+				continue
+			}
 		}
 
 		// Check if this property differs from parent's inherited value
@@ -542,11 +552,9 @@ func (sc StyleContext) ResolveInlineDelta(classes string) string {
 		return ""
 	}
 
-	// Register as raw delta style (no kfx-unknown base) since delta styles
-	// only contain properties that differ from the parent.
-	// Use styleUsageInline to prevent automatic line-height addition.
+	// Register as delta style with inline usage to prevent automatic line-height addition.
 	// Don't mark as used - that happens later after style event deduplication.
-	return sc.registry.RegisterResolvedRaw(deltaProps, styleUsageInline, false)
+	return sc.registry.RegisterResolved(deltaProps, styleUsageInline, false)
 }
 
 // propsEqual compares two property values for equality.

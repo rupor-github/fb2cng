@@ -2,27 +2,28 @@ package kfx
 
 import "slices"
 
-// SegmentNestedStyleEvents takes a list of possibly overlapping style events
-// (as produced by recursive inline walks) and returns non-overlapping events.
+// SegmentNestedStyleEvents processes a list of possibly overlapping style events
+// (as produced by recursive inline walks) and returns deduplicated, sorted events.
+//
+// Unlike a segmentation approach that splits overlapping events into non-overlapping
+// pieces, this function preserves overlapping events as KP3 (Kindle Previewer 3) does.
+// The Kindle renderer handles overlapping style_events correctly by applying them
+// in order, with later events taking precedence for overlapping regions.
 //
 // The algorithm:
 // 1. Deduplicate events at same offset+length (keep most specific)
-// 2. For each position, determine which event should be active (shortest/most-specific wins)
-// 3. Generate non-overlapping segments based on these active events
-//
-// This handles complex cases like <code>text <a>link</a> more</code> where:
-//   - code event covers [0-14]
-//   - link event covers [5-9]
-//
-// Result (non-overlapping):
-//   - [0-5] code style
-//   - [5-9] link style (already has code properties merged)
-//   - [9-14] code style
+// 2. Sort by offset ascending, then by length descending (outer events first)
 //
 // For events with identical offset and length (e.g., from <a><sup>text</sup></a>),
 // only the event with the longest style name (most merged styles) or LinkTo is kept.
 //
-// Events are returned sorted by offset ascending.
+// Example: For <sup><a>text</a></sup> where sup covers [0-6] and link covers [1-5]:
+//
+//	Input:  [{0,6,sup}, {1,5,link}]
+//	Output: [{0,6,sup}, {1,5,link}]  (overlapping events preserved)
+//
+// The renderer applies sup style to [0-6], then link style to [1-5], so [1-5]
+// gets both styles with link taking precedence for conflicting properties.
 func SegmentNestedStyleEvents(events []StyleEventRef) []StyleEventRef {
 	if len(events) == 0 {
 		return nil
@@ -31,7 +32,7 @@ func SegmentNestedStyleEvents(events []StyleEventRef) []StyleEventRef {
 		return events
 	}
 
-	// First, deduplicate events with identical offset+length by keeping the one
+	// Deduplicate events with identical offset+length by keeping the one
 	// with the most specific (longest) style name or with LinkTo.
 	type posKey struct {
 		offset, length int
@@ -56,86 +57,20 @@ func SegmentNestedStyleEvents(events []StyleEventRef) []StyleEventRef {
 	}
 
 	// Convert back to slice
-	deduped := make([]StyleEventRef, 0, len(bestByPos))
+	result := make([]StyleEventRef, 0, len(bestByPos))
 	for _, ev := range bestByPos {
-		deduped = append(deduped, ev)
+		result = append(result, ev)
 	}
 
-	if len(deduped) == 1 {
-		return deduped
-	}
-
-	// Collect all unique boundary points (starts and ends of events)
-	pointSet := make(map[int]struct{})
-	for _, ev := range deduped {
-		pointSet[ev.Offset] = struct{}{}
-		pointSet[ev.Offset+ev.Length] = struct{}{}
-	}
-	points := make([]int, 0, len(pointSet))
-	for p := range pointSet {
-		points = append(points, p)
-	}
-	slices.Sort(points)
-
-	// For each segment between consecutive points, find the most specific
-	// (shortest) event that covers it. Shorter events are more specific because
-	// they represent inner/nested elements with merged styles.
-	var result []StyleEventRef
-	for i := 0; i < len(points)-1; i++ {
-		segStart := points[i]
-		segEnd := points[i+1]
-		if segEnd <= segStart {
-			continue
+	// Sort by offset ascending, then by length descending (outer/longer events first)
+	// This matches KP3 output ordering where outer spans come before inner spans
+	slices.SortFunc(result, func(a, b StyleEventRef) int {
+		if a.Offset != b.Offset {
+			return a.Offset - b.Offset
 		}
-
-		// Find the shortest event that fully covers this segment
-		var bestEvent *StyleEventRef
-		bestLength := int(^uint(0) >> 1) // max int
-
-		for j := range deduped {
-			ev := &deduped[j]
-			evEnd := ev.Offset + ev.Length
-			// Event covers segment if ev.Offset <= segStart && evEnd >= segEnd
-			if ev.Offset <= segStart && evEnd >= segEnd {
-				if ev.Length < bestLength {
-					bestLength = ev.Length
-					bestEvent = ev
-				} else if ev.Length == bestLength {
-					// Tie-breaker: prefer event with LinkTo or longer style name
-					if ev.LinkTo != "" && bestEvent.LinkTo == "" {
-						bestEvent = ev
-					} else if len(ev.Style) > len(bestEvent.Style) {
-						bestEvent = ev
-					}
-				}
-			}
-		}
-
-		if bestEvent != nil {
-			// Create or extend a segment with this style
-			seg := StyleEventRef{
-				Offset:         segStart,
-				Length:         segEnd - segStart,
-				Style:          bestEvent.Style,
-				LinkTo:         bestEvent.LinkTo,
-				IsFootnoteLink: bestEvent.IsFootnoteLink,
-			}
-
-			// Try to merge with previous segment if same style and adjacent
-			if len(result) > 0 {
-				prev := &result[len(result)-1]
-				if prev.Style == seg.Style &&
-					prev.LinkTo == seg.LinkTo &&
-					prev.IsFootnoteLink == seg.IsFootnoteLink &&
-					prev.Offset+prev.Length == seg.Offset {
-					// Extend previous segment
-					prev.Length += seg.Length
-					continue
-				}
-			}
-			result = append(result, seg)
-		}
-	}
+		// Same offset: longer (outer) events come first
+		return b.Length - a.Length
+	})
 
 	return result
 }

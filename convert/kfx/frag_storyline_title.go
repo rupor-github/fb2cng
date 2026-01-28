@@ -152,7 +152,9 @@ func addTitleAsHeading(c *content.Content, title *fb2.Title, ctx StyleContext, h
 			nw.SetPreserveWhitespace(false)
 		}
 
-		end := nw.RuneCount()
+		// Use RuneCountAfterPendingSpace to include trailing whitespace inside
+		// the styled element. KP3 includes such whitespace in the style span.
+		end := nw.RuneCountAfterPendingSpace()
 
 		// Create style event if we have styled content
 		if segStyle != "" && end > start {
@@ -217,11 +219,10 @@ func addTitleAsHeading(c *content.Content, title *fb2.Title, ctx StyleContext, h
 				nw.WriteRaw("\n") // Use WriteRaw for structural newline
 
 				// Add style event for the break newline (like EPUB's <br class="...-break">)
+				// Use ResolveInlineDelta to only include properties that differ from the
+				// heading's base style, avoiding redundant line-height in style events.
 				breakStyle := descendantPrefix + "-break"
-				resolved := breakStyle
-				if styles != nil {
-					resolved = styles.ResolveStyle(breakStyle, styleUsageText)
-				}
+				resolved := inlineCtx.ResolveInlineDelta(breakStyle)
 				events = append(events, StyleEventRef{
 					Offset: breakStart,
 					Length: 1,
@@ -252,12 +253,11 @@ func addTitleAsHeading(c *content.Content, title *fb2.Title, ctx StyleContext, h
 			// Add paragraph-level style event only for multi-paragraph titles.
 			// For single-paragraph titles, the main element style is sufficient
 			// and KP3 doesn't add style events in this case.
+			// Use ResolveInlineDelta to only include properties that differ from the
+			// heading's base style, avoiding redundant line-height in style events.
 			if needParagraphStyleEvents && paraEnd > paraStart {
 				styleName := descendantPrefix + suffixFromParaStyle(paraStyle, headerStyleBase)
-				resolved := styleName
-				if styles != nil {
-					resolved = styles.ResolveStyle(styleName, styleUsageText)
-				}
+				resolved := inlineCtx.ResolveInlineDelta(styleName)
 				events = append(events, StyleEventRef{
 					Offset: paraStart,
 					Length: paraEnd - paraStart,
@@ -272,11 +272,10 @@ func addTitleAsHeading(c *content.Content, title *fb2.Title, ctx StyleContext, h
 			nw.WriteRaw("\n") // Use WriteRaw for structural newline
 
 			// Add style event for the emptyline character
+			// Use ResolveInlineDelta to only include properties that differ from the
+			// heading's base style, avoiding redundant line-height in style events.
 			emptylineStyle := descendantPrefix + "-emptyline"
-			resolved := emptylineStyle
-			if styles != nil {
-				resolved = styles.ResolveStyle(emptylineStyle, styleUsageText)
-			}
+			resolved := inlineCtx.ResolveInlineDelta(emptylineStyle)
 			events = append(events, StyleEventRef{
 				Offset: emptylineStart,
 				Length: 1,

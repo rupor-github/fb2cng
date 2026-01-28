@@ -178,7 +178,7 @@ func (sb *StorylineBuilder) resolveChildStyles(wrapper *ContentRef) {
 		if child.StyleSpec != "" && child.Style == "" {
 			if child.Type == SymImage {
 				// Images: use StyleContext.ResolveImage() for position filtering
-				// without text-specific inheritance (no line-height from kfx-unknown)
+				// without text-specific properties (line-height, text-indent, text-align)
 				_, classes := parseStyleSpec(child.StyleSpec)
 				child.Style = ctx.ResolveImage(classes)
 				sb.styles.ResolveStyle(child.Style, styleUsageImage)

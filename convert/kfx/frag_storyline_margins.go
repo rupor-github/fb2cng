@@ -1370,7 +1370,7 @@ func (sb *StorylineBuilder) applyCollapsedMargins(tree *ContentTree) {
 		// Register the new style, preserving the original style's usage type
 		originalStyle := ref.Style
 		originalUsage := sb.styles.GetUsage(originalStyle)
-		newStyle := sb.styles.RegisterResolvedRaw(props, originalUsage, true)
+		newStyle := sb.styles.RegisterResolved(props, originalUsage, true)
 		ref.Style = newStyle
 
 		// Trace the style variant creation
@@ -1437,7 +1437,7 @@ func (sb *StorylineBuilder) applyCollapsedMargins(tree *ContentTree) {
 		// Register the new style, preserving the original style's usage type
 		originalStyle := ref.Style
 		originalUsage := sb.styles.GetUsage(originalStyle)
-		newStyle := sb.styles.RegisterResolvedRaw(props, originalUsage, true)
+		newStyle := sb.styles.RegisterResolved(props, originalUsage, true)
 
 		// Trace the style variant creation
 		if tracer != nil && tracer.IsEnabled() {

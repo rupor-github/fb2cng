@@ -132,10 +132,6 @@ func (sr *StyleRegistry) mergePropertyWithContext(dst map[KFXSymbol]any, sym KFX
 	dst[sym] = val
 }
 
-func (sr *StyleRegistry) mergeProperties(dst map[KFXSymbol]any, src map[KFXSymbol]any) {
-	sr.mergePropertiesWithContext(dst, src, mergeContextInline)
-}
-
 func (sr *StyleRegistry) mergePropertiesWithContext(dst map[KFXSymbol]any, src map[KFXSymbol]any, ctx mergeContext) {
 	for sym, val := range src {
 		sr.mergePropertyWithContext(dst, sym, val, ctx)
@@ -363,34 +359,20 @@ func (sr *StyleRegistry) GetTableElementProps() TableElementProps {
 // RegisterResolved takes a merged property map, generates a unique style name,
 // registers the style, and returns the name. This is used by StyleContext.Resolve
 // to register styles built with proper CSS inheritance rules.
-// All resolved styles inherit from kfx-unknown as the base.
 //
-// Since styles registered via Resolve are used for text paragraphs, this automatically
-// records styleUsageText so that ensureDefaultLineHeight is applied during BuildFragments.
+// The usage parameter specifies what kind of content uses this style:
+//   - styleUsageText: text paragraphs - ensureDefaultLineHeight adds line-height: 1lh in BuildFragments
+//   - styleUsageInline: inline style events - no line-height added (inherit from parent block)
+//   - styleUsageImage: image styles - line-height handled separately
+//   - styleUsageWrapper: wrapper styles - line-height stripped unless break-inside: avoid
 //
-// This method also performs standard KFX output filtering:
-// - Removes height: auto (KP3 never outputs this, it's the implied default)
-// - Removes table element properties (these go on the element, not the style)
-func (sr *StyleRegistry) RegisterResolved(props map[KFXSymbol]any) string {
-	// Start with kfx-unknown as the base, then overlay provided props
-	merged := make(map[KFXSymbol]any)
-	sr.EnsureBaseStyle("kfx-unknown")
-	if unknown, exists := sr.styles["kfx-unknown"]; exists {
-		resolved := sr.resolveInheritance(unknown)
-		sr.mergeProperties(merged, resolved.Properties)
-	}
-	sr.mergeProperties(merged, props) // Provided props override kfx-unknown
-
-	return sr.registerFilteredStyle(merged, styleUsageText)
-}
-
-// RegisterResolvedRaw registers a style without adding the kfx-unknown base.
-// This is used for image styles and inline delta styles that don't need text properties.
-// Standard KFX output filtering is still applied.
-// The usage parameter allows specifying the usage type (text, image, inline, etc.).
 // The markUsed parameter controls whether the style is marked as used for output.
 // Pass markUsed=false when styles may be deduplicated later (e.g., style events).
-func (sr *StyleRegistry) RegisterResolvedRaw(props map[KFXSymbol]any, usage styleUsage, markUsed bool) string {
+//
+// Standard KFX output filtering is applied:
+//   - Removes height: auto (KP3 never outputs this, it's the implied default)
+//   - Removes table element properties (these go on the element, not the style)
+func (sr *StyleRegistry) RegisterResolved(props map[KFXSymbol]any, usage styleUsage, markUsed bool) string {
 	// Make a copy to avoid modifying caller's map
 	merged := make(map[KFXSymbol]any, len(props))
 	maps.Copy(merged, props)
@@ -400,24 +382,9 @@ func (sr *StyleRegistry) RegisterResolvedRaw(props map[KFXSymbol]any, usage styl
 	return sr.registerFilteredStyleNoMark(merged, usage)
 }
 
-// RegisterResolvedNoMark is like RegisterResolved but does NOT mark the style as used.
-// This is used when styles are resolved during processing but usage will be marked later
-// (e.g., after style event segmentation that may deduplicate some events).
-func (sr *StyleRegistry) RegisterResolvedNoMark(props map[KFXSymbol]any) string {
-	// Start with kfx-unknown as the base, then overlay provided props
-	merged := make(map[KFXSymbol]any)
-	sr.EnsureBaseStyle("kfx-unknown")
-	if unknown, exists := sr.styles["kfx-unknown"]; exists {
-		resolved := sr.resolveInheritance(unknown)
-		sr.mergeProperties(merged, resolved.Properties)
-	}
-	sr.mergeProperties(merged, props) // Provided props override kfx-unknown
-
-	return sr.registerFilteredStyleNoMark(merged, styleUsageText)
-}
-
 // registerFilteredStyle applies standard KFX output filtering, registers the style, and marks it used.
-// For text styles (from RegisterResolved), this also records styleUsageText so line-height is ensured.
+// The usage parameter is recorded so BuildFragments() can apply appropriate post-processing
+// (e.g., ensureDefaultLineHeight for text styles).
 func (sr *StyleRegistry) registerFilteredStyle(merged map[KFXSymbol]any, usage styleUsage) string {
 	return sr.doRegisterFilteredStyle(merged, true, usage)
 }
@@ -452,10 +419,10 @@ func (sr *StyleRegistry) doRegisterFilteredStyle(merged map[KFXSymbol]any, markU
 	sig := styleSignature(merged)
 	// Inline-only styles (style events) use a separate signature namespace.
 	// This prevents them from being deduplicated with block styles that have
-	// the same properties - KP3 keeps these as separate styles because:
-	// - Block styles need line-height: 1lh added during BuildFragments
-	// - Inline delta styles should NOT have line-height (inherit from parent)
-	// If we reused the same style, line-height would "leak" into inline usage.
+	// the same properties. BuildFragments applies different post-processing:
+	// - Block (styleUsageText): ensureDefaultLineHeight adds line-height: 1lh
+	// - Inline (styleUsageInline): NO line-height added (inherit from parent)
+	// If we reused the same style for both, line-height would "leak" into inline usage.
 	if usage == styleUsageInline {
 		sig = "inline:" + sig
 	}
@@ -513,7 +480,7 @@ func (sr *StyleRegistry) ResolveCoverImageStyle() string {
 //
 // Block-level wrapper styles (epigraph, poem, stanza, cite, annotation, footnote, etc.)
 // do NOT inherit from "p" to avoid polluting container styles with paragraph properties.
-// Unknown styles inherit from "kfx-unknown" (minimal empty style) to avoid unwanted formatting.
+// Unknown styles have no parent - line-height is added in BuildFragments for text usage.
 func (sr *StyleRegistry) inferParentStyle(name string) string {
 	// Block-level container styles should NOT inherit from anything
 	// These are wrappers that correspond to EPUB <div class="..."> elements
@@ -552,12 +519,7 @@ func (sr *StyleRegistry) inferParentStyle(name string) string {
 		}
 	}
 
-	// Default to "kfx-unknown" (minimal style) for unknown styles
-	// This avoids polluting unknown styles with "p" properties like text-align: justify
-	if _, exists := sr.styles["kfx-unknown"]; exists {
-		return "kfx-unknown"
-	}
-
+	// No parent - line-height will be added in BuildFragments for text styles
 	return ""
 }
 
@@ -937,14 +899,6 @@ func DefaultStyleRegistry() *StyleRegistry {
 	// ============================================================
 	// Minimal fallback style for unknown classes
 	// ============================================================
-
-	// "kfx-unknown" is a catch-all base style for classes not defined in CSS.
-	// It has minimal properties to avoid polluting derived styles
-	// with unwanted formatting (unlike "p" which has text-align: justify, margins, etc.)
-	// LineHeight is required to ensure proper text rendering.
-	sr.Register(NewStyle("kfx-unknown").
-		LineHeight(1.0, SymUnitLh).
-		Build())
 
 	// "kfx-link-empty" is an empty style for style_events that only need link_to.
 	// KP3 uses an empty style (only name property) for linked inline images.

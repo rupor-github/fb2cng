@@ -3,7 +3,7 @@ package kfx
 import "strings"
 
 // ResolveImage creates the final style for an image element within this context.
-// Unlike Resolve(), this does NOT inherit from kfx-unknown (images don't need line-height).
+// Images don't need line-height, so text-specific properties are filtered out.
 // Position-based margin filtering is applied from the container stack.
 //
 // classes: space-separated CSS classes (e.g., "image-vignette")
@@ -15,8 +15,7 @@ func (sc StyleContext) ResolveImage(classes string) string {
 		return ""
 	}
 
-	// Resolve classes directly - no kfx-unknown base, no tag defaults
-	// Images only get properties from their specific classes
+	// Resolve classes directly - images only get properties from their specific classes
 	for class := range strings.FieldsSeq(classes) {
 		if def, ok := sc.registry.Get(class); ok {
 			resolved := sc.registry.resolveInheritance(def)
@@ -35,10 +34,8 @@ func (sc StyleContext) ResolveImage(classes string) string {
 	// CollapseMargins() for centralized margin logic. Images participate in
 	// margin collapsing like other block elements.
 
-	// Use RegisterResolvedRaw to avoid adding kfx-unknown base (no line-height for images)
-	// Standard filtering (height: auto, table props) is still applied
-	// Image styles use styleUsageImage which is set separately via ResolveStyle
-	return sc.registry.RegisterResolvedRaw(merged, 0, true)
+	// Image styles use no usage tracking here - styleUsageImage is set separately via ResolveStyle
+	return sc.registry.RegisterResolved(merged, 0, true)
 }
 
 // ResolveImageWithDimensions resolves style for an image with calculated dimensions.
@@ -116,7 +113,7 @@ func (sc StyleContext) resolveInlineImage(props map[KFXSymbol]any, imageWidth, i
 	props[SymWidth] = DimensionValue(widthEm, SymUnitEm)   // width in em
 	props[SymHeight] = DimensionValue(heightEm, SymUnitEm) // height in em
 
-	return sc.registry.RegisterResolvedRaw(props, 0, true)
+	return sc.registry.RegisterResolved(props, 0, true)
 }
 
 // isContainerContextClass returns true if the given class name represents a container
@@ -232,5 +229,5 @@ func (sc StyleContext) resolveBlockImage(props map[KFXSymbol]any, imageWidth int
 	// Note: For other block images, margins come from CSS and will be processed
 	// by post-processing CollapseMargins() for centralized margin logic.
 
-	return sc.registry.RegisterResolvedRaw(props, 0, true), isFloatImage
+	return sc.registry.RegisterResolved(props, 0, true), isFloatImage
 }
