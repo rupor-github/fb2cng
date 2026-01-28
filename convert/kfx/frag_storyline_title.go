@@ -155,10 +155,11 @@ func addTitleAsHeading(c *content.Content, title *fb2.Title, ctx StyleContext, h
 			}
 			styleNames = append(styleNames, segStyle)
 
-			// Resolve inline style using the heading context (inlineCtx).
-			// This ensures inline styles inherit font-size from the heading.
+			// Resolve inline style using delta-only approach (KP3 behavior).
+			// Style events contain only properties that differ from the parent
+			// (heading style). Block-level properties are excluded.
 			mergedSpec := strings.Join(styleNames, " ")
-			mergedStyle := inlineCtx.ResolveNoMark("", mergedSpec)
+			mergedStyle := inlineCtx.ResolveInlineDelta(mergedSpec)
 
 			// Note: MarkUsage is called later after SegmentNestedStyleEvents(),
 			// to avoid marking styles that get deduplicated during segmentation.

@@ -278,6 +278,10 @@ func (sr *StyleRegistry) hasTextUsage(name string) bool {
 	return sr.usage[name]&styleUsageText != 0
 }
 
+func (sr *StyleRegistry) hasInlineUsage(name string) bool {
+	return sr.usage[name]&styleUsageInline != 0
+}
+
 func (sr *StyleRegistry) hasImageUsage(name string) bool {
 	return sr.usage[name]&styleUsageImage != 0
 }
@@ -375,15 +379,19 @@ func (sr *StyleRegistry) RegisterResolved(props map[KFXSymbol]any) string {
 }
 
 // RegisterResolvedRaw registers a style without adding the kfx-unknown base.
-// This is used for image styles that don't need text properties like line-height.
+// This is used for image styles and inline delta styles that don't need text properties.
 // Standard KFX output filtering is still applied.
-// The usage parameter allows preserving usage type when creating margin variants.
-// Pass 0 for image styles that don't need text usage.
-func (sr *StyleRegistry) RegisterResolvedRaw(props map[KFXSymbol]any, usage styleUsage) string {
+// The usage parameter allows specifying the usage type (text, image, inline, etc.).
+// The markUsed parameter controls whether the style is marked as used for output.
+// Pass markUsed=false when styles may be deduplicated later (e.g., style events).
+func (sr *StyleRegistry) RegisterResolvedRaw(props map[KFXSymbol]any, usage styleUsage, markUsed bool) string {
 	// Make a copy to avoid modifying caller's map
 	merged := make(map[KFXSymbol]any, len(props))
 	maps.Copy(merged, props)
-	return sr.registerFilteredStyle(merged, usage)
+	if markUsed {
+		return sr.registerFilteredStyle(merged, usage)
+	}
+	return sr.registerFilteredStyleNoMark(merged, usage)
 }
 
 // RegisterResolvedNoMark is like RegisterResolved but does NOT mark the style as used.
@@ -436,6 +444,15 @@ func (sr *StyleRegistry) doRegisterFilteredStyle(merged map[KFXSymbol]any, markU
 	}
 
 	sig := styleSignature(merged)
+	// Inline-only styles (style events) use a separate signature namespace.
+	// This prevents them from being deduplicated with block styles that have
+	// the same properties - KP3 keeps these as separate styles because:
+	// - Block styles need line-height: 1lh added during BuildFragments
+	// - Inline delta styles should NOT have line-height (inherit from parent)
+	// If we reused the same style, line-height would "leak" into inline usage.
+	if usage == styleUsageInline {
+		sig = "inline:" + sig
+	}
 	if name, ok := sr.resolved[sig]; ok {
 		if markUsed {
 			sr.used[name] = true
@@ -707,7 +724,14 @@ func (sr *StyleRegistry) BuildFragments() []*Fragment {
 		resolved.Properties = stripZeroMargins(resolved.Properties)
 		// Convert any remaining em font-sizes to rem before other adjustments
 		resolved.Properties = normalizeFontSizeUnits(resolved.Properties)
-		if sr.hasTextUsage(name) {
+		if sr.hasInlineUsage(name) && !sr.hasTextUsage(name) {
+			// Inline-only styles (style events) may need line-height adjustment
+			// for sub/sup with different font-size, but should NOT get default
+			// line-height added - they inherit from parent.
+			// Check this FIRST: if a style is used for both inline AND text,
+			// it needs line-height (the text usage takes precedence).
+			resolved.Properties = adjustLineHeightForFontSize(resolved.Properties)
+		} else if sr.hasTextUsage(name) {
 			// Adjust line-height and margins for non-default font-sizes
 			// Must be done before ensureDefaultLineHeight to set correct line-height value
 			resolved.Properties = adjustLineHeightForFontSize(resolved.Properties)

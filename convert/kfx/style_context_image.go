@@ -38,7 +38,7 @@ func (sc StyleContext) ResolveImage(classes string) string {
 	// Use RegisterResolvedRaw to avoid adding kfx-unknown base (no line-height for images)
 	// Standard filtering (height: auto, table props) is still applied
 	// Image styles use styleUsageImage which is set separately via ResolveStyle
-	return sc.registry.RegisterResolvedRaw(merged, 0)
+	return sc.registry.RegisterResolvedRaw(merged, 0, true)
 }
 
 // ResolveImageWithDimensions resolves style for an image with calculated dimensions.
@@ -116,7 +116,7 @@ func (sc StyleContext) resolveInlineImage(props map[KFXSymbol]any, imageWidth, i
 	props[SymWidth] = DimensionValue(widthEm, SymUnitEm)   // width in em
 	props[SymHeight] = DimensionValue(heightEm, SymUnitEm) // height in em
 
-	return sc.registry.RegisterResolvedRaw(props, 0)
+	return sc.registry.RegisterResolvedRaw(props, 0, true)
 }
 
 // isContainerContextClass returns true if the given class name represents a container
@@ -232,5 +232,5 @@ func (sc StyleContext) resolveBlockImage(props map[KFXSymbol]any, imageWidth int
 	// Note: For other block images, margins come from CSS and will be processed
 	// by post-processing CollapseMargins() for centralized margin logic.
 
-	return sc.registry.RegisterResolvedRaw(props, 0), isFloatImage
+	return sc.registry.RegisterResolvedRaw(props, 0, true), isFloatImage
 }

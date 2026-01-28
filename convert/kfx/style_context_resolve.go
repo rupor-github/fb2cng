@@ -449,3 +449,141 @@ func extractMarginValue(props map[KFXSymbol]any, sym KFXSymbol) float64 {
 	}
 	return 0
 }
+
+// isInlineOnlyProperty returns true for properties that are appropriate for inline
+// style events. Block-level properties (margins, text-align, text-indent) should NOT
+// appear in inline styles - they're inherited from the parent block element.
+//
+// KP3 style events contain only delta properties (what differs from parent), and
+// these deltas never include block-level properties like margins or text alignment.
+func isInlineOnlyProperty(sym KFXSymbol) bool {
+	switch sym {
+	// Block-level properties - NOT for inline styles
+	case SymMarginLeft, SymMarginRight, SymMarginTop, SymMarginBottom:
+		return false
+	case SymTextAlignment, SymTextIndent:
+		return false
+	case SymPaddingLeft, SymPaddingRight, SymPaddingTop, SymPaddingBottom:
+		return false
+	// All other properties are OK for inline styles
+	default:
+		return true
+	}
+}
+
+// ResolveInlineDelta creates a delta-only style for inline style events.
+// This matches KP3 behavior where style events contain only properties that differ
+// from the parent element's style (the block/container style).
+//
+// The method:
+// 1. Resolves the full inline style properties
+// 2. Compares against the parent's resolved properties (stored in sc.inherited)
+// 3. Filters out block-level properties (margins, text-align, text-indent)
+// 4. Only includes line-height when font-size changes (for sub/sup)
+//
+// The style is NOT marked as used immediately - usage will be marked later
+// after style event segmentation that may deduplicate some events.
+//
+// classes: space-separated CSS classes for the inline element (e.g., "strong", "sub link-footnote")
+// Returns the registered style name for the delta-only style.
+func (sc StyleContext) ResolveInlineDelta(classes string) string {
+	if sc.registry == nil {
+		return ""
+	}
+
+	// Resolve the full inline style properties using the existing cascade logic.
+	// This applies descendant selectors, inheritance, etc.
+	inlineProps := sc.resolveProperties("", classes)
+
+	// Build delta properties - only include properties that:
+	// 1. Are appropriate for inline styles (not block-level)
+	// 2. Differ from the parent's inherited properties
+	deltaProps := make(map[KFXSymbol]any)
+
+	// Track if font-size changed - we only include line-height when font-size differs
+	fontSizeChanged := false
+	if inlineFontSize, hasInline := inlineProps[SymFontSize]; hasInline {
+		if parentFontSize, hasParent := sc.inherited[SymFontSize]; hasParent {
+			fontSizeChanged = !propsEqual(inlineFontSize, parentFontSize)
+		} else {
+			fontSizeChanged = true // No parent font-size means it changed
+		}
+	}
+
+	for sym, val := range inlineProps {
+		// Skip block-level properties
+		if !isInlineOnlyProperty(sym) {
+			continue
+		}
+
+		// Special handling for line-height: only include if font-size changed.
+		// For normal bold/italic, line-height should be inherited from parent.
+		// For sub/sup with different font-size, line-height needs to be set
+		// to maintain proper vertical rhythm (KP3 uses 1.33249lh for superscript).
+		if sym == SymLineHeight && !fontSizeChanged {
+			continue
+		}
+
+		// Check if this property differs from parent's inherited value
+		if parentVal, hasParent := sc.inherited[sym]; hasParent {
+			if propsEqual(val, parentVal) {
+				continue // Same as parent, don't include in delta
+			}
+		}
+
+		// Property differs from parent or parent doesn't have it - include in delta
+		deltaProps[sym] = val
+	}
+
+	// Register as raw delta style (no kfx-unknown base) since delta styles
+	// only contain properties that differ from the parent.
+	// Use styleUsageInline to prevent automatic line-height addition.
+	// Don't mark as used - that happens later after style event deduplication.
+	return sc.registry.RegisterResolvedRaw(deltaProps, styleUsageInline, false)
+}
+
+// propsEqual compares two property values for equality.
+// Handles dimension values (with units) and symbol values.
+// Note: KFXSymbol and SymbolValue are different Go types but represent the same
+// underlying KFX symbol values, so we need to handle cross-type comparisons.
+func propsEqual(a, b any) bool {
+	// Handle nil cases
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+
+	// Try dimension comparison first
+	aVal, aUnit, aOk := measureParts(a)
+	bVal, bUnit, bOk := measureParts(b)
+	if aOk && bOk {
+		// Both are dimensions - compare value and unit
+		return aVal == bVal && aUnit == bUnit
+	}
+
+	// Try symbol comparison - handle both KFXSymbol and SymbolValue types.
+	// These are different Go types but represent the same KFX symbols.
+	aSymVal := symbolToInt(a)
+	bSymVal := symbolToInt(b)
+	if aSymVal >= 0 && bSymVal >= 0 {
+		return aSymVal == bSymVal
+	}
+
+	// Fall back to reflect.DeepEqual for other types
+	return a == b
+}
+
+// symbolToInt extracts the integer symbol value from KFXSymbol or SymbolValue.
+// Returns -1 if the value is not a symbol type.
+func symbolToInt(v any) int {
+	switch sv := v.(type) {
+	case KFXSymbol:
+		return int(sv)
+	case SymbolValue:
+		return int(sv)
+	default:
+		return -1
+	}
+}

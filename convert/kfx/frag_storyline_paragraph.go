@@ -262,10 +262,11 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 			}
 			styleNames = append(styleNames, segStyle)
 
-			// Resolve inline style using the paragraph context (inlineCtx).
-			// This ensures inline styles inherit font-size from the container.
+			// Resolve inline style using delta-only approach (KP3 behavior).
+			// Style events contain only properties that differ from the parent
+			// (paragraph style). Block-level properties are excluded.
 			mergedSpec := strings.Join(styleNames, " ")
-			mergedStyle := inlineCtx.ResolveNoMark("", mergedSpec)
+			mergedStyle := inlineCtx.ResolveInlineDelta(mergedSpec)
 
 			// Note: MarkUsage is called later after SegmentNestedStyleEvents(),
 			// to avoid marking styles that get deduplicated during segmentation.
@@ -506,10 +507,11 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 			}
 			styleNames = append(styleNames, segStyle)
 
-			// Resolve inline style using the paragraph context (inlineCtx).
-			// This ensures inline styles inherit font-size from the container.
+			// Resolve inline style using delta-only approach (KP3 behavior).
+			// Style events contain only properties that differ from the parent
+			// (paragraph style). Block-level properties are excluded.
 			mergedSpec := strings.Join(styleNames, " ")
-			mergedStyle := inlineCtx.ResolveNoMark("", mergedSpec)
+			mergedStyle := inlineCtx.ResolveInlineDelta(mergedSpec)
 
 			event := StyleEventRef{
 				Offset: start,

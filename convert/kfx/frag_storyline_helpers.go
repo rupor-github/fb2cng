@@ -275,10 +275,11 @@ func processMixedInlineSegments(
 			}
 			styleNames = append(styleNames, segStyle)
 
-			// Resolve inline style using the container context (inlineCtx).
-			// This ensures inline styles inherit font-size from the container.
+			// Resolve inline style using delta-only approach (KP3 behavior).
+			// Style events contain only properties that differ from the parent
+			// (container style). Block-level properties are excluded.
 			mergedSpec := strings.Join(styleNames, " ")
-			mergedStyle := inlineCtx.ResolveNoMark("", mergedSpec)
+			mergedStyle := inlineCtx.ResolveInlineDelta(mergedSpec)
 
 			event := StyleEventRef{
 				Offset: start,

@@ -110,6 +110,10 @@ const (
 	styleUsageText styleUsage = 1 << iota
 	styleUsageImage
 	styleUsageWrapper
+	// styleUsageInline is for inline delta styles (style events).
+	// These styles contain only properties that differ from the parent,
+	// and should NOT have line-height added automatically during BuildFragments.
+	styleUsageInline
 )
 
 // DimensionValue creates a KP3-compatible dimension value with unit.
