@@ -139,6 +139,16 @@ func isHorizontalSpacingProperty(sym KFXSymbol) bool {
 	return false
 }
 
+// isMarginProperty returns true if the symbol is a margin property.
+// KFX does not support negative margins, so these need special handling.
+func isMarginProperty(sym KFXSymbol) bool {
+	switch sym {
+	case SymMarginTop, SymMarginBottom, SymMarginLeft, SymMarginRight:
+		return true
+	}
+	return false
+}
+
 // RoundDecimals rounds a float64 to the specified number of decimal places.
 // Use with precision constants: LineHeightPrecision, WidthPercentPrecision.
 //
@@ -210,4 +220,80 @@ func PercentToRem(percent float64) float64 {
 func ImageWidthPercent(imageWidthPx int) float64 {
 	percent := float64(imageWidthPx) / KP3ContentWidthPx * 100
 	return RoundDecimals(min(max(percent, 0), 100), WidthPercentPrecision)
+}
+
+// PxToLh converts pixels to line-height units for vertical spacing.
+// Uses the formula: lh = px / KP3PixelsPerEm / LineHeightRatio
+//
+// The conversion chain: px → em → lh
+//   - px → em: px / KP3PixelsPerEm (16px = 1em)
+//   - em → lh: em / LineHeightRatio (1em = 1.2lh, so lh = em / 1.2)
+//
+// Combined: lh = px / 16 / 1.2 = px / 19.2
+//
+// Examples:
+//
+//	PxToLh(19.2) → 1.0lh
+//	PxToLh(9.6) → 0.5lh
+//	PxToLh(-8) → -0.416667lh (negative values preserved)
+func PxToLh(px float64) float64 {
+	return RoundSignificant(px/KP3PixelsPerEm/LineHeightRatio, SignificantFigures)
+}
+
+// PtToLh converts points to line-height units for vertical spacing.
+// Uses the formula: lh = pt * PtToPxRatio / KP3PixelsPerEm / LineHeightRatio
+//
+// The conversion chain: pt → px → em → lh
+//   - pt → px: pt * (96/72) = pt * 1.333... (CSS standard: 72pt = 1in = 96px)
+//   - px → em → lh: (see PxToLh)
+//
+// Combined: lh = pt * (4/3) / 16 / 1.2 = pt / 14.4
+//
+// Examples:
+//
+//	PtToLh(14.4) → 1.0lh
+//	PtToLh(7.2) → 0.5lh
+//	PtToLh(-8) → -0.555556lh (negative values preserved)
+func PtToLh(pt float64) float64 {
+	// CSS standard: 72pt = 96px, so 1pt = 96/72 = 4/3 px
+	const PtToPxRatio = 96.0 / 72.0 // 1.333...
+	return RoundSignificant(pt*PtToPxRatio/KP3PixelsPerEm/LineHeightRatio, SignificantFigures)
+}
+
+// PxToPercent converts pixels to percentage for horizontal spacing.
+// Uses the formula: % = px / KP3PixelsPerEm * EmToPercentHorizontal
+//
+// The conversion chain: px → em → %
+//   - px → em: px / KP3PixelsPerEm (16px = 1em)
+//   - em → %: em * EmToPercentHorizontal (1em = 3.125%)
+//
+// Combined: % = px / 16 * 3.125 = px * 0.1953125
+//
+// Examples:
+//
+//	PxToPercent(16) → 3.125%
+//	PxToPercent(32) → 6.25%
+//	PxToPercent(-8) → -1.5625% (negative values preserved)
+func PxToPercent(px float64) float64 {
+	return RoundSignificant(px/KP3PixelsPerEm*EmToPercentHorizontal, SignificantFigures)
+}
+
+// PtToPercent converts points to percentage for horizontal spacing.
+// Uses the formula: % = pt * PtToPxRatio / KP3PixelsPerEm * EmToPercentHorizontal
+//
+// The conversion chain: pt → px → em → %
+//   - pt → px: pt * (96/72) = pt * 1.333... (CSS standard: 72pt = 1in = 96px)
+//   - px → em → %: (see PxToPercent)
+//
+// Combined: % = pt * (4/3) / 16 * 3.125 = pt * 0.2604166...
+//
+// Examples:
+//
+//	PtToPercent(12) → 3.125%  (12pt = 16px = 1em = 3.125%)
+//	PtToPercent(24) → 6.25%
+//	PtToPercent(-8) → -2.08333% (negative values preserved)
+func PtToPercent(pt float64) float64 {
+	// CSS standard: 72pt = 96px, so 1pt = 96/72 = 4/3 px
+	const PtToPxRatio = 96.0 / 72.0 // 1.333...
+	return RoundSignificant(pt*PtToPxRatio/KP3PixelsPerEm*EmToPercentHorizontal, SignificantFigures)
 }

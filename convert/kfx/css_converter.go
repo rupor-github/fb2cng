@@ -583,6 +583,9 @@ func (c *Converter) parseShorthandValue(s string) CSSValue {
 //   - font-size: rem
 //   - text-indent: %
 //   - line-height: lh
+//
+// Note: KFX does not support negative margins. Negative margin values are
+// silently dropped with a warning logged.
 func (c *Converter) setDimensionProperty(sym KFXSymbol, value CSSValue, props map[KFXSymbol]any, warnings *[]string) {
 	// Handle keywords
 	if value.IsKeyword() {
@@ -592,6 +595,12 @@ func (c *Converter) setDimensionProperty(sym KFXSymbol, value CSSValue, props ma
 		case "0", "inherit", "initial":
 			// Skip or use default
 		}
+		return
+	}
+
+	// KFX does not support negative margins - skip with warning
+	if isMarginProperty(sym) && value.Value < 0 {
+		*warnings = append(*warnings, fmt.Sprintf("negative margin not supported in KFX, ignoring %s: %v%s", sym, value.Value, value.Unit))
 		return
 	}
 
@@ -616,11 +625,18 @@ func (c *Converter) setDimensionProperty(sym KFXSymbol, value CSSValue, props ma
 
 	switch {
 	case isVerticalSpacingProperty(sym):
-		// Vertical spacing: em -> lh using LineHeightRatio
-		if value.Unit == "em" {
+		// Vertical spacing: convert to lh units
+		switch value.Unit {
+		case "em":
 			convertedValue = value.Value / LineHeightRatio
 			convertedUnit = SymUnitLh
-		} else {
+		case "px":
+			convertedValue = PxToLh(value.Value)
+			convertedUnit = SymUnitLh
+		case "pt":
+			convertedValue = PtToLh(value.Value)
+			convertedUnit = SymUnitLh
+		default:
 			var err error
 			_, convertedUnit, err = CSSValueToKFX(value)
 			if err != nil {
@@ -630,11 +646,18 @@ func (c *Converter) setDimensionProperty(sym KFXSymbol, value CSSValue, props ma
 		}
 
 	case isHorizontalSpacingProperty(sym):
-		// Horizontal spacing: em -> % using EmToPercentHorizontal
-		if value.Unit == "em" {
+		// Horizontal spacing: convert to % units
+		switch value.Unit {
+		case "em":
 			convertedValue = value.Value * EmToPercentHorizontal
 			convertedUnit = SymUnitPercent
-		} else {
+		case "px":
+			convertedValue = PxToPercent(value.Value)
+			convertedUnit = SymUnitPercent
+		case "pt":
+			convertedValue = PtToPercent(value.Value)
+			convertedUnit = SymUnitPercent
+		default:
 			var err error
 			_, convertedUnit, err = CSSValueToKFX(value)
 			if err != nil {

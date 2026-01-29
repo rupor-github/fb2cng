@@ -4,6 +4,7 @@ import (
 	"math"
 	"math/big"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/amazon-ion/ion-go/ion"
@@ -858,5 +859,59 @@ func TestStyleRegistryBuildFragments(t *testing.T) {
 	// name2 and name3 may be the same due to deduplication
 	if !names[name2] && !names[name3] {
 		t.Errorf("expected at least one of %s or %s", name2, name3)
+	}
+}
+
+func TestNegativeMarginWarning(t *testing.T) {
+	log := zap.NewNop()
+	parser := NewParser(log)
+	conv := NewConverter(log)
+
+	// CSS with negative margins (not supported in KFX)
+	css := []byte(`
+		.test {
+			margin-left: -8pt;
+			margin-right: -8pt;
+			margin-top: -1em;
+			margin-bottom: 1em;
+		}
+	`)
+
+	sheet := parser.Parse(css)
+	styles, warnings := conv.ConvertStylesheet(sheet)
+
+	// Should have 3 warnings for the 3 negative margins
+	if len(warnings) != 3 {
+		t.Errorf("expected 3 warnings for negative margins, got %d: %v", len(warnings), warnings)
+	}
+
+	// Check warnings mention "negative margin"
+	for _, w := range warnings {
+		if !strings.Contains(w, "negative margin") {
+			t.Errorf("expected warning about negative margin, got: %s", w)
+		}
+	}
+
+	// Should have 1 style
+	if len(styles) != 1 {
+		t.Fatalf("expected 1 style, got %d", len(styles))
+	}
+
+	style := styles[0]
+
+	// The negative margins should NOT be in the properties
+	if _, ok := style.Properties[SymMarginLeft]; ok {
+		t.Error("negative margin-left should NOT be set")
+	}
+	if _, ok := style.Properties[SymMarginRight]; ok {
+		t.Error("negative margin-right should NOT be set")
+	}
+	if _, ok := style.Properties[SymMarginTop]; ok {
+		t.Error("negative margin-top should NOT be set")
+	}
+
+	// The positive margin-bottom SHOULD be set
+	if _, ok := style.Properties[SymMarginBottom]; !ok {
+		t.Error("positive margin-bottom SHOULD be set")
 	}
 }
