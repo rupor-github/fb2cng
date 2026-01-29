@@ -603,6 +603,10 @@ func stripLineHeight(props map[KFXSymbol]any) map[KFXSymbol]any {
 //   - For font-size >= 1rem (e.g., headings): line-height = 1.0101lh
 //     Uses the standard adjustment factor (100/99 ≈ 1.0101).
 //
+// Note: If line-height is already set (e.g., calculated in ResolveInlineDelta
+// for inline elements in non-standard contexts like headings), it is preserved.
+// The ratio-based calculation in ResolveInlineDelta is more accurate for those cases.
+//
 // Vertical margins are recalculated using the line-height adjustment factor.
 func adjustLineHeightForFontSize(props map[KFXSymbol]any) map[KFXSymbol]any {
 	// Check if font-size exists and differs from default (1rem)
@@ -624,16 +628,33 @@ func adjustLineHeightForFontSize(props map[KFXSymbol]any) map[KFXSymbol]any {
 	updated := make(map[KFXSymbol]any, len(props))
 	maps.Copy(updated, props)
 
-	// Calculate line-height based on font-size
+	// Calculate line-height based on font-size, but only if not already set.
+	// Styles from ResolveInlineDelta may already have ratio-based line-height
+	// calculated relative to the parent's font-size, which is more accurate
+	// for inline elements in heading contexts.
 	var adjustedLh float64
-	if fontSizeVal < 1.0 {
-		// For small fonts (sub/sup), use 1/font-size to keep absolute line spacing constant
-		adjustedLh = 1.0 / fontSizeVal
+	if existingLh, hasLh := props[SymLineHeight]; hasLh {
+		// Use existing line-height (already calculated with proper context)
+		if lhVal, lhUnit, ok := measureParts(existingLh); ok && lhUnit == SymUnitLh {
+			adjustedLh = lhVal
+		} else {
+			// Fallback: calculate based on font-size
+			if fontSizeVal < 1.0 {
+				adjustedLh = 1.0 / fontSizeVal
+			} else {
+				adjustedLh = AdjustedLineHeightLh
+			}
+			updated[SymLineHeight] = DimensionValue(RoundDecimals(adjustedLh, LineHeightPrecision), SymUnitLh)
+		}
 	} else {
-		// For large fonts (headings), use standard adjustment
-		adjustedLh = AdjustedLineHeightLh
+		// No existing line-height: calculate based on font-size
+		if fontSizeVal < 1.0 {
+			adjustedLh = 1.0 / fontSizeVal
+		} else {
+			adjustedLh = AdjustedLineHeightLh
+		}
+		updated[SymLineHeight] = DimensionValue(RoundDecimals(adjustedLh, LineHeightPrecision), SymUnitLh)
 	}
-	updated[SymLineHeight] = DimensionValue(RoundDecimals(adjustedLh, LineHeightPrecision), SymUnitLh)
 
 	// Adjust vertical margins using the line-height factor
 	for _, sym := range []KFXSymbol{SymMarginTop, SymMarginBottom, SymPaddingTop, SymPaddingBottom} {
@@ -897,15 +918,6 @@ func DefaultStyleRegistry() *StyleRegistry {
 	sr := NewStyleRegistry()
 
 	// ============================================================
-	// Minimal fallback style for unknown classes
-	// ============================================================
-
-	// "kfx-link-empty" is an empty style for style_events that only need link_to.
-	// KP3 uses an empty style (only name property) for linked inline images.
-	// Kindle appears to require the $157 (style) field to be present for links to work.
-	sr.Register(StyleDef{Name: "kfx-link-empty", Properties: make(map[KFXSymbol]any)})
-
-	// ============================================================
 	// Block-level HTML elements
 	// ============================================================
 
@@ -923,9 +935,14 @@ func DefaultStyleRegistry() *StyleRegistry {
 	// Font sizes use rem (not em) for KFX output
 	// Margins converted from em to lh: em_value / LineHeightRatio (1.2)
 	// layout-hints added during post-processing
+	// Headings include explicit line-height so that inline contexts (for sub/sup
+	// style delta calculations) can inherit it. The value is 1.0101lh (AdjustedLineHeightLh)
+	// which is the standard KFX line-height. CSS may override font-size but not line-height,
+	// so this base value will be available for inline delta resolution.
 	sr.Register(NewStyle("h1").
 		FontSize(2.0, SymUnitRem).
 		FontWeight(SymBold).
+		LineHeight(AdjustedLineHeightLh, SymUnitLh).
 		MarginTop(0.558, SymUnitLh). // 0.67em / 1.2
 		MarginBottom(0.558, SymUnitLh).
 		Build())
@@ -933,6 +950,7 @@ func DefaultStyleRegistry() *StyleRegistry {
 	sr.Register(NewStyle("h2").
 		FontSize(1.5, SymUnitRem).
 		FontWeight(SymBold).
+		LineHeight(AdjustedLineHeightLh, SymUnitLh).
 		MarginTop(0.692, SymUnitLh). // 0.83em / 1.2
 		MarginBottom(0.692, SymUnitLh).
 		Build())
@@ -940,6 +958,7 @@ func DefaultStyleRegistry() *StyleRegistry {
 	sr.Register(NewStyle("h3").
 		FontSize(1.17, SymUnitRem).
 		FontWeight(SymBold).
+		LineHeight(AdjustedLineHeightLh, SymUnitLh).
 		MarginTop(0.833333, SymUnitLh). // 1.0em / 1.2
 		MarginBottom(0.833333, SymUnitLh).
 		Build())
@@ -947,6 +966,7 @@ func DefaultStyleRegistry() *StyleRegistry {
 	sr.Register(NewStyle("h4").
 		FontSize(1.0, SymUnitRem).
 		FontWeight(SymBold).
+		LineHeight(AdjustedLineHeightLh, SymUnitLh).
 		MarginTop(1.108, SymUnitLh). // 1.33em / 1.2
 		MarginBottom(1.108, SymUnitLh).
 		Build())
@@ -954,6 +974,7 @@ func DefaultStyleRegistry() *StyleRegistry {
 	sr.Register(NewStyle("h5").
 		FontSize(0.83, SymUnitRem).
 		FontWeight(SymBold).
+		LineHeight(AdjustedLineHeightLh, SymUnitLh).
 		MarginTop(1.392, SymUnitLh). // 1.67em / 1.2
 		MarginBottom(1.392, SymUnitLh).
 		Build())
@@ -961,6 +982,7 @@ func DefaultStyleRegistry() *StyleRegistry {
 	sr.Register(NewStyle("h6").
 		FontSize(0.67, SymUnitRem).
 		FontWeight(SymBold).
+		LineHeight(AdjustedLineHeightLh, SymUnitLh).
 		MarginTop(1.942, SymUnitLh). // 2.33em / 1.2
 		MarginBottom(1.942, SymUnitLh).
 		Build())
@@ -1205,16 +1227,18 @@ func DefaultStyleRegistry() *StyleRegistry {
 		Build())
 
 	// Heading-context sub/sup: When sub/sup appears in headings (h1-h6), we apply
-	// only the baseline-style without font-size reduction. This matches KP3 behavior
-	// where title paragraphs wrapped in <sub>/<sup> render at full title size with
-	// just the vertical alignment applied.
+	// baseline-style with a modest font-size reduction (0.9em). This matches KP3
+	// behavior where inline <sup>/<sub> in titles are slightly smaller than the
+	// heading text but not as small as in normal paragraphs (which use 0.75rem).
 	for i := 1; i <= 6; i++ {
 		hTag := fmt.Sprintf("h%d", i)
-		sr.Register(NewStyle(hTag + "--sub").
+		sr.Register(NewStyle(hTag+"--sub").
 			BaselineStyle(SymSubscript).
+			FontSize(0.9, SymUnitEm).
 			Build())
-		sr.Register(NewStyle(hTag + "--sup").
+		sr.Register(NewStyle(hTag+"--sup").
 			BaselineStyle(SymSuperscript).
+			FontSize(0.9, SymUnitEm).
 			Build())
 	}
 

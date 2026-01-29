@@ -74,3 +74,77 @@ func SegmentNestedStyleEvents(events []StyleEventRef) []StyleEventRef {
 
 	return result
 }
+
+// FillStyleEventGaps fills gaps and empty-styled regions in style events with a base style.
+// KP3 ensures every character position in headings has at least a base line-height style.
+// This function:
+// 1. Removes events with empty Style (no link info)
+// 2. Fills gaps between styled regions with baseStyle
+// 3. Returns sorted events covering the full content range
+//
+// Parameters:
+//   - events: Deduplicated, sorted style events (from SegmentNestedStyleEvents)
+//   - totalLen: Total length of the content string in runes
+//   - baseStyle: Style name to use for gap fills (e.g., line-height-only style)
+//
+// The function preserves link-only events (empty Style but has LinkTo) since
+// these are needed for navigation even without visual styling.
+func FillStyleEventGaps(events []StyleEventRef, totalLen int, baseStyle string) []StyleEventRef {
+	if totalLen <= 0 {
+		return nil
+	}
+
+	// Filter out empty-styled events (no style AND no link)
+	var filtered []StyleEventRef
+	for _, ev := range events {
+		if ev.Style != "" || ev.LinkTo != "" {
+			filtered = append(filtered, ev)
+		}
+	}
+
+	// If no styled events, return single base style covering everything
+	if len(filtered) == 0 {
+		if baseStyle == "" {
+			return nil
+		}
+		return []StyleEventRef{{Offset: 0, Length: totalLen, Style: baseStyle}}
+	}
+
+	// If no base style to fill with, just return filtered events
+	if baseStyle == "" {
+		return filtered
+	}
+
+	// Track which positions are covered by styled events.
+	// We use a simple approach: find gaps between event boundaries.
+	// Since events can overlap (KP3 behavior), we track the furthest end position seen.
+	var result []StyleEventRef
+	covered := 0 // Furthest position covered so far
+
+	for _, ev := range filtered {
+		// If there's a gap before this event, fill it
+		if ev.Offset > covered {
+			result = append(result, StyleEventRef{
+				Offset: covered,
+				Length: ev.Offset - covered,
+				Style:  baseStyle,
+			})
+		}
+		result = append(result, ev)
+		// Update covered position (events may overlap, so take max)
+		if end := ev.Offset + ev.Length; end > covered {
+			covered = end
+		}
+	}
+
+	// Fill any gap at the end
+	if covered < totalLen {
+		result = append(result, StyleEventRef{
+			Offset: covered,
+			Length: totalLen - covered,
+			Style:  baseStyle,
+		})
+	}
+
+	return result
+}

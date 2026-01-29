@@ -296,11 +296,23 @@ func addTitleAsHeading(c *content.Content, title *fb2.Title, ctx StyleContext, h
 	// by StyleContext in resolveChildStyles(). This avoids merging wrapper margins.
 	styleSpec := headingTag + " " + headerStyleBase
 	contentName, offset := ca.Add(nw.String())
+	totalLen := nw.RuneCount() // Total content length for gap filling
 
 	// Apply segmentation to eliminate overlapping style events (KP3 requirement)
 	segmentedEvents := SegmentNestedStyleEvents(events)
 
-	// Mark usage only for styles that survived segmentation
+	// KP3 fills gaps in title style events with a base line-height style.
+	// This ensures every character has at least line-height: 1.0101lh for proper spacing.
+	// Create/get the base line-height style for gap filling.
+	var baseLineHeightStyle string
+	if styles != nil && totalLen > 0 {
+		baseLineHeightStyle = styles.RegisterResolved(map[KFXSymbol]any{
+			SymLineHeight: DimensionValue(AdjustedLineHeightLh, SymUnitLh),
+		}, styleUsageText, true)
+	}
+	segmentedEvents = FillStyleEventGaps(segmentedEvents, totalLen, baseLineHeightStyle)
+
+	// Mark usage only for styles that survived segmentation and gap filling
 	if styles != nil {
 		for _, ev := range segmentedEvents {
 			styles.ResolveStyle(ev.Style, styleUsageText)

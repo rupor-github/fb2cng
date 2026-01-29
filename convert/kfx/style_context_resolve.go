@@ -510,10 +510,106 @@ func (sc StyleContext) ResolveInlineDelta(classes string) string {
 		}
 	}
 
+	// KP3 special case: when a link-footnote is inside a superscript context (e.g., <sup><a>),
+	// the font-size from link-footnote CSS (0.8em) should NOT compound with the parent's
+	// superscript font-size (0.75rem).
+	//
+	// KP3 behavior differs based on context:
+	// 1. In normal paragraphs: link inherits sup's font-size (0.75rem)
+	// 2. In headings with explicit <sup><a>: link uses heading_font × 0.7
+	// 3. In headings with direct <a> (link-footnote): link uses heading_font × 0.9 (same as sup)
+	//
+	// Detection: classes are like "sup link-footnote" where "sup" comes before "link-footnote".
+	// We resolve the context classes (before link-footnote) to get their font-size/line-height.
+	var contextFontSize, contextLineHeight any
+	if fontSizeChanged && strings.Contains(classes, "link-footnote") {
+		// Extract classes before "link-footnote" to check ancestor context
+		parts := strings.Fields(classes)
+		var contextClasses []string
+		for _, p := range parts {
+			if p == "link-footnote" {
+				break
+			}
+			contextClasses = append(contextClasses, p)
+		}
+
+		// Check if we're in a heading context
+		var headingFontSize any
+		for _, scope := range sc.scopes {
+			if isHeadingTag(scope.Tag) {
+				// Get heading's font-size from registry
+				if headingDef, ok := sc.registry.Get(scope.Tag); ok {
+					resolved := sc.registry.resolveInheritance(headingDef)
+					if fs, ok := resolved.Properties[SymFontSize]; ok {
+						headingFontSize = fs
+					}
+				}
+				break // Use innermost heading
+			}
+		}
+
+		// Check if ancestor context (classes before link-footnote) has superscript baseline
+		hasSupContext := false
+		if len(contextClasses) > 0 {
+			// Get the tag from our scope chain - this is important for heading contexts
+			// where h1--sup has different properties than regular sup
+			var tag string
+			if len(sc.scopes) > 0 {
+				tag = sc.scopes[len(sc.scopes)-1].Tag
+			}
+			contextProps := sc.resolveProperties(tag, strings.Join(contextClasses, " "))
+			if baseline, ok := contextProps[SymBaselineStyle]; ok {
+				hasSupContext = symbolToInt(baseline) == int(SymSuperscript)
+			}
+		}
+
+		if headingFontSize != nil {
+			// In heading context - calculate font-size based on heading
+			if headingVal, headingUnit, ok := measureParts(headingFontSize); ok && headingUnit == SymUnitRem {
+				if hasSupContext {
+					// <sup><a> in heading: link uses heading × 0.7
+					contextFontSize = DimensionValue(headingVal*0.7, SymUnitRem)
+				} else {
+					// Direct <a> (link-footnote) in heading: link uses heading × 0.9 (same as sup)
+					// This matches KP3 behavior where link-footnote in heading gets sup factor
+					contextFontSize = DimensionValue(headingVal*0.9, SymUnitRem)
+				}
+			}
+		} else if hasSupContext {
+			// Not in heading context but has sup - use sup's font-size (inherited from parent)
+			var tag string
+			if len(sc.scopes) > 0 {
+				tag = sc.scopes[len(sc.scopes)-1].Tag
+			}
+			contextProps := sc.resolveProperties(tag, strings.Join(contextClasses, " "))
+			if fs, ok := contextProps[SymFontSize]; ok {
+				contextFontSize = fs
+			} else if pfs, ok := sc.inherited[SymFontSize]; ok {
+				contextFontSize = pfs
+			}
+
+			// Line-height from context
+			if lh, ok := contextProps[SymLineHeight]; ok {
+				contextLineHeight = lh
+			} else if plh, ok := sc.inherited[SymLineHeight]; ok {
+				contextLineHeight = plh
+			}
+		}
+	}
+
 	for sym, val := range inlineProps {
 		// Skip block-level properties
 		if !isInlineOnlyProperty(sym) {
 			continue
+		}
+
+		// For link-footnote in superscript context, use context's font-size/line-height
+		// instead of the compounded values from link-footnote CSS
+		if contextFontSize != nil && sym == SymFontSize {
+			val = contextFontSize
+		}
+		if contextLineHeight != nil && sym == SymLineHeight {
+			val = contextLineHeight
 		}
 
 		// Special handling for line-height: only include if font-size changed.
@@ -543,6 +639,42 @@ func (sc StyleContext) ResolveInlineDelta(classes string) string {
 
 		// Property differs from parent or parent doesn't have it - include in delta
 		deltaProps[sym] = val
+	}
+
+	// KP3 behavior: Calculate line-height to maintain constant absolute line spacing.
+	// When an inline element has a different font-size than its parent, KP3 calculates:
+	//   line-height = parent_lh × (parent_font / inline_font)
+	// This keeps the absolute line spacing the same as the parent block.
+	//
+	// Example: sup in h1 (1.25rem heading, 1.125rem sup)
+	//   line-height = 1.0101lh × (1.25 / 1.125) = 1.12205lh
+	//
+	// Only apply this when:
+	// 1. Font-size is in the delta (different from parent)
+	// 2. Parent has both font-size and line-height
+	if _, hasFontSize := deltaProps[SymFontSize]; hasFontSize {
+		parentFontSize, hasParentFont := sc.inherited[SymFontSize]
+		parentLineHeight, hasParentLh := sc.inherited[SymLineHeight]
+		if hasParentFont && hasParentLh {
+			parentFontVal, parentFontUnit, parentFontOk := measureParts(parentFontSize)
+			inlineFontVal, inlineFontUnit, inlineFontOk := measureParts(deltaProps[SymFontSize])
+			parentLhVal, parentLhUnit, parentLhOk := measureParts(parentLineHeight)
+
+			// Only calculate if we have valid dimensions and compatible units
+			if parentFontOk && inlineFontOk && parentLhOk &&
+				parentFontUnit == SymUnitRem && inlineFontUnit == SymUnitRem &&
+				parentLhUnit == SymUnitLh && inlineFontVal > 0 {
+
+				// Calculate ratio-based line-height to maintain absolute spacing
+				ratio := parentFontVal / inlineFontVal
+				adjustedLh := parentLhVal * ratio
+
+				// Round to LineHeightPrecision decimal places (same as adjustLineHeightForFontSize)
+				adjustedLh = RoundDecimals(adjustedLh, LineHeightPrecision)
+
+				deltaProps[SymLineHeight] = DimensionValue(adjustedLh, SymUnitLh)
+			}
+		}
 	}
 
 	// If no delta properties, return empty string - no style event needed.
@@ -601,4 +733,13 @@ func symbolToInt(v any) int {
 	default:
 		return -1
 	}
+}
+
+// isHeadingTag returns true if the tag is an HTML heading element (h1-h6).
+func isHeadingTag(tag string) bool {
+	switch tag {
+	case "h1", "h2", "h3", "h4", "h5", "h6":
+		return true
+	}
+	return false
 }

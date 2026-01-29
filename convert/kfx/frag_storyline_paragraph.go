@@ -356,8 +356,12 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 	// This ensures inline styles (like sub/sup) inherit font-size from the container.
 	inlineCtx := ctx.Push(tag, spanningClasses)
 
-	// Track cumulative rune count across flushes for style_event offsets
+	// Track cumulative rune count across flushes for style_event offsets.
+	// This includes text characters and inline image "virtual" positions.
 	var cumulativeRuneCount int
+
+	// Track inline images added - each image occupies 1 virtual position for style_events.
+	var inlineImageCount int
 
 	// Flush current text to items slice, preserving trailing spaces for inline images
 	flushText := func() {
@@ -375,8 +379,13 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 				Text: text,
 			})
 		}
-		// Accumulate rune count before resetting
-		cumulativeRuneCount += nw.RuneCount()
+		// Accumulate rune count before resetting.
+		// Include the pending space that was added to the text.
+		runeCount := nw.RuneCount()
+		if hadPendingSpace {
+			runeCount++
+		}
+		cumulativeRuneCount += runeCount
 		nw.Reset()
 	}
 
@@ -387,18 +396,13 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 		IsFootnoteLink bool
 	}
 
+	// Track whether current link contains inline images (for KP3-compatible style events)
+	var linkHasImage bool
+
 	var walk func(seg *fb2.InlineSegment, styleContext []inlineStyleInfo, spanningDepth int)
 	walk = func(seg *fb2.InlineSegment, styleContext []inlineStyleInfo, spanningDepth int) {
 		// Handle inline images - flush current text and add image item
 		if seg.Kind == fb2.InlineImageSegment {
-			// Check if there's a pending space that will be added during flush
-			hasPendingSpace := nw.HasPendingSpace()
-			// Capture the offset before flushing (includes all text so far)
-			imgOffset := cumulativeRuneCount + nw.RuneCount()
-			// Account for the trailing space that flushText() will add
-			if hasPendingSpace {
-				imgOffset++
-			}
 			flushText()
 			if seg.Image == nil {
 				return
@@ -409,23 +413,12 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 				return
 			}
 
-			// Check if image is inside a link context - if so, create a style_event
-			// to make the image clickable. KP3 uses an empty style with link_to.
-			// The offset is at the current text position, and length covers the
-			// "virtual" space the image occupies in the text stream.
+			// Mark that current link context contains an image.
+			// The link's style event will handle making the image clickable.
+			// KP3 creates a single event with an empty style for image-only links.
 			for i := len(styleContext) - 1; i >= 0; i-- {
 				if styleContext[i].LinkTo != "" {
-					// Create style_event for the linked image
-					// Kindle requires the $157 (style) field to be present for links to work,
-					// even if the style is empty.
-					emptyStyle := styles.ResolveStyle("kfx-link-empty", styleUsageText)
-					events = append(events, StyleEventRef{
-						Offset:         imgOffset,
-						Length:         1,
-						Style:          emptyStyle,
-						LinkTo:         styleContext[i].LinkTo,
-						IsFootnoteLink: styleContext[i].IsFootnoteLink,
-					})
+					linkHasImage = true
 					break
 				}
 			}
@@ -438,6 +431,11 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 				Style:        imgStyle,
 				AltText:      seg.Image.Alt,
 			})
+
+			// Inline images occupy 1 virtual position for style_event offset calculation.
+			// This matches KP3 behavior where style events span text + images.
+			inlineImageCount++
+
 			// Mark that we're continuing after an inline image.
 			// This allows leading whitespace in subsequent text to be preserved
 			// (if it exists in the source), but does NOT unconditionally add space.
@@ -486,8 +484,10 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 			}
 		}
 
-		// Track position for style event using rune count (cumulative across flushes)
-		start := cumulativeRuneCount + nw.RuneCount()
+		// Track position for style event using rune count (cumulative across flushes).
+		// Include inline image count since images occupy virtual positions.
+		start := cumulativeRuneCount + inlineImageCount + nw.RuneCount()
+		startImageCount := inlineImageCount
 
 		// Add text content
 		nw.WriteString(seg.Text)
@@ -503,6 +503,13 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 			childContext = append(append([]inlineStyleInfo(nil), styleContext...), info)
 		}
 
+		// Reset linkHasImage before processing link children so we can detect
+		// if THIS link contains images (not an outer link)
+		savedLinkHasImage := linkHasImage
+		if isLink {
+			linkHasImage = false
+		}
+
 		// Process children
 		childSpanningDepth := spanningDepth
 		if spanningDepth < len(spanningStyleParts) && segStyle == spanningStyleParts[spanningDepth] {
@@ -512,17 +519,27 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 			walk(&seg.Children[i], childContext, childSpanningDepth)
 		}
 
+		// Capture whether this link had images, then restore outer context
+		thisLinkHasImage := linkHasImage
+		if isLink {
+			linkHasImage = savedLinkHasImage
+		}
+
 		if seg.Kind == fb2.InlineCode {
 			nw.SetPreserveWhitespace(false)
 		}
 
 		// Use RuneCountAfterPendingSpace to include trailing whitespace inside
 		// the styled element. KP3 includes such whitespace in the style span.
-		end := cumulativeRuneCount + nw.RuneCountAfterPendingSpace()
+		// Include images added during children processing.
+		imagesDelta := inlineImageCount - startImageCount
+		end := cumulativeRuneCount + inlineImageCount + nw.RuneCountAfterPendingSpace()
 
 		// Create style event if we have styled content
 		isSpanningStyle := spanningDepth < len(spanningStyleParts) && segStyle == spanningStyleParts[spanningDepth]
-		if segStyle != "" && end > start && !isSpanningStyle {
+		// For links with images, check (end > start) OR (imagesDelta > 0) to ensure we create an event
+		hasContent := end > start || (isLink && imagesDelta > 0)
+		if segStyle != "" && hasContent && !isSpanningStyle {
 			var styleNames []string
 			for _, sctx := range styleContext {
 				styleNames = append(styleNames, sctx.Style)
@@ -532,8 +549,17 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 			// Resolve inline style using delta-only approach (KP3 behavior).
 			// Style events contain only properties that differ from the parent
 			// (paragraph style). Block-level properties are excluded.
-			mergedSpec := strings.Join(styleNames, " ")
-			mergedStyle := inlineCtx.ResolveInlineDelta(mergedSpec)
+			// For links containing only images, use an empty style instead -
+			// KP3 uses a single event with empty style for image-only links.
+			var mergedStyle string
+			if isLink && thisLinkHasImage {
+				// Link with image: use empty style (KP3 behavior).
+				// Register directly with empty properties - no need for a named style.
+				mergedStyle = styles.RegisterResolved(nil, styleUsageInline, false)
+			} else {
+				mergedSpec := strings.Join(styleNames, " ")
+				mergedStyle = inlineCtx.ResolveInlineDelta(mergedSpec)
+			}
 
 			event := StyleEventRef{
 				Offset: start,
