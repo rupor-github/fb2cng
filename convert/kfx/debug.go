@@ -3,6 +3,7 @@ package kfx
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/amazon-ion/ion-go/ion"
@@ -647,11 +648,292 @@ func (c *Container) DumpFragments() string {
 					fmt.Fprintf(&sb, "  id: %s\n", fidID)
 				}
 			}
-			fmt.Fprintf(&sb, "  value: %s\n\n", FormatValueCompact(f.Value))
+			fmt.Fprintf(&sb, "  value: %s\n", FormatValueCompact(f.Value))
+			if f.FType == SymDocumentData {
+				if pretty := formatDocumentDataPretty(f.Value); pretty != "" {
+					sb.WriteString(pretty)
+					sb.WriteString("\n")
+				}
+			}
+			sb.WriteString("\n")
 		}
 	}
 
 	return sb.String()
+}
+
+func formatDocumentDataPretty(v any) string {
+	// We intentionally keep this output stable and human-oriented: the compact
+	// one-line value is still printed above, but document_data ($538) is often the
+	// first thing people compare between our output and KP3.
+	//
+	// Note: document_data may be represented as map[string]any because KP3 uses
+	// non-$ field names (e.g. "max_id").
+	docData, ok := v.(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	// Helper: translate "$NNN" keys into readable symbol names.
+	fieldName := func(k string) string {
+		if strings.HasPrefix(k, "$") {
+			if id, err := strconv.Atoi(strings.TrimPrefix(k, "$")); err == nil {
+				return KFXSymbol(id).Name()
+			}
+		}
+		return k
+	}
+
+	// Helper: measureParts variant for debug output.
+	//
+	// In dumps produced from serialized KFX, we frequently see Ion structs decoded as
+	// map[string]any with keys like "$306"/"$307" rather than map[KFXSymbol]any.
+	// The core merge logic uses measureParts (map[KFXSymbol]any), but for dumps we
+	// accept either representation.
+	measurePartsDebug := func(v any) (float64, KFXSymbol, bool) {
+		// Fast path: reuse the canonical helper.
+		if mv, unit, ok := measureParts(v); ok {
+			return mv, unit, ok
+		}
+
+		m, ok := v.(map[string]any)
+		if !ok {
+			return 0, 0, false
+		}
+
+		rawVal, hasVal := m["$307"]
+		if !hasVal {
+			rawVal, hasVal = m["value"]
+		}
+		rawUnit, hasUnit := m["$306"]
+		if !hasUnit {
+			rawUnit, hasUnit = m["unit"]
+		}
+		if !hasVal || !hasUnit {
+			return 0, 0, false
+		}
+
+		unit, ok := symbolIDFromAny(rawUnit)
+		if !ok {
+			return 0, 0, false
+		}
+
+		if dec, ok := rawVal.(*ion.Decimal); ok {
+			return decimalToFloat64(dec), unit, true
+		}
+		if num, ok := numericFromAny(rawVal); ok {
+			return num, unit, true
+		}
+		return 0, 0, false
+	}
+
+	// Helper: render a value in a compact but readable way.
+	formatVal := func(v any) string {
+		formatMeasure := func(mv float64, unit KFXSymbol) string {
+			unitName := unit.Name()
+			// For common units we prefer CSS-like spellings.
+			switch unit {
+			case SymUnitPercent:
+				return fmt.Sprintf("%g%%", mv)
+			case SymUnitEm:
+				return fmt.Sprintf("%gem", mv)
+			case SymUnitRem:
+				return fmt.Sprintf("%grem", mv)
+			case SymUnitLh:
+				return fmt.Sprintf("%glh", mv)
+			case SymUnitPx:
+				return fmt.Sprintf("%gpx", mv)
+			default:
+				return fmt.Sprintf("%g%s", mv, unitName)
+			}
+		}
+
+		// Dimension values: {$306: unit, $307: value}
+		if mv, unit, ok := measurePartsDebug(v); ok {
+			return formatMeasure(mv, unit)
+		}
+
+		switch vv := v.(type) {
+		case SymbolValue:
+			return KFXSymbol(vv).Name()
+		case KFXSymbol:
+			return vv.Name()
+		case ReadSymbolValue:
+			return string(vv)
+		case SymbolByNameValue:
+			return string(vv)
+		case *ion.Decimal:
+			return vv.String()
+		case string:
+			return vv
+		case int:
+			return strconv.Itoa(vv)
+		case int64:
+			return strconv.FormatInt(vv, 10)
+		case bool:
+			if vv {
+				return "true"
+			}
+			return "false"
+		case StructValue:
+			// Try to render common "dimension" structs as human units.
+			if mv, unit, ok := measurePartsDebug(vv); ok {
+				return formatMeasure(mv, unit)
+			}
+			return FormatValueCompact(v)
+		case map[KFXSymbol]any:
+			if mv, unit, ok := measurePartsDebug(vv); ok {
+				return formatMeasure(mv, unit)
+			}
+			return FormatValueCompact(v)
+		default:
+			// Keep it compact; the raw Ion-struct form is already printed above.
+			return FormatValueCompact(v)
+		}
+	}
+
+	formatValShort := func(v any) string {
+		// Prefer a human unit form when possible (dimensions and symbols).
+		if mv, unit, ok := measurePartsDebug(v); ok {
+			unitName := unit.Name()
+			// Debug output should be stable and concise, so we avoid raw float noise
+			// from decimal->float conversions (e.g. 1.2 -> 1.2000000000000002).
+			mv = RoundSignificant(mv, SignificantFigures)
+			switch unit {
+			case SymUnitPercent:
+				return fmt.Sprintf("%g%%", mv)
+			case SymUnitEm:
+				return fmt.Sprintf("%gem", mv)
+			case SymUnitRem:
+				return fmt.Sprintf("%grem", mv)
+			case SymUnitLh:
+				return fmt.Sprintf("%glh", mv)
+			case SymUnitPx:
+				return fmt.Sprintf("%gpx", mv)
+			default:
+				return fmt.Sprintf("%g%s", mv, unitName)
+			}
+		}
+		if sym, ok := symbolIDFromAny(v); ok {
+			return sym.Name()
+		}
+		s := formatVal(v)
+		// If this is still a nested struct/list, collapse it to a placeholder.
+		// (The full representation is already printed above as the raw value.)
+		if strings.HasPrefix(s, "{") {
+			return "(struct)"
+		}
+		if strings.HasPrefix(s, "[") {
+			return "(list)"
+		}
+		return s
+	}
+
+	formatReadingOrders := func(v any) string {
+		items, ok := v.([]any)
+		if !ok {
+			return "(unrecognized reading_orders)"
+		}
+		if len(items) == 0 {
+			return "[]"
+		}
+
+		// We usually have a single default reading order.
+		var b strings.Builder
+		for i, it := range items {
+			ro, ok := it.(StructValue)
+			if !ok {
+				// Sometimes this can be map[KFXSymbol]any after parsing.
+				if m, ok := it.(map[KFXSymbol]any); ok {
+					ro = StructValue(m)
+				} else {
+					fmt.Fprintf(&b, "\n    - [%d]: %s", i, FormatValueCompact(it))
+					continue
+				}
+			}
+
+			name := ""
+			if n, ok := ro[SymReadOrderName]; ok {
+				name = formatValShort(n)
+			}
+			secs := ""
+			if s, ok := ro[SymSections]; ok {
+				list, ok := s.([]any)
+				if ok {
+					// Truncate long lists for readability.
+					max := len(list)
+					if max > 20 {
+						max = 20
+					}
+					parts := make([]string, 0, max)
+					for _, sym := range list[:max] {
+						parts = append(parts, formatValShort(sym))
+					}
+					secs = "[" + strings.Join(parts, ", ") + "]"
+					if len(list) > max {
+						secs = strings.TrimSuffix(secs, "]") + ", ...]"
+					}
+				} else {
+					secs = formatValShort(s)
+				}
+			}
+
+			fmt.Fprintf(&b, "\n    - name: %s", name)
+			if secs != "" {
+				fmt.Fprintf(&b, "\n      sections: %s", secs)
+			}
+		}
+		return b.String()
+	}
+
+	// Render a stable field order for easy diffs.
+	order := []string{"$169", "$16", "$42", "$112", "$192", "$436", "$477", "$560", "max_id"}
+	seen := map[string]bool{}
+
+	var out strings.Builder
+	out.WriteString("  pretty:\n")
+	for _, k := range order {
+		val, ok := docData[k]
+		if !ok {
+			continue
+		}
+		seen[k] = true
+		name := fieldName(k)
+		if k == "$169" {
+			out.WriteString("    ")
+			out.WriteString(name)
+			out.WriteString(":")
+			out.WriteString(formatReadingOrders(val))
+			out.WriteString("\n")
+			continue
+		}
+
+		// For $538 we prefer a readable value form over the nested Ion struct.
+		out.WriteString("    ")
+		out.WriteString(name)
+		out.WriteString(": ")
+		out.WriteString(formatValShort(val))
+		out.WriteString("\n")
+	}
+
+	// Include any remaining keys (sorted) so nothing is hidden.
+	extra := make([]string, 0, len(docData))
+	for k := range docData {
+		if !seen[k] {
+			extra = append(extra, k)
+		}
+	}
+	slices.Sort(extra)
+	for _, k := range extra {
+		out.WriteString("    ")
+		out.WriteString(fieldName(k))
+		out.WriteString(": ")
+		out.WriteString(formatVal(docData[k]))
+		out.WriteString("\n")
+	}
+
+	// Trim the trailing newline to keep surrounding formatting consistent.
+	return strings.TrimSuffix(out.String(), "\n")
 }
 
 // FormatValueCompact formats a value as a compact single-line string for debug output.
