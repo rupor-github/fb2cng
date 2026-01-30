@@ -202,6 +202,16 @@ func TestAdjustLineHeightForFontSize(t *testing.T) {
 			wantAdjustment: true,
 		},
 		{
+			name: "monospace font-size 0.7rem clamps to 0.75rem",
+			props: map[KFXSymbol]any{
+				SymFontFamily: "monospace",
+				SymFontSize:   DimensionValue(0.7, SymUnitRem),
+			},
+			wantLineHeight: RoundDecimals(1.0/0.75, LineHeightPrecision),
+			wantMarginTop:  0, // not present
+			wantAdjustment: true,
+		},
+		{
 			name: "font-size in percent (not rem) - no adjustment",
 			props: map[KFXSymbol]any{
 				SymFontSize:  DimensionValue(140, SymUnitPercent),
@@ -235,6 +245,8 @@ func TestAdjustLineHeightForFontSize(t *testing.T) {
 				if math.Abs(mtVal-tt.wantMarginTop) > 1e-5 {
 					t.Errorf("margin-top = %v, want %v", mtVal, tt.wantMarginTop)
 				}
+			} else if tt.wantMarginTop != 0 {
+				t.Errorf("margin-top is missing, want %v", tt.wantMarginTop)
 			}
 		})
 	}

@@ -628,6 +628,17 @@ func adjustLineHeightForFontSize(props map[KFXSymbol]any) map[KFXSymbol]any {
 	updated := make(map[KFXSymbol]any, len(props))
 	maps.Copy(updated, props)
 
+	// KP3 behavior (observed): monospace styles (e.g. <code>/<pre>) are not emitted
+	// with font-size below 0.75rem, even when the source CSS uses smaller percent
+	// values like 70%.
+	//
+	// We clamp only monospace here to avoid changing semantics for other small
+	// font-size use-cases (sub/sup, small text, etc.).
+	if fontSizeVal < 0.75 && isMonospaceFontFamily(props[SymFontFamily]) {
+		fontSizeVal = 0.75
+		updated[SymFontSize] = DimensionValue(fontSizeVal, SymUnitRem)
+	}
+
 	// Calculate line-height based on font-size, but only if not already set.
 	// Styles from ResolveInlineDelta may already have ratio-based line-height
 	// calculated relative to the parent's font-size, which is more accurate
@@ -667,6 +678,14 @@ func adjustLineHeightForFontSize(props map[KFXSymbol]any) map[KFXSymbol]any {
 	}
 
 	return updated
+}
+
+func isMonospaceFontFamily(v any) bool {
+	fam, ok := v.(string)
+	if !ok || fam == "" {
+		return false
+	}
+	return strings.Contains(strings.ToLower(fam), "monospace")
 }
 
 // normalizeFontSizeUnits converts font-size from em to rem for final KFX output.
