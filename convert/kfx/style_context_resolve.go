@@ -471,6 +471,58 @@ func isInlineOnlyProperty(sym KFXSymbol) bool {
 	}
 }
 
+// isDropcapGlyphDeltaProperty returns true for properties that are appropriate for
+// the first-glyph style_event in a dropcap paragraph.
+//
+// KP3 emits a style_event for the first glyph, but it only contains lightweight
+// text styling (e.g., font-weight: bold). Dropcap geometry is driven by paragraph
+// dropcap-* properties and should not be repeated inline.
+func isDropcapGlyphDeltaProperty(sym KFXSymbol) bool {
+	// Explicitly exclude dropcap geometry / layout properties.
+	switch sym {
+	case SymFontSize, SymLineHeight:
+		return false
+	case SymFloat, SymFloatClear:
+		return false
+	case SymPaddingLeft, SymPaddingRight, SymPaddingTop, SymPaddingBottom:
+		return false
+	default:
+		return isInlineOnlyProperty(sym)
+	}
+}
+
+// ResolveDropcapGlyphDelta creates a delta-only style for the first glyph in a
+// dropcap paragraph.
+//
+// classes should typically be "has-dropcap--dropcap".
+func (sc StyleContext) ResolveDropcapGlyphDelta(classes string) string {
+	if sc.registry == nil {
+		return ""
+	}
+
+	inlineProps := sc.resolveProperties("", classes)
+
+	deltaProps := make(map[KFXSymbol]any)
+	for sym, val := range inlineProps {
+		if !isDropcapGlyphDeltaProperty(sym) {
+			continue
+		}
+		if parentVal, hasParent := sc.inherited[sym]; hasParent {
+			if propsEqual(val, parentVal) {
+				continue
+			}
+		}
+		deltaProps[sym] = val
+	}
+
+	if len(deltaProps) == 0 {
+		return ""
+	}
+
+	// Register as delta style with inline usage; don't mark used here.
+	return sc.registry.RegisterResolved(deltaProps, styleUsageInline, false)
+}
+
 // ResolveInlineDelta creates a delta-only style for inline style events.
 // This matches KP3 behavior where style events contain only properties that differ
 // from the parent element's style (the block/container style).

@@ -141,6 +141,8 @@ func (sb *StorylineBuilder) buildContentTree() *ContentTree {
 					// Propagate wrapper's margins to the virtual container
 					containerNode.MarginTop = ref.MarginTop
 					containerNode.MarginBottom = ref.MarginBottom
+					// Mark this container as having a real wrapper entry in the storyline.
+					containerNode.HasWrapper = true
 					// Track the mapping from wrapper entry index to container node
 					// so we can update the wrapper's style after collapsing
 					tree.WrapperMap[i] = containerNode

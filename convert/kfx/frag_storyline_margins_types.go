@@ -236,6 +236,15 @@ type ContentNode struct {
 	// Lower values come first. Used to correctly order siblings when containers
 	// and content entries are interleaved.
 	EntryOrder int
+
+	// HasWrapper is true when this container corresponds to an actual wrapper entry
+	// in the storyline (a content entry with content_list).
+	//
+	// For such containers, KP3 keeps container margins on the wrapper itself and
+	// collapses first/last-child margins into the wrapper (not by transferring the
+	// wrapper's margins down to children). Purely virtual containers (no wrapper
+	// entry) still use transfer semantics.
+	HasWrapper bool
 }
 
 // IsContainer returns true if this node is a container (has children or is explicitly marked).

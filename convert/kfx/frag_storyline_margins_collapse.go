@@ -247,16 +247,34 @@ func (t *ContentTree) collapseFirstChild(container *ContentNode) {
 	first := container.Children[0]
 	beforeMT, beforeMB := first.MarginTop, first.MarginBottom
 
-	// For virtual containers: handle based on title-block mode
+	// For container nodes that correspond to a wrapper entry (content_list), collapse
+	// the first child's mt INTO the container (and remove it from the child).
+	// This matches KP3 where wrapper mt stays on the wrapper, and first-child mt is removed.
+	//
+	// For purely virtual containers (no wrapper entry), we instead transfer the container
+	// mt down to the first child, since there is nothing that can render the container mt.
 	if container.Index == -1 {
 		if container.ContainerFlags.IsTitleBlockMode() {
-			// Title-block mode: container KEEPS its mt (renders on wrapper entry)
-			// First child loses its mt (title-block spacing via mt on following elements)
+			// Title-block mode: container keeps its mt (on wrapper). Child loses mt.
 			first.MarginTop = nil
 			t.traceFirstChild(first, beforeMT, beforeMB, container)
 			return
 		}
-		// Non-title-block virtual container: transfer mt to first child
+		if container.HasWrapper {
+			// Wrapper-backed container: collapse first child's mt into container.
+			if first.MarginTop != nil {
+				if container.MarginTop != nil {
+					collapsed := collapseValues(*container.MarginTop, *first.MarginTop)
+					container.MarginTop = ptrFloat64(collapsed)
+				} else {
+					container.MarginTop = first.MarginTop
+				}
+				first.MarginTop = nil
+				t.traceFirstChild(first, beforeMT, beforeMB, container)
+			}
+			return
+		}
+		// Purely virtual container: transfer mt to first child.
 		if container.MarginTop != nil {
 			if first.MarginTop != nil {
 				collapsed := collapseValues(*container.MarginTop, *first.MarginTop)
@@ -267,7 +285,6 @@ func (t *ContentTree) collapseFirstChild(container *ContentNode) {
 			container.MarginTop = nil
 			t.traceFirstChild(first, beforeMT, beforeMB, container)
 		}
-		// Don't take margins FROM first child for virtual containers
 		return
 	}
 
@@ -389,14 +406,15 @@ func (t *ContentTree) collapseLastChildWithContext(container *ContentNode, isLas
 		// Don't transfer any child's mb to root - it would be lost
 		return
 	}
-	// Special case: virtual containers (Index == -1) that are the last child of ROOT
-	// should not receive the last child's mb. Virtual containers don't have corresponding
-	// content entries, so the margin would be lost (only wrapper entries in WrapperMap
-	// get their margins applied). When a virtual container is at the end of the storyline
-	// (last child of root), the last content element should keep its mb so it renders.
+	// Special case: purely virtual containers (Index == -1) that are the last child of ROOT
+	// should not receive the last child's mb. Without a real wrapper entry, the container's
+	// mb would be lost and the last content element should keep its mb so it renders.
+	//
+	// If the container corresponds to an actual wrapper entry (HasWrapper), allow collapsing
+	// into the container so the wrapper can render the final mb.
 	//
 	// This matches KP3 behavior where the last element in a storyline keeps its margin-bottom.
-	if container.Index == -1 && isLastChildOfParent && container.Parent != nil && container.Parent.ContainerKind == ContainerRoot {
+	if container.Index == -1 && !container.HasWrapper && isLastChildOfParent && container.Parent != nil && container.Parent.ContainerKind == ContainerRoot {
 		// Virtual container at storyline end - last child keeps its mb
 		return
 	}
@@ -580,8 +598,56 @@ func (t *ContentTree) collapseSiblings(container *ContentNode) {
 			continue
 		}
 
-		// Virtual container (wrapper) nodes: handle margin collapsing with next sibling
+		// Virtual container (wrapper) nodes: handle margin collapsing with next sibling.
 		// Containers don't render directly; their margins go to content.
+		//
+		// Title-block mode is special:
+		// - If the next sibling already has a margin-top, KP3 effectively collapses by max()
+		//   and the container's mb disappears into the next sibling's mt.
+		// - If the next sibling has no mt, KP3 keeps the container's mb on the container
+		//   (it does NOT manufacture a mt on the next sibling).
+		if curr.ContainerFlags.IsTitleBlockMode() {
+			// Title-block wrappers are special:
+			// - If the next sibling already has a margin-top, KP3 collapses by max()
+			//   and the title-block's mb disappears into that mt.
+			// - If the next sibling has no mt, KP3 keeps the title-block's mb on the wrapper
+			//   (it does NOT manufacture a mt on the next sibling).
+			//
+			// Important detail: this collapsing happens BEFORE first-child collapsing.
+			// If the next sibling is a container, its mt (if any) will be transferred down
+			// to the first rendered child later. So we must prefer collapsing into the
+			// container's mt when present, rather than descending to a child that may not
+			// have mt yet.
+			var target *ContentNode
+			switch {
+			case !next.IsContainer():
+				// Next is a leaf content node.
+				target = next
+			case next.MarginTop != nil:
+				// Next is a container that already has mt. Collapse into that mt and let
+				// first-child collapsing propagate it down.
+				target = next
+			default:
+				// Next is a container without mt; fall back to the first rendered descendant.
+				target = next
+				for target != nil && target.IsContainer() {
+					if len(target.Children) == 0 {
+						target = nil
+						break
+					}
+					target = target.Children[0]
+				}
+			}
+			// Only collapse if the chosen target already has mt.
+			if curr.MarginBottom != nil && target != nil && target.MarginTop != nil {
+				collapsed := collapseValues(*curr.MarginBottom, *target.MarginTop)
+				target.MarginTop = ptrFloat64(collapsed)
+				curr.MarginBottom = nil
+				// Trace against the immediate next sibling for context.
+				t.traceSibling(next, nextBeforeMT, nextBeforeMB, container)
+			}
+			continue
+		}
 		//
 		// For containers with FlagTransferMBToLastChild:
 		// - If next sibling's mt >= container's mb, the sibling absorbs it (remove container's mb)

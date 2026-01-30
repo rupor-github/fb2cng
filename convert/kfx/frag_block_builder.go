@@ -19,6 +19,37 @@ type BlockBuilder struct {
 	children  []ContentRef   // Nested content entries (styles resolved at Build() time)
 }
 
+// StartContainerBlock begins a new wrapper/container block associated with a container kind.
+// All content added until EndBlock is called will be nested inside this wrapper.
+//
+// This is used when KP3 outputs an actual container entry with content_list (e.g., titles,
+// some annotations) and we need a wrapper to carry margins rather than pushing those
+// margins down to each child.
+//
+// Returns the EID of the wrapper for reference.
+func (sb *StorylineBuilder) StartContainerBlock(styleSpec string, kind ContainerKind, flags ContainerFlags, styles *StyleRegistry) int {
+	eid := sb.eidCounter
+	sb.eidCounter++
+
+	// Enter container for margin collapsing tracking.
+	sb.EnterContainer(kind, flags)
+
+	// Create StyleContext for child resolution - children will be counted in EndBlock.
+	// Note: Use Push (not PushBlock) so container margins (ml/mr) stay on the wrapper
+	// unless explicitly inherited via CSS.
+	ctx := NewStyleContext(styles).Push("div", styleSpec)
+
+	sb.blockStack = append(sb.blockStack, &BlockBuilder{
+		styleSpec: styleSpec,
+		styles:    styles,
+		ctx:       ctx,
+		eid:       eid,
+		children:  make([]ContentRef, 0),
+	})
+
+	return eid
+}
+
 // StartBlock begins a new wrapper/container block.
 // All content added until EndBlock is called will be nested inside this wrapper.
 // The styleSpec is the raw style name (e.g., "chapter-title", "body-title") - resolution
@@ -31,26 +62,8 @@ type BlockBuilder struct {
 //
 // Returns the EID of the wrapper for reference.
 func (sb *StorylineBuilder) StartBlock(styleSpec string, styles *StyleRegistry) int {
-	eid := sb.eidCounter
-	sb.eidCounter++
-
-	// Enter title-block container for margin collapsing tracking.
 	// Title blocks use FlagTitleBlockMode: spacing via margin-top, first loses mt, last gets mb.
-	sb.EnterContainer(ContainerTitleBlock, FlagTitleBlockMode)
-
-	// Create StyleContext for child resolution - children will be counted in EndBlock
-	// The context will be finalized with proper item count when EndBlock is called
-	ctx := NewStyleContext(styles).Push("div", styleSpec)
-
-	sb.blockStack = append(sb.blockStack, &BlockBuilder{
-		styleSpec: styleSpec,
-		styles:    styles,
-		ctx:       ctx,
-		eid:       eid,
-		children:  make([]ContentRef, 0),
-	})
-
-	return eid
+	return sb.StartContainerBlock(styleSpec, ContainerTitleBlock, FlagTitleBlockMode, styles)
 }
 
 // StartBlockWithChildPositions is an alias for StartBlock.
@@ -105,11 +118,11 @@ func (sb *StorylineBuilder) EndBlock() {
 	wrapperRef.childRefs = block.children
 	wrapperRef.styleCtx = &ctx
 
-	if len(sb.blockStack) > 0 {
-		sb.blockStack[len(sb.blockStack)-1].children = append(sb.blockStack[len(sb.blockStack)-1].children, wrapperRef)
-	} else {
-		sb.contentEntries = append(sb.contentEntries, wrapperRef)
-	}
+	// Route wrapper through addEntry so it gets:
+	// - container tracking fields (used by margin collapsing post-processing)
+	// - entry ordering (to correctly order siblings during collapse)
+	// - pending empty-line margin consumption (prevents margin leakage past wrappers)
+	sb.addEntry(wrapperRef)
 }
 
 // addEntry is the internal method that routes content to the appropriate destination.

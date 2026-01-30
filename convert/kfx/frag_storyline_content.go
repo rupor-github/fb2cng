@@ -92,29 +92,50 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 		sb.EndBlock()
 	}
 
-	// Process annotation - KFX doesn't use wrapper blocks for annotations.
-	// Content is flat with styling applied directly to each paragraph.
-	// Position filtering is applied so first item gets wrapper's margin-top,
-	// last item gets margin-bottom, middle items lose both vertical margins.
+	// Process annotation.
 	if section.Annotation != nil {
-		// Enter annotation container for margin collapsing tracking.
-		// Use FlagForceTransferMBToLastChild to always transfer container's margin-bottom to the last paragraph.
-		sb.EnterContainer(ContainerAnnotation, FlagForceTransferMBToLastChild)
+		// KP3 sometimes emits an actual wrapper entry (content_list) for annotations.
+		// Heuristic: use a wrapper when there are multiple block items.
+		if len(section.Annotation.Items) > 1 {
+			wrapperEID := sb.StartContainerBlock("annotation", ContainerAnnotation, FlagForceTransferMBToLastChild, styles)
 
-		// If annotation has an ID, assign it to the first content item
-		if section.Annotation.ID != "" {
-			if _, exists := idToEID[section.Annotation.ID]; !exists {
-				idToEID[section.Annotation.ID] = sb.NextEID()
+			// If annotation has an ID, assign it to the wrapper entry.
+			if section.Annotation.ID != "" {
+				if _, exists := idToEID[section.Annotation.ID]; !exists {
+					idToEID[section.Annotation.ID] = wrapperEID
+				}
 			}
-		}
-		annotationCtx := NewStyleContext(styles).PushBlock("div", "annotation")
-		// Store container margins for post-processing
-		sb.SetContainerMargins(annotationCtx.ExtractContainerMargins("div", "annotation"))
-		for i := range section.Annotation.Items {
-			processFlowItem(c, &section.Annotation.Items[i], annotationCtx, "annotation", sb, styles, imageResources, ca, idToEID)
-		}
 
-		sb.ExitContainer() // Exit annotation container
+			// Store container margins for post-processing (applies to the wrapper-backed container).
+			// Use Push (not PushBlock) so container ml/mr remain on the wrapper rather than being
+			// inherited by each child paragraph.
+			annotationCtx := NewStyleContext(styles).Push("div", "annotation")
+			sb.SetContainerMargins(NewStyleContext(styles).ExtractContainerMargins("div", "annotation"))
+			for i := range section.Annotation.Items {
+				processFlowItem(c, &section.Annotation.Items[i], annotationCtx, "annotation", sb, styles, imageResources, ca, idToEID)
+			}
+			sb.EndBlock()
+		} else {
+			// Flat annotation (no wrapper entry): apply styling directly to each paragraph.
+			// Enter annotation container for margin collapsing tracking.
+			// Use FlagForceTransferMBToLastChild to always transfer container's margin-bottom to the last paragraph.
+			sb.EnterContainer(ContainerAnnotation, FlagForceTransferMBToLastChild)
+
+			// If annotation has an ID, assign it to the first content item.
+			if section.Annotation.ID != "" {
+				if _, exists := idToEID[section.Annotation.ID]; !exists {
+					idToEID[section.Annotation.ID] = sb.NextEID()
+				}
+			}
+
+			annotationCtx := NewStyleContext(styles).PushBlock("div", "annotation")
+			sb.SetContainerMargins(annotationCtx.ExtractContainerMargins("div", "annotation"))
+			for i := range section.Annotation.Items {
+				processFlowItem(c, &section.Annotation.Items[i], annotationCtx, "annotation", sb, styles, imageResources, ca, idToEID)
+			}
+
+			sb.ExitContainer() // Exit annotation container
+		}
 	}
 
 	// Process epigraphs - KFX doesn't use wrapper blocks for epigraphs.

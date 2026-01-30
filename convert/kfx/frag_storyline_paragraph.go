@@ -78,6 +78,10 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 		backlinkRefIDs []string // RefIDs to register after EID is assigned
 	)
 
+	// KP3 emits a style_event for the first glyph in dropcap paragraphs.
+	// The event contains only lightweight text styling (e.g. font-weight: bold).
+	var dropcapGlyphDeltaStyle string
+
 	// Create inline style context by pushing the paragraph tag and classes.
 	// This ensures inline styles (like sub/sup) inherit font-size from the container.
 	inlineCtx := ctx.Push(tag, spanningClasses)
@@ -319,6 +323,24 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 	for i := range para.Text {
 		walk(&para.Text[i], nil, 0) // Start with empty style context and spanning depth 0
 	}
+
+	// Add KP3-like style event for the first character in dropcap paragraphs.
+	// Offset is 0 because normalizingWriter never outputs leading whitespace.
+	if styles != nil && resolvedStyle != "" {
+		if def, ok := styles.Get(resolvedStyle); ok {
+			_, hasLines := def.Properties[SymDropcapLines]
+			_, hasChars := def.Properties[SymDropcapChars]
+			if (hasLines || hasChars) && nw.RuneCountAfterPendingSpace() >= 1 {
+				if dropcapGlyphDeltaStyle == "" {
+					dropcapGlyphDeltaStyle = inlineCtx.ResolveDropcapGlyphDelta("has-dropcap--dropcap")
+				}
+				if dropcapGlyphDeltaStyle != "" {
+					events = append(events, StyleEventRef{Offset: 0, Length: 1, Style: dropcapGlyphDeltaStyle})
+				}
+			}
+		}
+	}
+
 	flush()
 }
 
