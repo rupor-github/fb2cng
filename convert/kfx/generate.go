@@ -171,8 +171,9 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 		}
 	}
 
-	// $538 DocumentData - reading orders with sections
-	docDataFrag := BuildDocumentData(sectionNames)
+	// $538 DocumentData - reading orders with sections + global defaults
+	maxID := nextEID - 1
+	docDataFrag := BuildDocumentData(sectionNames, maxID)
 	if err := container.Fragments.Add(docDataFrag); err != nil {
 		return err
 	}

@@ -148,8 +148,8 @@ func BuildBookMetadata(c *content.Content, cfg *config.DocumentConfig, container
 }
 
 // BuildDocumentData creates the $538 document_data fragment.
-// This contains reading orders and is required for KFX v2.
-func BuildDocumentData(sectionNames sectionNameList) *Fragment {
+// This contains reading orders and global reading defaults.
+func BuildDocumentData(sectionNames sectionNameList, maxID int) *Fragment {
 	// Build reading order with section list as symbol references
 	sections := make([]any, 0, len(sectionNames))
 	for _, name := range sectionNames {
@@ -158,8 +158,19 @@ func BuildDocumentData(sectionNames sectionNameList) *Fragment {
 
 	readingOrder := NewReadingOrder(SymDefault, sections) // $351 = default
 
-	docData := NewStruct().
-		SetList(SymReadingOrders, []any{readingOrder}) // $169 = reading_orders
+	// Use a string-keyed map because KP3 includes a non-$ field name: "max_id".
+	// This will be added to the local symbol table automatically.
+	docData := map[string]any{
+		"$16":    DimensionValue(1.0, SymUnitEm),
+		"$42":    DimensionValue(1.2, SymUnitEm),
+		"$112":   SymbolValue(SymAuto),
+		"$192":   SymbolValue(SymLtr),
+		"$436":   SymbolValue(SymEnabled),
+		"$477":   SymbolValue(SymWidth),
+		"$560":   SymbolValue(SymHorizontalTb),
+		"$169":   []any{readingOrder},
+		"max_id": int64(maxID),
+	}
 
 	return NewRootFragment(SymDocumentData, docData)
 }
