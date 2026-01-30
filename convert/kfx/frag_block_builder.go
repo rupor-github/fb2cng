@@ -1,6 +1,40 @@
 package kfx
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
+
+// stripScopeClasses removes ancestor scope classes from a style spec class list.
+//
+// Wrapper blocks store a StyleContext (with scopes) for child resolution. Child StyleSpec
+// strings may include those scope classes (e.g., "h2 section-title section-title-header").
+// When resolving a child within the wrapper context, those scope classes must NOT be treated
+// as the child's own classes; they should only participate as ancestor scopes.
+func stripScopeClasses(classes string, scopes []StyleScope) string {
+	if classes == "" || len(scopes) == 0 {
+		return classes
+	}
+	// Build set of all scope classes.
+	scopeSet := make(map[string]bool)
+	for _, scope := range scopes {
+		for _, c := range scope.Classes {
+			scopeSet[c] = true
+		}
+	}
+	if len(scopeSet) == 0 {
+		return classes
+	}
+
+	parts := strings.Fields(classes)
+	kept := make([]string, 0, len(parts))
+	for _, c := range parts {
+		if !scopeSet[c] {
+			kept = append(kept, c)
+		}
+	}
+	return strings.Join(kept, " ")
+}
 
 // BlockBuilder collects content entries for a wrapper/container element.
 // It mirrors how EPUB generates <div class="..."> wrappers.
@@ -193,11 +227,13 @@ func (sb *StorylineBuilder) resolveChildStyles(wrapper *ContentRef) {
 				// Images: use StyleContext.ResolveImage() for position filtering
 				// without text-specific properties (line-height, text-indent, text-align)
 				_, classes := parseStyleSpec(child.StyleSpec)
+				classes = stripScopeClasses(classes, ctx.scopes)
 				child.Style = ctx.ResolveImage(classes)
 				sb.styles.ResolveStyle(child.Style, styleUsageImage)
 			} else {
 				// Text elements: use StyleContext.Resolve() for proper inheritance
 				tag, classes := parseStyleSpec(child.StyleSpec)
+				classes = stripScopeClasses(classes, ctx.scopes)
 				child.Style = ctx.Resolve(tag, classes)
 				sb.styles.ResolveStyle(child.Style, styleUsageText)
 			}

@@ -65,7 +65,7 @@ func newLocalEnv() *LocalEnv {
   <path d="M10 10 H90
            M150 10 H230"
         stroke="black" stroke-width="3"/>
-  <path d="M120 3 A7 7 0 1 1 119.9 3" fill="none" stroke="black" stroke-width="3"/>
+  <path d="M120 3 A7 7 0 1 1 119.9 3" fill="none" stroke="black" stroke-width="2"/>
 </svg>`),
 			common.VignettePosSectionTitleTop: []byte(`<svg viewBox="0 0 240 24" xmlns="http://www.w3.org/2000/svg">
   <path d="M20 12 H100

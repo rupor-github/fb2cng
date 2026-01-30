@@ -168,10 +168,22 @@ func (sc StyleContext) resolveProperties(tag, classes string) map[KFXSymbol]any 
 						continue
 					}
 
+					// 1) Standard descendant selectors: ancestor--class or ancestor--tag
 					styleName := anc + "--" + desc
 					if def, ok := sc.registry.Get(styleName); ok {
 						resolved := sc.registry.resolveInheritance(def)
 						sc.registry.mergePropertiesWithContext(merged, resolved.Properties, mergeContextInline)
+					}
+
+					// 2) Element-qualified class selectors in descendant position.
+					// CSS like ".section-title h2.section-title-header" should not apply to
+					// other tags that share the class (e.g., h3.section-title-header).
+					if tag != "" && desc != tag {
+						qualified := anc + "--" + tag + "." + desc
+						if def, ok := sc.registry.Get(qualified); ok {
+							resolved := sc.registry.resolveInheritance(def)
+							sc.registry.mergePropertiesWithContext(merged, resolved.Properties, mergeContextInline)
+						}
 					}
 				}
 			}
@@ -443,8 +455,15 @@ func isBlockInheritedProperty(sym KFXSymbol) bool {
 // Returns 0 if the property doesn't exist or isn't in lh units.
 func extractMarginValue(props map[KFXSymbol]any, sym KFXSymbol) float64 {
 	if val, ok := props[sym]; ok {
-		if v, unit, ok := measureParts(val); ok && unit == SymUnitLh {
-			return v
+		if v, unit, ok := measureParts(val); ok {
+			switch unit {
+			case SymUnitLh:
+				return v
+			case SymUnitEm:
+				// ExtractContainerMargins() expects lh units.
+				// CSS converter already converts em -> lh by dividing by LineHeightRatio.
+				return RoundSignificant(v/LineHeightRatio, SignificantFigures)
+			}
 		}
 	}
 	return 0

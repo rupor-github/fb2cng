@@ -295,7 +295,7 @@ func dumpMarginTree(c *kfx.Container) (string, int) {
 
 		// Extract content_list from storyline
 		contentList := extractContentList(f.Value)
-		formatMarginElements(tw, ctx, contentList, 1, "")
+		formatMarginElements(tw, ctx, contentList, 1, "", "")
 		tw.Line(0, "")
 	}
 
@@ -381,18 +381,19 @@ func extractContentList(v any) []any {
 }
 
 // formatMarginElements formats a list of content elements showing only margins.
-func formatMarginElements(tw *debug.TreeWriter, ctx *marginCtx, items []any, depth int, indexPrefix string) {
+// parentLineHeight is used to omit redundant lh=... on children (KP3 dumps do this).
+func formatMarginElements(tw *debug.TreeWriter, ctx *marginCtx, items []any, depth int, indexPrefix string, parentLineHeight string) {
 	for i, item := range items {
 		idx := fmt.Sprintf("%d", i)
 		if indexPrefix != "" {
 			idx = indexPrefix + "." + idx
 		}
-		formatMarginElement(tw, ctx, item, depth, idx)
+		formatMarginElement(tw, ctx, item, depth, idx, parentLineHeight)
 	}
 }
 
 // formatMarginElement formats a single content element showing margins.
-func formatMarginElement(tw *debug.TreeWriter, ctx *marginCtx, v any, depth int, idx string) {
+func formatMarginElement(tw *debug.TreeWriter, ctx *marginCtx, v any, depth int, idx string, parentLineHeight string) {
 	m := toMapAny(v)
 	if m == nil {
 		return
@@ -413,6 +414,19 @@ func formatMarginElement(tw *debug.TreeWriter, ctx *marginCtx, v any, depth int,
 	var mi *marginInfo
 	if styleName != "" {
 		mi = ctx.styleMargins[styleName]
+	}
+
+	// Only display line-height if it differs from the parent's effective line-height.
+	// KP3 margin dumps omit redundant lh=... for children.
+	effectiveLineHeight := parentLineHeight
+	if mi != nil && mi.lineHeight != "" {
+		effectiveLineHeight = mi.lineHeight
+		if mi.lineHeight == parentLineHeight {
+			// Avoid mutating shared styleMargins entries.
+			copied := *mi
+			copied.lineHeight = ""
+			mi = &copied
+		}
 	}
 
 	// Get text preview or resource name
@@ -438,7 +452,7 @@ func formatMarginElement(tw *debug.TreeWriter, ctx *marginCtx, v any, depth int,
 		tw.Line(depth, "[%s] container (%d items)%s", idx, childCount, marginStr)
 
 		// Recursively format children
-		formatMarginElements(tw, ctx, nestedList, depth+1, idx)
+		formatMarginElements(tw, ctx, nestedList, depth+1, idx, effectiveLineHeight)
 	} else {
 		// Leaf element
 		previewStr := ""

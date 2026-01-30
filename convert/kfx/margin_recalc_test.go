@@ -192,6 +192,29 @@ func TestAdjustLineHeightForFontSize(t *testing.T) {
 			wantAdjustment: true,
 		},
 		{
+			name: "monospace font-size 0.75rem uses KP3 line-height",
+			props: map[KFXSymbol]any{
+				SymFontFamily: "monospace",
+				SymFontSize:   DimensionValue(0.75, SymUnitRem),
+			},
+			wantLineHeight: 1.33249,
+			wantMarginTop:  0,
+			wantAdjustment: true,
+		},
+		{
+			name: "monospace margin scaling matches KP3",
+			props: map[KFXSymbol]any{
+				SymFontFamily:   "monospace",
+				SymFontSize:     DimensionValue(0.75, SymUnitRem),
+				SymLineHeight:   DimensionValue(1.33249, SymUnitLh),
+				SymMarginTop:    DimensionValue(0.5, SymUnitLh),
+				SymMarginBottom: DimensionValue(0.25, SymUnitLh),
+			},
+			wantLineHeight: 1.33249,
+			wantMarginTop:  0.500316,
+			wantAdjustment: true,
+		},
+		{
 			name: "small font-size 0.6rem uses 1/font-size",
 			props: map[KFXSymbol]any{
 				SymFontSize:  DimensionValue(0.6, SymUnitRem),
@@ -207,7 +230,7 @@ func TestAdjustLineHeightForFontSize(t *testing.T) {
 				SymFontFamily: "monospace",
 				SymFontSize:   DimensionValue(0.7, SymUnitRem),
 			},
-			wantLineHeight: RoundDecimals(1.0/0.75, LineHeightPrecision),
+			wantLineHeight: 1.33249,
 			wantMarginTop:  0, // not present
 			wantAdjustment: true,
 		},

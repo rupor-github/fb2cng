@@ -56,13 +56,18 @@ func (sb *StorylineBuilder) CollapseMargins() *ContentTree {
 // - Container margins propagate DOWN to children before children are processed (step 3)
 // - Children's final mb values bubble UP after they're fully processed (step 5)
 func (t *ContentTree) collapseNode(node *ContentNode) {
-	t.collapseNodeWithContext(node, false)
+	// Root is effectively at the end-of-storyline context.
+	t.collapseNodeWithContext(node, false, true)
 }
 
 // collapseNodeWithContext is the internal version that tracks whether this node
-// is the last child of its parent. This is needed for FlagTransferMBToLastChild
-// containers to decide whether to transfer mb to last child or let it bubble up.
-func (t *ContentTree) collapseNodeWithContext(node *ContentNode, isLastChildOfParent bool) {
+// is the last child of its parent and whether it is at the end of the storyline.
+//
+// isAtStorylineEnd is true when this node has no following siblings at any ancestor
+// level (i.e., it's the final subtree in the storyline). This is needed to model
+// KP3 behavior where margins from non-rendered virtual containers (like .section)
+// materialize on the last rendered element only at storyline end.
+func (t *ContentTree) collapseNodeWithContext(node *ContentNode, isLastChildOfParent bool, isAtStorylineEnd bool) {
 	if len(node.Children) == 0 {
 		return
 	}
@@ -87,7 +92,8 @@ func (t *ContentTree) collapseNodeWithContext(node *ContentNode, isLastChildOfPa
 	// Pass isLastChildOfParent context for each child
 	for i, child := range node.Children {
 		childIsLast := i == len(node.Children)-1
-		t.collapseNodeWithContext(child, childIsLast)
+		childAtEnd := isAtStorylineEnd && childIsLast
+		t.collapseNodeWithContext(child, childIsLast, childAtEnd)
 	}
 
 	// Step 5: Strip middle margin-bottom (for containers like stanza)
@@ -96,7 +102,13 @@ func (t *ContentTree) collapseNodeWithContext(node *ContentNode, isLastChildOfPa
 
 	// Step 6: Last-child collapsing - pull up last child's mb to this node
 	// This must happen AFTER recursion so children's mb values are final
-	t.collapseLastChildWithContext(node, isLastChildOfParent)
+	t.collapseLastChildWithContext(node, isLastChildOfParent, isAtStorylineEnd)
+
+	// Step 7: Sibling collapsing (post-pass)
+	// Some margins (notably container mb) are only known after child processing and
+	// last-child collapsing. Run sibling collapsing again to propagate those margins
+	// to following siblings (KP3 behavior).
+	t.collapseSiblings(node)
 }
 
 // collapseEmptyNodes handles Phase 1: self-collapse for empty nodes.
@@ -334,7 +346,7 @@ func (t *ContentTree) traceFirstChild(first *ContentNode, beforeMT, beforeMB *fl
 // child of its parent. This affects FlagTransferMBToLastChild behavior: if the container
 // is the last child, its mb should bubble up to the parent rather than staying on the
 // last child (so it can collapse with whatever comes after the parent).
-func (t *ContentTree) collapseLastChildWithContext(container *ContentNode, isLastChildOfParent bool) {
+func (t *ContentTree) collapseLastChildWithContext(container *ContentNode, isLastChildOfParent bool, isAtStorylineEnd bool) {
 	if len(container.Children) == 0 {
 		return
 	}
@@ -403,19 +415,24 @@ func (t *ContentTree) collapseLastChildWithContext(container *ContentNode, isLas
 	// Root is never rendered, so the margin would be lost. Instead, let the child
 	// keep its mb so it renders on the actual element.
 	if container.ContainerKind == ContainerRoot {
-		// Don't transfer any child's mb to root - it would be lost
 		return
 	}
-	// Special case: purely virtual containers (Index == -1) that are the last child of ROOT
-	// should not receive the last child's mb. Without a real wrapper entry, the container's
-	// mb would be lost and the last content element should keep its mb so it renders.
-	//
-	// If the container corresponds to an actual wrapper entry (HasWrapper), allow collapsing
-	// into the container so the wrapper can render the final mb.
-	//
-	// This matches KP3 behavior where the last element in a storyline keeps its margin-bottom.
-	if container.Index == -1 && !container.HasWrapper && isLastChildOfParent && container.Parent != nil && container.Parent.ContainerKind == ContainerRoot {
-		// Virtual container at storyline end - last child keeps its mb
+
+	// Special case: purely virtual containers (Index == -1) without a wrapper entry cannot
+	// render their own margin-bottom. At storyline end, KP3 applies such container mb to the
+	// last rendered child, and also prevents the last child's own mb from being pulled up into
+	// a non-rendered container (which would lose trailing spacing).
+	if container.Index == -1 && !container.HasWrapper && isAtStorylineEnd {
+		if container.MarginBottom != nil {
+			if last.MarginBottom != nil {
+				collapsed := collapseValues(*container.MarginBottom, *last.MarginBottom)
+				last.MarginBottom = ptrFloat64(collapsed)
+			} else {
+				last.MarginBottom = container.MarginBottom
+			}
+			container.MarginBottom = nil
+			t.traceLastChild(last, beforeMT, beforeMB, container)
+		}
 		return
 	}
 	// Float images have fixed margins (2.6lh) that don't participate in collapsing.
@@ -505,6 +522,12 @@ func (t *ContentTree) collapseSiblings(container *ContentNode) {
 		// Only process virtual containers (wrappers) or break-after-avoid elements
 		// Content nodes do NOT transfer margins to siblings (except special cases below)
 		if !curr.IsContainer() {
+			// Float images have fixed 2.6lh margins and act as barriers.
+			// They do not participate in sibling collapsing in either direction.
+			if curr.IsFloatImage || next.IsFloatImage {
+				continue
+			}
+
 			// For content nodes with break-after-avoid AND margin-bottom, AND next sibling
 			// is a container: transfer the margin to the container's first child.
 			//
@@ -539,22 +562,33 @@ func (t *ContentTree) collapseSiblings(container *ContentNode) {
 				continue
 			}
 
-			// CSS sibling margin collapsing between content node and following container:
-			// When a content node is followed by a container (virtual node), we should
-			// collapse curr's mb with container's mt using max(), and put the result on
-			// the container. The container's first-child collapsing will then propagate
-			// the margin to its first child.
+			// CSS sibling margin collapsing between content nodes:
+			// When curr has mb and next has mt, collapse them (max/min/sum) and put
+			// the result on next.mt. The current element's mb is removed.
 			//
-			// This is different from content → content collapsing because containers
-			// don't render directly - their margins go to their children.
+			if curr.MarginBottom != nil && next.MarginTop != nil {
+				currBeforeMT, currBeforeMB := curr.MarginTop, curr.MarginBottom
+				collapsed := collapseValues(*curr.MarginBottom, *next.MarginTop)
+				next.MarginTop = ptrFloat64(collapsed)
+				curr.MarginBottom = nil
+				if t.tracer != nil && t.tracer.IsEnabled() {
+					t.tracer.TraceMarginCollapse("sibling-collapse", curr.TraceID(),
+						currBeforeMT, currBeforeMB, curr.MarginTop, curr.MarginBottom,
+						container.ContainerKind.String())
+				}
+				// Trace against the immediate next sibling for context.
+				t.traceSibling(next, nextBeforeMT, nextBeforeMB, container)
+			}
+
+			// CSS sibling margin collapsing between content node and following container:
+			// Collapse curr.mb with container.mt and put the result on the container.
+			// The container's first-child collapsing will then propagate it down.
 			if curr.MarginBottom != nil && next.IsContainer() {
 				currBeforeMT, currBeforeMB := curr.MarginTop, curr.MarginBottom
-				// Collapse curr's mb with container's mt (if any)
 				if next.MarginTop != nil {
 					collapsed := collapseValues(*curr.MarginBottom, *next.MarginTop)
 					next.MarginTop = ptrFloat64(collapsed)
 				} else {
-					// Transfer curr's mb to container's mt
 					next.MarginTop = curr.MarginBottom
 				}
 				curr.MarginBottom = nil
@@ -564,35 +598,6 @@ func (t *ContentTree) collapseSiblings(container *ContentNode) {
 						container.ContainerKind.String())
 				}
 				t.traceSibling(next, nextBeforeMT, nextBeforeMB, container)
-				continue
-			}
-
-			// CSS sibling margin collapsing between content nodes:
-			// When curr has mb and next has mt, and next's mt >= curr's mb,
-			// remove curr's mb (it's absorbed into next's larger mt).
-			// This matches standard CSS behavior where adjacent margins collapse to the larger value.
-			//
-			// KP3 behavior: content elements don't transfer margins to siblings, but when the
-			// next sibling has a margin-top that's >= the current element's margin-bottom,
-			// the current element's margin-bottom is removed to avoid double-spacing.
-			// The visual spacing between elements comes from the larger margin (next's mt).
-			//
-			// Exception: Float images (full-width standalone images) act as barriers:
-			// - A float image's mt does NOT absorb the previous element's mb
-			// - The previous element keeps its mb and visual spacing is the SUM of both margins
-			if curr.MarginBottom != nil && next.MarginTop != nil && !next.IsFloatImage {
-				currMB := *curr.MarginBottom
-				nextMT := *next.MarginTop
-				if nextMT >= currMB {
-					// Next's mt absorbs curr's mb - remove curr's mb
-					currBeforeMT, currBeforeMB := curr.MarginTop, curr.MarginBottom
-					curr.MarginBottom = nil
-					if t.tracer != nil && t.tracer.IsEnabled() {
-						t.tracer.TraceMarginCollapse("sibling-absorb-mb", curr.TraceID(),
-							currBeforeMT, currBeforeMB, curr.MarginTop, curr.MarginBottom,
-							container.ContainerKind.String())
-					}
-				}
 			}
 			// Content nodes keep their margins otherwise
 			continue

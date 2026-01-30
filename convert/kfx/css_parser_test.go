@@ -200,6 +200,7 @@ func TestParser_PseudoElementAfter(t *testing.T) {
 	if rule.Selector.Pseudo != PseudoAfter {
 		t.Errorf("expected PseudoAfter, got %v", rule.Selector.Pseudo)
 	}
+	// Class takes precedence in style name; pseudo suffix is appended
 	if rule.Selector.StyleName() != "note--after" {
 		t.Errorf("expected style name 'note--after', got '%s'", rule.Selector.StyleName())
 	}
@@ -433,8 +434,8 @@ func TestParser_DescendantSelectorWithClass(t *testing.T) {
 		t.Errorf("expected ancestor class 'section-title', got '%s'", rule.Selector.Ancestor.Class)
 	}
 	// Class takes precedence in style name
-	if rule.Selector.StyleName() != "section-title--section-title-header" {
-		t.Errorf("expected style name 'section-title--section-title-header', got '%s'", rule.Selector.StyleName())
+	if rule.Selector.StyleName() != "section-title--h2.section-title-header" {
+		t.Errorf("expected style name 'section-title--h2.section-title-header', got '%s'", rule.Selector.StyleName())
 	}
 }
 

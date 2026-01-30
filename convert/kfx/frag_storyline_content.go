@@ -1,6 +1,7 @@
 package kfx
 
 import (
+	"fmt"
 	"strings"
 
 	"fbc/common"
@@ -19,17 +20,42 @@ import (
 const maxStorylineSplitDepth = 2
 
 // processStorylineSectionContent processes FB2 section content for a single storyline.
+//
+// depth is the effective heading depth (1..n) used for:
+// - choosing wrapper/title heading level
+// - deciding whether a titled nested section becomes a separate storyline
+//
+// Unlike raw FB2 nesting depth, this depth does NOT increase for untitled <section>
+// wrappers. KP3 effectively ignores untitled sections for heading level/margins.
+// We model that by only incrementing depth when entering a titled section.
+//
+// isStorylineRoot indicates whether this section is the root section for its storyline.
+// KP3 uses slightly different wrapper margin normalization for the first nested title
+// in a storyline vs. nested titles that appear inline deeper in the same storyline.
 // Titled nested sections up to maxStorylineSplitDepth are collected for the caller to
 // process as separate storylines, while deeper sections are processed inline.
 //
 // Parameters:
 //   - nestedTitledSections: receives titled nested sections that should become separate storylines
 //   - directChildTOC: receives TOC entries for sections processed inline
-func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, depth int, directChildTOC *[]*TOCEntry, nestedTitledSections *[]sectionWorkItem, idToEID eidByFB2ID) error {
+func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, depth int, storylineRootDepth int, isStorylineRoot bool, directChildTOC *[]*TOCEntry, nestedTitledSections *[]sectionWorkItem, idToEID eidByFB2ID) error {
 	// Enter section container for margin collapsing tracking.
 	// Section content is a standard container (no title-block mode).
+	//
+	// KP3 applies .section { margin: 1em 0 } to section containers, and the bottom margin
+	// materializes on the last rendered element at storyline end. We model this by applying
+	// the container margins for ALL sections (titled or untitled).
+	//
+	// Important: we do NOT push "section" into sectionCtx below to avoid .section overriding
+	// descendant paragraph styles via the cascade.
 	sb.EnterContainer(ContainerSection, 0)
+	styles.EnsureBaseStyle("section")
+	sb.SetContainerMargins(NewStyleContext(styles).ExtractContainerMargins("div", "section"))
 	defer sb.ExitContainer()
+
+	if section == nil {
+		return nil
+	}
 
 	if section != nil && section.ID != "" {
 		if _, exists := idToEID[section.ID]; !exists {
@@ -64,7 +90,21 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 			vigTopPos = common.VignettePosChapterTitleTop
 			vigBottomPos = common.VignettePosChapterTitleBottom
 		} else {
-			wrapperClass = "section-title"
+			// KP3 normalizes nested section title wrapper margins relative to the depth where the
+			// storyline started. For storylines that start at depth=2, wrapper levels are shifted
+			// down by 1 (depth 3 -> wrapper --h2, etc.). For storylines that start at depth=1,
+			// wrapper levels match depth (depth 3 -> wrapper --h3).
+			if depth == 2 && isStorylineRoot {
+				// KP3 uses base wrapper (section-title) for the root titled section of a depth=2 storyline.
+				wrapperClass = "section-title"
+			} else {
+				normalized := depth
+				if storylineRootDepth > 1 {
+					normalized = depth - (storylineRootDepth - 1)
+				}
+				normalized = max(normalized, 2)
+				wrapperClass = fmt.Sprintf("section-title--h%d", min(normalized, 6))
+			}
 			headerClassBase = "section-title-header"
 			// Map depth to heading level: 2->h2, 3->h3, 4->h4, 5->h5, 6+->h6
 			headingLevel = min(depth, 6)
@@ -92,12 +132,22 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 		sb.EndBlock()
 	}
 
+	// Compute child depth once per section. Depth increases only if THIS section has a title.
+	childDepth := depth
+	if section.HasTitle() {
+		childDepth = depth + 1
+	}
+
 	// Process annotation.
 	if section.Annotation != nil {
 		// KP3 sometimes emits an actual wrapper entry (content_list) for annotations.
 		// Heuristic: use a wrapper when there are multiple block items.
 		if len(section.Annotation.Items) > 1 {
-			wrapperEID := sb.StartContainerBlock("annotation", ContainerAnnotation, FlagForceTransferMBToLastChild, styles)
+			// Wrapper-backed annotation can render its own container margins, so do NOT force
+			// transferring mb to the last child. Keeping mb on children prevents KP3-like
+			// sibling collapsing (last child mb should bubble up to the wrapper and collapse
+			// into the following element's mt).
+			wrapperEID := sb.StartContainerBlock("annotation", ContainerAnnotation, 0, styles)
 
 			// If annotation has an ID, assign it to the wrapper entry.
 			if section.Annotation.ID != "" {
@@ -177,11 +227,23 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 	// margins via the class cascade. Section is purely structural in FB2.
 	sectionCtx := NewStyleContext(styles)
 	var lastTitledEntry *TOCEntry
+	lastTitledDepth := 0
 
 	for i := range section.Content {
 		item := &section.Content[i]
 		if item.Kind == fb2.FlowSection && item.Section != nil {
 			nestedSection := item.Section
+
+			// KP3 effectively treats untitled wrapper sections as belonging to the most
+			// recently seen titled sibling section (TOC nesting behaves the same way).
+			//
+			// This impacts heading level / title wrapper margins: a titled section found
+			// inside such an untitled wrapper should be one level deeper than that last
+			// titled sibling.
+			nextDepth := childDepth
+			if !nestedSection.HasTitle() && lastTitledDepth > 0 {
+				nextDepth = lastTitledDepth + 1
+			}
 
 			// Only split storylines for titled sections up to maxStorylineSplitDepth.
 			// Deeper sections are processed inline regardless of title.
@@ -192,10 +254,11 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 				// Add to the work queue for the caller to process
 				*nestedTitledSections = append(*nestedTitledSections, sectionWorkItem{
 					section:     nestedSection,
-					depth:       depth + 1,
+					depth:       childDepth,
 					parentEntry: nil, // Will be set by caller
 					isTopLevel:  false,
 				})
+				lastTitledDepth = childDepth
 			} else {
 				// Process inline in this storyline:
 				// - Untitled sections at any depth
@@ -210,14 +273,14 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 				// Process nested section content recursively (same storyline)
 				var childTOC []*TOCEntry
 				var childTitledSections []sectionWorkItem
-				if err := processStorylineSectionContent(c, nestedSection, sb, styles, imageResources, ca, depth+1, &childTOC, &childTitledSections, idToEID); err != nil {
+				if err := processStorylineSectionContent(c, nestedSection, sb, styles, imageResources, ca, nextDepth, storylineRootDepth, false, &childTOC, &childTitledSections, idToEID); err != nil {
 					return err
 				}
 
 				// Add section-end vignette for inline titled sections (depth > 1)
 				// This mirrors EPUB behavior at convert/epub/xhtml.go:797-798
 				// Section-end vignette appears at the end of an inline titled section.
-				if nestedSection.HasTitle() && depth+1 > 1 {
+				if nestedSection.HasTitle() && childDepth > 1 {
 					addVignetteImage(c.Book, sb, imageResources, common.VignettePosSectionEnd)
 				}
 
@@ -236,6 +299,7 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 					}
 					*directChildTOC = append(*directChildTOC, tocEntry)
 					lastTitledEntry = tocEntry
+					lastTitledDepth = nextDepth
 				} else if len(childTOC) > 0 {
 					// Untitled section - nest children under last titled sibling
 					if lastTitledEntry != nil {

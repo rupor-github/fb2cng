@@ -168,7 +168,7 @@ func (s Selector) StyleName() string {
 	// For descendant selectors, combine ancestor and descendant names
 	if s.Ancestor != nil {
 		ancestorName := s.Ancestor.StyleName()
-		descendantName := s.descendantBaseName()
+		descendantName := s.descendantNameForDescendantSelector()
 		base = ancestorName + "--" + descendantName
 	} else {
 		base = s.descendantBaseName()
@@ -182,6 +182,19 @@ func (s Selector) StyleName() string {
 	default:
 		return base
 	}
+}
+
+// descendantNameForDescendantSelector returns the base name for the rightmost part
+// when this selector participates in a descendant selector.
+//
+// For descendant selectors we sometimes need to preserve element+class specificity
+// (e.g. ".section-title h2.section-title-header") so element-qualified rules
+// don't apply to other tags that share the same class.
+func (s Selector) descendantNameForDescendantSelector() string {
+	if s.Element != "" && s.Class != "" {
+		return s.Element + "." + s.Class
+	}
+	return s.descendantBaseName()
 }
 
 // descendantBaseName returns the base name for the rightmost part of the selector.

@@ -50,6 +50,13 @@ const (
 	// in addition to LineHeightRatio when converting from em to lh.
 	AdjustedLineHeightLh = 100.0 / 99.0 // 1.01010101...
 
+	// SectionTitleHeaderLineHeightLh is the KP3 line-height used for nested section
+	// title header text (font-size: 120% -> 1.125rem after KP3 compression) when
+	// layout-hints: [treat_as_title] is present.
+	//
+	// Observed in KP3 reference output for testdata/_Test.fb2.
+	SectionTitleHeaderLineHeightLh = 0.982323
+
 	// LineHeightRatio is the assumed line-height multiplier (1lh = 1.2em).
 	// Used to convert em → lh for vertical spacing properties.
 	// Example: 0.3em CSS → 0.25lh KFX (0.3 / 1.2 = 0.25)

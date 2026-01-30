@@ -184,7 +184,7 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 			var nestedTitledSections []sectionWorkItem
 			var directChildTOC []*TOCEntry
 
-			if err := processStorylineSectionContent(c, section, sb, styles, imageResources, ca, work.depth, &directChildTOC, &nestedTitledSections, idToEID); err != nil {
+			if err := processStorylineSectionContent(c, section, sb, styles, imageResources, ca, work.depth, work.depth, true, &directChildTOC, &nestedTitledSections, idToEID); err != nil {
 				return nil, 0, nil, nil, nil, nil, landmarks, err
 			}
 

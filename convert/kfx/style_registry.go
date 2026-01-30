@@ -213,9 +213,14 @@ func (sr *StyleRegistry) EnsureBaseStyle(name string) {
 	// Log auto-creation of unknown styles (not defined in CSS)
 	sr.tracer.TraceAutoCreate(name, parent)
 
-	sr.Register(NewStyle(name).
+	// These auto-created styles may be created after sr.PostProcessForKFX() has
+	// already run (e.g. from runtime EnsureBaseStyle calls while building content).
+	// Apply the same KFX enhancements here so late-created styles match KP3 output.
+	def := NewStyle(name).
 		Inherit(parent).
-		Build())
+		Build()
+	def = sr.applyKFXEnhancements(name, def)
+	sr.Register(def)
 }
 
 // ResolveStyle ensures a style exists, resolves it to a generated name, and tracks usage type.
@@ -397,6 +402,29 @@ func (sr *StyleRegistry) registerFilteredStyleNoMark(merged map[KFXSymbol]any, u
 // doRegisterFilteredStyle is the common implementation for filtered style registration.
 // The usage parameter tracks what kind of content uses this style (text, image, wrapper).
 func (sr *StyleRegistry) doRegisterFilteredStyle(merged map[KFXSymbol]any, markUsed bool, usage styleUsage) string {
+	// KP3 pattern: styles marked as treat_as_title typically do not carry margin-bottom.
+	// Spacing is placed on the surrounding wrapper container, not on the title text itself.
+	//
+	// Important: apply this to resolved (generated) styles too, since title text styles
+	// often end up as resolved "s.." names.
+	if hints, ok := merged[SymLayoutHints].([]any); ok && containsSymbolAny(hints, SymTreatAsTitle) {
+		// KP3 does not put keep-together semantics (break-inside: avoid) on the title text style.
+		// It belongs on the wrapper container style.
+		delete(merged, SymBreakInside)
+
+		// KP3 also does not carry yj-break-* properties on title text styles.
+		// Page-break semantics are represented by wrapper styles and/or section boundaries.
+		delete(merged, SymYjBreakBefore)
+		delete(merged, SymYjBreakAfter)
+
+		// Exception: footnote-title is used directly on paragraphs (no wrapper), so it needs MB.
+		// We detect it by its left alignment (other title headers are centered) and bold.
+		isFootnoteTitle := isSymbol(merged[SymTextAlignment], SymLeft) && isSymbol(merged[SymFontWeight], SymBold)
+		if !isFootnoteTitle {
+			delete(merged, SymMarginBottom)
+		}
+	}
+
 	// Filter out height: auto - KP3 never outputs this in styles (it's the implied default)
 	if h, ok := merged[SymHeight]; ok {
 		isAuto := false
@@ -414,6 +442,13 @@ func (sr *StyleRegistry) doRegisterFilteredStyle(merged map[KFXSymbol]any, markU
 	// Filter table element properties - KP3 moves these from style to element
 	for prop := range tableElementProperties {
 		delete(merged, prop)
+	}
+
+	// KP3 does not emit break-inside for table styles (even if the source CSS had
+	// page-break-inside: avoid on the table rule).
+	// Keep-together behavior for titles is handled via wrapper styles.
+	if isKP3TableStyle(merged) {
+		delete(merged, SymBreakInside)
 	}
 
 	sig := styleSignature(merged)
@@ -537,6 +572,11 @@ func isBlockStyleName(name string) bool {
 		return true
 	}
 
+	// KP3 wrapper variants for nested section titles (section-title--h2..h6)
+	if strings.HasPrefix(name, "section-title--h") {
+		return true
+	}
+
 	// Vignette position variants (vignette-chapter-title-top, etc.)
 	if strings.HasPrefix(name, "vignette-") {
 		return true
@@ -644,6 +684,10 @@ func adjustLineHeightForFontSize(props map[KFXSymbol]any) map[KFXSymbol]any {
 	// calculated relative to the parent's font-size, which is more accurate
 	// for inline elements in heading contexts.
 	var adjustedLh float64
+	// For monospace blocks, KP3 uses a slightly different line-height for 0.75rem
+	// (observed in reference output: 0.75rem -> 1.33249lh).
+	// This also impacts margin scaling for code listings.
+	const kp3Monospace075LineHeightLh = 1.33249
 	if existingLh, hasLh := props[SymLineHeight]; hasLh {
 		// Use existing line-height (already calculated with proper context)
 		if lhVal, lhUnit, ok := measureParts(existingLh); ok && lhUnit == SymUnitLh {
@@ -652,6 +696,9 @@ func adjustLineHeightForFontSize(props map[KFXSymbol]any) map[KFXSymbol]any {
 			// Fallback: calculate based on font-size
 			if fontSizeVal < 1.0 {
 				adjustedLh = 1.0 / fontSizeVal
+				if isMonospaceFontFamily(updated[SymFontFamily]) && math.Abs(fontSizeVal-0.75) < 1e-9 {
+					adjustedLh = kp3Monospace075LineHeightLh
+				}
 			} else {
 				adjustedLh = AdjustedLineHeightLh
 			}
@@ -661,18 +708,40 @@ func adjustLineHeightForFontSize(props map[KFXSymbol]any) map[KFXSymbol]any {
 		// No existing line-height: calculate based on font-size
 		if fontSizeVal < 1.0 {
 			adjustedLh = 1.0 / fontSizeVal
+			if isMonospaceFontFamily(updated[SymFontFamily]) && math.Abs(fontSizeVal-0.75) < 1e-9 {
+				adjustedLh = kp3Monospace075LineHeightLh
+			}
 		} else {
 			adjustedLh = AdjustedLineHeightLh
 		}
 		updated[SymLineHeight] = DimensionValue(RoundDecimals(adjustedLh, LineHeightPrecision), SymUnitLh)
 	}
 
-	// Adjust vertical margins using the line-height factor
-	for _, sym := range []KFXSymbol{SymMarginTop, SymMarginBottom, SymPaddingTop, SymPaddingBottom} {
-		if margin, ok := updated[sym]; ok {
-			if marginVal, marginUnit, ok := measureParts(margin); ok && marginUnit == SymUnitLh {
-				adjusted := RoundSignificant(marginVal/adjustedLh, SignificantFigures)
-				updated[sym] = DimensionValue(adjusted, SymUnitLh)
+	// Adjust vertical margins using the line-height factor.
+	//
+	// For most styles, KP3 scales vertical margins down when line-height is adjusted.
+	// However, for monospace blocks at 0.75rem (code listings), KP3 keeps the
+	// absolute spacing consistent with the ideal 1/font-size line-height and then
+	// expresses margins relative to the emitted line-height.
+	isMonospace := isMonospaceFontFamily(updated[SymFontFamily])
+	if isMonospace && fontSizeVal < 1.0 {
+		idealLh := 1.0 / fontSizeVal
+		scale := idealLh / adjustedLh
+		for _, sym := range []KFXSymbol{SymMarginTop, SymMarginBottom, SymPaddingTop, SymPaddingBottom} {
+			if margin, ok := updated[sym]; ok {
+				if marginVal, marginUnit, ok := measureParts(margin); ok && marginUnit == SymUnitLh {
+					adjusted := RoundSignificant(marginVal*scale, SignificantFigures)
+					updated[sym] = DimensionValue(adjusted, SymUnitLh)
+				}
+			}
+		}
+	} else {
+		for _, sym := range []KFXSymbol{SymMarginTop, SymMarginBottom, SymPaddingTop, SymPaddingBottom} {
+			if margin, ok := updated[sym]; ok {
+				if marginVal, marginUnit, ok := measureParts(margin); ok && marginUnit == SymUnitLh {
+					adjusted := RoundSignificant(marginVal/adjustedLh, SignificantFigures)
+					updated[sym] = DimensionValue(adjusted, SymUnitLh)
+				}
 			}
 		}
 	}
@@ -686,6 +755,66 @@ func isMonospaceFontFamily(v any) bool {
 		return false
 	}
 	return strings.Contains(strings.ToLower(fam), "monospace")
+}
+
+func containsSymbolAny(list []any, expected KFXSymbol) bool {
+	for _, v := range list {
+		if sym, ok := symbolIDFromAny(v); ok && sym == expected {
+			return true
+		}
+	}
+	return false
+}
+
+// isKP3TableStyle returns true for the special table wrapper style that KP3 emits.
+//
+// In KP3 output, the table style has sizing-bounds: content_bounds and width: 32em,
+// but does NOT include break-inside even if the source CSS had page-break-inside: avoid.
+func isKP3TableStyle(props map[KFXSymbol]any) bool {
+	if props == nil {
+		return false
+	}
+	if !isSymbol(props[SymSizingBounds], SymContentBounds) {
+		return false
+	}
+	// width: 32em
+	v, ok := props[SymWidth]
+	if !ok {
+		return false
+	}
+	widthVal, widthUnit, ok := measureParts(v)
+	return ok && widthUnit == SymUnitEm && widthVal == 32
+}
+
+func isSectionTitleHeaderTextStyle(props map[KFXSymbol]any) bool {
+	if props == nil {
+		return false
+	}
+	// Needs to be title-like.
+	hints, ok := props[SymLayoutHints].([]any)
+	if !ok || !containsSymbolAny(hints, SymTreatAsTitle) {
+		return false
+	}
+	// Note: We intentionally allow break-inside: avoid here. Our generator sometimes
+	// emits treat_as_title on styles that also carry break-inside (KP3 does not, but
+	// we still want the correct line-height).
+	// In reference output, nested section title headers use this font size.
+	fs, ok := props[SymFontSize]
+	if !ok {
+		return false
+	}
+	fsVal, fsUnit, ok := measureParts(fs)
+	if !ok || fsUnit != SymUnitRem || math.Abs(fsVal-1.125) >= 1e-9 {
+		return false
+	}
+	// And they are centered/bold.
+	if !isSymbol(props[SymTextAlignment], SymCenter) {
+		return false
+	}
+	if !isSymbol(props[SymFontWeight], SymBold) {
+		return false
+	}
+	return true
 }
 
 // normalizeFontSizeUnits converts font-size from em to rem for final KFX output.
@@ -744,6 +873,9 @@ func (sr *StyleRegistry) BuildFragments() []*Fragment {
 			// Must be done before ensureDefaultLineHeight to set correct line-height value
 			resolved.Properties = adjustLineHeightForFontSize(resolved.Properties)
 			resolved.Properties = ensureDefaultLineHeight(resolved.Properties)
+			if isSectionTitleHeaderTextStyle(resolved.Properties) {
+				resolved.Properties[SymLineHeight] = DimensionValue(RoundDecimals(SectionTitleHeaderLineHeightLh, LineHeightPrecision), SymUnitLh)
+			}
 		} else if sr.hasImageUsage(name) {
 			// KP3 includes line-height: 1lh for standalone block images.
 			// Don't strip it, but also don't force default (already set in ResolveBlockImageStyle).
@@ -917,6 +1049,14 @@ func (sr *StyleRegistry) applyKFXStyleAdjustments() {
 			delete(def.Properties, SymMarginBottom)
 			sr.styles[styleName] = def
 		}
+	}
+
+	// Inline code styling should not override paragraph alignment.
+	// KP3 does not apply code { text-align: left; } to the paragraph when the entire
+	// paragraph is a single <code> span and the code style is promoted to block.
+	if def, exists := sr.styles["code"]; exists {
+		delete(def.Properties, SymTextAlignment)
+		sr.styles["code"] = def
 	}
 }
 
@@ -1297,11 +1437,50 @@ func DefaultStyleRegistry() *StyleRegistry {
 	// Internal styles (used by generator, not HTML elements)
 	// ============================================================
 
+	// Title paragraph immediately following an image-only title paragraph.
+	//
+	// KP3 special-cases some multi-paragraph titles where the first title line is an
+	// inline-image-only paragraph (wrapped as text entry) followed by a real text
+	// paragraph. In those cases KP3 emits a slightly larger margin-top on the text
+	// paragraph (0.594lh instead of the usual 0.55275lh for 1.25rem title text).
+	//
+	// This is referenced directly by generator code to avoid changing convert/default.css.
+	sr.Register(NewStyle("title-after-image").
+		MarginTop(0.5999994, SymUnitLh).
+		Build())
+
 	// Image container style
 	sr.Register(NewStyle("image").
 		TextAlign(SymCenter).
 		TextIndent(0, SymUnitPercent).
 		Build())
+
+	// KP3 uses different wrapper margins for nested section titles depending on depth.
+	// Default.css has a single .section-title margin, but KP3 normalizes it into
+	// multiple wrapper variants during conversion.
+	//
+	// These wrappers are referenced directly by generator code; we keep them programmatic
+	// to avoid changing convert/default.css.
+	for _, tt := range []struct {
+		name string
+		mt   float64
+		mb   float64
+	}{
+		{name: "section-title--h2", mt: 1.66667, mb: 0.9375},
+		{name: "section-title--h3", mt: 1.66667, mb: 1.24688},
+		{name: "section-title--h4", mt: 1.66667, mb: 1.56562},
+		// KP3 uses the same wrapper margins for deeper levels.
+		{name: "section-title--h5", mt: 2.18438, mb: 2.18438},
+		{name: "section-title--h6", mt: 2.18438, mb: 2.18438},
+	} {
+		sr.Register(NewStyle(tt.name).
+			BreakInsideAvoid().
+			YjBreakAfter(SymAvoid).
+			LineHeight(1, SymUnitLh).
+			MarginTop(tt.mt, SymUnitLh).
+			MarginBottom(tt.mb, SymUnitLh).
+			Build())
+	}
 
 	// Vignette image style - decorative images in title blocks.
 	// Uses 100% width and KP3-compatible margin-top for spacing.
@@ -1322,6 +1501,7 @@ func DefaultStyleRegistry() *StyleRegistry {
 		Width(100, SymUnitPercent).
 		MarginTop(1.25, SymUnitLh).
 		MarginBottom(1.25, SymUnitLh).
+		YjBreakBefore(SymAvoid).
 		Build())
 
 	return sr
@@ -1357,6 +1537,13 @@ func (sr *StyleRegistry) applyKFXEnhancements(name string, def StyleDef) StyleDe
 		if _, exists := props[SymLayoutHints]; !exists {
 			props[SymLayoutHints] = []any{SymbolValue(SymTreatAsTitle)}
 		}
+		// KP3 special case: nested section title header text (font-size: 120% -> 1.125rem)
+		// uses a slightly smaller line-height than our generic AdjustedLineHeightLh.
+		//
+		// In our generator, some of these styles end up as resolved "s.." names, so
+		// we match by properties rather than by source CSS class name.
+		// (line-height adjustment for 1.125rem title text is handled later in BuildFragments
+		// so it can override adjustLineHeightForFontSize/ensureDefaultLineHeight).
 		// KP3 reference: title text styles have margin-top but NOT margin-bottom.
 		// The margin-bottom is only on the wrapper container, not the text inside.
 		// EXCEPTIONS that should KEEP their margin-bottom:
@@ -1460,6 +1647,11 @@ func (sr *StyleRegistry) shouldHaveBreakInsideAvoid(name string, _ map[KFXSymbol
 		return true
 	}
 
+	// KP3 wrapper variants for nested section titles (section-title--h2..h6)
+	if strings.HasPrefix(name, "section-title--h") {
+		return true
+	}
+
 	// Exclude content styles that get layout-hints: [treat_as_title]
 	// These are NOT wrappers - they contain the actual title text
 	switch name {
@@ -1526,6 +1718,12 @@ func (sr *StyleRegistry) convertPageBreaksToYjBreaks(props map[KFXSymbol]any) {
 	if _, hasBreakInside := props[SymBreakInside]; hasBreakInside {
 		// When break-inside: avoid is present, KP3 does NOT output yj-break-before.
 		// The break-inside alone handles keeping content together without a page break.
+		delete(props, SymYjBreakBefore)
+	}
+
+	// KP3 reference output does not use yj-break-before: always in styles.
+	// Page breaks for "always" are represented via section/storyline boundaries.
+	if v, ok := props[SymYjBreakBefore]; ok && isSymbol(v, SymAlways) {
 		delete(props, SymYjBreakBefore)
 	}
 }

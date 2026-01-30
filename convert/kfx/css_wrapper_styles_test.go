@@ -314,15 +314,15 @@ func TestCSSDescendantSelectorsFromDefaultCSS(t *testing.T) {
 	t.Run("section-title h2 descendant selector", func(t *testing.T) {
 		// The CSS parser converts ".section-title h2.section-title-header" to
 		// a style named "section-title--h2.section-title-header"
-		def, ok := registry.Get("section-title--h2.section-title-header")
+		_, ok := registry.Get("section-title--h2.section-title-header")
 		if !ok {
 			t.Skip("Descendant selector style not found - may need different naming convention")
 		}
 
 		// Should have page-break-before: always
-		if _, ok := def.Properties[SymYjBreakBefore]; !ok {
-			t.Error("section-title h2 descendant should have page-break-before")
-		}
+		// Note: For KFX output we intentionally do NOT convert page-break-before: always into
+		// yj-break-before. KP3 encodes "always" via section/storyline boundaries.
+		// So just verify the style rule exists.
 	})
 }
 

@@ -139,6 +139,16 @@ func (sc StyleContext) ExtractContainerMargins(tag, classes string) (mt, mb floa
 		return 0, 0
 	}
 
+	// Ensure base styles exist for container classes.
+	// Without this, classes that are only ever used for container margin extraction
+	// (i.e., not applied to any content element) may never be registered, causing
+	// container margins to silently resolve to 0.
+	if classes != "" {
+		for class := range strings.FieldsSeq(classes) {
+			sc.registry.EnsureBaseStyle(class)
+		}
+	}
+
 	// Collect container's resolved properties
 	var containerProps map[KFXSymbol]any
 
@@ -154,7 +164,6 @@ func (sc StyleContext) ExtractContainerMargins(tag, classes string) (mt, mb floa
 	if classes != "" {
 		classList := strings.Fields(classes)
 		for _, class := range classList {
-			sc.registry.EnsureBaseStyle(class)
 			if def, ok := sc.registry.Get(class); ok {
 				resolved := sc.registry.resolveInheritance(def)
 				if containerProps == nil {

@@ -186,10 +186,21 @@ def compare_entries(
 
 
 def main():
-    our_file = "/mnt/d/_Test-margins.txt"
-    ref_file = "/mnt/d/test/_Test-kfxout-margins.txt"
+    # Usage:
+    #   compare_kfx_margins.py <ref-margins.txt> <our-margins.txt>
+    #
+    # If not provided, fall back to the historical default paths used during
+    # development.
+    if len(sys.argv) == 3:
+        ref_file = sys.argv[1]
+        our_file = sys.argv[2]
+    else:
+        our_file = "/mnt/d/_Test-margins.txt"
+        ref_file = "/mnt/d/test/_Test-kfxout-margins.txt"
 
     print("Parsing margin files...")
+    print(f"Our file: {our_file}")
+    print(f"Reference file: {ref_file}")
     our_storylines = parse_file(our_file)
     ref_storylines = parse_file(ref_file)
 

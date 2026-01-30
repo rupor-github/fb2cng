@@ -345,6 +345,16 @@ func markTitleStylesUsed(wrapperClass, headerBase string, styles *StyleRegistry)
 	if wrapperClass != "" {
 		styles.EnsureBaseStyle(wrapperClass)
 		styles.EnsureBaseStyle(wrapperClass + "--" + headerBase)
+		if strings.HasPrefix(wrapperClass, "section-title") {
+			styles.EnsureBaseStyle("section-title--" + headerBase)
+		}
+		// CSS descendant selector specificity: ".section-title hN.section-title-header"
+		// should be captured as wrapperClass--hN.headerBase.
+		if strings.HasPrefix(wrapperClass, "section-title") {
+			for headingLevel := 2; headingLevel <= 6; headingLevel++ {
+				styles.EnsureBaseStyle(fmt.Sprintf("%s--h%d.%s", wrapperClass, headingLevel, headerBase))
+			}
+		}
 	}
 }
 
@@ -409,6 +419,7 @@ func addTitleAsParagraphs(c *content.Content, title *fb2.Title, ctx StyleContext
 	}
 
 	firstParagraph := true
+	prevWasImageOnlyHeadingParagraph := false
 	for _, item := range title.Items {
 		if item.Paragraph != nil {
 			// Determine style for this paragraph.
@@ -423,9 +434,19 @@ func addTitleAsParagraphs(c *content.Content, title *fb2.Title, ctx StyleContext
 				paraStyle = styleBase + " " + styleBase + "-next"
 			}
 
+			hasTextContent := paragraphHasTextContent(item.Paragraph)
+			hasInlineImages := paragraphHasInlineImages(item.Paragraph)
+			isImageOnlyHeadingParagraph := headingLevel > 0 && hasInlineImages && !hasTextContent
+			isTitleTextFollowingImageOnlyHeading := prevWasImageOnlyHeadingParagraph && hasTextContent
+			if isTitleTextFollowingImageOnlyHeading {
+				paraStyle = strings.TrimSpace(paraStyle + " title-after-image")
+			}
+
 			// Pass paraStyle via extraClasses to apply styling directly to the paragraph.
 			// Context (ctx) provides inheritance chain for descendant selector matching.
 			addParagraphWithImages(c, item.Paragraph, ctx, paraStyle, headingLevel, sb, styles, imageResources, ca, idToEID)
+
+			prevWasImageOnlyHeadingParagraph = isImageOnlyHeadingParagraph
 		}
 		// EmptyLine items are ignored - spacing is handled via block margins like regular flow content
 	}
