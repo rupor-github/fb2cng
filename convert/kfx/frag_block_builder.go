@@ -53,17 +53,37 @@ type BlockBuilder struct {
 	children  []ContentRef   // Nested content entries (styles resolved at Build() time)
 }
 
-// StartContainerBlock begins a new wrapper/container block associated with a container kind.
+// BlockOptions controls how wrapper/container blocks are created.
+type BlockOptions struct {
+	Kind  ContainerKind
+	Flags ContainerFlags
+}
+
+// StartBlock begins a new wrapper/container block.
 // All content added until EndBlock is called will be nested inside this wrapper.
+// The styleSpec is the raw style name (e.g., "chapter-title", "body-title") - resolution
+// is deferred until Build() time when the actual position in the storyline is known.
+// Children get position-based style filtering via StyleContext:
+//   - First child: gets wrapper's margin-top, loses margin-bottom
+//   - Last child: loses margin-top, gets wrapper's margin-bottom
+//   - Single child: gets wrapper's margins
+//   - Middle children: lose both vertical margins
 //
-// This is used when KP3 outputs an actual container entry with content_list (e.g., titles,
-// some annotations) and we need a wrapper to carry margins rather than pushing those
-// margins down to each child.
+// When opts is nil, defaults to a title-block container with FlagTitleBlockMode.
 //
 // Returns the EID of the wrapper for reference.
-func (sb *StorylineBuilder) StartContainerBlock(styleSpec string, kind ContainerKind, flags ContainerFlags, styles *StyleRegistry) int {
+func (sb *StorylineBuilder) StartBlock(styleSpec string, styles *StyleRegistry, opts *BlockOptions) int {
 	eid := sb.eidCounter
 	sb.eidCounter++
+
+	kind := ContainerTitleBlock
+	flags := FlagTitleBlockMode
+	if opts != nil {
+		if opts.Kind != ContainerRoot {
+			kind = opts.Kind
+		}
+		flags = opts.Flags
+	}
 
 	// Enter container for margin collapsing tracking.
 	sb.EnterContainer(kind, flags)
@@ -82,28 +102,6 @@ func (sb *StorylineBuilder) StartContainerBlock(styleSpec string, kind Container
 	})
 
 	return eid
-}
-
-// StartBlock begins a new wrapper/container block.
-// All content added until EndBlock is called will be nested inside this wrapper.
-// The styleSpec is the raw style name (e.g., "chapter-title", "body-title") - resolution
-// is deferred until Build() time when the actual position in the storyline is known.
-// Children get position-based style filtering via StyleContext:
-//   - First child: gets wrapper's margin-top, loses margin-bottom
-//   - Last child: loses margin-top, gets wrapper's margin-bottom
-//   - Single child: gets wrapper's margins
-//   - Middle children: lose both vertical margins
-//
-// Returns the EID of the wrapper for reference.
-func (sb *StorylineBuilder) StartBlock(styleSpec string, styles *StyleRegistry) int {
-	// Title blocks use FlagTitleBlockMode: spacing via margin-top, first loses mt, last gets mb.
-	return sb.StartContainerBlock(styleSpec, ContainerTitleBlock, FlagTitleBlockMode, styles)
-}
-
-// StartBlockWithChildPositions is an alias for StartBlock.
-// Deprecated: Use StartBlock directly - all blocks now apply position-aware styling to children.
-func (sb *StorylineBuilder) StartBlockWithChildPositions(styleSpec string, styles *StyleRegistry) int {
-	return sb.StartBlock(styleSpec, styles)
 }
 
 // EndBlock closes the current wrapper block and adds it to the storyline.

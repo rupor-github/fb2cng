@@ -119,7 +119,7 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 
 		// Start wrapper block - this is the KFX equivalent of <div class="chapter-title"> or <div class="section-title">
 		// Children get position-based style filtering: first keeps top margin, last keeps bottom, middle loses both.
-		sb.StartBlock(wrapperClass, styles)
+		sb.StartBlock(wrapperClass, styles, nil)
 
 		// Add top vignette - style resolved with position filtering at build time
 		addVignetteImage(c.Book, sb, imageResources, vigTopPos)
@@ -152,7 +152,7 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 			// transferring mb to the last child. Keeping mb on children prevents KP3-like
 			// sibling collapsing (last child mb should bubble up to the wrapper and collapse
 			// into the following element's mt).
-			wrapperEID := sb.StartContainerBlock("annotation", ContainerAnnotation, 0, styles)
+			wrapperEID := sb.StartBlock("annotation", styles, &BlockOptions{Kind: ContainerAnnotation})
 
 			// If annotation has an ID, assign it to the wrapper entry.
 			if section.Annotation.ID != "" {

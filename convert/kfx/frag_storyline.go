@@ -276,7 +276,7 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 		// while the title inside has no margin-top (stripped via TitleBlock position).
 		if body.Title != nil && len(body.Title.Items) > 0 {
 			// Start wrapper block with body-title style (has margin-top: 2em)
-			sb.StartBlock("body-title", styles)
+			sb.StartBlock("body-title", styles, nil)
 
 			// Create context for title inside wrapper - Push() for inheritance only
 			// Position-based style filtering is deferred to build time
@@ -413,7 +413,7 @@ func processBodyIntroContent(c *content.Content, body *fb2.Body, sb *StorylineBu
 	if body.Title != nil {
 		// Start wrapper block - this is the KFX equivalent of <div class="body-title">
 		// Position-based style filtering is deferred to Build() time when actual position is known
-		sb.StartBlock("body-title", styles)
+		sb.StartBlock("body-title", styles, nil)
 
 		if body.Main() {
 			addVignetteImage(c.Book, sb, imageResources, common.VignettePosBookTitleTop)

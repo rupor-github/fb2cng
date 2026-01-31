@@ -260,7 +260,7 @@ func (sb *StorylineBuilder) AddMixedContent(styleSpec, style string, items []Inl
 
 // AddContentDeferred adds content with deferred style resolution.
 // The styleSpec will be resolved with position filtering in EndBlock().
-// Use this when adding content to blocks started with StartBlockWithPosition().
+// Use this when adding content to blocks started with StartBlock.
 func (sb *StorylineBuilder) AddContentDeferred(contentType KFXSymbol, contentName string, contentOffset int, styleSpec string) int {
 	eid := sb.eidCounter
 	sb.eidCounter++
