@@ -23,6 +23,7 @@ type LocalEnv struct {
 	// used by convert subcommand
 	NoDirs           bool
 	Overwrite        bool
+	KindleEbook      bool
 	CodePage         encoding.Encoding
 	DefaultCover     []byte
 	DefaultStyle     []byte

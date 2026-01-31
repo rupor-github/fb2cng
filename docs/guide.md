@@ -98,6 +98,7 @@ fbc convert [options] SOURCE [DESTINATION]
 #### Convert Options
 
 - `--to TYPE` - Output format: `epub2` (default), `epub3`, `kepub`, `kfx`, `azw8`
+- `--ebook, --eb` - For Kindle formats, mark output as ebook (EBOK) instead of personal document (PDOC)
 - `--nodirs, --nd` - Don't preserve input directory structure in output
 - `--overwrite, --ow` - Overwrite existing files
 - `--force-zip-cp ENCODING` - Force encoding for non-UTF8 archive file names (e.g., `windows-1251`, `cp866`)
@@ -803,6 +804,9 @@ debug: false
 # Output format specification (optional)
 # When not specified or not compatible, defaults will be used
 # output_format: epub3
+
+# Mark Kindle output as ebook (EBOK) instead of personal document (PDOC)
+kindle_ebook: false
 ```
 
 **Available fields:**
@@ -813,6 +817,7 @@ debug: false
   - For `fb2epub.exe`: `epub2`, `epub3`, `kepub`
   - For `fb2mobi.exe`: `kfx`, `azw8`
   - If incompatible format is specified, default is used with warning in logs
+- `kindle_ebook` (boolean, default: false) - For Kindle outputs, pass `--ebook` to mark as EBOK
 
 **When connector.yaml is not needed:**
 
@@ -825,6 +830,7 @@ In most cases, the connector works fine without configuration. You only need `co
 
 - `fb2epub.exe` → Converts to EPUB2 by default (or format specified in `connector.yaml`)
 - `fb2mobi.exe` → Converts to KFX by default
+- `kindle_ebook` in `connector.yaml` adds `--ebook` for `fb2mobi.exe` conversions
 - Automatically uses `--overwrite` flag
 - Expects exactly 2 arguments: source and destination files
 - Logs to console by default (or to file if specified in `connector.yaml`)

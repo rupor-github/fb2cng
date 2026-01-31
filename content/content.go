@@ -47,6 +47,7 @@ type Content struct {
 	SrcName       string
 	Doc           *etree.Document
 	OutputFormat  common.OutputFmt     // config: output format
+	KindleEbook   bool                 // cli: kindle ebook (EBOK) metadata
 	FootnotesMode common.FootnotesMode // config: footnotes handling mode
 	PageSize      int                  // config: runes per page, 0 if disabled
 	AdobeDE       bool                 // config: Adobe DE page markers are being generated instead of NCX pageList
@@ -226,6 +227,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 		SrcName:        srcName,
 		Doc:            doc,
 		OutputFormat:   outputFormat,
+		KindleEbook:    env.KindleEbook && outputFormat.ForKindle(),
 		FootnotesMode:  env.Cfg.Document.Footnotes.Mode,
 		BacklinkStr:    string(env.Cfg.Document.Footnotes.Backlinks),
 		MoreParaStr:    string(env.Cfg.Document.Footnotes.MoreParagraphs),

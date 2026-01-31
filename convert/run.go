@@ -107,6 +107,7 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 	}
 
 	env.NoDirs, env.Overwrite = cmd.Bool("nodirs"), cmd.Bool("overwrite")
+	env.KindleEbook = cmd.Bool("ebook")
 
 	// Since zip "standard" does not define file name encoding we may need to
 	// force archaic code page for old archives

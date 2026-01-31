@@ -47,7 +47,11 @@ func BuildBookMetadata(c *content.Content, cfg *config.DocumentConfig, container
 	if bookID != "" {
 		titleMetadata = append(titleMetadata, NewMetadataEntry("book_id", bookID))
 	}
-	titleMetadata = append(titleMetadata, NewMetadataEntry("cde_content_type", "PDOC"))
+	contentType := "PDOC"
+	if c.KindleEbook {
+		contentType = "EBOK"
+	}
+	titleMetadata = append(titleMetadata, NewMetadataEntry("cde_content_type", contentType))
 	if coverResourceName != "" {
 		titleMetadata = append(titleMetadata, NewMetadataEntry("cover_image", coverResourceName))
 	}

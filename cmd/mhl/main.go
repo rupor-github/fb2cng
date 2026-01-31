@@ -70,6 +70,7 @@ type (
 		LogDestination string            `yaml:"log_destination,omitempty" sanitize:"path_clean,assure_dir_exists_for_file" validate:"omitempty,filepath"`
 		Debug          bool              `yaml:"debug"`
 		OutputFormat   *common.OutputFmt `yaml:"output_format,omitempty" validate:"omitempty,oneof=0 1 2 3 4"`
+		KindleEbook    bool              `yaml:"kindle_ebook"`
 	}
 )
 
@@ -225,6 +226,10 @@ func main() {
 
 	args = append(args, "convert")
 	args = append(args, "--ow")
+
+	if cfg.KindleEbook && strings.EqualFold(target, "fb2mobi") {
+		args = append(args, "--ebook")
+	}
 
 	if cfg.OutputFormat != nil {
 		switch target {
