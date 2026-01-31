@@ -328,11 +328,50 @@ func (sb *StorylineBuilder) AddRawEntry(entry StructValue) {
 	ref := ContentRef{
 		RawEntry: entry,
 	}
-	if len(sb.blockStack) > 0 {
-		sb.blockStack[len(sb.blockStack)-1].children = append(sb.blockStack[len(sb.blockStack)-1].children, ref)
-	} else {
-		sb.entryOrderCounter++
-		ref.EntryOrder = sb.entryOrderCounter
-		sb.contentEntries = append(sb.contentEntries, ref)
+	// Route through addEntry so container tracking and pending empty-line
+	// margin consumption stays consistent.
+	sb.addEntry(ref)
+}
+
+// AddEmptyLineSpacer inserts a KP3-like empty-line spacer between block elements.
+// KP3 represents <empty-line/> between two block images as a container($270)
+// with layout: vertical and margin-top set to the empty-line margin.
+func (sb *StorylineBuilder) AddEmptyLineSpacer(marginTopLh float64, styles *StyleRegistry) int {
+	eid := sb.eidCounter
+	sb.eidCounter++
+
+	styleName := "emptyline-spacer"
+	resolved := styleName
+	if styles != nil {
+		styles.EnsureBaseStyle(styleName)
+		resolved = styles.ResolveStyle(styleName, styleUsageWrapper)
 	}
+
+	entry := NewStruct().
+		SetInt(SymUniqueID, int64(eid)).
+		SetSymbol(SymType, SymContainer).
+		SetSymbol(SymLayout, SymVertical).
+		Set(SymStyle, SymbolByName(resolved))
+
+	// Override to the exact margin for this spacer.
+	// We keep this in the style (not EmptyLineMarginTop) because KP3 stores it
+	// as a real style margin-top on the spacer container.
+	if styles != nil && resolved != "" {
+		if def, ok := styles.Get(resolved); ok {
+			props := make(map[KFXSymbol]any, len(def.Properties)+1)
+			for k, v := range def.Properties {
+				props[k] = v
+			}
+			props[SymMarginTop] = DimensionValue(marginTopLh, SymUnitLh)
+			resolved = styles.RegisterResolved(props, styles.GetUsage(resolved), true)
+			entry.Set(SymStyle, SymbolByName(resolved))
+		}
+	}
+
+	return sb.addEntry(ContentRef{
+		EID:      eid,
+		Type:     SymContainer,
+		Style:    resolved,
+		RawEntry: entry,
+	})
 }

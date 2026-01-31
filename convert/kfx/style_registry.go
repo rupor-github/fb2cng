@@ -1080,6 +1080,13 @@ func DefaultStyleRegistry() *StyleRegistry {
 	// Block-level HTML elements
 	// ============================================================
 
+	// Empty-line spacer used between block images.
+	// KP3 emits this as container($270) with layout: vertical and margin-top set.
+	// The actual margin-top is overridden per instance (see AddEmptyLineSpacer).
+	sr.Register(NewStyle("emptyline-spacer").
+		LineHeight(1, SymUnitLh).
+		Build())
+
 	// Base paragraph style - HTML <p> element
 	// Amazon reference (stylemap.ion): margin-top: 1em, margin-bottom: 1em
 	// Convert to lh units: 1em / 1.2 = 0.833lh

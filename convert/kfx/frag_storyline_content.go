@@ -42,19 +42,24 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 	// Enter section container for margin collapsing tracking.
 	// Section content is a standard container (no title-block mode).
 	//
-	// KP3 applies .section { margin: 1em 0 } to section containers, and the bottom margin
-	// materializes on the last rendered element at storyline end. We model this by applying
-	// the container margins for ALL sections (titled or untitled).
-	//
 	// Important: we do NOT push "section" into sectionCtx below to avoid .section overriding
 	// descendant paragraph styles via the cascade.
 	sb.EnterContainer(ContainerSection, 0)
-	styles.EnsureBaseStyle("section")
-	sb.SetContainerMargins(NewStyleContext(styles).ExtractContainerMargins("div", "section"))
 	defer sb.ExitContainer()
 
 	if section == nil {
 		return nil
+	}
+
+	// KP3 does not always materialize .section { margin: 1em 0 } onto the first/last element.
+	// In particular, for image-only sections (images + empty-lines), KP3 does not apply the
+	// section container margins to the first image.
+	//
+	// We model this by only applying section container margins when the section has
+	// non-trivial (non-image) content.
+	if sectionHasNonTrivialContent(section) {
+		styles.EnsureBaseStyle("section")
+		sb.SetContainerMargins(NewStyleContext(styles).ExtractContainerMargins("div", "section"))
 	}
 
 	if section != nil && section.ID != "" {
@@ -317,6 +322,40 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 	return nil
 }
 
+// sectionHasNonTrivialContent reports whether a section has content that should cause
+// .section container margins to be applied.
+//
+// For KP3 parity, sections consisting only of images and empty-lines should not force
+// section container margins to materialize on the first/last image.
+func sectionHasNonTrivialContent(section *fb2.Section) bool {
+	if section == nil {
+		return false
+	}
+	if section.HasTitle() {
+		return true
+	}
+	if len(section.Epigraphs) > 0 {
+		return true
+	}
+	if section.Annotation != nil && len(section.Annotation.Items) > 0 {
+		return true
+	}
+	for i := range section.Content {
+		item := &section.Content[i]
+		switch item.Kind {
+		case fb2.FlowParagraph, fb2.FlowSubtitle, fb2.FlowPoem, fb2.FlowCite, fb2.FlowTable:
+			return true
+		case fb2.FlowImage, fb2.FlowEmptyLine:
+			// Not considered non-trivial content for section margins.
+		case fb2.FlowSection:
+			if item.Section != nil && sectionHasNonTrivialContent(item.Section) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // processFlowItem processes a flow item using ContentAccumulator.
 // ctx tracks the full ancestor context chain for CSS cascade emulation.
 // contextName is the immediate context name (e.g., "section", "cite") used for subtitle naming.
@@ -350,11 +389,17 @@ func processFlowItem(c *content.Content, item *fb2.FlowItem, ctx StyleContext, c
 		}
 
 	case fb2.FlowEmptyLine:
-		// KP3 doesn't create content entries for empty-lines. Instead, it adds
+		// KP3 mostly doesn't create content entries for empty-lines. Instead, it adds
 		// the empty-line's margin to the following element's margin-top.
 		// Additionally, the preceding element's margin-bottom is stripped.
 		// This prevents double-spacing (previous mb + empty-line mt).
-		sb.MarkPreviousEntryStripMB()
+		//
+		// Exception (KP3 behavior): between two block images, KP3 emits a real
+		// container spacer entry with margin-top (see AddEmptyLineSpacer).
+		// In that case we must NOT strip the previous image's margin-bottom.
+		if !sb.PreviousEntryIsImage() {
+			sb.MarkPreviousEntryStripMB()
+		}
 		// Extract the margin value from the emptyline style and store it for the next entry.
 		// The margin is stored in StorylineBuilder (for text) and StyleContext (for images).
 		// For text elements: stored in ContentRef.EmptyLineMarginTop, applied during post-processing.
@@ -420,10 +465,19 @@ func processFlowItem(c *content.Content, item *fb2.FlowItem, ctx StyleContext, c
 		// to the next element's margin-top.
 		pendingMargin := ctx.ConsumePendingMargin()
 		if pendingMargin > 0 {
-			sb.SetPreviousEntryEmptyLineMarginBottom(pendingMargin)
-			// Also clear the pending margin from StorylineBuilder since we consumed it
-			// (it was set for both places in FlowEmptyLine case)
-			sb.consumePendingEmptyLineMarginTop()
+			// KP3 special case: image + empty-line + image -> emits a spacer container
+			// between the images rather than turning the empty-line into image margin.
+			if sb.PreviousEntryIsImage() {
+				// Clear pending empty-line mt on the builder (the spacer will consume it)
+				sb.consumePendingEmptyLineMarginTop()
+				sb.AddEmptyLineSpacer(pendingMargin, styles)
+			} else {
+				// Default: empty-line before image becomes previous element's mb.
+				sb.SetPreviousEntryEmptyLineMarginBottom(pendingMargin)
+				// Also clear the pending margin from StorylineBuilder since we consumed it
+				// (it was set for both places in FlowEmptyLine case)
+				sb.consumePendingEmptyLineMarginTop()
+			}
 		}
 		resolved, isFloatImage := ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, "image")
 		eid := sb.AddImage(imgInfo.ResourceName, resolved, item.Image.Alt, isFloatImage)

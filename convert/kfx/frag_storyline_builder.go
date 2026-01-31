@@ -336,6 +336,24 @@ func (sb *StorylineBuilder) SetPreviousEntryEmptyLineMarginBottom(margin float64
 	sb.contentEntries[prevIdx].EmptyLineMarginBottom = &margin
 }
 
+// PreviousEntryIsImage reports whether the most recently added top-level entry is an image.
+// This is used for KP3-like empty-line handling between two block images.
+func (sb *StorylineBuilder) PreviousEntryIsImage() bool {
+	if len(sb.blockStack) > 0 {
+		block := sb.blockStack[len(sb.blockStack)-1]
+		if len(block.children) == 0 {
+			return false
+		}
+		prev := block.children[len(block.children)-1]
+		return prev.Type == SymImage
+	}
+	if len(sb.contentEntries) == 0 {
+		return false
+	}
+	prev := sb.contentEntries[len(sb.contentEntries)-1]
+	return prev.Type == SymImage
+}
+
 // SetPendingEmptyLineMarginTop sets the empty-line margin to apply to the next content entry.
 // This is called when an empty-line is processed, and the margin will be stored in the
 // next content entry's EmptyLineMarginTop field when it's added.
