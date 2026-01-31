@@ -69,7 +69,7 @@ type (
 		Version        int               `yaml:"version" validate:"eq=1"`
 		LogDestination string            `yaml:"log_destination,omitempty" sanitize:"path_clean,assure_dir_exists_for_file" validate:"omitempty,filepath"`
 		Debug          bool              `yaml:"debug"`
-		OutputFormat   *common.OutputFmt `yaml:"output_format,omitempty" validate:"omitempty,oneof=0 1 2 3"`
+		OutputFormat   *common.OutputFmt `yaml:"output_format,omitempty" validate:"omitempty,oneof=0 1 2 3 4"`
 	}
 )
 

@@ -185,7 +185,7 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 		if cfg.PageMap.Enable {
 			pageSize = cfg.PageMap.Size
 		}
-		navFrag := BuildNavigation(tocEntries, nextEID, posItems, pageSize, landmarks)
+		navFrag := BuildNavigation(tocEntries, nextEID, posItems, pageSize, cfg.TOCPage.ChaptersWithoutTitle, landmarks)
 		if err := container.Fragments.Add(navFrag); err != nil {
 			return err
 		}

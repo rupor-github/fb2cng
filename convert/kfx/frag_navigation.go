@@ -1,6 +1,10 @@
 package kfx
 
-import "fmt"
+import (
+	"fmt"
+
+	"fbc/fb2"
+)
 
 // BuildNavigation creates a $389 book_navigation fragment from TOC entries.
 // This creates a hierarchical TOC structure similar to epub's NCX/nav.
@@ -8,9 +12,10 @@ import "fmt"
 // If posItems and pageSize are provided (pageSize > 0), an APPROXIMATE_PAGE_LIST
 // is also included in the navigation.
 // If landmarks has non-zero EIDs, a landmarks container is added.
-func BuildNavigation(tocEntries []*TOCEntry, startEID int, posItems []PositionItem, pageSize int, landmarks LandmarkInfo) *Fragment {
+
+func BuildNavigation(tocEntries []*TOCEntry, startEID int, posItems []PositionItem, pageSize int, includeUntitled bool, landmarks LandmarkInfo) *Fragment {
 	// Build TOC entries recursively
-	entries := buildNavEntries(tocEntries, startEID)
+	entries := buildNavEntries(tocEntries, startEID, includeUntitled)
 
 	// Create TOC navigation container
 	tocContainer := NewTOCContainer(entries)
@@ -84,11 +89,18 @@ func buildLandmarksContainer(landmarks LandmarkInfo) StructValue {
 }
 
 // buildNavEntries recursively builds navigation unit entries from TOC entries.
-func buildNavEntries(tocEntries []*TOCEntry, startEID int) []any {
+func buildNavEntries(tocEntries []*TOCEntry, startEID int, includeUntitled bool) []any {
 	entries := make([]any, 0, len(tocEntries))
 
 	for _, entry := range tocEntries {
-		if !entry.IncludeInTOC {
+		if !entry.IncludeInTOC && !includeUntitled {
+			continue
+		}
+		title := entry.Title
+		if title == "" && includeUntitled {
+			title = fb2.NoTitleText
+		}
+		if title == "" {
 			continue
 		}
 
@@ -96,11 +108,11 @@ func buildNavEntries(tocEntries []*TOCEntry, startEID int) []any {
 		targetPos := NewStruct().SetInt(SymUniqueID, int64(entry.FirstEID)) // $155 = id
 
 		// Create nav unit with label and target
-		navUnit := NewNavUnit(entry.Title, targetPos)
+		navUnit := NewNavUnit(title, targetPos)
 
 		// Add nested entries for children (hierarchical TOC)
 		if len(entry.Children) > 0 {
-			childEntries := buildNavEntries(entry.Children, startEID)
+			childEntries := buildNavEntries(entry.Children, startEID, includeUntitled)
 			if len(childEntries) > 0 {
 				navUnit.SetList(SymEntries, childEntries) // $247 = nested entries
 			}

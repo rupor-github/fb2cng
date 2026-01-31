@@ -9,6 +9,7 @@ import (
 	"fbc/common"
 	"fbc/config"
 	"fbc/content"
+	"fbc/fb2"
 )
 
 func nextContentBaseCounter(fragments *FragmentList) int {
@@ -72,8 +73,11 @@ func buildTOCEntryTree(entries []*TOCEntry, includeUntitled bool) []*tocPageEntr
 				continue
 			}
 			t := e.Title
+			if t == "" && includeUntitled {
+				t = fb2.NoTitleText
+			}
 			if t == "" {
-				t = "Untitled"
+				continue
 			}
 			entry := &tocPageEntry{
 				Title:    t,

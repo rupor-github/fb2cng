@@ -199,14 +199,18 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 			sectionEIDs[sectionName] = sb.AllEIDs()
 
 			// Create TOC entry for this section
-			title := section.AsTitleText("")
+			includeInTOC := section.HasTitle()
+			title := ""
+			if includeInTOC {
+				title = section.AsTitleText("")
+			}
 			tocEntry := &TOCEntry{
 				ID:           section.ID,
 				Title:        title,
 				SectionName:  sectionName,
 				StoryName:    storyName,
 				FirstEID:     sb.FirstEID(),
-				IncludeInTOC: title != "",
+				IncludeInTOC: includeInTOC,
 				Children:     directChildTOC, // Direct children (untitled nested sections)
 			}
 

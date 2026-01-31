@@ -2068,7 +2068,8 @@ func TestWriteNCX(t *testing.T) {
 		},
 	}
 
-	err := writeNCX(zw, c, chapters, log)
+	defaultCfg := &config.DocumentConfig{}
+	err := writeNCX(zw, c, chapters, defaultCfg, log)
 	if err != nil {
 		t.Fatalf("writeNCX() error = %v", err)
 	}

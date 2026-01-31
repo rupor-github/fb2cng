@@ -95,11 +95,12 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 			baseID := fmt.Sprintf("index%05d", chapterNum)
 			chapterID, filename := generateUniqueID(baseID, c.IDsIndex)
 
-			var fallback string
-			if env.Cfg.Document.TOCPage.ChaptersWithoutTitle {
-				fallback = section.AsTitleText(fmt.Sprintf("chapter-section-%d", chapterNum))
+			title := section.AsTitleText("")
+			includeInTOC := section.HasTitle()
+			if title == "" && env.Cfg.Document.TOCPage.ChaptersWithoutTitle {
+				title = fb2.NoTitleText
+				includeInTOC = true
 			}
-			title := section.AsTitleText(fallback)
 
 			// Set current filename for footnote reference tracking
 			c.CurrentFilename = filename
@@ -116,7 +117,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 				Title:        title,
 				Doc:          doc,
 				Section:      section,
-				IncludeInTOC: title != "",
+				IncludeInTOC: includeInTOC,
 			})
 			collectIDsFromSection(section, filename, idToFile)
 		}

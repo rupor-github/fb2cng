@@ -338,6 +338,8 @@ func (b *Body) Other() bool {
 }
 
 // AsTitleText extracts the title text from the body, with fallback.
+const NoTitleText = "[No Title]"
+
 func (b *Body) AsTitleText(fallback string) string {
 	if b.Title != nil {
 		for _, item := range b.Title.Items {
@@ -349,7 +351,7 @@ func (b *Body) AsTitleText(fallback string) string {
 		}
 	}
 	if fallback == "" {
-		return "[No Title]"
+		return NoTitleText
 	}
 	return fallback
 }
@@ -469,7 +471,7 @@ func (s *Section) AsTitleText(fallback string) string {
 		}
 	}
 	if fallback == "" {
-		return "[No Title]"
+		return NoTitleText
 	}
 	return fallback
 }

@@ -167,7 +167,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 			return fmt.Errorf("unable to write NAV: %w", err)
 		}
 	default:
-		if err := writeNCX(zw, c, chapters, log); err != nil {
+		if err := writeNCX(zw, c, chapters, cfg, log); err != nil {
 			return fmt.Errorf("unable to write NCX: %w", err)
 		}
 		// For EPUB2 and KEPUB with AdobeDE, write page-map.xml instead of NCX pageList
@@ -845,7 +845,7 @@ func writeNav(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	return writeXMLToZip(zw, path.Join(oebpsDir, "nav.xhtml"), doc)
 }
 
-func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap.Logger) error {
+func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, cfg *config.DocumentConfig, _ *zap.Logger) error {
 	doc := etree.NewDocument()
 	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
 
@@ -910,7 +910,7 @@ func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, _ *zap
 
 		// Add nested sections to TOC
 		if chapter.Section != nil {
-			buildNCXNavPoints(navPoint, chapter.Section, chapter.Filename, &playOrder, c, nil)
+			buildNCXNavPoints(navPoint, chapter.Section, chapter.Filename, &playOrder, c, cfg.TOCPage.ChaptersWithoutTitle, nil)
 		}
 	}
 
@@ -973,11 +973,14 @@ func writeDataToZip(zw *zip.Writer, name string, data []byte) error {
 	return err
 }
 
-func buildNCXNavPoints(parent *etree.Element, section *fb2.Section, filename string, playOrder *int, c *content.Content, lastNavPoint *etree.Element) {
+func buildNCXNavPoints(parent *etree.Element, section *fb2.Section, filename string, playOrder *int, c *content.Content, includeUntitled bool, lastNavPoint *etree.Element) {
 	for _, item := range section.Content {
 		if item.Kind == fb2.FlowSection && item.Section != nil {
-			if item.Section.HasTitle() {
-				titleText := item.Section.AsTitleText("")
+			titleText := item.Section.AsTitleText("")
+			if titleText == "" && includeUntitled {
+				titleText = fb2.NoTitleText
+			}
+			if titleText != "" {
 				*playOrder++
 				sectionID := item.Section.ID
 				navPoint := parent.CreateElement("navPoint")
@@ -991,18 +994,18 @@ func buildNCXNavPoints(parent *etree.Element, section *fb2.Section, filename str
 				navContent := navPoint.CreateElement("content")
 				navContent.CreateAttr("src", filename+"#"+sectionID)
 
-				buildNCXNavPoints(navPoint, item.Section, filename, playOrder, c, nil)
+				buildNCXNavPoints(navPoint, item.Section, filename, playOrder, c, includeUntitled, nil)
 			} else {
 				// Untitled section: nest children inside the last titled sibling if one exists
 				if lastNavPoint != nil {
-					buildNCXNavPoints(lastNavPoint, item.Section, filename, playOrder, c, nil)
+					buildNCXNavPoints(lastNavPoint, item.Section, filename, playOrder, c, includeUntitled, nil)
 				} else {
 					// No preceding titled sibling, children go to parent level
-					buildNCXNavPoints(parent, item.Section, filename, playOrder, c, nil)
+					buildNCXNavPoints(parent, item.Section, filename, playOrder, c, includeUntitled, nil)
 				}
 			}
 			// Track the last navPoint we created at this level
-			if item.Section.HasTitle() {
+			if titleText != "" {
 				// Find the navPoint we just created (last child of parent)
 				children := parent.ChildElements()
 				if len(children) > 0 {
@@ -1062,13 +1065,13 @@ func buildTOCContent(parentContainer *etree.Element, c *content.Content, chapter
 
 		// Add nested sections to TOC
 		if chapter.Section != nil {
-			buildTOCPageOL(li, chapter.Section, chapter.Filename, c)
+			buildTOCPageOL(li, chapter.Section, chapter.Filename, c, cfg.ChaptersWithoutTitle)
 		}
 	}
 }
 
 // buildTOCPageOL recursively builds nested TOC structure for the TOC page
-func buildTOCPageOL(parent *etree.Element, section *fb2.Section, filename string, c *content.Content) {
+func buildTOCPageOL(parent *etree.Element, section *fb2.Section, filename string, c *content.Content, includeUntitled bool) {
 	var oldParagraphs, oldSentences int
 	nestedOL := parent.SelectElement("ol")
 	if nestedOL == nil {
@@ -1078,7 +1081,7 @@ func buildTOCPageOL(parent *etree.Element, section *fb2.Section, filename string
 	}
 
 	hadItems := len(nestedOL.ChildElements()) > 0
-	buildTOCPageOLItems(nestedOL, section, filename, c, nil)
+	buildTOCPageOLItems(nestedOL, section, filename, c, includeUntitled, nil)
 
 	if !hadItems && len(nestedOL.ChildElements()) == 0 {
 		parent.RemoveChild(nestedOL)
@@ -1087,11 +1090,14 @@ func buildTOCPageOL(parent *etree.Element, section *fb2.Section, filename string
 }
 
 // buildTOCPageOLItems adds TOC entries for subsections to the ordered list
-func buildTOCPageOLItems(parentOL *etree.Element, section *fb2.Section, filename string, c *content.Content, lastLI *etree.Element) {
+func buildTOCPageOLItems(parentOL *etree.Element, section *fb2.Section, filename string, c *content.Content, includeUntitled bool, lastLI *etree.Element) {
 	for _, item := range section.Content {
 		if item.Kind == fb2.FlowSection && item.Section != nil {
-			if item.Section.HasTitle() {
-				titleText := item.Section.AsTitleText("")
+			titleText := item.Section.AsTitleText("")
+			if titleText == "" && includeUntitled {
+				titleText = fb2.NoTitleText
+			}
+			if titleText != "" {
 				li := parentOL.CreateElement("li")
 				li.CreateAttr("class", "toc-item toc-section")
 				a := li.CreateElement("a")
@@ -1100,15 +1106,15 @@ func buildTOCPageOLItems(parentOL *etree.Element, section *fb2.Section, filename
 				a.CreateAttr("href", filename+"#"+sectionID)
 				appendInlineText(a, c, titleText, false)
 
-				buildTOCPageOL(li, item.Section, filename, c)
+				buildTOCPageOL(li, item.Section, filename, c, includeUntitled)
 				lastLI = li
 			} else {
 				// Untitled section: nest children inside the last titled sibling if one exists
 				if lastLI != nil {
-					buildTOCPageOLIntoLI(lastLI, item.Section, filename, c)
+					buildTOCPageOLIntoLI(lastLI, item.Section, filename, c, includeUntitled)
 				} else {
 					// No preceding titled sibling, children go to parent level
-					buildTOCPageOLItems(parentOL, item.Section, filename, c, nil)
+					buildTOCPageOLItems(parentOL, item.Section, filename, c, includeUntitled, nil)
 				}
 			}
 		}
@@ -1116,13 +1122,19 @@ func buildTOCPageOLItems(parentOL *etree.Element, section *fb2.Section, filename
 }
 
 // buildTOCPageOLIntoLI creates nested OL inside an LI for untitled section's children
-func buildTOCPageOLIntoLI(li *etree.Element, section *fb2.Section, filename string, c *content.Content) {
+func buildTOCPageOLIntoLI(li *etree.Element, section *fb2.Section, filename string, c *content.Content, includeUntitled bool) {
 	// Check if there are titled children to add
 	hasTitledChildren := false
 	for _, item := range section.Content {
 		if item.Kind == fb2.FlowSection && item.Section != nil {
-			hasTitledChildren = true
-			break
+			titleText := item.Section.AsTitleText("")
+			if titleText == "" && includeUntitled {
+				titleText = fb2.NoTitleText
+			}
+			if titleText != "" {
+				hasTitledChildren = true
+				break
+			}
 		}
 	}
 	if !hasTitledChildren {
@@ -1142,7 +1154,7 @@ func buildTOCPageOLIntoLI(li *etree.Element, section *fb2.Section, filename stri
 		nestedOL.CreateAttr("class", "toc-list toc-nested")
 	}
 
-	buildTOCPageOLItems(nestedOL, section, filename, c, nil)
+	buildTOCPageOLItems(nestedOL, section, filename, c, includeUntitled, nil)
 }
 
 // getChapterAnchorSuffix returns the anchor suffix (including #) for chapter links in TOC/Nav/NCX.
