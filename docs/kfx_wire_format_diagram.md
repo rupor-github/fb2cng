@@ -400,6 +400,8 @@ Example: 0x8A = string (type 8) with 10-byte (A) body
   │($491 list)  │  - kindle_audit_metadata: creator info
   └─────────────┘  - kindle_ebook_metadata: capabilities
 
+   Note: kindle_title_metadata includes `cde_content_type`, which this converter sets to `PDOC` or `EBOK`
+
   Position/Location Mapping:
   ┌──────────────┐     ┌──────────────┐     ┌─────────────┐
   │    $264      │────>│    $265      │────>│    $550     │

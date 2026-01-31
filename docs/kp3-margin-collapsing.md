@@ -1,6 +1,6 @@
 # KP3 Margin Collapsing Algorithm
 
-This document describes the margin collapsing algorithm used by Kindle Previewer 3 (KP3) for KFX generation, based on reverse-engineering the decompiled Java source code.
+Derived from: `EpubToKFXConverter-4.0.jar` (Kindle Previewer 3) version 3.101.0
 
 ## Source Files Reference
 
@@ -443,26 +443,3 @@ MARGIN_RIGHT("margin_right"),
 MARGIN_LEFT("margin_left"),
 ```
 
----
-
-## Implementation Notes for fb2cng
-
-### Processing Order
-
-Based on KP3's implementation, the correct processing order is:
-
-1. **Build content tree** with container hierarchy
-2. **Phase 1 (per container):** Self-collapse empty nodes
-3. **Phase 2 (per container):** Parent-child collapsing
-   - First child: margin-top → parent's margin-top (child loses mt)
-   - Last child: margin-bottom → parent's margin-bottom (child loses mb)
-4. **Phase 3 (per container):** Sibling collapsing
-   - Predecessor's mb + Successor's mt → Successor's mt (predecessor loses mb)
-
-### Key Differences from CSS
-
-1. **Result placement:** In standard CSS, collapsed margins create spacing between elements. In KP3, the collapsed value is explicitly placed on ONE element (the successor for siblings, the parent for parent-child).
-
-2. **Mixed sign handling:** For sibling collapsing with mixed signs, KP3 has a complex algorithm that may look at the previous sibling's margin. For parent-child, it simply adds the values.
-
-3. **`doMarginCollapse` flag:** KP3 has an explicit flag to disable margin collapsing entirely for certain elements (inline-block, tables, etc.).

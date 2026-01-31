@@ -625,6 +625,10 @@ Common `$490` categories in modern KFX:
 - `kindle_ebook_metadata`: selection, nested_span (capability flags)
 - `kindle_capability_metadata`: (usually empty)
 
+Note on `cde_content_type`: can contain `"PDOC"` (personal document) or `"EBOK"` (ebook).
+
+Derived from: `convert/kfx/frag_metadata.go:BuildBookMetadata`.
+
 The converter reads title/author/etc from either:
 
 - `$490` → `$491` (categorised_metadata list) → category `kindle_title_metadata` → `$258` list of key/value structs (`$492` key, `$307` value)

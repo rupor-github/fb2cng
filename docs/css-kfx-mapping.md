@@ -1,7 +1,7 @@
 CSS → KFX Style Mapping Notes
 =============================
 
-Derived from: `EpubToKFXConverter-4.0.jar` (Kindle Previewer 3) version 3.101.0, ion files located in `Kindle Previewer 3/lib/fc/data` directory.
+Derived from: `EpubToKFXConverter-4.0.jar` (Kindle Previewer 3) version 3.101.0
 
 1. Configuration inputs
 -----------------------
