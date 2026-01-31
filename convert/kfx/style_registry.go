@@ -1058,6 +1058,15 @@ func (sr *StyleRegistry) applyKFXStyleAdjustments() {
 		delete(def.Properties, SymTextAlignment)
 		sr.styles["code"] = def
 	}
+
+	// Footnote titles should not behave like headings in KFX.
+	// KP3 reference output keeps footnote title paragraphs justified (inheriting from base paragraph)
+	// even though our CSS sets .footnote-title { text-align: left; } for EPUB.
+	// Strip alignment so footnote title paragraphs inherit the surrounding paragraph alignment.
+	if def, exists := sr.styles["footnote-title"]; exists {
+		delete(def.Properties, SymTextAlignment)
+		sr.styles["footnote-title"] = def
+	}
 }
 
 // DefaultStyleRegistry returns a registry with default HTML element styles for KFX.
@@ -1629,10 +1638,10 @@ func (sr *StyleRegistry) shouldHaveLayoutHintTitle(name string, _ map[KFXSymbol]
 		return true
 	}
 
-	// Simple title styles for generated sections (annotation-title, toc-title, footnote-title)
+	// Simple title styles for generated sections (annotation-title, toc-title)
 	// These are used directly as content styles without -header suffix
 	switch name {
-	case "annotation-title", "toc-title", "footnote-title":
+	case "annotation-title", "toc-title":
 		return true
 	}
 
