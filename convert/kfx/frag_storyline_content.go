@@ -62,7 +62,7 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 		sb.SetContainerMargins(NewStyleContext(styles).ExtractContainerMargins("div", "section"))
 	}
 
-	if section != nil && section.ID != "" {
+	if section.ID != "" {
 		if _, exists := idToEID[section.ID]; !exists {
 			idToEID[section.ID] = sb.NextEID()
 		}

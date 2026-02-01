@@ -134,7 +134,6 @@ func TestLocalEnv_Fields(t *testing.T) {
 		Log:       log,
 		NoDirs:    true,
 		Overwrite: false,
-		start:     time.Now(),
 	}
 
 	if env.Cfg != cfg {
@@ -160,7 +159,7 @@ func TestLocalEnv_RedirectAndRestore(t *testing.T) {
 	}
 
 	// Test multiple redirect/restore cycles
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		env.RedirectStdLog()
 		if env.restoreStdLog == nil {
 			t.Errorf("Iteration %d: restoreStdLog not set", i)

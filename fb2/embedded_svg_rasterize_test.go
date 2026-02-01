@@ -14,7 +14,7 @@ func TestEmbeddedSVGPlaceholdersRasterize(t *testing.T) {
 
 	for name, svg := range cases {
 		t.Run(name, func(t *testing.T) {
-			img, err := imgutil.RasterizeSVGToImage(svg, 0, 0)
+			img, err := imgutil.RasterizeSVGToImage(svg, 0, 0, 0)
 			if err != nil {
 				t.Fatalf("rasterize %s: %v", name, err)
 			}

@@ -100,9 +100,10 @@ func (fb *FictionBook) NormalizeLinks(vignettes map[common.VignettePos]*BinaryOb
 				fb.VignetteIDs[pos] = candidateID
 				// Add to binaries
 				fb.Binaries = append(fb.Binaries, BinaryObject{
-					ID:          candidateID,
-					ContentType: v.ContentType,
-					Data:        v.Data,
+					ID:              candidateID,
+					ContentType:     v.ContentType,
+					Data:            v.Data,
+					BuiltinVignette: v.BuiltinVignette,
 				})
 				break
 			}

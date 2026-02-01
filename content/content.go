@@ -300,6 +300,7 @@ func prepareVignettes(vigCfg *config.VignettesConfig, defaultVignettes map[commo
 
 		var data []byte
 		var contentType string
+		var builtinVignette bool
 		if check.configValue == "builtin" {
 			var ok bool
 			data, ok = defaultVignettes[check.position]
@@ -307,6 +308,7 @@ func prepareVignettes(vigCfg *config.VignettesConfig, defaultVignettes map[commo
 				continue
 			}
 			contentType = "image/svg+xml"
+			builtinVignette = true
 		} else {
 			fileData, err := os.ReadFile(check.configValue)
 			if err != nil {
@@ -326,8 +328,9 @@ func prepareVignettes(vigCfg *config.VignettesConfig, defaultVignettes map[commo
 		}
 
 		vignettes[check.position] = &fb2.BinaryObject{
-			ContentType: contentType,
-			Data:        data,
+			ContentType:     contentType,
+			Data:            data,
+			BuiltinVignette: builtinVignette,
 		}
 	}
 

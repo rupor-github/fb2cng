@@ -6,6 +6,8 @@ import (
 	"image/color"
 	"image/draw"
 	"math"
+	"regexp"
+	"strconv"
 
 	"github.com/srwiley/oksvg"
 	"github.com/srwiley/rasterx"
@@ -13,13 +15,58 @@ import (
 
 const defaultSVGSize = 2048 // Default size to use when SVG viewBox has no size to match KP3
 
+// KindleSVGStrokeWidthFactor is the multiplier for stroke-width values when
+// rasterizing SVGs for Kindle. Kindle devices render at higher resolution,
+// so strokes need to be thicker to remain visible.
+const KindleSVGStrokeWidthFactor = 8.0
+
+// strokeWidthRe matches stroke-width attributes and properties in SVG.
+// Captures the numeric value for replacement.
+var strokeWidthRe = regexp.MustCompile(`(stroke-width\s*[=:]\s*["']?)(\d+(?:\.\d+)?)(["']?)`)
+
+// ScaleSVGStrokeWidth multiplies all stroke-width values in SVG data by the given factor.
+// Returns the modified SVG data. If factor is <= 0 or 1, returns the original data unchanged.
+func ScaleSVGStrokeWidth(svgData []byte, factor float64) []byte {
+	if factor <= 0 || factor == 1.0 {
+		return svgData
+	}
+
+	return strokeWidthRe.ReplaceAllFunc(svgData, func(match []byte) []byte {
+		submatches := strokeWidthRe.FindSubmatch(match)
+		if len(submatches) < 4 {
+			return match
+		}
+
+		prefix := submatches[1]   // "stroke-width=" or "stroke-width:"
+		valueStr := submatches[2] // numeric value
+		suffix := submatches[3]   // closing quote if any
+
+		value, err := strconv.ParseFloat(string(valueStr), 64)
+		if err != nil {
+			return match
+		}
+
+		newValue := value * factor
+		// Format with minimal precision needed
+		newValueStr := strconv.FormatFloat(newValue, 'f', -1, 64)
+
+		return append(append(prefix, newValueStr...), suffix...)
+	})
+}
+
 // RasterizeSVGToImage rasterizes SVG to an RGBA image.
 //
 // Rules:
 //   - if targetW == 0 && targetH == 0: use SVG viewBox dimensions (fallback to 1024x1024)
 //   - if only one of targetW/targetH is > 0: scale by that dimension keeping aspect ratio
 //   - if both targetW and targetH are > 0: fit into that box keeping aspect ratio
-func RasterizeSVGToImage(svgData []byte, targetW, targetH int) (image.Image, error) {
+//   - if strokeWidthFactor > 0 and != 1: multiply all stroke-width values before rasterizing
+func RasterizeSVGToImage(svgData []byte, targetW, targetH int, strokeWidthFactor float64) (image.Image, error) {
+	// Scale stroke widths if factor is specified
+	if strokeWidthFactor > 0 && strokeWidthFactor != 1.0 {
+		svgData = ScaleSVGStrokeWidth(svgData, strokeWidthFactor)
+	}
+
 	icon, err := oksvg.ReadIconStream(bytes.NewReader(svgData))
 	if err != nil {
 		return nil, err

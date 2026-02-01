@@ -867,9 +867,10 @@ func (tc *TableCell) AsPlainText() string {
 
 // BinaryObject stores embedded binary data (images) encoded in base64.
 type BinaryObject struct {
-	ID          string
-	ContentType string
-	Data        []byte
+	ID              string
+	ContentType     string
+	Data            []byte
+	BuiltinVignette bool // True for builtin (default) vignettes, controls stroke-width scaling for Kindle
 }
 
 func FormatIDToTOC(id string) string {

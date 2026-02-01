@@ -12,7 +12,7 @@ func TestDefaultVignettesRasterize(t *testing.T) {
 	for pos, svg := range env.DefaultVignettes {
 		name := fmt.Sprintf("%v", pos)
 		t.Run(name, func(t *testing.T) {
-			img, err := imgutil.RasterizeSVGToImage(svg, 0, 0)
+			img, err := imgutil.RasterizeSVGToImage(svg, 0, 0, 0)
 			if err != nil {
 				t.Fatalf("rasterize vignette %s: %v", name, err)
 			}

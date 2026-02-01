@@ -7,7 +7,7 @@ import (
 )
 
 func TestDefaultCoverSVGRasterizes(t *testing.T) {
-	img, err := imgutil.RasterizeSVGToImage(defaultCoverSVG, 0, 0)
+	img, err := imgutil.RasterizeSVGToImage(defaultCoverSVG, 0, 0, 0)
 	if err != nil {
 		t.Fatalf("rasterize default cover svg: %v", err)
 	}

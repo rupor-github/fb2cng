@@ -124,7 +124,9 @@ func (bo *BinaryObject) handleImageError(bi *BookImage, operation string, err er
 		return bi
 	}
 
-	img, rasterErr := imgutil.RasterizeSVGToImage(brokenImage, 0, 0)
+	// brokenImage placeholder SVG already has thick strokes (stroke-width="4"),
+	// no scaling needed
+	img, rasterErr := imgutil.RasterizeSVGToImage(brokenImage, 0, 0, 0)
 	if rasterErr != nil {
 		log.Warn("Unable to rasterize broken placeholder SVG", zap.String("id", bo.ID), zap.Error(rasterErr))
 		return bi
@@ -210,7 +212,15 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 		if bytes.Equal(bo.Data, notFoundImage) {
 			targetW, targetH = 0, 0
 		}
-		img, err := imgutil.RasterizeSVGToImage(bo.Data, targetW, targetH)
+
+		// Apply stroke width scaling only for builtin vignettes (thin strokes that need
+		// to be visible on Kindle's high-resolution display). External file vignettes
+		// are assumed to have appropriate stroke widths already.
+		var strokeFactor float64
+		if bo.BuiltinVignette {
+			strokeFactor = imgutil.KindleSVGStrokeWidthFactor
+		}
+		img, err := imgutil.RasterizeSVGToImage(bo.Data, targetW, targetH, strokeFactor)
 		if err != nil {
 			return bo.handleImageError(bi, "rasterize", err, kindle, cfg, log)
 		}

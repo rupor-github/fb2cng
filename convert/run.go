@@ -78,7 +78,7 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 	}
 
 	if env.Cfg.Document.Images.Cover.Generate {
-		img, err := imgutil.RasterizeSVGToImage(defaultCoverSVG, env.Cfg.Document.Images.Screen.Width, env.Cfg.Document.Images.Screen.Height)
+		img, err := imgutil.RasterizeSVGToImage(defaultCoverSVG, env.Cfg.Document.Images.Screen.Width, env.Cfg.Document.Images.Screen.Height, 0)
 		if err != nil {
 			return fmt.Errorf("unable to rasterize embedded default cover svg: %w", err)
 		}
