@@ -131,6 +131,11 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 		}
 	}
 
+	// Filter unused image resources after content generation.
+	// This avoids emitting unreferenced external resources and raw media fragments.
+	usedResourceNames := collectReferencedResourceNames(contentFragments)
+	externalRes, rawMedia, imageResourceInfo = filterImageResources(externalRes, rawMedia, imageResourceInfo, usedResourceNames)
+
 	// Cover image resource name (e.g. "e6") for metadata.
 	coverResName := ""
 	if len(c.Book.Description.TitleInfo.Coverpage) > 0 && imageResourceInfo != nil {
