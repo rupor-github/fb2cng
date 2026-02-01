@@ -360,21 +360,55 @@ func (c *Content) UpdatePageRuneCount(text string) {
 	c.pageRuneCounter += utf8.RuneCountInString(text)
 }
 
+// SplitTextByPage splits text into chunks by page boundaries.
+// It returns chunks and a parallel slice indicating whether a page marker
+// should be inserted after each chunk.
+func (c *Content) SplitTextByPage(text string) ([]string, []bool) {
+	if text == "" {
+		return nil, nil
+	}
+	if c.PageSize == 0 || !c.PageTrackingEnabled {
+		return []string{text}, []bool{false}
+	}
+
+	var chunks []string
+	var markers []bool
+	var buf strings.Builder
+
+	for _, r := range text {
+		buf.WriteRune(r)
+		c.pageRuneCounter++
+		if c.pageRuneCounter >= c.PageSize {
+			chunks = append(chunks, buf.String())
+			markers = append(markers, true)
+			buf.Reset()
+			c.pageRuneCounter -= c.PageSize
+		}
+	}
+
+	if buf.Len() > 0 {
+		chunks = append(chunks, buf.String())
+		markers = append(markers, false)
+	}
+
+	return chunks, markers
+}
+
 // CheckPageBoundary checks if we've crossed a page boundary and returns true if a page marker should be inserted
 func (c *Content) CheckPageBoundary() bool {
 	if c.PageSize == 0 || !c.PageTrackingEnabled {
 		return false
 	}
-	if c.pageRuneCounter >= c.PageSize {
-		c.TotalPages++
-		c.pageRuneCounter = 0
-		return true
+	if c.pageRuneCounter < c.PageSize {
+		return false
 	}
-	return false
+	c.pageRuneCounter -= c.PageSize
+	return true
 }
 
 // AddPageMapEntry records a page marker in the current file
 func (c *Content) AddPageMapEntry() string {
+	c.TotalPages++
 	spanID := fmt.Sprintf("page%d", c.TotalPages)
 	entry := PageMapEntry{
 		PageNum:  c.TotalPages,

@@ -475,7 +475,7 @@ func appendFloatFootnoteSectionContentEpub2(parent *etree.Element, c *content.Co
 		if refs, exists := c.BackLinkIndex[section.ID]; exists && len(refs) > 0 {
 			for i, ref := range refs {
 				if i > 0 {
-					sectionElem.CreateText(text.NBSP)
+					appendPlainText(sectionElem, c, text.NBSP)
 				}
 				backLink := sectionElem.CreateElement("a")
 				href := ref.Filename + "#" + ref.RefID
@@ -492,12 +492,12 @@ func appendFloatFootnoteSectionContentEpub2(parent *etree.Element, c *content.Co
 				}
 				// Use title as link text if available, otherwise use ↩
 				if section.Title != nil && i == 0 {
-					textParent.CreateText(section.Title.AsTOCText(c.BacklinkStr))
+					appendPlainText(textParent, c, section.Title.AsTOCText(c.BacklinkStr))
 				} else {
-					textParent.CreateText(c.BacklinkStr)
+					appendPlainText(textParent, c, c.BacklinkStr)
 				}
 			}
-			sectionElem.CreateText(text.NBSP)
+			appendPlainText(sectionElem, c, text.NBSP)
 		}
 	}
 
@@ -552,7 +552,7 @@ func appendFloatFootnoteSectionContentEpub2(parent *etree.Element, c *content.Co
 				if item.Poem.ID != "" {
 					span.CreateAttr("id", item.Poem.ID)
 				}
-				span.CreateText(item.Poem.AsPlainText())
+				appendPlainText(span, c, item.Poem.AsPlainText())
 				sectionElem.CreateElement("br")
 			}
 		case fb2.FlowSubtitle:
@@ -572,7 +572,7 @@ func appendFloatFootnoteSectionContentEpub2(parent *etree.Element, c *content.Co
 				if item.Cite.ID != "" {
 					span.CreateAttr("id", item.Cite.ID)
 				}
-				span.CreateText(item.Cite.AsPlainText())
+				appendPlainText(span, c, item.Cite.AsPlainText())
 				sectionElem.CreateElement("br")
 			}
 		case fb2.FlowEmptyLine:
@@ -583,7 +583,7 @@ func appendFloatFootnoteSectionContentEpub2(parent *etree.Element, c *content.Co
 				if item.Table.ID != "" {
 					span.CreateAttr("id", item.Table.ID)
 				}
-				span.CreateText(item.Table.AsPlainText())
+				appendPlainText(span, c, item.Table.AsPlainText())
 				sectionElem.CreateElement("br")
 			}
 		}
@@ -606,7 +606,7 @@ func appendFloatFootnoteSectionContentEpub2(parent *etree.Element, c *content.Co
 		// Create the "more" indicator span
 		moreSpan := etree.NewElement("span")
 		moreSpan.CreateAttr("class", "footnote-more")
-		moreSpan.SetText(c.MoreParaStr)
+		appendPlainText(moreSpan, c, c.MoreParaStr)
 
 		// Insert at the beginning of first span
 		firstSpan.InsertChildAt(0, moreSpan)
@@ -673,7 +673,7 @@ func appendFloatFootnoteSectionContentEpub3(parent *etree.Element, c *content.Co
 		// Create the "more" indicator span
 		moreSpan := etree.NewElement("span")
 		moreSpan.CreateAttr("class", "footnote-more")
-		moreSpan.SetText(c.MoreParaStr)
+		appendPlainText(moreSpan, c, c.MoreParaStr)
 
 		// Insert at the beginning of first paragraph
 		firstPara.InsertChildAt(0, moreSpan)
@@ -688,7 +688,7 @@ func appendFloatFootnoteSectionContentEpub3(parent *etree.Element, c *content.Co
 
 			for i, ref := range refs {
 				if i > 0 {
-					backPara.CreateText(text.NBSP)
+					appendPlainText(backPara, c, text.NBSP)
 				}
 				backLink := backPara.CreateElement("a")
 				backLink.CreateAttr("class", "link-backlink")
@@ -697,7 +697,7 @@ func appendFloatFootnoteSectionContentEpub3(parent *etree.Element, c *content.Co
 				backLink.CreateAttr("href", href)
 				backLink.CreateAttr("epub:type", "backlink")
 				backLink.CreateAttr("role", "doc-backlink")
-				backLink.CreateText(c.BacklinkStr)
+				appendPlainText(backLink, c, c.BacklinkStr)
 			}
 		}
 	}
@@ -911,9 +911,19 @@ func appendParagraphInline(parent *etree.Element, c *content.Content, p *fb2.Par
 						koboSpan := dropCapSpan.CreateElement("span")
 						koboSpan.CreateAttr("class", "koboSpan")
 						koboSpan.CreateAttr("id", fmt.Sprintf("kobo.%d.%d", paragraph, sentence))
-						koboSpan.SetText(firstChar)
-					} else {
-						dropCapSpan.SetText(firstChar)
+					}
+
+					chunks, markers := c.SplitTextByPage(firstChar)
+					for i, chunk := range chunks {
+						if c.OutputFormat == common.OutputFmtKepub {
+							koboSpan := dropCapSpan.ChildElements()[0]
+							koboSpan.SetText(koboSpan.Text() + chunk)
+						} else {
+							dropCapSpan.SetText(dropCapSpan.Text() + chunk)
+						}
+						if markers[i] {
+							appendPageMarker(dropCapSpan, c)
+						}
 					}
 
 					// Render the rest of the text
@@ -938,60 +948,79 @@ func appendParagraphInline(parent *etree.Element, c *content.Content, p *fb2.Par
 }
 
 func appendInlineText(parent *etree.Element, c *content.Content, text string, hyphenate bool) {
-	// Track runes for page map
-	c.UpdatePageRuneCount(text)
-
 	if hyphenate {
 		text = c.Hyphen.Hyphenate(text)
 	}
 
+	chunks, markers := c.SplitTextByPage(text)
+	if len(chunks) == 0 {
+		return
+	}
+
 	if c.OutputFormat == common.OutputFmtKepub && strings.TrimSpace(text) != "" {
 		// Kobo mode: wrap text in span with unique ID
-		for s := range c.Splitter.Sentences(text) {
-			// Check for page boundary before each sentence
-			if c.CheckPageBoundary() {
-				spanID := c.AddPageMapEntry()
-				// Find block-level parent to insert page marker
-				blockParent := findBlockLevelParent(parent)
-				if blockParent != nil {
-					// Insert as first child of block parent - use <a> for kepub
-					pageMarker := etree.NewElement("span")
-					pageMarker.CreateAttr("id", spanID)
-					pageMarker.CreateAttr("class", "page-marker")
-					blockParent.InsertChildAt(0, pageMarker)
-				}
+		for i, chunk := range chunks {
+			for s := range c.Splitter.Sentences(chunk) {
+				paragraph, sentence := c.KoboSpanNextSentence()
+				span := parent.CreateElement("span")
+				span.CreateAttr("class", "koboSpan")
+				span.CreateAttr("id", fmt.Sprintf("kobo.%d.%d", paragraph, sentence))
+				span.SetText(s)
 			}
-
-			paragraph, sentence := c.KoboSpanNextSentence()
-			span := parent.CreateElement("span")
-			span.CreateAttr("class", "koboSpan")
-			span.CreateAttr("id", fmt.Sprintf("kobo.%d.%d", paragraph, sentence))
-			span.SetText(s)
-		}
-	} else {
-		// Check for page boundary
-		if c.CheckPageBoundary() {
-			spanID := c.AddPageMapEntry()
-			// Find block-level parent to insert page marker
-			blockParent := findBlockLevelParent(parent)
-			if blockParent != nil {
-				// Insert as first child of block parent
-				// Use <a> for epub2/kepub, <span> for epub3
-				pageMarker := etree.NewElement("span")
-				pageMarker.CreateAttr("id", spanID)
-				pageMarker.CreateAttr("class", "page-marker")
-				blockParent.InsertChildAt(0, pageMarker)
+			if markers[i] {
+				appendPageMarker(parent, c)
 			}
 		}
+		return
+	}
 
-		// Standard mode: use original tail-based approach
+	// Standard mode: use original tail-based approach
+	for i, chunk := range chunks {
 		if parent.ChildElements() == nil || len(parent.ChildElements()) == 0 {
-			parent.SetText(text)
+			parent.SetText(chunk)
 		} else {
 			lastChild := parent.ChildElements()[len(parent.ChildElements())-1]
-			lastChild.SetTail(lastChild.Tail() + text)
+			lastChild.SetTail(lastChild.Tail() + chunk)
+		}
+		if markers[i] {
+			appendPageMarker(parent, c)
 		}
 	}
+}
+
+func appendPlainText(parent *etree.Element, c *content.Content, text string) {
+	if text == "" {
+		return
+	}
+	chunks, markers := c.SplitTextByPage(text)
+	if len(chunks) == 0 {
+		return
+	}
+	for i, chunk := range chunks {
+		parent.CreateText(chunk)
+		if markers[i] {
+			appendPageMarker(parent, c)
+		}
+	}
+}
+
+func appendPageMarker(parent *etree.Element, c *content.Content) {
+	spanID := c.AddPageMapEntry()
+	pageMarker := etree.NewElement("span")
+	pageMarker.CreateAttr("id", spanID)
+	pageMarker.CreateAttr("class", "page-marker")
+
+	// Insert after the last child when possible, otherwise at start.
+	if len(parent.Child) > 0 {
+		parent.AddChild(pageMarker)
+		return
+	}
+	blockParent := findBlockLevelParent(parent)
+	if blockParent != nil {
+		blockParent.InsertChildAt(0, pageMarker)
+		return
+	}
+	parent.AddChild(pageMarker)
 }
 
 func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.InlineSegment, hyphenate bool) {
