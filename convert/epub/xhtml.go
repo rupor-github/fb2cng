@@ -534,6 +534,7 @@ func appendFloatFootnoteSectionContentEpub2(parent *etree.Element, c *content.Co
 					img.CreateAttr("id", item.Image.ID)
 				}
 				imgID := strings.TrimPrefix(item.Image.Href, "#")
+				c.TrackImageUsage(imgID)
 				if imgData, ok := c.ImagesIndex[imgID]; ok {
 					img.CreateAttr("src", imgData.Filename)
 				} else {
@@ -1083,6 +1084,7 @@ func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inl
 			img := imgParent.CreateElement("img")
 			img.CreateAttr("class", "image-inline")
 			imgID := strings.TrimPrefix(seg.Image.Href, "#")
+			c.TrackImageUsage(imgID)
 			if imgData, ok := c.ImagesIndex[imgID]; ok {
 				img.CreateAttr("src", imgData.Filename)
 			} else {
@@ -1115,6 +1117,7 @@ func appendImageElement(parent *etree.Element, c *content.Content, img *fb2.Imag
 	imgElem := imgParent.CreateElement("img")
 	imgElem.CreateAttr("class", "image-block")
 	imgID := strings.TrimPrefix(img.Href, "#")
+	c.TrackImageUsage(imgID)
 	if imgData, ok := c.ImagesIndex[imgID]; ok {
 		imgElem.CreateAttr("src", imgData.Filename)
 	} else {
@@ -1132,6 +1135,7 @@ func appendVignetteImage(parent *etree.Element, c *content.Content, position com
 	}
 
 	vignetteID := c.Book.VignetteIDs[position]
+	c.TrackImageUsage(vignetteID)
 	imgData, ok := c.ImagesIndex[vignetteID]
 	if !ok {
 		return

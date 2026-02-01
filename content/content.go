@@ -60,6 +60,7 @@ type Content struct {
 	CoverID        string
 	FootnotesIndex fb2.FootnoteRefs
 	ImagesIndex    fb2.BookImages
+	UsedImageIDs   map[string]bool
 	IDsIndex       fb2.IDIndex
 	LinksRevIndex  fb2.ReverseLinkIndex
 
@@ -237,6 +238,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 		CoverID:        coverID,
 		FootnotesIndex: footnotes,
 		ImagesIndex:    imagesIndex,
+		UsedImageIDs:   make(map[string]bool),
 		IDsIndex:       ids,
 		LinksRevIndex:  links,
 		WorkDir:        tmpDir,
@@ -421,6 +423,17 @@ func (c *Content) GetAllPagesSeq() iter.Seq[PageMapEntry] {
 			}
 		}
 	}
+}
+
+// TrackImageUsage records that an image ID was referenced during generation.
+func (c *Content) TrackImageUsage(id string) {
+	if id == "" {
+		return
+	}
+	if c.UsedImageIDs == nil {
+		c.UsedImageIDs = make(map[string]bool)
+	}
+	c.UsedImageIDs[id] = true
 }
 
 // AddFootnoteBackLinkRef adds a footnote reference and returns the BackLinkRef for generating links

@@ -143,6 +143,11 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		}
 	}
 
+	if c.CoverID != "" {
+		c.TrackImageUsage(c.CoverID)
+	}
+	filterUnusedImages(c)
+
 	if err := writeImages(zw, c.ImagesIndex, log); err != nil {
 		return fmt.Errorf("unable to write images: %w", err)
 	}
@@ -317,6 +322,22 @@ func writeImages(zw *zip.Writer, images fb2.BookImages, _ *zap.Logger) error {
 		}
 	}
 	return nil
+}
+
+func filterUnusedImages(c *content.Content) {
+	if c == nil || len(c.ImagesIndex) == 0 {
+		return
+	}
+	if len(c.UsedImageIDs) == 0 {
+		return
+	}
+	filtered := make(fb2.BookImages, len(c.UsedImageIDs))
+	for id := range c.UsedImageIDs {
+		if img, ok := c.ImagesIndex[id]; ok {
+			filtered[id] = img
+		}
+	}
+	c.ImagesIndex = filtered
 }
 
 func generateCoverPageDoc(c *content.Content, cfg *config.DocumentConfig, log *zap.Logger) (*etree.Document, error) {
