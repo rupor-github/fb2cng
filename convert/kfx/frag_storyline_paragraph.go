@@ -86,6 +86,15 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 	// This ensures inline styles (like sub/sup) inherit font-size from the container.
 	inlineCtx := ctx.Push(tag, spanningClasses)
 
+	// Resolve context-specific dropcap line count from dropcap span style.
+	// This allows body-intro paragraphs to use different dropcap sizes when CSS differs.
+	var dropcapLineCount int
+	if styles != nil && strings.Contains(spanningClasses, "has-dropcap") {
+		if lines, ok := inlineCtx.ResolveDropcapLines("has-dropcap--dropcap"); ok {
+			dropcapLineCount = lines
+		}
+	}
+
 	flush := func() {
 		if nw.Len() == 0 {
 			return
@@ -331,6 +340,14 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 			_, hasLines := def.Properties[SymDropcapLines]
 			_, hasChars := def.Properties[SymDropcapChars]
 			if (hasLines || hasChars) && nw.RuneCountAfterPendingSpace() >= 1 {
+				if dropcapLineCount > 0 && hasLines {
+					props := make(map[KFXSymbol]any, len(def.Properties)+1)
+					for k, v := range def.Properties {
+						props[k] = v
+					}
+					props[SymDropcapLines] = dropcapLineCount
+					resolvedStyle = styles.RegisterResolved(props, styleUsageText, true)
+				}
 				if dropcapGlyphDeltaStyle == "" {
 					dropcapGlyphDeltaStyle = inlineCtx.ResolveDropcapGlyphDelta("has-dropcap--dropcap")
 				}

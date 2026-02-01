@@ -542,6 +542,29 @@ func (sc StyleContext) ResolveDropcapGlyphDelta(classes string) string {
 	return sc.registry.RegisterResolved(deltaProps, styleUsageInline, false)
 }
 
+// ResolveDropcapLines determines dropcap line count from resolved dropcap span style.
+// It resolves the inline dropcap style in the current context and converts its
+// font-size to line count, similar to detectDropcapPatterns.
+func (sc StyleContext) ResolveDropcapLines(classes string) (int, bool) {
+	if sc.registry == nil {
+		return 0, false
+	}
+	inlineProps := sc.resolveProperties("", classes)
+	fontSize, ok := inlineProps[SymFontSize]
+	if !ok {
+		return 0, false
+	}
+	val, unit, ok := measureParts(fontSize)
+	if !ok || val <= 0 {
+		return 0, false
+	}
+	if unit != SymUnitEm && unit != SymUnitRem {
+		return 0, false
+	}
+	lines := max(2, min(10, int(val+0.5)))
+	return lines, true
+}
+
 // ResolveInlineDelta creates a delta-only style for inline style events.
 // This matches KP3 behavior where style events contain only properties that differ
 // from the parent element's style (the block/container style).
