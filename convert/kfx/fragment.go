@@ -95,14 +95,17 @@ func NewFragmentList() *FragmentList {
 }
 
 // Add adds a fragment to the list.
+// Note: Font ($262) and $387 fragments are allowed to have duplicate keys,
+// following KFX format behavior.
 func (fl *FragmentList) Add(f *Fragment) error {
 	key := f.Key()
-	if existing, ok := fl.byKey[key]; ok {
+	// Allow duplicate keys for font ($262) and $387 fragments (per KFX spec)
+	if existing, ok := fl.byKey[key]; ok && f.FType != SymFont {
 		return fmt.Errorf("duplicate fragment key %s (existing: %s)", key, existing)
 	}
 	fl.fragments = append(fl.fragments, f)
 	fl.byType[f.FType] = append(fl.byType[f.FType], f)
-	fl.byKey[key] = f
+	fl.byKey[key] = f // Note: for fonts, this overwrites previous, but that's OK since we use byType
 	return nil
 }
 

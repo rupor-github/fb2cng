@@ -30,7 +30,8 @@ func BuildMetadata(sectionNames sectionNameList) *Fragment {
 
 // BuildBookMetadata creates the $490 book_metadata fragment.
 // This contains categorised metadata: title, author, language, etc.
-func BuildBookMetadata(c *content.Content, cfg *config.DocumentConfig, containerID, coverResourceName string, log *zap.Logger) *Fragment {
+// If fontInfo has a body font, override_kindle_font is set to true.
+func BuildBookMetadata(c *content.Content, cfg *config.DocumentConfig, containerID, coverResourceName string, fontInfo *FontInfo, log *zap.Logger) *Fragment {
 	// Kindle title metadata
 	titleMetadata := make([]any, 0)
 
@@ -56,8 +57,9 @@ func BuildBookMetadata(c *content.Content, cfg *config.DocumentConfig, container
 		titleMetadata = append(titleMetadata, NewMetadataEntry("cover_image", coverResourceName))
 	}
 	// Common boolean flags present in reference output.
+	// override_kindle_font is true when embedded fonts are used for body text.
 	titleMetadata = append(titleMetadata, NewMetadataEntry("is_sample", false))
-	titleMetadata = append(titleMetadata, NewMetadataEntry("override_kindle_font", false))
+	titleMetadata = append(titleMetadata, NewMetadataEntry("override_kindle_font", fontInfo.HasBodyFont()))
 
 	// Title
 	title := c.Book.Description.TitleInfo.BookTitle.Value
@@ -153,7 +155,8 @@ func BuildBookMetadata(c *content.Content, cfg *config.DocumentConfig, container
 
 // BuildDocumentData creates the $538 document_data fragment.
 // This contains reading orders and global reading defaults.
-func BuildDocumentData(sectionNames sectionNameList, maxID int) *Fragment {
+// If fontInfo has a body font, the font_family ($11) field is included.
+func BuildDocumentData(sectionNames sectionNameList, maxID int, fontInfo *FontInfo) *Fragment {
 	// Build reading order with section list as symbol references
 	sections := make([]any, 0, len(sectionNames))
 	for _, name := range sectionNames {
@@ -165,8 +168,8 @@ func BuildDocumentData(sectionNames sectionNameList, maxID int) *Fragment {
 	// Use a string-keyed map because KP3 includes a non-$ field name: "max_id".
 	// This will be added to the local symbol table automatically.
 	docData := map[string]any{
-		"$16":    DimensionValue(1.0, SymUnitEm),
-		"$42":    DimensionValue(1.2, SymUnitEm),
+		"$16":    DimensionValue(DefaultFontSizeEm, SymUnitEm),   // font_size: default 1em
+		"$42":    DimensionValue(DefaultLineHeightEm, SymUnitEm), // line_height: default 1.2em
 		"$112":   SymbolValue(SymAuto),
 		"$192":   SymbolValue(SymLtr),
 		"$436":   SymbolValue(SymEnabled),
@@ -174,6 +177,11 @@ func BuildDocumentData(sectionNames sectionNameList, maxID int) *Fragment {
 		"$560":   SymbolValue(SymHorizontalTb),
 		"$169":   []any{readingOrder},
 		"max_id": int64(maxID),
+	}
+
+	// Add font_family when body font is specified
+	if fontInfo.HasBodyFont() {
+		docData["$11"] = fontInfo.GetKFXFontFamily()
 	}
 
 	return NewRootFragment(SymDocumentData, docData)

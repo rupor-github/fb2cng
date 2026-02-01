@@ -278,8 +278,11 @@ func (c *Converter) convertProperty(name string, value CSSValue, props map[KFXSy
 		}
 
 	case "font-family":
-		// Font family is stored as string, actual font resolution is separate
-		c.mergeProp(props, SymFontFamily, value.Raw)
+		// Transform CSS font-family to KFX format (strip quotes, add nav- prefix)
+		kfxFamily := ToKFXFontFamily(value.Raw)
+		if kfxFamily != "" {
+			c.mergeProp(props, SymFontFamily, kfxFamily)
+		}
 
 	case "font-size":
 		// Handle keyword values first
@@ -892,7 +895,7 @@ func (c *Converter) detectDropcapPatterns(sheet *Stylesheet) map[string]dropcapC
 
 		result[parentName] = dropcapConfig{chars: 1, lines: lines}
 
-		c.log.Debug("detected drop cap pattern",
+		c.log.Debug("Detected drop cap pattern",
 			zap.String("parent", parentName),
 			zap.Float64("font-size", fontSize.Value),
 			zap.String("unit", fontSize.Unit),

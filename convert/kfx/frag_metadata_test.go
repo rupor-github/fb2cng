@@ -41,7 +41,7 @@ func TestBuildBookMetadata_Transliterate(t *testing.T) {
 			},
 		}
 
-		frag := BuildBookMetadata(c, cfg, "container-id", "cover.jpg", log)
+		frag := BuildBookMetadata(c, cfg, "container-id", "cover.jpg", nil, log)
 		if frag == nil {
 			t.Fatal("Expected fragment, got nil")
 		}
@@ -73,7 +73,7 @@ func TestBuildBookMetadata_Transliterate(t *testing.T) {
 			},
 		}
 
-		frag := BuildBookMetadata(c, cfg, "container-id", "cover.jpg", log)
+		frag := BuildBookMetadata(c, cfg, "container-id", "cover.jpg", nil, log)
 		if frag == nil {
 			t.Fatal("Expected fragment, got nil")
 		}
@@ -128,7 +128,7 @@ func TestBuildBookMetadata_TitleTemplate(t *testing.T) {
 			},
 		}
 
-		frag := BuildBookMetadata(c, cfg, "", "", log)
+		frag := BuildBookMetadata(c, cfg, "", "", nil, log)
 		metadata := extractTitleMetadata(t, frag)
 
 		title, ok := metadata["title"]
@@ -164,7 +164,7 @@ func TestBuildBookMetadata_TitleTemplate(t *testing.T) {
 			},
 		}
 
-		frag := BuildBookMetadata(c, cfg, "", "", log)
+		frag := BuildBookMetadata(c, cfg, "", "", nil, log)
 		metadata := extractTitleMetadata(t, frag)
 
 		title, ok := metadata["title"]

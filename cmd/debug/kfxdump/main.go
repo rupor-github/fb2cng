@@ -22,7 +22,7 @@ import (
 func main() {
 	all := flag.Bool("all", false, "enable all dump flags (-dump, -resources, -styles, -storyline)")
 	dump := flag.Bool("dump", false, "dump all fragments into <file>-dump.txt")
-	resources := flag.Bool("resources", false, "dump $417 (bcRawMedia) raw bytes into <file>-resources.zip")
+	resources := flag.Bool("resources", false, "dump $417/$418 raw bytes into <file>-resources.zip")
 	styles := flag.Bool("styles", false, "dump $157 (style) fragments into <file>-styles.txt")
 	storyline := flag.Bool("storyline", false, "dump $259 (storyline) fragments into <file>-storyline.txt with expanded symbols and styles")
 	margins := flag.Bool("margins", false, "dump vertical margin tree into <file>-margins.txt for easy comparison")
@@ -1725,7 +1725,7 @@ func dumpResources(container *kfx.Container, inPath, outDir string, overwrite bo
 
 	usedNames := make(map[string]int)
 	written := 0
-	for _, frag := range container.Fragments.GetByType(kfx.SymRawMedia) {
+	for _, frag := range append(container.Fragments.GetByType(kfx.SymRawMedia), container.Fragments.GetByType(kfx.SymRawFont)...) {
 		blob, ok := asBlob(frag.Value)
 		if !ok || len(blob) == 0 {
 			continue
@@ -1743,6 +1743,9 @@ func dumpResources(container *kfx.Container, inPath, outDir string, overwrite bo
 		idPrefix := fmt.Sprintf("%d", frag.FID)
 		if idName != "" {
 			idPrefix += "_" + sanitizeFileComponent(idName)
+		}
+		if frag.FType == kfx.SymRawFont {
+			idPrefix += "_font"
 		}
 
 		ext := extFromFiletype(blob)

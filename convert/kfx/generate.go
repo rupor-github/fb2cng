@@ -91,8 +91,16 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 		tracer = NewStyleTracer(c.WorkDir)
 	}
 
-	// Create style registry from CSS stylesheets
-	styles := buildStyleRegistry(c.Book.Stylesheets, tracer, log)
+	// Create style registry from CSS stylesheets and get parsed CSS for font extraction
+	styles, parsedCSS := buildStyleRegistry(c.Book.Stylesheets, tracer, log)
+
+	// Build font info from stylesheets (for embedded fonts)
+	fontInfo := BuildFontInfo(c.Book.Stylesheets, parsedCSS, log)
+	if fontInfo.HasBodyFont() {
+		log.Debug("Detected embedded body font", zap.String("family", fontInfo.BodyFontFamily))
+		// Tell style registry to replace body font family with "default" in styles
+		styles.SetBodyFontFamily(fontInfo.BodyFontFamily)
+	}
 
 	usedIDs := collectUsedImageIDs(c.Book)
 	usedImages := make(fb2.BookImages, len(usedIDs))
@@ -146,7 +154,7 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	}
 
 	// $490 Book Metadata - categorised metadata (title, author, language, etc.)
-	bookMetadataFrag := BuildBookMetadata(c, cfg, container.ContainerID, coverResName, log)
+	bookMetadataFrag := BuildBookMetadata(c, cfg, container.ContainerID, coverResName, fontInfo, log)
 	if err := container.Fragments.Add(bookMetadataFrag); err != nil {
 		return err
 	}
@@ -178,7 +186,7 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 
 	// $538 DocumentData - reading orders with sections + global defaults
 	maxID := nextEID - 1
-	docDataFrag := BuildDocumentData(sectionNames, maxID)
+	docDataFrag := BuildDocumentData(sectionNames, maxID, fontInfo)
 	if err := container.Fragments.Add(docDataFrag); err != nil {
 		return err
 	}
@@ -218,6 +226,21 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 		}
 	}
 	for _, frag := range rawMedia {
+		if err := container.Fragments.Add(frag); err != nil {
+			return err
+		}
+	}
+
+	// $262 Font + $418 bcRawFont (embedded fonts)
+	// Start font resource index after image resources to avoid location collisions
+	fontStartIndex := len(rawMedia) + 1
+	fontFrags, rawFontFrags := BuildFontFragments(fontInfo, fontStartIndex)
+	for _, frag := range fontFrags {
+		if err := container.Fragments.Add(frag); err != nil {
+			return err
+		}
+	}
+	for _, frag := range rawFontFrags {
 		if err := container.Fragments.Add(frag); err != nil {
 			return err
 		}
@@ -500,13 +523,14 @@ func collectLinkTargets(fragments *FragmentList) map[string]bool {
 // It parses the CSS, converts rules to KFX style definitions, and registers them.
 // Falls back to default styles if no stylesheets are provided.
 // If tracer is non-nil, style operations will be logged to the trace.
-func buildStyleRegistry(stylesheets []fb2.Stylesheet, tracer *StyleTracer, log *zap.Logger) *StyleRegistry {
+// Returns both the registry and the parsed stylesheet (for font extraction).
+func buildStyleRegistry(stylesheets []fb2.Stylesheet, tracer *StyleTracer, log *zap.Logger) (*StyleRegistry, *Stylesheet) {
 	// If no stylesheets, return defaults
 	if len(stylesheets) == 0 {
 		log.Debug("No stylesheets provided, using defaults only")
 		sr := DefaultStyleRegistry()
 		sr.SetTracer(tracer)
-		return sr
+		return sr, nil
 	}
 
 	log.Debug("Processing stylesheets", zap.Int("count", len(stylesheets)))
@@ -533,8 +557,12 @@ func buildStyleRegistry(stylesheets []fb2.Stylesheet, tracer *StyleTracer, log *
 		log.Debug("No CSS data in stylesheets, using defaults only")
 		sr := DefaultStyleRegistry()
 		sr.SetTracer(tracer)
-		return sr
+		return sr, nil
 	}
+
+	// Parse CSS for font extraction
+	parser := NewParser(log)
+	parsedCSS := parser.Parse(combinedCSS)
 
 	// Create registry from CSS
 	registry, warnings := NewStyleRegistryFromCSS(combinedCSS, tracer, log)
@@ -548,7 +576,7 @@ func buildStyleRegistry(stylesheets []fb2.Stylesheet, tracer *StyleTracer, log *
 		zap.Int("stylesheets", len(stylesheets)),
 		zap.Int("warnings", len(warnings)))
 
-	return registry
+	return registry, parsedCSS
 }
 
 const charsetCR = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"

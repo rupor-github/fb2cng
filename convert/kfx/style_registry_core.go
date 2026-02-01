@@ -13,6 +13,8 @@ type StyleRegistry struct {
 	tracer *StyleTracer // Optional tracer for debugging style resolution
 
 	externalLinks *ExternalLinkRegistry // Tracks external link URLs -> anchor IDs
+
+	bodyFontFamily string // Body font family name (e.g., "paragraph") for "default" substitution
 }
 
 // NewStyleRegistry creates a new style registry.
@@ -36,6 +38,13 @@ func (sr *StyleRegistry) SetTracer(t *StyleTracer) {
 // Tracer returns the style tracer, or nil if none is set.
 func (sr *StyleRegistry) Tracer() *StyleTracer {
 	return sr.tracer
+}
+
+// SetBodyFontFamily sets the body font family name for "default" substitution.
+// When BuildFragments converts styles, font-family values matching the body font
+// will be replaced with "default" (as KP3 does).
+func (sr *StyleRegistry) SetBodyFontFamily(family string) {
+	sr.bodyFontFamily = family
 }
 
 // RegisterExternalLink registers an external URL and returns its anchor ID.

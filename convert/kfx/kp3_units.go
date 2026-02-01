@@ -57,11 +57,22 @@ const (
 	// Observed in KP3 reference output for testdata/_Test.fb2.
 	SectionTitleHeaderLineHeightLh = 0.982323
 
+	// DefaultFontSizeEm is the default font-size in document_data ($16).
+	// KP3 uses 1em as the base font size for the document.
+	DefaultFontSizeEm = 1.0
+
+	// DefaultLineHeightEm is the default line-height in document_data ($42).
+	// KP3 uses 1.2em as the base line height, which equals LineHeightRatio.
+	// This value appears in document_data and defines the relationship
+	// between em and lh units throughout the document.
+	DefaultLineHeightEm = 1.2
+
 	// LineHeightRatio is the assumed line-height multiplier (1lh = 1.2em).
 	// Used to convert em → lh for vertical spacing properties.
 	// Example: 0.3em CSS → 0.25lh KFX (0.3 / 1.2 = 0.25)
 	// KP3 uses 1.2em as the base line-height for vertical margin calculations.
-	LineHeightRatio = 1.2
+	// This value must match DefaultLineHeightEm.
+	LineHeightRatio = DefaultLineHeightEm
 
 	// KP3BaseWidthEm is the base content width in em units used by KP3 for horizontal
 	// calculations. KP3 assumes a viewport of 32em for horizontal-tb writing mode.

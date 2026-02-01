@@ -150,6 +150,8 @@ func (sr *StyleRegistry) BuildFragments() []*Fragment {
 		resolved.Properties = stripZeroMargins(resolved.Properties)
 		// Convert any remaining em font-sizes to rem before other adjustments
 		resolved.Properties = normalizeFontSizeUnits(resolved.Properties)
+		// Replace body font family with "default" (as KP3 does)
+		resolved.Properties = sr.normalizeFontFamily(resolved.Properties)
 		if sr.hasInlineUsage(name) && !sr.hasTextUsage(name) {
 			// Inline-only styles (style events) may need line-height adjustment
 			// for sub/sup with different font-size, but should NOT get default
@@ -178,6 +180,34 @@ func (sr *StyleRegistry) BuildFragments() []*Fragment {
 		fragments = append(fragments, BuildStyle(resolved))
 	}
 	return fragments
+}
+
+// normalizeFontFamily handles font-family for styles when a body font is set.
+// KP3 uses "default" in styles to reference the document's default font.
+// - If font-family matches body font → replace with "default"
+// - If font-family is different (e.g., dropcaps) → keep as-is
+// - If no font-family set → add "default" to inherit body font
+// If no body font family is set, returns properties unchanged.
+func (sr *StyleRegistry) normalizeFontFamily(props map[KFXSymbol]any) map[KFXSymbol]any {
+	if sr.bodyFontFamily == "" {
+		return props
+	}
+
+	bodyFamilyKFX := ToKFXFontFamily(sr.bodyFontFamily)
+
+	if fontFamily, ok := props[SymFontFamily]; ok {
+		if familyStr, isString := fontFamily.(string); isString {
+			// Check if this is the body font family (nav-prefixed version)
+			if familyStr == bodyFamilyKFX {
+				props[SymFontFamily] = "default"
+			}
+			// else: keep non-body font as-is (e.g., nav-dropcaps)
+		}
+	} else {
+		// No font-family set - add "default" to inherit body font
+		props[SymFontFamily] = "default"
+	}
+	return props
 }
 
 // DefaultStyleRegistry returns a registry with default HTML element styles for KFX.

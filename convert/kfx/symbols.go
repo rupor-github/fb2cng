@@ -28,6 +28,7 @@ const (
 	SymFontFamily              KFXSymbol = 11  // font_family
 	SymFontStyle               KFXSymbol = 12  // font_style
 	SymFontWeight              KFXSymbol = 13  // font_weight
+	SymFontStretch             KFXSymbol = 15  // font_stretch
 	SymFontSize                KFXSymbol = 16  // font_size
 	SymTextColor               KFXSymbol = 19  // text_color
 	SymTextBackgroundColor     KFXSymbol = 21  // text_background_color
@@ -184,6 +185,8 @@ const (
 	SymMetadata       KFXSymbol = 258 // metadata
 	SymStoryline      KFXSymbol = 259 // storyline
 	SymSection        KFXSymbol = 260 // section
+	SymStyleGroup     KFXSymbol = 261 // style_group
+	SymFont           KFXSymbol = 262 // font
 
 	// Content types ($269-$282)
 	SymText      KFXSymbol = 269 // text

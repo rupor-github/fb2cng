@@ -68,12 +68,17 @@ Resources are placed based on MIME type:
     body {
         font-family:"paragraph";
     }
-    .dropcap {
+    p.has-dropcap {
+        text-indent: 0;
+        margin: 0 0 0.4em 0;
+    }
+
+    p.has-dropcap .dropcap {
         font-family: "dropcaps";
-        font-weight: bold;
-        font-size: 3.5em;
         float: left;
-        margin-top: -0.1em 0.1em -0.1em;
+        font-size: 3.2em;
+        line-height: 1;
+        font-weight: bold;
         padding-right: 0.1em;
     }
 
