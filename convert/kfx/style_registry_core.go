@@ -169,11 +169,15 @@ func (sr *StyleRegistry) Register(def StyleDef) {
 	// Preserve DescendantReplacement flag (true if either has it)
 	descReplacement := existing.DescendantReplacement || def.DescendantReplacement
 
+	// Later CSS rules override Hidden flag (CSS cascade)
+	hidden := def.Hidden || existing.Hidden
+
 	sr.styles[def.Name] = StyleDef{
 		Name:                  def.Name,
 		Parent:                parent,
 		Properties:            merged,
 		DescendantReplacement: descReplacement,
+		Hidden:                hidden,
 	}
 	sr.tracer.TraceRegister(def.Name+" (merged)", merged)
 }
@@ -190,6 +194,16 @@ func (sr *StyleRegistry) Get(name string) (StyleDef, bool) {
 func (sr *StyleRegistry) IsDescendantReplacement(name string) bool {
 	if def, ok := sr.styles[name]; ok {
 		return def.DescendantReplacement
+	}
+	return false
+}
+
+// IsHidden returns true if the named style has CSS "display: none".
+// This is used to skip generating content that would be hidden by CSS
+// (e.g., footnote-more indicator when .footnote-more { display: none }).
+func (sr *StyleRegistry) IsHidden(name string) bool {
+	if def, ok := sr.styles[name]; ok {
+		return def.Hidden
 	}
 	return false
 }

@@ -737,8 +737,10 @@ func processFootnoteSectionContent(
 	}
 
 	// Count paragraphs in section content to determine if "more" indicator is needed
+	// Skip if footnote-more style has display: none in CSS
 	paragraphCount := countFootnoteParagraphs(section.Content)
-	needMoreIndicator := paragraphCount > 1 && c.MoreParaStr != "" && addMoreIndicator != nil
+	moreIndicatorHidden := styles != nil && styles.IsHidden("footnote-more")
+	needMoreIndicator := paragraphCount > 1 && c.MoreParaStr != "" && addMoreIndicator != nil && !moreIndicatorHidden
 	isFirstParagraph := true
 
 	// Process section content (paragraphs, poems, etc.)

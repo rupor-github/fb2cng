@@ -45,13 +45,24 @@ func (m *StyleMapper) MapStylesheet(sheet *Stylesheet) ([]StyleDef, []string) {
 		props, warnings := m.MapRule(rule.Selector, rule.Properties)
 		allWarnings = append(allWarnings, warnings...)
 
-		if len(props) == 0 {
+		// Check if CSS has display: none (style should be hidden)
+		// This must be checked BEFORE skipping empty props, because display: none
+		// is not converted to KFX but we still need to track it for hiding content.
+		isHidden := false
+		if v, ok := rule.Properties["display"]; ok && v.Keyword == "none" {
+			isHidden = true
+		}
+
+		// Skip rules with no KFX properties, unless they have display: none
+		// (which we need to track for content hiding)
+		if len(props) == 0 && !isHidden {
 			continue
 		}
 
 		style := StyleDef{
 			Name:       rule.Selector.StyleName(),
 			Properties: props,
+			Hidden:     isHidden,
 		}
 
 		if rule.Selector.Ancestor != nil && style.Parent == "" {
@@ -76,6 +87,8 @@ func (m *StyleMapper) MapStylesheet(sheet *Stylesheet) ([]StyleDef, []string) {
 			// earlier ones, they don't accumulate. The stylelist rules are for runtime style
 			// merging, not CSS cascade behavior.
 			mergeAllOverride(existing.Properties, style.Properties)
+			// Update Hidden flag - later rules override earlier ones
+			existing.Hidden = style.Hidden
 		} else {
 			styleCopy := style
 			styleMap[style.Name] = &styleCopy

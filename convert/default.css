@@ -2,6 +2,8 @@
 p {
     text-indent: 1em;
     text-align: justify;
+    /* For Kindles no need for separate space between paragraphs, latest kindle
+     * knows how to do it */
     margin: 0;
 }
 @media amzn-mobi {
@@ -381,17 +383,19 @@ td {
     text-indent: 0;
     margin: 0.2em 0;
 }
+
 /* "More" indicator for floating footnotes */
-/* if you do not want it - make sure this rule is uuncommented and next one is commented */
-/* .footnote-more { */
-/*     display: none; */
-/* } */
-/* if you want it - make sure this rule is uuncommented and previous one is commented */
-/* usially make sence to keep this rule in sync with .link-backlink style */
-.footnote-more {
-    text-decoration: none;
-    font-weight: bold;
-    color: gray;
+@media not amzn-et {
+    .footnote-more {
+        text-decoration: none;
+        font-weight: bold;
+        color: gray;
+    }
+}
+@media amzn-et {
+    .footnote-more {
+        display: none;
+    }
 }
 
 /* Links and hyperlink styles */

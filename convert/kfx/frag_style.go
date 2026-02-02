@@ -102,6 +102,11 @@ type StyleDef struct {
 	// heading-context version should inherit font-size from the heading rather than
 	// using the base class's explicit font-size.
 	DescendantReplacement bool
+
+	// Hidden is true if CSS has "display: none" for this style.
+	// While KFX doesn't output the display property, this flag is used to skip
+	// generating content that would be styled with this class (e.g., footnote-more indicator).
+	Hidden bool
 }
 
 type styleUsage uint8

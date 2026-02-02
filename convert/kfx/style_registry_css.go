@@ -25,7 +25,7 @@ func NewStyleRegistryFromCSS(cssData []byte, tracer *StyleTracer, log *zap.Logge
 	if len(cssData) > 0 {
 		// Parse CSS
 		parser := NewParser(log)
-		sheet := parser.Parse(cssData)
+		sheet := parser.Parse(cssData, "style registry")
 
 		// Convert to KFX styles (includes drop cap detection)
 		styles, cssWarnings := mapper.MapStylesheet(sheet)

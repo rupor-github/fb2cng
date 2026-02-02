@@ -26,10 +26,16 @@ func NewParser(log *zap.Logger) *Parser {
 }
 
 // Parse parses CSS text into a Stylesheet.
-func (p *Parser) Parse(data []byte) *Stylesheet {
+// The optional source parameter identifies what's being parsed (for debug logging).
+func (p *Parser) Parse(data []byte, source ...string) *Stylesheet {
 	sheet := &Stylesheet{
 		Rules:    make([]CSSRule, 0),
 		Warnings: make([]string, 0),
+	}
+
+	// Log parsing start with source identifier if provided
+	if len(source) > 0 && source[0] != "" {
+		p.log.Debug("Parsing CSS", zap.String("source", source[0]), zap.Int("bytes", len(data)))
 	}
 
 	input := parse.NewInput(bytes.NewReader(data))

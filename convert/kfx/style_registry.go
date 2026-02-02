@@ -748,6 +748,7 @@ func (sr *StyleRegistry) applyKFXEnhancements(name string, def StyleDef) StyleDe
 		Parent:                def.Parent,
 		Properties:            props,
 		DescendantReplacement: def.DescendantReplacement,
+		Hidden:                def.Hidden,
 	}
 }
 
