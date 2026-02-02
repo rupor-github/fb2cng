@@ -411,6 +411,13 @@ td {
     font-size: 0.8em;
     vertical-align: super;
 }
+/* Footnote link decorations, only "content" is supported for Kindle devices */
+/* .link-footnote::before { */
+/*     content: "[" */
+/* } */
+/* .link-footnote::after { */
+/*     content: "]" */
+/* } */
 .link-toc {
     text-decoration: none;
 }

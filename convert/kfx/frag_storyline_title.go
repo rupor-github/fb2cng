@@ -117,16 +117,12 @@ func addTitleAsHeading(c *content.Content, title *fb2.Title, ctx StyleContext, h
 		}
 
 		// Track position for style event using rune count (KFX uses character offsets).
-		// Use ContentStartOffset to account for pending space that may be written
-		// before this text content - the style event should point to where the
-		// styled content actually starts, not including the preceding space.
-		// When seg.Text is empty (structured elements like <strong>text</strong>),
-		// we need to look at what the first child will write.
-		startText := seg.Text
-		if startText == "" && len(seg.Children) > 0 {
-			startText = findFirstText(seg)
-		}
+		// Use GetPseudoStartText to account for ::before content.
+		startText := GetPseudoStartText(seg, segStyle, styles)
 		start := nw.ContentStartOffset(startText)
+
+		// Inject ::before content (inherits styling from base element)
+		InjectPseudoBefore(segStyle, styles, nw)
 
 		// Add text content (normalizingWriter handles whitespace and rune counting)
 		nw.WriteString(seg.Text)
@@ -155,6 +151,12 @@ func addTitleAsHeading(c *content.Content, title *fb2.Title, ctx StyleContext, h
 		// Use RuneCountAfterPendingSpace to include trailing whitespace inside
 		// the styled element. KP3 includes such whitespace in the style span.
 		end := nw.RuneCountAfterPendingSpace()
+
+		// Inject ::after content (inherits styling from base element)
+		// Always update end to include ::after in the main style span
+		if InjectPseudoAfter(segStyle, styles, nw) {
+			end = nw.RuneCountAfterPendingSpace()
+		}
 
 		// Create style event if we have styled content
 		if segStyle != "" && end > start {

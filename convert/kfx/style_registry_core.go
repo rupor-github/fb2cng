@@ -15,6 +15,12 @@ type StyleRegistry struct {
 	externalLinks *ExternalLinkRegistry // Tracks external link URLs -> anchor IDs
 
 	bodyFontFamily string // Body font family name (e.g., "paragraph") for "default" substitution
+
+	// pseudoContent stores the CSS 'content' property value for pseudo-element styles.
+	// Key is the base style name (e.g., "inlinenote"), value contains before/after text.
+	// This is used to inject ::before/::after content into text since KFX doesn't support
+	// CSS pseudo-elements natively.
+	pseudoContent map[string]*PseudoElementContent
 }
 
 // NewStyleRegistry creates a new style registry.

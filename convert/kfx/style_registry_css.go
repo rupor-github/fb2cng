@@ -23,6 +23,10 @@ func NewStyleRegistryFromCSS(sheet *Stylesheet, tracer *StyleTracer, log *zap.Lo
 	warnings := make([]string, 0)
 
 	if sheet != nil && len(sheet.Rules) > 0 {
+		// Extract pseudo-element content BEFORE conversion (content property is not converted to KFX)
+		pseudoWarnings := sr.extractPseudoContent(sheet)
+		warnings = append(warnings, pseudoWarnings...)
+
 		// Convert to KFX styles (includes drop cap detection)
 		styles, cssWarnings := mapper.MapStylesheet(sheet)
 		warnings = append(warnings, cssWarnings...)
@@ -33,7 +37,8 @@ func NewStyleRegistryFromCSS(sheet *Stylesheet, tracer *StyleTracer, log *zap.Lo
 		log.Debug("CSS styles loaded",
 			zap.Int("rules", len(sheet.Rules)),
 			zap.Int("styles", len(styles)),
-			zap.Int("warnings", len(cssWarnings)))
+			zap.Int("warnings", len(cssWarnings)),
+			zap.Int("pseudo_content", len(sr.pseudoContent)))
 	}
 
 	// Register programmatic descendant selectors.

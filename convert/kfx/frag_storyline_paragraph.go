@@ -150,6 +150,10 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 	//
 	// imageOnlyBlock (defined above) indicates this is an image-only paragraph where the image
 	// should inherit block-level styling (margins, break properties) from the paragraph style.
+	//
+	// Pseudo-element content (::before/::after): When a segment has a named style with registered
+	// pseudo-element content, the text is injected inline with separate style events for the
+	// injected content. This implements CSS pseudo-elements since KFX doesn't support them natively.
 	spanningStyleParts := strings.Fields(spanningStyle)
 	var walk func(seg *fb2.InlineSegment, styleContext []inlineStyleInfo, spanningDepth int)
 	walk = func(seg *fb2.InlineSegment, styleContext []inlineStyleInfo, spanningDepth int) {
@@ -230,16 +234,12 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 		}
 
 		// Track position for style event using rune count (KFX uses character offsets).
-		// Use ContentStartOffset to account for pending space that may be written
-		// before this text content - the style event should point to where the
-		// styled content actually starts, not including the preceding space.
-		// When seg.Text is empty (structured elements like <strong>text</strong>),
-		// we need to look at what the first child will write.
-		startText := seg.Text
-		if startText == "" && len(seg.Children) > 0 {
-			startText = findFirstText(seg)
-		}
+		// Use GetPseudoStartText to account for ::before content.
+		startText := GetPseudoStartText(seg, segStyle, styles)
 		start := nw.ContentStartOffset(startText)
+
+		// Inject ::before content (inherits styling from base element)
+		InjectPseudoBefore(segStyle, styles, nw)
 
 		// Add text content (normalizingWriter handles whitespace and rune counting)
 		nw.WriteString(seg.Text)
@@ -275,6 +275,12 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 		// E.g., for <sup>\n  <a>1.17</a>\n</sup>, the sup span should include
 		// the trailing whitespace after </a> but before </sup>.
 		end := nw.RuneCountAfterPendingSpace()
+
+		// Inject ::after content (inherits styling from base element)
+		// Always update end to include ::after in the main style span
+		if InjectPseudoAfter(segStyle, styles, nw) {
+			end = nw.RuneCountAfterPendingSpace()
+		}
 
 		// Create style event if we have styled content
 		// Skip if this style was already merged into block style (spanningDepth tracks this)
@@ -523,10 +529,30 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 			}
 		}
 
+		// Check for pseudo-element content (::before/::after) for named styles.
+		// This injects text content at the start and/or end of the styled segment.
+		var pseudoContent *PseudoElementContent
+		if segStyle != "" && styles != nil {
+			pseudoContent = styles.GetPseudoContentForClass(segStyle)
+		}
+
 		// Track position for style event using rune count (cumulative across flushes).
 		// Include inline image count since images occupy virtual positions.
-		start := cumulativeRuneCount + inlineImageCount + nw.RuneCount()
+		// If we have ::before content, that's what starts first
+		startText := seg.Text
+		if startText == "" && len(seg.Children) > 0 {
+			startText = findFirstText(seg)
+		}
+		if pseudoContent != nil && pseudoContent.Before != "" {
+			startText = pseudoContent.Before
+		}
+		start := cumulativeRuneCount + inlineImageCount + nw.ContentStartOffset(startText)
 		startImageCount := inlineImageCount
+
+		// Inject ::before content (inherits styling from base element)
+		if pseudoContent != nil && pseudoContent.Before != "" {
+			nw.WriteString(pseudoContent.Before)
+		}
 
 		// Add text content
 		nw.WriteString(seg.Text)
@@ -573,6 +599,13 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 		// Include images added during children processing.
 		imagesDelta := inlineImageCount - startImageCount
 		end := cumulativeRuneCount + inlineImageCount + nw.RuneCountAfterPendingSpace()
+
+		// Inject ::after content (inherits styling from base element)
+		// Always update end to include ::after in the main style span
+		if pseudoContent != nil && pseudoContent.After != "" {
+			nw.WriteString(pseudoContent.After)
+			end = cumulativeRuneCount + inlineImageCount + nw.RuneCountAfterPendingSpace()
+		}
 
 		// Create style event if we have styled content
 		isSpanningStyle := spanningDepth < len(spanningStyleParts) && segStyle == spanningStyleParts[spanningDepth]

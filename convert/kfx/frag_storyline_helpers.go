@@ -228,59 +228,23 @@ func processMixedInlineSegments(
 			return
 		}
 
-		// Determine style for this segment based on its kind
-		var segStyle string
-		var isLink bool
-		var linkTo string
-		var isFootnoteLink bool
+		// Determine style for this segment
+		segStyle, isLink, linkTo, isFootnoteLink, backlinkRefID := SegmentStyle(seg, c, styles)
+		if backlinkRefID != "" {
+			backlinkRefIDs = append(backlinkRefIDs, backlinkRefID)
+		}
 
-		switch seg.Kind {
-		case fb2.InlineStrong:
-			segStyle = "strong"
-		case fb2.InlineEmphasis:
-			segStyle = "emphasis"
-		case fb2.InlineStrikethrough:
-			segStyle = "strikethrough"
-		case fb2.InlineSub:
-			segStyle = "sub"
-		case fb2.InlineSup:
-			segStyle = "sup"
-		case fb2.InlineCode:
-			segStyle = "code"
+		if seg.Kind == fb2.InlineCode {
 			nw.SetPreserveWhitespace(true)
-		case fb2.InlineNamedStyle:
-			segStyle = seg.Style
-		case fb2.InlineLink:
-			isLink = true
-			if after, found := strings.CutPrefix(seg.Href, "#"); found {
-				linkTo = after
-				if _, isNote := c.FootnotesIndex[linkTo]; isNote {
-					segStyle = "link-footnote"
-					isFootnoteLink = true
-					// Register this footnote reference for backlink generation
-					ref := c.AddFootnoteBackLinkRef(linkTo)
-					// Collect RefID to return to caller for EID registration
-					backlinkRefIDs = append(backlinkRefIDs, ref.RefID)
-				} else {
-					segStyle = "link-internal"
-				}
-			} else {
-				segStyle = "link-external"
-				linkTo = styles.RegisterExternalLink(seg.Href)
-			}
 		}
 
 		// Track position for style event using rune count.
-		// Use ContentStartOffset to account for pending space that may be written
-		// before this text content - the style event should point to where the
-		// styled content actually starts, not including the preceding space.
-		// When seg.Text is empty (structured elements like <strong>text</strong>),
-		// we need to look at what the first child will write.
-		startText := seg.Text
-		if startText == "" && len(seg.Children) > 0 {
-			startText = findFirstText(seg)
-		}
+		// Use GetPseudoStartText to account for ::before content.
+		startText := GetPseudoStartText(seg, segStyle, styles)
 		start := nw.ContentStartOffset(startText)
+
+		// Inject ::before content (inherits styling from base element)
+		InjectPseudoBefore(segStyle, styles, nw)
 
 		// Add text content
 		nw.WriteString(seg.Text)
@@ -309,6 +273,12 @@ func processMixedInlineSegments(
 		// Use RuneCountAfterPendingSpace to include trailing whitespace inside
 		// the styled element. KP3 includes such whitespace in the style span.
 		end := nw.RuneCountAfterPendingSpace()
+
+		// Inject ::after content (inherits styling from base element)
+		// Always update end to include ::after in the main style span
+		if InjectPseudoAfter(segStyle, styles, nw) {
+			end = nw.RuneCountAfterPendingSpace()
+		}
 
 		// Create style event if we have styled content
 		if segStyle != "" && end > start {
