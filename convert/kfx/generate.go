@@ -129,6 +129,11 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 		}
 	}
 
+	// Apply OpenFromCover setting: if enabled and cover exists, start reading from cover
+	if cfg.OpenFromCover && landmarks.CoverEID > 0 {
+		landmarks.StartEID = landmarks.CoverEID
+	}
+
 	posItems := CollectPositionItems(contentFragments, sectionNames, chapterStartSections)
 	allEIDs := CollectAllEIDs(sectionEIDs)
 	// Prefer actual reading-order EIDs when available.
