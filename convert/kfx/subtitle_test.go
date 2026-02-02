@@ -20,7 +20,7 @@ func TestSectionSubtitleMarginBottom(t *testing.T) {
 }
 `)
 
-	registry, warnings := NewStyleRegistryFromCSS(css, nil, log)
+	registry, warnings := parseAndCreateRegistry(css, nil, log)
 	t.Logf("Warnings: %v", warnings)
 
 	// Get the style definition

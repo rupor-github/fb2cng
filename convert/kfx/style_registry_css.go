@@ -10,11 +10,11 @@ func (sr *StyleRegistry) RegisterFromCSS(styles []StyleDef) {
 	}
 }
 
-// NewStyleRegistryFromCSS creates a style registry from CSS stylesheet data.
+// NewStyleRegistryFromCSS creates a style registry from a pre-parsed CSS stylesheet.
 // It starts with default HTML element styles, overlays styles from CSS,
 // then applies KFX-specific post-processing for Kindle compatibility.
-// Returns the registry and any warnings from CSS parsing/conversion.
-func NewStyleRegistryFromCSS(cssData []byte, tracer *StyleTracer, log *zap.Logger) (*StyleRegistry, []string) {
+// Returns the registry and any warnings from CSS conversion.
+func NewStyleRegistryFromCSS(sheet *Stylesheet, tracer *StyleTracer, log *zap.Logger) (*StyleRegistry, []string) {
 	// Start with HTML element defaults only
 	sr := DefaultStyleRegistry()
 	sr.SetTracer(tracer)
@@ -22,11 +22,7 @@ func NewStyleRegistryFromCSS(cssData []byte, tracer *StyleTracer, log *zap.Logge
 	mapper := NewStyleMapper(log, tracer)
 	warnings := make([]string, 0)
 
-	if len(cssData) > 0 {
-		// Parse CSS
-		parser := NewParser(log)
-		sheet := parser.Parse(cssData, "style registry")
-
+	if sheet != nil && len(sheet.Rules) > 0 {
 		// Convert to KFX styles (includes drop cap detection)
 		styles, cssWarnings := mapper.MapStylesheet(sheet)
 		warnings = append(warnings, cssWarnings...)
@@ -57,6 +53,16 @@ func NewStyleRegistryFromCSS(cssData []byte, tracer *StyleTracer, log *zap.Logge
 	sr.PostProcessForKFX()
 
 	return sr, warnings
+}
+
+// parseAndCreateRegistry is a test helper that parses CSS bytes and creates a registry.
+func parseAndCreateRegistry(cssData []byte, tracer *StyleTracer, log *zap.Logger) (*StyleRegistry, []string) {
+	if len(cssData) == 0 {
+		return NewStyleRegistryFromCSS(nil, tracer, log)
+	}
+	parser := NewParser(log)
+	sheet := parser.Parse(cssData)
+	return NewStyleRegistryFromCSS(sheet, tracer, log)
 }
 
 // registerDescendantSelectors adds programmatic descendant selectors.

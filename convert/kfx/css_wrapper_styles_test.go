@@ -18,7 +18,7 @@ func TestCSSWrapperStylesFromDefaultCSS(t *testing.T) {
 		t.Fatalf("Failed to read default.css: %v", err)
 	}
 
-	registry, warnings := NewStyleRegistryFromCSS(css, nil, log)
+	registry, warnings := parseAndCreateRegistry(css, nil, log)
 	if len(warnings) > 0 {
 		t.Logf("CSS warnings: %v", warnings)
 	}
@@ -223,7 +223,7 @@ func TestCSSContentStylesFromDefaultCSS(t *testing.T) {
 		t.Fatalf("Failed to read default.css: %v", err)
 	}
 
-	registry, _ := NewStyleRegistryFromCSS(css, nil, log)
+	registry, _ := parseAndCreateRegistry(css, nil, log)
 
 	// Test epigraph container
 	t.Run("epigraph container", func(t *testing.T) {
@@ -308,7 +308,7 @@ func TestCSSDescendantSelectorsFromDefaultCSS(t *testing.T) {
 		t.Fatalf("Failed to read default.css: %v", err)
 	}
 
-	registry, _ := NewStyleRegistryFromCSS(css, nil, log)
+	registry, _ := parseAndCreateRegistry(css, nil, log)
 
 	// Test descendant selector for h2 section title page breaks
 	t.Run("section-title h2 descendant selector", func(t *testing.T) {

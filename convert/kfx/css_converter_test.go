@@ -23,7 +23,7 @@ func TestTitleStylesFromCSS(t *testing.T) {
 	}
 
 	log := zap.NewNop()
-	registry, _ := NewStyleRegistryFromCSS(css, nil, log)
+	registry, _ := parseAndCreateRegistry(css, nil, log)
 
 	// Title header styles should have text-align: center from CSS
 	titleStyles := []string{
@@ -554,7 +554,7 @@ func TestNewStyleRegistryFromCSS(t *testing.T) {
 		}
 	`)
 
-	registry, warnings := NewStyleRegistryFromCSS(css, nil, log)
+	registry, warnings := parseAndCreateRegistry(css, nil, log)
 
 	t.Logf("Warnings: %v", warnings)
 
@@ -600,7 +600,7 @@ func TestNewStyleRegistryFromCSS(t *testing.T) {
 func TestNewStyleRegistryFromCSS_Empty(t *testing.T) {
 	log := zap.NewNop()
 
-	registry, warnings := NewStyleRegistryFromCSS(nil, nil, log)
+	registry, warnings := parseAndCreateRegistry(nil, nil, log)
 
 	if len(warnings) != 0 {
 		t.Errorf("expected no warnings for empty CSS, got %v", warnings)
@@ -794,7 +794,7 @@ func TestStyleRegistryBuildFragments(t *testing.T) {
 		.custom { font-weight: bold; }
 	`)
 
-	registry, _ := NewStyleRegistryFromCSS(css, nil, log)
+	registry, _ := parseAndCreateRegistry(css, nil, log)
 
 	// Use StyleContext.Resolve to get resolved style names (base36 format)
 	// This is how styles are typically used in actual code

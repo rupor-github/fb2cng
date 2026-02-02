@@ -560,12 +560,12 @@ func buildStyleRegistry(stylesheets []fb2.Stylesheet, tracer *StyleTracer, log *
 		return sr, nil
 	}
 
-	// Parse CSS for font extraction
+	// Parse CSS once for both font extraction and style registry
 	parser := NewParser(log)
 	parsedCSS := parser.Parse(combinedCSS, "combined stylesheets")
 
-	// Create registry from CSS
-	registry, warnings := NewStyleRegistryFromCSS(combinedCSS, tracer, log)
+	// Create registry from parsed CSS
+	registry, warnings := NewStyleRegistryFromCSS(parsedCSS, tracer, log)
 
 	// Log warnings at debug level
 	for _, w := range warnings {

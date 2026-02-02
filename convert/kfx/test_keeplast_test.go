@@ -15,7 +15,7 @@ func TestKeepLastType(t *testing.T) {
 }
 `)
 
-	registry, _ := NewStyleRegistryFromCSS(css, nil, log)
+	registry, _ := parseAndCreateRegistry(css, nil, log)
 	def, ok := registry.Get("section-subtitle")
 	if !ok {
 		t.Fatal("section-subtitle not found!")

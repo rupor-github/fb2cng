@@ -125,7 +125,7 @@ func TestInferParentStyleWithCSS(t *testing.T) {
 		}
 	`)
 
-	sr, _ := NewStyleRegistryFromCSS(css, nil, log)
+	sr, _ := parseAndCreateRegistry(css, nil, log)
 
 	// Now "subtitle" exists from CSS, so inferParentStyle should find it
 	// Unknown styles have no parent (line-height added in BuildFragments)

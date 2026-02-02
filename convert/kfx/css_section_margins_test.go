@@ -16,7 +16,7 @@ func TestSectionContainerMarginsFromDefaultCSS(t *testing.T) {
 		t.Fatalf("Failed to read default.css: %v", err)
 	}
 
-	registry, _ := NewStyleRegistryFromCSS(css, nil, log)
+	registry, _ := parseAndCreateRegistry(css, nil, log)
 
 	def, ok := registry.Get("section")
 	if !ok {

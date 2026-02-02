@@ -16,7 +16,7 @@ func TestEmptyLineMarginValue(t *testing.T) {
     margin: 1em;
 }
 `)
-	registry, warnings := NewStyleRegistryFromCSS(cssContent, nil, log)
+	registry, warnings := parseAndCreateRegistry(cssContent, nil, log)
 	if len(warnings) > 0 {
 		t.Logf("CSS Warnings: %v", warnings)
 	}
@@ -76,7 +76,7 @@ p {
     margin: 1em;
 }
 `)
-	registry, warnings := NewStyleRegistryFromCSS(cssContent, nil, log)
+	registry, warnings := parseAndCreateRegistry(cssContent, nil, log)
 	if len(warnings) > 0 {
 		t.Logf("CSS Warnings: %v", warnings)
 	}
@@ -162,7 +162,7 @@ func TestGetEmptyLineMarginScaling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			registry, _ := NewStyleRegistryFromCSS([]byte(tt.css), nil, log)
+			registry, _ := parseAndCreateRegistry([]byte(tt.css), nil, log)
 
 			// Create a minimal StyleContext just to call GetEmptyLineMargin
 			ctx := NewStyleContext(nil)
@@ -183,7 +183,7 @@ func TestGetEmptyLineMarginFallback(t *testing.T) {
 	log := zap.NewNop()
 
 	t.Run("missing style returns 0", func(t *testing.T) {
-		registry, _ := NewStyleRegistryFromCSS([]byte(``), nil, log)
+		registry, _ := parseAndCreateRegistry([]byte(``), nil, log)
 		ctx := NewStyleContext(nil)
 
 		got := ctx.GetEmptyLineMargin("emptyline", registry)
@@ -198,7 +198,7 @@ func TestGetEmptyLineMarginFallback(t *testing.T) {
 		css := `.emptyline {
     display: block;
 }`
-		registry, _ := NewStyleRegistryFromCSS([]byte(css), nil, log)
+		registry, _ := parseAndCreateRegistry([]byte(css), nil, log)
 		ctx := NewStyleContext(nil)
 
 		got := ctx.GetEmptyLineMargin("emptyline", registry)
@@ -221,7 +221,7 @@ func TestGetEmptyLineMarginFallback(t *testing.T) {
     display: block;
     margin: 0;
 }`
-		registry, _ := NewStyleRegistryFromCSS([]byte(css), nil, log)
+		registry, _ := parseAndCreateRegistry([]byte(css), nil, log)
 		ctx := NewStyleContext(nil)
 
 		got := ctx.GetEmptyLineMargin("emptyline", registry)

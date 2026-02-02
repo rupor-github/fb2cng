@@ -18,7 +18,7 @@ func TestCiteSubtitleImageMargin(t *testing.T) {
 		}
 	}
 
-	sr, _ := NewStyleRegistryFromCSS(cssData, nil, log)
+	sr, _ := parseAndCreateRegistry(cssData, nil, log)
 
 	// Simulate: footnote body > cite > subtitle (image-only)
 	// footnote body context (no special class)
