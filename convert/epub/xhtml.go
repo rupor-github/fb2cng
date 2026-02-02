@@ -152,6 +152,9 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, idToF
 	// Set current filename for footnote tracking
 	c.CurrentFilename = filename
 
+	// Check if we're in float mode (footnote sections should NOT appear in TOC in float mode)
+	isFloatMode := c.FootnotesMode.IsFloat()
+
 	// Process all footnote bodies - build XHTML and chapter metadata in single loop
 	var chapters []chapterData
 	for bodyIdx, body := range footnoteBodies {
@@ -200,17 +203,45 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, idToF
 			chapterDoc = doc
 		}
 
+		// In default (non-float) mode, create a wrapper section that contains all footnote
+		// sections as nested content. This enables the TOC generation machinery to include
+		// individual footnote sections in the TOC.
+		var wrapperSection *fb2.Section
+		if !isFloatMode && len(body.Sections) > 0 {
+			wrapperSection = createFootnoteWrapperSection(body)
+		}
+
 		chapters = append(chapters, chapterData{
 			ID:           tocChapterID,
 			Filename:     filename,
 			AnchorID:     bodyID,
 			Title:        bodyTitle,
 			Doc:          chapterDoc,
+			Section:      wrapperSection,
 			IncludeInTOC: bodyTitle != "",
 		})
 	}
 
 	return chapters, nil
+}
+
+// createFootnoteWrapperSection creates a virtual section that wraps all footnote sections
+// from a body as nested FlowSection items. This enables the TOC generation to traverse
+// and include individual footnote sections.
+func createFootnoteWrapperSection(body *fb2.Body) *fb2.Section {
+	// Create flow items that reference the actual footnote sections
+	content := make([]fb2.FlowItem, 0, len(body.Sections))
+	for i := range body.Sections {
+		content = append(content, fb2.FlowItem{
+			Kind:    fb2.FlowSection,
+			Section: &body.Sections[i],
+		})
+	}
+
+	return &fb2.Section{
+		Title:   body.Title,
+		Content: content,
+	}
 }
 
 // createXHTMLDocument creates a standard XHTML document structure with head elements

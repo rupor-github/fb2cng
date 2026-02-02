@@ -256,6 +256,12 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 	// Process footnote bodies at the end - each footnote body gets its own storyline
 	// This ensures footnote IDs (n_1, n_2, etc.) are registered in idToEID for anchor generation
 	// Reference KFX creates separate storylines for each footnote body (notes, comments, etc.)
+	//
+	// In default mode (not float), footnotes behave like regular sections:
+	// - No backlinks are generated
+	// - Individual footnote sections appear as nested TOC entries under the footnote body
+	isFloatMode := c.FootnotesMode.IsFloat()
+
 	for _, body := range footnoteBodies {
 		sectionCount++
 		storyName := "l" + toBase36(sectionCount)
@@ -288,23 +294,53 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 			sb.EndBlock()
 		}
 
+		// Collect child TOC entries for individual footnote sections (default mode only)
+		var childTOCEntries []*TOCEntry
+
 		// Process each section in the footnote body using the unified processing function.
 		// This ensures consistent handling of all section elements: title, epigraphs,
 		// image, annotation, and content.
 		for j := range body.Sections {
 			section := &body.Sections[j]
 
-			// Create backlinks callback that looks up refs from BackLinkIndex
-			addBacklinks := func(c *content.Content, sectionID string, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, idToEID eidByFB2ID) {
-				if c.BacklinkStr == "" {
-					return
-				}
-				if refs, ok := c.BackLinkIndex[sectionID]; ok && len(refs) > 0 {
-					addBacklinkParagraph(c, refs, sb, styles, ca, idToEID)
+			// In default mode (not float): record EID before processing for nested TOC entry
+			var sectionFirstEID int
+			if !isFloatMode {
+				sectionFirstEID = sb.NextEID()
+			}
+
+			// Create backlinks callback - only used in float mode
+			// In default mode, footnotes behave like regular sections (no backlinks)
+			var addBacklinks func(c *content.Content, sectionID string, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, idToEID eidByFB2ID)
+			if isFloatMode {
+				addBacklinks = func(c *content.Content, sectionID string, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, idToEID eidByFB2ID) {
+					if c.BacklinkStr == "" {
+						return
+					}
+					if refs, ok := c.BackLinkIndex[sectionID]; ok && len(refs) > 0 {
+						addBacklinkParagraph(c, refs, sb, styles, ca, idToEID)
+					}
 				}
 			}
 
 			processFootnoteSectionContent(c, section, sb, styles, imageResources, ca, idToEID, addParagraphWithMoreIndicator, addBacklinks)
+
+			// In default mode: create nested TOC entry for this footnote section
+			// This mirrors EPUB behavior where individual footnote sections appear under footnote body
+			if !isFloatMode {
+				sectionTitle := section.AsTitleText("")
+				if sectionTitle != "" {
+					childEntry := &TOCEntry{
+						ID:           section.ID,
+						Title:        sectionTitle,
+						SectionName:  sectionName,
+						StoryName:    storyName,
+						FirstEID:     sectionFirstEID,
+						IncludeInTOC: true,
+					}
+					childTOCEntries = append(childTOCEntries, childEntry)
+				}
+			}
 		}
 
 		sectionEIDs[sectionName] = sb.AllEIDs()
@@ -322,6 +358,7 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 			StoryName:    storyName,
 			FirstEID:     sb.FirstEID(),
 			IncludeInTOC: bodyTitle != "", // Include in TOC if body has a title
+			Children:     childTOCEntries, // Nested entries for individual footnote sections (default mode)
 		}
 		tocEntries = append(tocEntries, tocEntry)
 		idToEID[anchorID] = sb.FirstEID()
