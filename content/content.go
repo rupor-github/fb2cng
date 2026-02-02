@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/beevik/etree"
@@ -363,9 +364,11 @@ func (c *Content) UpdatePageRuneCount(text string) {
 	c.pageRuneCounter += utf8.RuneCountInString(text)
 }
 
-// SplitTextByPage splits text into chunks by page boundaries.
+// SplitTextByPage splits text into chunks by page boundaries at word boundaries.
 // It returns chunks and a parallel slice indicating whether a page marker
 // should be inserted after each chunk.
+// Page breaks occur at the last word boundary before the page size is reached,
+// ensuring words are not split across pages.
 func (c *Content) SplitTextByPage(text string) ([]string, []bool) {
 	if text == "" {
 		return nil, nil
@@ -374,27 +377,70 @@ func (c *Content) SplitTextByPage(text string) ([]string, []bool) {
 		return []string{text}, []bool{false}
 	}
 
+	runes := []rune(text)
 	var chunks []string
 	var markers []bool
-	var buf strings.Builder
 
-	for _, r := range text {
-		buf.WriteRune(r)
+	chunkStart := 0
+	lastWordBoundary := -1 // Position of last word boundary in current chunk
+	pos := 0
+
+	for pos < len(runes) {
+		// Track word boundaries
+		if IsWordBoundary(runes[pos]) {
+			lastWordBoundary = pos
+		}
+
 		c.pageRuneCounter++
+		pos++
+
 		if c.pageRuneCounter >= c.PageSize {
-			chunks = append(chunks, buf.String())
-			markers = append(markers, true)
-			buf.Reset()
-			c.pageRuneCounter -= c.PageSize
+			// Page boundary reached - split at last word boundary if available
+			splitPos := pos // Default: split after current rune
+
+			if lastWordBoundary > chunkStart {
+				// Backtrack to word boundary
+				runesAfterBoundary := pos - lastWordBoundary - 1
+				c.pageRuneCounter = runesAfterBoundary
+				splitPos = lastWordBoundary + 1
+			} else {
+				c.pageRuneCounter = 0
+			}
+
+			chunk := string(runes[chunkStart:splitPos])
+			if chunk != "" {
+				chunks = append(chunks, chunk)
+				markers = append(markers, true)
+			}
+
+			chunkStart = splitPos
+			lastWordBoundary = -1
 		}
 	}
 
-	if buf.Len() > 0 {
-		chunks = append(chunks, buf.String())
+	// Remaining text
+	if chunkStart < len(runes) {
+		chunks = append(chunks, string(runes[chunkStart:]))
 		markers = append(markers, false)
 	}
 
 	return chunks, markers
+}
+
+// IsWordBoundary returns true if the rune is a word boundary character
+// (whitespace or common punctuation that typically allows line breaks).
+func IsWordBoundary(r rune) bool {
+	if unicode.IsSpace(r) {
+		return true
+	}
+	switch r {
+	case '-', '–', '—', // hyphens and dashes
+		',', '.', ';', ':', '!', '?', // punctuation
+		')', ']', '}', '»', '"', '\'', // closing brackets/quotes
+		'/': // slash
+		return true
+	}
+	return false
 }
 
 // CheckPageBoundary checks if we've crossed a page boundary and returns true if a page marker should be inserted
@@ -426,6 +472,17 @@ func (c *Content) ResetPageMap() {
 	c.pageRuneCounter = 0
 	c.TotalPages = 0
 	c.PageMapIndex = make(map[string][]PageMapEntry)
+}
+
+// StartNewPageAtChapter resets the rune counter so the next content starts on a new page.
+// Call this at chapter/section boundaries to ensure chapters start on fresh pages.
+// Unlike ForceNewPage, this doesn't record a synthetic page entry - the first content
+// in the new chapter will naturally continue page numbering.
+func (c *Content) StartNewPageAtChapter() {
+	if c.PageSize == 0 || !c.PageTrackingEnabled {
+		return
+	}
+	c.pageRuneCounter = 0
 }
 
 // ForceNewPage records a synthetic page for a file.

@@ -115,7 +115,7 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	// Generate storyline and section fragments from book content
 	// EIDs start at 1000 - this is arbitrary but leaves room for future system IDs
 	startEID := 1000
-	contentFragments, nextEID, sectionNames, tocEntries, sectionEIDs, idToEID, landmarks, err := generateStoryline(c, styles, imageResourceInfo, startEID)
+	contentFragments, nextEID, sectionNames, tocEntries, sectionEIDs, idToEID, landmarks, chapterStartSections, err := generateStoryline(c, styles, imageResourceInfo, startEID)
 	if err != nil {
 		return err
 	}
@@ -129,7 +129,7 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 		}
 	}
 
-	posItems := CollectPositionItems(contentFragments, sectionNames)
+	posItems := CollectPositionItems(contentFragments, sectionNames, chapterStartSections)
 	allEIDs := CollectAllEIDs(sectionEIDs)
 	// Prefer actual reading-order EIDs when available.
 	if len(posItems) > 0 {

@@ -142,7 +142,7 @@ func TestVignettePlacement_ValidNesting(t *testing.T) {
 	imageResources := createVignetteResources(c.ImagesIndex)
 	styles := NewStyleRegistry()
 
-	fragments, _, _, _, _, _, _, err := generateStoryline(c, styles, imageResources, 1000)
+	fragments, _, _, _, _, _, _, _, err := generateStoryline(c, styles, imageResources, 1000)
 	if err != nil {
 		t.Fatalf("generateStoryline failed: %v", err)
 	}
@@ -324,7 +324,7 @@ func TestVignettePlacement_InvalidNesting(t *testing.T) {
 	imageResources := createVignetteResources(c.ImagesIndex)
 	styles := NewStyleRegistry()
 
-	fragments, _, _, _, _, _, _, err := generateStoryline(c, styles, imageResources, 1000)
+	fragments, _, _, _, _, _, _, _, err := generateStoryline(c, styles, imageResources, 1000)
 	if err != nil {
 		t.Fatalf("generateStoryline failed: %v", err)
 	}
@@ -543,7 +543,7 @@ func TestVignettePlacement_NoVignettes(t *testing.T) {
 	styles := NewStyleRegistry()
 	imageResources := make(imageResourceInfoByID)
 
-	fragments, _, _, _, _, _, _, err := generateStoryline(c, styles, imageResources, 1000)
+	fragments, _, _, _, _, _, _, _, err := generateStoryline(c, styles, imageResources, 1000)
 	if err != nil {
 		t.Fatalf("generateStoryline failed: %v", err)
 	}
@@ -660,7 +660,7 @@ func TestChapterEndVignetteTransfer(t *testing.T) {
 
 	styles := NewStyleRegistry()
 
-	fragments, _, _, _, _, _, _, err := generateStoryline(c, styles, imageResources, 1000)
+	fragments, _, _, _, _, _, _, _, err := generateStoryline(c, styles, imageResources, 1000)
 	if err != nil {
 		t.Fatalf("generateStoryline failed: %v", err)
 	}

@@ -3,6 +3,7 @@ package kfx
 import (
 	"fmt"
 
+	"fbc/content"
 	"fbc/fb2"
 )
 
@@ -134,6 +135,9 @@ type PageEntry struct {
 // CalculateApproximatePages computes page positions from position items.
 // Each page is approximately pageSize runes. Returns page entries with
 // EID and offset for navigation.
+// When an item has SectionStart=true, a new page is started at that position
+// (pages don't span chapter boundaries).
+// Page breaks occur at word boundaries when text content is available.
 func CalculateApproximatePages(posItems []PositionItem, pageSize int) []PageEntry {
 	if len(posItems) == 0 || pageSize <= 0 {
 		return nil
@@ -144,12 +148,62 @@ func CalculateApproximatePages(posItems []PositionItem, pageSize int) []PageEntr
 	runesInPage := 0
 
 	for _, item := range posItems {
+		// Start a new page at chapter boundaries (SectionStart items)
+		// If we were mid-page, increment page number to start a fresh page
+		if item.SectionStart && runesInPage > 0 {
+			pageNumber++
+			runesInPage = 0
+		}
+
 		itemLen := item.Length
 		if itemLen <= 0 {
 			itemLen = 1
 		}
 
-		// Calculate how many runes we've consumed within this item
+		// If we have text content, use word-boundary splitting
+		if item.Text != "" {
+			runes := []rune(item.Text)
+			lastWordBoundary := -1
+			pos := 0 // Current position in runes
+
+			for pos < len(runes) {
+				// Record page start if this is a new page
+				if runesInPage == 0 {
+					pages = append(pages, PageEntry{
+						PageNumber: pageNumber,
+						EID:        item.EID,
+						Offset:     int64(pos),
+					})
+				}
+
+				// Track word boundaries from current position
+				lastWordBoundary = -1
+				startPos := pos
+
+				// Consume runes until page is full
+				for pos < len(runes) && runesInPage < pageSize {
+					if content.IsWordBoundary(runes[pos]) {
+						lastWordBoundary = pos
+					}
+					pos++
+					runesInPage++
+				}
+
+				// If page is full, find split point
+				if runesInPage >= pageSize {
+					if lastWordBoundary > startPos {
+						// Backtrack to word boundary
+						runesInPage -= (pos - lastWordBoundary - 1)
+						pos = lastWordBoundary + 1
+					}
+					runesInPage = 0
+					pageNumber++
+				}
+			}
+			continue
+		}
+
+		// No text content - use simple rune counting
 		runesConsumed := int64(0)
 
 		for runesConsumed < int64(itemLen) {

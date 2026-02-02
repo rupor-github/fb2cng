@@ -21,10 +21,12 @@ type sectionWorkItem struct {
 // generateStoryline creates storyline and section fragments from an FB2 book.
 // It uses the provided StyleRegistry to reference styles by name.
 // Returns fragments, next EID, section names for document_data, TOC entries, per-section EID sets,
-// and mapping of original FB2 IDs to EIDs (for $266 anchors).
+// mapping of original FB2 IDs to EIDs (for $266 anchors), landmarks, and chapter-start section names.
+// Chapter-start sections are those that correspond to EPUB chapter boundaries (cover, body intro,
+// top-level sections, footnotes) - used for page map calculations.
 func generateStoryline(c *content.Content, styles *StyleRegistry,
 	imageResources imageResourceInfoByID, startEID int,
-) (*FragmentList, int, sectionNameList, []*TOCEntry, sectionEIDsBySectionName, eidByFB2ID, LandmarkInfo, error) {
+) (*FragmentList, int, sectionNameList, []*TOCEntry, sectionEIDsBySectionName, eidByFB2ID, LandmarkInfo, map[string]bool, error) {
 	fragments := NewFragmentList()
 	eidCounter := startEID
 	sectionNames := make(sectionNameList, 0)
@@ -32,6 +34,7 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 	sectionEIDs := make(sectionEIDsBySectionName)
 	idToEID := make(eidByFB2ID)
 	landmarks := LandmarkInfo{}
+	chapterStartSections := make(map[string]bool) // Sections that start new chapters/pages
 
 	// Single shared content accumulator for the entire book.
 	// KP3 consolidates content across all storylines into fewer, larger fragments.
@@ -52,6 +55,7 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 			storyName := "l" + toBase36(sectionCount)
 			sectionName := "c" + toBase36(sectionCount-1)
 			sectionNames = append(sectionNames, sectionName)
+			chapterStartSections[sectionName] = true // Cover is a chapter boundary
 
 			// Create storyline with just the cover image
 			sb := NewStorylineBuilder(storyName, sectionName, eidCounter, styles)
@@ -65,7 +69,7 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 			// Build cover storyline fragment
 			storylineFrag := sb.BuildStorylineOnly()
 			if err := fragments.Add(storylineFrag); err != nil {
-				return nil, 0, nil, nil, nil, nil, landmarks, err
+				return nil, 0, nil, nil, nil, nil, landmarks, nil, err
 			}
 
 			// Build cover section with container type and image dimensions
@@ -75,7 +79,7 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 			pageTemplate := NewCoverPageTemplateEntry(pageTemplateEID, storyName, imgInfo.Width, imgInfo.Height)
 			sectionFrag := BuildSection(sectionName, []any{pageTemplate})
 			if err := fragments.Add(sectionFrag); err != nil {
-				return nil, 0, nil, nil, nil, nil, landmarks, err
+				return nil, 0, nil, nil, nil, nil, landmarks, nil, err
 			}
 
 			// Track cover EID for landmarks
@@ -100,12 +104,13 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 			storyName := "l" + toBase36(sectionCount)
 			sectionName := "c" + toBase36(sectionCount-1)
 			sectionNames = append(sectionNames, sectionName)
+			chapterStartSections[sectionName] = true // Body intro is a chapter boundary
 
 			// Create storyline builder for body intro
 			sb := NewStorylineBuilder(storyName, sectionName, eidCounter, styles)
 
 			if err := processBodyIntroContent(c, body, sb, styles, imageResources, ca, idToEID); err != nil {
-				return nil, 0, nil, nil, nil, nil, landmarks, err
+				return nil, 0, nil, nil, nil, nil, landmarks, nil, err
 			}
 
 			sectionEIDs[sectionName] = sb.AllEIDs()
@@ -137,10 +142,10 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 			storylineFrag, sectionFrag := sb.Build()
 
 			if err := fragments.Add(storylineFrag); err != nil {
-				return nil, 0, nil, nil, nil, nil, landmarks, err
+				return nil, 0, nil, nil, nil, nil, landmarks, nil, err
 			}
 			if err := fragments.Add(sectionFrag); err != nil {
-				return nil, 0, nil, nil, nil, nil, landmarks, err
+				return nil, 0, nil, nil, nil, nil, landmarks, nil, err
 			}
 		}
 
@@ -177,6 +182,11 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 			sectionName := "c" + toBase36(sectionCount-1)
 			sectionNames = append(sectionNames, sectionName)
 
+			// Mark top-level sections as chapter boundaries (matches EPUB chapter splits)
+			if work.isTopLevel {
+				chapterStartSections[sectionName] = true
+			}
+
 			// Create storyline builder
 			sb := NewStorylineBuilder(storyName, sectionName, eidCounter, styles)
 
@@ -185,7 +195,7 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 			var directChildTOC []*TOCEntry
 
 			if err := processStorylineSectionContent(c, section, sb, styles, imageResources, ca, work.depth, work.depth, true, &directChildTOC, &nestedTitledSections, idToEID); err != nil {
-				return nil, 0, nil, nil, nil, nil, landmarks, err
+				return nil, 0, nil, nil, nil, nil, landmarks, nil, err
 			}
 
 			// Determine if this storyline should have a chapter-end vignette.
@@ -228,10 +238,10 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 			storylineFrag, sectionFrag := sb.Build()
 
 			if err := fragments.Add(storylineFrag); err != nil {
-				return nil, 0, nil, nil, nil, nil, landmarks, err
+				return nil, 0, nil, nil, nil, nil, landmarks, nil, err
 			}
 			if err := fragments.Add(sectionFrag); err != nil {
-				return nil, 0, nil, nil, nil, nil, landmarks, err
+				return nil, 0, nil, nil, nil, nil, landmarks, nil, err
 			}
 
 			// Add nested titled sections to queue for processing as separate storylines.
@@ -267,6 +277,7 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 		storyName := "l" + toBase36(sectionCount)
 		sectionName := "c" + toBase36(sectionCount-1)
 		sectionNames = append(sectionNames, sectionName)
+		chapterStartSections[sectionName] = true // Footnotes body is a chapter boundary
 
 		sb := NewStorylineBuilder(storyName, sectionName, eidCounter, styles)
 
@@ -367,10 +378,10 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 		storylineFrag, sectionFrag := sb.Build()
 
 		if err := fragments.Add(storylineFrag); err != nil {
-			return nil, 0, nil, nil, nil, nil, landmarks, err
+			return nil, 0, nil, nil, nil, nil, landmarks, nil, err
 		}
 		if err := fragments.Add(sectionFrag); err != nil {
-			return nil, 0, nil, nil, nil, nil, landmarks, err
+			return nil, 0, nil, nil, nil, nil, landmarks, nil, err
 		}
 	}
 
@@ -378,11 +389,11 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 	for name, contentList := range ca.Finish() {
 		contentFrag := buildContentFragmentByName(name, contentList)
 		if err := fragments.Add(contentFrag); err != nil {
-			return nil, 0, nil, nil, nil, nil, landmarks, err
+			return nil, 0, nil, nil, nil, nil, landmarks, nil, err
 		}
 	}
 
-	return fragments, eidCounter, sectionNames, tocEntries, sectionEIDs, idToEID, landmarks, nil
+	return fragments, eidCounter, sectionNames, tocEntries, sectionEIDs, idToEID, landmarks, chapterStartSections, nil
 }
 
 // addVignetteImage adds a vignette image to the storyline if enabled.

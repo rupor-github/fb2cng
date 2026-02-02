@@ -64,6 +64,14 @@ type PositionItem struct {
 	EID    int
 	Length int // approximate text length (runes)
 
+	// SectionStart marks the first item of a new section/storyline.
+	// Used by page calculation to start a new page at section boundaries.
+	SectionStart bool
+
+	// Text contains the actual text content for word-boundary page splitting.
+	// Only populated when page map is enabled.
+	Text string
+
 	// For mixed content (text with inline images):
 	// InlineImages contains the EIDs and offsets of embedded images.
 	// When set, this entry will generate KP3-style granular position entries.
@@ -82,7 +90,9 @@ func HasInlineImages(items []PositionItem) bool {
 }
 
 // CollectPositionItems extracts content entries (including page templates) in reading order.
-func CollectPositionItems(fragments *FragmentList, sectionNames sectionNameList) []PositionItem {
+// chapterStartSections indicates which sections should be marked as chapter boundaries
+// for page calculation (pages reset at chapter boundaries).
+func CollectPositionItems(fragments *FragmentList, sectionNames sectionNameList, chapterStartSections map[string]bool) []PositionItem {
 	if fragments == nil {
 		return nil
 	}
@@ -250,7 +260,8 @@ func CollectPositionItems(fragments *FragmentList, sectionNames sectionNameList)
 		if int(off) < 0 || int(off) >= len(paras) {
 			return
 		}
-		out = append(out, PositionItem{EID: eid, Length: len([]rune(paras[off]))})
+		text := paras[off]
+		out = append(out, PositionItem{EID: eid, Length: len([]rune(text)), Text: text})
 	}
 
 	// Build section -> (pageTemplateEID, storyName)
@@ -289,7 +300,10 @@ func CollectPositionItems(fragments *FragmentList, sectionNames sectionNameList)
 		if !ok {
 			continue
 		}
-		out = append(out, PositionItem{EID: s.pageTemplateEID, Length: 1})
+		// Only mark page template as section start if this section is a chapter boundary
+		// (cover, body intro, top-level sections, footnotes bodies)
+		isChapterStart := chapterStartSections[secName]
+		out = append(out, PositionItem{EID: s.pageTemplateEID, Length: 1, SectionStart: isChapterStart})
 
 		var storyFrag *Fragment
 		for _, f := range fragments.GetByType(SymStoryline) {
