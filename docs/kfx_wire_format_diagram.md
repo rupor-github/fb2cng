@@ -300,6 +300,7 @@ Example: 0x8A = string (type 8) with 10-byte (A) body
 │  COMMON OPTIONAL FRAGMENTS                                              │
 │  ────────────────────────────────────────                               │
 │  $145   content           - Content fragments (paragraph text pools)    │
+│  $262   font              - Embedded font declaration (references $418) │
 │  $277   container_block   - Layout container structures                 │
 │  $418   bcRawFont         - Raw font data (embedded fonts)              │
 │  $490   BookMetadata      - Categorized metadata (title, author, etc.)  │
@@ -314,7 +315,7 @@ Example: 0x8A = string (type 8) with 10-byte (A) body
 │                                                                         │
 │  NOT IN SIMPLE BOOKS (omitted)                                          │
 │  ────────────────────────────────────────                               │
-│  $262, $267, $270*, $387, $390, $391, $393, $394, $418,                 │
+│  $267, $270*, $387, $390, $391, $393, $394,                             │
 │  $608, $609, $610, $611, $621, $692, $756                               │
 │                                                                         │
 │  * $270 (container) is reconstructed from metadata, not stored          │
@@ -859,6 +860,103 @@ Visual byte map (approximate):
 │    $422: 1264,                 // Width                                     │
 │    $423: 1680                  // Height                                    │
 │  }                                                                          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 12.1 Embedded Font Structure (`$262` + `$418`)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    $262 FONT FRAGMENT STRUCTURE                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Embedded fonts use two fragment types working together:                    │
+│  - $262 (font): Font declaration with metadata and location reference       │
+│  - $418 (bcRawFont): Raw font file data (TTF, OTF) as blob                 │
+│                                                                             │
+│  Font Fragment (fid = font_id, ftype = $262):                               │
+│  {                                                                          │
+│    $11: "nav-paragraph",     // font_family (with "nav-" prefix)            │
+│    $12: $350,                // font_style: $350 (normal), $382 (italic)    │
+│    $13: $350,                // font_weight: $350, $361 (bold), $362, etc.  │
+│    $15: $350,                // font_stretch: always $350 (normal)          │
+│    $165: "resource/rsrc42"   // location: path to bcRawFont fragment        │
+│  }                                                                          │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  FONT FAMILY NAMING CONVENTION                                      │    │
+│  │                                                                     │    │
+│  │  KFX uses "nav-" prefix for embedded font family names:             │    │
+│  │    CSS: font-family: "paragraph"  →  KFX: $11: "nav-paragraph"      │    │
+│  │    CSS: font-family: "dropcaps"   →  KFX: $11: "nav-dropcaps"       │    │
+│  │                                                                     │    │
+│  │  This distinguishes embedded fonts from system fonts.               │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+│  Font Weight Symbols:                                                       │
+│  ────────────────────                                                       │
+│  $350 = normal (400)                                                        │
+│  $362 = semibold (500-599)                                                  │
+│  $361 = bold (700+)                                                         │
+│                                                                             │
+│  Font Style Symbols:                                                        │
+│  ───────────────────                                                        │
+│  $350 = normal                                                              │
+│  $382 = italic                                                              │
+│                                                                             │
+│  bcRawFont Fragment ($418):                                                 │
+│  ─────────────────────────                                                  │
+│  fid = location path (e.g., "resource/rsrc42")                              │
+│  ftype = $418                                                               │
+│  value = raw font bytes (NOT Ion-encoded, stored as blob)                   │
+│                                                                             │
+│  Example (font family with normal + bold variants):                         │
+│  ──────────────────────────────────────────────────                         │
+│                                                                             │
+│  // Font declaration for normal weight                                      │
+│  $262 (fid="font_0"):                                                       │
+│    { $11: "nav-paragraph", $12: $350, $13: $350, $15: $350,                 │
+│      $165: "resource/rsrc10" }                                              │
+│                                                                             │
+│  // Font declaration for bold weight                                        │
+│  $262 (fid="font_1"):                                                       │
+│    { $11: "nav-paragraph", $12: $350, $13: $361, $15: $350,                 │
+│      $165: "resource/rsrc11" }                                              │
+│                                                                             │
+│  // Raw font data                                                           │
+│  $418 (fid="resource/rsrc10"): <raw TTF bytes for normal>                   │
+│  $418 (fid="resource/rsrc11"): <raw TTF bytes for bold>                     │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    BODY FONT AND METADATA FLAG                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  When embedded fonts are used for body text, two additional changes:        │
+│                                                                             │
+│  1. document_data ($538) includes font_family reference:                    │
+│     {                                                                       │
+│       $11: "nav-paragraph",        // font_family for body text             │
+│       $169: [...]                  // reading_orders                        │
+│     }                                                                       │
+│                                                                             │
+│  2. book_metadata ($490) includes override flag:                            │
+│     kindle_title_metadata: [                                                │
+│       ...,                                                                  │
+│       { $492: "override_kindle_font", $307: "true" }                        │
+│     ]                                                                       │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  override_kindle_font FLAG                                          │    │
+│  │                                                                     │    │
+│  │  When set to "true", tells Kindle to use the embedded font instead  │    │
+│  │  of the reader's selected font. Without this flag, embedded fonts   │    │
+│  │  may be ignored in favor of user preferences.                       │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```

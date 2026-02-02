@@ -749,6 +749,112 @@ Cover images require special handling in KFX to enable full-screen scaling. Unli
 
 Derived from: `convert/kfx/frag_storyline.go:NewCoverPageTemplateEntry`, `convert/kfx/frag_resource.go`, KP3 reference files.
 
+### 7.5.3 Embedded fonts (`$262` font + `$418` bcRawFont)
+
+KFX supports embedded fonts through two fragment types working together:
+
+- `$262` (font): Font declaration fragment that describes the font metadata and references the raw data
+- `$418` (bcRawFont): Raw font file data (TTF, OTF, etc.) stored as a blob
+
+**Font fragment (`$262`) structure**:
+
+```
+{
+  $11: "nav-paragraph",    // KFX font family name (with "nav-" prefix)
+  $12: symbol($350),       // font_style: $350 (normal) or $382 (italic)
+  $13: symbol($350),       // font_weight: $350 (normal), $361 (bold), $362 (semibold), etc.
+  $15: symbol($350),       // font_stretch: always $350 (normal) currently
+  $165: "resource/rsrc42"  // location: path to bcRawFont fragment
+}
+```
+
+**Field reference**:
+
+| Symbol | Name | Description |
+|--------|------|-------------|
+| `$11` | font_family | KFX font family name with "nav-" prefix (e.g., "nav-paragraph") |
+| `$12` | font_style | Font style symbol: `$350` (normal) or `$382` (italic) |
+| `$13` | font_weight | Font weight symbol: `$350` (normal), `$361` (bold), `$362` (semibold), etc. |
+| `$15` | font_stretch | Font stretch symbol: always `$350` (normal) for now |
+| `$165` | location | Path to the bcRawFont fragment containing the raw font data |
+
+**Font weight symbols**:
+
+| Symbol | CSS Value | Weight |
+|--------|-----------|--------|
+| `$350` | normal/400 | Normal |
+| `$362` | 500-599/semibold | Semibold |
+| `$361` | bold/700+ | Bold |
+
+**bcRawFont fragment (`$418`)**:
+
+The raw font data is stored as a blob (not Ion-encoded) with `fid` matching the `$165` location path from the font fragment.
+
+**Font family naming convention**:
+
+KFX uses a "nav-" prefix for embedded font family names. For example, a CSS font-family `"paragraph"` becomes `"nav-paragraph"` in KFX. This prefix distinguishes embedded fonts from system fonts.
+
+**Body font and `override_kindle_font` metadata**:
+
+When an embedded font is used for the body text, the `$490` (book_metadata) fragment includes:
+
+```
+kindle_title_metadata: [
+  ...,
+  { $492: "override_kindle_font", $307: "true" }
+]
+```
+
+This flag tells the Kindle reader to use the embedded font instead of the reader's selected font.
+
+**Multiple font variants**:
+
+A single font family can have multiple variants (normal, bold, italic, bold-italic). Each variant requires:
+
+1. One `$262` font fragment with the appropriate `$12` (style) and `$13` (weight) values
+2. One `$418` bcRawFont fragment containing the raw font data
+
+Example for a font family with normal and bold variants:
+
+```
+// Font fragment for normal weight
+$262 (fid="nav-paragraph-normal"):
+{
+  $11: "nav-paragraph",
+  $12: $350,  // normal style
+  $13: $350,  // normal weight
+  $15: $350,
+  $165: "resource/rsrc10"
+}
+
+// Font fragment for bold weight
+$262 (fid="nav-paragraph-bold"):
+{
+  $11: "nav-paragraph",
+  $12: $350,  // normal style
+  $13: $361,  // bold weight
+  $15: $350,
+  $165: "resource/rsrc11"
+}
+
+// Raw font data fragments
+$418 (fid="resource/rsrc10"): <raw TTF bytes for normal>
+$418 (fid="resource/rsrc11"): <raw TTF bytes for bold>
+```
+
+**document_data font reference**:
+
+When a body font is embedded, the `$538` (document_data) fragment includes the font family reference:
+
+```
+{
+  $11: "nav-paragraph",  // font_family used for body text
+  $169: [...]           // reading_orders
+}
+```
+
+Derived from: KP3 reference files, `kfxlib/yj_metadata.py`.
+
 ### 7.6 Position and location mapping fragments
 
 This codebase models Kindle positions using these concepts:
