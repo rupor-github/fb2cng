@@ -179,9 +179,9 @@ func TestVignettePlacement_ValidNesting(t *testing.T) {
 		},
 		{
 			name: "l5",
-			// Nested 2: section title vignettes + chapter-end (inherited from chap2)
-			expected: []string{"rsrc-vig-section-top", "rsrc-vig-section-bottom", "rsrc-vig-chapter-end"},
-			excluded: []string{"rsrc-vig-section-end", "rsrc-vig-chapter-top"}, // No section-end (it's a separate storyline, not inline)
+			// Nested 2: section title vignettes + section-end + chapter-end (inherited from chap2)
+			expected: []string{"rsrc-vig-section-top", "rsrc-vig-section-bottom", "rsrc-vig-section-end", "rsrc-vig-chapter-end"},
+			excluded: []string{"rsrc-vig-chapter-top"},
 		},
 	}
 

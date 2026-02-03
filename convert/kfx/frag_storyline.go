@@ -198,11 +198,24 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 				return nil, 0, nil, nil, nil, nil, landmarks, nil, err
 			}
 
-			// Determine if this storyline should have a chapter-end vignette.
-			// A storyline gets the vignette if it's marked as chapter-end AND has no nested
-			// titled sections that will become separate storylines (which would inherit the vignette).
-			// KP3 does not add a chapter-end vignette for untitled top-level sections.
-			if work.isChapterEnd && len(nestedTitledSections) == 0 && section.HasTitle() {
+			// Add end vignettes.
+			//
+			// Section-end vignette:
+			// - Added for titled nested section storylines (depth > 1)
+			// - Only when this storyline is a leaf (no nested titled sections split into their own storylines)
+			//   because otherwise the section continues in subsequent storylines.
+			//
+			// Chapter-end vignette:
+			// - Added only for the LAST storyline of the chapter (work.isChapterEnd)
+			// - Only when this storyline is a leaf, because a following nested storyline inherits chapter-end.
+			//
+			// KP3/EPUB behavior: if the chapter ends on a nested section storyline, the output includes BOTH:
+			// section-end vignette first, then chapter-end vignette.
+			isLeafStoryline := len(nestedTitledSections) == 0
+			if isLeafStoryline && section.HasTitle() && work.depth > 1 {
+				addEndVignette(c.Book, sb, styles, imageResources, common.VignettePosSectionEnd)
+			}
+			if work.isChapterEnd && isLeafStoryline && section.HasTitle() {
 				addEndVignette(c.Book, sb, styles, imageResources, common.VignettePosChapterEnd)
 			}
 

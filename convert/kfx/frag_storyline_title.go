@@ -19,17 +19,9 @@ func addTitleAsHeading(c *content.Content, title *fb2.Title, ctx StyleContext, h
 		return
 	}
 
-	wrapperClass := ""
-	if len(ctx.scopes) > 0 {
-		// Last scope class list is the current wrapper
-		if len(ctx.scopes[len(ctx.scopes)-1].Classes) > 0 {
-			wrapperClass = ctx.scopes[len(ctx.scopes)-1].Classes[0]
-		}
-	}
+	// Title style events use the base header styles directly (e.g. "section-title-header-first").
+	// Wrapper context is already provided by the StyleContext (ctx) for any descendant selectors.
 	descendantPrefix := headerStyleBase
-	if wrapperClass != "" {
-		descendantPrefix = wrapperClass + "--" + headerStyleBase
-	}
 	headingTag := fmt.Sprintf("h%d", headingLevel)
 
 	// Check if title contains inline images - if so, fall back to separate paragraphs
@@ -345,20 +337,16 @@ func markTitleStylesUsed(wrapperClass, headerBase string, styles *StyleRegistry)
 		return
 	}
 
+	// Ensure base and variant styles used by title style events exist.
 	styles.EnsureBaseStyle(headerBase)
-	if wrapperClass != "" {
-		styles.EnsureBaseStyle(wrapperClass)
-		styles.EnsureBaseStyle(wrapperClass + "--" + headerBase)
-		if strings.HasPrefix(wrapperClass, "section-title") {
-			styles.EnsureBaseStyle("section-title--" + headerBase)
-		}
-		// CSS descendant selector specificity: ".section-title hN.section-title-header"
-		// should be captured as wrapperClass--hN.headerBase.
-		if strings.HasPrefix(wrapperClass, "section-title") {
-			for headingLevel := 2; headingLevel <= 6; headingLevel++ {
-				styles.EnsureBaseStyle(fmt.Sprintf("%s--h%d.%s", wrapperClass, headingLevel, headerBase))
-			}
-		}
+	styles.EnsureBaseStyle(headerBase + "-first")
+	styles.EnsureBaseStyle(headerBase + "-next")
+	styles.EnsureBaseStyle(headerBase + "-break")
+	styles.EnsureBaseStyle(headerBase + "-emptyline")
+
+	// Ensure wrapper classes exist. wrapperClass may be a class list (space-separated).
+	for class := range strings.FieldsSeq(wrapperClass) {
+		styles.EnsureBaseStyle(class)
 	}
 }
 
