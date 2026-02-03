@@ -678,6 +678,43 @@ Visual byte map (approximate):
 │  Links to footnote bodies should include $616: $617 marker.                 │
 │  This enables Kindle's popup footnote display feature.                      │
 │                                                                             │
+│  CRITICAL - Style Event Ordering and Overlap Rules:                         │
+│  ───────────────────────────────────────────────────                        │
+│  KP3 enforces strict rules about style event ordering and overlap.          │
+│  Violating these causes rendering failures (wrong fonts, broken alignment). │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  OVERLAP RULES (from KP3 source: com.amazon.B.d.e.c.d.java)         │    │
+│  │                                                                     │    │
+│  │  ALLOWED - Complete nesting (one event fully inside another):       │    │
+│  │    [0]: offset=5, len=4   // outer: covers 5-8                      │    │
+│  │    [1]: offset=6, len=3   // inner: covers 6-8 (fully inside [0])   │    │
+│  │                                                                     │    │
+│  │  NOT ALLOWED - Partial overlap (neither fully contains the other):  │    │
+│  │    [0]: offset=5, len=4   // covers 5-8                             │    │
+│  │    [1]: offset=7, len=4   // covers 7-10 (PARTIAL overlap!)         │    │
+│  │    → KP3 throws: "Cannot create Overlapping Style Events"           │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+│  Example from KP3 reference (footnote link nested inside superscript):      │
+│    [0]: offset=15, len=6, style="s19M"   // superscript: covers 15-20       │
+│    [1]: offset=16, len=4, style="s19N"   // link: covers 16-19 (nested!)    │
+│  This is VALID because [1] is completely contained within [0].              │
+│                                                                             │
+│  ORDERING REQUIREMENT:                                                      │
+│  ─────────────────────                                                      │
+│  Events must be sorted by:                                                  │
+│    1. Offset ascending (primary key)                                        │
+│    2. Length DESCENDING (secondary key - LONGER events first at same offset)│
+│  This ensures outer/containing events come before inner/nested events.      │
+│                                                                             │
+│  STYLE INHERITANCE FOR NESTED CONTEXTS:                                     │
+│  ───────────────────────────────────────                                    │
+│  When an inner element (link) appears inside an outer context (superscript),│
+│  the inner element's style should INCLUDE properties from the outer context.│
+│  Create combined styles that merge outer + inner properties (e.g., s19N     │
+│  includes both superscript baseline AND link styling).                      │
+│                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────┐

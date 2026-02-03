@@ -1753,44 +1753,80 @@ Important processing order (behavioral semantics):
 
 Derived from: `kfxlib/yj_to_epub_content.py:KFX_EPUB_Content.process_content` (style_events loop), `find_or_create_style_event_element`, `add_kfx_style`, and `kfxlib/yj_to_epub_properties.py:KFX_EPUB_Properties.process_content_properties`.
 
-##### 7.8.3.2 Style event ordering and non-overlapping requirement (CRITICAL)
+##### 7.8.3.2 Style event ordering and overlap rules (CRITICAL)
 
 **CRITICAL**: KP3 (Kindle Previewer 3) enforces strict rules about style event ordering and overlap. Violating these rules causes severe rendering issues including incorrect font sizes, broken alignment, and visual corruption.
 
-**Non-overlapping requirement**:
+**Overlap rules** (from KP3 source `com.amazon.B.d.e.c.d.java`):
 
-KP3's internal code explicitly throws an exception if overlapping style events are detected:
+KP3's internal code checks for overlapping style events with configurable nesting behavior:
 
 ```java
-throw new IllegalArgumentException("Cannot create Overlapping Style Events. Offset = " + offset + ", Length = " + length);
+// From com.amazon.B.d.e.c.d.java - overlap detection with nesting support
+public boolean hasOverlap(int newOffset, int newLength, boolean allowNestedInside, boolean allowContaining) {
+    int existingStart = this.offset;
+    int existingEnd = this.offset + this.length - 1;
+    int newEnd = newOffset + newLength - 1;
+    
+    // If allowNestedInside=true and new interval is FULLY INSIDE existing: NO conflict
+    if (allowNestedInside && newOffset >= existingStart && newEnd <= existingEnd) {
+        return false;
+    }
+    // If allowContaining=true and existing is FULLY INSIDE new: NO conflict
+    if (allowContaining && existingStart >= newOffset && existingEnd <= newEnd) {
+        return false;
+    }
+    // Otherwise check for actual partial overlaps
+    if (newOffset >= existingStart && newOffset <= existingEnd) return true;
+    return newEnd >= existingStart && newEnd <= existingEnd ? true : newOffset < existingStart && newEnd > existingEnd;
+}
 ```
 
-Style events **MUST NOT** overlap. If the original content has nested inline styles (e.g., a link inside a code block), the encompassing style must be **segmented** around the nested element.
+When creating style events, KP3 typically calls with `allowNestedInside=true, allowContaining=true` (see `com.amazon.yj.m.l.a.java` line 22), which means:
 
-**Correct approach - Segmentation**:
+- **ALLOWED** - Complete nesting (one event fully inside another)
+- **ALLOWED** - Complete containing (one event fully surrounds another)  
+- **NOT ALLOWED** - Partial overlap (neither event fully contains the other)
 
-For text like `"Hello <code>foo<link>1.17</link>bar</code> World"` (30 chars total):
+**Example from KP3 reference** (footnote link nested inside superscript):
 
-- DO NOT create overlapping events:
-  ```
-  BAD: [0]: offset=6, len=15, code-style      // encompasses link
-       [1]: offset=9, len=4, link-style       // overlaps with code
-  ```
-- DO segment the outer style around inner elements:
-  ```
-  GOOD: [0]: offset=6, len=3, code-style      // "foo" before link
-        [1]: offset=9, len=4, link-style      // "1.17" (link)
-        [2]: offset=13, len=3, code-style     // "bar" after link
-  ```
+```
+style_events ($142): (2)
+  [0]: offset=5, len=4, style="s17Z"    /* superscript: covers positions 5-8 */
+  [1]: offset=6, len=3, style="s183"    /* link: covers positions 6-8 (nested inside [0]!) */
+```
+
+This is VALID because [1] is completely contained within [0].
+
+**Two valid approaches for nested inline styles**:
+
+For text like `"Hello <code>foo<link>1.17</link>bar</code> World"`:
+
+1. **Nesting approach** (fully nested events):
+   ```
+   [0]: offset=6, len=15, code-style      // encompasses entire code block including link
+   [1]: offset=9, len=4, code+link-style  // link style that INCLUDES code properties
+   ```
+
+2. **Segmentation approach** (split outer style around inner):
+   ```
+   [0]: offset=6, len=3, code-style       // "foo" before link
+   [1]: offset=9, len=4, code+link-style  // "1.17" (link with inherited code properties)
+   [2]: offset=13, len=3, code-style      // "bar" after link
+   ```
+
+Both approaches work. The key requirement is that the inner style must **include/inherit** properties from the outer context.
 
 **Ordering requirement**:
 
 Events are stored sorted by:
 
 1. **Offset ascending** (primary sort key)
-2. **Length ascending** (secondary sort key, for events at same offset - shorter first)
+2. **Length DESCENDING** (secondary sort key, for events at same offset - **longer first**)
 
-KP3's insertion algorithm (from decompiled Java):
+This ensures outer/containing events come before inner/nested events at the same position.
+
+KP3's insertion algorithm (from `com.amazon.B.d.e.b.A.java`):
 
 ```java
 private int insertionIndex(int offset, int length) {
@@ -1798,12 +1834,21 @@ private int insertionIndex(int offset, int length) {
         StyleEvent ev = events.get(i);
         int evOffset = ev.offset();
         int evLength = ev.length();
+        // Insert BEFORE if: existing offset > new offset, OR same offset but existing length < new length
         if (evOffset > offset || (evOffset == offset && evLength < length)) {
             return i;
         }
     }
     return -1; // append at end
 }
+```
+
+**Example with same offset** (from KP3 reference):
+
+```
+style_events ($142): (2)
+  [0]: offset=54, len=8, style="s1B0"   /* subscript+strikethrough - LONGER first */
+  [1]: offset=54, len=7, style="s17U"   /* bold+italic - shorter second */
 ```
 
 **Relationship between container style and style events**:
@@ -1829,10 +1874,10 @@ style_events ($142): (3)
 
 Note that:
 
-1. The code style is segmented: 0-34, then 39-222
+1. This example uses the segmentation approach: code style 0-34, then 39-222
 2. The link style at offset 35 includes monospace properties (merged)
-3. No overlapping events exist
-4. Events are ordered by offset ascending
+3. Events are ordered by offset ascending
+4. For same offsets, longer events would come first (not shown in this example)
 
 **Style property inheritance in nested contexts**:
 
@@ -1843,7 +1888,7 @@ This can be achieved by:
 1. Creating combined styles in the style registry that merge outer + inner properties
 2. Or by ensuring the style events cover all text and each carries its full computed style
 
-Derived from: KP3 decompiled source (`com.amazon.B.d.e.b.A.java`), reference KFX analysis, `convert/kfx/frag_storyline_builder.go:SegmentStyleEvents`.
+Derived from: KP3 decompiled source (`com.amazon.B.d.e.b.A.java`, `com.amazon.B.d.e.c.d.java`, `com.amazon.yj.m.l.a.java`), reference KFX analysis.
 
 3. **First-line style**: if a content struct contains `$622`, it is treated as a first-line style struct.
    - If `$622` is present, it is popped into `first_line_style`.
