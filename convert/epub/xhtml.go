@@ -798,7 +798,10 @@ func appendSectionContent(parent *etree.Element, c *content.Content, section *fb
 				appendVignetteImage(titleWrapper, c, common.VignettePosChapterTitleTop)
 			}
 		} else {
-			wrapperClass = "section-title"
+			// Include heading level in wrapper class for proper page-break control
+			// e.g., "section-title section-title-h2" for depth 2
+			headingLevel := min(depth, 6)
+			wrapperClass = fmt.Sprintf("section-title section-title-h%d", headingLevel)
 			headerClass = "section-title-header"
 
 			// Insert top vignette for sections

@@ -83,8 +83,8 @@ h6 {
     margin: 2em 0 1em 0;
 }
 
-/* H2 section titles get page breaks too */
-.section-title h2.section-title-header {
+/* H2 section titles (depth 2) get page breaks too */
+.section-title-h2 {
     page-break-before: always;
 }
 

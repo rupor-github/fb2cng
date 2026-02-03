@@ -97,18 +97,18 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 		} else {
 			// KP3 normalizes nested section title wrapper margins relative to the depth where the
 			// storyline started. For storylines that start at depth=2, wrapper levels are shifted
-			// down by 1 (depth 3 -> wrapper --h2, etc.). For storylines that start at depth=1,
-			// wrapper levels match depth (depth 3 -> wrapper --h3).
+			// down by 1 (depth 3 -> wrapper -h2, etc.). For storylines that start at depth=1,
+			// wrapper levels match depth (depth 3 -> wrapper -h3).
 			if depth == 2 && isStorylineRoot {
 				// KP3 uses base wrapper (section-title) for the root titled section of a depth=2 storyline.
-				wrapperClass = "section-title"
+				wrapperClass = "section-title section-title-h2"
 			} else {
 				normalized := depth
 				if storylineRootDepth > 1 {
 					normalized = depth - (storylineRootDepth - 1)
 				}
 				normalized = max(normalized, 2)
-				wrapperClass = fmt.Sprintf("section-title--h%d", min(normalized, 6))
+				wrapperClass = fmt.Sprintf("section-title section-title-h%d", min(normalized, 6))
 			}
 			headerClassBase = "section-title-header"
 			// Map depth to heading level: 2->h2, 3->h3, 4->h4, 5->h5, 6+->h6
