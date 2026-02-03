@@ -997,9 +997,11 @@ func writeDataToZip(zw *zip.Writer, name string, data []byte) error {
 func buildNCXNavPoints(parent *etree.Element, section *fb2.Section, filename string, playOrder *int, c *content.Content, includeUntitled bool, lastNavPoint *etree.Element) {
 	for _, item := range section.Content {
 		if item.Kind == fb2.FlowSection && item.Section != nil {
-			titleText := item.Section.AsTitleText("")
-			if titleText == "" && includeUntitled {
-				titleText = fb2.NoTitleText
+			// IMPORTANT: for nested TOC nodes we only consider explicit, non-empty titles.
+			// Wrapper sections with no effective title must not produce TOC entries.
+			titleText := ""
+			if item.Section.Title != nil {
+				titleText = item.Section.Title.AsTOCText("")
 			}
 			if titleText != "" {
 				*playOrder++
@@ -1114,9 +1116,11 @@ func buildTOCPageOL(parent *etree.Element, section *fb2.Section, filename string
 func buildTOCPageOLItems(parentOL *etree.Element, section *fb2.Section, filename string, c *content.Content, includeUntitled bool, lastLI *etree.Element) {
 	for _, item := range section.Content {
 		if item.Kind == fb2.FlowSection && item.Section != nil {
-			titleText := item.Section.AsTitleText("")
-			if titleText == "" && includeUntitled {
-				titleText = fb2.NoTitleText
+			// IMPORTANT: for nested TOC nodes we only consider explicit, non-empty titles.
+			// Wrapper sections with no effective title must not produce TOC entries.
+			titleText := ""
+			if item.Section.Title != nil {
+				titleText = item.Section.Title.AsTOCText("")
 			}
 			if titleText != "" {
 				li := parentOL.CreateElement("li")
@@ -1148,9 +1152,9 @@ func buildTOCPageOLIntoLI(li *etree.Element, section *fb2.Section, filename stri
 	hasTitledChildren := false
 	for _, item := range section.Content {
 		if item.Kind == fb2.FlowSection && item.Section != nil {
-			titleText := item.Section.AsTitleText("")
-			if titleText == "" && includeUntitled {
-				titleText = fb2.NoTitleText
+			titleText := ""
+			if item.Section.Title != nil {
+				titleText = item.Section.Title.AsTOCText("")
 			}
 			if titleText != "" {
 				hasTitledChildren = true
