@@ -8,8 +8,7 @@
 **BETA version - not a released code yet.**
 
 - Changes will happen!
-- Release platforms limited in comparison with fb2converter.
-- Generation of Kindle formats isn't implemented, only epub2/kepub/epub3 for now.
+- Release platforms limited in comparison with fb2converter (for now).
 
 Copilot generated [user guide](docs/guide.md)
 
