@@ -278,8 +278,9 @@ func (c *Converter) convertProperty(name string, value CSSValue, props map[KFXSy
 		}
 
 	case "font-family":
-		// Transform CSS font-family to KFX format (strip quotes, add nav- prefix)
-		kfxFamily := ToKFXFontFamily(value.Raw)
+		// Transform CSS font-family to KFX format.
+		// KP3 keeps generic families (e.g. monospace) unprefixed.
+		kfxFamily := ToKFXFontFamilyFromCSS(value.Raw)
 		if kfxFamily != "" {
 			c.mergeProp(props, SymFontFamily, kfxFamily)
 		}

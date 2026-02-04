@@ -58,6 +58,52 @@ func ToKFXFontFamily(cssFamily string) string {
 	return "nav-" + family
 }
 
+// ToKFXFontFamilyFromCSS converts a CSS font-family value to the string KP3 emits
+// in KFX styles.
+//
+// KP3 prefixes embedded font family names with "nav-" (see ToKFXFontFamily), but
+// keeps CSS generic families (e.g. monospace/serif) unprefixed.
+//
+// It also accepts a font stack and uses the first family.
+func ToKFXFontFamilyFromCSS(cssFontFamily string) string {
+	cssFontFamily = strings.TrimSpace(cssFontFamily)
+	if cssFontFamily == "" {
+		return ""
+	}
+
+	// Use first family from stack: "MyFont", serif -> "MyFont"
+	if idx := strings.Index(cssFontFamily, ","); idx >= 0 {
+		cssFontFamily = cssFontFamily[:idx]
+		cssFontFamily = strings.TrimSpace(cssFontFamily)
+	}
+
+	// Unquote if present
+	family := strings.Trim(cssFontFamily, `"'`)
+	family = strings.TrimSpace(family)
+	if family == "" {
+		return ""
+	}
+
+	lower := strings.ToLower(family)
+	if lower == "default" {
+		return "default"
+	}
+	if strings.HasPrefix(lower, "nav-") {
+		// Avoid double-prefixing if author CSS already uses nav-*.
+		return family
+	}
+
+	// CSS generic family keywords must remain unprefixed to match KP3 output.
+	switch lower {
+	case "serif", "sans-serif", "monospace", "cursive", "fantasy", "system-ui",
+		"ui-serif", "ui-sans-serif", "ui-monospace", "ui-rounded",
+		"emoji", "math", "fangsong":
+		return lower
+	}
+
+	return ToKFXFontFamily(family)
+}
+
 // fontResource represents a single font file resource.
 type fontResource struct {
 	Data     []byte

@@ -409,6 +409,47 @@ func TestParser_DescendantSelector(t *testing.T) {
 	}
 }
 
+func TestToKFXFontFamilyFromCSS_Generic(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{`monospace`, "monospace"},
+		{`"monospace"`, "monospace"},
+		{`serif`, "serif"},
+		{`sans-serif`, "sans-serif"},
+		{`ui-monospace`, "ui-monospace"},
+		{`system-ui`, "system-ui"},
+		{`monospace, serif`, "monospace"},
+		{`"monospace", serif`, "monospace"},
+	}
+	for _, tt := range tests {
+		got := ToKFXFontFamilyFromCSS(tt.in)
+		if got != tt.want {
+			t.Errorf("ToKFXFontFamilyFromCSS(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestToKFXFontFamilyFromCSS_NavPrefixing(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{`MyFont`, "nav-MyFont"},
+		{`"MyFont"`, "nav-MyFont"},
+		{`MyFont, serif`, "nav-MyFont"},
+		{`nav-MyFont`, "nav-MyFont"},
+		{`default`, "default"},
+	}
+	for _, tt := range tests {
+		got := ToKFXFontFamilyFromCSS(tt.in)
+		if got != tt.want {
+			t.Errorf("ToKFXFontFamilyFromCSS(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
 func TestParser_DescendantSelectorWithClass(t *testing.T) {
 	log := zap.NewNop()
 	p := NewParser(log)
