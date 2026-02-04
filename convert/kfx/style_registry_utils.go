@@ -68,8 +68,14 @@ func isBlockStyleName(name string) bool {
 		return true
 	}
 
-	// KP3 wrapper variants for nested section titles (section-title--h2..h6)
-	if strings.HasPrefix(name, "section-title--h") {
+	// KP3 wrapper variants for nested section titles (section-title-wrap-h2..h6)
+	if strings.HasPrefix(name, "section-title-wrap-h") {
+		return true
+	}
+
+	// Vignette-level selector anchors for nested section titles.
+	// These are internal wrapper classes used only for descendant image rules.
+	if strings.HasPrefix(name, "section-title-vig-h") {
 		return true
 	}
 

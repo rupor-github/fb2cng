@@ -1,5 +1,6 @@
 package kfx
 
+// Keep strings import even if currently unused in some build tags.
 import "strings"
 
 // ResolveImage creates the final style for an image element within this context.
@@ -9,24 +10,19 @@ import "strings"
 // classes: space-separated CSS classes (e.g., "image-vignette")
 // Returns the registered style name.
 func (sc StyleContext) ResolveImage(classes string) string {
-	merged := make(map[KFXSymbol]any)
-
 	if sc.registry == nil {
 		return ""
 	}
 
-	// Resolve classes directly - images only get properties from their specific classes
-	for class := range strings.FieldsSeq(classes) {
-		if def, ok := sc.registry.Get(class); ok {
-			resolved := sc.registry.resolveInheritance(def)
-			for k, v := range resolved.Properties {
-				// Skip text-specific properties that don't apply to images
-				switch k {
-				case SymLineHeight, SymTextIndent, SymTextAlignment:
-					continue
-				}
-				merged[k] = v
-			}
+	// Resolve with full cascade (including descendant selectors from scopes).
+	// Use tag "img" so rules like ancestor--img.image-vignette can apply.
+	merged := sc.resolveProperties("img", classes)
+
+	// Filter out text-specific properties that don't apply to images.
+	for k := range merged {
+		switch k {
+		case SymLineHeight, SymTextIndent, SymTextAlignment:
+			delete(merged, k)
 		}
 	}
 
@@ -34,7 +30,7 @@ func (sc StyleContext) ResolveImage(classes string) string {
 	// CollapseMargins() for centralized margin logic. Images participate in
 	// margin collapsing like other block elements.
 
-	// Image styles use no usage tracking here - styleUsageImage is set separately via ResolveStyle
+	// Image styles use no usage tracking here - styleUsageImage is set separately via ResolveStyle.
 	return sc.registry.RegisterResolved(merged, 0, true)
 }
 

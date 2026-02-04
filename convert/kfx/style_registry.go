@@ -3,6 +3,7 @@ package kfx
 import (
 	"fmt"
 	"maps"
+	"math"
 	"strings"
 )
 
@@ -165,7 +166,36 @@ func (sr *StyleRegistry) BuildFragments() []*Fragment {
 			resolved.Properties = adjustLineHeightForFontSize(resolved.Properties)
 			resolved.Properties = ensureDefaultLineHeight(resolved.Properties)
 			if isSectionTitleHeaderTextStyle(resolved.Properties) {
-				resolved.Properties[SymLineHeight] = DimensionValue(RoundDecimals(SectionTitleHeaderLineHeightLh, LineHeightPrecision), SymUnitLh)
+				// KP3 uses a slightly smaller line-height for nested section title headers
+				// (SectionTitleHeaderLineHeightLh) than our generic AdjustedLineHeightLh.
+				//
+				// We already scaled vertical margins/paddings in adjustLineHeightForFontSize()
+				// relative to the style's current line-height. If we change line-height here,
+				// we must re-scale those vertical measures so their absolute spacing matches
+				// KP3 output.
+				oldLh := 0.0
+				if lh, ok := resolved.Properties[SymLineHeight]; ok {
+					if lhVal, lhUnit, ok := measureParts(lh); ok && lhUnit == SymUnitLh {
+						oldLh = lhVal
+					}
+				}
+
+				updated := make(map[KFXSymbol]any, len(resolved.Properties))
+				maps.Copy(updated, resolved.Properties)
+				updated[SymLineHeight] = DimensionValue(RoundDecimals(SectionTitleHeaderLineHeightLh, LineHeightPrecision), SymUnitLh)
+
+				if oldLh > 0 && math.Abs(oldLh-SectionTitleHeaderLineHeightLh) >= 1e-9 {
+					scale := oldLh / SectionTitleHeaderLineHeightLh
+					for _, sym := range []KFXSymbol{SymMarginTop, SymMarginBottom, SymPaddingTop, SymPaddingBottom} {
+						if v, ok := updated[sym]; ok {
+							if vv, unit, ok := measureParts(v); ok && unit == SymUnitLh {
+								updated[sym] = DimensionValue(RoundSignificant(vv*scale, SignificantFigures), SymUnitLh)
+							}
+						}
+					}
+				}
+
+				resolved.Properties = updated
 			}
 		} else if sr.hasImageUsage(name) {
 			// KP3 includes line-height: 1lh for standalone block images.
@@ -616,6 +646,11 @@ func DefaultStyleRegistry() *StyleRegistry {
 	// Default.css has a single .section-title margin, but KP3 normalizes it into
 	// multiple wrapper variants during conversion.
 	//
+	// IMPORTANT: do NOT use "--" in these style names. "--" is reserved for descendant
+	// selectors produced by the CSS parser (ancestor--descendant). Using "--" here would
+	// make these wrapper styles match unintended descendant lookups such as
+	// "section-title--h2" for an h2 inside a .section-title wrapper.
+	//
 	// These wrappers are referenced directly by generator code; we keep them programmatic
 	// to avoid changing convert/default.css.
 	for _, tt := range []struct {
@@ -623,12 +658,13 @@ func DefaultStyleRegistry() *StyleRegistry {
 		mt   float64
 		mb   float64
 	}{
-		{name: "section-title--h2", mt: 1.66667, mb: 0.9375},
-		{name: "section-title--h3", mt: 1.66667, mb: 1.24688},
-		{name: "section-title--h4", mt: 1.66667, mb: 1.56562},
-		// KP3 uses the same wrapper margins for deeper levels.
-		{name: "section-title--h5", mt: 2.18438, mb: 2.18438},
-		{name: "section-title--h6", mt: 2.18438, mb: 2.18438},
+		// KP3 keeps wrapper spacing constant; depth-specific spacing is applied to
+		// the title text and vignette images inside the wrapper.
+		{name: "section-title-wrap-h2", mt: 1.66667, mb: 0.833333},
+		{name: "section-title-wrap-h3", mt: 1.66667, mb: 0.833333},
+		{name: "section-title-wrap-h4", mt: 1.66667, mb: 0.833333},
+		{name: "section-title-wrap-h5", mt: 1.66667, mb: 0.833333},
+		{name: "section-title-wrap-h6", mt: 1.66667, mb: 0.833333},
 	} {
 		sr.Register(NewStyle(tt.name).
 			BreakInsideAvoid().
@@ -649,6 +685,32 @@ func DefaultStyleRegistry() *StyleRegistry {
 		Width(100, SymUnitPercent).
 		MarginTop(0.697917, SymUnitLh). // Matching KP3 reference vignette spacing
 		Build())
+
+	// KP3 overrides vignette spacing inside nested section title wrappers based on depth.
+	// This applies to both top and bottom vignettes, but top vignettes are first-child
+	// elements in title-block mode and their margin-top is stripped during margin collapse.
+	for _, v := range []struct {
+		level int
+		mt    float64
+	}{
+		{level: 2, mt: 0.778125},
+		{level: 3, mt: 0.9375},
+		{level: 4, mt: 1.24688},
+		{level: 5, mt: 1.56562},
+		{level: 6, mt: 2.18438},
+	} {
+		anc := fmt.Sprintf("section-title-wrap-h%d", v.level)
+		sr.Register(NewStyle(anc+"--img.image-vignette").
+			MarginTop(v.mt, SymUnitLh).
+			Build())
+
+		// KP3 vignette spacing follows the ACTUAL heading level (h2..h6), not the normalized
+		// wrapper depth for storylines that start at depth > 1.
+		vigAnc := fmt.Sprintf("section-title-vig-h%d", v.level)
+		sr.Register(NewStyle(vigAnc+"--img.image-vignette").
+			MarginTop(v.mt, SymUnitLh).
+			Build())
+	}
 
 	// End vignette image style - decorative images at end of chapters/sections.
 	// KP3 reference shows mt=1.25lh, mb=1.25lh for section-end vignettes.
@@ -805,8 +867,8 @@ func (sr *StyleRegistry) shouldHaveBreakInsideAvoid(name string, _ map[KFXSymbol
 		return true
 	}
 
-	// KP3 wrapper variants for nested section titles (section-title--h2..h6)
-	if strings.HasPrefix(name, "section-title--h") {
+	// KP3 wrapper variants for nested section titles (section-title-wrap-h2..h6)
+	if strings.HasPrefix(name, "section-title-wrap-h") {
 		return true
 	}
 
