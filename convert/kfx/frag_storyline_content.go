@@ -171,7 +171,11 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 			annotationCtx := NewStyleContext(styles).Push("div", "annotation")
 			sb.SetContainerMargins(NewStyleContext(styles).ExtractContainerMargins("div", "annotation"))
 			for i := range section.Annotation.Items {
-				processFlowItem(c, &section.Annotation.Items[i], annotationCtx, "annotation", sb, styles, imageResources, ca, idToEID)
+				var next *fb2.FlowItem
+				if i+1 < len(section.Annotation.Items) {
+					next = &section.Annotation.Items[i+1]
+				}
+				processFlowItem(c, &section.Annotation.Items[i], next, annotationCtx, "annotation", sb, styles, imageResources, ca, idToEID)
 			}
 			sb.EndBlock()
 		} else {
@@ -190,7 +194,11 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 			annotationCtx := NewStyleContext(styles).PushBlock("div", "annotation")
 			sb.SetContainerMargins(annotationCtx.ExtractContainerMargins("div", "annotation"))
 			for i := range section.Annotation.Items {
-				processFlowItem(c, &section.Annotation.Items[i], annotationCtx, "annotation", sb, styles, imageResources, ca, idToEID)
+				var next *fb2.FlowItem
+				if i+1 < len(section.Annotation.Items) {
+					next = &section.Annotation.Items[i+1]
+				}
+				processFlowItem(c, &section.Annotation.Items[i], next, annotationCtx, "annotation", sb, styles, imageResources, ca, idToEID)
 			}
 
 			sb.ExitContainer() // Exit annotation container
@@ -220,7 +228,11 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 		sb.SetContainerMargins(epigraphCtx.ExtractContainerMargins("div", "epigraph"))
 
 		for i := range epigraph.Flow.Items {
-			processFlowItem(c, &epigraph.Flow.Items[i], epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID)
+			var next *fb2.FlowItem
+			if i+1 < len(epigraph.Flow.Items) {
+				next = &epigraph.Flow.Items[i+1]
+			}
+			processFlowItem(c, &epigraph.Flow.Items[i], next, epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID)
 		}
 		for i := range epigraph.TextAuthors {
 			addParagraphWithImages(c, &epigraph.TextAuthors[i], epigraphCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
@@ -307,7 +319,11 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 				}
 			}
 		} else {
-			processFlowItem(c, item, sectionCtx, "section", sb, styles, imageResources, ca, idToEID)
+			var next *fb2.FlowItem
+			if i+1 < len(section.Content) {
+				next = &section.Content[i+1]
+			}
+			processFlowItem(c, item, next, sectionCtx, "section", sb, styles, imageResources, ca, idToEID)
 		}
 	}
 
@@ -351,7 +367,7 @@ func sectionHasNonTrivialContent(section *fb2.Section) bool {
 // processFlowItem processes a flow item using ContentAccumulator.
 // ctx tracks the full ancestor context chain for CSS cascade emulation.
 // contextName is the immediate context name (e.g., "section", "cite") used for subtitle naming.
-func processFlowItem(c *content.Content, item *fb2.FlowItem, ctx StyleContext, contextName string, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
+func processFlowItem(c *content.Content, item *fb2.FlowItem, next *fb2.FlowItem, ctx StyleContext, contextName string, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
 	switch item.Kind {
 	case fb2.FlowParagraph:
 		if item.Paragraph != nil {
@@ -451,15 +467,17 @@ func processFlowItem(c *content.Content, item *fb2.FlowItem, ctx StyleContext, c
 		if !ok {
 			return
 		}
+		prevWasImage := sb.PreviousEntryIsImage()
 		// When empty-line precedes an image, KP3 puts the empty-line margin on the
 		// PREVIOUS element (as margin-bottom) rather than on the image (as margin-top).
 		// This is different from empty-line followed by text, where the margin goes
 		// to the next element's margin-top.
 		pendingMargin := ctx.ConsumePendingMargin()
+		hadEmptyLineBefore := pendingMargin > 0
 		if pendingMargin > 0 {
 			// KP3 special case: image + empty-line + image -> emits a spacer container
 			// between the images rather than turning the empty-line into image margin.
-			if sb.PreviousEntryIsImage() {
+			if prevWasImage {
 				// Clear pending empty-line mt on the builder (the spacer will consume it)
 				sb.consumePendingEmptyLineMarginTop()
 				sb.AddEmptyLineSpacer(pendingMargin, styles)
@@ -471,7 +489,24 @@ func processFlowItem(c *content.Content, item *fb2.FlowItem, ctx StyleContext, c
 				sb.consumePendingEmptyLineMarginTop()
 			}
 		}
+		nextIsCaptionLike := next != nil && (next.Kind == fb2.FlowParagraph || next.Kind == fb2.FlowSubtitle)
 		resolved, isFloatImage := ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, "image")
+		// KP3 quirk (observed in _Test.fb2): for certain full-width block images that are
+		// preceded by an <empty-line/>, KP3 injects fixed vertical margins of 2.6lh.
+		//
+		// In other books (e.g. 3.fb2), similar full-width images without surrounding
+		// empty-lines do NOT get this margin. Use the empty-line-before-image signal
+		// as the discriminator.
+		//
+		// Additional discriminator: KP3 does not inject 2.6lh when the image is
+		// immediately followed by text (common "figure + caption" pattern). Only apply
+		// when the next item is an empty-line/image or we're at the end of the container.
+		if !prevWasImage && hadEmptyLineBefore && !nextIsCaptionLike && ImageWidthPercent(imgInfo.Width) >= 100 {
+			resolved = ensureFixedBlockImageMargins(styles, resolved, 2.6, 2.6)
+			// Prevent post-processing margin collapsing from moving these fixed margins
+			// onto adjacent siblings (KP3 keeps 2.6lh on the image itself).
+			isFloatImage = true
+		}
 		eid := sb.AddImage(imgInfo.ResourceName, resolved, item.Image.Alt, isFloatImage)
 		if item.Image.ID != "" {
 			if _, exists := idToEID[item.Image.ID]; !exists {
@@ -523,7 +558,11 @@ func processPoem(c *content.Content, poem *fb2.Poem, ctx StyleContext, sb *Story
 		sb.SetContainerMargins(epigraphCtx.ExtractContainerMargins("div", "epigraph"))
 
 		for i := range epigraph.Flow.Items {
-			processFlowItem(c, &epigraph.Flow.Items[i], epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID)
+			var next *fb2.FlowItem
+			if i+1 < len(epigraph.Flow.Items) {
+				next = &epigraph.Flow.Items[i+1]
+			}
+			processFlowItem(c, &epigraph.Flow.Items[i], next, epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID)
 		}
 		for i := range epigraph.TextAuthors {
 			addParagraphWithImages(c, &epigraph.TextAuthors[i], epigraphCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
@@ -610,7 +649,11 @@ func processCite(c *content.Content, cite *fb2.Cite, ctx StyleContext, sb *Story
 
 	// Process all cite flow items with full context chain
 	for i := range cite.Items {
-		processFlowItem(c, &cite.Items[i], citeCtx, "cite", sb, styles, imageResources, ca, idToEID)
+		var next *fb2.FlowItem
+		if i+1 < len(cite.Items) {
+			next = &cite.Items[i+1]
+		}
+		processFlowItem(c, &cite.Items[i], next, citeCtx, "cite", sb, styles, imageResources, ca, idToEID)
 	}
 
 	// Process text authors
@@ -683,7 +726,11 @@ func processFootnoteSectionContent(
 		sb.SetContainerMargins(epigraphCtx.ExtractContainerMargins("div", "epigraph"))
 
 		for i := range epigraph.Flow.Items {
-			processFlowItem(c, &epigraph.Flow.Items[i], epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID)
+			var next *fb2.FlowItem
+			if i+1 < len(epigraph.Flow.Items) {
+				next = &epigraph.Flow.Items[i+1]
+			}
+			processFlowItem(c, &epigraph.Flow.Items[i], next, epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID)
 		}
 		for i := range epigraph.TextAuthors {
 			addParagraphWithImages(c, &epigraph.TextAuthors[i], epigraphCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
@@ -722,7 +769,11 @@ func processFootnoteSectionContent(
 		// Store container margins for post-processing
 		sb.SetContainerMargins(annotationCtx.ExtractContainerMargins("div", "annotation"))
 		for i := range section.Annotation.Items {
-			processFlowItem(c, &section.Annotation.Items[i], annotationCtx, "annotation", sb, styles, imageResources, ca, idToEID)
+			var next *fb2.FlowItem
+			if i+1 < len(section.Annotation.Items) {
+				next = &section.Annotation.Items[i+1]
+			}
+			processFlowItem(c, &section.Annotation.Items[i], next, annotationCtx, "annotation", sb, styles, imageResources, ca, idToEID)
 		}
 
 		sb.ExitContainer() // Exit annotation container
@@ -747,7 +798,11 @@ func processFootnoteSectionContent(
 			continue
 		}
 
-		processFlowItem(c, item, footnoteCtx, "footnote", sb, styles, imageResources, ca, idToEID)
+		var next *fb2.FlowItem
+		if i+1 < len(section.Content) {
+			next = &section.Content[i+1]
+		}
+		processFlowItem(c, item, next, footnoteCtx, "footnote", sb, styles, imageResources, ca, idToEID)
 		// Mark first paragraph as processed (for poems/cites that may contain paragraphs)
 		if item.Paragraph != nil {
 			isFirstParagraph = false

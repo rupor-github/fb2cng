@@ -508,7 +508,11 @@ func processBodyIntroContent(c *content.Content, body *fb2.Body, sb *StorylineBu
 		epigraphCtx := NewStyleContext(styles).PushBlock("div", "epigraph")
 
 		for i := range epigraph.Flow.Items {
-			processFlowItem(c, &epigraph.Flow.Items[i], epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID)
+			var next *fb2.FlowItem
+			if i+1 < len(epigraph.Flow.Items) {
+				next = &epigraph.Flow.Items[i+1]
+			}
+			processFlowItem(c, &epigraph.Flow.Items[i], next, epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID)
 		}
 		for i := range epigraph.TextAuthors {
 			addParagraphWithImages(c, &epigraph.TextAuthors[i], epigraphCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)

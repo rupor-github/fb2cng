@@ -343,7 +343,11 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 		sb.SetContainerMargins(annotationCtx.ExtractContainerMargins("div", "annotation"))
 		for i := range c.Book.Description.TitleInfo.Annotation.Items {
 			item := &c.Book.Description.TitleInfo.Annotation.Items[i]
-			processFlowItem(c, item, annotationCtx, "annotation", sb, styles, imageResources, ca, idToEID)
+			var next *fb2.FlowItem
+			if i+1 < len(c.Book.Description.TitleInfo.Annotation.Items) {
+				next = &c.Book.Description.TitleInfo.Annotation.Items[i+1]
+			}
+			processFlowItem(c, item, next, annotationCtx, "annotation", sb, styles, imageResources, ca, idToEID)
 		}
 		sb.ExitContainer() // Exit annotation container
 

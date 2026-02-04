@@ -47,8 +47,7 @@ func (sc StyleContext) ResolveImage(classes string) string {
 //
 // Block image behavior:
 //   - Standalone block images (blockStyle contains "image"):
-//   - Full-width (≥512px): Fixed 2.6lh margins (KP3 behavior), NO margin collapsing
-//   - Smaller: Margins from CSS, participate in post-processing margin collapsing
+//   - Margins from CSS, participate in post-processing margin collapsing
 //   - Always centered (box-align: center)
 //   - Images inside other blocks (paragraph, subtitle, etc.):
 //   - Inherit text-indent as margin-left (KP3 aligns such images with paragraph text)
@@ -62,8 +61,8 @@ func (sc StyleContext) ResolveImage(classes string) string {
 //   - Applies properties from "image-inline" CSS style
 //   - No margin collapsing (inline images don't participate in margin collapsing)
 //
-// Returns the registered style name and whether this is a "float image" (full-width standalone).
-// Float images have fixed 2.6lh margins and don't participate in sibling margin collapsing.
+// Returns the registered style name and whether this is a "float image".
+// Currently we don't classify any block images as float images.
 func (sc StyleContext) ResolveImageWithDimensions(kind ImageKind, imageWidth, imageHeight int, blockStyle string) (style string, isFloatImage bool) {
 	if sc.registry == nil {
 		return "", false
@@ -124,12 +123,10 @@ func isContainerContextClass(class string) bool {
 }
 
 // resolveBlockImage handles ImageBlock styling with position-based margin filtering.
-// Returns the style name and whether this is a float image (full-width standalone).
+// Returns the style name and whether this is a float image.
 func (sc StyleContext) resolveBlockImage(props map[KFXSymbol]any, imageWidth int, blockStyle string) (string, bool) {
 	widthPercent := ImageWidthPercent(imageWidth)
 	isStandaloneBlock := strings.Contains(blockStyle, "image")
-	isFullWidth := imageWidth >= int(KP3ContentWidthPx)
-	isFloatImage := isStandaloneBlock && isFullWidth // Float images are full-width standalone blocks
 
 	// Track if block style has text-align: center - this should become box-align: center for images
 	hasTextAlignCenter := false
@@ -214,16 +211,8 @@ func (sc StyleContext) resolveBlockImage(props map[KFXSymbol]any, imageWidth int
 
 	// Ensure line-height is present (KP3 requires it for block images)
 	props[SymLineHeight] = DimensionValue(1, SymUnitLh)
-
-	// Handle margins based on image type
-	if isStandaloneBlock && isFullWidth {
-		// Full-width standalone images: fixed 2.6lh margins (KP3 behavior)
-		// NO position filtering - these always get the same margins
-		props[SymMarginTop] = DimensionValue(2.6, SymUnitLh)
-		props[SymMarginBottom] = DimensionValue(2.6, SymUnitLh)
-	}
 	// Note: For other block images, margins come from CSS and will be processed
 	// by post-processing CollapseMargins() for centralized margin logic.
 
-	return sc.registry.RegisterResolved(props, 0, true), isFloatImage
+	return sc.registry.RegisterResolved(props, 0, true), false
 }

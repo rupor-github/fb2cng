@@ -110,8 +110,10 @@ func (sb *StorylineBuilder) AddContentWithHeading(contentType KFXSymbol, content
 }
 
 // AddImage adds an image reference (to storyline or current block).
-// isFloatImage should be true for full-width standalone block images that have fixed
-// margins and don't participate in sibling margin collapsing.
+//
+// isFloatImage marks images that should act as a barrier for margin post-processing.
+// At the moment we don't classify any images as float images (always false), but the
+// flag is kept to preserve structure for future KP3-parity experiments.
 func (sb *StorylineBuilder) AddImage(resourceName, style, altText string, isFloatImage bool) int {
 	eid := sb.eidCounter
 	sb.eidCounter++

@@ -58,9 +58,8 @@ type ContentRef struct {
 	// in applyEmptyLineMargins, after captureMargins captures the style-based margins.
 	EmptyLineMarginTop *float64
 
-	// IsFloatImage marks full-width standalone block images (≥512px).
-	// Float images have fixed 2.6lh margins that do NOT participate in sibling margin collapsing.
-	// They act as barriers between elements - their margins stay on the image itself.
+	// IsFloatImage marks images that should act as a barrier for margin post-processing.
+	// Currently we don't classify any images as float images (always false).
 	IsFloatImage bool
 }
 

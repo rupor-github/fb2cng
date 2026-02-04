@@ -215,8 +215,8 @@ type ContentNode struct {
 	// post-processing to avoid font-size scaling that would occur if baked into the CSS style.
 	EmptyLineMarginTop *float64
 
-	// IsFloatImage is true for full-width standalone block images (width >= 512px).
-	// These images have fixed 2.6lh margins and act as barriers to sibling margin collapsing.
+	// IsFloatImage marks images that should act as a barrier in margin post-processing.
+	// Currently we don't classify any images as float images (always false).
 	IsFloatImage bool
 
 	// ContainerKind identifies the type of container this node represents.

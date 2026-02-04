@@ -199,7 +199,7 @@ func (t *ContentTree) stripMarkedMarginBottom(container *ContentNode) {
 		}
 
 		// Float images have fixed margins that don't participate in collapsing.
-		// Skip stripping mb from float images - they keep their 2.6lh margins.
+		// Skip stripping mb from float images - they act as a collapse barrier.
 		if child.StripMarginBottom && child.MarginBottom != nil && !child.IsFloatImage {
 			strippedMB := *child.MarginBottom
 
@@ -435,8 +435,7 @@ func (t *ContentTree) collapseLastChildWithContext(container *ContentNode, isLas
 		}
 		return
 	}
-	// Float images have fixed margins (2.6lh) that don't participate in collapsing.
-	// They keep their margins and act as barriers in the margin flow.
+	// Float images act as a barrier in margin flow.
 	if last.IsFloatImage {
 		return
 	}
@@ -522,8 +521,7 @@ func (t *ContentTree) collapseSiblings(container *ContentNode) {
 		// Only process virtual containers (wrappers) or break-after-avoid elements
 		// Content nodes do NOT transfer margins to siblings (except special cases below)
 		if !curr.IsContainer() {
-			// Float images have fixed 2.6lh margins and act as barriers.
-			// They do not participate in sibling collapsing in either direction.
+			// Float images act as barriers; they do not participate in sibling collapsing.
 			if curr.IsFloatImage || next.IsFloatImage {
 				continue
 			}
