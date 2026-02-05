@@ -1,6 +1,6 @@
 module fbc
 
-go 1.25.6
+go 1.25.7
 
 tool (
 	github.com/abice/go-enum
@@ -41,7 +41,7 @@ require (
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
 	github.com/abice/go-enum v0.9.2 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
-	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
+	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.30.1 // indirect
@@ -64,7 +64,7 @@ require (
 	golang.org/x/exp/typeparams v0.0.0-20260112195511-716be5621a96 // indirect
 	golang.org/x/mod v0.32.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/telemetry v0.0.0-20260128140115-fcf36f686977 // indirect
+	golang.org/x/telemetry v0.0.0-20260205145544-86a5c4bf3c8d // indirect
 	golang.org/x/tools v0.41.0 // indirect
 	golang.org/x/tools/cmd/cover v0.1.0-deprecated // indirect
 	honnef.co/go/tools v0.6.1 // indirect

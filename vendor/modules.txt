@@ -30,7 +30,7 @@ github.com/cpuguy83/go-md2man/v2/md2man
 # github.com/disintegration/imaging v1.6.2
 ## explicit
 github.com/disintegration/imaging
-# github.com/gabriel-vasile/mimetype v1.4.12
+# github.com/gabriel-vasile/mimetype v1.4.13
 ## explicit; go 1.21
 github.com/gabriel-vasile/mimetype
 github.com/gabriel-vasile/mimetype/internal/charset
@@ -200,7 +200,7 @@ golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
-# golang.org/x/telemetry v0.0.0-20260128140115-fcf36f686977
+# golang.org/x/telemetry v0.0.0-20260205145544-86a5c4bf3c8d
 ## explicit; go 1.24.0
 golang.org/x/telemetry/counter
 golang.org/x/telemetry/internal/counter
