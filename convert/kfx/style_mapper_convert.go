@@ -245,16 +245,19 @@ func convertStyleMapProp(prop string, cssVal CSSValue, rawVal string, unit strin
 	case "keep_lines_together":
 		if cssVal.Keyword != "" || cssVal.Raw != "" || cssVal.IsNumeric() {
 			keep := make(map[KFXSymbol]any)
-			keep[SymKeepLinesTogether] = true
 			if count, ok := parseIntValue(cssVal, rawVal); ok {
 				switch strings.ToLower(sourceAttr) {
-				case "widows":
-					keep[SymKeepFirst] = count
 				case "orphans":
+					// KP3 maps CSS orphans to the keep "first" field.
+					keep[SymKeepFirst] = count
+				case "widows":
+					// KP3 maps CSS widows to the keep "last" field.
 					keep[SymKeepLast] = count
 				}
 			}
-			out[SymKeepLinesTogether] = keep
+			if len(keep) > 0 {
+				out[SymKeepLinesTogether] = keep
+			}
 		}
 	case "shadows", "text_shadows":
 		val := firstNonEmpty(cssVal.Raw, rawVal)

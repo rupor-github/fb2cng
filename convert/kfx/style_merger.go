@@ -241,9 +241,6 @@ func mergeKeepLinesTogether(existing, incoming any) (any, bool) {
 	merged := make(map[KFXSymbol]any, len(em)+len(im)+1)
 	maps.Copy(merged, em)
 	maps.Copy(merged, im)
-	if _, ok := merged[SymKeepLinesTogether]; !ok {
-		merged[SymKeepLinesTogether] = true
-	}
 	return merged, true
 }
 

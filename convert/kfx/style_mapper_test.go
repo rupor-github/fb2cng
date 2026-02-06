@@ -67,14 +67,11 @@ func TestStyleMapperWidowsOrphansTransformer(t *testing.T) {
 	if !ok {
 		t.Fatalf("keep_lines_together should be a symbol map, got %T", value)
 	}
-	if keepMap[SymKeepLinesTogether] != true {
-		t.Fatalf("keep_lines_together flag missing")
+	if first, ok := keepMap[SymKeepFirst]; !ok || first != 3 {
+		t.Fatalf("expected orphans->first=3, got %v", keepMap[SymKeepFirst])
 	}
-	if first, ok := keepMap[SymKeepFirst]; !ok || first != 2 {
-		t.Fatalf("expected widows->first=2, got %v", keepMap[SymKeepFirst])
-	}
-	if last, ok := keepMap[SymKeepLast]; !ok || last != 3 {
-		t.Fatalf("expected orphans->last=3, got %v", keepMap[SymKeepLast])
+	if last, ok := keepMap[SymKeepLast]; !ok || last != 2 {
+		t.Fatalf("expected widows->last=2, got %v", keepMap[SymKeepLast])
 	}
 }
 
