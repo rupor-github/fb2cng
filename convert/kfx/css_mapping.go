@@ -23,8 +23,10 @@ var cssToKFXProperty = CSSToKFXMap{
 	"background-color": SymFillColor,     // $70
 
 	// Text Layout
-	"text-indent": SymTextIndent,    // $36
-	"text-align":  SymTextAlignment, // $34
+	"text-indent":     SymTextIndent,    // $36
+	"text-align":      SymTextAlignment, // $34
+	"hyphens":         SymHyphens,       // $127
+	"-webkit-hyphens": SymHyphens,       // $127
 
 	// Box Model - Margins
 	"margin-top":    SymMarginTop,    // $47

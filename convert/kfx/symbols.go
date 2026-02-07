@@ -262,6 +262,7 @@ const (
 	SymSubscript   KFXSymbol = 371 // subscript
 	SymItalic      KFXSymbol = 382 // italic
 	SymAuto        KFXSymbol = 383 // auto
+	SymManual      KFXSymbol = 384 // manual
 	SymLtr         KFXSymbol = 376 // ltr
 	SymPortrait    KFXSymbol = 385 // portrait
 	SymLandscape   KFXSymbol = 386 // landscape

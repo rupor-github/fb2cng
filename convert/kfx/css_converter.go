@@ -189,6 +189,15 @@ func (c *Converter) convertProperty(name string, value CSSValue, props map[KFXSy
 			c.mergeProp(props, SymTextAlignment, sym)
 		}
 
+	case "hyphens", "-webkit-hyphens":
+		if sym, ok := ConvertHyphens(value); ok {
+			c.mergeProp(props, SymHyphens, sym)
+		} else if value.Keyword != "" {
+			c.log.Debug("unsupported hyphens value ignored",
+				zap.String("property", name),
+				zap.String("value", value.Keyword))
+		}
+
 	case "writing-mode", "-webkit-writing-mode":
 		if sym, ok := ConvertWritingMode(value); ok {
 			c.mergeProp(props, SymWritingMode, sym)

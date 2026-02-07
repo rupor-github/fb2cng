@@ -359,6 +359,23 @@ func ConvertClear(css CSSValue) (KFXSymbol, bool) {
 	return 0, false
 }
 
+// ConvertHyphens converts CSS hyphens values to KFX symbols.
+// CSS: none, auto, manual
+// KFX: $349 (none), $383 (auto), $384 (manual)
+// Note: KFX also defines "unknown" ($348) and "enabled" ($441) values,
+// but these are not standard CSS values and are not mapped here.
+func ConvertHyphens(css CSSValue) (KFXSymbol, bool) {
+	switch strings.ToLower(css.Keyword) {
+	case "none":
+		return SymNone, true // $349
+	case "auto":
+		return SymAuto, true // $383
+	case "manual":
+		return SymManual, true // $384
+	}
+	return 0, false
+}
+
 // ConvertPageBreak converts CSS page-break-* values.
 // CSS: always, avoid, auto
 // KFX: $352 (always), $353 (avoid)

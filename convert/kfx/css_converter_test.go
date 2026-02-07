@@ -862,6 +862,116 @@ func TestStyleRegistryBuildFragments(t *testing.T) {
 	}
 }
 
+func TestConvertHyphens(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    CSSValue
+		expected KFXSymbol
+		ok       bool
+	}{
+		{"none", CSSValue{Keyword: "none"}, SymNone, true},
+		{"auto", CSSValue{Keyword: "auto"}, SymAuto, true},
+		{"manual", CSSValue{Keyword: "manual"}, SymManual, true},
+		{"None (uppercase)", CSSValue{Keyword: "None"}, SymNone, true},
+		{"AUTO (uppercase)", CSSValue{Keyword: "AUTO"}, SymAuto, true},
+		{"unknown", CSSValue{Keyword: "unknown"}, 0, false},
+		{"enabled", CSSValue{Keyword: "enabled"}, 0, false},
+		{"empty", CSSValue{Keyword: ""}, 0, false},
+		{"invalid", CSSValue{Keyword: "invalid"}, 0, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, ok := ConvertHyphens(tt.input)
+			if ok != tt.ok {
+				t.Errorf("expected ok=%v, got ok=%v", tt.ok, ok)
+			}
+			if ok && result != tt.expected {
+				t.Errorf("expected %d, got %d", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestHyphensProperty(t *testing.T) {
+	log := zap.NewNop()
+	parser := NewParser(log)
+	conv := NewConverter(log)
+
+	tests := []struct {
+		name        string
+		css         string
+		expectProp  bool
+		expectValue KFXSymbol
+	}{
+		{
+			name:        "hyphens auto",
+			css:         `.test { hyphens: auto; }`,
+			expectProp:  true,
+			expectValue: SymAuto,
+		},
+		{
+			name:        "hyphens none",
+			css:         `.test { hyphens: none; }`,
+			expectProp:  true,
+			expectValue: SymNone,
+		},
+		{
+			name:        "hyphens manual",
+			css:         `.test { hyphens: manual; }`,
+			expectProp:  true,
+			expectValue: SymManual,
+		},
+		{
+			name:        "-webkit-hyphens auto",
+			css:         `.test { -webkit-hyphens: auto; }`,
+			expectProp:  true,
+			expectValue: SymAuto,
+		},
+		{
+			name:       "hyphens enabled (KFX-specific, ignored)",
+			css:        `.test { hyphens: enabled; font-weight: bold; }`,
+			expectProp: false,
+		},
+		{
+			name:       "hyphens unknown (KFX-specific, ignored)",
+			css:        `.test { hyphens: unknown; font-weight: bold; }`,
+			expectProp: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sheet := parser.Parse([]byte(tt.css))
+			styles, _ := conv.ConvertStylesheet(sheet)
+
+			if len(styles) != 1 {
+				t.Fatalf("expected 1 style, got %d", len(styles))
+			}
+
+			style := styles[0]
+			hyphens, hasProp := style.Properties[SymHyphens]
+
+			if tt.expectProp {
+				if !hasProp {
+					t.Fatal("expected hyphens property to be set")
+				}
+				if sym, ok := hyphens.(KFXSymbol); ok {
+					if sym != tt.expectValue {
+						t.Errorf("expected %v, got %v", tt.expectValue, sym)
+					}
+				} else {
+					t.Errorf("expected KFXSymbol, got %T: %v", hyphens, hyphens)
+				}
+			} else {
+				if hasProp {
+					t.Errorf("expected hyphens property to NOT be set, but got %v", hyphens)
+				}
+			}
+		})
+	}
+}
+
 func TestNegativeMarginWarning(t *testing.T) {
 	log := zap.NewNop()
 	parser := NewParser(log)

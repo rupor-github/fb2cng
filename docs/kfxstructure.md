@@ -2320,6 +2320,22 @@ Reference KFX files from KP3 consistently use `$59`/`$61` for left/right alignme
 
 Derived from: Reference KFX comparison, `convert/kfx/css_values.go:ConvertTextAlign`, `convert/kfx/css_values.go:ConvertFloat`.
 
+#### 7.10.10 Hyphens property symbol mapping
+
+CSS `hyphens` (and `-webkit-hyphens`) maps to KFX property `$127` (hyphens) with symbol values:
+
+| CSS Value | KFX Symbol | Symbol Name | Description |
+| --------- | ---------- | ----------- | ----------- |
+| `none`    | `$349`     | `SymNone`   | No hyphenation |
+| `auto`    | `$383`     | `SymAuto`   | Automatic hyphenation by the reading system |
+| `manual`  | `$384`     | `SymManual` | Only hyphenate at explicit soft hyphen (U+00AD) points |
+
+KFX also defines `$348` (unknown/null) and `$441` (enabled) values in the enum, but these are KFX-internal and are not mapped from CSS. Unrecognized values are logged at debug level and ignored.
+
+KP3 registers both `hyphens` and `-webkit-hyphens` as accepted CSS properties (see `com/amazon/yjhtmlmapper/b/c.java` lines 358-359).
+
+Derived from: KP3 `ElementEnums.data` (eHyphensOption), `convert/kfx/css_values.go:ConvertHyphens`.
+
 ---
 
 ## 8. Symbol dictionary

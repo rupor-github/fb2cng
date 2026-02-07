@@ -825,6 +825,14 @@ Visual byte map (approximate):
 │    start   → $680 (SymStart)    end     → $681 (SymEnd) [rarely used]       │
 │  KP3 reference files consistently use $59/$61 for left/right alignment.     │
 │                                                                             │
+│  Hyphens Symbol Mapping ($127):                                             │
+│  ──────────────────────────────                                             │
+│  CSS hyphens / -webkit-hyphens → KFX $127 (hyphens):                       │
+│    none    → $349 (SymNone)     No hyphenation                              │
+│    auto    → $383 (SymAuto)     Automatic hyphenation                       │
+│    manual  → $384 (SymManual)   Only at soft hyphen (U+00AD) points         │
+│  KFX-internal values $348 (unknown) and $441 (enabled) are not CSS-mapped.  │
+│                                                                             │
 │  Example Style Fragment:                                                    │
 │  {                                                                          │
 │    $173: "body-title-header",     // Style name                             │
