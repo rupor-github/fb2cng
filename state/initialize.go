@@ -61,38 +61,63 @@ func newLocalEnv() *LocalEnv {
         stroke="black" fill="none" stroke-width="1"/>
   <line x1="70" y1="10" x2="230" y2="10" stroke="black" stroke-width="1"/>
 </svg>`),
-			common.VignettePosChapterEnd: []byte(`<svg viewBox="0 0 240 20" xmlns="http://www.w3.org/2000/svg">
-  <path d="M10 10 H90
-           M150 10 H230"
+			common.VignettePosChapterEnd: []byte(`<svg viewBox="0 0 300 20" xmlns="http://www.w3.org/2000/svg">
+  <line x1="10" y1="10" x2="290" y2="10"
         stroke="black" stroke-width="1"/>
-  <path d="M120 3 A7 7 0 1 1 119.9 3" fill="none" stroke="black" stroke-width="1"/>
+  <path d="M10 10
+           Q40 20 70 10"
+        stroke="black" fill="none" stroke-width="1"/>
+  <path d="M120 10
+           Q150 0 180 10"
+        stroke="black" fill="none" stroke-width="1"/>
+  <path d="M230 10
+           Q260 20 290 10"
+        stroke="black" fill="none" stroke-width="1"/>
 </svg>`),
 			common.VignettePosSectionTitleTop: []byte(`<svg viewBox="0 0 240 24" xmlns="http://www.w3.org/2000/svg">
-  <path d="M20 12 H100
-           M140 12 H220"
-        stroke="black" stroke-width="1"/>
+  <path d="M20 22
+           C30 12 50 12 60 12"
+        fill="none" stroke="black" stroke-width="1"/>
+  <path d="M60 12 H100" stroke="black" stroke-width="1"/>
   <path d="M100 12
            C110 2 130 2 140 12
            C130 22 110 22 100 12"
         fill="none" stroke="black" stroke-width="1.2"/>
+  <path d="M140 12 H180" stroke="black" stroke-width="1"/>
+  <path d="M180 12
+           C190 12 210 12 220 22"
+        fill="none" stroke="black" stroke-width="1"/>
 </svg>`),
 			common.VignettePosSectionTitleBottom: []byte(`<svg viewBox="0 0 240 24" xmlns="http://www.w3.org/2000/svg">
-  <path d="M20 12 H100
-           M140 12 H220"
-        stroke="black" stroke-width="1"/>
+  <path d="M20 2
+           C30 12 50 12 60 12"
+        fill="none" stroke="black" stroke-width="1"/>
+  <path d="M60 12 H100" stroke="black" stroke-width="1"/>
   <path d="M100 12
-           C110 2 130 2 140 12
-           C130 22 110 22 100 12"
+           C110 22 130 22 140 12
+           C130 2 110 2 100 12"
         fill="none" stroke="black" stroke-width="1.2"/>
+  <path d="M140 12 H180" stroke="black" stroke-width="1"/>
+  <path d="M180 12
+           C190 12 210 12 220 2"
+        fill="none" stroke="black" stroke-width="1"/>
 </svg>`),
-			common.VignettePosSectionEnd: []byte(`<svg viewBox="0 0 200 20" xmlns="http://www.w3.org/2000/svg">
-  <path d="M50 10
-           C65 0 85 0 100 10
-           C85 20 65 20 50 10
-           M100 10
-           C115 0 135 0 150 10
-           C135 20 115 20 100 10"
-        stroke="black" fill="none" stroke-width="1.3"/>
+			common.VignettePosSectionEnd: []byte(`<svg viewBox="0 0 240 24" xmlns="http://www.w3.org/2000/svg">
+  <path d="M20 2
+           C30 12 50 12 60 12"
+        fill="none" stroke="black" stroke-width="1"/>
+  <path d="M60 12 H100" stroke="black" stroke-width="1"/>
+  <path d="M100 12
+           C110 22 130 22 140 12
+           C130 2 110 2 100 12"
+        fill="none" stroke="black" stroke-width="1.2"/>
+  <path d="M140 12 H180" stroke="black" stroke-width="1"/>
+  <path d="M180 12
+           C190 12 210 12 220 2"
+        fill="none" stroke="black" stroke-width="1"/>
+  <path d="M20 2
+           C70 13 170 13 220 2"
+        fill="none" stroke="black" stroke-width="1"/>
 </svg>`),
 		},
 	}
