@@ -140,26 +140,26 @@ func TestShorthandPropertyPreventsStylemapOverride(t *testing.T) {
 }
 
 // TestAdjustLineHeightForFontSize verifies that styles with non-default font-size
-// get adjusted line-height and correspondingly adjusted vertical margins.
-// KP3 uses different formulas:
-//   - font-size < 1rem: line-height = 1/font-size (keeps absolute spacing constant)
-//   - font-size >= 1rem: line-height = 1.0101lh
+// get properly adjusted. KP3 behavior:
+//   - font-size < 1rem: line-height stays at default (1lh), margins scale by 1/fontSize
+//   - font-size >= 1rem: line-height = 1.0101lh, margins scale by 1/adjustedLh
 func TestAdjustLineHeightForFontSize(t *testing.T) {
 	tests := []struct {
-		name           string
-		props          map[KFXSymbol]any
-		wantLineHeight float64
-		wantMarginTop  float64
-		wantAdjustment bool // whether adjustment should happen
+		name              string
+		props             map[KFXSymbol]any
+		wantLineHeight    float64 // 0 = not set/unchanged
+		wantLineHeightSet bool    // whether line-height should be added/changed
+		wantMarginTop     float64
+		wantMarginChanged bool // whether margin-top should be adjusted
 	}{
 		{
 			name: "no font-size",
 			props: map[KFXSymbol]any{
 				SymMarginTop: DimensionValue(0.55833, SymUnitLh),
 			},
-			wantLineHeight: 0, // not set
-			wantMarginTop:  0.55833,
-			wantAdjustment: false,
+			wantLineHeightSet: false,
+			wantMarginTop:     0.55833,
+			wantMarginChanged: false,
 		},
 		{
 			name: "default font-size 1rem",
@@ -167,9 +167,9 @@ func TestAdjustLineHeightForFontSize(t *testing.T) {
 				SymFontSize:  DimensionValue(1.0, SymUnitRem),
 				SymMarginTop: DimensionValue(0.55833, SymUnitLh),
 			},
-			wantLineHeight: 0, // not changed
-			wantMarginTop:  0.55833,
-			wantAdjustment: false,
+			wantLineHeightSet: false,
+			wantMarginTop:     0.55833,
+			wantMarginChanged: false,
 		},
 		{
 			name: "large font-size 1.25rem uses 1.0101",
@@ -177,62 +177,67 @@ func TestAdjustLineHeightForFontSize(t *testing.T) {
 				SymFontSize:  DimensionValue(1.25, SymUnitRem),
 				SymMarginTop: DimensionValue(0.55833, SymUnitLh),
 			},
-			wantLineHeight: RoundDecimals(AdjustedLineHeightLh, LineHeightPrecision), // 1.0101
-			wantMarginTop:  RoundSignificant(0.55833/AdjustedLineHeightLh, SignificantFigures),
-			wantAdjustment: true,
+			wantLineHeight:    RoundDecimals(AdjustedLineHeightLh, LineHeightPrecision), // 1.0101
+			wantLineHeightSet: true,
+			wantMarginTop:     RoundSignificant(0.55833/AdjustedLineHeightLh, SignificantFigures),
+			wantMarginChanged: true,
 		},
 		{
-			name: "small font-size 0.75rem uses 1/font-size",
+			name: "small font-size 0.75rem - line-height 1lh, margin scales by 1/fontSize",
 			props: map[KFXSymbol]any{
 				SymFontSize:  DimensionValue(0.75, SymUnitRem),
 				SymMarginTop: DimensionValue(0.41667, SymUnitLh),
 			},
-			wantLineHeight: RoundDecimals(1.0/0.75, LineHeightPrecision), // 1.33333
-			wantMarginTop:  RoundSignificant(0.41667/(1.0/0.75), SignificantFigures),
-			wantAdjustment: true,
+			wantLineHeight:    DefaultLineHeightLh, // KP3 sets 1lh for small font-size
+			wantLineHeightSet: true,
+			wantMarginTop:     RoundSignificant(0.41667/0.75, SignificantFigures),
+			wantMarginChanged: true,
 		},
 		{
-			name: "monospace font-size 0.75rem uses KP3 line-height",
+			name: "monospace font-size 0.75rem - same as non-monospace",
 			props: map[KFXSymbol]any{
 				SymFontFamily: "monospace",
 				SymFontSize:   DimensionValue(0.75, SymUnitRem),
 			},
-			wantLineHeight: 1.33249,
-			wantMarginTop:  0,
-			wantAdjustment: true,
+			wantLineHeight:    DefaultLineHeightLh,
+			wantLineHeightSet: true,
+			wantMarginChanged: false, // no margins to adjust
 		},
 		{
-			name: "monospace margin scaling matches KP3",
+			name: "monospace margin scaling at 0.75rem",
 			props: map[KFXSymbol]any{
 				SymFontFamily:   "monospace",
 				SymFontSize:     DimensionValue(0.75, SymUnitRem),
-				SymLineHeight:   DimensionValue(1.33249, SymUnitLh),
 				SymMarginTop:    DimensionValue(0.5, SymUnitLh),
 				SymMarginBottom: DimensionValue(0.25, SymUnitLh),
 			},
-			wantLineHeight: 1.33249,
-			wantMarginTop:  0.500316,
-			wantAdjustment: true,
+			wantLineHeight:    DefaultLineHeightLh,
+			wantLineHeightSet: true,
+			wantMarginTop:     RoundSignificant(0.5/0.75, SignificantFigures),
+			wantMarginChanged: true,
 		},
 		{
-			name: "small font-size 0.6rem uses 1/font-size",
+			name: "small font-size 0.6rem - margin scales by 1/fontSize",
 			props: map[KFXSymbol]any{
 				SymFontSize:  DimensionValue(0.6, SymUnitRem),
 				SymMarginTop: DimensionValue(0.3, SymUnitLh),
 			},
-			wantLineHeight: RoundDecimals(1.0/0.6, LineHeightPrecision), // 1.66667
-			wantMarginTop:  RoundSignificant(0.3/(1.0/0.6), SignificantFigures),
-			wantAdjustment: true,
+			wantLineHeight:    DefaultLineHeightLh,
+			wantLineHeightSet: true,
+			wantMarginTop:     RoundSignificant(0.3/0.6, SignificantFigures),
+			wantMarginChanged: true,
 		},
 		{
-			name: "monospace font-size 0.7rem clamps to 0.75rem",
+			name: "monospace font-size 0.7rem matches KP3 code style",
 			props: map[KFXSymbol]any{
 				SymFontFamily: "monospace",
 				SymFontSize:   DimensionValue(0.7, SymUnitRem),
+				SymMarginTop:  DimensionValue(0.5, SymUnitLh),
 			},
-			wantLineHeight: 1.33249,
-			wantMarginTop:  0, // not present
-			wantAdjustment: true,
+			wantLineHeight:    DefaultLineHeightLh,
+			wantLineHeightSet: true,
+			wantMarginTop:     RoundSignificant(0.5/0.7, SignificantFigures), // 0.714286 — matches KP3
+			wantMarginChanged: true,
 		},
 		{
 			name: "font-size in percent (not rem) - no adjustment",
@@ -240,9 +245,33 @@ func TestAdjustLineHeightForFontSize(t *testing.T) {
 				SymFontSize:  DimensionValue(140, SymUnitPercent),
 				SymMarginTop: DimensionValue(0.55833, SymUnitLh),
 			},
-			wantLineHeight: 0,
-			wantMarginTop:  0.55833,
-			wantAdjustment: false,
+			wantLineHeightSet: false,
+			wantMarginTop:     0.55833,
+			wantMarginChanged: false,
+		},
+		{
+			name: "small font-size with pre-existing line-height preserves it",
+			props: map[KFXSymbol]any{
+				SymFontSize:   DimensionValue(0.8, SymUnitRem),
+				SymLineHeight: DimensionValue(1.25, SymUnitLh),
+				SymMarginTop:  DimensionValue(0.4, SymUnitLh),
+			},
+			wantLineHeight:    1.25,                                          // preserved from input
+			wantLineHeightSet: true,                                          // present in output (unchanged)
+			wantMarginTop:     RoundSignificant(0.4/0.8, SignificantFigures), // margin still scales by 1/fontSize
+			wantMarginChanged: true,
+		},
+		{
+			name: "large font-size with pre-existing line-height preserves it",
+			props: map[KFXSymbol]any{
+				SymFontSize:   DimensionValue(1.25, SymUnitRem),
+				SymLineHeight: DimensionValue(1.12233, SymUnitLh),
+				SymMarginTop:  DimensionValue(0.55833, SymUnitLh),
+			},
+			wantLineHeight:    1.12233, // preserved from input
+			wantLineHeightSet: true,
+			wantMarginTop:     RoundSignificant(0.55833/1.12233, SignificantFigures), // uses preserved lh
+			wantMarginChanged: true,
 		},
 	}
 
@@ -252,14 +281,18 @@ func TestAdjustLineHeightForFontSize(t *testing.T) {
 
 			// Check line-height
 			if lh, ok := result[SymLineHeight]; ok {
-				lhVal, lhUnit, _ := measureParts(lh)
-				if !tt.wantAdjustment {
-					t.Errorf("line-height should not be set, got %v%v", lhVal, lhUnit)
+				lhVal, _, _ := measureParts(lh)
+				if !tt.wantLineHeightSet {
+					// If input already had line-height and we expect no change,
+					// the output should still have the same value
+					if _, hadInput := tt.props[SymLineHeight]; !hadInput {
+						t.Errorf("line-height should not be set, got %v", lhVal)
+					}
 				} else if math.Abs(lhVal-tt.wantLineHeight) > 1e-5 {
 					t.Errorf("line-height = %v, want %v", lhVal, tt.wantLineHeight)
 				}
-			} else if tt.wantAdjustment {
-				t.Error("line-height should be set but was not")
+			} else if tt.wantLineHeightSet {
+				t.Errorf("line-height should be set to %v but was not", tt.wantLineHeight)
 			}
 
 			// Check margin-top

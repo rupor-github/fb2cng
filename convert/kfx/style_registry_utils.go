@@ -135,21 +135,20 @@ func stripLineHeight(props map[KFXSymbol]any) map[KFXSymbol]any {
 }
 
 // adjustLineHeightForFontSize adjusts line-height and vertical margins when
-// font-size differs from the default (1rem). KP3 uses different formulas based
+// font-size differs from the default (1rem). KP3 uses different strategies based
 // on font-size:
 //
-//   - For font-size < 1rem (e.g., sub/sup): line-height = 1/font-size
-//     This keeps absolute line spacing the same as surrounding 1rem text.
-//     Example: 0.75rem font-size → 1.33333lh (0.75 * 1.33333 = 1.0 absolute)
+//   - For font-size < 1rem (e.g., sub/sup, code): line-height = 1lh (default).
+//     Vertical margins are scaled by 1/font-size to preserve absolute spacing.
+//     Example: 0.7rem font-size, margin 0.5lh → 0.5/0.7 = 0.714286lh
 //
 //   - For font-size >= 1rem (e.g., headings): line-height = 1.0101lh
 //     Uses the standard adjustment factor (100/99 ≈ 1.0101).
+//     Vertical margins are divided by the adjusted line-height.
 //
 // Note: If line-height is already set (e.g., calculated in ResolveInlineDelta
 // for inline elements in non-standard contexts like headings), it is preserved.
 // The ratio-based calculation in ResolveInlineDelta is more accurate for those cases.
-//
-// Vertical margins are recalculated using the line-height adjustment factor.
 func adjustLineHeightForFontSize(props map[KFXSymbol]any) map[KFXSymbol]any {
 	// Check if font-size exists and differs from default (1rem)
 	fontSize, ok := props[SymFontSize]
@@ -170,74 +169,39 @@ func adjustLineHeightForFontSize(props map[KFXSymbol]any) map[KFXSymbol]any {
 	updated := make(map[KFXSymbol]any, len(props))
 	maps.Copy(updated, props)
 
-	// KP3 behavior (observed): monospace styles (e.g. <code>/<pre>) are not emitted
-	// with font-size below 0.75rem, even when the source CSS uses smaller percent
-	// values like 70%.
-	//
-	// We clamp only monospace here to avoid changing semantics for other small
-	// font-size use-cases (sub/sup, small text, etc.).
-	if fontSizeVal < 0.75 && isMonospaceFontFamily(props[SymFontFamily]) {
-		fontSizeVal = 0.75
-		updated[SymFontSize] = DimensionValue(fontSizeVal, SymUnitRem)
-	}
-
-	// Calculate line-height based on font-size, but only if not already set.
-	// Styles from ResolveInlineDelta may already have ratio-based line-height
-	// calculated relative to the parent's font-size, which is more accurate
-	// for inline elements in heading contexts.
-	var adjustedLh float64
-	// For monospace blocks, KP3 uses a slightly different line-height for 0.75rem
-	// (observed in reference output: 0.75rem -> 1.33249lh).
-	// This also impacts margin scaling for code listings.
-	const kp3Monospace075LineHeightLh = 1.33249
-	if existingLh, hasLh := props[SymLineHeight]; hasLh {
-		// Use existing line-height (already calculated with proper context)
-		if lhVal, lhUnit, ok := measureParts(existingLh); ok && lhUnit == SymUnitLh {
-			adjustedLh = lhVal
-		} else {
-			// Fallback: calculate based on font-size
-			if fontSizeVal < 1.0 {
-				adjustedLh = 1.0 / fontSizeVal
-				if isMonospaceFontFamily(updated[SymFontFamily]) && math.Abs(fontSizeVal-0.75) < 1e-9 {
-					adjustedLh = kp3Monospace075LineHeightLh
-				}
-			} else {
-				adjustedLh = AdjustedLineHeightLh
-			}
-			updated[SymLineHeight] = DimensionValue(RoundDecimals(adjustedLh, LineHeightPrecision), SymUnitLh)
+	if fontSizeVal < 1.0 {
+		// Small font-size: KP3 sets line-height to 1lh explicitly.
+		// This preserves the default line spacing for inline elements (sub/sup, code)
+		// so they don't affect surrounding line rhythm.
+		// If line-height was already set by ResolveInlineDelta, preserve it as-is.
+		if _, hasLh := props[SymLineHeight]; !hasLh {
+			updated[SymLineHeight] = DimensionValue(DefaultLineHeightLh, SymUnitLh)
 		}
-	} else {
-		// No existing line-height: calculate based on font-size
-		if fontSizeVal < 1.0 {
-			adjustedLh = 1.0 / fontSizeVal
-			if isMonospaceFontFamily(updated[SymFontFamily]) && math.Abs(fontSizeVal-0.75) < 1e-9 {
-				adjustedLh = kp3Monospace075LineHeightLh
-			}
-		} else {
-			adjustedLh = AdjustedLineHeightLh
-		}
-		updated[SymLineHeight] = DimensionValue(RoundDecimals(adjustedLh, LineHeightPrecision), SymUnitLh)
-	}
 
-	// Adjust vertical margins using the line-height factor.
-	//
-	// For most styles, KP3 scales vertical margins down when line-height is adjusted.
-	// However, for monospace blocks at 0.75rem (code listings), KP3 keeps the
-	// absolute spacing consistent with the ideal 1/font-size line-height and then
-	// expresses margins relative to the emitted line-height.
-	isMonospace := isMonospaceFontFamily(updated[SymFontFamily])
-	if isMonospace && fontSizeVal < 1.0 {
-		idealLh := 1.0 / fontSizeVal
-		scale := idealLh / adjustedLh
+		// Scale vertical margins by 1/font-size to preserve absolute spacing.
+		// Example: code at 0.7rem with margin 0.5lh → 0.5/0.7 = 0.714286lh
 		for _, sym := range []KFXSymbol{SymMarginTop, SymMarginBottom, SymPaddingTop, SymPaddingBottom} {
 			if margin, ok := updated[sym]; ok {
 				if marginVal, marginUnit, ok := measureParts(margin); ok && marginUnit == SymUnitLh {
-					adjusted := RoundSignificant(marginVal*scale, SignificantFigures)
+					adjusted := RoundSignificant(marginVal/fontSizeVal, SignificantFigures)
 					updated[sym] = DimensionValue(adjusted, SymUnitLh)
 				}
 			}
 		}
 	} else {
+		// Large font-size: line-height = 1.0101lh, margins divided by line-height.
+		// Only set if not already present (ResolveInlineDelta may have set it).
+		adjustedLh := AdjustedLineHeightLh
+		if existingLh, hasLh := props[SymLineHeight]; hasLh {
+			if lhVal, lhUnit, ok := measureParts(existingLh); ok && lhUnit == SymUnitLh {
+				adjustedLh = lhVal
+			} else {
+				updated[SymLineHeight] = DimensionValue(RoundDecimals(adjustedLh, LineHeightPrecision), SymUnitLh)
+			}
+		} else {
+			updated[SymLineHeight] = DimensionValue(RoundDecimals(adjustedLh, LineHeightPrecision), SymUnitLh)
+		}
+
 		for _, sym := range []KFXSymbol{SymMarginTop, SymMarginBottom, SymPaddingTop, SymPaddingBottom} {
 			if margin, ok := updated[sym]; ok {
 				if marginVal, marginUnit, ok := measureParts(margin); ok && marginUnit == SymUnitLh {
@@ -249,14 +213,6 @@ func adjustLineHeightForFontSize(props map[KFXSymbol]any) map[KFXSymbol]any {
 	}
 
 	return updated
-}
-
-func isMonospaceFontFamily(v any) bool {
-	fam, ok := v.(string)
-	if !ok || fam == "" {
-		return false
-	}
-	return strings.Contains(strings.ToLower(fam), "monospace")
 }
 
 func containsSymbolAny(list []any, expected KFXSymbol) bool {
