@@ -833,6 +833,22 @@ Visual byte map (approximate):
 │    manual  → $384 (SymManual)   Only at soft hyphen (U+00AD) points         │
 │  KFX-internal values $348 (unknown) and $441 (enabled) are not CSS-mapped.  │
 │                                                                             │
+│  Shape Outside / Border Path ($650):                                        │
+│  ───────────────────────────────────                                        │
+│  CSS `-amzn-shape-outside: polygon(...)` → KFX $650 (yj.border_path).      │
+│  Value is a flat Ion list of float64 encoding a KVG (Kindle Vector          │
+│  Graphics) path for float exclusion zones. Commands and coordinates are     │
+│  interleaved:                                                               │
+│    0 = MOVE_TO    (+ 2 floats: x, y)                                       │
+│    1 = LINE_TO    (+ 2 floats: x, y)                                       │
+│    4 = CLOSE_PATH (no coordinates)                                          │
+│  KP3 only accepts polygon() with percent coordinates, divided by 100        │
+│  to produce fractional values (0.0-1.0). First point uses MOVE_TO,         │
+│  subsequent points use LINE_TO, path ends with CLOSE_PATH.                  │
+│  Example: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)                      │
+│  →  $650: [0e0, 0e0, 0e0, 1e0, 1e0, 0e0, 1e0, 1e0, 1e0, 1e0, 0e0,       │
+│            1e0, 4e0]                                                        │
+│                                                                             │
 │  Example Style Fragment:                                                    │
 │  {                                                                          │
 │    $173: "body-title-header",     // Style name                             │

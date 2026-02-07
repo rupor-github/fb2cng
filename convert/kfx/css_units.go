@@ -2,6 +2,7 @@ package kfx
 
 import (
 	"fmt"
+	"strings"
 )
 
 // CSSValueToKFX converts a CSS value with units to KFX dimension representation.
@@ -18,7 +19,10 @@ func CSSValueToKFX(css CSSValue) (value float64, unit KFXSymbol, err error) {
 	case "em":
 		return css.Value, SymUnitEm, nil // $308
 	case "ex":
-		return css.Value, SymUnitEx, nil // $309
+		// KP3 maps ex to em unit (com/amazon/yjhtmlmapper/i/d.java:17).
+		// Normally ex values are already converted to em by normalizeCSSProperties(),
+		// but this serves as a safety net for any ex values that bypass normalization.
+		return css.Value, SymUnitEm, nil // $308 (em, not ex)
 	case "%":
 		return css.Value, SymUnitPercent, nil // $314
 	case "px":
@@ -51,4 +55,76 @@ func MakeDimensionValue(css CSSValue) (StructValue, error) {
 		return nil, err
 	}
 	return DimensionValue(value, unit), nil
+}
+
+// MakeBorderRadiusValue converts a CSS border-radius value to a KFX value.
+//
+// KP3 reference: com/amazon/yjhtmlmapper/transformers/BorderRadiusTransformer.java
+//
+// CSS border-*-radius accepts two space-separated values for elliptical corners:
+//
+//	border-top-left-radius: 10px 20px  (horizontal-radius vertical-radius)
+//
+// KP3 splits the value by space, requires exactly 2 tokens for the two-value case:
+//   - If both values are identical → single DimensionValue (measure)
+//   - If they differ → Ion list of two DimensionValue items [horizontal, vertical]
+//
+// Single-value input falls through to the standard MakeDimensionValue path.
+// Returns (value, true) on success, (nil, false) on failure.
+func MakeBorderRadiusValue(cssVal CSSValue, rawVal string, unit string) (any, bool) {
+	// Determine the raw string to inspect for space-separated pairs.
+	raw := cssVal.Raw
+	if raw == "" {
+		raw = rawVal
+	}
+	raw = strings.TrimSpace(raw)
+
+	parts := strings.Fields(raw)
+
+	switch len(parts) {
+	case 0:
+		// Empty value — nothing to emit.
+		return nil, false
+
+	case 1:
+		// Single value — use standard dimension conversion.
+		if dim, err := MakeDimensionValue(cssVal); err == nil {
+			return dim, true
+		}
+		if rawVal != "" {
+			if dim, err := MakeDimensionValue(parseStyleMapCSSValue(rawVal, unit)); err == nil {
+				return dim, true
+			}
+		}
+		return nil, false
+
+	case 2:
+		// Two-value elliptical radius — KP3 BorderRadiusTransformer.java:54-73.
+		// Parse each token independently.
+		first := parseStyleMapCSSValue(parts[0], unit)
+		second := parseStyleMapCSSValue(parts[1], unit)
+
+		dim1, err1 := MakeDimensionValue(first)
+		dim2, err2 := MakeDimensionValue(second)
+		if err1 != nil || err2 != nil {
+			return nil, false
+		}
+
+		// KP3 compares the two tokens: if identical, emit single measure.
+		// The comparison reconstructs: var4[0].equals(var4[1] + this.k.d())
+		// We simplify: compare the parsed numeric value and unit.
+		if first.Value == second.Value && first.Unit == second.Unit {
+			return dim1, true
+		}
+
+		// Different radii — emit Ion list of two dimensions [horizontal, vertical].
+		list := NewList()
+		list.Add(dim1)
+		list.Add(dim2)
+		return ListValue(list), true
+
+	default:
+		// 3+ tokens — KP3 throws INVALID_PROPERTY_VALUE. Skip silently.
+		return nil, false
+	}
 }

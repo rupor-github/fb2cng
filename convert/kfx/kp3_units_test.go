@@ -138,6 +138,7 @@ func TestUnitConversionConstants(t *testing.T) {
 		{"EmToPercentHorizontal", EmToPercentHorizontal, 3.125},
 		{"EmToPercentTextIndent", EmToPercentTextIndent, 3.125},
 		{"FontSizeCompressionFactor", FontSizeCompressionFactor, 160.0},
+		{"ExToEmFactor", ExToEmFactor, 0.44},
 	}
 
 	for _, tt := range tests {

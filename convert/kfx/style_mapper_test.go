@@ -251,7 +251,7 @@ func TestStyleMapperXYStyleTransformer(t *testing.T) {
 func TestStyleMapperYJExtensions(t *testing.T) {
 	mapper := NewStyleMapper(nil, nil)
 
-	shape := "M0,0 L1,1"
+	shape := "polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)"
 	props, warnings := mapper.MapRule(Selector{Raw: "div", Element: "div"}, map[string]CSSValue{
 		"-amzn-shape-outside":       {Raw: shape},
 		"-amzn-max-crop-percentage": {Raw: "5,5,5,5"},
@@ -262,8 +262,30 @@ func TestStyleMapperYJExtensions(t *testing.T) {
 		t.Fatalf("unexpected warnings: %v", warnings)
 	}
 
-	if val, ok := props[mustSymbol(t, "yj.border_path")]; !ok || val != shape {
-		t.Fatalf("expected yj.border_path=%s, got %v", shape, val)
+	// yj.border_path should be a ListValue (KVG path), not a raw string.
+	if val, ok := props[mustSymbol(t, "yj.border_path")]; !ok {
+		t.Fatalf("expected yj.border_path")
+	} else {
+		list, ok := val.(ListValue)
+		if !ok {
+			t.Fatalf("expected yj.border_path to be ListValue, got %T", val)
+		}
+		// polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%) should produce:
+		// [moveTo(0,0), lineTo(1,0), lineTo(1,1), lineTo(0,1), closePath]
+		// = [0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 4]
+		expected := []float64{0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 4}
+		if len(list) != len(expected) {
+			t.Fatalf("expected %d elements in KVG path, got %d: %v", len(expected), len(list), list)
+		}
+		for i, want := range expected {
+			got, ok := list[i].(float64)
+			if !ok {
+				t.Fatalf("element %d: expected float64, got %T", i, list[i])
+			}
+			if got != want {
+				t.Fatalf("element %d: expected %v, got %v", i, want, got)
+			}
+		}
 	}
 	if val, ok := props[mustSymbol(t, "yj.max_crop")]; !ok {
 		t.Fatalf("expected yj.max_crop")
@@ -329,6 +351,157 @@ func TestStyleMapperYJExtensions(t *testing.T) {
 		t.Fatalf("expected text_shadows")
 	} else {
 		checkShadow(val, false, MakeColorValue(0, 0, 0), 1, 1, 2)
+	}
+}
+
+func TestParsePolygonPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		wantOK   bool
+		expected []float64
+	}{
+		{
+			name:     "basic square",
+			input:    "polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)",
+			wantOK:   true,
+			expected: []float64{0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 4},
+		},
+		{
+			name:     "triangle",
+			input:    "polygon(50% 0%, 100% 100%, 0% 100%)",
+			wantOK:   true,
+			expected: []float64{0, 0.5, 0, 1, 1, 1, 1, 0, 1, 4},
+		},
+		{
+			name:     "single point",
+			input:    "polygon(50% 50%)",
+			wantOK:   true,
+			expected: []float64{0, 0.5, 0.5, 4},
+		},
+		{
+			name:     "case insensitive",
+			input:    "POLYGON(0% 0%, 100% 100%)",
+			wantOK:   true,
+			expected: []float64{0, 0, 0, 1, 1, 1, 4},
+		},
+		{
+			name:     "fractional percentages",
+			input:    "polygon(33.3% 66.6%, 50% 25%)",
+			wantOK:   true,
+			expected: []float64{0, 0.333, 0.666, 1, 0.5, 0.25, 4},
+		},
+		{
+			name:   "reject circle",
+			input:  "circle(50%)",
+			wantOK: false,
+		},
+		{
+			name:   "reject ellipse",
+			input:  "ellipse(50% 50%)",
+			wantOK: false,
+		},
+		{
+			name:   "reject inset",
+			input:  "inset(10%)",
+			wantOK: false,
+		},
+		{
+			name:   "reject non-percent units",
+			input:  "polygon(10px 20px, 30px 40px)",
+			wantOK: false,
+		},
+		{
+			name:   "reject mixed units",
+			input:  "polygon(10% 20px, 30% 40%)",
+			wantOK: false,
+		},
+		{
+			name:   "reject single value per pair",
+			input:  "polygon(10%, 20%)",
+			wantOK: false,
+		},
+		{
+			name:   "reject three values per pair",
+			input:  "polygon(10% 20% 30%, 40% 50% 60%)",
+			wantOK: false,
+		},
+		{
+			name:   "reject empty polygon",
+			input:  "polygon()",
+			wantOK: false,
+		},
+		{
+			name:   "reject missing parens",
+			input:  "polygon 10% 20%",
+			wantOK: false,
+		},
+		{
+			name:   "reject plain string",
+			input:  "M0,0 L1,1",
+			wantOK: false,
+		},
+		{
+			name:   "reject empty string",
+			input:  "",
+			wantOK: false,
+		},
+		{
+			name:   "reject unitless values",
+			input:  "polygon(0 0, 100 100)",
+			wantOK: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, ok := parsePolygonPath(tc.input)
+			if ok != tc.wantOK {
+				t.Fatalf("parsePolygonPath(%q): got ok=%v, want %v (result=%v)", tc.input, ok, tc.wantOK, result)
+			}
+			if !tc.wantOK {
+				return
+			}
+			if len(result) != len(tc.expected) {
+				t.Fatalf("expected %d elements, got %d: %v", len(tc.expected), len(result), result)
+			}
+			for i, want := range tc.expected {
+				got, ok := result[i].(float64)
+				if !ok {
+					t.Fatalf("element %d: expected float64, got %T", i, result[i])
+				}
+				// Use tolerance for fractional percentages.
+				diff := got - want
+				if diff < 0 {
+					diff = -diff
+				}
+				if diff > 1e-9 {
+					t.Fatalf("element %d: expected %v, got %v", i, want, got)
+				}
+			}
+		})
+	}
+}
+
+func TestParsePolygonPathRejectsNonPolygon(t *testing.T) {
+	// Verify that the yj.border_path case in convertStyleMapProp rejects
+	// non-polygon values (old behavior was to pass them through as strings).
+	mapper := NewStyleMapper(nil, nil)
+
+	// SVG-like path string should NOT produce yj.border_path.
+	props, _ := mapper.MapRule(Selector{Raw: "div", Element: "div"}, map[string]CSSValue{
+		"-amzn-shape-outside": {Raw: "M0,0 L1,1"},
+	})
+	if _, ok := props[mustSymbol(t, "yj.border_path")]; ok {
+		t.Fatal("non-polygon value should not produce yj.border_path")
+	}
+
+	// circle() should NOT produce yj.border_path.
+	props, _ = mapper.MapRule(Selector{Raw: "div", Element: "div"}, map[string]CSSValue{
+		"-amzn-shape-outside": {Raw: "circle(50%)"},
+	})
+	if _, ok := props[mustSymbol(t, "yj.border_path")]; ok {
+		t.Fatal("circle() should not produce yj.border_path")
 	}
 }
 

@@ -48,7 +48,26 @@ var zeroValueProps = map[string]bool{
 	"margin-bottom":  true,
 }
 
-func normalizeCSSProperties(props map[string]CSSValue, tracer *StyleTracer, context string) map[string]CSSValue {
+// textDecorationControlTags lists HTML elements for which text-decoration: none
+// has semantic meaning and must be preserved. For all other elements, KP3 strips
+// text-decoration: none as a no-op (com/amazon/yjhtmlmapper/h/b.java:373-395).
+//
+// For reflowable books (which is what fb2cng produces), <a> is always in this set.
+// In KP3, the <a> exemption depends on a fixed-layout flag: in fixed-layout books
+// <a> is treated as a normal element (text-decoration: none is stripped), but in
+// reflowable books <a> is exempted (text-decoration: none is preserved to allow
+// removing the default hyperlink underline).
+var textDecorationControlTags = map[string]bool{
+	"u":      true,
+	"a":      true,
+	"ins":    true,
+	"del":    true,
+	"s":      true,
+	"strike": true,
+	"br":     true,
+}
+
+func normalizeCSSProperties(props map[string]CSSValue, element string, tracer *StyleTracer, context string) map[string]CSSValue {
 	if len(props) == 0 {
 		return props
 	}
@@ -60,6 +79,37 @@ func normalizeCSSProperties(props map[string]CSSValue, tracer *StyleTracer, cont
 		if shouldDropZeroValue(name, val) || isEmptyCSSValue(val) {
 			changed = true
 			continue
+		}
+		// KP3 converts ex units to em early in the normalization pipeline
+		// (com/amazon/yjhtmlmapper/h/b.java:253-263). The conversion uses
+		// a 0.44 factor defined in com/amazon/yj/F/a/b.java:24.
+		if val.Unit == "ex" {
+			val.Value *= ExToEmFactor
+			val.Unit = "em"
+			if val.Raw != "" {
+				val.Raw = fmt.Sprintf("%g%s", val.Value, val.Unit)
+			}
+			changed = true
+		}
+		// KP3 removes text-decoration: none for elements that are NOT in the
+		// decoration-control set (com/amazon/yjhtmlmapper/h/b.java:373-395).
+		// For elements like <u>, <a>, <ins>, <del>, <s>, <strike>, <br>,
+		// text-decoration: none has semantic meaning (e.g., removing the inherent
+		// underline from <u>) so it is preserved. For all other elements it's a
+		// no-op and is stripped.
+		// When element is empty (class-only selector), we conservatively keep it
+		// since we can't determine which element the class applies to.
+		if name == "text-decoration" && strings.EqualFold(strings.TrimSpace(val.Keyword), "none") {
+			if element != "" && !textDecorationControlTags[strings.ToLower(element)] {
+				changed = true
+				continue
+			}
+		}
+		if name == "text-decoration" && val.Keyword == "" && strings.EqualFold(strings.TrimSpace(val.Raw), "none") {
+			if element != "" && !textDecorationControlTags[strings.ToLower(element)] {
+				changed = true
+				continue
+			}
 		}
 		normalized[name] = val
 	}
@@ -127,7 +177,7 @@ func (c *Converter) ConvertRule(rule CSSRule) ConversionResult {
 		Warnings: make([]string, 0),
 	}
 
-	props := normalizeCSSProperties(rule.Properties, c.tracer, rule.Selector.Raw)
+	props := normalizeCSSProperties(rule.Properties, rule.Selector.Element, c.tracer, rule.Selector.Raw)
 
 	for propName, propValue := range props {
 		before := snapshotProps(result.Style.Properties)

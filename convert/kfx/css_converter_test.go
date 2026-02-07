@@ -972,6 +972,110 @@ func TestHyphensProperty(t *testing.T) {
 	}
 }
 
+func TestExToEmConversion(t *testing.T) {
+	log := zap.NewNop()
+	parser := NewParser(log)
+	conv := NewConverter(log)
+
+	// CSS with ex units should be converted to em using ExToEmFactor (0.44)
+	css := []byte(`
+		.test {
+			text-indent: 2ex;
+			margin-top: 1ex;
+			font-size: 3ex;
+		}
+	`)
+
+	sheet := parser.Parse(css)
+	styles, warnings := conv.ConvertStylesheet(sheet)
+
+	if len(warnings) > 0 {
+		t.Errorf("unexpected warnings: %v", warnings)
+	}
+
+	if len(styles) != 1 {
+		t.Fatalf("expected 1 style, got %d", len(styles))
+	}
+
+	style := styles[0]
+
+	// text-indent: 2ex → 0.88em → % (0.88 * EmToPercentTextIndent = 2.75%)
+	if ti, ok := style.Properties[SymTextIndent]; ok {
+		sv, ok := ti.(StructValue)
+		if !ok {
+			t.Fatalf("expected StructValue for text-indent, got %T", ti)
+		}
+		val := getStructValueAsFloat64(sv, SymValue)
+		expected := 2 * ExToEmFactor * EmToPercentTextIndent // 2 * 0.44 * 3.125 = 2.75
+		if math.Abs(val-expected) > 0.001 {
+			t.Errorf("text-indent: expected value ~%f%%, got %f", expected, val)
+		}
+	} else {
+		t.Error("text-indent property not set")
+	}
+
+	// margin-top: 1ex → 0.44em → lh (0.44 / 1.2 ≈ 0.366667)
+	if mt, ok := style.Properties[SymMarginTop]; ok {
+		sv, ok := mt.(StructValue)
+		if !ok {
+			t.Fatalf("expected StructValue for margin-top, got %T", mt)
+		}
+		val := getStructValueAsFloat64(sv, SymValue)
+		expected := ExToEmFactor / LineHeightRatio // 0.44 / 1.2 ≈ 0.3667
+		if math.Abs(val-expected) > 0.001 {
+			t.Errorf("margin-top: expected value ~%f lh, got %f", expected, val)
+		}
+	} else {
+		t.Error("margin-top property not set")
+	}
+}
+
+func TestExToEmNormalization(t *testing.T) {
+	// Test the normalizeCSSProperties function directly
+	props := map[string]CSSValue{
+		"text-indent": {Value: 2, Unit: "ex", Raw: "2ex"},
+		"font-weight": {Keyword: "bold"},
+		"margin-left": {Value: 0.5, Unit: "ex", Raw: "0.5ex"},
+	}
+
+	normalized := normalizeCSSProperties(props, "", nil, "")
+
+	// text-indent should now be in em
+	if ti, ok := normalized["text-indent"]; ok {
+		if ti.Unit != "em" {
+			t.Errorf("expected unit 'em', got '%s'", ti.Unit)
+		}
+		expected := 2.0 * ExToEmFactor // 0.88
+		if math.Abs(ti.Value-expected) > 1e-9 {
+			t.Errorf("expected value %f, got %f", expected, ti.Value)
+		}
+	} else {
+		t.Error("text-indent not found in normalized props")
+	}
+
+	// font-weight should be unchanged (keyword, not ex unit)
+	if fw, ok := normalized["font-weight"]; ok {
+		if fw.Keyword != "bold" {
+			t.Errorf("expected keyword 'bold', got '%s'", fw.Keyword)
+		}
+	} else {
+		t.Error("font-weight not found in normalized props")
+	}
+
+	// margin-left should now be in em
+	if ml, ok := normalized["margin-left"]; ok {
+		if ml.Unit != "em" {
+			t.Errorf("expected unit 'em', got '%s'", ml.Unit)
+		}
+		expected := 0.5 * ExToEmFactor // 0.22
+		if math.Abs(ml.Value-expected) > 1e-9 {
+			t.Errorf("expected value %f, got %f", expected, ml.Value)
+		}
+	} else {
+		t.Error("margin-left not found in normalized props")
+	}
+}
+
 func TestNegativeMarginWarning(t *testing.T) {
 	log := zap.NewNop()
 	parser := NewParser(log)
@@ -1023,5 +1127,291 @@ func TestNegativeMarginWarning(t *testing.T) {
 	// The positive margin-bottom SHOULD be set
 	if _, ok := style.Properties[SymMarginBottom]; !ok {
 		t.Error("positive margin-bottom SHOULD be set")
+	}
+}
+
+// TestMakeBorderRadiusValue tests the MakeBorderRadiusValue function directly.
+// KP3 reference: BorderRadiusTransformer.java
+func TestMakeBorderRadiusValue(t *testing.T) {
+	tests := []struct {
+		name     string
+		cssVal   CSSValue
+		rawVal   string
+		unit     string
+		wantOK   bool
+		wantList bool // true if result should be a ListValue (two different radii)
+	}{
+		{
+			name:   "single value from CSSValue",
+			cssVal: CSSValue{Value: 10, Unit: "px", Raw: "10px"},
+			wantOK: true,
+		},
+		{
+			name:   "single value from rawVal",
+			cssVal: CSSValue{},
+			rawVal: "10px",
+			unit:   "px",
+			wantOK: true,
+		},
+		{
+			name:   "two identical values - single dimension",
+			cssVal: CSSValue{Raw: "10px 10px"},
+			unit:   "px",
+			wantOK: true,
+		},
+		{
+			name:     "two different values - list of two dimensions",
+			cssVal:   CSSValue{Raw: "10px 20px"},
+			unit:     "px",
+			wantOK:   true,
+			wantList: true,
+		},
+		{
+			name:     "two different units - list of two dimensions",
+			cssVal:   CSSValue{Raw: "10px 50%"},
+			unit:     "px",
+			wantOK:   true,
+			wantList: true,
+		},
+		{
+			name:     "two values from rawVal",
+			cssVal:   CSSValue{},
+			rawVal:   "5em 10em",
+			unit:     "em",
+			wantOK:   true,
+			wantList: true,
+		},
+		{
+			name:   "two identical em values - single dimension",
+			cssVal: CSSValue{Raw: "5em 5em"},
+			unit:   "em",
+			wantOK: true,
+		},
+		{
+			name:   "empty value",
+			cssVal: CSSValue{},
+			wantOK: false,
+		},
+		{
+			name:   "three values - rejected by KP3",
+			cssVal: CSSValue{Raw: "10px 20px 30px"},
+			unit:   "px",
+			wantOK: false,
+		},
+		{
+			name:   "single zero value",
+			cssVal: CSSValue{Value: 0, Unit: "px", Raw: "0px"},
+			wantOK: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			val, ok := MakeBorderRadiusValue(tt.cssVal, tt.rawVal, tt.unit)
+			if ok != tt.wantOK {
+				t.Fatalf("MakeBorderRadiusValue() ok = %v, want %v", ok, tt.wantOK)
+			}
+			if !ok {
+				return
+			}
+
+			if tt.wantList {
+				// Should be a ListValue with two DimensionValue items
+				lv, isList := val.(ListValue)
+				if !isList {
+					t.Fatalf("expected ListValue, got %T", val)
+				}
+				if len(lv) != 2 {
+					t.Fatalf("expected list of 2 items, got %d", len(lv))
+				}
+				// Each item should be a StructValue (dimension)
+				for i, item := range lv {
+					sv, isSV := item.(StructValue)
+					if !isSV {
+						t.Errorf("list item[%d]: expected StructValue, got %T", i, item)
+						continue
+					}
+					if _, ok := sv[SymValue]; !ok {
+						t.Errorf("list item[%d]: missing $307 (value)", i)
+					}
+					if _, ok := sv[SymUnit]; !ok {
+						t.Errorf("list item[%d]: missing $306 (unit)", i)
+					}
+				}
+			} else {
+				// Should be a single StructValue (dimension)
+				sv, isSV := val.(StructValue)
+				if !isSV {
+					t.Fatalf("expected StructValue, got %T", val)
+				}
+				if _, ok := sv[SymValue]; !ok {
+					t.Error("missing $307 (value)")
+				}
+				if _, ok := sv[SymUnit]; !ok {
+					t.Error("missing $306 (unit)")
+				}
+			}
+		})
+	}
+}
+
+// TestBorderRadiusTwoValueDimensions verifies the actual numeric values in two-value output.
+func TestBorderRadiusTwoValueDimensions(t *testing.T) {
+	// "10px 20px" → list of [{value:10, unit:px}, {value:20, unit:px}]
+	val, ok := MakeBorderRadiusValue(CSSValue{Raw: "10px 20px"}, "", "px")
+	if !ok {
+		t.Fatal("expected ok=true")
+	}
+
+	lv, isList := val.(ListValue)
+	if !isList {
+		t.Fatalf("expected ListValue, got %T", val)
+	}
+	if len(lv) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(lv))
+	}
+
+	// First dimension: 10px
+	dim1 := lv[0].(StructValue)
+	v1 := getStructValueAsFloat64(dim1, SymValue)
+	if math.Abs(v1-10.0) > 0.001 {
+		t.Errorf("first radius: expected 10, got %f", v1)
+	}
+	if u1 := dim1[SymUnit]; u1 != SymbolValue(SymUnitPx) {
+		t.Errorf("first radius unit: expected SymUnitPx, got %v", u1)
+	}
+
+	// Second dimension: 20px
+	dim2 := lv[1].(StructValue)
+	v2 := getStructValueAsFloat64(dim2, SymValue)
+	if math.Abs(v2-20.0) > 0.001 {
+		t.Errorf("second radius: expected 20, got %f", v2)
+	}
+	if u2 := dim2[SymUnit]; u2 != SymbolValue(SymUnitPx) {
+		t.Errorf("second radius unit: expected SymUnitPx, got %v", u2)
+	}
+}
+
+// TestBorderRadiusMixedUnits verifies two-value output with different units.
+func TestBorderRadiusMixedUnits(t *testing.T) {
+	// "10px 50%" → list of [{value:10, unit:px}, {value:50, unit:percent}]
+	val, ok := MakeBorderRadiusValue(CSSValue{Raw: "10px 50%"}, "", "px")
+	if !ok {
+		t.Fatal("expected ok=true")
+	}
+
+	lv, isList := val.(ListValue)
+	if !isList {
+		t.Fatalf("expected ListValue, got %T", val)
+	}
+	if len(lv) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(lv))
+	}
+
+	// First: 10px
+	dim1 := lv[0].(StructValue)
+	v1 := getStructValueAsFloat64(dim1, SymValue)
+	if math.Abs(v1-10.0) > 0.001 {
+		t.Errorf("first radius: expected 10, got %f", v1)
+	}
+	if u1 := dim1[SymUnit]; u1 != SymbolValue(SymUnitPx) {
+		t.Errorf("first radius unit: expected SymUnitPx, got %v", u1)
+	}
+
+	// Second: 50%
+	dim2 := lv[1].(StructValue)
+	v2 := getStructValueAsFloat64(dim2, SymValue)
+	if math.Abs(v2-50.0) > 0.001 {
+		t.Errorf("second radius: expected 50, got %f", v2)
+	}
+	if u2 := dim2[SymUnit]; u2 != SymbolValue(SymUnitPercent) {
+		t.Errorf("second radius unit: expected SymUnitPercent, got %v", u2)
+	}
+}
+
+// TestBorderRadiusViaConvertStyleMapProp tests the integration with convertStyleMapProp.
+func TestBorderRadiusViaConvertStyleMapProp(t *testing.T) {
+	log := zap.NewNop()
+
+	tests := []struct {
+		name     string
+		prop     string
+		cssVal   CSSValue
+		rawVal   string
+		unit     string
+		wantOK   bool
+		wantList bool
+	}{
+		{
+			name:   "top-left single value",
+			prop:   "border_radius_top_left",
+			cssVal: CSSValue{Value: 10, Unit: "px", Raw: "10px"},
+			unit:   "px",
+			wantOK: true,
+		},
+		{
+			name:     "top-right two different values",
+			prop:     "border_radius_top_right",
+			cssVal:   CSSValue{Raw: "10px 20px"},
+			unit:     "px",
+			wantOK:   true,
+			wantList: true,
+		},
+		{
+			name:   "bottom-left two identical values",
+			prop:   "border_radius_bottom_left",
+			cssVal: CSSValue{Raw: "5em 5em"},
+			unit:   "em",
+			wantOK: true,
+		},
+		{
+			name:     "bottom-right mixed units",
+			prop:     "border_radius_bottom_right",
+			cssVal:   CSSValue{Raw: "10px 50%"},
+			unit:     "px",
+			wantOK:   true,
+			wantList: true,
+		},
+		{
+			name:   "generic border_radius single value",
+			prop:   "border_radius",
+			cssVal: CSSValue{Value: 8, Unit: "pt", Raw: "8pt"},
+			unit:   "pt",
+			wantOK: true,
+		},
+		{
+			name:   "empty value",
+			prop:   "border_radius_top_left",
+			cssVal: CSSValue{},
+			wantOK: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, ok := convertStyleMapProp(tt.prop, tt.cssVal, tt.rawVal, tt.unit, "measure", "", log)
+			if ok != tt.wantOK {
+				t.Fatalf("convertStyleMapProp() ok = %v, want %v", ok, tt.wantOK)
+			}
+			if !ok {
+				return
+			}
+
+			sym := symbolIDOr(tt.prop)
+			val, exists := result[sym]
+			if !exists {
+				t.Fatalf("expected property %s (sym=%d) in result", tt.prop, sym)
+			}
+
+			if tt.wantList {
+				if _, isList := val.(ListValue); !isList {
+					t.Errorf("expected ListValue for two-value radius, got %T", val)
+				}
+			} else {
+				if _, isSV := val.(StructValue); !isSV {
+					t.Errorf("expected StructValue for single-value radius, got %T", val)
+				}
+			}
+		})
 	}
 }

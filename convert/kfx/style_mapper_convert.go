@@ -202,18 +202,18 @@ func convertStyleMapProp(prop string, cssVal CSSValue, rawVal string, unit strin
 			out[SymLanguage] = val
 		}
 	case "border_radius_top_left", "border_radius_top_right", "border_radius_bottom_left", "border_radius_bottom_right", "border_radius":
-		if dim, err := MakeDimensionValue(cssVal); err == nil {
-			out[symbolIDOr(prop)] = dim
-		} else if rawVal != "" {
-			if dim, err := MakeDimensionValue(parseStyleMapCSSValue(rawVal, unit)); err == nil {
-				out[symbolIDOr(prop)] = dim
-			}
+		// KP3 reference: BorderRadiusTransformer.java
+		// Handles single values and two-value elliptical radius pairs (horizontal vertical).
+		if val, ok := MakeBorderRadiusValue(cssVal, rawVal, unit); ok {
+			out[symbolIDOr(prop)] = val
 		}
 	case "yj.border_path", "yj.max_crop", "yj.user_margin":
 		switch prop {
 		case "yj.border_path":
 			if val := firstNonEmpty(cssVal.Raw, rawVal); val != "" {
-				out[symbolIDOr(prop)] = val
+				if path, ok := parsePolygonPath(val); ok {
+					out[symbolIDOr(prop)] = path
+				}
 			}
 		case "yj.max_crop":
 			if crop, ok := parseMaxCropPercentage(firstNonEmpty(cssVal.Raw, rawVal)); ok {
@@ -528,6 +528,108 @@ func parsePageBleed(val string) map[KFXSymbol]any {
 		return nil
 	}
 	return result
+}
+
+// KVG path command constants for yj.border_path serialization.
+// These match KP3's KVG path builder commands (com.amazon.B.d.c.a.d).
+const (
+	kvgMoveTo    = float64(0) // MOVE_TO: start a new sub-path at (x, y)
+	kvgLineTo    = float64(1) // LINE_TO: draw line to (x, y)
+	kvgClosePath = float64(4) // CLOSE_PATH: close the current sub-path
+)
+
+// parsePolygonPath parses a CSS polygon() function value into a KVG path
+// represented as a flat Ion list of float64 values.
+//
+// KP3 reference: ShapeOutsideTransformer.java
+//   - Only accepts polygon() function (rejects circle, ellipse, inset)
+//   - Each coordinate pair must have exactly 2 values separated by whitespace
+//   - Both X and Y must use percent (%) units
+//   - Converts percent (0-100) to fractional (0.0-1.0) by dividing by 100
+//   - Builds KVG path: first point → moveTo, subsequent → lineTo, then closePath
+//
+// The output is a flat ListValue of float64 values:
+//
+//	[command, x, y, command, x, y, ..., closePath]
+//
+// Example: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)
+// → [0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 4]
+func parsePolygonPath(val string) (ListValue, bool) {
+	lower := strings.ToLower(strings.TrimSpace(val))
+
+	// KP3: only accepts polygon() function.
+	if !strings.HasPrefix(lower, "polygon") {
+		return nil, false
+	}
+
+	// Extract content between parentheses.
+	openIdx := strings.IndexByte(lower, '(')
+	closeIdx := strings.IndexByte(lower, ')')
+	if openIdx < 0 || closeIdx < 0 || openIdx+1 >= len(lower) || openIdx+1 >= closeIdx {
+		return nil, false
+	}
+	inner := lower[openIdx+1 : closeIdx]
+
+	// Split by comma to get coordinate pairs.
+	pairs := strings.Split(inner, ",")
+	if len(pairs) == 0 {
+		return nil, false
+	}
+
+	path := NewList()
+	first := true
+
+	for _, pair := range pairs {
+		tokens := strings.Fields(strings.TrimSpace(pair))
+		// KP3: exactly 2 values per coordinate pair.
+		if len(tokens) != 2 {
+			return nil, false
+		}
+
+		// KP3: both X and Y must use percent units.
+		x, okx := parsePolygonPercent(tokens[0])
+		y, oky := parsePolygonPercent(tokens[1])
+		if !okx || !oky {
+			return nil, false
+		}
+
+		// KP3: first point is moveTo, subsequent are lineTo.
+		if first {
+			path.Add(kvgMoveTo)
+			first = false
+		} else {
+			path.Add(kvgLineTo)
+		}
+		path.Add(x)
+		path.Add(y)
+	}
+
+	// Must have at least one point.
+	if first {
+		return nil, false
+	}
+
+	// KP3: close the path after all points.
+	path.Add(kvgClosePath)
+	return path, true
+}
+
+// parsePolygonPercent parses a single polygon coordinate token.
+// KP3 requires percent units and converts to fractional (0.0-1.0).
+func parsePolygonPercent(token string) (float64, bool) {
+	token = strings.TrimSpace(token)
+	if !strings.HasSuffix(token, "%") {
+		return 0, false
+	}
+	numStr := strings.TrimSuffix(token, "%")
+	if numStr == "" {
+		return 0, false
+	}
+	v, err := strconv.ParseFloat(numStr, 64)
+	if err != nil {
+		return 0, false
+	}
+	return v / 100.0, true
 }
 
 func parseShadows(raw string, isText bool, log *zap.Logger) ([]StructValue, bool) {

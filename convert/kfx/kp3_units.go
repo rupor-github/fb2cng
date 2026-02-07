@@ -119,6 +119,21 @@ const (
 	// The formula can also be written as: rem = 1 + (percent - 100) / 100 * 0.625
 	// where 0.625 = 100 / FontSizeCompressionFactor
 	FontSizeCompressionFactor = 160.0
+
+	// ExToEmFactor is the conversion factor from CSS ex units to em units.
+	// KP3 converts all ex values to em early in the normalization pipeline,
+	// using the formula: em = ex * ExToEmFactor.
+	//
+	// This is defined in com/amazon/yj/F/a/b.java:24 as constant 'e = 0.44'
+	// and used in com/amazon/yjhtmlmapper/i/c.java:8-15 for the ex→em mapping.
+	// The normalization sweep in com/amazon/yjhtmlmapper/h/b.java:253-263
+	// iterates over all CSS properties and replaces ex values with em equivalents.
+	//
+	// Examples:
+	//   1ex → 0.44em
+	//   2ex → 0.88em
+	//   0.5ex → 0.22em
+	ExToEmFactor = 0.44
 )
 
 // KP3 Unit Preference by Property

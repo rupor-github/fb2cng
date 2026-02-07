@@ -1678,7 +1678,14 @@ When a value is an `IonStruct`, this implementation recognizes these shapes:
 
 When a value is an `IonList`, this implementation recognizes these shapes:
 
-- `$650`: polygon shape (`process_polygon`).
+- `$650`: polygon shape (`process_polygon`). The value is a flat Ion list of `float64` values encoding a KVG path for float exclusion zones (CSS `shape-outside: polygon(...)`). The list interleaves command type codes with coordinate pairs:
+  - `0` = MOVE_TO, followed by 2 floats (x, y)
+  - `1` = LINE_TO, followed by 2 floats (x, y)
+  - `2` = QUAD_CURVE_TO, followed by 4 floats (x1, y1, x2, y2)
+  - `3` = CUBIC_CURVE_TO, followed by 6 floats (x1, y1, x2, y2, x3, y3)
+  - `4` = CLOSE_PATH, no following coordinates
+  
+  KP3's `ShapeOutsideTransformer` only accepts `polygon()` with percent coordinates; each percent value is divided by 100 to produce fractional coordinates (0.0-1.0). The first point emits MOVE_TO, subsequent points emit LINE_TO, and the path ends with CLOSE_PATH. Example for `polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)`: `[0e0, 0e0, 0e0, 1e0, 1e0, 0e0, 1e0, 1e0, 1e0, 1e0, 0e0, 1e0, 4e0]`.
 - `$646`: collision list (mapped via `COLLISIONS`).
 - `$98`: transform list (`process_transform`).
 - `$497`: list of shadows (each element processed recursively and joined by `, `).
