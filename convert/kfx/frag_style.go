@@ -468,18 +468,6 @@ func (sb *StyleBuilder) Dropcap(chars, lines int) *StyleBuilder {
 	return sb
 }
 
-// MarginLeftAuto sets left margin to auto (for centering).
-func (sb *StyleBuilder) MarginLeftAuto() *StyleBuilder {
-	sb.props[SymMarginLeft] = SymbolValue(SymAuto)
-	return sb
-}
-
-// MarginRightAuto sets right margin to auto (for centering).
-func (sb *StyleBuilder) MarginRightAuto() *StyleBuilder {
-	sb.props[SymMarginRight] = SymbolValue(SymAuto)
-	return sb
-}
-
 // MarginLeftPercent sets left margin in percentage.
 func (sb *StyleBuilder) MarginLeftPercent(value float64) *StyleBuilder {
 	sb.props[SymMarginLeft] = DimensionValue(value, SymUnitPercent)

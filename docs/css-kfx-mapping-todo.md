@@ -28,7 +28,7 @@ This document tracks the implementation status of CSS-to-KFX mapping features do
 
 | Transformer | KP3 Purpose | Current Status | Missing |
 |-------------|-------------|----------------|---------|
-| MarginAutoTransformer | Resolves `margin:auto` to logical properties, checks layout constraints | `style_mapper_convert.go:230-237` - basic `auto` keyword support | Layout constraint checking (floats, abs positioning), `text-align` fallback for centered images |
+| MarginAutoTransformer | Resolves `margin:auto` to logical properties, checks layout constraints | `css_converter.go` - `resolveMarginAuto()` post-processing in `ConvertRule()` | Full element-context decision tree (floats, absolute positioning, display type); fb2cng's controlled FB2 output doesn't exercise these edge cases |
 | XYStyleTransformer | Reconciles `*-x`/`*-y` pairs for background position/size | `style_mapper_convert.go:146-173` | More robust `auto` semantics handling |
 | NonBlockingBlockImageTransformer | Sets non-blocking flag for `float:snap-block` on `<img>` | `style_mapper_stylemap.go:224` - basic check | Full tag-specific validation |
 
@@ -147,9 +147,10 @@ The implementation loads embedded ion files matching KP3's configuration:
 
 ### High Priority
 
-1. **MarginAutoTransformer completeness**
-   - Add layout constraint checking (floats, absolute positioning)
-   - Implement `text-align` fallback for centered images
+1. ~~**MarginAutoTransformer completeness**~~ ✅ **DONE** (targeted safe changes)
+   - ~~Add layout constraint checking (floats, absolute positioning)~~
+   - ~~Implement `text-align` fallback for centered images~~
+   - Implemented in `css_converter.go:resolveMarginAuto()` — block-axis auto→0em (CSS 2.1 §10.6.3), paired inline-axis auto→`box_align: center`, single-side auto→`box_align: left/right`. Skips the full element-context decision tree (floats, abs positioning, display type) since FB2's controlled output doesn't exercise those edge cases.
 
 2. ~~**BorderRadiusTransformer two-value pairs**~~ ✅ **DONE**
    - ~~Parse `border-radius: 10px / 20px` syntax~~

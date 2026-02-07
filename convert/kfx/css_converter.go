@@ -190,6 +190,12 @@ func (c *Converter) ConvertRule(rule CSSRule) ConversionResult {
 		}
 	}
 
+	// Post-processing: resolve margin-auto values into box_align and zero dimensions.
+	// This implements KP3's MarginAutoTransformer (com/amazon/yjhtmlmapper/transformers/
+	// MarginAutoTransformer.java) which consumes margin-auto properties and replaces them
+	// with box_align (for centering) or zero (for block-axis auto margins).
+	resolveMarginAuto(result.Style.Properties)
+
 	if rule.Selector.Ancestor != nil && result.Style.Parent == "" {
 		descendantName := rule.Selector.descendantBaseName()
 		if descendantName != "" && descendantName != result.Style.Name {
@@ -506,6 +512,67 @@ func diffProps(before, after map[KFXSymbol]any) map[KFXSymbol]any {
 		}
 	}
 	return out
+}
+
+// resolveMarginAuto implements KP3's MarginAutoTransformer logic for the
+// subset of cases relevant to fb2cng output (reflowable content, no floats,
+// no absolute positioning).
+//
+// KP3 source: com/amazon/yjhtmlmapper/transformers/MarginAutoTransformer.java
+//
+// Three behaviors:
+//  1. Block-axis: margin-top/bottom: auto → 0em (CSS 2.1 §10.6.3)
+//  2. Paired inline-axis: both margin-left and margin-right auto → box_align: center
+//  3. Single-side inline-axis: margin-left: auto → box_align: right;
+//     margin-right: auto → box_align: left
+//
+// When emitting box_align, the consumed margin-auto values are removed from
+// the property map. An existing explicit box_align is never overridden.
+func resolveMarginAuto(props map[KFXSymbol]any) {
+	// 1. Block-axis: margin-top/bottom: auto → 0em
+	if isSymbol(props[SymMarginTop], SymAuto) {
+		props[SymMarginTop] = DimensionValue(0, SymUnitEm)
+	}
+	if isSymbol(props[SymMarginBottom], SymAuto) {
+		props[SymMarginBottom] = DimensionValue(0, SymUnitEm)
+	}
+
+	// 2 & 3. Inline-axis: margin-left/right auto → box_align
+	leftAuto := isSymbol(props[SymMarginLeft], SymAuto)
+	rightAuto := isSymbol(props[SymMarginRight], SymAuto)
+
+	if !leftAuto && !rightAuto {
+		return
+	}
+
+	// Don't override an explicit box_align already set by other means
+	// (e.g., from a registered style or stylemap override).
+	if _, hasBoxAlign := props[SymBoxAlign]; hasBoxAlign {
+		// Still consume the auto values — they shouldn't reach the output.
+		if leftAuto {
+			delete(props, SymMarginLeft)
+		}
+		if rightAuto {
+			delete(props, SymMarginRight)
+		}
+		return
+	}
+
+	switch {
+	case leftAuto && rightAuto:
+		// Both auto → center (KP3 method f(), lines 186-231)
+		props[SymBoxAlign] = SymbolValue(SymCenter)
+		delete(props, SymMarginLeft)
+		delete(props, SymMarginRight)
+	case leftAuto:
+		// Only left auto → align right (KP3 method f())
+		props[SymBoxAlign] = SymbolValue(SymRight)
+		delete(props, SymMarginLeft)
+	case rightAuto:
+		// Only right auto → align left (KP3 method f())
+		props[SymBoxAlign] = SymbolValue(SymLeft)
+		delete(props, SymMarginRight)
+	}
 }
 
 // expandShorthand expands CSS shorthand properties into individual properties.
