@@ -550,7 +550,7 @@ func parseShadows(raw string, isText bool, log *zap.Logger) ([]StructValue, bool
 			lower := strings.ToLower(token)
 			if lower == "inset" || lower == "outset" {
 				if log != nil {
-					log.Debug("shadow inset/outset ignored", zap.String("value", raw))
+					log.Debug("Shadow inset/outset ignored", zap.String("value", raw))
 				}
 				continue
 			}
@@ -567,13 +567,13 @@ func parseShadows(raw string, isText bool, log *zap.Logger) ([]StructValue, bool
 				continue
 			}
 			if log != nil {
-				log.Debug("shadow token unparsed", zap.String("token", token))
+				log.Debug("Shadow token unparsed", zap.String("token", token))
 			}
 		}
 
 		if len(dims) < 2 {
 			if log != nil {
-				log.Debug("shadow missing required offsets", zap.String("value", part))
+				log.Debug("Shadow missing required offsets", zap.String("value", part))
 			}
 			continue
 		}

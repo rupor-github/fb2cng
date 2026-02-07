@@ -62,12 +62,12 @@ func (p *Parser) Parse(data []byte, source ...string) *Stylesheet {
 				mq := p.parseMediaQueryFromTokens(parser.Values())
 				if mq.EvaluateForKFX() {
 					// Process rules inside @media block
-					p.log.Debug("processing @media block", zap.String("query", mq.Raw))
+					p.log.Debug("Processing @media block", zap.String("query", mq.Raw))
 					p.parseMediaBlock(parser, sheet)
 				} else {
 					// Skip entire @media block
 					p.skipAtRuleBlock(parser)
-					p.log.Debug("skipping @media block", zap.String("query", mq.Raw))
+					p.log.Debug("Skipping @media block", zap.String("query", mq.Raw))
 				}
 			case "@font-face":
 				// Parse @font-face
@@ -78,11 +78,11 @@ func (p *Parser) Parse(data []byte, source ...string) *Stylesheet {
 			default:
 				// Skip other @-rules
 				p.skipAtRuleBlock(parser)
-				p.log.Debug("skipping @-rule", zap.String("rule", atRule))
+				p.log.Debug("Skipping @-rule", zap.String("rule", atRule))
 			}
 		case css.AtRuleGrammar:
 			// Simple @-rule without block (e.g., @import)
-			p.log.Debug("skipping @-rule", zap.String("rule", string(data)))
+			p.log.Debug("Skipping @-rule", zap.String("rule", string(data)))
 
 		case css.BeginRulesetGrammar:
 			// Collect selector tokens
@@ -260,13 +260,13 @@ func (p *Parser) parseSelector(selStr string, sheet *Stylesheet) Selector {
 	if strings.ContainsAny(selStr, "+~>") {
 		// Sibling/child combinators
 		sheet.Warnings = append(sheet.Warnings, "unsupported combinator selector: "+selStr)
-		p.log.Debug("skipping combinator selector", zap.String("selector", selStr))
+		p.log.Debug("Skipping combinator selector", zap.String("selector", selStr))
 		return sel
 	}
 	if strings.Contains(selStr, "[") {
 		// Attribute selector
 		sheet.Warnings = append(sheet.Warnings, "unsupported attribute selector: "+selStr)
-		p.log.Debug("skipping attribute selector", zap.String("selector", selStr))
+		p.log.Debug("Skipping attribute selector", zap.String("selector", selStr))
 		return sel
 	}
 
@@ -340,7 +340,7 @@ func (p *Parser) parseSimpleSelector(selStr string, sheet *Stylesheet) Selector 
 			sel.Pseudo = PseudoAfter
 		default:
 			sheet.Warnings = append(sheet.Warnings, "unsupported pseudo-element: "+selStr)
-			p.log.Debug("skipping unsupported pseudo-element", zap.String("selector", selStr))
+			p.log.Debug("Skipping unsupported pseudo-element", zap.String("selector", selStr))
 			return sel
 		}
 	} else if before, pseudo, found := strings.Cut(remaining, ":"); found {
@@ -355,7 +355,7 @@ func (p *Parser) parseSimpleSelector(selStr string, sheet *Stylesheet) Selector 
 		default:
 			// Pseudo-class (e.g., :hover, :first-child) - not supported
 			sheet.Warnings = append(sheet.Warnings, "unsupported pseudo-class: "+selStr)
-			p.log.Debug("skipping pseudo-class selector", zap.String("selector", selStr))
+			p.log.Debug("Skipping pseudo-class selector", zap.String("selector", selStr))
 			return sel
 		}
 	}

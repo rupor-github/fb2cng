@@ -168,7 +168,7 @@ func (c *Converter) convertProperty(name string, value CSSValue, props map[KFXSy
 	kfxSym := KFXPropertySymbol(name)
 	if kfxSym == SymbolUnknown {
 		// Unknown property - log at debug level
-		c.log.Debug("unknown CSS property", zap.String("property", name))
+		c.log.Debug("Unknown CSS property", zap.String("property", name))
 		return
 	}
 
@@ -177,45 +177,57 @@ func (c *Converter) convertProperty(name string, value CSSValue, props map[KFXSy
 	case "font-weight":
 		if sym, ok := ConvertFontWeight(value); ok {
 			c.mergeProp(props, SymFontWeight, sym)
+		} else {
+			c.logUnsupportedValue(name, value)
 		}
 
 	case "font-style":
 		if sym, ok := ConvertFontStyle(value); ok {
 			c.mergeProp(props, SymFontStyle, sym)
+		} else {
+			c.logUnsupportedValue(name, value)
 		}
 
 	case "text-align":
 		if sym, ok := ConvertTextAlign(value); ok {
 			c.mergeProp(props, SymTextAlignment, sym)
+		} else {
+			c.logUnsupportedValue(name, value)
 		}
 
 	case "hyphens", "-webkit-hyphens":
 		if sym, ok := ConvertHyphens(value); ok {
 			c.mergeProp(props, SymHyphens, sym)
-		} else if value.Keyword != "" {
-			c.log.Debug("unsupported hyphens value ignored",
-				zap.String("property", name),
-				zap.String("value", value.Keyword))
+		} else {
+			c.logUnsupportedValue(name, value)
 		}
 
 	case "writing-mode", "-webkit-writing-mode":
 		if sym, ok := ConvertWritingMode(value); ok {
 			c.mergeProp(props, SymWritingMode, sym)
+		} else {
+			c.logUnsupportedValue(name, value)
 		}
 
 	case "text-orientation":
 		if sym, ok := ConvertTextOrientation(value); ok {
 			c.mergeProp(props, SymTextOrientation, sym)
+		} else {
+			c.logUnsupportedValue(name, value)
 		}
 
 	case "text-combine-upright", "text-combine":
 		if sym, ok := ConvertTextCombine(value); ok {
 			c.mergeProp(props, SymTextCombine, sym)
+		} else {
+			c.logUnsupportedValue(name, value)
 		}
 
 	case "text-emphasis-style", "-webkit-text-emphasis-style":
 		if sym, ok := ConvertTextEmphasisStyle(value); ok {
 			c.mergeProp(props, SymTextEmphasisStyle, sym)
+		} else {
+			c.logUnsupportedValue(name, value)
 		}
 
 	case "text-emphasis-color", "-webkit-text-emphasis-color":
@@ -228,17 +240,23 @@ func (c *Converter) convertProperty(name string, value CSSValue, props map[KFXSy
 	case "float":
 		if sym, ok := ConvertFloat(value); ok {
 			c.mergeProp(props, SymFloat, sym)
+		} else {
+			c.logUnsupportedValue(name, value)
 		}
 
 	case "clear":
 		if sym, ok := ConvertClear(value); ok {
 			c.mergeProp(props, SymFloatClear, sym)
+		} else {
+			c.logUnsupportedValue(name, value)
 		}
 
 	case "yj-break-before", "yj-break-after":
 		// KFX-specific break properties from stylemap
 		if sym, ok := convertYjBreak(value); ok {
 			c.mergeProp(props, kfxSym, sym)
+		} else {
+			c.logUnsupportedValue(name, value)
 		}
 
 	case "underline", "overline", "strikethrough":
@@ -254,6 +272,8 @@ func (c *Converter) convertProperty(name string, value CSSValue, props map[KFXSy
 		// Values: center, top, bottom
 		if sym, ok := ConvertBaselineStyle(value); ok {
 			c.mergeProp(props, kfxSym, sym)
+		} else {
+			c.logUnsupportedValue(name, value)
 		}
 
 	case "table-border-collapse":
@@ -402,7 +422,7 @@ func (c *Converter) convertProperty(name string, value CSSValue, props map[KFXSy
 			case "inherit":
 				// Skip inherit - KFX handles inheritance differently
 			default:
-				c.log.Debug("unhandled keyword value",
+				c.log.Debug("Unhandled keyword value",
 					zap.String("property", name),
 					zap.String("value", value.Keyword))
 			}
@@ -412,6 +432,14 @@ func (c *Converter) convertProperty(name string, value CSSValue, props map[KFXSy
 
 func (c *Converter) mergeProp(props map[KFXSymbol]any, sym KFXSymbol, val any) {
 	mergePropertyWithRules(props, sym, val, mergeContextInline, c.tracer)
+}
+
+func (c *Converter) logUnsupportedValue(property string, value CSSValue) {
+	if v := formatCSSValue(value); v != "" {
+		c.log.Debug("Unsupported CSS value ignored",
+			zap.String("property", property),
+			zap.String("value", v))
+	}
 }
 
 func snapshotProps(src map[KFXSymbol]any) map[KFXSymbol]any {
@@ -763,6 +791,8 @@ func (c *Converter) convertSpecialProperty(name string, value CSSValue, props ma
 			} else if vaResult.UseBaselineShift {
 				c.mergeProp(props, SymBaselineShift, vaResult.BaselineShift)
 			}
+		} else {
+			c.logUnsupportedValue(name, value)
 		}
 	case "page-break-before":
 		// In KFX, page-break-before: always is handled by section boundaries, not styles.
@@ -793,6 +823,8 @@ func (c *Converter) convertSpecialProperty(name string, value CSSValue, props ma
 			if vert != 0 {
 				c.mergeProp(props, SymTextEmphasisPositionVertical, vert)
 			}
+		} else {
+			c.logUnsupportedValue(name, value)
 		}
 
 	case "white-space":

@@ -167,7 +167,7 @@ func (m *StyleMapper) filterIgnorable(sel Selector, props map[string]CSSValue) m
 	for name, val := range props {
 		if isIgnorable(sel, name, val) {
 			if m.converter != nil && m.converter.log != nil {
-				m.converter.log.Debug("style ignored by mapping_ignorable_patterns",
+				m.converter.log.Debug("Style ignored by mapping_ignorable_patterns",
 					zap.String("selector", sel.Raw),
 					zap.String("property", name),
 					zap.String("value", formatCSSValue(val)))

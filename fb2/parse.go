@@ -272,7 +272,7 @@ func parseDate(el *etree.Element, log *zap.Logger) Date {
 		}
 
 		if err != nil && log != nil {
-			log.Debug("failed to parse date value", zap.String("value", value), zap.Error(err))
+			log.Debug("Failed to parse date value", zap.String("value", value), zap.Error(err))
 		}
 	}
 

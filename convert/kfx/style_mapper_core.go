@@ -141,7 +141,7 @@ func (m *StyleMapper) MapRule(selector Selector, props map[string]CSSValue) (map
 					continue
 				}
 				if strings.Contains(entry.Transformer, "TransformerForWebkitTransform") && m.converter != nil && m.converter.log != nil {
-					m.converter.log.Debug("ignoring -webkit-transform per KP3 behavior",
+					m.converter.log.Debug("Ignoring unsupported -webkit-transform",
 						zap.String("selector", selector.Raw),
 						zap.String("value", formatCSSValue(match.val)))
 				}
