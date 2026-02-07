@@ -12,6 +12,10 @@ import (
 // ctx provides the style context with optional position for margin filtering.
 // extraClasses are additional CSS classes to append to the style (e.g., paragraph's custom style).
 func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleContext, extraClasses string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
+	// Determine whether to insert soft hyphens into text, matching EPUB behavior.
+	// Hyphenation is skipped for "special" paragraphs (code/preformatted blocks).
+	hyphenate := !para.Special && c.Hyphen != nil
+
 	// Check for single spanning style that can be merged into block style
 	// This matches KP3 behavior where <p><em>text</em></p> gets font-style:italic in block style
 	spanningStyle := detectSingleSpanningStyle(para.Text)
@@ -241,8 +245,14 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 		// Inject ::before content (inherits styling from base element)
 		InjectPseudoBefore(segStyle, styles, nw)
 
-		// Add text content (normalizingWriter handles whitespace and rune counting)
-		nw.WriteString(seg.Text)
+		// Add text content (normalizingWriter handles whitespace and rune counting).
+		// When hyphenation is enabled, insert soft hyphens (U+00AD) into text,
+		// matching EPUB behavior where KP3 preserves them in KFX content strings.
+		text := seg.Text
+		if hyphenate && text != "" {
+			text = c.Hyphen.Hyphenate(text)
+		}
+		nw.WriteString(text)
 
 		// Build new style context for children (if this segment has a style)
 		childContext := styleContext
@@ -375,6 +385,10 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 // ctx provides the style context with optional position for margin filtering.
 // spanningClasses are CSS classes from spanning styles (already detected by caller).
 func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx StyleContext, spanningClasses string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, idToEID eidByFB2ID) {
+	// Determine whether to insert soft hyphens into text, matching EPUB behavior.
+	// Hyphenation is skipped for "special" paragraphs (code/preformatted blocks).
+	hyphenate := !para.Special && c.Hyphen != nil
+
 	// Determine the element tag - use heading tag (h1-h6) for heading contexts, otherwise p
 	tag := "p"
 	if headingLevel > 0 {
@@ -554,8 +568,14 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 			nw.WriteString(pseudoContent.Before)
 		}
 
-		// Add text content
-		nw.WriteString(seg.Text)
+		// Add text content.
+		// When hyphenation is enabled, insert soft hyphens (U+00AD) into text,
+		// matching EPUB behavior where KP3 preserves them in KFX content strings.
+		text := seg.Text
+		if hyphenate && text != "" {
+			text = c.Hyphen.Hyphenate(text)
+		}
+		nw.WriteString(text)
 
 		// Build new style context for children
 		childContext := styleContext

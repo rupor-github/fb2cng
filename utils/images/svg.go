@@ -18,7 +18,7 @@ const defaultSVGSize = 2048 // Default size to use when SVG viewBox has no size 
 // KindleSVGStrokeWidthFactor is the multiplier for stroke-width values when
 // rasterizing SVGs for Kindle. Kindle devices render at higher resolution,
 // so strokes need to be thicker to remain visible.
-const KindleSVGStrokeWidthFactor = 8.0
+const KindleSVGStrokeWidthFactor = 4.0
 
 // strokeWidthRe matches stroke-width attributes and properties in SVG.
 // Captures the numeric value for replacement.
