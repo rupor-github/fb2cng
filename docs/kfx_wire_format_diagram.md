@@ -588,6 +588,16 @@ Visual byte map (approximate):
 │    ]                                                                        │
 │  }                                                                          │
 │                                                                             │
+│  Soft-Hyphen Insertion (§7.10.11):                                          │
+│  ─────────────────────────────────                                          │
+│  Text strings in $145 content fragments may contain Unicode soft hyphens    │
+│  (U+00AD) inserted at conversion time. These are invisible break hints:     │
+│  the reading system may hyphenate at those points or ignore them.           │
+│  Soft hyphens are inserted for all regular paragraphs when hyphenation is   │
+│  enabled; skipped for code/preformatted blocks.                             │
+│  This is independent of the $127 (hyphens) style property — $127 controls  │
+│  runtime hyphenation behavior, while U+00AD marks specific break points.    │
+│                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -786,6 +796,48 @@ Visual byte map (approximate):
 │  %  → rem (font-size): divide by 100  (140% → 1.4rem)                       │
 │  em → rem (font-size): 1:1 ratio      (1em → 1rem)                          │
 │                                                                             │
+│  Ex-to-Em Conversion (§7.10.13):                                            │
+│  ────────────────────────────────                                           │
+│  KFX does NOT support the CSS "ex" unit. KP3 converts all ex values to em   │
+│  early in normalization using: em_value = ex_value × 0.44                   │
+│  (factor from com/amazon/yj/F/a/b.java:24).                                 │
+│  Examples: 1ex → 0.44em,  2ex → 0.88em,  0.5ex → 0.22em                     │
+│  The "ex" unit never appears in KFX output.                                 │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  CRITICAL: Margin-Auto Resolution (§7.10.12)                        │    │
+│  │                                                                     │    │
+│  │  CSS margin-left/right: auto do NOT become KFX margin properties.   │    │
+│  │  KP3's MarginAutoTransformer resolves them:                         │    │
+│  │                                                                     │    │
+│  │  margin-top/bottom: auto  →  0em (CSS 2.1 §10.6.3)                  │    │
+│  │  both margin-left+right auto  →  $587 (box_align) = $320 (center)   │    │
+│  │  only margin-left auto  →  $587 = $61 (right)                       │    │
+│  │  only margin-right auto  →  $587 = $59 (left)                       │    │
+│  │                                                                     │    │
+│  │  Auto margins are DELETED from output; existing $587 is preserved.  │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+│  Text-Decoration-None Filtering (§7.10.14):                                 │
+│  ───────────────────────────────────────────                                │
+│  KP3 strips "text-decoration: none" from most elements (it's a no-op).      │
+│  Preserved ONLY for: <u>, <a>, <ins>, <del>, <s>, <strike>, <br>.           │
+│  For these, it has semantic meaning (e.g., removing inherent underline).    │
+│  Note: <a> exemption is reflowable-only; in fixed-layout it is stripped.    │
+│                                                                             │
+│  Border-Radius Elliptical Values (§7.10.15):                                │
+│  ────────────────────────────────────────────                               │
+│  CSS border-*-radius with two space-separated values (e.g., "10px 20px")    │
+│  encodes as an Ion list of two dimension structs:                           │
+│    $97: [ {$307: 10, $306: $309}, {$307: 20, $306: $309} ]                  │
+│  If both values are identical → collapsed to single dimension.              │
+│  3+ values → rejected by KP3.                                               │
+│                                                                             │
+│  Line-Height Adjustment (§7.10.16):                                         │
+│  ──────────────────────────────────                                         │
+│  font-size < 1rem: line-height = 1lh; margins scaled by 1/font-size.        │
+│  font-size ≥ 1rem: line-height = 1.0101lh (100/99); margins / line-height.  │
+│                                                                             │
 │  Zero Value Omission:                                                       │
 │  ────────────────────                                                       │
 │  KP3 does NOT include style properties with zero values.                    │
@@ -827,7 +879,7 @@ Visual byte map (approximate):
 │                                                                             │
 │  Hyphens Symbol Mapping ($127):                                             │
 │  ──────────────────────────────                                             │
-│  CSS hyphens / -webkit-hyphens → KFX $127 (hyphens):                       │
+│  CSS hyphens / -webkit-hyphens → KFX $127 (hyphens):                        │
 │    none    → $349 (SymNone)     No hyphenation                              │
 │    auto    → $383 (SymAuto)     Automatic hyphenation                       │
 │    manual  → $384 (SymManual)   Only at soft hyphen (U+00AD) points         │
@@ -835,18 +887,18 @@ Visual byte map (approximate):
 │                                                                             │
 │  Shape Outside / Border Path ($650):                                        │
 │  ───────────────────────────────────                                        │
-│  CSS `-amzn-shape-outside: polygon(...)` → KFX $650 (yj.border_path).      │
+│  CSS `-amzn-shape-outside: polygon(...)` → KFX $650 (yj.border_path).       │
 │  Value is a flat Ion list of float64 encoding a KVG (Kindle Vector          │
 │  Graphics) path for float exclusion zones. Commands and coordinates are     │
 │  interleaved:                                                               │
-│    0 = MOVE_TO    (+ 2 floats: x, y)                                       │
-│    1 = LINE_TO    (+ 2 floats: x, y)                                       │
+│    0 = MOVE_TO    (+ 2 floats: x, y)                                        │
+│    1 = LINE_TO    (+ 2 floats: x, y)                                        │
 │    4 = CLOSE_PATH (no coordinates)                                          │
 │  KP3 only accepts polygon() with percent coordinates, divided by 100        │
-│  to produce fractional values (0.0-1.0). First point uses MOVE_TO,         │
+│  to produce fractional values (0.0-1.0). First point uses MOVE_TO,          │
 │  subsequent points use LINE_TO, path ends with CLOSE_PATH.                  │
-│  Example: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)                      │
-│  →  $650: [0e0, 0e0, 0e0, 1e0, 1e0, 0e0, 1e0, 1e0, 1e0, 1e0, 0e0,       │
+│  Example: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)                       │
+│  →  $650: [0e0, 0e0, 0e0, 1e0, 1e0, 0e0, 1e0, 1e0, 1e0, 1e0, 0e0,           │
 │            1e0, 4e0]                                                        │
 │                                                                             │
 │  Example Style Fragment:                                                    │
@@ -936,7 +988,7 @@ Visual byte map (approximate):
 │                                                                             │
 │  Embedded fonts use two fragment types working together:                    │
 │  - $262 (font): Font declaration with metadata and location reference       │
-│  - $418 (bcRawFont): Raw font file data (TTF, OTF) as blob                 │
+│  - $418 (bcRawFont): Raw font file data (TTF, OTF) as blob                  │
 │                                                                             │
 │  Font Fragment (fid = font_id, ftype = $262):                               │
 │  {                                                                          │

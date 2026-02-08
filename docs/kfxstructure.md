@@ -2343,6 +2343,161 @@ KP3 registers both `hyphens` and `-webkit-hyphens` as accepted CSS properties (s
 
 Derived from: KP3 `ElementEnums.data` (eHyphensOption), `convert/kfx/css_values.go:ConvertHyphens`.
 
+#### 7.10.11 Soft-hyphen insertion in KFX text content
+
+The `$127` (hyphens) property described in §7.10.10 controls the reading system's _runtime_ hyphenation behavior. Independently, the converter may insert Unicode soft hyphens (U+00AD, `\u00AD`) directly into the text strings stored in `$145` content fragments at conversion time.
+
+When hyphenation is enabled for the book and the paragraph is not a "special" block (code / preformatted), the converter passes every text run through the hyphenator before writing it to the content accumulator. The hyphenator inserts U+00AD at every legal break point. Kindle reading systems treat U+00AD as an invisible hint: the device may break the line at that point and render a visible hyphen, or ignore it if the line fits without breaking.
+
+This is the same approach used in EPUB generation, where KP3 preserves soft hyphens present in the input HTML in the resulting KFX content strings. The key distinction:
+
+- **§7.10.10** (`$127` property) — tells the reading system whether to auto-hyphenate, only break at manual points, or never break.
+- **§7.10.11** (this section) — pre-populates those manual break points in the actual text data.
+
+When `$127` = `$384` (manual), the reading system uses exactly the U+00AD positions inserted here.
+
+#### 7.10.12 Margin-auto to box_align resolution
+
+CSS `margin-left: auto` and/or `margin-right: auto` do not map to KFX margin properties directly. KP3's `MarginAutoTransformer` resolves them into `$587` (box_align) symbol values, matching CSS 2.1 centering semantics.
+
+Three behaviors:
+
+1. **Block-axis auto margins** — `margin-top: auto` and `margin-bottom: auto` are replaced with `0em` (CSS 2.1 §10.6.3: auto block-axis margins compute to zero in normal flow).
+
+2. **Both inline-axis margins auto** — `margin-left: auto` AND `margin-right: auto` → `$587` (box_align) = `$320` (center). Both margin properties are deleted from the output.
+
+3. **Single inline-axis margin auto**:
+   - Only `margin-left: auto` → `$587` = `$61` (right). `margin-left` is deleted.
+   - Only `margin-right: auto` → `$587` = `$59` (left). `margin-right` is deleted.
+
+An existing explicit `$587` (box_align) is **never** overridden — the auto margins are still consumed (deleted) but the box_align value is preserved as-is.
+
+**Example**: A centered block with `margin: 0 auto`:
+
+```
+CSS input:
+  margin-top: 0; margin-bottom: 0; margin-left: auto; margin-right: auto;
+
+KFX output after resolution:
+{
+  $47: {$307: 0, $306: $308},   // margin-top: 0em
+  $49: {$307: 0, $306: $308},   // margin-bottom: 0em
+  $587: $320                     // box_align: center
+  // margin-left and margin-right are ABSENT — consumed by box_align
+}
+```
+
+This resolution runs after CSS-to-KFX property mapping and before the final style is emitted.
+
+Derived from: KP3 `com/amazon/yjhtmlmapper/transformers/MarginAutoTransformer.java`, `convert/kfx/css_converter.go:resolveMarginAuto` (lines 517-576).
+
+#### 7.10.13 Ex-to-em unit conversion
+
+KFX does not support the CSS `ex` unit natively. KP3 converts all `ex` values to `em` early in the CSS normalization pipeline using a fixed conversion factor:
+
+```
+em_value = ex_value × 0.44
+```
+
+The factor 0.44 is defined in `com/amazon/yj/F/a/b.java:24` (constant `e`). It approximates the x-height / em-height ratio for a "typical" Latin font.
+
+The conversion happens in two places:
+
+1. **Primary** — `normalizeCSSProperties()` iterates all CSS properties before any KFX mapping. Any property with unit `ex` has its value multiplied by 0.44 and its unit changed to `em`.
+
+2. **Safety net** — `CSSValueToKFX()` maps any remaining `ex` unit to `$308` (em) without applying the factor. This catches values that somehow bypass normalization.
+
+**Examples**:
+
+| CSS Input    | After Normalization | KFX Output                        |
+| ------------ | ------------------- | --------------------------------- |
+| `1ex`        | `0.44em`            | `{ $307: 0.44, $306: $308 }`     |
+| `2ex`        | `0.88em`            | `{ $307: 0.88, $306: $308 }`     |
+| `0.5ex`      | `0.22em`            | `{ $307: 0.22, $306: $308 }`     |
+
+Note that §7.10.1 lists only the units that appear in KFX output — `ex` is intentionally absent because it is always converted before reaching the output.
+
+Derived from: KP3 `com/amazon/yj/F/a/b.java:24`, `com/amazon/yjhtmlmapper/h/b.java:253-263`, `convert/kfx/css_converter.go:normalizeCSSProperties` (lines 83-93), `convert/kfx/css_units.go:CSSValueToKFX` (lines 21-25), `convert/kfx/kp3_units.go:ExToEmFactor`.
+
+#### 7.10.14 Text-decoration-none filtering
+
+KP3 strips `text-decoration: none` from most elements as a no-op. It is only preserved for a specific set of "decoration control" elements where the declaration has semantic meaning (e.g., removing the inherent underline from `<u>`, or the default hyperlink underline from `<a>`).
+
+**Preserved for** (reflowable books):
+
+| Element    | Reason                                          |
+| ---------- | ----------------------------------------------- |
+| `<u>`      | Removes inherent underline                      |
+| `<a>`      | Removes default hyperlink underline (reflowable only) |
+| `<ins>`    | Removes inherent underline                      |
+| `<del>`    | Removes inherent strikethrough                  |
+| `<s>`      | Removes inherent strikethrough                  |
+| `<strike>` | Removes inherent strikethrough                  |
+| `<br>`     | Preserved by KP3 (no practical effect)          |
+
+**Stripped for** all other elements (e.g., `<p>`, `<div>`, `<span>`, `<h1>`–`<h6>`, etc.) — for these, `text-decoration: none` is the default and adds no information.
+
+**Fixed-layout note**: In KP3, the `<a>` exemption is conditional on the book being reflowable. In fixed-layout books, `<a>` is treated as a normal element and `text-decoration: none` is stripped. Since fb2cng always produces reflowable content, `<a>` is always in the exemption set.
+
+**Class-only selectors**: When the CSS selector has no element (e.g., `.myclass` rather than `p.myclass`), the element is unknown at normalization time. In this case, `text-decoration: none` is conservatively preserved since it might apply to a control element.
+
+This normalization runs before CSS-to-KFX property mapping.
+
+Derived from: KP3 `com/amazon/yjhtmlmapper/h/b.java:373-395`, `convert/kfx/css_converter.go:normalizeCSSProperties` (lines 51-68, 94-113).
+
+#### 7.10.15 Border-radius elliptical values
+
+CSS `border-*-radius` properties accept one or two space-separated values for circular or elliptical corners:
+
+```css
+border-top-left-radius: 10px;        /* circular: single radius */
+border-top-left-radius: 10px 20px;   /* elliptical: horizontal vertical */
+```
+
+KP3's `BorderRadiusTransformer` encodes these as follows:
+
+| CSS Input          | KFX Encoding                                              |
+| ------------------ | --------------------------------------------------------- |
+| Single value       | Standard `{ $307: value, $306: unit }` dimension          |
+| Two identical values | Collapsed to a single dimension (same as single value)  |
+| Two different values | Ion list of two dimensions: `[ {$307: h, $306: u}, {$307: v, $306: u} ]` |
+| Three or more values | Rejected (KP3 throws `INVALID_PROPERTY_VALUE`)          |
+
+**Example** — `border-top-left-radius: 10px 20px`:
+
+```
+$97: [                              // border-top-left-radius
+  { $307: 10, $306: $309 },        // horizontal radius: 10px
+  { $307: 20, $306: $309 }         // vertical radius: 20px
+]
+```
+
+This applies to all four border-radius properties: `$97` (border-top-left-radius), `$95` (border-top-right-radius), `$96` (border-bottom-right-radius), `$94` (border-bottom-left-radius).
+
+The list-of-two-dimensions shape should be added to the composite shapes recognized in §7.8.2.4. When decoding KFX back to CSS, a two-element Ion list under a border-radius property key should be reconstructed as `"<horizontal> <vertical>"`.
+
+Derived from: KP3 `com/amazon/yjhtmlmapper/transformers/BorderRadiusTransformer.java`, `convert/kfx/css_units.go:MakeBorderRadiusValue` (lines 60-130), `convert/kfx/style_mapper_convert.go` (lines 204-209).
+
+#### 7.10.16 Line-height adjustment for non-standard font sizes
+
+When a style's `font-size` differs from the default `1rem`, vertical spacing properties are adjusted to maintain consistent visual rhythm. The strategy depends on whether the font is smaller or larger than default:
+
+**Small font-size (< 1rem)** — used for `<sub>`, `<sup>`, `<code>`, and similar inline elements:
+
+- `line-height` is set to `1lh` (the default), unless it was already set by prior processing (e.g., `ResolveInlineDelta`). This ensures the small-font element does not disturb surrounding line spacing.
+- Vertical margins and paddings (`$47`, `$49`, `$52`, `$54`) in `lh` units are scaled by `1 / font-size` to preserve their absolute (visual) spacing. Example: `0.7rem` font with `margin: 0.5lh` → `0.5 / 0.7 = 0.714286lh`.
+
+**Large font-size (>= 1rem)** — used for headings (`<h1>`–`<h6>`):
+
+- `line-height` is set to `1.0101lh` (100/99 ≈ 1.010101...), matching KP3's standard adjustment factor. If line-height was already set, the existing value is used as the divisor instead.
+- Vertical margins and paddings in `lh` units are divided by the adjusted line-height. Example: `1.4rem` heading with `margin: 2lh` and adjusted line-height `1.0101lh` → `2 / 1.0101 = 1.98lh`.
+
+**Preserved line-height**: If `line-height` is already present in the property map (e.g., calculated by `ResolveInlineDelta` for inline elements in heading contexts), it is not overwritten. The ratio-based calculation from inline delta resolution is more accurate for those cases.
+
+**Note**: Earlier versions included monospace-specific handling (0.75rem clamping, a special `1.33249lh` constant, and `isMonospaceFontFamily()` checks). This was removed in favor of the simplified two-branch strategy above.
+
+Derived from: `convert/kfx/style_registry_utils.go:adjustLineHeightForFontSize` (lines 137-216).
+
 ---
 
 ## 8. Symbol dictionary
