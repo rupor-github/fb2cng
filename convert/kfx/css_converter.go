@@ -316,11 +316,14 @@ func (c *Converter) convertProperty(name string, value CSSValue, props map[KFXSy
 		}
 
 	case "underline", "overline", "strikethrough":
-		// Text decoration boolean properties from stylemap.
+		// Text decoration sub-properties from stylemap.
 		// These come from stylemap entries that set them directly.
-		// The value is typically "true" or the property name itself.
-		if !strings.EqualFold(value.Keyword, "none") && !strings.EqualFold(value.Raw, "none") {
-			c.mergeProp(props, kfxSym, true)
+		// Emit SymNone for "none" to explicitly suppress default decoration
+		// (e.g. underlines on links), SymSolid otherwise.
+		if strings.EqualFold(value.Keyword, "none") || strings.EqualFold(value.Raw, "none") {
+			c.mergeProp(props, kfxSym, SymbolValue(SymNone))
+		} else {
+			c.mergeProp(props, kfxSym, SymbolValue(SymSolid))
 		}
 
 	case "baseline-style":
@@ -895,11 +898,19 @@ func (c *Converter) convertSpecialProperty(name string, value CSSValue, props ma
 	switch name {
 	case "text-decoration":
 		dec := ConvertTextDecoration(value)
-		if dec.Underline {
-			c.mergeProp(props, SymUnderline, SymbolValue(SymSolid))
-		}
-		if dec.Strikethrough {
-			c.mergeProp(props, SymStrikethrough, SymbolValue(SymSolid))
+		if dec.None {
+			// KP3's TextDecorationTransformer emits all three as "none"
+			// when text-decoration is explicitly set to "none".
+			c.mergeProp(props, SymUnderline, SymbolValue(SymNone))
+			c.mergeProp(props, SymOverline, SymbolValue(SymNone))
+			c.mergeProp(props, SymStrikethrough, SymbolValue(SymNone))
+		} else {
+			if dec.Underline {
+				c.mergeProp(props, SymUnderline, SymbolValue(SymSolid))
+			}
+			if dec.Strikethrough {
+				c.mergeProp(props, SymStrikethrough, SymbolValue(SymSolid))
+			}
 		}
 	case "vertical-align":
 		if vaResult, ok := ConvertVerticalAlign(value); ok {

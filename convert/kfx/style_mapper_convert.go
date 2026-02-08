@@ -129,9 +129,11 @@ func convertStyleMapProp(prop string, cssVal CSSValue, rawVal string, unit strin
 			}
 		}
 	case "underline", "overline", "strikethrough":
-		// text-decoration: none sets value="none" in stylemap, don't emit for that
-		// Use "solid" value to match KP3 behavior
-		if rawVal != "none" && !strings.EqualFold(cssVal.Keyword, "none") {
+		// text-decoration sub-properties: emit SymNone for "none" to explicitly
+		// suppress default decoration (e.g. underlines on links), SymSolid otherwise.
+		if rawVal == "none" || strings.EqualFold(cssVal.Keyword, "none") {
+			out[symbolForDecoration(prop)] = SymbolValue(SymNone)
+		} else {
 			out[symbolForDecoration(prop)] = SymbolValue(SymSolid)
 		}
 	case "fill_color":
