@@ -1,6 +1,6 @@
 ﻿﻿<h1>
     <img src="docs/books.svg" style="vertical-align:middle; width:8%" align="absmiddle"/>
-    <span style="vertical-align:middle;">&nbsp;&nbsp;Multiplatform converter of FB2 to EPUB2/3, KEPUB, AZW8/KFX</span>
+    <span style="vertical-align:middle;">&nbsp;&nbsp;FB2 converter to EPUB2/3, KEPUB, AZW8/KFX</span>
 </h1>
 
 ### A complete rewrite of [fb2converter](https://github.com/rupor-github/fb2converter)
