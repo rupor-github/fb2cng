@@ -691,7 +691,7 @@ func (c *Converter) expandBackgroundShorthand(value CSSValue, props map[KFXSymbo
 		// Check if this part is a color
 		if r, g, b, ok := ParseColor(CSSValue{Raw: part, Keyword: part}); ok {
 			// Convert to KFX color format (ARGB)
-			color := int64(0xFF<<24 | r<<16 | g<<8 | b)
+			color := int64(0xFF)<<24 | int64(r)<<16 | int64(g)<<8 | int64(b)
 			c.mergeProp(props, SymFillColor, color)
 			return
 		}

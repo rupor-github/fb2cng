@@ -521,5 +521,5 @@ func ParseColor(css CSSValue) (r, g, b int, ok bool) {
 // MakeColorValue creates a KFX color value from RGB values.
 // KFX color format uses a packed ARGB integer (alpha always 255).
 func MakeColorValue(r, g, b int) int64 {
-	return int64(0xFF000000 | (r << 16) | (g << 8) | b)
+	return int64(0xFF)<<24 | int64(r)<<16 | int64(g)<<8 | int64(b)
 }

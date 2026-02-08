@@ -1,4 +1,4 @@
-# FB2CNG User Guide
+# FBC User Guide
 
 ## Table of Contents
 
@@ -20,8 +20,8 @@
 - **EPUB2** - Standard EPUB format with wide device compatibility
 - **EPUB3** - Modern EPUB format with enhanced features
 - **KEPUB** - EPUB2 optimized for Kobo devices
-- **KFX** - Kindle format with `.kfx` extension
-- **AZW8** - Kindle format with `.azw8` extension (same as KFX, different extension)
+- **KFX** - Kindle format X (with `.kfx` extension)
+- **AZW8** - Kindle format X with `.azw8` extension (same as KFX, different extension, added for convinience - Kindle Previewer 3 can open azw8 files directly and Kindle devices handle them just fine)
 
 ### Key Features
 
@@ -377,6 +377,23 @@ body {
 
 **Supported Formats:** TTF, OTF, WOFF, WOFF2
 
+#### Body Font-Family (KFX special handling)
+
+The `body { font-family: "..."; }` rule triggers special handling during KFX conversion. When fb2cng detects a `font-family` on the bare `body` selector **and** corresponding `@font-face` resources exist for that family, several things happen:
+
+1. **Document default font** — The font family name tells the Kindle reading system which embedded font is the document default.
+
+2. **Style normalization** — Every style in the book is post-processed:
+   - If a style's `font-family` matches the body font, it is replaced with the keyword `"default"` (telling the reader to use the document default font).
+   - If a style has **no** `font-family` set, `"default"` is added automatically so it inherits the body font.
+   - If a style uses a **different** font family (e.g., `"dropcaps"` or `monospace`), it is kept as-is.
+
+This means you don't need to repeat `font-family` on every element — setting it on `body` is sufficient, and all styles will automatically reference it. Non-body fonts (like a dedicated dropcap font) work alongside the body font without conflict.
+
+**Important:** The `body` rule is only recognized as a body font declaration when:
+- The selector is exactly `body` (no class, no descendant)
+- The font family name has matching `@font-face` resources with actual font data
+
 #### Resource Path Resolution
 
 When referencing resources (fonts, images) in your custom stylesheet:
@@ -432,6 +449,11 @@ document:
     
     # JPEG quality 40-100%
     jpeq_quality_level: 75
+    
+    # Reader screen size so images could be adjusted properly
+    screen:
+      width: 1264
+      height: 1680
 ```
 
 ### Cover Image Configuration
@@ -448,10 +470,6 @@ document:
       
       # Resize mode: none, keepAR, stretch
       resize: stretch
-      
-      # Target dimensions
-      width: 1264
-      height: 1680
 ```
 
 ### Footnotes Processing
@@ -691,11 +709,12 @@ document:
   images:
     optimize: true
     jpeq_quality_level: 80
+    screen:
+      width: 1264
+      height: 1680
     cover:
       generate: true
       resize: stretch
-      width: 1264
-      height: 1680
   
   footnotes:
     mode: float
@@ -920,16 +939,6 @@ This creates `fb2cng-report.zip` with complete diagnostic information.
 - Verify source images aren't already corrupted
 - Check log for specific image processing errors
 
-#### Memory Issues
-
-**Problem:** Out of memory with large files
-
-**Solutions:**
-- Process files individually rather than entire directories
-- Disable image optimization: `optimize: false`
-- Reduce image scaling: `scale_factor: 0.8`
-- Use 64-bit version of the program
-
 ### Getting Help
 
 When reporting issues, include:
@@ -977,7 +986,3 @@ Check logs for detailed information:
 ---
 
 **Version:** For specific version features, see `fbc --version` and release notes.
-
-**License:** See project repository for license information.
-
-**Build Key:** RWTNh1aN8DrXq26YRmWO3bPBx4m8jBATGXt4Z96DF4OVSzdCBmoAU+Vq
