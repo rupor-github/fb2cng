@@ -398,15 +398,16 @@ td {
     }
 }
 
+/* NOTE: Amazon viewers and AdobeDE ignore text-decoration:none on links */
 /* Links and hyperlink styles */
 .link-external {
     text-decoration: underline;
 }
 .link-internal {
-    text-decoration: none;
+    text-decoration: underline;
 }
 .link-footnote {
-    text-decoration: none;
+    text-decoration: underline;
     font-style: normal;
     font-size: 0.8em;
     vertical-align: super;
@@ -419,10 +420,10 @@ td {
 /*     content: "]" */
 /* } */
 .link-toc {
-    text-decoration: none;
+    text-decoration: underline;
 }
 .link-backlink {
-    text-decoration: none;
+    text-decoration: underline;
     font-weight: bold;
     color: gray;
 }
