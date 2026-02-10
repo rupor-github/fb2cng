@@ -7,6 +7,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/h2non/filetype"
@@ -22,6 +23,18 @@ var (
 
 	// Match @import statements
 	importPattern = regexp.MustCompile(`@import\s+(?:url\s*\()?\s*['"]?([^'"()]+)['"]?\s*\)?`)
+
+	// Match CSS rule blocks whose selector list includes .section-title-hN.
+	// Captures: (1) the heading digit N, (2) the declaration block between braces.
+	// The selector part allows grouped selectors (comma-separated).
+	sectionTitleBlockPattern = regexp.MustCompile(
+		`(?i)[^{}]*\.section-title-h([2-6])\b[^{]*\{([^}]*)\}`,
+	)
+
+	// Match page-break-before: always inside a declaration block.
+	pageBreakBeforeAlways = regexp.MustCompile(
+		`(?i)page-break-before\s*:\s*always`,
+	)
 )
 
 // cssExternalRef represents a reference found in CSS
@@ -109,6 +122,23 @@ func (fb *FictionBook) NormalizeStylesheets(srcPath string, defaultCSS []byte, l
 				sheet.Resources = append(sheet.Resources, *resource)
 			}
 		}
+	}
+
+	// Extract section page-break information from all stylesheets.
+	// Process in order so that later stylesheets (user CSS) override earlier ones (default CSS).
+	fb.sectionPageBreaks = make(map[int]bool)
+	for i := range fb.Stylesheets {
+		if fb.Stylesheets[i].Type != "text/css" {
+			continue
+		}
+		for depth, needsBreak := range parseSectionPageBreaks(fb.Stylesheets[i].Data) {
+			fb.sectionPageBreaks[depth] = needsBreak
+		}
+	}
+
+	if len(fb.sectionPageBreaks) > 0 {
+		log.Debug("Extracted section page breaks from CSS",
+			zap.Any("breaks", fb.sectionPageBreaks))
 	}
 
 	return fb
@@ -320,6 +350,25 @@ func parseStylesheetResources(css string) []cssExternalRef {
 	}
 
 	return refs
+}
+
+// parseSectionPageBreaks scans CSS text for .section-title-hN rules that
+// contain page-break-before:always and returns a map of depth -> bool.
+// Later stylesheets should be processed after earlier ones so that user
+// CSS can override defaults — the caller is responsible for merging.
+func parseSectionPageBreaks(css string) map[int]bool {
+	breaks := make(map[int]bool)
+
+	for _, match := range sectionTitleBlockPattern.FindAllStringSubmatch(css, -1) {
+		depth, err := strconv.Atoi(match[1])
+		if err != nil || depth < 2 || depth > 6 {
+			continue
+		}
+		block := match[2]
+		breaks[depth] = pageBreakBeforeAlways.MatchString(block)
+	}
+
+	return breaks
 }
 
 // sanitizeResourceFilename creates a safe filename from URL

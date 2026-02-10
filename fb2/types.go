@@ -26,11 +26,31 @@ type FictionBook struct {
 	Binaries        []BinaryObject
 	NotFoundImageID string                        // ID used for placeholder image when broken image links are found
 	VignetteIDs     map[common.VignettePos]string // IDs for vignette images by position
+	// sectionPageBreaks records which heading depths (2-6) have
+	// page-break-before:always in the CSS. Populated by NormalizeStylesheets.
+	sectionPageBreaks map[int]bool
 }
 
 func (fb *FictionBook) IsVignetteEnabled(position common.VignettePos) bool {
 	_, exists := fb.VignetteIDs[position]
 	return exists
+}
+
+// SectionNeedsBreak returns true if sections at the given heading depth
+// should start on a new page, based on CSS page-break-before rules.
+// Depth is clamped to [2, 6] — depth 1 is always a top-level chapter
+// and is handled separately.
+func (fb *FictionBook) SectionNeedsBreak(depth int) bool {
+	if depth < 2 || fb.sectionPageBreaks == nil {
+		return false
+	}
+	return fb.sectionPageBreaks[min(depth, 6)]
+}
+
+// SetSectionPageBreaks sets the page-break depths directly.
+// Intended for testing from other packages.
+func (fb *FictionBook) SetSectionPageBreaks(breaks map[int]bool) {
+	fb.sectionPageBreaks = breaks
 }
 
 type FootnoteRef struct {

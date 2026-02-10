@@ -30,6 +30,16 @@ type chapterData struct {
 // idToFileMap maps element IDs to the chapter filename containing them
 type idToFileMap map[string]string
 
+// splitResult signals that a nested section needs its own XHTML file.
+// When appendFlowItems encounters a FlowSection at a depth where
+// SectionNeedsBreak returns true, it stops rendering and returns the
+// section plus any remaining sibling items.
+type splitResult struct {
+	section   *fb2.Section   // the section that triggered the split
+	depth     int            // the depth this section lives at
+	remaining []fb2.FlowItem // siblings after this section (always FlowSection per FB2 spec)
+}
+
 func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([]chapterData, idToFileMap, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
@@ -111,7 +121,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 			// Start new page at chapter boundary
 			c.StartNewPageAtChapter()
 
-			doc, err := bodyToXHTML(c, body, section, title, addHiddenNavLink, log)
+			doc, splits, err := bodyToXHTML(c, body, section, title, addHiddenNavLink, log)
 			if err != nil {
 				log.Error("Unable to convert section", zap.Error(err))
 				continue
@@ -126,6 +136,52 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 				IncludeInTOC: includeInTOC,
 			})
 			collectIDsFromSection(section, filename, idToFile)
+
+			// Process split sections — nested sections that need their own files
+			for len(splits) > 0 {
+				split := splits[0]
+				splits = splits[1:]
+
+				chapterNum++
+				splitBaseID := fmt.Sprintf("index%05d", chapterNum)
+				splitChapterID, splitFilename := generateUniqueID(splitBaseID, c.IDsIndex)
+
+				splitTitle := split.section.AsTitleText("")
+
+				// Set current filename and start new page for the split section
+				c.CurrentFilename = splitFilename
+				c.StartNewPageAtChapter()
+
+				splitDoc, innerSplits, err := renderSplitSection(c, body, split.section, split.depth, log)
+				if err != nil {
+					log.Error("Unable to convert split section", zap.Error(err))
+					continue
+				}
+
+				chapters = append(chapters, chapterData{
+					ID:           splitChapterID,
+					Filename:     splitFilename,
+					Title:        splitTitle,
+					Doc:          splitDoc,
+					IncludeInTOC: false, // TOC entry comes from parent's Section traversal
+				})
+				// Overwrite ID mappings: split section's IDs now point to new file
+				collectIDsFromSection(split.section, splitFilename, idToFile)
+
+				// Queue inner splits (depth-first) then remaining siblings
+				var next []splitResult
+				next = append(next, innerSplits...)
+				for _, rem := range split.remaining {
+					if rem.Kind == fb2.FlowSection && rem.Section != nil {
+						next = append(next, splitResult{
+							section:   rem.Section,
+							depth:     split.depth,
+							remaining: nil,
+						})
+					}
+				}
+				splits = append(next, splits...)
+			}
 		}
 	}
 
@@ -326,7 +382,7 @@ func bodyIntroToXHTML(c *content.Content, body *fb2.Body, title string, chapterI
 	return doc, nil
 }
 
-func bodyToXHTML(c *content.Content, body *fb2.Body, section *fb2.Section, title string, addHiddenNav bool, log *zap.Logger) (*etree.Document, error) {
+func bodyToXHTML(c *content.Content, body *fb2.Body, section *fb2.Section, title string, addHiddenNav bool, log *zap.Logger) (*etree.Document, []splitResult, error) {
 	doc, root := createXHTMLDocument(c, title)
 
 	// Create wrapper div with class based on body type
@@ -345,8 +401,9 @@ func bodyToXHTML(c *content.Content, body *fb2.Body, section *fb2.Section, title
 		bodyDiv.CreateAttr("id", section.ID)
 	}
 
-	if err := appendSectionContent(bodyDiv, c, section, 1, log); err != nil {
-		return nil, err
+	splits, err := appendSectionContent(bodyDiv, c, section, 1, log)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	// EPUB3: Add hidden navigation link at the end of the first main body section
@@ -358,7 +415,38 @@ func bodyToXHTML(c *content.Content, body *fb2.Body, section *fb2.Section, title
 		navLink.SetText("Navigation")
 	}
 
-	return doc, nil
+	return doc, splits, nil
+}
+
+// renderSplitSection creates a new XHTML document for a section that was split out
+// of its parent due to CSS page-break-before rules. It renders the section content
+// and returns any further nested splits.
+func renderSplitSection(c *content.Content, body *fb2.Body, section *fb2.Section, depth int, log *zap.Logger) (*etree.Document, []splitResult, error) {
+	title := section.AsTitleText("")
+	doc, root := createXHTMLDocument(c, title)
+
+	// Create wrapper div with class based on body type
+	var bodyClass string
+	if body.Main() {
+		bodyClass = "main-body"
+	} else {
+		bodyClass = "other-body"
+	}
+
+	bodyDiv := root.CreateElement("div")
+	bodyDiv.CreateAttr("class", bodyClass)
+
+	// Add section ID to div wrapper so it can be a link target
+	if section.ID != "" {
+		bodyDiv.CreateAttr("id", section.ID)
+	}
+
+	splits, err := appendSectionContent(bodyDiv, c, section, depth, log)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return doc, splits, nil
 }
 
 // appendTitleAsHeading appends a title as a heading element (h1-h6) with span children for each paragraph
@@ -443,7 +531,7 @@ func appendEpigraphs(parent *etree.Element, c *content.Content, epigraphs []fb2.
 	for _, epigraph := range epigraphs {
 		div := parent.CreateElement("div")
 		div.CreateAttr("class", "epigraph")
-		if err := appendFlowItems(div, c, epigraph.Flow.Items, depth, "epigraph", log); err != nil {
+		if _, err := appendFlowItems(div, c, epigraph.Flow.Items, depth, "epigraph", log); err != nil {
 			return err
 		}
 		for _, ta := range epigraph.TextAuthors {
@@ -684,12 +772,12 @@ func appendFloatFootnoteSectionContentEpub3(parent *etree.Element, c *content.Co
 	if section.Annotation != nil {
 		div := asideElem.CreateElement("div")
 		div.CreateAttr("class", "annotation")
-		if err := appendFlowItems(div, c, section.Annotation.Items, 1, "annotation", log); err != nil {
+		if _, err := appendFlowItems(div, c, section.Annotation.Items, 1, "annotation", log); err != nil {
 			return err
 		}
 	}
 
-	if err := appendFlowItems(asideElem, c, section.Content, 1, "section", log); err != nil {
+	if _, err := appendFlowItems(asideElem, c, section.Content, 1, "section", log); err != nil {
 		return err
 	}
 
@@ -773,18 +861,18 @@ func appendFootnoteSectionContent(parent *etree.Element, c *content.Content, sec
 	if section.Annotation != nil {
 		div := sectionElem.CreateElement("div")
 		div.CreateAttr("class", "annotation")
-		if err := appendFlowItems(div, c, section.Annotation.Items, 1, "annotation", log); err != nil {
+		if _, err := appendFlowItems(div, c, section.Annotation.Items, 1, "annotation", log); err != nil {
 			return err
 		}
 	}
 
-	if err := appendFlowItems(sectionElem, c, section.Content, 1, "section", log); err != nil {
+	if _, err := appendFlowItems(sectionElem, c, section.Content, 1, "section", log); err != nil {
 		return err
 	}
 	return nil
 }
 
-func appendSectionContent(parent *etree.Element, c *content.Content, section *fb2.Section, depth int, log *zap.Logger) error {
+func appendSectionContent(parent *etree.Element, c *content.Content, section *fb2.Section, depth int, log *zap.Logger) ([]splitResult, error) {
 	if section.Title != nil {
 		// Always create wrapper div for section title
 		titleWrapper := parent.CreateElement("div")
@@ -827,7 +915,7 @@ func appendSectionContent(parent *etree.Element, c *content.Content, section *fb
 	}
 
 	if err := appendEpigraphs(parent, c, section.Epigraphs, depth, log); err != nil {
-		return err
+		return nil, err
 	}
 
 	if section.Image != nil {
@@ -837,13 +925,19 @@ func appendSectionContent(parent *etree.Element, c *content.Content, section *fb
 	if section.Annotation != nil {
 		div := parent.CreateElement("div")
 		div.CreateAttr("class", "annotation")
-		if err := appendFlowItems(div, c, section.Annotation.Items, depth, "annotation", log); err != nil {
-			return err
+		if _, err := appendFlowItems(div, c, section.Annotation.Items, depth, "annotation", log); err != nil {
+			return nil, err
 		}
 	}
 
-	if err := appendFlowItems(parent, c, section.Content, depth, "section", log); err != nil {
-		return err
+	splits, err := appendFlowItems(parent, c, section.Content, depth, "section", log)
+	if err != nil {
+		return nil, err
+	}
+	if len(splits) > 0 {
+		// Content was split — end vignette will be on the last split section's file,
+		// not this one. Skip it here.
+		return splits, nil
 	}
 
 	// Insert end vignette
@@ -855,11 +949,11 @@ func appendSectionContent(parent *etree.Element, c *content.Content, section *fb
 		}
 	}
 
-	return nil
+	return nil, nil
 }
 
-func appendFlowItems(parent *etree.Element, c *content.Content, items []fb2.FlowItem, depth int, context string, log *zap.Logger) error {
-	for _, item := range items {
+func appendFlowItems(parent *etree.Element, c *content.Content, items []fb2.FlowItem, depth int, context string, log *zap.Logger) ([]splitResult, error) {
+	for i, item := range items {
 		switch item.Kind {
 		case fb2.FlowParagraph:
 			if item.Paragraph != nil {
@@ -903,13 +997,13 @@ func appendFlowItems(parent *etree.Element, c *content.Content, items []fb2.Flow
 		case fb2.FlowPoem:
 			if item.Poem != nil {
 				if err := appendPoemElement(parent, c, item.Poem, depth, log); err != nil {
-					return err
+					return nil, err
 				}
 			}
 		case fb2.FlowCite:
 			if item.Cite != nil {
 				if err := appendCiteElement(parent, c, item.Cite, depth, log); err != nil {
-					return err
+					return nil, err
 				}
 			}
 		case fb2.FlowTable:
@@ -918,19 +1012,35 @@ func appendFlowItems(parent *etree.Element, c *content.Content, items []fb2.Flow
 			}
 		case fb2.FlowSection:
 			if item.Section != nil {
+				sectionDepth := depth + 1
+				if c.Book.SectionNeedsBreak(sectionDepth) {
+					// This section needs its own file. Return it plus remaining siblings.
+					return []splitResult{{
+						section:   item.Section,
+						depth:     sectionDepth,
+						remaining: items[i+1:],
+					}}, nil
+				}
 				div := parent.CreateElement("div")
 				div.CreateAttr("class", "section")
 				div.CreateAttr("id", item.Section.ID)
 				if item.Section.Lang != "" {
 					div.CreateAttr("xml:lang", item.Section.Lang)
 				}
-				if err := appendSectionContent(div, c, item.Section, depth+1, log); err != nil {
-					return err
+				splits, err := appendSectionContent(div, c, item.Section, sectionDepth, log)
+				if err != nil {
+					return nil, err
+				}
+				if len(splits) > 0 {
+					// Bubble up: append remaining siblings to last split's remaining list.
+					lastSplit := &splits[len(splits)-1]
+					lastSplit.remaining = append(lastSplit.remaining, items[i+1:]...)
+					return splits, nil
 				}
 			}
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 func appendParagraphInline(parent *etree.Element, c *content.Content, p *fb2.Paragraph) {
@@ -1325,7 +1435,7 @@ func appendCiteElement(parent *etree.Element, c *content.Content, cite *fb2.Cite
 	}
 	blockquote.CreateAttr("class", "cite")
 
-	if err := appendFlowItems(blockquote, c, cite.Items, depth, "cite", log); err != nil {
+	if _, err := appendFlowItems(blockquote, c, cite.Items, depth, "cite", log); err != nil {
 		return err
 	}
 

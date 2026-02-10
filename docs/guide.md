@@ -255,6 +255,7 @@ The built-in stylesheet ([`convert/default.css`](../convert/default.css)) provid
 
 **Document Structure:**
 - `.body-title`, `.chapter-title`, `.section-title` - Title containers with page break control
+- `.section-title-h2` through `.section-title-h6` - Depth-specific section title classes (see [Section Splitting](#section-splitting-via-css) below)
 - `.body-title-header`, `.chapter-title-header`, `.section-title-header` - Title text styling
 - `.section-subtitle` - Section subtitles
 - `.toc-title` - Table of contents title
@@ -309,6 +310,63 @@ The built-in stylesheet ([`convert/default.css`](../convert/default.css)) provid
 **Media Queries:**
 - `@media amzn-mobi` - Kindle MOBI-specific styles
 - `@media amzn-kf8` - Kindle KF8-specific styles
+
+#### Section Splitting via CSS
+
+FB2 books have a hierarchical section structure: top-level sections (depth 1) are always placed into separate XHTML files inside the EPUB. Nested sections (depths 2-6) are normally rendered inline within their parent's file.
+
+fb2cng can split nested sections into their own XHTML files based on CSS `page-break-before` rules. When a `.section-title-hN` class has `page-break-before: always`, all sections at depth N are split into separate files instead of being inlined.
+
+**How it works:**
+
+Each nested section's title wrapper gets a depth-specific CSS class: `.section-title-h2` for depth 2, `.section-title-h3` for depth 3, and so on up to `.section-title-h6`. fb2cng parses the stylesheet and checks which of these classes have `page-break-before: always`. Sections at those depths are then extracted into their own XHTML files during EPUB generation.
+
+**Default behavior:**
+
+The default stylesheet includes:
+
+```css
+.section-title-h2 {
+    page-break-before: always;
+}
+```
+
+This means depth-2 sections (direct children of top-level chapters) are split into separate files by default. Deeper sections (depth 3+) remain inline.
+
+**Customization examples:**
+
+Split sections at depths 2 and 3 into separate files:
+```css
+.section-title-h2 {
+    page-break-before: always;
+}
+.section-title-h3 {
+    page-break-before: always;
+}
+```
+
+Disable all section splitting (keep everything inline):
+```css
+.section-title-h2 {
+    page-break-before: auto;
+}
+```
+
+Split only at depth 3, not depth 2:
+```css
+.section-title-h2 {
+    page-break-before: auto;
+}
+.section-title-h3 {
+    page-break-before: always;
+}
+```
+
+**Notes:**
+- Depth 1 sections (top-level chapters) are always in separate files regardless of CSS — this only controls depths 2 through 6.
+- Splitting is recursive: if both depth 2 and depth 3 have `page-break-before: always`, depth-3 sections inside a depth-2 section will each get their own file.
+- The TOC hierarchy is preserved regardless of splitting — nested sections appear as children of their parent in the table of contents even when they are in separate files.
+- When using a custom stylesheet (`stylesheet_path`), it replaces the default entirely. If you want section splitting, include the appropriate `.section-title-hN` rules in your custom CSS.
 
 #### Customization Examples
 

@@ -565,3 +565,205 @@ func TestNormalizeStylesheets(t *testing.T) {
 		}
 	})
 }
+
+func TestParseSectionPageBreaks(t *testing.T) {
+	tests := []struct {
+		name string
+		css  string
+		want map[int]bool
+	}{
+		{
+			name: "simple page-break-before always",
+			css:  `.section-title-h2 { page-break-before: always; }`,
+			want: map[int]bool{2: true},
+		},
+		{
+			name: "multiple depths",
+			css: `.section-title-h2 { page-break-before: always; }
+			      .section-title-h3 { page-break-before: always; }`,
+			want: map[int]bool{2: true, 3: true},
+		},
+		{
+			name: "no page-break means false",
+			css:  `.section-title-h3 { margin-top: 2em; }`,
+			want: map[int]bool{3: false},
+		},
+		{
+			name: "mixed — some have break some do not",
+			css: `.section-title-h2 { page-break-before: always; }
+			      .section-title-h4 { margin-top: 1em; }`,
+			want: map[int]bool{2: true, 4: false},
+		},
+		{
+			name: "grouped selector",
+			css:  `.section-title-h3, .something-else { page-break-before: always; }`,
+			want: map[int]bool{3: true},
+		},
+		{
+			name: "extra whitespace around property",
+			css:  `.section-title-h5 {  page-break-before :  always ; color: red; }`,
+			want: map[int]bool{5: true},
+		},
+		{
+			name: "depth 6 boundary",
+			css:  `.section-title-h6 { page-break-before: always; }`,
+			want: map[int]bool{6: true},
+		},
+		{
+			name: "no matching rules",
+			css:  `body { margin: 0; } .chapter-title { page-break-before: always; }`,
+			want: map[int]bool{},
+		},
+		{
+			name: "ignores depth outside 2-6",
+			css:  `.section-title-h1 { page-break-before: always; } .section-title-h7 { page-break-before: always; }`,
+			want: map[int]bool{},
+		},
+		{
+			name: "case insensitive property matching",
+			css:  `.section-title-h2 { PAGE-BREAK-BEFORE: ALWAYS; }`,
+			want: map[int]bool{2: true},
+		},
+		{
+			name: "later rule overrides earlier",
+			css: `.section-title-h2 { page-break-before: always; }
+			      .section-title-h2 { margin-top: 1em; }`,
+			want: map[int]bool{2: false},
+		},
+		{
+			name: "empty css",
+			css:  ``,
+			want: map[int]bool{},
+		},
+		{
+			name: "real-world default.css pattern",
+			css: `.section-title {
+				page-break-inside: avoid;
+				page-break-after: avoid;
+				margin: 2em 0 1em 0;
+			}
+			.section-title-h2 {
+				page-break-before: always;
+			}`,
+			want: map[int]bool{2: true},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseSectionPageBreaks(tt.css)
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %d entries %v, want %d entries %v", len(got), got, len(tt.want), tt.want)
+			}
+			for depth, wantBreak := range tt.want {
+				if gotBreak, ok := got[depth]; !ok {
+					t.Errorf("missing depth %d in result", depth)
+				} else if gotBreak != wantBreak {
+					t.Errorf("depth %d: got %v, want %v", depth, gotBreak, wantBreak)
+				}
+			}
+		})
+	}
+}
+
+func TestSectionNeedsBreak(t *testing.T) {
+	t.Run("returns true for depth with page break", func(t *testing.T) {
+		book := &FictionBook{}
+		book.sectionPageBreaks = map[int]bool{2: true, 3: true}
+
+		if !book.SectionNeedsBreak(2) {
+			t.Error("expected SectionNeedsBreak(2) = true")
+		}
+		if !book.SectionNeedsBreak(3) {
+			t.Error("expected SectionNeedsBreak(3) = true")
+		}
+	})
+
+	t.Run("returns false for depth without page break", func(t *testing.T) {
+		book := &FictionBook{}
+		book.sectionPageBreaks = map[int]bool{2: true}
+
+		if book.SectionNeedsBreak(4) {
+			t.Error("expected SectionNeedsBreak(4) = false")
+		}
+	})
+
+	t.Run("returns false for depth explicitly set to false", func(t *testing.T) {
+		book := &FictionBook{}
+		book.sectionPageBreaks = map[int]bool{3: false}
+
+		if book.SectionNeedsBreak(3) {
+			t.Error("expected SectionNeedsBreak(3) = false")
+		}
+	})
+
+	t.Run("returns false for depth 1", func(t *testing.T) {
+		book := &FictionBook{}
+		book.sectionPageBreaks = map[int]bool{2: true, 3: true}
+
+		if book.SectionNeedsBreak(1) {
+			t.Error("expected SectionNeedsBreak(1) = false — depth 1 is chapter level")
+		}
+	})
+
+	t.Run("clamps depth above 6", func(t *testing.T) {
+		book := &FictionBook{}
+		book.sectionPageBreaks = map[int]bool{6: true}
+
+		if !book.SectionNeedsBreak(7) {
+			t.Error("expected SectionNeedsBreak(7) = true (clamped to 6)")
+		}
+		if !book.SectionNeedsBreak(100) {
+			t.Error("expected SectionNeedsBreak(100) = true (clamped to 6)")
+		}
+	})
+
+	t.Run("nil map returns false", func(t *testing.T) {
+		book := &FictionBook{}
+
+		if book.SectionNeedsBreak(2) {
+			t.Error("expected SectionNeedsBreak(2) = false with nil map")
+		}
+	})
+
+	t.Run("populated via NormalizeStylesheets", func(t *testing.T) {
+		log := zaptest.NewLogger(t)
+		book := &FictionBook{
+			Stylesheets: []Stylesheet{
+				{
+					Type: "text/css",
+					Data: `.section-title-h2 { page-break-before: always; }`,
+				},
+			},
+		}
+
+		result := book.NormalizeStylesheets("", nil, log)
+
+		if !result.SectionNeedsBreak(2) {
+			t.Error("expected SectionNeedsBreak(2) = true after NormalizeStylesheets")
+		}
+		if result.SectionNeedsBreak(3) {
+			t.Error("expected SectionNeedsBreak(3) = false — not specified in CSS")
+		}
+	})
+
+	t.Run("user CSS overrides default CSS", func(t *testing.T) {
+		log := zaptest.NewLogger(t)
+		defaultCSS := []byte(`.section-title-h2 { page-break-before: always; }`)
+
+		book := &FictionBook{
+			Stylesheets: []Stylesheet{
+				{
+					Type: "text/css",
+					Data: `.section-title-h2 { margin-top: 2em; }`, // no page-break-before
+				},
+			},
+		}
+
+		result := book.NormalizeStylesheets("", defaultCSS, log)
+
+		if result.SectionNeedsBreak(2) {
+			t.Error("expected SectionNeedsBreak(2) = false — user CSS should override default")
+		}
+	})
+}

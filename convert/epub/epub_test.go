@@ -2069,7 +2069,7 @@ func TestWriteNCX(t *testing.T) {
 	}
 
 	defaultCfg := &config.DocumentConfig{}
-	err := writeNCX(zw, c, chapters, defaultCfg, log)
+	err := writeNCX(zw, c, chapters, defaultCfg, nil, log)
 	if err != nil {
 		t.Fatalf("writeNCX() error = %v", err)
 	}
@@ -2172,7 +2172,7 @@ func TestWriteNav(t *testing.T) {
 		},
 	}
 
-	err := writeNav(zw, c, cfg, chapters, log)
+	err := writeNav(zw, c, cfg, chapters, nil, log)
 	if err != nil {
 		t.Fatalf("writeNav() error = %v", err)
 	}
@@ -2325,7 +2325,7 @@ func TestGenerateTOCPage(t *testing.T) {
 
 	cfg := &config.TOCPageConfig{}
 
-	tocChapter := generateTOCPage(c, chapters, cfg, log)
+	tocChapter := generateTOCPage(c, chapters, cfg, nil, log)
 
 	if tocChapter.ID != "toc-page" {
 		t.Errorf("Expected ID 'toc-page', got '%s'", tocChapter.ID)
@@ -2458,7 +2458,7 @@ func TestGenerateTOCPage_IDCollision(t *testing.T) {
 
 	cfg := &config.TOCPageConfig{}
 
-	tocChapter := generateTOCPage(c, chapters, cfg, log)
+	tocChapter := generateTOCPage(c, chapters, cfg, nil, log)
 
 	// Should get toc-page-2 since toc-page and toc-page-1 are taken by FB2 element IDs
 	if tocChapter.ID != "toc-page-2" {
@@ -3310,5 +3310,451 @@ func TestWriteOPF_EPUB3Collections(t *testing.T) {
 
 			tt.validate(t, opfContent)
 		})
+	}
+}
+
+// --- Section splitting tests ---
+
+// makeTitle creates an fb2.Title with a single text paragraph.
+func makeTitle(text string) *fb2.Title {
+	return &fb2.Title{
+		Items: []fb2.TitleItem{
+			{Paragraph: &fb2.Paragraph{
+				Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: text}},
+			}},
+		},
+	}
+}
+
+// TestAppendFlowItems_SplitOnSectionNeedsBreak verifies that appendFlowItems
+// returns a splitResult when it encounters a FlowSection at a depth where
+// SectionNeedsBreak returns true.
+func TestAppendFlowItems_SplitOnSectionNeedsBreak(t *testing.T) {
+	log := setupTestLogger(t)
+
+	book := &fb2.FictionBook{}
+	book.SetSectionPageBreaks(map[int]bool{2: true})
+
+	c := &content.Content{
+		Book: book,
+	}
+
+	childA := &fb2.Section{
+		ID:    "childA",
+		Title: makeTitle("Child A"),
+		Content: []fb2.FlowItem{
+			{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+				Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "content A"}},
+			}},
+		},
+	}
+	childB := &fb2.Section{
+		ID:    "childB",
+		Title: makeTitle("Child B"),
+		Content: []fb2.FlowItem{
+			{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+				Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "content B"}},
+			}},
+		},
+	}
+
+	items := []fb2.FlowItem{
+		{Kind: fb2.FlowSection, Section: childA},
+		{Kind: fb2.FlowSection, Section: childB},
+	}
+
+	doc := etree.NewDocument()
+	parent := doc.CreateElement("div")
+
+	// depth=1 means child sections are at depth 2, which needs break
+	splits, err := appendFlowItems(parent, c, items, 1, "section", log)
+	if err != nil {
+		t.Fatalf("appendFlowItems error: %v", err)
+	}
+	if len(splits) == 0 {
+		t.Fatal("expected split results, got none")
+	}
+
+	// First split should be childA
+	if splits[0].section != childA {
+		t.Errorf("expected first split section to be childA, got %v", splits[0].section.ID)
+	}
+	if splits[0].depth != 2 {
+		t.Errorf("expected split depth 2, got %d", splits[0].depth)
+	}
+	// Remaining should contain childB
+	if len(splits[0].remaining) != 1 {
+		t.Fatalf("expected 1 remaining item, got %d", len(splits[0].remaining))
+	}
+	if splits[0].remaining[0].Section != childB {
+		t.Error("expected remaining item to be childB")
+	}
+
+	// Parent element should have no child sections rendered
+	// (they all got split out before any rendering)
+	sectionDivs := parent.SelectElements("div")
+	if len(sectionDivs) != 0 {
+		t.Errorf("expected no rendered section divs, got %d", len(sectionDivs))
+	}
+}
+
+// TestAppendFlowItems_NoSplitWhenBreakFalse verifies that appendFlowItems
+// renders nested sections inline when SectionNeedsBreak returns false.
+func TestAppendFlowItems_NoSplitWhenBreakFalse(t *testing.T) {
+	log := setupTestLogger(t)
+
+	book := &fb2.FictionBook{}
+	// No page breaks set — SectionNeedsBreak returns false for all depths
+
+	c := &content.Content{
+		Book: book,
+	}
+
+	child := &fb2.Section{
+		ID:    "child1",
+		Title: makeTitle("Child Section"),
+		Content: []fb2.FlowItem{
+			{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+				Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "paragraph"}},
+			}},
+		},
+	}
+
+	items := []fb2.FlowItem{
+		{Kind: fb2.FlowSection, Section: child},
+	}
+
+	doc := etree.NewDocument()
+	parent := doc.CreateElement("div")
+
+	splits, err := appendFlowItems(parent, c, items, 1, "section", log)
+	if err != nil {
+		t.Fatalf("appendFlowItems error: %v", err)
+	}
+	if len(splits) != 0 {
+		t.Errorf("expected no splits, got %d", len(splits))
+	}
+
+	// Section should be rendered inline as a div
+	sectionDivs := parent.SelectElements("div")
+	if len(sectionDivs) == 0 {
+		t.Error("expected section to be rendered inline as a div")
+	}
+}
+
+// TestAppendFlowItems_SplitBubblesUpFromDeeper verifies that when a deeper nested
+// section triggers a split, it bubbles up through the parent section correctly.
+func TestAppendFlowItems_SplitBubblesUpFromDeeper(t *testing.T) {
+	log := setupTestLogger(t)
+
+	book := &fb2.FictionBook{}
+	// Only depth 3 triggers break
+	book.SetSectionPageBreaks(map[int]bool{3: true})
+
+	c := &content.Content{
+		Book: book,
+	}
+
+	// Structure: depth-1 section contains depth-2 section which contains depth-3 sections
+	grandchild1 := &fb2.Section{
+		ID:    "gc1",
+		Title: makeTitle("Grandchild 1"),
+		Content: []fb2.FlowItem{
+			{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+				Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "gc1 content"}},
+			}},
+		},
+	}
+	grandchild2 := &fb2.Section{
+		ID:    "gc2",
+		Title: makeTitle("Grandchild 2"),
+		Content: []fb2.FlowItem{
+			{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+				Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "gc2 content"}},
+			}},
+		},
+	}
+
+	// Depth-2 section containing two depth-3 children
+	parentSection := &fb2.Section{
+		ID:    "parent",
+		Title: makeTitle("Parent Section"),
+		Content: []fb2.FlowItem{
+			{Kind: fb2.FlowSection, Section: grandchild1},
+			{Kind: fb2.FlowSection, Section: grandchild2},
+		},
+	}
+
+	items := []fb2.FlowItem{
+		{Kind: fb2.FlowSection, Section: parentSection},
+	}
+
+	doc := etree.NewDocument()
+	parent := doc.CreateElement("div")
+
+	// depth=1: parentSection is at depth 2 (no break), grandchildren at depth 3 (break!)
+	splits, err := appendFlowItems(parent, c, items, 1, "section", log)
+	if err != nil {
+		t.Fatalf("appendFlowItems error: %v", err)
+	}
+
+	// Splits should bubble up from the depth-3 level
+	if len(splits) == 0 {
+		t.Fatal("expected splits to bubble up from depth-3 sections")
+	}
+	if splits[0].section != grandchild1 {
+		t.Errorf("expected first split to be grandchild1 (id=%s), got id=%s", grandchild1.ID, splits[0].section.ID)
+	}
+	if splits[0].depth != 3 {
+		t.Errorf("expected split depth 3, got %d", splits[0].depth)
+	}
+}
+
+// TestConvertToXHTML_SectionSplit verifies the end-to-end split behavior:
+// that convertToXHTML produces multiple chapters when sections are split,
+// with correct IDs, filenames, and TOC flags.
+func TestConvertToXHTML_SectionSplit(t *testing.T) {
+	ctx, _, log := setupTestContext(t)
+
+	book := &fb2.FictionBook{
+		Bodies: []fb2.Body{
+			{
+				Kind: fb2.BodyMain,
+				Sections: []fb2.Section{
+					{
+						ID:    "ch1",
+						Title: makeTitle("Chapter 1"),
+						Content: []fb2.FlowItem{
+							{Kind: fb2.FlowSection, Section: &fb2.Section{
+								ID:    "ch1-s1",
+								Title: makeTitle("Section 1.1"),
+								Content: []fb2.FlowItem{
+									{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+										ID:   "p1",
+										Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Paragraph in 1.1"}},
+									}},
+								},
+							}},
+							{Kind: fb2.FlowSection, Section: &fb2.Section{
+								ID:    "ch1-s2",
+								Title: makeTitle("Section 1.2"),
+								Content: []fb2.FlowItem{
+									{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+										ID:   "p2",
+										Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Paragraph in 1.2"}},
+									}},
+								},
+							}},
+						},
+					},
+				},
+			},
+		},
+	}
+	// Enable page breaks at depth 2 — the child sections above are depth 2
+	book.SetSectionPageBreaks(map[int]bool{2: true})
+
+	c := &content.Content{
+		OutputFormat: common.OutputFmtEpub3,
+		Book:         book,
+		IDsIndex:     make(fb2.IDIndex),
+	}
+
+	chapters, idToFile, err := convertToXHTML(ctx, c, log)
+	if err != nil {
+		t.Fatalf("convertToXHTML error: %v", err)
+	}
+
+	// We expect 3 chapters:
+	// 1. ch1 (the parent, with title rendered but child sections split out)
+	// 2. ch1-s1 (split)
+	// 3. ch1-s2 (split)
+	if len(chapters) < 3 {
+		t.Fatalf("expected at least 3 chapters, got %d", len(chapters))
+	}
+
+	// First chapter should have IncludeInTOC = true and Section set
+	parentChapter := chapters[0]
+	if !parentChapter.IncludeInTOC {
+		t.Error("parent chapter should have IncludeInTOC = true")
+	}
+	if parentChapter.Section == nil {
+		t.Error("parent chapter should have Section set for TOC traversal")
+	}
+
+	// Split chapters should have IncludeInTOC = false
+	for i := 1; i < 3; i++ {
+		ch := chapters[i]
+		if ch.IncludeInTOC {
+			t.Errorf("split chapter %d (ID=%s) should have IncludeInTOC = false", i, ch.ID)
+		}
+		if ch.Doc == nil {
+			t.Errorf("split chapter %d should have a Doc", i)
+		}
+	}
+
+	// Verify ID-to-file mapping: split section IDs should point to their new filenames
+	if fn, ok := idToFile["ch1-s1"]; !ok {
+		t.Error("idToFile should contain ch1-s1")
+	} else if fn != chapters[1].Filename {
+		t.Errorf("ch1-s1 should map to %s, got %s", chapters[1].Filename, fn)
+	}
+
+	if fn, ok := idToFile["ch1-s2"]; !ok {
+		t.Error("idToFile should contain ch1-s2")
+	} else if fn != chapters[2].Filename {
+		t.Errorf("ch1-s2 should map to %s, got %s", chapters[2].Filename, fn)
+	}
+
+	// Paragraph IDs should also be remapped to the split files
+	if fn, ok := idToFile["p1"]; !ok {
+		t.Error("idToFile should contain p1")
+	} else if fn != chapters[1].Filename {
+		t.Errorf("p1 should map to %s, got %s", chapters[1].Filename, fn)
+	}
+
+	if fn, ok := idToFile["p2"]; !ok {
+		t.Error("idToFile should contain p2")
+	} else if fn != chapters[2].Filename {
+		t.Errorf("p2 should map to %s, got %s", chapters[2].Filename, fn)
+	}
+}
+
+// TestConvertToXHTML_NoSplitWithoutPageBreaks verifies that when no page breaks
+// are configured, sections are rendered inline and no extra chapters are created.
+func TestConvertToXHTML_NoSplitWithoutPageBreaks(t *testing.T) {
+	ctx, _, log := setupTestContext(t)
+
+	book := &fb2.FictionBook{
+		Bodies: []fb2.Body{
+			{
+				Kind: fb2.BodyMain,
+				Sections: []fb2.Section{
+					{
+						ID:    "ch1",
+						Title: makeTitle("Chapter 1"),
+						Content: []fb2.FlowItem{
+							{Kind: fb2.FlowSection, Section: &fb2.Section{
+								ID:    "ch1-s1",
+								Title: makeTitle("Section 1.1"),
+								Content: []fb2.FlowItem{
+									{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+										Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "text"}},
+									}},
+								},
+							}},
+							{Kind: fb2.FlowSection, Section: &fb2.Section{
+								ID:    "ch1-s2",
+								Title: makeTitle("Section 1.2"),
+								Content: []fb2.FlowItem{
+									{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+										Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "text"}},
+									}},
+								},
+							}},
+						},
+					},
+				},
+			},
+		},
+	}
+	// No page breaks — sections stay inline
+
+	c := &content.Content{
+		OutputFormat: common.OutputFmtEpub3,
+		Book:         book,
+		IDsIndex:     make(fb2.IDIndex),
+	}
+
+	chapters, idToFile, err := convertToXHTML(ctx, c, log)
+	if err != nil {
+		t.Fatalf("convertToXHTML error: %v", err)
+	}
+
+	// Should be exactly 1 chapter (parent contains children inline)
+	if len(chapters) != 1 {
+		t.Errorf("expected 1 chapter (no splits), got %d", len(chapters))
+	}
+
+	// All IDs should map to the same file
+	parentFile := chapters[0].Filename
+	if idToFile["ch1"] != parentFile {
+		t.Errorf("ch1 should map to %s", parentFile)
+	}
+	if idToFile["ch1-s1"] != parentFile {
+		t.Errorf("ch1-s1 should map to %s (inline), got %s", parentFile, idToFile["ch1-s1"])
+	}
+	if idToFile["ch1-s2"] != parentFile {
+		t.Errorf("ch1-s2 should map to %s (inline), got %s", parentFile, idToFile["ch1-s2"])
+	}
+}
+
+// TestConvertToXHTML_SplitSectionContent verifies that split section XHTML documents
+// contain the correct content — the section's own title and body text.
+func TestConvertToXHTML_SplitSectionContent(t *testing.T) {
+	ctx, _, log := setupTestContext(t)
+
+	book := &fb2.FictionBook{
+		Bodies: []fb2.Body{
+			{
+				Kind: fb2.BodyMain,
+				Sections: []fb2.Section{
+					{
+						ID:    "ch1",
+						Title: makeTitle("Chapter 1"),
+						Content: []fb2.FlowItem{
+							{Kind: fb2.FlowSection, Section: &fb2.Section{
+								ID:    "sub1",
+								Title: makeTitle("Sub One"),
+								Content: []fb2.FlowItem{
+									{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+										Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Sub one content"}},
+									}},
+								},
+							}},
+						},
+					},
+				},
+			},
+		},
+	}
+	book.SetSectionPageBreaks(map[int]bool{2: true})
+
+	c := &content.Content{
+		OutputFormat: common.OutputFmtEpub3,
+		Book:         book,
+		IDsIndex:     make(fb2.IDIndex),
+	}
+
+	chapters, _, err := convertToXHTML(ctx, c, log)
+	if err != nil {
+		t.Fatalf("convertToXHTML error: %v", err)
+	}
+
+	if len(chapters) < 2 {
+		t.Fatalf("expected at least 2 chapters, got %d", len(chapters))
+	}
+
+	// The split chapter's XHTML should contain the section title and paragraph text
+	splitDoc := chapters[1].Doc
+	if splitDoc == nil {
+		t.Fatal("split chapter Doc should not be nil")
+	}
+
+	xmlStr, err := splitDoc.WriteToString()
+	if err != nil {
+		t.Fatalf("WriteToString error: %v", err)
+	}
+
+	if !strings.Contains(xmlStr, "Sub One") {
+		t.Error("split chapter should contain section title 'Sub One'")
+	}
+	if !strings.Contains(xmlStr, "Sub one content") {
+		t.Error("split chapter should contain paragraph text 'Sub one content'")
+	}
+
+	// The split doc should have the section's ID as an attribute
+	if !strings.Contains(xmlStr, `id="sub1"`) {
+		t.Error("split chapter should have id='sub1' on wrapper div")
 	}
 }
