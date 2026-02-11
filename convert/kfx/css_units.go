@@ -1,9 +1,10 @@
 package kfx
 
 import (
-	"fbc/css"
 	"fmt"
 	"strings"
+
+	"fbc/css"
 )
 
 // CSSValueToKFX converts a CSS value with units to KFX dimension representation.

@@ -1,7 +1,6 @@
 package kfx
 
 import (
-	"fbc/css"
 	"fmt"
 	"maps"
 	"reflect"
@@ -9,6 +8,8 @@ import (
 	"strings"
 
 	"go.uber.org/zap"
+
+	"fbc/css"
 )
 
 // Converter converts CSS rules to KFX style definitions.

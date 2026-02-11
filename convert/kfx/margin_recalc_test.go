@@ -1,11 +1,12 @@
 package kfx
 
 import (
-	"fbc/css"
 	"math"
 	"testing"
 
 	"go.uber.org/zap"
+
+	"fbc/css"
 )
 
 // TestCSSStylesValueParsing verifies that CSS values from stylemap's CSSStyles

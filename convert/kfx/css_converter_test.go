@@ -1,7 +1,6 @@
 package kfx
 
 import (
-	"fbc/css"
 	"math"
 	"math/big"
 	"os"
@@ -10,6 +9,8 @@ import (
 
 	"github.com/amazon-ion/ion-go/ion"
 	"go.uber.org/zap"
+
+	"fbc/css"
 )
 
 // TestTitleStylesFromCSS verifies that title styles from default.css have proper formatting.

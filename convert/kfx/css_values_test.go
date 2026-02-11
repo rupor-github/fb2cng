@@ -1,8 +1,9 @@
 package kfx
 
 import (
-	"fbc/css"
 	"testing"
+
+	"fbc/css"
 )
 
 func TestConvertWritingMode(t *testing.T) {

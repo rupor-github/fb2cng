@@ -1,10 +1,11 @@
 package kfx
 
 import (
-	"fbc/css"
 	"testing"
 
 	"go.uber.org/zap"
+
+	"fbc/css"
 )
 
 func TestParseCSSContent(t *testing.T) {

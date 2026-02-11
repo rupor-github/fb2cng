@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"fbc/css"
-
 	"go.uber.org/zap"
+
+	"fbc/css"
 )
 
 // allRules collects all top-level rules from a stylesheet's Items.

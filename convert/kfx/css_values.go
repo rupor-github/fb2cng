@@ -1,9 +1,10 @@
 package kfx
 
 import (
-	"fbc/css"
 	"strconv"
 	"strings"
+
+	"fbc/css"
 )
 
 // ConvertFontWeight converts CSS font-weight values to KFX symbols.
