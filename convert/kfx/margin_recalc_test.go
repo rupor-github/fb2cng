@@ -1,6 +1,7 @@
 package kfx
 
 import (
+	"fbc/css"
 	"math"
 	"testing"
 
@@ -17,8 +18,8 @@ func TestCSSStylesValueParsing(t *testing.T) {
 	mapper := NewStyleMapper(nil, nil)
 
 	// Simulate h1 with font-size: 140%
-	sel := Selector{Element: "h1", Raw: "h1"}
-	props := map[string]CSSValue{
+	sel := css.Selector{Element: "h1", Raw: "h1"}
+	props := map[string]css.CSSValue{
 		"font-size": {Value: 140, Unit: "%", Raw: "140%"},
 	}
 
@@ -51,8 +52,8 @@ func TestMarginConversionWithStylemap(t *testing.T) {
 
 	// CSS rule: h1 { font-size: 140%; }
 	// Stylemap adds: margin-top: 0.67em, margin-bottom: 0.67em
-	sel := Selector{Element: "h1", Raw: "h1"}
-	props := map[string]CSSValue{
+	sel := css.Selector{Element: "h1", Raw: "h1"}
+	props := map[string]css.CSSValue{
 		"font-size": {Value: 140, Unit: "%", Raw: "140%"},
 	}
 
@@ -79,7 +80,7 @@ func TestMarginConversionWithStylemap(t *testing.T) {
 func TestMarginConversionFullFlow(t *testing.T) {
 	// Parse CSS
 	cssData := []byte(`h1 { font-size: 140%; }`)
-	parser := NewParser(nil)
+	parser := css.NewParser(nil)
 	sheet := parser.Parse(cssData)
 
 	// Map stylesheet
@@ -121,8 +122,8 @@ func TestShorthandPropertyPreventsStylemapOverride(t *testing.T) {
 	// CSS: blockquote.cite { margin: 1em 2em; }
 	// Stylemap for blockquote has CSSStyles: {margin-left: 40px, margin-right: 40px}
 	// The stylemap defaults should NOT override because CSS has "margin" shorthand
-	sel := Selector{Element: "blockquote", Class: "cite", Raw: "blockquote.cite"}
-	props := map[string]CSSValue{
+	sel := css.Selector{Element: "blockquote", Class: "cite", Raw: "blockquote.cite"}
+	props := map[string]css.CSSValue{
 		"margin": {Value: 0, Raw: "1em 2em"},
 	}
 

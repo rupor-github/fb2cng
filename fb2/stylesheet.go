@@ -12,30 +12,13 @@ import (
 
 	"github.com/h2non/filetype"
 	"go.uber.org/zap"
+
+	"fbc/css"
 )
 
-var (
-	// Match url() references: url("path") or url('path') or url(path)
-	urlPattern = regexp.MustCompile(`url\s*\(\s*['"]?([^'")]+)['"]?\s*\)`)
-
-	// Match @font-face blocks
-	fontFacePattern = regexp.MustCompile(`@font-face\s*\{[^}]*\}`)
-
-	// Match @import statements
-	importPattern = regexp.MustCompile(`@import\s+(?:url\s*\()?\s*['"]?([^'"()]+)['"]?\s*\)?`)
-
-	// Match CSS rule blocks whose selector list includes .section-title-hN.
-	// Captures: (1) the heading digit N, (2) the declaration block between braces.
-	// The selector part allows grouped selectors (comma-separated).
-	sectionTitleBlockPattern = regexp.MustCompile(
-		`(?i)[^{}]*\.section-title-h([2-6])\b[^{]*\{([^}]*)\}`,
-	)
-
-	// Match page-break-before: always inside a declaration block.
-	pageBreakBeforeAlways = regexp.MustCompile(
-		`(?i)page-break-before\s*:\s*always`,
-	)
-)
+// urlExtractPattern extracts URLs from raw CSS value strings such as @font-face src
+// or background property values. It matches url("path"), url('path'), and url(path).
+var urlExtractPattern = regexp.MustCompile(`url\s*\(\s*(?:["']([^"']*)["']|([^)"]*))\s*\)`)
 
 // cssExternalRef represents a reference found in CSS
 type cssExternalRef struct {
@@ -305,47 +288,56 @@ func (fb *FictionBook) resolveStylesheetResource(ref cssExternalRef, binaryIndex
 }
 
 // parseStylesheetResources extracts external resource references from CSS
-func parseStylesheetResources(css string) []cssExternalRef {
+// by parsing it with the css package and walking the AST.
+func parseStylesheetResources(cssText string) []cssExternalRef {
+	sheet := css.NewParser(nil).Parse([]byte(cssText))
+
 	var refs []cssExternalRef
 	seen := make(map[string]bool)
 
-	// Find @import statements
-	for _, match := range importPattern.FindAllStringSubmatch(css, -1) {
-		url := strings.TrimSpace(match[1])
+	addURL := func(url, context string) {
+		url = strings.TrimSpace(url)
 		if url != "" && !seen[url] {
-			refs = append(refs, cssExternalRef{
-				URL:     url,
-				Context: "import",
-			})
+			refs = append(refs, cssExternalRef{URL: url, Context: context})
 			seen[url] = true
 		}
 	}
 
-	// Find @font-face blocks and their url() references
-	for _, fontFaceBlock := range fontFacePattern.FindAllString(css, -1) {
-		for _, match := range urlPattern.FindAllStringSubmatch(fontFaceBlock, -1) {
-			url := strings.TrimSpace(match[1])
-			if url != "" && !seen[url] {
-				refs = append(refs, cssExternalRef{
-					URL:     url,
-					Context: "font-face",
-				})
-				seen[url] = true
+	// extractURLs pulls url() references out of a raw CSS value string.
+	extractURLs := func(raw, context string) {
+		for _, m := range urlExtractPattern.FindAllStringSubmatch(raw, -1) {
+			// Group 1 is quoted URL, group 2 is unquoted
+			u := m[1]
+			if u == "" {
+				u = m[2]
 			}
+			addURL(u, context)
 		}
 	}
 
-	// Find other url() references (backgrounds, borders, etc.)
-	// Skip those already found in @font-face or @import
-	allURLs := urlPattern.FindAllStringSubmatch(css, -1)
-	for _, match := range allURLs {
-		url := strings.TrimSpace(match[1])
-		if url != "" && !seen[url] {
-			refs = append(refs, cssExternalRef{
-				URL:     url,
-				Context: "other",
-			})
-			seen[url] = true
+	for _, item := range sheet.Items {
+		switch {
+		case item.Import != nil:
+			addURL(*item.Import, "import")
+
+		case item.FontFace != nil:
+			extractURLs(item.FontFace.Src, "font-face")
+
+		case item.Rule != nil:
+			for _, val := range item.Rule.Properties {
+				if strings.Contains(val.Raw, "url(") {
+					extractURLs(val.Raw, "other")
+				}
+			}
+
+		case item.MediaBlock != nil:
+			for _, rule := range item.MediaBlock.Rules {
+				for _, val := range rule.Properties {
+					if strings.Contains(val.Raw, "url(") {
+						extractURLs(val.Raw, "other")
+					}
+				}
+			}
 		}
 	}
 
@@ -356,16 +348,36 @@ func parseStylesheetResources(css string) []cssExternalRef {
 // contain page-break-before:always and returns a map of depth -> bool.
 // Later stylesheets should be processed after earlier ones so that user
 // CSS can override defaults — the caller is responsible for merging.
-func parseSectionPageBreaks(css string) map[int]bool {
+func parseSectionPageBreaks(cssText string) map[int]bool {
+	sheet := css.NewParser(nil).Parse([]byte(cssText))
 	breaks := make(map[int]bool)
 
-	for _, match := range sectionTitleBlockPattern.FindAllStringSubmatch(css, -1) {
-		depth, err := strconv.Atoi(match[1])
-		if err != nil || depth < 2 || depth > 6 {
-			continue
+	// checkRule examines a single rule for .section-title-hN selectors
+	// and page-break-before: always property.
+	checkRule := func(rule *css.CSSRule) {
+		class := rule.Selector.Class
+		if !strings.HasPrefix(class, "section-title-h") {
+			return
 		}
-		block := match[2]
-		breaks[depth] = pageBreakBeforeAlways.MatchString(block)
+		depthStr := strings.TrimPrefix(class, "section-title-h")
+		depth, err := strconv.Atoi(depthStr)
+		if err != nil || depth < 2 || depth > 6 {
+			return
+		}
+		// Check if the rule has page-break-before: always
+		val, ok := rule.GetProperty("page-break-before")
+		breaks[depth] = ok && strings.EqualFold(val.Raw, "always")
+	}
+
+	for _, item := range sheet.Items {
+		switch {
+		case item.Rule != nil:
+			checkRule(item.Rule)
+		case item.MediaBlock != nil:
+			for i := range item.MediaBlock.Rules {
+				checkRule(&item.MediaBlock.Rules[i])
+			}
+		}
 	}
 
 	return breaks

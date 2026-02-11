@@ -5,11 +5,13 @@ import (
 	"strings"
 
 	"go.uber.org/zap"
+
+	"fbc/css"
 )
 
-func convertStyleMapLineHeight(cssVal CSSValue, rawVal string) (StructValue, bool) {
+func convertStyleMapLineHeight(cssVal css.CSSValue, rawVal string) (StructValue, bool) {
 	if strings.EqualFold(cssVal.Keyword, "normal") || strings.EqualFold(rawVal, "normal") {
-		cssVal = CSSValue{Value: 1.2, Unit: "em"}
+		cssVal = css.CSSValue{Value: 1.2, Unit: "em"}
 	}
 	if !cssVal.IsNumeric() && cssVal.Unit == "" {
 		return nil, false
@@ -27,7 +29,7 @@ func convertStyleMapLineHeight(cssVal CSSValue, rawVal string) (StructValue, boo
 	return DimensionValue(value, unit), true
 }
 
-func convertStyleMapDimension(sym KFXSymbol, cssVal CSSValue) (StructValue, bool) {
+func convertStyleMapDimension(sym KFXSymbol, cssVal css.CSSValue) (StructValue, bool) {
 	if cssVal.IsKeyword() {
 		return nil, false
 	}
@@ -54,7 +56,7 @@ func convertStyleMapDimension(sym KFXSymbol, cssVal CSSValue) (StructValue, bool
 	return DimensionValue(value, unit), true
 }
 
-func convertStyleMapProp(prop string, cssVal CSSValue, rawVal string, unit string, valType string, sourceAttr string, log *zap.Logger) (map[KFXSymbol]any, bool) {
+func convertStyleMapProp(prop string, cssVal css.CSSValue, rawVal string, unit string, valType string, sourceAttr string, log *zap.Logger) (map[KFXSymbol]any, bool) {
 	out := make(map[KFXSymbol]any)
 
 	// Skip yj.semantics.heading_level - it should only be in storyline entries, not styles.
@@ -352,7 +354,7 @@ func convertStyleMapProp(prop string, cssVal CSSValue, rawVal string, unit strin
 	return out, true
 }
 
-func parseDimensionFromCSS(cssVal CSSValue, rawVal, unit string) (StructValue, bool) {
+func parseDimensionFromCSS(cssVal css.CSSValue, rawVal, unit string) (StructValue, bool) {
 	if pct, ok := positionKeywordPercent(firstNonEmpty(cssVal.Keyword, rawVal)); ok {
 		return DimensionValue(pct, SymUnitPercent), true
 	}
@@ -367,7 +369,7 @@ func parseDimensionFromCSS(cssVal CSSValue, rawVal, unit string) (StructValue, b
 	return nil, false
 }
 
-func parseXYPair(cssVal CSSValue, rawVal string) (StructValue, StructValue, bool) {
+func parseXYPair(cssVal css.CSSValue, rawVal string) (StructValue, StructValue, bool) {
 	val := firstNonEmpty(cssVal.Raw, rawVal, cssVal.Keyword, formatCSSValue(cssVal))
 	parts := splitStyleTokens(val)
 	switch len(parts) {
@@ -399,7 +401,7 @@ func parseXYPair(cssVal CSSValue, rawVal string) (StructValue, StructValue, bool
 	return x, y, true
 }
 
-func parseBackgroundSize(cssVal CSSValue, rawVal string) (StructValue, StructValue, bool) {
+func parseBackgroundSize(cssVal css.CSSValue, rawVal string) (StructValue, StructValue, bool) {
 	val := firstNonEmpty(cssVal.Raw, rawVal, cssVal.Keyword, formatCSSValue(cssVal))
 	parts := splitStyleTokens(val)
 	if len(parts) == 0 {
@@ -665,7 +667,7 @@ func parseShadows(raw string, isText bool, log *zap.Logger) ([]StructValue, bool
 				dims = append(dims, dim)
 				continue
 			}
-			if r, g, b, ok := ParseColor(CSSValue{Raw: token, Keyword: token}); ok {
+			if r, g, b, ok := ParseColor(css.CSSValue{Raw: token, Keyword: token}); ok {
 				color = MakeColorValue(r, g, b)
 				colorSet = true
 				continue

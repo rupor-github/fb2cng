@@ -1,4 +1,4 @@
-package kfx
+package css
 
 import (
 	"bytes"
@@ -29,7 +29,7 @@ func NewParser(log *zap.Logger) *Parser {
 // The optional source parameter identifies what's being parsed (for debug logging).
 func (p *Parser) Parse(data []byte, source ...string) *Stylesheet {
 	sheet := &Stylesheet{
-		Rules:    make([]CSSRule, 0),
+		Items:    make([]StylesheetItem, 0),
 		Warnings: make([]string, 0),
 	}
 
@@ -58,31 +58,38 @@ func (p *Parser) Parse(data []byte, source ...string) *Stylesheet {
 			atRule := string(data)
 			switch atRule {
 			case "@media":
-				// Parse @media query and evaluate for KFX context
+				// Parse @media query and preserve the block in the AST
 				mq := p.parseMediaQueryFromTokens(parser.Values())
-				if mq.EvaluateForKFX() {
-					// Process rules inside @media block
-					p.log.Debug("Processing @media block", zap.String("query", mq.Raw))
-					p.parseMediaBlock(parser, sheet)
-				} else {
-					// Skip entire @media block
-					p.skipAtRuleBlock(parser)
-					p.log.Debug("Skipping @media block", zap.String("query", mq.Raw))
-				}
+				rules := p.parseMediaBlockRules(parser, sheet)
+				p.log.Debug("Parsed @media block", zap.String("query", mq.Raw), zap.Int("rules", len(rules)))
+				sheet.Items = append(sheet.Items, StylesheetItem{
+					MediaBlock: &MediaBlock{Query: mq, Rules: rules},
+				})
 			case "@font-face":
 				// Parse @font-face
 				ff := p.parseFontFace(parser)
+				sheet.Items = append(sheet.Items, StylesheetItem{FontFace: &ff})
 				if ff.Family != "" {
 					sheet.FontFaces = append(sheet.FontFaces, ff)
 				}
 			default:
-				// Skip other @-rules
+				// Skip other @-rules with blocks
 				p.skipAtRuleBlock(parser)
 				p.log.Debug("Skipping @-rule", zap.String("rule", atRule))
 			}
 		case css.AtRuleGrammar:
 			// Simple @-rule without block (e.g., @import)
-			p.log.Debug("Skipping @-rule", zap.String("rule", string(data)))
+			atRule := string(data)
+			if atRule == "@import" {
+				url := extractImportURL(parser.Values())
+				if url != "" {
+					sheet.Items = append(sheet.Items, StylesheetItem{Import: &url})
+					sheet.Imports = append(sheet.Imports, url)
+					p.log.Debug("Parsed @import", zap.String("url", url))
+				}
+			} else {
+				p.log.Debug("Skipping @-rule", zap.String("rule", atRule))
+			}
 
 		case css.BeginRulesetGrammar:
 			// Collect selector tokens
@@ -115,12 +122,31 @@ func (p *Parser) Parse(data []byte, source ...string) *Stylesheet {
 						Selector:   sel,
 						Properties: propsCopy,
 					}
-					sheet.Rules = append(sheet.Rules, rule)
+					sheet.Items = append(sheet.Items, StylesheetItem{Rule: &rule})
 				}
 			}
 			currentSelectors = nil
 		}
 	}
+}
+
+// extractImportURL extracts the URL from @import tokens.
+// Handles: @import "url"; @import url("url"); @import url(url);
+func extractImportURL(tokens []css.Token) string {
+	for _, t := range tokens {
+		switch t.TokenType {
+		case css.StringToken:
+			return unquote(string(t.Data))
+		case css.URLToken:
+			// url(something) — the token data is the full url(...) string
+			s := string(t.Data)
+			// Strip url( prefix and ) suffix
+			s = strings.TrimPrefix(s, "url(")
+			s = strings.TrimSuffix(s, ")")
+			return unquote(strings.TrimSpace(s))
+		}
+	}
+	return ""
 }
 
 // parseSelectors extracts selector strings from token data.
@@ -197,10 +223,10 @@ func (p *Parser) parsePropertyValue(tokens []css.Token) CSSValue {
 		case css.DimensionToken:
 			val.Value, val.Unit = parseDimension(string(t.Data))
 		case css.PercentageToken:
-			val.Value, _ = parseNumber(strings.TrimSuffix(string(t.Data), "%"))
+			val.Value, _ = strconv.ParseFloat(strings.TrimSuffix(string(t.Data), "%"), 64)
 			val.Unit = "%"
 		case css.NumberToken:
-			val.Value, _ = parseNumber(string(t.Data))
+			val.Value, _ = strconv.ParseFloat(string(t.Data), 64)
 		case css.IdentToken:
 			val.Keyword = strings.ToLower(string(t.Data))
 		case css.StringToken:
@@ -241,14 +267,9 @@ func parseDimension(s string) (float64, string) {
 		return 0, ""
 	}
 
-	num, _ := parseNumber(s[:numEnd])
+	num, _ := strconv.ParseFloat(s[:numEnd], 64)
 	unit := strings.ToLower(s[numEnd:])
 	return num, unit
-}
-
-// parseNumber parses a number string.
-func parseNumber(s string) (float64, error) {
-	return strconv.ParseFloat(s, 64)
 }
 
 // parseSelector parses a single selector string into a Selector.
@@ -505,8 +526,11 @@ func (p *Parser) parseMediaQueryFromTokens(tokens []css.Token) MediaQuery {
 	return mq
 }
 
-// parseMediaBlock parses rules inside an @media block and adds them to the stylesheet.
-func (p *Parser) parseMediaBlock(parser *css.Parser, sheet *Stylesheet) {
+// parseMediaBlockRules parses rules inside an @media block and returns them.
+// Unlike the old parseMediaBlock which appended directly to sheet.Rules,
+// this returns the rules for the caller to wrap in a MediaBlock.
+func (p *Parser) parseMediaBlockRules(parser *css.Parser, sheet *Stylesheet) []CSSRule {
+	var rules []CSSRule
 	var currentSelectors []string
 
 	for {
@@ -514,7 +538,7 @@ func (p *Parser) parseMediaBlock(parser *css.Parser, sheet *Stylesheet) {
 
 		switch gt {
 		case css.ErrorGrammar, css.EndAtRuleGrammar:
-			return
+			return rules
 
 		case css.BeginRulesetGrammar:
 			currentSelectors = p.parseSelectors(data, parser.Values())
@@ -530,7 +554,7 @@ func (p *Parser) parseMediaBlock(parser *css.Parser, sheet *Stylesheet) {
 						Selector:   sel,
 						Properties: propsCopy,
 					}
-					sheet.Rules = append(sheet.Rules, rule)
+					rules = append(rules, rule)
 				}
 			}
 			currentSelectors = nil

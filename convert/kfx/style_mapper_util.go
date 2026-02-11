@@ -3,6 +3,8 @@ package kfx
 import (
 	"strconv"
 	"strings"
+
+	"fbc/css"
 )
 
 func firstNonEmpty(primary string, rest ...string) string {
@@ -63,7 +65,7 @@ func symbolIDOr(name string) KFXSymbol {
 	return SymbolUnknown
 }
 
-func parseIntValue(cssVal CSSValue, rawVal string) (int, bool) {
+func parseIntValue(cssVal css.CSSValue, rawVal string) (int, bool) {
 	switch {
 	case cssVal.IsNumeric():
 		return int(cssVal.Value), true
@@ -97,7 +99,7 @@ func firstOrEmpty(values []string, idx int) string {
 	return ""
 }
 
-func ConvertBackgroundRepeat(css CSSValue) (KFXSymbol, bool) {
+func ConvertBackgroundRepeat(css css.CSSValue) (KFXSymbol, bool) {
 	val := strings.ToLower(firstNonEmpty(css.Keyword, css.Raw))
 	switch val {
 	case "repeat-x":

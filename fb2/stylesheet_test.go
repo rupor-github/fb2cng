@@ -25,11 +25,9 @@ func TestParseStylesheetResources(t *testing.T) {
 		},
 		{
 			name: "multiple url variations",
-			css: `
-				background: url(#bg-img);
-				background: url('#bg-img2');
-				background: url("#bg-img3");
-			`,
+			css: `p { background: url(#bg-img); }
+			      a { background: url('#bg-img2'); }
+			      div { background: url("#bg-img3"); }`,
 			want: 3,
 		},
 		{
@@ -39,12 +37,12 @@ func TestParseStylesheetResources(t *testing.T) {
 		},
 		{
 			name: "data url",
-			css:  `src: url('data:font/woff2;base64,ABC');`,
+			css:  `@font-face { font-family: 'Test'; src: url('data:font/woff2;base64,ABC'); }`,
 			want: 1,
 		},
 		{
 			name: "url with spaces",
-			css:  `src: url( '#font-id' );`,
+			css:  `@font-face { font-family: 'Test'; src: url( '#font-id' ); }`,
 			want: 1,
 		},
 		{
@@ -55,8 +53,8 @@ func TestParseStylesheetResources(t *testing.T) {
 		{
 			name: "duplicate urls",
 			css: `
-				@font-face { src: url('#font-id'); }
-				background: url('#font-id');
+				@font-face { font-family: 'Test'; src: url('#font-id'); }
+				p { background: url('#font-id'); }
 			`,
 			want: 1, // Should deduplicate
 		},
@@ -216,7 +214,7 @@ func TestNormalizeStylesheets(t *testing.T) {
 			Stylesheets: []Stylesheet{
 				{
 					Type: "text/css",
-					Data: `src: url('#missing');`,
+					Data: `@font-face { font-family: 'Test'; src: url('#missing'); }`,
 				},
 			},
 			Binaries: []BinaryObject{},
@@ -256,7 +254,7 @@ func TestNormalizeStylesheets(t *testing.T) {
 			Stylesheets: []Stylesheet{
 				{
 					Type: "text/css",
-					Data: `src: url('#my-font');`,
+					Data: `@font-face { font-family: 'Test'; src: url('#my-font'); }`,
 				},
 			},
 			Binaries: []BinaryObject{

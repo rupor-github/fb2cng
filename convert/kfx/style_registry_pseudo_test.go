@@ -1,6 +1,7 @@
 package kfx
 
 import (
+	"fbc/css"
 	"testing"
 
 	"go.uber.org/zap"
@@ -9,52 +10,52 @@ import (
 func TestParseCSSContent(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    CSSValue
+		input    css.CSSValue
 		expected string
 	}{
 		{
 			name:     "double quoted string",
-			input:    CSSValue{Raw: `"["`},
+			input:    css.CSSValue{Raw: `"["`},
 			expected: "[",
 		},
 		{
 			name:     "single quoted string",
-			input:    CSSValue{Raw: `']'`},
+			input:    css.CSSValue{Raw: `']'`},
 			expected: "]",
 		},
 		{
 			name:     "complex content",
-			input:    CSSValue{Raw: `">>> "`},
+			input:    css.CSSValue{Raw: `">>> "`},
 			expected: ">>> ",
 		},
 		{
 			name:     "none keyword",
-			input:    CSSValue{Raw: "none"},
+			input:    css.CSSValue{Raw: "none"},
 			expected: "",
 		},
 		{
 			name:     "normal keyword",
-			input:    CSSValue{Raw: "normal"},
+			input:    css.CSSValue{Raw: "normal"},
 			expected: "",
 		},
 		{
 			name:     "empty value",
-			input:    CSSValue{Raw: ""},
+			input:    css.CSSValue{Raw: ""},
 			expected: "",
 		},
 		{
 			name:     "unquoted value (attr function)",
-			input:    CSSValue{Raw: "attr(data-before)"},
+			input:    css.CSSValue{Raw: "attr(data-before)"},
 			expected: "", // Not supported
 		},
 		{
 			name:     "counter function",
-			input:    CSSValue{Raw: "counter(section)"},
+			input:    css.CSSValue{Raw: "counter(section)"},
 			expected: "", // Not supported
 		},
 		{
 			name:     "whitespace around quotes",
-			input:    CSSValue{Raw: `  "text"  `},
+			input:    css.CSSValue{Raw: `  "text"  `},
 			expected: "text",
 		},
 	}
@@ -71,11 +72,11 @@ func TestParseCSSContent(t *testing.T) {
 
 func TestExtractPseudoContent(t *testing.T) {
 	log := zap.NewNop()
-	parser := NewParser(log)
+	parser := css.NewParser(log)
 
 	tests := []struct {
 		name          string
-		css           string
+		cssText       string
 		checkClass    string
 		wantBefore    string
 		wantAfter     string
@@ -84,7 +85,7 @@ func TestExtractPseudoContent(t *testing.T) {
 	}{
 		{
 			name: "before and after",
-			css: `
+			cssText: `
 				.note::before { content: "["; }
 				.note::after { content: "]"; }
 			`,
@@ -96,7 +97,7 @@ func TestExtractPseudoContent(t *testing.T) {
 		},
 		{
 			name: "only before",
-			css: `
+			cssText: `
 				.prefix::before { content: ">>> "; }
 			`,
 			checkClass:    "prefix",
@@ -107,7 +108,7 @@ func TestExtractPseudoContent(t *testing.T) {
 		},
 		{
 			name: "only after",
-			css: `
+			cssText: `
 				.suffix::after { content: " <<<"; }
 			`,
 			checkClass:    "suffix",
@@ -118,7 +119,7 @@ func TestExtractPseudoContent(t *testing.T) {
 		},
 		{
 			name: "pseudo with unsupported properties",
-			css: `
+			cssText: `
 				.styled::before {
 					content: "!";
 					color: red;
@@ -133,7 +134,7 @@ func TestExtractPseudoContent(t *testing.T) {
 		},
 		{
 			name: "pseudo without content",
-			css: `
+			cssText: `
 				.empty::before { color: red; }
 			`,
 			checkClass:    "empty",
@@ -144,7 +145,7 @@ func TestExtractPseudoContent(t *testing.T) {
 		},
 		{
 			name: "pseudo with none content",
-			css: `
+			cssText: `
 				.none::before { content: none; }
 			`,
 			checkClass:    "none",
@@ -155,7 +156,7 @@ func TestExtractPseudoContent(t *testing.T) {
 		},
 		{
 			name:          "no pseudo elements",
-			css:           `.normal { font-weight: bold; }`,
+			cssText:       `.normal { font-weight: bold; }`,
 			checkClass:    "normal",
 			wantBefore:    "",
 			wantAfter:     "",
@@ -166,7 +167,7 @@ func TestExtractPseudoContent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sheet := parser.Parse([]byte(tt.css))
+			sheet := parser.Parse([]byte(tt.cssText))
 			sr := NewStyleRegistry()
 			warnings := sr.extractPseudoContent(sheet)
 
@@ -295,7 +296,7 @@ func TestPseudoContentWarningsIntegration(t *testing.T) {
 	log := zap.NewNop()
 
 	// CSS with pseudo-element that has unsupported properties
-	css := []byte(`
+	cssData := []byte(`
 		.link-footnote {
 			font-size: 0.8em;
 		}
@@ -310,7 +311,7 @@ func TestPseudoContentWarningsIntegration(t *testing.T) {
 		}
 	`)
 
-	registry, warnings := parseAndCreateRegistry(css, nil, log)
+	registry, warnings := parseAndCreateRegistry(cssData, nil, log)
 
 	// Should have warnings for color, font-style, and text-decoration
 	warningCount := 0

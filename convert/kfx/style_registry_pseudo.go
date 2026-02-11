@@ -3,6 +3,8 @@ package kfx
 import (
 	"fmt"
 	"strings"
+
+	"fbc/css"
 )
 
 // PseudoElementContent holds the text content for CSS ::before and ::after pseudo-elements.
@@ -19,16 +21,17 @@ type PseudoElementContent struct {
 //
 // Returns warnings for any pseudo-element rules that have properties other than `content`,
 // since those properties cannot be applied in KFX (the content inherits from the base element).
-func (sr *StyleRegistry) extractPseudoContent(sheet *Stylesheet) []string {
+func (sr *StyleRegistry) extractPseudoContent(sheet *css.Stylesheet) []string {
 	if sheet == nil {
 		return nil
 	}
 
 	var warnings []string
 
-	for _, rule := range sheet.Rules {
+	rules := flattenStylesheetForKFX(sheet)
+	for _, rule := range rules {
 		// Only process pseudo-element rules
-		if rule.Selector.Pseudo == PseudoNone {
+		if rule.Selector.Pseudo == css.PseudoNone {
 			continue
 		}
 
@@ -55,7 +58,7 @@ func (sr *StyleRegistry) extractPseudoContent(sheet *Stylesheet) []string {
 		}
 
 		// Register the pseudo-element content
-		styleName := rule.Selector.StyleName()
+		styleName := selectorStyleName(rule.Selector)
 		sr.registerPseudoContentByName(styleName, text)
 	}
 
@@ -134,7 +137,7 @@ func (sr *StyleRegistry) HasPseudoContent() bool {
 // parseCSSContent parses a CSS content property value.
 // It handles quoted strings like 'content: "["' or "content: '['"
 // Returns the unquoted text content, or empty string if not a string value.
-func parseCSSContent(value CSSValue) string {
+func parseCSSContent(value css.CSSValue) string {
 	raw := strings.TrimSpace(value.Raw)
 
 	// Handle none/normal keywords

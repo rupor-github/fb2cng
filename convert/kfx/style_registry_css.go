@@ -1,6 +1,10 @@
 package kfx
 
-import "go.uber.org/zap"
+import (
+	"go.uber.org/zap"
+
+	"fbc/css"
+)
 
 // RegisterFromCSS adds styles from a parsed CSS stylesheet.
 // Later rules override earlier ones for the same style name.
@@ -14,7 +18,7 @@ func (sr *StyleRegistry) RegisterFromCSS(styles []StyleDef) {
 // It starts with default HTML element styles, overlays styles from CSS,
 // then applies KFX-specific post-processing for Kindle compatibility.
 // Returns the registry and any warnings from CSS conversion.
-func NewStyleRegistryFromCSS(sheet *Stylesheet, tracer *StyleTracer, log *zap.Logger) (*StyleRegistry, []string) {
+func NewStyleRegistryFromCSS(sheet *css.Stylesheet, tracer *StyleTracer, log *zap.Logger) (*StyleRegistry, []string) {
 	// Start with HTML element defaults only
 	sr := DefaultStyleRegistry()
 	sr.SetTracer(tracer)
@@ -22,23 +26,26 @@ func NewStyleRegistryFromCSS(sheet *Stylesheet, tracer *StyleTracer, log *zap.Lo
 	mapper := NewStyleMapper(log, tracer)
 	warnings := make([]string, 0)
 
-	if sheet != nil && len(sheet.Rules) > 0 {
-		// Extract pseudo-element content BEFORE conversion (content property is not converted to KFX)
-		pseudoWarnings := sr.extractPseudoContent(sheet)
-		warnings = append(warnings, pseudoWarnings...)
+	if sheet != nil {
+		rules := flattenStylesheetForKFX(sheet)
+		if len(rules) > 0 {
+			// Extract pseudo-element content BEFORE conversion (content property is not converted to KFX)
+			pseudoWarnings := sr.extractPseudoContent(sheet)
+			warnings = append(warnings, pseudoWarnings...)
 
-		// Convert to KFX styles (includes drop cap detection)
-		styles, cssWarnings := mapper.MapStylesheet(sheet)
-		warnings = append(warnings, cssWarnings...)
+			// Convert to KFX styles (includes drop cap detection)
+			styles, cssWarnings := mapper.MapStylesheet(sheet)
+			warnings = append(warnings, cssWarnings...)
 
-		// Register CSS styles (overriding defaults where applicable)
-		sr.RegisterFromCSS(styles)
+			// Register CSS styles (overriding defaults where applicable)
+			sr.RegisterFromCSS(styles)
 
-		log.Debug("CSS styles loaded",
-			zap.Int("rules", len(sheet.Rules)),
-			zap.Int("styles", len(styles)),
-			zap.Int("warnings", len(cssWarnings)),
-			zap.Int("pseudo_content", len(sr.pseudoContent)))
+			log.Debug("CSS styles loaded",
+				zap.Int("rules", len(rules)),
+				zap.Int("styles", len(styles)),
+				zap.Int("warnings", len(cssWarnings)),
+				zap.Int("pseudo_content", len(sr.pseudoContent)))
+		}
 	}
 
 	// Register programmatic descendant selectors.
@@ -65,7 +72,7 @@ func parseAndCreateRegistry(cssData []byte, tracer *StyleTracer, log *zap.Logger
 	if len(cssData) == 0 {
 		return NewStyleRegistryFromCSS(nil, tracer, log)
 	}
-	parser := NewParser(log)
+	parser := css.NewParser(log)
 	sheet := parser.Parse(cssData)
 	return NewStyleRegistryFromCSS(sheet, tracer, log)
 }

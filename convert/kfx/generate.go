@@ -15,6 +15,7 @@ import (
 	"fbc/common"
 	"fbc/config"
 	"fbc/content"
+	"fbc/css"
 	"fbc/fb2"
 	"fbc/misc"
 )
@@ -529,7 +530,7 @@ func collectLinkTargets(fragments *FragmentList) map[string]bool {
 // Falls back to default styles if no stylesheets are provided.
 // If tracer is non-nil, style operations will be logged to the trace.
 // Returns both the registry and the parsed stylesheet (for font extraction).
-func buildStyleRegistry(stylesheets []fb2.Stylesheet, tracer *StyleTracer, log *zap.Logger) (*StyleRegistry, *Stylesheet) {
+func buildStyleRegistry(stylesheets []fb2.Stylesheet, tracer *StyleTracer, log *zap.Logger) (*StyleRegistry, *css.Stylesheet) {
 	// If no stylesheets, return defaults
 	if len(stylesheets) == 0 {
 		log.Debug("No stylesheets provided, using defaults only")
@@ -566,7 +567,7 @@ func buildStyleRegistry(stylesheets []fb2.Stylesheet, tracer *StyleTracer, log *
 	}
 
 	// Parse CSS once for both font extraction and style registry
-	parser := NewParser(log)
+	parser := css.NewParser(log)
 	parsedCSS := parser.Parse(combinedCSS, "combined stylesheets")
 
 	// Create registry from parsed CSS

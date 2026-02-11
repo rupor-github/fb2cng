@@ -1,6 +1,7 @@
 package kfx
 
 import (
+	"fbc/css"
 	"fmt"
 	"strings"
 )
@@ -14,43 +15,43 @@ import (
 //
 // This function preserves CSS units as-is. Property-specific conversion
 // happens in the style builder or during fragment generation.
-func CSSValueToKFX(css CSSValue) (value float64, unit KFXSymbol, err error) {
-	switch css.Unit {
+func CSSValueToKFX(val css.CSSValue) (value float64, unit KFXSymbol, err error) {
+	switch val.Unit {
 	case "em":
-		return css.Value, SymUnitEm, nil // $308
+		return val.Value, SymUnitEm, nil // $308
 	case "ex":
 		// KP3 maps ex to em unit (com/amazon/yjhtmlmapper/i/d.java:17).
 		// Normally ex values are already converted to em by normalizeCSSProperties(),
 		// but this serves as a safety net for any ex values that bypass normalization.
-		return css.Value, SymUnitEm, nil // $308 (em, not ex)
+		return val.Value, SymUnitEm, nil // $308 (em, not ex)
 	case "%":
-		return css.Value, SymUnitPercent, nil // $314
+		return val.Value, SymUnitPercent, nil // $314
 	case "px":
-		return css.Value, SymUnitPx, nil // $319
+		return val.Value, SymUnitPx, nil // $319
 	case "pt":
-		return css.Value, SymUnitPt, nil // $318
+		return val.Value, SymUnitPt, nil // $318
 	case "cm":
-		return css.Value, SymUnitCm, nil // $315
+		return val.Value, SymUnitCm, nil // $315
 	case "mm":
-		return css.Value, SymUnitMm, nil // $316
+		return val.Value, SymUnitMm, nil // $316
 	case "in":
-		return css.Value, SymUnitIn, nil // $317
+		return val.Value, SymUnitIn, nil // $317
 	case "rem":
-		return css.Value, SymUnitRem, nil // $505
+		return val.Value, SymUnitRem, nil // $505
 	case "lh":
-		return css.Value, SymUnitLh, nil // $310
+		return val.Value, SymUnitLh, nil // $310
 	case "":
 		// Unitless - typically ratio for line-height, but also valid for zero values
 		// The caller should handle property-specific unit selection
-		return css.Value, SymUnitLh, nil // $310 (lh)
+		return val.Value, SymUnitLh, nil // $310 (lh)
 	default:
-		return 0, 0, fmt.Errorf("unsupported unit: %s", css.Unit)
+		return 0, 0, fmt.Errorf("unsupported unit: %s", val.Unit)
 	}
 }
 
 // MakeDimensionValue creates a KFX dimension struct from CSS value.
-func MakeDimensionValue(css CSSValue) (StructValue, error) {
-	value, unit, err := CSSValueToKFX(css)
+func MakeDimensionValue(val css.CSSValue) (StructValue, error) {
+	value, unit, err := CSSValueToKFX(val)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +72,7 @@ func MakeDimensionValue(css CSSValue) (StructValue, error) {
 //
 // Single-value input falls through to the standard MakeDimensionValue path.
 // Returns (value, true) on success, (nil, false) on failure.
-func MakeBorderRadiusValue(cssVal CSSValue, rawVal string, unit string) (any, bool) {
+func MakeBorderRadiusValue(cssVal css.CSSValue, rawVal string, unit string) (any, bool) {
 	// Determine the raw string to inspect for space-separated pairs.
 	raw := cssVal.Raw
 	if raw == "" {

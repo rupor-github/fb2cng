@@ -1,9 +1,11 @@
 package kfx
 
 import (
+	"fbc/css"
 	"fmt"
 	"maps"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"go.uber.org/zap"
@@ -67,12 +69,12 @@ var textDecorationControlTags = map[string]bool{
 	"br":     true,
 }
 
-func normalizeCSSProperties(props map[string]CSSValue, element string, tracer *StyleTracer, context string) map[string]CSSValue {
+func normalizeCSSProperties(props map[string]css.CSSValue, element string, tracer *StyleTracer, context string) map[string]css.CSSValue {
 	if len(props) == 0 {
 		return props
 	}
 
-	normalized := make(map[string]CSSValue, len(props))
+	normalized := make(map[string]css.CSSValue, len(props))
 	changed := false
 
 	for name, val := range props {
@@ -121,7 +123,7 @@ func normalizeCSSProperties(props map[string]CSSValue, element string, tracer *S
 	return normalized
 }
 
-func shouldDropZeroValue(name string, val CSSValue) bool {
+func shouldDropZeroValue(name string, val css.CSSValue) bool {
 	if !zeroValueProps[name] {
 		return false
 	}
@@ -140,11 +142,11 @@ func shouldDropZeroValue(name string, val CSSValue) bool {
 	return false
 }
 
-func isEmptyCSSValue(val CSSValue) bool {
+func isEmptyCSSValue(val css.CSSValue) bool {
 	return val.Raw == "" && val.Keyword == "" && val.Value == 0 && val.Unit == ""
 }
 
-func cssValuesToStrings(src map[string]CSSValue) map[string]string {
+func cssValuesToStrings(src map[string]css.CSSValue) map[string]string {
 	out := make(map[string]string, len(src))
 	for k, v := range src {
 		if s := formatCSSValue(v); s != "" {
@@ -154,7 +156,7 @@ func cssValuesToStrings(src map[string]CSSValue) map[string]string {
 	return out
 }
 
-func formatCSSValue(val CSSValue) string {
+func formatCSSValue(val css.CSSValue) string {
 	switch {
 	case val.Raw != "":
 		return val.Raw
@@ -168,10 +170,10 @@ func formatCSSValue(val CSSValue) string {
 }
 
 // ConvertRule converts a single CSS rule to a KFX StyleDef.
-func (c *Converter) ConvertRule(rule CSSRule) ConversionResult {
+func (c *Converter) ConvertRule(rule css.CSSRule) ConversionResult {
 	result := ConversionResult{
 		Style: StyleDef{
-			Name:       rule.Selector.StyleName(),
+			Name:       selectorStyleName(rule.Selector),
 			Properties: make(map[KFXSymbol]any),
 		},
 		Warnings: make([]string, 0),
@@ -197,7 +199,7 @@ func (c *Converter) ConvertRule(rule CSSRule) ConversionResult {
 	resolveMarginAuto(result.Style.Properties)
 
 	if rule.Selector.Ancestor != nil && result.Style.Parent == "" {
-		descendantName := rule.Selector.descendantBaseName()
+		descendantName := rule.Selector.DescendantBaseName()
 		if descendantName != "" && descendantName != result.Style.Name {
 			result.Style.Parent = descendantName
 		}
@@ -207,7 +209,7 @@ func (c *Converter) ConvertRule(rule CSSRule) ConversionResult {
 }
 
 // convertProperty converts a single CSS property to KFX properties.
-func (c *Converter) convertProperty(name string, value CSSValue, props map[KFXSymbol]any, warnings *[]string) {
+func (c *Converter) convertProperty(name string, value css.CSSValue, props map[KFXSymbol]any, warnings *[]string) {
 	// Handle shorthand properties first
 	if IsShorthandProperty(name) {
 		c.expandShorthand(name, value, props, warnings)
@@ -493,7 +495,7 @@ func (c *Converter) mergeProp(props map[KFXSymbol]any, sym KFXSymbol, val any) {
 	mergePropertyWithRules(props, sym, val, mergeContextInline, c.tracer)
 }
 
-func (c *Converter) logUnsupportedValue(property string, value CSSValue) {
+func (c *Converter) logUnsupportedValue(property string, value css.CSSValue) {
 	if v := formatCSSValue(value); v != "" {
 		c.log.Debug("Unsupported CSS value ignored",
 			zap.String("property", property),
@@ -579,7 +581,7 @@ func resolveMarginAuto(props map[KFXSymbol]any) {
 }
 
 // expandShorthand expands CSS shorthand properties into individual properties.
-func (c *Converter) expandShorthand(name string, value CSSValue, props map[KFXSymbol]any, warnings *[]string) {
+func (c *Converter) expandShorthand(name string, value css.CSSValue, props map[KFXSymbol]any, warnings *[]string) {
 	switch name {
 	case "margin":
 		c.expandBoxShorthand(value, props, warnings,
@@ -603,7 +605,7 @@ func (c *Converter) expandShorthand(name string, value CSSValue, props map[KFXSy
 //   - 2 values: top/bottom, left/right
 //   - 3 values: top, left/right, bottom
 //   - 4 values: top, right, bottom, left
-func (c *Converter) expandBoxShorthand(value CSSValue, props map[KFXSymbol]any, warnings *[]string,
+func (c *Converter) expandBoxShorthand(value css.CSSValue, props map[KFXSymbol]any, warnings *[]string,
 	symTop, symRight, symBottom, symLeft KFXSymbol,
 ) {
 	raw := strings.TrimSpace(value.Raw)
@@ -614,13 +616,13 @@ func (c *Converter) expandBoxShorthand(value CSSValue, props map[KFXSymbol]any, 
 	}
 
 	// Parse each part as a CSS value
-	parsedValues := make([]CSSValue, len(parts))
+	parsedValues := make([]css.CSSValue, len(parts))
 	for i, part := range parts {
 		parsedValues[i] = c.parseShorthandValue(part)
 	}
 
 	// Apply values based on count
-	var top, right, bottom, left CSSValue
+	var top, right, bottom, left css.CSSValue
 	switch len(parsedValues) {
 	case 1:
 		top, right, bottom, left = parsedValues[0], parsedValues[0], parsedValues[0], parsedValues[0]
@@ -648,7 +650,7 @@ func (c *Converter) expandBoxShorthand(value CSSValue, props map[KFXSymbol]any, 
 // expandBorderShorthand expands CSS border shorthand to individual properties.
 // CSS border format: [width] [style] [color]
 // Example: "1px solid black" -> border-width: 1px, border-style: solid, border-color: black
-func (c *Converter) expandBorderShorthand(value CSSValue, props map[KFXSymbol]any, _ *[]string) {
+func (c *Converter) expandBorderShorthand(value css.CSSValue, props map[KFXSymbol]any, _ *[]string) {
 	raw := strings.TrimSpace(value.Raw)
 	for part := range strings.FieldsSeq(raw) {
 		part = strings.ToLower(part)
@@ -663,7 +665,7 @@ func (c *Converter) expandBorderShorthand(value CSSValue, props map[KFXSymbol]an
 		}
 
 		// Check for color (named color or hex)
-		if r, g, b, ok := ParseColor(CSSValue{Raw: part, Keyword: part}); ok {
+		if r, g, b, ok := ParseColor(css.CSSValue{Raw: part, Keyword: part}); ok {
 			c.mergeProp(props, SymBorderColor, MakeColorValue(r, g, b))
 			continue
 		}
@@ -683,7 +685,7 @@ func (c *Converter) expandBorderShorthand(value CSSValue, props map[KFXSymbol]an
 // For KFX, we only extract the background-color component.
 // CSS background shorthand can contain: color, image, position, size, repeat, attachment, origin, clip
 // We only care about color values (hex, rgb, rgba, named colors).
-func (c *Converter) expandBackgroundShorthand(value CSSValue, props map[KFXSymbol]any, _ *[]string) {
+func (c *Converter) expandBackgroundShorthand(value css.CSSValue, props map[KFXSymbol]any, _ *[]string) {
 	raw := strings.TrimSpace(value.Raw)
 	if raw == "" || raw == "none" || raw == "transparent" {
 		return
@@ -692,7 +694,7 @@ func (c *Converter) expandBackgroundShorthand(value CSSValue, props map[KFXSymbo
 	// Split into parts and look for a color value
 	for part := range strings.FieldsSeq(raw) {
 		// Check if this part is a color
-		if r, g, b, ok := ParseColor(CSSValue{Raw: part, Keyword: part}); ok {
+		if r, g, b, ok := ParseColor(css.CSSValue{Raw: part, Keyword: part}); ok {
 			// Convert to KFX color format (ARGB)
 			color := int64(0xFF)<<24 | int64(r)<<16 | int64(g)<<8 | int64(b)
 			c.mergeProp(props, SymFillColor, color)
@@ -702,9 +704,9 @@ func (c *Converter) expandBackgroundShorthand(value CSSValue, props map[KFXSymbo
 }
 
 // parseShorthandValue parses a single value from a shorthand property.
-func (c *Converter) parseShorthandValue(s string) CSSValue {
+func (c *Converter) parseShorthandValue(s string) css.CSSValue {
 	s = strings.TrimSpace(s)
-	val := CSSValue{Raw: s}
+	val := css.CSSValue{Raw: s}
 
 	// Check for keywords
 	if s == "auto" || s == "inherit" || s == "initial" {
@@ -724,7 +726,7 @@ func (c *Converter) parseShorthandValue(s string) CSSValue {
 		}
 
 		if numEnd > 0 {
-			val.Value, _ = parseNumber(s[:numEnd])
+			val.Value, _ = strconv.ParseFloat(s[:numEnd], 64)
 			val.Unit = strings.ToLower(s[numEnd:])
 
 			// Handle percentage
@@ -747,7 +749,7 @@ func (c *Converter) parseShorthandValue(s string) CSSValue {
 //
 // Note: KFX does not support negative margins. Negative margin values are
 // silently dropped with a warning logged.
-func (c *Converter) setDimensionProperty(sym KFXSymbol, value CSSValue, props map[KFXSymbol]any, warnings *[]string) {
+func (c *Converter) setDimensionProperty(sym KFXSymbol, value css.CSSValue, props map[KFXSymbol]any, warnings *[]string) {
 	// Handle keywords
 	if value.IsKeyword() {
 		switch strings.ToLower(value.Keyword) {
@@ -858,7 +860,7 @@ func (c *Converter) setDimensionProperty(sym KFXSymbol, value CSSValue, props ma
 	c.mergeProp(props, sym, DimensionValue(convertedValue, convertedUnit))
 }
 
-func normalizeBreakValue(val CSSValue) CSSValue {
+func normalizeBreakValue(val css.CSSValue) css.CSSValue {
 	switch strings.ToLower(val.Keyword) {
 	case "page":
 		val.Keyword = "always"
@@ -868,21 +870,21 @@ func normalizeBreakValue(val CSSValue) CSSValue {
 	return val
 }
 
-func (c *Converter) applyBreakBefore(value CSSValue, props map[KFXSymbol]any) {
+func (c *Converter) applyBreakBefore(value css.CSSValue, props map[KFXSymbol]any) {
 	value = normalizeBreakValue(value)
 	if sym, ok := ConvertPageBreak(value); ok && sym == SymAvoid {
 		c.mergeProp(props, SymKeepFirst, sym)
 	}
 }
 
-func (c *Converter) applyBreakAfter(value CSSValue, props map[KFXSymbol]any) {
+func (c *Converter) applyBreakAfter(value css.CSSValue, props map[KFXSymbol]any) {
 	value = normalizeBreakValue(value)
 	if sym, ok := ConvertPageBreak(value); ok && sym == SymAvoid {
 		c.mergeProp(props, SymKeepLast, sym)
 	}
 }
 
-func (c *Converter) applyBreakInside(value CSSValue, props map[KFXSymbol]any) {
+func (c *Converter) applyBreakInside(value css.CSSValue, props map[KFXSymbol]any) {
 	value = normalizeBreakValue(value)
 	if sym, ok := ConvertPageBreak(value); ok && sym == SymAvoid {
 		c.mergeProp(props, SymBreakInside, SymbolValue(SymAvoid))
@@ -894,7 +896,7 @@ func (c *Converter) applyBreakInside(value CSSValue, props map[KFXSymbol]any) {
 // Amazon's code (com/amazon/yjhtmlmapper/e/j.java:172) removes display from CSS styles.
 // The display property is only used internally for element classification (block vs inline).
 // KFX "render" property is only set on content entries (like inline images), not from CSS.
-func (c *Converter) convertSpecialProperty(name string, value CSSValue, props map[KFXSymbol]any, _ *[]string) {
+func (c *Converter) convertSpecialProperty(name string, value css.CSSValue, props map[KFXSymbol]any, _ *[]string) {
 	switch name {
 	case "text-decoration":
 		dec := ConvertTextDecoration(value)
@@ -969,8 +971,9 @@ func (c *Converter) convertSpecialProperty(name string, value CSSValue, props ma
 // ConvertStylesheet converts an entire CSS stylesheet to KFX style definitions.
 // This includes special handling for drop caps: it detects .has-dropcap .dropcap
 // patterns and extracts font-size to calculate dropcap-lines for the parent style.
-func (c *Converter) ConvertStylesheet(sheet *Stylesheet) ([]StyleDef, []string) {
-	styles := make([]StyleDef, 0, len(sheet.Rules))
+func (c *Converter) ConvertStylesheet(sheet *css.Stylesheet) ([]StyleDef, []string) {
+	rules := flattenStylesheetForKFX(sheet)
+	styles := make([]StyleDef, 0, len(rules))
 	allWarnings := make([]string, 0)
 
 	// Track seen style names to merge properties for same selector
@@ -980,7 +983,7 @@ func (c *Converter) ConvertStylesheet(sheet *Stylesheet) ([]StyleDef, []string) 
 	// First pass: detect drop cap patterns and extract font-size
 	dropcapInfo := c.detectDropcapPatterns(sheet)
 
-	for _, rule := range sheet.Rules {
+	for _, rule := range rules {
 		result := c.ConvertRule(rule)
 		allWarnings = append(allWarnings, result.Warnings...)
 
@@ -1030,22 +1033,23 @@ type dropcapConfig struct {
 // It looks for selectors matching *.has-dropcap .dropcap (or similar)
 // and extracts font-size to calculate dropcap-lines.
 // Returns a map from parent style name (e.g., "has-dropcap") to dropcap config.
-func (c *Converter) detectDropcapPatterns(sheet *Stylesheet) map[string]dropcapConfig {
+func (c *Converter) detectDropcapPatterns(sheet *css.Stylesheet) map[string]dropcapConfig {
 	result := make(map[string]dropcapConfig)
 
-	for _, rule := range sheet.Rules {
+	rules := flattenStylesheetForKFX(sheet)
+	for _, rule := range rules {
 		// Look for descendant selectors where descendant is "dropcap"
 		if rule.Selector.Ancestor == nil {
 			continue
 		}
 
-		descendantName := rule.Selector.descendantBaseName()
+		descendantName := rule.Selector.DescendantBaseName()
 		if descendantName != "dropcap" {
 			continue
 		}
 
 		// Get the parent style name
-		parentName := rule.Selector.Ancestor.StyleName()
+		parentName := selectorStyleName(*rule.Selector.Ancestor)
 
 		// Extract font-size to calculate lines
 		fontSize, hasFontSize := rule.GetProperty("font-size")

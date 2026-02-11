@@ -1,6 +1,7 @@
 package kfx
 
 import (
+	"fbc/css"
 	"math"
 	"math/big"
 	"os"
@@ -13,17 +14,17 @@ import (
 
 // TestTitleStylesFromCSS verifies that title styles from default.css have proper formatting.
 func TestTitleStylesFromCSS(t *testing.T) {
-	css, err := os.ReadFile("../../convert/default.css")
+	cssData, err := os.ReadFile("../../convert/default.css")
 	if err != nil {
 		// Try alternate path for when running from different directory
-		css, err = os.ReadFile("../default.css")
+		cssData, err = os.ReadFile("../default.css")
 		if err != nil {
 			t.Skip("Could not read default.css, skipping test")
 		}
 	}
 
 	log := zap.NewNop()
-	registry, _ := parseAndCreateRegistry(css, nil, log)
+	registry, _ := parseAndCreateRegistry(cssData, nil, log)
 
 	// Title header styles should have text-align: center from CSS
 	titleStyles := []string{
@@ -66,20 +67,20 @@ func TestTitleStylesFromCSS(t *testing.T) {
 func TestConvertFontWeight(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    CSSValue
+		input    css.CSSValue
 		expected KFXSymbol
 		ok       bool
 	}{
-		{"bold keyword", CSSValue{Keyword: "bold"}, SymBold, true},
-		{"bolder keyword", CSSValue{Keyword: "bolder"}, SymBold, true},
-		{"lighter keyword", CSSValue{Keyword: "lighter"}, SymLight, true},
-		{"normal keyword", CSSValue{Keyword: "normal"}, SymNormal, true},
-		{"numeric 700", CSSValue{Value: 700}, SymBold, true},
-		{"numeric 600", CSSValue{Value: 600}, SymSemibold, true},
-		{"numeric 500", CSSValue{Value: 500}, SymMedium, true},
-		{"numeric 400", CSSValue{Value: 400}, SymNormal, true},
-		{"numeric 300", CSSValue{Value: 300}, SymLight, true},
-		{"numeric 200", CSSValue{Value: 200}, SymLight, true},
+		{"bold keyword", css.CSSValue{Keyword: "bold"}, SymBold, true},
+		{"bolder keyword", css.CSSValue{Keyword: "bolder"}, SymBold, true},
+		{"lighter keyword", css.CSSValue{Keyword: "lighter"}, SymLight, true},
+		{"normal keyword", css.CSSValue{Keyword: "normal"}, SymNormal, true},
+		{"numeric 700", css.CSSValue{Value: 700}, SymBold, true},
+		{"numeric 600", css.CSSValue{Value: 600}, SymSemibold, true},
+		{"numeric 500", css.CSSValue{Value: 500}, SymMedium, true},
+		{"numeric 400", css.CSSValue{Value: 400}, SymNormal, true},
+		{"numeric 300", css.CSSValue{Value: 300}, SymLight, true},
+		{"numeric 200", css.CSSValue{Value: 200}, SymLight, true},
 	}
 
 	for _, tt := range tests {
@@ -98,14 +99,14 @@ func TestConvertFontWeight(t *testing.T) {
 func TestConvertFontStyle(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    CSSValue
+		input    css.CSSValue
 		expected KFXSymbol
 		ok       bool
 	}{
-		{"italic", CSSValue{Keyword: "italic"}, SymItalic, true},
-		{"oblique", CSSValue{Keyword: "oblique"}, SymItalic, true},
-		{"normal", CSSValue{Keyword: "normal"}, SymNormal, true},
-		{"unknown", CSSValue{Keyword: "unknown"}, 0, false},
+		{"italic", css.CSSValue{Keyword: "italic"}, SymItalic, true},
+		{"oblique", css.CSSValue{Keyword: "oblique"}, SymItalic, true},
+		{"normal", css.CSSValue{Keyword: "normal"}, SymNormal, true},
+		{"unknown", css.CSSValue{Keyword: "unknown"}, 0, false},
 	}
 
 	for _, tt := range tests {
@@ -124,16 +125,16 @@ func TestConvertFontStyle(t *testing.T) {
 func TestConvertTextAlign(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    CSSValue
+		input    css.CSSValue
 		expected KFXSymbol
 		ok       bool
 	}{
-		{"left", CSSValue{Keyword: "left"}, SymLeft, true},
-		{"start", CSSValue{Keyword: "start"}, SymStart, true},
-		{"right", CSSValue{Keyword: "right"}, SymRight, true},
-		{"end", CSSValue{Keyword: "end"}, SymEnd, true},
-		{"center", CSSValue{Keyword: "center"}, SymCenter, true},
-		{"justify", CSSValue{Keyword: "justify"}, SymJustify, true},
+		{"left", css.CSSValue{Keyword: "left"}, SymLeft, true},
+		{"start", css.CSSValue{Keyword: "start"}, SymStart, true},
+		{"right", css.CSSValue{Keyword: "right"}, SymRight, true},
+		{"end", css.CSSValue{Keyword: "end"}, SymEnd, true},
+		{"center", css.CSSValue{Keyword: "center"}, SymCenter, true},
+		{"justify", css.CSSValue{Keyword: "justify"}, SymJustify, true},
 	}
 
 	for _, tt := range tests {
@@ -152,15 +153,15 @@ func TestConvertTextAlign(t *testing.T) {
 func TestConvertTextDecoration(t *testing.T) {
 	tests := []struct {
 		name          string
-		input         CSSValue
+		input         css.CSSValue
 		underline     bool
 		strikethrough bool
 		none          bool
 	}{
-		{"underline", CSSValue{Raw: "underline"}, true, false, false},
-		{"line-through", CSSValue{Raw: "line-through"}, false, true, false},
-		{"both", CSSValue{Raw: "underline line-through"}, true, true, false},
-		{"none", CSSValue{Raw: "none"}, false, false, true},
+		{"underline", css.CSSValue{Raw: "underline"}, true, false, false},
+		{"line-through", css.CSSValue{Raw: "line-through"}, false, true, false},
+		{"both", css.CSSValue{Raw: "underline line-through"}, true, true, false},
+		{"none", css.CSSValue{Raw: "none"}, false, false, true},
 	}
 
 	for _, tt := range tests {
@@ -182,13 +183,13 @@ func TestConvertTextDecoration(t *testing.T) {
 func TestConvertVerticalAlign(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    CSSValue
+		input    css.CSSValue
 		hasValue bool
 	}{
-		{"super", CSSValue{Keyword: "super"}, true},
-		{"sub", CSSValue{Keyword: "sub"}, true},
-		{"baseline", CSSValue{Keyword: "baseline"}, true},
-		{"numeric", CSSValue{Value: 0.5, Unit: "em"}, true},
+		{"super", css.CSSValue{Keyword: "super"}, true},
+		{"sub", css.CSSValue{Keyword: "sub"}, true},
+		{"baseline", css.CSSValue{Keyword: "baseline"}, true},
+		{"numeric", css.CSSValue{Value: 0.5, Unit: "em"}, true},
 	}
 
 	for _, tt := range tests {
@@ -207,17 +208,17 @@ func TestConvertVerticalAlign(t *testing.T) {
 func TestParseColor(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    CSSValue
+		input    css.CSSValue
 		r, g, b  int
 		shouldOk bool
 	}{
-		{"hex 6 digit", CSSValue{Raw: "#ff0000"}, 255, 0, 0, true},
-		{"hex 3 digit", CSSValue{Raw: "#f00"}, 255, 0, 0, true},
-		{"rgb function", CSSValue{Raw: "rgb(255, 128, 0)"}, 255, 128, 0, true},
-		{"keyword black", CSSValue{Raw: "black"}, 0, 0, 0, true},
-		{"keyword white", CSSValue{Raw: "white"}, 255, 255, 255, true},
-		{"keyword red", CSSValue{Raw: "red"}, 255, 0, 0, true},
-		{"invalid", CSSValue{Raw: "invalid-color"}, 0, 0, 0, false},
+		{"hex 6 digit", css.CSSValue{Raw: "#ff0000"}, 255, 0, 0, true},
+		{"hex 3 digit", css.CSSValue{Raw: "#f00"}, 255, 0, 0, true},
+		{"rgb function", css.CSSValue{Raw: "rgb(255, 128, 0)"}, 255, 128, 0, true},
+		{"keyword black", css.CSSValue{Raw: "black"}, 0, 0, 0, true},
+		{"keyword white", css.CSSValue{Raw: "white"}, 255, 255, 255, true},
+		{"keyword red", css.CSSValue{Raw: "red"}, 255, 0, 0, true},
+		{"invalid", css.CSSValue{Raw: "invalid-color"}, 0, 0, 0, false},
 	}
 
 	for _, tt := range tests {
@@ -238,19 +239,19 @@ func TestParseColor(t *testing.T) {
 func TestCSSValueToKFX(t *testing.T) {
 	tests := []struct {
 		name         string
-		input        CSSValue
+		input        css.CSSValue
 		expectedUnit KFXSymbol
 		shouldError  bool
 	}{
-		{"em unit", CSSValue{Value: 1.5, Unit: "em"}, SymUnitEm, false},
-		{"px unit", CSSValue{Value: 16, Unit: "px"}, SymUnitPx, false},
-		{"pt unit", CSSValue{Value: 12, Unit: "pt"}, SymUnitPt, false},
-		{"percent", CSSValue{Value: 150, Unit: "%"}, SymUnitPercent, false},
-		{"unitless", CSSValue{Value: 1.2, Unit: ""}, SymUnitLh, false},
-		{"cm unit", CSSValue{Value: 2.5, Unit: "cm"}, SymUnitCm, false},
-		{"rem unit", CSSValue{Value: 0.75, Unit: "rem"}, SymUnitRem, false},
-		{"lh unit", CSSValue{Value: 1.0, Unit: "lh"}, SymUnitLh, false},
-		{"unknown unit", CSSValue{Value: 1, Unit: "vw"}, 0, true},
+		{"em unit", css.CSSValue{Value: 1.5, Unit: "em"}, SymUnitEm, false},
+		{"px unit", css.CSSValue{Value: 16, Unit: "px"}, SymUnitPx, false},
+		{"pt unit", css.CSSValue{Value: 12, Unit: "pt"}, SymUnitPt, false},
+		{"percent", css.CSSValue{Value: 150, Unit: "%"}, SymUnitPercent, false},
+		{"unitless", css.CSSValue{Value: 1.2, Unit: ""}, SymUnitLh, false},
+		{"cm unit", css.CSSValue{Value: 2.5, Unit: "cm"}, SymUnitCm, false},
+		{"rem unit", css.CSSValue{Value: 0.75, Unit: "rem"}, SymUnitRem, false},
+		{"lh unit", css.CSSValue{Value: 1.0, Unit: "lh"}, SymUnitLh, false},
+		{"unknown unit", css.CSSValue{Value: 1, Unit: "vw"}, 0, true},
 	}
 
 	for _, tt := range tests {
@@ -274,8 +275,8 @@ func TestCSSValueToKFX(t *testing.T) {
 
 func TestPercentUnit(t *testing.T) {
 	// 150% should stay as 150 percent (not converted to ratio)
-	css := CSSValue{Value: 150, Unit: "%"}
-	value, unit, err := CSSValueToKFX(css)
+	val := css.CSSValue{Value: 150, Unit: "%"}
+	value, unit, err := CSSValueToKFX(val)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -293,42 +294,42 @@ func TestConverterConvertRule(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		rule          CSSRule
+		rule          css.CSSRule
 		expectedProps map[KFXSymbol]any
 		hasWarnings   bool
 	}{
 		{
 			name: "font-weight bold",
-			rule: CSSRule{
-				Selector:   Selector{Raw: ".strong", Class: "strong"},
-				Properties: map[string]CSSValue{"font-weight": {Keyword: "bold"}},
+			rule: css.CSSRule{
+				Selector:   css.Selector{Raw: ".strong", Class: "strong"},
+				Properties: map[string]css.CSSValue{"font-weight": {Keyword: "bold"}},
 			},
 			expectedProps: map[KFXSymbol]any{SymFontWeight: SymBold},
 			hasWarnings:   false,
 		},
 		{
 			name: "font-style italic",
-			rule: CSSRule{
-				Selector:   Selector{Raw: ".emphasis", Class: "emphasis"},
-				Properties: map[string]CSSValue{"font-style": {Keyword: "italic"}},
+			rule: css.CSSRule{
+				Selector:   css.Selector{Raw: ".emphasis", Class: "emphasis"},
+				Properties: map[string]css.CSSValue{"font-style": {Keyword: "italic"}},
 			},
 			expectedProps: map[KFXSymbol]any{SymFontStyle: SymItalic},
 			hasWarnings:   false,
 		},
 		{
 			name: "text-align center",
-			rule: CSSRule{
-				Selector:   Selector{Raw: ".centered", Class: "centered"},
-				Properties: map[string]CSSValue{"text-align": {Keyword: "center"}},
+			rule: css.CSSRule{
+				Selector:   css.Selector{Raw: ".centered", Class: "centered"},
+				Properties: map[string]css.CSSValue{"text-align": {Keyword: "center"}},
 			},
 			expectedProps: map[KFXSymbol]any{SymTextAlignment: SymCenter},
 			hasWarnings:   false,
 		},
 		{
 			name: "margin shorthand 4 values",
-			rule: CSSRule{
-				Selector:   Selector{Raw: ".box", Class: "box"},
-				Properties: map[string]CSSValue{"margin": {Raw: "1em 2em 3em 4em"}},
+			rule: css.CSSRule{
+				Selector:   css.Selector{Raw: ".box", Class: "box"},
+				Properties: map[string]css.CSSValue{"margin": {Raw: "1em 2em 3em 4em"}},
 			},
 			expectedProps: map[KFXSymbol]any{
 				SymMarginTop:    StructValue{},
@@ -340,9 +341,9 @@ func TestConverterConvertRule(t *testing.T) {
 		},
 		{
 			name: "clear both",
-			rule: CSSRule{
-				Selector:   Selector{Raw: ".clear", Class: "clear"},
-				Properties: map[string]CSSValue{"clear": {Keyword: "both"}},
+			rule: css.CSSRule{
+				Selector:   css.Selector{Raw: ".clear", Class: "clear"},
+				Properties: map[string]css.CSSValue{"clear": {Keyword: "both"}},
 			},
 			expectedProps: map[KFXSymbol]any{SymFloatClear: SymBoth},
 			hasWarnings:   false,
@@ -375,9 +376,9 @@ func TestBreakAliasConversion(t *testing.T) {
 	log := zap.NewNop()
 	conv := NewConverter(log)
 
-	rule := CSSRule{
-		Selector: Selector{Raw: ".break", Class: "break"},
-		Properties: map[string]CSSValue{
+	rule := css.CSSRule{
+		Selector: css.Selector{Raw: ".break", Class: "break"},
+		Properties: map[string]css.CSSValue{
 			"break-before": {Keyword: "avoid-page"},
 			"break-after":  {Keyword: "avoid"},
 			"break-inside": {Keyword: "avoid"},
@@ -412,10 +413,10 @@ func TestBreakAliasConversion(t *testing.T) {
 
 func TestConverterConvertStylesheet(t *testing.T) {
 	log := zap.NewNop()
-	parser := NewParser(log)
+	parser := css.NewParser(log)
 	conv := NewConverter(log)
 
-	css := []byte(`
+	cssData := []byte(`
 		.paragraph {
 			line-height: 1.2;
 			text-indent: 1.5em;
@@ -431,7 +432,7 @@ func TestConverterConvertStylesheet(t *testing.T) {
 		}
 	`)
 
-	sheet := parser.Parse(css)
+	sheet := parser.Parse(cssData)
 	styles, warnings := conv.ConvertStylesheet(sheet)
 
 	t.Logf("Converted %d styles with %d warnings", len(styles), len(warnings))
@@ -479,9 +480,9 @@ func TestShorthandExpansion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rule := CSSRule{
-				Selector:   Selector{Raw: ".test", Class: "test"},
-				Properties: map[string]CSSValue{"margin": {Raw: tt.marginValue}},
+			rule := css.CSSRule{
+				Selector:   css.Selector{Raw: ".test", Class: "test"},
+				Properties: map[string]css.CSSValue{"margin": {Raw: tt.marginValue}},
 			}
 			result := conv.ConvertRule(rule)
 
@@ -499,11 +500,11 @@ func TestShorthandExpansion(t *testing.T) {
 
 func TestMergeRulesWithSameSelector(t *testing.T) {
 	log := zap.NewNop()
-	parser := NewParser(log)
+	parser := css.NewParser(log)
 	conv := NewConverter(log)
 
 	// Two rules with same selector should be merged
-	css := []byte(`
+	cssData := []byte(`
 		.test {
 			font-weight: bold;
 		}
@@ -512,7 +513,7 @@ func TestMergeRulesWithSameSelector(t *testing.T) {
 		}
 	`)
 
-	sheet := parser.Parse(css)
+	sheet := parser.Parse(cssData)
 	styles, _ := conv.ConvertStylesheet(sheet)
 
 	// Should have 1 merged style
@@ -539,7 +540,7 @@ func TestMergeRulesWithSameSelector(t *testing.T) {
 func TestNewStyleRegistryFromCSS(t *testing.T) {
 	log := zap.NewNop()
 
-	css := []byte(`
+	cssData := []byte(`
 		.paragraph {
 			line-height: 1.5;
 			text-indent: 2em;
@@ -554,7 +555,7 @@ func TestNewStyleRegistryFromCSS(t *testing.T) {
 		}
 	`)
 
-	registry, warnings := parseAndCreateRegistry(css, nil, log)
+	registry, warnings := parseAndCreateRegistry(cssData, nil, log)
 
 	t.Logf("Warnings: %v", warnings)
 
@@ -618,29 +619,29 @@ func TestNewStyleRegistryFromCSS_Empty(t *testing.T) {
 
 func TestFontSizeKeywords(t *testing.T) {
 	log := zap.NewNop()
-	parser := NewParser(log)
+	parser := css.NewParser(log)
 	conv := NewConverter(log)
 
 	tests := []struct {
 		name     string
-		css      string
+		cssText  string
 		expected float64 // Expected em value
 	}{
 		{
 			name:     "smaller keyword",
-			css:      `.test { font-size: smaller; }`,
+			cssText:  `.test { font-size: smaller; }`,
 			expected: 0.833, // Amazon's 5/6 value (rounded to 3 decimals)
 		},
 		{
 			name:     "larger keyword",
-			css:      `.test { font-size: larger; }`,
+			cssText:  `.test { font-size: larger; }`,
 			expected: 1.2,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sheet := parser.Parse([]byte(tt.css))
+			sheet := parser.Parse([]byte(tt.cssText))
 			styles, _ := conv.ConvertStylesheet(sheet)
 
 			if len(styles) != 1 {
@@ -721,41 +722,41 @@ func decimalToFloat64Test(d *ion.Decimal) float64 {
 
 func TestWhiteSpaceProperty(t *testing.T) {
 	log := zap.NewNop()
-	parser := NewParser(log)
+	parser := css.NewParser(log)
 	conv := NewConverter(log)
 
 	tests := []struct {
 		name        string
-		css         string
+		cssText     string
 		expectProp  bool   // Whether white_space property should be set
 		expectValue string // Expected value if set
 	}{
 		{
 			name:        "nowrap sets white_space",
-			css:         `.test { white-space: nowrap; }`,
+			cssText:     `.test { white-space: nowrap; }`,
 			expectProp:  true,
 			expectValue: "nowrap",
 		},
 		{
 			name:       "normal does not set white_space",
-			css:        `.test { white-space: normal; font-weight: bold; }`,
+			cssText:    `.test { white-space: normal; font-weight: bold; }`,
 			expectProp: false,
 		},
 		{
 			name:       "pre does not set white_space (handled at content level)",
-			css:        `.test { white-space: pre; font-weight: bold; }`,
+			cssText:    `.test { white-space: pre; font-weight: bold; }`,
 			expectProp: false,
 		},
 		{
 			name:       "pre-wrap does not set white_space",
-			css:        `.test { white-space: pre-wrap; font-weight: bold; }`,
+			cssText:    `.test { white-space: pre-wrap; font-weight: bold; }`,
 			expectProp: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sheet := parser.Parse([]byte(tt.css))
+			sheet := parser.Parse([]byte(tt.cssText))
 			styles, _ := conv.ConvertStylesheet(sheet)
 
 			if len(styles) != 1 {
@@ -789,12 +790,12 @@ func TestWhiteSpaceProperty(t *testing.T) {
 func TestStyleRegistryBuildFragments(t *testing.T) {
 	log := zap.NewNop()
 
-	css := []byte(`
+	cssData := []byte(`
 		.paragraph { line-height: 1.2; }
 		.custom { font-weight: bold; }
 	`)
 
-	registry, _ := parseAndCreateRegistry(css, nil, log)
+	registry, _ := parseAndCreateRegistry(cssData, nil, log)
 
 	// Use StyleContext.Resolve to get resolved style names (base36 format)
 	// This is how styles are typically used in actual code
@@ -865,19 +866,19 @@ func TestStyleRegistryBuildFragments(t *testing.T) {
 func TestConvertHyphens(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    CSSValue
+		input    css.CSSValue
 		expected KFXSymbol
 		ok       bool
 	}{
-		{"none", CSSValue{Keyword: "none"}, SymNone, true},
-		{"auto", CSSValue{Keyword: "auto"}, SymAuto, true},
-		{"manual", CSSValue{Keyword: "manual"}, SymManual, true},
-		{"None (uppercase)", CSSValue{Keyword: "None"}, SymNone, true},
-		{"AUTO (uppercase)", CSSValue{Keyword: "AUTO"}, SymAuto, true},
-		{"unknown", CSSValue{Keyword: "unknown"}, 0, false},
-		{"enabled", CSSValue{Keyword: "enabled"}, 0, false},
-		{"empty", CSSValue{Keyword: ""}, 0, false},
-		{"invalid", CSSValue{Keyword: "invalid"}, 0, false},
+		{"none", css.CSSValue{Keyword: "none"}, SymNone, true},
+		{"auto", css.CSSValue{Keyword: "auto"}, SymAuto, true},
+		{"manual", css.CSSValue{Keyword: "manual"}, SymManual, true},
+		{"None (uppercase)", css.CSSValue{Keyword: "None"}, SymNone, true},
+		{"AUTO (uppercase)", css.CSSValue{Keyword: "AUTO"}, SymAuto, true},
+		{"unknown", css.CSSValue{Keyword: "unknown"}, 0, false},
+		{"enabled", css.CSSValue{Keyword: "enabled"}, 0, false},
+		{"empty", css.CSSValue{Keyword: ""}, 0, false},
+		{"invalid", css.CSSValue{Keyword: "invalid"}, 0, false},
 	}
 
 	for _, tt := range tests {
@@ -895,54 +896,54 @@ func TestConvertHyphens(t *testing.T) {
 
 func TestHyphensProperty(t *testing.T) {
 	log := zap.NewNop()
-	parser := NewParser(log)
+	parser := css.NewParser(log)
 	conv := NewConverter(log)
 
 	tests := []struct {
 		name        string
-		css         string
+		cssText     string
 		expectProp  bool
 		expectValue KFXSymbol
 	}{
 		{
 			name:        "hyphens auto",
-			css:         `.test { hyphens: auto; }`,
+			cssText:     `.test { hyphens: auto; }`,
 			expectProp:  true,
 			expectValue: SymAuto,
 		},
 		{
 			name:        "hyphens none",
-			css:         `.test { hyphens: none; }`,
+			cssText:     `.test { hyphens: none; }`,
 			expectProp:  true,
 			expectValue: SymNone,
 		},
 		{
 			name:        "hyphens manual",
-			css:         `.test { hyphens: manual; }`,
+			cssText:     `.test { hyphens: manual; }`,
 			expectProp:  true,
 			expectValue: SymManual,
 		},
 		{
 			name:        "-webkit-hyphens auto",
-			css:         `.test { -webkit-hyphens: auto; }`,
+			cssText:     `.test { -webkit-hyphens: auto; }`,
 			expectProp:  true,
 			expectValue: SymAuto,
 		},
 		{
 			name:       "hyphens enabled (KFX-specific, ignored)",
-			css:        `.test { hyphens: enabled; font-weight: bold; }`,
+			cssText:    `.test { hyphens: enabled; font-weight: bold; }`,
 			expectProp: false,
 		},
 		{
 			name:       "hyphens unknown (KFX-specific, ignored)",
-			css:        `.test { hyphens: unknown; font-weight: bold; }`,
+			cssText:    `.test { hyphens: unknown; font-weight: bold; }`,
 			expectProp: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sheet := parser.Parse([]byte(tt.css))
+			sheet := parser.Parse([]byte(tt.cssText))
 			styles, _ := conv.ConvertStylesheet(sheet)
 
 			if len(styles) != 1 {
@@ -974,11 +975,11 @@ func TestHyphensProperty(t *testing.T) {
 
 func TestExToEmConversion(t *testing.T) {
 	log := zap.NewNop()
-	parser := NewParser(log)
+	parser := css.NewParser(log)
 	conv := NewConverter(log)
 
 	// CSS with ex units should be converted to em using ExToEmFactor (0.44)
-	css := []byte(`
+	cssData := []byte(`
 		.test {
 			text-indent: 2ex;
 			margin-top: 1ex;
@@ -986,7 +987,7 @@ func TestExToEmConversion(t *testing.T) {
 		}
 	`)
 
-	sheet := parser.Parse(css)
+	sheet := parser.Parse(cssData)
 	styles, warnings := conv.ConvertStylesheet(sheet)
 
 	if len(warnings) > 0 {
@@ -1032,7 +1033,7 @@ func TestExToEmConversion(t *testing.T) {
 
 func TestExToEmNormalization(t *testing.T) {
 	// Test the normalizeCSSProperties function directly
-	props := map[string]CSSValue{
+	props := map[string]css.CSSValue{
 		"text-indent": {Value: 2, Unit: "ex", Raw: "2ex"},
 		"font-weight": {Keyword: "bold"},
 		"margin-left": {Value: 0.5, Unit: "ex", Raw: "0.5ex"},
@@ -1078,11 +1079,11 @@ func TestExToEmNormalization(t *testing.T) {
 
 func TestNegativeMarginWarning(t *testing.T) {
 	log := zap.NewNop()
-	parser := NewParser(log)
+	parser := css.NewParser(log)
 	conv := NewConverter(log)
 
 	// CSS with negative margins (not supported in KFX)
-	css := []byte(`
+	cssData := []byte(`
 		.test {
 			margin-left: -8pt;
 			margin-right: -8pt;
@@ -1091,7 +1092,7 @@ func TestNegativeMarginWarning(t *testing.T) {
 		}
 	`)
 
-	sheet := parser.Parse(css)
+	sheet := parser.Parse(cssData)
 	styles, warnings := conv.ConvertStylesheet(sheet)
 
 	// Should have 3 warnings for the 3 negative margins
@@ -1135,7 +1136,7 @@ func TestNegativeMarginWarning(t *testing.T) {
 func TestMakeBorderRadiusValue(t *testing.T) {
 	tests := []struct {
 		name     string
-		cssVal   CSSValue
+		cssVal   css.CSSValue
 		rawVal   string
 		unit     string
 		wantOK   bool
@@ -1143,39 +1144,39 @@ func TestMakeBorderRadiusValue(t *testing.T) {
 	}{
 		{
 			name:   "single value from CSSValue",
-			cssVal: CSSValue{Value: 10, Unit: "px", Raw: "10px"},
+			cssVal: css.CSSValue{Value: 10, Unit: "px", Raw: "10px"},
 			wantOK: true,
 		},
 		{
 			name:   "single value from rawVal",
-			cssVal: CSSValue{},
+			cssVal: css.CSSValue{},
 			rawVal: "10px",
 			unit:   "px",
 			wantOK: true,
 		},
 		{
 			name:   "two identical values - single dimension",
-			cssVal: CSSValue{Raw: "10px 10px"},
+			cssVal: css.CSSValue{Raw: "10px 10px"},
 			unit:   "px",
 			wantOK: true,
 		},
 		{
 			name:     "two different values - list of two dimensions",
-			cssVal:   CSSValue{Raw: "10px 20px"},
+			cssVal:   css.CSSValue{Raw: "10px 20px"},
 			unit:     "px",
 			wantOK:   true,
 			wantList: true,
 		},
 		{
 			name:     "two different units - list of two dimensions",
-			cssVal:   CSSValue{Raw: "10px 50%"},
+			cssVal:   css.CSSValue{Raw: "10px 50%"},
 			unit:     "px",
 			wantOK:   true,
 			wantList: true,
 		},
 		{
 			name:     "two values from rawVal",
-			cssVal:   CSSValue{},
+			cssVal:   css.CSSValue{},
 			rawVal:   "5em 10em",
 			unit:     "em",
 			wantOK:   true,
@@ -1183,24 +1184,24 @@ func TestMakeBorderRadiusValue(t *testing.T) {
 		},
 		{
 			name:   "two identical em values - single dimension",
-			cssVal: CSSValue{Raw: "5em 5em"},
+			cssVal: css.CSSValue{Raw: "5em 5em"},
 			unit:   "em",
 			wantOK: true,
 		},
 		{
 			name:   "empty value",
-			cssVal: CSSValue{},
+			cssVal: css.CSSValue{},
 			wantOK: false,
 		},
 		{
 			name:   "three values - rejected by KP3",
-			cssVal: CSSValue{Raw: "10px 20px 30px"},
+			cssVal: css.CSSValue{Raw: "10px 20px 30px"},
 			unit:   "px",
 			wantOK: false,
 		},
 		{
 			name:   "single zero value",
-			cssVal: CSSValue{Value: 0, Unit: "px", Raw: "0px"},
+			cssVal: css.CSSValue{Value: 0, Unit: "px", Raw: "0px"},
 			wantOK: true,
 		},
 	}
@@ -1258,7 +1259,7 @@ func TestMakeBorderRadiusValue(t *testing.T) {
 // TestBorderRadiusTwoValueDimensions verifies the actual numeric values in two-value output.
 func TestBorderRadiusTwoValueDimensions(t *testing.T) {
 	// "10px 20px" → list of [{value:10, unit:px}, {value:20, unit:px}]
-	val, ok := MakeBorderRadiusValue(CSSValue{Raw: "10px 20px"}, "", "px")
+	val, ok := MakeBorderRadiusValue(css.CSSValue{Raw: "10px 20px"}, "", "px")
 	if !ok {
 		t.Fatal("expected ok=true")
 	}
@@ -1295,7 +1296,7 @@ func TestBorderRadiusTwoValueDimensions(t *testing.T) {
 // TestBorderRadiusMixedUnits verifies two-value output with different units.
 func TestBorderRadiusMixedUnits(t *testing.T) {
 	// "10px 50%" → list of [{value:10, unit:px}, {value:50, unit:percent}]
-	val, ok := MakeBorderRadiusValue(CSSValue{Raw: "10px 50%"}, "", "px")
+	val, ok := MakeBorderRadiusValue(css.CSSValue{Raw: "10px 50%"}, "", "px")
 	if !ok {
 		t.Fatal("expected ok=true")
 	}
@@ -1336,7 +1337,7 @@ func TestBorderRadiusViaConvertStyleMapProp(t *testing.T) {
 	tests := []struct {
 		name     string
 		prop     string
-		cssVal   CSSValue
+		cssVal   css.CSSValue
 		rawVal   string
 		unit     string
 		wantOK   bool
@@ -1345,14 +1346,14 @@ func TestBorderRadiusViaConvertStyleMapProp(t *testing.T) {
 		{
 			name:   "top-left single value",
 			prop:   "border_radius_top_left",
-			cssVal: CSSValue{Value: 10, Unit: "px", Raw: "10px"},
+			cssVal: css.CSSValue{Value: 10, Unit: "px", Raw: "10px"},
 			unit:   "px",
 			wantOK: true,
 		},
 		{
 			name:     "top-right two different values",
 			prop:     "border_radius_top_right",
-			cssVal:   CSSValue{Raw: "10px 20px"},
+			cssVal:   css.CSSValue{Raw: "10px 20px"},
 			unit:     "px",
 			wantOK:   true,
 			wantList: true,
@@ -1360,14 +1361,14 @@ func TestBorderRadiusViaConvertStyleMapProp(t *testing.T) {
 		{
 			name:   "bottom-left two identical values",
 			prop:   "border_radius_bottom_left",
-			cssVal: CSSValue{Raw: "5em 5em"},
+			cssVal: css.CSSValue{Raw: "5em 5em"},
 			unit:   "em",
 			wantOK: true,
 		},
 		{
 			name:     "bottom-right mixed units",
 			prop:     "border_radius_bottom_right",
-			cssVal:   CSSValue{Raw: "10px 50%"},
+			cssVal:   css.CSSValue{Raw: "10px 50%"},
 			unit:     "px",
 			wantOK:   true,
 			wantList: true,
@@ -1375,14 +1376,14 @@ func TestBorderRadiusViaConvertStyleMapProp(t *testing.T) {
 		{
 			name:   "generic border_radius single value",
 			prop:   "border_radius",
-			cssVal: CSSValue{Value: 8, Unit: "pt", Raw: "8pt"},
+			cssVal: css.CSSValue{Value: 8, Unit: "pt", Raw: "8pt"},
 			unit:   "pt",
 			wantOK: true,
 		},
 		{
 			name:   "empty value",
 			prop:   "border_radius_top_left",
-			cssVal: CSSValue{},
+			cssVal: css.CSSValue{},
 			wantOK: false,
 		},
 	}

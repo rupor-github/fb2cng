@@ -9,7 +9,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +20,7 @@ import (
 	"fbc/common"
 	"fbc/config"
 	"fbc/content"
+	"fbc/css"
 	"fbc/fb2"
 )
 
@@ -442,9 +442,16 @@ func writeStylesheet(zw *zip.Writer, c *content.Content) error {
 			continue
 		}
 
-		styleCSS := style.Data
+		// Build URL -> filename rewrite map from resolved resources
+		urlMap := make(map[string]string, len(style.Resources))
+		for _, resource := range style.Resources {
+			urlMap[resource.OriginalURL] = resource.Filename
+		}
 
-		// Write stylesheet resources to EPUB and rewrite CSS URLs
+		// Parse the CSS
+		sheet := css.NewParser(nil).Parse([]byte(style.Data))
+
+		// Write stylesheet resources to EPUB
 		for _, resource := range style.Resources {
 			// Filename already contains directory (e.g., "fonts/myfont.woff2")
 			fullPath := path.Join(oebpsDir, resource.Filename)
@@ -453,12 +460,18 @@ func writeStylesheet(zw *zip.Writer, c *content.Content) error {
 				return fmt.Errorf("unable to write stylesheet resource %s: %w",
 					resource.Filename, err)
 			}
-
-			// Rewrite CSS URL references to point to EPUB internal paths
-			styleCSS = rewriteCSSURL(styleCSS, resource.OriginalURL, resource.Filename)
 		}
 
-		finalCSS.WriteString(styleCSS)
+		// Rewrite all CSS URL references to point to EPUB internal paths
+		sheet.RewriteURLs(func(originalURL string) string {
+			if newPath, ok := urlMap[originalURL]; ok {
+				return newPath
+			}
+			return originalURL
+		})
+
+		// Serialize rewritten CSS
+		sheet.WriteTo(&finalCSS) //nolint:errcheck
 		finalCSS.WriteString("\n")
 	}
 
@@ -1269,25 +1282,6 @@ func copyFile(src, dst string) error {
 		return fmt.Errorf("failed to close destination file: %w", err)
 	}
 	return nil
-}
-
-// rewriteCSSURL replaces URL references in CSS
-func rewriteCSSURL(css, oldURL, newPath string) string {
-	// Handle all url() variations: url("..."), url('...'), url(...)
-	patterns := []string{
-		`url\s*\(\s*"` + regexp.QuoteMeta(oldURL) + `"\s*\)`,
-		`url\s*\(\s*'` + regexp.QuoteMeta(oldURL) + `'\s*\)`,
-		`url\s*\(\s*` + regexp.QuoteMeta(oldURL) + `\s*\)`,
-	}
-
-	newRef := `url("` + newPath + `")`
-
-	for _, pattern := range patterns {
-		re := regexp.MustCompile(pattern)
-		css = re.ReplaceAllString(css, newRef)
-	}
-
-	return css
 }
 
 // addSequencesToMetadata adds EPUB3 belongs-to-collection metadata for all sequences.

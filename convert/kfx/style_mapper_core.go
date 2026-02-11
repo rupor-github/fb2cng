@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"go.uber.org/zap"
+
+	"fbc/css"
 )
 
 // StyleMapper is a thin façade for upcoming stylemap-driven mapping.
@@ -25,12 +27,12 @@ func NewStyleMapper(log *zap.Logger, tracer *StyleTracer) *StyleMapper {
 }
 
 // MapStylesheet converts an entire stylesheet using stylemap-aware mapping.
-func (m *StyleMapper) MapStylesheet(sheet *Stylesheet) ([]StyleDef, []string) {
+func (m *StyleMapper) MapStylesheet(sheet *css.Stylesheet) ([]StyleDef, []string) {
 	if sheet == nil {
 		return nil, nil
 	}
 
-	styles := make([]StyleDef, 0, len(sheet.Rules))
+	styles := make([]StyleDef, 0, len(sheet.Items))
 	allWarnings := make([]string, 0)
 
 	styleMap := make(map[string]*StyleDef)
@@ -41,7 +43,8 @@ func (m *StyleMapper) MapStylesheet(sheet *Stylesheet) ([]StyleDef, []string) {
 		dropcapInfo = m.converter.detectDropcapPatterns(sheet)
 	}
 
-	for _, rule := range sheet.Rules {
+	rules := flattenStylesheetForKFX(sheet)
+	for _, rule := range rules {
 		props, warnings := m.MapRule(rule.Selector, rule.Properties)
 		allWarnings = append(allWarnings, warnings...)
 
@@ -60,13 +63,13 @@ func (m *StyleMapper) MapStylesheet(sheet *Stylesheet) ([]StyleDef, []string) {
 		}
 
 		style := StyleDef{
-			Name:       rule.Selector.StyleName(),
+			Name:       selectorStyleName(rule.Selector),
 			Properties: props,
 			Hidden:     isHidden,
 		}
 
 		if rule.Selector.Ancestor != nil && style.Parent == "" {
-			descendantName := rule.Selector.descendantBaseName()
+			descendantName := rule.Selector.DescendantBaseName()
 			if descendantName != "" && descendantName != style.Name {
 				style.Parent = descendantName
 			}
@@ -108,10 +111,10 @@ func (m *StyleMapper) MapStylesheet(sheet *Stylesheet) ([]StyleDef, []string) {
 // Used internally by MapStylesheet, but exported for testing
 // and for callers that need to convert individual rules programmatically.
 // It applies stylemap lookups and transformers on top of the base CSS conversion.
-func (m *StyleMapper) MapRule(selector Selector, props map[string]CSSValue) (map[KFXSymbol]any, []string) {
+func (m *StyleMapper) MapRule(selector css.Selector, props map[string]css.CSSValue) (map[KFXSymbol]any, []string) {
 	props = m.applyStyleMapCSS(selector, props)
 
-	result := m.converter.ConvertRule(CSSRule{
+	result := m.converter.ConvertRule(css.CSSRule{
 		Selector:   selector,
 		Properties: props,
 	})

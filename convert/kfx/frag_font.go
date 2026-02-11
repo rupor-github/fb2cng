@@ -6,6 +6,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"fbc/css"
 	"fbc/fb2"
 )
 
@@ -116,7 +117,7 @@ type fontResource struct {
 // BuildFontInfo extracts embedded font information from stylesheets.
 // It parses @font-face declarations and the body font-family rule.
 // All fonts are collected into AllFonts, and the body font family is identified.
-func BuildFontInfo(stylesheets []fb2.Stylesheet, parsedCSS *Stylesheet, log *zap.Logger) *FontInfo {
+func BuildFontInfo(stylesheets []fb2.Stylesheet, parsedCSS *css.Stylesheet, log *zap.Logger) *FontInfo {
 	info := &FontInfo{
 		AllFonts: make(map[string][]fontResource),
 	}
@@ -174,7 +175,8 @@ func BuildFontInfo(stylesheets []fb2.Stylesheet, parsedCSS *Stylesheet, log *zap
 	}
 
 	// Find body font-family from CSS rules
-	for _, rule := range parsedCSS.Rules {
+	rules := flattenStylesheetForKFX(parsedCSS)
+	for _, rule := range rules {
 		if rule.Selector.Element == "body" && rule.Selector.Class == "" {
 			if val, ok := rule.Properties["font-family"]; ok {
 				family := extractFontFamilyName(val)
@@ -226,7 +228,7 @@ func extractURLFromSrc(src string) string {
 
 // extractFontFamilyName extracts the font family name from a CSS value.
 // Handles quoted and unquoted names, returns first font in stack.
-func extractFontFamilyName(val CSSValue) string {
+func extractFontFamilyName(val css.CSSValue) string {
 	if val.Keyword != "" {
 		// Remove quotes and get first family from comma-separated list
 		family := val.Keyword
@@ -242,19 +244,19 @@ func extractFontFamilyName(val CSSValue) string {
 // normalizeWeightToSymbol converts CSS font-weight string to KFX symbol.
 // This handles @font-face descriptor values like "bold", "700", etc.
 func normalizeWeightToSymbol(weight string) KFXSymbol {
-	// Use ConvertFontWeight with a CSSValue
-	css := CSSValue{Keyword: strings.TrimSpace(weight)}
+	// Use ConvertFontWeight with a css.CSSValue
+	val := css.CSSValue{Keyword: strings.TrimSpace(weight)}
 
 	// Try as keyword first
-	if sym, ok := ConvertFontWeight(css); ok {
+	if sym, ok := ConvertFontWeight(val); ok {
 		return sym
 	}
 
 	// Try parsing as number
 	weight = strings.TrimSpace(weight)
 	if w, err := strconv.Atoi(weight); err == nil {
-		css = CSSValue{Value: float64(w)}
-		if sym, ok := ConvertFontWeight(css); ok {
+		val = css.CSSValue{Value: float64(w)}
+		if sym, ok := ConvertFontWeight(val); ok {
 			return sym
 		}
 	}
@@ -265,8 +267,8 @@ func normalizeWeightToSymbol(weight string) KFXSymbol {
 // normalizeStyleToSymbol converts CSS font-style string to KFX symbol.
 // This handles @font-face descriptor values like "italic", "oblique", etc.
 func normalizeStyleToSymbol(style string) KFXSymbol {
-	css := CSSValue{Keyword: strings.TrimSpace(style)}
-	if sym, ok := ConvertFontStyle(css); ok {
+	val := css.CSSValue{Keyword: strings.TrimSpace(style)}
+	if sym, ok := ConvertFontStyle(val); ok {
 		return sym
 	}
 	return SymNormal

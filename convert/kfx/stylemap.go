@@ -3,6 +3,8 @@ package kfx
 import (
 	"strconv"
 	"strings"
+
+	"fbc/css"
 )
 
 // HTMLKey identifies a stylemap entry trigger: tag + attribute + optional value/unit.
@@ -87,14 +89,14 @@ func propertyToCSSName(prop string) (string, bool) {
 	return strings.ReplaceAll(prop, "_", "-"), true
 }
 
-func parseStyleMapCSSValue(val, unit string) CSSValue {
+func parseStyleMapCSSValue(val, unit string) css.CSSValue {
 	val = strings.TrimSpace(val)
 	if val == "" {
-		return CSSValue{}
+		return css.CSSValue{}
 	}
 
 	if n, err := strconv.ParseFloat(val, 64); err == nil {
-		return CSSValue{Value: n, Unit: unit, Raw: val}
+		return css.CSSValue{Value: n, Unit: unit, Raw: val}
 	}
 
 	// Try to split number+unit (e.g., 1.5em)
@@ -113,9 +115,9 @@ func parseStyleMapCSSValue(val, unit string) CSSValue {
 			if unitPart == "" {
 				unitPart = unit
 			}
-			return CSSValue{Value: n, Unit: unitPart, Raw: val}
+			return css.CSSValue{Value: n, Unit: unitPart, Raw: val}
 		}
 	}
 
-	return CSSValue{Raw: val, Keyword: val}
+	return css.CSSValue{Raw: val, Keyword: val}
 }
