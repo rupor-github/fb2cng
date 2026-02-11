@@ -116,9 +116,9 @@ func (p *Parser) Parse(data []byte, source ...string) *Stylesheet {
 				sel := p.parseSelector(selStr, sheet)
 				if sel.IsSimple() {
 					// Clone properties for each rule
-					propsCopy := make(map[string]CSSValue, len(props))
+					propsCopy := make(map[string]Value, len(props))
 					maps.Copy(propsCopy, props)
-					rule := CSSRule{
+					rule := Rule{
 						Selector:   sel,
 						Properties: propsCopy,
 					}
@@ -172,8 +172,8 @@ func (p *Parser) parseSelectors(data []byte, values []css.Token) []string {
 }
 
 // parseDeclarations parses property declarations until EndRulesetGrammar.
-func (p *Parser) parseDeclarations(parser *css.Parser, _ *Stylesheet) map[string]CSSValue {
-	props := make(map[string]CSSValue)
+func (p *Parser) parseDeclarations(parser *css.Parser, _ *Stylesheet) map[string]Value {
+	props := make(map[string]Value)
 
 	for {
 		gt, _, data := parser.Next()
@@ -196,10 +196,10 @@ func (p *Parser) parseDeclarations(parser *css.Parser, _ *Stylesheet) map[string
 	}
 }
 
-// parsePropertyValue converts CSS tokens to a CSSValue.
-func (p *Parser) parsePropertyValue(tokens []css.Token) CSSValue {
+// parsePropertyValue converts CSS tokens to a Value.
+func (p *Parser) parsePropertyValue(tokens []css.Token) Value {
 	if len(tokens) == 0 {
-		return CSSValue{}
+		return Value{}
 	}
 
 	// Build raw value string
@@ -214,7 +214,7 @@ func (p *Parser) parsePropertyValue(tokens []css.Token) CSSValue {
 	}
 	raw := strings.TrimSpace(strings.Join(rawParts, ""))
 
-	val := CSSValue{Raw: raw}
+	val := Value{Raw: raw}
 
 	// Handle single token cases
 	if len(tokens) == 1 || (len(tokens) == 2 && tokens[1].TokenType == css.WhitespaceToken) {
@@ -417,8 +417,8 @@ func (p *Parser) skipAtRuleBlock(parser *css.Parser) {
 }
 
 // parseFontFace parses an @font-face block.
-func (p *Parser) parseFontFace(parser *css.Parser) CSSFontFace {
-	ff := CSSFontFace{}
+func (p *Parser) parseFontFace(parser *css.Parser) FontFace {
+	ff := FontFace{}
 
 	for {
 		gt, _, data := parser.Next()
@@ -529,8 +529,8 @@ func (p *Parser) parseMediaQueryFromTokens(tokens []css.Token) MediaQuery {
 // parseMediaBlockRules parses rules inside an @media block and returns them.
 // Unlike the old parseMediaBlock which appended directly to sheet.Rules,
 // this returns the rules for the caller to wrap in a MediaBlock.
-func (p *Parser) parseMediaBlockRules(parser *css.Parser, sheet *Stylesheet) []CSSRule {
-	var rules []CSSRule
+func (p *Parser) parseMediaBlockRules(parser *css.Parser, sheet *Stylesheet) []Rule {
+	var rules []Rule
 	var currentSelectors []string
 
 	for {
@@ -548,9 +548,9 @@ func (p *Parser) parseMediaBlockRules(parser *css.Parser, sheet *Stylesheet) []C
 			for _, selStr := range currentSelectors {
 				sel := p.parseSelector(selStr, sheet)
 				if sel.IsSimple() {
-					propsCopy := make(map[string]CSSValue, len(props))
+					propsCopy := make(map[string]Value, len(props))
 					maps.Copy(propsCopy, props)
-					rule := CSSRule{
+					rule := Rule{
 						Selector:   sel,
 						Properties: propsCopy,
 					}

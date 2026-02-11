@@ -10,52 +10,52 @@ import (
 func TestParseCSSContent(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    css.CSSValue
+		input    css.Value
 		expected string
 	}{
 		{
 			name:     "double quoted string",
-			input:    css.CSSValue{Raw: `"["`},
+			input:    css.Value{Raw: `"["`},
 			expected: "[",
 		},
 		{
 			name:     "single quoted string",
-			input:    css.CSSValue{Raw: `']'`},
+			input:    css.Value{Raw: `']'`},
 			expected: "]",
 		},
 		{
 			name:     "complex content",
-			input:    css.CSSValue{Raw: `">>> "`},
+			input:    css.Value{Raw: `">>> "`},
 			expected: ">>> ",
 		},
 		{
 			name:     "none keyword",
-			input:    css.CSSValue{Raw: "none"},
+			input:    css.Value{Raw: "none"},
 			expected: "",
 		},
 		{
 			name:     "normal keyword",
-			input:    css.CSSValue{Raw: "normal"},
+			input:    css.Value{Raw: "normal"},
 			expected: "",
 		},
 		{
 			name:     "empty value",
-			input:    css.CSSValue{Raw: ""},
+			input:    css.Value{Raw: ""},
 			expected: "",
 		},
 		{
 			name:     "unquoted value (attr function)",
-			input:    css.CSSValue{Raw: "attr(data-before)"},
+			input:    css.Value{Raw: "attr(data-before)"},
 			expected: "", // Not supported
 		},
 		{
 			name:     "counter function",
-			input:    css.CSSValue{Raw: "counter(section)"},
+			input:    css.Value{Raw: "counter(section)"},
 			expected: "", // Not supported
 		},
 		{
 			name:     "whitespace around quotes",
-			input:    css.CSSValue{Raw: `  "text"  `},
+			input:    css.Value{Raw: `  "text"  `},
 			expected: "text",
 		},
 	}

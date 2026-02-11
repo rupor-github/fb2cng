@@ -111,10 +111,10 @@ func (m *StyleMapper) MapStylesheet(sheet *css.Stylesheet) ([]StyleDef, []string
 // Used internally by MapStylesheet, but exported for testing
 // and for callers that need to convert individual rules programmatically.
 // It applies stylemap lookups and transformers on top of the base CSS conversion.
-func (m *StyleMapper) MapRule(selector css.Selector, props map[string]css.CSSValue) (map[KFXSymbol]any, []string) {
+func (m *StyleMapper) MapRule(selector css.Selector, props map[string]css.Value) (map[KFXSymbol]any, []string) {
 	props = m.applyStyleMapCSS(selector, props)
 
-	result := m.converter.ConvertRule(css.CSSRule{
+	result := m.converter.ConvertRule(css.Rule{
 		Selector:   selector,
 		Properties: props,
 	})

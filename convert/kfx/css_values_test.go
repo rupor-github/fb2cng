@@ -8,16 +8,16 @@ import (
 func TestConvertWritingMode(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    css.CSSValue
+		input    css.Value
 		expected KFXSymbol
 		ok       bool
 	}{
-		{"horizontal-tb", css.CSSValue{Keyword: "horizontal-tb"}, SymHorizontalTb, true},
-		{"horizontal_tb underscore", css.CSSValue{Keyword: "horizontal_tb"}, SymHorizontalTb, true},
-		{"vertical-rl", css.CSSValue{Keyword: "vertical-rl"}, SymVerticalRl, true},
-		{"vertical-lr", css.CSSValue{Keyword: "vertical-lr"}, SymVerticalLr, true},
-		{"from raw", css.CSSValue{Raw: "horizontal-tb"}, SymHorizontalTb, true},
-		{"unknown", css.CSSValue{Keyword: "diagonal"}, 0, false},
+		{"horizontal-tb", css.Value{Keyword: "horizontal-tb"}, SymHorizontalTb, true},
+		{"horizontal_tb underscore", css.Value{Keyword: "horizontal_tb"}, SymHorizontalTb, true},
+		{"vertical-rl", css.Value{Keyword: "vertical-rl"}, SymVerticalRl, true},
+		{"vertical-lr", css.Value{Keyword: "vertical-lr"}, SymVerticalLr, true},
+		{"from raw", css.Value{Raw: "horizontal-tb"}, SymHorizontalTb, true},
+		{"unknown", css.Value{Keyword: "diagonal"}, 0, false},
 	}
 
 	for _, tt := range tests {
@@ -36,11 +36,11 @@ func TestConvertWritingMode(t *testing.T) {
 func TestConvertTextCombine(t *testing.T) {
 	tests := []struct {
 		name  string
-		input css.CSSValue
+		input css.Value
 		ok    bool
 	}{
-		{"empty", css.CSSValue{}, false},
-		{"from raw", css.CSSValue{Raw: "all"}, true},
+		{"empty", css.Value{}, false},
+		{"from raw", css.Value{Raw: "all"}, true},
 	}
 
 	for _, tt := range tests {
@@ -56,15 +56,15 @@ func TestConvertTextCombine(t *testing.T) {
 func TestConvertTextOrientation(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    css.CSSValue
+		input    css.Value
 		expected KFXSymbol
 		ok       bool
 	}{
-		{"mixed", css.CSSValue{Keyword: "mixed"}, SymAuto, true},
-		{"upright", css.CSSValue{Keyword: "upright"}, SymUpright, true},
-		{"sideways", css.CSSValue{Keyword: "sideways"}, SymSideways, true},
-		{"sideways-rl", css.CSSValue{Keyword: "sideways-rl"}, SymSideways, true},
-		{"unknown", css.CSSValue{Keyword: "unknown"}, 0, false},
+		{"mixed", css.Value{Keyword: "mixed"}, SymAuto, true},
+		{"upright", css.Value{Keyword: "upright"}, SymUpright, true},
+		{"sideways", css.Value{Keyword: "sideways"}, SymSideways, true},
+		{"sideways-rl", css.Value{Keyword: "sideways-rl"}, SymSideways, true},
+		{"unknown", css.Value{Keyword: "unknown"}, 0, false},
 	}
 
 	for _, tt := range tests {
@@ -83,22 +83,22 @@ func TestConvertTextOrientation(t *testing.T) {
 func TestConvertTextEmphasisStyle(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    css.CSSValue
+		input    css.Value
 		expected KFXSymbol
 		ok       bool
 	}{
-		{"dot", css.CSSValue{Raw: "dot"}, SymFilledDot, true},
-		{"filled dot", css.CSSValue{Raw: "filled dot"}, SymFilledDot, true},
-		{"open dot", css.CSSValue{Raw: "open dot"}, SymOpenDot, true},
-		{"circle", css.CSSValue{Raw: "circle"}, SymFilledCircle, true},
-		{"open circle", css.CSSValue{Raw: "open circle"}, SymOpenCircle, true},
-		{"double-circle", css.CSSValue{Raw: "double-circle"}, SymFilledDoubleCircle, true},
-		{"open double-circle", css.CSSValue{Raw: "open double-circle"}, SymOpenDoubleCircle, true},
-		{"triangle", css.CSSValue{Raw: "triangle"}, SymFilledTriangle, true},
-		{"open triangle", css.CSSValue{Raw: "open triangle"}, SymOpenTriangle, true},
-		{"sesame", css.CSSValue{Raw: "sesame"}, SymFilledSesame, true},
-		{"open sesame", css.CSSValue{Raw: "open sesame"}, SymOpenSesame, true},
-		{"empty", css.CSSValue{}, 0, false},
+		{"dot", css.Value{Raw: "dot"}, SymFilledDot, true},
+		{"filled dot", css.Value{Raw: "filled dot"}, SymFilledDot, true},
+		{"open dot", css.Value{Raw: "open dot"}, SymOpenDot, true},
+		{"circle", css.Value{Raw: "circle"}, SymFilledCircle, true},
+		{"open circle", css.Value{Raw: "open circle"}, SymOpenCircle, true},
+		{"double-circle", css.Value{Raw: "double-circle"}, SymFilledDoubleCircle, true},
+		{"open double-circle", css.Value{Raw: "open double-circle"}, SymOpenDoubleCircle, true},
+		{"triangle", css.Value{Raw: "triangle"}, SymFilledTriangle, true},
+		{"open triangle", css.Value{Raw: "open triangle"}, SymOpenTriangle, true},
+		{"sesame", css.Value{Raw: "sesame"}, SymFilledSesame, true},
+		{"open sesame", css.Value{Raw: "open sesame"}, SymOpenSesame, true},
+		{"empty", css.Value{}, 0, false},
 	}
 
 	for _, tt := range tests {
@@ -117,19 +117,19 @@ func TestConvertTextEmphasisStyle(t *testing.T) {
 func TestConvertTextEmphasisPosition(t *testing.T) {
 	tests := []struct {
 		name      string
-		input     css.CSSValue
+		input     css.Value
 		wantHoriz KFXSymbol
 		wantVert  KFXSymbol
 		ok        bool
 	}{
-		{"over", css.CSSValue{Raw: "over"}, 0, SymTop, true},
-		{"under", css.CSSValue{Raw: "under"}, 0, SymBottom, true},
-		{"over right", css.CSSValue{Raw: "over right"}, SymRight, SymTop, true},
-		{"under left", css.CSSValue{Raw: "under left"}, SymLeft, SymBottom, true},
-		{"top", css.CSSValue{Raw: "top"}, 0, SymTop, true},
-		{"bottom", css.CSSValue{Raw: "bottom"}, 0, SymBottom, true},
-		{"empty", css.CSSValue{}, 0, 0, false},
-		{"unknown", css.CSSValue{Raw: "center"}, 0, 0, false},
+		{"over", css.Value{Raw: "over"}, 0, SymTop, true},
+		{"under", css.Value{Raw: "under"}, 0, SymBottom, true},
+		{"over right", css.Value{Raw: "over right"}, SymRight, SymTop, true},
+		{"under left", css.Value{Raw: "under left"}, SymLeft, SymBottom, true},
+		{"top", css.Value{Raw: "top"}, 0, SymTop, true},
+		{"bottom", css.Value{Raw: "bottom"}, 0, SymBottom, true},
+		{"empty", css.Value{}, 0, 0, false},
+		{"unknown", css.Value{Raw: "center"}, 0, 0, false},
 	}
 
 	for _, tt := range tests {
@@ -216,15 +216,15 @@ func TestConvertBorderStyle(t *testing.T) {
 func TestConvertFloat(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    css.CSSValue
+		input    css.Value
 		expected KFXSymbol
 		ok       bool
 	}{
-		{"left", css.CSSValue{Keyword: "left"}, SymLeft, true},
-		{"right", css.CSSValue{Keyword: "right"}, SymRight, true},
-		{"none", css.CSSValue{Keyword: "none"}, SymNone, true},
+		{"left", css.Value{Keyword: "left"}, SymLeft, true},
+		{"right", css.Value{Keyword: "right"}, SymRight, true},
+		{"none", css.Value{Keyword: "none"}, SymNone, true},
 		// "center" maps to SymCenter through symbolIDFromString fallback
-		{"center", css.CSSValue{Keyword: "center"}, SymCenter, true},
+		{"center", css.Value{Keyword: "center"}, SymCenter, true},
 	}
 
 	for _, tt := range tests {
@@ -243,15 +243,15 @@ func TestConvertFloat(t *testing.T) {
 func TestConvertClear(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    css.CSSValue
+		input    css.Value
 		expected KFXSymbol
 		ok       bool
 	}{
-		{"left", css.CSSValue{Keyword: "left"}, SymLeft, true},
-		{"right", css.CSSValue{Keyword: "right"}, SymRight, true},
-		{"both", css.CSSValue{Keyword: "both"}, SymBoth, true},
-		{"none", css.CSSValue{Keyword: "none"}, SymNone, true},
-		{"unknown", css.CSSValue{Keyword: "all"}, 0, false},
+		{"left", css.Value{Keyword: "left"}, SymLeft, true},
+		{"right", css.Value{Keyword: "right"}, SymRight, true},
+		{"both", css.Value{Keyword: "both"}, SymBoth, true},
+		{"none", css.Value{Keyword: "none"}, SymNone, true},
+		{"unknown", css.Value{Keyword: "all"}, 0, false},
 	}
 
 	for _, tt := range tests {
@@ -270,14 +270,14 @@ func TestConvertClear(t *testing.T) {
 func TestConvertPageBreak(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    css.CSSValue
+		input    css.Value
 		expected KFXSymbol
 		ok       bool
 	}{
-		{"always", css.CSSValue{Keyword: "always"}, SymAlways, true},
-		{"avoid", css.CSSValue{Keyword: "avoid"}, SymAvoid, true},
-		{"auto", css.CSSValue{Keyword: "auto"}, SymAuto, true},
-		{"unknown", css.CSSValue{Keyword: "never"}, 0, false},
+		{"always", css.Value{Keyword: "always"}, SymAlways, true},
+		{"avoid", css.Value{Keyword: "avoid"}, SymAvoid, true},
+		{"auto", css.Value{Keyword: "auto"}, SymAuto, true},
+		{"unknown", css.Value{Keyword: "never"}, 0, false},
 	}
 
 	for _, tt := range tests {
@@ -296,15 +296,15 @@ func TestConvertPageBreak(t *testing.T) {
 func TestConvertYjBreak(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    css.CSSValue
+		input    css.Value
 		expected KFXSymbol
 		ok       bool
 	}{
-		{"always keyword", css.CSSValue{Keyword: "always"}, SymAlways, true},
-		{"always raw", css.CSSValue{Raw: "always"}, SymAlways, true},
-		{"avoid", css.CSSValue{Keyword: "avoid"}, SymAvoid, true},
-		{"auto", css.CSSValue{Keyword: "auto"}, SymAuto, true},
-		{"unknown", css.CSSValue{Keyword: "never"}, 0, false},
+		{"always keyword", css.Value{Keyword: "always"}, SymAlways, true},
+		{"always raw", css.Value{Raw: "always"}, SymAlways, true},
+		{"avoid", css.Value{Keyword: "avoid"}, SymAvoid, true},
+		{"auto", css.Value{Keyword: "auto"}, SymAuto, true},
+		{"unknown", css.Value{Keyword: "never"}, 0, false},
 	}
 
 	for _, tt := range tests {
@@ -323,19 +323,19 @@ func TestConvertYjBreak(t *testing.T) {
 func TestConvertBaselineStyle(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    css.CSSValue
+		input    css.Value
 		expected KFXSymbol
 		ok       bool
 	}{
-		{"center", css.CSSValue{Keyword: "center"}, SymCenter, true},
-		{"top", css.CSSValue{Keyword: "top"}, SymTop, true},
-		{"bottom", css.CSSValue{Keyword: "bottom"}, SymBottom, true},
-		{"superscript", css.CSSValue{Keyword: "superscript"}, SymSuperscript, true},
-		{"super alias", css.CSSValue{Keyword: "super"}, SymSuperscript, true},
-		{"subscript", css.CSSValue{Keyword: "subscript"}, SymSubscript, true},
-		{"sub alias", css.CSSValue{Keyword: "sub"}, SymSubscript, true},
-		{"from raw", css.CSSValue{Raw: "top"}, SymTop, true},
-		{"unknown", css.CSSValue{Keyword: "middle"}, 0, false},
+		{"center", css.Value{Keyword: "center"}, SymCenter, true},
+		{"top", css.Value{Keyword: "top"}, SymTop, true},
+		{"bottom", css.Value{Keyword: "bottom"}, SymBottom, true},
+		{"superscript", css.Value{Keyword: "superscript"}, SymSuperscript, true},
+		{"super alias", css.Value{Keyword: "super"}, SymSuperscript, true},
+		{"subscript", css.Value{Keyword: "subscript"}, SymSubscript, true},
+		{"sub alias", css.Value{Keyword: "sub"}, SymSubscript, true},
+		{"from raw", css.Value{Raw: "top"}, SymTop, true},
+		{"unknown", css.Value{Keyword: "middle"}, 0, false},
 	}
 
 	for _, tt := range tests {
@@ -354,35 +354,35 @@ func TestConvertBaselineStyle(t *testing.T) {
 func TestParseColorExtended(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    css.CSSValue
+		input    css.Value
 		r, g, b  int
 		shouldOk bool
 	}{
 		// Already tested: hex colors, rgb function, basic keywords
 		// Add more keyword coverage:
-		{"gray", css.CSSValue{Raw: "gray"}, 128, 128, 128, true},
-		{"grey", css.CSSValue{Raw: "grey"}, 128, 128, 128, true},
-		{"silver", css.CSSValue{Raw: "silver"}, 192, 192, 192, true},
-		{"maroon", css.CSSValue{Raw: "maroon"}, 128, 0, 0, true},
-		{"navy", css.CSSValue{Raw: "navy"}, 0, 0, 128, true},
-		{"teal", css.CSSValue{Raw: "teal"}, 0, 128, 128, true},
-		{"olive", css.CSSValue{Raw: "olive"}, 128, 128, 0, true},
-		{"purple", css.CSSValue{Raw: "purple"}, 128, 0, 128, true},
-		{"fuchsia", css.CSSValue{Raw: "fuchsia"}, 255, 0, 255, true},
-		{"magenta", css.CSSValue{Raw: "magenta"}, 255, 0, 255, true},
-		{"aqua", css.CSSValue{Raw: "aqua"}, 0, 255, 255, true},
-		{"cyan", css.CSSValue{Raw: "cyan"}, 0, 255, 255, true},
-		{"lime", css.CSSValue{Raw: "lime"}, 0, 255, 0, true},
-		{"yellow", css.CSSValue{Raw: "yellow"}, 255, 255, 0, true},
-		{"orange", css.CSSValue{Raw: "orange"}, 255, 165, 0, true},
-		{"brown", css.CSSValue{Raw: "brown"}, 165, 42, 42, true},
-		{"pink", css.CSSValue{Raw: "pink"}, 255, 192, 203, true},
-		{"green", css.CSSValue{Raw: "green"}, 0, 128, 0, true},
+		{"gray", css.Value{Raw: "gray"}, 128, 128, 128, true},
+		{"grey", css.Value{Raw: "grey"}, 128, 128, 128, true},
+		{"silver", css.Value{Raw: "silver"}, 192, 192, 192, true},
+		{"maroon", css.Value{Raw: "maroon"}, 128, 0, 0, true},
+		{"navy", css.Value{Raw: "navy"}, 0, 0, 128, true},
+		{"teal", css.Value{Raw: "teal"}, 0, 128, 128, true},
+		{"olive", css.Value{Raw: "olive"}, 128, 128, 0, true},
+		{"purple", css.Value{Raw: "purple"}, 128, 0, 128, true},
+		{"fuchsia", css.Value{Raw: "fuchsia"}, 255, 0, 255, true},
+		{"magenta", css.Value{Raw: "magenta"}, 255, 0, 255, true},
+		{"aqua", css.Value{Raw: "aqua"}, 0, 255, 255, true},
+		{"cyan", css.Value{Raw: "cyan"}, 0, 255, 255, true},
+		{"lime", css.Value{Raw: "lime"}, 0, 255, 0, true},
+		{"yellow", css.Value{Raw: "yellow"}, 255, 255, 0, true},
+		{"orange", css.Value{Raw: "orange"}, 255, 165, 0, true},
+		{"brown", css.Value{Raw: "brown"}, 165, 42, 42, true},
+		{"pink", css.Value{Raw: "pink"}, 255, 192, 203, true},
+		{"green", css.Value{Raw: "green"}, 0, 128, 0, true},
 		// rgba function (alpha ignored)
-		{"rgba", css.CSSValue{Raw: "rgba(100, 150, 200, 0.5)"}, 100, 150, 200, true},
+		{"rgba", css.Value{Raw: "rgba(100, 150, 200, 0.5)"}, 100, 150, 200, true},
 		// Invalid hex length
-		{"invalid hex 4", css.CSSValue{Raw: "#1234"}, 0, 0, 0, false},
-		{"invalid hex 5", css.CSSValue{Raw: "#12345"}, 0, 0, 0, false},
+		{"invalid hex 4", css.Value{Raw: "#1234"}, 0, 0, 0, false},
+		{"invalid hex 5", css.Value{Raw: "#12345"}, 0, 0, 0, false},
 	}
 
 	for _, tt := range tests {
@@ -428,12 +428,12 @@ func TestConvertVerticalAlignNumeric(t *testing.T) {
 	// Test numeric vertical-align values
 	tests := []struct {
 		name  string
-		input css.CSSValue
+		input css.Value
 		ok    bool
 	}{
-		{"em value", css.CSSValue{Value: 0.5, Unit: "em"}, true},
-		{"percentage", css.CSSValue{Value: 50, Unit: "%"}, true},
-		{"px value", css.CSSValue{Value: 5, Unit: "px"}, true},
+		{"em value", css.Value{Value: 0.5, Unit: "em"}, true},
+		{"percentage", css.Value{Value: 50, Unit: "%"}, true},
+		{"px value", css.Value{Value: 5, Unit: "px"}, true},
 	}
 
 	for _, tt := range tests {

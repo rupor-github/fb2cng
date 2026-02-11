@@ -8,14 +8,14 @@ import (
 	"fbc/css"
 )
 
-func (m *StyleMapper) applyStyleMapCSS(sel css.Selector, props map[string]css.CSSValue) map[string]css.CSSValue {
+func (m *StyleMapper) applyStyleMapCSS(sel css.Selector, props map[string]css.Value) map[string]css.Value {
 	if m.styleMap == nil {
 		return props
 	}
 
 	filtered := m.filterIgnorable(sel, props)
 
-	merged := make(map[string]css.CSSValue, len(filtered))
+	merged := make(map[string]css.Value, len(filtered))
 	for k, v := range filtered {
 		merged[k] = v
 	}
@@ -62,7 +62,7 @@ func (m *StyleMapper) applyStyleMapCSS(sel css.Selector, props map[string]css.CS
 // cssPropertyCoveredByMerged returns true if the CSS property is already covered
 // by existing properties in merged, either directly or via a shorthand property.
 // For example, if merged has "margin", then "margin-left" is covered.
-func cssPropertyCoveredByMerged(merged map[string]css.CSSValue, prop string) bool {
+func cssPropertyCoveredByMerged(merged map[string]css.Value, prop string) bool {
 	if _, exists := merged[prop]; exists {
 		return true
 	}
@@ -113,11 +113,11 @@ func styleMapKeysFromSelector(sel css.Selector) []HTMLKey {
 
 type styleMapMatch struct {
 	key     HTMLKey
-	val     css.CSSValue
+	val     css.Value
 	element string
 }
 
-func styleMapMatches(sel css.Selector, props map[string]css.CSSValue) []styleMapMatch {
+func styleMapMatches(sel css.Selector, props map[string]css.Value) []styleMapMatch {
 	matches := make([]styleMapMatch, 0, len(props)+3)
 
 	for _, key := range styleMapKeysFromSelector(sel) {
@@ -160,12 +160,12 @@ func styleMapMatches(sel css.Selector, props map[string]css.CSSValue) []styleMap
 	return matches
 }
 
-func (m *StyleMapper) filterIgnorable(sel css.Selector, props map[string]css.CSSValue) map[string]css.CSSValue {
+func (m *StyleMapper) filterIgnorable(sel css.Selector, props map[string]css.Value) map[string]css.Value {
 	if len(defaultIgnorablePatterns) == 0 {
 		return props
 	}
 
-	out := make(map[string]css.CSSValue, len(props))
+	out := make(map[string]css.Value, len(props))
 	for name, val := range props {
 		if isIgnorable(sel, name, val) {
 			if m.converter != nil && m.converter.log != nil {
@@ -181,7 +181,7 @@ func (m *StyleMapper) filterIgnorable(sel css.Selector, props map[string]css.CSS
 	return out
 }
 
-func isIgnorable(sel css.Selector, propName string, val css.CSSValue) bool {
+func isIgnorable(sel css.Selector, propName string, val css.Value) bool {
 	// Known KFX properties are never ignorable
 	if KFXPropertySymbol(propName) != SymbolUnknown {
 		return false
@@ -222,7 +222,7 @@ func styleMapCSSOverride(entry StyleMapEntry) (cssProp string, overrideVal strin
 	return "", "", false
 }
 
-func styleMapKFXOverride(entry StyleMapEntry, cssVal css.CSSValue, sourceAttr string, element string, log *zap.Logger) (map[KFXSymbol]any, bool) {
+func styleMapKFXOverride(entry StyleMapEntry, cssVal css.Value, sourceAttr string, element string, log *zap.Logger) (map[KFXSymbol]any, bool) {
 	if strings.Contains(entry.Transformer, "NonBlockingBlockImageTransformer") && element != "img" {
 		return nil, false
 	}
@@ -257,7 +257,7 @@ func styleMapKFXOverride(entry StyleMapEntry, cssVal css.CSSValue, sourceAttr st
 	return result, true
 }
 
-func pickCSSValue(val css.CSSValue, entry StyleMapEntry) css.CSSValue {
+func pickCSSValue(val css.Value, entry StyleMapEntry) css.Value {
 	if !isEmptyCSSValue(val) {
 		return val
 	}

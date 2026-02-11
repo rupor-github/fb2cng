@@ -77,8 +77,8 @@ func (mq MediaQuery) Evaluate(kf8, et bool) bool {
 	return true
 }
 
-// CSSValue represents a parsed CSS property value.
-type CSSValue struct {
+// Value represents a parsed CSS property value.
+type Value struct {
 	Raw     string  // Original CSS value string (e.g., "1.2em", "bold", "#ff0000")
 	Value   float64 // Numeric value if applicable
 	Unit    string  // Unit if applicable: "em", "px", "%", "pt", etc.
@@ -87,7 +87,7 @@ type CSSValue struct {
 
 // IsNumeric returns true if the value has a numeric component.
 // This includes explicit zero values like "0" or "0px".
-func (v CSSValue) IsNumeric() bool {
+func (v Value) IsNumeric() bool {
 	// If there's a unit, it's definitely numeric
 	if v.Unit != "" {
 		return true
@@ -108,7 +108,7 @@ func (v CSSValue) IsNumeric() bool {
 }
 
 // IsKeyword returns true if the value is a keyword (no numeric component).
-func (v CSSValue) IsKeyword() bool {
+func (v Value) IsKeyword() bool {
 	return v.Keyword != "" && v.Unit == ""
 }
 
@@ -165,21 +165,21 @@ func (s Selector) DescendantBaseName() string {
 	}
 }
 
-// CSSRule represents a single CSS rule (selector + properties).
-type CSSRule struct {
-	Selector   Selector            // Parsed selector
-	Properties map[string]CSSValue // Property name -> value
-	SourceLine int                 // Line number in source for error reporting
+// Rule represents a single CSS rule (selector + properties).
+type Rule struct {
+	Selector   Selector         // Parsed selector
+	Properties map[string]Value // Property name -> value
+	SourceLine int              // Line number in source for error reporting
 }
 
-// GetProperty returns the value for a property, or empty CSSValue if not found.
-func (r CSSRule) GetProperty(name string) (CSSValue, bool) {
+// GetProperty returns the value for a property, or empty Value if not found.
+func (r Rule) GetProperty(name string) (Value, bool) {
 	v, ok := r.Properties[name]
 	return v, ok
 }
 
-// CSSFontFace represents an @font-face declaration.
-type CSSFontFace struct {
+// FontFace represents an @font-face declaration.
+type FontFace struct {
 	Family string // font-family value
 	Src    string // src value (URL or local reference)
 	Style  string // font-style: normal, italic
@@ -189,29 +189,29 @@ type CSSFontFace struct {
 // StylesheetItem is a single top-level item in a stylesheet.
 // Exactly one of Rule, MediaBlock, or Import is non-nil.
 type StylesheetItem struct {
-	Rule       *CSSRule     // A plain rule (selector + properties)
-	MediaBlock *MediaBlock  // A @media block containing nested rules
-	FontFace   *CSSFontFace // A @font-face declaration
-	Import     *string      // An @import URL
+	Rule       *Rule       // A plain rule (selector + properties)
+	MediaBlock *MediaBlock // A @media block containing nested rules
+	FontFace   *FontFace   // A @font-face declaration
+	Import     *string     // An @import URL
 }
 
 // MediaBlock represents a @media block with its query and nested rules.
 type MediaBlock struct {
 	Query MediaQuery
-	Rules []CSSRule
+	Rules []Rule
 }
 
 // Stylesheet represents a parsed CSS stylesheet.
 type Stylesheet struct {
 	Items     []StylesheetItem // All top-level items in source order
-	FontFaces []CSSFontFace    // @font-face declarations (convenience accessor)
+	FontFaces []FontFace       // @font-face declarations (convenience accessor)
 	Imports   []string         // All @import URLs in source order (convenience accessor)
 	Warnings  []string         // Warnings for unsupported features
 }
 
 // RulesBySelector returns all top-level rules matching the given selector string.
-func (s *Stylesheet) RulesBySelector(selector string) []CSSRule {
-	var matches []CSSRule
+func (s *Stylesheet) RulesBySelector(selector string) []Rule {
+	var matches []Rule
 	for _, item := range s.Items {
 		if item.Rule != nil && item.Rule.Selector.Raw == selector {
 			matches = append(matches, *item.Rule)
@@ -268,7 +268,7 @@ func (s *Stylesheet) String() string {
 }
 
 // writeRule writes a single CSS rule to w.
-func writeRule(w io.Writer, rule *CSSRule) (int, error) {
+func writeRule(w io.Writer, rule *Rule) (int, error) {
 	var total int
 	n, err := fmt.Fprintf(w, "%s {\n", rule.Selector.Raw)
 	total += n
@@ -286,7 +286,7 @@ func writeRule(w io.Writer, rule *CSSRule) (int, error) {
 }
 
 // writeProperties writes property declarations sorted alphabetically.
-func writeProperties(w io.Writer, props map[string]CSSValue) (int, error) {
+func writeProperties(w io.Writer, props map[string]Value) (int, error) {
 	// Sort property names for deterministic output
 	names := make([]string, 0, len(props))
 	for name := range props {
@@ -307,7 +307,7 @@ func writeProperties(w io.Writer, props map[string]CSSValue) (int, error) {
 }
 
 // writeFontFace writes an @font-face block to w.
-func writeFontFace(w io.Writer, ff *CSSFontFace) (int, error) {
+func writeFontFace(w io.Writer, ff *FontFace) (int, error) {
 	var total int
 	n, err := fmt.Fprint(w, "@font-face {\n")
 	total += n
@@ -445,7 +445,7 @@ func (s *Stylesheet) RewriteURLs(fn func(originalURL string) string) {
 }
 
 // rewriteURLsInProperties rewrites url() references in property values.
-func rewriteURLsInProperties(props map[string]CSSValue, fn func(string) string) {
+func rewriteURLsInProperties(props map[string]Value, fn func(string) string) {
 	for name, val := range props {
 		if strings.Contains(val.Raw, "url(") {
 			val.Raw = rewriteURLsInValue(val.Raw, fn)

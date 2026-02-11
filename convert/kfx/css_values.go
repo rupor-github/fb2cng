@@ -9,7 +9,7 @@ import (
 // ConvertFontWeight converts CSS font-weight values to KFX symbols.
 // CSS: bold, bolder, lighter, normal, 100-900
 // KFX: $361 (bold), $362 (semibold), $363 (light), $364 (medium), $350 (normal)
-func ConvertFontWeight(css css.CSSValue) (KFXSymbol, bool) {
+func ConvertFontWeight(css css.Value) (KFXSymbol, bool) {
 	if css.Keyword != "" {
 		switch strings.ToLower(css.Keyword) {
 		case "bold", "bolder":
@@ -46,7 +46,7 @@ func ConvertFontWeight(css css.CSSValue) (KFXSymbol, bool) {
 // ConvertFontStyle converts CSS font-style values to KFX symbols.
 // CSS: italic, oblique, normal
 // KFX: $382 (italic), $350 (normal)
-func ConvertFontStyle(css css.CSSValue) (KFXSymbol, bool) {
+func ConvertFontStyle(css css.Value) (KFXSymbol, bool) {
 	switch strings.ToLower(css.Keyword) {
 	case "italic", "oblique":
 		return SymItalic, true // $382
@@ -59,7 +59,7 @@ func ConvertFontStyle(css css.CSSValue) (KFXSymbol, bool) {
 // ConvertTextAlign converts CSS text-align values to KFX symbols.
 // CSS: left, right, center, justify, start, end
 // KFX: $59 (left), $680 (start), $61 (right), $681 (end), $320 (center), $321 (justify)
-func ConvertTextAlign(css css.CSSValue) (KFXSymbol, bool) {
+func ConvertTextAlign(css css.Value) (KFXSymbol, bool) {
 	switch strings.ToLower(css.Keyword) {
 	case "left":
 		return SymLeft, true // $59
@@ -80,7 +80,7 @@ func ConvertTextAlign(css css.CSSValue) (KFXSymbol, bool) {
 // ConvertWritingMode maps writing-mode values to KFX symbols.
 // CSS: horizontal-tb, vertical-rl, vertical-lr
 // KFX: $557 (horizontal_tb), $559 (vertical_rl), $558 (vertical_lr)
-func ConvertWritingMode(css css.CSSValue) (KFXSymbol, bool) {
+func ConvertWritingMode(css css.Value) (KFXSymbol, bool) {
 	val := strings.ToLower(firstNonEmpty(css.Keyword, css.Raw))
 	switch val {
 	case "horizontal-tb", "horizontal_tb":
@@ -97,7 +97,7 @@ func ConvertWritingMode(css css.CSSValue) (KFXSymbol, bool) {
 }
 
 // ConvertTextCombine maps text-combine-upright to KFX symbols.
-func ConvertTextCombine(css css.CSSValue) (KFXSymbol, bool) {
+func ConvertTextCombine(css css.Value) (KFXSymbol, bool) {
 	val := strings.ToLower(firstNonEmpty(css.Keyword, css.Raw))
 	if val == "" {
 		return 0, false
@@ -109,7 +109,7 @@ func ConvertTextCombine(css css.CSSValue) (KFXSymbol, bool) {
 }
 
 // ConvertTextOrientation converts text-orientation to KFX symbols.
-func ConvertTextOrientation(css css.CSSValue) (KFXSymbol, bool) {
+func ConvertTextOrientation(css css.Value) (KFXSymbol, bool) {
 	val := strings.ToLower(firstNonEmpty(css.Keyword, css.Raw))
 	switch val {
 	case "mixed":
@@ -126,7 +126,7 @@ func ConvertTextOrientation(css css.CSSValue) (KFXSymbol, bool) {
 }
 
 // ConvertTextEmphasisStyle maps text-emphasis-style to KFX symbols.
-func ConvertTextEmphasisStyle(css css.CSSValue) (KFXSymbol, bool) {
+func ConvertTextEmphasisStyle(css css.Value) (KFXSymbol, bool) {
 	val := strings.ToLower(firstNonEmpty(css.Keyword, css.Raw))
 	if val == "" {
 		return 0, false
@@ -184,7 +184,7 @@ func ConvertTextEmphasisStyle(css css.CSSValue) (KFXSymbol, bool) {
 }
 
 // ConvertTextEmphasisPosition splits position into horizontal/vertical symbols.
-func ConvertTextEmphasisPosition(css css.CSSValue) (KFXSymbol, KFXSymbol, bool) {
+func ConvertTextEmphasisPosition(css css.Value) (KFXSymbol, KFXSymbol, bool) {
 	val := strings.ToLower(firstNonEmpty(css.Keyword, css.Raw))
 	if val == "" {
 		return 0, 0, false
@@ -243,7 +243,7 @@ type TextDecorationResult struct {
 // Returns which decorations are set.
 // CSS: underline, line-through, none
 // KFX: $23 (underline), $27 (strikethrough)
-func ConvertTextDecoration(css css.CSSValue) TextDecorationResult {
+func ConvertTextDecoration(css css.Value) TextDecorationResult {
 	result := TextDecorationResult{}
 	raw := strings.ToLower(css.Raw)
 
@@ -272,7 +272,7 @@ type VerticalAlignResult struct {
 // CSS: super, sub -> KFX: baseline_style ($44)
 // CSS: baseline, length/percent values -> KFX: baseline_shift ($31)
 // KP3 uses baseline_style for super/sub which is more compatible.
-func ConvertVerticalAlign(css css.CSSValue) (VerticalAlignResult, bool) {
+func ConvertVerticalAlign(css css.Value) (VerticalAlignResult, bool) {
 	result := VerticalAlignResult{}
 
 	switch strings.ToLower(css.Keyword) {
@@ -328,7 +328,7 @@ func ConvertBorderStyle(style string) (KFXSymbol, bool) {
 // ConvertFloat converts CSS float values to KFX symbols.
 // CSS: left, right, none
 // KFX: $59 (left), $61 (right), $349 (none)
-func ConvertFloat(css css.CSSValue) (KFXSymbol, bool) {
+func ConvertFloat(css css.Value) (KFXSymbol, bool) {
 	switch strings.ToLower(css.Keyword) {
 	case "left":
 		return SymLeft, true // $59
@@ -346,7 +346,7 @@ func ConvertFloat(css css.CSSValue) (KFXSymbol, bool) {
 // ConvertClear converts CSS clear values to KFX symbols for yj.float_clear.
 // CSS: left, right, both, none
 // KFX: $59 (left), $61 (right), $421 (both), $349 (none)
-func ConvertClear(css css.CSSValue) (KFXSymbol, bool) {
+func ConvertClear(css css.Value) (KFXSymbol, bool) {
 	switch strings.ToLower(css.Keyword) {
 	case "left":
 		return SymLeft, true
@@ -365,7 +365,7 @@ func ConvertClear(css css.CSSValue) (KFXSymbol, bool) {
 // KFX: $349 (none), $383 (auto), $384 (manual)
 // Note: KFX also defines "unknown" ($348) and "enabled" ($441) values,
 // but these are not standard CSS values and are not mapped here.
-func ConvertHyphens(css css.CSSValue) (KFXSymbol, bool) {
+func ConvertHyphens(css css.Value) (KFXSymbol, bool) {
 	switch strings.ToLower(css.Keyword) {
 	case "none":
 		return SymNone, true // $349
@@ -380,7 +380,7 @@ func ConvertHyphens(css css.CSSValue) (KFXSymbol, bool) {
 // ConvertPageBreak converts CSS page-break-* values.
 // CSS: always, avoid, auto
 // KFX: $352 (always), $353 (avoid)
-func ConvertPageBreak(css css.CSSValue) (KFXSymbol, bool) {
+func ConvertPageBreak(css css.Value) (KFXSymbol, bool) {
 	switch strings.ToLower(css.Keyword) {
 	case "always":
 		return SymAlways, true // $352
@@ -395,7 +395,7 @@ func ConvertPageBreak(css css.CSSValue) (KFXSymbol, bool) {
 // convertYjBreak converts yj-break-before/yj-break-after values.
 // Values come from stylemap: always, avoid, auto
 // KFX: $352 (always), $353 (avoid), $383 (auto)
-func convertYjBreak(css css.CSSValue) (KFXSymbol, bool) {
+func convertYjBreak(css css.Value) (KFXSymbol, bool) {
 	val := strings.ToLower(firstNonEmpty(css.Keyword, css.Raw))
 	switch val {
 	case "always":
@@ -412,7 +412,7 @@ func convertYjBreak(css css.CSSValue) (KFXSymbol, bool) {
 // Used by vertical-align mapping in stylemap for super/sub positioning.
 // Values: center, top, bottom, superscript, subscript
 // KFX: $320 (center), $58 (top), $60 (bottom), $370 (superscript), $371 (subscript)
-func ConvertBaselineStyle(css css.CSSValue) (KFXSymbol, bool) {
+func ConvertBaselineStyle(css css.Value) (KFXSymbol, bool) {
 	val := strings.ToLower(firstNonEmpty(css.Keyword, css.Raw))
 	switch val {
 	case "center":
@@ -435,7 +435,7 @@ func ConvertBaselineStyle(css css.CSSValue) (KFXSymbol, bool) {
 // ParseColor parses a CSS color value to RGB integers.
 // Supports: #RGB, #RRGGBB, rgb(r,g,b), color keywords
 // Returns r, g, b values (0-255) and ok.
-func ParseColor(css css.CSSValue) (r, g, b int, ok bool) {
+func ParseColor(css css.Value) (r, g, b int, ok bool) {
 	raw := strings.TrimSpace(css.Raw)
 
 	// Handle hex colors

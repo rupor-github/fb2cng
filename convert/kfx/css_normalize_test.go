@@ -7,7 +7,7 @@ import (
 
 func TestNormalizeCSSPropertiesDropsZeroValues(t *testing.T) {
 	// Test properties that should be dropped when zero (per Amazon's YJHtmlMapper)
-	props := map[string]css.CSSValue{
+	props := map[string]css.Value{
 		"margin-left":  {Raw: "0px", Value: 0, Unit: "px"},
 		"padding-top":  {Raw: "0", Value: 0},
 		"font-size":    {Raw: "0em", Value: 0, Unit: "em"},
@@ -35,7 +35,7 @@ func TestNormalizeCSSPropertiesDropsZeroValues(t *testing.T) {
 }
 
 func TestNormalizeCSSPropertiesKeepsNonZeroValues(t *testing.T) {
-	props := map[string]css.CSSValue{
+	props := map[string]css.Value{
 		"margin-left":  {Raw: "10%", Value: 10, Unit: "%"},
 		"padding-top":  {Raw: "0.5em", Value: 0.5, Unit: "em"},
 		"margin-right": {Raw: "1rem", Value: 1, Unit: "rem"},
@@ -60,7 +60,7 @@ func TestNormalizeCSSPropertiesAllZeroValueProps(t *testing.T) {
 	}
 
 	for _, prop := range zeroProps {
-		props := map[string]css.CSSValue{
+		props := map[string]css.Value{
 			prop: {Raw: "0", Value: 0},
 		}
 		norm := normalizeCSSProperties(props, "", nil, "test")
@@ -216,8 +216,8 @@ func TestNormalizeTextDecorationNone(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			val := css.CSSValue{Keyword: tt.keyword, Raw: tt.raw}
-			props := map[string]css.CSSValue{
+			val := css.Value{Keyword: tt.keyword, Raw: tt.raw}
+			props := map[string]css.Value{
 				"text-decoration": val,
 			}
 
@@ -233,7 +233,7 @@ func TestNormalizeTextDecorationNone(t *testing.T) {
 
 func TestNormalizeTextDecorationNoneWithOtherProps(t *testing.T) {
 	// Verify that text-decoration stripping doesn't affect other properties
-	props := map[string]css.CSSValue{
+	props := map[string]css.Value{
 		"text-decoration": {Keyword: "none"},
 		"font-weight":     {Keyword: "bold"},
 		"margin-left":     {Raw: "1em", Value: 1, Unit: "em"},

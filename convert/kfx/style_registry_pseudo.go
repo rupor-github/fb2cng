@@ -137,7 +137,7 @@ func (sr *StyleRegistry) HasPseudoContent() bool {
 // parseCSSContent parses a CSS content property value.
 // It handles quoted strings like 'content: "["' or "content: '['"
 // Returns the unquoted text content, or empty string if not a string value.
-func parseCSSContent(value css.CSSValue) string {
+func parseCSSContent(value css.Value) string {
 	raw := strings.TrimSpace(value.Raw)
 
 	// Handle none/normal keywords

@@ -51,11 +51,11 @@ func selectorDescendantName(s css.Selector) string {
 // @media blocks that match the KFX context (kf8=true, et=true).
 // Rules from non-matching @media blocks are excluded.
 // The result preserves source order.
-func flattenStylesheetForKFX(sheet *css.Stylesheet) []css.CSSRule {
+func flattenStylesheetForKFX(sheet *css.Stylesheet) []css.Rule {
 	if sheet == nil {
 		return nil
 	}
-	var rules []css.CSSRule
+	var rules []css.Rule
 	for _, item := range sheet.Items {
 		switch {
 		case item.Rule != nil:

@@ -89,14 +89,14 @@ func propertyToCSSName(prop string) (string, bool) {
 	return strings.ReplaceAll(prop, "_", "-"), true
 }
 
-func parseStyleMapCSSValue(val, unit string) css.CSSValue {
+func parseStyleMapCSSValue(val, unit string) css.Value {
 	val = strings.TrimSpace(val)
 	if val == "" {
-		return css.CSSValue{}
+		return css.Value{}
 	}
 
 	if n, err := strconv.ParseFloat(val, 64); err == nil {
-		return css.CSSValue{Value: n, Unit: unit, Raw: val}
+		return css.Value{Value: n, Unit: unit, Raw: val}
 	}
 
 	// Try to split number+unit (e.g., 1.5em)
@@ -115,9 +115,9 @@ func parseStyleMapCSSValue(val, unit string) css.CSSValue {
 			if unitPart == "" {
 				unitPart = unit
 			}
-			return css.CSSValue{Value: n, Unit: unitPart, Raw: val}
+			return css.Value{Value: n, Unit: unitPart, Raw: val}
 		}
 	}
 
-	return css.CSSValue{Raw: val, Keyword: val}
+	return css.Value{Raw: val, Keyword: val}
 }

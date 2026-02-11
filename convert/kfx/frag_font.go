@@ -228,7 +228,7 @@ func extractURLFromSrc(src string) string {
 
 // extractFontFamilyName extracts the font family name from a CSS value.
 // Handles quoted and unquoted names, returns first font in stack.
-func extractFontFamilyName(val css.CSSValue) string {
+func extractFontFamilyName(val css.Value) string {
 	if val.Keyword != "" {
 		// Remove quotes and get first family from comma-separated list
 		family := val.Keyword
@@ -244,8 +244,8 @@ func extractFontFamilyName(val css.CSSValue) string {
 // normalizeWeightToSymbol converts CSS font-weight string to KFX symbol.
 // This handles @font-face descriptor values like "bold", "700", etc.
 func normalizeWeightToSymbol(weight string) KFXSymbol {
-	// Use ConvertFontWeight with a css.CSSValue
-	val := css.CSSValue{Keyword: strings.TrimSpace(weight)}
+	// Use ConvertFontWeight with a css.Value
+	val := css.Value{Keyword: strings.TrimSpace(weight)}
 
 	// Try as keyword first
 	if sym, ok := ConvertFontWeight(val); ok {
@@ -255,7 +255,7 @@ func normalizeWeightToSymbol(weight string) KFXSymbol {
 	// Try parsing as number
 	weight = strings.TrimSpace(weight)
 	if w, err := strconv.Atoi(weight); err == nil {
-		val = css.CSSValue{Value: float64(w)}
+		val = css.Value{Value: float64(w)}
 		if sym, ok := ConvertFontWeight(val); ok {
 			return sym
 		}
@@ -267,7 +267,7 @@ func normalizeWeightToSymbol(weight string) KFXSymbol {
 // normalizeStyleToSymbol converts CSS font-style string to KFX symbol.
 // This handles @font-face descriptor values like "italic", "oblique", etc.
 func normalizeStyleToSymbol(style string) KFXSymbol {
-	val := css.CSSValue{Keyword: strings.TrimSpace(style)}
+	val := css.Value{Keyword: strings.TrimSpace(style)}
 	if sym, ok := ConvertFontStyle(val); ok {
 		return sym
 	}

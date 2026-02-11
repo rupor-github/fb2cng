@@ -13,8 +13,8 @@ import (
 // allRules collects all top-level rules from a stylesheet's Items.
 // It does NOT flatten @media blocks — use this only for tests that
 // care about plain top-level rules.
-func allRules(sheet *css.Stylesheet) []css.CSSRule {
-	var rules []css.CSSRule
+func allRules(sheet *css.Stylesheet) []css.Rule {
+	var rules []css.Rule
 	for _, item := range sheet.Items {
 		if item.Rule != nil {
 			rules = append(rules, *item.Rule)
@@ -824,43 +824,43 @@ func TestParser_SourceOrderPreserved(t *testing.T) {
 	}
 }
 
-func TestCSSValue_IsNumeric(t *testing.T) {
+func TestValue_IsNumeric(t *testing.T) {
 	tests := []struct {
-		val  css.CSSValue
+		val  css.Value
 		want bool
 	}{
-		{css.CSSValue{Raw: "1em", Value: 1, Unit: "em"}, true},
-		{css.CSSValue{Raw: "0", Value: 0}, true},
-		{css.CSSValue{Raw: "100%", Value: 100, Unit: "%"}, true},
-		{css.CSSValue{Raw: "-0.5em", Value: -0.5, Unit: "em"}, true},
-		{css.CSSValue{Raw: "bold", Keyword: "bold"}, false},
-		{css.CSSValue{Raw: "italic", Keyword: "italic"}, false},
+		{css.Value{Raw: "1em", Value: 1, Unit: "em"}, true},
+		{css.Value{Raw: "0", Value: 0}, true},
+		{css.Value{Raw: "100%", Value: 100, Unit: "%"}, true},
+		{css.Value{Raw: "-0.5em", Value: -0.5, Unit: "em"}, true},
+		{css.Value{Raw: "bold", Keyword: "bold"}, false},
+		{css.Value{Raw: "italic", Keyword: "italic"}, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.val.Raw, func(t *testing.T) {
 			if got := tt.val.IsNumeric(); got != tt.want {
-				t.Errorf("CSSValue{Raw: %q}.IsNumeric() = %v, want %v", tt.val.Raw, got, tt.want)
+				t.Errorf("Value{Raw: %q}.IsNumeric() = %v, want %v", tt.val.Raw, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestCSSValue_IsKeyword(t *testing.T) {
+func TestValue_IsKeyword(t *testing.T) {
 	tests := []struct {
-		val  css.CSSValue
+		val  css.Value
 		want bool
 	}{
-		{css.CSSValue{Keyword: "bold"}, true},
-		{css.CSSValue{Keyword: "italic"}, true},
-		{css.CSSValue{Value: 1, Unit: "em"}, false},
-		{css.CSSValue{Raw: "0"}, false},
+		{css.Value{Keyword: "bold"}, true},
+		{css.Value{Keyword: "italic"}, true},
+		{css.Value{Value: 1, Unit: "em"}, false},
+		{css.Value{Raw: "0"}, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.val.Keyword+tt.val.Raw, func(t *testing.T) {
 			if got := tt.val.IsKeyword(); got != tt.want {
-				t.Errorf("CSSValue.IsKeyword() = %v, want %v", got, tt.want)
+				t.Errorf("Value.IsKeyword() = %v, want %v", got, tt.want)
 			}
 		})
 	}

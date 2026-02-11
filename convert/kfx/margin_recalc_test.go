@@ -12,14 +12,14 @@ import (
 // are properly parsed with value and unit fields populated.
 //
 // The issue was that CSSStyles entries like "0.67em" were being stored as
-// CSSValue{Raw: "0.67em"} without parsing Value and Unit, causing the CSS
+// css.Value{Raw: "0.67em"} without parsing Value and Unit, causing the CSS
 // converter to skip them (it checks cssVal.IsNumeric() which requires Value != 0).
 func TestCSSStylesValueParsing(t *testing.T) {
 	mapper := NewStyleMapper(nil, nil)
 
 	// Simulate h1 with font-size: 140%
 	sel := css.Selector{Element: "h1", Raw: "h1"}
-	props := map[string]css.CSSValue{
+	props := map[string]css.Value{
 		"font-size": {Value: 140, Unit: "%", Raw: "140%"},
 	}
 
@@ -53,7 +53,7 @@ func TestMarginConversionWithStylemap(t *testing.T) {
 	// CSS rule: h1 { font-size: 140%; }
 	// Stylemap adds: margin-top: 0.67em, margin-bottom: 0.67em
 	sel := css.Selector{Element: "h1", Raw: "h1"}
-	props := map[string]css.CSSValue{
+	props := map[string]css.Value{
 		"font-size": {Value: 140, Unit: "%", Raw: "140%"},
 	}
 
@@ -123,7 +123,7 @@ func TestShorthandPropertyPreventsStylemapOverride(t *testing.T) {
 	// Stylemap for blockquote has CSSStyles: {margin-left: 40px, margin-right: 40px}
 	// The stylemap defaults should NOT override because CSS has "margin" shorthand
 	sel := css.Selector{Element: "blockquote", Class: "cite", Raw: "blockquote.cite"}
-	props := map[string]css.CSSValue{
+	props := map[string]css.Value{
 		"margin": {Value: 0, Raw: "1em 2em"},
 	}
 

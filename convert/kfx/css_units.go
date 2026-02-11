@@ -15,7 +15,7 @@ import (
 //
 // This function preserves CSS units as-is. Property-specific conversion
 // happens in the style builder or during fragment generation.
-func CSSValueToKFX(val css.CSSValue) (value float64, unit KFXSymbol, err error) {
+func CSSValueToKFX(val css.Value) (value float64, unit KFXSymbol, err error) {
 	switch val.Unit {
 	case "em":
 		return val.Value, SymUnitEm, nil // $308
@@ -50,7 +50,7 @@ func CSSValueToKFX(val css.CSSValue) (value float64, unit KFXSymbol, err error) 
 }
 
 // MakeDimensionValue creates a KFX dimension struct from CSS value.
-func MakeDimensionValue(val css.CSSValue) (StructValue, error) {
+func MakeDimensionValue(val css.Value) (StructValue, error) {
 	value, unit, err := CSSValueToKFX(val)
 	if err != nil {
 		return nil, err
@@ -72,7 +72,7 @@ func MakeDimensionValue(val css.CSSValue) (StructValue, error) {
 //
 // Single-value input falls through to the standard MakeDimensionValue path.
 // Returns (value, true) on success, (nil, false) on failure.
-func MakeBorderRadiusValue(cssVal css.CSSValue, rawVal string, unit string) (any, bool) {
+func MakeBorderRadiusValue(cssVal css.Value, rawVal string, unit string) (any, bool) {
 	// Determine the raw string to inspect for space-separated pairs.
 	raw := cssVal.Raw
 	if raw == "" {

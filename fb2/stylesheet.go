@@ -354,7 +354,7 @@ func parseSectionPageBreaks(cssText string) map[int]bool {
 
 	// checkRule examines a single rule for .section-title-hN selectors
 	// and page-break-before: always property.
-	checkRule := func(rule *css.CSSRule) {
+	checkRule := func(rule *css.Rule) {
 		class := rule.Selector.Class
 		if !strings.HasPrefix(class, "section-title-h") {
 			return
