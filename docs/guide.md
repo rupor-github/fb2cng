@@ -181,6 +181,18 @@ fbc -c myconfig.yaml dumpconfig active.yaml
 
 Shows the actual configuration being used (defaults merged with your custom settings).
 
+### Templates
+
+Many configuration fields (those with `_template` in their name) use the
+[Go template language](https://pkg.go.dev/text/template#pkg-overview) to give you full control over
+file naming, metadata formatting, footnote labels, and more. If you are not familiar with Go
+templates, the linked documentation provides a complete reference for the syntax including actions,
+pipelines, variables, and built-in functions.
+
+In addition to the standard Go template functions, all templates have access to the
+[slim-sprig](https://go-task.github.io/slim-sprig) function library which provides many useful
+string, math, list, and other helper functions (such as `first`, `cat`, `contains`, etc.).
+
 ### File Naming Templates
 
 Control output filenames using Go templates in configuration:
