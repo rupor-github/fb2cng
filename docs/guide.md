@@ -322,6 +322,7 @@ The built-in stylesheet ([`convert/default.css`](../convert/default.css)) provid
 **Media Queries:**
 - `@media amzn-mobi` - Kindle MOBI-specific styles
 - `@media amzn-kf8` - Kindle KF8-specific styles
+- `@media amzn-et` - Kindle KFX-specific styles
 
 #### Section Splitting via CSS
 
@@ -463,6 +464,10 @@ This means you don't need to repeat `font-family` on every element — setting i
 **Important:** The `body` rule is only recognized as a body font declaration when:
 - The selector is exactly `body` (no class, no descendant)
 - The font family name has matching `@font-face` resources with actual font data
+
+#### Negative Margins (KFX special handling)
+
+During KFX generation, all negative margin values are silently clamped to zero. The Kindle KFX rendering engine does not handle negative margins reliably — they can cause layout corruption, especially in the presence of drop caps and more complex CSS rules. To avoid these rendering issues, fb2cng strips negative margins when producing KFX output.
 
 #### Resource Path Resolution
 
@@ -730,7 +735,7 @@ By default (`adobe_de: false`), page map data is written as a standard `<pageLis
 
 **`adobe_de` option:**
 
-Some e-reader devices are based on the Adobe RMSDK (Reading Mobile SDK), also sometimes referred to as Adobe RDK. These include **Kobo** e-readers, older Sony Readers, and various other devices that use the Adobe rendering engine under the hood. The Adobe RMSDK does not support the standard NCX `<pageList>` for page navigation. Instead, it uses its own proprietary mechanism: a separate `page-map.xml` file referenced from the `<spine>` element via a non-standard `page-map` attribute.
+Some e-reader devices are based on the Adobe RMSDK (Reading Mobile SDK). These include **Kobo** e-readers, older Sony Readers, and various other devices that use the Adobe rendering engine under the hood. The Adobe RMSDK does not support the standard NCX `<pageList>` for page navigation. Instead, it uses its own proprietary mechanism: a separate `page-map.xml` file referenced from the `<spine>` element via a non-standard `page-map` attribute.
 
 Setting `adobe_de: true` switches fb2cng to this proprietary mode. When enabled:
 
