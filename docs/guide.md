@@ -715,12 +715,32 @@ document:
     # Generate page map for navigation
     enable: true
     
-    # Page size in characters
+    # Page size in characters (Unicode code points), min 500
     size: 2300
     
-    # Adobe Digital Editions support (EPUB2/KEPUB only)
+    # Use Adobe RMSDK proprietary page-map.xml (EPUB2/KEPUB only)
     adobe_de: false
 ```
+
+When page map is enabled, fb2cng inserts page markers into the document content at approximately every `size` Unicode code points and generates navigation metadata so that readers can display page numbers.
+
+**How page numbers are generated:**
+
+By default (`adobe_de: false`), page map data is written as a standard `<pageList>` element inside the NCX file. This is the EPUB-compliant approach and works with most modern reading systems.
+
+**`adobe_de` option:**
+
+Some e-reader devices are based on the Adobe RMSDK (Reading Mobile SDK), also sometimes referred to as Adobe RDK. These include **Kobo** e-readers, older Sony Readers, and various other devices that use the Adobe rendering engine under the hood. The Adobe RMSDK does not support the standard NCX `<pageList>` for page navigation. Instead, it uses its own proprietary mechanism: a separate `page-map.xml` file referenced from the `<spine>` element via a non-standard `page-map` attribute.
+
+Setting `adobe_de: true` switches fb2cng to this proprietary mode. When enabled:
+
+1. A `page-map.xml` file is generated inside the EPUB package containing all page markers
+2. The OPF manifest includes a `page-map` item with media type `application/oebps-page-map+xml`
+3. The `<spine>` element gets a `page-map` attribute pointing to this item
+
+This breaks strict EPUB compliance — EpubCheck will report `ERROR(RSC-005)` because the `page-map` attribute on `<spine>` is not part of the EPUB specification. However, it is the only way to get page number navigation working on Adobe RMSDK-based devices.
+
+**Note:** This setting is only relevant for EPUB2 and KEPUB output formats. For EPUB3 and KFX, page map data is handled through their own native mechanisms regardless of this setting.
 
 ### Hyphenation
 
