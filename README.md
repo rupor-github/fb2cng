@@ -4,6 +4,7 @@
 </h1>
 
 ### A complete rewrite of [fb2converter](https://github.com/rupor-github/fb2converter)
+[![GitHub Release](https://img.shields.io/github/release/rupor-github/fb2cng.svg)](https://github.com/rupor-github/fb2cng/releases)
 
 * Produces EPUB2/3 and KEPUB files which pass latest [epubcheck](https://www.w3.org/publishing/epubcheck/) with no error/warnings
 * Generates KFX/AZW8 files directly without any Amazon's software (much faster than using Kindle Previwer 3 with Calibre plugins)
