@@ -1,4 +1,4 @@
-﻿﻿<h1>
+﻿<h1>
     <img src="docs/books.svg" style="vertical-align:middle; width:8%" align="absmiddle"/>
     <span style="vertical-align:middle;">&nbsp;&nbsp;FB2 converter to EPUB2/3, KEPUB, AZW8/KFX</span>
 </h1>
@@ -8,9 +8,7 @@
 * Produces EPUB2/3 and KEPUB files which pass latest [epubcheck](https://www.w3.org/publishing/epubcheck/) with no error/warnings
 * Generates KFX/AZW8 files directly without any Amazon's software (much faster than using Kindle Previwer 3 with Calibre plugins)
 
-**BETA version - not a released code yet.**
-
-- Changes will happen!
+> **Note:** Direct KFX generation is a relatively new feature, so various hiccups may still occur. If you encounter any issues, please [create an issue](https://github.com/rupor-github/fb2cng/issues) on GitHub for investigation.
 
 ### Documentation
 
