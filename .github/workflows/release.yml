@@ -47,7 +47,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          prerelease: true
+          # prerelease: true
           generate_release_notes: true
           files: |-
             release/fbc-*.zip
