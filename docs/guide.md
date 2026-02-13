@@ -626,7 +626,9 @@ label_template: |
 ```
 Result: `[Notes-1]`, `[Notes-2]`, ... (or `[1]`, `[2]`, ... if no title)
 
-### Table of Contents
+### Table of Contents Page
+
+The TOC (table of contents) itself is always generated automatically from the book's section structure. The settings below control an optional **TOC page** — a visible page rendered inside the book content that lists chapters as clickable links. This is separate from the TOC metadata used by the reading system's built-in navigation.
 
 ```yaml
 document:
@@ -645,6 +647,8 @@ document:
 ```
 
 ### Annotation Page
+
+When enabled, fb2cng generates an annotation page from the book's `<annotation>` metadata in the FB2 file. This is rendered as a separate chapter in the output, typically containing the book's description or summary as provided by the author or publisher.
 
 ```yaml
 document:
@@ -749,13 +753,17 @@ This breaks strict EPUB compliance — EpubCheck will report `ERROR(RSC-005)` be
 
 ### Hyphenation
 
+When enabled, fb2cng inserts **soft hyphens** (Unicode character `U+00AD`) into words throughout the book text. A soft hyphen is an invisible character that marks a position where a word *may* be broken across lines with a hyphen. If the reading system does not need to break the word at that point, the soft hyphen remains invisible and has no effect. This allows reading systems that lack built-in hyphenation to still display properly hyphenated text.
+
+fb2cng uses the Liang/Knuth hyphenation algorithm (the same algorithm used by TeX) with a set of built-in language-specific pattern dictionaries sourced from the [hyph-utf8](http://ctan.math.utah.edu/ctan/tex-archive/language/hyph-utf8/tex/patterns/txt) project. The appropriate dictionary is selected automatically based on the book's language metadata.
+
+**In most cases this feature should not be used.** Modern e-readers (Kindle, Kobo, Apple Books, etc.) include their own built-in hyphenation engines. Enabling soft hyphen insertion on these devices can cause conflicts — the reader's hyphenator may produce double hyphens, incorrect line breaks, or other visual artifacts. This option exists primarily for older devices that have no hyphenation support of their own.
+
 ```yaml
 document:
   # Insert soft hyphens for devices without hyphenation
   insert_soft_hyphen: false
 ```
-
-**Note:** May conflict with built-in reader hyphenation.
 
 ### Logging Configuration
 
