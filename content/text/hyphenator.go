@@ -207,26 +207,26 @@ func (h *hyph) hyphenateWord(s, hyphen string) string {
 		vIndex++
 	}
 
-	var outstr string
-
 	// trim the values for the beginning and ending dots
 	markers := v[1 : len(v)-1]
+
+	var out strings.Builder
+	out.Grow(len(s) + len(s)/4) // room for hyphens
+
 	mIndex := 0
-	u := make([]byte, 4)
 	for _, ch := range s {
-		l := utf8.EncodeRune(u, ch)
-		outstr += string(u[0:l])
+		out.WriteRune(ch)
 		// don't hyphenate between (or after) first two and the last two characters of a string
 		if 1 <= mIndex && mIndex < len(markers)-2 {
 			// hyphens are inserted on odd values, skipped on even ones
 			if markers[mIndex]%2 != 0 {
-				outstr += hyphen
+				out.WriteString(hyphen)
 			}
 		}
 		mIndex++
 	}
 
-	return outstr
+	return out.String()
 }
 
 // hyphenate string.
@@ -237,7 +237,8 @@ func (h *hyph) hyphString(s, hyphen string) string {
 	sc.Mode = scanner.ScanIdents
 	sc.Whitespace = 0
 
-	var outstr string
+	var out strings.Builder
+	out.Grow(len(s) + len(s)/4) // room for hyphens
 
 	tok := sc.Scan()
 	for tok != scanner.EOF {
@@ -252,19 +253,17 @@ func (h *hyph) hyphString(s, hyphen string) string {
 				if hyphen != `-` {
 					exc = strings.ReplaceAll(exc, `-`, hyphen)
 				}
-				outstr += exc
+				out.WriteString(exc)
 			} else {
 				// not an exception, hyphenate normally
-				outstr += h.hyphenateWord(sc.TokenText(), hyphen)
+				out.WriteString(h.hyphenateWord(sc.TokenText(), hyphen))
 			}
 		default:
 			// A Unicode rune to append to the output
-			p := make([]byte, utf8.UTFMax)
-			l := utf8.EncodeRune(p, tok)
-			outstr += string(p[0:l])
+			out.WriteRune(tok)
 		}
 
 		tok = sc.Scan()
 	}
-	return outstr
+	return out.String()
 }

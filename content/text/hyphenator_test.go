@@ -323,6 +323,46 @@ func TestHyphenatorLoadDictionaryError(t *testing.T) {
 	}
 }
 
+func BenchmarkHyphString(b *testing.B) {
+	h := &hyph{}
+	dataPatterns, err := tryLoadDictionary("en-us", "pat")
+	if err != nil {
+		b.Fatal(err)
+	}
+	dataExceptions, _ := tryLoadDictionary("en-us", "hyp")
+	if dataExceptions == nil {
+		dataExceptions = []byte{}
+	}
+	if err := h.loadDictionary("en-us", strings.NewReader(string(dataPatterns)), strings.NewReader(string(dataExceptions))); err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	for range b.N {
+		h.hyphString(testStr, `-`)
+	}
+}
+
+func BenchmarkHyphStringRU(b *testing.B) {
+	h := &hyph{}
+	dataPatterns, err := tryLoadDictionary("ru", "pat")
+	if err != nil {
+		b.Fatal(err)
+	}
+	dataExceptions, _ := tryLoadDictionary("ru", "hyp")
+	if dataExceptions == nil {
+		dataExceptions = []byte{}
+	}
+	if err := h.loadDictionary("ru", strings.NewReader(string(dataPatterns)), strings.NewReader(string(dataExceptions))); err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	for range b.N {
+		h.hyphString(testStrRU, `-`)
+	}
+}
+
 func TestHyphenatorReloadDictionary(t *testing.T) {
 	h := &hyph{}
 
