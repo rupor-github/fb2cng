@@ -484,16 +484,17 @@ When referencing resources (fonts, images) in your custom stylesheet:
 src: url("#font-id");  /* Resolves to FB2 <binary id="font-id"> */
 ```
 
-**Relative Paths** - Resolve from current working directory:
+**Relative Paths** - Resolve from the stylesheet's directory:
 ```css
 src: url("fonts/MyFont.ttf");  /* Loads from ./fonts/MyFont.ttf */
-src: url("../shared/fonts/x.ttf");  /* Basename only: fonts/x.ttf in EPUB */
 ```
 
-**Absolute Paths** - Basename extracted:
+**Security Constraints** — paths that escape the stylesheet's directory are rejected:
 ```css
-src: url("/usr/share/fonts/MyFont.ttf");  /* Becomes fonts/MyFont.ttf in EPUB */
+src: url("../shared/fonts/x.ttf");   /* REJECTED — path traversal */
+src: url("/usr/share/fonts/x.ttf");  /* REJECTED — absolute path */
 ```
+A warning is logged and the `url()` reference is dropped from the output.
 
 **Data URLs** - Kept as-is (already embedded):
 ```css

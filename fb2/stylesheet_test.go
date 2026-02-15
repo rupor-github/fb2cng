@@ -562,6 +562,77 @@ func TestNormalizeStylesheets(t *testing.T) {
 			t.Errorf("resource data mismatch: got %q, want %q", string(resource.Data), string(fontData))
 		}
 	})
+	t.Run("rejects path traversal via url()", func(t *testing.T) {
+		// Create a "sensitive" file outside the source directory
+		tmpDir := t.TempDir()
+		sensitiveDir := filepath.Join(tmpDir, "sensitive")
+		if err := os.MkdirAll(sensitiveDir, 0755); err != nil {
+			t.Fatalf("failed to create sensitive directory: %v", err)
+		}
+		sensitiveFile := filepath.Join(sensitiveDir, "secret.txt")
+		if err := os.WriteFile(sensitiveFile, []byte("top secret data"), 0644); err != nil {
+			t.Fatalf("failed to create sensitive file: %v", err)
+		}
+
+		// Create book directory (separate from sensitive directory)
+		bookDir := filepath.Join(tmpDir, "books", "subdir")
+		if err := os.MkdirAll(bookDir, 0755); err != nil {
+			t.Fatalf("failed to create book directory: %v", err)
+		}
+		fb2Path := filepath.Join(bookDir, "test.fb2")
+
+		// CSS tries to traverse up and read the sensitive file
+		book := &FictionBook{
+			Stylesheets: []Stylesheet{
+				{
+					Type: "text/css",
+					Data: `@font-face { src: url('../../sensitive/secret.txt'); }`,
+				},
+			},
+		}
+
+		result := book.NormalizeStylesheets(fb2Path, nil, log)
+
+		// The path traversal should be rejected — no resources loaded
+		if len(result.Stylesheets[0].Resources) != 0 {
+			t.Errorf("expected 0 resources (path traversal should be rejected), got %d", len(result.Stylesheets[0].Resources))
+			for _, r := range result.Stylesheets[0].Resources {
+				t.Logf("  loaded: %q (data=%q)", r.OriginalURL, string(r.Data))
+			}
+		}
+	})
+
+	t.Run("rejects absolute path via url()", func(t *testing.T) {
+		// Create a file at a known absolute path
+		tmpDir := t.TempDir()
+		absFile := filepath.Join(tmpDir, "secret.txt")
+		if err := os.WriteFile(absFile, []byte("secret via absolute path"), 0644); err != nil {
+			t.Fatalf("failed to create file: %v", err)
+		}
+
+		bookDir := filepath.Join(tmpDir, "books")
+		if err := os.MkdirAll(bookDir, 0755); err != nil {
+			t.Fatalf("failed to create book directory: %v", err)
+		}
+		fb2Path := filepath.Join(bookDir, "test.fb2")
+
+		// CSS references an absolute path
+		book := &FictionBook{
+			Stylesheets: []Stylesheet{
+				{
+					Type: "text/css",
+					Data: `@font-face { src: url('` + absFile + `'); }`,
+				},
+			},
+		}
+
+		result := book.NormalizeStylesheets(fb2Path, nil, log)
+
+		// Absolute paths should be rejected
+		if len(result.Stylesheets[0].Resources) != 0 {
+			t.Errorf("expected 0 resources (absolute path should be rejected), got %d", len(result.Stylesheets[0].Resources))
+		}
+	})
 }
 
 func TestParseSectionPageBreaks(t *testing.T) {

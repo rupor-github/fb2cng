@@ -11,8 +11,8 @@
 |----------|---------|---------------|
 | Fragment ID | `#font-id` | `fonts/font-id.woff2` or `other/font-id` |
 | Relative path | `fonts/x.woff2` | `fonts/x.woff2` (basename only) |
-| Nested path | `../../shared/fonts/x.ttf` | `fonts/x.ttf` (basename only) |
-| Absolute path | `/usr/share/fonts/x.ttf` | `fonts/x.ttf` (basename only) |
+| Nested path | `../../shared/fonts/x.ttf` | **Rejected — path traversal** |
+| Absolute path | `/usr/share/fonts/x.ttf` | **Rejected — absolute path** |
 | data: URL | `data:font/...` | Kept as-is (already embedded) |
 | HTTP(S) URL | `https://...` | **Warning, skipped** |
 

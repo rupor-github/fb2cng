@@ -2,6 +2,7 @@ package fb2
 
 import (
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"path"
@@ -181,23 +182,21 @@ func (fb *FictionBook) resolveStylesheetResource(ref cssExternalRef, binaryIndex
 		return resource
 	}
 
-	// Case 2: File path (relative or absolute) - load from filesystem
+	// Case 2: File path — load from filesystem using os.DirFS for security.
+	// os.DirFS roots a filesystem at basePath and refuses to serve absolute
+	// paths or paths containing ".." that would escape the root. This
+	// prevents path-traversal attacks (e.g. url('../../etc/passwd')).
 	resourcePath := ref.URL
 
-	// Handle relative paths
-	if !filepath.IsAbs(resourcePath) {
-		resourcePath = filepath.Join(basePath, resourcePath)
-	}
+	// os.DirFS uses forward-slash paths (fs.FS convention), so normalize.
+	resourcePath = filepath.ToSlash(resourcePath)
 
-	// Clean the path (remove ../ etc.)
-	resourcePath = filepath.Clean(resourcePath)
-
-	// Try to load the file
-	data, err := os.ReadFile(resourcePath)
+	baseFS := os.DirFS(basePath)
+	data, err := fs.ReadFile(baseFS, resourcePath)
 	if err != nil {
 		log.Warn("Unable to load stylesheet resource from file",
 			zap.String("url", ref.URL),
-			zap.String("path", resourcePath),
+			zap.String("basePath", basePath),
 			zap.String("context", ref.Context),
 			zap.Error(err))
 		return nil
