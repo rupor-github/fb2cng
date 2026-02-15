@@ -1238,3 +1238,84 @@ func TestStylesheet_RewriteURLs_NoChange(t *testing.T) {
 		t.Errorf("expected no change for CSS without URLs, before:\n%s\nafter:\n%s", before, after)
 	}
 }
+
+// Tests for CSS double-quote escaping in WriteTo output.
+
+func TestStylesheet_String_ImportEscapesQuotes(t *testing.T) {
+	// Construct a stylesheet with an import URL containing double quotes.
+	importURL := `foo"};body{background:red}/*`
+	sheet := &css.Stylesheet{
+		Items: []css.StylesheetItem{
+			{Import: &importURL},
+		},
+		Imports: []string{importURL},
+	}
+
+	out := sheet.String()
+	// The output must not contain an unescaped double quote inside url("...").
+	// The escaped version should use \" inside the quotes.
+	if strings.Contains(out, `url("foo"`) {
+		t.Errorf("import URL with embedded quote was not escaped:\n%s", out)
+	}
+	if !strings.Contains(out, `\"`) {
+		t.Errorf("expected escaped quote in output:\n%s", out)
+	}
+}
+
+func TestStylesheet_String_FontFaceEscapesQuotes(t *testing.T) {
+	// Construct a stylesheet with a font-family containing double quotes.
+	sheet := &css.Stylesheet{
+		Items: []css.StylesheetItem{
+			{FontFace: &css.FontFace{
+				Family: `My"Font`,
+				Src:    `url("myfont.woff2")`,
+			}},
+		},
+	}
+
+	out := sheet.String()
+	// The output must escape the embedded double quote in font-family.
+	if strings.Contains(out, `"My"Font"`) {
+		t.Errorf("font-family with embedded quote was not escaped:\n%s", out)
+	}
+	if !strings.Contains(out, `My\"Font`) {
+		t.Errorf("expected escaped quote in font-family output:\n%s", out)
+	}
+}
+
+func TestStylesheet_String_FontFaceEscapesBackslash(t *testing.T) {
+	sheet := &css.Stylesheet{
+		Items: []css.StylesheetItem{
+			{FontFace: &css.FontFace{
+				Family: `My\Font`,
+				Src:    `url("myfont.woff2")`,
+			}},
+		},
+	}
+
+	out := sheet.String()
+	if !strings.Contains(out, `My\\Font`) {
+		t.Errorf("expected escaped backslash in font-family output:\n%s", out)
+	}
+}
+
+func TestStylesheet_RewriteURLs_EscapesQuotesInRewrittenURL(t *testing.T) {
+	log := zap.NewNop()
+	p := css.NewParser(log)
+
+	input := []byte(`p { background: url("original.png"); }`)
+	sheet := p.Parse(input)
+
+	// Rewrite to a URL that contains a double quote.
+	sheet.RewriteURLs(func(url string) string {
+		return `injected"}.evil{color:red}/*`
+	})
+
+	out := sheet.String()
+	if strings.Contains(out, `url("injected"`) {
+		t.Errorf("rewritten URL with embedded quote was not escaped:\n%s", out)
+	}
+	if !strings.Contains(out, `\"`) {
+		t.Errorf("expected escaped quote in rewritten URL output:\n%s", out)
+	}
+}

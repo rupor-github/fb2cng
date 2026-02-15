@@ -9,6 +9,28 @@ import (
 	"unicode"
 )
 
+// cssEscapeDoubleQuoted escapes a string for use inside CSS double quotes.
+// Backslashes and double quotes are escaped per CSS syntax: \" and \\.
+func cssEscapeDoubleQuoted(s string) string {
+	// Fast path: nothing to escape.
+	if !strings.ContainsAny(s, `"\`) {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s) + 4)
+	for _, r := range s {
+		switch r {
+		case '\\':
+			b.WriteString(`\\`)
+		case '"':
+			b.WriteString(`\"`)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 // MediaQuery represents a parsed @media query condition.
 // Supports Amazon-specific media types: amzn-mobi, amzn-kf8, amzn-et.
 type MediaQuery struct {
@@ -234,7 +256,7 @@ func (s *Stylesheet) WriteTo(w io.Writer) (int64, error) {
 
 		switch {
 		case item.Import != nil:
-			n, err = fmt.Fprintf(w, "@import url(\"%s\");\n", *item.Import)
+			n, err = fmt.Fprintf(w, "@import url(\"%s\");\n", cssEscapeDoubleQuoted(*item.Import))
 		case item.FontFace != nil:
 			n, err = writeFontFace(w, item.FontFace)
 		case item.MediaBlock != nil:
@@ -317,7 +339,7 @@ func writeFontFace(w io.Writer, ff *FontFace) (int, error) {
 
 	// Write properties in a stable order
 	if ff.Family != "" {
-		n, err = fmt.Fprintf(w, "  font-family: \"%s\";\n", ff.Family)
+		n, err = fmt.Fprintf(w, "  font-family: \"%s\";\n", cssEscapeDoubleQuoted(ff.Family))
 		total += n
 		if err != nil {
 			return total, err
@@ -471,6 +493,6 @@ func rewriteURLsInValue(value string, fn func(string) string) string {
 		}
 		originalURL = strings.TrimSpace(originalURL)
 		newURL := fn(originalURL)
-		return fmt.Sprintf("url(\"%s\")", newURL)
+		return fmt.Sprintf("url(\"%s\")", cssEscapeDoubleQuoted(newURL))
 	})
 }
