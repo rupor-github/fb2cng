@@ -273,3 +273,48 @@ func TestNew_SeekError(t *testing.T) {
 		t.Errorf("quality mismatch after seek: first=%d, second=%d", quality1, quality2)
 	}
 }
+
+func TestNew_RejectsPartialSOI(t *testing.T) {
+	// Bug: the original check used && instead of ||, so a file with only
+	// one correct SOI byte (e.g. 0xFF 0x00 or 0x00 0xD8) would pass
+	// validation and enter the marker-scanning loop.
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		{"correct_first_byte_only", []byte{0xff, 0x00}},
+		{"correct_second_byte_only", []byte{0x00, 0xd8}},
+		{"both_wrong", []byte{0x00, 0x00}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewFromBytes(tt.data)
+			if err != ErrInvalidJPEG {
+				t.Errorf("expected ErrInvalidJPEG, got %v", err)
+			}
+		})
+	}
+}
+
+func TestReadQuality_ManyMarkersTerminates(t *testing.T) {
+	// Craft a JPEG with many valid non-DQT markers (APP0 segments) but no
+	// DQT table. Without an iteration cap readQuality would spin through
+	// all of them; with the cap it should return an error promptly.
+	var buf bytes.Buffer
+	// SOI
+	buf.Write([]byte{0xff, 0xd8})
+	// Write maxMarkerIterations+100 APP0 markers, each with a minimal
+	// 2-byte payload (length field = 4 means 2 bytes of length + 2 of data).
+	for range maxMarkerIterations + 100 {
+		buf.Write([]byte{0xff, 0xe0}) // APP0 marker
+		buf.Write([]byte{0x00, 0x04}) // length = 4 (includes the 2 length bytes)
+		buf.Write([]byte{0x00, 0x00}) // 2 bytes of padding
+	}
+	// EOI
+	buf.Write([]byte{0xff, 0xd9})
+
+	_, err := NewFromBytes(buf.Bytes())
+	if err == nil {
+		t.Fatal("expected error for JPEG with too many markers, got nil")
+	}
+}

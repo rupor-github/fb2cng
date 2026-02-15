@@ -23,6 +23,13 @@ const (
 	maxTq     = 3
 )
 
+// maxMarkerIterations is the maximum number of JPEG marker segments
+// readQuality will scan before giving up. Legitimate JPEGs have at most a
+// handful of segments before the DQT table. This prevents pathological
+// inputs (many valid non-DQT markers) from spinning indefinitely.
+// Variable (not const) so tests can reference it.
+var maxMarkerIterations = 1000
+
 // for the DQT marker -- start --
 // Sample quantization tables from JPEG spec --- only needed for
 // guesstimate of quality factor.  Note these are in zigzag order.
@@ -85,7 +92,7 @@ func New(rs io.ReadSeeker) (qr Qualitier, err error) {
 	if err != nil {
 		return
 	}
-	if sign[0] != 0xff && sign[1] != 0xd8 {
+	if sign[0] != 0xff || sign[1] != 0xd8 {
 		err = ErrInvalidJPEG
 		return
 	}
@@ -99,7 +106,7 @@ func New(rs io.ReadSeeker) (qr Qualitier, err error) {
 }
 
 func (jr *jpegReader) readQuality() (q int, err error) {
-	for {
+	for range maxMarkerIterations {
 		mark := jr.readMarker()
 		if mark == 0 {
 			err = ErrInvalidJPEG
@@ -211,6 +218,8 @@ func (jr *jpegReader) readQuality() (q int, err error) {
 		}
 
 	}
+	err = ErrInvalidJPEG
+	return
 }
 
 func (jr *jpegReader) readMarker() int {
