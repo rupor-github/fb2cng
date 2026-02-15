@@ -1,8 +1,10 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/rupor-github/gencfg"
@@ -604,4 +606,28 @@ func TestOutputFmt_Ext_Panic(t *testing.T) {
 	}()
 	invalidFmt := common.OutputFmt(99)
 	invalidFmt.Ext()
+}
+
+func TestUnmarshalConfig_WrapsValidationError(t *testing.T) {
+	// version: 99 will fail validation (validate:"eq=1").
+	// unmarshalConfig should wrap the validation error with context.
+	data := []byte("version: 99\n")
+	cfg := &Config{}
+
+	_, err := unmarshalConfig(data, cfg, true)
+	if err == nil {
+		t.Fatal("expected validation error, got nil")
+	}
+
+	// After the fix, the error should be wrapped so that the underlying
+	// validation error is reachable via errors.Unwrap / errors.Is.
+	// At minimum, the message should contain wrapping context.
+	if !strings.Contains(err.Error(), "validat") {
+		t.Errorf("expected error to mention validation, got: %v", err)
+	}
+
+	// The error should preserve the chain — errors.Unwrap should return non-nil.
+	if errors.Unwrap(err) == nil {
+		t.Errorf("expected wrapped error (errors.Unwrap non-nil), got bare error: %v", err)
+	}
 }

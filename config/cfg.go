@@ -174,10 +174,10 @@ func unmarshalConfig(data []byte, cfg *Config, process bool) (*Config, error) {
 	if process {
 		// sanitize and validate what has been loaded
 		if err := gencfg.Sanitize(cfg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to sanitize configuration: %w", err)
 		}
 		if err := gencfg.Validate(cfg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to validate configuration: %w", err)
 		}
 	}
 	return cfg, nil
@@ -222,7 +222,7 @@ func Prepare() ([]byte, error) {
 func Dump(cfg *Config) ([]byte, error) {
 	data, err := yaml.Marshal(*cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal config to yaml: %v", err)
+		return nil, fmt.Errorf("failed to marshal config to yaml: %w", err)
 	}
 	return data, nil
 }
