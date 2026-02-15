@@ -36,6 +36,7 @@ func (conf *ReporterConfig) Prepare() (*Report, error) {
 type entry struct {
 	original string
 	actual   string
+	tempDir  string // temp dir holding the copied file/dir; may differ from actual for regular files
 	stamp    time.Time
 	data     []byte
 }
@@ -64,15 +65,21 @@ func (r *Report) Close() (retErr error) {
 	return r.finalize()
 }
 
-// removeStoredDirs removes all stored directory entries after they have been
-// archived by finalize(). File entries and data entries are left alone.
+// removeStoredDirs removes all temporary directories created by StoreCopy
+// after they have been archived by finalize().
 func (r *Report) removeStoredDirs() {
 	for _, e := range r.entries {
 		if len(e.data) > 0 || len(e.actual) == 0 {
 			continue
 		}
-		if info, err := os.Stat(e.actual); err == nil && info.IsDir() {
-			os.RemoveAll(e.actual)
+		// For regular files, tempDir holds the parent temp directory.
+		// For directories, actual is the temp directory itself.
+		dir := e.tempDir
+		if dir == "" {
+			dir = e.actual
+		}
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			os.RemoveAll(dir)
 		}
 	}
 }
@@ -166,16 +173,20 @@ func (r *Report) StoreCopy(name, path string) error {
 		case info.Mode().IsRegular():
 			where, err := copyFile(dir, e.actual, info.ModTime())
 			if err != nil {
+				os.RemoveAll(dir)
 				return err
 			}
 			e.actual = where
+			e.tempDir = dir
 		case info.Mode().IsDir():
 			if err := copyDir(dir, e.actual); err != nil {
+				os.RemoveAll(dir)
 				return err
 			}
 			e.actual = dir
 		}
 	} else {
+		os.RemoveAll(dir)
 		return err
 	}
 

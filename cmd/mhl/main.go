@@ -1,16 +1,22 @@
+//go:build windows
+
 package main
 
 import (
 	"bufio"
 	"bytes"
+	"context"
 	_ "embed"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
+	"time"
 
 	yaml "gopkg.in/yaml.v3"
 
@@ -264,7 +270,16 @@ func main() {
 	args = append(args, from)
 	args = append(args, to)
 
-	cmd := exec.Command(converterPath, args...)
+	// Allow graceful shutdown on interrupt and enforce a timeout so the
+	// connector never hangs indefinitely waiting for the conversion engine.
+	const converterTimeout = 2 * time.Minute
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	ctx, cancel := context.WithTimeout(ctx, converterTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, converterPath, args...)
+	cmd.Stderr = os.Stderr
 
 	log.Printf("Starting %s with %q\n", converterPath, args)
 
@@ -287,9 +302,6 @@ func main() {
 	}
 
 	if err := cmd.Wait(); err != nil {
-		if ee, ok := err.(*exec.ExitError); ok && len(ee.Stderr) > 0 {
-			log.Println(string(ee.Stderr))
-		}
 		log.Fatalf("Conversion engine returned error: %v", err)
 	}
 }

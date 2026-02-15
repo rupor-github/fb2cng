@@ -487,6 +487,44 @@ func TestParser_DescendantSelectorWithClass(t *testing.T) {
 	}
 }
 
+func TestParser_DescendantSelectorDeepNesting(t *testing.T) {
+	log := zap.NewNop()
+	p := css.NewParser(log)
+
+	// Three-level descendant: div p code
+	input := []byte(`div p code { font-family: monospace; }`)
+	sheet := p.Parse(input)
+
+	rules := allRules(sheet)
+	if len(rules) != 1 {
+		t.Fatalf("expected 1 rule, got %d", len(rules))
+	}
+
+	rule := rules[0]
+	// Rightmost: code
+	if rule.Selector.Element != "code" {
+		t.Errorf("expected element 'code', got '%s'", rule.Selector.Element)
+	}
+	// Middle ancestor: p
+	if rule.Selector.Ancestor == nil {
+		t.Fatal("expected ancestor selector for 'p'")
+	}
+	if rule.Selector.Ancestor.Element != "p" {
+		t.Errorf("expected ancestor element 'p', got '%s'", rule.Selector.Ancestor.Element)
+	}
+	// Outermost ancestor: div
+	if rule.Selector.Ancestor.Ancestor == nil {
+		t.Fatal("expected grandparent ancestor selector for 'div'")
+	}
+	if rule.Selector.Ancestor.Ancestor.Element != "div" {
+		t.Errorf("expected grandparent element 'div', got '%s'", rule.Selector.Ancestor.Ancestor.Element)
+	}
+	// No further ancestors
+	if rule.Selector.Ancestor.Ancestor.Ancestor != nil {
+		t.Error("expected no further ancestors beyond 'div'")
+	}
+}
+
 func TestParser_FontFace(t *testing.T) {
 	log := zap.NewNop()
 	p := css.NewParser(log)

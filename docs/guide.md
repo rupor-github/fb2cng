@@ -530,7 +530,7 @@ document:
     optimize: true
     
     # JPEG quality 40-100%
-    jpeq_quality_level: 75
+    jpeg_quality_level: 75
     
     # Reader screen size so images could be adjusted properly
     screen:
@@ -818,7 +818,7 @@ document:
   
   images:
     optimize: true
-    jpeq_quality_level: 80
+    jpeg_quality_level: 80
     screen:
       width: 1264
       height: 1680

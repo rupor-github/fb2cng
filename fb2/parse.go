@@ -300,17 +300,20 @@ func parseFlow(el *etree.Element, log *zap.Logger) (Flow, error) {
 	return flow, nil
 }
 
+// knownTextTags is the set of FB2 text-containing elements that could
+// reasonably be converted to a paragraph when found unexpectedly.
+var knownTextTags = map[string]bool{
+	"text-author": true,
+	"date":        true,
+	"v":           true, // verse
+	"stanza":      true,
+	"epigraph":    true,
+	"annotation":  true,
+}
+
 // isKnownTextTag checks if a tag is a known FB2 text-containing element
 // that could reasonably be converted to a paragraph when found unexpectedly
 func isKnownTextTag(tag string) bool {
-	knownTextTags := map[string]bool{
-		"text-author": true,
-		"date":        true,
-		"v":           true, // verse
-		"stanza":      true,
-		"epigraph":    true,
-		"annotation":  true,
-	}
 	return knownTextTags[tag]
 }
 
@@ -736,14 +739,14 @@ func parseTableCell(el *etree.Element, log *zap.Logger) (TableCell, error) {
 		if err != nil {
 			return cell, fmt.Errorf("table cell colspan: %w", err)
 		}
-		cell.ColSpan = v
+		cell.ColSpan = max(v, 1)
 	}
 	if raw := el.SelectAttrValue("rowspan", ""); raw != "" {
 		v, err := strconv.Atoi(raw)
 		if err != nil {
 			return cell, fmt.Errorf("table cell rowspan: %w", err)
 		}
-		cell.RowSpan = v
+		cell.RowSpan = max(v, 1)
 	}
 	cell.Align = el.SelectAttrValue("align", "")
 	cell.VAlign = el.SelectAttrValue("valign", "")

@@ -1,0 +1,14 @@
+<svg viewBox="0 0 240 24" xmlns="http://www.w3.org/2000/svg">
+  <path d="M20 22
+           C30 12 50 12 60 12"
+        fill="none" stroke="black" stroke-width="1"/>
+  <path d="M60 12 H100" stroke="black" stroke-width="1"/>
+  <path d="M100 12
+           C110 2 130 2 140 12
+           C130 22 110 22 100 12"
+        fill="none" stroke="black" stroke-width="1.2"/>
+  <path d="M140 12 H180" stroke="black" stroke-width="1"/>
+  <path d="M180 12
+           C190 12 210 12 220 22"
+        fill="none" stroke="black" stroke-width="1"/>
+</svg>

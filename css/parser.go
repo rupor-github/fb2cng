@@ -222,10 +222,18 @@ func (p *Parser) parsePropertyValue(tokens []css.Token) Value {
 				val.Keyword = raw
 			}
 		case css.PercentageToken:
-			val.Value, _ = strconv.ParseFloat(strings.TrimSuffix(string(t.Data), "%"), 64)
-			val.Unit = "%"
+			if v, err := strconv.ParseFloat(strings.TrimSuffix(string(t.Data), "%"), 64); err == nil {
+				val.Value = v
+				val.Unit = "%"
+			} else {
+				val.Keyword = raw
+			}
 		case css.NumberToken:
-			val.Value, _ = strconv.ParseFloat(string(t.Data), 64)
+			if v, err := strconv.ParseFloat(string(t.Data), 64); err == nil {
+				val.Value = v
+			} else {
+				val.Keyword = raw
+			}
 		case css.IdentToken:
 			val.Keyword = strings.ToLower(string(t.Data))
 		case css.StringToken:
@@ -315,6 +323,8 @@ func (p *Parser) parseSelector(selStr string, sheet *Stylesheet) Selector {
 }
 
 // parseDescendantSelector parses a descendant selector like "p code" or ".section-title h2".
+// It iterates right-to-left over space-separated parts, building the ancestor chain
+// without recursion.
 func (p *Parser) parseDescendantSelector(selStr string, sheet *Stylesheet) Selector {
 	sel := Selector{Raw: selStr}
 
@@ -337,24 +347,24 @@ func (p *Parser) parseDescendantSelector(selStr string, sheet *Stylesheet) Selec
 	sel.Class = mainSel.Class
 	sel.Pseudo = mainSel.Pseudo
 
-	// Parse ancestor parts (all parts except the last one)
-	// For simplicity, we combine all ancestor parts into a single ancestor selector
-	// e.g., ".section-title h2.section-title-header" -> ancestor is ".section-title"
-	ancestorParts := parts[:len(parts)-1]
-	if len(ancestorParts) == 1 {
-		// Single ancestor
-		ancestorSel := p.parseSimpleSelector(ancestorParts[0], sheet)
-		if ancestorSel.IsSimple() {
-			sel.Ancestor = &ancestorSel
+	// Build ancestor chain left-to-right, nesting inner ancestors.
+	// For "div p code", parts[0]="div" parts[1]="p" parts[2]="code".
+	// We want sel(code).Ancestor = sel(p).Ancestor = sel(div).
+	// Build from the leftmost (outermost) ancestor inward.
+	var ancestor *Selector
+	for i := range len(parts) - 1 {
+		partSel := p.parseSimpleSelector(parts[i], sheet)
+		if !partSel.IsSimple() {
+			break
 		}
-	} else {
-		// Multiple ancestors - recursively parse as descendant selector
-		ancestorStr := strings.Join(ancestorParts, " ")
-		ancestorSel := p.parseDescendantSelector(ancestorStr, sheet)
-		if ancestorSel.IsSimple() || ancestorSel.IsDescendant() {
-			sel.Ancestor = &ancestorSel
+		if ancestor != nil {
+			partSel.Ancestor = ancestor
+			partSel.Raw = strings.Join(parts[:i+1], " ")
 		}
+		clone := partSel
+		ancestor = &clone
 	}
+	sel.Ancestor = ancestor
 
 	return sel
 }

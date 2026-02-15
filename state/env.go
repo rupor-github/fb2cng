@@ -1,4 +1,4 @@
-// Package state defines stared program state.
+// Package state defines shared program state.
 package state
 
 import (

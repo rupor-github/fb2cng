@@ -121,7 +121,7 @@ func (s *Splitter) Split(in string) []string {
 func (s *Splitter) Sentences(in string) iter.Seq[string] {
 	return func(yield func(string) bool) {
 		if s == nil {
-			yield(in)
+			_ = yield(in)
 			return
 		}
 
@@ -154,7 +154,7 @@ func (s *Splitter) Sentences(in string) iter.Seq[string] {
 		}
 		// Yield the last sentence
 		if len(sentences) > 0 {
-			yield(sentences[len(sentences)-1].Text)
+			_ = yield(sentences[len(sentences)-1].Text)
 		}
 	}
 }
@@ -193,7 +193,7 @@ func (*Splitter) Words(in string, ignoreNBSP bool) iter.Seq[string] {
 			}
 			word.WriteRune(sym)
 		}
-		yield(word.String())
+		_ = yield(word.String())
 	}
 }
 

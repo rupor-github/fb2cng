@@ -3,30 +3,40 @@ package content
 import (
 	"encoding/json"
 	"strings"
+	"sync"
+)
+
+var (
+	htmlEntitiesOnce  sync.Once
+	htmlEntitiesCache map[string]string
+	htmlEntitiesErr   error
 )
 
 func prepareHTMLNamedEntities() (map[string]string, error) {
-
-	type Entity struct {
-		Codepoints []rune `json:"codepoints"` // codepoints of character
-		Characters string `json:"characters"` // character itself
-	}
-
-	data := make(map[string]Entity)
-	if err := json.Unmarshal([]byte(htmlNamedEntitiesJSON), &data); err != nil {
-		return nil, err
-	}
-
-	res := make(map[string]string, len(data))
-	for k, v := range data {
-		if !strings.HasPrefix(k, "&") || !strings.HasSuffix(k, ";") {
-			// not interested - we are always in "strict" XML parsing mode
-			continue
+	htmlEntitiesOnce.Do(func() {
+		type Entity struct {
+			Codepoints []rune `json:"codepoints"` // codepoints of character
+			Characters string `json:"characters"` // character itself
 		}
-		k = strings.Trim(k, "&;")
-		res[k] = v.Characters
-	}
-	return res, nil
+
+		data := make(map[string]Entity)
+		if err := json.Unmarshal([]byte(htmlNamedEntitiesJSON), &data); err != nil {
+			htmlEntitiesErr = err
+			return
+		}
+
+		res := make(map[string]string, len(data))
+		for k, v := range data {
+			if !strings.HasPrefix(k, "&") || !strings.HasSuffix(k, ";") {
+				// not interested - we are always in "strict" XML parsing mode
+				continue
+			}
+			k = strings.Trim(k, "&;")
+			res[k] = v.Characters
+		}
+		htmlEntitiesCache = res
+	})
+	return htmlEntitiesCache, htmlEntitiesErr
 }
 
 // Comes from reference in https://html.spec.whatwg.org/multipage/named-characters.html#named-character-references,

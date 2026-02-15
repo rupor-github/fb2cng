@@ -736,13 +736,13 @@ func collectResourceDefinitions(c *kfx.Container) map[string]*ResourceInfo {
 	return defs
 }
 
-// truncateText truncates a string to maxLen, adding "..." if truncated.
+// truncateText truncates a string to maxLen runes, adding "..." if truncated.
 // Also replaces newlines with spaces for compact display.
 func truncateText(s string, maxLen int) string {
 	s = strings.ReplaceAll(s, "\n", " ")
 	s = strings.ReplaceAll(s, "\r", "")
-	if len(s) > maxLen {
-		return s[:maxLen] + "..."
+	if r := []rune(s); len(r) > maxLen {
+		return string(r[:maxLen]) + "..."
 	}
 	return s
 }
@@ -1695,7 +1695,7 @@ func dumpFragmentsByTypeWithUsage(c *kfx.Container, ftype kfx.KFXSymbol, styleUs
 	return sb.String(), len(sortedFrags)
 }
 
-func dumpResources(container *kfx.Container, inPath, outDir string, overwrite bool) error {
+func dumpResources(container *kfx.Container, inPath, outDir string, overwrite bool) (retErr error) {
 	base := filepath.Base(inPath)
 	stem := strings.TrimSuffix(base, filepath.Ext(base))
 	dir := filepath.Dir(inPath)
@@ -1718,10 +1718,10 @@ func dumpResources(container *kfx.Container, inPath, outDir string, overwrite bo
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { retErr = errors.Join(retErr, f.Close()) }()
 
 	zw := zip.NewWriter(f)
-	defer zw.Close()
+	defer func() { retErr = errors.Join(retErr, zw.Close()) }()
 
 	usedNames := make(map[string]int)
 	written := 0

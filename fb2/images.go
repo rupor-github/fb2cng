@@ -2,7 +2,6 @@ package fb2
 
 import (
 	"bytes"
-	_ "embed"
 	"fmt"
 	"image"
 	"image/color"
@@ -25,50 +24,6 @@ import (
 	"fbc/jpegquality"
 	imgutil "fbc/utils/images"
 )
-
-var brokenImage = []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
-  <title>Broken image</title>
-
-  <!-- background -->
-  <rect x="0" y="0" width="200" height="200" fill="#ffffff"/>
-
-  <!-- outer border -->
-  <rect x="6" y="6" width="188" height="188"
-        fill="none" stroke="#333333" stroke-width="4"
-        rx="4" ry="4"/>
-
-  <!-- inner image frame -->
-  <rect x="40" y="50" width="120" height="90"
-        fill="none" stroke="#E60000" stroke-width="4"
-        rx="4" ry="4"/>
-
-  <!-- sun -->
-  <circle cx="75" cy="75" r="8" fill="#E60000"/>
-
-  <!-- mountains -->
-  <path d="M45 130
-           L80 85
-           L105 120
-           L130 95
-           L155 130"
-        fill="none"
-        stroke="#E60000"
-        stroke-width="4"
-        stroke-linejoin="round"
-        stroke-linecap="round"/>
-
-  <!-- crack -->
-  <path d="M100 55
-           L92 75
-           L110 95
-           L98 115
-           L108 135"
-        fill="none"
-        stroke="#E60000"
-        stroke-width="4"
-        stroke-linejoin="round"
-        stroke-linecap="round"/>
-</svg>`)
 
 // Image processing functions for FictionBook.
 

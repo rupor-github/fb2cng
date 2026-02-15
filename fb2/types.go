@@ -389,17 +389,19 @@ func (t *Title) AsTOCText(fallback string) string {
 	var imageAltBuf strings.Builder
 	hasText := false
 
+	lastByte := byte(0)
 	for _, item := range t.Items {
 		if item.Paragraph != nil {
 			text := item.Paragraph.AsPlainText()
 			if text != "" {
 				if buf.Len() > 0 {
-					if !strings.HasSuffix(buf.String(), ".") {
-						buf.WriteString(".")
+					if lastByte != '.' {
+						buf.WriteByte('.')
 					}
-					buf.WriteString(" ")
+					buf.WriteByte(' ')
 				}
 				buf.WriteString(text)
+				lastByte = text[len(text)-1]
 				hasText = true
 			}
 

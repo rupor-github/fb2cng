@@ -1,0 +1,17 @@
+<svg viewBox="0 0 240 24" xmlns="http://www.w3.org/2000/svg">
+  <path d="M20 2
+           C30 12 50 12 60 12"
+        fill="none" stroke="black" stroke-width="1"/>
+  <path d="M60 12 H100" stroke="black" stroke-width="1"/>
+  <path d="M100 12
+           C110 22 130 22 140 12
+           C130 2 110 2 100 12"
+        fill="none" stroke="black" stroke-width="1.2"/>
+  <path d="M140 12 H180" stroke="black" stroke-width="1"/>
+  <path d="M180 12
+           C190 12 210 12 220 2"
+        fill="none" stroke="black" stroke-width="1"/>
+  <path d="M20 2
+           C70 13 170 13 220 2"
+        fill="none" stroke="black" stroke-width="1"/>
+</svg>

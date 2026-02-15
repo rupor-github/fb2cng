@@ -119,7 +119,7 @@ func NewHyphenator(lang language.Tag, log *zap.Logger) *Hyphenator {
 	}
 
 	h := &hyph{}
-	if err = h.loadDictionary(langName, strings.NewReader(string(dataPatterns)), strings.NewReader(string(dataExceptions))); err != nil {
+	if err = h.loadDictionary(langName, bytes.NewReader(dataPatterns), bytes.NewReader(dataExceptions)); err != nil {
 		log.Warn("Unable to load hyphenation dictionary", zap.Stringer("tag", lang), zap.Error(err))
 		return nil
 	}

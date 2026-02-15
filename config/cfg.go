@@ -47,7 +47,7 @@ type (
 		RemoveTransparency bool         `yaml:"remove_transparency"`
 		ScaleFactor        float64      `yaml:"scale_factor" validate:"gte=0.0"`
 		Optimize           bool         `yaml:"optimize"`
-		JPEGQuality        int          `yaml:"jpeq_quality_level" validate:"min=40,max=100"`
+		JPEGQuality        int          `yaml:"jpeg_quality_level" validate:"min=40,max=100"`
 		Screen             ScreenConfig `yaml:"screen"`
 		Cover              CoverConfig  `yaml:"cover"`
 	}

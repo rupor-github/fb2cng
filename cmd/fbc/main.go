@@ -97,7 +97,7 @@ func destroyAppContext(ctx context.Context, cmd *cli.Command) (err error) {
 }
 
 // Ignore urfave/cli default error handling - for me cli.Exit() looks
-// non-transparent and unnesessary. I will return regular errors from
+// non-transparent and unnecessary. I will return regular errors from
 // subcommands.
 var errWasHandled bool
 
@@ -157,7 +157,7 @@ func main() {
 					&cli.BoolFlag{Name: "ebook", Aliases: []string{"eb"}, Usage: "for Kindle formats generate as ebook (EBOK) instead of personal document (PDOC)"},
 					&cli.StringFlag{Name: "asin", Usage: "set ASIN (10 chars, A-Z0-9); used only for Kindle formats"},
 					&cli.BoolFlag{Name: "nodirs", Aliases: []string{"nd"}, Usage: "when producing output do not keep input directory structure"},
-					&cli.BoolFlag{Name: "overwrite", Aliases: []string{"ow"}, Usage: "continue even if destination exits, overwrite files"},
+					&cli.BoolFlag{Name: "overwrite", Aliases: []string{"ow"}, Usage: "continue even if destination exists, overwrite files"},
 					&cli.StringFlag{Name: "force-zip-cp",
 						Usage: "Force `ENCODING` for ALL non UTF-8 file names in processed archives (see IANA.org for character set names)"},
 				},
@@ -192,7 +192,7 @@ DESTINATION:
 DESTINATION:
     file name to write configuration to, if absent - STDOUT
 
-Produces file with actual "active" configuration values wich is composition of
+Produces file with actual "active" configuration values which is composition of
 default values and values specified in configuration file. To see default
 configuration embedded into the program use --default flag.
 `, cli.CommandHelpTemplate),
@@ -202,7 +202,7 @@ configuration embedded into the program use --default flag.
 
 	var err error
 	// NOTE: os.Exit is called at the end of main to set exit code, make sure
-	// there are no other deffered functions after that
+	// there are no other deferred functions after that
 	defer func() {
 		stop()
 		if err != nil {
@@ -217,7 +217,7 @@ configuration embedded into the program use --default flag.
 	err = app.Run(ctx, os.Args)
 }
 
-func outputConfiguration(ctx context.Context, cmd *cli.Command) error {
+func outputConfiguration(ctx context.Context, cmd *cli.Command) (retErr error) {
 
 	env := state.EnvFromContext(ctx)
 	if cmd.Args().Len() > 1 {
@@ -238,7 +238,7 @@ func outputConfiguration(ctx context.Context, cmd *cli.Command) error {
 		if err != nil {
 			return fmt.Errorf("unable to create destination file '%s': %w", fname, err)
 		}
-		defer out.Close()
+		defer func() { retErr = multierr.Append(retErr, out.Close()) }()
 
 	}
 

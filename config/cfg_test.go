@@ -39,7 +39,7 @@ document:
     remove_transparency: true
     scale_factor: 1.5
     optimize: true
-    jpeq_quality_level: 85
+    jpeg_quality_level: 85
   footnotes:
     mode: float
     bodies: ["notes", "comments"]
@@ -80,7 +80,7 @@ reporting:
 	}
 
 	if cfg.Document.Footnotes.Mode != common.FootnotesModeFloat {
-		t.Errorf("FootnotesMode = %d, want FootnotesModeInline", cfg.Document.Footnotes.Mode)
+		t.Errorf("FootnotesMode = %d, want FootnotesModeFloat", cfg.Document.Footnotes.Mode)
 	}
 
 	if len(cfg.Document.Footnotes.BodyNames) != 2 {
@@ -629,5 +629,26 @@ func TestUnmarshalConfig_WrapsValidationError(t *testing.T) {
 	// The error should preserve the chain — errors.Unwrap should return non-nil.
 	if errors.Unwrap(err) == nil {
 		t.Errorf("expected wrapped error (errors.Unwrap non-nil), got bare error: %v", err)
+	}
+}
+
+func TestCleanFileName(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"normal", "book.fb2", "book.fb2"},
+		{"NUL stripped", "book\x00.fb2", "book.fb2"},
+		{"all invalid", "\x00\x00\x00", "_bad_file_name_"},
+		{"empty", "", "_bad_file_name_"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := CleanFileName(tt.in)
+			if got != tt.want {
+				t.Errorf("CleanFileName(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
 	}
 }

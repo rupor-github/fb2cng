@@ -39,12 +39,16 @@ func EnsureJFIFAPP0(jpegData []byte, dpit DpiType, xdensity, ydensity int16) ([]
 	buf := new(bytes.Buffer)
 	buf.Write(jpegData[:2])
 	buf.Write(marker)
-	_ = binary.Write(buf, binary.BigEndian, uint16(0x10)) // length
-	buf.Write(jfif)
-	_ = binary.Write(buf, binary.BigEndian, uint8(dpit))
-	_ = binary.Write(buf, binary.BigEndian, uint16(xdensity))
-	_ = binary.Write(buf, binary.BigEndian, uint16(ydensity))
-	_ = binary.Write(buf, binary.BigEndian, uint16(0)) // no thumbnail segment
+
+	// Build JFIF APP0 segment body (16 bytes, big-endian).
+	var seg [16]byte
+	binary.BigEndian.PutUint16(seg[0:2], 0x10)               // segment length (16 including these 2 bytes)
+	copy(seg[2:9], jfif)                                     // "JFIF\0" + version
+	seg[9] = uint8(dpit)                                     // density units
+	binary.BigEndian.PutUint16(seg[10:12], uint16(xdensity)) // X density
+	binary.BigEndian.PutUint16(seg[12:14], uint16(ydensity)) // Y density
+	// seg[14:16]: thumbnail dimensions (0x00, 0x00) — already zero from array init.
+	buf.Write(seg[:])
 	buf.Write(jpegData[2:])
 	return buf.Bytes(), true, nil
 }

@@ -12,7 +12,7 @@ import (
 // CleanFileName removes not allowed characters form file name.
 func CleanFileName(in string) string {
 	out := strings.TrimLeft(strings.Map(func(sym rune) rune {
-		if strings.ContainsRune(string(os.PathSeparator)+string(os.PathListSeparator), sym) {
+		if sym == 0 || strings.ContainsRune(string(os.PathSeparator)+string(os.PathListSeparator), sym) {
 			return -1
 		}
 		return sym

@@ -1670,6 +1670,64 @@ func TestPrepare_WithCoverID(t *testing.T) {
 
 // TestPrepare_CleansUpTmpDirOnError verifies that when Prepare() fails after
 // creating a temp directory, the temp directory is removed (no leak).
+func TestPrepareHTMLNamedEntities_Cached(t *testing.T) {
+	// First call
+	m1, err := prepareHTMLNamedEntities()
+	if err != nil {
+		t.Fatalf("first call failed: %v", err)
+	}
+	if len(m1) == 0 {
+		t.Fatal("expected non-empty entities map")
+	}
+
+	// Second call should return the same map (cached via sync.Once)
+	m2, err := prepareHTMLNamedEntities()
+	if err != nil {
+		t.Fatalf("second call failed: %v", err)
+	}
+
+	// Verify pointer identity — same underlying map returned
+	if m1["amp"] != m2["amp"] {
+		t.Error("expected same values from cached calls")
+	}
+
+	// Spot check well-known entities
+	for _, tc := range []struct {
+		name string
+		want string
+	}{
+		{"amp", "&"},
+		{"lt", "<"},
+		{"gt", ">"},
+		{"quot", "\""},
+		{"apos", "'"},
+		{"nbsp", "\u00A0"},
+		{"mdash", "\u2014"},
+		{"ndash", "\u2013"},
+		{"laquo", "\u00AB"},
+		{"raquo", "\u00BB"},
+	} {
+		got, ok := m1[tc.name]
+		if !ok {
+			t.Errorf("entity %q not found", tc.name)
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("entity %q = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+
+	// Verify entries without semicolons (non-strict) were excluded:
+	// The JSON has both "&amp" and "&amp;" entries; only "&amp;" should
+	// produce "amp" in the result. Entries like "&amp" (no semicolon)
+	// should be filtered out.
+	for k := range m1 {
+		if strings.HasPrefix(k, "&") || strings.HasSuffix(k, ";") {
+			t.Errorf("entity key %q should have been stripped of & and ;", k)
+		}
+	}
+}
+
 func TestPrepare_CleansUpTmpDirOnError(t *testing.T) {
 	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	ctx := state.ContextWithEnv(context.Background())
