@@ -1,6 +1,7 @@
 package images
 
 import (
+	"math"
 	"strings"
 	"testing"
 )
@@ -45,6 +46,50 @@ func TestRasterizeSVGToImage(t *testing.T) {
 		}
 		if img.Bounds().Dx() != 150 || img.Bounds().Dy() != 75 {
 			t.Fatalf("unexpected bounds: %v", img.Bounds())
+		}
+	})
+
+	t.Run("huge_viewbox_clamped", func(t *testing.T) {
+		// An SVG with extreme viewBox dimensions must not allocate a huge image.
+		// The rasterizer should clamp to maxRasterDim while preserving aspect ratio.
+		huge := []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100000 50000"><rect width="100000" height="50000"/></svg>`)
+		img, err := RasterizeSVGToImage(huge, 0, 0, 0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		bounds := img.Bounds()
+		if bounds.Dx() > maxRasterDim || bounds.Dy() > maxRasterDim {
+			t.Fatalf("dimensions %dx%d exceed max %d", bounds.Dx(), bounds.Dy(), maxRasterDim)
+		}
+		// Aspect ratio 2:1 should be preserved. Width clamped to maxRasterDim,
+		// height should be maxRasterDim/2.
+		if bounds.Dx() != maxRasterDim {
+			t.Errorf("expected width %d, got %d", maxRasterDim, bounds.Dx())
+		}
+		if bounds.Dy() != maxRasterDim/2 {
+			t.Errorf("expected height %d, got %d", maxRasterDim/2, bounds.Dy())
+		}
+	})
+
+	t.Run("huge_viewbox_tall_clamped", func(t *testing.T) {
+		// Tall SVG: height is the limiting dimension.
+		tall := []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5000 100000"><rect width="5000" height="100000"/></svg>`)
+		img, err := RasterizeSVGToImage(tall, 0, 0, 0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		bounds := img.Bounds()
+		if bounds.Dx() > maxRasterDim || bounds.Dy() > maxRasterDim {
+			t.Fatalf("dimensions %dx%d exceed max %d", bounds.Dx(), bounds.Dy(), maxRasterDim)
+		}
+		// Aspect ratio 1:20, height clamped to maxRasterDim.
+		if bounds.Dy() != maxRasterDim {
+			t.Errorf("expected height %d, got %d", maxRasterDim, bounds.Dy())
+		}
+		// Width = 8192 * (5000/100000) = 409.6, rounds to 410.
+		expectedW := int(math.Round(float64(maxRasterDim) * 5000.0 / 100000.0))
+		if bounds.Dx() != expectedW {
+			t.Errorf("expected width %d, got %d", expectedW, bounds.Dx())
 		}
 	})
 }

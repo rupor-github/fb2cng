@@ -15,6 +15,13 @@ import (
 
 const defaultSVGSize = 2048 // Default size to use when SVG viewBox has no size to match KP3
 
+// maxRasterDim is the maximum pixel dimension (width or height) allowed when
+// rasterizing an SVG. This prevents OOM from malicious SVGs with enormous
+// viewBox values (e.g. viewBox="0 0 100000 100000" would otherwise allocate
+// ~37 GB for the RGBA buffer). 8192 is consistent with common GPU texture
+// limits and very generous for ebook images.
+var maxRasterDim = 8192
+
 // KindleSVGStrokeWidthFactor is the multiplier for stroke-width values when
 // rasterizing SVGs for Kindle. Kindle devices render at higher resolution,
 // so strokes need to be thicker to remain visible.
@@ -97,11 +104,14 @@ func RasterizeSVGToImage(svgData []byte, targetW, targetH int, strokeWidthFactor
 		w = int(math.Round(float64(intrW) * scale))
 		h = int(math.Round(float64(intrH) * scale))
 	}
-	if w < 1 {
-		w = 1
-	}
-	if h < 1 {
-		h = 1
+	w = max(w, 1)
+	h = max(h, 1)
+
+	// Clamp to maxRasterDim preserving aspect ratio to prevent OOM.
+	if w > maxRasterDim || h > maxRasterDim {
+		s := min(float64(maxRasterDim)/float64(w), float64(maxRasterDim)/float64(h))
+		w = max(int(math.Round(float64(w)*s)), 1)
+		h = max(int(math.Round(float64(h)*s)), 1)
 	}
 
 	icon.SetTarget(0, 0, float64(w), float64(h))
