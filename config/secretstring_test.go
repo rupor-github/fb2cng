@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	yaml "gopkg.in/yaml.v3"
@@ -242,6 +243,48 @@ func TestSecretString_YAML_Integration(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestSecretString_StringerNoLeak verifies that fmt.Sprintf("%v"), "%s", and
+// "%#v" on a SecretString never reveal the underlying value. Before the fix
+// these all printed the raw secret because String() and GoString() were missing.
+func TestSecretString_StringerNoLeak(t *testing.T) {
+	secret := SecretString("super-secret-password-12345")
+
+	tests := []struct {
+		name   string
+		format string
+	}{
+		{"percent-v", "%v"},
+		{"percent-s", "%s"},
+		{"percent-sharp-v", "%#v"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := fmt.Sprintf(tt.format, secret)
+			if containsSubstring(got, "super-secret-password-12345") {
+				t.Errorf("fmt.Sprintf(%q, secret) leaked the value: %s", tt.format, got)
+			}
+		})
+	}
+
+	// Also verify Stringer/GoStringer interfaces return the mask
+	if s := secret.String(); s != SecretStringValue {
+		t.Errorf("String() = %q, want %q", s, SecretStringValue)
+	}
+	if s := secret.GoString(); s != "SecretString("+SecretStringValue+")" {
+		t.Errorf("GoString() = %q, want %q", s, "SecretString("+SecretStringValue+")")
+	}
+
+	// Empty secret should indicate empty, not leak
+	var empty SecretString
+	if s := empty.String(); s != "" {
+		t.Errorf("empty.String() = %q, want %q", s, "")
+	}
+	if s := empty.GoString(); s != "SecretString()" {
+		t.Errorf("empty.GoString() = %q, want %q", s, "SecretString()")
 	}
 }
 
