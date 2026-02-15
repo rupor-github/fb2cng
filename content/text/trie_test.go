@@ -334,6 +334,100 @@ func TestTrieSingleCharacter(t *testing.T) {
 	}
 }
 
+// TestTriePatternCyrillic demonstrates that addPatternString must handle
+// multi-byte (non-ASCII) characters correctly. Cyrillic letters are 2 bytes
+// each in UTF-8, so the byte offset from `range s` diverges from the rune
+// index. This test mirrors TestTrieValues / TestMultiFindValue but uses
+// Cyrillic characters instead of ASCII.
+func TestTriePatternCyrillic(t *testing.T) {
+	trie := newTrie()
+
+	// Pattern "пе2ре3нос" means:
+	//   п(0) е(2) р(0) е(3) н(0) о(0) с(0)
+	// The pure string (digits stripped) is "перенос".
+	trie.addPatternString("пе2ре3нос")
+
+	pure := "перенос"
+	if !trie.contains(pure) {
+		t.Fatalf("trie should contain %q", pure)
+	}
+
+	expected := []int{0, 2, 0, 3, 0, 0, 0}
+	val, ok := trie.getValue(pure)
+	if !ok {
+		t.Fatalf("no value returned for %q", pure)
+	}
+	values := val.([]int)
+	if len(values) != len(expected) {
+		t.Fatalf("length mismatch for %q: want %v, got %v", pure, expected, values)
+	}
+	for i := range values {
+		if values[i] != expected[i] {
+			t.Fatalf("content mismatch for %q: want %v, got %v", pure, expected, values)
+		}
+	}
+}
+
+// TestTriePatternCyrillicMultiFind mirrors TestMultiFindValue but with
+// Cyrillic patterns to verify allSubstringsAndValues works with multi-byte
+// characters after addPatternString.
+func TestTriePatternCyrillicMultiFind(t *testing.T) {
+	trie := newTrie()
+
+	// Add several Cyrillic patterns with interspersed digits.
+	trie.addPatternString("пе2ре") // перe -> [0,2,0,0]
+	trie.addPatternString("ре3но") // рено -> [0,3,0,0]
+	trie.addPatternString("но4с")  // нос  -> [0,4,0]
+
+	// Search in "перенос" — should find "пере" starting at position 0.
+	found, values := trie.allSubstringsAndValues("перенос")
+	if len(found) != 1 || found[0] != "пере" {
+		t.Fatalf("expected [пере] but found %v", found)
+	}
+	ev := []int{0, 2, 0, 0}
+	fv := values[0].([]int)
+	if len(fv) != len(ev) {
+		t.Fatalf("value length mismatch: want %v, got %v", ev, fv)
+	}
+	for i := range ev {
+		if fv[i] != ev[i] {
+			t.Fatalf("value mismatch: want %v, got %v", ev, fv)
+		}
+	}
+
+	// Search in "реноска" — should find "рено" (anchored at start).
+	found, values = trie.allSubstringsAndValues("реноска")
+	if len(found) != 1 || found[0] != "рено" {
+		t.Fatalf("expected [рено] but found %v", found)
+	}
+	ev = []int{0, 3, 0, 0}
+	fv = values[0].([]int)
+	if len(fv) != len(ev) {
+		t.Fatalf("value length mismatch: want %v, got %v", ev, fv)
+	}
+	for i := range ev {
+		if fv[i] != ev[i] {
+			t.Fatalf("value mismatch: want %v, got %v", ev, fv)
+		}
+	}
+
+	// Search in "носка" — should find "нос" (anchored at start).
+	found, values = trie.allSubstringsAndValues("носка")
+	if len(found) != 1 || found[0] != "нос" {
+		t.Fatalf("expected [нос] but found %v", found)
+	}
+	ev = []int{0, 4, 0}
+	fv = values[0].([]int)
+	if len(fv) != len(ev) {
+		t.Fatalf("value length mismatch: want %v, got %v", ev, fv)
+	}
+	for i := range ev {
+		if fv[i] != ev[i] {
+			t.Fatalf("value mismatch: want %v, got %v", ev, fv)
+		}
+	}
+}
+
 func TestTriePatternEdgeCases(t *testing.T) {
 	trie := newTrie()
 

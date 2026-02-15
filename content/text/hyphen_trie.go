@@ -3,7 +3,6 @@ package text
 import (
 	"strings"
 	"unicode"
-	"unicode/utf8"
 )
 
 // addPatternString specialized function for TeX-style hyphenation patterns.
@@ -12,16 +11,16 @@ func (p *trie) addPatternString(s string) {
 
 	v := []int{}
 
-	// precompute the Unicode rune for the character '0'
-	zero, _ := utf8.DecodeRune([]byte{'0'})
+	const zero = '0'
 
-	strLen := utf8.RuneCountInString(s)
+	// Convert to runes once to avoid byte-offset vs rune-index confusion
+	// (range over string yields byte offsets, not rune indices).
+	runes := []rune(s)
 
-	// Using the range keyword will give us each Unicode rune.
-	for pos, sym := range s {
+	for i, sym := range runes {
 
 		if unicode.IsDigit(sym) {
-			if pos == 0 {
+			if i == 0 {
 				// This is a prefix number
 				v = append(v, int(sym-zero))
 			}
@@ -30,9 +29,9 @@ func (p *trie) addPatternString(s string) {
 			continue
 		}
 
-		if pos < strLen-1 {
+		if i < len(runes)-1 {
 			// look ahead to see if it's followed by a number
-			next := []rune(s)[pos+1]
+			next := runes[i+1]
 			if unicode.IsDigit(next) {
 				// next char is the hyphenation value for this char
 				v = append(v, int(next-zero))
