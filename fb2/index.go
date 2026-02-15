@@ -1,7 +1,6 @@
 package fb2
 
 import (
-	"net/url"
 	"strings"
 
 	"go.uber.org/zap"
@@ -124,23 +123,32 @@ func indexHref(index ReverseLinkIndex, href, linkType string, path []any, log *z
 			Type: "empty-href-link",
 			Path: path,
 		})
+	} else if hasExternalScheme(href) {
+		// Valid external link with recognized scheme
+		index[href] = append(index[href], ElementRef{
+			Type: "external-link",
+			Path: path,
+		})
 	} else {
-		// External link
-		if _, err := url.Parse(href); err != nil {
-			log.Warn("Invalid external link", zap.String("href", href), zap.Error(err))
-			// Broken link - collect under the actual name, so it could be reported later
-			index[targetID] = append(index[targetID], ElementRef{
-				Type: "broken-link",
-				Path: path,
-			})
+		// No recognized scheme — treat as broken link
+		log.Warn("Link with unrecognized scheme", zap.String("href", href))
+		index[href] = append(index[href], ElementRef{
+			Type: "broken-link",
+			Path: path,
+		})
+	}
+}
 
-		} else {
-			index[href] = append(index[href], ElementRef{
-				Type: "external-link",
-				Path: path,
-			})
+// hasExternalScheme reports whether href starts with a recognized external URL scheme.
+func hasExternalScheme(href string) bool {
+	for _, prefix := range []string{
+		"http://", "https://", "ftp://", "ftps://", "mailto:",
+	} {
+		if len(href) > len(prefix) && strings.EqualFold(href[:len(prefix)], prefix) {
+			return true
 		}
 	}
+	return false
 }
 
 // buildReverseLinkIndex walks the entire FictionBook and builds an index of all links

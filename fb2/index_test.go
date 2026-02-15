@@ -159,3 +159,140 @@ func TestBuildFootnotesIndex(t *testing.T) {
 		}
 	})
 }
+
+func TestHasExternalScheme(t *testing.T) {
+	tests := []struct {
+		href string
+		want bool
+	}{
+		{"http://example.com", true},
+		{"https://example.com/path", true},
+		{"HTTP://EXAMPLE.COM", true},
+		{"ftp://files.example.com/book.fb2", true},
+		{"ftps://secure.example.com/book.fb2", true},
+		{"mailto:user@example.com", true},
+		{"MAILTO:user@example.com", true},
+		// No scheme
+		{"example.com", false},
+		{"just some text", false},
+		{"/path/to/file", false},
+		{"relative/path", false},
+		// Unsupported schemes
+		{"file:///etc/passwd", false},
+		{"javascript:alert(1)", false},
+		{"data:text/html,<h1>hi</h1>", false},
+		// Scheme-like but too short (no content after scheme)
+		{"http://", false},
+		{"https://", false},
+		{"mailto:", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.href, func(t *testing.T) {
+			if got := hasExternalScheme(tt.href); got != tt.want {
+				t.Errorf("hasExternalScheme(%q) = %v, want %v", tt.href, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIndexHref(t *testing.T) {
+	log := zap.NewNop()
+	path := []any{"test"}
+
+	t.Run("internal link", func(t *testing.T) {
+		index := make(ReverseLinkIndex)
+		indexHref(index, "#footnote1", "inline-link", path, log)
+
+		refs, ok := index["footnote1"]
+		if !ok || len(refs) != 1 {
+			t.Fatalf("expected 1 ref under 'footnote1', got %v", index)
+		}
+		if refs[0].Type != "inline-link" {
+			t.Errorf("expected type 'inline-link', got %q", refs[0].Type)
+		}
+	})
+
+	t.Run("empty href", func(t *testing.T) {
+		index := make(ReverseLinkIndex)
+		indexHref(index, "", "inline-link", path, log)
+
+		refs, ok := index["links/empty_href"]
+		if !ok || len(refs) != 1 {
+			t.Fatalf("expected 1 ref under 'links/empty_href', got %v", index)
+		}
+		if refs[0].Type != "empty-href-link" {
+			t.Errorf("expected type 'empty-href-link', got %q", refs[0].Type)
+		}
+	})
+
+	t.Run("valid external link", func(t *testing.T) {
+		index := make(ReverseLinkIndex)
+		indexHref(index, "https://example.com", "inline-link", path, log)
+
+		refs, ok := index["https://example.com"]
+		if !ok || len(refs) != 1 {
+			t.Fatalf("expected 1 ref under URL key, got %v", index)
+		}
+		if refs[0].Type != "external-link" {
+			t.Errorf("expected type 'external-link', got %q", refs[0].Type)
+		}
+	})
+
+	t.Run("no scheme is broken link", func(t *testing.T) {
+		index := make(ReverseLinkIndex)
+		indexHref(index, "not-a-url", "inline-link", path, log)
+
+		refs, ok := index["not-a-url"]
+		if !ok || len(refs) != 1 {
+			t.Fatalf("expected 1 ref under 'not-a-url', got %v", index)
+		}
+		if refs[0].Type != "broken-link" {
+			t.Errorf("expected type 'broken-link', got %q", refs[0].Type)
+		}
+	})
+
+	t.Run("javascript scheme is broken link", func(t *testing.T) {
+		index := make(ReverseLinkIndex)
+		indexHref(index, "javascript:alert(1)", "inline-link", path, log)
+
+		refs, ok := index["javascript:alert(1)"]
+		if !ok || len(refs) != 1 {
+			t.Fatalf("expected 1 ref, got %v", index)
+		}
+		if refs[0].Type != "broken-link" {
+			t.Errorf("expected type 'broken-link', got %q", refs[0].Type)
+		}
+	})
+
+	t.Run("mailto is external link", func(t *testing.T) {
+		index := make(ReverseLinkIndex)
+		indexHref(index, "mailto:user@example.com", "inline-link", path, log)
+
+		refs, ok := index["mailto:user@example.com"]
+		if !ok || len(refs) != 1 {
+			t.Fatalf("expected 1 ref, got %v", index)
+		}
+		if refs[0].Type != "external-link" {
+			t.Errorf("expected type 'external-link', got %q", refs[0].Type)
+		}
+	})
+
+	t.Run("broken link indexed under href not empty string", func(t *testing.T) {
+		// Regression: old code used targetID (always "" in else branch)
+		// instead of href as the index key.
+		index := make(ReverseLinkIndex)
+		indexHref(index, "some-random-text", "inline-link", path, log)
+
+		if _, ok := index[""]; ok {
+			t.Error("broken link should NOT be indexed under empty string")
+		}
+		refs, ok := index["some-random-text"]
+		if !ok || len(refs) != 1 {
+			t.Fatalf("expected 1 ref under 'some-random-text', got %v", index)
+		}
+		if refs[0].Type != "broken-link" {
+			t.Errorf("expected type 'broken-link', got %q", refs[0].Type)
+		}
+	})
+}
