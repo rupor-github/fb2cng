@@ -8,6 +8,7 @@ import (
 	"image/gif"
 	"image/jpeg"
 	"image/png"
+	"strings"
 	"testing"
 
 	"go.uber.org/zap"
@@ -779,6 +780,52 @@ func TestParseBinary_CorruptedBase64(t *testing.T) {
 	_, err := parseBinary(el, log)
 	if err == nil {
 		t.Error("expected error for invalid base64")
+	}
+}
+
+func TestParseBinary_RejectsOversizedBinary(t *testing.T) {
+	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+
+	// Temporarily lower the limit so we don't need to allocate 256MB in a test.
+	orig := maxBinaryDecodedSize
+	maxBinaryDecodedSize = 1024 // 1 KB
+	t.Cleanup(func() { maxBinaryDecodedSize = orig })
+
+	// Create data that decodes to more than 1 KB.
+	bigData := bytes.Repeat([]byte("X"), 2048)
+	encoded := base64.StdEncoding.EncodeToString(bigData)
+	el := mustElement(t, `<binary id="huge" content-type="image/png">`+encoded+`</binary>`)
+
+	_, err := parseBinary(el, log)
+	if err == nil {
+		t.Fatal("expected error for oversized binary, got nil")
+	}
+	if !strings.Contains(err.Error(), "exceeds maximum") {
+		t.Errorf("expected 'exceeds maximum' in error, got: %v", err)
+	}
+}
+
+func TestParseBinary_AcceptsBinaryJustUnderLimit(t *testing.T) {
+	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+
+	// The size check uses len(base64)*3/4 as an upper-bound estimate, which
+	// can overestimate by up to 2 bytes due to padding. Use a limit with
+	// enough headroom so that 2048 bytes of real data passes.
+	orig := maxBinaryDecodedSize
+	maxBinaryDecodedSize = 2050
+	t.Cleanup(func() { maxBinaryDecodedSize = orig })
+
+	// Create data that decodes to exactly 2048 bytes (under the limit).
+	data := bytes.Repeat([]byte("A"), 2048)
+	encoded := base64.StdEncoding.EncodeToString(data)
+	el := mustElement(t, `<binary id="ok" content-type="image/jpeg">`+encoded+`</binary>`)
+
+	bo, err := parseBinary(el, log)
+	if err != nil {
+		t.Fatalf("expected success for binary under limit, got: %v", err)
+	}
+	if !bytes.Equal(bo.Data, data) {
+		t.Error("decoded data mismatch")
 	}
 }
 

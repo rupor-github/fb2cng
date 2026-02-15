@@ -929,10 +929,27 @@ func parseOutputDocument(el *etree.Element, log *zap.Logger) (OutputDocument, er
 	return doc, nil
 }
 
+// maxBinaryDecodedSize is the maximum allowed size (in bytes) for a decoded
+// binary element. Base64 text length is checked before decoding: if the
+// estimated decoded size exceeds this limit the element is rejected.
+// 256 MB is extremely generous for any legitimate FB2 resource (images, fonts).
+// Variable (not const) so that tests can temporarily lower it.
+var maxBinaryDecodedSize = 256 * 1024 * 1024
+
 func parseBinary(el *etree.Element, log *zap.Logger) (BinaryObject, error) {
 	id := el.SelectAttrValue("id", "")
 	contentType := el.SelectAttrValue("content-type", "")
-	data, err := base64.StdEncoding.DecodeString(normalizeBase64(el.Text()))
+
+	raw := el.Text()
+	// Estimate decoded size from base64 text length (every 4 base64 chars → 3 bytes).
+	// Use the raw length which includes whitespace — this overestimates slightly
+	// but is a cheap upper-bound check before we allocate anything.
+	if estimated := len(raw) * 3 / 4; estimated > maxBinaryDecodedSize {
+		return BinaryObject{}, fmt.Errorf("binary %q: base64 payload (%d bytes estimated decoded) exceeds maximum allowed size (%d bytes)",
+			id, estimated, maxBinaryDecodedSize)
+	}
+
+	data, err := base64.StdEncoding.DecodeString(normalizeBase64(raw))
 	if err != nil {
 		var corruptErr base64.CorruptInputError
 		if errors.As(err, &corruptErr) && len(data) > 0 {
