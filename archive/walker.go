@@ -3,6 +3,8 @@ package archive
 
 import (
 	"archive/zip"
+	"fmt"
+	"path"
 	"strings"
 )
 
@@ -13,7 +15,8 @@ import (
 type WalkFunc func(archive string, file *zip.File) error
 
 // Walk walks the all files in the archive which satisfy match condition,
-// calling walkFn for each item.
+// calling walkFn for each item. Entries with path traversal components
+// ("..") or absolute paths are silently skipped to prevent Zip Slip attacks.
 func Walk(archive, pattern string, walkFn WalkFunc) error {
 
 	r, err := zip.OpenReader(archive)
@@ -23,11 +26,29 @@ func Walk(archive, pattern string, walkFn WalkFunc) error {
 	defer r.Close()
 
 	for _, f := range r.File {
-		if !f.FileInfo().IsDir() && strings.HasPrefix(f.FileHeader.Name, pattern) {
+		name := f.FileHeader.Name
+		if !isSafePath(name) {
+			return fmt.Errorf("zip entry %q: unsafe path (absolute or contains path traversal)", name)
+		}
+		if !f.FileInfo().IsDir() && strings.HasPrefix(name, pattern) {
 			if err := walkFn(archive, f); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+// isSafePath returns false for paths that could escape the extraction
+// directory: absolute paths and those containing ".." components.
+func isSafePath(name string) bool {
+	if path.IsAbs(name) || strings.HasPrefix(name, "/") || strings.HasPrefix(name, `\`) {
+		return false
+	}
+	for _, part := range strings.Split(name, "/") {
+		if part == ".." {
+			return false
+		}
+	}
+	return true
 }

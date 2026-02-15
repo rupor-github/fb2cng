@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -361,4 +362,66 @@ func TestWalk_CaseSensitivity(t *testing.T) {
 			t.Errorf("visited %d files with 'docs/', want 0", visited)
 		}
 	})
+}
+
+func TestWalk_RejectsPathTraversal(t *testing.T) {
+	tmpDir := t.TempDir()
+	zipPath := filepath.Join(tmpDir, "malicious.zip")
+
+	// Create a zip with a path traversal entry using raw FileHeader.
+	zipFile, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatalf("create zip: %v", err)
+	}
+	w := zip.NewWriter(zipFile)
+	// Manually set the name to include ".." — zip.Create would sanitize.
+	header := &zip.FileHeader{Name: "../../etc/passwd", Method: zip.Store}
+	fw, err := w.CreateHeader(header)
+	if err != nil {
+		t.Fatalf("create header: %v", err)
+	}
+	fw.Write([]byte("root:x:0:0::/root:/bin/bash"))
+	w.Close()
+	zipFile.Close()
+
+	err = Walk(zipPath, "", func(archive string, file *zip.File) error {
+		t.Errorf("walkFn should not be called for path-traversal entry, got %q", file.Name)
+		return nil
+	})
+	if err == nil {
+		t.Fatal("expected error for zip entry with path traversal, got nil")
+	}
+	if !strings.Contains(err.Error(), "unsafe path") {
+		t.Errorf("expected 'unsafe path' in error, got: %v", err)
+	}
+}
+
+func TestWalk_RejectsAbsolutePath(t *testing.T) {
+	tmpDir := t.TempDir()
+	zipPath := filepath.Join(tmpDir, "malicious.zip")
+
+	zipFile, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatalf("create zip: %v", err)
+	}
+	w := zip.NewWriter(zipFile)
+	header := &zip.FileHeader{Name: "/etc/passwd", Method: zip.Store}
+	fw, err := w.CreateHeader(header)
+	if err != nil {
+		t.Fatalf("create header: %v", err)
+	}
+	fw.Write([]byte("root:x:0:0::/root:/bin/bash"))
+	w.Close()
+	zipFile.Close()
+
+	err = Walk(zipPath, "", func(archive string, file *zip.File) error {
+		t.Errorf("walkFn should not be called for absolute path entry, got %q", file.Name)
+		return nil
+	})
+	if err == nil {
+		t.Fatal("expected error for zip entry with absolute path, got nil")
+	}
+	if !strings.Contains(err.Error(), "unsafe path") {
+		t.Errorf("expected 'unsafe path' in error, got: %v", err)
+	}
 }
