@@ -162,8 +162,8 @@ golang.org/x/crypto/blowfish
 golang.org/x/crypto/pbkdf2
 golang.org/x/crypto/scrypt
 golang.org/x/crypto/sha3
-# golang.org/x/exp/typeparams v0.0.0-20260209203927-2842357ff358
-## explicit; go 1.24.0
+# golang.org/x/exp/typeparams v0.0.0-20260212183809-81e46e3db34a
+## explicit; go 1.25.0
 golang.org/x/exp/typeparams
 # golang.org/x/image v0.36.0
 ## explicit; go 1.24.0
@@ -200,8 +200,8 @@ golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
-# golang.org/x/telemetry v0.0.0-20260209163413-e7419c687ee4
-## explicit; go 1.24.0
+# golang.org/x/telemetry v0.0.0-20260213145524-e0ab670178e1
+## explicit; go 1.25.0
 golang.org/x/telemetry/counter
 golang.org/x/telemetry/internal/counter
 golang.org/x/telemetry/internal/mmap
@@ -240,11 +240,13 @@ golang.org/x/text/unicode/norm
 golang.org/x/tools/cmd/goimports
 golang.org/x/tools/cover
 golang.org/x/tools/go/analysis
+golang.org/x/tools/go/analysis/passes/ctrlflow
 golang.org/x/tools/go/analysis/passes/inspect
 golang.org/x/tools/go/ast/astutil
 golang.org/x/tools/go/ast/edge
 golang.org/x/tools/go/ast/inspector
 golang.org/x/tools/go/buildutil
+golang.org/x/tools/go/cfg
 golang.org/x/tools/go/gcexportdata
 golang.org/x/tools/go/internal/cgo
 golang.org/x/tools/go/loader
@@ -274,8 +276,8 @@ golang.org/x/tools/cmd/cover
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
-# honnef.co/go/tools v0.6.1
-## explicit; go 1.23
+# honnef.co/go/tools v0.7.0
+## explicit; go 1.25.0
 honnef.co/go/tools/analysis/callcheck
 honnef.co/go/tools/analysis/code
 honnef.co/go/tools/analysis/edit
@@ -296,11 +298,13 @@ honnef.co/go/tools/go/ir
 honnef.co/go/tools/go/ir/irutil
 honnef.co/go/tools/go/loader
 honnef.co/go/tools/go/types/typeutil
+honnef.co/go/tools/internal/analysisinternal/typeindex
 honnef.co/go/tools/internal/passes/buildir
 honnef.co/go/tools/internal/renameio
 honnef.co/go/tools/internal/robustio
 honnef.co/go/tools/internal/sharedcheck
 honnef.co/go/tools/internal/sync
+honnef.co/go/tools/internal/typesinternal/typeindex
 honnef.co/go/tools/knowledge
 honnef.co/go/tools/lintcmd
 honnef.co/go/tools/lintcmd/cache
