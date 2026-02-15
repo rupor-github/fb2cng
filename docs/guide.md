@@ -871,7 +871,7 @@ MyHomeLib Installation Directory
 │   MyHomeLib.exe
 │
 └───converters
-    ├───fb2converter
+    ├───converter
     │       fbc.exe
     │       mhl-connector.exe
     │
@@ -890,7 +890,7 @@ MyHomeLib Installation Directory
 
 **Option 1: Copy executable**
 - Copy `mhl-connector.exe` as `fb2epub.exe` and/or `fb2mobi.exe`
-- Place `fbc.exe` in system PATH or in `fb2converter` directory
+- Place `fbc.exe` in system PATH or in `converter` directory
 
 **Option 2: Symlinks (recommended)**
 - Create symlinks next to `fbc.exe`
@@ -899,8 +899,10 @@ MyHomeLib Installation Directory
 
 **Windows (as Administrator):**
 ```cmd
-mklink fb2epub.exe mhl-connector.exe
-mklink fb2mobi.exe mhl-connector.exe
+cd converters\fb2epub
+mklink fb2epub.exe ..\converter\mhl-connector.exe
+cd ..\fb2mobi
+mklink fb2mobi.exe ..\converter\mhl-connector.exe
 ```
 
 ### Configuration

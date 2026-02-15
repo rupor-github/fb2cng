@@ -114,8 +114,9 @@ func (s *Splitter) Split(in string) []string {
 }
 
 // Sentences returns an iterator over sentences.
-// This is more memory-efficient than Split for large texts as it doesn't
-// allocate a slice for all sentences upfront. The iterator applies the same
+// Note: Tokenize() still materializes all tokens upfront, so this is not
+// a streaming iterator. It avoids the additional []string allocation of Split
+// but has the same underlying memory cost. The iterator applies the same
 // space-trimming logic as Split for Kobo device compatibility.
 func (s *Splitter) Sentences(in string) iter.Seq[string] {
 	return func(yield func(string) bool) {

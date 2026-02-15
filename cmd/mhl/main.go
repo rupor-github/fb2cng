@@ -36,7 +36,7 @@ const usageMsg = `
 	|	MyHomeLib.exe
 	|
 	\---converters
-		+---fb2converter
+		+---converter
 		|		fbc.exe
 		|		mhl-connector.exe
 		|
@@ -51,7 +51,7 @@ const usageMsg = `
 	If you are copying mhl-connector.exe you could either follow above structure or have fbc.exe in a OS PATH.
 
 	If you are using symlinks, mhl-connector.exe should be located next to fbc.exe and they could be anywhere,
-	no fb2converter directory or OS PATH modification is necessary.
+	no converter directory or OS PATH modification is necessary.
 
 	Since passing additional arguments via MyHomeLib is inconvinient -
 	additional configuration file "connector.yaml" is supported. If required it
@@ -171,10 +171,10 @@ func main() {
 	converterName := misc.GetAppName() + ".exe"
 
 	paths := []string{
-		filepath.Join(filepath.Dir(resolvedPath), converterName),            // where symlink points
-		filepath.Join(filepath.Dir(exePath), converterName),                 // where I was started from
-		filepath.Join(filepath.Dir(exePath), "fb2converter", converterName), // `pwd`/../fb2converter
-		filepath.Join(converterName),                                        // in the system PATH
+		filepath.Join(filepath.Dir(resolvedPath), converterName),         // where symlink points
+		filepath.Join(filepath.Dir(exePath), converterName),              // where I was started from
+		filepath.Join(filepath.Dir(exePath), "converter", converterName), // `pwd`/../converter
+		filepath.Join(converterName),                                     // in the system PATH
 	}
 
 	var converterPath string
@@ -189,9 +189,13 @@ func main() {
 	}
 
 	// let's get the target name from the executable name
-	target := strings.TrimSuffix(filepath.Base(exePath), filepath.Ext(exePath))
-	if !strings.EqualFold(target, "fb2mobi") && !strings.EqualFold(target, "fb2epub") {
-		log.Fatalf("MHL connector could be named either fb2mobi or fb2epub (or started via appropriate symlinks), current name is: %s. It should be invoked by MyHomeLib, never directly", target)
+	target := filepath.Base(exePath)
+	if !strings.EqualFold(filepath.Ext(target), ".exe") {
+		log.Fatalf("MHL connector must be a .exe executable, current name is: %s", target)
+	}
+	target = strings.ToLower(strings.TrimSuffix(target, filepath.Ext(target)))
+	if target != "fb2mobi" && target != "fb2epub" {
+		log.Fatalf("MHL connector could be named either fb2mobi.exe or fb2epub.exe (or started via appropriate symlinks), current name is: %s.exe. It should be invoked by MyHomeLib, never directly", target)
 	}
 
 	from, err := filepath.Abs(os.Args[1])
@@ -227,7 +231,7 @@ func main() {
 	args = append(args, "convert")
 	args = append(args, "--ow")
 
-	if cfg.KindleEbook && strings.EqualFold(target, "fb2mobi") {
+	if cfg.KindleEbook && target == "fb2mobi" {
 		args = append(args, "--ebook")
 	}
 
