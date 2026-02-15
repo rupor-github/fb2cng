@@ -624,6 +624,112 @@ func TestParser_NumericValues(t *testing.T) {
 	}
 }
 
+func TestParser_DimensionEdgeCases(t *testing.T) {
+	log := zap.NewNop()
+	p := css.NewParser(log)
+
+	tests := []struct {
+		name      string
+		css       string
+		prop      string
+		wantValue float64
+		wantUnit  string
+		// wantKeyword, if non-empty, means parseDimension should have
+		// failed and the value should have fallen back to keyword=raw.
+		wantKeyword string
+	}{
+		{
+			name:      "fractional-only .5em",
+			css:       `p { margin-top: .5em; }`,
+			prop:      "margin-top",
+			wantValue: 0.5,
+			wantUnit:  "em",
+		},
+		{
+			name:      "positive sign +1px",
+			css:       `p { margin-top: +1px; }`,
+			prop:      "margin-top",
+			wantValue: 1,
+			wantUnit:  "px",
+		},
+		{
+			name:      "negative value -3px",
+			css:       `p { margin-top: -3px; }`,
+			prop:      "margin-top",
+			wantValue: -3,
+			wantUnit:  "px",
+		},
+		{
+			name:      "zero with unit 0px",
+			css:       `p { margin-top: 0px; }`,
+			prop:      "margin-top",
+			wantValue: 0,
+			wantUnit:  "px",
+		},
+		{
+			name:      "negative fractional -.25rem",
+			css:       `p { margin-top: -.25rem; }`,
+			prop:      "margin-top",
+			wantValue: -0.25,
+			wantUnit:  "rem",
+		},
+		{
+			name:      "large value 100vw",
+			css:       `p { width: 100vw; }`,
+			prop:      "width",
+			wantValue: 100,
+			wantUnit:  "vw",
+		},
+		{
+			name:      "unit is lowercased 12PX -> px",
+			css:       `p { margin-top: 12PX; }`,
+			prop:      "margin-top",
+			wantValue: 12,
+			wantUnit:  "px",
+		},
+		{
+			name:      "positive fractional +.75em",
+			css:       `p { margin-top: +.75em; }`,
+			prop:      "margin-top",
+			wantValue: 0.75,
+			wantUnit:  "em",
+		},
+		// Note: "5.em" is not valid CSS — the tokenizer does not produce a
+		// DimensionToken for it, so parseDimension is never called. That
+		// edge case is handled at the tokenizer level, not by us.
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sheet := p.Parse([]byte(tt.css))
+			rules := allRules(sheet)
+			if len(rules) != 1 {
+				t.Fatalf("expected 1 rule, got %d", len(rules))
+			}
+
+			val, ok := rules[0].GetProperty(tt.prop)
+			if !ok {
+				t.Fatalf("expected property %s", tt.prop)
+			}
+
+			if tt.wantKeyword != "" {
+				if val.Keyword != tt.wantKeyword {
+					t.Errorf("expected keyword %q, got keyword=%q value=%v unit=%q",
+						tt.wantKeyword, val.Keyword, val.Value, val.Unit)
+				}
+				return
+			}
+
+			if val.Value != tt.wantValue {
+				t.Errorf("expected value %v, got %v", tt.wantValue, val.Value)
+			}
+			if val.Unit != tt.wantUnit {
+				t.Errorf("expected unit %q, got %q", tt.wantUnit, val.Unit)
+			}
+		})
+	}
+}
+
 func TestParser_ShorthandMargin(t *testing.T) {
 	log := zap.NewNop()
 	p := css.NewParser(log)

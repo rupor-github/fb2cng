@@ -5,7 +5,6 @@ import (
 	"maps"
 	"strconv"
 	"strings"
-	"unicode"
 
 	parse "github.com/tdewolff/parse/v2"
 	"github.com/tdewolff/parse/v2/css"
@@ -221,7 +220,11 @@ func (p *Parser) parsePropertyValue(tokens []css.Token) Value {
 		t := tokens[0]
 		switch t.TokenType {
 		case css.DimensionToken:
-			val.Value, val.Unit = parseDimension(string(t.Data))
+			if v, u, ok := parseDimension(string(t.Data)); ok {
+				val.Value, val.Unit = v, u
+			} else {
+				val.Keyword = raw
+			}
 		case css.PercentageToken:
 			val.Value, _ = strconv.ParseFloat(strings.TrimSuffix(string(t.Data), "%"), 64)
 			val.Unit = "%"
@@ -251,25 +254,40 @@ func (p *Parser) parsePropertyValue(tokens []css.Token) Value {
 	return val
 }
 
-// parseDimension extracts numeric value and unit from dimension token.
-func parseDimension(s string) (float64, string) {
-	// Find where number ends
-	numEnd := 0
-	for i, r := range s {
-		if unicode.IsDigit(r) || r == '.' || r == '-' || r == '+' {
-			numEnd = i + 1
-		} else {
-			break
+// parseDimension extracts numeric value and unit from a CSS dimension token
+// string (e.g. "1.2em", "-3px", "+0.5rem"). The numeric prefix is parsed by
+// strconv.ParseFloat; the remainder is lowercased and returned as the unit.
+// On any parse failure, ok is false and the caller should fall back to Raw.
+func parseDimension(s string) (num float64, unit string, ok bool) {
+	// Find where the numeric prefix ends.  A valid CSS number is:
+	//   [+-]? ( <digits> '.'? <digits>? | '.' <digits> )
+	// We locate the boundary by scanning for the first byte that cannot
+	// be part of such a number.
+	i := 0
+	if i < len(s) && (s[i] == '+' || s[i] == '-') {
+		i++
+	}
+	digits := 0
+	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+		i++
+		digits++
+	}
+	if i < len(s) && s[i] == '.' {
+		i++
+		for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+			i++
+			digits++
 		}
 	}
-
-	if numEnd == 0 {
-		return 0, ""
+	if digits == 0 || i == 0 {
+		return 0, "", false
 	}
 
-	num, _ := strconv.ParseFloat(s[:numEnd], 64)
-	unit := strings.ToLower(s[numEnd:])
-	return num, unit
+	num, err := strconv.ParseFloat(s[:i], 64)
+	if err != nil {
+		return 0, "", false
+	}
+	return num, strings.ToLower(s[i:]), true
 }
 
 // parseSelector parses a single selector string into a Selector.
