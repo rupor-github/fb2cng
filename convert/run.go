@@ -109,6 +109,16 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 	env.NoDirs, env.Overwrite = cmd.Bool("nodirs"), cmd.Bool("overwrite")
 	env.KindleEbook = cmd.Bool("ebook")
 
+	as, err := common.NormalizeASIN(cmd.String("asin"))
+	if err != nil {
+		return fmt.Errorf("invalid --asin: %w", err)
+	}
+	if as != "" && !format.ForKindle() {
+		log.Warn("Ignoring --asin for non-Kindle output", zap.String("format", format.String()))
+		as = ""
+	}
+	env.KindleASIN = as
+
 	// Since zip "standard" does not define file name encoding we may need to
 	// force archaic code page for old archives
 	cp := cmd.String("force-zip-cp")

@@ -99,6 +99,7 @@ fbc convert [options] SOURCE [DESTINATION]
 
 - `--to TYPE` - Output format: `epub2` (default), `epub3`, `kepub`, `kfx`, `azw8`
 - `--ebook, --eb` - For Kindle formats, mark output as ebook (EBOK) instead of personal document (PDOC)
+- `--asin ASIN` - For Kindle formats (`kfx`, `azw8`), set ASIN used in metadata (10 chars, `A-Z0-9`; for books it's often the ISBN-10)
 - `--nodirs, --nd` - Don't preserve input directory structure in output
 - `--overwrite, --ow` - Overwrite existing files
 - `--force-zip-cp ENCODING` - Force encoding for non-UTF8 archive file names (e.g., `windows-1251`, `cp866`)
@@ -148,6 +149,11 @@ fbc convert --to epub3 ~/Books/FB2/ ~/Books/EPUB/
 **Convert archive with overwrite:**
 ```bash
 fbc convert --ow --to kepub books.zip ~/Kobo/
+```
+
+**Convert to Kindle with explicit ASIN:**
+```bash
+fbc convert --to kfx --asin B012345678 book.fb2
 ```
 
 **Convert with custom configuration:**

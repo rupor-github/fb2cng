@@ -155,6 +155,7 @@ func main() {
 					&cli.StringFlag{Name: "to", Value: common.OutputFmtEpub2.String(),
 						Usage: "conversion output `TYPE` (supported types: " + strings.Join(common.OutputFmtNames(), ", ") + ")"},
 					&cli.BoolFlag{Name: "ebook", Aliases: []string{"eb"}, Usage: "for Kindle formats generate as ebook (EBOK) instead of personal document (PDOC)"},
+					&cli.StringFlag{Name: "asin", Usage: "set ASIN (10 chars, A-Z0-9); used only for Kindle formats"},
 					&cli.BoolFlag{Name: "nodirs", Aliases: []string{"nd"}, Usage: "when producing output do not keep input directory structure"},
 					&cli.BoolFlag{Name: "overwrite", Aliases: []string{"ow"}, Usage: "continue even if destination exits, overwrite files"},
 					&cli.StringFlag{Name: "force-zip-cp",

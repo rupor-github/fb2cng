@@ -24,6 +24,7 @@ type LocalEnv struct {
 	NoDirs           bool
 	Overwrite        bool
 	KindleEbook      bool
+	KindleASIN       string
 	CodePage         encoding.Encoding
 	DefaultCover     []byte
 	DefaultStyle     []byte

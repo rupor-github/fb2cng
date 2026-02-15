@@ -36,7 +36,10 @@ func BuildBookMetadata(c *content.Content, cfg *config.DocumentConfig, container
 	titleMetadata := make([]any, 0)
 
 	// Stable IDs (these don't need to match Amazon exactly, but having them helps parity/compat)
-	asin := hashToAlphanumeric(c.Book.Description.DocumentInfo.ID, 32)
+	asin := c.ASIN
+	if asin == "" {
+		asin = hashToAlphanumeric(c.Book.Description.DocumentInfo.ID, 32)
+	}
 	if asin != "" {
 		titleMetadata = append(titleMetadata, NewMetadataEntry("ASIN", asin))
 		titleMetadata = append(titleMetadata, NewMetadataEntry("content_id", asin))
