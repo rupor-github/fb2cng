@@ -28,10 +28,10 @@ func transliterateWord(word string) string {
 	firstUpper := unicode.IsUpper(runes[0])
 	allUpper := isAllUpper(runes)
 
-	// Use slug for transliteration (temporarily disable lowercase)
-	slug.Lowercase = false
+	// slug.Make always lowercases (the default). We apply our own casing
+	// afterward. This avoids mutating the package-level slug.Lowercase
+	// variable, which would be a data race under concurrent use.
 	trans := slug.Make(word)
-	slug.Lowercase = true
 
 	if trans == "" {
 		return word

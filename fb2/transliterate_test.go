@@ -1,6 +1,9 @@
 package fb2
 
-import "testing"
+import (
+	"sync"
+	"testing"
+)
 
 func TestTransliterate(t *testing.T) {
 	tests := []struct {
@@ -68,6 +71,46 @@ func TestTransliterate(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestTransliterateRace verifies that concurrent calls to Transliterate and
+// Slugify do not race on shared global state. Run with -race to detect.
+func TestTransliterateRace(t *testing.T) {
+	const goroutines = 10
+	const iterations = 100
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines * 2)
+
+	// Half the goroutines call Transliterate (which needs case-preserved output)
+	for i := 0; i < goroutines; i++ {
+		go func() {
+			defer wg.Done()
+			for j := 0; j < iterations; j++ {
+				got := Transliterate("Война и мир")
+				if got != "Voina i mir" {
+					t.Errorf("Transliterate race: got %q, want %q", got, "Voina i mir")
+					return
+				}
+			}
+		}()
+	}
+
+	// The other half call Slugify (which expects lowercase output)
+	for i := 0; i < goroutines; i++ {
+		go func() {
+			defer wg.Done()
+			for j := 0; j < iterations; j++ {
+				got := Slugify("Война и мир")
+				if got != "voina-i-mir" {
+					t.Errorf("Slugify race: got %q, want %q", got, "voina-i-mir")
+					return
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
 }
 
 func TestSlugify(t *testing.T) {
