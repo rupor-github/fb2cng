@@ -218,7 +218,7 @@ func ReadContainer(data []byte) (*Container, error) {
 			}
 
 			if err := c.Fragments.Add(frag); err != nil {
-				// Duplicate fragment - skip (as per KFXInput behavior)
+				// Duplicate fragment - skip (some readers accept "first wins")
 				continue
 			}
 		}
@@ -678,7 +678,7 @@ func (c *Container) serializeFragmentValue(frag *Fragment) ([]byte, error) {
 		w = NewIonWriter()
 	}
 
-	// KFXInput expects fragment payload values to be unannotated; fragment identity is carried
+	// Keep fragment payload values unannotated; fragment identity is carried
 	// by the entity directory (id_idnum/type_idnum).
 
 	if err := c.writeValue(w, frag.Value); err != nil {

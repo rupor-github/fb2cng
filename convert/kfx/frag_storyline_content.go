@@ -32,16 +32,16 @@ const maxStorylineSplitDepth = 2
 // entries; any titled descendants are attached under the most recently seen titled
 // sibling (see inline processing below).
 //
-// isStorylineRoot indicates whether this section is the root section for its storyline.
-// KP3 uses slightly different wrapper margin normalization for the first nested title
-// in a storyline vs. nested titles that appear inline deeper in the same storyline.
+// storylineRootDepth is the depth where the current storyline started.
+// KP3 normalizes nested wrapper margins relative to this depth.
+//
 // Titled nested sections up to maxStorylineSplitDepth are collected for the caller to
 // process as separate storylines, while deeper sections are processed inline.
 //
 // Parameters:
 //   - nestedTitledSections: receives titled nested sections that should become separate storylines
 //   - directChildTOC: receives TOC entries for sections processed inline
-func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, depth int, storylineRootDepth int, isStorylineRoot bool, directChildTOC *[]*TOCEntry, nestedTitledSections *[]sectionWorkItem, idToEID eidByFB2ID) error {
+func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, depth int, storylineRootDepth int, directChildTOC *[]*TOCEntry, nestedTitledSections *[]sectionWorkItem, idToEID eidByFB2ID) error {
 	// Enter section container for margin collapsing tracking.
 	// Section content is a standard container (no title-block mode).
 	//
@@ -283,7 +283,7 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 				// Process nested section content recursively (same storyline)
 				var childTOC []*TOCEntry
 				var childTitledSections []sectionWorkItem
-				if err := processStorylineSectionContent(c, nestedSection, sb, styles, imageResources, ca, nextDepth, storylineRootDepth, false, &childTOC, &childTitledSections, idToEID); err != nil {
+				if err := processStorylineSectionContent(c, nestedSection, sb, styles, imageResources, ca, nextDepth, storylineRootDepth, &childTOC, &childTitledSections, idToEID); err != nil {
 					return err
 				}
 

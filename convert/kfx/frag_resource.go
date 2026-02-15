@@ -9,6 +9,16 @@ import (
 	"fbc/fb2"
 )
 
+// imageResourceInfo holds image resource information including dimensions.
+// Used to create KP3-compatible width-based styles for images.
+type imageResourceInfo struct {
+	ResourceName string // KFX resource name (e.g., "e1")
+	Width        int    // Image width in pixels
+	Height       int    // Image height in pixels
+}
+
+type imageResourceInfoByID map[string]imageResourceInfo
+
 func buildImageResourceFragments(images fb2.BookImages) ([]*Fragment, []*Fragment, imageResourceInfoByID) {
 	if len(images) == 0 {
 		return nil, nil, nil

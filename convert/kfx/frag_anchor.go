@@ -4,6 +4,8 @@ import (
 	"sync"
 )
 
+type eidByFB2ID map[string]int
+
 // buildAnchorFragments generates $266 anchor fragments for internal navigation.
 // Fragment naming uses the actual ID from the source document (e.g., section IDs, note IDs).
 // For TOC page links, anchor IDs may match section names (c0, c1, etc.) - this is allowed

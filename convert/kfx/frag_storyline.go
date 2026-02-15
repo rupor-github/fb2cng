@@ -8,6 +8,10 @@ import (
 	"fbc/fb2"
 )
 
+type sectionNameList []string
+
+type sectionEIDsBySectionName map[string][]int
+
 // sectionWorkItem represents a section to be processed as a storyline.
 // Used by the work queue to flatten nested titled sections into separate storylines.
 type sectionWorkItem struct {
@@ -194,7 +198,7 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 			var nestedTitledSections []sectionWorkItem
 			var directChildTOC []*TOCEntry
 
-			if err := processStorylineSectionContent(c, section, sb, styles, imageResources, ca, work.depth, work.depth, true, &directChildTOC, &nestedTitledSections, idToEID); err != nil {
+			if err := processStorylineSectionContent(c, section, sb, styles, imageResources, ca, work.depth, work.depth, &directChildTOC, &nestedTitledSections, idToEID); err != nil {
 				return nil, 0, nil, nil, nil, nil, landmarks, nil, err
 			}
 

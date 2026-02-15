@@ -8,7 +8,7 @@ func BuildAuxiliaryDataFragments(ids sectionNameList) []*Fragment {
 		if id == "" {
 			continue
 		}
-		// KFXInput requires fragment IDs (the fid symbol) to be unique across all fragment types.
+		// Fragment IDs (the fid symbol) must be unique across all fragment types.
 		// Reference files use a separate auxiliary id (often suffixed) while storing the real target
 		// in $598 (kfx_id).
 		fid := id + "-ad"

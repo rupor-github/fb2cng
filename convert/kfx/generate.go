@@ -267,7 +267,7 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 		}
 	}
 
-	// $593 FormatCapabilities - keep minimal (KFXInput reads kfxgen.* here)
+	// $593 FormatCapabilities - keep minimal
 	// Include pidMapWithOffset when inline images use offset-based position entries
 	formatFeatures := DefaultFormatFeatures()
 	if HasInlineImages(posItems) {
@@ -312,7 +312,7 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 // reflowSectionSizeVersion computes the reflow-section-size major version from
 // the maximum per-section PID count.
 //
-// This matches KFXInput's calculation:
+// This matches Calibre plugin behavior:
 //
 //	if max > 65536:
 //	  v = min(((max-65536)//16384)+2, 256)

@@ -3,7 +3,7 @@ package kfx
 import "fmt"
 
 // MaxContentFragmentSize is the maximum size in bytes for a content fragment's content_list.
-// KFXInput validates that content fragments don't exceed 8192 bytes.
+// Some consumers validate that content fragments don't exceed 8192 bytes.
 // This is separate from the container's ChunkSize ($412) which is used for streaming/compression.
 const MaxContentFragmentSize = 8192
 
