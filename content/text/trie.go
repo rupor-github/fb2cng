@@ -188,7 +188,7 @@ func (p *trie) allSubstrings(s string) []string {
 
 		// if this is a leaf node, add the string so far to the output vector
 		if child.leaf {
-			v = append(v, s[0:pos])
+			v = append(v, s[0:pos+utf8.RuneLen(rune)])
 		}
 		p = child
 	}

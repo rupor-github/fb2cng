@@ -79,18 +79,71 @@ func TestMultiFind(t *testing.T) {
 	trie.addString(`hena`)
 	trie.addString(`henat`)
 
-	expected := []string{}
-	expected = append(expected, `hyph`)
+	expected := []string{`hyph`}
 	found := trie.allSubstrings(`hyphenation`)
 	if len(found) != len(expected) {
-		t.Errorf("expected %v but found %v", expected, found)
+		t.Fatalf("expected %v but found %v", expected, found)
+	}
+	for i := range found {
+		if found[i] != expected[i] {
+			t.Errorf("allSubstrings[%d] = %q, want %q", i, found[i], expected[i])
+		}
 	}
 
 	expected = []string{`hen`, `hena`, `henat`}
 
 	found = trie.allSubstrings(`henation`)
 	if len(found) != len(expected) {
-		t.Errorf("expected %v but found %v", expected, found)
+		t.Fatalf("expected %v but found %v", expected, found)
+	}
+	for i := range found {
+		if found[i] != expected[i] {
+			t.Errorf("allSubstrings[%d] = %q, want %q", i, found[i], expected[i])
+		}
+	}
+}
+
+func TestMultiFind_Cyrillic(t *testing.T) {
+	trie := newTrie()
+
+	trie.addString("пере")
+	trie.addString("рено")
+	trie.addString("нос")
+
+	// Search in "перенос" — should find "пере" anchored at start.
+	found := trie.allSubstrings("перенос")
+	expected := []string{"пере"}
+	if len(found) != len(expected) {
+		t.Fatalf("expected %v but found %v", expected, found)
+	}
+	for i := range found {
+		if found[i] != expected[i] {
+			t.Errorf("allSubstrings[%d] = %q, want %q", i, found[i], expected[i])
+		}
+	}
+
+	// Search in "реноска" — should find "рено" anchored at start.
+	found = trie.allSubstrings("реноска")
+	expected = []string{"рено"}
+	if len(found) != len(expected) {
+		t.Fatalf("expected %v but found %v", expected, found)
+	}
+	for i := range found {
+		if found[i] != expected[i] {
+			t.Errorf("allSubstrings[%d] = %q, want %q", i, found[i], expected[i])
+		}
+	}
+
+	// Search in "носка" — should find "нос" anchored at start.
+	found = trie.allSubstrings("носка")
+	expected = []string{"нос"}
+	if len(found) != len(expected) {
+		t.Fatalf("expected %v but found %v", expected, found)
+	}
+	for i := range found {
+		if found[i] != expected[i] {
+			t.Errorf("allSubstrings[%d] = %q, want %q", i, found[i], expected[i])
+		}
 	}
 }
 
