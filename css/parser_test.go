@@ -501,11 +501,12 @@ func TestParser_FontFace(t *testing.T) {
 	`)
 	sheet := p.Parse(input)
 
-	if len(sheet.FontFaces) != 1 {
-		t.Fatalf("expected 1 font-face, got %d", len(sheet.FontFaces))
+	fontFaces := sheet.FontFaces()
+	if len(fontFaces) != 1 {
+		t.Fatalf("expected 1 font-face, got %d", len(fontFaces))
 	}
 
-	ff := sheet.FontFaces[0]
+	ff := fontFaces[0]
 	if ff.Family != "MyFont" {
 		t.Errorf("expected family 'MyFont', got '%s'", ff.Family)
 	}
@@ -544,15 +545,16 @@ func TestParser_Import(t *testing.T) {
 		t.Fatalf("expected 3 items, got %d", len(sheet.Items))
 	}
 
-	// Convenience Imports slice
-	if len(sheet.Imports) != 2 {
-		t.Fatalf("expected 2 imports, got %d", len(sheet.Imports))
+	// Imports() method
+	imports := sheet.Imports()
+	if len(imports) != 2 {
+		t.Fatalf("expected 2 imports, got %d", len(imports))
 	}
-	if sheet.Imports[0] != "other.css" {
-		t.Errorf("expected first import 'other.css', got '%s'", sheet.Imports[0])
+	if imports[0] != "other.css" {
+		t.Errorf("expected first import 'other.css', got '%s'", imports[0])
 	}
-	if sheet.Imports[1] != "another.css" {
-		t.Errorf("expected second import 'another.css', got '%s'", sheet.Imports[1])
+	if imports[1] != "another.css" {
+		t.Errorf("expected second import 'another.css', got '%s'", imports[1])
 	}
 
 	// Verify items
@@ -1202,8 +1204,9 @@ func TestStylesheet_RewriteURLs_Import(t *testing.T) {
 		return url
 	})
 
-	if len(sheet.Imports) != 1 || sheet.Imports[0] != "new.css" {
-		t.Errorf("expected import rewritten to 'new.css', got %v", sheet.Imports)
+	imports := sheet.Imports()
+	if len(imports) != 1 || imports[0] != "new.css" {
+		t.Errorf("expected import rewritten to 'new.css', got %v", imports)
 	}
 
 	output := sheet.String()
@@ -1229,12 +1232,13 @@ func TestStylesheet_RewriteURLs_FontFace(t *testing.T) {
 		return url
 	})
 
-	if len(sheet.FontFaces) != 1 {
-		t.Fatalf("expected 1 font-face, got %d", len(sheet.FontFaces))
+	fontFaces := sheet.FontFaces()
+	if len(fontFaces) != 1 {
+		t.Fatalf("expected 1 font-face, got %d", len(fontFaces))
 	}
 
-	if !strings.Contains(sheet.FontFaces[0].Src, "fonts/new.woff2") {
-		t.Errorf("expected rewritten font src, got: %s", sheet.FontFaces[0].Src)
+	if !strings.Contains(fontFaces[0].Src, "fonts/new.woff2") {
+		t.Errorf("expected rewritten font src, got: %s", fontFaces[0].Src)
 	}
 
 	output := sheet.String()
@@ -1345,6 +1349,81 @@ func TestStylesheet_RewriteURLs_NoChange(t *testing.T) {
 	}
 }
 
+func TestStylesheet_RewriteURLs_DuplicateImports(t *testing.T) {
+	log := zap.NewNop()
+	p := css.NewParser(log)
+
+	// Two identical @import statements — the old sync logic would only
+	// update the first Item, leaving the second stale.
+	input := []byte(`@import "reset.css";
+@import "reset.css";
+p { margin: 0; }`)
+	sheet := p.Parse(input)
+
+	sheet.RewriteURLs(func(url string) string {
+		if url == "reset.css" {
+			return "new-reset.css"
+		}
+		return url
+	})
+
+	imports := sheet.Imports()
+	if len(imports) != 2 {
+		t.Fatalf("expected 2 imports, got %d", len(imports))
+	}
+	for i, imp := range imports {
+		if imp != "new-reset.css" {
+			t.Errorf("import[%d] = %q, want %q", i, imp, "new-reset.css")
+		}
+	}
+
+	output := sheet.String()
+	count := strings.Count(output, `@import url("new-reset.css");`)
+	if count != 2 {
+		t.Errorf("expected 2 rewritten imports in output, got %d:\n%s", count, output)
+	}
+}
+
+func TestStylesheet_RewriteURLs_DuplicateFontFaces(t *testing.T) {
+	log := zap.NewNop()
+	p := css.NewParser(log)
+
+	// Two @font-face blocks with the same family but different weights.
+	// The old sync logic matched by Family and broke on first match,
+	// leaving the second font-face's Src stale.
+	input := []byte(`
+		@font-face {
+			font-family: "MyFont";
+			font-weight: normal;
+			src: url("fonts/regular.woff2");
+		}
+		@font-face {
+			font-family: "MyFont";
+			font-weight: bold;
+			src: url("fonts/bold.woff2");
+		}
+	`)
+	sheet := p.Parse(input)
+
+	sheet.RewriteURLs(func(url string) string {
+		return strings.Replace(url, "fonts/", "new/", 1)
+	})
+
+	fontFaces := sheet.FontFaces()
+	if len(fontFaces) != 2 {
+		t.Fatalf("expected 2 font-faces, got %d", len(fontFaces))
+	}
+
+	for i, ff := range fontFaces {
+		if !strings.Contains(ff.Src, "new/") {
+			t.Errorf("font-face[%d] src not rewritten: %s", i, ff.Src)
+		}
+		if strings.Contains(ff.Src, "fonts/") {
+			t.Errorf("font-face[%d] still contains old path: %s", i, ff.Src)
+		}
+	}
+}
+
 // Tests for CSS double-quote escaping in WriteTo output.
 
 func TestStylesheet_String_ImportEscapesQuotes(t *testing.T) {
@@ -1354,7 +1433,6 @@ func TestStylesheet_String_ImportEscapesQuotes(t *testing.T) {
 		Items: []css.StylesheetItem{
 			{Import: &importURL},
 		},
-		Imports: []string{importURL},
 	}
 
 	out := sheet.String()

@@ -68,9 +68,6 @@ func (p *Parser) Parse(data []byte, source ...string) *Stylesheet {
 				// Parse @font-face
 				ff := p.parseFontFace(parser)
 				sheet.Items = append(sheet.Items, StylesheetItem{FontFace: &ff})
-				if ff.Family != "" {
-					sheet.FontFaces = append(sheet.FontFaces, ff)
-				}
 			default:
 				// Skip other @-rules with blocks
 				p.skipAtRuleBlock(parser)
@@ -83,7 +80,6 @@ func (p *Parser) Parse(data []byte, source ...string) *Stylesheet {
 				url := extractImportURL(parser.Values())
 				if url != "" {
 					sheet.Items = append(sheet.Items, StylesheetItem{Import: &url})
-					sheet.Imports = append(sheet.Imports, url)
 					p.log.Debug("Parsed @import", zap.String("url", url))
 				}
 			} else {

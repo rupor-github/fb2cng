@@ -225,10 +225,31 @@ type MediaBlock struct {
 
 // Stylesheet represents a parsed CSS stylesheet.
 type Stylesheet struct {
-	Items     []StylesheetItem // All top-level items in source order
-	FontFaces []FontFace       // @font-face declarations (convenience accessor)
-	Imports   []string         // All @import URLs in source order (convenience accessor)
-	Warnings  []string         // Warnings for unsupported features
+	Items    []StylesheetItem // All top-level items in source order
+	Warnings []string         // Warnings for unsupported features
+}
+
+// Imports returns all @import URLs from the stylesheet in source order.
+func (s *Stylesheet) Imports() []string {
+	var urls []string
+	for _, item := range s.Items {
+		if item.Import != nil {
+			urls = append(urls, *item.Import)
+		}
+	}
+	return urls
+}
+
+// FontFaces returns all @font-face declarations from the stylesheet in source order.
+// Only font-faces with a non-empty Family are included (matching parser behavior).
+func (s *Stylesheet) FontFaces() []FontFace {
+	var faces []FontFace
+	for _, item := range s.Items {
+		if item.FontFace != nil && item.FontFace.Family != "" {
+			faces = append(faces, *item.FontFace)
+		}
+	}
+	return faces
 }
 
 // RulesBySelector returns all top-level rules matching the given selector string.
@@ -434,26 +455,11 @@ func (s *Stylesheet) RewriteURLs(fn func(originalURL string) string) {
 
 		switch {
 		case item.Import != nil:
-			oldURL := *item.Import
-			newURL := fn(oldURL)
+			newURL := fn(*item.Import)
 			item.Import = &newURL
-			// Also update the Imports convenience slice
-			for j := range s.Imports {
-				if s.Imports[j] == oldURL {
-					s.Imports[j] = newURL
-					break
-				}
-			}
 
 		case item.FontFace != nil:
 			item.FontFace.Src = rewriteURLsInValue(item.FontFace.Src, fn)
-			// Also update FontFaces convenience slice
-			for j := range s.FontFaces {
-				if s.FontFaces[j].Family == item.FontFace.Family {
-					s.FontFaces[j].Src = item.FontFace.Src
-					break
-				}
-			}
 
 		case item.Rule != nil:
 			rewriteURLsInProperties(item.Rule.Properties, fn)

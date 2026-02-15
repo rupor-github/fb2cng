@@ -137,7 +137,7 @@ func BuildFontInfo(stylesheets []fb2.Stylesheet, parsedCSS *css.Stylesheet, log 
 	}
 
 	// Process @font-face declarations from parsed CSS - collect ALL fonts
-	for _, ff := range parsedCSS.FontFaces {
+	for _, ff := range parsedCSS.FontFaces() {
 		if ff.Family == "" || ff.Src == "" {
 			continue
 		}
