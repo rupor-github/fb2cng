@@ -1667,3 +1667,74 @@ func TestPrepare_WithCoverID(t *testing.T) {
 		t.Error("Cover image not found in images index")
 	}
 }
+
+// TestPrepare_CleansUpTmpDirOnError verifies that when Prepare() fails after
+// creating a temp directory, the temp directory is removed (no leak).
+func TestPrepare_CleansUpTmpDirOnError(t *testing.T) {
+	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+	ctx := state.ContextWithEnv(context.Background())
+	env := state.EnvFromContext(ctx)
+	cfg, err := config.LoadConfiguration("")
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	// Configure a vignette pointing to a nonexistent file — this will cause
+	// prepareVignettes to fail after the temp directory has been created.
+	cfg.Document.Vignettes.Book.TitleTop = "/nonexistent/path/to/vignette.svg"
+	env.Cfg = cfg
+	env.Log = logger
+
+	fb2Content := `<?xml version="1.0" encoding="utf-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <description>
+    <title-info>
+      <genre>prose</genre>
+      <author><first-name>Test</first-name><last-name>Author</last-name></author>
+      <book-title>Test Book</book-title>
+      <lang>en</lang>
+    </title-info>
+    <document-info>
+      <author><first-name>Test</first-name><last-name>Author</last-name></author>
+      <program-used>test</program-used>
+      <date>2024-01-01</date>
+      <id>00000000-0000-0000-0000-000000000001</id>
+      <version>1.0</version>
+    </document-info>
+  </description>
+  <body>
+    <section>
+      <p>Content</p>
+    </section>
+  </body>
+</FictionBook>`
+
+	// Snapshot temp directories before the call
+	beforeDirs, err := filepath.Glob(filepath.Join(os.TempDir(), "fbc-*"))
+	if err != nil {
+		t.Fatalf("failed to glob temp dirs: %v", err)
+	}
+	beforeSet := make(map[string]bool, len(beforeDirs))
+	for _, d := range beforeDirs {
+		beforeSet[d] = true
+	}
+
+	reader := strings.NewReader(fb2Content)
+	_, err = Prepare(ctx, reader, "test.fb2", common.OutputFmtEpub2, logger)
+	if err == nil {
+		t.Fatal("expected Prepare to fail, but it succeeded")
+	}
+
+	// Check that no new temp directories were left behind
+	afterDirs, err := filepath.Glob(filepath.Join(os.TempDir(), "fbc-*"))
+	if err != nil {
+		t.Fatalf("failed to glob temp dirs: %v", err)
+	}
+
+	for _, d := range afterDirs {
+		if !beforeSet[d] {
+			// Clean up the leaked dir so the test doesn't pollute the system
+			os.RemoveAll(d)
+			t.Errorf("Prepare() leaked temp directory: %s", d)
+		}
+	}
+}

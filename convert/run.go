@@ -365,6 +365,11 @@ func processBook(ctx context.Context, r io.Reader, src string, dst string, forma
 	if err != nil {
 		return fmt.Errorf("unable to parse fb2 source (%s): %w", src, err)
 	}
+	// When no reporter is active, clean up the working directory on exit.
+	// With a reporter, Report.Close() handles cleanup after archiving.
+	if env.Rpt == nil {
+		defer os.RemoveAll(c.WorkDir)
+	}
 
 	refID = c.Book.Description.DocumentInfo.ID
 

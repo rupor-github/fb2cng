@@ -498,6 +498,44 @@ func TestProcessBook_WithPanic(t *testing.T) {
 	_ = err
 }
 
+// TestProcessBook_CleansUpWorkDir verifies that processBook removes the
+// working directory after conversion when no reporter is active.
+func TestProcessBook_CleansUpWorkDir(t *testing.T) {
+	ctx, _ := setupTestEnv(t)
+	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+	sample := loadProcessBookSample(t)
+	sampleName := filepath.Base(sampleFB2Path)
+
+	// Snapshot temp directories before the call
+	beforeDirs, err := filepath.Glob(filepath.Join(os.TempDir(), "fbc-*"))
+	if err != nil {
+		t.Fatalf("failed to glob temp dirs: %v", err)
+	}
+	beforeSet := make(map[string]bool, len(beforeDirs))
+	for _, d := range beforeDirs {
+		beforeSet[d] = true
+	}
+
+	dst := t.TempDir()
+	err = processBook(ctx, selectReader(readerForEncoding(t, sample, encUnknown), encUnknown), sampleName, dst, common.OutputFmtEpub3, logger)
+	if err != nil {
+		t.Fatalf("processBook() error = %v", err)
+	}
+
+	// Check that no new fbc-* temp directories remain
+	afterDirs, err := filepath.Glob(filepath.Join(os.TempDir(), "fbc-*"))
+	if err != nil {
+		t.Fatalf("failed to glob temp dirs: %v", err)
+	}
+
+	for _, d := range afterDirs {
+		if !beforeSet[d] {
+			os.RemoveAll(d)
+			t.Errorf("processBook() leaked working directory: %s", d)
+		}
+	}
+}
+
 // TestSrcEncoding_String tests srcEncoding string representation
 func TestSrcEncoding_String(t *testing.T) {
 	// Note: srcEncoding doesn't have a String() method defined

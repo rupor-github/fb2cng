@@ -47,7 +47,7 @@ type Report struct {
 	file    *os.File
 }
 
-// Close finalizes debug report.
+// Close finalizes debug report and removes stored working directories.
 func (r *Report) Close() error {
 	if r == nil {
 		// Ignore uninitialized cases to avoid checking in many places. This means no report has been requested.
@@ -57,7 +57,21 @@ func (r *Report) Close() error {
 		return nil
 	}
 	defer r.file.Close()
+	defer r.removeStoredDirs()
 	return r.finalize()
+}
+
+// removeStoredDirs removes all stored directory entries after they have been
+// archived by finalize(). File entries and data entries are left alone.
+func (r *Report) removeStoredDirs() {
+	for _, e := range r.entries {
+		if len(e.data) > 0 || len(e.actual) == 0 {
+			continue
+		}
+		if info, err := os.Stat(e.actual); err == nil && info.IsDir() {
+			os.RemoveAll(e.actual)
+		}
+	}
 }
 
 // Name returns name of underlying file.

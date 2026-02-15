@@ -88,7 +88,7 @@ type Content struct {
 
 // Prepare reads, parses, and prepares FB2 content for conversion.
 // It is used for all output formats.
-func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat common.OutputFmt, log *zap.Logger) (*Content, error) {
+func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat common.OutputFmt, log *zap.Logger) (_ *Content, retErr error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -139,6 +139,13 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 	if err != nil {
 		return nil, fmt.Errorf("unable to create temporary directory: %w", err)
 	}
+	defer func() {
+		// On error, clean up the temp directory immediately. The reporter
+		// (if active) tolerates absent paths in finalize(), so this is safe.
+		if retErr != nil {
+			os.RemoveAll(tmpDir)
+		}
+	}()
 	env.Rpt.Store(fmt.Sprintf("%s-%s", misc.GetAppName(), book.Description.DocumentInfo.ID), tmpDir)
 
 	baseSrcName := filepath.Base(srcName)
