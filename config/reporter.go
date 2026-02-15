@@ -3,6 +3,7 @@ package config
 import (
 	"archive/zip"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -48,7 +49,7 @@ type Report struct {
 }
 
 // Close finalizes debug report and removes stored working directories.
-func (r *Report) Close() error {
+func (r *Report) Close() (retErr error) {
 	if r == nil {
 		// Ignore uninitialized cases to avoid checking in many places. This means no report has been requested.
 		return nil
@@ -56,8 +57,10 @@ func (r *Report) Close() error {
 	if r.file == nil {
 		return nil
 	}
-	defer r.file.Close()
 	defer r.removeStoredDirs()
+	defer func() {
+		retErr = errors.Join(retErr, r.file.Close())
+	}()
 	return r.finalize()
 }
 
@@ -241,10 +244,12 @@ func copyDir(dir, src string) error {
 }
 
 // finalize creates the final archive (report) with all previously stored items.
-func (r *Report) finalize() error {
+func (r *Report) finalize() (retErr error) {
 
 	arc := zip.NewWriter(r.file)
-	defer arc.Close()
+	defer func() {
+		retErr = errors.Join(retErr, arc.Close())
+	}()
 
 	t := time.Now()
 

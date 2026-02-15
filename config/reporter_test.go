@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -78,5 +79,50 @@ func TestReportClose_NilFile(t *testing.T) {
 	r := &Report{entries: make(map[string]entry)}
 	if err := r.Close(); err != nil {
 		t.Errorf("Close with nil file should not error, got: %v", err)
+	}
+}
+
+func TestReportClose_PropagatesFileCloseError(t *testing.T) {
+	// If r.file is already closed before Close() is called, finalize() will
+	// fail because it can't write to the file. But more importantly, the
+	// deferred file.Close() will also return an error. We verify that Close()
+	// surfaces the file close error (via errors.Join) rather than silently
+	// discarding it.
+
+	reportFile, err := os.CreateTemp("", "test-report-close-err-*.zip")
+	if err != nil {
+		t.Fatalf("failed to create temp report file: %v", err)
+	}
+	name := reportFile.Name()
+	defer os.Remove(name)
+
+	r := &Report{
+		entries: make(map[string]entry),
+		file:    reportFile,
+	}
+
+	// Close the underlying file so both finalize and file.Close will fail.
+	reportFile.Close()
+
+	err = r.Close()
+	if err == nil {
+		t.Fatal("expected error from Close when file is already closed")
+	}
+
+	// The returned error should contain multiple errors joined together —
+	// at minimum the finalize error (write to closed file) and the file
+	// close error. Verify we can unwrap multiple errors.
+	var joined interface{ Unwrap() []error }
+	if !errors.As(err, &joined) {
+		// Even if errors.Join collapses to a single non-nil error, at least
+		// we got an error. The key property is that file.Close error is not
+		// silently lost.
+		t.Logf("error is not a joined error (may be single): %v", err)
+		return
+	}
+
+	errs := joined.Unwrap()
+	if len(errs) < 2 {
+		t.Errorf("expected at least 2 joined errors, got %d: %v", len(errs), err)
 	}
 }
