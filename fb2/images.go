@@ -178,8 +178,7 @@ func (bo *BinaryObject) encodeImage(img image.Image, imgType string, cfg *config
 		}
 		return data, nil
 	default:
-		log.Warn("Unable to process image - unsupported format, skipping", zap.String("id", bo.ID), zap.String("type", imgType))
-		return nil, nil
+		return nil, fmt.Errorf("unsupported image format %q, ID - %s", imgType, bo.ID)
 	}
 }
 
@@ -229,7 +228,6 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 		bi.Dim.Height = img.Bounds().Dy()
 		imgType := "jpeg"
 		bi.MimeType = "image/jpeg"
-		imageChanged := true
 
 		// Cover resizing for SVG follows the same rules as raster images.
 		if cover {
@@ -271,12 +269,7 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 		if encErr != nil {
 			return bo.handleImageError(bi, "encode", encErr, kindle, cfg, log)
 		}
-		if data != nil {
-			bi.Data = data
-		}
-		if !imageChanged {
-			return bi
-		}
+		bi.Data = data
 		return bi
 	}
 
@@ -402,9 +395,7 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 	if err != nil {
 		return bo.handleImageError(bi, "encode", err, kindle, cfg, log)
 	}
-	if data != nil {
-		bi.Data = data
-	}
+	bi.Data = data
 
 	return bi
 }

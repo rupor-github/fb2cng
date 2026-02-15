@@ -875,3 +875,85 @@ func TestPrepareImages_SkipsNonImageBinaries(t *testing.T) {
 		t.Error("font 'font2' should not be in image index")
 	}
 }
+
+func TestEncodeImage_ReturnsErrorForUnsupportedFormat(t *testing.T) {
+	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+	cfg := &config.ImagesConfig{
+		JPEGQuality: 85,
+		Optimize:    false,
+	}
+
+	img := image.NewRGBA(image.Rect(0, 0, 10, 10))
+	bo := &BinaryObject{ID: "test-unsupported"}
+
+	// "gif", "bmp", "tiff", "webp" all hit the default branch
+	for _, format := range []string{"gif", "bmp", "tiff", "webp", "unknown"} {
+		data, err := bo.encodeImage(img, format, cfg, log)
+		if err == nil {
+			t.Errorf("encodeImage(%q): expected error for unsupported format, got nil", format)
+		}
+		if data != nil {
+			t.Errorf("encodeImage(%q): expected nil data, got %d bytes", format, len(data))
+		}
+	}
+
+	// Verify supported formats still work
+	for _, format := range []string{"png", "jpeg"} {
+		data, err := bo.encodeImage(img, format, cfg, log)
+		if err != nil {
+			t.Errorf("encodeImage(%q): unexpected error: %v", format, err)
+		}
+		if data == nil {
+			t.Errorf("encodeImage(%q): expected non-nil data", format)
+		}
+	}
+}
+
+// TestPrepareImage_BMPScaleFactorNonKindle verifies that unsupported-for-encoding
+// formats (like BMP) produce a placeholder when re-encoding is needed (e.g., scale
+// factor resize) in non-kindle mode, rather than silently preserving original data.
+func TestPrepareImage_BMPScaleFactorNonKindle(t *testing.T) {
+	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+	cfg := &config.ImagesConfig{
+		JPEGQuality: 85,
+		Optimize:    false,
+		UseBroken:   false,
+		ScaleFactor: 0.5, // triggers resize → imageChanged=true → encodeImage called
+		Screen:      config.ScreenConfig{Width: 1600, Height: 2560},
+		Cover:       config.CoverConfig{Resize: common.ImageResizeModeNone},
+	}
+
+	// Create a valid BMP image
+	img := image.NewRGBA(image.Rect(0, 0, 100, 100))
+	for y := range 100 {
+		for x := range 100 {
+			img.Set(x, y, color.RGBA{uint8(x), uint8(y), 128, 255})
+		}
+	}
+	var buf bytes.Buffer
+	// BMP encoder is not in stdlib, so we'll use a trick: encode as PNG,
+	// then register it as BMP content type. But image.Decode will return "png".
+	// Instead, let's directly test via the GIF path which also hits default.
+	// Actually, GIF without transparency + non-kindle + scale factor does hit default.
+	if err := gif.Encode(&buf, img, nil); err != nil {
+		t.Fatalf("failed to encode GIF: %v", err)
+	}
+
+	bo := &BinaryObject{
+		ID:          "gif-scale-test",
+		ContentType: "image/gif",
+		Data:        buf.Bytes(),
+	}
+
+	bi := bo.PrepareImage(false, false, cfg, log)
+	if bi == nil {
+		t.Fatal("expected non-nil BookImage")
+	}
+
+	// Before the fix, encodeImage returned nil,nil for "gif", and the caller
+	// silently kept original data (resize was lost). After the fix, encodeImage
+	// returns an error, and handleImageError substitutes a placeholder.
+	if bytes.Equal(bi.Data, bo.Data) {
+		t.Error("expected image data to differ from original (should be placeholder, not silently preserved)")
+	}
+}
