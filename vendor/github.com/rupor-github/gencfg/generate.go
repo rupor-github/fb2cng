@@ -45,12 +45,14 @@ func WithDoNotExpandField(name string) func(*ProcessingOptions) {
 
 type generationContext struct {
 	opts *ProcessingOptions
+	tmpl *templateContext
 	name string
 }
 
 // optimization - to avoid touching nodes which could not be templates.
 var possiblyTemplate = regexp.MustCompile(`{{.*}}`)
 
+// couldBeTemplate checks if the field string could contain a Go template expression.
 func (gctx *generationContext) couldBeTemplate(field string) bool {
 	return possiblyTemplate.MatchString(field)
 }
@@ -76,7 +78,7 @@ func (gctx *generationContext) walk(current, parent *yaml.Node, pos int) error {
 		if current.Tag == "!!str" && gctx.couldBeTemplate(current.Value) &&
 			(gctx.opts.doNotExpand == nil || !gctx.opts.doNotExpand[gctx.name]) {
 
-			value, err := expandField(gctx.name, current.Value, gctx.opts)
+			value, err := gctx.tmpl.expandField(gctx.name, current.Value)
 			if err != nil {
 				return err
 			}
@@ -136,7 +138,12 @@ func Process(src []byte, options ...func(*ProcessingOptions)) ([]byte, error) {
 		return nil, err
 	}
 
-	if err := (&generationContext{opts: opts}).walk(&tree, nil, 0); err != nil {
+	tmplCtx, err := newTemplateContext(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := (&generationContext{opts: opts, tmpl: tmplCtx}).walk(&tree, nil, 0); err != nil {
 		return nil, err
 	}
 

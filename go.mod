@@ -18,7 +18,7 @@ require (
 	github.com/hidez8891/zip v1.11.0
 	github.com/maruel/natural v1.3.0
 	github.com/neurosnap/sentences v1.1.2
-	github.com/rupor-github/gencfg v1.0.13
+	github.com/rupor-github/gencfg v1.0.14
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
 	github.com/tdewolff/parse/v2 v2.8.5

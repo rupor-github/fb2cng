@@ -4,20 +4,21 @@ import (
 	validator "github.com/go-playground/validator/v10"
 )
 
-type ValdatorOptions struct {
+type ValidatorOptions struct {
 	custom validator.StructLevelFunc
 }
 
-func WithAdditionalChecks(fn validator.StructLevelFunc) func(*ValdatorOptions) {
-	return func(opts *ValdatorOptions) {
+// WithAdditionalChecks returns an option that registers a custom struct-level validation function.
+func WithAdditionalChecks(fn validator.StructLevelFunc) func(*ValidatorOptions) {
+	return func(opts *ValidatorOptions) {
 		opts.custom = fn
 	}
 }
 
 // Validate validates the data using the go-playground/validator package
-func Validate(data any, options ...func(*ValdatorOptions)) error {
+func Validate(data any, options ...func(*ValidatorOptions)) error {
 
-	opts := &ValdatorOptions{}
+	opts := &ValidatorOptions{}
 	for _, setOpt := range options {
 		setOpt(opts)
 	}

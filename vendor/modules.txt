@@ -106,8 +106,8 @@ github.com/mitchellh/reflectwalk
 # github.com/neurosnap/sentences v1.1.2
 ## explicit; go 1.18
 github.com/neurosnap/sentences
-# github.com/rupor-github/gencfg v1.0.13
-## explicit; go 1.25.5
+# github.com/rupor-github/gencfg v1.0.14
+## explicit; go 1.26.0
 github.com/rupor-github/gencfg
 # github.com/russross/blackfriday/v2 v2.1.0
 ## explicit

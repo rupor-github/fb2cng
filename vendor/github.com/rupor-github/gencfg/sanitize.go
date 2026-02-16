@@ -7,30 +7,11 @@ import (
 	"reflect"
 	"slices"
 	"strings"
-	"testing"
 )
 
-// sanitizeTestFunctions only used by Sanitize tests and should never be invoked otherwise.
-type sanitizeTestFunctions struct{}
-
-// ReportTestCall is a test function that could be called by the sanitize function with the tag sanitize:"test_call=ReportTestCall".
-// Add more test methods with the same signature to sanitizeTestFunctions as needed.
-func (sanitizeTestFunctions) ReportTestCall(name, data string) error {
-	fmt.Println("ReportTestCall called with", name, data)
-	return nil
-}
-
-func (s sanitizeTestFunctions) invokeMethodByName(methodName, paramName, paramValue string) error {
-	method := reflect.ValueOf(s).MethodByName(methodName)
-	if !method.IsValid() {
-		return fmt.Errorf("function '%s' not found for '%s', value='%s'", methodName, paramName, paramValue)
-	}
-	res := method.Call([]reflect.Value{reflect.ValueOf(paramName), reflect.ValueOf(paramValue)})
-	if len(res) > 0 && !res[0].IsNil() {
-		return res[0].Interface().(error)
-	}
-	return nil
-}
+// testCallHandler is a hook for test_call sanitize tag dispatch. It is nil in
+// production builds and set to a real dispatcher in sanitize_test.go init().
+var testCallHandler func(methodName, paramName, paramValue string) error
 
 // Sanitize function can be used as a simple and consistent interface for sanitizing structs,
 // while the more complex logic is encapsulated within the sanitize function.
@@ -42,6 +23,7 @@ func Sanitize(inputStruct any) error {
 	return sanitize(val, "root", "")
 }
 
+// sanitize recursively walks a struct value, processing fields with sanitize tags.
 func sanitize(val reflect.Value, name, parentTags string) error {
 	if !val.IsValid() || val.Kind() == reflect.Ptr && val.IsNil() {
 		return nil
@@ -97,6 +79,7 @@ func sanitize(val reflect.Value, name, parentTags string) error {
 	return nil
 }
 
+// sanitizeArrayOrSlice iterates over array or slice elements and sanitizes each one.
 func sanitizeArrayOrSlice(field reflect.Value, name, parentTags string) error {
 	for j := 0; j < field.Len(); j++ {
 		v := field.Index(j)
@@ -110,6 +93,8 @@ func sanitizeArrayOrSlice(field reflect.Value, name, parentTags string) error {
 	return nil
 }
 
+// sanitizeMap iterates over map entries and sanitizes each value,
+// copying non-addressable values before modification and writing them back.
 func sanitizeMap(field reflect.Value, name, parentTags string) error {
 	iter := field.MapRange()
 	for iter.Next() {
@@ -134,6 +119,8 @@ func sanitizeMap(field reflect.Value, name, parentTags string) error {
 	return nil
 }
 
+// sanitizeValue processes comma-separated sanitize tags on a single field value,
+// dispatching to the appropriate operation for each tag.
 func sanitizeValue(elem reflect.Value, name, tags string) error {
 	kind := elem.Kind()
 	for tag := range strings.SplitSeq(tags, ",") {
@@ -207,7 +194,7 @@ func sanitizeValue(elem reflect.Value, name, tags string) error {
 				return fmt.Errorf("wrong file name '%s': %w", elem.String(), err)
 			}
 			if _, err := os.Stat(fileName); err != nil {
-				return fmt.Errorf("file '%s' does not exists or is not accessible: %w", fileName, err)
+				return fmt.Errorf("file '%s' does not exist or is not accessible: %w", fileName, err)
 			}
 		case "oneof_or_tag":
 			if kind != reflect.String {
@@ -236,7 +223,7 @@ func sanitizeValue(elem reflect.Value, name, tags string) error {
 
 		case "test_call":
 			// should only be used in testing environment
-			if !testing.Testing() {
+			if testCallHandler == nil {
 				return nil
 			}
 			if kind != reflect.String {
@@ -245,8 +232,7 @@ func sanitizeValue(elem reflect.Value, name, tags string) error {
 			if len(tagKeyValue) < 2 {
 				return fmt.Errorf("empty test_call on '%s', must be test_call=function", name)
 			}
-			testFunctions := sanitizeTestFunctions{}
-			if err := testFunctions.invokeMethodByName(tagKeyValue[1], name, elem.String()); err != nil {
+			if err := testCallHandler(tagKeyValue[1], name, elem.String()); err != nil {
 				return fmt.Errorf("failed to test_call: %w", err)
 			}
 		default:
