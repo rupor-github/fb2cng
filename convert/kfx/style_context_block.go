@@ -31,9 +31,7 @@ func (sc StyleContext) PushBlock(tag, classes string) StyleContext {
 	newMarginOrigins := make(map[KFXSymbol]*marginOrigin, len(sc.marginOrigins))
 	for sym, origin := range sc.marginOrigins {
 		newContributors := make(map[string]bool, len(origin.contributors))
-		for k, v := range origin.contributors {
-			newContributors[k] = v
-		}
+		maps.Copy(newContributors, origin.contributors)
 		newMarginOrigins[sym] = &marginOrigin{
 			value:        origin.value,
 			contributors: newContributors,
@@ -162,16 +160,14 @@ func (sc StyleContext) ExtractContainerMargins(tag, classes string) (mt, mb floa
 
 	// Get properties from classes (override tag properties)
 	if classes != "" {
-		classList := strings.Fields(classes)
-		for _, class := range classList {
+		classList := strings.FieldsSeq(classes)
+		for class := range classList {
 			if def, ok := sc.registry.Get(class); ok {
 				resolved := sc.registry.resolveInheritance(def)
 				if containerProps == nil {
 					containerProps = make(map[KFXSymbol]any)
 				}
-				for sym, val := range resolved.Properties {
-					containerProps[sym] = val
-				}
+				maps.Copy(containerProps, resolved.Properties)
 			}
 		}
 	}

@@ -300,7 +300,7 @@ func TestMultiFindValue(t *testing.T) {
 			t.Errorf("Value length mismatch: expected %v but found %v", ev, fv)
 			break
 		}
-		for i := 0; i < len(ev); i++ {
+		for i := range ev {
 			if ev[i] != fv[i] {
 				t.Errorf("Value mismatch: expected %v but found %v", ev, fv)
 				break

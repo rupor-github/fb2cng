@@ -676,8 +676,8 @@ func formatDocumentDataPretty(v any) string {
 
 	// Helper: translate "$NNN" keys into readable symbol names.
 	fieldName := func(k string) string {
-		if strings.HasPrefix(k, "$") {
-			if id, err := strconv.Atoi(strings.TrimPrefix(k, "$")); err == nil {
+		if after, ok0 := strings.CutPrefix(k, "$"); ok0 {
+			if id, err := strconv.Atoi(after); err == nil {
 				return KFXSymbol(id).Name()
 			}
 		}
@@ -861,10 +861,7 @@ func formatDocumentDataPretty(v any) string {
 				list, ok := s.([]any)
 				if ok {
 					// Truncate long lists for readability.
-					max := len(list)
-					if max > 20 {
-						max = 20
-					}
+					max := min(len(list), 20)
 					parts := make([]string, 0, max)
 					for _, sym := range list[:max] {
 						parts = append(parts, formatValShort(sym))

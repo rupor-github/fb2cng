@@ -1,6 +1,7 @@
 package kfx
 
 import (
+	"maps"
 	"strings"
 
 	"go.uber.org/zap"
@@ -16,9 +17,7 @@ func (m *StyleMapper) applyStyleMapCSS(sel css.Selector, props map[string]css.Va
 	filtered := m.filterIgnorable(sel, props)
 
 	merged := make(map[string]css.Value, len(filtered))
-	for k, v := range filtered {
-		merged[k] = v
-	}
+	maps.Copy(merged, filtered)
 
 	for _, match := range styleMapMatches(sel, merged) {
 		for _, entry := range m.styleMap.EntriesFor(match.key) {
@@ -245,9 +244,7 @@ func styleMapKFXOverride(entry StyleMapEntry, cssVal css.Value, sourceAttr strin
 		}
 		valType := firstOrEmpty(valueTypes, i)
 		if kvs, ok := convertStyleMapProp(prop, val, firstOrEmpty(values, i), firstOrEmpty(units, i), valType, sourceAttr, log); ok {
-			for sym, v := range kvs {
-				result[sym] = v
-			}
+			maps.Copy(result, kvs)
 		}
 	}
 

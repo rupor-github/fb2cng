@@ -3,6 +3,7 @@ package fb2
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"fbc/utils/debug"
 )
@@ -479,52 +480,53 @@ func FormatRefPath(path []any) string {
 	if len(path) == 0 {
 		return "[]"
 	}
-	result := "["
+	var result strings.Builder
+	result.WriteString("[")
 	for i, elem := range path {
 		if i > 0 {
-			result += " -> "
+			result.WriteString(" -> ")
 		}
 		switch v := elem.(type) {
 		case *Body:
-			result += fmt.Sprintf("Body{name:%q,kind:%s}", v.Name, v.Kind)
+			result.WriteString(fmt.Sprintf("Body{name:%q,kind:%s}", v.Name, v.Kind))
 		case *Section:
-			result += fmt.Sprintf("Section{id:%q}", v.ID)
+			result.WriteString(fmt.Sprintf("Section{id:%q}", v.ID))
 		case *Paragraph:
-			result += fmt.Sprintf("Paragraph{id:%q}", v.ID)
+			result.WriteString(fmt.Sprintf("Paragraph{id:%q}", v.ID))
 		case *Flow:
-			result += fmt.Sprintf("Flow{id:%q}", v.ID)
+			result.WriteString(fmt.Sprintf("Flow{id:%q}", v.ID))
 		case *FlowItem:
-			result += fmt.Sprintf("FlowItem{kind:%s}", v.Kind)
+			result.WriteString(fmt.Sprintf("FlowItem{kind:%s}", v.Kind))
 		case *Epigraph:
-			result += "Epigraph"
+			result.WriteString("Epigraph")
 		case *Poem:
-			result += fmt.Sprintf("Poem{id:%q}", v.ID)
+			result.WriteString(fmt.Sprintf("Poem{id:%q}", v.ID))
 		case *Cite:
-			result += fmt.Sprintf("Cite{id:%q}", v.ID)
+			result.WriteString(fmt.Sprintf("Cite{id:%q}", v.ID))
 		case *Table:
-			result += fmt.Sprintf("Table{id:%q}", v.ID)
+			result.WriteString(fmt.Sprintf("Table{id:%q}", v.ID))
 		case *Image:
-			result += fmt.Sprintf("Image{id:%q,href:%q}", v.ID, v.Href)
+			result.WriteString(fmt.Sprintf("Image{id:%q,href:%q}", v.ID, v.Href))
 		case *InlineImage:
-			result += fmt.Sprintf("InlineImage{href:%q}", v.Href)
+			result.WriteString(fmt.Sprintf("InlineImage{href:%q}", v.Href))
 		case *InlineSegment:
-			result += fmt.Sprintf("InlineSegment{kind:%s}", v.Kind)
+			result.WriteString(fmt.Sprintf("InlineSegment{kind:%s}", v.Kind))
 		case *Stanza:
-			result += "Stanza"
+			result.WriteString("Stanza")
 		case *BinaryObject:
-			result += fmt.Sprintf("Binary{id:%q}", v.ID)
+			result.WriteString(fmt.Sprintf("Binary{id:%q}", v.ID))
 		case *Author:
-			result += fmt.Sprintf("Author{id:%q,name:%s %s}", v.ID, v.FirstName, v.LastName)
+			result.WriteString(fmt.Sprintf("Author{id:%q,name:%s %s}", v.ID, v.FirstName, v.LastName))
 		case *Description:
-			result += "Description"
+			result.WriteString("Description")
 		case *TitleInfo:
-			result += "TitleInfo"
+			result.WriteString("TitleInfo")
 		case *DocumentInfo:
-			result += "DocumentInfo"
+			result.WriteString("DocumentInfo")
 		default:
-			result += fmt.Sprintf("%T", v)
+			result.WriteString(fmt.Sprintf("%T", v))
 		}
 	}
-	result += "]"
-	return result
+	result.WriteString("]")
+	return result.String()
 }

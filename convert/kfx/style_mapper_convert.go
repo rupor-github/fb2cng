@@ -1,6 +1,7 @@
 package kfx
 
 import (
+	"maps"
 	"strconv"
 	"strings"
 
@@ -225,9 +226,7 @@ func convertStyleMapProp(prop string, cssVal css.Value, rawVal string, unit stri
 			}
 		case "yj.user_margin":
 			if margins := parsePageBleed(firstNonEmpty(cssVal.Raw, rawVal)); len(margins) > 0 {
-				for k, v := range margins {
-					out[k] = v
-				}
+				maps.Copy(out, margins)
 			}
 		}
 	case "margin_left", "margin_right", "margin_top", "margin_bottom":

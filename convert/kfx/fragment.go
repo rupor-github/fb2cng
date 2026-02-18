@@ -2,6 +2,7 @@ package kfx
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 )
 
@@ -140,7 +141,7 @@ func (fl *FragmentList) Types() []KFXSymbol {
 	for t := range fl.byType {
 		types = append(types, t)
 	}
-	sort.Slice(types, func(i, j int) bool { return types[i] < types[j] })
+	slices.Sort(types)
 	return types
 }
 

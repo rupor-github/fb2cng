@@ -3,6 +3,7 @@ package fb2
 import (
 	"fmt"
 	"io/fs"
+	"maps"
 	"net/http"
 	"os"
 	"path"
@@ -115,9 +116,7 @@ func (fb *FictionBook) NormalizeStylesheets(srcPath string, defaultCSS []byte, l
 		if fb.Stylesheets[i].Type != "text/css" {
 			continue
 		}
-		for depth, needsBreak := range parseSectionPageBreaks(fb.Stylesheets[i].Data) {
-			fb.sectionPageBreaks[depth] = needsBreak
-		}
+		maps.Copy(fb.sectionPageBreaks, parseSectionPageBreaks(fb.Stylesheets[i].Data))
 	}
 
 	if len(fb.sectionPageBreaks) > 0 {

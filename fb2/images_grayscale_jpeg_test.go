@@ -18,8 +18,8 @@ func TestEncodeImage_GrayscaleJPEG(t *testing.T) {
 	log := zap.NewNop()
 
 	src := image.NewRGBA(image.Rect(0, 0, 2, 2))
-	for y := 0; y < 2; y++ {
-		for x := 0; x < 2; x++ {
+	for y := range 2 {
+		for x := range 2 {
 			src.Set(x, y, color.RGBA{R: 10, G: 10, B: 10, A: 255})
 		}
 	}

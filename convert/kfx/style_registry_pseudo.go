@@ -111,7 +111,7 @@ func (sr *StyleRegistry) GetPseudoContent(classes string) *PseudoElementContent 
 	}
 
 	// Check each class for pseudo-element content
-	for _, class := range strings.Fields(classes) {
+	for class := range strings.FieldsSeq(classes) {
 		if pc, ok := sr.pseudoContent[class]; ok {
 			return pc
 		}

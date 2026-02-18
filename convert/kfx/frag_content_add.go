@@ -1,6 +1,9 @@
 package kfx
 
-import "fmt"
+import (
+	"fmt"
+	"maps"
+)
 
 // AddContent adds a content reference to the storyline (or current block).
 // The styleSpec is the original style specification (e.g., "p section") used for
@@ -361,9 +364,7 @@ func (sb *StorylineBuilder) AddEmptyLineSpacer(marginTopLh float64, styles *Styl
 	if styles != nil && resolved != "" {
 		if def, ok := styles.Get(resolved); ok {
 			props := make(map[KFXSymbol]any, len(def.Properties)+1)
-			for k, v := range def.Properties {
-				props[k] = v
-			}
+			maps.Copy(props, def.Properties)
 			props[SymMarginTop] = DimensionValue(marginTopLh, SymUnitLh)
 			resolved = styles.RegisterResolved(props, styles.GetUsage(resolved), true)
 			entry.Set(SymStyle, SymbolByName(resolved))

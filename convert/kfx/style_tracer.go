@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -313,7 +314,7 @@ func (t *StyleTracer) Flush() string {
 	for i, entry := range t.entries {
 		sb.WriteString(fmt.Sprintf("[%04d] %s: %s\n", i+1, entry.operation, entry.styleName))
 		if entry.details != "" {
-			for _, line := range strings.Split(entry.details, "\n") {
+			for line := range strings.SplitSeq(entry.details, "\n") {
 				sb.WriteString("       " + line + "\n")
 			}
 		}
@@ -344,7 +345,7 @@ func traceFormatProperties(props map[KFXSymbol]any) string {
 	for k := range props {
 		keys = append(keys, k)
 	}
-	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+	slices.Sort(keys)
 
 	var parts []string
 	for _, k := range keys {

@@ -2,6 +2,8 @@ package kfx
 
 // Helpers for KP3-parity image margin tweaks.
 
+import "maps"
+
 // ensureFixedBlockImageMargins returns a resolved style name that is identical to baseStyle,
 // but with margin-top/margin-bottom set to the given lh values.
 //
@@ -16,9 +18,7 @@ func ensureFixedBlockImageMargins(styles *StyleRegistry, baseStyle string, mtLh,
 	}
 
 	props := make(map[KFXSymbol]any, len(def.Properties)+2)
-	for k, v := range def.Properties {
-		props[k] = v
-	}
+	maps.Copy(props, def.Properties)
 	props[SymMarginTop] = DimensionValue(mtLh, SymUnitLh)
 	props[SymMarginBottom] = DimensionValue(mbLh, SymUnitLh)
 

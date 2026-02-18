@@ -57,9 +57,7 @@ func mergeAllWithRules(dst, src map[KFXSymbol]any, ctx mergeContext, tracer *Sty
 // "blockquote.cite" both producing "cite"). Unlike mergeAllWithRules, this doesn't use
 // stylelist rules which are designed for runtime style merging, not CSS cascade behavior.
 func mergeAllOverride(dst, src map[KFXSymbol]any) {
-	for sym, val := range src {
-		dst[sym] = val
-	}
+	maps.Copy(dst, src)
 }
 
 func mergeStyleProperty(sym KFXSymbol, existing, incoming any, ctx mergeContext, tracer *StyleTracer) (any, bool) {
@@ -442,8 +440,8 @@ func symbolIDFromString(val string) (KFXSymbol, bool) {
 	if sym, ok := yjSymbolIDs[val]; ok {
 		return sym, true
 	}
-	if strings.HasPrefix(val, "$") {
-		if id, err := strconv.Atoi(strings.TrimPrefix(val, "$")); err == nil {
+	if after, ok := strings.CutPrefix(val, "$"); ok {
+		if id, err := strconv.Atoi(after); err == nil {
 			return KFXSymbol(id), true
 		}
 	}

@@ -2,6 +2,7 @@ package kfx
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	"fbc/content"
@@ -358,9 +359,7 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 			if (hasLines || hasChars) && nw.RuneCountAfterPendingSpace() >= 1 {
 				if dropcapLineCount > 0 && hasLines {
 					props := make(map[KFXSymbol]any, len(def.Properties)+1)
-					for k, v := range def.Properties {
-						props[k] = v
-					}
+					maps.Copy(props, def.Properties)
 					props[SymDropcapLines] = dropcapLineCount
 					resolvedStyle = styles.RegisterResolved(props, styleUsageText, true)
 				}

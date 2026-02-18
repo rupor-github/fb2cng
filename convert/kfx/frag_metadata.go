@@ -1,6 +1,8 @@
 package kfx
 
 import (
+	"strings"
+
 	"go.uber.org/zap"
 	"golang.org/x/text/language"
 
@@ -207,12 +209,12 @@ func formatAuthorName(author fb2.Author) string {
 		return author.Nickname
 	}
 
-	result := ""
+	var result strings.Builder
 	for i, p := range parts {
 		if i > 0 {
-			result += " "
+			result.WriteString(" ")
 		}
-		result += p
+		result.WriteString(p)
 	}
-	return result
+	return result.String()
 }

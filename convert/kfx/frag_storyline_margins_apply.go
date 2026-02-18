@@ -2,6 +2,7 @@ package kfx
 
 import (
 	"fmt"
+	"maps"
 )
 
 // captureMargins extracts margin-top and margin-bottom values from resolved styles
@@ -111,9 +112,7 @@ func (sb *StorylineBuilder) applyCollapsedMargins(tree *ContentTree) {
 
 		// Make a copy of properties and apply collapsed margins
 		props := make(map[KFXSymbol]any, len(resolved.Properties))
-		for k, v := range resolved.Properties {
-			props[k] = v
-		}
+		maps.Copy(props, resolved.Properties)
 
 		// Apply collapsed margins from the virtual container
 		if containerNode.MarginTop == nil || *containerNode.MarginTop == 0 {
@@ -178,9 +177,7 @@ func (sb *StorylineBuilder) applyCollapsedMargins(tree *ContentTree) {
 
 		// Make a copy of properties and apply collapsed margins
 		props := make(map[KFXSymbol]any, len(resolved.Properties))
-		for k, v := range resolved.Properties {
-			props[k] = v
-		}
+		maps.Copy(props, resolved.Properties)
 
 		// Apply collapsed margins
 		if node.MarginTop == nil || *node.MarginTop == 0 {

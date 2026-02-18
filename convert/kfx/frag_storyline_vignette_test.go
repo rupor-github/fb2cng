@@ -1,6 +1,7 @@
 package kfx
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -731,12 +732,7 @@ func collectStorylineVignettes(fragments *FragmentList) map[string][]string {
 
 // containsVignette checks if a vignette is in the list
 func containsVignette(vignettes []string, target string) bool {
-	for _, v := range vignettes {
-		if v == target {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(vignettes, target)
 }
 
 // countVignette counts occurrences of a vignette in the list
