@@ -781,21 +781,10 @@ func appendFloatFootnoteSectionContentEpub3(parent *etree.Element, c *content.Co
 		return err
 	}
 
-	// Add class="footnote" to all paragraphs and collect them for "more" indicator
-	paragraphs := make([]*etree.Element, 0)
-	for _, child := range asideElem.ChildElements() {
-		if child.Tag == "p" {
-			// Add or append "footnote" class to paragraph
-			existingClass := child.SelectAttrValue("class", "")
-			if existingClass != "" {
-				child.RemoveAttr("class")
-				child.CreateAttr("class", existingClass+" footnote")
-			} else {
-				child.CreateAttr("class", "footnote")
-			}
-			paragraphs = append(paragraphs, child)
-		}
-	}
+	// Add class="footnote" to all paragraphs (including those inside epigraph/annotation divs)
+	// and collect them for "more" indicator placement. Use recursive traversal to find <p> elements
+	// inside wrapper divs like <div class="epigraph"> and <div class="annotation">.
+	paragraphs := collectAndClassifyFootnoteParagraphs(asideElem)
 
 	if len(paragraphs) > 1 {
 		firstPara := paragraphs[0]
@@ -832,6 +821,36 @@ func appendFloatFootnoteSectionContentEpub3(parent *etree.Element, c *content.Co
 		}
 	}
 	return nil
+}
+
+// collectAndClassifyFootnoteParagraphs finds all <p> elements inside an <aside> element
+// (including those nested inside wrapper divs like <div class="epigraph"> and
+// <div class="annotation">), adds class="footnote" to each, and returns them in
+// document order. This ensures the "more" indicator is placed on the first visible
+// paragraph regardless of whether it's in an epigraph, annotation, or body content.
+func collectAndClassifyFootnoteParagraphs(aside *etree.Element) []*etree.Element {
+	var paragraphs []*etree.Element
+	var collect func(parent *etree.Element)
+	collect = func(parent *etree.Element) {
+		for _, child := range parent.ChildElements() {
+			if child.Tag == "p" {
+				// Add or append "footnote" class to paragraph
+				existingClass := child.SelectAttrValue("class", "")
+				if existingClass != "" {
+					child.RemoveAttr("class")
+					child.CreateAttr("class", existingClass+" footnote")
+				} else {
+					child.CreateAttr("class", "footnote")
+				}
+				paragraphs = append(paragraphs, child)
+			} else if child.Tag == "div" {
+				// Recurse into wrapper divs (epigraph, annotation, etc.)
+				collect(child)
+			}
+		}
+	}
+	collect(aside)
+	return paragraphs
 }
 
 // appendFootnoteSectionContent appends footnote section content in

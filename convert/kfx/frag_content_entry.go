@@ -86,8 +86,14 @@ type StyleEventRef struct {
 // NewContentEntry creates a content entry for storyline's $146.
 // Based on reference: {$155: eid, $157: style, $159: type, $145: {name: content_X, $403: offset}}
 func NewContentEntry(ref ContentRef) StructValue {
-	// If a pre-built entry is provided, use it directly
+	// If a pre-built entry is provided, use it directly.
+	// Apply footnote content markers before returning, since the RawEntry was
+	// built before addEntry() set FootnoteContent on the ContentRef.
 	if ref.RawEntry != nil {
+		if ref.FootnoteContent {
+			ref.RawEntry.SetSymbol(SymPosition, SymFooter)           // $183 = $455 (position = footer)
+			ref.RawEntry.SetSymbol(SymYjClassification, SymFootnote) // $615 = $281 (yj.classification = footnote)
+		}
 		return ref.RawEntry
 	}
 

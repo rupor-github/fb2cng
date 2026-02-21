@@ -21,7 +21,7 @@
 - **EPUB3** - Modern EPUB format with enhanced features
 - **KEPUB** - EPUB2 optimized for Kobo devices
 - **KFX** - Kindle format X (with `.kfx` extension)
-- **AZW8** - Kindle format X with `.azw8` extension (same as KFX, different extension, added for convinience - Kindle Previewer 3 can open azw8 files directly and Kindle devices handle them just fine)
+- **AZW8** - Kindle format X with `.azw8` extension (same as KFX, different extension, added for convenience - Kindle Previewer 3 can open azw8 files directly and Kindle devices handle them just fine)
 
 ### Key Features
 
@@ -584,6 +584,51 @@ document:
 - **`default`** - Regular hyperlinks to footnotes with no special processing
 - **`float`** - Popup/floating footnotes (requires reader support). Preserves original footnote reference text from FB2 file
 - **`floatRenumbered`** - Same as `float`, but automatically renumbers all footnotes sequentially and replaces their reference text with formatted labels
+
+**Multi-paragraph indicator (`more_paragraphs`):**
+
+When a footnote contains more than one paragraph, reading systems that display floating/popup footnotes typically show only the first paragraph. The `more_paragraphs` setting prepends a visual indicator to the first paragraph of such footnotes so the reader knows there is additional content. The default value is `"(~)\u00A0"` (the string `(~)` followed by a non-breaking space).
+
+The indicator visibility is controlled via CSS using the `.footnote-more` class. The default stylesheet hides it in KFX output and shows it in EPUB:
+
+```css
+/* Show indicator in EPUB (non-Kindle) */
+@media not amzn-et {
+    .footnote-more {
+        text-decoration: none;
+        font-weight: bold;
+        color: gray;
+    }
+}
+
+/* Hide indicator in KFX (Kindle) */
+@media amzn-et {
+    .footnote-more {
+        display: none;
+    }
+}
+```
+
+When `.footnote-more` has `display: none`, the indicator text is suppressed and the first paragraph is rendered identically to single-paragraph footnotes. To show the indicator in KFX output, override the style in your custom stylesheet:
+
+```css
+@media amzn-et {
+    .footnote-more {
+        font-weight: bold;
+        color: gray;
+    }
+}
+```
+
+To hide the indicator in EPUB output, add to your custom stylesheet:
+
+```css
+@media not amzn-et {
+    .footnote-more {
+        display: none;
+    }
+}
+```
 
 **floatRenumbered Mode:**
 

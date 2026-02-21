@@ -179,6 +179,13 @@ func (sb *StorylineBuilder) addEntry(ref ContentRef) int {
 		ref.EmptyLineMarginTop = margin
 	}
 
+	// Apply pending footnote content flag to this entry.
+	// This marks the first body paragraph of a footnote section with
+	// position:footer and yj.classification:footnote markers.
+	if sb.consumePendingFootnoteContent() {
+		ref.FootnoteContent = true
+	}
+
 	if len(sb.blockStack) > 0 {
 		// Add to current block's children
 		sb.blockStack[len(sb.blockStack)-1].children = append(sb.blockStack[len(sb.blockStack)-1].children, ref)
@@ -294,10 +301,17 @@ func (sb *StorylineBuilder) applyStorylinePositionFiltering() {
 			continue
 		}
 
-		// Resolve style WITHOUT position filtering - keep all margins
-		// Use fresh StyleContext (no container stack) so margins are preserved
+		// Resolve style WITHOUT position filtering - keep all margins.
+		// Use the entry's stored StyleContext if available (preserves ancestor scopes
+		// for descendant selector matching, e.g., ".footnote p" inside a footnote).
+		// Fall back to a fresh StyleContext (no container stack) when no context was stored.
 		tag, classes := parseStyleSpec(entry.StyleSpec)
-		resolvedStyle := NewStyleContext(sb.styles).Resolve(tag, classes)
+		var resolvedStyle string
+		if entry.styleCtx != nil {
+			resolvedStyle = entry.styleCtx.Resolve(tag, classes)
+		} else {
+			resolvedStyle = NewStyleContext(sb.styles).Resolve(tag, classes)
+		}
 
 		if entry.RawEntry != nil {
 			// For RawEntry, update the style field in the pre-built structure

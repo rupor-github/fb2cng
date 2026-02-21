@@ -29,15 +29,21 @@ func (sc StyleContext) resolveProperties(tag, classes string) map[KFXSymbol]any 
 	sc.registry.mergePropertiesWithContext(merged, sc.inherited, mergeContextInline)
 
 	// 2. Apply element tag defaults (all properties)
-	// For margin-left/right, we need special handling:
-	// - If the element (e.g., "p") has margin-left: 0 explicitly, it would normally
-	//   override the inherited container margin (e.g., from poem)
-	// - But in KFX block context, we want to PRESERVE container margins
-	// - So we filter out zero margins from tag defaults if we have non-zero inherited margins
+	// Two types of filtering protect container properties from tag defaults:
+	//
+	// a) Margin protection: If the element (e.g., "p") has margin-left: 0 explicitly,
+	//    it would normally override the inherited container margin (e.g., from poem).
+	//    We filter out zero margins from tag defaults if we have non-zero inherited margins.
+	//
+	// b) Inherited property protection: If a container (e.g., .footnote, .poem) explicitly
+	//    set an inherited property (e.g., text-indent: 0, text-align: right), the tag
+	//    default (e.g., p's text-indent: 1em) should not override it. In CSS, a parent's
+	//    explicit value takes precedence over the child element's default — the child
+	//    inherits from the parent unless it has its own explicit declaration.
 	if tag != "" {
 		if def, ok := sc.registry.Get(tag); ok {
 			resolved := sc.registry.resolveInheritance(def)
-			propsToMerge := sc.filterZeroMarginsIfInherited(resolved.Properties)
+			propsToMerge := sc.filterTagDefaultsIfInherited(resolved.Properties)
 			sc.registry.mergePropertiesWithContext(merged, propsToMerge, mergeContextInline)
 		}
 	}
@@ -271,18 +277,43 @@ func (sc StyleContext) handleContainerAwareMargins(merged, props map[KFXSymbol]a
 	return nonMarginProps
 }
 
-// filterZeroMarginsIfInherited returns a copy of props with margin-left/right removed
-// if they are zero and we already have non-zero inherited margins from a block container.
-// This prevents element tag defaults (like "p { margin-left: 0 }") from overriding
-// container margins (like poem's margin-left: 9.375%).
-func (sc StyleContext) filterZeroMarginsIfInherited(props map[KFXSymbol]any) map[KFXSymbol]any {
+// filterTagDefaultsIfInherited returns a copy of props with certain properties removed
+// when they would override values explicitly set by a container ancestor.
+//
+// Two types of filtering:
+//
+// a) Zero-margin protection: If the tag default has margin-left/right: 0 but we have
+// non-zero inherited margins from a block container (e.g., poem), the zero margins
+// are filtered out so the container's indentation is preserved.
+//
+// b) Inherited CSS property protection: If a container (e.g., .footnote, .poem, .epigraph)
+// explicitly set an inherited CSS property (e.g., text-indent: 0, text-align: right,
+// font-style: italic), the tag default for that property (e.g., p's text-indent: 1em)
+// is filtered out. In CSS, a parent's explicit value takes precedence over the child
+// element's UA/default stylesheet — the child inherits from the parent unless it has
+// its own explicit declaration (which would come from classes or descendant selectors
+// in steps 3-4 of the cascade).
+func (sc StyleContext) filterTagDefaultsIfInherited(props map[KFXSymbol]any) map[KFXSymbol]any {
 	needsFilter := false
+
+	// Check zero-margin condition
 	for _, sym := range []KFXSymbol{SymMarginLeft, SymMarginRight} {
 		if val, hasMargin := props[sym]; hasMargin {
-			// Check if this is a zero margin and we have non-zero inherited
 			if isZeroMargin(val) && !isZeroMargin(sc.inherited[sym]) {
 				needsFilter = true
 				break
+			}
+		}
+	}
+
+	// Check inherited CSS property condition
+	if !needsFilter {
+		for sym := range props {
+			if isInheritedProperty(sym) {
+				if _, hasInherited := sc.inherited[sym]; hasInherited {
+					needsFilter = true
+					break
+				}
 			}
 		}
 	}
@@ -294,12 +325,20 @@ func (sc StyleContext) filterZeroMarginsIfInherited(props map[KFXSymbol]any) map
 	// Create filtered copy
 	filtered := make(map[KFXSymbol]any, len(props))
 	for sym, val := range props {
+		// Filter zero margins if we have non-zero inherited
 		if sym == SymMarginLeft || sym == SymMarginRight {
-			// Skip zero margins if we have non-zero inherited
 			if isZeroMargin(val) && !isZeroMargin(sc.inherited[sym]) {
 				continue
 			}
 		}
+
+		// Filter inherited CSS properties if container already set them
+		if isInheritedProperty(sym) {
+			if _, hasInherited := sc.inherited[sym]; hasInherited {
+				continue
+			}
+		}
+
 		filtered[sym] = val
 	}
 	return filtered

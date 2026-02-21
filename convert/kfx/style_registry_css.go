@@ -48,13 +48,6 @@ func NewStyleRegistryFromCSS(sheet *css.Stylesheet, tracer *StyleTracer, log *za
 		}
 	}
 
-	// Register programmatic descendant selectors.
-	// These implement CSS descendant selector semantics (e.g., ".footnote p")
-	// that override element defaults for elements inside specific containers.
-	// This is needed because CSS class rules like ".footnote { text-indent: 0; }"
-	// should not directly apply to child elements - only descendant selectors do.
-	sr.registerDescendantSelectors()
-
 	// Apply KFX-specific style adjustments before post-processing.
 	// This fixes discrepancies between CSS/EPUB behavior and KFX behavior,
 	// such as footnote title margins where the -first/-next variants should
@@ -77,32 +70,11 @@ func parseAndCreateRegistry(cssData []byte, tracer *StyleTracer, log *zap.Logger
 	return NewStyleRegistryFromCSS(sheet, tracer, log)
 }
 
-// registerDescendantSelectors adds programmatic descendant selectors.
-// These implement CSS descendant selector semantics (e.g., ".footnote p")
-// that are not expressible in the CSS file but needed for correct KFX output.
-//
-// In CSS, a rule like ".footnote { text-indent: 0; }" applies to the element
-// with class="footnote", not to its children. To affect child paragraphs,
-// you need a descendant selector like ".footnote p { text-indent: 0; }".
-//
-// The style_context.go resolveProperties() function looks up selectors using:
-// - "ancestor--descendant" for descendant selectors (CSS: ".ancestor descendant")
-// - "parent>child" for direct child selectors (CSS: ".parent > child")
-func (sr *StyleRegistry) registerDescendantSelectors() {
-	// .footnote > p { text-indent: 0; }
-	// Direct child paragraphs of footnote should have no text-indent,
-	// overriding p { text-indent: 1em; }. Using direct child selector (>)
-	// ensures nested elements like cite inside footnote keep their default indent.
-	sr.Register(NewStyle("footnote>p").
-		TextIndent(0, SymUnitPercent).
-		Build())
-}
-
 // applyKFXStyleAdjustments modifies CSS styles for KFX-specific requirements.
 // This is called after CSS is loaded but before KFX post-processing.
 //
-// Unlike registerDescendantSelectors which adds new selector rules, this function
-// modifies existing styles to fix discrepancies between CSS/EPUB behavior and KFX behavior.
+// This function modifies existing styles to fix discrepancies between CSS/EPUB
+// behavior and KFX behavior.
 func (sr *StyleRegistry) applyKFXStyleAdjustments() {
 	// Remove vertical margins from footnote-title-first and footnote-title-next.
 	//

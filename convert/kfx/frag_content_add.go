@@ -33,7 +33,10 @@ func (sb *StorylineBuilder) AddContent(contentType KFXSymbol, contentName string
 
 // AddContentAndEvents adds content with style events (to storyline or current block).
 // The styleSpec is the original style specification used for position-based re-resolution.
-func (sb *StorylineBuilder) AddContentAndEvents(contentType KFXSymbol, contentName string, contentOffset int, styleSpec, style string, events []StyleEventRef) int {
+// An optional StyleContext can be passed to preserve ancestor scopes for deferred resolution.
+// When provided, descendant selectors (e.g., ".footnote p") will match correctly during
+// deferred style resolution in Build(). Without it, a fresh context with no scopes is used.
+func (sb *StorylineBuilder) AddContentAndEvents(contentType KFXSymbol, contentName string, contentOffset int, styleSpec, style string, events []StyleEventRef, ctx ...StyleContext) int {
 	eid := sb.eidCounter
 	sb.eidCounter++
 
@@ -46,7 +49,7 @@ func (sb *StorylineBuilder) AddContentAndEvents(contentType KFXSymbol, contentNa
 		}
 	}
 
-	return sb.addEntry(ContentRef{
+	ref := ContentRef{
 		EID:           eid,
 		Type:          contentType,
 		ContentName:   contentName,
@@ -54,36 +57,14 @@ func (sb *StorylineBuilder) AddContentAndEvents(contentType KFXSymbol, contentNa
 		StyleSpec:     styleSpec,
 		Style:         style,
 		StyleEvents:   events,
-	})
-}
-
-// AddFootnoteContentAndEvents adds footnote content with style events and position/classification markers.
-// This is used for the first paragraph of footnote content (with "more" indicator if present).
-// It adds position:footer ($183=$455) and yj.classification:footnote ($615=$281) markers
-// that identify the content as footnote body text for Kindle's footnote rendering.
-func (sb *StorylineBuilder) AddFootnoteContentAndEvents(contentType KFXSymbol, contentName string, contentOffset int, styleSpec, style string, events []StyleEventRef) int {
-	eid := sb.eidCounter
-	sb.eidCounter++
-
-	if style != "" && sb.styles != nil {
-		sb.styles.tracer.TraceAssign(traceSymbolName(contentType)+" (footnote)", fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name, styleSpec)
-		// Only mark usage now if no styleSpec (immediate style, won't be re-resolved)
-		// Deferred styles (with styleSpec) are marked after position filtering in Build()
-		if styleSpec == "" {
-			sb.styles.ResolveStyle(style, styleUsageText)
-		}
 	}
-
-	return sb.addEntry(ContentRef{
-		EID:             eid,
-		Type:            contentType,
-		ContentName:     contentName,
-		ContentOffset:   contentOffset,
-		StyleSpec:       styleSpec,
-		Style:           style,
-		StyleEvents:     events,
-		FootnoteContent: true,
-	})
+	// Store the caller's StyleContext for deferred resolution if provided.
+	// This preserves ancestor scopes so descendant selectors work correctly.
+	if len(ctx) > 0 {
+		sc := ctx[0]
+		ref.styleCtx = &sc
+	}
+	return sb.addEntry(ref)
 }
 
 // AddContentWithHeading adds content with style events and heading level (to storyline or current block).

@@ -592,9 +592,9 @@ func addBacklinkParagraph(c *content.Content, refs []content.BackLinkRef, sb *St
 	sb.AddContentAndEvents(SymText, contentName, contentOffset, paraStyle, "", events)
 }
 
-// countFootnoteParagraphs counts the number of paragraphs in footnote content.
-// Used to determine if "more paragraphs" indicator should be shown.
-func countFootnoteParagraphs(content []fb2.FlowItem) int {
+// countFootnoteFlowParagraphs counts the number of paragraphs in a slice of flow items.
+// Used by countFootnoteSectionParagraphs to tally paragraphs across all footnote sub-sections.
+func countFootnoteFlowParagraphs(content []fb2.FlowItem) int {
 	count := 0
 	for i := range content {
 		if content[i].Paragraph != nil {
@@ -607,17 +607,42 @@ func countFootnoteParagraphs(content []fb2.FlowItem) int {
 			}
 		}
 		if content[i].Cite != nil {
-			count += countFootnoteParagraphs(content[i].Cite.Items)
+			count += countFootnoteFlowParagraphs(content[i].Cite.Items)
 		}
 	}
+	return count
+}
+
+// countFootnoteSectionParagraphs counts all visible paragraphs in a footnote section,
+// including those inside epigraphs, annotations, and body content. This total is used
+// to determine whether the "more" indicator (~) should be shown.
+func countFootnoteSectionParagraphs(section *fb2.Section) int {
+	count := 0
+	// Count epigraph paragraphs (flow items + text-authors)
+	for i := range section.Epigraphs {
+		count += countFootnoteFlowParagraphs(section.Epigraphs[i].Flow.Items)
+		count += len(section.Epigraphs[i].TextAuthors)
+	}
+	// Count annotation paragraphs
+	if section.Annotation != nil {
+		count += countFootnoteFlowParagraphs(section.Annotation.Items)
+	}
+	// Count body content paragraphs
+	count += countFootnoteFlowParagraphs(section.Content)
 	return count
 }
 
 // addParagraphWithMoreIndicator adds a paragraph with a "more paragraphs" indicator at the start.
 // The indicator is styled with "footnote-more" and prepended to the paragraph content.
 func addParagraphWithMoreIndicator(c *content.Content, para *fb2.Paragraph, ctx StyleContext, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
-	// Resolve the footnote paragraph style
-	styleSpec := ctx.StyleSpec("p", "paragraph")
+	// Build the element-level styleSpec for deferred resolution.
+	// Unlike the immediate-resolution path (addParagraphWithImages), we do NOT use ctx.StyleSpec()
+	// because that bakes ancestor scope classes into the spec string. For deferred resolution,
+	// the scope information is carried by the stored StyleContext (ctx), so the styleSpec should
+	// contain only the element tag and element classes. If scope classes were included,
+	// parseStyleSpec() would treat them as element classes during re-resolution, causing
+	// "footnote" to be applied as both a scope ancestor AND an element class.
+	styleSpec := "p paragraph"
 
 	// Check for single spanning style that can be merged into block style
 	spanningStyle := detectSingleSpanningStyle(para.Text)
@@ -800,9 +825,12 @@ func addParagraphWithMoreIndicator(c *content.Content, para *fb2.Paragraph, ctx 
 		}
 	}
 
-	// Use AddFootnoteContentAndEvents to add position:footer and yj.classification:footnote markers
-	// These markers identify the first paragraph of footnote content for Kindle's footnote rendering
-	eid := sb.AddFootnoteContentAndEvents(SymText, contentName, offset, styleSpec, resolved, segmentedEvents)
+	// Use AddContentAndEvents (not AddFootnoteContentAndEvents) because footnote content marking
+	// is now handled by the pending flag mechanism in StorylineBuilder. The pending flag was set
+	// by processFootnoteSectionContent() after section ID registration, and will be consumed by
+	// addEntry() for whichever content entry comes first (epigraph, image, or this paragraph).
+	// This avoids redundant marking when an epigraph already consumed the flag.
+	eid := sb.AddContentAndEvents(SymText, contentName, offset, styleSpec, resolved, segmentedEvents, ctx)
 	if para.ID != "" {
 		if _, exists := idToEID[para.ID]; !exists {
 			idToEID[para.ID] = eid

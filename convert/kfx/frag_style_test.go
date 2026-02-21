@@ -494,4 +494,215 @@ func TestStyleContext(t *testing.T) {
 			t.Errorf("Expected accumulated margin-left %.3f%%, got %.3f%%", expected, val)
 		}
 	})
+
+	t.Run("container text-indent is not overridden by p tag default", func(t *testing.T) {
+		// This tests the fix for the bug where p { text-indent: 1em } would
+		// override the inherited text-indent: 0 from a footnote/poem container.
+		sr := NewStyleRegistry()
+		// footnote with text-indent: 0
+		sr.Register(StyleDef{Name: "footnote", Properties: map[KFXSymbol]any{
+			SymTextIndent: DimensionValue(0, SymUnitPercent),
+		}})
+		// p with text-indent: 3.125% (standard paragraph indent)
+		sr.Register(StyleDef{Name: "p", Properties: map[KFXSymbol]any{
+			SymTextIndent: DimensionValue(3.125, SymUnitPercent),
+		}})
+
+		// Simulate: footnote > p (plain paragraph inside footnote container)
+		ctx := NewStyleContext(sr).PushBlock("div", "footnote")
+		styleName := ctx.Resolve("p", "")
+
+		def, ok := sr.Get(styleName)
+		if !ok {
+			t.Fatalf("Style %q not found", styleName)
+		}
+
+		textIndent := def.Properties[SymTextIndent]
+		if textIndent == nil {
+			t.Fatal("Expected text-indent in resolved style")
+		}
+		val, unit, ok := measureParts(textIndent)
+		if !ok || unit != SymUnitPercent {
+			t.Fatalf("Expected percent unit, got %v", textIndent)
+		}
+		// Should be 0% (from footnote), NOT 3.125% (from p tag default)
+		if val != 0 {
+			t.Errorf("Expected text-indent 0%% (inherited from footnote), got %.3f%%", val)
+		}
+	})
+
+	t.Run("container text-align is not overridden by p tag default", func(t *testing.T) {
+		// Epigraph sets text-align: right, which should not be overridden
+		// by p's text-align: justify.
+		sr := NewStyleRegistry()
+		sr.Register(StyleDef{Name: "epigraph", Properties: map[KFXSymbol]any{
+			SymTextAlignment: SymbolValue(SymRight),
+			SymFontStyle:     SymbolValue(SymItalic),
+		}})
+		sr.Register(StyleDef{Name: "p", Properties: map[KFXSymbol]any{
+			SymTextAlignment: SymbolValue(SymJustify),
+			SymTextIndent:    DimensionValue(3.125, SymUnitPercent),
+		}})
+
+		ctx := NewStyleContext(sr).PushBlock("div", "epigraph")
+		styleName := ctx.Resolve("p", "")
+
+		def, ok := sr.Get(styleName)
+		if !ok {
+			t.Fatalf("Style %q not found", styleName)
+		}
+
+		textAlign := def.Properties[SymTextAlignment]
+		if textAlign == nil {
+			t.Fatal("Expected text-align in resolved style")
+		}
+		// Should be right (from epigraph), NOT justify (from p tag default)
+		got := symbolToInt(textAlign)
+		want := int(SymRight)
+		if got != want {
+			t.Errorf("Expected text-align right (%d), got %d", want, got)
+		}
+	})
+
+	t.Run("container font-style is not overridden by tag default", func(t *testing.T) {
+		// Container sets font-style: italic, tag default should not override it.
+		sr := NewStyleRegistry()
+		sr.Register(StyleDef{Name: "cite", Properties: map[KFXSymbol]any{
+			SymFontStyle: SymbolValue(SymItalic),
+		}})
+		sr.Register(StyleDef{Name: "p", Properties: map[KFXSymbol]any{
+			SymFontStyle: SymbolValue(SymNormal),
+		}})
+
+		ctx := NewStyleContext(sr).PushBlock("div", "cite")
+		styleName := ctx.Resolve("p", "")
+
+		def, ok := sr.Get(styleName)
+		if !ok {
+			t.Fatalf("Style %q not found", styleName)
+		}
+
+		fontStyle := def.Properties[SymFontStyle]
+		if fontStyle == nil {
+			t.Fatal("Expected font-style in resolved style")
+		}
+		got := symbolToInt(fontStyle)
+		want := int(SymItalic)
+		if got != want {
+			t.Errorf("Expected font-style italic (%d), got %d", want, got)
+		}
+	})
+
+	t.Run("class can still override container inherited property", func(t *testing.T) {
+		// Even when container sets text-indent: 0, an explicit class should
+		// be able to override it (step 3 of cascade).
+		sr := NewStyleRegistry()
+		sr.Register(StyleDef{Name: "footnote", Properties: map[KFXSymbol]any{
+			SymTextIndent: DimensionValue(0, SymUnitPercent),
+		}})
+		sr.Register(StyleDef{Name: "p", Properties: map[KFXSymbol]any{
+			SymTextIndent: DimensionValue(3.125, SymUnitPercent),
+		}})
+		// An explicit class with its own text-indent
+		sr.Register(StyleDef{Name: "indented", Properties: map[KFXSymbol]any{
+			SymTextIndent: DimensionValue(6.25, SymUnitPercent),
+		}})
+
+		ctx := NewStyleContext(sr).PushBlock("div", "footnote")
+		styleName := ctx.Resolve("p", "indented")
+
+		def, ok := sr.Get(styleName)
+		if !ok {
+			t.Fatalf("Style %q not found", styleName)
+		}
+
+		textIndent := def.Properties[SymTextIndent]
+		if textIndent == nil {
+			t.Fatal("Expected text-indent in resolved style")
+		}
+		val, unit, ok := measureParts(textIndent)
+		if !ok || unit != SymUnitPercent {
+			t.Fatalf("Expected percent unit, got %v", textIndent)
+		}
+		// Should be 6.25% from the explicit "indented" class, overriding
+		// both the container's 0% and the filtered p tag default's 3.125%
+		if val != 6.25 {
+			t.Errorf("Expected text-indent 6.25%% (from explicit class), got %.3f%%", val)
+		}
+	})
+
+	t.Run("root-level p tag defaults apply normally without container", func(t *testing.T) {
+		// Without a container, p's tag defaults should apply normally.
+		// This ensures the filter doesn't break root-level paragraphs.
+		sr := NewStyleRegistry()
+		sr.Register(StyleDef{Name: "p", Properties: map[KFXSymbol]any{
+			SymTextIndent:    DimensionValue(3.125, SymUnitPercent),
+			SymTextAlignment: SymbolValue(SymJustify),
+		}})
+
+		ctx := NewStyleContext(sr)
+		styleName := ctx.Resolve("p", "")
+
+		def, ok := sr.Get(styleName)
+		if !ok {
+			t.Fatalf("Style %q not found", styleName)
+		}
+
+		// text-indent should be 3.125% (p's default, no container to filter)
+		textIndent := def.Properties[SymTextIndent]
+		if textIndent == nil {
+			t.Fatal("Expected text-indent in resolved style")
+		}
+		val, _, ok := measureParts(textIndent)
+		if !ok || val != 3.125 {
+			t.Errorf("Expected text-indent 3.125%%, got %v", textIndent)
+		}
+
+		// text-align should be justify (p's default, no container to filter)
+		textAlign := def.Properties[SymTextAlignment]
+		if textAlign == nil {
+			t.Fatal("Expected text-align in resolved style")
+		}
+		got := symbolToInt(textAlign)
+		if got != int(SymJustify) {
+			t.Errorf("Expected text-align justify, got %d", got)
+		}
+	})
+
+	t.Run("descendant selector overrides inherited property", func(t *testing.T) {
+		// descendant selector (footnote--p) should be able to set properties
+		// even when container also set them (step 4 of cascade).
+		sr := NewStyleRegistry()
+		sr.Register(StyleDef{Name: "footnote", Properties: map[KFXSymbol]any{
+			SymTextIndent: DimensionValue(0, SymUnitPercent),
+		}})
+		sr.Register(StyleDef{Name: "p", Properties: map[KFXSymbol]any{
+			SymTextIndent: DimensionValue(3.125, SymUnitPercent),
+		}})
+		// descendant selector: footnote--p sets text-indent to 1%
+		sr.Register(StyleDef{Name: "footnote--p", Properties: map[KFXSymbol]any{
+			SymTextIndent: DimensionValue(1, SymUnitPercent),
+		}})
+
+		ctx := NewStyleContext(sr).PushBlock("div", "footnote")
+		styleName := ctx.Resolve("p", "")
+
+		def, ok := sr.Get(styleName)
+		if !ok {
+			t.Fatalf("Style %q not found", styleName)
+		}
+
+		textIndent := def.Properties[SymTextIndent]
+		if textIndent == nil {
+			t.Fatal("Expected text-indent in resolved style")
+		}
+		val, unit, ok := measureParts(textIndent)
+		if !ok || unit != SymUnitPercent {
+			t.Fatalf("Expected percent unit, got %v", textIndent)
+		}
+		// Should be 1% from descendant selector, NOT 0% from container or 3.125% from p
+		if val != 1 {
+			t.Errorf("Expected text-indent 1%% (from descendant selector), got %.3f%%", val)
+		}
+	})
 }

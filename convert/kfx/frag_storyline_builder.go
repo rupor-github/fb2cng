@@ -106,6 +106,13 @@ type StorylineBuilder struct {
 	// The margin is stored in ContentRef.EmptyLineMarginTop and applied during post-processing,
 	// avoiding font-size scaling that would occur if baked into the style.
 	pendingEmptyLineMarginTop *float64
+
+	// pendingFootnoteContent marks the next content entry as footnote body content.
+	// When set, the next entry added via addEntry will have FootnoteContent=true,
+	// which adds position:footer and yj.classification:footnote markers.
+	// This is used to mark the first body paragraph of each footnote section,
+	// matching KP3 behavior where every footnote's first paragraph gets these markers.
+	pendingFootnoteContent bool
 }
 
 // containerMargins stores the CSS margins for a container.
@@ -368,6 +375,25 @@ func (sb *StorylineBuilder) consumePendingEmptyLineMarginTop() *float64 {
 	margin := sb.pendingEmptyLineMarginTop
 	sb.pendingEmptyLineMarginTop = nil
 	return margin
+}
+
+// SetPendingFootnoteContent marks the next content entry as footnote body content.
+// When set, the next entry added via addEntry will have FootnoteContent=true,
+// adding position:footer ($183=$455) and yj.classification:footnote ($615=$281) markers.
+// This ensures the first body paragraph of each footnote section gets these markers,
+// matching KP3 reference output.
+func (sb *StorylineBuilder) SetPendingFootnoteContent() {
+	sb.pendingFootnoteContent = true
+}
+
+// consumePendingFootnoteContent returns and clears the pending footnote content flag.
+// Called by addEntry to apply the flag to the next content entry.
+func (sb *StorylineBuilder) consumePendingFootnoteContent() bool {
+	if sb.pendingFootnoteContent {
+		sb.pendingFootnoteContent = false
+		return true
+	}
+	return false
 }
 
 // Build creates the storyline and section fragments.
