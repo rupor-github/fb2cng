@@ -88,7 +88,7 @@ document:
     # - .Title (string) - book title as specified in fb2 metainformation
     # - .Series (array of { .Name (string), .Number (integer) }) - series as
     # specified in fb2 metainformation.
-    #     NOTE: according to fictionbook schema series could be hierarhical (series
+    #     NOTE: according to fictionbook schema series could be hierarchical (series
     #     contain series and so on). Hierarchy is completely ignored - anything below
     #     first level is not present here.
     # - .Language (string) - canonical string representation of a language as
@@ -127,7 +127,7 @@ document:
     # When creator_name_template is set author(s) name in output book
     # metainformation will be formatted using it. Template is applied to each
     # available author individually. Device often uses particular format for
-    # sorting books by author names. Folowing fields are available:
+    # sorting books by author names. Following fields are available:
     # - .Index (int) - 0 based index (if there is more than 1 author)
     # - .FirstName (string),
     # - .MiddleName (string),
@@ -207,7 +207,7 @@ document:
     # "float"           - pop up footnotes (result depends on reader support).
     # "floatRenumbered" - same as float, but footnote links and titles use
     #                     sequential numbering controlled by label_template.
-    # NOTE: actual generated content will follow output format requrements for
+    # NOTE: actual generated content will follow output format requirements for
     # example with floating footnotes for epub2 and kepub "bi-directional
     # links" method (A -> B and B -> A) and for epub3 it will be <aside> and
     # <epub> required elements
@@ -244,7 +244,7 @@ document:
     # Create separate "chapter" with book annotation if available
     enable: false
 
-    # Use provded annotation title
+    # Use provided annotation title
     title: Annotation
 
     # Show annotation in TOC (generated page, ncx, nav, ...)
@@ -264,7 +264,7 @@ document:
     # - .Title (string) - book title as specified in fb2 metainformation
     # - .Series (array of { .Name (string), .Number (integer) }) - series as
     # specified in fb2 metainformation.
-    #     NOTE: according to fictionbook schema series could be hierarhical (series
+    #     NOTE: according to fictionbook schema series could be hierarchical (series
     #     contain series and so on). Hierarchy is completely ignored - anything below
     #     first level is dropped.
     #     NOTE: Similarly I am not aware of any usage of multiple series, for
