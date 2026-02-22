@@ -177,6 +177,23 @@ func (fb *FictionBook) buildReverseLinkIndex(log *zap.Logger) ReverseLinkIndex {
 	for i := range fb.Bodies {
 		bodyPath := []any{&fb.Bodies[i]}
 
+		// Index body-level image
+		if fb.Bodies[i].Image != nil {
+			indexHref(index, fb.Bodies[i].Image.Href, "block-image",
+				append(append([]any{}, bodyPath...), fb.Bodies[i].Image),
+				log)
+		}
+
+		// Index body-level title paragraphs (may contain inline images)
+		if fb.Bodies[i].Title != nil {
+			titlePath := append(append([]any{}, bodyPath...), fb.Bodies[i].Title)
+			for j := range fb.Bodies[i].Title.Items {
+				if fb.Bodies[i].Title.Items[j].Paragraph != nil {
+					fb.indexInlineLinks(index, fb.Bodies[i].Title.Items[j].Paragraph.Text, append(append([]any{}, titlePath...), &fb.Bodies[i].Title.Items[j], fb.Bodies[i].Title.Items[j].Paragraph), log)
+				}
+			}
+		}
+
 		// Index epigraphs
 		for j := range fb.Bodies[i].Epigraphs {
 			epiPath := append(append([]any{}, bodyPath...), &fb.Bodies[i].Epigraphs[j])

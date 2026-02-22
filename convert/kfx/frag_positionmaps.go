@@ -78,11 +78,30 @@ type PositionItem struct {
 	InlineImages []InlineImagePos
 }
 
-// HasInlineImages returns true if any position item has inline images,
-// indicating the book uses offset-based position entries.
+// isImageOnly reports whether a position item with inline images contains
+// no actual text — all images sit at offset 0 and the total length equals
+// the number of images. Such entries do not produce $143 offset fields in
+// the position_id_map.
+func (it *PositionItem) isImageOnly() bool {
+	if len(it.InlineImages) == 0 {
+		return false
+	}
+	for _, img := range it.InlineImages {
+		if img.Offset != 0 {
+			return false
+		}
+	}
+	return it.Length == len(it.InlineImages)
+}
+
+// HasInlineImages returns true if any position item has mixed content
+// (text interleaved with inline images) that produces offset-based
+// position entries ($143). Image-only entries are excluded because
+// they do not emit offsets and therefore do not require the
+// kfxgen.pidMapWithOffset format capability.
 func HasInlineImages(items []PositionItem) bool {
-	for _, it := range items {
-		if len(it.InlineImages) > 0 {
+	for i := range items {
+		if len(items[i].InlineImages) > 0 && !items[i].isImageOnly() {
 			return true
 		}
 	}
@@ -352,21 +371,7 @@ func BuildPositionIDMap(allEIDs []int, items []PositionItem) *Fragment {
 	if len(items) > 0 {
 		for _, it := range items {
 			if len(it.InlineImages) > 0 {
-				// Check if this is image-only (no actual text content)
-				// Image-only: all images at offset 0 and length equals number of images
-				isImageOnly := true
-				for _, img := range it.InlineImages {
-					if img.Offset != 0 {
-						isImageOnly = false
-						break
-					}
-				}
-				// Also check that total length equals number of images (no text)
-				if it.Length != len(it.InlineImages) {
-					isImageOnly = false
-				}
-
-				if isImageOnly {
+				if it.isImageOnly() {
 					// Image-only text entry: emit wrapper and images at same PID
 					// KP3 emits: {pid, wrapper_eid}, {pid, image_eid}
 					entries = append(entries, NewStruct().

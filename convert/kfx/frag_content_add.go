@@ -117,28 +117,6 @@ func (sb *StorylineBuilder) AddImage(resourceName, style, altText string, isFloa
 	})
 }
 
-// AddInlineImage adds an inline image reference (embedded within text).
-// Unlike block images, inline images have render: inline and use em-based dimensions
-// with baseline-style: center for vertical alignment within text.
-func (sb *StorylineBuilder) AddInlineImage(resourceName, style, altText string) int {
-	eid := sb.eidCounter
-	sb.eidCounter++
-
-	if style != "" && sb.styles != nil {
-		sb.styles.tracer.TraceAssign(traceSymbolName(SymImage)+" (inline)", fmt.Sprintf("%d", eid), style, sb.sectionName+"/"+sb.name, "")
-		sb.styles.ResolveStyle(style, styleUsageImage)
-	}
-
-	return sb.addEntry(ContentRef{
-		EID:          eid,
-		Type:         SymImage,
-		ResourceName: resourceName,
-		Style:        style,
-		AltText:      altText,
-		RenderInline: true, // Sets render: inline ($601 = $283)
-	})
-}
-
 // AddMixedContent adds a text entry with interleaved inline images using content_list.
 // This creates the KP3-compatible structure where text and images are mixed in a single entry:
 //

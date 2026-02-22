@@ -8,7 +8,6 @@ type ContentRef struct {
 	ContentOffset   int             // Offset within content fragment ($403)
 	ResourceName    string          // For images: external_resource fragment id/name ($175)
 	AltText         string          // For images: alt text ($584)
-	RenderInline    bool            // For inline images: set render ($601) = inline ($283)
 	Style           string          // Resolved style name (set by StyleSpec resolution or directly)
 	StyleSpec       string          // Raw style specification for deferred resolution
 	StyleEvents     []StyleEventRef // Optional inline style events ($142)
@@ -134,9 +133,6 @@ func NewContentEntry(ref ContentRef) StructValue {
 	if ref.Type == SymImage {
 		entry.Set(SymResourceName, SymbolByName(ref.ResourceName)) // $175 = resource_name (symbol reference)
 		entry.SetString(SymAltText, ref.AltText)                   // $584 = alt_text (always include, even if empty)
-		if ref.RenderInline {
-			entry.SetSymbol(SymRender, SymInline) // $601 = inline ($283) for inline images
-		}
 	} else if ref.ContentName != "" {
 		// Content reference - nested struct with name and offset
 		// Only add if we have a content name (containers with children don't have content)
