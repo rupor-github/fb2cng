@@ -545,6 +545,12 @@ func appendEpigraphs(parent *etree.Element, c *content.Content, epigraphs []fb2.
 }
 
 func appendBodyIntroContent(parent *etree.Element, c *content.Content, body *fb2.Body, depth int, log *zap.Logger) error {
+	// Per FictionBook.xsd bodyType sequence: image -> title -> epigraph -> section
+
+	if body.Image != nil {
+		appendImageElement(parent, c, body.Image)
+	}
+
 	if body.Title != nil {
 		// Always create wrapper div for body title
 		titleWrapper := parent.CreateElement("div")
@@ -566,10 +572,6 @@ func appendBodyIntroContent(parent *etree.Element, c *content.Content, body *fb2
 
 	if err := appendEpigraphs(parent, c, body.Epigraphs, depth, log); err != nil {
 		return err
-	}
-
-	if body.Image != nil {
-		appendImageElement(parent, c, body.Image)
 	}
 
 	return nil

@@ -71,19 +71,7 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 		}
 	}
 
-	if section.Image != nil {
-		imgID := strings.TrimPrefix(section.Image.Href, "#")
-		if imgInfo, ok := imageResources[imgID]; ok {
-			ctx := NewStyleContext(styles)
-			resolved, isFloatImage := ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, "image")
-			eid := sb.AddImage(imgInfo.ResourceName, resolved, section.Image.Alt, isFloatImage)
-			if section.Image.ID != "" {
-				if _, exists := idToEID[section.Image.ID]; !exists {
-					idToEID[section.Image.ID] = eid
-				}
-			}
-		}
-	}
+	// Per FictionBook.xsd sectionType sequence: title -> epigraph -> image -> annotation -> content
 
 	// Process title with wrapper (mirrors EPUB's <div class="chapter-title"> or <div class="section-title">)
 	if section.Title != nil {
@@ -147,6 +135,57 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 	// Depth always increases when entering a nested <section>, even if the wrapper is untitled.
 	childDepth := depth + 1
 
+	// Process epigraphs - KFX doesn't use wrapper blocks for epigraphs.
+	// Instead, apply epigraph styling directly to each paragraph as flat siblings.
+	// This matches KP3 reference output where margin-left is on each paragraph.
+	// Position filtering is applied within each epigraph's items.
+	for _, epigraph := range section.Epigraphs {
+		// Enter epigraph container for margin collapsing tracking.
+		// Use FlagTransferMBToLastChild so that epigraph's margin-bottom goes to its last child
+		// (text-author if present) rather than bubbling up to sibling collapsing.
+		sb.EnterContainer(ContainerEpigraph, FlagTransferMBToLastChild)
+
+		// If epigraph has an ID, assign it to the first content item
+		if epigraph.Flow.ID != "" {
+			if _, exists := idToEID[epigraph.Flow.ID]; !exists {
+				// NextEID returns the EID that will be assigned to the next content item
+				idToEID[epigraph.Flow.ID] = sb.NextEID()
+			}
+		}
+
+		epigraphCtx := NewStyleContext(styles).PushBlock("div", "epigraph")
+		// Store container margins for post-processing
+		sb.SetContainerMargins(epigraphCtx.ExtractContainerMargins("div", "epigraph"))
+
+		for i := range epigraph.Flow.Items {
+			var next *fb2.FlowItem
+			if i+1 < len(epigraph.Flow.Items) {
+				next = &epigraph.Flow.Items[i+1]
+			}
+			processFlowItem(c, &epigraph.Flow.Items[i], next, epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID)
+		}
+		for i := range epigraph.TextAuthors {
+			addParagraphWithImages(c, &epigraph.TextAuthors[i], epigraphCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
+		}
+
+		sb.ExitContainer() // Exit epigraph container
+	}
+
+	// Process section image (per FictionBook.xsd sectionType sequence: title -> epigraph -> image -> annotation)
+	if section.Image != nil {
+		imgID := strings.TrimPrefix(section.Image.Href, "#")
+		if imgInfo, ok := imageResources[imgID]; ok {
+			ctx := NewStyleContext(styles)
+			resolved, isFloatImage := ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, "image")
+			eid := sb.AddImage(imgInfo.ResourceName, resolved, section.Image.Alt, isFloatImage)
+			if section.Image.ID != "" {
+				if _, exists := idToEID[section.Image.ID]; !exists {
+					idToEID[section.Image.ID] = eid
+				}
+			}
+		}
+	}
+
 	// Process annotation.
 	if section.Annotation != nil {
 		// KP3 sometimes emits an actual wrapper entry (content_list) for annotations.
@@ -203,42 +242,6 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 
 			sb.ExitContainer() // Exit annotation container
 		}
-	}
-
-	// Process epigraphs - KFX doesn't use wrapper blocks for epigraphs.
-	// Instead, apply epigraph styling directly to each paragraph as flat siblings.
-	// This matches KP3 reference output where margin-left is on each paragraph.
-	// Position filtering is applied within each epigraph's items.
-	for _, epigraph := range section.Epigraphs {
-		// Enter epigraph container for margin collapsing tracking.
-		// Use FlagTransferMBToLastChild so that epigraph's margin-bottom goes to its last child
-		// (text-author if present) rather than bubbling up to sibling collapsing.
-		sb.EnterContainer(ContainerEpigraph, FlagTransferMBToLastChild)
-
-		// If epigraph has an ID, assign it to the first content item
-		if epigraph.Flow.ID != "" {
-			if _, exists := idToEID[epigraph.Flow.ID]; !exists {
-				// NextEID returns the EID that will be assigned to the next content item
-				idToEID[epigraph.Flow.ID] = sb.NextEID()
-			}
-		}
-
-		epigraphCtx := NewStyleContext(styles).PushBlock("div", "epigraph")
-		// Store container margins for post-processing
-		sb.SetContainerMargins(epigraphCtx.ExtractContainerMargins("div", "epigraph"))
-
-		for i := range epigraph.Flow.Items {
-			var next *fb2.FlowItem
-			if i+1 < len(epigraph.Flow.Items) {
-				next = &epigraph.Flow.Items[i+1]
-			}
-			processFlowItem(c, &epigraph.Flow.Items[i], next, epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID)
-		}
-		for i := range epigraph.TextAuthors {
-			addParagraphWithImages(c, &epigraph.TextAuthors[i], epigraphCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
-		}
-
-		sb.ExitContainer() // Exit epigraph container
 	}
 
 	// Process content items
