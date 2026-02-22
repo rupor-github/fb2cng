@@ -836,3 +836,170 @@ func TestSectionNeedsBreak(t *testing.T) {
 		}
 	})
 }
+
+func TestParseBodyTitlePageBreak(t *testing.T) {
+	tests := []struct {
+		name      string
+		css       string
+		wantValue bool
+		wantFound bool
+	}{
+		{
+			name:      "page-break-before always",
+			css:       `.body-title { page-break-before: always; }`,
+			wantValue: true,
+			wantFound: true,
+		},
+		{
+			name:      "no body-title rule",
+			css:       `.section-title { page-break-before: always; }`,
+			wantValue: false,
+			wantFound: false,
+		},
+		{
+			name:      "body-title without page-break-before",
+			css:       `.body-title { margin-top: 2em; }`,
+			wantValue: false,
+			wantFound: false,
+		},
+		{
+			name:      "page-break-before avoid",
+			css:       `.body-title { page-break-before: avoid; }`,
+			wantValue: false,
+			wantFound: true,
+		},
+		{
+			name:      "case insensitive",
+			css:       `.body-title { PAGE-BREAK-BEFORE: ALWAYS; }`,
+			wantValue: true,
+			wantFound: true,
+		},
+		{
+			name:      "empty CSS",
+			css:       ``,
+			wantValue: false,
+			wantFound: false,
+		},
+		{
+			name: "real-world default.css pattern",
+			css: `.body-title {
+				page-break-inside: avoid;
+				page-break-after: avoid;
+				page-break-before: always;
+				margin: 2em 0 1em 0;
+			}`,
+			wantValue: true,
+			wantFound: true,
+		},
+		{
+			name: "later rule without property does not override",
+			css: `.body-title { page-break-before: always; }
+			      .body-title { margin-top: 1em; }`,
+			wantValue: true,
+			wantFound: true,
+		},
+		{
+			name: "later rule with property overrides",
+			css: `.body-title { page-break-before: always; }
+			      .body-title { page-break-before: avoid; }`,
+			wantValue: false,
+			wantFound: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotValue, gotFound := parseBodyTitlePageBreak(tt.css)
+			if gotFound != tt.wantFound {
+				t.Errorf("found = %v, want %v", gotFound, tt.wantFound)
+			}
+			if gotValue != tt.wantValue {
+				t.Errorf("value = %v, want %v", gotValue, tt.wantValue)
+			}
+		})
+	}
+}
+
+func TestBodyTitleNeedsBreak(t *testing.T) {
+	t.Run("returns false by default", func(t *testing.T) {
+		book := &FictionBook{}
+		if book.BodyTitleNeedsBreak() {
+			t.Error("expected BodyTitleNeedsBreak() = false by default")
+		}
+	})
+
+	t.Run("returns true when set", func(t *testing.T) {
+		book := &FictionBook{}
+		book.SetBodyTitlePageBreak(true)
+		if !book.BodyTitleNeedsBreak() {
+			t.Error("expected BodyTitleNeedsBreak() = true after SetBodyTitlePageBreak(true)")
+		}
+	})
+
+	t.Run("returns false when explicitly unset", func(t *testing.T) {
+		book := &FictionBook{}
+		book.SetBodyTitlePageBreak(true)
+		book.SetBodyTitlePageBreak(false)
+		if book.BodyTitleNeedsBreak() {
+			t.Error("expected BodyTitleNeedsBreak() = false after SetBodyTitlePageBreak(false)")
+		}
+	})
+
+	t.Run("populated via NormalizeStylesheets", func(t *testing.T) {
+		log := zaptest.NewLogger(t)
+		book := &FictionBook{
+			Stylesheets: []Stylesheet{
+				{
+					Type: "text/css",
+					Data: `.body-title { page-break-before: always; }`,
+				},
+			},
+		}
+
+		result := book.NormalizeStylesheets("", nil, log)
+
+		if !result.BodyTitleNeedsBreak() {
+			t.Error("expected BodyTitleNeedsBreak() = true after NormalizeStylesheets")
+		}
+	})
+
+	t.Run("user CSS overrides default CSS", func(t *testing.T) {
+		log := zaptest.NewLogger(t)
+		defaultCSS := []byte(`.body-title { page-break-before: always; }`)
+
+		book := &FictionBook{
+			Stylesheets: []Stylesheet{
+				{
+					Type: "text/css",
+					Data: `.body-title { page-break-before: avoid; }`,
+				},
+			},
+		}
+
+		result := book.NormalizeStylesheets("", defaultCSS, log)
+
+		if result.BodyTitleNeedsBreak() {
+			t.Error("expected BodyTitleNeedsBreak() = false — user CSS should override default")
+		}
+	})
+
+	t.Run("user CSS without body-title preserves default", func(t *testing.T) {
+		log := zaptest.NewLogger(t)
+		defaultCSS := []byte(`.body-title { page-break-before: always; }`)
+
+		book := &FictionBook{
+			Stylesheets: []Stylesheet{
+				{
+					Type: "text/css",
+					Data: `.section-title { margin-top: 2em; }`,
+				},
+			},
+		}
+
+		result := book.NormalizeStylesheets("", defaultCSS, log)
+
+		if !result.BodyTitleNeedsBreak() {
+			t.Error("expected BodyTitleNeedsBreak() = true — user CSS doesn't mention body-title, default should apply")
+		}
+	})
+}

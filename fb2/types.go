@@ -29,6 +29,11 @@ type FictionBook struct {
 	// sectionPageBreaks records which heading depths (2-6) have
 	// page-break-before:always in the CSS. Populated by NormalizeStylesheets.
 	sectionPageBreaks map[int]bool
+	// bodyTitlePageBreak records whether .body-title has page-break-before:always
+	// in the CSS. When true and a body has both an image and a title, the image
+	// is placed in a separate storyline to create a structural page break.
+	// Populated by NormalizeStylesheets.
+	bodyTitlePageBreak bool
 }
 
 func (fb *FictionBook) IsVignetteEnabled(position common.VignettePos) bool {
@@ -51,6 +56,19 @@ func (fb *FictionBook) SectionNeedsBreak(depth int) bool {
 // Intended for testing from other packages.
 func (fb *FictionBook) SetSectionPageBreaks(breaks map[int]bool) {
 	fb.sectionPageBreaks = breaks
+}
+
+// BodyTitleNeedsBreak returns true if .body-title has page-break-before:always
+// in the CSS, indicating that a body image should be placed in a separate
+// storyline from the body title.
+func (fb *FictionBook) BodyTitleNeedsBreak() bool {
+	return fb.bodyTitlePageBreak
+}
+
+// SetBodyTitlePageBreak sets the body-title page-break flag directly.
+// Intended for testing from other packages.
+func (fb *FictionBook) SetBodyTitlePageBreak(v bool) {
+	fb.bodyTitlePageBreak = v
 }
 
 type FootnoteRef struct {

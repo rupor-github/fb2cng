@@ -104,6 +104,39 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 		// Process body intro content (title, epigraphs, image) as separate storyline
 		// This mirrors epub's bodyIntroToXHTML which creates a separate chapter for body intro
 		if body.Title != nil {
+			// When CSS has page-break-before:always on .body-title and the body has
+			// both an image and a title, place the image in its own storyline/section.
+			// This creates a structural page break between them, matching KP3 behavior.
+			splitBodyImage := body.Image != nil && c.Book.BodyTitleNeedsBreak()
+
+			if splitBodyImage {
+				sectionCount++
+				imgStoryName := "l" + toBase36(sectionCount)
+				imgSectionName := "c" + toBase36(sectionCount-1)
+				sectionNames = append(sectionNames, imgSectionName)
+				chapterStartSections[imgSectionName] = true
+
+				imgSB := NewStorylineBuilder(imgStoryName, imgSectionName, eidCounter, styles)
+				processBodyImageOnly(body, imgSB, styles, imageResources, idToEID)
+
+				sectionEIDs[imgSectionName] = imgSB.AllEIDs()
+
+				// Track start reading location
+				if landmarks.StartEID == 0 {
+					landmarks.StartEID = imgSB.FirstEID()
+				}
+
+				eidCounter = imgSB.NextEID()
+
+				storylineFrag, sectionFrag := imgSB.Build()
+				if err := fragments.Add(storylineFrag); err != nil {
+					return nil, 0, nil, nil, nil, nil, landmarks, nil, err
+				}
+				if err := fragments.Add(sectionFrag); err != nil {
+					return nil, 0, nil, nil, nil, nil, landmarks, nil, err
+				}
+			}
+
 			sectionCount++
 			storyName := "l" + toBase36(sectionCount)
 			sectionName := "c" + toBase36(sectionCount-1)
@@ -113,7 +146,7 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 			// Create storyline builder for body intro
 			sb := NewStorylineBuilder(storyName, sectionName, eidCounter, styles)
 
-			if err := processBodyIntroContent(c, body, sb, styles, imageResources, ca, idToEID); err != nil {
+			if err := processBodyIntroContent(c, body, sb, styles, imageResources, ca, idToEID, splitBodyImage); err != nil {
 				return nil, 0, nil, nil, nil, nil, landmarks, nil, err
 			}
 
@@ -458,9 +491,32 @@ func addEndVignette(book *fb2.FictionBook, sb *StorylineBuilder, styles *StyleRe
 	sb.AddImage(imgInfo.ResourceName, resolved, "", false) // Vignettes are decorative, no alt text
 }
 
+// processBodyImageOnly adds just the body image to a storyline builder.
+// Used when the body image is split into its own storyline/section.
+func processBodyImageOnly(body *fb2.Body, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, idToEID eidByFB2ID) {
+	if body.Image == nil {
+		return
+	}
+	imgID := strings.TrimPrefix(body.Image.Href, "#")
+	imgInfo, ok := imageResources[imgID]
+	if !ok {
+		return
+	}
+	ctx := NewStyleContext(styles)
+	resolved, isFloatImage := ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, "image")
+	eid := sb.AddImage(imgInfo.ResourceName, resolved, body.Image.Alt, isFloatImage)
+	if body.Image.ID != "" {
+		if _, exists := idToEID[body.Image.ID]; !exists {
+			idToEID[body.Image.ID] = eid
+		}
+	}
+}
+
 // processBodyIntroContent processes body intro content (title, epigraphs, image).
-func processBodyIntroContent(c *content.Content, body *fb2.Body, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) error {
-	if body.Image != nil {
+// When skipImage is true, the body image is not added (it was already placed in
+// a separate storyline via processBodyImageOnly).
+func processBodyIntroContent(c *content.Content, body *fb2.Body, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, skipImage bool) error {
+	if !skipImage && body.Image != nil {
 		imgID := strings.TrimPrefix(body.Image.Href, "#")
 		if imgInfo, ok := imageResources[imgID]; ok {
 			ctx := NewStyleContext(styles)

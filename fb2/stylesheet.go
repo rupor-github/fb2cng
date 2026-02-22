@@ -124,6 +124,21 @@ func (fb *FictionBook) NormalizeStylesheets(srcPath string, defaultCSS []byte, l
 			zap.Any("breaks", fb.sectionPageBreaks))
 	}
 
+	// Extract body-title page-break information from all stylesheets.
+	// Process in order so that later stylesheets (user CSS) override earlier ones (default CSS).
+	for i := range fb.Stylesheets {
+		if fb.Stylesheets[i].Type != "text/css" {
+			continue
+		}
+		if val, found := parseBodyTitlePageBreak(fb.Stylesheets[i].Data); found {
+			fb.bodyTitlePageBreak = val
+		}
+	}
+
+	if fb.bodyTitlePageBreak {
+		log.Debug("Body title page break detected in CSS")
+	}
+
 	return fb
 }
 
@@ -379,6 +394,38 @@ func parseSectionPageBreaks(cssText string) map[int]bool {
 	}
 
 	return breaks
+}
+
+// parseBodyTitlePageBreak scans CSS text for a .body-title rule that has
+// page-break-before: always. Returns (value, found) where found indicates
+// whether the rule was present at all, so callers can implement "last wins"
+// semantics across multiple stylesheets.
+func parseBodyTitlePageBreak(cssText string) (value bool, found bool) {
+	sheet := css.NewParser(nil).Parse([]byte(cssText))
+
+	checkRule := func(rule *css.Rule) {
+		if rule.Selector.Class != "body-title" {
+			return
+		}
+		val, ok := rule.GetProperty("page-break-before")
+		if ok {
+			found = true
+			value = strings.EqualFold(val.Raw, "always")
+		}
+	}
+
+	for _, item := range sheet.Items {
+		switch {
+		case item.Rule != nil:
+			checkRule(item.Rule)
+		case item.MediaBlock != nil:
+			for i := range item.MediaBlock.Rules {
+				checkRule(&item.MediaBlock.Rules[i])
+			}
+		}
+	}
+
+	return value, found
 }
 
 // sanitizeResourceFilename creates a safe filename from URL
