@@ -107,7 +107,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 		CanonicalAttrVal: true,
 	}
 	doc.ReadSettings = etree.ReadSettings{
-		CharsetReader: charset.NewReaderLabel,
+		CharsetReader: makeCharsetReader(log),
 		Entity:        entities,
 		ValidateInput: false,
 		Permissive:    true,
@@ -550,4 +550,77 @@ func (c *Content) AddFootnoteBackLinkRef(targetID string) BackLinkRef {
 	}
 	c.BackLinkIndex[targetID] = append(refs, ref)
 	return ref
+}
+
+// makeCharsetReader returns a CharsetReader function that detects when an XML
+// document declares a non-UTF-8 encoding (e.g. "Windows-1251") but its content
+// is actually valid UTF-8. This is a common problem with FB2 files from various
+// sources. When a mismatch is detected, the reader bypasses charset conversion
+// to avoid producing mojibake. For genuinely non-UTF-8 content, it falls
+// through to charset.NewReaderLabel for proper transcoding.
+func makeCharsetReader(log *zap.Logger) func(string, io.Reader) (io.Reader, error) {
+	return func(label string, input io.Reader) (io.Reader, error) {
+		// Read a sample from the stream to check the actual encoding.
+		// We need enough bytes to see multi-byte UTF-8 sequences (Cyrillic,
+		// CJK, etc.) that would be mangled by a wrong charset decoder.
+		const peekSize = 2048 // 2KB should be enough for detection in most cases
+		buf, err := io.ReadAll(io.LimitReader(input, peekSize))
+		if err != nil {
+			return nil, fmt.Errorf("unable to peek at XML content: %w", err)
+		}
+
+		// Reconstruct the full reader: peeked bytes + remainder.
+		restored := io.MultiReader(bytes.NewReader(buf), input)
+
+		// The peek buffer may split a multi-byte UTF-8 sequence at the
+		// boundary, making utf8.Valid reject otherwise valid UTF-8 content.
+		// Trim any trailing incomplete sequence before validation.
+		checkBuf := trimIncompleteUTF8(buf)
+
+		if utf8.Valid(checkBuf) && containsNonASCII(checkBuf) {
+			log.Warn("XML declares non-UTF-8 encoding but content is valid UTF-8, ignoring declared encoding",
+				zap.String("declared", label))
+			return restored, nil
+		}
+
+		// Content is not valid UTF-8 — honour the declared encoding.
+		return charset.NewReaderLabel(label, restored)
+	}
+}
+
+// trimIncompleteUTF8 returns buf with any trailing incomplete multi-byte UTF-8
+// sequence removed. This is needed when a fixed-size peek buffer splits a
+// multi-byte character at the boundary.
+func trimIncompleteUTF8(buf []byte) []byte {
+	if len(buf) == 0 || buf[len(buf)-1] < 0x80 {
+		return buf // ends with ASCII — nothing to trim
+	}
+	// Walk backwards to find the start of the last (possibly incomplete) rune.
+	// UTF-8 continuation bytes are 10xxxxxx (0x80..0xBF), leader bytes start
+	// with 11xxxxxx (0xC0+). We need at most 3 trailing continuation bytes
+	// before hitting a leader.
+	i := len(buf) - 1
+	for i > 0 && i > len(buf)-4 && buf[i]&0xC0 == 0x80 {
+		i--
+	}
+	// i now points at the leader byte of the last rune. If DecodeRune
+	// returns RuneError, the sequence is incomplete — trim it off.
+	r, _ := utf8.DecodeRune(buf[i:])
+	if r == utf8.RuneError {
+		return buf[:i]
+	}
+	return buf
+}
+
+// containsNonASCII reports whether buf contains at least one byte > 0x7F.
+// A pure-ASCII payload is ambiguous (valid in both UTF-8 and any single-byte
+// encoding), so we only override the declared charset when we see multi-byte
+// UTF-8 sequences that would be damaged by wrong transcoding.
+func containsNonASCII(buf []byte) bool {
+	for _, b := range buf {
+		if b > 0x7F {
+			return true
+		}
+	}
+	return false
 }
