@@ -8,6 +8,15 @@ import (
 	"fbc/fb2"
 )
 
+// BacklinkRefWithOffset pairs a backlink RefID with its character offset
+// within the paragraph where the footnote reference appears. The offset
+// tells the Kindle viewer exactly where in the content entry the [1] link
+// is, so backlink navigation lands on the correct page.
+type BacklinkRefWithOffset struct {
+	RefID  string
+	Offset int // character offset (runes) within the content entry
+}
+
 // titleHasInlineImages checks if any title paragraph contains inline images.
 // Used to decide whether to use combined heading or separate paragraph approach.
 func titleHasInlineImages(title *fb2.Title) bool {
@@ -145,9 +154,9 @@ type inlineStyleInfo struct {
 
 // MixedContentResult holds the output of processMixedInlineSegments.
 type MixedContentResult struct {
-	Items          []InlineContentItem // Content items (text chunks and inline images)
-	Events         []StyleEventRef     // Style events for inline formatting
-	BacklinkRefIDs []string            // RefIDs of backlinks to register with EID after element creation
+	Items          []InlineContentItem     // Content items (text chunks and inline images)
+	Events         []StyleEventRef         // Style events for inline formatting
+	BacklinkRefIDs []BacklinkRefWithOffset // Backlinks to register with EID after element creation
 }
 
 // processMixedInlineSegments processes inline segments that may contain mixed content
@@ -172,7 +181,7 @@ func processMixedInlineSegments(
 	var (
 		items          []InlineContentItem
 		events         []StyleEventRef
-		backlinkRefIDs []string
+		backlinkRefIDs []BacklinkRefWithOffset
 		nw             = newNormalizingWriter()
 	)
 
@@ -231,7 +240,7 @@ func processMixedInlineSegments(
 		// Determine style for this segment
 		segStyle, isLink, linkTo, isFootnoteLink, backlinkRefID := SegmentStyle(seg, c, styles)
 		if backlinkRefID != "" {
-			backlinkRefIDs = append(backlinkRefIDs, backlinkRefID)
+			backlinkRefIDs = append(backlinkRefIDs, BacklinkRefWithOffset{RefID: backlinkRefID})
 		}
 
 		if seg.Kind == fb2.InlineCode {
@@ -242,6 +251,11 @@ func processMixedInlineSegments(
 		// Use GetPseudoStartText to account for ::before content.
 		startText := GetPseudoStartText(seg, segStyle, styles)
 		start := nw.ContentStartOffset(startText)
+
+		// Now that start is known, set the offset on the backlink ref we just collected
+		if backlinkRefID != "" && len(backlinkRefIDs) > 0 {
+			backlinkRefIDs[len(backlinkRefIDs)-1].Offset = start
+		}
 
 		// Inject ::before content (inherits styling from base element)
 		InjectPseudoBefore(segStyle, styles, nw)
@@ -336,8 +350,8 @@ func processMixedInlineSegments(
 
 // TextOnlyResult holds the result of processing inline segments for text-only content.
 type TextOnlyResult struct {
-	Events         []StyleEventRef // Style events for inline formatting
-	BacklinkRefIDs []string        // Collected backlink RefIDs for footnote references
+	Events         []StyleEventRef         // Style events for inline formatting
+	BacklinkRefIDs []BacklinkRefWithOffset // Collected backlink refs for footnote references
 }
 
 // processInlineSegments processes inline segments for text-only content (no inline images).

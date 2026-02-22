@@ -878,6 +878,8 @@ Many structures reference a “position” as a struct containing:
 - `$155` or `$598`: EID
 - optional `$143`: EID offset (default `0`)
 
+**Backlink offset (`$143`) for footnote return links**: When an anchor points back from a footnote to the body text paragraph containing the footnote reference (e.g., the `[1]` link), `$143` must be set to the character offset (in Unicode code points / runes) of that reference within the paragraph's text content. Without it, the Kindle viewer navigates to offset 0 (the start of the paragraph), which can be several pages before the actual footnote reference when the paragraph is long. Section/chapter anchors that target paragraph boundaries can safely omit `$143` (offset 0 is correct for them).
+
 In the EPUB conversion pipeline, this is normalized into a tuple `(eid, offset)` by:
 
 - `get_location_id(struct)` which pops `$155` first, else `$598`
@@ -1407,6 +1409,8 @@ Anchor fragments are collected first. Each `$266` entry is validated and then in
 Other observed keys:
 
 - `$597` is tolerated and discarded.
+
+**Backlink anchor offset**: For position anchors used as footnote backlinks (the `[<]` return link from a footnote back to the body text), the `$183` position struct must include `$143` with the character offset of the footnote reference within its paragraph. See §7.6.1 for details. Omitting `$143` causes the Kindle viewer to navigate to the start of the target paragraph rather than the footnote reference location.
 
 Derived from: `kfxlib/yj_to_epub_navigation.py:KFX_EPUB_Navigation.process_anchors`, `convert/kfx/frag_anchor.go`.
 

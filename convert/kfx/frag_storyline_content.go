@@ -67,7 +67,7 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 
 	if section.ID != "" {
 		if _, exists := idToEID[section.ID]; !exists {
-			idToEID[section.ID] = sb.NextEID()
+			idToEID[section.ID] = anchorTarget{EID: sb.NextEID()}
 		}
 	}
 
@@ -149,7 +149,7 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 		if epigraph.Flow.ID != "" {
 			if _, exists := idToEID[epigraph.Flow.ID]; !exists {
 				// NextEID returns the EID that will be assigned to the next content item
-				idToEID[epigraph.Flow.ID] = sb.NextEID()
+				idToEID[epigraph.Flow.ID] = anchorTarget{EID: sb.NextEID()}
 			}
 		}
 
@@ -180,7 +180,7 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 			eid := sb.AddImage(imgInfo.ResourceName, resolved, section.Image.Alt, isFloatImage)
 			if section.Image.ID != "" {
 				if _, exists := idToEID[section.Image.ID]; !exists {
-					idToEID[section.Image.ID] = eid
+					idToEID[section.Image.ID] = anchorTarget{EID: eid}
 				}
 			}
 		}
@@ -200,7 +200,7 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 			// If annotation has an ID, assign it to the wrapper entry.
 			if section.Annotation.ID != "" {
 				if _, exists := idToEID[section.Annotation.ID]; !exists {
-					idToEID[section.Annotation.ID] = wrapperEID
+					idToEID[section.Annotation.ID] = anchorTarget{EID: wrapperEID}
 				}
 			}
 
@@ -226,7 +226,7 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 			// If annotation has an ID, assign it to the first content item.
 			if section.Annotation.ID != "" {
 				if _, exists := idToEID[section.Annotation.ID]; !exists {
-					idToEID[section.Annotation.ID] = sb.NextEID()
+					idToEID[section.Annotation.ID] = anchorTarget{EID: sb.NextEID()}
 				}
 			}
 
@@ -279,7 +279,7 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 				firstEID := sb.NextEID()
 				if nestedSection.ID != "" {
 					if _, exists := idToEID[nestedSection.ID]; !exists {
-						idToEID[nestedSection.ID] = firstEID
+						idToEID[nestedSection.ID] = anchorTarget{EID: firstEID}
 					}
 				}
 
@@ -431,7 +431,7 @@ func processFlowItem(c *content.Content, item *fb2.FlowItem, next *fb2.FlowItem,
 			// If poem has an ID, assign it to the first content item.
 			if item.Poem.ID != "" {
 				if _, exists := idToEID[item.Poem.ID]; !exists {
-					idToEID[item.Poem.ID] = sb.NextEID()
+					idToEID[item.Poem.ID] = anchorTarget{EID: sb.NextEID()}
 				}
 			}
 			// processPoem handles PushBlock internally with proper item counting
@@ -444,7 +444,7 @@ func processFlowItem(c *content.Content, item *fb2.FlowItem, next *fb2.FlowItem,
 			// If cite has an ID, assign it to the first content item.
 			if item.Cite.ID != "" {
 				if _, exists := idToEID[item.Cite.ID]; !exists {
-					idToEID[item.Cite.ID] = sb.NextEID()
+					idToEID[item.Cite.ID] = anchorTarget{EID: sb.NextEID()}
 				}
 			}
 			// processCite handles PushBlock internally with proper item counting
@@ -456,7 +456,7 @@ func processFlowItem(c *content.Content, item *fb2.FlowItem, next *fb2.FlowItem,
 			eid := sb.AddTable(c, item.Table, styles, ca, imageResources, idToEID)
 			if item.Table.ID != "" {
 				if _, exists := idToEID[item.Table.ID]; !exists {
-					idToEID[item.Table.ID] = eid
+					idToEID[item.Table.ID] = anchorTarget{EID: eid}
 				}
 			}
 		}
@@ -513,7 +513,7 @@ func processFlowItem(c *content.Content, item *fb2.FlowItem, next *fb2.FlowItem,
 		eid := sb.AddImage(imgInfo.ResourceName, resolved, item.Image.Alt, isFloatImage)
 		if item.Image.ID != "" {
 			if _, exists := idToEID[item.Image.ID]; !exists {
-				idToEID[item.Image.ID] = eid
+				idToEID[item.Image.ID] = anchorTarget{EID: eid}
 			}
 		}
 
@@ -552,7 +552,7 @@ func processPoem(c *content.Content, poem *fb2.Poem, ctx StyleContext, sb *Story
 		// If epigraph has an ID, assign it to the first content item
 		if epigraph.Flow.ID != "" {
 			if _, exists := idToEID[epigraph.Flow.ID]; !exists {
-				idToEID[epigraph.Flow.ID] = sb.NextEID()
+				idToEID[epigraph.Flow.ID] = anchorTarget{EID: sb.NextEID()}
 			}
 		}
 
@@ -705,7 +705,7 @@ func processFootnoteSectionContent(
 	// This ensures footnote popups show the body content, not the title
 	if section.ID != "" {
 		if _, exists := idToEID[section.ID]; !exists {
-			idToEID[section.ID] = sb.NextEID()
+			idToEID[section.ID] = anchorTarget{EID: sb.NextEID()}
 		}
 	}
 
@@ -737,7 +737,7 @@ func processFootnoteSectionContent(
 		// If epigraph has an ID, assign it to the first content item
 		if epigraph.Flow.ID != "" {
 			if _, exists := idToEID[epigraph.Flow.ID]; !exists {
-				idToEID[epigraph.Flow.ID] = sb.NextEID()
+				idToEID[epigraph.Flow.ID] = anchorTarget{EID: sb.NextEID()}
 			}
 		}
 
@@ -780,7 +780,7 @@ func processFootnoteSectionContent(
 			eid := sb.AddImage(imgInfo.ResourceName, resolved, section.Image.Alt, isFloatImage)
 			if section.Image.ID != "" {
 				if _, exists := idToEID[section.Image.ID]; !exists {
-					idToEID[section.Image.ID] = eid
+					idToEID[section.Image.ID] = anchorTarget{EID: eid}
 				}
 			}
 		}
@@ -794,7 +794,7 @@ func processFootnoteSectionContent(
 
 		if section.Annotation.ID != "" {
 			if _, exists := idToEID[section.Annotation.ID]; !exists {
-				idToEID[section.Annotation.ID] = sb.NextEID()
+				idToEID[section.Annotation.ID] = anchorTarget{EID: sb.NextEID()}
 			}
 		}
 		annotationCtx := NewStyleContext(styles).PushBlock("div", "annotation")

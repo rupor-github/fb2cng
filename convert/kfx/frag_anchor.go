@@ -4,7 +4,15 @@ import (
 	"sync"
 )
 
-type eidByFB2ID map[string]int
+// anchorTarget holds the EID and optional character offset for an anchor position.
+// The Offset field is used for backlink anchors to tell the Kindle viewer exactly
+// where within a content entry the footnote reference appears ($143 in KFX).
+type anchorTarget struct {
+	EID    int
+	Offset int // character offset (runes) within the content entry; 0 = start
+}
+
+type eidByFB2ID map[string]anchorTarget
 
 // buildAnchorFragments generates $266 anchor fragments for internal navigation.
 // Fragment naming uses the actual ID from the source document (e.g., section IDs, note IDs).
@@ -20,11 +28,14 @@ func buildAnchorFragments(idToEID eidByFB2ID, referenced map[string]bool) []*Fra
 		if id == "" {
 			continue
 		}
-		eid, ok := idToEID[id]
-		if !ok || eid == 0 {
+		target, ok := idToEID[id]
+		if !ok || target.EID == 0 {
 			continue
 		}
-		pos := NewStruct().SetInt(SymUniqueID, int64(eid))
+		pos := NewStruct().SetInt(SymUniqueID, int64(target.EID))
+		if target.Offset > 0 {
+			pos.SetInt(SymOffset, int64(target.Offset))
+		}
 		out = append(out, &Fragment{
 			FType:   SymAnchor,
 			FIDName: id,

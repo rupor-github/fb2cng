@@ -165,7 +165,7 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 				IncludeInTOC: true,
 			}
 			tocEntries = append(tocEntries, tocEntry)
-			idToEID[anchorID] = sb.FirstEID()
+			idToEID[anchorID] = anchorTarget{EID: sb.FirstEID()}
 
 			// Track start reading location (first body intro is the "Start" landmark)
 			if landmarks.StartEID == 0 {
@@ -422,7 +422,7 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 			Children:     childTOCEntries, // Nested entries for individual footnote sections (default mode)
 		}
 		tocEntries = append(tocEntries, tocEntry)
-		idToEID[anchorID] = sb.FirstEID()
+		idToEID[anchorID] = anchorTarget{EID: sb.FirstEID()}
 
 		eidCounter = sb.NextEID()
 		storylineFrag, sectionFrag := sb.Build()
@@ -507,7 +507,7 @@ func processBodyImageOnly(body *fb2.Body, sb *StorylineBuilder, styles *StyleReg
 	eid := sb.AddImage(imgInfo.ResourceName, resolved, body.Image.Alt, isFloatImage)
 	if body.Image.ID != "" {
 		if _, exists := idToEID[body.Image.ID]; !exists {
-			idToEID[body.Image.ID] = eid
+			idToEID[body.Image.ID] = anchorTarget{EID: eid}
 		}
 	}
 }
@@ -524,7 +524,7 @@ func processBodyIntroContent(c *content.Content, body *fb2.Body, sb *StorylineBu
 			eid := sb.AddImage(imgInfo.ResourceName, resolved, body.Image.Alt, isFloatImage)
 			if body.Image.ID != "" {
 				if _, exists := idToEID[body.Image.ID]; !exists {
-					idToEID[body.Image.ID] = eid
+					idToEID[body.Image.ID] = anchorTarget{EID: eid}
 				}
 			}
 		}
@@ -561,7 +561,7 @@ func processBodyIntroContent(c *content.Content, body *fb2.Body, sb *StorylineBu
 		if epigraph.Flow.ID != "" {
 			if _, exists := idToEID[epigraph.Flow.ID]; !exists {
 				// NextEID returns the EID that will be assigned to the next content item
-				idToEID[epigraph.Flow.ID] = sb.NextEID()
+				idToEID[epigraph.Flow.ID] = anchorTarget{EID: sb.NextEID()}
 			}
 		}
 
@@ -726,7 +726,7 @@ func addParagraphWithMoreIndicator(c *content.Content, para *fb2.Paragraph, ctx 
 
 	// Process inline segments
 	var events []StyleEventRef
-	var backlinkRefIDs []string
+	var backlinkRefIDs []BacklinkRefWithOffset
 
 	// Create inline style context for this footnote paragraph.
 	// This ensures inline styles inherit properties from the paragraph context.
@@ -760,7 +760,7 @@ func addParagraphWithMoreIndicator(c *content.Content, para *fb2.Paragraph, ctx 
 		// Determine style for this segment using shared helper
 		segStyle, isLink, linkTo, isFootnoteLink, backlinkRefID := SegmentStyle(seg, c, styles)
 		if backlinkRefID != "" {
-			backlinkRefIDs = append(backlinkRefIDs, backlinkRefID)
+			backlinkRefIDs = append(backlinkRefIDs, BacklinkRefWithOffset{RefID: backlinkRefID})
 		}
 
 		if seg.Kind == fb2.InlineCode {
@@ -770,6 +770,11 @@ func addParagraphWithMoreIndicator(c *content.Content, para *fb2.Paragraph, ctx 
 		// Use GetPseudoStartText to account for ::before content
 		startText := GetPseudoStartText(seg, segStyle, styles)
 		start := nw.ContentStartOffset(startText)
+
+		// Now that start is known, set the offset on the backlink ref we just collected
+		if backlinkRefID != "" && len(backlinkRefIDs) > 0 {
+			backlinkRefIDs[len(backlinkRefIDs)-1].Offset = start
+		}
 
 		// Inject ::before content (inherits styling from base element)
 		InjectPseudoBefore(segStyle, styles, nw)
@@ -889,13 +894,13 @@ func addParagraphWithMoreIndicator(c *content.Content, para *fb2.Paragraph, ctx 
 	eid := sb.AddContentAndEvents(SymText, contentName, offset, styleSpec, resolved, segmentedEvents, ctx)
 	if para.ID != "" {
 		if _, exists := idToEID[para.ID]; !exists {
-			idToEID[para.ID] = eid
+			idToEID[para.ID] = anchorTarget{EID: eid}
 		}
 	}
 	// Register backlink ref IDs
-	for _, refID := range backlinkRefIDs {
-		if _, exists := idToEID[refID]; !exists {
-			idToEID[refID] = eid
+	for _, ref := range backlinkRefIDs {
+		if _, exists := idToEID[ref.RefID]; !exists {
+			idToEID[ref.RefID] = anchorTarget{EID: eid, Offset: ref.Offset}
 		}
 	}
 }

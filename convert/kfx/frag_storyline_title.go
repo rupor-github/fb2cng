@@ -40,8 +40,8 @@ func addTitleAsHeading(c *content.Content, title *fb2.Title, ctx StyleContext, h
 		events           []StyleEventRef
 		firstParagraph   = true
 		prevWasEmptyLine = false
-		firstParaID      string   // Store ID of first paragraph for EID mapping
-		backlinkRefIDs   []string // RefIDs to register after EID is assigned
+		firstParaID      string                  // Store ID of first paragraph for EID mapping
+		backlinkRefIDs   []BacklinkRefWithOffset // Backlink refs to register after EID is assigned
 	)
 
 	// inlineStyleInfo tracks style and optional link info during inline walks.
@@ -96,8 +96,8 @@ func addTitleAsHeading(c *content.Content, title *fb2.Title, ctx StyleContext, h
 					isFootnoteLink = true
 					// Register this footnote reference for backlink generation
 					ref := c.AddFootnoteBackLinkRef(linkTo)
-					// Collect RefID to register with EID after the element is created
-					backlinkRefIDs = append(backlinkRefIDs, ref.RefID)
+					// Collect RefID to register with EID after the element is created (offset set below)
+					backlinkRefIDs = append(backlinkRefIDs, BacklinkRefWithOffset{RefID: ref.RefID})
 				} else {
 					segStyle = "link-internal"
 				}
@@ -112,6 +112,11 @@ func addTitleAsHeading(c *content.Content, title *fb2.Title, ctx StyleContext, h
 		// Use GetPseudoStartText to account for ::before content.
 		startText := GetPseudoStartText(seg, segStyle, styles)
 		start := nw.ContentStartOffset(startText)
+
+		// Now that start is known, set the offset on the backlink ref we just collected
+		if isFootnoteLink && len(backlinkRefIDs) > 0 {
+			backlinkRefIDs[len(backlinkRefIDs)-1].Offset = start
+		}
 
 		// Inject ::before content (inherits styling from base element)
 		InjectPseudoBefore(segStyle, styles, nw)
@@ -320,14 +325,14 @@ func addTitleAsHeading(c *content.Content, title *fb2.Title, ctx StyleContext, h
 	// Map first paragraph ID to the combined entry's EID
 	if firstParaID != "" {
 		if _, exists := idToEID[firstParaID]; !exists {
-			idToEID[firstParaID] = eid
+			idToEID[firstParaID] = anchorTarget{EID: eid}
 		}
 	}
 
 	// Register any backlink ref IDs collected during processing
-	for _, refID := range backlinkRefIDs {
-		if _, exists := idToEID[refID]; !exists {
-			idToEID[refID] = eid
+	for _, ref := range backlinkRefIDs {
+		if _, exists := idToEID[ref.RefID]; !exists {
+			idToEID[ref.RefID] = anchorTarget{EID: eid, Offset: ref.Offset}
 		}
 	}
 }

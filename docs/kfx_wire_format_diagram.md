@@ -1096,6 +1096,27 @@ Visual byte map (approximate):
 │    }                                                                        │
 │  }                                                                          │
 │                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  IMPORTANT: $143 Offset in Backlink Anchors                         │    │
+│  │                                                                     │    │
+│  │  For footnote backlinks (the [<] return link from a footnote back   │    │
+│  │  to the body text), $143 MUST be set to the character offset        │    │
+│  │  (Unicode code points / runes) of the footnote reference within     │    │
+│  │  the target paragraph's text content.                               │    │
+│  │                                                                     │    │
+│  │  Without $143, the Kindle viewer navigates to offset 0 (start of    │    │
+│  │  the paragraph). When the footnote reference [1] appears deep       │    │
+│  │  into a long paragraph, this lands the reader pages before the      │    │
+│  │  actual reference link.                                             │    │
+│  │                                                                     │    │
+│  │  Section/chapter anchors targeting paragraph boundaries can omit    │    │
+│  │  $143 (offset 0 is correct for them).                               │    │
+│  │                                                                     │    │
+│  │  Example backlink anchor:                                           │    │
+│  │    { $183: { $155: 1159, $143: 152 } }                              │    │
+│  │  → navigates to character 152 within the content at EID 1159        │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
 │  EXTERNAL URI ANCHOR (for http/https links):                                │
 │  ───────────────────────────────────────────                                │
 │  Fragment: fid = anchor_id, ftype = $266                                    │

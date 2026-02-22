@@ -98,7 +98,7 @@ func buildTOCEntryTree(entries []*TOCEntry, includeUntitled bool) []*tocPageEntr
 func collectTOCAnchors(entries []*tocPageEntry, idToEID eidByFB2ID) {
 	for _, e := range entries {
 		if e.AnchorID != "" && e.FirstEID > 0 {
-			idToEID[e.AnchorID] = e.FirstEID
+			idToEID[e.AnchorID] = anchorTarget{EID: e.FirstEID}
 		}
 		if len(e.Children) > 0 {
 			collectTOCAnchors(e.Children, idToEID)

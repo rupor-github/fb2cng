@@ -80,7 +80,7 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 	var (
 		nw             = newNormalizingWriter() // Normalizes whitespace and tracks rune count
 		events         []StyleEventRef
-		backlinkRefIDs []string // RefIDs to register after EID is assigned
+		backlinkRefIDs []BacklinkRefWithOffset // Backlink refs to register after EID is assigned
 	)
 
 	// KP3 emits a style_event for the first glyph in dropcap paragraphs.
@@ -124,13 +124,13 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 		}
 		if para.ID != "" {
 			if _, exists := idToEID[para.ID]; !exists {
-				idToEID[para.ID] = eid
+				idToEID[para.ID] = anchorTarget{EID: eid}
 			}
 		}
 		// Register any backlink ref IDs collected during processing
-		for _, refID := range backlinkRefIDs {
-			if _, exists := idToEID[refID]; !exists {
-				idToEID[refID] = eid
+		for _, ref := range backlinkRefIDs {
+			if _, exists := idToEID[ref.RefID]; !exists {
+				idToEID[ref.RefID] = anchorTarget{EID: eid, Offset: ref.Offset}
 			}
 		}
 		nw.Reset()
@@ -225,8 +225,8 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 					// Register this footnote reference for backlink generation
 					// The ref.RefID becomes the anchor that backlinks point to
 					ref := c.AddFootnoteBackLinkRef(linkTo)
-					// Collect RefID to register with EID after flush
-					backlinkRefIDs = append(backlinkRefIDs, ref.RefID)
+					// Collect RefID to register with EID after flush (offset set below)
+					backlinkRefIDs = append(backlinkRefIDs, BacklinkRefWithOffset{RefID: ref.RefID})
 					// linkTo stays as the footnote ID (after) - it's what we link TO
 				} else {
 					segStyle = "link-internal"
@@ -242,6 +242,11 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 		// Use GetPseudoStartText to account for ::before content.
 		startText := GetPseudoStartText(seg, segStyle, styles)
 		start := nw.ContentStartOffset(startText)
+
+		// Now that start is known, set the offset on the backlink ref we just collected
+		if isFootnoteLink && len(backlinkRefIDs) > 0 {
+			backlinkRefIDs[len(backlinkRefIDs)-1].Offset = start
+		}
 
 		// Inject ::before content (inherits styling from base element)
 		InjectPseudoBefore(segStyle, styles, nw)
@@ -407,7 +412,7 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 		items          []InlineContentItem // Collected content items (text and images)
 		nw             = newNormalizingWriter()
 		events         []StyleEventRef
-		backlinkRefIDs []string // RefIDs to register after EID is assigned
+		backlinkRefIDs []BacklinkRefWithOffset // Backlink refs to register after EID is assigned
 	)
 
 	// Create inline style context by pushing the paragraph tag and classes.
@@ -531,8 +536,8 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 					isFootnoteLink = true
 					// Register this footnote reference for backlink generation
 					ref := c.AddFootnoteBackLinkRef(linkTo)
-					// Collect RefID to register with EID after the element is created
-					backlinkRefIDs = append(backlinkRefIDs, ref.RefID)
+					// Collect RefID to register with EID after the element is created (offset set below)
+					backlinkRefIDs = append(backlinkRefIDs, BacklinkRefWithOffset{RefID: ref.RefID})
 				} else {
 					segStyle = "link-internal"
 				}
@@ -561,6 +566,11 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 		}
 		start := cumulativeRuneCount + inlineImageCount + nw.ContentStartOffset(startText)
 		startImageCount := inlineImageCount
+
+		// Now that start is known, set the offset on the backlink ref we just collected
+		if isFootnoteLink && len(backlinkRefIDs) > 0 {
+			backlinkRefIDs[len(backlinkRefIDs)-1].Offset = start
+		}
 
 		// Inject ::before content (inherits styling from base element)
 		if pseudoContent != nil && pseudoContent.Before != "" {
@@ -700,13 +710,13 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 	eid := sb.AddMixedContent("", resolvedStyle, items, segmentedEvents, headingLevel)
 	if para.ID != "" {
 		if _, exists := idToEID[para.ID]; !exists {
-			idToEID[para.ID] = eid
+			idToEID[para.ID] = anchorTarget{EID: eid}
 		}
 	}
 	// Register any backlink ref IDs collected during processing
-	for _, refID := range backlinkRefIDs {
-		if _, exists := idToEID[refID]; !exists {
-			idToEID[refID] = eid
+	for _, ref := range backlinkRefIDs {
+		if _, exists := idToEID[ref.RefID]; !exists {
+			idToEID[ref.RefID] = anchorTarget{EID: eid, Offset: ref.Offset}
 		}
 	}
 }
