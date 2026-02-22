@@ -1,9 +1,13 @@
 package config
 
 import (
+	"archive/zip"
+	"bufio"
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"testing"
 )
 
@@ -124,5 +128,129 @@ func TestReportClose_PropagatesFileCloseError(t *testing.T) {
 	errs := joined.Unwrap()
 	if len(errs) < 2 {
 		t.Errorf("expected at least 2 joined errors, got %d: %v", len(errs), err)
+	}
+}
+
+func TestManifestContainsAllEntries(t *testing.T) {
+	// Create a temp file for the report archive
+	reportFile, err := os.CreateTemp("", "test-report-manifest-*.zip")
+	if err != nil {
+		t.Fatalf("failed to create temp report file: %v", err)
+	}
+	reportName := reportFile.Name()
+	defer os.Remove(reportName)
+
+	r := &Report{
+		entries: make(map[string]entry),
+		file:    reportFile,
+	}
+
+	// Create a directory with files (including a subdirectory)
+	dir, err := os.MkdirTemp("", "test-manifest-dir-")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	if err := os.WriteFile(filepath.Join(dir, "file1.txt"), []byte("content1"), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "subdir"), 0755); err != nil {
+		t.Fatalf("failed to create subdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "subdir", "file2.txt"), []byte("content2"), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	// Create a standalone regular file
+	tmpFile, err := os.CreateTemp("", "test-manifest-file-")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	tmpFile.WriteString("standalone content")
+	tmpFile.Close()
+	defer os.Remove(tmpFile.Name())
+
+	// Store entries
+	r.Store("my-dir", dir)
+	r.Store("standalone.txt", tmpFile.Name())
+	r.StoreData("config/test.yml", []byte("key: value"))
+
+	if err := r.Close(); err != nil {
+		t.Fatalf("Report.Close() error: %v", err)
+	}
+
+	// Read the resulting ZIP and collect all entry names
+	zr, err := zip.OpenReader(reportName)
+	if err != nil {
+		t.Fatalf("failed to open zip: %v", err)
+	}
+	defer zr.Close()
+
+	zipEntries := make(map[string]bool)
+	for _, f := range zr.File {
+		zipEntries[f.Name] = true
+	}
+
+	// Read MANIFEST content
+	var manifestEntries []string
+	for _, f := range zr.File {
+		if f.Name == "MANIFEST" {
+			rc, err := f.Open()
+			if err != nil {
+				t.Fatalf("failed to open MANIFEST: %v", err)
+			}
+			scanner := bufio.NewScanner(rc)
+			for scanner.Scan() {
+				line := scanner.Text()
+				// Extract the entry name (second tab-separated field)
+				parts := strings.SplitN(line, "\t", 3)
+				if len(parts) >= 2 {
+					manifestEntries = append(manifestEntries, parts[1])
+				}
+			}
+			rc.Close()
+			break
+		}
+	}
+
+	sort.Strings(manifestEntries)
+
+	// Every non-MANIFEST zip entry should be in the MANIFEST
+	manifestSet := make(map[string]bool)
+	for _, name := range manifestEntries {
+		manifestSet[name] = true
+	}
+
+	for name := range zipEntries {
+		if name == "MANIFEST" {
+			continue
+		}
+		if !manifestSet[name] {
+			t.Errorf("zip entry %q is not listed in MANIFEST", name)
+		}
+	}
+
+	// Every MANIFEST entry should be in the zip (or be an absent path)
+	for _, name := range manifestEntries {
+		if !zipEntries[name] {
+			t.Errorf("MANIFEST entry %q is not in the zip archive", name)
+		}
+	}
+
+	// Verify specific expected entries
+	expectedEntries := []string{
+		"my-dir/file1.txt",
+		"my-dir/subdir/file2.txt",
+		"standalone.txt",
+		"config/test.yml",
+	}
+	for _, expected := range expectedEntries {
+		if !manifestSet[expected] {
+			t.Errorf("expected MANIFEST to contain %q, but it doesn't. MANIFEST entries: %v", expected, manifestEntries)
+		}
+		if !zipEntries[expected] {
+			t.Errorf("expected zip to contain %q, but it doesn't", expected)
+		}
 	}
 }

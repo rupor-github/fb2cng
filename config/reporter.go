@@ -264,42 +264,92 @@ func (r *Report) finalize() (retErr error) {
 
 	t := time.Now()
 
-	names, manifest := prepareManifest(r.entries)
+	// Expand all entries so that directories are replaced by their individual files.
+	// This ensures the MANIFEST contains every file that will be in the archive.
+	expanded := expandEntries(r.entries, t)
+
+	names, manifest := prepareManifest(expanded)
 	if err := saveFile(arc, "MANIFEST", t, manifest); err != nil {
 		return err
 	}
 
 	// in the same order as in manifest
 	for _, name := range names {
-		if len(r.entries[name].data) > 0 {
-			if err := saveFile(arc, name, r.entries[name].stamp, bytes.NewReader(r.entries[name].data)); err != nil {
+		e := expanded[name]
+		if len(e.data) > 0 {
+			if err := saveFile(arc, name, e.stamp, bytes.NewReader(e.data)); err != nil {
 				return err
 			}
 			continue
 		}
 
-		path := r.entries[name].actual
-		// ignoring absent files
-		if info, err := os.Stat(path); err == nil {
-			switch {
-			case info.Mode().IsRegular():
-				var r io.ReadCloser
-				if r, err = os.Open(path); err != nil {
-					return err
-				}
-				if err := saveFile(arc, name, info.ModTime(), r); err != nil {
-					r.Close()
-					return err
-				}
-				r.Close()
-			case info.Mode().IsDir():
-				if err := saveDir(arc, name, path); err != nil {
-					return err
-				}
+		path := e.actual
+		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
+			var f io.ReadCloser
+			if f, err = os.Open(path); err != nil {
+				return err
 			}
+			if err := saveFile(arc, name, info.ModTime(), f); err != nil {
+				f.Close()
+				return err
+			}
+			f.Close()
 		}
 	}
 	return nil
+}
+
+// expandEntries returns a new map where directory entries have been replaced
+// by individual file entries for every regular file inside the directory tree.
+// Non-directory entries (data or regular files) are passed through unchanged.
+// Absent paths are silently skipped.
+func expandEntries(entries map[string]entry, now time.Time) map[string]entry {
+	expanded := make(map[string]entry, len(entries))
+
+	for name, e := range entries {
+		if len(e.data) > 0 {
+			expanded[name] = e
+			continue
+		}
+
+		info, err := os.Stat(e.actual)
+		if err != nil {
+			// absent path — still list it in the manifest so the user knows it was expected
+			if e.stamp.IsZero() {
+				e.stamp = now
+			}
+			expanded[name] = e
+			continue
+		}
+
+		if info.Mode().IsRegular() {
+			expanded[name] = e
+			continue
+		}
+
+		if info.IsDir() {
+			_ = filepath.Walk(e.actual, func(path string, fi os.FileInfo, err error) error {
+				if err != nil {
+					return err
+				}
+				if !fi.Mode().IsRegular() {
+					return nil
+				}
+				rel, err := filepath.Rel(e.actual, path)
+				if err != nil {
+					return err
+				}
+				childName := filepath.ToSlash(filepath.Join(name, rel))
+				expanded[childName] = entry{
+					original: filepath.Join(e.original, rel),
+					actual:   path,
+					stamp:    fi.ModTime(),
+				}
+				return nil
+			})
+		}
+	}
+	return expanded
 }
 
 func prepareManifest(entries map[string]entry) ([]string, *bytes.Buffer) {
@@ -336,35 +386,4 @@ func saveFile(dst *zip.Writer, name string, t time.Time, src io.Reader) error {
 		return err
 	}
 	return nil
-}
-
-func saveDir(dst *zip.Writer, name, dir string) error {
-	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if !info.Mode().IsRegular() {
-			// ignore links, sockets, etc.
-			return nil
-		}
-
-		// Get the path of the file relative to the source folder
-		rel, err := filepath.Rel(dir, path)
-		if err != nil {
-			return err
-		}
-		// root entry under new name
-		rel = filepath.ToSlash(filepath.Join(name, rel))
-
-		var r io.ReadCloser
-		if r, err = os.Open(path); err != nil {
-			return err
-		}
-		defer r.Close()
-
-		if err = saveFile(dst, rel, info.ModTime(), r); err != nil {
-			return err
-		}
-		return nil
-	})
 }
