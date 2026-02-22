@@ -38,8 +38,8 @@ type (
 	}
 
 	ScreenConfig struct {
-		Width  int `yaml:"width" validate:"min=600"`
-		Height int `yaml:"height" validate:"min=800"`
+		Width  int `yaml:"width" validate:"min=400"`
+		Height int `yaml:"height" validate:"min=600"`
 	}
 
 	ImagesConfig struct {
