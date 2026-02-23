@@ -75,8 +75,8 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 			// Set current filename for footnote reference tracking
 			c.CurrentFilename = filename
 
-			// Start new page at chapter boundary
-			c.StartNewPageAtChapter()
+			// Register new page for this file in the page map
+			c.ForceNewPage(filename)
 
 			doc, err := bodyIntroToXHTML(c, body, title, chapterID, log)
 			if err != nil {
@@ -118,8 +118,8 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 			// Set current filename for footnote reference tracking
 			c.CurrentFilename = filename
 
-			// Start new page at chapter boundary
-			c.StartNewPageAtChapter()
+			// Register new page for this file in the page map
+			c.ForceNewPage(filename)
 
 			doc, splits, err := bodyToXHTML(c, body, section, title, addHiddenNavLink, log)
 			if err != nil {
@@ -148,9 +148,9 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 
 				splitTitle := split.section.AsTitleText("")
 
-				// Set current filename and start new page for the split section
+				// Set current filename and register new page for the split section
 				c.CurrentFilename = splitFilename
-				c.StartNewPageAtChapter()
+				c.ForceNewPage(splitFilename)
 
 				splitDoc, innerSplits, err := renderSplitSection(c, body, split.section, split.depth, log)
 				if err != nil {
@@ -195,9 +195,6 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 	// (content is visible in both modes, just displayed differently)
 	c.PageTrackingEnabled = c.PageSize > 0
 
-	// Start new page at footnotes chapter boundary
-	c.StartNewPageAtChapter()
-
 	footnotesChapters, err := processFootnoteBodies(c, footnoteBodies, idToFile, log)
 	if err != nil {
 		log.Error("Unable to convert footnotes", zap.Error(err))
@@ -218,6 +215,9 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, idToF
 
 	// Set current filename for footnote tracking
 	c.CurrentFilename = filename
+
+	// Register new page for footnotes file in the page map
+	c.ForceNewPage(filename)
 
 	// Check if we're in float mode (footnote sections should NOT appear in TOC in float mode)
 	isFloatMode := c.FootnotesMode.IsFloat()

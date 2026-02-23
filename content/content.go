@@ -483,17 +483,6 @@ func (c *Content) ResetPageMap() {
 	c.PageMapIndex = make(map[string][]PageMapEntry)
 }
 
-// StartNewPageAtChapter resets the rune counter so the next content starts on a new page.
-// Call this at chapter/section boundaries to ensure chapters start on fresh pages.
-// Unlike ForceNewPage, this doesn't record a synthetic page entry - the first content
-// in the new chapter will naturally continue page numbering.
-func (c *Content) StartNewPageAtChapter() {
-	if c.PageSize == 0 || !c.PageTrackingEnabled {
-		return
-	}
-	c.pageRuneCounter = 0
-}
-
 // ForceNewPage records a synthetic page for a file.
 // Used for spine items where we don't (or can't) inject in-document page markers (e.g., cover, TOC page).
 func (c *Content) ForceNewPage(filename string) {
