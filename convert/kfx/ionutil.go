@@ -41,6 +41,24 @@ func GetIonProlog() []byte {
 	return ionProlog
 }
 
+// CreatePrologForMaxID creates an Ion prolog with a YJ_symbols import truncated
+// to the specified maxID. The maxID is the total symbol count INCLUDING Ion system
+// symbols (e.g., 857 means 857-9=848 YJ_symbols entries). This is used by KDF files
+// that have a "max_id" fragment instead of a "$ion_symbol_table" fragment.
+func CreatePrologForMaxID(maxID int) []byte {
+	systemSymCount := len(ion.V1SystemSymbolTable.Symbols())
+	yjCount := maxID - systemSymCount
+	if yjCount < 0 {
+		yjCount = 0
+	}
+	st := createSharedSymbolTable(yjCount)
+	buf := bytes.Buffer{}
+	if err := ion.NewBinaryWriter(&buf, st).Finish(); err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
+}
+
 // GetSharedSymbolTable returns the YJ_symbols shared symbol table.
 func GetSharedSymbolTable() ion.SharedSymbolTable {
 	return sharedSymbolTable

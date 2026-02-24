@@ -30,6 +30,9 @@ github.com/cpuguy83/go-md2man/v2/md2man
 # github.com/disintegration/imaging v1.6.2
 ## explicit
 github.com/disintegration/imaging
+# github.com/dustin/go-humanize v1.0.1
+## explicit; go 1.16
+github.com/dustin/go-humanize
 # github.com/gabriel-vasile/mimetype v1.4.13
 ## explicit; go 1.21
 github.com/gabriel-vasile/mimetype
@@ -103,9 +106,15 @@ github.com/mitchellh/copystructure
 # github.com/mitchellh/reflectwalk v1.0.2
 ## explicit
 github.com/mitchellh/reflectwalk
+# github.com/ncruces/go-strftime v0.1.9
+## explicit; go 1.17
+github.com/ncruces/go-strftime
 # github.com/neurosnap/sentences v1.1.2
 ## explicit; go 1.18
 github.com/neurosnap/sentences
+# github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec
+## explicit; go 1.12
+github.com/remyoudompheng/bigfft
 # github.com/rupor-github/gencfg v1.0.14
 ## explicit; go 1.26.0
 github.com/rupor-github/gencfg
@@ -162,6 +171,9 @@ golang.org/x/crypto/blowfish
 golang.org/x/crypto/pbkdf2
 golang.org/x/crypto/scrypt
 golang.org/x/crypto/sha3
+# golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0
+## explicit; go 1.23.0
+golang.org/x/exp/constraints
 # golang.org/x/exp/typeparams v0.0.0-20260212183809-81e46e3db34a
 ## explicit; go 1.25.0
 golang.org/x/exp/typeparams
@@ -481,3 +493,44 @@ honnef.co/go/tools/stylecheck/st1021
 honnef.co/go/tools/stylecheck/st1022
 honnef.co/go/tools/stylecheck/st1023
 honnef.co/go/tools/unused
+# modernc.org/libc v1.65.7
+## explicit; go 1.23.0
+modernc.org/libc
+modernc.org/libc/errno
+modernc.org/libc/fcntl
+modernc.org/libc/fts
+modernc.org/libc/grp
+modernc.org/libc/honnef.co/go/netdb
+modernc.org/libc/langinfo
+modernc.org/libc/limits
+modernc.org/libc/netdb
+modernc.org/libc/netinet/in
+modernc.org/libc/poll
+modernc.org/libc/pthread
+modernc.org/libc/pwd
+modernc.org/libc/signal
+modernc.org/libc/stdio
+modernc.org/libc/stdlib
+modernc.org/libc/sys/socket
+modernc.org/libc/sys/stat
+modernc.org/libc/sys/types
+modernc.org/libc/termios
+modernc.org/libc/time
+modernc.org/libc/unistd
+modernc.org/libc/utime
+modernc.org/libc/uuid
+modernc.org/libc/uuid/uuid
+modernc.org/libc/wctype
+# modernc.org/mathutil v1.7.1
+## explicit; go 1.21
+modernc.org/mathutil
+# modernc.org/memory v1.11.0
+## explicit; go 1.23.0
+modernc.org/memory
+# modernc.org/sqlite v1.37.1
+## explicit; go 1.23.0
+modernc.org/sqlite/lib
+# zombiezen.com/go/sqlite v1.4.2
+## explicit; go 1.23.0
+zombiezen.com/go/sqlite
+zombiezen.com/go/sqlite/sqlitex

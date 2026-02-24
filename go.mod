@@ -31,6 +31,7 @@ require (
 	golang.org/x/term v0.40.0
 	golang.org/x/text v0.34.0
 	gopkg.in/yaml.v3 v3.0.1
+	zombiezen.com/go/sqlite v1.4.2
 )
 
 require (
@@ -41,6 +42,7 @@ require (
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
 	github.com/abice/go-enum v0.9.2 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
+	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
@@ -55,12 +57,15 @@ require (
 	github.com/mattn/goveralls v0.0.12 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
+	github.com/ncruces/go-strftime v0.1.9 // indirect
+	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/urfave/cli/v2 v2.27.7 // indirect
 	github.com/xrash/smetrics v0.0.0-20250705151800-55b8f293f342 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
+	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20260212183809-81e46e3db34a // indirect
 	golang.org/x/mod v0.33.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
@@ -68,4 +73,8 @@ require (
 	golang.org/x/tools v0.42.0 // indirect
 	golang.org/x/tools/cmd/cover v0.1.0-deprecated // indirect
 	honnef.co/go/tools v0.7.0 // indirect
+	modernc.org/libc v1.65.7 // indirect
+	modernc.org/mathutil v1.7.1 // indirect
+	modernc.org/memory v1.11.0 // indirect
+	modernc.org/sqlite v1.37.1 // indirect
 )

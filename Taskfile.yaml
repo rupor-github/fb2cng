@@ -265,7 +265,7 @@ tasks:
       DIRS_WITH_TESTS:
         sh: find -name '*_test.go' -printf "%h\n" | sort -u
     cmds:
-      - echo "{{.TATN}}Check compiling all availble tests{{.TOFF}}"
+      - echo "{{.TATN}}Check compiling all available tests{{.TOFF}}"
       - for: {var: DIRS_WITH_TESTS, as: DIR}
         cmd: go test -mod=mod -c -o /dev/null '{{.DIR}}'
     sources:
@@ -281,6 +281,8 @@ tasks:
     cmds:
       - task: go-build
         vars: {FLAGS: 'debug', PACKAGE: './cmd/debug/kfxdump', TARGET: '{{.DEV_BUILD_DIR}}/kfxdump'}
+      - task: go-build
+        vars: {FLAGS: 'debug', PACKAGE: './cmd/debug/kdfdump', TARGET: '{{.DEV_BUILD_DIR}}/kdfdump'}
 
   go-build:
     internal: true
