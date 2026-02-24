@@ -95,6 +95,16 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	// Create style registry from CSS stylesheets and get parsed CSS for font extraction
 	styles, parsedCSS := buildStyleRegistry(c.Book.Stylesheets, tracer, log)
 
+	// Save parsed stylesheet to debug report when debug mode is enabled.
+	// For EPUB the stylesheet is always part of the output archive, but for KFX
+	// it only exists in memory — write it to WorkDir so it gets captured.
+	if c.Debug && parsedCSS != nil {
+		cssPath := filepath.Join(c.WorkDir, "parsed-stylesheet.css")
+		if err := os.WriteFile(cssPath, []byte(parsedCSS.String()), 0644); err != nil {
+			log.Warn("Failed to write parsed stylesheet for debug", zap.Error(err))
+		}
+	}
+
 	// Build font info from stylesheets (for embedded fonts)
 	fontInfo := BuildFontInfo(c.Book.Stylesheets, parsedCSS, log)
 	if fontInfo.HasBodyFont() {
