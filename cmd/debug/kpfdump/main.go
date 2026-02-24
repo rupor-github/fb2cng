@@ -1,4 +1,4 @@
-// kdfdump reads KDF files produced by Kindle Previewer (KP3), strips SQLite fingerprint
+// kpfdump reads KDF/KPF files produced by Kindle Previewer (KP3), strips SQLite fingerprint
 // records, parses the Ion fragment payloads, and produces output similar to kfxdump.
 //
 // KDF files are standard SQLite databases with 1024-byte "fingerprint" records injected at
@@ -49,7 +49,7 @@ func main() {
 	writeSqlite := flag.Bool("sqlite", false, "write clean SQLite database to <file>.sqlite")
 	overwrite := flag.Bool("overwrite", false, "overwrite existing output")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: kdfdump [-all] [-dump] [-resources] [-styles] [-storyline] [-margins] [-sqlite] [-overwrite] <file.kdf|file.kpf> [outdir]\n\n")
+		fmt.Fprintf(os.Stderr, "usage: kpfdump [-all] [-dump] [-resources] [-styles] [-storyline] [-margins] [-sqlite] [-overwrite] <file.kdf|file.kpf> [outdir]\n\n")
 		fmt.Fprintf(os.Stderr, "Reads KDF/KPF files and produces output similar to kfxdump.\n")
 		fmt.Fprintf(os.Stderr, "Fingerprint records are stripped automatically before parsing.\n\n")
 		flag.PrintDefaults()

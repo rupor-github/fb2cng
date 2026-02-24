@@ -282,7 +282,7 @@ tasks:
       - task: go-build
         vars: {FLAGS: 'debug', PACKAGE: './cmd/debug/kfxdump', TARGET: '{{.DEV_BUILD_DIR}}/kfxdump'}
       - task: go-build
-        vars: {FLAGS: 'debug', PACKAGE: './cmd/debug/kdfdump', TARGET: '{{.DEV_BUILD_DIR}}/kdfdump'}
+        vars: {FLAGS: 'debug', PACKAGE: './cmd/debug/kpfdump', TARGET: '{{.DEV_BUILD_DIR}}/kpfdump'}
 
   go-build:
     internal: true

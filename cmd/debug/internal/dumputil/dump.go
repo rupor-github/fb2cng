@@ -1,4 +1,4 @@
-// Package dumputil provides shared output helpers for kfxdump and kdfdump debug tools.
+// Package dumputil provides shared output helpers for kfxdump and kpfdump debug tools.
 // It operates on *kfx.Container and produces dump text, resource ZIPs, style reports,
 // storyline expansions, and margin trees.
 package dumputil
