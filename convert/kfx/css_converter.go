@@ -421,16 +421,20 @@ func (c *Converter) convertProperty(name string, value css.Value, props map[KFXS
 		}
 
 	case "text-indent":
-		// KP3 uses % for text-indent. Convert em → % using EmToPercentTextIndent ratio.
+		// Keep em units for text-indent so the indent scales with font size changes
+		// in the viewer. Converting em → % (viewport-relative) makes the indent fixed
+		// regardless of font size, which is incorrect CSS behavior.
+		// Calibre KFX Input/Output converts em → % here (1em = 3.125%), losing the
+		// font-relative behavior. We preserve em units, matching KP3 and Amazon backend.
 		// Note: text-indent: 0 is meaningful in KFX - it explicitly sets no indentation,
-		// which overrides any inherited text-indent. KP3 uses "text-indent: 0%" explicitly.
+		// which overrides any inherited text-indent.
 		if value.IsNumeric() {
-			if value.Unit == "" || value.Unit == "%" {
-				c.mergeProp(props, kfxSym, DimensionValue(value.Value, SymUnitPercent))
+			if value.Unit == "em" {
+				c.mergeProp(props, kfxSym, DimensionValue(value.Value, SymUnitEm))
 				return
 			}
-			if value.Unit == "em" {
-				c.mergeProp(props, kfxSym, DimensionValue(value.Value*EmToPercentTextIndent, SymUnitPercent))
+			if value.Unit == "" || value.Unit == "%" {
+				c.mergeProp(props, kfxSym, DimensionValue(value.Value, SymUnitPercent))
 				return
 			}
 			dim, err := MakeDimensionValue(value)
@@ -741,12 +745,16 @@ func (c *Converter) parseShorthandValue(s string) css.Value {
 }
 
 // setDimensionProperty sets a dimension property from a CSS value.
-// KP3 uses specific units for different properties (see kpv_units.go):
+// Unit conventions for different properties (see kp3_units.go):
 //   - Vertical spacing (margin-top/bottom, padding-top/bottom): lh
-//   - Horizontal spacing (margin-left/right, padding-left/right): %
+//   - Horizontal spacing (margin-left/right, padding-left/right): em (font-relative, scales with viewer font size)
 //   - font-size: rem
-//   - text-indent: %
+//   - text-indent: em (font-relative, scales with viewer font size)
 //   - line-height: lh
+//
+// Horizontal spacing and text-indent use em units so values scale with the viewer
+// font size, matching KP3 and Amazon backend behavior. Calibre KFX Input/Output
+// converts these to % (viewport-relative), losing font-relative scaling.
 //
 // Note: KFX does not support negative margins. Negative margin values are
 // silently dropped with a warning logged.
@@ -770,20 +778,19 @@ func (c *Converter) setDimensionProperty(sym KFXSymbol, value css.Value, props m
 
 	// For zero values, we still need to emit them to override any defaults
 	// (e.g., User-Agent stylesheet sets margin-top: 1em for <p>, and CSS may override with 0).
-	// KP3 uses the appropriate unit for each property type.
 	if value.Value == 0 {
 		switch {
 		case isVerticalSpacingProperty(sym):
 			c.mergeProp(props, sym, DimensionValue(0, SymUnitLh))
 		case isHorizontalSpacingProperty(sym):
-			c.mergeProp(props, sym, DimensionValue(0, SymUnitPercent))
+			c.mergeProp(props, sym, DimensionValue(0, SymUnitEm))
 		default:
 			c.mergeProp(props, sym, DimensionValue(0, SymUnitEm))
 		}
 		return
 	}
 
-	// Convert em to KP3-preferred units based on property type
+	// Convert to preferred units based on property type
 	convertedValue := value.Value
 	var convertedUnit KFXSymbol
 
@@ -810,17 +817,17 @@ func (c *Converter) setDimensionProperty(sym KFXSymbol, value css.Value, props m
 		}
 
 	case isHorizontalSpacingProperty(sym):
-		// Horizontal spacing: convert to % units
+		// Horizontal spacing: keep em units so values scale with viewer font size.
+		// Convert px/pt to em; pass em through as-is.
 		switch value.Unit {
 		case "em":
-			convertedValue = value.Value * EmToPercentHorizontal
-			convertedUnit = SymUnitPercent
+			convertedUnit = SymUnitEm
 		case "px":
-			convertedValue = PxToPercent(value.Value)
-			convertedUnit = SymUnitPercent
+			convertedValue = value.Value / KP3PixelsPerEm
+			convertedUnit = SymUnitEm
 		case "pt":
-			convertedValue = PtToPercent(value.Value)
-			convertedUnit = SymUnitPercent
+			convertedValue = PtToEm(value.Value)
+			convertedUnit = SymUnitEm
 		default:
 			var err error
 			_, convertedUnit, err = CSSValueToKFX(value)

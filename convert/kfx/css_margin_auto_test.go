@@ -140,7 +140,7 @@ func TestResolveMarginAutoSingleSideInlineAxis(t *testing.T) {
 			name: "only left auto → box_align right",
 			input: map[KFXSymbol]any{
 				SymMarginLeft:  SymAuto,
-				SymMarginRight: DimensionValue(0, SymUnitPercent),
+				SymMarginRight: DimensionValue(0, SymUnitEm),
 			},
 			wantBoxAlign: SymbolValue(SymRight),
 			wantLeft:     false,
@@ -149,7 +149,7 @@ func TestResolveMarginAutoSingleSideInlineAxis(t *testing.T) {
 		{
 			name: "only right auto → box_align left",
 			input: map[KFXSymbol]any{
-				SymMarginLeft:  DimensionValue(0, SymUnitPercent),
+				SymMarginLeft:  DimensionValue(0, SymUnitEm),
 				SymMarginRight: SymAuto,
 			},
 			wantBoxAlign: SymbolValue(SymLeft),
@@ -247,15 +247,15 @@ func TestResolveMarginAutoNoAutoValues(t *testing.T) {
 	props := map[KFXSymbol]any{
 		SymMarginTop:    DimensionValue(1, SymUnitEm),
 		SymMarginBottom: DimensionValue(2, SymUnitEm),
-		SymMarginLeft:   DimensionValue(3, SymUnitPercent),
-		SymMarginRight:  DimensionValue(4, SymUnitPercent),
+		SymMarginLeft:   DimensionValue(3, SymUnitEm),
+		SymMarginRight:  DimensionValue(4, SymUnitEm),
 	}
 	// Snapshot before.
 	want := map[KFXSymbol]any{
 		SymMarginTop:    DimensionValue(1, SymUnitEm),
 		SymMarginBottom: DimensionValue(2, SymUnitEm),
-		SymMarginLeft:   DimensionValue(3, SymUnitPercent),
-		SymMarginRight:  DimensionValue(4, SymUnitPercent),
+		SymMarginLeft:   DimensionValue(3, SymUnitEm),
+		SymMarginRight:  DimensionValue(4, SymUnitEm),
 	}
 
 	resolveMarginAuto(props)

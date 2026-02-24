@@ -30,6 +30,12 @@ func convertStyleMapLineHeight(cssVal css.Value, rawVal string) (StructValue, bo
 	return DimensionValue(value, unit), true
 }
 
+// convertStyleMapDimension converts a CSS dimension value to KFX representation,
+// applying property-specific unit preferences (see kp3_units.go Unit Preference table).
+// Vertical spacing (margin-top/bottom) converts em → lh; horizontal spacing
+// (margin-left/right, padding-left/right) and text-indent preserve em units for
+// font-relative scaling, matching KP3 and the Amazon backend. Calibre KFX Input/Output
+// converts horizontal em values to % (viewport-relative), losing this scaling behavior.
 func convertStyleMapDimension(sym KFXSymbol, cssVal css.Value) (StructValue, bool) {
 	if cssVal.IsKeyword() {
 		return nil, false
@@ -47,7 +53,7 @@ func convertStyleMapDimension(sym KFXSymbol, cssVal css.Value) (StructValue, boo
 		}
 	case isHorizontalSpacingProperty(sym):
 		if cssVal.Unit == "em" {
-			return DimensionValue(cssVal.Value*EmToPercentHorizontal, SymUnitPercent), true
+			return DimensionValue(cssVal.Value, SymUnitEm), true
 		}
 	}
 	value, unit, err := CSSValueToKFX(cssVal)

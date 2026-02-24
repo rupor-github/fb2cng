@@ -160,7 +160,7 @@ func TestStyleContext(t *testing.T) {
 		}})
 		sr.Register(StyleDef{Name: "poem", Properties: map[KFXSymbol]any{
 			SymTextAlignment: SymbolValue(SymLeft),
-			SymMarginLeft:    DimensionValue(6.25, SymUnitPercent),
+			SymMarginLeft:    DimensionValue(2, SymUnitEm),
 		}})
 		sr.Register(StyleDef{Name: "stanza", Properties: map[KFXSymbol]any{
 			SymLineHeight: DimensionValue(1.4, SymUnitRatio),
@@ -170,11 +170,11 @@ func TestStyleContext(t *testing.T) {
 		}})
 		sr.Register(StyleDef{Name: "epigraph", Properties: map[KFXSymbol]any{
 			SymFontStyle:  SymbolValue(SymItalic),
-			SymMarginLeft: DimensionValue(12.5, SymUnitPercent),
+			SymMarginLeft: DimensionValue(4, SymUnitEm),
 		}})
 		sr.Register(StyleDef{Name: "cite", Properties: map[KFXSymbol]any{
 			SymFontStyle:  SymbolValue(SymItalic),
-			SymMarginLeft: DimensionValue(6.25, SymUnitPercent),
+			SymMarginLeft: DimensionValue(2, SymUnitEm),
 		}})
 		return sr
 	}
@@ -301,13 +301,13 @@ func TestStyleContext(t *testing.T) {
 		sr.Register(StyleDef{
 			Name: "p",
 			Properties: map[KFXSymbol]any{
-				SymMarginLeft: DimensionValue(1, SymUnitPercent),
+				SymMarginLeft: DimensionValue(1, SymUnitEm),
 			},
 		})
 		sr.Register(StyleDef{
 			Name: "p",
 			Properties: map[KFXSymbol]any{
-				SymMarginLeft: DimensionValue(2, SymUnitPercent),
+				SymMarginLeft: DimensionValue(2, SymUnitEm),
 			},
 		})
 
@@ -318,8 +318,8 @@ func TestStyleContext(t *testing.T) {
 		// CSS cascade: second value should override first, not accumulate
 		if got := def.Properties[SymMarginLeft]; got == nil {
 			t.Fatalf("margin-left missing after merge")
-		} else if reflect.DeepEqual(got, DimensionValue(2, SymUnitPercent)) == false {
-			t.Fatalf("expected CSS cascade override margin-left 2%%, got %v", got)
+		} else if reflect.DeepEqual(got, DimensionValue(2, SymUnitEm)) == false {
+			t.Fatalf("expected CSS cascade override margin-left 2em, got %v", got)
 		}
 	})
 
@@ -372,13 +372,13 @@ func TestStyleContext(t *testing.T) {
 
 	t.Run("PushBlock accumulates margins from different containers", func(t *testing.T) {
 		sr := NewStyleRegistry()
-		// poem with margin-left: 6.25%
+		// poem with margin-left: 2em
 		sr.Register(StyleDef{Name: "poem", Properties: map[KFXSymbol]any{
-			SymMarginLeft: DimensionValue(6.25, SymUnitPercent),
+			SymMarginLeft: DimensionValue(2, SymUnitEm),
 		}})
-		// verse with margin-left: 3.125%
+		// verse with margin-left: 1em
 		sr.Register(StyleDef{Name: "verse", Properties: map[KFXSymbol]any{
-			SymMarginLeft: DimensionValue(3.125, SymUnitPercent),
+			SymMarginLeft: DimensionValue(1, SymUnitEm),
 		}})
 
 		// Push poem, then push verse as nested container
@@ -386,26 +386,26 @@ func TestStyleContext(t *testing.T) {
 			PushBlock("div", "poem").
 			PushBlock("div", "verse")
 
-		// Margins from different containers should accumulate: 6.25% + 3.125% = 9.375%
+		// Margins from different containers should accumulate: 2em + 1em = 3em
 		marginLeft := ctx.inherited[SymMarginLeft]
 		if marginLeft == nil {
 			t.Fatal("Expected margin-left to be inherited")
 		}
 		val, unit, ok := measureParts(marginLeft)
-		if !ok || unit != SymUnitPercent {
-			t.Fatalf("Expected percent unit, got %v", marginLeft)
+		if !ok || unit != SymUnitEm {
+			t.Fatalf("Expected em unit, got %v", marginLeft)
 		}
-		expected := 9.375
+		expected := 3.0
 		if val != expected {
-			t.Errorf("Expected accumulated margin-left %.3f%%, got %.3f%%", expected, val)
+			t.Errorf("Expected accumulated margin-left %.3fem, got %.3fem", expected, val)
 		}
 	})
 
 	t.Run("same container margin is not double-counted in resolveProperties", func(t *testing.T) {
 		sr := NewStyleRegistry()
-		// cite with margin-left: 6.25%
+		// cite with margin-left: 2em
 		sr.Register(StyleDef{Name: "cite", Properties: map[KFXSymbol]any{
-			SymMarginLeft: DimensionValue(6.25, SymUnitPercent),
+			SymMarginLeft: DimensionValue(2, SymUnitEm),
 		}})
 		// p is a simple paragraph
 		sr.Register(StyleDef{Name: "p", Properties: map[KFXSymbol]any{
@@ -427,13 +427,13 @@ func TestStyleContext(t *testing.T) {
 			t.Fatal("Expected margin-left in resolved style")
 		}
 		val, unit, ok := measureParts(marginLeft)
-		if !ok || unit != SymUnitPercent {
-			t.Fatalf("Expected percent unit, got %v", marginLeft)
+		if !ok || unit != SymUnitEm {
+			t.Fatalf("Expected em unit, got %v", marginLeft)
 		}
-		// Should be 6.25%, NOT 12.5% (double-counted)
-		expected := 6.25
+		// Should be 2em, NOT 4em (double-counted)
+		expected := 2.0
 		if val != expected {
-			t.Errorf("Expected margin-left %.2f%% (not double-counted), got %.2f%%", expected, val)
+			t.Errorf("Expected margin-left %.2fem (not double-counted), got %.2fem", expected, val)
 		}
 	})
 
@@ -457,17 +457,17 @@ func TestStyleContext(t *testing.T) {
 		// This tests the fix for the bug where p { margin-left: 0 } would
 		// override the inherited container margin from poem/stanza.
 		sr := NewStyleRegistry()
-		// poem with margin-left: 9.375%
+		// poem with margin-left: 3em
 		sr.Register(StyleDef{Name: "poem", Properties: map[KFXSymbol]any{
-			SymMarginLeft: DimensionValue(9.375, SymUnitPercent),
+			SymMarginLeft: DimensionValue(3, SymUnitEm),
 		}})
 		// p with margin-left: 0 (explicitly)
 		sr.Register(StyleDef{Name: "p", Properties: map[KFXSymbol]any{
-			SymMarginLeft: DimensionValue(0, SymUnitPercent),
+			SymMarginLeft: DimensionValue(0, SymUnitEm),
 		}})
-		// verse with margin-left: 6.25%
+		// verse with margin-left: 2em
 		sr.Register(StyleDef{Name: "verse", Properties: map[KFXSymbol]any{
-			SymMarginLeft: DimensionValue(6.25, SymUnitPercent),
+			SymMarginLeft: DimensionValue(2, SymUnitEm),
 		}})
 
 		// Simulate: poem > p.verse
@@ -484,14 +484,14 @@ func TestStyleContext(t *testing.T) {
 			t.Fatal("Expected margin-left in resolved style")
 		}
 		val, unit, ok := measureParts(marginLeft)
-		if !ok || unit != SymUnitPercent {
-			t.Fatalf("Expected percent unit, got %v", marginLeft)
+		if !ok || unit != SymUnitEm {
+			t.Fatalf("Expected em unit, got %v", marginLeft)
 		}
-		// Expected: poem 9.375% + verse 6.25% = 15.625%
+		// Expected: poem 3em + verse 2em = 5em
 		// The p's margin-left: 0 should NOT override the inherited poem margin
-		expected := 15.625
+		expected := 5.0
 		if val != expected {
-			t.Errorf("Expected accumulated margin-left %.3f%%, got %.3f%%", expected, val)
+			t.Errorf("Expected accumulated margin-left %.3fem, got %.3fem", expected, val)
 		}
 	})
 
@@ -501,11 +501,11 @@ func TestStyleContext(t *testing.T) {
 		sr := NewStyleRegistry()
 		// footnote with text-indent: 0
 		sr.Register(StyleDef{Name: "footnote", Properties: map[KFXSymbol]any{
-			SymTextIndent: DimensionValue(0, SymUnitPercent),
+			SymTextIndent: DimensionValue(0, SymUnitEm),
 		}})
-		// p with text-indent: 3.125% (standard paragraph indent)
+		// p with text-indent: 1em (standard paragraph indent)
 		sr.Register(StyleDef{Name: "p", Properties: map[KFXSymbol]any{
-			SymTextIndent: DimensionValue(3.125, SymUnitPercent),
+			SymTextIndent: DimensionValue(1, SymUnitEm),
 		}})
 
 		// Simulate: footnote > p (plain paragraph inside footnote container)
@@ -522,12 +522,12 @@ func TestStyleContext(t *testing.T) {
 			t.Fatal("Expected text-indent in resolved style")
 		}
 		val, unit, ok := measureParts(textIndent)
-		if !ok || unit != SymUnitPercent {
-			t.Fatalf("Expected percent unit, got %v", textIndent)
+		if !ok || unit != SymUnitEm {
+			t.Fatalf("Expected em unit, got %v", textIndent)
 		}
-		// Should be 0% (from footnote), NOT 3.125% (from p tag default)
+		// Should be 0em (from footnote), NOT 1em (from p tag default)
 		if val != 0 {
-			t.Errorf("Expected text-indent 0%% (inherited from footnote), got %.3f%%", val)
+			t.Errorf("Expected text-indent 0em (inherited from footnote), got %.3fem", val)
 		}
 	})
 
@@ -541,7 +541,7 @@ func TestStyleContext(t *testing.T) {
 		}})
 		sr.Register(StyleDef{Name: "p", Properties: map[KFXSymbol]any{
 			SymTextAlignment: SymbolValue(SymJustify),
-			SymTextIndent:    DimensionValue(3.125, SymUnitPercent),
+			SymTextIndent:    DimensionValue(1, SymUnitEm),
 		}})
 
 		ctx := NewStyleContext(sr).PushBlock("div", "epigraph")
@@ -598,14 +598,14 @@ func TestStyleContext(t *testing.T) {
 		// be able to override it (step 3 of cascade).
 		sr := NewStyleRegistry()
 		sr.Register(StyleDef{Name: "footnote", Properties: map[KFXSymbol]any{
-			SymTextIndent: DimensionValue(0, SymUnitPercent),
+			SymTextIndent: DimensionValue(0, SymUnitEm),
 		}})
 		sr.Register(StyleDef{Name: "p", Properties: map[KFXSymbol]any{
-			SymTextIndent: DimensionValue(3.125, SymUnitPercent),
+			SymTextIndent: DimensionValue(1, SymUnitEm),
 		}})
 		// An explicit class with its own text-indent
 		sr.Register(StyleDef{Name: "indented", Properties: map[KFXSymbol]any{
-			SymTextIndent: DimensionValue(6.25, SymUnitPercent),
+			SymTextIndent: DimensionValue(2, SymUnitEm),
 		}})
 
 		ctx := NewStyleContext(sr).PushBlock("div", "footnote")
@@ -621,13 +621,13 @@ func TestStyleContext(t *testing.T) {
 			t.Fatal("Expected text-indent in resolved style")
 		}
 		val, unit, ok := measureParts(textIndent)
-		if !ok || unit != SymUnitPercent {
-			t.Fatalf("Expected percent unit, got %v", textIndent)
+		if !ok || unit != SymUnitEm {
+			t.Fatalf("Expected em unit, got %v", textIndent)
 		}
-		// Should be 6.25% from the explicit "indented" class, overriding
-		// both the container's 0% and the filtered p tag default's 3.125%
-		if val != 6.25 {
-			t.Errorf("Expected text-indent 6.25%% (from explicit class), got %.3f%%", val)
+		// Should be 2em from the explicit "indented" class, overriding
+		// both the container's 0em and the filtered p tag default's 1em
+		if val != 2 {
+			t.Errorf("Expected text-indent 2em (from explicit class), got %.3fem", val)
 		}
 	})
 
@@ -636,7 +636,7 @@ func TestStyleContext(t *testing.T) {
 		// This ensures the filter doesn't break root-level paragraphs.
 		sr := NewStyleRegistry()
 		sr.Register(StyleDef{Name: "p", Properties: map[KFXSymbol]any{
-			SymTextIndent:    DimensionValue(3.125, SymUnitPercent),
+			SymTextIndent:    DimensionValue(1, SymUnitEm),
 			SymTextAlignment: SymbolValue(SymJustify),
 		}})
 
@@ -648,14 +648,14 @@ func TestStyleContext(t *testing.T) {
 			t.Fatalf("Style %q not found", styleName)
 		}
 
-		// text-indent should be 3.125% (p's default, no container to filter)
+		// text-indent should be 1em (p's default, no container to filter)
 		textIndent := def.Properties[SymTextIndent]
 		if textIndent == nil {
 			t.Fatal("Expected text-indent in resolved style")
 		}
 		val, _, ok := measureParts(textIndent)
-		if !ok || val != 3.125 {
-			t.Errorf("Expected text-indent 3.125%%, got %v", textIndent)
+		if !ok || val != 1 {
+			t.Errorf("Expected text-indent 1em, got %v", textIndent)
 		}
 
 		// text-align should be justify (p's default, no container to filter)
@@ -674,14 +674,14 @@ func TestStyleContext(t *testing.T) {
 		// even when container also set them (step 4 of cascade).
 		sr := NewStyleRegistry()
 		sr.Register(StyleDef{Name: "footnote", Properties: map[KFXSymbol]any{
-			SymTextIndent: DimensionValue(0, SymUnitPercent),
+			SymTextIndent: DimensionValue(0, SymUnitEm),
 		}})
 		sr.Register(StyleDef{Name: "p", Properties: map[KFXSymbol]any{
-			SymTextIndent: DimensionValue(3.125, SymUnitPercent),
+			SymTextIndent: DimensionValue(1, SymUnitEm),
 		}})
-		// descendant selector: footnote--p sets text-indent to 1%
+		// descendant selector: footnote--p sets text-indent to 0.5em
 		sr.Register(StyleDef{Name: "footnote--p", Properties: map[KFXSymbol]any{
-			SymTextIndent: DimensionValue(1, SymUnitPercent),
+			SymTextIndent: DimensionValue(0.5, SymUnitEm),
 		}})
 
 		ctx := NewStyleContext(sr).PushBlock("div", "footnote")
@@ -697,12 +697,12 @@ func TestStyleContext(t *testing.T) {
 			t.Fatal("Expected text-indent in resolved style")
 		}
 		val, unit, ok := measureParts(textIndent)
-		if !ok || unit != SymUnitPercent {
-			t.Fatalf("Expected percent unit, got %v", textIndent)
+		if !ok || unit != SymUnitEm {
+			t.Fatalf("Expected em unit, got %v", textIndent)
 		}
-		// Should be 1% from descendant selector, NOT 0% from container or 3.125% from p
-		if val != 1 {
-			t.Errorf("Expected text-indent 1%% (from descendant selector), got %.3f%%", val)
+		// Should be 0.5em from descendant selector, NOT 0em from container or 1em from p
+		if val != 0.5 {
+			t.Errorf("Expected text-indent 0.5em (from descendant selector), got %.3fem", val)
 		}
 	})
 }

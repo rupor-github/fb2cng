@@ -1001,16 +1001,24 @@ func TestExToEmConversion(t *testing.T) {
 
 	style := styles[0]
 
-	// text-indent: 2ex → 0.88em → % (0.88 * EmToPercentTextIndent = 2.75%)
+	// text-indent: 2ex → 0.88em → em (kept as em, not converted to %)
 	if ti, ok := style.Properties[SymTextIndent]; ok {
 		sv, ok := ti.(StructValue)
 		if !ok {
 			t.Fatalf("expected StructValue for text-indent, got %T", ti)
 		}
 		val := getStructValueAsFloat64(sv, SymValue)
-		expected := 2 * ExToEmFactor * EmToPercentTextIndent // 2 * 0.44 * 3.125 = 2.75
+		expected := 2 * ExToEmFactor // 2 * 0.44 = 0.88em
 		if math.Abs(val-expected) > 0.001 {
-			t.Errorf("text-indent: expected value ~%f%%, got %f", expected, val)
+			t.Errorf("text-indent: expected value ~%fem, got %f", expected, val)
+		}
+		// Unit should be em
+		unit, ok := sv[SymUnit].(SymbolValue)
+		if !ok {
+			t.Fatalf("expected unit to be SymbolValue, got %T", sv[SymUnit])
+		}
+		if KFXSymbol(unit) != SymUnitEm {
+			t.Errorf("text-indent: expected em unit ($308), got %v", unit)
 		}
 	} else {
 		t.Error("text-indent property not set")

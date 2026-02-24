@@ -9,10 +9,15 @@ import (
 
 // CSSValueToKFX converts a CSS value with units to KFX dimension representation.
 // Returns the numeric value and the KFX unit symbol.
-// Note: KP3 uses specific units for different properties:
-//   - text-indent: % (percent)
-//   - margins: lh (line-height units)
+// Note: Different properties use specific units:
+//   - text-indent: em (font-relative, scales with viewer font size)
+//   - horizontal margins/padding: em (font-relative, scales with viewer font size)
+//   - vertical margins/padding: lh (line-height units)
 //   - font-size in inline styles: rem
+//
+// Calibre KFX Input/Output converts em → % for horizontal properties and
+// text-indent, losing font-relative behavior. fb2cng preserves em units,
+// matching KP3 and the Amazon backend conversion pipeline.
 //
 // This function preserves CSS units as-is. Property-specific conversion
 // happens in the style builder or during fragment generation.

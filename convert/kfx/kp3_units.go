@@ -11,6 +11,11 @@ import "math"
 // These constants define the conversion ratios used when transforming CSS units
 // to KP3-preferred units. The values are derived from reference KFX file analysis.
 //
+// NOTE: fb2cng and KP3 both use em units for horizontal spacing (margin-left/right,
+// padding-left/right) and text-indent, so these values scale with the viewer font
+// size. Calibre KFX Input/Output converts em to % for these properties, making
+// them viewport-relative and losing font-size scaling.
+//
 // See docs/kfxstructure.md §7.10.2 "KP3 unit conventions" for full documentation.
 
 const (
@@ -94,17 +99,6 @@ const (
 	// See also com/amazon/yj/style/merger/e/a.java: public static final int m = 512;
 	KP3ContentWidthPx = KP3BaseWidthEm * KP3PixelsPerEm // 512.0
 
-	// EmToPercentHorizontal is the em-to-percent ratio for horizontal spacing.
-	// Used for margin-left, margin-right, padding-left, padding-right.
-	// KP3 uses a base width of 32em, so 1em = 100/32 = 3.125%
-	// Example: 1em CSS → 3.125% KFX, 2em CSS → 6.25% KFX
-	EmToPercentHorizontal = 100.0 / KP3BaseWidthEm // 3.125
-
-	// EmToPercentTextIndent is the em-to-percent ratio for text-indent.
-	// Text indent uses a different ratio than horizontal margins.
-	// Example: 1em CSS → 3.125% KFX
-	EmToPercentTextIndent = 100.0 / KP3BaseWidthEm // 3.125
-
 	// FontSizeCompressionFactor is the divisor for KP3's font-size percentage compression.
 	// KP3 compresses percentage font-sizes using the formula:
 	//   rem = 1 + (percent - 100) / FontSizeCompressionFactor
@@ -136,21 +130,26 @@ const (
 	ExToEmFactor = 0.44
 )
 
-// KP3 Unit Preference by Property
+// Unit Preference by Property
 //
-// | CSS Property    | KP3 Unit | Notes                              |
-// |-----------------|----------|------------------------------------|
-// | font-size       | rem      | NOT %. Using % breaks text-align   |
-// | margin-top      | lh       | Line-height units for vertical     |
-// | margin-bottom   | lh       | Line-height units for vertical     |
-// | margin-left     | %        | Percentage for horizontal          |
-// | margin-right    | %        | Percentage for horizontal          |
-// | padding-top     | lh       | Line-height units for vertical     |
-// | padding-bottom  | lh       | Line-height units for vertical     |
-// | padding-left    | %        | Percentage for horizontal          |
-// | padding-right   | %        | Percentage for horizontal          |
-// | text-indent     | %        | Percentage                         |
-// | line-height     | lh       | Line-height units                  |
+// | CSS Property    | Unit | Notes                              |
+// |-----------------|------|------------------------------------|
+// | font-size       | rem  | NOT %. Using % breaks text-align   |
+// | margin-top      | lh   | Line-height units for vertical     |
+// | margin-bottom   | lh   | Line-height units for vertical     |
+// | margin-left     | em   | Font-relative, scales with viewer  |
+// | margin-right    | em   | Font-relative, scales with viewer  |
+// | padding-top     | lh   | Line-height units for vertical     |
+// | padding-bottom  | lh   | Line-height units for vertical     |
+// | padding-left    | em   | Font-relative, scales with viewer  |
+// | padding-right   | em   | Font-relative, scales with viewer  |
+// | text-indent     | em   | Font-relative, scales with viewer  |
+// | line-height     | lh   | Line-height units                  |
+//
+// NOTE: Calibre KFX Input/Output converts em → % for horizontal spacing and
+// text-indent (1em = 3.125% for text-indent, 1em = 6.25% for margins), making
+// these values viewport-relative. fb2cng preserves em units, matching KP3 and
+// the Amazon backend conversion pipeline. See docs/kfxstructure.md §7.10.3a.
 
 // isVerticalSpacingProperty returns true if the symbol is a vertical spacing property
 // that should use lh units in KP3.
@@ -163,7 +162,7 @@ func isVerticalSpacingProperty(sym KFXSymbol) bool {
 }
 
 // isHorizontalSpacingProperty returns true if the symbol is a horizontal spacing property
-// that should use % units in KP3.
+// that should use em units for font-relative scaling.
 func isHorizontalSpacingProperty(sym KFXSymbol) bool {
 	switch sym {
 	case SymMarginLeft, SymMarginRight, SymPaddingLeft, SymPaddingRight:
@@ -293,40 +292,22 @@ func PtToLh(pt float64) float64 {
 	return RoundSignificant(pt*PtToPxRatio/KP3PixelsPerEm/LineHeightRatio, SignificantFigures)
 }
 
-// PxToPercent converts pixels to percentage for horizontal spacing.
-// Uses the formula: % = px / KP3PixelsPerEm * EmToPercentHorizontal
+// PtToEm converts points to em units for horizontal spacing.
+// Uses the formula: em = pt * PtToPxRatio / KP3PixelsPerEm
 //
-// The conversion chain: px → em → %
-//   - px → em: px / KP3PixelsPerEm (16px = 1em)
-//   - em → %: em * EmToPercentHorizontal (1em = 3.125%)
-//
-// Combined: % = px / 16 * 3.125 = px * 0.1953125
-//
-// Examples:
-//
-//	PxToPercent(16) → 3.125%
-//	PxToPercent(32) → 6.25%
-//	PxToPercent(-8) → -1.5625% (negative values preserved)
-func PxToPercent(px float64) float64 {
-	return RoundSignificant(px/KP3PixelsPerEm*EmToPercentHorizontal, SignificantFigures)
-}
-
-// PtToPercent converts points to percentage for horizontal spacing.
-// Uses the formula: % = pt * PtToPxRatio / KP3PixelsPerEm * EmToPercentHorizontal
-//
-// The conversion chain: pt → px → em → %
+// The conversion chain: pt → px → em
 //   - pt → px: pt * (96/72) = pt * 1.333... (CSS standard: 72pt = 1in = 96px)
-//   - px → em → %: (see PxToPercent)
+//   - px → em: px / KP3PixelsPerEm (16px = 1em)
 //
-// Combined: % = pt * (4/3) / 16 * 3.125 = pt * 0.2604166...
+// Combined: em = pt * (4/3) / 16 = pt / 12
 //
 // Examples:
 //
-//	PtToPercent(12) → 3.125%  (12pt = 16px = 1em = 3.125%)
-//	PtToPercent(24) → 6.25%
-//	PtToPercent(-8) → -2.08333% (negative values preserved)
-func PtToPercent(pt float64) float64 {
+//	PtToEm(12) → 1.0em    (12pt = 16px = 1em)
+//	PtToEm(24) → 2.0em
+//	PtToEm(-8) → -0.666667em (negative values preserved)
+func PtToEm(pt float64) float64 {
 	// CSS standard: 72pt = 96px, so 1pt = 96/72 = 4/3 px
 	const PtToPxRatio = 96.0 / 72.0 // 1.333...
-	return RoundSignificant(pt*PtToPxRatio/KP3PixelsPerEm*EmToPercentHorizontal, SignificantFigures)
+	return RoundSignificant(pt*PtToPxRatio/KP3PixelsPerEm, SignificantFigures)
 }

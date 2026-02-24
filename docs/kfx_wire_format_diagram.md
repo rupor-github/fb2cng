@@ -778,23 +778,36 @@ Visual byte map (approximate):
 │  │ font-size      │ rem      │ NOT %. Using % breaks text-align!        │   │
 │  │ margin-top     │ lh       │ Line-height units for vertical spacing   │   │
 │  │ margin-bottom  │ lh       │ Line-height units for vertical spacing   │   │
-│  │ margin-left    │ %        │ Percentage for horizontal spacing        │   │
-│  │ margin-right   │ %        │ Percentage for horizontal spacing        │   │
-│  │ text-indent    │ %        │ Percentage (1em → 3.125%)                │   │
+│  │ margin-left    │ em       │ Em units for horizontal spacing          │   │
+│  │ margin-right   │ em       │ Em units for horizontal spacing          │   │
+│  │ text-indent    │ em       │ Em units (scales with font size)         │   │
 │  │ line-height    │ lh       │ Line-height units                        │   │
 │  │ padding-top    │ lh       │ Line-height units for table cells        │   │
 │  │ padding-bottom │ lh       │ Line-height units for table cells        │   │
-│  │ padding-left   │ %        │ Percentage for table cells               │   │
-│  │ padding-right  │ %        │ Percentage for table cells               │   │
+│  │ padding-left   │ em       │ Em units for table cells                 │   │
+│  │ padding-right  │ em       │ Em units for table cells                 │   │
 │  └────────────────┴──────────┴──────────────────────────────────────────┘   │
 │                                                                             │
 │  Unit Conversion from CSS:                                                  │
 │  ─────────────────────────────                                              │
 │  em → lh (vertical):   1:1 ratio      (1em → 1lh)                           │
-│  em → %  (horizontal): 1:6.25 ratio   (1em → 6.25%)                         │
-│  em → %  (text-indent): 1:3.125 ratio (1em → 3.125%)                        │
+│  em → em (horizontal): kept as-is     (1em → 1em)                           │
+│  em → em (text-indent): kept as-is    (1em → 1em)                           │
 │  %  → rem (font-size): divide by 100  (140% → 1.4rem)                       │
 │  em → rem (font-size): 1:1 ratio      (1em → 1rem)                          │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  NOTE: em vs % for horizontal spacing and text-indent               │    │
+│  │                                                                     │    │
+│  │  KFX supports both em ($308) and % ($314) for these properties.     │    │
+│  │  em is font-relative (scales with viewer font size); % is viewport- │    │
+│  │  relative (fixed fraction of screen width).                         │    │
+│  │                                                                     │    │
+│  │  fb2cng + KP3 + Amazon backend: use em (font-relative scaling)      │    │
+│  │  Calibre KFX Input/Output: converts em → % (loses scaling)          │    │
+│  │                                                                     │    │
+│  │  See docs/kfxstructure.md §7.10.3a for details.                     │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
 │                                                                             │
 │  Ex-to-Em Conversion (§7.10.13):                                            │
 │  ────────────────────────────────                                           │
@@ -1801,8 +1814,8 @@ Visual byte map (approximate):
 │ 12. CRITICAL: Style dimension units must match KP3 conventions:             │
 │     - font-size: use rem (NOT %). Percent breaks text-align rendering       │
 │     - margin-top/bottom: use lh (line-height units)                         │
-│     - margin-left/right: use % (percent)                                    │
-│     - text-indent: use % (1em = 3.125%)                                     │
+│     - margin-left/right: use em                                              │
+│     - text-indent: use em                                                    │
 │     - Zero values should be omitted entirely from style properties          │
 │                                                                             │
 │ 13. CRITICAL: Color values use packed ARGB integers (0xAARRGGBB):           │

@@ -36,18 +36,18 @@ func TestCiteSubtitleImageMargin(t *testing.T) {
 	textIndent := citeCtx.ResolveProperty("p", "cite-subtitle", SymTextIndent)
 	t.Logf("ResolveProperty(p, cite-subtitle, text-indent): %v", textIndent)
 
-	// The marginLeft should be 6.25% inherited from cite container.
+	// The marginLeft should be 2em inherited from cite container.
 	// The p rule in test.css has margin: 0 -8pt 0.3em -8pt, but KFX does not
 	// support negative margins, so the -8pt is ignored and the value is
-	// inherited from the parent cite container (which has margin: 1em 2em = 6.25%).
+	// inherited from the parent cite container (which has margin: 1em 2em = 2em).
 	if marginLeft == nil {
 		t.Error("Expected margin-left to be resolved from cite context")
 	} else {
 		val, unit, _ := measureParts(marginLeft)
-		t.Logf("margin-left: %.5f%% (unit: %v)", val, unit)
-		expected := 6.25 // inherited from cite (2em = 6.25%)
+		t.Logf("margin-left: %.5fem (unit: %v)", val, unit)
+		expected := 2.0 // inherited from cite (2em stays as 2em)
 		if val != expected {
-			t.Errorf("Expected margin-left %.5f%%, got %.5f%%", expected, val)
+			t.Errorf("Expected margin-left %.5fem, got %.5fem", expected, val)
 		}
 	}
 }

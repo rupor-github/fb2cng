@@ -11,20 +11,20 @@ func TestMergePropertyCumulativeMargin(t *testing.T) {
 	// StyleContext.resolveProperties. The merge function itself uses override semantics.
 	sr := NewStyleRegistry()
 	dst := map[KFXSymbol]any{
-		SymMarginLeft: DimensionValue(2, SymUnitPercent),
+		SymMarginLeft: DimensionValue(2, SymUnitEm),
 	}
 
 	// Non-zero incoming should override
-	sr.mergeProperty(dst, SymMarginLeft, DimensionValue(3, SymUnitPercent))
+	sr.mergeProperty(dst, SymMarginLeft, DimensionValue(3, SymUnitEm))
 
-	expected := DimensionValue(3, SymUnitPercent)
+	expected := DimensionValue(3, SymUnitEm)
 	if got := dst[SymMarginLeft]; !reflect.DeepEqual(got, expected) {
 		t.Fatalf("expected overridden margin-left %v, got %v", expected, got)
 	}
 
 	// Zero incoming also overrides (explicit margin: 0 is valid CSS)
-	sr.mergeProperty(dst, SymMarginLeft, DimensionValue(0, SymUnitPercent))
-	expectedZero := DimensionValue(0, SymUnitPercent)
+	sr.mergeProperty(dst, SymMarginLeft, DimensionValue(0, SymUnitEm))
+	expectedZero := DimensionValue(0, SymUnitEm)
 	if got := dst[SymMarginLeft]; !reflect.DeepEqual(got, expectedZero) {
 		t.Fatalf("expected zero margin-left %v after zero merge, got %v", expectedZero, got)
 	}
@@ -146,8 +146,8 @@ func TestSelectMergeRuleFromStyleList(t *testing.T) {
 			// non-zero overrides). Rule name reflects the KP3 source.
 			name:         "margin_left inline uses cumulative-same-container",
 			sym:          SymMarginLeft,
-			existing:     DimensionValue(1, SymUnitPercent),
-			incoming:     DimensionValue(2, SymUnitPercent),
+			existing:     DimensionValue(1, SymUnitEm),
+			incoming:     DimensionValue(2, SymUnitEm),
 			ctx:          mergeContext{allowWritingModeConvert: true, sourceIsInline: true},
 			expectedRule: "cumulative-same-container",
 		},

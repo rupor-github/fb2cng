@@ -2025,8 +2025,8 @@ Paragraph style (`s1X`):
   $42: {$306: $310, $307: 1.},        // line-height: 1lh
   $47: {$306: $310, $307: 0.25},      // margin-bottom: 0.25lh
   $49: {$306: $310, $307: 0.833},     // margin-top: 0.833lh
-  $34: $321,                           // text-align: justify
-  $37: {$306: $314, $307: 3.125}      // text-indent: 3.125%
+  $34: $321,                          // text-align: justify
+  $37: {$306: $308, $307: 1.}         // text-indent: 1em
 }
 ```
 
@@ -2034,7 +2034,7 @@ Link style (`link-backlink`):
 
 ```
 {
-  $13: $361,                           // font-weight: bold
+  $13: $361,                          // font-weight: bold
   $42: {$306: $310, $307: 1.},        // line-height: 1lh
   $576: {$19: int(4286611584)},       // link_visited_style: gray
   $577: {$19: int(4286611584)}        // link_unvisited_style: gray
@@ -2072,7 +2072,7 @@ After link enhancement (final):
 
 ```
 {
-  $13: $361,                           // font-weight: bold
+  $13: $361,                          // font-weight: bold
   $576: {$19: int(4286611584)},       // link_visited_style: gray
   $577: {$19: int(4286611584)}        // link_unvisited_style: gray
 }
@@ -2186,21 +2186,21 @@ Derived from: Reference KFX analysis, `convert/kfx/frag_style.go:DimensionValue`
 | `font-size`     | `rem`    | **NOT `%`**. Using `%` breaks text-align rendering. See §7.10.3 for compression formula. |
 | `margin-top`    | `lh`     | Line-height units for vertical spacing                                                   |
 | `margin-bottom` | `lh`     | Line-height units for vertical spacing                                                   |
-| `margin-left`   | `%`      | Percentage for horizontal spacing                                                        |
-| `margin-right`  | `%`      | Percentage for horizontal spacing                                                        |
-| `text-indent`   | `%`      | Percentage                                                                               |
+| `margin-left`   | `em`     | Em units for horizontal spacing (scales with font size)                                  |
+| `margin-right`  | `em`     | Em units for horizontal spacing (scales with font size)                                  |
+| `text-indent`   | `em`     | Em units (scales with font size)                                                         |
 | `line-height`   | `lh`     | Line-height units                                                                        |
 
 #### 7.10.3 Unit conversion ratios
 
-When converting from CSS `em` units to KP3-preferred units:
+When converting from CSS units to KP3-preferred units:
 
-| Conversion               | Ratio   | Example          |
-| ------------------------ | ------- | ---------------- |
-| `em` → `lh` (vertical)   | 1:1     | `1em` → `1lh`    |
-| `em` → `%` (horizontal)  | 1:6.25  | `1em` → `6.25%`  |
-| `em` → `rem` (font-size) | 1:1     | `1em` → `1rem`   |
-| `em` → `%` (text-indent) | 1:3.125 | `1em` → `3.125%` |
+| Conversion                | Ratio  | Example        |
+| ------------------------- | ------ | -------------- |
+| `em` → `lh` (vertical)    | 1:1    | `1em` → `1lh`  |
+| `em` → `em` (horizontal)  | 1:1    | `1em` → `1em`  |
+| `em` → `rem` (font-size)  | 1:1    | `1em` → `1rem` |
+| `em` → `em` (text-indent) | 1:1    | `1em` → `1em`  |
 
 **Font-size percentage compression**: KP3 applies a compression formula to percentage font-sizes, bringing large values closer to 1rem. This is different from simple division:
 
@@ -2223,6 +2223,19 @@ For values ≤ 100%, direct conversion is used: `rem = percent / 100`.
 This compression brings heading sizes closer to body text while preserving the relative hierarchy. The factor 160 was reverse-engineered from KP3 reference output analysis.
 
 Derived from: KP3 Java source analysis (`com/amazon/Q/a/d/b/i.java`), reference KFX comparison, `convert/kfx/kp3_units.go:PercentToRem`.
+
+#### 7.10.3a Behavioral differences: em vs % for horizontal spacing and text-indent
+
+KFX natively supports both `em` ($308) and `%` ($314) units for horizontal spacing properties (`margin-left`, `margin-right`, `padding-left`, `padding-right`) and `text-indent`. These units have fundamentally different behavior in the Kindle viewer:
+
+- **`em` units** are font-relative: when the user changes font size in the viewer, margins and indents scale proportionally. This matches standard CSS behavior where `1em` means "one font-size width."
+- **`%` units** are viewport-relative: margins and indents remain at a fixed fraction of the viewport width regardless of the user's font size setting. This breaks the expected relationship between text size and indentation.
+
+**fb2cng** preserves `em` units for these properties. CSS `text-indent: 1em` becomes KFX `{$306: $308, $307: 1.}` (1em). Values in `px` and `pt` are converted to `em` using `px / 16` and `pt / 12` respectively.
+
+**KP3** (Kindle Previewer 3, `EpubToKFXConverter-4.0.jar`) also uses `em` units when converting EPUB CSS to KFX. This was confirmed by analyzing KFX files produced by KP3 from EPUB sources with `em`-based indentation. The Amazon backend conversion pipeline most likely follows the same convention.
+
+**Calibre KFX Input/Output** plugins convert `em` values for these properties to `%` using fixed ratios (1em = 3.125% for text-indent, 1em = 6.25% for horizontal margins). This makes indents and margins viewport-relative, so they do not scale when the user adjusts font size. The visual result is that paragraph indentation appears to shrink relative to the text as font size increases, or grow as font size decreases.
 
 #### 7.10.4 Zero value omission
 

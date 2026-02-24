@@ -90,7 +90,7 @@ func extractStringValueFromMap(m map[string]any, key string) string {
 }
 
 // FormatDimensionAsCSS formats a KFX dimension value {$307: value, $306: unit} as CSS.
-// Returns the formatted string like "3.125%" or "1lh".
+// Returns the formatted string like "1em" or "1lh".
 func FormatDimensionAsCSS(v any) string {
 	var value, unit any
 

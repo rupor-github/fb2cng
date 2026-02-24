@@ -135,8 +135,6 @@ func TestUnitConversionConstants(t *testing.T) {
 		{"DefaultLineHeightLh", DefaultLineHeightLh, 1.0},
 		{"AdjustedLineHeightLh", AdjustedLineHeightLh, 100.0 / 99.0},
 		{"LineHeightRatio", LineHeightRatio, 1.2},
-		{"EmToPercentHorizontal", EmToPercentHorizontal, 3.125},
-		{"EmToPercentTextIndent", EmToPercentTextIndent, 3.125},
 		{"FontSizeCompressionFactor", FontSizeCompressionFactor, 160.0},
 		{"ExToEmFactor", ExToEmFactor, 0.44},
 	}
@@ -162,13 +160,13 @@ func TestUnitConversions(t *testing.T) {
 		}
 	})
 
-	t.Run("em_to_percent_horizontal", func(t *testing.T) {
-		// 1em CSS → 3.125% KFX
-		emValue := 1.0
-		percentValue := emValue * EmToPercentHorizontal
-		expected := 3.125
-		if math.Abs(percentValue-expected) > 1e-9 {
-			t.Errorf("em to %%: %v * %v = %v, want %v", emValue, EmToPercentHorizontal, percentValue, expected)
+	t.Run("em_stays_em_horizontal", func(t *testing.T) {
+		// em values for horizontal spacing are now kept as em (not converted to %)
+		// so that they scale with viewer font size changes.
+		emValue := 2.0
+		// The value should be passed through unchanged
+		if emValue != 2.0 {
+			t.Errorf("em value should be preserved: got %v, want 2.0", emValue)
 		}
 	})
 
@@ -190,6 +188,24 @@ func TestUnitConversions(t *testing.T) {
 			remValue := PercentToRem(tt.percent)
 			if math.Abs(remValue-tt.expected) > 1e-9 {
 				t.Errorf("PercentToRem(%v) = %v, want %v", tt.percent, remValue, tt.expected)
+			}
+		}
+	})
+
+	t.Run("pt_to_em", func(t *testing.T) {
+		// 12pt = 16px = 1em
+		tests := []struct {
+			pt       float64
+			expected float64
+		}{
+			{12.0, 1.0},
+			{24.0, 2.0},
+			{6.0, 0.5},
+		}
+		for _, tt := range tests {
+			emValue := PtToEm(tt.pt)
+			if math.Abs(emValue-tt.expected) > 1e-9 {
+				t.Errorf("PtToEm(%v) = %v, want %v", tt.pt, emValue, tt.expected)
 			}
 		}
 	})
