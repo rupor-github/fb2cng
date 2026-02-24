@@ -106,7 +106,7 @@ github.com/mitchellh/copystructure
 # github.com/mitchellh/reflectwalk v1.0.2
 ## explicit
 github.com/mitchellh/reflectwalk
-# github.com/ncruces/go-strftime v0.1.9
+# github.com/ncruces/go-strftime v1.0.0
 ## explicit; go 1.17
 github.com/ncruces/go-strftime
 # github.com/neurosnap/sentences v1.1.2
@@ -134,7 +134,7 @@ github.com/srwiley/oksvg
 # github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
 ## explicit; go 1.17
 github.com/srwiley/rasterx
-# github.com/tdewolff/parse/v2 v2.8.5
+# github.com/tdewolff/parse/v2 v2.8.8
 ## explicit; go 1.11
 github.com/tdewolff/parse/v2
 github.com/tdewolff/parse/v2/buffer
@@ -171,10 +171,10 @@ golang.org/x/crypto/blowfish
 golang.org/x/crypto/pbkdf2
 golang.org/x/crypto/scrypt
 golang.org/x/crypto/sha3
-# golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0
-## explicit; go 1.23.0
+# golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa
+## explicit; go 1.25.0
 golang.org/x/exp/constraints
-# golang.org/x/exp/typeparams v0.0.0-20260212183809-81e46e3db34a
+# golang.org/x/exp/typeparams v0.0.0-20260218203240-3dfff04db8fa
 ## explicit; go 1.25.0
 golang.org/x/exp/typeparams
 # golang.org/x/image v0.36.0
@@ -493,8 +493,10 @@ honnef.co/go/tools/stylecheck/st1021
 honnef.co/go/tools/stylecheck/st1022
 honnef.co/go/tools/stylecheck/st1023
 honnef.co/go/tools/unused
-# modernc.org/libc v1.65.7
-## explicit; go 1.23.0
+# modernc.org/fileutil v1.4.0
+## explicit; go 1.24
+# modernc.org/libc v1.68.0
+## explicit; go 1.24.0
 modernc.org/libc
 modernc.org/libc/errno
 modernc.org/libc/fcntl
@@ -527,8 +529,8 @@ modernc.org/mathutil
 # modernc.org/memory v1.11.0
 ## explicit; go 1.23.0
 modernc.org/memory
-# modernc.org/sqlite v1.37.1
-## explicit; go 1.23.0
+# modernc.org/sqlite v1.46.1
+## explicit; go 1.24.0
 modernc.org/sqlite/lib
 # zombiezen.com/go/sqlite v1.4.2
 ## explicit; go 1.23.0
