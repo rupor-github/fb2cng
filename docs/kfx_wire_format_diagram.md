@@ -804,7 +804,6 @@ Visual byte map (approximate):
 │  │  relative (fixed fraction of screen width).                         │    │
 │  │                                                                     │    │
 │  │  fb2cng + KP3 + Amazon backend: use em (font-relative scaling)      │    │
-│  │  Calibre KFX Input/Output: converts em → % (loses scaling)          │    │
 │  │                                                                     │    │
 │  │  See docs/kfxstructure.md §7.10.3a for details.                     │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │

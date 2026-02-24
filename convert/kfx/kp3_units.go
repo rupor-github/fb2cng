@@ -13,8 +13,7 @@ import "math"
 //
 // NOTE: fb2cng and KP3 both use em units for horizontal spacing (margin-left/right,
 // padding-left/right) and text-indent, so these values scale with the viewer font
-// size. Calibre KFX Input/Output converts em to % for these properties, making
-// them viewport-relative and losing font-size scaling.
+// size.
 //
 // See docs/kfxstructure.md §7.10.2 "KP3 unit conventions" for full documentation.
 
@@ -145,11 +144,6 @@ const (
 // | padding-right   | em   | Font-relative, scales with viewer  |
 // | text-indent     | em   | Font-relative, scales with viewer  |
 // | line-height     | lh   | Line-height units                  |
-//
-// NOTE: Calibre KFX Input/Output converts em → % for horizontal spacing and
-// text-indent (1em = 3.125% for text-indent, 1em = 6.25% for margins), making
-// these values viewport-relative. fb2cng preserves em units, matching KP3 and
-// the Amazon backend conversion pipeline. See docs/kfxstructure.md §7.10.3a.
 
 // isVerticalSpacingProperty returns true if the symbol is a vertical spacing property
 // that should use lh units in KP3.

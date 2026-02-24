@@ -15,10 +15,6 @@ import (
 //   - vertical margins/padding: lh (line-height units)
 //   - font-size in inline styles: rem
 //
-// Calibre KFX Input/Output converts em → % for horizontal properties and
-// text-indent, losing font-relative behavior. fb2cng preserves em units,
-// matching KP3 and the Amazon backend conversion pipeline.
-//
 // This function preserves CSS units as-is. Property-specific conversion
 // happens in the style builder or during fragment generation.
 func CSSValueToKFX(val css.Value) (value float64, unit KFXSymbol, err error) {

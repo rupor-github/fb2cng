@@ -2235,8 +2235,6 @@ KFX natively supports both `em` ($308) and `%` ($314) units for horizontal spaci
 
 **KP3** (Kindle Previewer 3, `EpubToKFXConverter-4.0.jar`) also uses `em` units when converting EPUB CSS to KFX. This was confirmed by analyzing KFX files produced by KP3 from EPUB sources with `em`-based indentation. The Amazon backend conversion pipeline most likely follows the same convention.
 
-**Calibre KFX Input/Output** plugins convert `em` values for these properties to `%` using fixed ratios (1em = 3.125% for text-indent, 1em = 6.25% for horizontal margins). This makes indents and margins viewport-relative, so they do not scale when the user adjusts font size. The visual result is that paragraph indentation appears to shrink relative to the text as font size increases, or grow as font size decreases.
-
 #### 7.10.4 Zero value omission
 
 KP3 does NOT include style properties with zero values. For example, `margin-left: 0` is omitted entirely from the style definition rather than being encoded as `{ $48: { $307: 0, $306: "$314" } }`.

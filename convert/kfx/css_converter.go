@@ -424,8 +424,6 @@ func (c *Converter) convertProperty(name string, value css.Value, props map[KFXS
 		// Keep em units for text-indent so the indent scales with font size changes
 		// in the viewer. Converting em → % (viewport-relative) makes the indent fixed
 		// regardless of font size, which is incorrect CSS behavior.
-		// Calibre KFX Input/Output converts em → % here (1em = 3.125%), losing the
-		// font-relative behavior. We preserve em units, matching KP3 and Amazon backend.
 		// Note: text-indent: 0 is meaningful in KFX - it explicitly sets no indentation,
 		// which overrides any inherited text-indent.
 		if value.IsNumeric() {
@@ -753,8 +751,7 @@ func (c *Converter) parseShorthandValue(s string) css.Value {
 //   - line-height: lh
 //
 // Horizontal spacing and text-indent use em units so values scale with the viewer
-// font size, matching KP3 and Amazon backend behavior. Calibre KFX Input/Output
-// converts these to % (viewport-relative), losing font-relative scaling.
+// font size, matching KP3 and Amazon backend behavior.
 //
 // Note: KFX does not support negative margins. Negative margin values are
 // silently dropped with a warning logged.
