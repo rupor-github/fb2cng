@@ -9,10 +9,109 @@ The findings are based on analysis of the decompiled Kindle Previewer source
 
 ## Overview
 
-The conversion is **hardcoded and unconditional** for reflowable content. There
-is no configuration, flag, or condition that preserves `em` units for horizontal
-margins or `text-indent`. By the time KFX data is written, these values are
-always stored as `$314` (percentage).
+The conversion pipeline has **two stages** that handle em-to-percent conversion
+independently:
+
+1. **Computed Style Visitor** (`yj/style/b/e.java`) — always converts all
+   horizontal properties (margins, padding, text-indent) to `UNIT_PERCENT` in
+   the computed style.
+
+2. **Unit Normalizer** (`yj/i/f/a/d/f.java`) — runs after the visitor and
+   rewrites `text-indent` on the **original container style**. This stage
+   makes a **conditional decision** whether to keep text-indent in `em` or
+   convert it to `%`.
+
+The computed style is used internally for layout calculations. The original
+container style is what gets written to the KFX output. Therefore the Unit
+Normalizer's decision determines the final unit in the KFX file.
+
+**For horizontal margins and padding**, the conversion to `%` is unconditional.
+**For text-indent**, the conversion depends on the conditions described below.
+
+## The Key Decision: text-indent in `em` vs `%`
+
+**File:** `com/amazon/yj/i/f/a/d/f.java`, lines 314-331
+
+The Unit Normalizer converts text-indent to an em value first, then decides
+whether to keep it in `em` or convert to `%`:
+
+```java
+// var7  = original CSS unit of text-indent
+// var8  = text-indent value converted to em
+// var32 = computed MARGIN_INLINE_START (margin-left in horizontal-tb)
+// var33 = computed PADDING_INLINE_START (padding-left in horizontal-tb)
+// this.f = writing mode
+// threshold = 4.0 em (field 'o')
+
+if ((this.f == x.HORIZONTAL_TB || var7 != u.UNIT_EM)
+    && (var8 > 4.0
+        || var32 != null && var32.i().a() != 0.0
+        || var33 != null && var33.i().a() != 0.0)) {
+    // CONVERT TO PERCENT
+    if (var10.a() != 0.0) {
+        var8 *= var10.a();              // scale by computed font-size
+    }
+    var30 = b.a(var8, UNIT_EM, var5, DPI, true, errors, this.f);
+    var30 = this.a(var4, var30);        // cap at 70% inside table rows
+} else {
+    // KEEP AS EM
+    var30 = new Pair(var8, UNIT_EM);
+}
+```
+
+### Decision Rules
+
+The condition for converting to `%` requires BOTH parts of the AND:
+
+**Part 1** (first parenthesized group):
+- Writing mode is `horizontal-tb` (the normal case), OR
+- The original CSS unit was NOT `em` (e.g., `px`, `pt`, `%`)
+
+**Part 2** (second parenthesized group) — ANY of:
+- Text-indent value exceeds **4.0em**, OR
+- `margin-inline-start` (margin-left) is **non-zero**, OR
+- `padding-inline-start` (padding-left) is **non-zero**
+
+Both parts must be true for the conversion to `%` to happen.
+
+### When text-indent stays in `em`
+
+Text-indent is preserved in `em` when Part 2 is false, meaning ALL of:
+- Text-indent value is **4.0em or less**, AND
+- `margin-left` (margin-inline-start) is **zero or absent**, AND
+- `padding-left` (padding-inline-start) is **zero or absent**
+
+In vertical writing modes, text-indent also stays in `em` when the original
+unit was `em` (Part 1 is false), regardless of Part 2.
+
+### Examples
+
+| text-indent | margin-left | padding-left | Writing mode | Result |
+|-------------|-------------|--------------|--------------|--------|
+| `2em`       | `0`         | `0`          | horizontal-tb | **em** |
+| `2em`       | `1em`       | `0`          | horizontal-tb | **%**  |
+| `2em`       | `0`         | `0.5em`      | horizontal-tb | **%**  |
+| `5em`       | `0`         | `0`          | horizontal-tb | **%**  |
+| `4em`       | `0`         | `0`          | horizontal-tb | **em** |
+| `4.001em`   | `0`         | `0`          | horizontal-tb | **%**  |
+| `2em`       | `1em`       | `0`          | vertical-rl   | **em** |
+
+### Font-size multiplication
+
+When text-indent IS converted to `%`, the value is first **multiplied by
+the computed font-size** (line 317-318):
+
+```java
+if (var10.a() != 0.0) {
+    var8 *= var10.a();  // scale by computed font-size (e.g., 1.25 for 125%)
+}
+```
+
+This means the `%` conversion for text-indent accounts for the element's
+effective font-size, unlike the computed style visitor which does NOT apply
+font-size multiplication to text-indent.
+
+When text-indent stays in `em`, no font-size multiplication occurs.
 
 ## The Core Conversion Function
 
@@ -145,9 +244,9 @@ for (var6 : com.amazon.yj.y.a.a.g) {
 }
 ```
 
-### 3. TEXT_INDENT (lines 591-597)
+### 3. TEXT_INDENT in computed style (lines 591-597)
 
-Always converted to `UNIT_PERCENT`:
+In the computed style, text-indent is always converted to `UNIT_PERCENT`:
 
 ```java
 if (var1.c(TEXT_INDENT) != null) {
@@ -157,6 +256,10 @@ if (var1.c(TEXT_INDENT) != null) {
     var2.a(TEXT_INDENT, var10);
 }
 ```
+
+However, this only affects the computed style. The original container style
+(which is what goes into the KFX output) is processed separately by the
+Unit Normalizer (see "The Key Decision" above).
 
 ## The Shared Conversion Function
 
@@ -198,13 +301,16 @@ if (UNIT_EM == var12.b()
 This means for margins in `em`, the conversion accounts for the actual
 computed font-size of the element, not just a nominal `em` unit.
 
-**What does NOT get multiplied:**
+**What does NOT get multiplied (in the computed style visitor):**
 
 - **TEXT_INDENT**: `a.e.contains(resolveLogical(TEXT_INDENT, ...))` is always
   `false` because `a.e` only contains margin/padding inline properties.
   Text-indent goes through `em × 100 / 32` directly.
 - **Border weights**: set `a.g` is {BORDER_WEIGHT_INLINE_START/END}, also
   not in `a.e`.
+
+Note: In the Unit Normalizer, text-indent IS multiplied by font-size when it
+gets converted to `%` (see "The Key Decision" above).
 
 ### Final em-to-percent conversion (lines 673-676)
 
@@ -231,8 +337,11 @@ For an element with `margin-left: 2em` and computed `font-size: 1.25em`
 
 Without the multiplication the result would be `2.0 × 100.0 / 32.0 = 6.25%`.
 
-For `text-indent: 2em` with the same font-size, the multiplication does NOT
-apply, so the result is `2.0 × 100.0 / 32.0 = 6.25%` regardless of font-size.
+For `text-indent: 2em` with the same font-size, and no margin-left/padding-left,
+the Unit Normalizer **keeps it as `2.0em`** (no conversion).
+
+For `text-indent: 2em` with `margin-left: 1em` and the same font-size, the
+Unit Normalizer converts it: `2.0 × 1.25 = 2.5`, then `2.5 × 100 / 32 = 7.8125%`.
 
 ## Font-Size Computation
 
@@ -276,6 +385,55 @@ Key properties:
 - Unsupported units (px, pt, etc.) log an error and default to 1.0em
 - The computed style inherits the parent's font-size when no explicit value is set
 
+## Full Pipeline: text-indent from CSS to KFX
+
+```
+Original CSS text-indent (any unit: px, em, %, pt, etc.)
+    |
+    v
+[1] Computed Style Visitor (yj/style/b/e.java:591-597)
+    - Converts to UNIT_PERCENT of parent width
+    - Stored in computed style as UNIT_PERCENT
+    - Used for internal layout calculations
+    |
+    v
+[2] Unit Normalizer (yj/i/f/a/d/f.java:275-352)
+    - Reads original style's text-indent
+    - Converts to EM first (via yj/F/a/b.java:212)
+    - DECISION: if horizontal-TB & (value > 4em or has margin/padding):
+        => multiply by font-size, convert to UNIT_PERCENT
+      else:
+        => keep as UNIT_EM
+    - Writes back to the container's original style
+    |
+    v
+[3] Margin Normalization (Q/a/d/b/h.java:354-388)
+    - Adjusts negative text-indent values
+    - Preserves the unit from step [2]
+    |
+    v
+[4] Paragraph Space Data Collection (Q/a/d/d/b/e.java)
+    - Calls d.java:126 to read text-indent as em-equivalent
+    - Handles both UNIT_EM and UNIT_PERCENT inputs
+    - Groups paragraphs by text-indent value
+    |
+    v
+[5] Text-Indent Relativization Fixup (Q/a/d/d/a/c.java)
+    - If 70%+ of paragraphs share same text-indent:
+      removes vertical spacing (margin-top/bottom)
+    - Does NOT change text-indent value itself
+    |
+    v
+[6] Main Style Relativization (Q/a/d/b/i.java:390-453)
+    - Only runs when CompleteRelativization=true (editing mode)
+    - For normal reflowable ingestion: DOES NOT RUN
+    - When it runs: subtracts most-common value, writes UNIT_PERCENT
+    |
+    v
+KFX Output: text_indent stored as UNIT_EM or UNIT_PERCENT
+            depending on step [2] decision
+```
+
 ## Conditions
 
 ### When the conversion does NOT happen
@@ -300,12 +458,17 @@ Key properties:
 3. **Null properties**. If the property is not present in the style, no
    conversion is attempted.
 
+4. **Text-indent <= 4em with no margin/padding** (see "The Key Decision").
+   The Unit Normalizer keeps text-indent in `em` when the value is small
+   and no margin-left or padding-left is set on the element.
+
 ### When the conversion ALWAYS happens
 
-For all **reflowable** content, the em-to-percent conversion runs
-unconditionally. There is no flag or configuration to disable it.
+For all **reflowable** content, the em-to-percent conversion of horizontal
+**margins and padding** runs unconditionally. Text-indent conversion is
+conditional (see above).
 
-## Configuration Flags (Unused for This Conversion)
+## Configuration Flags
 
 The preprocessor configuration (`com/amazon/html/c/b/e.java`) has several
 relativization flags:
@@ -325,22 +488,18 @@ master `relativizeUnits` flag, but `textIndentRelativize` and
 to `true` when the app-level `CompleteRelativization` flag is on
 (`com/amazon/adapter/common/app/c.java`).
 
-These flags are serialized to JSON and sent to an external preprocessor
-(Chromium/PhantomJS-based). They do NOT control the Java-side em-to-percent
-conversion in the computed style visitor -- that runs unconditionally.
+The `CompleteRelativization` flag is configured per conversion profile
+(`global/Conversion-Configuration.cfg`):
 
-The preprocessor outputs an `isHorizontalPropertyRelativized` flag
-(`com/amazon/html/c/b/f.java:153-154`), but in the mapper context construction
-(`com/amazon/adapter/common/n/a/g.java:12`) this flag is **overridden to
-`true`** regardless of the preprocessor output:
+| Profile                           | CompleteRelativization |
+|-----------------------------------|-----------------------|
+| `EditingConversion-cyborg-v1`     | `true`                |
+| `Reflowable-conversion-Ingestion` | `false`               |
+| `FixedLayout-conversion-Ingestion`| `false`               |
 
-```java
-var5.b().a(true);  // isHorizontalPropertyRelativized = true always
-```
-
-The only place this flag is consumed (`com/amazon/yjhtmlmapper/h/b.java:266`)
-is a minor cleanup function that removes zero-width inline-size values -- it
-has nothing to do with the em-to-percent conversion itself.
+For normal reflowable content (the KP3 case), `CompleteRelativization = false`,
+so the main style relativization pass at `Q/a/d/b/i.java` does NOT rewrite
+text-indent. The final unit is determined solely by the Unit Normalizer.
 
 ## KFX Internal Unit Codes
 
@@ -358,46 +517,66 @@ is in `KFXInput/kfxlib/yj_to_epub_properties.py`, lines 631-647:
 | `$505`     | `rem`    |
 | `$310`     | `lh`     |
 
-After Kindle Previewer converts a reflowable EPUB, margins and text-indent
-that were originally in `em` are stored as `$314` (percentage) in the KFX
-output. The KFXInput plugin faithfully maps `$314` back to `%` -- there is no
-reverse conversion from `%` to `em`.
-
-## Implications for Round-Tripping
-
-When converting EPUB -> KFX -> EPUB:
-
-1. The original `em` values for horizontal margins and `text-indent` are
-   **permanently lost** during the EPUB-to-KFX step.
-2. The KFXInput plugin outputs them as `%` values.
-3. To recover approximate `em` values, one could divide the percentage by
-   `(100 / 32)` = `3.125` for horizontal-tb, but this would not account
-   for font-size-dependent margin scaling (see §4 above).
+After Kindle Previewer converts a reflowable EPUB, text-indent may appear
+as either `$308` (em) or `$314` (%) in the KFX output, depending on the
+conditions described above.
 
 ## Implications for fb2cng
 
 fb2cng emits `em` units directly for horizontal margins, padding, and
-text-indent in its KFX output (since commit `2ac8d97`). This means:
+text-indent in its KFX output (since commit `2ac8d97`). Based on the
+analysis above:
 
-1. **KP3 applies the font-size multiplication itself** when it processes
-   the KFX data. fb2cng does not need to replicate this step.
-2. If fb2cng were converting em→% instead, it **would** need to replicate
-   the font-size multiplication for margins (but NOT for text-indent) to
-   match KP3 behavior. That was the previously missing step.
-3. By emitting raw `em` values, fb2cng lets KP3 handle the font-size-aware
-   conversion correctly. The em values also scale with the viewer font-size
-   setting, unlike `%` values which are viewport-relative.
+1. **Emitting text-indent in `em` is correct** and matches KP3 behavior
+   for typical book content where text-indent is small (≤ 4em) and no
+   margin-left is set.
+
+2. **KP3 applies the font-size multiplication itself** when it processes
+   the KFX data for margins/padding. fb2cng does not need to replicate this step.
+
+3. If fb2cng were converting em→% for text-indent, it **would** need to
+   replicate the font-size multiplication (which DOES apply to text-indent
+   in the `%` path, unlike in the computed style visitor).
+
+4. By emitting raw `em` values, fb2cng lets KP3 handle any font-size-aware
+   conversion correctly when needed. The em values also scale with the viewer
+   font-size setting, unlike `%` values which are viewport-relative.
 
 The property sets used by fb2cng (see `kp3_units.go`) align with the
 analysis above:
 
-| Property | fb2cng unit | KP3 computed style unit |
-|----------|-------------|-------------------------|
-| margin-left/right | `em` ($308) | `%` ($314) after visitor |
-| padding-left/right | `em` ($308) | `%` ($314) after visitor |
-| text-indent | `em` ($308) | `%` ($314) after visitor |
+| Property | fb2cng unit | KP3 output unit (typical) |
+|----------|-------------|---------------------------|
+| margin-left/right | `em` ($308) | `%` ($314) always |
+| padding-left/right | `em` ($308) | `%` ($314) always |
+| text-indent | `em` ($308) | `em` ($308) or `%` ($314) conditional |
 | margin-top/bottom | `lh` ($310) | not relativized |
 | font-size | `rem` ($505) | `em` after visitor |
+
+## Additional Pipeline Steps
+
+### NBSP-to-text-indent conversion (f.java:291-295)
+
+The Unit Normalizer also converts leading non-breaking spaces (NBSP) into
+text-indent. If an element has leading NBSP characters, they are removed and
+their width is added to the text-indent value. The same em-vs-% decision
+applies to the result.
+
+### Negative text-indent handling (f.java:334-346)
+
+If text-indent is negative, it is pushed to child containers and removed
+from the parent container, provided the element has children and a non-zero
+width.
+
+### Table row capping (f.java:355-358)
+
+Inside table rows, text-indent in `%` is capped at 70%.
+
+### Paragraph space gap reset (Q/a/d/d/a/c.java)
+
+When 70%+ of paragraphs share the same non-zero text-indent, vertical
+spacing (margin-top, margin-bottom) between those paragraphs is removed.
+This is a gap-reset optimization, not a text-indent conversion.
 
 ## File Index
 
@@ -405,16 +584,22 @@ analysis above:
 |------|------|
 | `com/amazon/yj/F/a/b.java` | Core em-to-percent conversion formula |
 | `com/amazon/yj/style/b/e.java` | Computed style visitor (triggers conversion) |
+| `com/amazon/yj/i/f/a/d/f.java` | **Unit Normalizer (text-indent em-vs-% decision)** |
 | `com/amazon/yj/y/a/a.java` | Property sets (see below) |
 | `com/amazon/yj/y/a/e.java` | Writing-mode-aware property resolution |
+| `com/amazon/Q/a/d/c/d.java` | Text-indent relativization reader |
+| `com/amazon/Q/a/d/d/a/c.java` | Text-indent gap reset fixup |
+| `com/amazon/Q/a/d/b/i.java` | Main style relativization (CompleteRelativization only) |
+| `com/amazon/Q/a/d/b/h.java` | Negative text-indent sanitization |
 | `com/amazon/html/c/b/e.java` | Preprocessor input configuration |
 | `com/amazon/html/c/b/f.java` | Preprocessor output (isHorizontalPropertyRelativized) |
 | `com/amazon/adapter/a/a/b/h.java` | Config construction, fixed-layout override |
 | `com/amazon/adapter/common/app/c.java` | App-level relativization config |
-| `com/amazon/adapter/common/n/a/g.java` | Mapper context construction |
+| `com/amazon/adapter/h/b/a/a/g.java` | Feature extraction (margin-left, text-indent) |
+| `com/amazon/adapter/h/b/b/k.java` | Text-indent folding into margin-left (table layout) |
 | `com/amazon/yjhtmlmapper/h/b.java` | HTML pre-processing (rem-to-em, flag check) |
-| `com/amazon/yjhtmlmapper/c/b.java` | Mapper context (isHorizontalPropertyRelativized) |
 | `com/amazon/B/d/e/h/u.java` | Unit enum (UNIT_EM, UNIT_PERCENT, etc.) |
+| `global/Conversion-Configuration.cfg` | Conversion profile configuration |
 
 ### Property Sets (`com/amazon/yj/y/a/a.java`)
 
