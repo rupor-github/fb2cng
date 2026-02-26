@@ -562,11 +562,32 @@ text-indent. If an element has leading NBSP characters, they are removed and
 their width is added to the text-indent value. The same em-vs-% decision
 applies to the result.
 
-### Negative text-indent handling (f.java:334-346)
+### Negative text-indent handling in Unit Normalizer (f.java:334-346, 360-382)
 
-If text-indent is negative, it is pushed to child containers and removed
-from the parent container, provided the element has children and a non-zero
-width.
+If text-indent is negative, two things happen:
+
+**Pushing to children (f.java:334-346):** Negative text-indent is pushed to
+child containers and removed from the parent container, provided the element
+has children and a non-zero width. The method `a()` at line 360 checks:
+- text-indent must be negative (`var3.i().a() >= 0.0` → return false)
+- element must not be in excluded tag set `m`
+- element must have children (CONTENT_LIST with non-empty child list)
+- parent must have a non-zero WIDTH in computed style
+- element must not be a TEXT container with specific merger conditions
+
+**Sanitization (h.java:354-388):** After the Unit Normalizer, the margin
+normalization pass sanitizes negative text-indent that exceeds available space:
+
+1. Computes "available space" = margin-left + padding-left for the element
+   (method `f()` at h.java:390-422, also accounts for list indentation)
+2. If `available_space + text_indent > 0`, the negative indent fits within
+   the available margin/padding → **no change**
+3. If it doesn't fit, calculates `overflow = available_space + text_indent`
+   and `ratio = overflow / text_indent`
+4. Reduces text-indent proportionally: `new = original - original × ratio`
+5. If the result rounds to 0.0, the text-indent property is **removed entirely**
+6. Logs: `"Text indent has been sanitized. Original: X, new value: Y"`
+7. The unit (em or %) is preserved from the Unit Normalizer's decision
 
 ### Table row capping (f.java:355-358)
 
@@ -580,6 +601,252 @@ This is a gap-reset optimization, not a text-indent conversion.
 
 ## File Index
 
+## Negative Margin Handling
+
+This section describes how negative CSS margin values (e.g., `margin-left: -1em`)
+are handled throughout the KP3 pipeline.
+
+### Summary
+
+Negative margins are **not stripped or clamped** by any stage of the pipeline.
+They flow through the conversion process and produce negative `%` values in the
+KFX output. However, they have several important side effects on the pipeline:
+
+1. **Trigger text-indent → % conversion** (even for small text-indent values)
+2. **Disable margin normalization** for the affected property across the entire section
+3. **Fold negative text-indent into margin-left** during data collection
+4. **Reduce overflow sums** in the Unit Normalizer's overflow protection
+5. **Prevent center-alignment detection** when the sum conditions aren't met
+6. **Are folded with padding** when both exist on the same side (may reduce or cancel out)
+
+### Stage-by-stage behavior
+
+#### 1. Computed Style Visitor (e.java:628-679)
+
+Negative margins are converted to `%` identically to positive margins. The
+shared conversion function at line 656 short-circuits only on `== 0.0`, with
+no check for `< 0`. The full path for a negative margin in `em`:
+
+1. Font-size multiplication IS applied (lines 665-671): `value *= computedFontSize`
+2. Core formula at `b.java:180`: `value × 100 / 32.0` → produces negative `%`
+3. The `> 100.0` cap (b.java:201) does NOT trigger for negative values
+4. Rounding at `b.java:249` (`Math.round(var0 * 1000.0) / 1000.0`) preserves sign
+5. Result stored in computed style as negative `UNIT_PERCENT`
+
+Example: `margin-left: -2em` with `font-size: 1.0em` in `horizontal-tb`:
+`-2.0 × 1.0 × 100 / 32.0 = -6.25%`
+
+#### 2. Unit Normalizer — margin conversion (f.java:59-93)
+
+Margins and padding are processed by the Unit Normalizer's `b()` method,
+which converts them to `%` unconditionally (same as positive values). The
+conversion iterates over inline margin/padding properties (set `i` at line 71)
+and calls the same core conversion function. No negative guard exists.
+
+#### 3. Unit Normalizer — effect on text-indent decision (f.java:314-316)
+
+The condition for converting text-indent to `%` checks `var32.i().a() != 0.0`
+(margin-inline-start is non-zero). **Negative margin-left IS non-zero**, so it
+triggers the text-indent → % conversion path, even for small text-indent values.
+
+Example: `text-indent: 2em; margin-left: -1em` → text-indent is converted to `%`
+(whereas `text-indent: 2em; margin-left: 0` would stay in `em`).
+
+#### 4. Unit Normalizer — overflow protection (f.java:116-130)
+
+The overflow check at line 123 sums all inline margins and padding:
+
+```java
+var6 = sum of all inline margin/padding values in %
+if (var6 >= 99.99999) {
+    scale_factor = 70.0 / var6;
+    // scale all values down
+}
+```
+
+Negative margins **reduce** this sum, making the 99.99999% overflow threshold
+less likely to trigger. A negative margin effectively "frees up" space in this
+calculation. Note: the sum at `a()` (line 184) simply accumulates `%` values —
+negative `%` values reduce the total.
+
+#### 5. Margin-to-padding folding (f.java:234-268)
+
+When both margin and padding exist for the same side (e.g., margin-left and
+padding-left), the Unit Normalizer folds them together:
+
+```java
+// f.java:260-268
+if (padding != null) {
+    if (margin == null) {
+        margin = padding;  // move padding to margin
+        remove padding;
+    } else if (margin.unit == padding.unit) {
+        margin = margin + padding;  // SUM them
+        remove padding;
+    }
+    // if units differ, both are kept
+}
+```
+
+With negative margin: `margin-left: -2em` + `padding-left: 3em` → result is
+`margin-left: 1em`, padding removed. The folding has no negative guard, so the
+sum can still be negative if `|margin| > padding`.
+
+#### 6. Per-section data collection (Q/a/d/a/a.java:251-283)
+
+During data collection for margin normalization, the per-section visitor
+(`a.java`) collects MARGIN_LEFT, MARGIN_RIGHT, TEXT_INDENT, CONV_BODY_MARGIN_LEFT,
+CONV_BODY_MARGIN_RIGHT values for each container.
+
+**Critical interaction with negative text-indent (lines 260-283):** When
+collecting MARGIN_LEFT and the container has negative text-indent, the
+collected margin-left value is **adjusted** to include the negative text-indent:
+
+```java
+// a.java:262-266
+double textIndent = computedStyle.get(TEXT_INDENT).value();  // from computed style, in %
+if (textIndent < 0.0 && property == MARGIN_LEFT) {
+    // fold negative text-indent into margin-left for collection purposes
+    collectedValue = margin_left_in_percent + textIndent;  // reduces margin-left
+}
+```
+
+This means a negative text-indent effectively reduces the MARGIN_LEFT value
+tracked by the data collector, which in turn affects whether the minimum is
+negative (and therefore whether normalization is skipped).
+
+#### 7. Per-section minimum computation (Q/a/d/a/d.java:135-158)
+
+The minimum is found by iterating all distinct values collected for a property
+and taking the smallest. Since negative values are collected without filtering,
+a single negative margin-left value will make the minimum negative.
+
+```java
+// d.java:147-153
+for (entry : collected_values) {
+    double value = entry.measure().value();
+    if (min == null || value < min) {
+        min = value;
+    }
+}
+return min == null ? 0.0 : min;
+```
+
+#### 8. Margin Normalization decision (h.java:83-101)
+
+The per-section margin normalizer checks the minimum for each property
+(MARGIN_LEFT, MARGIN_RIGHT, TEXT_INDENT):
+
+```java
+// h.java:87-101
+for (property : [MARGIN_LEFT, MARGIN_RIGHT, TEXT_INDENT]) {
+    min = sectionData.getMin(property);
+    if (min == 0.0) {
+        log("Min value is zero, not normalizing " + property);
+    } else if (min < 0.0) {
+        log("Min value is negative at " + min + ", not normalizing " + property);
+    } else {
+        log(property + " is eligible to be normalized by value " + min);
+        normalizable.put(property, min);
+    }
+}
+```
+
+**One container with a negative margin-left disables margin-left normalization
+for ALL containers in the entire section.** The same applies independently to
+MARGIN_RIGHT and TEXT_INDENT.
+
+#### 9. Per-container normalization (h.java:183-247)
+
+When normalization IS eligible (minimum > 0), each container's value is reduced
+by the section minimum:
+
+```java
+// h.java:245-247
+new_value = container_value - section_minimum;
+```
+
+For eligible properties, the margin value must be in `UNIT_PERCENT` (lines 207-213).
+If it's not, a warning is logged and the unit is forced to UNIT_PERCENT. After
+subtraction, if the result rounds to 0.0, the property is removed entirely.
+
+When normalization is skipped (due to negative minimum), ALL containers keep
+their original margin values for that property — including containers that
+have positive margins.
+
+#### 10. Center-alignment detection (h.java:263-296)
+
+The normalizer detects center-aligned elements by checking:
+
+```java
+// h.java:293
+if (margin_left == margin_right
+    && margin_left + margin_right + width + borders + padding >= 99.0) {
+    set BOX_ALIGN = "center";
+}
+```
+
+Negative margins reduce the sum, making center-alignment detection less likely
+to succeed. E.g., `margin-left: -5%; margin-right: -5%; width: 100%` sums to
+90%, which is < 99%.
+
+#### 11. Negative text-indent sanitization (h.java:354-388)
+
+See the "Negative text-indent handling in Unit Normalizer" subsection in the
+"Additional Pipeline Steps" section above. This step reduces or removes
+negative text-indent that exceeds available margin+padding space. This is
+about negative **text-indent**, not negative margins directly, but the
+available space is calculated FROM margin-left + padding-left values.
+
+If margin-left is negative, the available space for negative text-indent is
+**reduced**, making sanitization more aggressive (more likely to trim the indent).
+
+#### 12. Floated element margin-block-start removal (h.java:509-536)
+
+For floated elements with `margin-block-start` (margin-top) in `UNIT_LINE_HEIGHT`:
+if the value is `< 2.0`, the margin-top is **removed**. This applies to both
+positive and negative values (a negative margin-top < 2.0 would be removed).
+
+#### 13. Parent width rescaling (h.java:309-352)
+
+When `CompleteRelativization` is on (editing mode only, NOT normal KP3), the
+normalizer rescales `%`-based margin/padding/text-indent values when the parent
+width changes. The rescaling formula is `new = old × original_parent_width / new_parent_width`.
+Negative values are rescaled proportionally (sign preserved).
+
+#### 14. Main Style Relativization (i.java:460-494)
+
+Only runs when `CompleteRelativization=true` (editing mode, not normal KP3).
+When it encounters negative text-indent, it **only logs** diagnostic information
+but does **not modify** the value.
+
+#### 15. Adapter layer
+
+No negative margin stripping or clamping was found in the adapter layer.
+Negative margins from the CSS pass through to the pipeline unmodified.
+
+### Implications for fb2cng
+
+1. **Negative `margin-left`** will force text-indent to be converted from
+   `em` to `%` by KP3, even for small text-indent values. If fb2cng emits
+   negative margins alongside text-indent in `em`, KP3 will apply font-size
+   multiplication and convert the text-indent to `%`.
+
+2. **Negative margins disable normalization** for the entire section. If even
+   one container in a section has a negative margin-left, KP3 will not subtract
+   the common minimum from any container's margin-left in that section. This
+   could lead to larger-than-expected margins in the output.
+
+3. **Negative text-indent with negative margin-left** compounds: the negative
+   margin-left reduces available space, making KP3's sanitization more likely
+   to trim or remove the negative text-indent.
+
+4. **Negative margins survive the pipeline** — they are converted to negative
+   `%` and written to the KFX output. They are not clamped, removed, or
+   special-cased at any point.
+
+## File Index
+
 | File | Role |
 |------|------|
 | `com/amazon/yj/F/a/b.java` | Core em-to-percent conversion formula |
@@ -590,7 +857,9 @@ This is a gap-reset optimization, not a text-indent conversion.
 | `com/amazon/Q/a/d/c/d.java` | Text-indent relativization reader |
 | `com/amazon/Q/a/d/d/a/c.java` | Text-indent gap reset fixup |
 | `com/amazon/Q/a/d/b/i.java` | Main style relativization (CompleteRelativization only) |
-| `com/amazon/Q/a/d/b/h.java` | Negative text-indent sanitization |
+| `com/amazon/Q/a/d/b/h.java` | Margin normalization + negative text-indent sanitization |
+| `com/amazon/Q/a/d/a/a.java` | Per-section data collection (margin/text-indent min values) |
+| `com/amazon/Q/a/d/a/d.java` | Per-section min/max value storage |
 | `com/amazon/html/c/b/e.java` | Preprocessor input configuration |
 | `com/amazon/html/c/b/f.java` | Preprocessor output (isHorizontalPropertyRelativized) |
 | `com/amazon/adapter/a/a/b/h.java` | Config construction, fixed-layout override |
