@@ -104,6 +104,9 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 			return fmt.Errorf("unable to read style css from %q: %w", env.Cfg.Document.StylesheetPath, err)
 		}
 		env.DefaultStyle = data
+		log.Debug("Using user stylesheet", zap.String("path", env.Cfg.Document.StylesheetPath), zap.Int("bytes", len(data)))
+	} else {
+		log.Debug("Using embedded default stylesheet", zap.Int("bytes", len(env.DefaultStyle)))
 	}
 
 	env.NoDirs, env.Overwrite = cmd.Bool("nodirs"), cmd.Bool("overwrite")

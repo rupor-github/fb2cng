@@ -43,7 +43,7 @@ func (fb *FictionBook) NormalizeStylesheets(srcPath string, defaultCSS []byte, l
 			Data: string(defaultCSS),
 		}
 		fb.Stylesheets = append([]Stylesheet{defaultStylesheet}, fb.Stylesheets...)
-		log.Debug("Added default stylesheet for processing", zap.Int("bytes", len(defaultCSS)))
+		log.Debug("Added stylesheet for processing", zap.Int("bytes", len(defaultCSS)))
 	}
 
 	// Early return if no stylesheets to process
@@ -83,7 +83,7 @@ func (fb *FictionBook) NormalizeStylesheets(srcPath string, defaultCSS []byte, l
 		if i == 0 && len(defaultCSS) > 0 {
 			// Default stylesheet - use current working directory
 			basePath = "."
-			log.Debug("Resolving default stylesheet resources from current directory")
+			log.Debug("Resolving stylesheet resources from current directory")
 		}
 
 		for _, ref := range refs {
