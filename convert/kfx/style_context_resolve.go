@@ -282,9 +282,19 @@ func (sc StyleContext) handleContainerAwareMargins(merged, props map[KFXSymbol]a
 //
 // Two types of filtering:
 //
-// a) Zero-margin protection: If the tag default has margin-left/right: 0 but we have
-// non-zero inherited margins from a block container (e.g., poem), the zero margins
-// are filtered out so the container's indentation is preserved.
+// a) Container margin protection: If a block container (e.g., poem, cite) contributed
+// non-zero margin-left/right via PushBlock, the tag default's margin is filtered out
+// regardless of its value (zero, positive, or negative). Tag selectors have lower CSS
+// specificity than the class selectors that built the inherited margin, so the tag
+// default should not override them. The element's own class (step 3) will handle
+// margin accumulation via handleContainerAwareMargins.
+//
+// This is critical for negative margins: without this, a tag default like
+// p { margin: 0 -8pt 0.3em -8pt } would override the accumulated container margin
+// (e.g., poem 3em + verse 2em = 5em) with -0.533em, because the stylelist merge rule
+// for margin-left with sourceIsInline=true is YJCumulativeInSameContainerRuleMerger
+// (override semantics). The verse class at step 3 can't fix this because same-container
+// detection would skip it.
 //
 // b) Inherited CSS property protection: If a container (e.g., .footnote, .poem, .epigraph)
 // explicitly set an inherited CSS property (e.g., text-indent: 0, text-align: right,
@@ -296,10 +306,11 @@ func (sc StyleContext) handleContainerAwareMargins(merged, props map[KFXSymbol]a
 func (sc StyleContext) filterTagDefaultsIfInherited(props map[KFXSymbol]any) map[KFXSymbol]any {
 	needsFilter := false
 
-	// Check zero-margin condition
+	// Check container margin condition: if a block container contributed non-zero margin,
+	// the tag default margin should be filtered out (lower CSS specificity).
 	for _, sym := range []KFXSymbol{SymMarginLeft, SymMarginRight} {
-		if val, hasMargin := props[sym]; hasMargin {
-			if isZeroMargin(val) && !isZeroMargin(sc.inherited[sym]) {
+		if _, hasMargin := props[sym]; hasMargin {
+			if !isZeroMargin(sc.inherited[sym]) {
 				needsFilter = true
 				break
 			}
@@ -325,9 +336,11 @@ func (sc StyleContext) filterTagDefaultsIfInherited(props map[KFXSymbol]any) map
 	// Create filtered copy
 	filtered := make(map[KFXSymbol]any, len(props))
 	for sym, val := range props {
-		// Filter zero margins if we have non-zero inherited
+		// Filter tag default margins if container contributed non-zero inherited margin.
+		// Tag selectors have lower CSS specificity than class selectors, so the container's
+		// accumulated margin (from PushBlock) should not be overridden by the tag default.
 		if sym == SymMarginLeft || sym == SymMarginRight {
-			if isZeroMargin(val) && !isZeroMargin(sc.inherited[sym]) {
+			if !isZeroMargin(sc.inherited[sym]) {
 				continue
 			}
 		}

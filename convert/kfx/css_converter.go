@@ -753,8 +753,9 @@ func (c *Converter) parseShorthandValue(s string) css.Value {
 // Horizontal spacing and text-indent use em units so values scale with the viewer
 // font size, matching KP3 and Amazon backend behavior.
 //
-// Note: KFX does not support negative margins. Negative margin values are
-// silently dropped with a warning logged.
+// Negative margin values are allowed through the entire pipeline including the final
+// output. The filterTagDefaultsIfInherited guard in style_context_resolve.go prevents
+// tag-level negative margins from overriding accumulated container margins.
 func (c *Converter) setDimensionProperty(sym KFXSymbol, value css.Value, props map[KFXSymbol]any, warnings *[]string) {
 	// Handle keywords
 	if value.IsKeyword() {
@@ -764,12 +765,6 @@ func (c *Converter) setDimensionProperty(sym KFXSymbol, value css.Value, props m
 		case "0", "inherit", "initial":
 			// Skip or use default
 		}
-		return
-	}
-
-	// KFX does not support negative margins - skip with warning
-	if isMarginProperty(sym) && value.Value < 0 {
-		*warnings = append(*warnings, fmt.Sprintf("negative margin not supported in KFX, ignoring %s: %v%s", sym, value.Value, value.Unit))
 		return
 	}
 

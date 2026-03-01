@@ -166,7 +166,7 @@ func isHorizontalSpacingProperty(sym KFXSymbol) bool {
 }
 
 // isMarginProperty returns true if the symbol is a margin property.
-// KFX does not support negative margins, so these need special handling.
+// Negative margins are allowed through the entire pipeline including the final output.
 func isMarginProperty(sym KFXSymbol) bool {
 	switch sym {
 	case SymMarginTop, SymMarginBottom, SymMarginLeft, SymMarginRight:

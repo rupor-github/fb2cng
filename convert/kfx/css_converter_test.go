@@ -4,7 +4,6 @@ import (
 	"math"
 	"math/big"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/amazon-ion/ion-go/ion"
@@ -1086,12 +1085,13 @@ func TestExToEmNormalization(t *testing.T) {
 	}
 }
 
-func TestNegativeMarginWarning(t *testing.T) {
+func TestNegativeMarginPassthrough(t *testing.T) {
 	log := zap.NewNop()
 	parser := css.NewParser(log)
 	conv := NewConverter(log)
 
-	// CSS with negative margins (not supported in KFX)
+	// CSS with negative margins — these should now pass through the CSS converter
+	// and be clamped later at the output stage (doRegisterFilteredStyle).
 	cssData := []byte(`
 		.test {
 			margin-left: -8pt;
@@ -1104,16 +1104,9 @@ func TestNegativeMarginWarning(t *testing.T) {
 	sheet := parser.Parse(cssData)
 	styles, warnings := conv.ConvertStylesheet(sheet)
 
-	// Should have 3 warnings for the 3 negative margins
-	if len(warnings) != 3 {
-		t.Errorf("expected 3 warnings for negative margins, got %d: %v", len(warnings), warnings)
-	}
-
-	// Check warnings mention "negative margin"
-	for _, w := range warnings {
-		if !strings.Contains(w, "negative margin") {
-			t.Errorf("expected warning about negative margin, got: %s", w)
-		}
+	// Negative margins should NOT produce warnings anymore (they're handled at output)
+	if len(warnings) != 0 {
+		t.Errorf("expected 0 warnings, got %d: %v", len(warnings), warnings)
 	}
 
 	// Should have 1 style
@@ -1123,15 +1116,21 @@ func TestNegativeMarginWarning(t *testing.T) {
 
 	style := styles[0]
 
-	// The negative margins should NOT be in the properties
-	if _, ok := style.Properties[SymMarginLeft]; ok {
-		t.Error("negative margin-left should NOT be set")
+	// The negative margins SHOULD be in the properties (clamping happens at output stage)
+	if val, ok := style.Properties[SymMarginLeft]; !ok {
+		t.Error("negative margin-left should be set (clamping is at output stage)")
+	} else if v, _, mok := measureParts(val); !mok || v >= 0 {
+		t.Errorf("margin-left should be negative, got %v", val)
 	}
-	if _, ok := style.Properties[SymMarginRight]; ok {
-		t.Error("negative margin-right should NOT be set")
+	if val, ok := style.Properties[SymMarginRight]; !ok {
+		t.Error("negative margin-right should be set (clamping is at output stage)")
+	} else if v, _, mok := measureParts(val); !mok || v >= 0 {
+		t.Errorf("margin-right should be negative, got %v", val)
 	}
-	if _, ok := style.Properties[SymMarginTop]; ok {
-		t.Error("negative margin-top should NOT be set")
+	if val, ok := style.Properties[SymMarginTop]; !ok {
+		t.Error("negative margin-top should be set (clamping is at output stage)")
+	} else if v, _, mok := measureParts(val); !mok || v >= 0 {
+		t.Errorf("margin-top should be negative, got %v", val)
 	}
 
 	// The positive margin-bottom SHOULD be set

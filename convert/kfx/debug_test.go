@@ -37,9 +37,10 @@ func TestCiteSubtitleImageMargin(t *testing.T) {
 	t.Logf("ResolveProperty(p, cite-subtitle, text-indent): %v", textIndent)
 
 	// The marginLeft should be 2em inherited from cite container.
-	// The p rule in test.css has margin: 0 -8pt 0.3em -8pt, but KFX does not
-	// support negative margins, so the -8pt is ignored and the value is
-	// inherited from the parent cite container (which has margin: 1em 2em = 2em).
+	// The p rule may have margin: 0 -8pt 0.3em -8pt, but the tag-level margin
+	// is filtered out by filterTagDefaultsIfInherited when there's non-zero
+	// inherited margin from the cite container (which has margin: 1em 2em = 2em).
+	// This preserves the container's indentation regardless of the tag default value.
 	if marginLeft == nil {
 		t.Error("Expected margin-left to be resolved from cite context")
 	} else {

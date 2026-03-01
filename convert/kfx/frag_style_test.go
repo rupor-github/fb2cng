@@ -495,6 +495,74 @@ func TestStyleContext(t *testing.T) {
 		}
 	})
 
+	t.Run("element tag negative margin does not override inherited container margin", func(t *testing.T) {
+		// This tests that a negative margin on the tag default (e.g., p { margin-left: -8pt })
+		// does not override the accumulated container margin from poem/stanza.
+		// The tag default has lower CSS specificity than the class selectors that built
+		// the inherited margin, so it should be filtered out by filterTagDefaultsIfInherited.
+		sr := NewStyleRegistry()
+		// poem with margin-left: 3em
+		sr.Register(StyleDef{Name: "poem", Properties: map[KFXSymbol]any{
+			SymMarginLeft: DimensionValue(3, SymUnitEm),
+		}})
+		// p with negative margin-left (converted from -8pt to em)
+		sr.Register(StyleDef{Name: "p", Properties: map[KFXSymbol]any{
+			SymMarginLeft: DimensionValue(-0.53333, SymUnitEm),
+		}})
+		// verse with margin-left: 2em
+		sr.Register(StyleDef{Name: "verse", Properties: map[KFXSymbol]any{
+			SymMarginLeft: DimensionValue(2, SymUnitEm),
+		}})
+
+		// Simulate: poem > p.verse
+		poemCtx := NewStyleContext(sr).PushBlock("div", "poem")
+		resolved := poemCtx.resolveProperties("p", "verse")
+
+		marginLeft := resolved[SymMarginLeft]
+		if marginLeft == nil {
+			t.Fatal("Expected margin-left in resolved style")
+		}
+		val, unit, ok := measureParts(marginLeft)
+		if !ok || unit != SymUnitEm {
+			t.Fatalf("Expected em unit, got %v", marginLeft)
+		}
+		// Expected: poem 3em + verse 2em = 5em
+		// The p's negative margin-left should NOT override the inherited poem margin
+		expected := 5.0
+		if val != expected {
+			t.Errorf("Expected accumulated margin-left %.3fem, got %.3fem", expected, val)
+		}
+	})
+
+	t.Run("negative margin preserved at output", func(t *testing.T) {
+		// Verify that negative margins pass through to the final output without clamping.
+		sr := NewStyleRegistry()
+
+		// Register a resolved style with a negative margin
+		props := map[KFXSymbol]any{
+			SymMarginLeft: DimensionValue(-1.5, SymUnitEm),
+		}
+		styleName := sr.RegisterResolved(props, styleUsageText, true)
+
+		def, ok := sr.Get(styleName)
+		if !ok {
+			t.Fatalf("Style %q not found", styleName)
+		}
+
+		marginLeft := def.Properties[SymMarginLeft]
+		if marginLeft == nil {
+			t.Fatal("Expected margin-left in resolved style")
+		}
+		val, unit, ok := measureParts(marginLeft)
+		if !ok || unit != SymUnitEm {
+			t.Fatalf("Expected em unit, got %v", marginLeft)
+		}
+		// Negative margin should be preserved as-is
+		if val != -1.5 {
+			t.Errorf("Expected margin-left -1.500em, got %.3fem", val)
+		}
+	})
+
 	t.Run("container text-indent is not overridden by p tag default", func(t *testing.T) {
 		// This tests the fix for the bug where p { text-indent: 1em } would
 		// override the inherited text-indent: 0 from a footnote/poem container.
