@@ -165,16 +165,6 @@ func isHorizontalSpacingProperty(sym KFXSymbol) bool {
 	return false
 }
 
-// isMarginProperty returns true if the symbol is a margin property.
-// Negative margins are allowed through the entire pipeline including the final output.
-func isMarginProperty(sym KFXSymbol) bool {
-	switch sym {
-	case SymMarginTop, SymMarginBottom, SymMarginLeft, SymMarginRight:
-		return true
-	}
-	return false
-}
-
 // RoundDecimals rounds a float64 to the specified number of decimal places.
 // Use with precision constants: LineHeightPrecision, WidthPercentPrecision.
 //

@@ -2,8 +2,7 @@
 p {
     text-indent: 1em;
     text-align: justify;
-    /* For Kindles no need for separate space between paragraphs, latest kindle
-     * knows how to do it */
+    /* default Amazon style defines margin: 1em, 0; */
     margin: 0;
 }
 @media amzn-mobi {
@@ -13,7 +12,7 @@ p {
         margin: 0 -8pt 0.3em -8pt;
     }
 }
-/* Negative margins + floats = broken flow in Kindle KFX */
+/* Negative margins + floats = broken layout in Kindle KFX rendering */
 @media amzn-kf8 and not amzn-et {
     p {
         text-indent: 1em;
@@ -36,7 +35,8 @@ p code {
 /* Paragraphs with drop caps should have no text indent */
 p.has-dropcap {
     text-indent: 0;
-    margin: 0 0 0.4em 0;
+    /* default Amazon style defines margin: 1em, 0; */
+    margin: 0;
 }
 
 /* Drop caps - decorative large first letter */

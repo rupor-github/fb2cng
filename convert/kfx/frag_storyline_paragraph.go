@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"maps"
 	"strings"
+	"unicode/utf8"
 
 	"fbc/content"
+	"fbc/content/text"
 	"fbc/fb2"
 )
 
@@ -86,6 +88,7 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 	// KP3 emits a style_event for the first glyph in dropcap paragraphs.
 	// The event contains only lightweight text styling (e.g. font-weight: bold).
 	var dropcapGlyphDeltaStyle string
+	var injectDropcapSpacer bool
 
 	// Create inline style context by pushing the paragraph tag and classes.
 	// This ensures inline styles (like sub/sup) inherit font-size from the container.
@@ -104,10 +107,17 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 		if nw.Len() == 0 {
 			return
 		}
-		contentName, offset := ca.Add(nw.String())
 
 		// Apply segmentation to eliminate overlapping style events (KP3 requirement)
 		segmentedEvents := SegmentNestedStyleEvents(events)
+		contentText := nw.String()
+		if injectDropcapSpacer {
+			// HACK: KP3/KFX renders paragraphs with dropcaps and negative margin-left badly.
+			// Insert a narrow no-break spacer after the first rune as a layout workaround.
+			contentText = insertSpacerAfterFirstRune(contentText, text.NNBSP)
+			adjustStyleEventsForInsertedRune(segmentedEvents, 1)
+		}
+		contentName, offset := ca.Add(contentText)
 
 		// Mark usage only for styles that survived segmentation
 		if styles != nil {
@@ -362,10 +372,23 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 			_, hasLines := def.Properties[SymDropcapLines]
 			_, hasChars := def.Properties[SymDropcapChars]
 			if (hasLines || hasChars) && nw.RuneCountAfterPendingSpace() >= 1 {
+				// HACK: when KP3/KFX combines dropcaps with negative margin-left, surrounding
+				// text positioning is wrong. We compensate by inserting a narrow no-break spacer
+				// into the text stream and extending dropcap-chars to keep that spacer inside
+				// the dropcap span rather than letting it render as normal paragraph text.
+				injectDropcapSpacer = hasNegativeMarginLeft(def.Properties[SymMarginLeft])
 				if dropcapLineCount > 0 && hasLines {
 					props := make(map[KFXSymbol]any, len(def.Properties)+1)
 					maps.Copy(props, def.Properties)
 					props[SymDropcapLines] = dropcapLineCount
+					if injectDropcapSpacer {
+						props[SymDropcapChars] = incrementDropcapChars(props[SymDropcapChars])
+					}
+					resolvedStyle = styles.RegisterResolved(props, styleUsageText, true)
+				} else if injectDropcapSpacer {
+					props := make(map[KFXSymbol]any, len(def.Properties)+1)
+					maps.Copy(props, def.Properties)
+					props[SymDropcapChars] = incrementDropcapChars(props[SymDropcapChars])
 					resolvedStyle = styles.RegisterResolved(props, styleUsageText, true)
 				}
 				if dropcapGlyphDeltaStyle == "" {
@@ -718,6 +741,44 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 		if _, exists := idToEID[ref.RefID]; !exists {
 			idToEID[ref.RefID] = anchorTarget{EID: eid, Offset: ref.Offset}
 		}
+	}
+}
+
+func hasNegativeMarginLeft(val any) bool {
+	v, _, ok := measureParts(val)
+	return ok && v < 0
+}
+
+func incrementDropcapChars(val any) int {
+	if n, ok := numericFromAny(val); ok && n >= 1 {
+		return int(n) + 1
+	}
+	return 2
+}
+
+func insertSpacerAfterFirstRune(s, spacer string) string {
+	if s == "" {
+		return s
+	}
+	_, size := utf8.DecodeRuneInString(s)
+	if size <= 0 {
+		return s
+	}
+	return s[:size] + spacer + s[size:]
+}
+
+func adjustStyleEventsForInsertedRune(events []StyleEventRef, insertAt int) {
+	for i := range events {
+		start := events[i].Offset
+		end := events[i].Offset + events[i].Length
+		if start >= insertAt {
+			start++
+		}
+		if end > insertAt {
+			end++
+		}
+		events[i].Offset = start
+		events[i].Length = end - start
 	}
 }
 
