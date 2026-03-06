@@ -1,6 +1,6 @@
 module fbc
 
-go 1.26.0
+go 1.26.1
 
 tool (
 	github.com/abice/go-enum
@@ -21,12 +21,12 @@ require (
 	github.com/rupor-github/gencfg v1.0.14
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
-	github.com/tdewolff/parse/v2 v2.8.8
-	github.com/urfave/cli/v3 v3.6.2
+	github.com/tdewolff/parse/v2 v2.8.10
+	github.com/urfave/cli/v3 v3.7.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.1
 	golang.org/x/image v0.36.0
-	golang.org/x/net v0.50.0
+	golang.org/x/net v0.51.0
 	golang.org/x/sys v0.41.0
 	golang.org/x/term v0.40.0
 	golang.org/x/text v0.34.0
@@ -65,16 +65,15 @@ require (
 	github.com/urfave/cli/v2 v2.27.7 // indirect
 	github.com/xrash/smetrics v0.0.0-20250705151800-55b8f293f342 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
-	golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa // indirect
 	golang.org/x/exp/typeparams v0.0.0-20260218203240-3dfff04db8fa // indirect
 	golang.org/x/mod v0.33.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/telemetry v0.0.0-20260213145524-e0ab670178e1 // indirect
+	golang.org/x/telemetry v0.0.0-20260306145045-e526e8a188f5 // indirect
 	golang.org/x/tools v0.42.0 // indirect
 	golang.org/x/tools/cmd/cover v0.1.0-deprecated // indirect
 	honnef.co/go/tools v0.7.0 // indirect
-	modernc.org/fileutil v1.4.0 // indirect
-	modernc.org/libc v1.68.0 // indirect
+	modernc.org/ccgo/v4 v4.32.0 // indirect
+	modernc.org/libc v1.69.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.46.1 // indirect
