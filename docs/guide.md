@@ -1066,7 +1066,7 @@ kindle_ebook: false
   - For `fb2epub.exe`: `epub2`, `epub3`, `kepub`
   - For `fb2mobi.exe`: `kfx`, `azw8`
   - If incompatible format is specified, default is used with warning in logs
-- `kindle_ebook` (boolean, default: false) - For Kindle outputs, pass `--ebook` to mark as EBOK
+- `kindle_ebook` (boolean, default: false) - For Kindle outputs (`kfx`, `azw8`) pass `--ebook` to mark as EBOK; this is only relevant for `fb2mobi.exe`
 
 **When connector.yaml is not needed:**
 
@@ -1079,7 +1079,11 @@ In most cases, the connector works fine without configuration. You only need `co
 
 - `fb2epub.exe` → Converts to EPUB2 by default (or format specified in `connector.yaml`)
 - `fb2mobi.exe` → Converts to KFX by default
-- `kindle_ebook` in `connector.yaml` adds `--ebook` for `fb2mobi.exe` conversions
+- `kindle_ebook` is only meaningful for Kindle output formats (`kfx`, `azw8`), so it is only used by `fb2mobi.exe`
+- When `kindle_ebook: true` is set for `fb2mobi.exe`, the connector adds `--ebook` so Kindle output is marked as EBOK instead of PDOC
+- If `output_format` is not supported by the current connector target, the connector falls back to that target's default format and writes a warning to the logs
+- Example: `output_format: epub3` with `fb2mobi.exe` falls back to `kfx`
+- Example: `output_format: azw8` with `fb2epub.exe` falls back to `epub2`
 - Automatically uses `--overwrite` flag
 - Expects exactly 2 arguments: source and destination files
 - Logs to console by default (or to file if specified in `connector.yaml`)
