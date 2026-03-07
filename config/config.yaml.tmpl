@@ -163,6 +163,7 @@ document:
 
     # Kindle eInk devices do not handle transparent images well. This option
     # removes transparency from PNG and GIF images by flattening to white background.
+    # NOTE: for Kindle output this behavior is applied automatically.
     remove_transparency: false
 
     # Resize all images (but cover) with specified ratio
@@ -172,10 +173,13 @@ document:
     # respects "jpeg_quality_level": if detected level for an image is higher
     # than requested image will be re-encoded. For PNG best compression_level
     # is always specified. Additionally will trigger grayscale detection for
-    # JPEG images 
+    # JPEG images. NOTE: for Kindle output some conversion still happens even
+    # with this disabled, because raster images are normalized to JPEG and SVG
+    # images are rasterized.
     optimize: true
 
-    # JPEG quality level to use, percentage points (40% - 100%)
+    # JPEG quality level to use, percentage points (40% - 100%). For Kindle
+    # output this also affects PNG/GIF-to-JPEG conversion and SVG rasterization.
     jpeg_quality_level: 95
 
     screen:
@@ -187,7 +191,7 @@ document:
 
     cover:
       # When book does not have cover image supply one. For Amazon formats
-      # always true
+      # this is always enabled automatically.
       generate: false
 
       # What image to use as default cover when default one is needed. If
@@ -195,7 +199,7 @@ document:
       # default_image_path = "default_cover.jpeg"
 
       # How to process cover image
-      # "none"    - do nothing
+      # "none"    - do nothing (for Kindle output treated as "keepAR")
       # "keepAR"  - when image height is less than specified, resize to
       # specified height keeping aspect ratio
       # "stretch" - unconditionally resize to specified width and height

@@ -540,6 +540,50 @@ document:
       height: 1680
 ```
 
+**Image Options:**
+
+- **`use_broken`** - Controls what happens when an image cannot be decoded or processed.
+  - `false` - Replace the bad image with the built-in "broken image" placeholder. This is the safer default because the output stays readable.
+  - `true` - Keep the original image data untouched and let the reader/device decide whether it can display it.
+  - Use `true` only when the source book contains unusual images that `fb2cng` cannot decode but your target reader may still support.
+
+- **`remove_transparency`** - Flattens transparent PNG/GIF images onto a white background.
+  - `false` - Keep transparency where the output format and reader can handle it.
+  - `true` - Remove transparency to avoid rendering problems on Kindle eInk devices.
+  - For Kindle output this behavior is applied automatically, even if the option is `false`.
+  - Use this when transparent illustrations, logos, or UI-like graphics show dark boxes, missing areas, or other artifacts on eInk readers.
+
+- **`scale_factor`** - Resizes all non-cover images by a multiplier.
+  - `1.0` - Keep original size.
+  - `< 1.0` - Shrink images to reduce file size.
+  - `> 1.0` - Enlarge images.
+  - Use values below `1.0` when books contain oversized images and output size matters. Avoid enlarging unless the source images are intentionally small, because this cannot add detail.
+
+- **`optimize`** - Re-encodes supported raster images to reduce size and normalize output.
+  - JPEG images are only re-encoded when the detected source quality is higher than `jpeg_quality_level`.
+  - PNG images are re-encoded with best compression.
+  - Grayscale JPEGs are detected and encoded as grayscale when possible.
+  - For Kindle output, some image conversion still happens even with `optimize: false` because Kindle-compatible output requires JPEG raster images and rasterized SVG.
+  - Use `true` for most books. Set it to `false` if you want to preserve original files as much as possible or if a specific image starts failing only after processing.
+
+- **`jpeg_quality_level`** - Target JPEG quality used when JPEG images must be re-encoded.
+  - Lower values create smaller files with more visible compression artifacts.
+  - Higher values preserve more detail but increase output size.
+  - For Kindle output this also affects PNG/GIF-to-JPEG conversion and SVG rasterization, not just optimized source JPEGs.
+  - A practical range is usually `70-85`; use higher values for image-heavy books, comics, or covers where artifacts are more noticeable.
+
+- **`screen.width` / `screen.height`** - Target device screen size used for image-related decisions.
+  - Affects cover resizing.
+  - Used when rasterizing SVG images for Kindle output.
+  - Set these to your main target device if you care about Kindle sizing behavior; otherwise the defaults are a reasonable general-purpose baseline.
+
+**Format Notes:**
+
+- Kindle output normalizes decodable raster images to JPEG.
+- SVG images stay as SVG in EPUB output, but are rasterized for Kindle output.
+- For Kindle output, `cover.resize: none` is effectively treated as `keepAR`.
+- Cover images are not affected by `scale_factor`; they use the separate `cover.resize` rules below.
+
 ### Cover Image Configuration
 
 ```yaml
@@ -555,6 +599,20 @@ document:
       # Resize mode: none, keepAR, stretch
       resize: stretch
 ```
+
+**Cover Options:**
+
+- **`generate`** - Create a fallback cover when the source book has no cover.
+  - Use this when your library software or reader expects every book to have a cover.
+  - For Amazon/Kindle output this is effectively always enabled automatically.
+
+- **`default_image_path`** - Path to a custom image used when a generated/default cover is needed.
+  - Use this when you want a branded fallback cover instead of the built-in one.
+
+- **`resize`** - Controls how the cover is fitted to `screen.width` and `screen.height`.
+  - **`none`** - Keep the cover at its original size. Use this when your source covers are already prepared for the target device. For Kindle output this is effectively changed to `keepAR`.
+  - **`keepAR`** - Resize only when the cover is shorter than the target height, preserving aspect ratio. Use this when you want to avoid distortion but still prevent undersized covers.
+  - **`stretch`** - Force the cover to exactly match the configured width and height. Use this when you need a predictable full-screen cover and do not mind possible distortion.
 
 ### Footnotes Processing
 
