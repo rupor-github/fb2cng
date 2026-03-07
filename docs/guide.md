@@ -889,9 +889,7 @@ With the default configuration:
 - `"Hello,"\t— said John` -> `"Hello," — said John`
 - `"Hello,"— said John` -> unchanged, because there is no whitespace before the dash
 
-This is primarily useful for dialogue punctuation conventions where spacing before the dash must be normalized consistently.
-
-If you need a non-breaking space before the dialogue dash, set `to` accordingly.
+This is primarily useful for dialogue punctuation conventions where spacing before the dash must be normalized consistently. It can also help enforce Russian line-breaking rules by using a non-breaking space before the dialogue dash.
 
 ### Page Map
 
