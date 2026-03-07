@@ -13,7 +13,7 @@
 
 ## Introduction
 
-**fb2cng** (FictionBook to Next Generation) is a complete rewrite of [fb2converter](https://github.com/rupor-github/fb2converter), designed to convert FB2 (FictionBook) files to various e-book formats including EPUB2, EPUB3, KEPUB, and KFX.
+**fb2cng** (FictionBook converter - Next Generation) is a complete rewrite of [fb2converter](https://github.com/rupor-github/fb2converter), designed to convert FB2 (FictionBook) files to various e-book formats including EPUB2, EPUB3, KEPUB, and KFX.
 
 ### Supported Output Formats
 
@@ -771,6 +771,69 @@ document:
       from: "‐‑−–—―"
       to: " "
 ```
+
+These transformations are intended for cleanup of legacy FB2 markup where various dash-like characters and spacing conventions are used inconsistently.
+
+The default values in the sample configuration are not arbitrary. They reflect the defaults that have proven practical over years of real-world usage with older FB2 libraries and reader workflows.
+
+fb2cng applies them in this order: `speech`, then `dashes`, then `dialogue`.
+
+All three options have the same structure:
+
+- `enable`: turn the transformation on or off
+- `from`: a set of characters to match; every character in this string is treated as an allowed source variant
+- `to`: replacement text inserted by the transformation
+
+By default, `from: "‐‑−–—―"` means "treat any of these dash-like Unicode characters as equivalent input".
+
+**Important scope limitation:** text transformations are applied only to regular paragraph content in section bodies. They are not applied to titles, subtitles, poems, cites, epigraphs, tables, or other special structures.
+
+#### `speech`
+
+Normalizes direct-speech markers at the **start of a text segment**.
+
+It only matches when the very first character is one of the `from` characters. fb2cng then removes that opening dash and any spaces immediately following it, and replaces the whole prefix with `to`.
+
+With the default configuration:
+
+- `—Text` -> `— Text`
+- `-   Text` -> `— Text`
+- `  — Text` -> unchanged, because the dash is not the first character
+- `Text - speech marker` -> unchanged, because this transformation only works at the beginning
+
+Use this when old FB2 files start dialogue paragraphs with inconsistent dash characters or missing space after the opening dash.
+
+#### `dashes`
+
+Normalizes dashes that are surrounded by whitespace on both sides.
+
+fb2cng scans the text and replaces any character from `from` only when it has whitespace before it and whitespace after it. This is useful for cases such as author-speech separators or spaced dashes in the middle of a sentence.
+
+With the default configuration:
+
+- `word - word` -> `word — word`
+- `word – word` -> `word — word`
+- `word-word` -> unchanged
+- `— word` -> unchanged
+- `word —` -> unchanged
+
+Use this when the source mixes hyphen-minus, en dash, em dash, and similar characters between words.
+
+#### `dialogue`
+
+Normalizes whitespace immediately **before** an interior dialogue dash.
+
+fb2cng looks for a run of whitespace followed by one of the `from` characters. When found, it keeps the dash itself and replaces the preceding whitespace with `to`.
+
+With the default configuration:
+
+- `"Hello,"   — said John` -> `"Hello," — said John`
+- `"Hello,"\t— said John` -> `"Hello," — said John`
+- `"Hello,"— said John` -> unchanged, because there is no whitespace before the dash
+
+This is primarily useful for dialogue punctuation conventions where spacing before the dash must be normalized consistently.
+
+If you need a non-breaking space before the dialogue dash, set `to` accordingly.
 
 ### Page Map
 
