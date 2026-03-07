@@ -952,17 +952,23 @@ logging:
 
 ### Configuration Loading
 
-1. **No config file** - Uses built-in defaults
-2. **Custom config** - Specify with `-c` flag: `fbc -c myconfig.yaml convert ...`
-3. **Merged config** - Your settings override defaults, missing values use defaults
+fb2cng always starts from the built-in default configuration embedded into the program.
 
-### Getting Default Configuration
+When you pass `-c myconfig.yaml`, that file is loaded on top of the defaults:
 
-```bash
-fbc dumpconfig --default default.yaml
-```
+1. Embedded defaults are loaded first
+2. Values present in your custom YAML override the corresponding default values
+3. Values you do not specify remain at their default values
 
-This provides a complete template with all available options and their default values.
+So the configuration actually used during conversion is always the **merged active configuration**, not "your file only".
+
+Examples:
+
+- No config file: `fbc convert book.fb2` -> use embedded defaults as-is
+- Custom config: `fbc -c myconfig.yaml convert book.fb2` -> use defaults plus your overrides
+- Dump default config template: `fbc dumpconfig --default default.yaml`
+- Dump merged active config: `fbc -c myconfig.yaml dumpconfig active.yaml`
+- Dump merged active config to screen: `fbc -c myconfig.yaml dumpconfig`
 
 ### Configuration Best Practices
 
