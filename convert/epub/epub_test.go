@@ -3758,3 +3758,33 @@ func TestConvertToXHTML_SplitSectionContent(t *testing.T) {
 		t.Error("split chapter should have id='sub1' on wrapper div")
 	}
 }
+
+func TestAppendParagraphInlineRecoversNestedInlineTextChildren(t *testing.T) {
+	c := &content.Content{}
+	parent := etree.NewElement("p")
+
+	appendParagraphInline(parent, c, &fb2.Paragraph{
+		Text: []fb2.InlineSegment{{
+			Kind: fb2.InlineText,
+			Children: []fb2.InlineSegment{
+				{Kind: fb2.InlineText, Text: "Recovered text"},
+				{
+					Kind:     fb2.InlineStrong,
+					Children: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: " bold"}},
+				},
+			},
+		}},
+	})
+
+	if got := parent.Text(); got != "Recovered text" {
+		t.Fatalf("parent text = %q, want %q", got, "Recovered text")
+	}
+
+	strong := parent.SelectElement("strong")
+	if strong == nil {
+		t.Fatal("expected recovered strong element")
+	}
+	if got := strong.Text(); got != " bold" {
+		t.Fatalf("strong text = %q, want %q", got, " bold")
+	}
+}

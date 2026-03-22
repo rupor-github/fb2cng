@@ -1203,6 +1203,9 @@ func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inl
 	switch seg.Kind {
 	case fb2.InlineText:
 		appendInlineText(parent, c, seg.Text, hyphenate)
+		for _, child := range seg.Children {
+			appendInlineSegment(parent, c, &child, hyphenate)
+		}
 	case fb2.InlineStrong:
 		strong := parent.CreateElement("strong")
 		for _, child := range seg.Children {

@@ -343,7 +343,7 @@ func (fb *FictionBook) FilterReferencedImages(allImages BookImages, links Revers
 	log.Debug("Filtered images index", zap.Int("total", len(allImages)), zap.Int("referenced", len(filtered)))
 	for id, img := range allImages {
 		if _, exists := filtered[id]; !exists {
-			log.Debug("Excluding unreferenced image", zap.String("id", id), zap.String("type", img.MimeType))
+			log.Warn("Excluding unreferenced image", zap.String("id", id), zap.String("type", img.MimeType))
 		}
 	}
 

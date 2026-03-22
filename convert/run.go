@@ -327,7 +327,7 @@ func processArchive(ctx context.Context, path, pathIn, pathOut, dst string, form
 				pathInArchive = n
 			} else {
 				n, _ = ianaindex.IANA.Name(cp)
-				log.Warn("Unable to convert archive name from specified encoding",
+				log.Warn("Unable to convert name in archive from specified encoding",
 					zap.String("charset", n), zap.String("path", pathInArchive), zap.Error(err))
 			}
 		}

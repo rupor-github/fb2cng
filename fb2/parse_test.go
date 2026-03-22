@@ -1,12 +1,15 @@
 package fb2
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/beevik/etree"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest"
 )
 
@@ -583,5 +586,86 @@ func TestParagraphSpecialFlag(t *testing.T) {
 	}
 	if citePara.Special {
 		t.Error("Cite paragraph should have Special=false")
+	}
+}
+
+func TestParseParagraphWarnsOnInvalidNestedParagraph(t *testing.T) {
+	var buf bytes.Buffer
+	core := zapcore.NewCore(
+		zapcore.NewJSONEncoder(zap.NewDevelopmentEncoderConfig()),
+		zapcore.AddSync(&buf),
+		zapcore.WarnLevel,
+	)
+	log := zap.New(core)
+
+	xml := `<?xml version="1.0" encoding="utf-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <description>
+    <title-info>
+      <author><first-name>Test</first-name><last-name>Author</last-name></author>
+      <book-title>Test</book-title>
+    </title-info>
+    <document-info>
+      <author><first-name>Doc</first-name><last-name>Creator</last-name></author>
+      <date>2024-01-01</date>
+    </document-info>
+  </description>
+  <body>
+    <section>
+      <p><p>Recovered</p></p>
+    </section>
+  </body>
+</FictionBook>`
+
+	doc := etree.NewDocument()
+	if err := doc.ReadFromString(xml); err != nil {
+		t.Fatalf("Failed to parse XML: %v", err)
+	}
+
+	book, err := ParseBookXML(doc, nil, log)
+	if err != nil {
+		t.Fatalf("ParseBookXML() error = %v", err)
+	}
+
+	if len(book.Bodies) != 1 || len(book.Bodies[0].Sections) != 1 || len(book.Bodies[0].Sections[0].Content) != 1 {
+		t.Fatalf("unexpected parsed structure: %+v", book.Bodies)
+	}
+
+	para := book.Bodies[0].Sections[0].Content[0].Paragraph
+	if para == nil {
+		t.Fatal("expected paragraph")
+	}
+	if got := para.AsPlainText(); got != "Recovered" {
+		t.Fatalf("paragraph text = %q, want %q", got, "Recovered")
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, `"M":"Invalid inline structure, recovering content"`) {
+		t.Fatal("expected warning for invalid nested paragraph")
+	}
+	if !strings.Contains(output, `"container":"p"`) {
+		t.Fatalf("warning output missing container field: %s", output)
+	}
+	if !strings.Contains(output, `"tag":"p"`) {
+		t.Fatalf("warning output missing tag field: %s", output)
+	}
+}
+
+func TestParseTableCellDoesNotWarnOnValidInlineMarkup(t *testing.T) {
+	var buf bytes.Buffer
+	core := zapcore.NewCore(
+		zapcore.NewJSONEncoder(zap.NewDevelopmentEncoderConfig()),
+		zapcore.AddSync(&buf),
+		zapcore.WarnLevel,
+	)
+	log := zap.New(core)
+
+	el := mustElement(t, `<td><strong>Hello</strong> <emphasis>world</emphasis></td>`)
+	if _, err := parseTableCell(el, log); err != nil {
+		t.Fatalf("parseTableCell() error = %v", err)
+	}
+
+	if strings.Contains(buf.String(), "Invalid inline structure") {
+		t.Fatalf("unexpected warning output: %s", buf.String())
 	}
 }

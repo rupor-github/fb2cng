@@ -311,10 +311,28 @@ var knownTextTags = map[string]bool{
 	"annotation":  true,
 }
 
+// inlineTags is the set of FB2 elements allowed inside mixed inline content
+// such as paragraphs and table cells. Other child elements are recovered with a warning.
+var inlineTags = map[string]bool{
+	"strong":        true,
+	"emphasis":      true,
+	"style":         true,
+	"a":             true,
+	"strikethrough": true,
+	"sub":           true,
+	"sup":           true,
+	"code":          true,
+	"image":         true,
+}
+
 // isKnownTextTag checks if a tag is a known FB2 text-containing element
 // that could reasonably be converted to a paragraph when found unexpectedly
 func isKnownTextTag(tag string) bool {
 	return knownTextTags[tag]
+}
+
+func isInlineTag(tag string) bool {
+	return inlineTags[tag]
 }
 
 // extractAllText recursively extracts all text content from an element,
@@ -416,11 +434,11 @@ func parseParagraph(el *etree.Element, special bool, log *zap.Logger) Paragraph 
 		Lang:    xmlLang(el),
 		Special: special,
 	}
-	para.Text = parseInlineSegments(el, log)
+	para.Text = parseInlineSegments(el, el.Tag, log)
 	return para
 }
 
-func parseInlineSegments(parent *etree.Element, log *zap.Logger) []InlineSegment {
+func parseInlineSegments(parent *etree.Element, containerTag string, log *zap.Logger) []InlineSegment {
 	var segments []InlineSegment
 	for _, node := range parent.Child {
 		switch token := node.(type) {
@@ -430,6 +448,12 @@ func parseInlineSegments(parent *etree.Element, log *zap.Logger) []InlineSegment
 			}
 			segments = append(segments, InlineSegment{Kind: InlineText, Text: token.Data})
 		case *etree.Element:
+			if !isInlineTag(token.Tag) {
+				log.Warn("Invalid inline structure, recovering content",
+					zap.String("container", containerTag),
+					zap.String("parent", parent.Tag),
+					zap.String("tag", token.Tag))
+			}
 			kind := mapInlineKind(token.Tag)
 			segment := InlineSegment{
 				Kind:     kind,
@@ -443,7 +467,7 @@ func parseInlineSegments(parent *etree.Element, log *zap.Logger) []InlineSegment
 				img := parseInlineImage(token, log)
 				segment.Image = &img
 			} else {
-				segment.Children = parseInlineSegments(token, log)
+				segment.Children = parseInlineSegments(token, containerTag, log)
 			}
 			segments = append(segments, segment)
 		}
@@ -750,7 +774,7 @@ func parseTableCell(el *etree.Element, log *zap.Logger) (TableCell, error) {
 	}
 	cell.Align = el.SelectAttrValue("align", "")
 	cell.VAlign = el.SelectAttrValue("valign", "")
-	cell.Content = parseInlineSegments(el, log)
+	cell.Content = parseInlineSegments(el, el.Tag, log)
 	return cell, nil
 }
 
