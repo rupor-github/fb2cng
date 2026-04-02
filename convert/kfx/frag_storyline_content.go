@@ -9,16 +9,6 @@ import (
 	"fbc/fb2"
 )
 
-// maxStorylineSplitDepth controls the maximum section depth at which titled sections
-// become separate storylines. Sections at this depth or shallower with titles get
-// their own storyline; deeper sections are processed inline regardless of title.
-//
-// Value of 2 means:
-//   - Depth 1 (top-level sections): titled sections → separate storylines
-//   - Depth 2 (nested in depth-1): titled sections → separate storylines
-//   - Depth 3+: processed inline (same storyline as parent)
-const maxStorylineSplitDepth = 2
-
 // processStorylineSectionContent processes FB2 section content for a single storyline.
 //
 // depth is the section nesting depth (1..n) used for:
@@ -35,8 +25,9 @@ const maxStorylineSplitDepth = 2
 // storylineRootDepth is the depth where the current storyline started.
 // KP3 normalizes nested wrapper margins relative to this depth.
 //
-// Titled nested sections up to maxStorylineSplitDepth are collected for the caller to
-// process as separate storylines, while deeper sections are processed inline.
+// Titled nested sections whose heading depth has page-break-before: always in CSS
+// are collected for the caller to process as separate storylines, while other
+// titled sections are processed inline.
 //
 // Parameters:
 //   - nestedTitledSections: receives titled nested sections that should become separate storylines
@@ -259,9 +250,9 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 
 			nextDepth := childDepth
 
-			// Only split storylines for titled sections up to maxStorylineSplitDepth.
-			// Deeper sections are processed inline regardless of title.
-			shouldSplit := nestedSection.HasTitle() && depth < maxStorylineSplitDepth
+			// Match EPUB behavior: nested titled sections become separate storylines only
+			// when their heading depth is configured to page-break-before: always.
+			shouldSplit := nestedSection.HasTitle() && c.Book.SectionNeedsBreak(nextDepth)
 
 			if shouldSplit {
 				// Titled section within split depth -> becomes a separate storyline

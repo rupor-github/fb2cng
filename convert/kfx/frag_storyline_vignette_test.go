@@ -133,6 +133,7 @@ func TestVignettePlacement_ValidNesting(t *testing.T) {
 		},
 		VignetteIDs: vignetteIDs,
 	}
+	book.SetSectionPageBreaks(map[int]bool{2: true})
 
 	c := &content.Content{
 		Book:         book,
@@ -308,6 +309,7 @@ func TestVignettePlacement_InvalidNesting(t *testing.T) {
 		},
 		VignetteIDs: vignetteIDs,
 	}
+	book.SetSectionPageBreaks(map[int]bool{2: true})
 
 	c := &content.Content{
 		Book:         book,
@@ -642,6 +644,7 @@ func TestChapterEndVignetteTransfer(t *testing.T) {
 		},
 		VignetteIDs: vignetteIDs,
 	}
+	book.SetSectionPageBreaks(map[int]bool{2: true})
 
 	c := &content.Content{
 		Book:         book,
