@@ -6,7 +6,7 @@ receive their final `font-size` in KFX output — especially when nested
 inside headings (`h1`–`h6`).
 
 The findings are based on analysis of the decompiled Kindle Previewer source
-(`/home/rupor/amazon/src`) and decoded ION data files (`/home/rupor/amazon/data/`).
+and decoded ION data files.
 
 ## Overview
 

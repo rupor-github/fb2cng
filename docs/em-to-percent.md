@@ -5,7 +5,7 @@ This document describes how and why CSS `em` units on horizontal margins
 values during EPUB-to-KFX conversion by Amazon's Kindle Previewer.
 
 The findings are based on analysis of the decompiled Kindle Previewer source
-(`/home/rupor/amazon/src`) and the Calibre KFXOutput/KFXInput plugins.
+and the Calibre KFXOutput/KFXInput plugins.
 
 ## Overview
 
