@@ -45,6 +45,13 @@ func (m *StyleMapper) MapStylesheet(sheet *css.Stylesheet) ([]StyleDef, []string
 
 	rules := flattenStylesheetForKFX(sheet)
 	for _, rule := range rules {
+		// Pseudo-element rules (::before, ::after) are handled by
+		// extractPseudoContent() which runs before MapStylesheet.
+		// Skip them here to avoid spurious "ignored by mapping_ignorable_patterns"
+		// warnings for the `content` property (which is not a KFX property).
+		if rule.Selector.Pseudo != css.PseudoNone {
+			continue
+		}
 		props, warnings := m.MapRule(rule.Selector, rule.Properties)
 		allWarnings = append(allWarnings, warnings...)
 
