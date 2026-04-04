@@ -1153,7 +1153,7 @@ func appendInlineText(parent *etree.Element, c *content.Content, text string, hy
 	// Standard mode: use original tail-based approach
 	for i, chunk := range chunks {
 		if parent.ChildElements() == nil || len(parent.ChildElements()) == 0 {
-			parent.SetText(chunk)
+			parent.SetText(parent.Text() + chunk)
 		} else {
 			lastChild := parent.ChildElements()[len(parent.ChildElements())-1]
 			lastChild.SetTail(lastChild.Tail() + chunk)

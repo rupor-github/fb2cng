@@ -289,13 +289,11 @@ func parseFlow(el *etree.Element, log *zap.Logger) (Flow, error) {
 		if !ok {
 			continue
 		}
-		item, err := parseFlowItem(child, el.Tag, log)
+		items, err := parseFlowItem(child, el.Tag, log)
 		if err != nil {
 			return flow, err
 		}
-		if item != nil {
-			flow.Items = append(flow.Items, *item)
-		}
+		flow.Items = append(flow.Items, items...)
 	}
 	return flow, nil
 }
@@ -373,58 +371,146 @@ func parseUnexpectedAsParagraph(el *etree.Element, log *zap.Logger) Paragraph {
 	return para
 }
 
-func parseFlowItem(el *etree.Element, parentTag string, log *zap.Logger) (*FlowItem, error) {
+func parseFlowItem(el *etree.Element, parentTag string, log *zap.Logger) ([]FlowItem, error) {
 	switch el.Tag {
 	case "p":
+		if hasBlockChildren(el) {
+			return flattenMalformedParagraph(el, parentTag, log)
+		}
 		para := parseParagraph(el, false, log)
-		return &FlowItem{Kind: FlowParagraph, Paragraph: &para}, nil
+		return []FlowItem{{Kind: FlowParagraph, Paragraph: &para}}, nil
 	case "poem":
 		poem, err := parsePoem(el, log)
 		if err != nil {
 			return nil, err
 		}
 		p := poem
-		return &FlowItem{Kind: FlowPoem, Poem: &p}, nil
+		return []FlowItem{{Kind: FlowPoem, Poem: &p}}, nil
 	case "cite":
 		cite, err := parseCite(el, log)
 		if err != nil {
 			return nil, err
 		}
 		c := cite
-		return &FlowItem{Kind: FlowCite, Cite: &c}, nil
+		return []FlowItem{{Kind: FlowCite, Cite: &c}}, nil
 	case "subtitle":
 		para := parseParagraph(el, true, log)
-		return &FlowItem{Kind: FlowSubtitle, Subtitle: &para}, nil
+		return []FlowItem{{Kind: FlowSubtitle, Subtitle: &para}}, nil
 	case "empty-line":
-		return &FlowItem{Kind: FlowEmptyLine}, nil
+		return []FlowItem{{Kind: FlowEmptyLine}}, nil
 	case "table":
 		table, err := parseTable(el, log)
 		if err != nil {
 			return nil, err
 		}
 		t := table
-		return &FlowItem{Kind: FlowTable, Table: &t}, nil
+		return []FlowItem{{Kind: FlowTable, Table: &t}}, nil
 	case "image":
 		img := parseImage(el, log)
-		return &FlowItem{Kind: FlowImage, Image: &img}, nil
+		return []FlowItem{{Kind: FlowImage, Image: &img}}, nil
 	case "section":
 		section, err := parseSection(el, log)
 		if err != nil {
 			return nil, err
 		}
 		s := section
-		return &FlowItem{Kind: FlowSection, Section: &s}, nil
+		return []FlowItem{{Kind: FlowSection, Section: &s}}, nil
 	default:
 		msg := fmt.Sprintf("Unexpected tag in %s, ", parentTag)
 		// Check if this is a known text-containing tag that we can handle as a paragraph
 		if isKnownTextTag(el.Tag) {
 			log.Warn(msg+"converting to paragraph", zap.String("tag", el.Tag))
 			para := parseUnexpectedAsParagraph(el, log)
-			return &FlowItem{Kind: FlowParagraph, Paragraph: &para}, nil
+			return []FlowItem{{Kind: FlowParagraph, Paragraph: &para}}, nil
 		}
 		log.Warn(msg+"ignoring", zap.String("tag", el.Tag))
 		return nil, nil
 	}
+}
+
+// hasBlockChildren reports whether el contains any child elements that are
+// not valid inline tags, indicating a malformed nesting (e.g. <p> inside <p>).
+func hasBlockChildren(el *etree.Element) bool {
+	for _, node := range el.Child {
+		if child, ok := node.(*etree.Element); ok {
+			if !isInlineTag(child.Tag) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// flattenMalformedParagraph splits a malformed <p> that contains nested block
+// elements (like other <p> tags) into separate FlowItems. Inline content
+// between block elements is collected into its own paragraph. A warning is
+// emitted for each non-inline child encountered.
+func flattenMalformedParagraph(el *etree.Element, parentTag string, log *zap.Logger) ([]FlowItem, error) {
+	var items []FlowItem
+	var segments []InlineSegment
+	idUsed := false
+
+	flush := func() {
+		// Skip segments that consist only of whitespace text.
+		hasContent := false
+		for _, seg := range segments {
+			if seg.Kind != InlineText || strings.TrimSpace(seg.Text) != "" {
+				hasContent = true
+				break
+			}
+		}
+		if !hasContent {
+			segments = nil
+			return
+		}
+
+		para := Paragraph{Text: segments}
+		if !idUsed {
+			para.ID = el.SelectAttrValue("id", "")
+			para.Style = el.SelectAttrValue("style", "")
+			para.Lang = xmlLang(el)
+			idUsed = true
+		}
+		items = append(items, FlowItem{Kind: FlowParagraph, Paragraph: &para})
+		segments = nil
+	}
+
+	for _, node := range el.Child {
+		switch token := node.(type) {
+		case *etree.CharData:
+			if token.Data != "" {
+				segments = append(segments, InlineSegment{Kind: InlineText, Text: token.Data})
+			}
+		case *etree.Element:
+			if isInlineTag(token.Tag) {
+				segments = append(segments, parseInlineElement(token, el.Tag, log))
+			} else {
+				// Block element found inside inline context — flush any
+				// accumulated inline content as a paragraph, then parse
+				// the block element normally.
+				flush()
+				log.Warn("Malformed paragraph structure, recovering content",
+					zap.String("container", parentTag),
+					zap.String("parent", el.Tag),
+					zap.String("tag", token.Tag))
+				blockItems, err := parseFlowItem(token, el.Tag, log)
+				if err != nil {
+					return nil, err
+				}
+				items = append(items, blockItems...)
+			}
+		}
+	}
+	flush()
+
+	// Fallback: if nothing was produced (should not happen in practice),
+	// parse the element as a regular paragraph so content is not lost.
+	if len(items) == 0 {
+		para := parseParagraph(el, false, log)
+		items = append(items, FlowItem{Kind: FlowParagraph, Paragraph: &para})
+	}
+
+	return items, nil
 }
 
 func parseParagraph(el *etree.Element, special bool, log *zap.Logger) Paragraph {
@@ -454,25 +540,32 @@ func parseInlineSegments(parent *etree.Element, containerTag string, log *zap.Lo
 					zap.String("parent", parent.Tag),
 					zap.String("tag", token.Tag))
 			}
-			kind := mapInlineKind(token.Tag)
-			segment := InlineSegment{
-				Kind:     kind,
-				Lang:     xmlLang(token),
-				Name:     token.SelectAttrValue("name", ""),
-				Style:    token.SelectAttrValue("style", ""),
-				Href:     attrValue(token, "xlink", "href"),
-				LinkType: token.SelectAttrValue("type", ""),
-			}
-			if kind == InlineImageSegment {
-				img := parseInlineImage(token, log)
-				segment.Image = &img
-			} else {
-				segment.Children = parseInlineSegments(token, containerTag, log)
-			}
-			segments = append(segments, segment)
+			segments = append(segments, parseInlineElement(token, containerTag, log))
 		}
 	}
 	return segments
+}
+
+// parseInlineElement parses a single XML element as an inline segment.
+// It is used by both parseInlineSegments (for all children) and
+// flattenMalformedParagraph (for inline children only).
+func parseInlineElement(token *etree.Element, containerTag string, log *zap.Logger) InlineSegment {
+	kind := mapInlineKind(token.Tag)
+	segment := InlineSegment{
+		Kind:     kind,
+		Lang:     xmlLang(token),
+		Name:     token.SelectAttrValue("name", ""),
+		Style:    token.SelectAttrValue("style", ""),
+		Href:     attrValue(token, "xlink", "href"),
+		LinkType: token.SelectAttrValue("type", ""),
+	}
+	if kind == InlineImageSegment {
+		img := parseInlineImage(token, log)
+		segment.Image = &img
+	} else {
+		segment.Children = parseInlineSegments(token, containerTag, log)
+	}
+	return segment
 }
 
 func mapInlineKind(tag string) InlineSegmentKind {
@@ -586,13 +679,11 @@ func parseEpigraph(el *etree.Element, log *zap.Logger) (Epigraph, error) {
 			epi.TextAuthors = append(epi.TextAuthors, para)
 			continue
 		}
-		item, err := parseFlowItem(child, el.Tag, log)
+		items, err := parseFlowItem(child, el.Tag, log)
 		if err != nil {
 			return epi, err
 		}
-		if item != nil {
-			epi.Flow.Items = append(epi.Flow.Items, *item)
-		}
+		epi.Flow.Items = append(epi.Flow.Items, items...)
 	}
 	return epi, nil
 }
@@ -630,13 +721,11 @@ func parseSection(el *etree.Element, log *zap.Logger) (Section, error) {
 			subCopy := sub
 			section.Content = append(section.Content, FlowItem{Kind: FlowSection, Section: &subCopy})
 		default:
-			item, err := parseFlowItem(child, el.Tag, log)
+			items, err := parseFlowItem(child, el.Tag, log)
 			if err != nil {
 				return section, err
 			}
-			if item != nil {
-				section.Content = append(section.Content, *item)
-			}
+			section.Content = append(section.Content, items...)
 		}
 	}
 	return section, nil
@@ -721,13 +810,11 @@ func parseCite(el *etree.Element, log *zap.Logger) (Cite, error) {
 			cite.TextAuthors = append(cite.TextAuthors, para)
 			continue
 		}
-		item, err := parseFlowItem(child, el.Tag, log)
+		items, err := parseFlowItem(child, el.Tag, log)
 		if err != nil {
 			return cite, err
 		}
-		if item != nil {
-			cite.Items = append(cite.Items, *item)
-		}
+		cite.Items = append(cite.Items, items...)
 	}
 	return cite, nil
 }

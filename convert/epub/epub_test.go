@@ -3788,3 +3788,39 @@ func TestAppendParagraphInlineRecoversNestedInlineTextChildren(t *testing.T) {
 		t.Fatalf("strong text = %q, want %q", got, " bold")
 	}
 }
+
+func TestAppendInlineTextDoesNotOverwriteConsecutiveText(t *testing.T) {
+	// When an inline element wraps multiple block elements (e.g.
+	// <strong><p>text1</p><p>text2</p></strong>), the parser produces
+	// InlineText segments with children that are rendered consecutively
+	// on the same parent. Verify that text accumulates rather than being
+	// overwritten by later SetText calls.
+	c := &content.Content{}
+	parent := etree.NewElement("p")
+
+	// Simulate what the renderer sees for <strong><p>text1</p><p>text2</p></strong>:
+	// An InlineStrong whose children are two InlineText-with-children segments.
+	appendParagraphInline(parent, c, &fb2.Paragraph{
+		Text: []fb2.InlineSegment{{
+			Kind: fb2.InlineStrong,
+			Children: []fb2.InlineSegment{
+				{
+					Kind:     fb2.InlineText,
+					Children: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "text1"}},
+				},
+				{
+					Kind:     fb2.InlineText,
+					Children: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "text2"}},
+				},
+			},
+		}},
+	})
+
+	strong := parent.SelectElement("strong")
+	if strong == nil {
+		t.Fatal("expected strong element")
+	}
+	if got := strong.Text(); got != "text1text2" {
+		t.Fatalf("strong text = %q, want %q", got, "text1text2")
+	}
+}

@@ -640,14 +640,257 @@ func TestParseParagraphWarnsOnInvalidNestedParagraph(t *testing.T) {
 	}
 
 	output := buf.String()
-	if !strings.Contains(output, `"M":"Invalid inline structure, recovering content"`) {
-		t.Fatal("expected warning for invalid nested paragraph")
+	if !strings.Contains(output, `"M":"Malformed paragraph structure, recovering content"`) {
+		t.Fatalf("expected warning for malformed paragraph, got: %s", output)
 	}
-	if !strings.Contains(output, `"container":"p"`) {
+	if !strings.Contains(output, `"container":"section"`) {
 		t.Fatalf("warning output missing container field: %s", output)
 	}
 	if !strings.Contains(output, `"tag":"p"`) {
 		t.Fatalf("warning output missing tag field: %s", output)
+	}
+}
+
+func TestFlattenMalformedParagraphMultipleInnerParagraphs(t *testing.T) {
+	var buf bytes.Buffer
+	core := zapcore.NewCore(
+		zapcore.NewJSONEncoder(zap.NewDevelopmentEncoderConfig()),
+		zapcore.AddSync(&buf),
+		zapcore.WarnLevel,
+	)
+	log := zap.New(core)
+
+	xml := `<?xml version="1.0" encoding="utf-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <description>
+    <title-info>
+      <author><first-name>Test</first-name><last-name>Author</last-name></author>
+      <book-title>Test</book-title>
+    </title-info>
+    <document-info>
+      <author><first-name>Doc</first-name><last-name>Creator</last-name></author>
+      <date>2024-01-01</date>
+    </document-info>
+  </description>
+  <body>
+    <section>
+      <p><p>First</p><p>Second</p><p>Third</p></p>
+    </section>
+  </body>
+</FictionBook>`
+
+	doc := etree.NewDocument()
+	if err := doc.ReadFromString(xml); err != nil {
+		t.Fatalf("Failed to parse XML: %v", err)
+	}
+
+	book, err := ParseBookXML(doc, nil, log)
+	if err != nil {
+		t.Fatalf("ParseBookXML() error = %v", err)
+	}
+
+	section := book.Bodies[0].Sections[0]
+	if len(section.Content) != 3 {
+		t.Fatalf("expected 3 paragraphs, got %d", len(section.Content))
+	}
+
+	expected := []string{"First", "Second", "Third"}
+	for i, want := range expected {
+		para := section.Content[i].Paragraph
+		if para == nil {
+			t.Fatalf("content[%d]: expected paragraph", i)
+		}
+		if got := para.AsPlainText(); got != want {
+			t.Fatalf("content[%d] text = %q, want %q", i, got, want)
+		}
+	}
+}
+
+func TestFlattenMalformedParagraphMixedInlineAndBlock(t *testing.T) {
+	var buf bytes.Buffer
+	core := zapcore.NewCore(
+		zapcore.NewJSONEncoder(zap.NewDevelopmentEncoderConfig()),
+		zapcore.AddSync(&buf),
+		zapcore.WarnLevel,
+	)
+	log := zap.New(core)
+
+	xml := `<?xml version="1.0" encoding="utf-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <description>
+    <title-info>
+      <author><first-name>Test</first-name><last-name>Author</last-name></author>
+      <book-title>Test</book-title>
+    </title-info>
+    <document-info>
+      <author><first-name>Doc</first-name><last-name>Creator</last-name></author>
+      <date>2024-01-01</date>
+    </document-info>
+  </description>
+  <body>
+    <section>
+      <p>Inline text <strong>bold</strong> <p>Block paragraph</p> trailing</p>
+    </section>
+  </body>
+</FictionBook>`
+
+	doc := etree.NewDocument()
+	if err := doc.ReadFromString(xml); err != nil {
+		t.Fatalf("Failed to parse XML: %v", err)
+	}
+
+	book, err := ParseBookXML(doc, nil, log)
+	if err != nil {
+		t.Fatalf("ParseBookXML() error = %v", err)
+	}
+
+	section := book.Bodies[0].Sections[0]
+	if len(section.Content) != 3 {
+		t.Fatalf("expected 3 items, got %d", len(section.Content))
+	}
+
+	// First: inline text before the block element
+	para0 := section.Content[0].Paragraph
+	if para0 == nil {
+		t.Fatal("content[0]: expected paragraph")
+	}
+	text0 := para0.AsPlainText()
+	if !strings.Contains(text0, "Inline text") || !strings.Contains(text0, "bold") {
+		t.Fatalf("content[0] text = %q, want it to contain 'Inline text' and 'bold'", text0)
+	}
+
+	// Second: the block paragraph
+	para1 := section.Content[1].Paragraph
+	if para1 == nil {
+		t.Fatal("content[1]: expected paragraph")
+	}
+	if got := para1.AsPlainText(); got != "Block paragraph" {
+		t.Fatalf("content[1] text = %q, want %q", got, "Block paragraph")
+	}
+
+	// Third: trailing inline text
+	para2 := section.Content[2].Paragraph
+	if para2 == nil {
+		t.Fatal("content[2]: expected paragraph")
+	}
+	if got := strings.TrimSpace(para2.AsPlainText()); got != "trailing" {
+		t.Fatalf("content[2] text = %q, want %q", got, "trailing")
+	}
+}
+
+func TestFlattenMalformedParagraphDeepNesting(t *testing.T) {
+	log := zaptest.NewLogger(t)
+
+	xml := `<?xml version="1.0" encoding="utf-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <description>
+    <title-info>
+      <author><first-name>Test</first-name><last-name>Author</last-name></author>
+      <book-title>Test</book-title>
+    </title-info>
+    <document-info>
+      <author><first-name>Doc</first-name><last-name>Creator</last-name></author>
+      <date>2024-01-01</date>
+    </document-info>
+  </description>
+  <body>
+    <section>
+      <p><p><p>Deep</p></p></p>
+    </section>
+  </body>
+</FictionBook>`
+
+	doc := etree.NewDocument()
+	if err := doc.ReadFromString(xml); err != nil {
+		t.Fatalf("Failed to parse XML: %v", err)
+	}
+
+	book, err := ParseBookXML(doc, nil, log)
+	if err != nil {
+		t.Fatalf("ParseBookXML() error = %v", err)
+	}
+
+	section := book.Bodies[0].Sections[0]
+	if len(section.Content) != 1 {
+		t.Fatalf("expected 1 paragraph, got %d", len(section.Content))
+	}
+
+	para := section.Content[0].Paragraph
+	if para == nil {
+		t.Fatal("expected paragraph")
+	}
+	if got := para.AsPlainText(); got != "Deep" {
+		t.Fatalf("paragraph text = %q, want %q", got, "Deep")
+	}
+}
+
+func TestParseInlineWrappingBlockElements(t *testing.T) {
+	// When a valid inline element like <strong> wraps block elements like <p>,
+	// hasBlockChildren on the outer <p> returns false (since <strong> is inline).
+	// The block <p> elements inside <strong> are handled by parseInlineSegments
+	// which maps them to InlineText segments with children. This tests that the
+	// parsed structure preserves all text content for the renderer.
+	log := zaptest.NewLogger(t)
+
+	xml := `<?xml version="1.0" encoding="utf-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <description>
+    <title-info>
+      <author><first-name>Test</first-name><last-name>Author</last-name></author>
+      <book-title>Test</book-title>
+    </title-info>
+    <document-info>
+      <author><first-name>Doc</first-name><last-name>Creator</last-name></author>
+      <date>2024-01-01</date>
+    </document-info>
+  </description>
+  <body>
+    <section>
+      <p><strong><p>text1</p><p>text2</p></strong></p>
+    </section>
+  </body>
+</FictionBook>`
+
+	doc := etree.NewDocument()
+	if err := doc.ReadFromString(xml); err != nil {
+		t.Fatalf("Failed to parse XML: %v", err)
+	}
+
+	book, err := ParseBookXML(doc, nil, log)
+	if err != nil {
+		t.Fatalf("ParseBookXML() error = %v", err)
+	}
+
+	section := book.Bodies[0].Sections[0]
+	if len(section.Content) != 1 {
+		t.Fatalf("expected 1 paragraph, got %d", len(section.Content))
+	}
+
+	para := section.Content[0].Paragraph
+	if para == nil {
+		t.Fatal("expected paragraph")
+	}
+
+	// The paragraph should contain a single InlineStrong segment
+	if len(para.Text) != 1 || para.Text[0].Kind != InlineStrong {
+		t.Fatalf("expected single InlineStrong segment, got %+v", para.Text)
+	}
+
+	// The InlineStrong should have two InlineText children (from the two inner <p>)
+	strong := para.Text[0]
+	if len(strong.Children) != 2 {
+		t.Fatalf("expected 2 children in strong, got %d", len(strong.Children))
+	}
+	for i, child := range strong.Children {
+		if child.Kind != InlineText {
+			t.Fatalf("child[%d] kind = %v, want InlineText", i, child.Kind)
+		}
+	}
+
+	// Verify that all text is recoverable via AsPlainText
+	got := para.AsPlainText()
+	if !strings.Contains(got, "text1") || !strings.Contains(got, "text2") {
+		t.Fatalf("paragraph plain text = %q, want it to contain both 'text1' and 'text2'", got)
 	}
 }
 
