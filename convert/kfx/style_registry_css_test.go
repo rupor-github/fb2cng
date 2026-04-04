@@ -1,6 +1,7 @@
 package kfx
 
 import (
+	"math"
 	"reflect"
 	"testing"
 
@@ -236,5 +237,128 @@ func TestConvertFontSizeToEm(t *testing.T) {
 				t.Errorf("convertFontSizeToEm(%v) = %v, want %v", tt.input, got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestAccumulatedFontSize_SubInHeading(t *testing.T) {
+	// Test the accumulated font-size tracking for sub inside heading context.
+	// This is the core bug: sub { font-size: 25% } inside h1 should produce
+	// a correct rem value, not the wrong 0.40625rem from mergeRelative with
+	// compressed rem values.
+	//
+	// Setup:
+	//   DefaultStyleRegistry h1 font-size: 2.0rem (browser default, RemToFontSizeMultiplier → 2.6)
+	//   CSS .chapter-title-header-next font-size: 200% → PercentToRem(200) = 1.625rem (mult 2.0)
+	//   CSS sub font-size: 25% → PercentToRem(25) = 0.25rem, h1--sub gets 0.25em (from propagation)
+	//
+	// Push("h1") → fontSizeAccumEm = 1.0 × 2.6 = 2.6 (h1's 2.0rem → multiplier 2.6)
+	// resolveProperties("", "chapter-title-header-next sub"):
+	//   chapter-title-header-next: 1.625rem → mult 2.0 → localAccumEm = 1.0 × 2.0 = 2.0
+	//     Wait — the base is sc.fontSizeAccumEm = 2.6. So localAccumEm = 2.6 × 2.0 = 5.2
+	//     No! rem resets to base × mult: localAccumEm = sc.fontSizeAccumEm × 2.0 = 2.6 × 2.0 = 5.2
+	//   h1--sub: 0.25em → localAccumEm = 5.2 × 0.25 = 1.3
+	//   PercentToRem(1.3 × 100) = PercentToRem(130) = 1.1875rem
+	cssData := []byte(`
+		sub { font-size: 25%; vertical-align: baseline; }
+		.chapter-title-header-next { font-size: 200%; }
+	`)
+	sr, _ := parseAndCreateRegistry(cssData, nil, zap.NewNop())
+
+	// Create context and push into h1 scope
+	ctx := NewStyleContext(sr)
+	ctx = ctx.Push("h1", "")
+
+	// Verify fontSizeAccumEm after Push("h1")
+	// h1 has font-size: 2.0rem (DefaultStyleRegistry base, no CSS override in test)
+	// RemToFontSizeMultiplier(2.0) = ((2.0-1)*160/100)+1 = 2.6
+	// fontSizeAccumEm = 1.0 × 2.6 = 2.6
+	expectedAccum := 2.6
+	if math.Abs(ctx.fontSizeAccumEm-expectedAccum) > 1e-9 {
+		t.Errorf("after Push(h1): fontSizeAccumEm = %v, want %v", ctx.fontSizeAccumEm, expectedAccum)
+	}
+
+	// Resolve inline properties for "chapter-title-header-next sub"
+	resolved := ctx.resolveProperties("", "chapter-title-header-next sub")
+	fs, ok := resolved[SymFontSize]
+	if !ok {
+		t.Fatal("resolved properties missing font-size")
+	}
+
+	val, unit, ok := measureParts(fs)
+	if !ok {
+		t.Fatalf("font-size is not a dimension: %v", fs)
+	}
+	if unit != SymUnitRem {
+		t.Errorf("font-size unit = %v, want rem", unit)
+	}
+
+	// The corrected value:
+	// localAccumEm = 2.6 (from h1) × 2.0 (chapter-title-header-next) = 5.2
+	// then × 0.25 (h1--sub em) = 1.3
+	// PercentToRem(130) = 1 + (130-100)/160 = 1.1875rem
+	expectedRem := PercentToRem(2.6 * 2.0 * 0.25 * 100) // PercentToRem(130) = 1.1875
+	if math.Abs(val-expectedRem) > 1e-6 {
+		t.Errorf("sub-in-heading font-size = %.6f rem, want %.6f rem",
+			val, expectedRem)
+	}
+
+	// Critical: verify the old buggy value (0.40625) is NOT produced
+	if math.Abs(val-0.40625) < 1e-6 {
+		t.Error("font-size is still the old buggy value 0.40625rem; accumulated em tracking is not working")
+	}
+}
+
+func TestAccumulatedFontSize_PushAccumulation(t *testing.T) {
+	// Test that fontSizeAccumEm is correctly accumulated through Push calls.
+	// DefaultStyleRegistry h1 = 2.0rem, h2 = 1.125rem, p = 1.0rem (no explicit font-size)
+	sr, _ := parseAndCreateRegistry(nil, nil, zap.NewNop())
+
+	ctx := NewStyleContext(sr)
+	if ctx.fontSizeAccumEm != 1.0 {
+		t.Errorf("root fontSizeAccumEm = %v, want 1.0", ctx.fontSizeAccumEm)
+	}
+
+	// Push h1: 2.0rem → RemToFontSizeMultiplier(2.0) = 2.6
+	h1Ctx := ctx.Push("h1", "")
+	expectedH1 := RemToFontSizeMultiplier(2.0) // 2.6
+	if math.Abs(h1Ctx.fontSizeAccumEm-expectedH1) > 1e-9 {
+		t.Errorf("after Push(h1): fontSizeAccumEm = %v, want %v", h1Ctx.fontSizeAccumEm, expectedH1)
+	}
+
+	// Push h2: 1.5rem → RemToFontSizeMultiplier(1.5) = 1.8
+	h2Ctx := ctx.Push("h2", "")
+	expectedH2 := RemToFontSizeMultiplier(1.5) // 1.8
+	if math.Abs(h2Ctx.fontSizeAccumEm-expectedH2) > 1e-9 {
+		t.Errorf("after Push(h2): fontSizeAccumEm = %v, want %v", h2Ctx.fontSizeAccumEm, expectedH2)
+	}
+}
+
+func TestAccumulatedFontSize_NoEmNoCorrection(t *testing.T) {
+	// When no em font-size is involved (all rem), the post-correction should NOT
+	// modify the font-size. This ensures the fix only triggers for the specific case.
+	cssData := []byte(`.large { font-size: 200%; }`)
+	sr, _ := parseAndCreateRegistry(cssData, nil, zap.NewNop())
+
+	ctx := NewStyleContext(sr)
+
+	// Resolve with only rem-based classes — no em, no correction needed
+	resolved := ctx.resolveProperties("p", "large")
+	fs, ok := resolved[SymFontSize]
+	if !ok {
+		t.Fatal("resolved properties missing font-size")
+	}
+
+	val, unit, ok := measureParts(fs)
+	if !ok {
+		t.Fatalf("font-size is not a dimension: %v", fs)
+	}
+	if unit != SymUnitRem {
+		t.Errorf("font-size unit = %v, want rem", unit)
+	}
+
+	// Should be PercentToRem(200) = 1.625rem (unchanged, no em correction)
+	expected := PercentToRem(200)
+	if math.Abs(val-expected) > 1e-6 {
+		t.Errorf("font-size = %v rem, want %v rem", val, expected)
 	}
 }

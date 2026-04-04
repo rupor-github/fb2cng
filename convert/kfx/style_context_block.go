@@ -27,6 +27,9 @@ func (sc StyleContext) PushBlock(tag, classes string) StyleContext {
 	newInherited := make(map[KFXSymbol]any, len(sc.inherited))
 	maps.Copy(newInherited, sc.inherited)
 
+	// Track accumulated font-size (same logic as Push)
+	newAccumEm := sc.fontSizeAccumEm
+
 	// Copy existing margin origins (deep copy to preserve contributor sets)
 	newMarginOrigins := make(map[KFXSymbol]*marginOrigin, len(sc.marginOrigins))
 	for sym, origin := range sc.marginOrigins {
@@ -92,6 +95,10 @@ func (sc StyleContext) PushBlock(tag, classes string) StyleContext {
 			for sym, val := range resolved.Properties {
 				mergeBlockProperty(sym, val, tag)
 			}
+			// Update accumulated font-size from tag
+			if fs, ok := resolved.Properties[SymFontSize]; ok {
+				newAccumEm = sc.fontSizeAccumEm * FontSizeMultiplier(fs)
+			}
 		}
 	}
 
@@ -107,6 +114,15 @@ func (sc StyleContext) PushBlock(tag, classes string) StyleContext {
 					for sym, val := range resolved.Properties {
 						mergeBlockProperty(sym, val, class)
 					}
+					// Update accumulated font-size from class
+					if fs, ok := resolved.Properties[SymFontSize]; ok {
+						mult := FontSizeMultiplier(fs)
+						if _, unit, ok := measureParts(fs); ok && unit == SymUnitEm {
+							newAccumEm *= mult
+						} else {
+							newAccumEm = sc.fontSizeAccumEm * mult
+						}
+					}
 				}
 			}
 		}
@@ -117,11 +133,12 @@ func (sc StyleContext) PushBlock(tag, classes string) StyleContext {
 
 	// Build the new context
 	return StyleContext{
-		registry:      sc.registry,
-		inherited:     newInherited,
-		marginOrigins: newMarginOrigins,
-		scopes:        newScopes,
-		emptyLine:     sc.emptyLine, // Preserve empty-line tracking
+		registry:        sc.registry,
+		inherited:       newInherited,
+		marginOrigins:   newMarginOrigins,
+		fontSizeAccumEm: newAccumEm,
+		scopes:          newScopes,
+		emptyLine:       sc.emptyLine, // Preserve empty-line tracking
 	}
 }
 

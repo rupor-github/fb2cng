@@ -80,6 +80,26 @@ type StyleContext struct {
 	// Full scope chain from root to current level (for debugging/future use)
 	scopes []StyleScope
 
+	// fontSizeAccumEm tracks the accumulated CSS font-size multiplier chain from
+	// the root to the current scope level. This represents the TRUE accumulated
+	// font-size in em units, before KP3's PercentToRem compression.
+	//
+	// KP3's pipeline works by accumulating font-size multipliers in em units through
+	// the DOM tree (e.g., body 1.0 × h1 2.0 × span 2.0 = 4.0em), then dividing by
+	// the most-common font-size and converting to rem at the end.
+	//
+	// Our pipeline compresses font-sizes to rem independently at each level via
+	// PercentToRem (e.g., 200% → 1.625rem), which loses the true multiplier.
+	// When an inline element like sub has font-size in em (relative), the stylelist
+	// mergeRelative rule multiplies em × compressed_rem, producing wrong results.
+	//
+	// This field enables correct em-to-rem resolution: when resolveProperties()
+	// encounters an em font-size that was merged against a compressed rem, it can
+	// recompute using the true accumulated em chain.
+	//
+	// Starts at 1.0 (root level = body default font-size).
+	fontSizeAccumEm float64
+
 	// emptyLine holds shared state for empty line margin handling.
 	// This is a pointer to allow mutation across value copies of StyleContext.
 	// All contexts within a processing scope share the same emptyLineState.
@@ -90,11 +110,12 @@ type StyleContext struct {
 // Empty-line tracking is enabled by default for all contexts.
 func NewStyleContext(registry *StyleRegistry) StyleContext {
 	return StyleContext{
-		registry:      registry,
-		inherited:     make(map[KFXSymbol]any),
-		marginOrigins: make(map[KFXSymbol]*marginOrigin),
-		scopes:        nil,
-		emptyLine:     &emptyLineState{}, // Shared empty line state
+		registry:        registry,
+		inherited:       make(map[KFXSymbol]any),
+		marginOrigins:   make(map[KFXSymbol]*marginOrigin),
+		fontSizeAccumEm: 1.0, // Root level: body default font-size is 1.0em
+		scopes:          nil,
+		emptyLine:       &emptyLineState{}, // Shared empty line state
 	}
 }
 
@@ -128,6 +149,11 @@ func (sc StyleContext) Push(tag, classes string) StyleContext {
 	newInherited := make(map[KFXSymbol]any, len(sc.inherited))
 	maps.Copy(newInherited, sc.inherited)
 
+	// Track accumulated font-size: each CSS font-size (percentage/em) is relative
+	// to the parent. When a class overrides the tag's font-size, the accumulated
+	// value resets to parentAccumEm × newMultiplier.
+	newAccumEm := sc.fontSizeAccumEm
+
 	// Add inherited properties from tag defaults
 	if tag != "" && sc.registry != nil {
 		if def, ok := sc.registry.Get(tag); ok {
@@ -136,6 +162,10 @@ func (sc StyleContext) Push(tag, classes string) StyleContext {
 				if isInheritedProperty(sym) {
 					newInherited[sym] = val
 				}
+			}
+			// Update accumulated font-size from tag's font-size
+			if fs, ok := resolved.Properties[SymFontSize]; ok {
+				newAccumEm = sc.fontSizeAccumEm * FontSizeMultiplier(fs)
 			}
 		}
 	}
@@ -154,6 +184,18 @@ func (sc StyleContext) Push(tag, classes string) StyleContext {
 							newInherited[sym] = val
 						}
 					}
+					// Update accumulated font-size from class's font-size.
+					// CSS class overrides tag: reset to parentAccumEm × classMultiplier.
+					if fs, ok := resolved.Properties[SymFontSize]; ok {
+						mult := FontSizeMultiplier(fs)
+						if _, unit, ok := measureParts(fs); ok && unit == SymUnitEm {
+							// em: compounds with current accumulated
+							newAccumEm *= mult
+						} else {
+							// rem (from PercentToRem): resets to parent × multiplier
+							newAccumEm = sc.fontSizeAccumEm * mult
+						}
+					}
 				}
 			}
 		}
@@ -163,9 +205,10 @@ func (sc StyleContext) Push(tag, classes string) StyleContext {
 	newScopes := append(sc.scopes, StyleScope{Tag: tag, Classes: classList})
 
 	return StyleContext{
-		registry:  sc.registry,
-		inherited: newInherited,
-		scopes:    newScopes,
-		emptyLine: sc.emptyLine, // Preserve empty-line tracking
+		registry:        sc.registry,
+		inherited:       newInherited,
+		fontSizeAccumEm: newAccumEm,
+		scopes:          newScopes,
+		emptyLine:       sc.emptyLine, // Preserve empty-line tracking
 	}
 }

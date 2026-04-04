@@ -219,6 +219,51 @@ func PercentToRem(percent float64) float64 {
 	return RoundSignificant(percent/100, SignificantFigures)
 }
 
+// RemToFontSizeMultiplier recovers the original CSS font-size multiplier from a
+// PercentToRem-compressed rem value.
+//
+// This is the inverse of PercentToRem:
+//   - For rem > 1: percent = (rem - 1) * FontSizeCompressionFactor + 100, multiplier = percent / 100
+//   - For rem <= 1: multiplier = rem (direct, no compression was applied)
+//
+// The multiplier represents the original CSS font-size as a factor relative to
+// the parent's font-size. For example:
+//   - 1.625rem → 2.0 (from CSS 200%)
+//   - 1.25rem → 1.4 (from CSS 140%)
+//   - 2.25rem → 3.0 (from CSS 300%)
+//   - 0.75rem → 0.75 (from CSS 75%)
+//
+// This is used for accumulated font-size tracking: when computing inline element
+// font-sizes that use em units (relative to parent), we need the true parent
+// font-size chain, not the independently-compressed rem values.
+func RemToFontSizeMultiplier(rem float64) float64 {
+	if rem > 1 {
+		return ((rem - 1) * FontSizeCompressionFactor / 100) + 1
+	}
+	return rem
+}
+
+// FontSizeMultiplier extracts the CSS font-size multiplier from a KFX font-size
+// property value. Returns 1.0 if the value is not a font-size dimension.
+//
+// For rem values: uses RemToFontSizeMultiplier to reverse PercentToRem compression.
+// For em values: returns the em value directly (em is already a multiplier).
+// For other units or non-dimensional values: returns 1.0 (no scaling effect).
+func FontSizeMultiplier(fontSizeVal any) float64 {
+	v, unit, ok := measureParts(fontSizeVal)
+	if !ok || v == 0 {
+		return 1.0
+	}
+	switch unit {
+	case SymUnitRem:
+		return RemToFontSizeMultiplier(v)
+	case SymUnitEm:
+		return v
+	default:
+		return 1.0
+	}
+}
+
 // ImageWidthPercent calculates the width percentage for a block image.
 // KP3 uses a fixed 512px content width (KP3ContentWidthPx) for all block image
 // calculations, regardless of the actual screen dimensions.

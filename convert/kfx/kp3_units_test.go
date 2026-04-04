@@ -210,3 +210,90 @@ func TestUnitConversions(t *testing.T) {
 		}
 	})
 }
+
+func TestRemToFontSizeMultiplier(t *testing.T) {
+	tests := []struct {
+		name     string
+		rem      float64
+		expected float64
+	}{
+		// Round-trip: PercentToRem → RemToFontSizeMultiplier should recover CSS multiplier
+		{"200%_compressed", 1.625, 2.0}, // PercentToRem(200) = 1.625 → multiplier 2.0
+		{"140%_compressed", 1.25, 1.4},  // PercentToRem(140) = 1.25 → multiplier 1.4
+		{"120%_compressed", 1.125, 1.2}, // PercentToRem(120) = 1.125 → multiplier 1.2
+		{"300%_compressed", 2.25, 3.0},  // PercentToRem(300) = 2.25 → multiplier 3.0
+		{"400%_compressed", 2.875, 4.0}, // PercentToRem(400) = 2.875 → multiplier 4.0
+
+		// Values at or below 100% — no compression, direct pass-through
+		{"100%_direct", 1.0, 1.0},  // PercentToRem(100) = 1.0 → multiplier 1.0
+		{"80%_direct", 0.8, 0.8},   // PercentToRem(80) = 0.8 → multiplier 0.8
+		{"75%_direct", 0.75, 0.75}, // PercentToRem(75) = 0.75 → multiplier 0.75
+		{"70%_direct", 0.7, 0.7},   // PercentToRem(70) = 0.7 → multiplier 0.7
+		{"50%_direct", 0.5, 0.5},   // PercentToRem(50) = 0.5 → multiplier 0.5
+		{"25%_direct", 0.25, 0.25}, // PercentToRem(25) = 0.25 → multiplier 0.25
+
+		// Edge case
+		{"zero", 0, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := RemToFontSizeMultiplier(tt.rem)
+			if math.Abs(result-tt.expected) > 1e-9 {
+				t.Errorf("RemToFontSizeMultiplier(%v) = %v, want %v", tt.rem, result, tt.expected)
+			}
+		})
+	}
+
+	// Verify round-trip: PercentToRem → RemToFontSizeMultiplier
+	t.Run("round_trip", func(t *testing.T) {
+		percentages := []float64{25, 50, 70, 75, 80, 100, 120, 140, 200, 300, 400}
+		for _, pct := range percentages {
+			rem := PercentToRem(pct)
+			mult := RemToFontSizeMultiplier(rem)
+			expected := pct / 100.0
+			if math.Abs(mult-expected) > 1e-6 {
+				t.Errorf("round-trip %.0f%%: PercentToRem=%.6f, RemToFontSizeMultiplier=%.6f, want %.6f",
+					pct, rem, mult, expected)
+			}
+		}
+	})
+}
+
+func TestFontSizeMultiplier(t *testing.T) {
+	tests := []struct {
+		name     string
+		val      any
+		expected float64
+	}{
+		// rem values (compressed by PercentToRem)
+		{"rem_1.625", DimensionValue(1.625, SymUnitRem), 2.0},
+		{"rem_1.25", DimensionValue(1.25, SymUnitRem), 1.4},
+		{"rem_1.125", DimensionValue(1.125, SymUnitRem), 1.2},
+		{"rem_1.0", DimensionValue(1.0, SymUnitRem), 1.0},
+		{"rem_0.75", DimensionValue(0.75, SymUnitRem), 0.75},
+
+		// em values (direct multiplier)
+		{"em_0.25", DimensionValue(0.25, SymUnitEm), 0.25},
+		{"em_0.9", DimensionValue(0.9, SymUnitEm), 0.9},
+		{"em_1.2", DimensionValue(1.2, SymUnitEm), 1.2},
+
+		// Other units / non-dimensional
+		{"lh_1.0", DimensionValue(1.0, SymUnitLh), 1.0},
+		{"nil", nil, 1.0},
+		{"string", "hello", 1.0},
+
+		// Zero values
+		{"rem_zero", DimensionValue(0, SymUnitRem), 1.0},
+		{"em_zero", DimensionValue(0, SymUnitEm), 1.0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FontSizeMultiplier(tt.val)
+			if math.Abs(result-tt.expected) > 1e-9 {
+				t.Errorf("FontSizeMultiplier(%v) = %v, want %v", tt.val, result, tt.expected)
+			}
+		})
+	}
+}

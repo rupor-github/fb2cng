@@ -28,65 +28,49 @@ func (sc StyleContext) resolveProperties(tag, classes string) map[KFXSymbol]any 
 	// 1. Start with inherited properties from context
 	sc.registry.mergePropertiesWithContext(merged, sc.inherited, mergeContextInline)
 
+	// Track accumulated font-size for em→rem correction.
+	// localAccumEm starts at the context's accumulated value (from Push calls).
+	// As classes apply font-sizes, we update this to track the true CSS multiplier chain.
+	localAccumEm := sc.fontSizeAccumEm
+	// hadEmFontSize tracks whether any class in the loop applied an em-unit font-size.
+	// When em is merged against compressed rem by mergeRelative, the result is wrong
+	// and needs post-correction using localAccumEm.
+	hadEmFontSize := false
+
 	// 2. Apply element tag defaults (all properties)
-	// Two types of filtering protect container properties from tag defaults:
-	//
-	// a) Margin protection: If the element (e.g., "p") has margin-left: 0 explicitly,
-	//    it would normally override the inherited container margin (e.g., from poem).
-	//    We filter out zero margins from tag defaults if we have non-zero inherited margins.
-	//
-	// b) Inherited property protection: If a container (e.g., .footnote, .poem) explicitly
-	//    set an inherited property (e.g., text-indent: 0, text-align: right), the tag
-	//    default (e.g., p's text-indent: 1em) should not override it. In CSS, a parent's
-	//    explicit value takes precedence over the child element's default — the child
-	//    inherits from the parent unless it has its own explicit declaration.
 	if tag != "" {
 		if def, ok := sc.registry.Get(tag); ok {
 			resolved := sc.registry.resolveInheritance(def)
 			propsToMerge := sc.filterTagDefaultsIfInherited(resolved.Properties)
 			sc.registry.mergePropertiesWithContext(merged, propsToMerge, mergeContextInline)
+
+			// Update accumulated font-size from tag
+			if fs, ok := propsToMerge[SymFontSize]; ok {
+				mult := FontSizeMultiplier(fs)
+				if _, unit, ok := measureParts(fs); ok && unit == SymUnitEm {
+					localAccumEm *= mult
+					hadEmFontSize = true
+				} else {
+					// rem: reset to parent × multiplier
+					localAccumEm = sc.fontSizeAccumEm * mult
+				}
+			}
 		}
 	}
 
 	// 3. Apply element's classes (all properties, in order)
-	// Use mergeContextClassOverride so class margins override tag margins
-	// (CSS specificity: class > element selector, uses override rule instead of override-maximum)
-	//
-	// For margin-left/right: implement YJCumulativeInSameContainerRuleMerger correctly:
-	// - If this class already contributed to the inherited margin (via PushBlock), SKIP the margin
-	//   to avoid double-counting (same container semantics)
-	// - If this class is NEW (different container), ACCUMULATE with inherited margin
-	//
-	// IMPORTANT: For classes with descendant selectors (e.g., "sub" has "h1--sub" when inside h1),
-	// we apply the descendant selector INSTEAD OF the base class. This prevents the base class's
-	// font-size from overriding inherited values when the descendant selector intentionally omits it.
-	// For example: h1--sub only has baseline-style (no font-size), so sub/sup in headings inherit
-	// the heading's font-size rather than getting the base sub's font-size: 0.75rem.
 	classList := strings.Fields(classes)
 
-	// Build a map of class -> descendant selector name for classes that should have REPLACEMENT
-	// descendant selector behavior. This only applies to styles marked with DescendantReplacement
-	// in the registry (e.g., sub, sup, small) where the descendant selector should COMPLETELY
-	// REPLACE the base class (not just override).
-	//
-	// CSS descendant selectors (like ".section-title h2.section-title-header") use standard
-	// CSS cascade behavior: base class is applied first, then descendant selector properties
-	// override. These are handled in step 4 below.
-	//
-	// The replacement behavior is needed for sub/sup/small in headings: h1--sub only has
-	// baseline-style (no font-size), so sub/sup in headings inherit the heading's font-size
-	// rather than getting the base sub's font-size: 0.75rem.
+	// Build descendant selector replacement map (same as before)
 	classToDescendantSelector := make(map[string]string)
 
 	if len(sc.scopes) > 0 && classes != "" {
 		for _, class := range classList {
-			// Only check for replacement descendants for styles marked with DescendantReplacement
 			isReplacement := sc.registry.IsDescendantReplacement(class)
 			if !isReplacement {
 				continue
 			}
 
-			// Check if any scope ancestor has a descendant selector for this class
 			for _, scope := range sc.scopes {
 				ancestors := make([]string, 0, len(scope.Classes)+1)
 				ancestors = append(ancestors, scope.Classes...)
@@ -97,13 +81,12 @@ func (sc StyleContext) resolveProperties(tag, classes string) map[KFXSymbol]any 
 				for _, anc := range ancestors {
 					styleName := anc + "--" + class
 					if _, ok := sc.registry.Get(styleName); ok {
-						// Found a descendant selector; use it instead of the base class
 						classToDescendantSelector[class] = styleName
 						break
 					}
 				}
 				if _, found := classToDescendantSelector[class]; found {
-					break // Stop at first match (innermost scope takes precedence)
+					break
 				}
 			}
 		}
@@ -119,6 +102,21 @@ func (sc StyleContext) resolveProperties(tag, classes string) map[KFXSymbol]any 
 
 			if def, ok := sc.registry.Get(styleToApply); ok {
 				resolved := sc.registry.resolveInheritance(def)
+
+				// Track the font-size multiplier from this class BEFORE merging
+				// (mergePropertiesWithContext will apply mergeRelative which may produce wrong results)
+				if fs, ok := resolved.Properties[SymFontSize]; ok {
+					mult := FontSizeMultiplier(fs)
+					if _, unit, ok := measureParts(fs); ok && unit == SymUnitEm {
+						localAccumEm *= mult
+						hadEmFontSize = true
+					} else if mult != 1.0 {
+						// rem: reset to parent × multiplier
+						// (If mult==1.0 it means no font-size or default, don't reset)
+						localAccumEm = sc.fontSizeAccumEm * mult
+					}
+				}
+
 				// Handle margins with container-aware logic
 				propsToMerge := sc.handleContainerAwareMargins(merged, resolved.Properties, class)
 				sc.registry.mergePropertiesWithContext(merged, propsToMerge, mergeContextClassOverride)
@@ -127,10 +125,6 @@ func (sc StyleContext) resolveProperties(tag, classes string) map[KFXSymbol]any 
 	}
 
 	// 4. Apply descendant selectors matching any scope ancestor with current tag/classes.
-	// This mirrors CSS descendant rules like ".section-title h2.section-title-header".
-	// These are OVERRIDE selectors (CSS cascade) - they add to/override the base class properties.
-	// This is different from replacement selectors (step 3) which completely replace the base class.
-	// Also apply direct child selectors (parent>child) from innermost scope only.
 	if len(sc.scopes) > 0 {
 		descCandidates := make([]string, 0, len(classList)+1)
 		if tag != "" {
@@ -139,7 +133,6 @@ func (sc StyleContext) resolveProperties(tag, classes string) map[KFXSymbol]any 
 		descCandidates = append(descCandidates, classList...)
 
 		// First, check direct child selectors (parent>child) from innermost scope only.
-		// This mirrors CSS child combinator like ".footnote > p".
 		innerScope := sc.scopes[len(sc.scopes)-1]
 		directParents := make([]string, 0, len(innerScope.Classes)+1)
 		directParents = append(directParents, innerScope.Classes...)
@@ -153,13 +146,21 @@ func (sc StyleContext) resolveProperties(tag, classes string) map[KFXSymbol]any 
 				if def, ok := sc.registry.Get(styleName); ok {
 					resolved := sc.registry.resolveInheritance(def)
 					sc.registry.mergePropertiesWithContext(merged, resolved.Properties, mergeContextInline)
+					// Track font-size from descendant selectors too
+					if fs, ok := resolved.Properties[SymFontSize]; ok {
+						mult := FontSizeMultiplier(fs)
+						if _, unit, ok := measureParts(fs); ok && unit == SymUnitEm {
+							localAccumEm *= mult
+							hadEmFontSize = true
+						} else if mult != 1.0 {
+							localAccumEm = sc.fontSizeAccumEm * mult
+						}
+					}
 				}
 			}
 		}
 
 		// Then, check descendant selectors (ancestor--descendant) from all scopes.
-		// Skip classes that already had replacement behavior applied (sub, sup)
-		// to avoid double-applying h1--sub etc.
 		for _, scope := range sc.scopes {
 			ancestors := make([]string, 0, len(scope.Classes)+1)
 			ancestors = append(ancestors, scope.Classes...)
@@ -169,7 +170,6 @@ func (sc StyleContext) resolveProperties(tag, classes string) map[KFXSymbol]any 
 
 			for _, anc := range ancestors {
 				for _, desc := range descCandidates {
-					// Skip if this class already had replacement descendant applied
 					if _, hadReplacement := classToDescendantSelector[desc]; hadReplacement {
 						continue
 					}
@@ -179,19 +179,54 @@ func (sc StyleContext) resolveProperties(tag, classes string) map[KFXSymbol]any 
 					if def, ok := sc.registry.Get(styleName); ok {
 						resolved := sc.registry.resolveInheritance(def)
 						sc.registry.mergePropertiesWithContext(merged, resolved.Properties, mergeContextInline)
+						if fs, ok := resolved.Properties[SymFontSize]; ok {
+							mult := FontSizeMultiplier(fs)
+							if _, unit, ok := measureParts(fs); ok && unit == SymUnitEm {
+								localAccumEm *= mult
+								hadEmFontSize = true
+							} else if mult != 1.0 {
+								localAccumEm = sc.fontSizeAccumEm * mult
+							}
+						}
 					}
 
 					// 2) Element-qualified class selectors in descendant position.
-					// CSS like ".section-title h2.section-title-header" should not apply to
-					// other tags that share the class (e.g., h3.section-title-header).
 					if tag != "" && desc != tag {
 						qualified := anc + "--" + tag + "." + desc
 						if def, ok := sc.registry.Get(qualified); ok {
 							resolved := sc.registry.resolveInheritance(def)
 							sc.registry.mergePropertiesWithContext(merged, resolved.Properties, mergeContextInline)
+							if fs, ok := resolved.Properties[SymFontSize]; ok {
+								mult := FontSizeMultiplier(fs)
+								if _, unit, ok := measureParts(fs); ok && unit == SymUnitEm {
+									localAccumEm *= mult
+									hadEmFontSize = true
+								} else if mult != 1.0 {
+									localAccumEm = sc.fontSizeAccumEm * mult
+								}
+							}
 						}
 					}
 				}
+			}
+		}
+	}
+
+	// 5. Post-correction for font-size: if an em font-size was merged against a
+	// compressed rem value by mergeRelative, the result is wrong. Recompute using
+	// the true accumulated em chain.
+	//
+	// Example: sub-in-heading
+	//   mergeRelative(1.625rem, 0.25em) = 0.40625rem  ← WRONG (compressed rem × em)
+	//   localAccumEm = 1.0 × 2.0 × 2.0 × 0.25 = 1.0 ← TRUE accumulated em
+	//   PercentToRem(1.0 × 100) = 1.0rem              ← CORRECT
+	if hadEmFontSize {
+		if fs, ok := merged[SymFontSize]; ok {
+			if _, unit, ok := measureParts(fs); ok && unit == SymUnitRem {
+				// The font-size is in rem (from mergeRelative converting em×rem → rem).
+				// Replace with the correct value computed from the true accumulated em.
+				correctedRem := PercentToRem(localAccumEm * 100)
+				merged[SymFontSize] = DimensionValue(correctedRem, SymUnitRem)
 			}
 		}
 	}
