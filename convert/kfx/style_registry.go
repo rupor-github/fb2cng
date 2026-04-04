@@ -294,8 +294,17 @@ func DefaultStyleRegistry() *StyleRegistry {
 	// style delta calculations) can inherit it. The value is 1.0101lh (AdjustedLineHeightLh)
 	// which is the standard KFX line-height. CSS may override font-size but not line-height,
 	// so this base value will be available for inline delta resolution.
+	// h1 font-size uses 1.5rem (not the bare HTML UA default of 2.0rem) because KP3
+	// applies the HTML5 section-nesting algorithm (aiM.java) which reduces h1's font-size
+	// based on how many <section>/<article>/<aside>/<nav> ancestors it has:
+	//   depth 0 → 2.0em, depth 1 → 1.5em, depth 2 → 1.17em, depth 3 → 1.0em, ...
+	// In the EPUB that KP3 processes (generated from the same FB2), every h1 sits inside
+	// at least one <section> element, so it is always at section-depth 1 → 1.5em.
+	// Our FB2→KFX pipeline mirrors this: depth-1 sections use h1, deeper sections use
+	// h2–h6. There is no depth-0 h1 in practice. A user stylesheet with an explicit
+	// "h1 { font-size: ... }" rule will override this base via Register() merge.
 	sr.Register(NewStyle("h1").
-		FontSize(2.0, SymUnitRem).
+		FontSize(1.5, SymUnitRem).
 		FontWeight(SymBold).
 		LineHeight(AdjustedLineHeightLh, SymUnitLh).
 		MarginTop(0.558, SymUnitLh). // 0.67em / 1.2

@@ -247,17 +247,15 @@ func TestAccumulatedFontSize_SubInHeading(t *testing.T) {
 	// compressed rem values.
 	//
 	// Setup:
-	//   DefaultStyleRegistry h1 font-size: 2.0rem (browser default, RemToFontSizeMultiplier → 2.6)
+	//   DefaultStyleRegistry h1 font-size: 1.5rem (section-depth-1, RemToFontSizeMultiplier → 1.8)
 	//   CSS .chapter-title-header-next font-size: 200% → PercentToRem(200) = 1.625rem (mult 2.0)
 	//   CSS sub font-size: 25% → PercentToRem(25) = 0.25rem, h1--sub gets 0.25em (from propagation)
 	//
-	// Push("h1") → fontSizeAccumEm = 1.0 × 2.6 = 2.6 (h1's 2.0rem → multiplier 2.6)
+	// Push("h1") → fontSizeAccumEm = 1.0 × 1.8 = 1.8 (h1's 1.5rem → multiplier 1.8)
 	// resolveProperties("", "chapter-title-header-next sub"):
-	//   chapter-title-header-next: 1.625rem → mult 2.0 → localAccumEm = 1.0 × 2.0 = 2.0
-	//     Wait — the base is sc.fontSizeAccumEm = 2.6. So localAccumEm = 2.6 × 2.0 = 5.2
-	//     No! rem resets to base × mult: localAccumEm = sc.fontSizeAccumEm × 2.0 = 2.6 × 2.0 = 5.2
-	//   h1--sub: 0.25em → localAccumEm = 5.2 × 0.25 = 1.3
-	//   PercentToRem(1.3 × 100) = PercentToRem(130) = 1.1875rem
+	//   chapter-title-header-next: 1.625rem → mult 2.0 → localAccumEm = 1.8 × 2.0 = 3.6
+	//   h1--sub: 0.25em → localAccumEm = 3.6 × 0.25 = 0.9
+	//   PercentToRem(0.9 × 100) = PercentToRem(90) = 0.9rem (≤100% → identity)
 	cssData := []byte(`
 		sub { font-size: 25%; vertical-align: baseline; }
 		.chapter-title-header-next { font-size: 200%; }
@@ -269,10 +267,10 @@ func TestAccumulatedFontSize_SubInHeading(t *testing.T) {
 	ctx = ctx.Push("h1", "")
 
 	// Verify fontSizeAccumEm after Push("h1")
-	// h1 has font-size: 2.0rem (DefaultStyleRegistry base, no CSS override in test)
-	// RemToFontSizeMultiplier(2.0) = ((2.0-1)*160/100)+1 = 2.6
-	// fontSizeAccumEm = 1.0 × 2.6 = 2.6
-	expectedAccum := 2.6
+	// h1 has font-size: 1.5rem (DefaultStyleRegistry base with section-depth-1)
+	// RemToFontSizeMultiplier(1.5) = ((1.5-1)*160/100)+1 = 1.8
+	// fontSizeAccumEm = 1.0 × 1.8 = 1.8
+	expectedAccum := 1.8
 	if math.Abs(ctx.fontSizeAccumEm-expectedAccum) > 1e-9 {
 		t.Errorf("after Push(h1): fontSizeAccumEm = %v, want %v", ctx.fontSizeAccumEm, expectedAccum)
 	}
@@ -293,10 +291,10 @@ func TestAccumulatedFontSize_SubInHeading(t *testing.T) {
 	}
 
 	// The corrected value:
-	// localAccumEm = 2.6 (from h1) × 2.0 (chapter-title-header-next) = 5.2
-	// then × 0.25 (h1--sub em) = 1.3
-	// PercentToRem(130) = 1 + (130-100)/160 = 1.1875rem
-	expectedRem := PercentToRem(2.6 * 2.0 * 0.25 * 100) // PercentToRem(130) = 1.1875
+	// localAccumEm = 1.8 (from h1) × 2.0 (chapter-title-header-next) = 3.6
+	// then × 0.25 (h1--sub em) = 0.9
+	// PercentToRem(90) = 0.9rem (≤100% → identity)
+	expectedRem := PercentToRem(1.8 * 2.0 * 0.25 * 100) // PercentToRem(90) = 0.9
 	if math.Abs(val-expectedRem) > 1e-6 {
 		t.Errorf("sub-in-heading font-size = %.6f rem, want %.6f rem",
 			val, expectedRem)
@@ -310,7 +308,7 @@ func TestAccumulatedFontSize_SubInHeading(t *testing.T) {
 
 func TestAccumulatedFontSize_PushAccumulation(t *testing.T) {
 	// Test that fontSizeAccumEm is correctly accumulated through Push calls.
-	// DefaultStyleRegistry h1 = 2.0rem, h2 = 1.125rem, p = 1.0rem (no explicit font-size)
+	// DefaultStyleRegistry h1 = 1.5rem (section-depth-1), h2 = 1.5rem, p = 1.0rem (no explicit font-size)
 	sr, _ := parseAndCreateRegistry(nil, nil, zap.NewNop())
 
 	ctx := NewStyleContext(sr)
@@ -318,9 +316,9 @@ func TestAccumulatedFontSize_PushAccumulation(t *testing.T) {
 		t.Errorf("root fontSizeAccumEm = %v, want 1.0", ctx.fontSizeAccumEm)
 	}
 
-	// Push h1: 2.0rem → RemToFontSizeMultiplier(2.0) = 2.6
+	// Push h1: 1.5rem → RemToFontSizeMultiplier(1.5) = 1.8
 	h1Ctx := ctx.Push("h1", "")
-	expectedH1 := RemToFontSizeMultiplier(2.0) // 2.6
+	expectedH1 := RemToFontSizeMultiplier(1.5) // 1.8
 	if math.Abs(h1Ctx.fontSizeAccumEm-expectedH1) > 1e-9 {
 		t.Errorf("after Push(h1): fontSizeAccumEm = %v, want %v", h1Ctx.fontSizeAccumEm, expectedH1)
 	}

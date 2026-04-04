@@ -85,7 +85,7 @@ type StyleContext struct {
 	// font-size in em units, before KP3's PercentToRem compression.
 	//
 	// KP3's pipeline works by accumulating font-size multipliers in em units through
-	// the DOM tree (e.g., body 1.0 × h1 2.0 × span 2.0 = 4.0em), then dividing by
+	// the DOM tree (e.g., body 1.0 × h1 1.5 × span 2.0 = 3.0em), then dividing by
 	// the most-common font-size and converting to rem at the end.
 	//
 	// Our pipeline compresses font-sizes to rem independently at each level via
