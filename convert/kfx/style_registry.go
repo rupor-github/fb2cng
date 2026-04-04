@@ -152,7 +152,8 @@ func (sr *StyleRegistry) BuildFragments() []*Fragment {
 		// Convert any remaining em font-sizes to rem before other adjustments
 		resolved.Properties = normalizeFontSizeUnits(resolved.Properties)
 		// Replace body font family with "default" (as KP3 does)
-		resolved.Properties = sr.normalizeFontFamily(resolved.Properties)
+		isInlineOnly := sr.hasInlineUsage(name) && !sr.hasTextUsage(name)
+		resolved.Properties = sr.normalizeFontFamily(resolved.Properties, isInlineOnly)
 		if sr.hasInlineUsage(name) && !sr.hasTextUsage(name) {
 			// Inline-only styles (style events) may need line-height adjustment
 			// for sub/sup with different font-size, but should NOT get default
@@ -216,9 +217,14 @@ func (sr *StyleRegistry) BuildFragments() []*Fragment {
 // KP3 uses "default" in styles to reference the document's default font.
 // - If font-family matches body font → replace with "default"
 // - If font-family is different (e.g., dropcaps) → keep as-is
-// - If no font-family set → add "default" to inherit body font
+// - If no font-family set and NOT inline-only → add "default" to inherit body font
+//
+// For inline-only styles (style events), KP3 does NOT inject "default" when
+// font-family is absent — the inline element inherits from its parent paragraph.
+// Adding "default" would override the inherited font (e.g., heading's decorative
+// font gets replaced with body font for sub/sup text).
 // If no body font family is set, returns properties unchanged.
-func (sr *StyleRegistry) normalizeFontFamily(props map[KFXSymbol]any) map[KFXSymbol]any {
+func (sr *StyleRegistry) normalizeFontFamily(props map[KFXSymbol]any, inlineOnly bool) map[KFXSymbol]any {
 	if sr.bodyFontFamily == "" {
 		return props
 	}
@@ -233,8 +239,11 @@ func (sr *StyleRegistry) normalizeFontFamily(props map[KFXSymbol]any) map[KFXSym
 			}
 			// else: keep non-body font as-is (e.g., nav-dropcaps)
 		}
-	} else {
-		// No font-family set - add "default" to inherit body font
+	} else if !inlineOnly {
+		// No font-family set - add "default" to inherit body font.
+		// Skip for inline-only styles: they inherit font-family from
+		// their parent paragraph, so injecting "default" would incorrectly
+		// override the inherited font.
 		props[SymFontFamily] = "default"
 	}
 	return props

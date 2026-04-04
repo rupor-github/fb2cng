@@ -81,6 +81,15 @@ func selectMergeRule(sym KFXSymbol, existing, incoming any, ctx mergeContext) pr
 		return propertyMergeRule{"cumulative", mergeLayoutHints}
 	case SymKeepLinesTogether:
 		return propertyMergeRule{"keep-lines-together", mergeKeepLinesTogether}
+	case SymBaselineStyle:
+		// In CSS cascade context (class override), user's explicit baseline_style
+		// should override the default. The stylelist's YJBaselineStyleRuleMerger
+		// preserves existing subscript/superscript when incoming is normal, which
+		// is correct at runtime (child inherits parent context) but wrong during
+		// CSS cascade where user's "vertical-align: baseline" must win.
+		if !ctx.allowWritingModeConvert {
+			return propertyMergeRule{"override", mergeOverride}
+		}
 	}
 
 	// Look up merge rule from stylelist data

@@ -176,6 +176,14 @@ func TestSelectMergeRuleFromStyleList(t *testing.T) {
 			expectedRule: "baseline-style",
 		},
 		{
+			name:         "baseline_style class-override uses override",
+			sym:          SymBaselineStyle,
+			existing:     SymSubscript,
+			incoming:     SymNormal,
+			ctx:          mergeContextClassOverride,
+			expectedRule: "override",
+		},
+		{
 			name:         "float_clear uses horizontal-position",
 			sym:          SymFloatClear,
 			existing:     SymLeft,
@@ -217,4 +225,52 @@ func TestSelectMergeRuleFromStyleList(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMergeBaselineStyleContextBehavior(t *testing.T) {
+	// In runtime context (inline), mergeBaselineStyle should keep existing subscript
+	// when incoming is normal — a parent's "normal" shouldn't erase child's subscript.
+	t.Run("inline_keeps_existing_subscript", func(t *testing.T) {
+		sr := NewStyleRegistry()
+		dst := map[KFXSymbol]any{
+			SymBaselineStyle: SymbolValue(SymSubscript),
+		}
+		sr.mergePropertyWithContext(dst, SymBaselineStyle, SymbolValue(SymNormal), mergeContextInline)
+
+		got, _ := symbolIDFromAny(dst[SymBaselineStyle])
+		if got != SymSubscript {
+			t.Errorf("inline context: expected subscript preserved, got %v", got)
+		}
+	})
+
+	// In class-override context (CSS cascade), user's explicit normal should
+	// override existing subscript — "vertical-align: baseline" must take effect.
+	t.Run("class_override_allows_normal", func(t *testing.T) {
+		sr := NewStyleRegistry()
+		dst := map[KFXSymbol]any{
+			SymBaselineStyle: SymbolValue(SymSubscript),
+		}
+		sr.mergePropertyWithContext(dst, SymBaselineStyle, SymbolValue(SymNormal), mergeContextClassOverride)
+
+		got, _ := symbolIDFromAny(dst[SymBaselineStyle])
+		if got != SymNormal {
+			t.Errorf("class-override context: expected normal to override subscript, got %v", got)
+		}
+	})
+
+	// In both contexts, non-normal incoming should always override existing.
+	t.Run("superscript_overrides_in_both_contexts", func(t *testing.T) {
+		sr := NewStyleRegistry()
+		for _, ctx := range []mergeContext{mergeContextInline, mergeContextClassOverride} {
+			dst := map[KFXSymbol]any{
+				SymBaselineStyle: SymbolValue(SymNormal),
+			}
+			sr.mergePropertyWithContext(dst, SymBaselineStyle, SymbolValue(SymSuperscript), ctx)
+
+			got, _ := symbolIDFromAny(dst[SymBaselineStyle])
+			if got != SymSuperscript {
+				t.Errorf("context %v: expected superscript to override normal, got %v", ctx, got)
+			}
+		}
+	})
 }

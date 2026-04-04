@@ -242,9 +242,21 @@ func addTitleAsHeading(c *content.Content, title *fb2.Title, ctx StyleContext, h
 			// Add style event for entire paragraph span
 			paraStart := nw.RuneCount()
 
+			// Build initial inline style context with paragraph style for multi-paragraph titles.
+			// This ensures inline elements (sub, sup, etc.) inherit paragraph-level properties
+			// (especially font-family) that differ from the heading base. Without this, a <sub>
+			// inside a "-next" paragraph would lose the paragraph's font-family in its delta,
+			// falling back to the heading base font instead of the paragraph's font.
+			// KP3 produces a single combined event with both paragraph and inline properties.
+			paraStyleName := descendantPrefix + suffixFromParaStyle(paraStyle, headerStyleBase)
+			var paraInitCtx []inlineStyleInfo
+			if needParagraphStyleEvents {
+				paraInitCtx = []inlineStyleInfo{{Style: paraStyleName}}
+			}
+
 			// Process paragraph content
 			for i := range item.Paragraph.Text {
-				processSegment(&item.Paragraph.Text[i], nil) // Start with empty style context
+				processSegment(&item.Paragraph.Text[i], paraInitCtx)
 			}
 
 			paraEnd := nw.RuneCount()
@@ -254,14 +266,28 @@ func addTitleAsHeading(c *content.Content, title *fb2.Title, ctx StyleContext, h
 			// and KP3 doesn't add style events in this case.
 			// Use ResolveInlineDelta to only include properties that differ from the
 			// heading's base style, avoiding redundant line-height in style events.
+			//
+			// Skip the paragraph event if an inline event already covers the exact same range
+			// (e.g., entire paragraph is a single <sub> element). Since inline events now include
+			// paragraph context properties, the paragraph event would be redundant and would
+			// cause deduplication conflicts in SegmentNestedStyleEvents.
 			if needParagraphStyleEvents && paraEnd > paraStart {
-				styleName := descendantPrefix + suffixFromParaStyle(paraStyle, headerStyleBase)
-				resolved := inlineCtx.ResolveInlineDelta(styleName)
-				events = append(events, StyleEventRef{
-					Offset: paraStart,
-					Length: paraEnd - paraStart,
-					Style:  resolved,
-				})
+				paraLen := paraEnd - paraStart
+				inlineCovered := false
+				for _, ev := range events {
+					if ev.Offset == paraStart && ev.Length == paraLen {
+						inlineCovered = true
+						break
+					}
+				}
+				if !inlineCovered {
+					resolved := inlineCtx.ResolveInlineDelta(paraStyleName)
+					events = append(events, StyleEventRef{
+						Offset: paraStart,
+						Length: paraLen,
+						Style:  resolved,
+					})
+				}
 			}
 
 			prevWasEmptyLine = false

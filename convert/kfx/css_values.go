@@ -288,8 +288,12 @@ func ConvertVerticalAlign(css css.Value) (VerticalAlignResult, bool) {
 		result.BaselineStyle = SymSubscript
 		return result, true
 	case "baseline":
-		result.UseBaselineShift = true
-		result.BaselineShift = DimensionValue(0, SymUnitEm)
+		// Reset baseline positioning: use baseline_style: normal instead of
+		// baseline_shift: 0em. This correctly clears sub/superscript modes
+		// when applied to elements with inherent subscript/superscript defaults.
+		// KP3 also uses baseline_style: normal for vertical-align: baseline.
+		result.UseBaselineStyle = true
+		result.BaselineStyle = SymNormal
 		return result, true
 	}
 

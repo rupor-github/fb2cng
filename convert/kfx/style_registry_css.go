@@ -1,6 +1,9 @@
 package kfx
 
 import (
+	"fmt"
+	"reflect"
+
 	"go.uber.org/zap"
 
 	"fbc/css"
@@ -116,4 +119,132 @@ func (sr *StyleRegistry) applyKFXStyleAdjustments() {
 		delete(def.Properties, SymTextAlignment)
 		sr.styles["footnote-title"] = def
 	}
+
+	// Propagate user CSS changes to heading-context descendant styles.
+	//
+	// Styles with DescendantReplacement (sub, sup, small) have heading-context
+	// descendants (h1--sub, h2--sub, etc.) that completely replace the base style
+	// when the element appears inside a heading. These descendants are registered
+	// with hardcoded defaults in DefaultStyleRegistry().
+	//
+	// When user CSS modifies the base style (e.g., sub { vertical-align: baseline; }),
+	// the heading-context descendants must be updated to reflect those changes.
+	// Otherwise, user CSS is silently ignored in heading contexts.
+	sr.propagateToHeadingDescendants()
+}
+
+// descendantReplacementDefaults defines the known default properties for each
+// DescendantReplacement style. These must match what DefaultStyleRegistry() registers.
+// If the base style differs from these defaults after CSS loading, user CSS modified it.
+var descendantReplacementDefaults = map[string]map[KFXSymbol]any{
+	"sub": {
+		SymBaselineStyle: SymbolValue(SymSubscript),
+		SymFontSize:      DimensionValue(0.75, SymUnitRem),
+	},
+	"sup": {
+		SymBaselineStyle: SymbolValue(SymSuperscript),
+		SymFontSize:      DimensionValue(0.75, SymUnitRem),
+	},
+	"small": {
+		SymFontSize: DimensionValue(0.8333333333333334, SymUnitEm),
+	},
+}
+
+// propagateToHeadingDescendants updates heading-context descendant styles (h1--sub, etc.)
+// when user CSS has modified the base DescendantReplacement style (sub, sup, small).
+//
+// The heading-context descendants exist to prevent base sub/sup/small absolute font-size
+// from overriding inherited heading font-size. When user CSS modifies these styles,
+// the heading-context descendants must reflect the user's changes, otherwise the
+// user's CSS is silently ignored in heading contexts.
+//
+// Only properties that exist in the defaults AND were changed by user CSS are propagated:
+//   - baseline_style: copied directly if changed
+//   - font_size: converted from absolute rem to relative em if changed, so it scales
+//     with the heading font-size rather than being an absolute value
+//
+// Properties NOT in the defaults (line_height, baseline_shift, etc.) are intentionally
+// not propagated — they are inherited from the heading context or computed by the resolver.
+func (sr *StyleRegistry) propagateToHeadingDescendants() {
+	for baseName, defaultProps := range descendantReplacementDefaults {
+		baseDef, exists := sr.styles[baseName]
+		if !exists {
+			continue
+		}
+
+		// Check if user CSS modified this style by comparing against defaults.
+		if stylePropsMatchDefaults(baseDef.Properties, defaultProps) {
+			continue
+		}
+
+		// Determine which default properties were changed by user CSS.
+		changedProps := make(map[KFXSymbol]any)
+		for sym, defaultVal := range defaultProps {
+			baseVal, hasIt := baseDef.Properties[sym]
+			if !hasIt || !reflect.DeepEqual(baseVal, defaultVal) {
+				if hasIt {
+					changedProps[sym] = baseVal
+				}
+				// If !hasIt, the property was removed — we don't propagate absence,
+				// the heading-context descendant already has its own default.
+			}
+		}
+
+		if len(changedProps) == 0 {
+			continue
+		}
+
+		// Update all heading-context descendants with only the changed properties.
+		for i := 1; i <= 6; i++ {
+			descName := fmt.Sprintf("h%d--%s", i, baseName)
+			descDef, ok := sr.styles[descName]
+			if !ok {
+				continue
+			}
+
+			for sym, val := range changedProps {
+				if sym == SymFontSize {
+					// Convert font-size from absolute rem to relative em.
+					// In heading context, em is relative to the heading's font-size,
+					// so 0.25rem (absolute) becomes 0.25em (relative to heading).
+					descDef.Properties[sym] = convertFontSizeToEm(val)
+				} else {
+					descDef.Properties[sym] = val
+				}
+			}
+			sr.styles[descName] = descDef
+		}
+	}
+}
+
+// convertFontSizeToEm converts a font-size dimension value from rem to em.
+// If the value is already in em or is not a dimension, it is returned unchanged.
+// This is needed for heading-context descendants where font-size should be relative
+// to the heading rather than absolute.
+func convertFontSizeToEm(val any) any {
+	value, unit, ok := measureParts(val)
+	if !ok {
+		return val
+	}
+	if unit == SymUnitRem {
+		return DimensionValue(value, SymUnitEm)
+	}
+	return val
+}
+
+// stylePropsMatchDefaults returns true if two property maps have the same keys and values.
+func stylePropsMatchDefaults(a, b map[KFXSymbol]any) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, va := range a {
+		vb, ok := b[k]
+		if !ok {
+			return false
+		}
+		if !reflect.DeepEqual(va, vb) {
+			return false
+		}
+	}
+	return true
 }
