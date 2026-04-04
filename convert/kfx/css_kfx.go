@@ -6,9 +6,9 @@ import (
 
 // selectorStyleName returns the KFX style name for a CSS selector.
 // Rules:
-//   - .foo -> "foo"
+//   - .foo -> "foo" (unless foo is an HTML tag name, then ".foo")
 //   - tag -> "tag"
-//   - tag.foo -> "foo" (class takes precedence)
+//   - tag.foo -> "foo" (class takes precedence; element qualifies, no collision)
 //   - ancestor descendant -> "ancestor--descendant" (e.g., "p code" -> "p--code")
 //   - selector::before -> "selector--before"
 //   - selector::after -> "selector--after"
@@ -22,6 +22,12 @@ func selectorStyleName(s css.Selector) string {
 		base = ancestorName + "--" + descendantName
 	} else {
 		base = s.DescendantBaseName()
+		// Guard against class-only selectors whose name collides with an HTML
+		// element tag (e.g. ".h1" would otherwise map to "h1", overriding the
+		// element default). Prefix with "." so the style is stored separately.
+		if s.Class != "" && s.Element == "" && isHTMLTag(s.Class) {
+			base = "." + base
+		}
 	}
 
 	switch s.Pseudo {
