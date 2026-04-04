@@ -52,16 +52,18 @@ func (m *StyleMapper) MapStylesheet(sheet *css.Stylesheet) ([]StyleDef, []string
 		if rule.Selector.Pseudo != css.PseudoNone {
 			continue
 		}
-		props, warnings := m.MapRule(rule.Selector, rule.Properties)
-		allWarnings = append(allWarnings, warnings...)
-
-		// Check if CSS has display: none (style should be hidden)
-		// This must be checked BEFORE skipping empty props, because display: none
-		// is not converted to KFX but we still need to track it for hiding content.
+		// Check if CSS has display: none (style should be hidden).
+		// Extract this BEFORE MapRule to avoid a spurious "ignored by
+		// mapping_ignorable_patterns" log — display is not a KFX property
+		// but we handle it explicitly via the Hidden flag.
 		isHidden := false
 		if v, ok := rule.Properties["display"]; ok && v.Keyword == "none" {
 			isHidden = true
+			delete(rule.Properties, "display")
 		}
+
+		props, warnings := m.MapRule(rule.Selector, rule.Properties)
+		allWarnings = append(allWarnings, warnings...)
 
 		// Skip rules with no KFX properties, unless they have display: none
 		// (which we need to track for content hiding)
