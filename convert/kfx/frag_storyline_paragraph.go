@@ -482,9 +482,6 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 		IsFootnoteLink bool
 	}
 
-	// Track whether current link contains inline images (for KP3-compatible style events)
-	var linkHasImage bool
-
 	var walk func(seg *fb2.InlineSegment, styleContext []inlineStyleInfo, spanningDepth int)
 	walk = func(seg *fb2.InlineSegment, styleContext []inlineStyleInfo, spanningDepth int) {
 		// Handle inline images - flush current text and add image item
@@ -497,16 +494,6 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 			imgInfo, ok := imageResources[imgID]
 			if !ok {
 				return
-			}
-
-			// Mark that current link context contains an image.
-			// The link's style event will handle making the image clickable.
-			// KP3 creates a single event with an empty style for image-only links.
-			for i := len(styleContext) - 1; i >= 0; i-- {
-				if styleContext[i].LinkTo != "" {
-					linkHasImage = true
-					break
-				}
 			}
 
 			// Create inline image style with em-based dimensions
@@ -620,13 +607,6 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 			childContext = append(append([]inlineStyleInfo(nil), styleContext...), info)
 		}
 
-		// Reset linkHasImage before processing link children so we can detect
-		// if THIS link contains images (not an outer link)
-		savedLinkHasImage := linkHasImage
-		if isLink {
-			linkHasImage = false
-		}
-
 		// Process children
 		childSpanningDepth := spanningDepth
 		if spanningDepth < len(spanningStyleParts) && segStyle == spanningStyleParts[spanningDepth] {
@@ -634,12 +614,6 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 		}
 		for i := range seg.Children {
 			walk(&seg.Children[i], childContext, childSpanningDepth)
-		}
-
-		// Capture whether this link had images, then restore outer context
-		thisLinkHasImage := linkHasImage
-		if isLink {
-			linkHasImage = savedLinkHasImage
 		}
 
 		if seg.Kind == fb2.InlineCode {
@@ -673,17 +647,8 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 			// Resolve inline style using delta-only approach (KP3 behavior).
 			// Style events contain only properties that differ from the parent
 			// (paragraph style). Block-level properties are excluded.
-			// For links containing only images, use an empty style instead -
-			// KP3 uses a single event with empty style for image-only links.
-			var mergedStyle string
-			if isLink && thisLinkHasImage {
-				// Link with image: use empty style (KP3 behavior).
-				// Register directly with empty properties - no need for a named style.
-				mergedStyle = styles.RegisterResolved(nil, styleUsageInline, false)
-			} else {
-				mergedSpec := strings.Join(styleNames, " ")
-				mergedStyle = inlineCtx.ResolveInlineDelta(mergedSpec)
-			}
+			mergedSpec := strings.Join(styleNames, " ")
+			mergedStyle := inlineCtx.ResolveInlineDelta(mergedSpec)
 
 			event := StyleEventRef{
 				Offset: start,
