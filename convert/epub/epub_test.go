@@ -3824,3 +3824,354 @@ func TestAppendInlineTextDoesNotOverwriteConsecutiveText(t *testing.T) {
 		t.Fatalf("strong text = %q, want %q", got, "text1text2")
 	}
 }
+
+// makeSection creates an fb2.Section with a title and ID for test purposes.
+func makeSection(id, title string) *fb2.Section {
+	s := &fb2.Section{ID: id}
+	if title != "" {
+		s.Title = &fb2.Title{Items: []fb2.TitleItem{{
+			Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: title}}},
+		}}}
+	}
+	return s
+}
+
+// makeWrapperChapterData creates a chapterData for an untitled wrapper section
+// whose children are titled subsections. This simulates the FB2 pattern:
+//
+//	<section>           ← untitled wrapper
+//	  <section><title>Chapter 1</title>...</section>
+//	  <section><title>Chapter 2</title>...</section>
+//	</section>
+func makeWrapperChapterData(filename string, children ...*fb2.Section) chapterData {
+	wrapper := &fb2.Section{ID: "wrapper"}
+	for _, child := range children {
+		wrapper.Content = append(wrapper.Content, fb2.FlowItem{
+			Kind:    fb2.FlowSection,
+			Section: child,
+		})
+	}
+	return chapterData{
+		ID:           "wrapper-ch",
+		Filename:     filename,
+		Title:        "",
+		IncludeInTOC: false,
+		Section:      wrapper,
+	}
+}
+
+func TestWriteNCX_UntitledWrapperSection(t *testing.T) {
+	_, _, log := setupTestContext(t)
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+
+	c := &content.Content{
+		Book: &fb2.FictionBook{
+			Description: fb2.Description{
+				TitleInfo: fb2.TitleInfo{
+					BookTitle: fb2.TextField{Value: "Test Book"},
+					Lang:      language.Make("en"),
+				},
+				DocumentInfo: fb2.DocumentInfo{ID: "test-ncx-wrapper"},
+			},
+		},
+		OutputFormat: common.OutputFmtEpub2,
+		ImagesIndex:  make(fb2.BookImages),
+	}
+
+	// One untitled wrapper chapter containing two titled subsections
+	chapters := []chapterData{
+		makeWrapperChapterData("ch01.xhtml",
+			makeSection("sec1", "Chapter 1"),
+			makeSection("sec2", "Chapter 2"),
+		),
+	}
+
+	cfg := &config.DocumentConfig{}
+	err := writeNCX(zw, c, chapters, cfg, nil, log)
+	if err != nil {
+		t.Fatalf("writeNCX() error = %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close zip: %v", err)
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatalf("open zip: %v", err)
+	}
+
+	for _, f := range zr.File {
+		if !strings.HasSuffix(f.Name, ".ncx") {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatalf("open ncx: %v", err)
+		}
+		data, _ := io.ReadAll(rc)
+		rc.Close()
+
+		doc := etree.NewDocument()
+		if err := doc.ReadFromBytes(data); err != nil {
+			t.Fatalf("parse NCX: %v", err)
+		}
+
+		navMap := doc.FindElement("//navMap")
+		if navMap == nil {
+			t.Fatal("Missing navMap element")
+		}
+
+		navPoints := navMap.SelectElements("navPoint")
+		if len(navPoints) != 2 {
+			t.Fatalf("expected 2 navPoints (promoted from wrapper), got %d", len(navPoints))
+		}
+
+		for i, expected := range []string{"Chapter 1", "Chapter 2"} {
+			label := navPoints[i].FindElement("navLabel/text")
+			if label == nil || label.Text() != expected {
+				got := ""
+				if label != nil {
+					got = label.Text()
+				}
+				t.Errorf("navPoint[%d] label = %q, want %q", i, got, expected)
+			}
+		}
+		return
+	}
+	t.Error("NCX file not found in zip")
+}
+
+func TestWriteNCX_MixedTitledAndWrapper(t *testing.T) {
+	_, _, log := setupTestContext(t)
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+
+	c := &content.Content{
+		Book: &fb2.FictionBook{
+			Description: fb2.Description{
+				TitleInfo: fb2.TitleInfo{
+					BookTitle: fb2.TextField{Value: "Test Book"},
+					Lang:      language.Make("en"),
+				},
+				DocumentInfo: fb2.DocumentInfo{ID: "test-ncx-mixed"},
+			},
+		},
+		OutputFormat: common.OutputFmtEpub2,
+		ImagesIndex:  make(fb2.BookImages),
+	}
+
+	// Mix of titled chapters and untitled wrapper chapters
+	chapters := []chapterData{
+		{
+			ID:           "intro",
+			Filename:     "intro.xhtml",
+			Title:        "Introduction",
+			IncludeInTOC: true,
+		},
+		makeWrapperChapterData("ch01.xhtml",
+			makeSection("sec1", "Part 1"),
+			makeSection("sec2", "Part 2"),
+		),
+		{
+			ID:           "epilog",
+			Filename:     "epilog.xhtml",
+			Title:        "Epilogue",
+			IncludeInTOC: true,
+		},
+	}
+
+	cfg := &config.DocumentConfig{}
+	err := writeNCX(zw, c, chapters, cfg, nil, log)
+	if err != nil {
+		t.Fatalf("writeNCX() error = %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close zip: %v", err)
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatalf("open zip: %v", err)
+	}
+
+	for _, f := range zr.File {
+		if !strings.HasSuffix(f.Name, ".ncx") {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatalf("open ncx: %v", err)
+		}
+		data, _ := io.ReadAll(rc)
+		rc.Close()
+
+		doc := etree.NewDocument()
+		if err := doc.ReadFromBytes(data); err != nil {
+			t.Fatalf("parse NCX: %v", err)
+		}
+
+		navMap := doc.FindElement("//navMap")
+		if navMap == nil {
+			t.Fatal("Missing navMap element")
+		}
+
+		navPoints := navMap.SelectElements("navPoint")
+		// Introduction + Part 1 + Part 2 (promoted) + Epilogue = 4
+		if len(navPoints) != 4 {
+			t.Fatalf("expected 4 navPoints, got %d", len(navPoints))
+		}
+
+		expected := []string{"Introduction", "Part 1", "Part 2", "Epilogue"}
+		for i, want := range expected {
+			label := navPoints[i].FindElement("navLabel/text")
+			if label == nil || label.Text() != want {
+				got := ""
+				if label != nil {
+					got = label.Text()
+				}
+				t.Errorf("navPoint[%d] label = %q, want %q", i, got, want)
+			}
+		}
+		return
+	}
+	t.Error("NCX file not found in zip")
+}
+
+func TestWriteNav_UntitledWrapperSection(t *testing.T) {
+	_, _, log := setupTestContext(t)
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+
+	c := &content.Content{
+		Book: &fb2.FictionBook{
+			Description: fb2.Description{
+				TitleInfo: fb2.TitleInfo{
+					BookTitle: fb2.TextField{Value: "Test Book NAV Wrapper"},
+					Lang:      language.Make("en"),
+				},
+			},
+		},
+		OutputFormat: common.OutputFmtEpub3,
+		ImagesIndex:  make(fb2.BookImages),
+	}
+
+	chapters := []chapterData{
+		makeWrapperChapterData("ch01.xhtml",
+			makeSection("sec1", "Chapter 1"),
+			makeSection("sec2", "Chapter 2"),
+			makeSection("sec3", "Chapter 3"),
+		),
+	}
+
+	cfg := &config.DocumentConfig{
+		TOCPage: config.TOCPageConfig{
+			Placement: common.TOCPagePlacementNone,
+		},
+	}
+
+	err := writeNav(zw, c, cfg, chapters, nil, log)
+	if err != nil {
+		t.Fatalf("writeNav() error = %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close zip: %v", err)
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatalf("open zip: %v", err)
+	}
+
+	for _, f := range zr.File {
+		if !strings.Contains(f.Name, "nav.xhtml") {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatalf("open nav: %v", err)
+		}
+		data, _ := io.ReadAll(rc)
+		rc.Close()
+
+		navContent := string(data)
+		for _, want := range []string{"Chapter 1", "Chapter 2", "Chapter 3"} {
+			if !strings.Contains(navContent, want) {
+				t.Errorf("NAV should contain %q (promoted from wrapper section)", want)
+			}
+		}
+		return
+	}
+	t.Error("NAV file not found in zip")
+}
+
+func TestGenerateTOCPage_UntitledWrapperSection(t *testing.T) {
+	log := setupTestLogger(t)
+
+	c := &content.Content{
+		Book: &fb2.FictionBook{
+			Description: fb2.Description{
+				TitleInfo: fb2.TitleInfo{
+					BookTitle: fb2.TextField{Value: "Test Book"},
+				},
+			},
+		},
+		IDsIndex:     make(fb2.IDIndex),
+		OutputFormat: common.OutputFmtEpub2,
+	}
+
+	// One untitled wrapper plus a regular titled chapter
+	chapters := []chapterData{
+		makeWrapperChapterData("ch01.xhtml",
+			makeSection("sec1", "Chapter 1"),
+			makeSection("sec2", "Chapter 2"),
+		),
+		{
+			ID:           "notes",
+			Filename:     "notes.xhtml",
+			Title:        "Notes",
+			IncludeInTOC: true,
+		},
+	}
+
+	cfg := &config.TOCPageConfig{}
+
+	tocChapter := generateTOCPage(c, chapters, cfg, nil, log)
+	if tocChapter.Doc == nil {
+		t.Fatal("TOC document should not be nil")
+	}
+
+	body := tocChapter.Doc.Root().SelectElement("body")
+	if body == nil {
+		t.Fatal("Body element not found")
+	}
+	tocBodyDiv := body.SelectElement("div")
+	if tocBodyDiv == nil {
+		t.Fatal("TOC body div wrapper not found")
+	}
+
+	ol := tocBodyDiv.SelectElement("ol")
+	if ol == nil {
+		t.Fatal("OL element not found")
+	}
+
+	items := ol.SelectElements("li")
+	// Chapter 1 + Chapter 2 (promoted from wrapper) + Notes = 3
+	if len(items) != 3 {
+		t.Fatalf("expected 3 list items (2 promoted + 1 regular), got %d", len(items))
+	}
+
+	expected := []string{"Chapter 1", "Chapter 2", "Notes"}
+	for i, want := range expected {
+		a := items[i].SelectElement("a")
+		if a == nil {
+			t.Fatalf("item[%d] should have an anchor element", i)
+		}
+		if a.Text() != want {
+			t.Errorf("item[%d] text = %q, want %q", i, a.Text(), want)
+		}
+	}
+}

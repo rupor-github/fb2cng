@@ -70,6 +70,12 @@ func buildTOCEntryTree(entries []*TOCEntry, includeUntitled bool) []*tocPageEntr
 				continue
 			}
 			if !e.IncludeInTOC && !includeUntitled {
+				// Untitled wrapper entry: promote its children to this level.
+				// This handles FB2 structures where a top-level <section> has no title
+				// but contains titled subsections that should appear in the TOC.
+				if len(e.Children) > 0 {
+					out = append(out, build(e.Children)...)
+				}
 				continue
 			}
 			t := e.Title

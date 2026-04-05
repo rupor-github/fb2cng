@@ -928,6 +928,12 @@ func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, cfg *c
 	playOrder := 0
 	for _, chapter := range chapters {
 		if !chapter.IncludeInTOC {
+			// Untitled wrapper chapter: promote its children to navMap level.
+			// This handles FB2 structures where a top-level <section> has no title
+			// but contains titled subsections that should appear in the TOC.
+			if chapter.Section != nil {
+				buildNCXNavPoints(navMap, chapter.Section, chapter.Filename, &playOrder, c, cfg.TOCPage.ChaptersWithoutTitle, nil, idToFile)
+			}
 			continue
 		}
 		playOrder++
@@ -1096,6 +1102,12 @@ func buildTOCContent(parentContainer *etree.Element, c *content.Content, chapter
 
 	for _, chapter := range chapters {
 		if !chapter.IncludeInTOC {
+			// Untitled wrapper chapter: promote its children to the top-level list.
+			// This handles FB2 structures where a top-level <section> has no title
+			// but contains titled subsections that should appear in the TOC.
+			if chapter.Section != nil {
+				buildTOCPageOLItems(ol, chapter.Section, chapter.Filename, c, cfg.ChaptersWithoutTitle, nil, idToFile)
+			}
 			continue
 		}
 		li := ol.CreateElement("li")

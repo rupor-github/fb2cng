@@ -95,6 +95,13 @@ func buildNavEntries(tocEntries []*TOCEntry, startEID int, includeUntitled bool)
 
 	for _, entry := range tocEntries {
 		if !entry.IncludeInTOC && !includeUntitled {
+			// Untitled wrapper entry: promote its children to this level.
+			// This handles FB2 structures where a top-level <section> has no title
+			// but contains titled subsections that should appear in the TOC.
+			if len(entry.Children) > 0 {
+				childEntries := buildNavEntries(entry.Children, startEID, includeUntitled)
+				entries = append(entries, childEntries...)
+			}
 			continue
 		}
 		title := entry.Title
