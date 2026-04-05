@@ -11,12 +11,15 @@ import (
 
 // processStorylineSectionContent processes FB2 section content for a single storyline.
 //
-// depth is the section nesting depth (1..n) used for:
-// - choosing wrapper/title heading level
-// - deciding whether a titled nested section becomes a separate storyline
+// depth is the structural section nesting depth (1..n) used for:
+// - deciding whether a titled nested section becomes a separate storyline (SectionNeedsBreak)
+// - computing CSS wrapper margin normalization relative to storylineRootDepth
 //
-// KP3 heading level / wrapper margins follow the actual FB2 nesting depth, including
-// untitled wrapper <section> elements.
+// titleDepth is the visual depth (only increments when entering a titled section) used for:
+// - choosing chapter vs section vignettes, wrapper classes, and heading level
+//
+// When an untitled wrapper <section> exists, depth increments but titleDepth does not,
+// so titled children get chapter-level treatment despite being structurally nested.
 //
 // TOC hierarchy is different: untitled wrapper sections do not create their own TOC
 // entries; any titled descendants are attached under the most recently seen titled
@@ -32,7 +35,7 @@ import (
 // Parameters:
 //   - nestedTitledSections: receives titled nested sections that should become separate storylines
 //   - directChildTOC: receives TOC entries for sections processed inline
-func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, depth int, storylineRootDepth int, directChildTOC *[]*TOCEntry, nestedTitledSections *[]sectionWorkItem, idToEID eidByFB2ID) error {
+func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, depth int, titleDepth int, storylineRootDepth int, directChildTOC *[]*TOCEntry, nestedTitledSections *[]sectionWorkItem, idToEID eidByFB2ID) error {
 	// Enter section container for margin collapsing tracking.
 	// Section content is a standard container (no title-block mode).
 	//
@@ -66,11 +69,14 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 
 	// Process title with wrapper (mirrors EPUB's <div class="chapter-title"> or <div class="section-title">)
 	if section.Title != nil {
-		// Determine wrapper class, header class base, and heading level based on depth
+		// Determine wrapper class, header class base, and heading level based on titleDepth.
+		// titleDepth drives the chapter-vs-section distinction: titleDepth==1 means chapter treatment,
+		// titleDepth>1 means section treatment. This correctly handles untitled wrapper <section>
+		// elements that don't increment titleDepth.
 		var wrapperClass, headerClassBase string
 		var headingLevel int
 		var vigTopPos, vigBottomPos common.VignettePos
-		if depth == 1 {
+		if titleDepth == 1 {
 			wrapperClass = "chapter-title"
 			headerClassBase = "chapter-title-header"
 			headingLevel = 1
@@ -122,9 +128,15 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 		sb.EndBlock()
 	}
 
-	// Compute child depth once per section.
-	// Depth always increases when entering a nested <section>, even if the wrapper is untitled.
+	// Compute child depths once per section.
+	// Structural depth always increases when entering a nested <section>, even if the wrapper is untitled.
 	childDepth := depth + 1
+	// Title depth only increases when entering a titled section.
+	// For untitled wrappers, children inherit the same titleDepth.
+	childTitleDepth := titleDepth
+	if section.HasTitle() {
+		childTitleDepth = titleDepth + 1
+	}
 
 	// Process epigraphs - KFX doesn't use wrapper blocks for epigraphs.
 	// Instead, apply epigraph styling directly to each paragraph as flat siblings.
@@ -249,6 +261,9 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 			nestedSection := item.Section
 
 			nextDepth := childDepth
+			// Compute titleDepth for the nested section:
+			// only increment when entering a titled section.
+			nextTitleDepth := childTitleDepth
 
 			// Match EPUB behavior: nested titled sections become separate storylines only
 			// when their heading depth is configured to page-break-before: always.
@@ -260,6 +275,7 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 				*nestedTitledSections = append(*nestedTitledSections, sectionWorkItem{
 					section:     nestedSection,
 					depth:       nextDepth,
+					titleDepth:  nextTitleDepth,
 					parentEntry: nil, // Will be set by caller
 					isTopLevel:  false,
 				})
@@ -277,14 +293,14 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 				// Process nested section content recursively (same storyline)
 				var childTOC []*TOCEntry
 				var childTitledSections []sectionWorkItem
-				if err := processStorylineSectionContent(c, nestedSection, sb, styles, imageResources, ca, nextDepth, storylineRootDepth, &childTOC, &childTitledSections, idToEID); err != nil {
+				if err := processStorylineSectionContent(c, nestedSection, sb, styles, imageResources, ca, nextDepth, nextTitleDepth, storylineRootDepth, &childTOC, &childTitledSections, idToEID); err != nil {
 					return err
 				}
 
-				// Add section-end vignette for inline titled sections (depth > 1)
+				// Add section-end vignette for inline titled sections (titleDepth > 1)
 				// This mirrors EPUB behavior at convert/epub/xhtml.go:797-798
 				// Section-end vignette appears at the end of an inline titled section.
-				if nestedSection.HasTitle() && childDepth > 1 {
+				if nestedSection.HasTitle() && nextTitleDepth > 1 {
 					addVignetteImage(c.Book, sb, imageResources, common.VignettePosSectionEnd)
 				}
 

@@ -3367,7 +3367,7 @@ func TestAppendFlowItems_SplitOnSectionNeedsBreak(t *testing.T) {
 	parent := doc.CreateElement("div")
 
 	// depth=1 means child sections are at depth 2, which needs break
-	splits, err := appendFlowItems(parent, c, items, 1, "section", log)
+	splits, err := appendFlowItems(parent, c, items, 1, 1, "section", log)
 	if err != nil {
 		t.Fatalf("appendFlowItems error: %v", err)
 	}
@@ -3427,7 +3427,7 @@ func TestAppendFlowItems_NoSplitWhenBreakFalse(t *testing.T) {
 	doc := etree.NewDocument()
 	parent := doc.CreateElement("div")
 
-	splits, err := appendFlowItems(parent, c, items, 1, "section", log)
+	splits, err := appendFlowItems(parent, c, items, 1, 1, "section", log)
 	if err != nil {
 		t.Fatalf("appendFlowItems error: %v", err)
 	}
@@ -3493,7 +3493,7 @@ func TestAppendFlowItems_SplitBubblesUpFromDeeper(t *testing.T) {
 	parent := doc.CreateElement("div")
 
 	// depth=1: parentSection is at depth 2 (no break), grandchildren at depth 3 (break!)
-	splits, err := appendFlowItems(parent, c, items, 1, "section", log)
+	splits, err := appendFlowItems(parent, c, items, 1, 1, "section", log)
 	if err != nil {
 		t.Fatalf("appendFlowItems error: %v", err)
 	}

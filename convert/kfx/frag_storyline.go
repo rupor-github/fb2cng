@@ -16,7 +16,8 @@ type sectionEIDsBySectionName map[string][]int
 // Used by the work queue to flatten nested titled sections into separate storylines.
 type sectionWorkItem struct {
 	section      *fb2.Section
-	depth        int       // Original depth in the FB2 hierarchy (1 for top-level)
+	depth        int       // Structural depth in the FB2 hierarchy (1 for top-level, always increments per nesting level)
+	titleDepth   int       // Visual depth (only increments when entering a titled section); drives vignette type and heading level
 	parentEntry  *TOCEntry // Parent TOC entry for hierarchy tracking
 	isTopLevel   bool      // True if this is a direct child of <body>
 	isChapterEnd bool      // True if this is the last storyline of a chapter (gets chapter-end vignette)
@@ -199,6 +200,7 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 			workQueue = append(workQueue, sectionWorkItem{
 				section:      &body.Sections[j],
 				depth:        1,
+				titleDepth:   1,
 				parentEntry:  nil,
 				isTopLevel:   true,
 				isChapterEnd: true, // May be transferred to last nested storyline
@@ -231,7 +233,7 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 			var nestedTitledSections []sectionWorkItem
 			var directChildTOC []*TOCEntry
 
-			if err := processStorylineSectionContent(c, section, sb, styles, imageResources, ca, work.depth, work.depth, &directChildTOC, &nestedTitledSections, idToEID); err != nil {
+			if err := processStorylineSectionContent(c, section, sb, styles, imageResources, ca, work.depth, work.titleDepth, work.depth, &directChildTOC, &nestedTitledSections, idToEID); err != nil {
 				return nil, 0, nil, nil, nil, nil, landmarks, nil, err
 			}
 
@@ -249,7 +251,7 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 			// KP3/EPUB behavior: if the chapter ends on a nested section storyline, the output includes BOTH:
 			// section-end vignette first, then chapter-end vignette.
 			isLeafStoryline := len(nestedTitledSections) == 0
-			if isLeafStoryline && section.HasTitle() && work.depth > 1 {
+			if isLeafStoryline && section.HasTitle() && work.titleDepth > 1 {
 				addEndVignette(c.Book, sb, styles, imageResources, common.VignettePosSectionEnd)
 			}
 			if work.isChapterEnd && isLeafStoryline && section.HasTitle() {
@@ -300,12 +302,22 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 			// With append, sibling sections would be processed before nested children.
 			// With prepend, we process depth-first which preserves FB2 document order.
 			//
-			// Transfer isChapterEnd to the LAST nested section - only the final storyline
-			// in a chapter chain gets the chapter-end vignette.
+			// Transfer isChapterEnd to nested sections.
+			// When the parent is untitled (wrapper section), ALL children are independent chapters
+			// and each gets isChapterEnd=true (mirrors EPUB behavior where each split section
+			// gets its own chapter-end vignette based on titleDepth).
+			// When the parent is titled, only the LAST nested section inherits isChapterEnd,
+			// since the chapter continues through all nested storylines and ends at the last one.
+			parentIsUntitled := !section.HasTitle()
 			for i := range nestedTitledSections {
 				nestedTitledSections[i].parentEntry = tocEntry
-				// Only the last nested section inherits isChapterEnd
-				nestedTitledSections[i].isChapterEnd = work.isChapterEnd && (i == len(nestedTitledSections)-1)
+				if parentIsUntitled {
+					// Untitled wrapper: each child is an independent chapter
+					nestedTitledSections[i].isChapterEnd = work.isChapterEnd
+				} else {
+					// Titled parent: only the last nested section inherits isChapterEnd
+					nestedTitledSections[i].isChapterEnd = work.isChapterEnd && (i == len(nestedTitledSections)-1)
+				}
 			}
 			if len(nestedTitledSections) > 0 {
 				workQueue = append(nestedTitledSections, workQueue...)
