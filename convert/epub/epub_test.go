@@ -4175,3 +4175,277 @@ func TestGenerateTOCPage_UntitledWrapperSection(t *testing.T) {
 		}
 	}
 }
+
+// TestSectionContent_UntitledWrapperChapterTreatment verifies that titled children
+// of an untitled wrapper section get chapter treatment (titleDepth=1):
+//   - wrapper class "chapter-title" (not "section-title")
+//   - heading tag <h1> (not <h2>)
+//   - chapter vignettes (not section vignettes)
+//   - chapter-end vignette (not section-end)
+func TestSectionContent_UntitledWrapperChapterTreatment(t *testing.T) {
+	log := setupTestLogger(t)
+
+	// Build a book with vignettes enabled for both chapter and section positions
+	// so we can verify the correct ones are chosen.
+	book := &fb2.FictionBook{
+		VignetteIDs: map[common.VignettePos]string{
+			common.VignettePosChapterTitleTop:    "vig-ch-top",
+			common.VignettePosChapterTitleBottom: "vig-ch-bot",
+			common.VignettePosChapterEnd:         "vig-ch-end",
+			common.VignettePosSectionTitleTop:    "vig-sec-top",
+			common.VignettePosSectionTitleBottom: "vig-sec-bot",
+			common.VignettePosSectionEnd:         "vig-sec-end",
+		},
+	}
+	// No page breaks — all sections render inline
+	c := &content.Content{
+		Book: book,
+		ImagesIndex: fb2.BookImages{
+			"vig-ch-top":  {Filename: "vig-ch-top.png"},
+			"vig-ch-bot":  {Filename: "vig-ch-bot.png"},
+			"vig-ch-end":  {Filename: "vig-ch-end.png"},
+			"vig-sec-top": {Filename: "vig-sec-top.png"},
+			"vig-sec-bot": {Filename: "vig-sec-bot.png"},
+			"vig-sec-end": {Filename: "vig-sec-end.png"},
+		},
+	}
+
+	// Untitled wrapper containing two titled children
+	wrapper := &fb2.Section{
+		ID: "wrapper",
+		// No Title — this is the untitled wrapper
+		Content: []fb2.FlowItem{
+			{
+				Kind: fb2.FlowSection,
+				Section: &fb2.Section{
+					ID:    "ch1",
+					Title: makeTitle("Chapter 1"),
+					Content: []fb2.FlowItem{
+						{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+							Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Content 1"}},
+						}},
+					},
+				},
+			},
+			{
+				Kind: fb2.FlowSection,
+				Section: &fb2.Section{
+					ID:    "ch2",
+					Title: makeTitle("Chapter 2"),
+					Content: []fb2.FlowItem{
+						{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+							Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Content 2"}},
+						}},
+					},
+				},
+			},
+		},
+	}
+
+	doc := etree.NewDocument()
+	parent := doc.CreateElement("div")
+
+	// depth=1, titleDepth=1: wrapper is at top-level.
+	// Since wrapper has no title, its contentTitleDepth stays 1,
+	// so children should get titleDepth=1 → chapter treatment.
+	splits, err := appendSectionContent(parent, c, wrapper, 1, 1, log)
+	if err != nil {
+		t.Fatalf("appendSectionContent error: %v", err)
+	}
+	if len(splits) != 0 {
+		t.Errorf("expected no splits (no page breaks configured), got %d", len(splits))
+	}
+
+	// Serialize for inspection
+	rendered, err := doc.WriteToString()
+	if err != nil {
+		t.Fatalf("serialize error: %v", err)
+	}
+
+	// --- Verify chapter treatment (NOT section treatment) ---
+
+	// 1. Wrapper class should be "chapter-title"
+	if !strings.Contains(rendered, `class="chapter-title"`) {
+		t.Error("expected chapter-title wrapper class, not found")
+	}
+	if strings.Contains(rendered, "section-title") {
+		t.Errorf("should NOT have section-title class, got:\n%s", rendered)
+	}
+
+	// 2. Heading should be <h1> (titleDepth=1)
+	if !strings.Contains(rendered, "<h1") {
+		t.Error("expected <h1> heading tag for chapter treatment")
+	}
+	if strings.Contains(rendered, "<h2") {
+		t.Error("should NOT have <h2> heading tag")
+	}
+
+	// 3. Chapter vignettes should be present
+	if !strings.Contains(rendered, "vignette-chapter-title-top") {
+		t.Error("expected chapter-title-top vignette")
+	}
+	if !strings.Contains(rendered, "vignette-chapter-title-bottom") {
+		t.Error("expected chapter-title-bottom vignette")
+	}
+	if !strings.Contains(rendered, "vignette-chapter-end") {
+		t.Error("expected chapter-end vignette")
+	}
+
+	// 4. Section vignettes should NOT be present
+	if strings.Contains(rendered, "vignette-section-title-top") {
+		t.Error("should NOT have section-title-top vignette")
+	}
+	if strings.Contains(rendered, "vignette-section-title-bottom") {
+		t.Error("should NOT have section-title-bottom vignette")
+	}
+	if strings.Contains(rendered, "vignette-section-end") {
+		t.Error("should NOT have section-end vignette")
+	}
+
+	// 5. Both chapters should be present
+	if !strings.Contains(rendered, "Chapter 1") || !strings.Contains(rendered, "Chapter 2") {
+		t.Errorf("both chapter titles should be rendered, got:\n%s", rendered)
+	}
+
+	// 6. Count: exactly 2 chapter-title wrappers (one per titled child)
+	count := strings.Count(rendered, `class="chapter-title"`)
+	if count != 2 {
+		t.Errorf("expected 2 chapter-title wrapper divs, got %d", count)
+	}
+
+	// 7. Count: exactly 2 chapter-end vignettes
+	endCount := strings.Count(rendered, "vignette-chapter-end")
+	if endCount != 2 {
+		t.Errorf("expected 2 chapter-end vignettes, got %d", endCount)
+	}
+}
+
+// TestSectionContent_DoubleUntitledWrapperChapterTreatment verifies that titled
+// grandchildren of doubly-nested untitled wrappers still get chapter treatment.
+//
+// Structure:
+//
+//	<section>               ← untitled wrapper (depth=1, titleDepth=1)
+//	  <section>             ← untitled wrapper (depth=2, titleDepth=1 — no title, no increment)
+//	    <section><title>Ch1 ← titled (depth=3, titleDepth=1 → chapter treatment)
+//	    <section><title>Ch2
+func TestSectionContent_DoubleUntitledWrapperChapterTreatment(t *testing.T) {
+	log := setupTestLogger(t)
+
+	book := &fb2.FictionBook{
+		VignetteIDs: map[common.VignettePos]string{
+			common.VignettePosChapterTitleTop:    "vig-ch-top",
+			common.VignettePosChapterTitleBottom: "vig-ch-bot",
+			common.VignettePosChapterEnd:         "vig-ch-end",
+			common.VignettePosSectionTitleTop:    "vig-sec-top",
+			common.VignettePosSectionTitleBottom: "vig-sec-bot",
+			common.VignettePosSectionEnd:         "vig-sec-end",
+		},
+	}
+	c := &content.Content{
+		Book: book,
+		ImagesIndex: fb2.BookImages{
+			"vig-ch-top":  {Filename: "vig-ch-top.png"},
+			"vig-ch-bot":  {Filename: "vig-ch-bot.png"},
+			"vig-ch-end":  {Filename: "vig-ch-end.png"},
+			"vig-sec-top": {Filename: "vig-sec-top.png"},
+			"vig-sec-bot": {Filename: "vig-sec-bot.png"},
+			"vig-sec-end": {Filename: "vig-sec-end.png"},
+		},
+	}
+
+	// Double-nested untitled wrappers containing titled grandchildren
+	outerWrapper := &fb2.Section{
+		ID: "outer-wrapper",
+		Content: []fb2.FlowItem{
+			{
+				Kind: fb2.FlowSection,
+				Section: &fb2.Section{
+					ID: "inner-wrapper",
+					// Also no title — second untitled wrapper
+					Content: []fb2.FlowItem{
+						{
+							Kind: fb2.FlowSection,
+							Section: &fb2.Section{
+								ID:    "ch1",
+								Title: makeTitle("Chapter 1"),
+								Content: []fb2.FlowItem{
+									{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+										Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Content 1"}},
+									}},
+								},
+							},
+						},
+						{
+							Kind: fb2.FlowSection,
+							Section: &fb2.Section{
+								ID:    "ch2",
+								Title: makeTitle("Chapter 2"),
+								Content: []fb2.FlowItem{
+									{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+										Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Content 2"}},
+									}},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	doc := etree.NewDocument()
+	parent := doc.CreateElement("div")
+
+	// outer wrapper: depth=1, titleDepth=1
+	// inner wrapper: depth=2, titleDepth=1 (untitled, no increment)
+	// ch1, ch2:      depth=3, titleDepth=1 (still chapter treatment!)
+	splits, err := appendSectionContent(parent, c, outerWrapper, 1, 1, log)
+	if err != nil {
+		t.Fatalf("appendSectionContent error: %v", err)
+	}
+	if len(splits) != 0 {
+		t.Errorf("expected no splits, got %d", len(splits))
+	}
+
+	rendered, err := doc.WriteToString()
+	if err != nil {
+		t.Fatalf("serialize error: %v", err)
+	}
+
+	// Even through two levels of untitled wrappers, titled grandchildren
+	// should still get chapter treatment (titleDepth=1).
+
+	if !strings.Contains(rendered, `class="chapter-title"`) {
+		t.Error("expected chapter-title wrapper class")
+	}
+	if strings.Contains(rendered, "section-title") {
+		t.Errorf("should NOT have section-title class, got:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "<h1") {
+		t.Error("expected <h1> heading tag")
+	}
+	if strings.Contains(rendered, "<h2") || strings.Contains(rendered, "<h3") {
+		t.Error("should NOT have <h2> or <h3> heading tags")
+	}
+
+	// Chapter vignettes present, section vignettes absent
+	if !strings.Contains(rendered, "vignette-chapter-title-top") {
+		t.Error("expected chapter-title-top vignette")
+	}
+	if !strings.Contains(rendered, "vignette-chapter-end") {
+		t.Error("expected chapter-end vignette")
+	}
+	if strings.Contains(rendered, "vignette-section-title-top") {
+		t.Error("should NOT have section-title-top vignette")
+	}
+	if strings.Contains(rendered, "vignette-section-end") {
+		t.Error("should NOT have section-end vignette")
+	}
+
+	// Exactly 2 chapter-title wrappers
+	count := strings.Count(rendered, `class="chapter-title"`)
+	if count != 2 {
+		t.Errorf("expected 2 chapter-title wrapper divs, got %d", count)
+	}
+}

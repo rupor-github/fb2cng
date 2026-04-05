@@ -688,6 +688,516 @@ func TestChapterEndVignetteTransfer(t *testing.T) {
 	}
 }
 
+// TestVignettePlacement_UntitledTopLevelWrapper verifies that titled children of an
+// untitled top-level wrapper section get chapter treatment (titleDepth=1).
+//
+// This is the key scenario from the _Test.fb2 file pattern:
+//
+//	<body>
+//	  <section>              ← UNTITLED wrapper (depth=1, titleDepth=1)
+//	    <section><title>Ch1  ← titled (depth=2, titleDepth=1 → chapter vignettes!)
+//	    <section><title>Ch2
+//	    <section><title>Ch3
+//
+// Because the wrapper has no title, titleDepth stays at 1 for its children.
+// Each child becomes a separate storyline (depth=2, SectionNeedsBreak(2)=true)
+// and should get chapter-title-top, chapter-title-bottom, and chapter-end vignettes.
+//
+// This also tests isChapterEnd propagation: when the parent is untitled, ALL
+// children get isChapterEnd=true (not just the last), because each is an
+// independent chapter from the vignette perspective.
+func TestVignettePlacement_UntitledTopLevelWrapper(t *testing.T) {
+	vignetteIDs := map[common.VignettePos]string{
+		common.VignettePosChapterTitleTop:    "vig-chapter-top",
+		common.VignettePosChapterTitleBottom: "vig-chapter-bottom",
+		common.VignettePosChapterEnd:         "vig-chapter-end",
+		common.VignettePosSectionTitleTop:    "vig-section-top",
+		common.VignettePosSectionTitleBottom: "vig-section-bottom",
+		common.VignettePosSectionEnd:         "vig-section-end",
+	}
+
+	book := &fb2.FictionBook{
+		Description: fb2.Description{
+			TitleInfo: fb2.TitleInfo{
+				BookTitle: fb2.TextField{Value: "Test Book"},
+				Authors:   []fb2.Author{{LastName: "Author"}},
+				Lang:      language.English,
+			},
+			DocumentInfo: fb2.DocumentInfo{
+				ID: "test-untitled-top-wrapper",
+			},
+		},
+		Bodies: []fb2.Body{
+			{
+				Kind: fb2.BodyMain,
+				Sections: []fb2.Section{
+					// UNTITLED wrapper section at depth=1
+					{
+						ID: "wrapper",
+						// No Title — untitled wrapper
+						Content: []fb2.FlowItem{
+							{
+								Kind: fb2.FlowSection,
+								Section: &fb2.Section{
+									ID: "ch1",
+									Title: &fb2.Title{
+										Items: []fb2.TitleItem{
+											{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 1"}}}},
+										},
+									},
+									Content: []fb2.FlowItem{
+										{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 1 content."}}}},
+									},
+								},
+							},
+							{
+								Kind: fb2.FlowSection,
+								Section: &fb2.Section{
+									ID: "ch2",
+									Title: &fb2.Title{
+										Items: []fb2.TitleItem{
+											{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 2"}}}},
+										},
+									},
+									Content: []fb2.FlowItem{
+										{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 2 content."}}}},
+									},
+								},
+							},
+							{
+								Kind: fb2.FlowSection,
+								Section: &fb2.Section{
+									ID: "ch3",
+									Title: &fb2.Title{
+										Items: []fb2.TitleItem{
+											{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 3"}}}},
+										},
+									},
+									Content: []fb2.FlowItem{
+										{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 3 content."}}}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		VignetteIDs: vignetteIDs,
+	}
+	book.SetSectionPageBreaks(map[int]bool{2: true})
+
+	c := &content.Content{
+		Book:         book,
+		OutputFormat: common.OutputFmtKfx,
+		ScreenWidth:  1264,
+		ImagesIndex:  createVignetteImages(),
+	}
+	imageResources := createVignetteResources(c.ImagesIndex)
+	styles := NewStyleRegistry()
+
+	fragments, _, _, _, _, _, _, _, err := generateStoryline(c, styles, imageResources, 1000)
+	if err != nil {
+		t.Fatalf("generateStoryline failed: %v", err)
+	}
+
+	storylineVignettes := collectStorylineVignettes(fragments)
+
+	// Storyline layout:
+	// l1 = untitled wrapper (no title → no vignettes)
+	// l2 = ch1 (titleDepth=1 → chapter vignettes + chapter-end)
+	// l3 = ch2 (titleDepth=1 → chapter vignettes + chapter-end)
+	// l4 = ch3 (titleDepth=1 → chapter vignettes + chapter-end)
+	tests := []struct {
+		name     string
+		expected []string
+		excluded []string
+	}{
+		{
+			name:     "l1",
+			expected: []string{}, // Untitled wrapper — no vignettes
+			excluded: []string{"rsrc-vig-chapter-top", "rsrc-vig-chapter-bottom", "rsrc-vig-chapter-end", "rsrc-vig-section-top", "rsrc-vig-section-bottom", "rsrc-vig-section-end"},
+		},
+		{
+			name: "l2",
+			// ch1: titleDepth=1 → chapter treatment, plus chapter-end (untitled parent → all children get it)
+			expected: []string{"rsrc-vig-chapter-top", "rsrc-vig-chapter-bottom", "rsrc-vig-chapter-end"},
+			excluded: []string{"rsrc-vig-section-top", "rsrc-vig-section-bottom", "rsrc-vig-section-end"},
+		},
+		{
+			name: "l3",
+			// ch2: same chapter treatment + chapter-end
+			expected: []string{"rsrc-vig-chapter-top", "rsrc-vig-chapter-bottom", "rsrc-vig-chapter-end"},
+			excluded: []string{"rsrc-vig-section-top", "rsrc-vig-section-bottom", "rsrc-vig-section-end"},
+		},
+		{
+			name: "l4",
+			// ch3: same chapter treatment + chapter-end
+			expected: []string{"rsrc-vig-chapter-top", "rsrc-vig-chapter-bottom", "rsrc-vig-chapter-end"},
+			excluded: []string{"rsrc-vig-section-top", "rsrc-vig-section-bottom", "rsrc-vig-section-end"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			actual, exists := storylineVignettes[tc.name]
+			if !exists {
+				t.Fatalf("storyline %s not found in %v", tc.name, storylineVignettes)
+			}
+
+			for _, exp := range tc.expected {
+				if !containsVignette(actual, exp) {
+					t.Errorf("expected vignette %s not found, got %v", exp, actual)
+				}
+			}
+
+			for _, excl := range tc.excluded {
+				if containsVignette(actual, excl) {
+					t.Errorf("vignette %s should NOT be present, got %v", excl, actual)
+				}
+			}
+
+			for _, v := range actual {
+				if !strings.HasPrefix(v, "rsrc-vig-") {
+					continue
+				}
+				if !containsVignette(tc.expected, v) {
+					t.Errorf("unexpected vignette %s found", v)
+				}
+			}
+		})
+	}
+
+	// Additional check: verify isChapterEnd propagation — ALL three chapters
+	// should have chapter-end (not just the last one), because the parent is untitled.
+	for _, name := range []string{"l2", "l3", "l4"} {
+		if !containsVignette(storylineVignettes[name], "rsrc-vig-chapter-end") {
+			t.Errorf("isChapterEnd propagation: storyline %s should have chapter-end vignette (untitled parent gives ALL children chapter-end)", name)
+		}
+	}
+}
+
+// TestVignettePlacement_DoubleUntitledWrapper verifies that titled sections nested
+// inside two levels of untitled wrappers still get chapter treatment (titleDepth=1).
+//
+// Structure:
+//
+//	<body>
+//	  <section>                ← outer untitled wrapper (depth=1, titleDepth=1)
+//	    <section>              ← inner untitled wrapper (depth=2, titleDepth=1 — no title, no increment)
+//	      <section><title>Ch1  ← titled (depth=3, titleDepth=1 → chapter vignettes!)
+//	      <section><title>Ch2
+//
+// Both inner wrapper and outer wrapper are untitled, so titleDepth never increments.
+// Since SectionNeedsBreak(2)=true, the inner wrapper at depth=2 would be split — but it has
+// no title, so it doesn't split (shouldSplit requires HasTitle). The inner wrapper is processed
+// inline within the outer wrapper's storyline. Children at depth=3 don't split either
+// (SectionNeedsBreak(3)=false by default) and are processed inline — but they get titleDepth=1.
+//
+// Note: We set SectionNeedsBreak for depth=3 to force children into separate storylines,
+// making it easier to inspect their vignettes individually.
+func TestVignettePlacement_DoubleUntitledWrapper(t *testing.T) {
+	vignetteIDs := map[common.VignettePos]string{
+		common.VignettePosChapterTitleTop:    "vig-chapter-top",
+		common.VignettePosChapterTitleBottom: "vig-chapter-bottom",
+		common.VignettePosChapterEnd:         "vig-chapter-end",
+		common.VignettePosSectionTitleTop:    "vig-section-top",
+		common.VignettePosSectionTitleBottom: "vig-section-bottom",
+		common.VignettePosSectionEnd:         "vig-section-end",
+	}
+
+	book := &fb2.FictionBook{
+		Description: fb2.Description{
+			TitleInfo: fb2.TitleInfo{
+				BookTitle: fb2.TextField{Value: "Test Book"},
+				Authors:   []fb2.Author{{LastName: "Author"}},
+				Lang:      language.English,
+			},
+			DocumentInfo: fb2.DocumentInfo{
+				ID: "test-double-untitled-wrapper",
+			},
+		},
+		Bodies: []fb2.Body{
+			{
+				Kind: fb2.BodyMain,
+				Sections: []fb2.Section{
+					// Outer untitled wrapper at depth=1
+					{
+						ID: "outer-wrapper",
+						Content: []fb2.FlowItem{
+							{
+								Kind: fb2.FlowSection,
+								Section: &fb2.Section{
+									ID: "inner-wrapper",
+									// Also no title — second untitled wrapper at depth=2
+									Content: []fb2.FlowItem{
+										{
+											Kind: fb2.FlowSection,
+											Section: &fb2.Section{
+												ID: "ch1",
+												Title: &fb2.Title{
+													Items: []fb2.TitleItem{
+														{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 1"}}}},
+													},
+												},
+												Content: []fb2.FlowItem{
+													{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 1 content."}}}},
+												},
+											},
+										},
+										{
+											Kind: fb2.FlowSection,
+											Section: &fb2.Section{
+												ID: "ch2",
+												Title: &fb2.Title{
+													Items: []fb2.TitleItem{
+														{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 2"}}}},
+													},
+												},
+												Content: []fb2.FlowItem{
+													{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 2 content."}}}},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		VignetteIDs: vignetteIDs,
+	}
+	// Set page break at depth 3 so titled children become separate storylines
+	book.SetSectionPageBreaks(map[int]bool{3: true})
+
+	c := &content.Content{
+		Book:         book,
+		OutputFormat: common.OutputFmtKfx,
+		ScreenWidth:  1264,
+		ImagesIndex:  createVignetteImages(),
+	}
+	imageResources := createVignetteResources(c.ImagesIndex)
+	styles := NewStyleRegistry()
+
+	fragments, _, _, _, _, _, _, _, err := generateStoryline(c, styles, imageResources, 1000)
+	if err != nil {
+		t.Fatalf("generateStoryline failed: %v", err)
+	}
+
+	storylineVignettes := collectStorylineVignettes(fragments)
+
+	// Storyline layout:
+	// l1 = outer-wrapper (untitled, depth=1 → no vignettes)
+	//      inner-wrapper is processed inline within l1 (untitled, depth=2, no title so no split)
+	// l2 = ch1 (depth=3, titleDepth=1 → chapter vignettes + chapter-end)
+	// l3 = ch2 (depth=3, titleDepth=1 → chapter vignettes + chapter-end)
+	tests := []struct {
+		name     string
+		expected []string
+		excluded []string
+	}{
+		{
+			name:     "l1",
+			expected: []string{}, // Both wrappers untitled — no vignettes
+			excluded: []string{"rsrc-vig-chapter-top", "rsrc-vig-chapter-end", "rsrc-vig-section-top", "rsrc-vig-section-end"},
+		},
+		{
+			name: "l2",
+			// ch1 through two untitled wrappers: still titleDepth=1 → chapter treatment
+			expected: []string{"rsrc-vig-chapter-top", "rsrc-vig-chapter-bottom", "rsrc-vig-chapter-end"},
+			excluded: []string{"rsrc-vig-section-top", "rsrc-vig-section-bottom", "rsrc-vig-section-end"},
+		},
+		{
+			name: "l3",
+			// ch2: same chapter treatment
+			expected: []string{"rsrc-vig-chapter-top", "rsrc-vig-chapter-bottom", "rsrc-vig-chapter-end"},
+			excluded: []string{"rsrc-vig-section-top", "rsrc-vig-section-bottom", "rsrc-vig-section-end"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			actual, exists := storylineVignettes[tc.name]
+			if !exists {
+				t.Fatalf("storyline %s not found in %v", tc.name, storylineVignettes)
+			}
+
+			for _, exp := range tc.expected {
+				if !containsVignette(actual, exp) {
+					t.Errorf("expected vignette %s not found, got %v", exp, actual)
+				}
+			}
+
+			for _, excl := range tc.excluded {
+				if containsVignette(actual, excl) {
+					t.Errorf("vignette %s should NOT be present, got %v", excl, actual)
+				}
+			}
+
+			for _, v := range actual {
+				if !strings.HasPrefix(v, "rsrc-vig-") {
+					continue
+				}
+				if !containsVignette(tc.expected, v) {
+					t.Errorf("unexpected vignette %s found", v)
+				}
+			}
+		})
+	}
+}
+
+// TestChapterEndVignetteTransfer_UntitledWrapper verifies that when a chapter's
+// parent section is untitled (wrapper), ALL its titled children get isChapterEnd=true.
+// This contrasts with TestChapterEndVignetteTransfer where the parent is titled
+// and only the LAST child gets the chapter-end vignette.
+//
+// Structure:
+//
+//	<body>
+//	  <section>              ← UNTITLED wrapper
+//	    <section><title>Sec1 ← gets chapter-end (independent chapter)
+//	    <section><title>Sec2 ← gets chapter-end (independent chapter)
+//	    <section><title>Sec3 ← gets chapter-end (independent chapter)
+//
+// Compare with TestChapterEndVignetteTransfer:
+//
+//	<body>
+//	  <section><title>Chapter ← TITLED parent
+//	    <section><title>Sec1  ← NO chapter-end
+//	    <section><title>Sec2  ← NO chapter-end
+//	    <section><title>Sec3  ← HAS chapter-end (only the last)
+func TestChapterEndVignetteTransfer_UntitledWrapper(t *testing.T) {
+	vignetteIDs := map[common.VignettePos]string{
+		common.VignettePosChapterEnd: "vig-chapter-end",
+	}
+
+	book := &fb2.FictionBook{
+		Description: fb2.Description{
+			TitleInfo: fb2.TitleInfo{
+				BookTitle: fb2.TextField{Value: "Test Book"},
+				Authors:   []fb2.Author{{LastName: "Author"}},
+				Lang:      language.English,
+			},
+			DocumentInfo: fb2.DocumentInfo{
+				ID: "test-chapter-end-untitled-wrapper",
+			},
+		},
+		Bodies: []fb2.Body{
+			{
+				Kind: fb2.BodyMain,
+				Sections: []fb2.Section{
+					// UNTITLED wrapper
+					{
+						ID: "wrapper",
+						// No Title
+						Content: []fb2.FlowItem{
+							{
+								Kind: fb2.FlowSection,
+								Section: &fb2.Section{
+									ID: "sec1",
+									Title: &fb2.Title{
+										Items: []fb2.TitleItem{
+											{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Section 1"}}}},
+										},
+									},
+									Content: []fb2.FlowItem{
+										{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Sec 1."}}}},
+									},
+								},
+							},
+							{
+								Kind: fb2.FlowSection,
+								Section: &fb2.Section{
+									ID: "sec2",
+									Title: &fb2.Title{
+										Items: []fb2.TitleItem{
+											{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Section 2"}}}},
+										},
+									},
+									Content: []fb2.FlowItem{
+										{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Sec 2."}}}},
+									},
+								},
+							},
+							{
+								Kind: fb2.FlowSection,
+								Section: &fb2.Section{
+									ID: "sec3",
+									Title: &fb2.Title{
+										Items: []fb2.TitleItem{
+											{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Section 3"}}}},
+										},
+									},
+									Content: []fb2.FlowItem{
+										{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Sec 3."}}}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		VignetteIDs: vignetteIDs,
+	}
+	book.SetSectionPageBreaks(map[int]bool{2: true})
+
+	c := &content.Content{
+		Book:         book,
+		OutputFormat: common.OutputFmtKfx,
+		ScreenWidth:  1264,
+		ImagesIndex: fb2.BookImages{
+			"vig-chapter-end": {Dim: struct{ Width, Height int }{800, 100}},
+		},
+	}
+
+	imageResources := make(imageResourceInfoByID)
+	imageResources["vig-chapter-end"] = imageResourceInfo{
+		ResourceName: "rsrc-vig-chapter-end",
+		Width:        800,
+		Height:       100,
+	}
+
+	styles := NewStyleRegistry()
+
+	fragments, _, _, _, _, _, _, _, err := generateStoryline(c, styles, imageResources, 1000)
+	if err != nil {
+		t.Fatalf("generateStoryline failed: %v", err)
+	}
+
+	storylineVignettes := collectStorylineVignettes(fragments)
+
+	// l1 = untitled wrapper (no vignettes)
+	// l2 = sec1 (HAS chapter-end — independent chapter due to untitled parent)
+	// l3 = sec2 (HAS chapter-end — same)
+	// l4 = sec3 (HAS chapter-end — same)
+	//
+	// This is the opposite of TestChapterEndVignetteTransfer where a TITLED parent
+	// passes chapter-end only to the LAST child (l4).
+
+	// Untitled wrapper should have no vignettes
+	if containsVignette(storylineVignettes["l1"], "rsrc-vig-chapter-end") {
+		t.Error("untitled wrapper (l1) should NOT have chapter-end vignette")
+	}
+
+	// ALL three children should have chapter-end (not just the last)
+	for _, name := range []string{"l2", "l3", "l4"} {
+		if !containsVignette(storylineVignettes[name], "rsrc-vig-chapter-end") {
+			t.Errorf("storyline %s should have chapter-end vignette (untitled parent gives ALL children chapter-end), got %v", name, storylineVignettes[name])
+		}
+	}
+
+	// Verify exactly 1 chapter-end per child storyline (no duplicates)
+	for _, name := range []string{"l2", "l3", "l4"} {
+		count := countVignette(storylineVignettes[name], "rsrc-vig-chapter-end")
+		if count != 1 {
+			t.Errorf("storyline %s should have exactly 1 chapter-end vignette, got %d", name, count)
+		}
+	}
+}
+
 // ============================================================================
 // Helper functions for vignette tests
 // ============================================================================
