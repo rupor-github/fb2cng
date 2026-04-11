@@ -184,7 +184,7 @@ func unmarshalConfig(data []byte, cfg *Config, process bool) (*Config, error) {
 }
 
 // LoadConfiguration reads the configuration from the file at the given path,
-// superimposes its values on top of expanded configuration tamplate to provide
+// superimposes its values on top of expanded configuration template to provide
 // sane defaults and performs validation.
 func LoadConfiguration(path string, options ...func(*gencfg.ProcessingOptions)) (*Config, error) {
 	haveFile := len(path) > 0
