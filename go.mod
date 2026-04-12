@@ -10,6 +10,7 @@ tool (
 require (
 	github.com/amazon-ion/ion-go v1.5.0
 	github.com/beevik/etree v1.6.0
+	github.com/carlos7ags/folio v0.6.2
 	github.com/disintegration/imaging v1.6.2
 	github.com/go-task/slim-sprig/v3 v3.0.0
 	github.com/google/uuid v1.6.0
