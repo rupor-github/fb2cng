@@ -15,6 +15,10 @@ import (
 // ctx provides the style context with optional position for margin filtering.
 // extraClasses are additional CSS classes to append to the style (e.g., paragraph's custom style).
 func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleContext, extraClasses string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
+	if sb != nil && sb.consumePendingFootnoteMore() && c != nil && c.MoreParaStr != "" {
+		para = paragraphWithMoreIndicator(para, c.MoreParaStr)
+	}
+
 	// Determine whether to insert soft hyphens into text, matching EPUB behavior.
 	// Hyphenation is skipped for "special" paragraphs (code/preformatted blocks).
 	hyphenate := !para.Special && c.Hyphen != nil
@@ -402,6 +406,22 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 	}
 
 	flush()
+}
+
+func paragraphWithMoreIndicator(para *fb2.Paragraph, moreText string) *fb2.Paragraph {
+	if para == nil || moreText == "" {
+		return para
+	}
+
+	cloned := *para
+	cloned.Text = make([]fb2.InlineSegment, 0, len(para.Text)+1)
+	cloned.Text = append(cloned.Text, fb2.InlineSegment{
+		Kind:  fb2.InlineNamedStyle,
+		Style: "footnote-more",
+		Text:  moreText,
+	})
+	cloned.Text = append(cloned.Text, para.Text...)
+	return &cloned
 }
 
 // addParagraphWithMixedContent handles paragraphs that have both text and inline images,

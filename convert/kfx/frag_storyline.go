@@ -396,7 +396,7 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 				}
 			}
 
-			processFootnoteSectionContent(c, section, sb, styles, imageResources, ca, idToEID, addParagraphWithMoreIndicator, addBacklinks)
+			processFootnoteSectionContent(c, section, sb, styles, imageResources, ca, idToEID, addBacklinks)
 
 			// In default mode: create nested TOC entry for this footnote section
 			// This mirrors EPUB behavior where individual footnote sections appear under footnote body
@@ -660,259 +660,26 @@ func addBacklinkParagraph(c *content.Content, refs []content.BackLinkRef, sb *St
 	sb.AddContentAndEvents(SymText, contentName, contentOffset, paraStyle, "", events)
 }
 
-// countFootnoteFlowParagraphs counts the number of paragraphs in a slice of flow items.
-// Used by countFootnoteSectionParagraphs to tally paragraphs across all footnote sub-sections.
-func countFootnoteFlowParagraphs(content []fb2.FlowItem) int {
-	count := 0
-	for i := range content {
-		if content[i].Paragraph != nil {
-			count++
-		}
-		// Count paragraphs inside poems and cites as well
-		if content[i].Poem != nil {
-			for j := range content[i].Poem.Stanzas {
-				count += len(content[i].Poem.Stanzas[j].Verses)
-			}
-		}
-		if content[i].Cite != nil {
-			count += countFootnoteFlowParagraphs(content[i].Cite.Items)
-		}
-	}
-	return count
-}
-
-// countFootnoteSectionParagraphs counts all visible paragraphs in a footnote section,
-// including those inside epigraphs, annotations, and body content. This total is used
-// to determine whether the "more" indicator (~) should be shown.
-func countFootnoteSectionParagraphs(section *fb2.Section) int {
-	count := 0
-	// Count epigraph paragraphs (flow items + text-authors)
-	for i := range section.Epigraphs {
-		count += countFootnoteFlowParagraphs(section.Epigraphs[i].Flow.Items)
-		count += len(section.Epigraphs[i].TextAuthors)
-	}
-	// Count annotation paragraphs
-	if section.Annotation != nil {
-		count += countFootnoteFlowParagraphs(section.Annotation.Items)
-	}
-	// Count body content paragraphs
-	count += countFootnoteFlowParagraphs(section.Content)
-	return count
-}
-
-// addParagraphWithMoreIndicator adds a paragraph with a "more paragraphs" indicator at the start.
-// The indicator is styled with "footnote-more" and prepended to the paragraph content.
-func addParagraphWithMoreIndicator(c *content.Content, para *fb2.Paragraph, ctx StyleContext, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
-	// Build the element-level styleSpec for deferred resolution.
-	// Unlike the immediate-resolution path (addParagraphWithImages), we do NOT use ctx.StyleSpec()
-	// because that bakes ancestor scope classes into the spec string. For deferred resolution,
-	// the scope information is carried by the stored StyleContext (ctx), so the styleSpec should
-	// contain only the element tag and element classes. If scope classes were included,
-	// parseStyleSpec() would treat them as element classes during re-resolution, causing
-	// "footnote" to be applied as both a scope ancestor AND an element class.
-	styleSpec := "p paragraph"
-
-	// Check for single spanning style that can be merged into block style
-	spanningStyle := detectSingleSpanningStyle(para.Text)
-	if spanningStyle != "" {
-		styleSpec = styleSpec + " " + spanningStyle
-	}
-
-	// Check if paragraph has inline images
-	hasTextContent := paragraphHasTextContent(para)
-	hasInlineImages := paragraphHasInlineImages(para)
-
-	// Build text content with more indicator prefix
-	nw := newNormalizingWriter()
-	moreStr := c.MoreParaStr
-
-	// Add "more" indicator at the start
-	nw.WriteString(moreStr)
-
-	// Resolve styles
-	moreStyle := "footnote-more"
-	if styles != nil {
-		styles.EnsureBaseStyle(moreStyle)
-		moreStyle = NewStyleContext(styles).Resolve("", moreStyle)
-	}
-
-	// Process inline segments
-	var events []StyleEventRef
-	var backlinkRefIDs []BacklinkRefWithOffset
-
-	// Create inline style context for this footnote paragraph.
-	// This ensures inline styles inherit properties from the paragraph context.
-	inlineCtx := ctx.Push("p", "paragraph "+spanningStyle)
-
-	// Add style event for the "more" indicator
-	moreLen := nw.RuneCount()
-	if moreLen > 0 {
-		events = append(events, StyleEventRef{
-			Offset: 0,
-			Length: moreLen,
-			Style:  moreStyle,
-		})
-	}
-
-	// Process paragraph text segments
-	type inlineStyleInfo struct {
-		Style          string
-		LinkTo         string
-		IsFootnoteLink bool
-	}
-
-	spanningStyleParts := strings.Fields(spanningStyle)
-	var walk func(seg *fb2.InlineSegment, styleContext []inlineStyleInfo, spanningDepth int)
-	walk = func(seg *fb2.InlineSegment, styleContext []inlineStyleInfo, spanningDepth int) {
-		// Skip inline images for now (handled separately)
-		if seg.Kind == fb2.InlineImageSegment {
-			return
-		}
-
-		// Determine style for this segment using shared helper
-		segStyle, isLink, linkTo, isFootnoteLink, backlinkRefID := SegmentStyle(seg, c, styles)
-		if backlinkRefID != "" {
-			backlinkRefIDs = append(backlinkRefIDs, BacklinkRefWithOffset{RefID: backlinkRefID})
-		}
-
-		if seg.Kind == fb2.InlineCode {
-			nw.SetPreserveWhitespace(true)
-		}
-
-		// Use GetPseudoStartText to account for ::before content
-		startText := GetPseudoStartText(seg, segStyle, styles)
-		start := nw.ContentStartOffset(startText)
-
-		// Now that start is known, set the offset on the backlink ref we just collected
-		if backlinkRefID != "" && len(backlinkRefIDs) > 0 {
-			backlinkRefIDs[len(backlinkRefIDs)-1].Offset = start
-		}
-
-		// Inject ::before content (inherits styling from base element)
-		InjectPseudoBefore(segStyle, styles, nw)
-
-		nw.WriteString(seg.Text)
-
-		// Build child context
-		childContext := styleContext
-		if segStyle != "" {
-			info := inlineStyleInfo{Style: segStyle}
-			if isLink {
-				info.LinkTo = linkTo
-				info.IsFootnoteLink = isFootnoteLink
-			}
-			childContext = append(append([]inlineStyleInfo(nil), styleContext...), info)
-		}
-
-		// Process children
-		childSpanningDepth := spanningDepth
-		if spanningDepth < len(spanningStyleParts) && segStyle == spanningStyleParts[spanningDepth] {
-			childSpanningDepth++
-		}
-		for i := range seg.Children {
-			walk(&seg.Children[i], childContext, childSpanningDepth)
-		}
-
-		if seg.Kind == fb2.InlineCode {
-			nw.SetPreserveWhitespace(false)
-		}
-
-		// Use RuneCountAfterPendingSpace to include trailing whitespace inside
-		// the styled element. KP3 includes such whitespace in the style span.
-		end := nw.RuneCountAfterPendingSpace()
-
-		// Inject ::after content (inherits styling from base element)
-		// Always update end to include ::after in the main style span
-		if InjectPseudoAfter(segStyle, styles, nw) {
-			end = nw.RuneCountAfterPendingSpace()
-		}
-
-		// Create style event
-		isSpanningStyle := spanningDepth < len(spanningStyleParts) && segStyle == spanningStyleParts[spanningDepth]
-		if segStyle != "" && end > start && !isSpanningStyle {
-			var styleNames []string
-			for _, sctx := range styleContext {
-				styleNames = append(styleNames, sctx.Style)
-			}
-			styleNames = append(styleNames, segStyle)
-
-			// Resolve inline style using delta-only approach (KP3 behavior).
-			// Style events contain only properties that differ from the parent
-			// (paragraph style). Block-level properties are excluded.
-			mergedSpec := strings.Join(styleNames, " ")
-			mergedStyle := inlineCtx.ResolveInlineDelta(mergedSpec)
-
-			event := StyleEventRef{
-				Offset: start,
-				Length: end - start,
-				Style:  mergedStyle,
-			}
-
-			if isLink {
-				event.LinkTo = linkTo
-				event.IsFootnoteLink = isFootnoteLink
-			} else {
-				for i := len(styleContext) - 1; i >= 0; i-- {
-					if styleContext[i].LinkTo != "" {
-						event.LinkTo = styleContext[i].LinkTo
-						event.IsFootnoteLink = styleContext[i].IsFootnoteLink
-						break
-					}
-				}
-			}
-
-			events = append(events, event)
-		}
-	}
-
-	// Walk paragraph text (skip images for text-only processing)
-	if hasInlineImages && hasTextContent {
-		// For mixed content, fall back to standard processing with more indicator prepended
-		// This is a simplified path - complex mixed content goes through standard flow
-		for i := range para.Text {
-			walk(&para.Text[i], nil, 0)
-		}
-	} else if !hasInlineImages {
-		// Text only paragraph
-		for i := range para.Text {
-			walk(&para.Text[i], nil, 0)
-		}
-	}
-
-	if nw.Len() == 0 {
-		// No text content, fall back to standard processing
-		addParagraphWithImages(c, para, ctx, "paragraph", 0, sb, styles, imageResources, ca, idToEID)
+func addStandaloneFootnoteMoreIndicator(c *content.Content, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator) {
+	if c == nil || sb == nil || ca == nil || c.MoreParaStr == "" {
 		return
 	}
 
-	// Resolve style - don't pre-resolve, will be done in Build() with position filtering
-	resolved := ""
-
-	contentName, offset := ca.Add(nw.String())
-
-	// Segment events
-	segmentedEvents := SegmentNestedStyleEvents(events)
 	if styles != nil {
-		for _, ev := range segmentedEvents {
-			styles.ResolveStyle(ev.Style, styleUsageText)
-		}
+		styles.EnsureBaseStyle("footnote-more")
 	}
 
-	// Use AddContentAndEvents (not AddFootnoteContentAndEvents) because footnote content marking
-	// is now handled by the pending flag mechanism in StorylineBuilder. The pending flag was set
-	// by processFootnoteSectionContent() after section ID registration, and will be consumed by
-	// addEntry() for whichever content entry comes first (epigraph, image, or this paragraph).
-	// This avoids redundant marking when an epigraph already consumed the flag.
-	eid := sb.AddContentAndEvents(SymText, contentName, offset, styleSpec, resolved, segmentedEvents, ctx)
-	if para.ID != "" {
-		if _, exists := idToEID[para.ID]; !exists {
-			idToEID[para.ID] = anchorTarget{EID: eid}
-		}
+	contentName, contentOffset := ca.Add(c.MoreParaStr)
+	resolved := ""
+	if styles != nil {
+		resolved = NewStyleContext(styles).Resolve("", "footnote-more")
 	}
-	// Register backlink ref IDs
-	for _, ref := range backlinkRefIDs {
-		if _, exists := idToEID[ref.RefID]; !exists {
-			idToEID[ref.RefID] = anchorTarget{EID: eid, Offset: ref.Offset}
-		}
+
+	// Preserve pending footnote content so the following real body element (e.g. the image)
+	// remains the first footnote-content entry.
+	hadPendingFootnoteContent := sb.consumePendingFootnoteContent()
+	sb.AddContent(SymText, contentName, contentOffset, "", resolved)
+	if hadPendingFootnoteContent {
+		sb.SetPendingFootnoteContent()
 	}
 }

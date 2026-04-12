@@ -82,3 +82,64 @@ func TestAddParagraphWithImages_DropcapNegativeMarginInjectsSpacer(t *testing.T)
 		t.Fatalf("expected glyph event to stay on first rune, got %+v", entry.StyleEvents[0])
 	}
 }
+
+func TestAddParagraphWithImages_PendingFootnoteMorePreservesInlineImages(t *testing.T) {
+	sr := NewStyleRegistry()
+	sr.Register(NewStyle("p").Build())
+	sr.Register(NewStyle("footnote-more").FontWeight(SymBold).Build())
+
+	ctx := NewStyleContext(sr)
+	para := &fb2.Paragraph{
+		Text: []fb2.InlineSegment{
+			{Kind: fb2.InlineText, Text: "Lead "},
+			{Kind: fb2.InlineImageSegment, Image: &fb2.InlineImage{Href: "#img1", Alt: "img"}},
+			{Kind: fb2.InlineText, Text: " tail"},
+		},
+	}
+
+	sb := NewStorylineBuilder("l1", "c0", 1, sr)
+	sb.SetPendingFootnoteMore()
+	ca := NewContentAccumulator(1)
+	images := imageResourceInfoByID{
+		"img1": {ResourceName: "resource/img1", Width: 10, Height: 10},
+	}
+	addParagraphWithImages(&content.Content{MoreParaStr: "(~) "}, para, ctx, "", 0, sb, sr, images, ca, nil)
+
+	if len(sb.contentEntries) != 1 {
+		t.Fatalf("expected one storyline entry, got %d", len(sb.contentEntries))
+	}
+	entry := sb.contentEntries[0]
+	if entry.RawEntry == nil {
+		t.Fatal("expected mixed-content raw entry")
+	}
+	items, ok := entry.RawEntry.GetList(SymContentList)
+	if !ok {
+		t.Fatal("expected content_list on mixed-content entry")
+	}
+	if len(items) != 3 {
+		t.Fatalf("expected text-image-text content_list, got %d items", len(items))
+	}
+	firstText, ok := items[0].(string)
+	if !ok {
+		t.Fatalf("expected first content_list item to be text, got %T", items[0])
+	}
+	if firstText != "(~) Lead " {
+		t.Fatalf("expected marker-prefixed first text item, got %q", firstText)
+	}
+	if _, ok := items[1].(StructValue); !ok {
+		t.Fatalf("expected second content_list item to be image struct, got %T", items[1])
+	}
+	lastText, ok := items[2].(string)
+	if !ok {
+		t.Fatalf("expected last content_list item to be text, got %T", items[2])
+	}
+	if lastText != " tail" {
+		t.Fatalf("expected trailing text after inline image, got %q", lastText)
+	}
+	if sb.HasPendingFootnoteMore() {
+		t.Fatal("expected pending footnote-more flag to be consumed")
+	}
+	if entry.Style == "" && len(entry.StyleEvents) == 0 {
+		t.Fatal("expected marker styling to be preserved on the rendered paragraph")
+	}
+}

@@ -113,6 +113,12 @@ type StorylineBuilder struct {
 	// This is used to mark the first body paragraph of each footnote section,
 	// matching KP3 behavior where every footnote's first paragraph gets these markers.
 	pendingFootnoteContent bool
+
+	// pendingFootnoteMore marks the next visible paragraph-like entry in a float footnote.
+	// It is consumed by paragraph helpers so the marker appears at the beginning of the
+	// first visible paragraph after backlinks/title. Image-first footnotes are handled
+	// separately by emitting a standalone marker entry before the image.
+	pendingFootnoteMore bool
 }
 
 // containerMargins stores the CSS margins for a container.
@@ -148,6 +154,20 @@ func NewStorylineBuilder(storyName, sectionName string, startEID int, styles *St
 		pageTemplateEID: startEID,     // First EID goes to page template
 		eidCounter:      startEID + 1, // Content EIDs start after page template
 	}
+}
+
+func (sb *StorylineBuilder) SetPendingFootnoteMore() {
+	sb.pendingFootnoteMore = true
+}
+
+func (sb *StorylineBuilder) HasPendingFootnoteMore() bool {
+	return sb.pendingFootnoteMore
+}
+
+func (sb *StorylineBuilder) consumePendingFootnoteMore() bool {
+	v := sb.pendingFootnoteMore
+	sb.pendingFootnoteMore = false
+	return v
 }
 
 // EnterContainer pushes a new container onto the margin collapsing stack.

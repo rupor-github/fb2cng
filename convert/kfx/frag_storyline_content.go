@@ -460,6 +460,10 @@ func processFlowItem(c *content.Content, item *fb2.FlowItem, next *fb2.FlowItem,
 
 	case fb2.FlowTable:
 		if item.Table != nil {
+			if sb.HasPendingFootnoteMore() {
+				sb.consumePendingFootnoteMore()
+				addStandaloneFootnoteMoreIndicator(c, sb, styles, ca)
+			}
 			eid := sb.AddTable(c, item.Table, styles, ca, imageResources, idToEID)
 			if item.Table.ID != "" {
 				if _, exists := idToEID[item.Table.ID]; !exists {
@@ -471,6 +475,10 @@ func processFlowItem(c *content.Content, item *fb2.FlowItem, next *fb2.FlowItem,
 	case fb2.FlowImage:
 		if item.Image == nil {
 			return
+		}
+		if sb.HasPendingFootnoteMore() {
+			sb.consumePendingFootnoteMore()
+			addStandaloneFootnoteMoreIndicator(c, sb, styles, ca)
 		}
 		imgID := strings.TrimPrefix(item.Image.Href, "#")
 		imgInfo, ok := imageResources[imgID]
@@ -679,7 +687,6 @@ func processCite(c *content.Content, cite *fb2.Cite, ctx StyleContext, sb *Story
 //
 // Parameters:
 //   - section: the FB2 section to process
-//   - addMoreIndicator: function to add "more paragraphs" indicator to first paragraph
 //   - addBacklinks: function to add backlink paragraph at the end
 func processFootnoteSectionContent(
 	c *content.Content,
@@ -689,7 +696,6 @@ func processFootnoteSectionContent(
 	imageResources imageResourceInfoByID,
 	ca *ContentAccumulator,
 	idToEID eidByFB2ID,
-	addMoreIndicator func(c *content.Content, para *fb2.Paragraph, ctx StyleContext, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID),
 	addBacklinks func(c *content.Content, sectionID string, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, idToEID eidByFB2ID),
 ) {
 	// Enter footnote section container for margin collapsing tracking.
@@ -724,14 +730,14 @@ func processFootnoteSectionContent(
 	// markers, regardless of whether it's a body paragraph or an epigraph paragraph.
 	sb.SetPendingFootnoteContent()
 
-	// Count ALL visible paragraphs in the footnote section (epigraphs + annotation + body content)
-	// to determine if "more" indicator is needed. The indicator goes on the FIRST visible paragraph,
-	// which may be inside an epigraph or annotation, not necessarily in the body content.
-	// Skip if footnote-more style has display: none in CSS.
-	paragraphCount := countFootnoteSectionParagraphs(section)
+	// Count all visible content units in the footnote section (paragraphs, images, tables)
+	// to determine if the first rendered item needs a marker.
 	moreIndicatorHidden := styles != nil && styles.IsHidden("footnote-more")
-	needMoreIndicator := paragraphCount > 1 && c.MoreParaStr != "" && addMoreIndicator != nil && !moreIndicatorHidden
-	isFirstParagraph := true
+	visibleCount := fb2.CountFootnoteVisibleElements(section)
+	needMoreIndicator := visibleCount > 1 && c.MoreParaStr != "" && !moreIndicatorHidden
+	if needMoreIndicator {
+		sb.SetPendingFootnoteMore()
+	}
 
 	// Process epigraphs - same pattern as regular sections
 	// KFX doesn't use wrapper blocks for epigraphs; apply styling directly to each paragraph.
@@ -755,21 +761,11 @@ func processFootnoteSectionContent(
 		for i := range epigraph.Flow.Items {
 			item := &epigraph.Flow.Items[i]
 
-			// Add "more paragraphs" indicator to the first visible paragraph if needed
-			if needMoreIndicator && isFirstParagraph && item.Paragraph != nil {
-				addMoreIndicator(c, item.Paragraph, epigraphCtx, sb, styles, imageResources, ca, idToEID)
-				isFirstParagraph = false
-				continue
-			}
-
 			var next *fb2.FlowItem
 			if i+1 < len(epigraph.Flow.Items) {
 				next = &epigraph.Flow.Items[i+1]
 			}
 			processFlowItem(c, item, next, epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID)
-			if item.Paragraph != nil {
-				isFirstParagraph = false
-			}
 		}
 		for i := range epigraph.TextAuthors {
 			addParagraphWithImages(c, &epigraph.TextAuthors[i], epigraphCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
@@ -782,6 +778,10 @@ func processFootnoteSectionContent(
 	if section.Image != nil {
 		imgID := strings.TrimPrefix(section.Image.Href, "#")
 		if imgInfo, ok := imageResources[imgID]; ok {
+			if sb.HasPendingFootnoteMore() {
+				sb.consumePendingFootnoteMore()
+				addStandaloneFootnoteMoreIndicator(c, sb, styles, ca)
+			}
 			ctx := NewStyleContext(styles)
 			resolved, isFloatImage := ctx.ResolveImageWithDimensions(ImageBlock, imgInfo.Width, imgInfo.Height, "image")
 			eid := sb.AddImage(imgInfo.ResourceName, resolved, section.Image.Alt, isFloatImage)
@@ -810,21 +810,11 @@ func processFootnoteSectionContent(
 		for i := range section.Annotation.Items {
 			item := &section.Annotation.Items[i]
 
-			// Add "more paragraphs" indicator to the first visible paragraph if needed
-			if needMoreIndicator && isFirstParagraph && item.Paragraph != nil {
-				addMoreIndicator(c, item.Paragraph, annotationCtx, sb, styles, imageResources, ca, idToEID)
-				isFirstParagraph = false
-				continue
-			}
-
 			var next *fb2.FlowItem
 			if i+1 < len(section.Annotation.Items) {
 				next = &section.Annotation.Items[i+1]
 			}
 			processFlowItem(c, item, next, annotationCtx, "annotation", sb, styles, imageResources, ca, idToEID)
-			if item.Paragraph != nil {
-				isFirstParagraph = false
-			}
 		}
 
 		sb.ExitContainer() // Exit annotation container
@@ -835,22 +825,11 @@ func processFootnoteSectionContent(
 	for i := range section.Content {
 		item := &section.Content[i]
 
-		// Add "more paragraphs" indicator to the first paragraph if needed
-		if needMoreIndicator && isFirstParagraph && item.Paragraph != nil {
-			addMoreIndicator(c, item.Paragraph, footnoteCtx, sb, styles, imageResources, ca, idToEID)
-			isFirstParagraph = false
-			continue
-		}
-
 		var next *fb2.FlowItem
 		if i+1 < len(section.Content) {
 			next = &section.Content[i+1]
 		}
 		processFlowItem(c, item, next, footnoteCtx, "footnote", sb, styles, imageResources, ca, idToEID)
-		// Mark first paragraph as processed (for poems/cites that may contain paragraphs)
-		if item.Paragraph != nil {
-			isFirstParagraph = false
-		}
 	}
 
 	// Add backlink paragraph if this footnote was referenced.
@@ -858,6 +837,7 @@ func processFootnoteSectionContent(
 	// receive the footer/footnote markers. For empty footnotes (no body paragraphs),
 	// the pending flag would otherwise be consumed by the backlink entry.
 	sb.consumePendingFootnoteContent()
+	sb.consumePendingFootnoteMore()
 	if addBacklinks != nil && section.ID != "" {
 		addBacklinks(c, section.ID, sb, styles, ca, idToEID)
 	}

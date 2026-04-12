@@ -579,14 +579,102 @@ func appendBodyIntroContent(parent *etree.Element, c *content.Content, body *fb2
 	return nil
 }
 
-// hasImageChild checks if an element contains an img child
-func hasImageChild(elem *etree.Element) bool {
-	for _, child := range elem.ChildElements() {
-		if child.Tag == "img" {
-			return true
+// footnoteMethod2MarkerTarget returns the first rendered span that can host the
+// Method 2 marker and whether the flattened footnote contains additional visible
+// content after that point. Backlinks at the beginning are ignored.
+func footnoteMethod2MarkerTarget(sectionElem *etree.Element) (*etree.Element, bool) {
+	var (
+		firstSpan            *etree.Element
+		hasVisibleBody       bool
+		hasMultipleVisibleEl bool
+	)
+
+	for _, child := range sectionElem.Child {
+		elem, ok := child.(*etree.Element)
+		if !ok {
+			continue
+		}
+
+		switch elem.Tag {
+		case "a":
+			// Backlinks precede body content and do not count toward the marker.
+			continue
+		case "span":
+			if elem.SelectAttrValue("class", "") == "koboSpan" {
+				continue
+			}
+			if !hasVisibleBody {
+				firstSpan = elem
+				hasVisibleBody = true
+				continue
+			}
+			hasMultipleVisibleEl = true
+		case "img":
+			if !hasVisibleBody {
+				hasVisibleBody = true
+				continue
+			}
+			hasMultipleVisibleEl = true
+		case "br":
+			if hasVisibleBody && firstSpan != nil {
+				hasMultipleVisibleEl = true
+			}
 		}
 	}
-	return false
+
+	return firstSpan, hasMultipleVisibleEl
+}
+
+func countFootnoteMethod2VisibleElements(sectionElem *etree.Element) int {
+	count := 0
+	hasVisibleBody := false
+	hasCurrentItem := false
+	for _, child := range sectionElem.Child {
+		elem, ok := child.(*etree.Element)
+		if !ok {
+			continue
+		}
+
+		switch elem.Tag {
+		case "a":
+			continue
+		case "span":
+			if elem.SelectAttrValue("class", "") == "koboSpan" {
+				continue
+			}
+			hasVisibleBody = true
+			hasCurrentItem = true
+		case "img":
+			hasVisibleBody = true
+			hasCurrentItem = true
+		case "br":
+			if hasVisibleBody && hasCurrentItem {
+				count++
+				hasCurrentItem = false
+			}
+		}
+	}
+	if hasCurrentItem {
+		count++
+	}
+	return count
+}
+
+func firstVisibleAsideElement(aside *etree.Element) *etree.Element {
+	if aside == nil {
+		return nil
+	}
+	for _, child := range aside.Child {
+		elem, ok := child.(*etree.Element)
+		if !ok {
+			continue
+		}
+		switch elem.Tag {
+		case "p", "img", "table", "div", "blockquote":
+			return elem
+		}
+	}
+	return nil
 }
 
 // appendFloatFootnoteSectionContentEpub2 appends footnote section content in
@@ -723,19 +811,9 @@ func appendFloatFootnoteSectionContentEpub2(parent *etree.Element, c *content.Co
 		}
 	}
 
-	// If there's more than one text span, add indicator to the first one
-	textSpans := make([]*etree.Element, 0)
-	for _, child := range sectionElem.ChildElements() {
-		if child.Tag == "span" {
-			// Exclude koboSpan and image-containing spans
-			if class := child.SelectAttrValue("class", ""); class != "koboSpan" && !hasImageChild(child) {
-				textSpans = append(textSpans, child)
-			}
-		}
-	}
-
-	if len(textSpans) > 1 {
-		firstSpan := textSpans[0]
+	firstSpan, canPlaceMoreIndicator := footnoteMethod2MarkerTarget(sectionElem)
+	needMoreIndicator := countFootnoteMethod2VisibleElements(sectionElem) > 1 && c.MoreParaStr != ""
+	if needMoreIndicator && canPlaceMoreIndicator && firstSpan != nil {
 
 		// Create the "more" indicator span
 		moreSpan := etree.NewElement("span")
@@ -784,22 +862,25 @@ func appendFloatFootnoteSectionContentEpub3(parent *etree.Element, c *content.Co
 	if _, err := appendFlowItems(asideElem, c, section.Content, 1, 1, "section", log); err != nil {
 		return err
 	}
+	needMoreIndicator := section != nil && fb2.CountFootnoteVisibleElements(section) > 1 && c.MoreParaStr != ""
 
-	// Add class="footnote" to all paragraphs (including those inside epigraph/annotation divs)
-	// and collect them for "more" indicator placement. Use recursive traversal to find <p> elements
-	// inside wrapper divs like <div class="epigraph"> and <div class="annotation">.
-	paragraphs := collectAndClassifyFootnoteParagraphs(asideElem)
+	// Add class="footnote" to all paragraphs (including those inside epigraph/annotation divs).
+	collectAndClassifyFootnoteParagraphs(asideElem)
 
-	if len(paragraphs) > 1 {
-		firstPara := paragraphs[0]
+	if needMoreIndicator {
+		firstVisible := firstVisibleAsideElement(asideElem)
+		if firstVisible != nil {
+			moreSpan := etree.NewElement("span")
+			moreSpan.CreateAttr("class", "footnote-more")
+			appendPlainText(moreSpan, c, c.MoreParaStr)
 
-		// Create the "more" indicator span
-		moreSpan := etree.NewElement("span")
-		moreSpan.CreateAttr("class", "footnote-more")
-		appendPlainText(moreSpan, c, c.MoreParaStr)
-
-		// Insert at the beginning of first paragraph
-		firstPara.InsertChildAt(0, moreSpan)
+			switch firstVisible.Tag {
+			case "p":
+				firstVisible.InsertChildAt(0, moreSpan)
+			default:
+				asideElem.InsertChildAt(0, moreSpan)
+			}
+		}
 	}
 
 	// Add back-references for EPUB3 float mode - OUTSIDE the aside element

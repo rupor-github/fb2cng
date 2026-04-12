@@ -3100,6 +3100,139 @@ func TestFloatModeFootnotesSingleParagraph(t *testing.T) {
 	}
 }
 
+func TestFloatModeFootnotesVisibleElements(t *testing.T) {
+	const moreParaSym = "(~)\u00A0"
+	const backlinkSym = "[<]"
+
+	imageSeg := fb2.InlineSegment{Kind: fb2.InlineImageSegment, Image: &fb2.InlineImage{Href: "#img1", Alt: "img"}}
+	table := &fb2.Table{Rows: []fb2.TableRow{{Cells: []fb2.TableCell{{Content: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "cell"}}}}}}}
+
+	tests := []struct {
+		name                string
+		format              common.OutputFmt
+		section             fb2.Section
+		expectMoreIndicator bool
+		expectMarkerBefore  string
+	}{
+		{
+			name:   "EPUB3 single paragraph with inline image only",
+			format: common.OutputFmtEpub3,
+			section: fb2.Section{ID: "note1", Content: []fb2.FlowItem{{
+				Kind:      fb2.FlowParagraph,
+				Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Only "}, imageSeg}},
+			}}},
+			expectMoreIndicator: false,
+		},
+		{
+			name:   "EPUB3 image first followed by paragraph",
+			format: common.OutputFmtEpub3,
+			section: fb2.Section{
+				ID:    "note1",
+				Image: &fb2.Image{Href: "#img1", Alt: "img"},
+				Content: []fb2.FlowItem{{
+					Kind:      fb2.FlowParagraph,
+					Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "After image"}}},
+				}},
+			},
+			expectMoreIndicator: true,
+			expectMarkerBefore:  "img",
+		},
+		{
+			name:   "EPUB3 table first followed by paragraph",
+			format: common.OutputFmtEpub3,
+			section: fb2.Section{ID: "note1", Content: []fb2.FlowItem{
+				{Kind: fb2.FlowTable, Table: table},
+				{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "After table"}}}},
+			}},
+			expectMoreIndicator: true,
+			expectMarkerBefore:  "table",
+		},
+		{
+			name:   "EPUB2 flattened paragraph followed by image",
+			format: common.OutputFmtEpub2,
+			section: fb2.Section{ID: "note1", Content: []fb2.FlowItem{
+				{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Paragraph"}}}},
+				{Kind: fb2.FlowImage, Image: &fb2.Image{Href: "#img1", Alt: "img"}},
+			}},
+			expectMoreIndicator: true,
+			expectMarkerBefore:  "span",
+		},
+		{
+			name:   "Kepub single rendered element with inline image",
+			format: common.OutputFmtKepub,
+			section: fb2.Section{ID: "note1", Content: []fb2.FlowItem{{
+				Kind:      fb2.FlowParagraph,
+				Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Only "}, imageSeg}},
+			}}},
+			expectMoreIndicator: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _, log := setupTestContext(t)
+			c := &content.Content{
+				OutputFormat:  tt.format,
+				FootnotesMode: common.FootnotesModeFloat,
+				BackLinkIndex: make(map[string][]content.BackLinkRef),
+				BacklinkStr:   backlinkSym,
+				MoreParaStr:   moreParaSym,
+				ImagesIndex: fb2.BookImages{
+					"img1": {Filename: "images/img1.jpg"},
+				},
+				Book: &fb2.FictionBook{Bodies: []fb2.Body{
+					{Sections: []fb2.Section{{
+						ID: "chapter1",
+						Content: []fb2.FlowItem{{
+							Kind:      fb2.FlowParagraph,
+							Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Text with footnote"}, {Kind: fb2.InlineLink, Href: "#note1", Children: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "1"}}}}},
+						}},
+					}}},
+					{Name: "notes", Kind: fb2.BodyFootnotes, Sections: []fb2.Section{tt.section}},
+				}},
+				FootnotesIndex: fb2.FootnoteRefs{"note1": {BodyIdx: 1, SectionIdx: 0}},
+			}
+
+			chapters, _, err := convertToXHTML(ctx, c, log)
+			if err != nil {
+				t.Fatalf("convertToXHTML() error = %v", err)
+			}
+
+			var fnChapter *chapterData
+			for i := range chapters {
+				if chapters[i].Doc != nil && chapters[i].AnchorID != "" {
+					fnChapter = &chapters[i]
+					break
+				}
+			}
+			if fnChapter == nil {
+				t.Fatal("Footnote chapter not found")
+			}
+
+			moreSpans := fnChapter.Doc.FindElements("//span[@class='footnote-more']")
+			if tt.expectMoreIndicator {
+				if len(moreSpans) == 0 {
+					t.Fatal("Expected 'footnote-more' span not found")
+				}
+				if tt.expectMarkerBefore != "" && tt.format == common.OutputFmtEpub3 {
+					aside := fnChapter.Doc.FindElement("//aside[@epub:type='footnote']")
+					if aside == nil {
+						t.Fatal("Expected footnote aside not found")
+					}
+					firstElem := aside.ChildElements()[0]
+					if tt.expectMarkerBefore == "img" || tt.expectMarkerBefore == "table" {
+						if firstElem.Tag != "span" || firstElem.SelectAttrValue("class", "") != "footnote-more" {
+							t.Fatalf("expected standalone marker before first %s, got <%s class=%q>", tt.expectMarkerBefore, firstElem.Tag, firstElem.SelectAttrValue("class", ""))
+						}
+					}
+				}
+			} else if len(moreSpans) > 0 {
+				t.Fatal("Did not expect 'footnote-more' span")
+			}
+		})
+	}
+}
+
 func TestWriteOPF_EPUB3Collections(t *testing.T) {
 	_, env, log := setupTestContext(t)
 	cfg := &env.Cfg.Document

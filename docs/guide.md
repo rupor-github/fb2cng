@@ -684,9 +684,9 @@ document:
 - **`float`** - Popup/floating footnotes (requires reader support). Preserves original footnote reference text from FB2 file
 - **`floatRenumbered`** - Same as `float`, but automatically renumbers all footnotes sequentially and replaces their reference text with formatted labels
 
-**Multi-paragraph indicator (`more_paragraphs`):**
+**Floating footnote indicator (`more_paragraphs`):**
 
-When a footnote contains more than one paragraph, reading systems that display floating/popup footnotes typically show only the first paragraph. The `more_paragraphs` setting prepends a visual indicator to the first paragraph of such footnotes so the reader knows there is additional content. The default value is `"(~)\u00A0"` (the string `(~)` followed by a non-breaking space).
+When a floating footnote contains more than one visible content element, reading systems that display popup footnotes may show only the first one. The `more_paragraphs` setting prepends a visual indicator to the first visible footnote content so the reader knows there is additional content. Paragraphs, images, and tables are treated as visible content elements. The default value is `"(~)\u00A0"` (the string `(~)` followed by a non-breaking space).
 
 The indicator visibility is controlled via CSS using the `.footnote-more` class. The default stylesheet hides it in KFX output and shows it in EPUB:
 
