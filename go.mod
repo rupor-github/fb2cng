@@ -1,6 +1,6 @@
 module fbc
 
-go 1.26.1
+go 1.26.2
 
 tool (
 	github.com/abice/go-enum
@@ -25,11 +25,11 @@ require (
 	github.com/urfave/cli/v3 v3.8.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.1
-	golang.org/x/image v0.38.0
-	golang.org/x/net v0.52.0
-	golang.org/x/sys v0.42.0
-	golang.org/x/term v0.41.0
-	golang.org/x/text v0.35.0
+	golang.org/x/image v0.39.0
+	golang.org/x/net v0.53.0
+	golang.org/x/sys v0.43.0
+	golang.org/x/term v0.42.0
+	golang.org/x/text v0.36.0
 	gopkg.in/yaml.v3 v3.0.1
 	zombiezen.com/go/sqlite v1.4.2
 )
@@ -53,7 +53,7 @@ require (
 	github.com/labstack/gommon v0.4.2 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-isatty v0.0.21 // indirect
 	github.com/mattn/goveralls v0.0.12 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
@@ -64,19 +64,17 @@ require (
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/urfave/cli/v2 v2.27.7 // indirect
 	github.com/xrash/smetrics v0.0.0-20250705151800-55b8f293f342 // indirect
-	golang.org/x/crypto v0.49.0 // indirect
-	golang.org/x/exp/typeparams v0.0.0-20260312153236-7ab1446f8b90 // indirect
-	golang.org/x/mod v0.34.0 // indirect
+	golang.org/x/crypto v0.50.0 // indirect
+	golang.org/x/exp/typeparams v0.0.0-20260410095643-746e56fc9e2f // indirect
+	golang.org/x/mod v0.35.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/telemetry v0.0.0-20260316223853-b6b0c46d1ccd // indirect
-	golang.org/x/tools v0.43.0 // indirect
+	golang.org/x/telemetry v0.0.0-20260409153401-be6f6cb8b1fa // indirect
+	golang.org/x/tools v0.44.0 // indirect
 	golang.org/x/tools/cmd/cover v0.1.0-deprecated // indirect
 	honnef.co/go/tools v0.7.0 // indirect
-	modernc.org/cc/v4 v4.27.3 // indirect
-	modernc.org/ccgo/v4 v4.32.4 // indirect
-	modernc.org/libc v1.70.0 // indirect
+	modernc.org/libc v1.72.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/opt v0.2.0 // indirect
-	modernc.org/sqlite v1.48.0 // indirect
+	modernc.org/sqlite v1.48.2 // indirect
 )
