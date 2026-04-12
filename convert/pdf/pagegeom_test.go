@@ -35,3 +35,27 @@ func TestGeometryFromConfig(t *testing.T) {
 		t.Fatalf("unexpected default margins: %#v", geom.Margins)
 	}
 }
+
+func TestGeometryFromStyles_UsesBodySpacing(t *testing.T) {
+	cfg, err := config.LoadConfiguration("")
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	cfg.Document.Images.Screen.Width = 1264
+	cfg.Document.Images.Screen.Height = 1680
+
+	geom := GeometryFromStyles(&cfg.Document, resolvedStyle{
+		MarginTop:     12,
+		MarginRight:   18,
+		MarginBottom:  24,
+		MarginLeft:    30,
+		PaddingTop:    3,
+		PaddingRight:  4,
+		PaddingBottom: 5,
+		PaddingLeft:   6,
+	})
+
+	if geom.Margins.Top != 15 || geom.Margins.Right != 22 || geom.Margins.Bottom != 29 || geom.Margins.Left != 36 {
+		t.Fatalf("unexpected CSS-derived margins: %#v", geom.Margins)
+	}
+}
