@@ -61,6 +61,7 @@
 - **KEPUB** - EPUB2 optimized for Kobo devices
 - **KFX** - Kindle format X (with `.kfx` extension)
 - **AZW8** - Kindle format X with `.azw8` extension (same as KFX, different extension, added for convenience - Kindle Previewer 3 can open azw8 files directly and Kindle devices handle them just fine)
+- **PDF** - Portable Document Format (with `.pdf` extension)
 
 ### Key Features
 
@@ -99,7 +100,7 @@ This converts `book.fb2` to EPUB2 format in the current directory.
 fbc convert --to epub3 book.fb2
 ```
 
-Supported formats: `epub2`, `epub3`, `kepub`, `kfx`, `azw8`
+Supported formats: `epub2`, `epub3`, `kepub`, `kfx`, `azw8`, `pdf`
 
 ### Convert with output directory
 
@@ -136,7 +137,7 @@ fbc convert [options] SOURCE [DESTINATION]
 
 #### Convert Options
 
-- `--to TYPE` - Output format: `epub2` (default), `epub3`, `kepub`, `kfx`, `azw8`
+- `--to TYPE` - Output format: `epub2` (default), `epub3`, `kepub`, `kfx`, `azw8`, `pdf`
 - `--ebook, --eb` - For Kindle formats, mark output as ebook (EBOK) instead of personal document (PDOC)
 - `--asin ASIN` - For Kindle formats (`kfx`, `azw8`), set ASIN used in metadata (10 chars, `A-Z0-9`; for books it's often the ISBN-10)
 - `--nodirs, --nd` - Don't preserve input directory structure in output

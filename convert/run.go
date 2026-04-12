@@ -22,6 +22,7 @@ import (
 	"fbc/content"
 	"fbc/convert/epub"
 	"fbc/convert/kfx"
+	"fbc/convert/pdf"
 	"fbc/state"
 	imgutil "fbc/utils/images"
 )
@@ -402,6 +403,10 @@ func processBook(ctx context.Context, r io.Reader, src string, dst string, forma
 		}
 	case common.OutputFmtKfx, common.OutputFmtAzw8:
 		if err := kfx.Generate(ctx, c, outputName, &env.Cfg.Document, log); err != nil {
+			return fmt.Errorf("unable to generate output: %w", err)
+		}
+	case common.OutputFmtPdf:
+		if err := pdf.Generate(ctx, c, outputName, &env.Cfg.Document, log); err != nil {
 			return fmt.Errorf("unable to generate output: %w", err)
 		}
 	}

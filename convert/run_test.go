@@ -183,6 +183,39 @@ func TestProcess_SingleFile(t *testing.T) {
 	}
 }
 
+func TestProcess_SingleFilePDF(t *testing.T) {
+	ctx, _ := setupTestEnv(t)
+	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+
+	tmpDir := t.TempDir()
+	dstDir := t.TempDir()
+
+	fb2Content := []byte(`<?xml version="1.0" encoding="UTF-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+<description><title-info><book-title>Test</book-title></title-info><document-info><id>11111111-1111-1111-1111-111111111111</id></document-info></description>
+<body><section id="c1"><title><p>Chapter</p></title><p>Content</p></section></body>
+</FictionBook>`)
+
+	testFile := filepath.Join(tmpDir, "book.fb2")
+	if err := os.WriteFile(testFile, fb2Content, 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	err := process(ctx, testFile, dstDir, common.OutputFmtPdf, logger)
+	if err != nil {
+		t.Errorf("process() error = %v", err)
+	}
+
+	outputFile := filepath.Join(dstDir, "Test.pdf")
+	data, err := os.ReadFile(outputFile)
+	if err != nil {
+		t.Fatalf("expected generated PDF at %s: %v", outputFile, err)
+	}
+	if !strings.HasPrefix(string(data), "%PDF-") {
+		t.Fatalf("generated file does not look like PDF: %q", string(data[:min(len(data), 8)]))
+	}
+}
+
 // TestProcess_Archive tests process with a ZIP archive
 func TestProcess_Archive(t *testing.T) {
 	ctx, _ := setupTestEnv(t)

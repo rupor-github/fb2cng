@@ -93,6 +93,7 @@ func TestBuildOutputPath_DifferentFormats(t *testing.T) {
 		{"EPUB3", common.OutputFmtEpub3, ".epub"},
 		{"KEPUB", common.OutputFmtKepub, ".kepub.epub"},
 		{"KFX", common.OutputFmtKfx, ".kfx"},
+		{"PDF", common.OutputFmtPdf, ".pdf"},
 	}
 
 	for _, tt := range tests {
@@ -156,6 +157,7 @@ func TestBuildDefaultFileName(t *testing.T) {
 		{"with path", "path/to/book.fb2", false, common.OutputFmtEpub3, "book.epub"},
 		{"kepub format", "book.fb2", false, common.OutputFmtKepub, "book.kepub.epub"},
 		{"kfx format", "book.fb2", false, common.OutputFmtKfx, "book.kfx"},
+		{"pdf format", "book.fb2", false, common.OutputFmtPdf, "book.pdf"},
 		{"transliterate", "Книга.fb2", true, common.OutputFmtEpub3, "kniga.epub"},
 	}
 
