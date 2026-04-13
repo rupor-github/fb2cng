@@ -26,11 +26,12 @@ type splitSection struct {
 }
 
 type renderContext struct {
-	c      *content.Content
-	doc    *document.Document
-	styles *styleResolver
-	fonts  *fontRegistry
-	log    *zap.Logger
+	c             *content.Content
+	doc           *document.Document
+	styles        *styleResolver
+	fonts         *fontRegistry
+	log           *zap.Logger
+	contentHeight float64 // usable page content height in points (page height minus vertical margins)
 }
 
 type flowBuilder struct {
@@ -79,11 +80,12 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 	applyMetadata(doc, c)
 
 	rc := &renderContext{
-		c:      c,
-		doc:    doc,
-		styles: styles,
-		fonts:  newFontRegistry(c.Book.Stylesheets, parsed, log),
-		log:    log.Named("pdf"),
+		c:             c,
+		doc:           doc,
+		styles:        styles,
+		fonts:         newFontRegistry(c.Book.Stylesheets, parsed, log),
+		log:           log.Named("pdf"),
+		contentHeight: geom.PageSize.Height - geom.Margins.Top - geom.Margins.Bottom,
 	}
 
 	if err := addPlan(rc, plan); err != nil {
@@ -865,7 +867,7 @@ func newImageElement(rc *renderContext, img *fb2.BookImage, imageID string, clas
 		style = rc.styles.Resolve("img", class, extraAncestors, defaultResolvedStyle())
 	}
 	imageElem := layout.NewImageElement(pdfImg)
-	applyImageStyle(imageElem, style, img)
+	applyImageStyle(imageElem, style, img, rc.contentHeight)
 	altText := strings.TrimSpace(alt)
 	if altText == "" {
 		altText = strings.TrimSpace(title)
@@ -990,7 +992,7 @@ func applyDivStyle(div *layout.Div, style resolvedStyle) {
 	}
 }
 
-func applyImageStyle(elem *layout.ImageElement, style resolvedStyle, img *fb2.BookImage) {
+func applyImageStyle(elem *layout.ImageElement, style resolvedStyle, img *fb2.BookImage, maxContentHeight float64) {
 	if elem == nil {
 		return
 	}
@@ -1001,10 +1003,19 @@ func applyImageStyle(elem *layout.ImageElement, style resolvedStyle, img *fb2.Bo
 	if img == nil || img.Dim.Width <= 0 || img.Dim.Height <= 0 {
 		return
 	}
-	maxWidth := PxToPt(img.Dim.Width, 1)
-	maxHeight := PxToPt(img.Dim.Height, 1)
-	if maxWidth > 0 || maxHeight > 0 {
-		elem.SetSize(maxWidth, maxHeight)
+	w := PxToPt(img.Dim.Width, 1)
+	h := PxToPt(img.Dim.Height, 1)
+	// Scale down proportionally so the image fits within the usable page
+	// content height. Without this, images taller than the page cause the
+	// folio layout engine to loop infinitely (Div returns LayoutPartial
+	// with zero progress when its child image returns LayoutNothing).
+	if maxContentHeight > 0 && h > maxContentHeight {
+		scale := maxContentHeight / h
+		w *= scale
+		h = maxContentHeight
+	}
+	if w > 0 || h > 0 {
+		elem.SetSize(w, h)
 	}
 }
 

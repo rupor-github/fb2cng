@@ -541,7 +541,7 @@ func TestOutputFmt_UnmarshalText(t *testing.T) {
 
 func TestOutputFmtNames(t *testing.T) {
 	names := common.OutputFmtNames()
-	expected := []string{"epub2", "epub3", "kepub", "kfx", "azw8"}
+	expected := []string{"epub2", "epub3", "kepub", "kfx", "azw8", "pdf"}
 
 	if len(names) != len(expected) {
 		t.Errorf("common.OutputFmtNames() length = %d, want %d", len(names), len(expected))
@@ -564,6 +564,7 @@ func TestOutputFmt_ForKindle(t *testing.T) {
 		{common.OutputFmtKepub, false},
 		{common.OutputFmtKfx, true},
 		{common.OutputFmtAzw8, true},
+		{common.OutputFmtPdf, false},
 	}
 
 	for _, tt := range tests {
@@ -586,6 +587,7 @@ func TestOutputFmt_Ext(t *testing.T) {
 		{common.OutputFmtKepub, ".kepub.epub"},
 		{common.OutputFmtKfx, ".kfx"},
 		{common.OutputFmtAzw8, ".azw8"},
+		{common.OutputFmtPdf, ".pdf"},
 	}
 
 	for _, tt := range tests {
