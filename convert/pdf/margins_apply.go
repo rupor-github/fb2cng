@@ -11,12 +11,14 @@ import (
 // tree, and applies the collapsed values back to the folio elements.
 //
 // The meta map provides container kind/flag annotations for Div wrappers
-// (populated by tagContainer during element creation).
-func collapseMargins(elements []layout.Element, meta map[*layout.Div]*marginMeta) {
+// (populated by tagContainer during element creation).  The signals map
+// provides empty-line margin-absorption annotations (populated by
+// handleEmptyLine/consumePendingEmptyLine).
+func collapseMargins(elements []layout.Element, meta map[*layout.Div]*marginMeta, signals map[layout.Element]*emptyLineSignal) {
 	if len(elements) == 0 {
 		return
 	}
-	result := buildMarginTree(elements, meta)
+	result := buildMarginTree(elements, meta, signals)
 	margins.CollapseTree(result.tree)
 	applyCollapsedMargins(result)
 }

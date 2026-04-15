@@ -32,31 +32,47 @@ type marginTreeResult struct {
 // Div elements become container nodes; Paragraphs, Headings, and other
 // elements become leaf content nodes.  The meta map provides container
 // kind/flag annotations for Div wrappers (populated by tagContainer
-// during element creation).
+// during element creation).  The signals map provides empty-line
+// margin-absorption annotations (populated by handleEmptyLine).
 //
 // The resulting tree can be passed to margins.CollapseTree() and the
 // collapsed values applied back via applyCollapsedMargins().
-func buildMarginTree(elements []layout.Element, meta map[*layout.Div]*marginMeta) *marginTreeResult {
+func buildMarginTree(elements []layout.Element, meta map[*layout.Div]*marginMeta, signals map[layout.Element]*emptyLineSignal) *marginTreeResult {
 	result := &marginTreeResult{
 		tree:       margins.NewContentTree(nil),
 		nodeElem:   make(map[*margins.ContentNode]layout.Element),
 		wrapperDiv: make(map[*margins.ContentNode]*layout.Div),
 	}
 	counter := 0
-	addElements(result, result.tree.Root, elements, meta, &counter)
+	addElements(result, result.tree.Root, elements, meta, signals, &counter)
 	return result
 }
 
 // addElements walks a slice of elements and adds each to the tree under parent.
-func addElements(r *marginTreeResult, parent *margins.ContentNode, elements []layout.Element, meta map[*layout.Div]*marginMeta, counter *int) {
+func addElements(r *marginTreeResult, parent *margins.ContentNode, elements []layout.Element, meta map[*layout.Div]*marginMeta, signals map[layout.Element]*emptyLineSignal, counter *int) {
 	for _, elem := range elements {
 		*counter++
-		addElement(r, parent, elem, *counter, meta, counter)
+		addElement(r, parent, elem, *counter, meta, signals, counter)
 	}
 }
 
 // addElement adds a single folio element to the margin tree.
-func addElement(r *marginTreeResult, parent *margins.ContentNode, elem layout.Element, order int, meta map[*layout.Div]*marginMeta, counter *int) {
+func addElement(r *marginTreeResult, parent *margins.ContentNode, elem layout.Element, order int, meta map[*layout.Div]*marginMeta, signals map[layout.Element]*emptyLineSignal, counter *int) {
+	// applySignals copies empty-line margin-absorption annotations from the
+	// signals map onto the newly created ContentNode.
+	applySignals := func(node *margins.ContentNode) {
+		if signals == nil {
+			return
+		}
+		sig, ok := signals[elem]
+		if !ok {
+			return
+		}
+		node.StripMarginBottom = sig.StripMarginBottom
+		node.EmptyLineMarginTop = sig.EmptyLineMarginTop
+		node.EmptyLineMarginBottom = sig.EmptyLineMarginBottom
+	}
+
 	switch e := elem.(type) {
 	case *layout.Paragraph:
 		node := &margins.ContentNode{
@@ -67,6 +83,7 @@ func addElement(r *marginTreeResult, parent *margins.ContentNode, elem layout.El
 			Parent:       parent,
 			EntryOrder:   order,
 		}
+		applySignals(node)
 		parent.Children = append(parent.Children, node)
 		r.nodeElem[node] = e
 
@@ -89,11 +106,12 @@ func addElement(r *marginTreeResult, parent *margins.ContentNode, elem layout.El
 			HasWrapper:     true,
 			EntryOrder:     order,
 		}
+		applySignals(containerNode)
 		parent.Children = append(parent.Children, containerNode)
 		r.wrapperDiv[containerNode] = e
 
 		// Recurse into the Div's children.
-		addElements(r, containerNode, e.Children(), meta, counter)
+		addElements(r, containerNode, e.Children(), meta, signals, counter)
 
 	case *layout.Heading:
 		// Headings have no SpaceBefore/SpaceAfter API.  Their internal
@@ -107,6 +125,7 @@ func addElement(r *marginTreeResult, parent *margins.ContentNode, elem layout.El
 			Parent:      parent,
 			EntryOrder:  order,
 		}
+		applySignals(node)
 		parent.Children = append(parent.Children, node)
 		r.nodeElem[node] = e
 
@@ -118,6 +137,7 @@ func addElement(r *marginTreeResult, parent *margins.ContentNode, elem layout.El
 			Parent:      parent,
 			EntryOrder:  order,
 		}
+		applySignals(node)
 		parent.Children = append(parent.Children, node)
 		r.nodeElem[node] = elem
 	}

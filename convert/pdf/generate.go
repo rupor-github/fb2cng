@@ -30,21 +30,32 @@ type splitSection struct {
 }
 
 type renderContext struct {
-	c             *content.Content
-	doc           *document.Document
-	styles        *styleResolver
-	fonts         *fontRegistry
-	log           *zap.Logger
-	contentHeight float64                     // usable page content height in points (page height minus vertical margins)
-	deviceDPI     float64                     // device screen resolution (pixels per inch)
-	marginMeta    map[*layout.Div]*marginMeta // margin collapsing container metadata, keyed by Div pointer
+	c                *content.Content
+	doc              *document.Document
+	styles           *styleResolver
+	fonts            *fontRegistry
+	log              *zap.Logger
+	contentHeight    float64                             // usable page content height in points (page height minus vertical margins)
+	deviceDPI        float64                             // device screen resolution (pixels per inch)
+	marginMeta       map[*layout.Div]*marginMeta         // margin collapsing container metadata, keyed by Div pointer
+	emptyLineSignals map[layout.Element]*emptyLineSignal // empty-line margin signals, keyed by element pointer
+}
+
+// emptyLineSignal stores empty-line margin collapsing annotations for a
+// folio element.  These are consumed by buildMarginTree to set the
+// corresponding fields on ContentNode (Phase 0 of the collapse algorithm).
+type emptyLineSignal struct {
+	StripMarginBottom     bool
+	EmptyLineMarginTop    *float64
+	EmptyLineMarginBottom *float64
 }
 
 type flowBuilder struct {
-	ctx       *renderContext
-	elements  *[]layout.Element
-	ancestors []styleScope
-	parent    resolvedStyle
+	ctx                    *renderContext
+	elements               *[]layout.Element
+	ancestors              []styleScope
+	parent                 resolvedStyle
+	pendingEmptyLineMargin *float64 // margin-top from a preceding empty-line, to be applied to the next element
 }
 
 type textContext struct {
@@ -86,14 +97,15 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 	applyMetadata(doc, c)
 
 	rc := &renderContext{
-		c:             c,
-		doc:           doc,
-		styles:        styles,
-		fonts:         newFontRegistry(c.Book.Stylesheets, parsed, log),
-		log:           log.Named("pdf"),
-		contentHeight: geom.PageSize.Height - geom.Margins.Top - geom.Margins.Bottom,
-		deviceDPI:     float64(cfg.Images.Screen.DPI),
-		marginMeta:    make(map[*layout.Div]*marginMeta),
+		c:                c,
+		doc:              doc,
+		styles:           styles,
+		fonts:            newFontRegistry(c.Book.Stylesheets, parsed, log),
+		log:              log.Named("pdf"),
+		contentHeight:    geom.PageSize.Height - geom.Margins.Top - geom.Margins.Bottom,
+		deviceDPI:        float64(cfg.Images.Screen.DPI),
+		marginMeta:       make(map[*layout.Div]*marginMeta),
+		emptyLineSignals: make(map[layout.Element]*emptyLineSignal),
 	}
 
 	if err := addPlan(rc, plan); err != nil {
@@ -239,7 +251,7 @@ func addBodyIntroUnit(rc *renderContext, body *fb2.Body) error {
 	parent := defaultResolvedStyle()
 	b := flowBuilder{ctx: rc, elements: &elements, parent: parent}
 	b.renderBodyIntro(body)
-	collapseMargins(elements, rc.marginMeta)
+	collapseMargins(elements, rc.marginMeta, rc.emptyLineSignals)
 	for _, elem := range elements {
 		rc.doc.Add(elem)
 	}
@@ -259,7 +271,7 @@ func addFootnotesBodyUnit(rc *renderContext, body *fb2.Body) error {
 	for i := range body.Sections {
 		b.renderFootnoteSection(&body.Sections[i])
 	}
-	collapseMargins(elements, rc.marginMeta)
+	collapseMargins(elements, rc.marginMeta, rc.emptyLineSignals)
 	for _, elem := range elements {
 		rc.doc.Add(elem)
 	}
@@ -319,7 +331,7 @@ func renderSplitSection(rc *renderContext, work *splitSection) ([]layout.Element
 	for i := range splits {
 		splits[i].parentUnit = work.parentUnit
 	}
-	collapseMargins(elements, rc.marginMeta)
+	collapseMargins(elements, rc.marginMeta, rc.emptyLineSignals)
 	return elements, splits, nil
 }
 
@@ -451,10 +463,11 @@ func (b *flowBuilder) renderTitleBlock(title *fb2.Title, classPrefix string, hea
 				class += " " + item.Paragraph.Style
 			}
 			child.renderParagraph(item.Paragraph, "p", class)
+			child.consumePendingEmptyLine()
 			continue
 		}
 		if item.EmptyLine {
-			child.renderEmptyLine(classPrefix + "-emptyline")
+			child.handleEmptyLine(classPrefix + "-emptyline")
 		}
 	}
 	b.pushWrappedTagged("div", classPrefix, elems, margins.ContainerTitleBlock, margins.FlagTitleBlockMode)
@@ -558,13 +571,15 @@ func (b *flowBuilder) renderFlowItems(items []fb2.FlowItem, depth int, titleDept
 		case fb2.FlowParagraph:
 			if item.Paragraph != nil {
 				b.renderParagraph(item.Paragraph, "p", item.Paragraph.Style)
+				b.consumePendingEmptyLine()
 			}
 		case fb2.FlowImage:
 			if item.Image != nil {
 				b.renderImage(item.Image, "image image-block", nil)
+				b.consumePendingEmptyLine()
 			}
 		case fb2.FlowEmptyLine:
-			b.renderEmptyLine("emptyline")
+			b.handleEmptyLine("emptyline")
 		case fb2.FlowSubtitle:
 			if item.Subtitle != nil {
 				class := context + "-subtitle"
@@ -572,18 +587,22 @@ func (b *flowBuilder) renderFlowItems(items []fb2.FlowItem, depth int, titleDept
 					class += " " + item.Subtitle.Style
 				}
 				b.renderParagraph(item.Subtitle, "p", class)
+				b.consumePendingEmptyLine()
 			}
 		case fb2.FlowPoem:
 			if item.Poem != nil {
 				b.renderPoem(item.Poem, depth)
+				b.consumePendingEmptyLine()
 			}
 		case fb2.FlowCite:
 			if item.Cite != nil {
 				b.renderCite(item.Cite, depth)
+				b.consumePendingEmptyLine()
 			}
 		case fb2.FlowTable:
 			if item.Table != nil {
 				b.renderTable(item.Table)
+				b.consumePendingEmptyLine()
 			}
 		case fb2.FlowSection:
 			if item.Section == nil {
@@ -609,6 +628,7 @@ func (b *flowBuilder) renderFlowItems(items []fb2.FlowItem, depth int, titleDept
 				return childSplits
 			}
 			b.pushWrapped("div", "section", elems)
+			b.consumePendingEmptyLine()
 		}
 	}
 	return splits
@@ -785,10 +805,55 @@ func (b *flowBuilder) renderPlainParagraph(tag string, class string, text string
 	*b.elements = append(*b.elements, para)
 }
 
-func (b *flowBuilder) renderEmptyLine(class string) {
+// handleEmptyLine implements the KFX-style margin-absorption model for
+// empty-line elements.  Instead of emitting a spacer Div it:
+//   - Marks the previous element for margin-bottom stripping
+//   - Stores the empty-line margin (margin-top from CSS) as pending
+//
+// The pending margin is applied to the next element via consumePendingEmptyLine.
+func (b *flowBuilder) handleEmptyLine(class string) {
+	// Compute empty-line margin from CSS (use only margin-top, matching KFX).
 	style := b.resolve("div", class)
-	spacer := layout.NewDiv().SetSpaceBefore(style.MarginTop).SetSpaceAfter(style.MarginBottom)
-	*b.elements = append(*b.elements, wrapIfNeeded("div", class, style, spacer))
+	margin := style.MarginTop
+
+	// Mark the previous element for margin-bottom stripping.
+	if elems := *b.elements; len(elems) > 0 {
+		prev := elems[len(elems)-1]
+		sig := b.getOrCreateSignal(prev)
+		sig.StripMarginBottom = true
+	}
+
+	// Store pending margin for the next element.
+	if margin > 0 {
+		b.pendingEmptyLineMargin = &margin
+	}
+}
+
+// consumePendingEmptyLine applies any pending empty-line margin to the
+// element just appended to b.elements.  Must be called after every
+// element append in contexts where empty-lines can occur.
+func (b *flowBuilder) consumePendingEmptyLine() {
+	if b.pendingEmptyLineMargin == nil {
+		return
+	}
+	elems := *b.elements
+	if len(elems) == 0 {
+		return
+	}
+	last := elems[len(elems)-1]
+	sig := b.getOrCreateSignal(last)
+	sig.EmptyLineMarginTop = b.pendingEmptyLineMargin
+	b.pendingEmptyLineMargin = nil
+}
+
+// getOrCreateSignal returns the empty-line signal for elem, creating one if needed.
+func (b *flowBuilder) getOrCreateSignal(elem layout.Element) *emptyLineSignal {
+	sig := b.ctx.emptyLineSignals[elem]
+	if sig == nil {
+		sig = &emptyLineSignal{}
+		b.ctx.emptyLineSignals[elem] = sig
+	}
+	return sig
 }
 
 func (b *flowBuilder) renderImage(img *fb2.Image, class string, extraAncestors []styleScope) {
