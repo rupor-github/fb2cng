@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"unicode/utf16"
 	"unicode/utf8"
 
 	"github.com/carlos7ags/folio/document"
@@ -132,7 +133,7 @@ func applyMetadata(doc *document.Document, c *content.Content) {
 	}
 
 	book := c.Book
-	doc.Info.Title = book.Description.TitleInfo.BookTitle.Value
+	doc.Info.Title = encodePDFTextString(book.Description.TitleInfo.BookTitle.Value)
 
 	var authors []string
 	for _, a := range book.Description.TitleInfo.Authors {
@@ -142,11 +143,11 @@ func applyMetadata(doc *document.Document, c *content.Content) {
 		}
 	}
 	if len(authors) > 0 {
-		doc.Info.Author = strings.Join(authors, ", ")
+		doc.Info.Author = encodePDFTextString(strings.Join(authors, ", "))
 	}
 
 	if book.Description.TitleInfo.Annotation != nil {
-		doc.Info.Subject = book.Description.TitleInfo.Annotation.AsPlainText()
+		doc.Info.Subject = encodePDFTextString(book.Description.TitleInfo.Annotation.AsPlainText())
 	}
 	if c.SrcName != "" {
 		doc.Info.Creator = "fbc"
@@ -959,6 +960,7 @@ func newHeadingElement(rc *renderContext, tag, classes string, ancestors []style
 		heading = layout.NewHeadingWithFont(plainTextRuns(runs), headingLevel, std, style.FontSize)
 	}
 	heading.SetRuns(runs).SetAlign(style.Align)
+	heading.SetBookmarkLabel(encodePDFTextString(plainTextRuns(runs)))
 	return wrapIfNeeded(tag, classes, style, heading)
 }
 
@@ -1239,6 +1241,33 @@ func inlineSegmentClass(seg *fb2.InlineSegment, c *content.Content) string {
 	default:
 		return ""
 	}
+}
+
+// encodePDFTextString encodes s as a PDF "text string" (ISO 32000 §7.9.2.2).
+// If every character fits in PDFDocEncoding (approximately Latin-1, U+0000..U+00FF),
+// the string is returned unchanged.  Otherwise it is returned as UTF-16BE with a
+// leading BOM (U+FEFF) so that PDF consumers interpret the bytes as Unicode.
+//
+// This is needed because folio serialises outline titles and document-info
+// values with core.NewPdfLiteralString, which writes raw bytes into a PDF
+// literal string.  Without a BOM, PDF viewers decode such bytes as
+// PDFDocEncoding and multi-byte UTF-8 sequences (e.g. Cyrillic) appear as
+// mojibake.
+func encodePDFTextString(s string) string {
+	for _, r := range s {
+		if r > 0xFF {
+			codes := utf16.Encode([]rune(s))
+			buf := make([]byte, 2+len(codes)*2) // BOM + code units
+			buf[0] = 0xFE
+			buf[1] = 0xFF
+			for i, c := range codes {
+				buf[2+i*2] = byte(c >> 8)
+				buf[2+i*2+1] = byte(c)
+			}
+			return string(buf)
+		}
+	}
+	return s
 }
 
 func plainTextRuns(runs []layout.TextRun) string {
