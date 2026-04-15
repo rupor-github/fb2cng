@@ -1,8 +1,10 @@
 package pdf
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"unicode/utf8"
 
@@ -96,11 +98,32 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		return err
 	}
 
-	if err := doc.Save(outputPath); err != nil {
-		return fmt.Errorf("save pdf: %w", err)
+	if err := savePDF(doc, outputPath); err != nil {
+		return err
 	}
 	log.Info("PDF generation completed", zap.String("output", outputPath), zap.Int("units", len(plan.Units)))
 	return nil
+}
+
+// savePDF writes the document through a buffered writer so folio's many
+// small writes are coalesced into large OS-level writes.  This avoids
+// thousands of individual write(2) syscalls that are particularly expensive
+// on cross-boundary filesystems (e.g. WSL2 drvfs mounts).
+func savePDF(doc *document.Document, path string) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("save pdf: %w", err)
+	}
+	bw := bufio.NewWriterSize(f, 256*1024)
+	if _, err := doc.WriteTo(bw); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("save pdf: %w", err)
+	}
+	if err := bw.Flush(); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("save pdf: %w", err)
+	}
+	return f.Close()
 }
 
 func applyMetadata(doc *document.Document, c *content.Content) {
