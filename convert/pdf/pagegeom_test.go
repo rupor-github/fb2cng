@@ -8,10 +8,29 @@ import (
 )
 
 func TestPxToPt(t *testing.T) {
-	got := PxToPt(1264, 1)
-	want := 948.0
+	// 1264 device pixels at 300 DPI → 1264 * 72 / 300 = 303.36 pt
+	got := PxToPt(1264, 300)
+	want := 303.36
 	if math.Abs(got-want) > 0.001 {
-		t.Fatalf("PxToPt(1264, 1) = %.6f, want %.6f", got, want)
+		t.Fatalf("PxToPt(1264, 300) = %.6f, want %.6f", got, want)
+	}
+}
+
+func TestPxToPt_DefaultDPI(t *testing.T) {
+	// Zero DPI falls back to defaultDeviceDPI (300).
+	got := PxToPt(1264, 0)
+	want := 303.36
+	if math.Abs(got-want) > 0.001 {
+		t.Fatalf("PxToPt(1264, 0) = %.6f, want %.6f", got, want)
+	}
+}
+
+func TestCSSPxToPt(t *testing.T) {
+	// CSS px always uses 96 DPI: 960px * 72/96 = 720 pt
+	got := CSSPxToPt(960)
+	want := 720.0
+	if math.Abs(got-want) > 0.001 {
+		t.Fatalf("CSSPxToPt(960) = %.6f, want %.6f", got, want)
 	}
 }
 
@@ -22,13 +41,15 @@ func TestGeometryFromConfig(t *testing.T) {
 	}
 	cfg.Document.Images.Screen.Width = 1264
 	cfg.Document.Images.Screen.Height = 1680
+	// DPI comes from config template default (300).
 
 	geom := GeometryFromConfig(&cfg.Document)
 
-	if got, want := geom.PageSize.Width, 948.0; math.Abs(got-want) > 0.001 {
+	// 1264 * 72 / 300 = 303.36, 1680 * 72 / 300 = 403.2
+	if got, want := geom.PageSize.Width, 303.36; math.Abs(got-want) > 0.001 {
 		t.Fatalf("page width = %.6f, want %.6f", got, want)
 	}
-	if got, want := geom.PageSize.Height, 1260.0; math.Abs(got-want) > 0.001 {
+	if got, want := geom.PageSize.Height, 403.2; math.Abs(got-want) > 0.001 {
 		t.Fatalf("page height = %.6f, want %.6f", got, want)
 	}
 	if geom.Margins.Top != 48 || geom.Margins.Right != 36 || geom.Margins.Bottom != 48 || geom.Margins.Left != 36 {

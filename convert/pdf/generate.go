@@ -35,6 +35,7 @@ type renderContext struct {
 	fonts         *fontRegistry
 	log           *zap.Logger
 	contentHeight float64 // usable page content height in points (page height minus vertical margins)
+	deviceDPI     float64 // device screen resolution (pixels per inch)
 }
 
 type flowBuilder struct {
@@ -89,6 +90,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		fonts:         newFontRegistry(c.Book.Stylesheets, parsed, log),
 		log:           log.Named("pdf"),
 		contentHeight: geom.PageSize.Height - geom.Margins.Top - geom.Margins.Bottom,
+		deviceDPI:     float64(cfg.Images.Screen.DPI),
 	}
 
 	if err := addPlan(rc, plan); err != nil {
@@ -891,7 +893,7 @@ func newImageElement(rc *renderContext, img *fb2.BookImage, imageID string, clas
 		style = rc.styles.Resolve("img", class, extraAncestors, defaultResolvedStyle())
 	}
 	imageElem := layout.NewImageElement(pdfImg)
-	applyImageStyle(imageElem, style, img, rc.contentHeight)
+	applyImageStyle(imageElem, style, img, rc.contentHeight, rc.deviceDPI)
 	altText := strings.TrimSpace(alt)
 	if altText == "" {
 		altText = strings.TrimSpace(title)
@@ -1017,7 +1019,7 @@ func applyDivStyle(div *layout.Div, style resolvedStyle) {
 	}
 }
 
-func applyImageStyle(elem *layout.ImageElement, style resolvedStyle, img *fb2.BookImage, maxContentHeight float64) {
+func applyImageStyle(elem *layout.ImageElement, style resolvedStyle, img *fb2.BookImage, maxContentHeight, deviceDPI float64) {
 	if elem == nil {
 		return
 	}
@@ -1028,8 +1030,8 @@ func applyImageStyle(elem *layout.ImageElement, style resolvedStyle, img *fb2.Bo
 	if img == nil || img.Dim.Width <= 0 || img.Dim.Height <= 0 {
 		return
 	}
-	w := PxToPt(img.Dim.Width, 1)
-	h := PxToPt(img.Dim.Height, 1)
+	w := PxToPt(img.Dim.Width, deviceDPI)
+	h := PxToPt(img.Dim.Height, deviceDPI)
 	// Scale down proportionally so the image fits within the usable page
 	// content height. Without this, images taller than the page cause the
 	// folio layout engine to loop infinitely (Div returns LayoutPartial

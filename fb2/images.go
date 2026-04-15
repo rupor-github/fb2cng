@@ -124,7 +124,8 @@ func (bo *BinaryObject) encodeImage(img image.Image, imgType string, cfg *config
 		if err != nil {
 			return nil, fmt.Errorf("unable to encode processed JPEG, ID - %s: %w", bo.ID, err)
 		}
-		data, added, err := imgutil.EnsureJFIFAPP0(buf.Bytes(), imgutil.DpiPxPerInch, 300, 300)
+		dpi := int16(cfg.Screen.DPI) //nolint:gosec // validated by config: min=72,max=600
+		data, added, err := imgutil.EnsureJFIFAPP0(buf.Bytes(), imgutil.DpiPxPerInch, dpi, dpi)
 		if err != nil {
 			return nil, fmt.Errorf("unable to insert jpeg JFIF APP0 marker segment, ID - %s: %w", bo.ID, err)
 		}

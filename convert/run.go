@@ -83,7 +83,8 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 		if err != nil {
 			return fmt.Errorf("unable to rasterize embedded default cover svg: %w", err)
 		}
-		jpegData, err := imgutil.EncodeJPEGWithDPI(img, env.Cfg.Document.Images.JPEGQuality, imgutil.DpiPxPerInch, 300, 300)
+		dpi := int16(env.Cfg.Document.Images.Screen.DPI) //nolint:gosec // validated by config: min=72,max=600
+		jpegData, err := imgutil.EncodeJPEGWithDPI(img, env.Cfg.Document.Images.JPEGQuality, imgutil.DpiPxPerInch, dpi, dpi)
 		if err != nil {
 			return fmt.Errorf("unable to encode embedded default cover jpeg: %w", err)
 		}

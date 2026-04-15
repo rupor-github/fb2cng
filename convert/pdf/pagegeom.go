@@ -7,7 +7,15 @@ import (
 	"fbc/config"
 )
 
-const defaultScreenDPI = 96.0
+const (
+	// defaultDeviceDPI is the fallback screen resolution when config does not
+	// specify one.  300 PPI is correct for all modern e-ink readers.
+	defaultDeviceDPI = 300.0
+
+	// cssDPI is the standard CSS reference DPI (1 CSS-px = 1/96 inch).
+	// Used only for CSS unit conversions (px→pt), NOT for page geometry.
+	cssDPI = 96.0
+)
 
 // Geometry describes page size and margins for PDF output.
 type Geometry struct {
@@ -15,12 +23,18 @@ type Geometry struct {
 	Margins  layout.Margins
 }
 
-// PxToPt converts CSS-like pixels to PDF points using the default screen DPI.
-func PxToPt(px int, scale float64) float64 {
-	if scale <= 0 {
-		scale = 1
+// PxToPt converts device pixels to PDF points using the given device DPI.
+// If dpi is zero or negative, defaultDeviceDPI is used.
+func PxToPt(px int, dpi float64) float64 {
+	if dpi <= 0 {
+		dpi = defaultDeviceDPI
 	}
-	return float64(px) * 72.0 / defaultScreenDPI * scale
+	return float64(px) * 72.0 / dpi
+}
+
+// CSSPxToPt converts CSS pixels to PDF points (1 CSS-px = 1/96 inch).
+func CSSPxToPt(value float64) float64 {
+	return value * 72.0 / cssDPI
 }
 
 // DefaultMargins returns conservative content margins in PDF points.
@@ -41,9 +55,10 @@ func GeometryFromStyles(cfg *config.DocumentConfig, bodyStyle resolvedStyle) Geo
 		return Geometry{PageSize: document.PageSize{}, Margins: DefaultMargins()}
 	}
 
+	dpi := float64(cfg.Images.Screen.DPI)
 	page := document.PageSize{
-		Width:  PxToPt(cfg.Images.Screen.Width, 1),
-		Height: PxToPt(cfg.Images.Screen.Height, 1),
+		Width:  PxToPt(cfg.Images.Screen.Width, dpi),
+		Height: PxToPt(cfg.Images.Screen.Height, dpi),
 	}
 
 	return Geometry{

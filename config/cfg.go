@@ -40,6 +40,7 @@ type (
 	ScreenConfig struct {
 		Width  int `yaml:"width" validate:"min=400"`
 		Height int `yaml:"height" validate:"min=600"`
+		DPI    int `yaml:"dpi" validate:"min=72,max=600"`
 	}
 
 	ImagesConfig struct {

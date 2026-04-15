@@ -521,7 +521,7 @@ func parseRawLength(raw string, fontSize float64, percentBase float64) (float64,
 	case "", "pt":
 		return value, true
 	case "px":
-		return value * 72.0 / defaultScreenDPI, true
+		return CSSPxToPt(value), true
 	case "em":
 		return value * fontSize, true
 	case "rem":
