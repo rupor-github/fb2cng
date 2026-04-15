@@ -464,13 +464,27 @@ func (b *flowBuilder) renderTitleHeading(title *fb2.Title, headingLevel int, cla
 	if title == nil {
 		return
 	}
+
+	// Resolve heading style FIRST so its font-size (e.g. h1 at 140% → 16.8pt)
+	// propagates to all text runs created below.
+	hTag := headingTag(headingLevel)
+	headingClass := classPrefix
+	headingStyle := defaultResolvedStyle()
+	if b.ctx != nil && b.ctx.styles != nil {
+		headingStyle = b.ctx.styles.Resolve(hTag, headingClass, b.ancestors, b.parent)
+	}
+
+	// Ancestor chain includes the heading scope so that descendant CSS
+	// selectors (e.g. "h1 strong") work correctly inside runs.
+	headingAncestors := append(append([]styleScope{}, b.ancestors...), styleScope{Tag: hTag, Classes: splitClasses(headingClass)})
+
 	var runs []layout.TextRun
 	firstParagraph := true
 	prevWasEmptyLine := false
 	for i, item := range title.Items {
 		if item.Paragraph != nil {
 			if i > 0 && !prevWasEmptyLine {
-				runs = append(runs, b.textRunForClass("\n", classPrefix+"-break", textContext{ancestors: b.ancestors, parent: b.parent, hyphenate: false}))
+				runs = append(runs, b.textRunForClass("\n", classPrefix+"-break", textContext{ancestors: headingAncestors, parent: headingStyle, hyphenate: false}))
 			}
 			class := classPrefix + "-next"
 			if firstParagraph {
@@ -480,20 +494,19 @@ func (b *flowBuilder) renderTitleHeading(title *fb2.Title, headingLevel int, cla
 			if item.Paragraph.Style != "" {
 				class += " " + item.Paragraph.Style
 			}
-			runs = append(runs, b.paragraphRuns(item.Paragraph, class, textContext{ancestors: b.ancestors, parent: b.parent, hyphenate: !item.Paragraph.Special && b.ctx != nil && b.ctx.c != nil && b.ctx.c.Hyphen != nil})...)
+			runs = append(runs, b.paragraphRuns(item.Paragraph, class, textContext{ancestors: headingAncestors, parent: headingStyle, hyphenate: !item.Paragraph.Special && b.ctx != nil && b.ctx.c != nil && b.ctx.c.Hyphen != nil})...)
 			prevWasEmptyLine = false
 			continue
 		}
 		if item.EmptyLine {
-			runs = append(runs, b.textRunForClass("\n\n", classPrefix+"-emptyline", textContext{ancestors: b.ancestors, parent: b.parent, hyphenate: false}))
+			runs = append(runs, b.textRunForClass("\n\n", classPrefix+"-emptyline", textContext{ancestors: headingAncestors, parent: headingStyle, hyphenate: false}))
 			prevWasEmptyLine = true
 		}
 	}
 	if len(runs) == 0 {
 		return
 	}
-	headingClass := classPrefix
-	heading := newHeadingElement(b.ctx, headingTag(headingLevel), headingClass, b.ancestors, b.parent, headingLevel, runs)
+	heading := newHeadingElement(b.ctx, hTag, headingClass, headingStyle, headingLevel, runs)
 	*b.elements = append(*b.elements, heading)
 }
 
@@ -949,11 +962,7 @@ func newStyledParagraphElement(rc *renderContext, tag, classes string, ancestors
 	return wrapIfNeeded(tag, classes, style, para)
 }
 
-func newHeadingElement(rc *renderContext, tag, classes string, ancestors []styleScope, parent resolvedStyle, level int, runs []layout.TextRun) layout.Element {
-	style := defaultResolvedStyle()
-	if rc != nil && rc.styles != nil {
-		style = rc.styles.Resolve(tag, classes, ancestors, parent)
-	}
+func newHeadingElement(rc *renderContext, tag, classes string, style resolvedStyle, level int, runs []layout.TextRun) layout.Element {
 	headingLevel := layout.H1
 	switch min(max(level, 1), 6) {
 	case 1:

@@ -35,6 +35,7 @@ tasks:
       - task: generate-project-version
       - task: get-dictionaries
       - task: get-sentences
+      - task: get-fonts
       - task: generate-enums
     cmds:
       - task: go-build
@@ -50,7 +51,7 @@ tasks:
       You can specify what tests to run by using PACKAGES environment variable, for example: "PACKAGES='./module1,./module2' task test".
       You can pass any additional parameters supported by "go test", for example: "PACKAGES='./module' task test -- -run=TestFuncPattern".
     platforms: [linux]
-    deps: [generate-project-version, get-dictionaries, get-sentences, generate-enums]
+    deps: [generate-project-version, get-dictionaries, get-sentences, get-fonts, generate-enums]
     vars:
       TEST_DIR: "{{.ROOT_DIR}}/{{.DEV_BUILD_DIR}}/tests_results"
       DIRS_WITH_TESTS:
@@ -72,7 +73,7 @@ tasks:
       You can specify what packages to benchmark by using PACKAGES environment variable, for example: "PACKAGES='./module1,./module2' task bench".
       You can pass any additional parameters supported by "go test", for example: "PACKAGES='./module1' task bench -- -bench=BenchmarkFuncPattern -benchmem".
     platforms: [linux]
-    deps: [generate-project-version, get-dictionaries, get-sentences, generate-enums]
+    deps: [generate-project-version, get-dictionaries, get-sentences, get-fonts, generate-enums]
     vars:
       TEST_DIR: "{{.ROOT_DIR}}/{{.DEV_BUILD_DIR}}/tests_results"
       DIRS_WITH_TESTS:
@@ -93,7 +94,7 @@ tasks:
       You could specify anything in the project, for example "task escape -- ./module1".
       If no package is specified assumes "./cmd/{{.PRJ_NAME}}".
     platforms: [linux]
-    deps: [generate-project-version, get-dictionaries, get-sentences, generate-enums]
+    deps: [generate-project-version, get-dictionaries, get-sentences, get-fonts, generate-enums]
     cmds:
       - echo "{{.TATN}}Building binary with escape analisys enabled{{.TOFF}}"
       - go build -mod=mod -gcflags 'all=-m' -o /dev/null {{default (joinPath "./cmd/" .PRJ_NAME) .CLI_ARGS}}
@@ -102,7 +103,7 @@ tasks:
   release:
     desc: Cross-builds release for all supported platforms
     platforms: [linux]
-    deps: [generate-project-version, get-dictionaries, get-sentences, generate-enums]
+    deps: [generate-project-version, get-dictionaries, get-sentences, get-fonts, generate-enums]
     cmds:
       - mkdir -p '{{.REL_BUILD_DIR}}'
       - for:
@@ -229,6 +230,36 @@ tasks:
           -not -name 'korean.json.gz' \
           -not -name 'hungarian.json.gz' | read
 
+  get-fonts:
+    internal: true
+    run: once
+    desc: Get builtin fonts for PDF generation
+    vars:
+      DIR: 'convert/pdf/fonts'
+      UA: 'Mozilla/5.0 (X11; Linux x86_64)'
+      # awk one-liner: parse Google Fonts CSS to extract font-style, font-weight and url,
+      # then download each variant as PREFIX-{Regular,Bold,Italic,BoldItalic}.ttf.
+      GFONTS_AWK: >-
+        /font-style:/{gsub(/;/,"",$2);style=$2}
+        /font-weight:/{gsub(/;/,"",$2);weight=$2}
+        /url\(/{url=$0;gsub(/.*url\(/,"",url);gsub(/\).*/,"",url);
+        if(style=="italic"&&weight=="400")s="Italic";
+        else if(style=="italic"&&weight=="700")s="BoldItalic";
+        else if(weight=="400")s="Regular";
+        else if(weight=="700")s="Bold";
+        else next;
+        system("curl -sL \""url"\" -o \""pfx"-"s".ttf\"")}
+    dir: '{{.DIR}}'
+    cmds:
+      - rm -f *.ttf *.ttf.gz
+      - echo "{{.TATN}}Downloading PDF builtin fonts from Google Fonts{{.TOFF}}"
+      - curl -sL -H 'User-Agent:{{.UA}}' 'https://fonts.googleapis.com/css2?family=Literata:ital,wght@0,400;0,700;1,400;1,700' | awk -v pfx=Literata '{{.GFONTS_AWK}}'
+      - curl -sL -H 'User-Agent:{{.UA}}' 'https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,400;0,700;1,400;1,700' | awk -v pfx=NotoSans '{{.GFONTS_AWK}}'
+      - curl -sL -H 'User-Agent:{{.UA}}' 'https://fonts.googleapis.com/css2?family=Noto+Sans+Mono:wght@400;700' | awk -v pfx=NotoSansMono '{{.GFONTS_AWK}}'
+      - gzip -q -f *.ttf
+    status:
+      - find -type f -name '*.ttf.gz' | read
+
   generate-enums:
     internal: true
     desc: Generates code for specified enum types
@@ -314,6 +345,7 @@ tasks:
       - ./convert/default-cover.svg
       - ./content/text/dictionaries/*.gz
       - ./content/text/sentences/*.gz
+      - ./convert/pdf/fonts/*.gz
     generates:
       - '{{.TARGET}}'
 

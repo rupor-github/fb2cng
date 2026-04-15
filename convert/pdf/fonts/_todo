@@ -1,0 +1,24 @@
+To get PDF builtin fonts execute in this directory:
+
+Literata (serif, SIL OFL, https://github.com/googlefonts/literata):
+
+	curl -sL -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" \
+	  "https://fonts.googleapis.com/css2?family=Literata:ital,wght@0,400;0,700;1,400;1,700" \
+	  | awk '/font-style:/{gsub(/;/,"",$2);style=$2} /font-weight:/{gsub(/;/,"",$2);weight=$2} /url\(/{url=$0;gsub(/.*url\(/,"",url);gsub(/\).*/,"",url);if(style=="italic"&&weight=="400")s="Italic";else if(style=="italic"&&weight=="700")s="BoldItalic";else if(weight=="400")s="Regular";else if(weight=="700")s="Bold";else next;system("curl -sL \""url"\" -o \"Literata-"s".ttf\"")}'
+
+Noto Sans (sans-serif, SIL OFL, https://github.com/notofonts/latin-greek-cyrillic):
+
+	curl -sL -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" \
+	  "https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,400;0,700;1,400;1,700" \
+	  | awk '/font-style:/{gsub(/;/,"",$2);style=$2} /font-weight:/{gsub(/;/,"",$2);weight=$2} /url\(/{url=$0;gsub(/.*url\(/,"",url);gsub(/\).*/,"",url);if(style=="italic"&&weight=="400")s="Italic";else if(style=="italic"&&weight=="700")s="BoldItalic";else if(weight=="400")s="Regular";else if(weight=="700")s="Bold";else next;system("curl -sL \""url"\" -o \"NotoSans-"s".ttf\"")}'
+
+Noto Sans Mono (monospace, SIL OFL, https://github.com/notofonts/latin-greek-cyrillic):
+No italic variants available; Regular is reused for Italic, Bold for BoldItalic.
+
+	curl -sL -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" \
+	  "https://fonts.googleapis.com/css2?family=Noto+Sans+Mono:wght@400;700" \
+	  | awk '/font-weight:/{gsub(/;/,"",$2);weight=$2} /url\(/{url=$0;gsub(/.*url\(/,"",url);gsub(/\).*/,"",url);if(weight=="400")s="Regular";else if(weight=="700")s="Bold";else next;system("curl -sL \""url"\" -o \"NotoSansMono-"s".ttf\"")}'
+
+After downloading compress all fonts:
+
+	for a in $(ls *.ttf); do gzip $a; done

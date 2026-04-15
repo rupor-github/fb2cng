@@ -30,6 +30,7 @@ misc/version.go
 common/*_code.go
 content/text/dictionaries/*.txt.gz
 content/text/sentences/*.json.gz
+convert/pdf/fonts/*.ttf.gz
 !content/text/sentences/russian.json.gz
 !content/text/sentences/hungarian.json.gz
 !content/text/sentences/icelandic.json.gz

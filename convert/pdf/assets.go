@@ -24,7 +24,6 @@ type fontVariant struct {
 
 type fontRegistry struct {
 	families map[string][]fontVariant
-	fallback *foliFont.EmbeddedFont
 	log      *zap.Logger
 }
 
@@ -86,25 +85,14 @@ func newFontRegistry(stylesheets []fb2.Stylesheet, parsed *css.Stylesheet, log *
 }
 
 func (fr *fontRegistry) resolve(style resolvedStyle, text string) (*foliFont.Standard, *foliFont.EmbeddedFont) {
+	// CSS @font-face embedded fonts — highest priority.
 	if fr != nil {
 		if ef := fr.matchEmbedded(style); ef != nil {
 			return nil, ef
 		}
 	}
-
-	std := resolveStandardFont(style)
-	if foliFont.CanEncodeWinAnsi(text) || fr == nil {
-		return std, nil
-	}
-
-	if fr.fallback == nil {
-		fr.fallback = loadFallbackEmbeddedFont(fr.log)
-	}
-	if fr.fallback != nil {
-		return nil, fr.fallback
-	}
-
-	return std, nil
+	// Builtin Literata font — default for all text.
+	return nil, builtinFont(style)
 }
 
 func (fr *fontRegistry) matchEmbedded(style resolvedStyle) *foliFont.EmbeddedFont {
@@ -192,75 +180,6 @@ func extractURLFromCSSSrc(src string) string {
 	end += start
 	url := strings.TrimSpace(src[start:end])
 	return strings.Trim(url, `"'`)
-}
-
-func resolveStandardFont(style resolvedStyle) *foliFont.Standard {
-	family := mapToStandardFamily(normalizeFontFamilyName(style.FontFamily))
-	switch family {
-	case "courier":
-		switch {
-		case style.Bold && style.Italic:
-			return foliFont.CourierBoldOblique
-		case style.Bold:
-			return foliFont.CourierBold
-		case style.Italic:
-			return foliFont.CourierOblique
-		default:
-			return foliFont.Courier
-		}
-	case "times":
-		switch {
-		case style.Bold && style.Italic:
-			return foliFont.TimesBoldItalic
-		case style.Bold:
-			return foliFont.TimesBold
-		case style.Italic:
-			return foliFont.TimesItalic
-		default:
-			return foliFont.TimesRoman
-		}
-	default:
-		switch {
-		case style.Bold && style.Italic:
-			return foliFont.HelveticaBoldOblique
-		case style.Bold:
-			return foliFont.HelveticaBold
-		case style.Italic:
-			return foliFont.HelveticaOblique
-		default:
-			return foliFont.Helvetica
-		}
-	}
-}
-
-func loadFallbackEmbeddedFont(log *zap.Logger) *foliFont.EmbeddedFont {
-	paths := []string{
-		"/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
-		"/usr/share/fonts/noto/NotoSans-Regular.ttf",
-		"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-		"/usr/share/fonts/dejavu/DejaVuSans.ttf",
-	}
-	for _, path := range paths {
-		face, err := foliFont.LoadFont(path)
-		if err == nil {
-			return foliFont.NewEmbeddedFont(face)
-		}
-		if log != nil {
-			log.Debug("Unable to load fallback font", zap.String("path", path), zap.Error(err))
-		}
-	}
-	return nil
-}
-
-func mapToStandardFamily(family string) string {
-	switch {
-	case strings.Contains(family, "courier") || strings.Contains(family, "monospace") || family == "mono":
-		return "courier"
-	case strings.Contains(family, "times") || (strings.Contains(family, "serif") && !strings.Contains(family, "sans")):
-		return "times"
-	default:
-		return "helvetica"
-	}
 }
 
 func newPDFImage(img *fb2.BookImage) (*folioimage.Image, error) {
