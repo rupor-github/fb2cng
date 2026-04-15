@@ -185,12 +185,28 @@ func (sr *styleResolver) Resolve(tag, classes string, ancestors []styleScope, pa
 		style = defaultResolvedStyle()
 	}
 
+	// Apply UA (User Agent) font defaults BEFORE CSS rules.
+	// These provide browser-like defaults for HTML tags (bold for <strong>,
+	// italic for <em>, monospace for <code>, heading font-sizes, etc.).
+	// CSS rules applied below will override these if they set the same properties.
+	applyUAFontDefaults(&style, tag)
+
 	classList := splitClasses(classes)
 	current := styleScope{Tag: tag, Classes: classList}
 	matched := sr.matchRules(sr.rules, current, ancestors)
+
+	// Scan matched CSS rules to determine which margin and baseline properties
+	// are explicitly set. UA defaults for these will not override CSS values.
+	cssFlags := scanCSSOverrides(matched)
+
 	for _, rule := range matched {
 		sr.applyRule(&style, parent, rule)
 	}
+
+	// Apply UA margin and baseline defaults AFTER CSS rules, only for
+	// properties not explicitly set by any matched CSS rule. Margins are
+	// computed from the final font-size (which CSS may have changed).
+	applyUAPostCSSDefaults(&style, tag, cssFlags)
 
 	if style.FontFamily == "" {
 		style.FontFamily = parent.FontFamily
@@ -220,6 +236,173 @@ func (sr *styleResolver) Resolve(tag, classes string, ancestors []styleScope, pa
 	}
 
 	return style
+}
+
+// cssOverrideFlags tracks which properties were explicitly set by matched CSS rules.
+// Used to avoid overriding user CSS with UA (User Agent) defaults.
+type cssOverrideFlags struct {
+	marginTop     bool
+	marginRight   bool
+	marginBottom  bool
+	marginLeft    bool
+	verticalAlign bool
+}
+
+// scanCSSOverrides scans matched CSS rules to determine which margin and baseline
+// properties are explicitly set. Returns flags indicating which properties were found.
+func scanCSSOverrides(matched []compiledRule) cssOverrideFlags {
+	var flags cssOverrideFlags
+	for _, rule := range matched {
+		if _, ok := rule.Properties["margin"]; ok {
+			flags.marginTop = true
+			flags.marginRight = true
+			flags.marginBottom = true
+			flags.marginLeft = true
+		}
+		if _, ok := rule.Properties["margin-top"]; ok {
+			flags.marginTop = true
+		}
+		if _, ok := rule.Properties["margin-right"]; ok {
+			flags.marginRight = true
+		}
+		if _, ok := rule.Properties["margin-bottom"]; ok {
+			flags.marginBottom = true
+		}
+		if _, ok := rule.Properties["margin-left"]; ok {
+			flags.marginLeft = true
+		}
+		if _, ok := rule.Properties["vertical-align"]; ok {
+			flags.verticalAlign = true
+		}
+	}
+	return flags
+}
+
+// applyUAFontDefaults applies HTML User Agent font defaults for the given tag.
+// These are applied BEFORE CSS rules so that CSS can override them.
+// Matches the KFX DefaultStyleRegistry() font properties.
+func applyUAFontDefaults(style *resolvedStyle, tag string) {
+	switch tag {
+	case "strong", "b":
+		style.Bold = true
+	case "em", "i":
+		style.Italic = true
+	case "del", "s", "strike":
+		style.Strike = true
+	case "u":
+		style.Underline = true
+	case "sub":
+		style.FontSize = 0.75 * defaultFontSizePt // 0.75rem = 9pt
+	case "sup":
+		style.FontSize = 0.75 * defaultFontSizePt // 0.75rem = 9pt
+	case "code", "pre":
+		style.FontFamily = "monospace"
+	case "th":
+		style.Bold = true
+	case "h1":
+		style.FontSize = 1.5 * defaultFontSizePt // 18pt
+		style.Bold = true
+	case "h2":
+		style.FontSize = 1.5 * defaultFontSizePt // 18pt
+		style.Bold = true
+	case "h3":
+		style.FontSize = 1.17 * defaultFontSizePt // 14.04pt
+		style.Bold = true
+	case "h4":
+		style.FontSize = 1.0 * defaultFontSizePt // 12pt
+		style.Bold = true
+	case "h5":
+		style.FontSize = 0.83 * defaultFontSizePt // 9.96pt
+		style.Bold = true
+	case "h6":
+		style.FontSize = 0.67 * defaultFontSizePt // 8.04pt
+		style.Bold = true
+	}
+}
+
+// applyUAPostCSSDefaults applies HTML User Agent margin and baseline defaults
+// AFTER CSS rules. Only sets properties not explicitly overridden by any matched
+// CSS rule. Vertical margins use the CSS UA stylesheet values (in em, multiplied
+// by the element's final font-size). This matches the KFX DefaultStyleRegistry():
+//
+//   - p:          margin 1em 0         (KFX: 0.833333lh ≈ 1em/1.2)
+//   - h1:         margin 0.67em 0      (KFX: 0.558lh)
+//   - h2:         margin 0.83em 0      (KFX: 0.692lh)
+//   - h3:         margin 1.0em 0       (KFX: 0.833333lh)
+//   - h4:         margin 1.33em 0      (KFX: 1.108lh)
+//   - h5:         margin 1.67em 0      (KFX: 1.392lh)
+//   - h6:         margin 2.33em 0      (KFX: 1.942lh)
+//   - blockquote: margin 1em 40px      (KFX: 0.833333lh + 40px)
+//   - pre:        margin 1em 0         (KFX: 0.833333lh)
+func applyUAPostCSSDefaults(style *resolvedStyle, tag string, flags cssOverrideFlags) {
+	var marginTopEm, marginBottomEm float64
+	var hasVerticalMargins bool
+	var marginLeftPx, marginRightPx float64
+	var hasHorizontalMargins bool
+
+	switch tag {
+	case "p":
+		marginTopEm, marginBottomEm = 1.0, 1.0
+		hasVerticalMargins = true
+	case "h1":
+		marginTopEm, marginBottomEm = 0.67, 0.67
+		hasVerticalMargins = true
+	case "h2":
+		marginTopEm, marginBottomEm = 0.83, 0.83
+		hasVerticalMargins = true
+	case "h3":
+		marginTopEm, marginBottomEm = 1.0, 1.0
+		hasVerticalMargins = true
+	case "h4":
+		marginTopEm, marginBottomEm = 1.33, 1.33
+		hasVerticalMargins = true
+	case "h5":
+		marginTopEm, marginBottomEm = 1.67, 1.67
+		hasVerticalMargins = true
+	case "h6":
+		marginTopEm, marginBottomEm = 2.33, 2.33
+		hasVerticalMargins = true
+	case "blockquote":
+		marginTopEm, marginBottomEm = 1.0, 1.0
+		hasVerticalMargins = true
+		marginLeftPx, marginRightPx = 40, 40
+		hasHorizontalMargins = true
+	case "pre":
+		marginTopEm, marginBottomEm = 1.0, 1.0
+		hasVerticalMargins = true
+	}
+
+	if hasVerticalMargins {
+		fontSize := style.FontSize
+		if fontSize <= 0 {
+			fontSize = defaultFontSizePt
+		}
+		if !flags.marginTop {
+			style.MarginTop = marginTopEm * fontSize
+		}
+		if !flags.marginBottom {
+			style.MarginBottom = marginBottomEm * fontSize
+		}
+	}
+	if hasHorizontalMargins {
+		if !flags.marginLeft {
+			style.MarginLeft = CSSPxToPt(marginLeftPx)
+		}
+		if !flags.marginRight {
+			style.MarginRight = CSSPxToPt(marginRightPx)
+		}
+	}
+
+	// Baseline shift for sub/sup using final font-size.
+	// Only applied if CSS didn't explicitly set vertical-align.
+	if !flags.verticalAlign {
+		switch tag {
+		case "sub":
+			style.BaselineShift = -style.FontSize * 0.2
+		case "sup":
+			style.BaselineShift = style.FontSize * 0.33
+		}
+	}
 }
 
 func (sr *styleResolver) ResolvePseudo(tag, classes string, ancestors []styleScope, parent resolvedStyle) pseudoContent {

@@ -237,18 +237,3 @@ func (sb *StorylineBuilder) getContentRefForNode(node *ContentNode) *ContentRef 
 	}
 	return nil
 }
-
-// marginsEqual compares two margin pointers for equality.
-// Two nil pointers are equal, and two non-nil pointers are equal if their values are equal.
-func marginsEqual(a, b *float64) bool {
-	if a == nil && b == nil {
-		return true
-	}
-	if a == nil || b == nil {
-		return false
-	}
-	// Use epsilon comparison for floating point
-	const epsilon = 1e-9
-	diff := *a - *b
-	return diff >= -epsilon && diff <= epsilon
-}

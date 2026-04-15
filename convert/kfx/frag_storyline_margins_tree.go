@@ -2,19 +2,13 @@ package kfx
 
 import (
 	"sort"
+
+	"fbc/convert/margins"
 )
 
-// NewContentTree creates an empty content tree with a virtual root node.
-func NewContentTree(tracer *StyleTracer) *ContentTree {
-	return &ContentTree{
-		Root: &ContentNode{
-			Index:         -1,
-			ContainerKind: ContainerRoot,
-		},
-		NodeMap:    make(map[int]*ContentNode),
-		WrapperMap: make(map[int]*ContentNode),
-		tracer:     tracer,
-	}
+// newContentTree creates an empty content tree with a virtual root node.
+func newContentTree(tracer margins.Tracer) *ContentTree {
+	return margins.NewContentTree(tracer)
 }
 
 // buildContentTree builds a ContentTree from the flat contentRefs slice.
@@ -31,11 +25,11 @@ func NewContentTree(tracer *StyleTracer) *ContentTree {
 // - Virtual container nodes for each container ID
 // - Leaf content nodes for actual content entries
 func (sb *StorylineBuilder) buildContentTree() *ContentTree {
-	var tracer *StyleTracer
+	var tracer margins.Tracer
 	if sb.styles != nil {
 		tracer = sb.styles.Tracer()
 	}
-	tree := NewContentTree(tracer)
+	tree := newContentTree(tracer)
 
 	// Map from container ID to container node.
 	// Container ID 0 is the root.

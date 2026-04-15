@@ -16,6 +16,7 @@ import (
 	"fbc/common"
 	"fbc/config"
 	"fbc/content"
+	"fbc/convert/margins"
 	"fbc/convert/structure"
 	"fbc/fb2"
 )
@@ -34,8 +35,9 @@ type renderContext struct {
 	styles        *styleResolver
 	fonts         *fontRegistry
 	log           *zap.Logger
-	contentHeight float64 // usable page content height in points (page height minus vertical margins)
-	deviceDPI     float64 // device screen resolution (pixels per inch)
+	contentHeight float64                     // usable page content height in points (page height minus vertical margins)
+	deviceDPI     float64                     // device screen resolution (pixels per inch)
+	marginMeta    map[*layout.Div]*marginMeta // margin collapsing container metadata, keyed by Div pointer
 }
 
 type flowBuilder struct {
@@ -91,6 +93,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		log:           log.Named("pdf"),
 		contentHeight: geom.PageSize.Height - geom.Margins.Top - geom.Margins.Bottom,
 		deviceDPI:     float64(cfg.Images.Screen.DPI),
+		marginMeta:    make(map[*layout.Div]*marginMeta),
 	}
 
 	if err := addPlan(rc, plan); err != nil {
@@ -236,6 +239,7 @@ func addBodyIntroUnit(rc *renderContext, body *fb2.Body) error {
 	parent := defaultResolvedStyle()
 	b := flowBuilder{ctx: rc, elements: &elements, parent: parent}
 	b.renderBodyIntro(body)
+	collapseMargins(elements, rc.marginMeta)
 	for _, elem := range elements {
 		rc.doc.Add(elem)
 	}
@@ -255,6 +259,7 @@ func addFootnotesBodyUnit(rc *renderContext, body *fb2.Body) error {
 	for i := range body.Sections {
 		b.renderFootnoteSection(&body.Sections[i])
 	}
+	collapseMargins(elements, rc.marginMeta)
 	for _, elem := range elements {
 		rc.doc.Add(elem)
 	}
@@ -314,6 +319,7 @@ func renderSplitSection(rc *renderContext, work *splitSection) ([]layout.Element
 	for i := range splits {
 		splits[i].parentUnit = work.parentUnit
 	}
+	collapseMargins(elements, rc.marginMeta)
 	return elements, splits, nil
 }
 
@@ -343,7 +349,7 @@ func (b *flowBuilder) renderBodyTitle(body *fb2.Body) {
 	if body.Main() {
 		child.renderVignette(common.VignettePosBookTitleBottom, "vignette vignette-book-title-bottom")
 	}
-	b.pushWrapped("div", "body-title", elems)
+	b.pushWrappedTagged("div", "body-title", elems, margins.ContainerTitleBlock, margins.FlagTitleBlockMode)
 }
 
 func (b *flowBuilder) renderFootnoteSection(section *fb2.Section) {
@@ -363,7 +369,7 @@ func (b *flowBuilder) renderFootnoteSection(section *fb2.Section) {
 		child.renderAnnotation(section.Annotation, 1, 1)
 	}
 	child.renderFlowItems(section.Content, 1, 1, "section")
-	b.pushWrapped("div", "footnote", elems)
+	b.pushWrappedTagged("div", "footnote", elems, margins.ContainerFootnote, 0)
 }
 
 func (b *flowBuilder) renderSection(section *fb2.Section, depth int, titleDepth int) []splitSection {
@@ -420,7 +426,7 @@ func (b *flowBuilder) renderSectionTitle(section *fb2.Section, titleDepth int) {
 	child.renderVignette(topPos, "vignette vignette-"+topPos.String())
 	child.renderTitleHeading(section.Title, titleDepth, headerClass)
 	child.renderVignette(bottomPos, "vignette vignette-"+bottomPos.String())
-	b.pushWrapped("div", wrapperClass, elems)
+	b.pushWrappedTagged("div", wrapperClass, elems, margins.ContainerTitleBlock, margins.FlagTitleBlockMode)
 }
 
 func (b *flowBuilder) renderTitleBlock(title *fb2.Title, classPrefix string, headingLevel int, asHeading bool) {
@@ -451,7 +457,7 @@ func (b *flowBuilder) renderTitleBlock(title *fb2.Title, classPrefix string, hea
 			child.renderEmptyLine(classPrefix + "-emptyline")
 		}
 	}
-	b.pushWrapped("div", classPrefix, elems)
+	b.pushWrappedTagged("div", classPrefix, elems, margins.ContainerTitleBlock, margins.FlagTitleBlockMode)
 }
 
 func (b *flowBuilder) renderTitleHeading(title *fb2.Title, headingLevel int, classPrefix string) {
@@ -517,7 +523,7 @@ func (b *flowBuilder) renderEpigraphs(epigraphs []fb2.Epigraph, depth int) {
 		for j := range epigraph.TextAuthors {
 			child.renderParagraph(&epigraph.TextAuthors[j], "p", "text-author")
 		}
-		b.pushWrapped("div", "epigraph", elems)
+		b.pushWrappedTagged("div", "epigraph", elems, margins.ContainerEpigraph, margins.FlagTransferMBToLastChild)
 	}
 }
 
@@ -528,7 +534,7 @@ func (b *flowBuilder) renderAnnotation(flow *fb2.Flow, depth int, titleDepth int
 	var elems []layout.Element
 	child := b.descend("div", "annotation", b.resolve("div", "annotation"), &elems)
 	child.renderFlowItems(flow.Items, depth, titleDepth, "annotation")
-	b.pushWrapped("div", "annotation", elems)
+	b.pushWrappedTagged("div", "annotation", elems, margins.ContainerAnnotation, margins.FlagForceTransferMBToLastChild)
 }
 
 func (b *flowBuilder) renderFlowItems(items []fb2.FlowItem, depth int, titleDepth int, context string) []splitSection {
@@ -623,7 +629,7 @@ func (b *flowBuilder) renderPoem(poem *fb2.Poem, depth int) {
 			child.renderPlainParagraph("p", "date", dateText)
 		}
 	}
-	b.pushWrapped("div", "poem", elems)
+	b.pushWrappedTagged("div", "poem", elems, margins.ContainerPoem, 0)
 }
 
 func (b *flowBuilder) renderStanza(stanza *fb2.Stanza, depth int) {
@@ -641,7 +647,7 @@ func (b *flowBuilder) renderStanza(stanza *fb2.Stanza, depth int) {
 	for i := range stanza.Verses {
 		child.renderParagraph(&stanza.Verses[i], "p", "verse")
 	}
-	b.pushWrapped("div", "stanza", elems)
+	b.pushWrappedTagged("div", "stanza", elems, margins.ContainerStanza, margins.FlagStripMiddleMarginBottom|margins.FlagTransferMBToLastChild)
 }
 
 func (b *flowBuilder) renderCite(cite *fb2.Cite, depth int) {
@@ -654,7 +660,7 @@ func (b *flowBuilder) renderCite(cite *fb2.Cite, depth int) {
 	for i := range cite.TextAuthors {
 		child.renderParagraph(&cite.TextAuthors[i], "p", "text-author")
 	}
-	b.pushWrapped("blockquote", "cite", elems)
+	b.pushWrappedTagged("blockquote", "cite", elems, margins.ContainerCite, margins.FlagTransferMBToLastChild)
 }
 
 func (b *flowBuilder) renderTable(table *fb2.Table) {
@@ -820,6 +826,14 @@ func (b *flowBuilder) descend(tag, classes string, style resolvedStyle, out *[]l
 }
 
 func (b *flowBuilder) pushWrapped(tag, classes string, elems []layout.Element) {
+	b.pushWrappedTagged(tag, classes, elems, margins.ContainerSection, 0)
+}
+
+// pushWrappedTagged wraps elements in a Div with the given tag/classes and
+// records margin collapsing metadata (container kind + flags) for the Div.
+// This is the tagged variant of pushWrapped used when the container has
+// specific margin collapsing semantics (title-block, epigraph, poem, etc.).
+func (b *flowBuilder) pushWrappedTagged(tag, classes string, elems []layout.Element, kind margins.ContainerKind, flags margins.ContainerFlags) {
 	if len(elems) == 0 {
 		return
 	}
@@ -829,6 +843,7 @@ func (b *flowBuilder) pushWrapped(tag, classes string, elems []layout.Element) {
 		container.Add(elem)
 	}
 	applyDivStyle(container, style)
+	tagContainer(b.ctx.marginMeta, container, kind, flags, style)
 	if tag == "blockquote" {
 		container.SetTag("BlockQuote")
 	} else if tag == "div" && strings.Contains(classes, "section") {
