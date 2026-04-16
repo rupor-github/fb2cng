@@ -82,6 +82,9 @@ type resolvedStyle struct {
 	MaxWidth  cssDimension
 	MinHeight cssDimension
 	MaxHeight cssDimension
+
+	Orphans int // min lines at bottom of page before break (CSS default 2)
+	Widows  int // min lines at top of page after break (CSS default 2)
 }
 
 // cssDimension holds a CSS length that may be either an absolute value (points)
@@ -99,6 +102,8 @@ func defaultResolvedStyle() resolvedStyle {
 		Align:      layout.AlignLeft,
 		Color:      layout.ColorBlack,
 		HasColor:   true,
+		Orphans:    2,
+		Widows:     2,
 	}
 }
 
@@ -118,6 +123,8 @@ func (s resolvedStyle) inheritedOnly() resolvedStyle {
 		LetterSpacing: s.LetterSpacing,
 		Hyphens:       s.Hyphens,
 		WhiteSpace:    s.WhiteSpace,
+		Orphans:       s.Orphans,
+		Widows:        s.Widows,
 	}
 }
 
@@ -669,6 +676,16 @@ func (sr *styleResolver) applyRule(style *resolvedStyle, parent resolvedStyle, r
 	if val, ok := props["break-after"]; ok {
 		style.BreakAfter = parseBreakKeyword(val)
 	}
+	if val, ok := props["orphans"]; ok {
+		if n, err := strconv.Atoi(strings.TrimSpace(val.Raw)); err == nil && n >= 1 {
+			style.Orphans = n
+		}
+	}
+	if val, ok := props["widows"]; ok {
+		if n, err := strconv.Atoi(strings.TrimSpace(val.Raw)); err == nil && n >= 1 {
+			style.Widows = n
+		}
+	}
 	if val, ok := props["background-color"]; ok {
 		if color, ok := parseColorValue(val); ok {
 			style.Background = &color
@@ -743,6 +760,7 @@ var handledCSSProperties = map[string]bool{
 	"white-space": true, "width": true, "display": true,
 	"page-break-inside": true, "page-break-before": true, "page-break-after": true,
 	"break-before": true, "break-after": true,
+	"orphans": true, "widows": true,
 	"letter-spacing": true, "hyphens": true, "-webkit-hyphens": true,
 	"min-width": true, "max-width": true, "min-height": true, "max-height": true,
 	// Handled elsewhere (font resolution).

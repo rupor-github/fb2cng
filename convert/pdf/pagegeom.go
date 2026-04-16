@@ -37,9 +37,10 @@ func CSSPxToPt(value float64) float64 {
 	return value * 72.0 / cssDPI
 }
 
-// DefaultMargins returns conservative content margins in PDF points.
+// DefaultMargins returns content margins in PDF points sized for
+// e-reader pages (~4–6 inches).  18 pt ≈ ¼ inch on each side.
 func DefaultMargins() layout.Margins {
-	return layout.Margins{Top: 48, Right: 36, Bottom: 48, Left: 36}
+	return layout.Margins{Top: 18, Right: 18, Bottom: 18, Left: 18}
 }
 
 // GeometryFromConfig derives PDF page geometry from configured screen size.

@@ -43,10 +43,20 @@ type renderContext struct {
 }
 
 // addElement adds an element to the document, deduplicating consecutive
-// AreaBreaks.  The renderer always flushes the current page when it sees
-// an AreaBreak, even when the page is empty — producing a blank page.
-// By tracking whether we are already at page-top (after a prior break or
-// at document start) we silently drop the redundant break.
+// AreaBreaks and preserving first-element margins at page top.
+//
+// AreaBreak deduplication: the folio renderer always flushes the current
+// page when it sees an AreaBreak, even when the page is empty — producing
+// a blank page.  By tracking whether we are already at page-top (after a
+// prior break or at document start) we silently drop the redundant break.
+//
+// Margin preservation: folio's stripLeadingOffset (render_plans.go) removes
+// the SpaceBefore of the first element on every new page.  This is wrong
+// for us because element margins (e.g. heading wrapper's 2em top margin)
+// are font-size dependent and must be preserved.  We insert a zero-height
+// sentinel Div as the true first element — it absorbs stripLeadingOffset
+// (nothing to strip since its Y is 0), flips atPageTop to false inside
+// folio's renderer, and the real content element keeps its SpaceBefore.
 func (rc *renderContext) addElement(elem layout.Element) {
 	if _, isBreak := elem.(*layout.AreaBreak); isBreak {
 		if rc.atPageTop {
@@ -55,6 +65,11 @@ func (rc *renderContext) addElement(elem layout.Element) {
 		rc.doc.Add(elem)
 		rc.atPageTop = true
 		return
+	}
+	if rc.atPageTop {
+		// Zero-height sentinel: absorbs folio's stripLeadingOffset so the
+		// real first element's SpaceBefore is preserved.
+		rc.doc.Add(layout.NewDiv())
 	}
 	rc.doc.Add(elem)
 	rc.atPageTop = false
@@ -957,8 +972,19 @@ func (b *flowBuilder) pushWrappedTagged(tag, classes string, elems []layout.Elem
 }
 
 func wrapIfNeeded(tag, classes string, style resolvedStyle, elem layout.Element) layout.Element {
-	if style.PaddingTop == 0 && style.PaddingRight == 0 && style.PaddingBottom == 0 && style.PaddingLeft == 0 &&
-		style.Background == nil && !style.HasBorder && !style.KeepTogether && style.WidthPercent == 0 {
+	needsWrap := style.PaddingTop != 0 || style.PaddingRight != 0 || style.PaddingBottom != 0 || style.PaddingLeft != 0 ||
+		style.Background != nil || style.HasBorder || style.KeepTogether || style.WidthPercent != 0
+
+	// Elements without a margin API (Heading, ImageElement) need a wrapper
+	// Div to carry CSS/UA margins.  Paragraphs handle margins directly via
+	// SetSpaceBefore/SetSpaceAfter so they don't need this.
+	if !needsWrap {
+		if _, ok := elem.(*layout.Heading); ok {
+			needsWrap = style.MarginTop != 0 || style.MarginBottom != 0
+		}
+	}
+
+	if !needsWrap {
 		return elem
 	}
 	div := layout.NewDiv().Add(elem)
@@ -1111,6 +1137,13 @@ func applyParagraphStyle(para *layout.Paragraph, style resolvedStyle) {
 	case style.Hyphens == "manual":
 		para.SetHyphens("manual")
 	}
+	// CSS orphans/widows control page-break line thresholds.
+	if style.Orphans > 0 {
+		para.SetOrphans(style.Orphans)
+	}
+	if style.Widows > 0 {
+		para.SetWidows(style.Widows)
+	}
 }
 
 func applyDivStyle(div *layout.Div, style resolvedStyle) {
@@ -1231,7 +1264,7 @@ func (b *flowBuilder) inlineRuns(seg *fb2.InlineSegment, tc textContext) []layou
 		pseudo = b.ctx.styles.ResolvePseudo(tag, classes, tc.ancestors, tc.parent)
 	}
 	linkURI := tc.linkURI
-	if seg.Kind == fb2.InlineLink && seg.Href != "" && !strings.HasPrefix(seg.Href, "#") {
+	if seg.Kind == fb2.InlineLink && seg.Href != "" {
 		linkURI = seg.Href
 	}
 
