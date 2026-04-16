@@ -39,6 +39,25 @@ type renderContext struct {
 	deviceDPI        float64                             // device screen resolution (pixels per inch)
 	marginMeta       map[*layout.Div]*marginMeta         // margin collapsing container metadata, keyed by Div pointer
 	emptyLineSignals map[layout.Element]*emptyLineSignal // empty-line margin signals, keyed by element pointer
+	atPageTop        bool                                // true when the renderer is at the top of a (new) page — suppresses duplicate AreaBreaks
+}
+
+// addElement adds an element to the document, deduplicating consecutive
+// AreaBreaks.  The renderer always flushes the current page when it sees
+// an AreaBreak, even when the page is empty — producing a blank page.
+// By tracking whether we are already at page-top (after a prior break or
+// at document start) we silently drop the redundant break.
+func (rc *renderContext) addElement(elem layout.Element) {
+	if _, isBreak := elem.(*layout.AreaBreak); isBreak {
+		if rc.atPageTop {
+			return // suppress duplicate page break
+		}
+		rc.doc.Add(elem)
+		rc.atPageTop = true
+		return
+	}
+	rc.doc.Add(elem)
+	rc.atPageTop = false
 }
 
 // emptyLineSignal stores empty-line margin collapsing annotations for a
@@ -106,6 +125,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		deviceDPI:        float64(cfg.Images.Screen.DPI),
 		marginMeta:       make(map[*layout.Div]*marginMeta),
 		emptyLineSignals: make(map[layout.Element]*emptyLineSignal),
+		atPageTop:        true, // document starts at the top of the first page
 	}
 
 	if err := addPlan(rc, plan); err != nil {
@@ -177,14 +197,14 @@ func addPlan(rc *renderContext, plan *structure.Plan) error {
 	}
 
 	if len(plan.Units) == 0 {
-		rc.doc.Add(newParagraphElement(rc, "p", "", nil, defaultResolvedStyle(), "Empty document"))
+		rc.addElement(newParagraphElement(rc, "p", "", nil, defaultResolvedStyle(), "Empty document"))
 		return nil
 	}
 
 	for i := range plan.Units {
 		unit := &plan.Units[i]
 		if i > 0 && unit.ForceNewPage {
-			rc.doc.Add(layout.NewAreaBreak())
+			rc.addElement(layout.NewAreaBreak())
 		}
 		if err := addUnit(rc, unit); err != nil {
 			return err
@@ -227,7 +247,7 @@ func addCoverUnit(rc *renderContext) error {
 	if err != nil {
 		return err
 	}
-	rc.doc.Add(elem)
+	rc.addElement(elem)
 	return nil
 }
 
@@ -239,7 +259,7 @@ func addBodyImageUnit(rc *renderContext, body *fb2.Body) error {
 	if err != nil {
 		return err
 	}
-	rc.doc.Add(elem)
+	rc.addElement(elem)
 	return nil
 }
 
@@ -253,7 +273,7 @@ func addBodyIntroUnit(rc *renderContext, body *fb2.Body) error {
 	b.renderBodyIntro(body)
 	collapseMargins(elements, rc.marginMeta, rc.emptyLineSignals)
 	for _, elem := range elements {
-		rc.doc.Add(elem)
+		rc.addElement(elem)
 	}
 	return nil
 }
@@ -273,7 +293,7 @@ func addFootnotesBodyUnit(rc *renderContext, body *fb2.Body) error {
 	}
 	collapseMargins(elements, rc.marginMeta, rc.emptyLineSignals)
 	for _, elem := range elements {
-		rc.doc.Add(elem)
+		rc.addElement(elem)
 	}
 	return nil
 }
@@ -293,7 +313,7 @@ func addSectionUnit(rc *renderContext, unit *structure.Unit) error {
 		work := queue[0]
 		queue = queue[1:]
 		if !first {
-			rc.doc.Add(layout.NewAreaBreak())
+			rc.addElement(layout.NewAreaBreak())
 		}
 		first = false
 
@@ -302,7 +322,7 @@ func addSectionUnit(rc *renderContext, unit *structure.Unit) error {
 			return err
 		}
 		for _, elem := range elements {
-			rc.doc.Add(elem)
+			rc.addElement(elem)
 		}
 		next := append([]splitSection{}, splits...)
 		for _, rem := range work.remaining {
@@ -927,7 +947,13 @@ func (b *flowBuilder) pushWrappedTagged(tag, classes string, elems []layout.Elem
 	} else if tag == "div" && strings.Contains(classes, "section") {
 		container.SetTag("Sect")
 	}
+	if style.BreakBefore == "always" {
+		*b.elements = append(*b.elements, layout.NewAreaBreak())
+	}
 	*b.elements = append(*b.elements, container)
+	if style.BreakAfter == "always" {
+		*b.elements = append(*b.elements, layout.NewAreaBreak())
+	}
 }
 
 func wrapIfNeeded(tag, classes string, style resolvedStyle, elem layout.Element) layout.Element {
@@ -1075,7 +1101,14 @@ func applyParagraphStyle(para *layout.Paragraph, style resolvedStyle) {
 	if style.Background != nil {
 		para.SetBackground(*style.Background)
 	}
-	if style.WhiteSpace == "pre-wrap" {
+	// CSS hyphens property controls folio's built-in hyphenation engine.
+	// pre-wrap mode forces manual (soft-hyphen only) breaking.
+	switch {
+	case style.WhiteSpace == "pre-wrap":
+		para.SetHyphens("manual")
+	case style.Hyphens == "none":
+		para.SetHyphens("none")
+	case style.Hyphens == "manual":
 		para.SetHyphens("manual")
 	}
 }
@@ -1105,6 +1138,21 @@ func applyDivStyle(div *layout.Div, style resolvedStyle) {
 	}
 	if style.WidthPercent > 0 {
 		div.SetWidthPercent(style.WidthPercent / 100.0)
+	}
+	applyDivDimension(div, style.MinWidth, (*layout.Div).SetMinWidth, (*layout.Div).SetMinWidthUnit)
+	applyDivDimension(div, style.MaxWidth, (*layout.Div).SetMaxWidth, (*layout.Div).SetMaxWidthUnit)
+	applyDivDimension(div, style.MinHeight, (*layout.Div).SetMinHeight, (*layout.Div).SetMinHeightUnit)
+	applyDivDimension(div, style.MaxHeight, (*layout.Div).SetMaxHeight, (*layout.Div).SetMaxHeightUnit)
+}
+
+// applyDivDimension applies a cssDimension to a Div using the appropriate
+// setter: percentage values use the UnitValue setter, absolute values use the
+// point setter.
+func applyDivDimension(div *layout.Div, dim cssDimension, setPt func(*layout.Div, float64) *layout.Div, setUnit func(*layout.Div, layout.UnitValue) *layout.Div) {
+	if dim.Percent > 0 {
+		setUnit(div, layout.Pct(dim.Percent))
+	} else if dim.Pt > 0 {
+		setPt(div, dim.Pt)
 	}
 }
 
@@ -1144,6 +1192,14 @@ func (b *flowBuilder) paragraphRuns(p *fb2.Paragraph, class string, tc textConte
 	if b.ctx != nil && b.ctx.styles != nil {
 		style = b.ctx.styles.Resolve(tag, class, tc.ancestors, tc.parent)
 	}
+	// CSS hyphens property overrides the content-level hyphenation setting.
+	hyphenate := tc.hyphenate
+	switch style.Hyphens {
+	case "none":
+		hyphenate = false
+	case "auto":
+		hyphenate = b.ctx != nil && b.ctx.c != nil && b.ctx.c.Hyphen != nil
+	}
 	segments := p.Text
 	if hasStyle("has-dropcap", p.Style) {
 		segments = splitDropcapSegments(segments)
@@ -1154,7 +1210,7 @@ func (b *flowBuilder) paragraphRuns(p *fb2.Paragraph, class string, tc textConte
 			ancestors: append(append([]styleScope{}, tc.ancestors...), styleScope{Tag: tag, Classes: splitClasses(class)}),
 			parent:    style,
 			linkURI:   tc.linkURI,
-			hyphenate: tc.hyphenate,
+			hyphenate: hyphenate,
 		})...)
 	}
 	return runs
@@ -1270,6 +1326,7 @@ func (b *flowBuilder) textRunForStyle(text string, style resolvedStyle) layout.T
 		run.Decoration |= layout.DecorationStrikethrough
 	}
 	run.BaselineShift = style.BaselineShift
+	run.LetterSpacing = style.LetterSpacing
 	if style.Background != nil {
 		run.BackgroundColor = style.Background
 	}

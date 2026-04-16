@@ -46,17 +46,21 @@ type resolvedStyle struct {
 	Align      layout.Align
 	TextIndent float64
 
-	Color     layout.Color
-	HasColor  bool
-	Underline bool
-	Strike    bool
+	Color         layout.Color
+	HasColor      bool
+	Underline     bool
+	Strike        bool
+	LetterSpacing float64
+	Hyphens       string // "none", "manual", "auto", or "" (inherit)
 
 	BaselineShift float64
 
-	MarginTop    float64
-	MarginRight  float64
-	MarginBottom float64
-	MarginLeft   float64
+	MarginTop       float64
+	MarginRight     float64
+	MarginBottom    float64
+	MarginLeft      float64
+	MarginLeftAuto  bool // true when margin-left: auto was set
+	MarginRightAuto bool // true when margin-right: auto was set
 
 	PaddingTop    float64
 	PaddingRight  float64
@@ -68,9 +72,23 @@ type resolvedStyle struct {
 	HasBorder  bool
 
 	KeepTogether bool
+	BreakBefore  string // "always", "avoid", "" (auto/unset)
+	BreakAfter   string // "always", "avoid", "" (auto/unset)
 	Hidden       bool
 	WhiteSpace   string
 	WidthPercent float64
+
+	MinWidth  cssDimension
+	MaxWidth  cssDimension
+	MinHeight cssDimension
+	MaxHeight cssDimension
+}
+
+// cssDimension holds a CSS length that may be either an absolute value (points)
+// or a percentage of the container.  Zero-value means unset.
+type cssDimension struct {
+	Pt      float64 // absolute value in points (used when Percent == 0)
+	Percent float64 // percentage value (0–100); when > 0, Pt is ignored
 }
 
 func defaultResolvedStyle() resolvedStyle {
@@ -86,18 +104,20 @@ func defaultResolvedStyle() resolvedStyle {
 
 func (s resolvedStyle) inheritedOnly() resolvedStyle {
 	return resolvedStyle{
-		FontFamily: s.FontFamily,
-		FontSize:   s.FontSize,
-		LineHeight: s.LineHeight,
-		Bold:       s.Bold,
-		Italic:     s.Italic,
-		Align:      s.Align,
-		TextIndent: s.TextIndent,
-		Color:      s.Color,
-		HasColor:   s.HasColor,
-		Underline:  s.Underline,
-		Strike:     s.Strike,
-		WhiteSpace: s.WhiteSpace,
+		FontFamily:    s.FontFamily,
+		FontSize:      s.FontSize,
+		LineHeight:    s.LineHeight,
+		Bold:          s.Bold,
+		Italic:        s.Italic,
+		Align:         s.Align,
+		TextIndent:    s.TextIndent,
+		Color:         s.Color,
+		HasColor:      s.HasColor,
+		Underline:     s.Underline,
+		Strike:        s.Strike,
+		LetterSpacing: s.LetterSpacing,
+		Hyphens:       s.Hyphens,
+		WhiteSpace:    s.WhiteSpace,
 	}
 }
 
@@ -207,6 +227,9 @@ func (sr *styleResolver) Resolve(tag, classes string, ancestors []styleScope, pa
 	// properties not explicitly set by any matched CSS rule. Margins are
 	// computed from the final font-size (which CSS may have changed).
 	applyUAPostCSSDefaults(&style, tag, cssFlags)
+
+	// Convert margin: auto to alignment (KFX MarginAutoTransformer).
+	resolveMarginAuto(&style)
 
 	if style.FontFamily == "" {
 		style.FontFamily = parent.FontFamily
@@ -519,7 +542,7 @@ func (sr *styleResolver) applyRule(style *resolvedStyle, parent resolvedStyle, r
 	}
 
 	if val, ok := props["margin"]; ok {
-		applyBoxShorthand(val, style.FontSize, &style.MarginTop, &style.MarginRight, &style.MarginBottom, &style.MarginLeft)
+		applyMarginShorthand(val, style.FontSize, style)
 	}
 	if val, ok := props["padding"]; ok {
 		applyBoxShorthand(val, style.FontSize, &style.PaddingTop, &style.PaddingRight, &style.PaddingBottom, &style.PaddingLeft)
@@ -528,6 +551,16 @@ func (sr *styleResolver) applyRule(style *resolvedStyle, parent resolvedStyle, r
 		if border, ok := parseBorder(val.Raw); ok {
 			style.Border = border
 			style.HasBorder = true
+		}
+		raw := strings.ToLower(val.Raw)
+		for _, unsupported := range []string{"groove", "ridge", "inset", "outset"} {
+			if strings.Contains(raw, unsupported) {
+				sr.log.Debug("Ignoring unsupported border-style value",
+					zap.String("property", "border"),
+					zap.String("unsupported", unsupported),
+					zap.String("value", val.Raw),
+				)
+			}
 		}
 	}
 	if val, ok := props["background"]; ok {
@@ -540,7 +573,7 @@ func (sr *styleResolver) applyRule(style *resolvedStyle, parent resolvedStyle, r
 		style.FontFamily = normalizeFontFamilyValue(val)
 	}
 	if val, ok := props["font-size"]; ok {
-		if size, ok := parseLength(val, parent.FontSize, defaultFontSizePt); ok && size > 0 {
+		if size, ok := parseFontSize(val, parent.FontSize); ok && size > 0 {
 			style.FontSize = size
 		}
 	}
@@ -571,6 +604,13 @@ func (sr *styleResolver) applyRule(style *resolvedStyle, parent resolvedStyle, r
 	}
 	if val, ok := props["text-decoration"]; ok {
 		style.Underline, style.Strike = parseTextDecoration(val)
+		if strings.Contains(strings.ToLower(val.Raw), "overline") {
+			sr.log.Debug("Ignoring unsupported text-decoration value",
+				zap.String("property", "text-decoration"),
+				zap.String("unsupported", "overline"),
+				zap.String("value", val.Raw),
+			)
+		}
 	}
 	if val, ok := props["vertical-align"]; ok {
 		style.BaselineShift = parseBaselineShift(val, style.FontSize)
@@ -583,11 +623,51 @@ func (sr *styleResolver) applyRule(style *resolvedStyle, parent resolvedStyle, r
 			style.WidthPercent = val.Value
 		}
 	}
+	if val, ok := props["min-width"]; ok {
+		style.MinWidth = parseDimension(val, style.FontSize)
+	}
+	if val, ok := props["max-width"]; ok {
+		style.MaxWidth = parseDimension(val, style.FontSize)
+	}
+	if val, ok := props["min-height"]; ok {
+		style.MinHeight = parseDimension(val, style.FontSize)
+	}
+	if val, ok := props["max-height"]; ok {
+		style.MaxHeight = parseDimension(val, style.FontSize)
+	}
 	if val, ok := props["display"]; ok {
 		style.Hidden = strings.EqualFold(valueKeyword(val), "none")
 	}
 	if val, ok := props["page-break-inside"]; ok {
 		style.KeepTogether = strings.EqualFold(valueKeyword(val), "avoid")
+	}
+	if val, ok := props["letter-spacing"]; ok {
+		keyword := strings.ToLower(strings.TrimSpace(valueKeyword(val)))
+		if keyword == "normal" {
+			style.LetterSpacing = 0
+		} else if ls, ok := parseLength(val, style.FontSize, style.FontSize); ok {
+			style.LetterSpacing = ls
+		}
+	}
+	if val, ok := props["hyphens"]; ok {
+		style.Hyphens = parseHyphensKeyword(val)
+	}
+	if val, ok := props["-webkit-hyphens"]; ok {
+		if style.Hyphens == "" { // don't override unprefixed
+			style.Hyphens = parseHyphensKeyword(val)
+		}
+	}
+	if val, ok := props["page-break-before"]; ok {
+		style.BreakBefore = parseBreakKeyword(val)
+	}
+	if val, ok := props["break-before"]; ok {
+		style.BreakBefore = parseBreakKeyword(val)
+	}
+	if val, ok := props["page-break-after"]; ok {
+		style.BreakAfter = parseBreakKeyword(val)
+	}
+	if val, ok := props["break-after"]; ok {
+		style.BreakAfter = parseBreakKeyword(val)
 	}
 	if val, ok := props["background-color"]; ok {
 		if color, ok := parseColorValue(val); ok {
@@ -601,8 +681,13 @@ func (sr *styleResolver) applyRule(style *resolvedStyle, parent resolvedStyle, r
 		}
 	}
 	if val, ok := props["margin-right"]; ok {
-		if measure, ok := parseLength(val, style.FontSize, style.FontSize); ok {
+		raw := strings.TrimSpace(strings.ToLower(val.Raw))
+		if raw == "auto" {
+			style.MarginRightAuto = true
+			style.MarginRight = 0
+		} else if measure, ok := parseLength(val, style.FontSize, style.FontSize); ok {
 			style.MarginRight = measure
+			style.MarginRightAuto = false
 		}
 	}
 	if val, ok := props["margin-bottom"]; ok {
@@ -611,8 +696,13 @@ func (sr *styleResolver) applyRule(style *resolvedStyle, parent resolvedStyle, r
 		}
 	}
 	if val, ok := props["margin-left"]; ok {
-		if measure, ok := parseLength(val, style.FontSize, style.FontSize); ok {
+		raw := strings.TrimSpace(strings.ToLower(val.Raw))
+		if raw == "auto" {
+			style.MarginLeftAuto = true
+			style.MarginLeft = 0
+		} else if measure, ok := parseLength(val, style.FontSize, style.FontSize); ok {
 			style.MarginLeft = measure
+			style.MarginLeftAuto = false
 		}
 	}
 
@@ -635,6 +725,41 @@ func (sr *styleResolver) applyRule(style *resolvedStyle, parent resolvedStyle, r
 		if measure, ok := parseLength(val, style.FontSize, style.FontSize); ok {
 			style.PaddingLeft = measure
 		}
+	}
+
+	// Log CSS properties that we received but do not handle.
+	sr.logUnhandledProperties(props)
+}
+
+// handledCSSProperties is the set of CSS properties consumed by applyRule.
+// Properties not in this set trigger a debug log when encountered.
+var handledCSSProperties = map[string]bool{
+	"margin": true, "margin-top": true, "margin-right": true, "margin-bottom": true, "margin-left": true,
+	"padding": true, "padding-top": true, "padding-right": true, "padding-bottom": true, "padding-left": true,
+	"border": true, "background": true, "background-color": true,
+	"font-family": true, "font-size": true, "font-weight": true, "font-style": true,
+	"line-height": true, "text-align": true, "text-indent": true,
+	"color": true, "text-decoration": true, "vertical-align": true,
+	"white-space": true, "width": true, "display": true,
+	"page-break-inside": true, "page-break-before": true, "page-break-after": true,
+	"break-before": true, "break-after": true,
+	"letter-spacing": true, "hyphens": true, "-webkit-hyphens": true,
+	"min-width": true, "max-width": true, "min-height": true, "max-height": true,
+	// Handled elsewhere (font resolution).
+	"src": true, "font-display": true, "unicode-range": true,
+	// CSS properties that are valid but have no effect in PDF generation.
+	"content": true, "height": true,
+}
+
+func (sr *styleResolver) logUnhandledProperties(props map[string]css.Value) {
+	for name, val := range props {
+		if handledCSSProperties[name] {
+			continue
+		}
+		sr.log.Debug("Ignoring unsupported CSS property",
+			zap.String("property", name),
+			zap.String("value", val.Raw),
+		)
 	}
 }
 
@@ -707,6 +832,8 @@ func parseRawLength(raw string, fontSize float64, percentBase float64) (float64,
 		return CSSPxToPt(value), true
 	case "em":
 		return value * fontSize, true
+	case "ex":
+		return value * 0.44 * fontSize, true // x-height ≈ 0.44em for most fonts
 	case "rem":
 		return value * defaultFontSizePt, true
 	case "%":
@@ -937,4 +1064,161 @@ func parseBorder(raw string) (layout.Border, bool) {
 		return layout.Border{}, false
 	}
 	return border, true
+}
+
+// parseFontSize handles font-size CSS values including keywords.
+// Relative keywords (smaller/larger) scale relative to parentFontSize.
+// Absolute keywords (xx-small through xxx-large) use the CSS absolute
+// size scale relative to defaultFontSizePt ("medium").
+func parseFontSize(val css.Value, parentFontSize float64) (float64, bool) {
+	keyword := strings.ToLower(strings.TrimSpace(valueKeyword(val)))
+	switch keyword {
+	case "smaller":
+		return parentFontSize * (5.0 / 6.0), true // KFX: 0.8333em
+	case "larger":
+		return parentFontSize * 1.2, true // KFX: 1.2em
+	case "xx-small":
+		return defaultFontSizePt * (3.0 / 5.0), true
+	case "x-small":
+		return defaultFontSizePt * (3.0 / 4.0), true
+	case "small":
+		return defaultFontSizePt * (8.0 / 9.0), true
+	case "medium":
+		return defaultFontSizePt, true
+	case "large":
+		return defaultFontSizePt * (6.0 / 5.0), true
+	case "x-large":
+		return defaultFontSizePt * (3.0 / 2.0), true
+	case "xx-large":
+		return defaultFontSizePt * 2.0, true
+	case "xxx-large":
+		return defaultFontSizePt * 3.0, true
+	default:
+		return parseLength(val, parentFontSize, defaultFontSizePt)
+	}
+}
+
+// parseDimension parses a CSS length value into a cssDimension.
+// Percentage values are stored in Percent; all other lengths in Pt.
+func parseDimension(val css.Value, fontSize float64) cssDimension {
+	if val.Unit == "%" && val.IsNumeric() {
+		return cssDimension{Percent: val.Value}
+	}
+	if pts, ok := parseLength(val, fontSize, fontSize); ok && pts > 0 {
+		return cssDimension{Pt: pts}
+	}
+	return cssDimension{}
+}
+
+// parseHyphensKeyword extracts the hyphens value from a CSS property.
+// Returns "none", "manual", "auto", or "" for unrecognised values.
+func parseHyphensKeyword(val css.Value) string {
+	switch strings.ToLower(strings.TrimSpace(valueKeyword(val))) {
+	case "none":
+		return "none"
+	case "manual":
+		return "manual"
+	case "auto":
+		return "auto"
+	default:
+		return ""
+	}
+}
+
+// parseBreakKeyword extracts a page-break / break-before/after value.
+// Returns "always" or "avoid"; everything else (auto, unrecognised) returns "".
+func parseBreakKeyword(val css.Value) string {
+	switch strings.ToLower(strings.TrimSpace(valueKeyword(val))) {
+	case "always", "page", "left", "right", "recto", "verso":
+		return "always"
+	case "avoid":
+		return "avoid"
+	default:
+		return ""
+	}
+}
+
+// applyMarginShorthand parses the CSS margin shorthand, treating "auto" as
+// zero length while recording which sides are auto for later resolution.
+// Unlike the generic applyBoxShorthand, this does not abort when a part
+// is "auto".
+func applyMarginShorthand(val css.Value, fontSize float64, style *resolvedStyle) {
+	parts := strings.Fields(val.Raw)
+	if len(parts) == 0 {
+		return
+	}
+
+	type marginPart struct {
+		value float64
+		auto  bool
+		ok    bool
+	}
+	parse := func(s string) marginPart {
+		s = strings.TrimSpace(strings.ToLower(s))
+		if s == "auto" {
+			return marginPart{value: 0, auto: true, ok: true}
+		}
+		v, ok := parseRawLength(s, fontSize, fontSize)
+		return marginPart{value: v, ok: ok}
+	}
+
+	var top, right, bottom, left marginPart
+	switch len(parts) {
+	case 1:
+		v := parse(parts[0])
+		if !v.ok {
+			return
+		}
+		top, right, bottom, left = v, v, v, v
+	case 2:
+		v0, v1 := parse(parts[0]), parse(parts[1])
+		if !v0.ok || !v1.ok {
+			return
+		}
+		top, bottom = v0, v0
+		right, left = v1, v1
+	case 3:
+		v0, v1, v2 := parse(parts[0]), parse(parts[1]), parse(parts[2])
+		if !v0.ok || !v1.ok || !v2.ok {
+			return
+		}
+		top, right, bottom, left = v0, v1, v2, v1
+	default:
+		v0, v1, v2, v3 := parse(parts[0]), parse(parts[1]), parse(parts[2]), parse(parts[3])
+		if !v0.ok || !v1.ok || !v2.ok || !v3.ok {
+			return
+		}
+		top, right, bottom, left = v0, v1, v2, v3
+	}
+
+	style.MarginTop = top.value
+	style.MarginRight = right.value
+	style.MarginBottom = bottom.value
+	style.MarginLeft = left.value
+	style.MarginLeftAuto = left.auto
+	style.MarginRightAuto = right.auto
+}
+
+// resolveMarginAuto converts margin-left/right: auto into text alignment,
+// matching the KFX MarginAutoTransformer behavior:
+//
+//   - Both left and right auto → center
+//   - Only left auto → right-align
+//   - Only right auto → left-align
+//   - top/bottom auto → 0 (already handled during parsing)
+func resolveMarginAuto(style *resolvedStyle) {
+	if !style.MarginLeftAuto && !style.MarginRightAuto {
+		return
+	}
+	if style.MarginLeftAuto && style.MarginRightAuto {
+		style.Align = layout.AlignCenter
+	} else if style.MarginLeftAuto {
+		style.Align = layout.AlignRight
+	} else {
+		style.Align = layout.AlignLeft
+	}
+	style.MarginLeft = 0
+	style.MarginRight = 0
+	style.MarginLeftAuto = false
+	style.MarginRightAuto = false
 }
