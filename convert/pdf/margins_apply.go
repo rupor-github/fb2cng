@@ -14,12 +14,14 @@ import (
 // (populated by tagContainer during element creation).  The signals map
 // provides empty-line margin-absorption annotations (populated by
 // handleEmptyLine/consumePendingEmptyLine).
-func collapseMargins(elements []layout.Element, meta map[*layout.Div]*marginMeta, signals map[layout.Element]*emptyLineSignal) {
+func collapseMargins(elements []layout.Element, meta map[*layout.Div]*marginMeta, signals map[layout.Element]*emptyLineSignal, tracer *PDFTracer) {
 	if len(elements) == 0 {
 		return
 	}
 	result := buildMarginTree(elements, meta, signals)
+	tracer.TraceMarginTree("before", result.tree)
 	margins.CollapseTree(result.tree)
+	tracer.TraceMarginTree("after", result.tree)
 	applyCollapsedMargins(result)
 }
 

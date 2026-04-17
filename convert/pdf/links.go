@@ -58,6 +58,7 @@ package pdf
 //   instead of external /URI actions.
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/carlos7ags/folio/document"
@@ -71,18 +72,25 @@ import (
 // document.  The tracker is populated during layout (PlacedBlock.Draw
 // closures) and consulted indirectly through doc.namedDests during the
 // annotation-writing phase of the same WriteTo() call.
+//
+// When a non-nil tracer is supplied, the tracker emits PAGE/ANCHOR
+// events for every new pointer observation and every id→page mapping;
+// these are invaluable for diagnosing page-index drift that would
+// otherwise require env-gated printf instrumentation.
 type anchorTracker struct {
 	doc        *document.Document
 	pageIndex  map[*layout.PageResult]int // allocated on first Draw per page
 	nextIndex  int
 	registered map[string]bool // id -> already added to doc.namedDests
+	tracer     *PDFTracer      // nil-safe debug-report tracer
 }
 
-func newAnchorTracker(doc *document.Document) *anchorTracker {
+func newAnchorTracker(doc *document.Document, tracer *PDFTracer) *anchorTracker {
 	return &anchorTracker{
 		doc:        doc,
 		pageIndex:  make(map[*layout.PageResult]int),
 		registered: make(map[string]bool),
+		tracer:     tracer,
 	}
 }
 
@@ -99,12 +107,15 @@ func (t *anchorTracker) resolvePageIndex(page *layout.PageResult) int {
 	idx := t.nextIndex
 	t.pageIndex[page] = idx
 	t.nextIndex++
+	if t.tracer.IsEnabled() {
+		t.tracer.TracePageObserve(idx, fmt.Sprintf("%p", page), "")
+	}
 	return idx
 }
 
 // register adds a NamedDest for id pointing to the given page index.
 // Duplicates are silently ignored (the first observation wins).
-func (t *anchorTracker) register(id string, pageIdx int) {
+func (t *anchorTracker) register(id string, pageIdx int, page *layout.PageResult) {
 	if id == "" || t.registered[id] {
 		return
 	}
@@ -114,6 +125,9 @@ func (t *anchorTracker) register(id string, pageIdx int) {
 		PageIndex: pageIdx,
 		FitType:   "Fit",
 	})
+	if t.tracer.IsEnabled() {
+		t.tracer.TraceAnchorRegister(id, pageIdx, fmt.Sprintf("%p", page))
+	}
 }
 
 // anchoredElement decorates an inner layout.Element by chaining one or
@@ -222,7 +236,7 @@ func chainAnchorDraw(block *layout.PlacedBlock, ids []string, tracker *anchorTra
 		}
 		pageIdx := tracker.resolvePageIndex(ctx.Page)
 		for _, id := range ids {
-			tracker.register(id, pageIdx)
+			tracker.register(id, pageIdx, ctx.Page)
 		}
 	}
 }
@@ -240,22 +254,23 @@ func chainAnchorDraw(block *layout.PlacedBlock, ids []string, tracker *anchorTra
 // for the Overflow element (via another wrapper), so page-split
 // paragraphs carry the rewrite on every continuation.
 type internalLinkRewriter struct {
-	inner layout.Element
+	inner  layout.Element
+	tracer *PDFTracer // nil-safe; emits REWRITE events when enabled
 }
 
-func newInternalLinkRewriter(inner layout.Element) layout.Element {
+func newInternalLinkRewriter(inner layout.Element, tracer *PDFTracer) layout.Element {
 	if inner == nil {
 		return nil
 	}
-	return &internalLinkRewriter{inner: inner}
+	return &internalLinkRewriter{inner: inner, tracer: tracer}
 }
 
 // PlanLayout implements layout.Element.
 func (w *internalLinkRewriter) PlanLayout(area layout.LayoutArea) layout.LayoutPlan {
 	plan := w.inner.PlanLayout(area)
-	rewriteInternalLinks(plan.Blocks)
+	rewriteInternalLinks(plan.Blocks, w.tracer)
 	if plan.Overflow != nil {
-		plan.Overflow = &internalLinkRewriter{inner: plan.Overflow}
+		plan.Overflow = &internalLinkRewriter{inner: plan.Overflow, tracer: w.tracer}
 	}
 	return plan
 }
@@ -279,17 +294,21 @@ func (w *internalLinkRewriter) MaxWidth() float64 {
 
 // rewriteInternalLinks walks a block tree and rewrites every LinkArea
 // whose URI begins with "#" into a DestName link.  Mutates in place.
-func rewriteInternalLinks(blocks []layout.PlacedBlock) {
+// Emits REWRITE events into tracer when it is enabled; the tracer is
+// nil-safe so the call site is unconditional.
+func rewriteInternalLinks(blocks []layout.PlacedBlock, tracer *PDFTracer) {
 	for i := range blocks {
 		for j := range blocks[i].Links {
 			link := &blocks[i].Links[j]
 			if strings.HasPrefix(link.URI, "#") {
+				from := link.URI
 				link.DestName = link.URI[1:]
 				link.URI = ""
+				tracer.TraceLinkRewrite(from, link.DestName)
 			}
 		}
 		if len(blocks[i].Children) > 0 {
-			rewriteInternalLinks(blocks[i].Children)
+			rewriteInternalLinks(blocks[i].Children, tracer)
 		}
 	}
 }

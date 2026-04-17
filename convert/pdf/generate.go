@@ -41,6 +41,7 @@ type renderContext struct {
 	emptyLineSignals map[layout.Element]*emptyLineSignal // empty-line margin signals, keyed by element pointer
 	atPageTop        bool                                // true when the renderer is at the top of a (new) page — suppresses duplicate AreaBreaks
 	anchors          *anchorTracker                      // registers FB2 ids as named destinations during layout
+	tracer           *PDFTracer                          // accumulates pipeline-state events for the debug report; nil-safe no-op when disabled
 }
 
 // addElement adds an element to the document, deduplicating consecutive
@@ -61,19 +62,22 @@ type renderContext struct {
 func (rc *renderContext) addElement(elem layout.Element) {
 	if _, isBreak := elem.(*layout.AreaBreak); isBreak {
 		if rc.atPageTop {
+			rc.tracer.TraceAreaBreak("suppressed")
 			return // suppress duplicate page break
 		}
+		rc.tracer.TraceAreaBreak("added")
 		rc.doc.Add(elem)
 		rc.atPageTop = true
 		return
 	}
+	rc.tracer.TraceAddElement(elem, rc.atPageTop)
 	if rc.atPageTop {
 		// Zero-height sentinel: absorbs folio's stripLeadingOffset so the
 		// real first element's SpaceBefore is preserved.
 		rc.doc.Add(layout.NewDiv())
 	}
 	// Wrap with a page probe so that every top-level element observes
-	// its Draw-time *PageResult pointer.  This keeps the anchor tracker's
+	// its Draw-time '*PageResult' pointer.  This keeps the anchor tracker's
 	// pointer→index map in sync with folio's physical page order even
 	// on pages that carry no anchor ids — required because the tracker
 	// assigns sequential indices on first sight and relies on every
@@ -149,8 +153,14 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		marginMeta:       make(map[*layout.Div]*marginMeta),
 		emptyLineSignals: make(map[layout.Element]*emptyLineSignal),
 		atPageTop:        true, // document starts at the top of the first page
-		anchors:          newAnchorTracker(doc),
+		tracer:           NewPDFTracer(c.WorkDir),
 	}
+	rc.anchors = newAnchorTracker(doc, rc.tracer)
+	defer func() {
+		if path := rc.tracer.Flush(); path != "" {
+			rc.log.Debug("PDF trace written", zap.String("path", path))
+		}
+	}()
 
 	if err := addPlan(rc, plan); err != nil {
 		return fmt.Errorf("render structure plan: %w", err)
@@ -295,7 +305,7 @@ func addBodyIntroUnit(rc *renderContext, body *fb2.Body) error {
 	parent := defaultResolvedStyle()
 	b := flowBuilder{ctx: rc, elements: &elements, parent: parent}
 	b.renderBodyIntro(body)
-	collapseMargins(elements, rc.marginMeta, rc.emptyLineSignals)
+	collapseMargins(elements, rc.marginMeta, rc.emptyLineSignals, rc.tracer)
 	for _, elem := range elements {
 		rc.addElement(elem)
 	}
@@ -315,7 +325,7 @@ func addFootnotesBodyUnit(rc *renderContext, body *fb2.Body) error {
 	for i := range body.Sections {
 		b.renderFootnoteSection(&body.Sections[i])
 	}
-	collapseMargins(elements, rc.marginMeta, rc.emptyLineSignals)
+	collapseMargins(elements, rc.marginMeta, rc.emptyLineSignals, rc.tracer)
 	for _, elem := range elements {
 		rc.addElement(elem)
 	}
@@ -375,7 +385,7 @@ func renderSplitSection(rc *renderContext, work *splitSection) ([]layout.Element
 	for i := range splits {
 		splits[i].parentUnit = work.parentUnit
 	}
-	collapseMargins(elements, rc.marginMeta, rc.emptyLineSignals)
+	collapseMargins(elements, rc.marginMeta, rc.emptyLineSignals, rc.tracer)
 	return elements, splits, nil
 }
 
@@ -1144,7 +1154,7 @@ func newStyledParagraphElement(rc *renderContext, tag, classes string, ancestors
 	// "#"-prefixed LinkURI.  The rewriter walks the block tree recursively
 	// so both bare paragraphs and Div-wrapped paragraphs work correctly.
 	if runsContainInternalLink(runs) {
-		wrapped = newInternalLinkRewriter(wrapped)
+		wrapped = newInternalLinkRewriter(wrapped, rc.tracer)
 	}
 	return wrapped
 }
@@ -1190,7 +1200,7 @@ func newHeadingElement(rc *renderContext, tag, classes string, style resolvedSty
 	// (even when nested inside the margin wrapper Div) resolve to named
 	// destinations.  The rewriter walks the block tree recursively.
 	if runsContainInternalLink(runs) {
-		wrapped = newInternalLinkRewriter(wrapped)
+		wrapped = newInternalLinkRewriter(wrapped, rc.tracer)
 	}
 	return wrapped
 }
