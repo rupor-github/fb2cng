@@ -58,7 +58,6 @@ package pdf
 //   instead of external /URI actions.
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/carlos7ags/folio/document"
@@ -108,14 +107,14 @@ func (t *anchorTracker) resolvePageIndex(page *layout.PageResult) int {
 	t.pageIndex[page] = idx
 	t.nextIndex++
 	if t.tracer.IsEnabled() {
-		t.tracer.TracePageObserve(idx, fmt.Sprintf("%p", page), "")
+		t.tracer.TracePageObserve(idx)
 	}
 	return idx
 }
 
 // register adds a NamedDest for id pointing to the given page index.
 // Duplicates are silently ignored (the first observation wins).
-func (t *anchorTracker) register(id string, pageIdx int, page *layout.PageResult) {
+func (t *anchorTracker) register(id string, pageIdx int) {
 	if id == "" || t.registered[id] {
 		return
 	}
@@ -126,7 +125,7 @@ func (t *anchorTracker) register(id string, pageIdx int, page *layout.PageResult
 		FitType:   "Fit",
 	})
 	if t.tracer.IsEnabled() {
-		t.tracer.TraceAnchorRegister(id, pageIdx, fmt.Sprintf("%p", page))
+		t.tracer.TraceAnchorRegister(id, pageIdx)
 	}
 }
 
@@ -236,7 +235,7 @@ func chainAnchorDraw(block *layout.PlacedBlock, ids []string, tracker *anchorTra
 		}
 		pageIdx := tracker.resolvePageIndex(ctx.Page)
 		for _, id := range ids {
-			tracker.register(id, pageIdx, ctx.Page)
+			tracker.register(id, pageIdx)
 		}
 	}
 }

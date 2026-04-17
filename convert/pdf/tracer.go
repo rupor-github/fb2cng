@@ -16,14 +16,18 @@ package pdf
 // reconstruct from the final PDF file:
 //
 //   - addElement decisions (AreaBreak add/suppress, page-top sentinel
-//     emission, element types as they reach folio).
+//     emission, element types as they reach folio) — each ADD entry
+//     includes a short preview of the element's visible content when
+//     one was registered via Label() at creation time.
 //   - Anchor registration (id → pageIdx) and the order in which folio
-//     visits page pointers — essential for debugging pointer→index
-//     drift when pages carry no anchor targets.
+//     visits pages — essential for debugging page-index drift when
+//     pages carry no anchor targets.
 //   - Internal-link rewrites (URI="#id" → DestName="id") across
 //     paragraph/heading PlacedBlock trees.
 //   - Vertical margin tree structure before and after collapse — the
-//     PDF equivalent of kfxdump -margins, emitted pre-PDF-write.
+//     PDF equivalent of kfxdump -margins, emitted pre-PDF-write.  Leaf
+//     nodes show the content preview registered via Label() when the
+//     corresponding element was created.
 //
 // On Flush() the accumulated entries are serialised to
 // <workDir>/pdf-trace.txt, which is then picked up automatically by
@@ -42,6 +46,12 @@ import (
 	"fbc/convert/margins"
 )
 
+// previewMaxLen caps the length of content previews embedded in trace
+// output so long paragraphs do not dominate a line.  The cutoff is
+// generous enough for a short sentence or the first clause of a
+// paragraph to land intact; beyond that an ellipsis is appended.
+const previewMaxLen = 48
+
 // PDFTracer accumulates pipeline events for a single PDF generation run.
 //
 // A nil tracer is a valid no-op — every public method is nil-safe, so
@@ -51,7 +61,8 @@ type PDFTracer struct {
 	enabled  bool
 	workDir  string
 	entries  []pdfTraceEntry
-	sections map[string]int // per-operation counters for the summary header
+	sections map[string]int            // per-operation counters for the summary header
+	labels   map[layout.Element]string // content previews registered via Label
 }
 
 // pdfTraceEntry is one line in the trace file, with an operation label
@@ -72,6 +83,7 @@ func NewPDFTracer(workDir string) *PDFTracer {
 		workDir:  workDir,
 		enabled:  workDir != "",
 		sections: make(map[string]int),
+		labels:   make(map[layout.Element]string),
 	}
 }
 
@@ -85,6 +97,119 @@ func (t *PDFTracer) IsEnabled() bool {
 	return t.enabled
 }
 
+// Label stores a short human-readable preview string for the given
+// element, to be consulted later by describeElement() during ADD and
+// margin-tree rendering.  Called at element-creation time from factory
+// helpers (paragraph/heading/image) where the source text is still in
+// scope.
+//
+// The preview is truncated to previewMaxLen runes and whitespace is
+// collapsed so the trace remains readable even for long paragraphs.
+func (t *PDFTracer) Label(elem layout.Element, preview string) {
+	if !t.IsEnabled() || elem == nil {
+		return
+	}
+	t.labels[elem] = truncatePreview(preview)
+}
+
+// describeElement returns a human-readable single-line description of
+// a folio element: its type name plus either a content preview (for
+// elements that were previously Label()'d) or a structural hint (child
+// count for Divs, "AreaBreak" for breaks, etc.).  Always safe to call
+// for any element including nil.
+func (t *PDFTracer) describeElement(elem layout.Element) string {
+	if elem == nil {
+		return "<nil>"
+	}
+	kind := fmt.Sprintf("%T", elem)
+	if t != nil {
+		if preview, ok := t.labels[elem]; ok && preview != "" {
+			return fmt.Sprintf("%s %q", kind, preview)
+		}
+	}
+	// Structural hints for elements we did not Label.  Div exposes
+	// Children(); descend once to find a labelled paragraph/heading so
+	// a bare wrapper Div still yields context.
+	if div, ok := elem.(*layout.Div); ok {
+		children := div.Children()
+		if nested := t.firstChildPreview(children); nested != "" {
+			return fmt.Sprintf("%s (%d children) %q", kind, len(children), nested)
+		}
+		return fmt.Sprintf("%s (%d children)", kind, len(children))
+	}
+	// Internal wrapper types (anchoredElement, internalLinkRewriter)
+	// delegate to an inner element; surface its preview so the trace
+	// remains readable.  unwrapInnerElement uses a narrow type-switch
+	// over pdf-package-private wrappers and is nil-safe.
+	if inner := unwrapInnerElement(elem); inner != nil {
+		if preview, ok := t.labels[inner]; ok && preview != "" {
+			return fmt.Sprintf("%s → %s %q", kind, fmt.Sprintf("%T", inner), preview)
+		}
+		if div, ok := inner.(*layout.Div); ok {
+			if nested := t.firstChildPreview(div.Children()); nested != "" {
+				return fmt.Sprintf("%s → *layout.Div %q", kind, nested)
+			}
+		}
+	}
+	return kind
+}
+
+// unwrapInnerElement returns the inner element wrapped by one of the
+// pdf package's decorator types (anchoredElement, internalLinkRewriter).
+// Returns nil for elements that are not known wrappers so callers can
+// distinguish "unwrappable" from "no preview available".
+func unwrapInnerElement(elem layout.Element) layout.Element {
+	switch w := elem.(type) {
+	case *anchoredElement:
+		return w.inner
+	case *internalLinkRewriter:
+		return w.inner
+	}
+	return nil
+}
+
+// firstChildPreview walks a Div's direct and indirect children looking
+// for the first element with a registered preview label.  Returns ""
+// if none found within a reasonable depth (to bound recursion on
+// deeply nested structures).
+func (t *PDFTracer) firstChildPreview(children []layout.Element) string {
+	const maxDepth = 4
+	return t.firstChildPreviewDepth(children, maxDepth)
+}
+
+func (t *PDFTracer) firstChildPreviewDepth(children []layout.Element, depth int) string {
+	if t == nil || depth <= 0 {
+		return ""
+	}
+	for _, c := range children {
+		if p, ok := t.labels[c]; ok && p != "" {
+			return p
+		}
+		if div, ok := c.(*layout.Div); ok {
+			if nested := t.firstChildPreviewDepth(div.Children(), depth-1); nested != "" {
+				return nested
+			}
+		}
+	}
+	return ""
+}
+
+// truncatePreview collapses runs of whitespace into single spaces and
+// caps the resulting string at previewMaxLen runes, appending an
+// ellipsis when truncated.  Returns "" for inputs that contain only
+// whitespace.
+func truncatePreview(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if s == "" {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= previewMaxLen {
+		return s
+	}
+	return string(runes[:previewMaxLen]) + "…"
+}
+
 // TraceAddElement records a top-level element reaching folio via
 // renderContext.addElement.  atPageTop indicates whether a zero-height
 // sentinel Div was inserted ahead of the element to preserve its
@@ -93,14 +218,13 @@ func (t *PDFTracer) TraceAddElement(elem layout.Element, atPageTop bool) {
 	if !t.IsEnabled() {
 		return
 	}
-	kind := fmt.Sprintf("%T", elem)
 	details := fmt.Sprintf("atPageTop=%t", atPageTop)
 	if atPageTop {
 		details += " (sentinel emitted)"
 	}
 	t.entries = append(t.entries, pdfTraceEntry{
 		operation: "ADD",
-		subject:   kind,
+		subject:   t.describeElement(elem),
 		details:   details,
 	})
 	t.sections["elements_added"]++
@@ -124,39 +248,34 @@ func (t *PDFTracer) TraceAreaBreak(action string) {
 
 // TracePageObserve records the first Draw-time observation of a
 // previously unseen *PageResult pointer.  pageIdx is the sequential
-// index assigned by the anchor tracker; ptr is the pointer address
-// (as hex text) so cross-references with TraceAnchorRegister can be
-// verified manually.
+// index assigned by the anchor tracker.
 //
 // The order of observations must match folio's physical page order
 // for pointer→index mapping to be correct.  A gap in the observed
 // sequence (e.g. index 0, 2, 3) is a sign that some pages lack
 // instrumented elements and pointer→index drift is likely.
-func (t *PDFTracer) TracePageObserve(pageIdx int, ptr string, firstElem string) {
+func (t *PDFTracer) TracePageObserve(pageIdx int) {
 	if !t.IsEnabled() {
 		return
 	}
-	details := fmt.Sprintf("ptr=%s first-elem=%s", ptr, firstElem)
 	t.entries = append(t.entries, pdfTraceEntry{
 		operation: "PAGE",
 		subject:   fmt.Sprintf("index=%d", pageIdx),
-		details:   details,
 	})
 	t.sections["pages_observed"]++
 }
 
 // TraceAnchorRegister records a named-destination being added to the
 // document.  pageIdx is the final resolved index the id will navigate
-// to; ptr is the *PageResult pointer address for cross-referencing
-// with TracePageObserve.
-func (t *PDFTracer) TraceAnchorRegister(id string, pageIdx int, ptr string) {
+// to.
+func (t *PDFTracer) TraceAnchorRegister(id string, pageIdx int) {
 	if !t.IsEnabled() {
 		return
 	}
 	t.entries = append(t.entries, pdfTraceEntry{
 		operation: "ANCHOR",
 		subject:   id,
-		details:   fmt.Sprintf("pageIdx=%d ptr=%s", pageIdx, ptr),
+		details:   fmt.Sprintf("pageIdx=%d", pageIdx),
 	})
 	t.sections["anchors_registered"]++
 }
@@ -178,16 +297,18 @@ func (t *PDFTracer) TraceLinkRewrite(from, to string) {
 }
 
 // TraceMarginTree records a snapshot of a margin ContentTree.  label
-// distinguishes pre-collapse from post-collapse snapshots.  The tree
-// is rendered recursively with one line per node, indented by depth,
-// so diffs between label="before" and label="after" highlight the
-// effect of the collapse algorithm.
-func (t *PDFTracer) TraceMarginTree(label string, tree *margins.ContentTree) {
+// distinguishes pre-collapse from post-collapse snapshots.  nodeElem
+// supplies the leaf-node → element mapping so leaves can be annotated
+// with the content preview registered for that element.  The tree is
+// rendered recursively with one line per node, indented by depth, so
+// diffs between label="before" and label="after" highlight the effect
+// of the collapse algorithm.
+func (t *PDFTracer) TraceMarginTree(label string, tree *margins.ContentTree, nodeElem map[*margins.ContentNode]layout.Element) {
 	if !t.IsEnabled() || tree == nil || tree.Root == nil {
 		return
 	}
 	var sb strings.Builder
-	formatMarginNode(&sb, tree.Root, 0)
+	t.formatMarginNode(&sb, tree.Root, 0, nodeElem)
 	t.entries = append(t.entries, pdfTraceEntry{
 		operation: "TREE",
 		subject:   label,
@@ -198,10 +319,11 @@ func (t *PDFTracer) TraceMarginTree(label string, tree *margins.ContentTree) {
 
 // formatMarginNode renders a single ContentNode and its children into
 // sb with depth-based indentation.  Leaf nodes show their content type
-// and margins; container nodes show their kind/flags and recurse.  The
-// root sentinel (Parent==nil AND Index==-1 AND ContainerKind==Root) is
-// rendered as a bare "root" marker.
-func formatMarginNode(sb *strings.Builder, n *margins.ContentNode, depth int) {
+// and margins, plus a content preview when the corresponding element
+// was Label()'d at creation time.  Container nodes show kind/flags and
+// recurse.  The root sentinel (Parent==nil AND Index==-1 AND
+// ContainerKind==Root) is rendered as a bare "root" marker.
+func (t *PDFTracer) formatMarginNode(sb *strings.Builder, n *margins.ContentNode, depth int, nodeElem map[*margins.ContentNode]layout.Element) {
 	if n == nil {
 		return
 	}
@@ -222,11 +344,34 @@ func formatMarginNode(sb *strings.Builder, n *margins.ContentNode, depth int) {
 		if n.EmptyLineMarginBottom != nil {
 			fmt.Fprintf(sb, " emlMB=%.3f", *n.EmptyLineMarginBottom)
 		}
+		if preview := t.previewForNode(n, nodeElem); preview != "" {
+			fmt.Fprintf(sb, " %q", preview)
+		}
 		sb.WriteString("]\n")
 	}
 	for _, c := range n.Children {
-		formatMarginNode(sb, c, depth+1)
+		t.formatMarginNode(sb, c, depth+1, nodeElem)
 	}
+}
+
+// previewForNode looks up the element associated with a leaf margin
+// node and returns its registered preview label, if any.
+func (t *PDFTracer) previewForNode(n *margins.ContentNode, nodeElem map[*margins.ContentNode]layout.Element) string {
+	if t == nil || nodeElem == nil {
+		return ""
+	}
+	elem, ok := nodeElem[n]
+	if !ok {
+		return ""
+	}
+	if preview, ok := t.labels[elem]; ok {
+		return preview
+	}
+	// Fall back to scanning Div children for a labelled descendant.
+	if div, ok := elem.(*layout.Div); ok {
+		return t.firstChildPreview(div.Children())
+	}
+	return ""
 }
 
 // formatMarginPtr formats a nullable margin value for trace output.
@@ -284,6 +429,7 @@ func (t *PDFTracer) Flush() string {
 
 	t.entries = nil
 	t.sections = make(map[string]int)
+	t.labels = make(map[layout.Element]string)
 
 	return tracePath
 }

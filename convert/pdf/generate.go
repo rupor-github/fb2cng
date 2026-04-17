@@ -1120,6 +1120,7 @@ func newImageElement(rc *renderContext, img *fb2.BookImage, imageID string, clas
 		altText = imageID
 	}
 	imageElem.SetAltText(altText)
+	rc.tracer.Label(imageElem, "img:"+altText)
 	return wrapIfNeeded("img", class, style, imageElem), nil
 }
 
@@ -1139,6 +1140,7 @@ func newParagraphElement(rc *renderContext, tag, classes string, ancestors []sty
 	}
 	para := newParagraphWithStyle(rc, style, text)
 	applyParagraphStyle(para, style)
+	rc.tracer.Label(para, text)
 	return para
 }
 
@@ -1149,6 +1151,7 @@ func newStyledParagraphElement(rc *renderContext, tag, classes string, ancestors
 	}
 	para := layout.NewStyledParagraph(runs...)
 	applyParagraphStyle(para, style)
+	rc.tracer.Label(para, plainTextRuns(runs))
 	wrapped := wrapIfNeeded(tag, classes, style, para)
 	// Post-wrap with internalLinkRewriter when any inline run carries a
 	// "#"-prefixed LinkURI.  The rewriter walks the block tree recursively
@@ -1195,6 +1198,7 @@ func newHeadingElement(rc *renderContext, tag, classes string, style resolvedSty
 	}
 	heading.SetRuns(runs).SetAlign(style.Align)
 	heading.SetBookmarkLabel(encodePDFTextString(plainTextRuns(runs)))
+	rc.tracer.Label(heading, plainTextRuns(runs))
 	wrapped := wrapIfNeeded(tag, classes, style, heading)
 	// Post-wrap with internalLinkRewriter so inline links in headings
 	// (even when nested inside the margin wrapper Div) resolve to named

@@ -19,9 +19,9 @@ func collapseMargins(elements []layout.Element, meta map[*layout.Div]*marginMeta
 		return
 	}
 	result := buildMarginTree(elements, meta, signals)
-	tracer.TraceMarginTree("before", result.tree)
+	tracer.TraceMarginTree("before", result.tree, result.nodeElem)
 	margins.CollapseTree(result.tree)
-	tracer.TraceMarginTree("after", result.tree)
+	tracer.TraceMarginTree("after", result.tree, result.nodeElem)
 	applyCollapsedMargins(result)
 }
 
