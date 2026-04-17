@@ -81,6 +81,7 @@ type anchorTracker struct {
 	pageIndex  map[*layout.PageResult]int // allocated on first Draw per page
 	nextIndex  int
 	registered map[string]bool // id -> already added to doc.namedDests
+	idPage     map[string]int  // id -> resolved page index (parallel record, exported via PageForID)
 	tracer     *PDFTracer      // nil-safe debug-report tracer
 }
 
@@ -89,6 +90,7 @@ func newAnchorTracker(doc *document.Document, tracer *PDFTracer) *anchorTracker 
 		doc:        doc,
 		pageIndex:  make(map[*layout.PageResult]int),
 		registered: make(map[string]bool),
+		idPage:     make(map[string]int),
 		tracer:     tracer,
 	}
 }
@@ -119,6 +121,7 @@ func (t *anchorTracker) register(id string, pageIdx int) {
 		return
 	}
 	t.registered[id] = true
+	t.idPage[id] = pageIdx
 	t.doc.AddNamedDest(document.NamedDest{
 		Name:      id,
 		PageIndex: pageIdx,
@@ -127,6 +130,18 @@ func (t *anchorTracker) register(id string, pageIdx int) {
 	if t.tracer.IsEnabled() {
 		t.tracer.TraceAnchorRegister(id, pageIdx)
 	}
+}
+
+// PageForID returns the 0-based page index an anchor id resolved to,
+// and a boolean indicating whether the id was ever registered during
+// layout.  Used by the manual outline builder (see buildOutline in
+// generate.go) to map plan.TOC entries to their destination pages.
+func (t *anchorTracker) PageForID(id string) (int, bool) {
+	if t == nil || id == "" {
+		return 0, false
+	}
+	idx, ok := t.idPage[id]
+	return idx, ok
 }
 
 // anchoredElement decorates an inner layout.Element by chaining one or

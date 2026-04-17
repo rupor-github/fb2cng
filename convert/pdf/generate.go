@@ -42,20 +42,6 @@ type renderContext struct {
 	atPageTop        bool                                // true when the renderer is at the top of a (new) page — suppresses duplicate AreaBreaks
 	anchors          *anchorTracker                      // registers FB2 ids as named destinations during layout
 	tracer           *PDFTracer                          // accumulates pipeline-state events for the debug report; nil-safe no-op when disabled
-
-	// tocDepth maps an FB2 section ID to its logical depth in the
-	// structural TOC tree (root entries = 1, children of a root entry
-	// = 2, and so on).  The mapping is derived from plan.TOC (built by
-	// convert/structure/builder.go:collectSectionChildren with the
-	// last-titled-sibling promotion that compensates for FB2 "wrong
-	// nesting" — untitled wrapper <section>s whose titled descendants
-	// should appear as siblings/children of a preceding titled peer).
-	// Heading levels in the PDF outline use this depth instead of raw
-	// DOM depth so the outline shape matches EPUB/KFX exactly for
-	// wrong-nesting trees — two FB2 subtrees that nest titled content
-	// under different numbers of untitled wrappers still get identical
-	// heading sequences (H1/H2/H3/...).
-	tocDepth map[string]int
 }
 
 // addElement adds an element to the document, deduplicating consecutive
@@ -152,7 +138,13 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 	geom := GeometryFromStyles(cfg, bodyStyle)
 	doc := document.NewDocument(geom.PageSize)
 	doc.SetMargins(geom.Margins)
-	doc.SetAutoBookmarks(true)
+	// Disable folio's auto-bookmark generation: it derives the outline
+	// tree from heading tags (H1..H6) and is therefore capped at the
+	// HTML heading ceiling.  We build the outline manually from
+	// plan.TOC after layout (see outlineFinalizer below), which
+	// supports unlimited nesting depth — matching KFX/EPUB TOC trees
+	// verbatim for deeply nested FB2 wrong-nesting structures.
+	doc.SetAutoBookmarks(false)
 	doc.SetTagged(true)
 	applyMetadata(doc, c)
 
@@ -170,7 +162,6 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		tracer:           NewPDFTracer(c.WorkDir),
 	}
 	rc.anchors = newAnchorTracker(doc, rc.tracer)
-	rc.tocDepth = buildTOCDepthMap(plan.TOC)
 	defer func() {
 		if path := rc.tracer.Flush(); path != "" {
 			rc.log.Debug("PDF trace written", zap.String("path", path))
@@ -180,6 +171,15 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 	if err := addPlan(rc, plan); err != nil {
 		return fmt.Errorf("render structure plan: %w", err)
 	}
+
+	// Install the outline finalizer as the very last element in the
+	// document.  Its Draw closure fires during layout after every
+	// preceding element's anchor registrations have been recorded, so
+	// tracker.idPage is complete by the time the finalizer walks
+	// plan.TOC and populates doc.outlines.  This runs before folio's
+	// WriteTo serializes the outline tree, so manual outlines win
+	// over auto-bookmarks (which are disabled in any case).
+	doc.Add(newOutlineFinalizer(doc, plan.TOC, rc.anchors, rc.tracer))
 
 	if err := ctx.Err(); err != nil {
 		return err
@@ -238,45 +238,6 @@ func applyMetadata(doc *document.Document, c *content.Content) {
 	if c.SrcName != "" {
 		doc.Info.Creator = "fbc"
 	}
-}
-
-// buildTOCDepthMap walks the renderer-neutral TOC tree and returns a
-// mapping from each entry's FB2 section ID to its logical depth (root
-// entries = 1, children = 2, etc.).  The tree already encodes FB2
-// wrong-nesting compensation via the last-titled-sibling promotion in
-// convert/structure/builder.go:collectSectionChildren, so using its
-// depth as the outline heading level yields symmetric outlines across
-// FB2 subtrees that otherwise differ only in how many untitled
-// <section> wrappers sit between titled peers.  Entries with empty IDs
-// (e.g. body intros that carry an "a-body-N" ID unrelated to any FB2
-// section) are still included — the lookup keyed by section ID simply
-// will not match for them, and renderSectionTitle falls back to the
-// DOM-depth formula.
-func buildTOCDepthMap(entries []*structure.TOCEntry) map[string]int {
-	if len(entries) == 0 {
-		return nil
-	}
-	m := make(map[string]int)
-	var walk func([]*structure.TOCEntry, int)
-	walk = func(list []*structure.TOCEntry, depth int) {
-		for _, e := range list {
-			if e == nil {
-				continue
-			}
-			if e.ID != "" {
-				// Keep the shallowest depth if the same ID appears
-				// twice — should not happen for well-formed plans but
-				// guards against unexpected duplicates without losing
-				// the parent-most nesting level.
-				if prev, ok := m[e.ID]; !ok || depth < prev {
-					m[e.ID] = depth
-				}
-			}
-			walk(e.Children, depth+1)
-		}
-	}
-	walk(entries, 1)
-	return m
 }
 
 func addPlan(rc *renderContext, plan *structure.Plan) error {
@@ -529,29 +490,25 @@ func (b *flowBuilder) renderSection(section *fb2.Section, depth int, titleDepth 
 //
 //   - depth is the structural DOM depth of the section (root body = 0,
 //     top-level <section> = 1, and +1 per <section> level regardless
-//     of whether intermediate wrappers carry a title).  Used as a
-//     fallback for the outline heading level when a section does not
-//     appear in plan.TOC (e.g. footnote sections or pathological
-//     inputs).  The primary source for the heading level is the
-//     logical TOC depth (see below).
+//     of whether intermediate wrappers carry a title).  Currently
+//     unused here — kept in the signature because callers propagate
+//     it for symmetry with other render paths and for potential
+//     future use (e.g. structure-tag role overrides).
 //
 //   - titleDepth counts only titled sections (untitled wrappers do NOT
 //     increment it).  It drives the CSS wrapper class selector
-//     (.chapter-title vs .section-title-hN) and the page-break
-//     decisions that hinge on those classes.  This keeps CSS visual
-//     treatment stable as FB2 trees vary in how aggressively they
-//     wrap titled sections in anonymous <section>s.
+//     (.chapter-title vs .section-title-hN), the visual heading font
+//     size (via H1..H6 tag selection, capped at 6), and the
+//     page-break decisions that hinge on those classes.
 //
-// Outline heading level: we look up the section in rc.tocDepth — the
-// logical depth in the structural TOC tree built by
-// convert/structure/builder.go.  That tree already compensates for FB2
-// wrong-nesting (untitled wrapper <section>s are collapsed and their
-// titled descendants are promoted as children of the last titled
-// sibling), so it yields identical nesting for FB2 subtrees that
-// differ only in wrapper count.  This mirrors EPUB/KFX TOC shape
-// exactly; folio's auto-bookmark stack (document.go:buildAutoBookmarks)
-// then produces a PDF outline with the same tree topology.
+// The PDF outline is built separately from plan.TOC by
+// outlineFinalizer (no HN depth cap).  The heading tag produced here
+// is therefore a purely visual concern and is capped at H6 to match
+// KFX's visual cap and to honor HTML's heading ceiling.  Heading tags
+// no longer participate in bookmark generation because
+// doc.SetAutoBookmarks is disabled.
 func (b *flowBuilder) renderSectionTitle(section *fb2.Section, depth, titleDepth int) {
+	_ = depth
 	if section == nil || section.Title == nil {
 		return
 	}
@@ -570,20 +527,11 @@ func (b *flowBuilder) renderSectionTitle(section *fb2.Section, depth, titleDepth
 		bottomPos = common.VignettePosSectionTitleBottom
 	}
 
-	// Outline heading level: prefer the logical TOC depth; fall back
-	// to DOM depth if the section isn't in the TOC map.  Chapter-level
-	// (titleDepth==1) stays h1 to keep the chapter CSS stable.
-	headingLevel := 1
-	if titleDepth != 1 {
-		logical := 0
-		if b.ctx != nil && section.ID != "" {
-			logical = b.ctx.tocDepth[section.ID]
-		}
-		if logical <= 0 {
-			logical = depth
-		}
-		headingLevel = min(max(logical, 2), 6)
-	}
+	// Visual heading level: use titleDepth capped at 6 so deeply nested
+	// titled sections still get a valid HN tag.  titleDepth==1 maps to
+	// H1 (chapter); deeper levels map to H2..H6.  The cap is purely
+	// visual — TOC depth is unlimited and built manually from plan.TOC.
+	headingLevel := min(max(titleDepth, 1), 6)
 
 	var elems []layout.Element
 	child := b.descend("div", wrapperClass, b.resolve("div", wrapperClass), &elems)
