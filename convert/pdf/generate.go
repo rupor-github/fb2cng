@@ -529,54 +529,164 @@ func (b *flowBuilder) renderTitleBlock(title *fb2.Title, classPrefix string, hea
 	b.pushWrappedTagged("div", classPrefix, elems, margins.ContainerTitleBlock, margins.FlagTitleBlockMode)
 }
 
+// renderTitleHeading renders a FB2 <title> as a sequence of block-level
+// elements: a layout.Heading for the first <p> (providing PDF bookmark
+// and structure tag) and layout.Paragraphs for subsequent <p>s, all
+// styled with the classPrefix + "-first"/"-next" CSS variants.
+// <empty-line/> items are handled via the margin-absorption machinery
+// so .classPrefix-emptyline's CSS margin becomes a visible gap.
+//
+// This mirrors KFX's addTitleAsParagraphs path.  The combined-heading
+// path used by KFX (addTitleAsHeading) cannot be replicated faithfully
+// in PDF because folio's layout.Paragraph is a single block-level unit
+// with no support for inline display:block boundaries.  Using separate
+// elements preserves:
+//
+//   - Per-line CSS styling differences between -first and -next (e.g.
+//     bold title line vs italic author line).
+//   - Inline images inside title paragraphs (not representable inside
+//     a single folio Heading's text runs).
+//   - Empty-line margins from the .classPrefix-emptyline CSS rule
+//     (via handleEmptyLine / consumePendingEmptyLine).
+//
+// Only the first element carries the heading's bookmark entry: the
+// bookmarkLabel is set to the combined plain text of all <p>s so the
+// outline matches KFX's auto-bookmark behavior.  Subsequent elements
+// are plain styled paragraphs — their class resolution places them in
+// the heading's ancestor chain so font-size and weight inherit
+// correctly from the heading scope.
 func (b *flowBuilder) renderTitleHeading(title *fb2.Title, headingLevel int, classPrefix string) {
 	if title == nil {
 		return
 	}
 
-	// Resolve heading style FIRST so its font-size (e.g. h1 at 140% → 16.8pt)
-	// propagates to all text runs created below.
+	// Resolve the heading tag once; it participates both in style
+	// resolution (h1-h6 selectors drive font-size) and in the ancestor
+	// chain we push for subsequent paragraphs so their descendant
+	// selectors (e.g. "h1 strong") match correctly.
 	hTag := headingTag(headingLevel)
-	headingClass := classPrefix
 	headingStyle := defaultResolvedStyle()
 	if b.ctx != nil && b.ctx.styles != nil {
-		headingStyle = b.ctx.styles.Resolve(hTag, headingClass, b.ancestors, b.parent)
+		headingStyle = b.ctx.styles.Resolve(hTag, classPrefix, b.ancestors, b.parent)
 	}
 
-	// Ancestor chain includes the heading scope so that descendant CSS
-	// selectors (e.g. "h1 strong") work correctly inside runs.
-	headingAncestors := append(append([]styleScope{}, b.ancestors...), styleScope{Tag: hTag, Classes: splitClasses(headingClass)})
+	// Ancestor chain entered when rendering title-body paragraphs
+	// (both the first-line Heading and subsequent -next lines).  Pushing
+	// the heading scope lets descendant CSS selectors match and lets
+	// paragraph font-size inherit the heading's computed size.
+	headingAncestors := append(append([]styleScope{}, b.ancestors...), styleScope{Tag: hTag, Classes: splitClasses(classPrefix)})
 
-	var runs []layout.TextRun
-	firstParagraph := true
-	prevWasEmptyLine := false
-	for i, item := range title.Items {
+	// Precompute the combined plain-text bookmark label by walking all
+	// paragraph items.  Empty-lines and non-paragraph items do not
+	// contribute visible text.  Leading/trailing whitespace is stripped
+	// and internal whitespace is collapsed.
+	var bookmarkParts []string
+	for _, item := range title.Items {
 		if item.Paragraph != nil {
-			if i > 0 && !prevWasEmptyLine {
-				runs = append(runs, b.textRunForClass("\n", classPrefix+"-break", textContext{ancestors: headingAncestors, parent: headingStyle, hyphenate: false}))
+			if text := strings.TrimSpace(item.Paragraph.AsPlainText()); text != "" {
+				bookmarkParts = append(bookmarkParts, text)
 			}
+		}
+	}
+	bookmarkLabel := strings.Join(bookmarkParts, " ")
+
+	// Render each title item as a separate element in the builder's
+	// current element slice.  The first paragraph becomes a Heading so
+	// it receives the PDF bookmark and H1-H6 structure tag.  Subsequent
+	// paragraphs become regular styled paragraphs rendered through
+	// renderParagraph — they inherit the heading's font-size via the
+	// ancestors chain and pick up -next class styling.
+	firstParagraph := true
+	for _, item := range title.Items {
+		if item.Paragraph != nil {
 			class := classPrefix + "-next"
 			if firstParagraph {
 				class = classPrefix + "-first"
 				firstParagraph = false
+				b.renderTitleFirstParagraph(item.Paragraph, hTag, classPrefix, class, headingLevel, headingStyle, headingAncestors, bookmarkLabel)
+				continue
 			}
 			if item.Paragraph.Style != "" {
 				class += " " + item.Paragraph.Style
 			}
-			runs = append(runs, b.paragraphRuns(item.Paragraph, class, textContext{ancestors: headingAncestors, parent: headingStyle, hyphenate: !item.Paragraph.Special && b.ctx != nil && b.ctx.c != nil && b.ctx.c.Hyphen != nil})...)
-			prevWasEmptyLine = false
+			// Re-derive the title builder each iteration so pending
+			// empty-line / anchor state accumulated on b since the
+			// previous element (e.g. a <empty-line/> between title
+			// paragraphs) is picked up by renderParagraph.
+			titleBuilder := b.withAncestors(headingAncestors, headingStyle)
+			titleBuilder.renderParagraph(item.Paragraph, "p", class)
+			// Mirror any pending state changes renderParagraph left on
+			// the derived builder back onto b so subsequent iterations
+			// (and the caller) stay synchronized.
+			b.pendingAnchors = titleBuilder.pendingAnchors
+			b.pendingEmptyLineMargin = titleBuilder.pendingEmptyLineMargin
 			continue
 		}
 		if item.EmptyLine {
-			runs = append(runs, b.textRunForClass("\n\n", classPrefix+"-emptyline", textContext{ancestors: headingAncestors, parent: headingStyle, hyphenate: false}))
-			prevWasEmptyLine = true
+			b.handleEmptyLine(classPrefix + "-emptyline")
 		}
 	}
-	if len(runs) == 0 {
+}
+
+// renderTitleFirstParagraph renders the first paragraph of a title as
+// a folio Heading so it contributes a PDF bookmark / outline entry and
+// an H1-H6 structure tag.  If the paragraph contains inline images the
+// Heading would drop them (folio headings are text-only), so in that
+// case we fall back to a normal styled paragraph and attach an explicit
+// bookmark via a zero-height marker — the same approach we use for the
+// anchor decorator.
+//
+// class must include both classPrefix (base header style) and the
+// position variant (classPrefix + "-first") because folio's style
+// resolver applies both class selectors independently and the base
+// style carries font-weight / text-align, while the variant may add
+// display / margin / size overrides.
+func (b *flowBuilder) renderTitleFirstParagraph(p *fb2.Paragraph, hTag, classPrefix, class string, headingLevel int, headingStyle resolvedStyle, headingAncestors []styleScope, bookmarkLabel string) {
+	if p == nil {
 		return
 	}
-	heading := newHeadingElement(b.ctx, hTag, headingClass, headingStyle, headingLevel, runs)
+	hyphenate := !p.Special && b.ctx != nil && b.ctx.c != nil && b.ctx.c.Hyphen != nil
+	runs := b.paragraphRuns(p, class, textContext{ancestors: headingAncestors, parent: headingStyle, hyphenate: hyphenate})
+
+	// Decide: can we represent the first paragraph as a folio Heading?
+	// A Heading only holds text runs; if the paragraph produced no runs
+	// (e.g. image-only title line) we must fall back to a styled paragraph.
+	if len(runs) == 0 {
+		// Image-only or empty-title-paragraph.  Render as a styled
+		// paragraph using the -first class so CSS margins still apply;
+		// paragraph factories handle inline images via renderParagraph.
+		titleBuilder := b.withAncestors(headingAncestors, headingStyle)
+		titleBuilder.renderParagraph(p, "p", class)
+		b.pendingAnchors = titleBuilder.pendingAnchors
+		b.pendingEmptyLineMargin = titleBuilder.pendingEmptyLineMargin
+		return
+	}
+
+	heading := newHeadingElement(b.ctx, hTag, class, headingStyle, headingLevel, runs, bookmarkLabel)
+	b.emitAnchor(p.ID)
 	*b.elements = append(*b.elements, b.attachAnchors(heading))
+}
+
+// withAncestors returns a derived flowBuilder that shares the receiver's
+// element slice, context, and pending state, but uses the supplied
+// ancestor chain and parent style for subsequent resolve() / render*
+// calls.  This lets renderTitleHeading delegate paragraph rendering to
+// renderParagraph while keeping the heading scope in the ancestor chain
+// so descendant selectors (e.g. "h1 strong", ".body-title-header-next")
+// match correctly.
+//
+// Crucially the returned builder writes to the same elements slice as
+// the receiver, so ordering of emitted paragraphs is preserved and the
+// pending-empty-line / anchor queues remain synchronized.
+func (b *flowBuilder) withAncestors(ancestors []styleScope, parent resolvedStyle) flowBuilder {
+	return flowBuilder{
+		ctx:                    b.ctx,
+		elements:               b.elements,
+		ancestors:              ancestors,
+		parent:                 parent,
+		pendingAnchors:         b.pendingAnchors,
+		pendingEmptyLineMargin: b.pendingEmptyLineMargin,
+	}
 }
 
 func headingTag(level int) string {
@@ -1173,7 +1283,7 @@ func runsContainInternalLink(runs []layout.TextRun) bool {
 	return false
 }
 
-func newHeadingElement(rc *renderContext, tag, classes string, style resolvedStyle, level int, runs []layout.TextRun) layout.Element {
+func newHeadingElement(rc *renderContext, tag, classes string, style resolvedStyle, level int, runs []layout.TextRun, bookmarkLabel string) layout.Element {
 	headingLevel := layout.H1
 	switch min(max(level, 1), 6) {
 	case 1:
@@ -1197,7 +1307,14 @@ func newHeadingElement(rc *renderContext, tag, classes string, style resolvedSty
 		heading = layout.NewHeadingWithFont(plainTextRuns(runs), headingLevel, std, style.FontSize)
 	}
 	heading.SetRuns(runs).SetAlign(style.Align)
-	heading.SetBookmarkLabel(encodePDFTextString(plainTextRuns(runs)))
+	// bookmarkLabel overrides the auto-derived label when non-empty —
+	// used for multi-paragraph titles so the outline entry reflects
+	// the combined title text, not just the first visible line.
+	label := bookmarkLabel
+	if label == "" {
+		label = plainTextRuns(runs)
+	}
+	heading.SetBookmarkLabel(encodePDFTextString(label))
 	rc.tracer.Label(heading, plainTextRuns(runs))
 	wrapped := wrapIfNeeded(tag, classes, style, heading)
 	// Post-wrap with internalLinkRewriter so inline links in headings
@@ -1429,18 +1546,6 @@ func (b *flowBuilder) inlineImageRun(img *fb2.InlineImage, tc textContext) *layo
 	}
 	run := layout.RunInline(elem)
 	return &run
-}
-
-func (b *flowBuilder) textRunForClass(text string, classes string, tc textContext) layout.TextRun {
-	style := defaultResolvedStyle()
-	if b.ctx != nil && b.ctx.styles != nil {
-		style = b.ctx.styles.Resolve("span", classes, tc.ancestors, tc.parent)
-	}
-	run := b.textRunForStyle(text, style)
-	if tc.linkURI != "" {
-		run.LinkURI = tc.linkURI
-	}
-	return run
 }
 
 func (b *flowBuilder) textRunForStyle(text string, style resolvedStyle) layout.TextRun {
