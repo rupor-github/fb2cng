@@ -52,7 +52,7 @@ func TestGeometryFromConfig(t *testing.T) {
 	if got, want := geom.PageSize.Height, 403.2; math.Abs(got-want) > 0.001 {
 		t.Fatalf("page height = %.6f, want %.6f", got, want)
 	}
-	if geom.Margins.Top != 48 || geom.Margins.Right != 36 || geom.Margins.Bottom != 48 || geom.Margins.Left != 36 {
+	if geom.Margins.Top != 18 || geom.Margins.Right != 18 || geom.Margins.Bottom != 18 || geom.Margins.Left != 18 {
 		t.Fatalf("unexpected default margins: %#v", geom.Margins)
 	}
 }

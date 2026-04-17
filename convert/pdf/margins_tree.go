@@ -27,6 +27,30 @@ type marginTreeResult struct {
 	wrapperDiv map[*margins.ContentNode]*layout.Div
 }
 
+// unwrapDecorators removes pdf-package Element wrappers (anchoredElement,
+// internalLinkRewriter) that are transparent to margin collapsing.  The
+// returned element is the innermost folio type (Paragraph, Div, Heading,
+// ImageElement, etc.) that should be classified by the margin tree.  If
+// elem is not a wrapper, it is returned unchanged.
+func unwrapDecorators(elem layout.Element) layout.Element {
+	for {
+		switch w := elem.(type) {
+		case *anchoredElement:
+			if w == nil || w.inner == nil {
+				return elem
+			}
+			elem = w.inner
+		case *internalLinkRewriter:
+			if w == nil || w.inner == nil {
+				return elem
+			}
+			elem = w.inner
+		default:
+			return elem
+		}
+	}
+}
+
 // buildMarginTree constructs a margins.ContentTree from an element list.
 //
 // Div elements become container nodes; Paragraphs, Headings, and other
@@ -58,13 +82,25 @@ func addElements(r *marginTreeResult, parent *margins.ContentNode, elements []la
 
 // addElement adds a single folio element to the margin tree.
 func addElement(r *marginTreeResult, parent *margins.ContentNode, elem layout.Element, order int, meta map[*layout.Div]*marginMeta, signals map[layout.Element]*emptyLineSignal, counter *int) {
+	// Unwrap pdf-package decorators (internalLinkRewriter, anchoredElement)
+	// so margin collapsing operates on the underlying folio element type.
+	// Empty-line signals are keyed on the wrapper, so apply those BEFORE
+	// unwrapping; the resulting node carries the signals regardless of
+	// which type ends up representing it in the tree.
+	wrapper := elem
+	elem = unwrapDecorators(elem)
+
 	// applySignals copies empty-line margin-absorption annotations from the
-	// signals map onto the newly created ContentNode.
+	// signals map onto the newly created ContentNode.  Signals may be keyed
+	// on either the wrapper or the unwrapped element — check both.
 	applySignals := func(node *margins.ContentNode) {
 		if signals == nil {
 			return
 		}
-		sig, ok := signals[elem]
+		sig, ok := signals[wrapper]
+		if !ok {
+			sig, ok = signals[elem]
+		}
 		if !ok {
 			return
 		}

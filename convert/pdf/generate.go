@@ -40,6 +40,7 @@ type renderContext struct {
 	marginMeta       map[*layout.Div]*marginMeta         // margin collapsing container metadata, keyed by Div pointer
 	emptyLineSignals map[layout.Element]*emptyLineSignal // empty-line margin signals, keyed by element pointer
 	atPageTop        bool                                // true when the renderer is at the top of a (new) page — suppresses duplicate AreaBreaks
+	anchors          *anchorTracker                      // registers FB2 ids as named destinations during layout
 }
 
 // addElement adds an element to the document, deduplicating consecutive
@@ -71,7 +72,13 @@ func (rc *renderContext) addElement(elem layout.Element) {
 		// real first element's SpaceBefore is preserved.
 		rc.doc.Add(layout.NewDiv())
 	}
-	rc.doc.Add(elem)
+	// Wrap with a page probe so that every top-level element observes
+	// its Draw-time *PageResult pointer.  This keeps the anchor tracker's
+	// pointer→index map in sync with folio's physical page order even
+	// on pages that carry no anchor ids — required because the tracker
+	// assigns sequential indices on first sight and relies on every
+	// page being visited in order.
+	rc.doc.Add(newPageProbe(elem, rc.anchors))
 	rc.atPageTop = false
 }
 
@@ -90,6 +97,7 @@ type flowBuilder struct {
 	ancestors              []styleScope
 	parent                 resolvedStyle
 	pendingEmptyLineMargin *float64 // margin-top from a preceding empty-line, to be applied to the next element
+	pendingAnchors         []string // FB2 ids queued to attach to the next element appended to *elements
 }
 
 type textContext struct {
@@ -141,6 +149,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		marginMeta:       make(map[*layout.Div]*marginMeta),
 		emptyLineSignals: make(map[layout.Element]*emptyLineSignal),
 		atPageTop:        true, // document starts at the top of the first page
+		anchors:          newAnchorTracker(doc),
 	}
 
 	if err := addPlan(rc, plan); err != nil {
@@ -405,6 +414,7 @@ func (b *flowBuilder) renderFootnoteSection(section *fb2.Section) {
 	}
 	var elems []layout.Element
 	child := b.descend("div", "footnote", b.resolve("div", "footnote"), &elems)
+	child.emitAnchor(section.ID)
 	if section.Title != nil {
 		child.renderTitleBlock(section.Title, "footnote-title", 1, false)
 	}
@@ -423,6 +433,7 @@ func (b *flowBuilder) renderSection(section *fb2.Section, depth int, titleDepth 
 	if section == nil {
 		return nil
 	}
+	b.emitAnchor(section.ID)
 	if section.Title != nil {
 		b.renderSectionTitle(section, titleDepth)
 	}
@@ -555,7 +566,7 @@ func (b *flowBuilder) renderTitleHeading(title *fb2.Title, headingLevel int, cla
 		return
 	}
 	heading := newHeadingElement(b.ctx, hTag, headingClass, headingStyle, headingLevel, runs)
-	*b.elements = append(*b.elements, heading)
+	*b.elements = append(*b.elements, b.attachAnchors(heading))
 }
 
 func headingTag(level int) string {
@@ -675,6 +686,7 @@ func (b *flowBuilder) renderPoem(poem *fb2.Poem, depth int) {
 	}
 	var elems []layout.Element
 	child := b.descend("div", "poem", b.resolve("div", "poem"), &elems)
+	child.emitAnchor(poem.ID)
 	if poem.Title != nil {
 		child.renderTitleBlock(poem.Title, "poem-title", depth, false)
 	}
@@ -724,6 +736,7 @@ func (b *flowBuilder) renderCite(cite *fb2.Cite, depth int) {
 	}
 	var elems []layout.Element
 	child := b.descend("blockquote", "cite", b.resolve("blockquote", "cite"), &elems)
+	child.emitAnchor(cite.ID)
 	child.renderFlowItems(cite.Items, depth, depth, "cite")
 	for i := range cite.TextAuthors {
 		child.renderParagraph(&cite.TextAuthors[i], "p", "text-author")
@@ -759,7 +772,7 @@ func (b *flowBuilder) renderTable(table *fb2.Table) {
 			applyCellStyle(cell, cellStyle)
 		}
 	}
-	*b.elements = append(*b.elements, wrapBlockElement(style, tbl))
+	*b.elements = append(*b.elements, b.attachAnchors(wrapBlockElement(style, tbl)))
 }
 
 func tableCellTag(cell *fb2.TableCell) string {
@@ -823,13 +836,62 @@ func (b *flowBuilder) renderParagraph(p *fb2.Paragraph, tag string, class string
 		if plain == "" {
 			style := b.resolve(tag, class)
 			spacer := layout.NewDiv().SetSpaceBefore(style.MarginTop).SetSpaceAfter(style.MarginBottom)
-			*b.elements = append(*b.elements, spacer)
+			b.emitAnchor(p.ID)
+			*b.elements = append(*b.elements, b.attachAnchors(spacer))
 			return
 		}
 		runs = []layout.TextRun{b.textRunForStyle(plain, b.resolve(tag, class))}
 	}
 	para := newStyledParagraphElement(b.ctx, tag, class, b.ancestors, b.parent, runs)
-	*b.elements = append(*b.elements, para)
+	b.emitAnchor(p.ID)
+	*b.elements = append(*b.elements, b.attachAnchors(para))
+}
+
+// emitAnchor queues an FB2 id to be attached to the next element
+// appended to *b.elements.  A nil/empty id is a no-op.  Anchors are
+// attached via an anchoredElement decorator that piggy-backs on the
+// target element's first placed block, so they contribute no extra
+// layout blocks and always register on the page where the target's
+// first visible content lands — even when pagination splits the
+// container before the target is placed.
+//
+// This is CRITICAL: emitting a free-standing zero-height marker
+// element causes folio's flushPage to treat it as page content,
+// producing blank pages whenever the marker lands on an otherwise
+// empty area (e.g. immediately after an AreaBreak).  Piggy-backing
+// avoids that entirely.
+//
+// If no element is subsequently appended to the slice (empty container),
+// the queued anchor is discarded on the builder's next-level exit.
+// This matches the semantics of an id on an element with no rendered
+// content: there's nothing visible to navigate to anyway.
+func (b *flowBuilder) emitAnchor(id string) {
+	if id == "" || b.ctx == nil || b.ctx.anchors == nil {
+		return
+	}
+	b.pendingAnchors = append(b.pendingAnchors, id)
+}
+
+// attachAnchors wraps elem with any queued pending anchors and returns
+// the wrapped element.  If there are no pending anchors, elem is
+// returned unchanged.  The pending queue is drained on every call.
+//
+// AreaBreaks are skipped: anchors should never attach to a page-break
+// sentinel since the break has no PlacedBlocks to hook into.  In that
+// case the anchors remain queued for the next real element.
+func (b *flowBuilder) attachAnchors(elem layout.Element) layout.Element {
+	if elem == nil || len(b.pendingAnchors) == 0 {
+		return elem
+	}
+	if _, isBreak := elem.(*layout.AreaBreak); isBreak {
+		return elem
+	}
+	ids := b.pendingAnchors
+	b.pendingAnchors = nil
+	if b.ctx == nil || b.ctx.anchors == nil {
+		return elem
+	}
+	return newAnchoredElement(elem, ids, b.ctx.anchors)
 }
 
 func (b *flowBuilder) renderPlainParagraph(tag string, class string, text string) {
@@ -837,7 +899,7 @@ func (b *flowBuilder) renderPlainParagraph(tag string, class string, text string
 		return
 	}
 	para := newParagraphElement(b.ctx, tag, class, b.ancestors, b.parent, text)
-	*b.elements = append(*b.elements, para)
+	*b.elements = append(*b.elements, b.attachAnchors(para))
 }
 
 // handleEmptyLine implements the KFX-style margin-absorption model for
@@ -900,7 +962,8 @@ func (b *flowBuilder) renderImage(img *fb2.Image, class string, extraAncestors [
 		b.ctx.log.Warn("Skipping image", zap.String("href", img.Href), zap.Error(err))
 		return
 	}
-	*b.elements = append(*b.elements, elem)
+	b.emitAnchor(img.ID)
+	*b.elements = append(*b.elements, b.attachAnchors(elem))
 }
 
 func (b *flowBuilder) renderVignette(pos common.VignettePos, class string) {
@@ -917,7 +980,7 @@ func (b *flowBuilder) renderVignette(pos common.VignettePos, class string) {
 		b.ctx.log.Warn("Skipping vignette", zap.String("id", id), zap.Error(err))
 		return
 	}
-	*b.elements = append(*b.elements, elem)
+	*b.elements = append(*b.elements, b.attachAnchors(elem))
 }
 
 func (b *flowBuilder) resolve(tag, classes string) resolvedStyle {
@@ -965,7 +1028,7 @@ func (b *flowBuilder) pushWrappedTagged(tag, classes string, elems []layout.Elem
 	if style.BreakBefore == "always" {
 		*b.elements = append(*b.elements, layout.NewAreaBreak())
 	}
-	*b.elements = append(*b.elements, container)
+	*b.elements = append(*b.elements, b.attachAnchors(container))
 	if style.BreakAfter == "always" {
 		*b.elements = append(*b.elements, layout.NewAreaBreak())
 	}
@@ -1076,7 +1139,25 @@ func newStyledParagraphElement(rc *renderContext, tag, classes string, ancestors
 	}
 	para := layout.NewStyledParagraph(runs...)
 	applyParagraphStyle(para, style)
-	return wrapIfNeeded(tag, classes, style, para)
+	wrapped := wrapIfNeeded(tag, classes, style, para)
+	// Post-wrap with internalLinkRewriter when any inline run carries a
+	// "#"-prefixed LinkURI.  The rewriter walks the block tree recursively
+	// so both bare paragraphs and Div-wrapped paragraphs work correctly.
+	if runsContainInternalLink(runs) {
+		wrapped = newInternalLinkRewriter(wrapped)
+	}
+	return wrapped
+}
+
+// runsContainInternalLink reports whether any run in runs has a LinkURI
+// beginning with "#" (an intra-document fragment reference).
+func runsContainInternalLink(runs []layout.TextRun) bool {
+	for i := range runs {
+		if strings.HasPrefix(runs[i].LinkURI, "#") {
+			return true
+		}
+	}
+	return false
 }
 
 func newHeadingElement(rc *renderContext, tag, classes string, style resolvedStyle, level int, runs []layout.TextRun) layout.Element {
@@ -1104,7 +1185,14 @@ func newHeadingElement(rc *renderContext, tag, classes string, style resolvedSty
 	}
 	heading.SetRuns(runs).SetAlign(style.Align)
 	heading.SetBookmarkLabel(encodePDFTextString(plainTextRuns(runs)))
-	return wrapIfNeeded(tag, classes, style, heading)
+	wrapped := wrapIfNeeded(tag, classes, style, heading)
+	// Post-wrap with internalLinkRewriter so inline links in headings
+	// (even when nested inside the margin wrapper Div) resolve to named
+	// destinations.  The rewriter walks the block tree recursively.
+	if runsContainInternalLink(runs) {
+		wrapped = newInternalLinkRewriter(wrapped)
+	}
+	return wrapped
 }
 
 func newParagraphWithStyle(rc *renderContext, style resolvedStyle, text string) *layout.Paragraph {
