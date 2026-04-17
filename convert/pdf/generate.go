@@ -576,19 +576,16 @@ func (b *flowBuilder) renderTitleHeading(title *fb2.Title, headingLevel int, cla
 	// paragraph font-size inherit the heading's computed size.
 	headingAncestors := append(append([]styleScope{}, b.ancestors...), styleScope{Tag: hTag, Classes: splitClasses(classPrefix)})
 
-	// Precompute the combined plain-text bookmark label by walking all
-	// paragraph items.  Empty-lines and non-paragraph items do not
-	// contribute visible text.  Leading/trailing whitespace is stripped
-	// and internal whitespace is collapsed.
-	var bookmarkParts []string
-	for _, item := range title.Items {
-		if item.Paragraph != nil {
-			if text := strings.TrimSpace(item.Paragraph.AsPlainText()); text != "" {
-				bookmarkParts = append(bookmarkParts, text)
-			}
-		}
-	}
-	bookmarkLabel := strings.Join(bookmarkParts, " ")
+	// Compute the combined plain-text bookmark label using the same
+	// ". "-joined format KFX and EPUB use for TOC entries (see
+	// fb2.Title.AsTOCText in fb2/types.go:403).  This keeps the PDF
+	// outline, EPUB nav, and KFX navigation consistent for multi-
+	// paragraph titles and uses image-alt text as a fallback when a
+	// title contains only inline images.  The "Untitled" fallback
+	// never surfaces for non-empty titles so we pass "" to suppress
+	// it entirely here; renderSectionTitle's caller already guards
+	// against empty titles.
+	bookmarkLabel := title.AsTOCText("")
 
 	// Render each title item as a separate element in the builder's
 	// current element slice.  The first paragraph becomes a Heading so
@@ -777,22 +774,20 @@ func (b *flowBuilder) renderFlowItems(items []fb2.FlowItem, depth int, titleDept
 			sectionDepth := depth + 1
 			childTitleDepth := titleDepth
 			if item.Section.HasTitle() && b.ctx.c.Book.SectionNeedsBreak(sectionDepth) {
-				return []splitSection{{
-					section:    item.Section,
-					depth:      sectionDepth,
-					titleDepth: childTitleDepth,
-					remaining:  items[i+1:],
-				}}
+				// Titled sections whose heading depth has page-break-before
+				// in the CSS are promoted to their own structural Unit by
+				// the structure builder (convert/structure/builder.go,
+				// collectSectionChildren -> addSectionUnit path).  Those
+				// Units are rendered independently by addUnit later in the
+				// plan loop, so we must NOT also render them inline here
+				// — doing so would produce duplicate bookmarks and
+				// duplicate content (see KFX's mirror: inline-vs-split
+				// routing in convert/kfx/frag_storyline_content.go:270).
+				continue
 			}
 			var elems []layout.Element
 			child := b.descend("div", "section", b.resolve("div", "section"), &elems)
-			childSplits := child.renderSection(item.Section, sectionDepth, childTitleDepth)
-			if len(childSplits) > 0 {
-				last := &childSplits[len(childSplits)-1]
-				last.remaining = append(last.remaining, items[i+1:]...)
-				b.pushWrapped("div", "section", elems)
-				return childSplits
-			}
+			child.renderSection(item.Section, sectionDepth, childTitleDepth)
 			b.pushWrapped("div", "section", elems)
 			b.consumePendingEmptyLine()
 		}
