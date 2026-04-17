@@ -42,6 +42,20 @@ type renderContext struct {
 	atPageTop        bool                                // true when the renderer is at the top of a (new) page — suppresses duplicate AreaBreaks
 	anchors          *anchorTracker                      // registers FB2 ids as named destinations during layout
 	tracer           *PDFTracer                          // accumulates pipeline-state events for the debug report; nil-safe no-op when disabled
+
+	// tocDepth maps an FB2 section ID to its logical depth in the
+	// structural TOC tree (root entries = 1, children of a root entry
+	// = 2, and so on).  The mapping is derived from plan.TOC (built by
+	// convert/structure/builder.go:collectSectionChildren with the
+	// last-titled-sibling promotion that compensates for FB2 "wrong
+	// nesting" — untitled wrapper <section>s whose titled descendants
+	// should appear as siblings/children of a preceding titled peer).
+	// Heading levels in the PDF outline use this depth instead of raw
+	// DOM depth so the outline shape matches EPUB/KFX exactly for
+	// wrong-nesting trees — two FB2 subtrees that nest titled content
+	// under different numbers of untitled wrappers still get identical
+	// heading sequences (H1/H2/H3/...).
+	tocDepth map[string]int
 }
 
 // addElement adds an element to the document, deduplicating consecutive
@@ -156,6 +170,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		tracer:           NewPDFTracer(c.WorkDir),
 	}
 	rc.anchors = newAnchorTracker(doc, rc.tracer)
+	rc.tocDepth = buildTOCDepthMap(plan.TOC)
 	defer func() {
 		if path := rc.tracer.Flush(); path != "" {
 			rc.log.Debug("PDF trace written", zap.String("path", path))
@@ -223,6 +238,45 @@ func applyMetadata(doc *document.Document, c *content.Content) {
 	if c.SrcName != "" {
 		doc.Info.Creator = "fbc"
 	}
+}
+
+// buildTOCDepthMap walks the renderer-neutral TOC tree and returns a
+// mapping from each entry's FB2 section ID to its logical depth (root
+// entries = 1, children = 2, etc.).  The tree already encodes FB2
+// wrong-nesting compensation via the last-titled-sibling promotion in
+// convert/structure/builder.go:collectSectionChildren, so using its
+// depth as the outline heading level yields symmetric outlines across
+// FB2 subtrees that otherwise differ only in how many untitled
+// <section> wrappers sit between titled peers.  Entries with empty IDs
+// (e.g. body intros that carry an "a-body-N" ID unrelated to any FB2
+// section) are still included — the lookup keyed by section ID simply
+// will not match for them, and renderSectionTitle falls back to the
+// DOM-depth formula.
+func buildTOCDepthMap(entries []*structure.TOCEntry) map[string]int {
+	if len(entries) == 0 {
+		return nil
+	}
+	m := make(map[string]int)
+	var walk func([]*structure.TOCEntry, int)
+	walk = func(list []*structure.TOCEntry, depth int) {
+		for _, e := range list {
+			if e == nil {
+				continue
+			}
+			if e.ID != "" {
+				// Keep the shallowest depth if the same ID appears
+				// twice — should not happen for well-formed plans but
+				// guards against unexpected duplicates without losing
+				// the parent-most nesting level.
+				if prev, ok := m[e.ID]; !ok || depth < prev {
+					m[e.ID] = depth
+				}
+			}
+			walk(e.Children, depth+1)
+		}
+	}
+	walk(entries, 1)
+	return m
 }
 
 func addPlan(rc *renderContext, plan *structure.Plan) error {
@@ -445,7 +499,7 @@ func (b *flowBuilder) renderSection(section *fb2.Section, depth int, titleDepth 
 	}
 	b.emitAnchor(section.ID)
 	if section.Title != nil {
-		b.renderSectionTitle(section, titleDepth)
+		b.renderSectionTitle(section, depth, titleDepth)
 	}
 	b.renderEpigraphs(section.Epigraphs, depth)
 	if section.Image != nil {
@@ -470,7 +524,34 @@ func (b *flowBuilder) renderSection(section *fb2.Section, depth int, titleDepth 
 	return splits
 }
 
-func (b *flowBuilder) renderSectionTitle(section *fb2.Section, titleDepth int) {
+// renderSectionTitle renders a section's title block.  Two distinct
+// "depth" quantities participate:
+//
+//   - depth is the structural DOM depth of the section (root body = 0,
+//     top-level <section> = 1, and +1 per <section> level regardless
+//     of whether intermediate wrappers carry a title).  Used as a
+//     fallback for the outline heading level when a section does not
+//     appear in plan.TOC (e.g. footnote sections or pathological
+//     inputs).  The primary source for the heading level is the
+//     logical TOC depth (see below).
+//
+//   - titleDepth counts only titled sections (untitled wrappers do NOT
+//     increment it).  It drives the CSS wrapper class selector
+//     (.chapter-title vs .section-title-hN) and the page-break
+//     decisions that hinge on those classes.  This keeps CSS visual
+//     treatment stable as FB2 trees vary in how aggressively they
+//     wrap titled sections in anonymous <section>s.
+//
+// Outline heading level: we look up the section in rc.tocDepth — the
+// logical depth in the structural TOC tree built by
+// convert/structure/builder.go.  That tree already compensates for FB2
+// wrong-nesting (untitled wrapper <section>s are collapsed and their
+// titled descendants are promoted as children of the last titled
+// sibling), so it yields identical nesting for FB2 subtrees that
+// differ only in wrapper count.  This mirrors EPUB/KFX TOC shape
+// exactly; folio's auto-bookmark stack (document.go:buildAutoBookmarks)
+// then produces a PDF outline with the same tree topology.
+func (b *flowBuilder) renderSectionTitle(section *fb2.Section, depth, titleDepth int) {
 	if section == nil || section.Title == nil {
 		return
 	}
@@ -489,10 +570,25 @@ func (b *flowBuilder) renderSectionTitle(section *fb2.Section, titleDepth int) {
 		bottomPos = common.VignettePosSectionTitleBottom
 	}
 
+	// Outline heading level: prefer the logical TOC depth; fall back
+	// to DOM depth if the section isn't in the TOC map.  Chapter-level
+	// (titleDepth==1) stays h1 to keep the chapter CSS stable.
+	headingLevel := 1
+	if titleDepth != 1 {
+		logical := 0
+		if b.ctx != nil && section.ID != "" {
+			logical = b.ctx.tocDepth[section.ID]
+		}
+		if logical <= 0 {
+			logical = depth
+		}
+		headingLevel = min(max(logical, 2), 6)
+	}
+
 	var elems []layout.Element
 	child := b.descend("div", wrapperClass, b.resolve("div", wrapperClass), &elems)
 	child.renderVignette(topPos, "vignette vignette-"+topPos.String())
-	child.renderTitleHeading(section.Title, titleDepth, headerClass)
+	child.renderTitleHeading(section.Title, headingLevel, headerClass)
 	child.renderVignette(bottomPos, "vignette vignette-"+bottomPos.String())
 	b.pushWrappedTagged("div", wrapperClass, elems, margins.ContainerTitleBlock, margins.FlagTitleBlockMode)
 }
