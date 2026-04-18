@@ -104,6 +104,7 @@ type flowBuilder struct {
 	depth                  int      // nesting depth: 0 = top-level unit elements, >0 = inside a container Div
 	pendingEmptyLineMargin *float64 // margin-top from a preceding empty-line, to be applied to the next element
 	pendingAnchors         []string // FB2 ids queued to attach to the next element appended to *elements
+	prevWasImage           bool     // true when the most recent content element was a block image
 }
 
 type textContext struct {
@@ -239,6 +240,12 @@ func applyMetadata(doc *document.Document, c *content.Content) {
 
 	if book.Description.TitleInfo.Annotation != nil {
 		doc.Info.Subject = encodePDFTextString(book.Description.TitleInfo.Annotation.AsPlainText())
+	}
+	if book.Description.TitleInfo.Keywords != nil {
+		kw := strings.TrimSpace(book.Description.TitleInfo.Keywords.Value)
+		if kw != "" {
+			doc.Info.Keywords = encodePDFTextString(kw)
+		}
 	}
 	if c.SrcName != "" {
 		doc.Info.Creator = "fbc"
@@ -837,11 +844,13 @@ func (b *flowBuilder) renderFlowItems(items []fb2.FlowItem, depth int, titleDept
 			if item.Paragraph != nil {
 				b.renderParagraph(item.Paragraph, "p", item.Paragraph.Style)
 				b.consumePendingEmptyLine()
+				b.prevWasImage = false
 			}
 		case fb2.FlowImage:
 			if item.Image != nil {
+				b.consumePendingEmptyLineForImage()
 				b.renderImage(item.Image, "image image-block", nil)
-				b.consumePendingEmptyLine()
+				b.prevWasImage = true
 			}
 		case fb2.FlowEmptyLine:
 			b.handleEmptyLine("emptyline")
@@ -853,21 +862,25 @@ func (b *flowBuilder) renderFlowItems(items []fb2.FlowItem, depth int, titleDept
 				}
 				b.renderParagraph(item.Subtitle, "p", class)
 				b.consumePendingEmptyLine()
+				b.prevWasImage = false
 			}
 		case fb2.FlowPoem:
 			if item.Poem != nil {
 				b.renderPoem(item.Poem, depth)
 				b.consumePendingEmptyLine()
+				b.prevWasImage = false
 			}
 		case fb2.FlowCite:
 			if item.Cite != nil {
 				b.renderCite(item.Cite, depth)
 				b.consumePendingEmptyLine()
+				b.prevWasImage = false
 			}
 		case fb2.FlowTable:
 			if item.Table != nil {
 				b.renderTable(item.Table)
 				b.consumePendingEmptyLine()
+				b.prevWasImage = false
 			}
 		case fb2.FlowSection:
 			if item.Section == nil {
@@ -892,6 +905,7 @@ func (b *flowBuilder) renderFlowItems(items []fb2.FlowItem, depth int, titleDept
 			child.renderSection(item.Section, sectionDepth, childTitleDepth)
 			b.pushWrapped("div", "section", elems)
 			b.consumePendingEmptyLine()
+			b.prevWasImage = false
 		}
 	}
 	return splits
@@ -974,7 +988,12 @@ func (b *flowBuilder) renderTable(table *fb2.Table) {
 	}
 	for i := range table.Rows {
 		rowData := &table.Rows[i]
-		row := tbl.AddRow()
+		var row *layout.Row
+		if isHeaderRow(rowData) {
+			row = tbl.AddHeaderRow()
+		} else {
+			row = tbl.AddRow()
+		}
 		for j := range rowData.Cells {
 			cellData := &rowData.Cells[j]
 			cellElem := b.newTableCellElement(cellData)
@@ -997,6 +1016,21 @@ func tableCellTag(cell *fb2.TableCell) string {
 		return "th"
 	}
 	return "td"
+}
+
+// isHeaderRow returns true when every cell in the row is a <th>.
+// Such rows are repeated by folio at the top of each page when
+// a table breaks across page boundaries.
+func isHeaderRow(row *fb2.TableRow) bool {
+	if row == nil || len(row.Cells) == 0 {
+		return false
+	}
+	for i := range row.Cells {
+		if !row.Cells[i].Header {
+			return false
+		}
+	}
+	return true
 }
 
 func applyCellStyle(cell *layout.Cell, style resolvedStyle) {
@@ -1288,17 +1322,26 @@ func (b *flowBuilder) renderPlainParagraph(tag string, class string, text string
 //   - Marks the previous element for margin-bottom stripping
 //   - Stores the empty-line margin (margin-top from CSS) as pending
 //
-// The pending margin is applied to the next element via consumePendingEmptyLine.
+// The pending margin is applied to the next element via consumePendingEmptyLine
+// (for text) or consumePendingEmptyLineForImage (for images).
+//
+// KFX quirk: when the previous element is a block image, the margin-bottom
+// is NOT stripped — the empty-line between two images is rendered as a real
+// spacer container, not as margin manipulation.
 func (b *flowBuilder) handleEmptyLine(class string) {
 	// Compute empty-line margin from CSS (use only margin-top, matching KFX).
 	style := b.resolve("div", class)
 	margin := style.MarginTop
 
-	// Mark the previous element for margin-bottom stripping.
-	if elems := *b.elements; len(elems) > 0 {
-		prev := elems[len(elems)-1]
-		sig := b.getOrCreateSignal(prev)
-		sig.StripMarginBottom = true
+	// Mark the previous element for margin-bottom stripping — but not when
+	// the previous element is a block image (KFX keeps the image's mb intact
+	// and uses a spacer container for image+emptyline+image sequences).
+	if !b.prevWasImage {
+		if elems := *b.elements; len(elems) > 0 {
+			prev := elems[len(elems)-1]
+			sig := b.getOrCreateSignal(prev)
+			sig.StripMarginBottom = true
+		}
 	}
 
 	// Store pending margin for the next element.
@@ -1344,6 +1387,51 @@ func (b *flowBuilder) consumeEmptyLineForDropcap() {
 	margin := *b.pendingEmptyLineMargin
 	b.pendingEmptyLineMargin = nil
 
+	spacer := layout.NewStyledParagraph()
+	spacer.SetSpaceBefore(margin)
+	*b.elements = append(*b.elements, spacer)
+}
+
+// consumePendingEmptyLineForImage handles the pending empty-line margin when
+// the next element is a block image.  Must be called BEFORE renderImage so
+// that any spacer or margin-bottom annotation lands on the correct element.
+//
+// KFX distinguishes two sub-cases (frag_storyline_content.go:496-508):
+//
+//  1. image + emptyline + image  → emit a spacer Paragraph between the images
+//     (the previous image's margin-bottom is NOT stripped — handleEmptyLine
+//     already skips stripping when prevWasImage is true).
+//  2. non-image + emptyline + image → set the pending margin as the previous
+//     element's EmptyLineMarginBottom (applied during margin tree collapsing).
+func (b *flowBuilder) consumePendingEmptyLineForImage() {
+	if b.pendingEmptyLineMargin == nil {
+		return
+	}
+	margin := *b.pendingEmptyLineMargin
+	b.pendingEmptyLineMargin = nil
+
+	if b.prevWasImage {
+		// Case 1: image + emptyline + image → real spacer between images.
+		b.emitEmptyLineSpacer(margin)
+	} else {
+		// Case 2: non-image + emptyline + image → previous element gets mb.
+		elems := *b.elements
+		if len(elems) > 0 {
+			prev := elems[len(elems)-1]
+			sig := b.getOrCreateSignal(prev)
+			sig.EmptyLineMarginBottom = &margin
+		}
+	}
+}
+
+// emitEmptyLineSpacer inserts a zero-content StyledParagraph whose SpaceBefore
+// provides the empty-line gap.  This mirrors KFX's AddEmptyLineSpacer which
+// creates a real container($270) with margin-top between adjacent block images.
+//
+// A StyledParagraph is used (rather than a Div) because empty Divs are
+// self-collapsed by collapseEmptyNodes and lose their margin — the same
+// rationale as consumeEmptyLineForDropcap.
+func (b *flowBuilder) emitEmptyLineSpacer(margin float64) {
 	spacer := layout.NewStyledParagraph()
 	spacer.SetSpaceBefore(margin)
 	*b.elements = append(*b.elements, spacer)
