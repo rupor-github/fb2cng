@@ -32,7 +32,8 @@ func cssEscapeDoubleQuoted(s string) string {
 }
 
 // MediaQuery represents a parsed @media query condition.
-// Supports Amazon-specific media types: amzn-mobi, amzn-kf8, amzn-et.
+// Supports Amazon-specific media types (amzn-mobi, amzn-kf8, amzn-et)
+// and fb2cng-specific queries (fbc-pdf).
 type MediaQuery struct {
 	Raw      string         // Original media query string
 	Type     string         // Media type (e.g., "amzn-mobi", "amzn-kf8")
@@ -46,24 +47,23 @@ type MediaFeature struct {
 	Negated bool   // true if "not" modifier was used
 }
 
+// MediaContext describes the active media environment for query evaluation.
+//
+// Predefined contexts:
+//
+//	KFX generation:  MediaContext{KF8: true, ET: true}
+//	PDF generation:  MediaContext{KF8: true, ET: true, PDF: true}
+type MediaContext struct {
+	KF8 bool // amzn-kf8 — Kindle KF8 format
+	ET  bool // amzn-et  — Kindle Enhanced Typesetting (KFX)
+	PDF bool // fbc-pdf  — fb2cng PDF generation
+}
+
 // Evaluate returns true if this media query matches the given context.
-// For KFX generation, amzn-kf8=true and amzn-et=true (Enhanced Typesetting).
-// amzn-mobi is always false for KFX.
-func (mq MediaQuery) Evaluate(kf8, et bool) bool {
+// amzn-mobi is always false (not supported by any pipeline).
+func (mq MediaQuery) Evaluate(ctx MediaContext) bool {
 	// Evaluate main type
-	var typeMatches bool
-	switch strings.ToLower(mq.Type) {
-	case "amzn-kf8":
-		typeMatches = kf8
-	case "amzn-et":
-		typeMatches = et
-	case "amzn-mobi":
-		typeMatches = false // Always false for KFX
-	case "all", "screen":
-		typeMatches = true // Generic media types match
-	default:
-		typeMatches = false // Unknown media type
-	}
+	typeMatches := matchMediaName(mq.Type, ctx)
 
 	if mq.Negated {
 		typeMatches = !typeMatches
@@ -75,17 +75,7 @@ func (mq MediaQuery) Evaluate(kf8, et bool) bool {
 
 	// Evaluate all features (AND logic)
 	for _, f := range mq.Features {
-		var featureMatches bool
-		switch strings.ToLower(f.Name) {
-		case "amzn-kf8":
-			featureMatches = kf8
-		case "amzn-et":
-			featureMatches = et
-		case "amzn-mobi":
-			featureMatches = false
-		default:
-			featureMatches = false
-		}
+		featureMatches := matchMediaName(f.Name, ctx)
 
 		if f.Negated {
 			featureMatches = !featureMatches
@@ -97,6 +87,25 @@ func (mq MediaQuery) Evaluate(kf8, et bool) bool {
 	}
 
 	return true
+}
+
+// matchMediaName returns whether a single media type or feature name
+// is active in the given context.
+func matchMediaName(name string, ctx MediaContext) bool {
+	switch strings.ToLower(name) {
+	case "amzn-kf8":
+		return ctx.KF8
+	case "amzn-et":
+		return ctx.ET
+	case "amzn-mobi":
+		return false // Never matches — MOBI not supported
+	case "fbc-pdf":
+		return ctx.PDF
+	case "all", "screen":
+		return true
+	default:
+		return false
+	}
 }
 
 // Value represents a parsed CSS property value.

@@ -53,6 +53,10 @@ func selectorDescendantName(s css.Selector) string {
 	return s.DescendantBaseName()
 }
 
+// kfxMediaContext is the media context for KFX generation:
+// amzn-kf8 and amzn-et are true (Enhanced Typesetting), fbc-pdf is false.
+var kfxMediaContext = css.MediaContext{KF8: true, ET: true}
+
 // flattenStylesheetForKFX returns all CSS rules from a stylesheet, flattening
 // @media blocks that match the KFX context (kf8=true, et=true).
 // Rules from non-matching @media blocks are excluded.
@@ -67,7 +71,7 @@ func flattenStylesheetForKFX(sheet *css.Stylesheet) []css.Rule {
 		case item.Rule != nil:
 			rules = append(rules, *item.Rule)
 		case item.MediaBlock != nil:
-			if item.MediaBlock.Query.Evaluate(true, true) {
+			if item.MediaBlock.Query.Evaluate(kfxMediaContext) {
 				rules = append(rules, item.MediaBlock.Rules...)
 			}
 		}

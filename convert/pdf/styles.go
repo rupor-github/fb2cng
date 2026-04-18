@@ -216,6 +216,10 @@ func detectDropcapPatterns(sheet *css.Stylesheet, log *zap.Logger) {
 	}
 }
 
+// pdfMediaContext is the media context for PDF generation:
+// amzn-kf8 and amzn-et match KFX behaviour exactly, fbc-pdf is true.
+var pdfMediaContext = css.MediaContext{KF8: true, ET: true, PDF: true}
+
 func flattenStylesheetForPDF(sheet *css.Stylesheet) []css.Rule {
 	if sheet == nil {
 		return nil
@@ -227,7 +231,7 @@ func flattenStylesheetForPDF(sheet *css.Stylesheet) []css.Rule {
 		case item.Rule != nil:
 			rules = append(rules, *item.Rule)
 		case item.MediaBlock != nil:
-			if item.MediaBlock.Query.Evaluate(false, false) {
+			if item.MediaBlock.Query.Evaluate(pdfMediaContext) {
 				rules = append(rules, item.MediaBlock.Rules...)
 			}
 		}
