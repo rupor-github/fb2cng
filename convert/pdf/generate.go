@@ -174,7 +174,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		}
 	}()
 
-	if err := addPlan(rc, plan); err != nil {
+	if err := addPlan(rc, plan, cfg); err != nil {
 		return fmt.Errorf("render structure plan: %w", err)
 	}
 
@@ -304,7 +304,7 @@ func alignString(a layout.Align) string {
 	}
 }
 
-func addPlan(rc *renderContext, plan *structure.Plan) error {
+func addPlan(rc *renderContext, plan *structure.Plan, cfg *config.DocumentConfig) error {
 	if rc == nil || rc.doc == nil || plan == nil {
 		return nil
 	}
@@ -314,12 +314,33 @@ func addPlan(rc *renderContext, plan *structure.Plan) error {
 		return nil
 	}
 
+	// KFX ordering: Cover → TOC (before) → Annotation → Content → Footnotes → TOC (after).
+	// Insert generated "before" pages after the cover unit (first unit).
+	hasCover := plan.Units[0].Kind == structure.UnitCover
+
+	if !hasCover {
+		if err := addBeforeGeneratedPages(rc, plan, cfg); err != nil {
+			return err
+		}
+	}
+
 	for i := range plan.Units {
 		unit := &plan.Units[i]
 		if i > 0 && unit.ForceNewPage {
 			rc.addElement(layout.NewAreaBreak())
 		}
 		if err := addUnit(rc, unit); err != nil {
+			return err
+		}
+		if i == 0 && hasCover {
+			if err := addBeforeGeneratedPages(rc, plan, cfg); err != nil {
+				return err
+			}
+		}
+	}
+
+	if cfg != nil && cfg.TOCPage.Placement == common.TOCPagePlacementAfter {
+		if err := addTOCPage(rc, plan, cfg); err != nil {
 			return err
 		}
 	}
@@ -410,6 +431,213 @@ func addFootnotesBodyUnit(rc *renderContext, unitID string, body *fb2.Body) erro
 		rc.addElement(elem)
 	}
 	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Generated pages (annotation, TOC)
+// ---------------------------------------------------------------------------
+
+// addBeforeGeneratedPages inserts generated pages that should appear
+// before the main body content.  KFX ordering: TOC (before) → Annotation.
+func addBeforeGeneratedPages(rc *renderContext, plan *structure.Plan, cfg *config.DocumentConfig) error {
+	if cfg == nil {
+		return nil
+	}
+	if cfg.TOCPage.Placement == common.TOCPagePlacementBefore {
+		if err := addTOCPage(rc, plan, cfg); err != nil {
+			return err
+		}
+	}
+	if cfg.Annotation.Enable && rc.c.Book.Description.TitleInfo.Annotation != nil {
+		if err := addAnnotationPage(rc, plan, cfg); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// addAnnotationPage renders the book-level annotation as a separate page.
+// This mirrors KFX's annotation section (generated_sections.go:324-389)
+// and EPUB's generateAnnotation.
+func addAnnotationPage(rc *renderContext, plan *structure.Plan, cfg *config.DocumentConfig) error {
+	if rc == nil || cfg == nil || rc.c.Book.Description.TitleInfo.Annotation == nil {
+		return nil
+	}
+	rc.addElement(layout.NewAreaBreak())
+
+	var elements []layout.Element
+	b := flowBuilder{ctx: rc, elements: &elements, parent: rc.bodyStyle}
+
+	// Register anchor for outline/linking.
+	b.emitAnchor("annotation-page")
+
+	// Render title using the config string (e.g. "Annotation").
+	title := syntheticTitle(cfg.Annotation.Title)
+	if title != nil {
+		b.renderTitleBlock(title, "annotation-title", 1, false)
+	}
+
+	// Render annotation content wrapped in a container with matching CSS class.
+	var innerElems []layout.Element
+	child := b.descend("div", "annotation", b.resolve("div", "annotation"), &innerElems)
+	child.renderFlowItems(rc.c.Book.Description.TitleInfo.Annotation.Items, 1, 1, "annotation")
+	b.pushWrappedTagged("div", "annotation", innerElems, margins.ContainerAnnotation, margins.FlagForceTransferMBToLastChild)
+
+	collapseMargins(elements, rc.marginMeta, rc.emptyLineSignals, rc.tracer)
+	for _, elem := range elements {
+		rc.addElement(elem)
+	}
+
+	// Add annotation to the outline (TOC tree) if configured.
+	if cfg.Annotation.InTOC {
+		plan.TOC = append([]*structure.TOCEntry{{
+			ID:           "annotation-page",
+			Title:        cfg.Annotation.Title,
+			IncludeInTOC: true,
+		}}, plan.TOC...)
+	}
+
+	return nil
+}
+
+// addTOCPage renders a hierarchical table-of-contents page with internal
+// links to each section.  This mirrors KFX's TOC section
+// (generated_sections.go:391-451) and EPUB's generateTOCPage.
+func addTOCPage(rc *renderContext, plan *structure.Plan, cfg *config.DocumentConfig) error {
+	if rc == nil || cfg == nil || plan == nil {
+		return nil
+	}
+	rc.addElement(layout.NewAreaBreak())
+
+	var elements []layout.Element
+	b := flowBuilder{ctx: rc, elements: &elements, parent: rc.bodyStyle}
+
+	// Build the TOC title: book title (+ optional authors).
+	var authors string
+	if cfg.TOCPage.AuthorsTemplate != "" {
+		expanded, err := rc.c.Book.ExpandTemplateMetainfo(
+			config.AuthorsTemplateFieldName,
+			cfg.TOCPage.AuthorsTemplate,
+			rc.c.SrcName, rc.c.OutputFormat,
+		)
+		if err != nil {
+			rc.log.Warn("Unable to prepare list of authors for TOC", zap.Error(err))
+		} else {
+			authors = expanded
+		}
+	}
+	bookTitle := rc.c.Book.Description.TitleInfo.BookTitle.Value
+	if title := syntheticTitle(bookTitle, authors); title != nil {
+		b.renderTitleBlock(title, "toc-title", 1, false)
+	}
+
+	// Build the hierarchical TOC entry list from the plan.
+	entries := flattenTOCForPage(plan.TOC, cfg.TOCPage.ChaptersWithoutTitle)
+	renderTOCList(&b, entries, 0)
+
+	collapseMargins(elements, rc.marginMeta, rc.emptyLineSignals, rc.tracer)
+	for _, elem := range elements {
+		rc.addElement(elem)
+	}
+
+	return nil
+}
+
+// tocPageEntry is a renderer-local TOC entry for the generated TOC page.
+type tocPageEntry struct {
+	Title    string
+	AnchorID string
+	Children []*tocPageEntry
+}
+
+// flattenTOCForPage converts structure.TOCEntry tree into a flat list suitable
+// for rendering.  Untitled wrapper entries are either promoted (their children
+// are hoisted to the parent level) or included with a placeholder title,
+// depending on the includeUntitled flag.
+func flattenTOCForPage(entries []*structure.TOCEntry, includeUntitled bool) []*tocPageEntry {
+	var build func(es []*structure.TOCEntry) []*tocPageEntry
+	build = func(es []*structure.TOCEntry) []*tocPageEntry {
+		var out []*tocPageEntry
+		for _, e := range es {
+			if e == nil {
+				continue
+			}
+			if !e.IncludeInTOC && !includeUntitled {
+				// Untitled wrapper: promote its children to this level.
+				if len(e.Children) > 0 {
+					out = append(out, build(e.Children)...)
+				}
+				continue
+			}
+			t := e.Title
+			if t == "" && includeUntitled {
+				t = fb2.NoTitleText
+			}
+			if t == "" {
+				continue
+			}
+			entry := &tocPageEntry{
+				Title:    t,
+				AnchorID: e.ID,
+			}
+			if len(e.Children) > 0 {
+				entry.Children = build(e.Children)
+			}
+			out = append(out, entry)
+		}
+		return out
+	}
+	return build(entries)
+}
+
+// renderTOCList recursively renders TOC entries as paragraphs with internal
+// links.  Nested entries are wrapped in a Div with class "toc-nested".
+// Each entry is a paragraph with class "toc-item toc-section" containing
+// a link to the section's anchor.
+func renderTOCList(b *flowBuilder, entries []*tocPageEntry, depth int) {
+	for _, entry := range entries {
+		// Create a paragraph with a link to the section anchor.
+		para := &fb2.Paragraph{
+			Text: []fb2.InlineSegment{{
+				Kind: fb2.InlineLink,
+				Href: "#" + entry.AnchorID,
+				Children: []fb2.InlineSegment{{
+					Text: entry.Title,
+				}},
+			}},
+		}
+		b.renderParagraph(para, "p", "toc-item toc-section link-toc")
+
+		// Render children in a nested container.
+		if len(entry.Children) > 0 {
+			var nested []layout.Element
+			child := b.descend("div", "toc-nested", b.resolve("div", "toc-nested"), &nested)
+			renderTOCList(&child, entry.Children, depth+1)
+			if len(nested) > 0 {
+				b.pushWrapped("div", "toc-nested", nested)
+			}
+		}
+	}
+}
+
+// syntheticTitle creates an fb2.Title from one or more text strings.
+// Empty strings are skipped; nil is returned if no non-empty strings remain.
+// This mirrors KFX's titleFromStrings (frag_storyline_title.go:482).
+func syntheticTitle(lines ...string) *fb2.Title {
+	var items []fb2.TitleItem
+	for _, line := range lines {
+		if line != "" {
+			items = append(items, fb2.TitleItem{
+				Paragraph: &fb2.Paragraph{
+					Text: []fb2.InlineSegment{{Text: line}},
+				},
+			})
+		}
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	return &fb2.Title{Items: items}
 }
 
 func addSectionUnit(rc *renderContext, unit *structure.Unit) error {
