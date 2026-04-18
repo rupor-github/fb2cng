@@ -114,9 +114,12 @@ func (t *anchorTracker) resolvePageIndex(page *layout.PageResult) int {
 	return idx
 }
 
-// register adds a NamedDest for id pointing to the given page index.
+// register adds a NamedDest for id pointing to the given page index
+// and Y position.  The destination uses FitH (fit page width, scroll
+// to Y) so that clicking a link lands at the target element rather
+// than just showing the whole page.
 // Duplicates are silently ignored (the first observation wins).
-func (t *anchorTracker) register(id string, pageIdx int) {
+func (t *anchorTracker) register(id string, pageIdx int, topY float64) {
 	if id == "" || t.registered[id] {
 		return
 	}
@@ -125,7 +128,8 @@ func (t *anchorTracker) register(id string, pageIdx int) {
 	t.doc.AddNamedDest(document.NamedDest{
 		Name:      id,
 		PageIndex: pageIdx,
-		FitType:   "Fit",
+		FitType:   "FitH",
+		Top:       topY,
 	})
 	if t.tracer.IsEnabled() {
 		t.tracer.TraceAnchorRegister(id, pageIdx)
@@ -239,6 +243,11 @@ func (a *anchoredElement) MaxWidth() float64 {
 // runs AFTER the original Draw so that any page-state mutations the
 // original performs (e.g. updating ctx.Page fields) are already in
 // effect.
+//
+// The topY parameter received by Draw is in PDF coordinates (origin at
+// page bottom-left, increasing upward) — the same coordinate space used
+// by folio's heading-recording and link-annotation code.  We pass it
+// directly to register() for position-aware FitH destinations.
 func chainAnchorDraw(block *layout.PlacedBlock, ids []string, tracker *anchorTracker) {
 	orig := block.Draw
 	block.Draw = func(ctx layout.DrawContext, x, topY float64) {
@@ -250,7 +259,7 @@ func chainAnchorDraw(block *layout.PlacedBlock, ids []string, tracker *anchorTra
 		}
 		pageIdx := tracker.resolvePageIndex(ctx.Page)
 		for _, id := range ids {
-			tracker.register(id, pageIdx)
+			tracker.register(id, pageIdx, topY)
 		}
 	}
 }
