@@ -83,6 +83,8 @@ type outlineFinalizer struct {
 	tracker *anchorTracker
 	tracer  *PDFTracer
 	done    bool // guard against multiple Draw invocations (overflow, etc.)
+	added   int  // entries successfully added (for OUTLINE_DONE)
+	skipped int  // entries skipped / hoisted (for OUTLINE_DONE)
 }
 
 func newOutlineFinalizer(
@@ -91,6 +93,7 @@ func newOutlineFinalizer(
 	tracker *anchorTracker,
 	tracer *PDFTracer,
 ) layout.Element {
+	tracer.TraceTOCInput(entries)
 	return &outlineFinalizer{
 		doc:     doc,
 		entries: entries,
@@ -145,6 +148,7 @@ func (f *outlineFinalizer) build() {
 	for _, root := range f.entries {
 		f.addRoot(root)
 	}
+	f.tracer.TraceOutlineDone(f.added, f.skipped)
 }
 
 // addRoot adds a single top-level entry (or hoists its children if
@@ -158,13 +162,21 @@ func (f *outlineFinalizer) addRoot(entry *structure.TOCEntry) {
 	}
 	if entry.IncludeInTOC {
 		if pageIdx, ok := f.tracker.PageForID(entry.ID); ok {
+			f.tracer.TraceOutlineAdd(entry.ID, entry.Title, 0, pageIdx)
+			f.added++
 			o := f.doc.AddOutline(encodePDFTextString(entry.Title), document.FitDest(pageIdx))
-			f.addChildren(o, entry.Children)
+			f.addChildren(o, entry.Children, 1)
 			return
 		}
 	}
 	// Unresolved root: hoist its children to top level so the
 	// subtree is not lost.
+	action := "hoist"
+	if len(entry.Children) == 0 {
+		action = "drop"
+	}
+	f.tracer.TraceOutlineSkip(entry.ID, entry.Title, action)
+	f.skipped++
 	for _, child := range entry.Children {
 		f.addRoot(child)
 	}
@@ -182,8 +194,9 @@ type pendingChild struct {
 // then recurses into each of them by stable index into
 // parent.Children (Phase 2).  This two-phase descent avoids
 // invalidating previously-returned *Outline pointers when AddChild
-// grows the parent's slice.
-func (f *outlineFinalizer) addChildren(parent *document.Outline, entries []*structure.TOCEntry) {
+// grows the parent's slice.  depth is the current outline nesting
+// level (0 = root) used for trace output.
+func (f *outlineFinalizer) addChildren(parent *document.Outline, entries []*structure.TOCEntry, depth int) {
 	if parent == nil || len(entries) == 0 {
 		return
 	}
@@ -193,12 +206,12 @@ func (f *outlineFinalizer) addChildren(parent *document.Outline, entries []*stru
 	// deeper branches still surface in the outline.
 	var pend []pendingChild
 	for _, e := range entries {
-		f.appendResolved(parent, e, &pend)
+		f.appendResolved(parent, e, &pend, depth)
 	}
 
 	// Phase 2: recurse using stable indices into parent.Children.
 	for _, p := range pend {
-		f.addChildren(&parent.Children[p.idx], p.entry.Children)
+		f.addChildren(&parent.Children[p.idx], p.entry.Children, depth+1)
 	}
 }
 
@@ -206,24 +219,33 @@ func (f *outlineFinalizer) addChildren(parent *document.Outline, entries []*stru
 // resolvable destination, or recurses into its children when it
 // does not.  The resulting parent.Children indices (for every
 // successfully appended entry) are recorded in pend for the Phase 2
-// descent.
+// descent.  depth is the outline nesting level for trace output.
 func (f *outlineFinalizer) appendResolved(
 	parent *document.Outline,
 	entry *structure.TOCEntry,
 	pend *[]pendingChild,
+	depth int,
 ) {
 	if entry == nil {
 		return
 	}
 	if entry.IncludeInTOC {
 		if pageIdx, ok := f.tracker.PageForID(entry.ID); ok {
+			f.tracer.TraceOutlineAdd(entry.ID, entry.Title, depth, pageIdx)
+			f.added++
 			parent.AddChild(encodePDFTextString(entry.Title), document.FitDest(pageIdx))
 			*pend = append(*pend, pendingChild{entry: entry, idx: len(parent.Children) - 1})
 			return
 		}
 	}
 	// Unresolved: hoist the entry's children to the current parent.
+	action := "hoist"
+	if len(entry.Children) == 0 {
+		action = "drop"
+	}
+	f.tracer.TraceOutlineSkip(entry.ID, entry.Title, action)
+	f.skipped++
 	for _, c := range entry.Children {
-		f.appendResolved(parent, c, pend)
+		f.appendResolved(parent, c, pend, depth)
 	}
 }

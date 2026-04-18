@@ -44,6 +44,7 @@ import (
 	"github.com/carlos7ags/folio/layout"
 
 	"fbc/convert/margins"
+	"fbc/convert/structure"
 )
 
 // previewMaxLen caps the length of content previews embedded in trace
@@ -380,6 +381,94 @@ func formatMarginPtr(m *float64) string {
 		return "nil"
 	}
 	return fmt.Sprintf("%.3f", *m)
+}
+
+// ---------------------------------------------------------------------------
+// Outline / TOC tracing
+// ---------------------------------------------------------------------------
+
+// TraceTOCInput records the full plan.TOC tree as received by the
+// outline finalizer.  This is the "before" snapshot — the logical TOC
+// that structure.builder produced after wrong-nesting compensation.
+// Comparing it with the OUTLINE_ADD / OUTLINE_HOIST / OUTLINE_SKIP
+// events that follow reveals any resolution failures or structural
+// discrepancies between the plan and the final PDF outline.
+func (t *PDFTracer) TraceTOCInput(entries []*structure.TOCEntry) {
+	if !t.IsEnabled() {
+		return
+	}
+	var sb strings.Builder
+	t.formatTOCEntries(&sb, entries, 0)
+	t.entries = append(t.entries, pdfTraceEntry{
+		operation: "TOC_INPUT",
+		subject:   fmt.Sprintf("%d root entries", len(entries)),
+		details:   sb.String(),
+	})
+	t.sections["toc_input"]++
+}
+
+// formatTOCEntries recursively renders a TOCEntry tree into sb with
+// depth-based indentation.  Each entry shows its ID, title (full,
+// Go-escaped), and IncludeInTOC flag.
+func (t *PDFTracer) formatTOCEntries(sb *strings.Builder, entries []*structure.TOCEntry, depth int) {
+	indent := strings.Repeat("  ", depth)
+	for _, e := range entries {
+		if e == nil {
+			continue
+		}
+		flag := " "
+		if !e.IncludeInTOC {
+			flag = "!"
+		}
+		fmt.Fprintf(sb, "%s%s[%s] %q\n", indent, flag, e.ID, e.Title)
+		if len(e.Children) > 0 {
+			t.formatTOCEntries(sb, e.Children, depth+1)
+		}
+	}
+}
+
+// TraceOutlineAdd records a TOC entry being added to the PDF outline
+// at the given depth (0 = root, 1 = child of root, etc.) with its
+// resolved page index.  The title is emitted in full with Go escaping.
+func (t *PDFTracer) TraceOutlineAdd(id, title string, depth, pageIdx int) {
+	if !t.IsEnabled() {
+		return
+	}
+	t.entries = append(t.entries, pdfTraceEntry{
+		operation: "OUTLINE_ADD",
+		subject:   fmt.Sprintf("depth=%d %q", depth, title),
+		details:   fmt.Sprintf("id=%s pageIdx=%d", id, pageIdx),
+	})
+	t.sections["outline_added"]++
+}
+
+// TraceOutlineSkip records a TOC entry that could not be resolved to a
+// page index.  action describes what happened: "hoist" when the
+// entry's children were promoted to the parent level, "drop" when the
+// entry has no children and is simply omitted.  The title is emitted
+// in full with Go escaping.
+func (t *PDFTracer) TraceOutlineSkip(id, title, action string) {
+	if !t.IsEnabled() {
+		return
+	}
+	t.entries = append(t.entries, pdfTraceEntry{
+		operation: "OUTLINE_SKIP",
+		subject:   fmt.Sprintf("%s %q", action, title),
+		details:   fmt.Sprintf("id=%s", id),
+	})
+	t.sections["outline_skipped"]++
+}
+
+// TraceOutlineDone records the completion of the outline build with a
+// count of total entries added.
+func (t *PDFTracer) TraceOutlineDone(added, skipped int) {
+	if !t.IsEnabled() {
+		return
+	}
+	t.entries = append(t.entries, pdfTraceEntry{
+		operation: "OUTLINE_DONE",
+		subject:   fmt.Sprintf("added=%d skipped=%d", added, skipped),
+	})
 }
 
 // Flush serialises the accumulated trace to <workDir>/pdf-trace.txt
