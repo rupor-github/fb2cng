@@ -274,9 +274,9 @@ func addUnit(rc *renderContext, unit *structure.Unit) error {
 	case structure.UnitBodyImage:
 		return addBodyImageUnit(rc, unit.Body)
 	case structure.UnitBodyIntro:
-		return addBodyIntroUnit(rc, unit.Body)
+		return addBodyIntroUnit(rc, unit.ID, unit.Body)
 	case structure.UnitFootnotesBody:
-		return addFootnotesBodyUnit(rc, unit.Body)
+		return addFootnotesBodyUnit(rc, unit.ID, unit.Body)
 	case structure.UnitSection:
 		return addSectionUnit(rc, unit)
 	default:
@@ -312,13 +312,14 @@ func addBodyImageUnit(rc *renderContext, body *fb2.Body) error {
 	return nil
 }
 
-func addBodyIntroUnit(rc *renderContext, body *fb2.Body) error {
+func addBodyIntroUnit(rc *renderContext, unitID string, body *fb2.Body) error {
 	if rc == nil || body == nil {
 		return nil
 	}
 	var elements []layout.Element
 	parent := defaultResolvedStyle()
 	b := flowBuilder{ctx: rc, elements: &elements, parent: parent}
+	b.emitAnchor(unitID)
 	b.renderBodyIntro(body)
 	collapseMargins(elements, rc.marginMeta, rc.emptyLineSignals, rc.tracer)
 	for _, elem := range elements {
@@ -327,12 +328,13 @@ func addBodyIntroUnit(rc *renderContext, body *fb2.Body) error {
 	return nil
 }
 
-func addFootnotesBodyUnit(rc *renderContext, body *fb2.Body) error {
+func addFootnotesBodyUnit(rc *renderContext, unitID string, body *fb2.Body) error {
 	if rc == nil || body == nil {
 		return nil
 	}
 	var elements []layout.Element
 	b := flowBuilder{ctx: rc, elements: &elements, parent: defaultResolvedStyle()}
+	b.emitAnchor(unitID)
 	if body.Title != nil {
 		b.renderTitleBlock(body.Title, "footnote-title", 1, false)
 	}
