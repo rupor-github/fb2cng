@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -210,8 +211,7 @@ func detectDropcapPatterns(sheet *css.Stylesheet, log *zap.Logger) {
 		}
 		log.Debug("Detected drop cap pattern",
 			zap.String("parent", parentName),
-			zap.Float64("font-size", fontSize.Value),
-			zap.String("unit", fontSize.Unit),
+			zap.String("font-size", fmt.Sprintf("%.4g%s", fontSize.Value, fontSize.Unit)),
 			zap.Int("lines", lines))
 	}
 }

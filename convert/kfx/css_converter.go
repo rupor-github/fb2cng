@@ -1071,8 +1071,7 @@ func (c *Converter) detectDropcapPatterns(sheet *css.Stylesheet) map[string]drop
 
 		c.log.Debug("Detected drop cap pattern",
 			zap.String("parent", parentName),
-			zap.Float64("font-size", fontSize.Value),
-			zap.String("unit", fontSize.Unit),
+			zap.String("font-size", fmt.Sprintf("%.4g%s", fontSize.Value, fontSize.Unit)),
 			zap.Int("lines", lines))
 	}
 

@@ -35,6 +35,7 @@ type renderContext struct {
 	styles           *styleResolver
 	fonts            *fontRegistry
 	log              *zap.Logger
+	bodyStyle        resolvedStyle                       // resolved CSS body style — root of the inherited property cascade
 	contentHeight    float64                             // usable page content height in points (page height minus vertical margins)
 	deviceDPI        float64                             // device screen resolution (pixels per inch)
 	marginMeta       map[*layout.Div]*marginMeta         // margin collapsing container metadata, keyed by Div pointer
@@ -136,6 +137,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 	if styles != nil {
 		bodyStyle = styles.Resolve("body", "", nil, defaultResolvedStyle())
 	}
+	logBodyStyle(log, bodyStyle)
 
 	geom := GeometryFromStyles(cfg, bodyStyle)
 	doc := document.NewDocument(geom.PageSize)
@@ -156,6 +158,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		styles:           styles,
 		fonts:            newFontRegistry(c.Book.Stylesheets, parsed, log),
 		log:              log.Named("pdf"),
+		bodyStyle:        bodyStyle,
 		contentHeight:    geom.PageSize.Height - geom.Margins.Top - geom.Margins.Bottom,
 		deviceDPI:        float64(cfg.Images.Screen.DPI),
 		marginMeta:       make(map[*layout.Div]*marginMeta),
@@ -242,6 +245,58 @@ func applyMetadata(doc *document.Document, c *content.Content) {
 	}
 }
 
+// logBodyStyle logs the resolved body CSS properties that will cascade
+// to all content elements.  Mirrors the KFX "Detected body font rule"
+// debug log but also covers non-font inherited properties.
+func logBodyStyle(log *zap.Logger, style resolvedStyle) {
+	if log == nil {
+		return
+	}
+	defaults := defaultResolvedStyle()
+	fields := []zap.Field{
+		zap.String("font-family", style.FontFamily),
+		zap.String("font-size", fmt.Sprintf("%.4gpt", style.FontSize)),
+		zap.String("line-height", fmt.Sprintf("%.4g", style.LineHeight)),
+	}
+	if style.Bold != defaults.Bold {
+		fields = append(fields, zap.Bool("font-weight-bold", style.Bold))
+	}
+	if style.Italic != defaults.Italic {
+		fields = append(fields, zap.Bool("font-style-italic", style.Italic))
+	}
+	if style.HasColor && style.Color != defaults.Color {
+		fields = append(fields, zap.String("color", fmt.Sprintf("#%02x%02x%02x", style.Color.R, style.Color.G, style.Color.B)))
+	}
+	if style.LetterSpacing != defaults.LetterSpacing {
+		fields = append(fields, zap.String("letter-spacing", fmt.Sprintf("%.4gpt", style.LetterSpacing)))
+	}
+	if style.Hyphens != defaults.Hyphens {
+		fields = append(fields, zap.String("hyphens", style.Hyphens))
+	}
+	if style.Align != defaults.Align {
+		fields = append(fields, zap.String("text-align", alignString(style.Align)))
+	}
+	if style.TextIndent != defaults.TextIndent {
+		fields = append(fields, zap.String("text-indent", fmt.Sprintf("%.4gpt", style.TextIndent)))
+	}
+	log.Debug("Resolved body style (CSS cascade root)", fields...)
+}
+
+func alignString(a layout.Align) string {
+	switch a {
+	case layout.AlignLeft:
+		return "left"
+	case layout.AlignCenter:
+		return "center"
+	case layout.AlignRight:
+		return "right"
+	case layout.AlignJustify:
+		return "justify"
+	default:
+		return "left"
+	}
+}
+
 func addPlan(rc *renderContext, plan *structure.Plan) error {
 	if rc == nil || rc.doc == nil || plan == nil {
 		return nil
@@ -319,8 +374,7 @@ func addBodyIntroUnit(rc *renderContext, unitID string, body *fb2.Body) error {
 		return nil
 	}
 	var elements []layout.Element
-	parent := defaultResolvedStyle()
-	b := flowBuilder{ctx: rc, elements: &elements, parent: parent}
+	b := flowBuilder{ctx: rc, elements: &elements, parent: rc.bodyStyle}
 	b.emitAnchor(unitID)
 	b.renderBodyIntro(body)
 	collapseMargins(elements, rc.marginMeta, rc.emptyLineSignals, rc.tracer)
@@ -335,7 +389,7 @@ func addFootnotesBodyUnit(rc *renderContext, unitID string, body *fb2.Body) erro
 		return nil
 	}
 	var elements []layout.Element
-	b := flowBuilder{ctx: rc, elements: &elements, parent: defaultResolvedStyle()}
+	b := flowBuilder{ctx: rc, elements: &elements, parent: rc.bodyStyle}
 	b.emitAnchor(unitID)
 	if body.Title != nil {
 		b.renderTitleBlock(body.Title, "footnote-title", 1, false)
@@ -399,7 +453,7 @@ func renderSplitSection(rc *renderContext, work *splitSection) ([]layout.Element
 		return nil, nil, nil
 	}
 	var elements []layout.Element
-	b := flowBuilder{ctx: rc, elements: &elements, parent: defaultResolvedStyle()}
+	b := flowBuilder{ctx: rc, elements: &elements, parent: rc.bodyStyle}
 	splits := b.renderSection(work.section, work.depth, work.titleDepth)
 	for i := range splits {
 		splits[i].parentUnit = work.parentUnit
@@ -1337,7 +1391,7 @@ func (b *flowBuilder) renderVignette(pos common.VignettePos, class string) {
 
 func (b *flowBuilder) resolve(tag, classes string) resolvedStyle {
 	if b.ctx == nil || b.ctx.styles == nil {
-		return defaultResolvedStyle()
+		return b.parent
 	}
 	return b.ctx.styles.Resolve(tag, classes, b.ancestors, b.parent)
 }
@@ -1427,9 +1481,9 @@ func newWrappedImageElement(rc *renderContext, img *fb2.BookImage, imageID strin
 		return nil, fmt.Errorf("nil image")
 	}
 	var wrappedAncestors []styleScope
-	style := defaultResolvedStyle()
+	style := rc.bodyStyle
 	if rc.styles != nil {
-		style = rc.styles.Resolve("div", wrapperClass, extraAncestors, defaultResolvedStyle())
+		style = rc.styles.Resolve("div", wrapperClass, extraAncestors, rc.bodyStyle)
 		wrappedAncestors = append(append([]styleScope{}, extraAncestors...), styleScope{Tag: "div", Classes: splitClasses(wrapperClass)})
 	} else {
 		wrappedAncestors = append([]styleScope{}, extraAncestors...)
@@ -1449,9 +1503,9 @@ func newImageElement(rc *renderContext, img *fb2.BookImage, imageID string, clas
 	if err != nil {
 		return nil, err
 	}
-	style := defaultResolvedStyle()
+	style := rc.bodyStyle
 	if rc.styles != nil {
-		style = rc.styles.Resolve("img", class, extraAncestors, defaultResolvedStyle())
+		style = rc.styles.Resolve("img", class, extraAncestors, rc.bodyStyle)
 	}
 	imageElem := layout.NewImageElement(pdfImg)
 	applyImageStyle(imageElem, style, img, rc.contentHeight, rc.deviceDPI)
