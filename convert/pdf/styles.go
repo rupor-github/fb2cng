@@ -187,6 +187,35 @@ func newStyleResolverFromParsed(sheet *css.Stylesheet, log *zap.Logger) *styleRe
 	return sr
 }
 
+// detectDropcapPatterns scans the stylesheet for drop cap patterns.
+// It looks for descendant selectors matching "*.has-dropcap .dropcap"
+// and logs the detection once during CSS parsing — matching the KFX
+// pipeline's approach in css_converter.go.
+func detectDropcapPatterns(sheet *css.Stylesheet, log *zap.Logger) {
+	if sheet == nil || log == nil {
+		return
+	}
+	for _, rule := range flattenStylesheetForPDF(sheet) {
+		if rule.Selector.Ancestor == nil {
+			continue
+		}
+		if rule.Selector.DescendantBaseName() != "dropcap" {
+			continue
+		}
+		parentName := rule.Selector.Ancestor.DescendantBaseName()
+		fontSize, hasFontSize := rule.GetProperty("font-size")
+		lines := 3
+		if hasFontSize && fontSize.Value > 0 {
+			lines = max(2, min(10, int(fontSize.Value+0.5)))
+		}
+		log.Debug("Detected drop cap pattern",
+			zap.String("parent", parentName),
+			zap.Float64("font-size", fontSize.Value),
+			zap.String("unit", fontSize.Unit),
+			zap.Int("lines", lines))
+	}
+}
+
 func flattenStylesheetForPDF(sheet *css.Stylesheet) []css.Rule {
 	if sheet == nil {
 		return nil
@@ -767,6 +796,9 @@ var handledCSSProperties = map[string]bool{
 	"src": true, "font-display": true, "unicode-range": true,
 	// CSS properties that are valid but have no effect in PDF generation.
 	"content": true, "height": true,
+	// Handled via the dropcap float mechanism — not a general CSS float
+	// implementation, but recognised to suppress the "unsupported" warning.
+	"float": true,
 }
 
 func (sr *styleResolver) logUnhandledProperties(props map[string]css.Value) {

@@ -100,6 +100,7 @@ type flowBuilder struct {
 	elements               *[]layout.Element
 	ancestors              []styleScope
 	parent                 resolvedStyle
+	depth                  int      // nesting depth: 0 = top-level unit elements, >0 = inside a container Div
 	pendingEmptyLineMargin *float64 // margin-top from a preceding empty-line, to be applied to the next element
 	pendingAnchors         []string // FB2 ids queued to attach to the next element appended to *elements
 }
@@ -130,6 +131,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 
 	parsed := buildCombinedStylesheet(c.Book.Stylesheets, log)
 	styles := newStyleResolverFromParsed(parsed, log)
+	detectDropcapPatterns(parsed, log)
 	bodyStyle := defaultResolvedStyle()
 	if styles != nil {
 		bodyStyle = styles.Resolve("body", "", nil, defaultResolvedStyle())
@@ -991,6 +993,47 @@ func (b *flowBuilder) renderParagraph(p *fb2.Paragraph, tag string, class string
 	if p == nil {
 		return
 	}
+	// Float-based dropcap: extract the first character and emit it as a
+	// floating element before the paragraph body.  This replaces the old
+	// inline-only approach so the body text wraps around the enlarged
+	// initial character.
+	//
+	// At the top level (depth == 0) the Float element is placed directly
+	// in the unit's element list where folio's render loop tracks it and
+	// narrows subsequent elements.  Inside container Divs (depth > 0)
+	// Div.PlanLayout does NOT track floats, so the body Paragraph would
+	// get full width and overlap the dropcap.  In that case we simulate
+	// the effect with a Div wrapper: padding-left reserves space for the
+	// dropcap, and an AddOverlay places the enlarged character at the
+	// Div's left edge.
+	if hasStyle("has-dropcap", p.Style) {
+		if dropChar, restSegs := extractDropcapChar(p.Text); dropChar != "" {
+			if b.depth == 0 {
+				// Top-level: true Float dropcap with text wrapping.
+				// If an empty-line preceded this paragraph, the pending
+				// margin must push both the Float AND the body Paragraph
+				// down together.  We emit a zero-content spacer Paragraph
+				// with SpaceBefore so the render loop advances curY before
+				// placing the Float.  A spacer Paragraph (not Div) is used
+				// because empty Divs are self-collapsed by the margin
+				// collapsing algorithm, losing the gap.  Text-typed nodes
+				// survive collapsing intact.
+				b.consumeEmptyLineForDropcap()
+				b.emitDropcapFloat(p, tag, class, dropChar)
+				// Continue with the remaining segments — strip
+				// "has-dropcap" so paragraphRuns doesn't re-inject.
+				restP := *p
+				restP.Text = restSegs
+				restP.ID = "" // anchor already registered on the float
+				restP.Style = removeStyle("has-dropcap", p.Style)
+				p = &restP
+			} else {
+				// Nested inside a container Div: overlay-based dropcap.
+				b.emitDropcapOverlay(p, tag, class, dropChar, restSegs)
+				return
+			}
+		}
+	}
 	runs := b.paragraphRuns(p, class, textContext{ancestors: b.ancestors, parent: b.parent, hyphenate: !p.Special && b.ctx != nil && b.ctx.c != nil && b.ctx.c.Hyphen != nil})
 	if len(runs) == 0 {
 		plain := strings.TrimSpace(p.AsPlainText())
@@ -1006,6 +1049,129 @@ func (b *flowBuilder) renderParagraph(p *fb2.Paragraph, tag string, class string
 	para := newStyledParagraphElement(b.ctx, tag, class, b.ancestors, b.parent, runs)
 	b.emitAnchor(p.ID)
 	*b.elements = append(*b.elements, b.attachAnchors(para))
+}
+
+// emitDropcapFloat builds a floating dropcap element for the given character
+// and appends it to the element list.  The float is styled according to the
+// CSS ".dropcap" class and placed to the left so subsequent paragraph text
+// wraps around it.
+//
+// The element structure is Float → Paragraph (no Div wrapper, because a Div
+// defaults to the full available width, which would make the float claim the
+// entire page).  The Paragraph naturally shrinks to the character's glyph
+// width.  CSS padding-right on the .dropcap class becomes the Float margin
+// (the gap between the dropcap box and the wrapped text).
+func (b *flowBuilder) emitDropcapFloat(p *fb2.Paragraph, tag, class, dropChar string) {
+	// Resolve the dropcap style: CSS selector "p.has-dropcap .dropcap"
+	// maps to resolving "span" with class "dropcap" inside the paragraph's
+	// ancestor scope.
+	paraStyle := b.resolve(tag, class)
+	paraAncestors := append(append([]styleScope{}, b.ancestors...), styleScope{Tag: tag, Classes: splitClasses(class)})
+	dropcapStyle := defaultResolvedStyle()
+	if b.ctx != nil && b.ctx.styles != nil {
+		dropcapStyle = b.ctx.styles.Resolve("span", "dropcap", paraAncestors, paraStyle)
+	}
+
+	// Build a single-character paragraph with the dropcap style.
+	run := b.textRunForStyle(dropChar, dropcapStyle)
+	dropcapPara := layout.NewStyledParagraph(run)
+	dropcapPara.SetLeading(dropcapStyle.LineHeight)
+	dropcapPara.SetAlign(dropcapStyle.Align)
+	if dropcapStyle.Background != nil {
+		dropcapPara.SetBackground(*dropcapStyle.Background)
+	}
+
+	// CSS padding-right becomes the float margin — the gap between the
+	// enlarged character and the wrapped text.  This matches CSS semantics
+	// where padding on a floated inline element widens the float box.
+	margin := dropcapStyle.PaddingRight
+	if margin <= 0 {
+		margin = 2 // minimal fallback in points
+	}
+	floatElem := layout.NewFloat(layout.FloatLeft, dropcapPara).SetMargin(margin)
+
+	b.emitAnchor(p.ID)
+	*b.elements = append(*b.elements, b.attachAnchors(floatElem))
+}
+
+// emitDropcapOverlay renders a dropcap paragraph inside a container Div
+// where folio's Float element cannot work (Div.PlanLayout does not track
+// floats, so the body text would get full width and overlap the dropcap).
+//
+// The approach: create a wrapper Div with padding-left equal to the
+// dropcap character width + gap.  The body Paragraph is a normal-flow
+// child and wraps at the reduced width.  The dropcap character is placed
+// via AddOverlay at a negative X offset so it appears at the Div's left
+// edge.  This gives an indented-text effect: the dropcap is at the left,
+// body text is to its right.  All body lines are indented (not just the
+// lines adjacent to the dropcap), but this is an acceptable trade-off
+// compared to the overlapping text that occurs without it.
+func (b *flowBuilder) emitDropcapOverlay(p *fb2.Paragraph, tag, class, dropChar string, restSegs []fb2.InlineSegment) {
+	// Resolve the dropcap style (same logic as emitDropcapFloat).
+	paraStyle := b.resolve(tag, class)
+	paraAncestors := append(append([]styleScope{}, b.ancestors...), styleScope{Tag: tag, Classes: splitClasses(class)})
+	dropcapStyle := defaultResolvedStyle()
+	if b.ctx != nil && b.ctx.styles != nil {
+		dropcapStyle = b.ctx.styles.Resolve("span", "dropcap", paraAncestors, paraStyle)
+	}
+
+	// Build the dropcap Paragraph.
+	dcRun := b.textRunForStyle(dropChar, dropcapStyle)
+	dropcapPara := layout.NewStyledParagraph(dcRun)
+	dropcapPara.SetLeading(dropcapStyle.LineHeight)
+	if dropcapStyle.Background != nil {
+		dropcapPara.SetBackground(*dropcapStyle.Background)
+	}
+
+	// Compute gap between dropcap box and body text.
+	gap := dropcapStyle.PaddingRight
+	if gap <= 0 {
+		gap = 2
+	}
+
+	// Measure the dropcap's rendered width via a trial layout.
+	dcPlan := dropcapPara.PlanLayout(layout.LayoutArea{Width: 1e9, Height: 1e9})
+	dcWidth := 0.0
+	for _, blk := range dcPlan.Blocks {
+		if w := blk.X + blk.Width; w > dcWidth {
+			dcWidth = w
+		}
+	}
+	indent := dcWidth + gap
+
+	// Build the body Paragraph from the remaining segments.
+	restP := *p
+	restP.Text = restSegs
+	restP.ID = "" // anchor handled below on the wrapper
+	restP.Style = removeStyle("has-dropcap", p.Style)
+	bodyClass := restP.Style
+	bodyRuns := b.paragraphRuns(&restP, bodyClass, textContext{
+		ancestors: b.ancestors, parent: b.parent,
+		hyphenate: !p.Special && b.ctx != nil && b.ctx.c != nil && b.ctx.c.Hyphen != nil,
+	})
+	var bodyElem layout.Element
+	if len(bodyRuns) == 0 {
+		plain := strings.TrimSpace(restP.AsPlainText())
+		if plain != "" {
+			bodyRuns = []layout.TextRun{b.textRunForStyle(plain, b.resolve(tag, bodyClass))}
+		}
+	}
+	if len(bodyRuns) > 0 {
+		bodyElem = newStyledParagraphElement(b.ctx, tag, bodyClass, b.ancestors, b.parent, bodyRuns)
+	}
+
+	// Assemble the wrapper Div: padding-left reserves space for the
+	// dropcap; the body Paragraph wraps at the reduced width; the
+	// dropcap character is placed as an overlay at X = -indent.
+	wrapper := layout.NewDiv()
+	wrapper.SetPaddingAll(layout.Padding{Left: indent})
+	if bodyElem != nil {
+		wrapper.Add(bodyElem)
+	}
+	wrapper.AddOverlay(dropcapPara, -indent, 0, dcWidth, false, 0)
+
+	b.emitAnchor(p.ID)
+	*b.elements = append(*b.elements, b.attachAnchors(wrapper))
 }
 
 // emitAnchor queues an FB2 id to be attached to the next element
@@ -1104,6 +1270,31 @@ func (b *flowBuilder) consumePendingEmptyLine() {
 	b.pendingEmptyLineMargin = nil
 }
 
+// consumeEmptyLineForDropcap handles the pending empty-line margin for
+// dropcap paragraphs.  Unlike consumePendingEmptyLine (which tags the
+// margin on the last element for margin-tree processing), this method
+// emits a zero-content spacer Paragraph whose SpaceBefore advances
+// curY in the render loop.  Both the Float and the body Paragraph are
+// placed after the spacer, so they share the same Y and align properly.
+//
+// A Paragraph is used instead of a Div because empty Divs (Index == -1,
+// no children) are self-collapsed by collapseEmptyNodes, which moves
+// MarginTop into MarginBottom.  The collapsed value then migrates to the
+// Float via sibling collapsing, but the Float has no SpaceBefore API, so
+// the gap is lost.  Text-typed leaf nodes (IsEmpty() == false) keep
+// their MarginTop through all collapsing phases.
+func (b *flowBuilder) consumeEmptyLineForDropcap() {
+	if b.pendingEmptyLineMargin == nil {
+		return
+	}
+	margin := *b.pendingEmptyLineMargin
+	b.pendingEmptyLineMargin = nil
+
+	spacer := layout.NewStyledParagraph()
+	spacer.SetSpaceBefore(margin)
+	*b.elements = append(*b.elements, spacer)
+}
+
 // getOrCreateSignal returns the empty-line signal for elem, creating one if needed.
 func (b *flowBuilder) getOrCreateSignal(elem layout.Element) *emptyLineSignal {
 	sig := b.ctx.emptyLineSignals[elem]
@@ -1159,6 +1350,7 @@ func (b *flowBuilder) descend(tag, classes string, style resolvedStyle, out *[]l
 		elements:  out,
 		ancestors: ancestors,
 		parent:    style,
+		depth:     b.depth + 1,
 	}
 }
 
@@ -1494,9 +1686,6 @@ func (b *flowBuilder) paragraphRuns(p *fb2.Paragraph, class string, tc textConte
 		hyphenate = b.ctx != nil && b.ctx.c != nil && b.ctx.c.Hyphen != nil
 	}
 	segments := p.Text
-	if hasStyle("has-dropcap", p.Style) {
-		segments = splitDropcapSegments(segments)
-	}
 	var runs []layout.TextRun
 	for i := range segments {
 		runs = append(runs, b.inlineRuns(&segments[i], textContext{
@@ -1707,7 +1896,11 @@ func plainTextRuns(runs []layout.TextRun) string {
 	return strings.TrimSpace(sb.String())
 }
 
-func splitDropcapSegments(segments []fb2.InlineSegment) []fb2.InlineSegment {
+// extractDropcapChar finds the first displayable character in segments and
+// returns it as a string alongside a copy of the segments with that character
+// removed.  When no character is found the first return value is empty and
+// the second is the original slice unchanged.
+func extractDropcapChar(segments []fb2.InlineSegment) (string, []fb2.InlineSegment) {
 	clone := append([]fb2.InlineSegment(nil), segments...)
 	for i := range clone {
 		seg := &clone[i]
@@ -1718,23 +1911,27 @@ func splitDropcapSegments(segments []fb2.InlineSegment) []fb2.InlineSegment {
 		if r == utf8.RuneError && size == 0 {
 			continue
 		}
-		drop := fb2.InlineSegment{
-			Kind:  fb2.InlineNamedStyle,
-			Style: "dropcap",
-			Children: []fb2.InlineSegment{{
-				Kind: fb2.InlineText,
-				Text: string(r),
-			}},
+		clone[i].Text = seg.Text[size:]
+		if clone[i].Text == "" && len(clone[i].Children) == 0 {
+			clone = append(clone[:i], clone[i+1:]...)
 		}
-		rest := seg.Text[size:]
-		clone = append(clone[:i], append([]fb2.InlineSegment{drop}, clone[i:]...)...)
-		clone[i+1].Text = rest
-		if clone[i+1].Text == "" && len(clone[i+1].Children) == 0 {
-			clone = append(clone[:i+1], clone[i+2:]...)
-		}
-		return clone
+		return string(r), clone
 	}
-	return clone
+	return "", segments
+}
+
+// removeStyle removes the named class from a space-separated style string.
+func removeStyle(style, styles string) string {
+	if styles == "" || style == "" {
+		return styles
+	}
+	var parts []string
+	for part := range strings.FieldsSeq(styles) {
+		if part != style {
+			parts = append(parts, part)
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 func hasStyle(style, styles string) bool {
