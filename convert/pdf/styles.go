@@ -103,6 +103,7 @@ func defaultResolvedStyle() resolvedStyle {
 		Align:      layout.AlignLeft,
 		Color:      layout.ColorBlack,
 		HasColor:   true,
+		Hyphens:    "auto",
 		Orphans:    2,
 		Widows:     2,
 	}

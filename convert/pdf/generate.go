@@ -979,8 +979,7 @@ func (b *flowBuilder) renderTitleFirstParagraph(p *fb2.Paragraph, hTag, classPre
 	if p == nil {
 		return
 	}
-	hyphenate := !p.Special && b.ctx != nil && b.ctx.c != nil && b.ctx.c.Hyphen != nil
-	runs := b.paragraphRuns(p, class, textContext{ancestors: headingAncestors, parent: headingStyle, hyphenate: hyphenate})
+	runs := b.paragraphRuns(p, class, textContext{ancestors: headingAncestors, parent: headingStyle})
 
 	// Decide: can we represent the first paragraph as a folio Heading?
 	// A Heading only holds text runs; if the paragraph produced no runs
@@ -1297,11 +1296,11 @@ func (b *flowBuilder) newTableCellElement(cell *fb2.TableCell) layout.Element {
 	}
 	if len(runs) == 0 {
 		para := newParagraphElement(b.ctx, tableCellTag(cell), class, b.ancestors, b.parent, strings.TrimSpace(cell.AsPlainText()))
-		applyParagraphStyle(para, style)
+		applyParagraphStyle(b.ctx, para, style)
 		return para
 	}
 	para := layout.NewStyledParagraph(runs...)
-	applyParagraphStyle(para, style)
+	applyParagraphStyle(b.ctx, para, style)
 	return para
 }
 
@@ -1350,7 +1349,7 @@ func (b *flowBuilder) renderParagraph(p *fb2.Paragraph, tag string, class string
 			}
 		}
 	}
-	runs := b.paragraphRuns(p, class, textContext{ancestors: b.ancestors, parent: b.parent, hyphenate: !p.Special && b.ctx != nil && b.ctx.c != nil && b.ctx.c.Hyphen != nil})
+	runs := b.paragraphRuns(p, class, textContext{ancestors: b.ancestors, parent: b.parent})
 	if len(runs) == 0 {
 		plain := strings.TrimSpace(p.AsPlainText())
 		if plain == "" {
@@ -1463,7 +1462,6 @@ func (b *flowBuilder) emitDropcapOverlay(p *fb2.Paragraph, tag, class, dropChar 
 	bodyClass := restP.Style
 	bodyRuns := b.paragraphRuns(&restP, bodyClass, textContext{
 		ancestors: b.ancestors, parent: b.parent,
-		hyphenate: !p.Special && b.ctx != nil && b.ctx.c != nil && b.ctx.c.Hyphen != nil,
 	})
 	var bodyElem layout.Element
 	if len(bodyRuns) == 0 {
@@ -1852,7 +1850,7 @@ func newParagraphElement(rc *renderContext, tag, classes string, ancestors []sty
 		style = rc.styles.Resolve(tag, classes, ancestors, parent)
 	}
 	para := newParagraphWithStyle(rc, style, text)
-	applyParagraphStyle(para, style)
+	applyParagraphStyle(rc, para, style)
 	rc.tracer.Label(para, text)
 	return para
 }
@@ -1863,7 +1861,7 @@ func newStyledParagraphElement(rc *renderContext, tag, classes string, ancestors
 		style = rc.styles.Resolve(tag, classes, ancestors, parent)
 	}
 	para := layout.NewStyledParagraph(runs...)
-	applyParagraphStyle(para, style)
+	applyParagraphStyle(rc, para, style)
 	rc.tracer.Label(para, plainTextRuns(runs))
 	wrapped := wrapIfNeeded(tag, classes, style, para)
 	// Post-wrap with internalLinkRewriter when any inline run carries a
@@ -1937,7 +1935,7 @@ func newParagraphWithStyle(rc *renderContext, style resolvedStyle, text string) 
 	return layout.NewParagraph(text, std, style.FontSize)
 }
 
-func applyParagraphStyle(para *layout.Paragraph, style resolvedStyle) {
+func applyParagraphStyle(rc *renderContext, para *layout.Paragraph, style resolvedStyle) {
 	if para == nil {
 		return
 	}
@@ -1950,12 +1948,16 @@ func applyParagraphStyle(para *layout.Paragraph, style resolvedStyle) {
 		para.SetBackground(*style.Background)
 	}
 	// CSS hyphens property controls folio's built-in hyphenation engine.
-	// pre-wrap mode forces manual (soft-hyphen only) breaking.
+	// Note: folio's hyphenation is US English only (see folio issue #197).
+	// Our soft-hyphen insertion is ineffective since folio doesn't honor
+	// soft hyphens for line breaks in manual mode.
 	switch {
 	case style.WhiteSpace == "pre-wrap":
 		para.SetHyphens("manual")
 	case style.Hyphens == "none":
 		para.SetHyphens("none")
+	case style.Hyphens == "auto", style.Hyphens == "":
+		para.SetHyphens("auto")
 	case style.Hyphens == "manual":
 		para.SetHyphens("manual")
 	}
@@ -2048,12 +2050,14 @@ func (b *flowBuilder) paragraphRuns(p *fb2.Paragraph, class string, tc textConte
 		style = b.ctx.styles.Resolve(tag, class, tc.ancestors, tc.parent)
 	}
 	// CSS hyphens property overrides the content-level hyphenation setting.
+	// Note: folio doesn't honor soft hyphens, so skip our insertion for PDF.
 	hyphenate := tc.hyphenate
 	switch style.Hyphens {
 	case "none":
 		hyphenate = false
 	case "auto":
-		hyphenate = b.ctx != nil && b.ctx.c != nil && b.ctx.c.Hyphen != nil
+		// Don't use our soft-hyphen insertion - folio ignores soft hyphens
+		hyphenate = false
 	}
 	segments := p.Text
 	var runs []layout.TextRun

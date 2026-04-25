@@ -1,0 +1,19 @@
+fail_fast: true
+default_install_hook_types: [pre-commit, pre-push]
+repos:
+  - repo: local
+    hooks:
+      - id: check-gofmt
+        name: Checking go source formatting
+        language: system
+        entry: bash -c "exit $(gofmt -l . | grep -v '^vendor/' | wc -l)"
+        require_serial: true
+        always_run: true
+        stages: [pre-commit, pre-push]
+      - id: check-vuln
+        name: Scanning for vulnurabilities
+        language: system
+        entry: bash -c "trivy --exit-code 1 fs --ignore-unfixed ."
+        require_serial: true
+        always_run: true
+        stages: [pre-push]
