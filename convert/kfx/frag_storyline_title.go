@@ -467,7 +467,17 @@ func addTitleAsParagraphs(c *content.Content, title *fb2.Title, ctx StyleContext
 
 			// Pass paraStyle via extraClasses to apply styling directly to the paragraph.
 			// Context (ctx) provides inheritance chain for descendant selector matching.
-			addParagraphWithImages(c, item.Paragraph, ctx, paraStyle, headingLevel, sb, styles, imageResources, ca, idToEID)
+			//
+			// KP3 does not propagate root horizontal content insets into title paragraphs
+			// that are generated around title art/inline images. Keeping those margins on
+			// the mixed-content text entry makes image titles bleed/scale differently than
+			// KP3. Strip only the synthetic html/body horizontal margins here; the context
+			// still keeps root inherited properties and descendant-selector scopes.
+			paragraphCtx := ctx
+			if hasInlineImages {
+				paragraphCtx = paragraphCtx.WithoutRootHorizontalMargins()
+			}
+			addParagraphWithImages(c, item.Paragraph, paragraphCtx, paraStyle, headingLevel, sb, styles, imageResources, ca, idToEID)
 
 			prevWasImageOnlyHeadingParagraph = isImageOnlyHeadingParagraph
 		}

@@ -21,6 +21,23 @@ type marginOrigin struct {
 	contributors map[string]bool // Style names that contributed to this margin
 }
 
+func copyMarginOrigins(origins map[KFXSymbol]*marginOrigin) map[KFXSymbol]*marginOrigin {
+	if len(origins) == 0 {
+		return make(map[KFXSymbol]*marginOrigin)
+	}
+
+	copied := make(map[KFXSymbol]*marginOrigin, len(origins))
+	for sym, origin := range origins {
+		newContributors := make(map[string]bool, len(origin.contributors))
+		maps.Copy(newContributors, origin.contributors)
+		copied[sym] = &marginOrigin{
+			value:        origin.value,
+			contributors: newContributors,
+		}
+	}
+	return copied
+}
+
 // emptyLineState holds mutable state for empty line margin handling.
 // This is shared across all context copies to allow margin propagation
 // across container boundaries (e.g., empty line before a poem affects
@@ -106,9 +123,9 @@ type StyleContext struct {
 	emptyLine *emptyLineState
 }
 
-// NewStyleContext creates an empty context (root level) with the given style registry.
+// newBareStyleContext creates an empty root context with the given style registry.
 // Empty-line tracking is enabled by default for all contexts.
-func NewStyleContext(registry *StyleRegistry) StyleContext {
+func newBareStyleContext(registry *StyleRegistry) StyleContext {
 	return StyleContext{
 		registry:        registry,
 		inherited:       make(map[KFXSymbol]any),
@@ -117,6 +134,23 @@ func NewStyleContext(registry *StyleRegistry) StyleContext {
 		scopes:          nil,
 		emptyLine:       &emptyLineState{}, // Shared empty line state
 	}
+}
+
+// NewStyleContext creates a root-aware context with the given style registry.
+//
+// KFX content is generated from FB2 rather than XHTML, so there are no physical
+// <html>/<body> elements to carry CSS root styles. KP3 still treats html/body as
+// root conversion context; push those scopes here so inherited root properties and
+// root descendant selectors participate in style resolution for generated content.
+//
+// Use PushBlock for both root scopes so horizontal root margins participate in
+// the same cumulative margin logic as other block container insets. Callers that
+// build generated/nested structures that should not receive root content insets
+// can explicitly strip them with WithoutRootHorizontalMargins().
+func NewStyleContext(registry *StyleRegistry) StyleContext {
+	return newBareStyleContext(registry).
+		PushBlock("html", "").
+		PushBlock("body", "")
 }
 
 // ScopePath returns a CSS-like path string showing the element hierarchy.
@@ -148,6 +182,11 @@ func (sc StyleContext) Push(tag, classes string) StyleContext {
 	// Copy existing inherited properties
 	newInherited := make(map[KFXSymbol]any, len(sc.inherited))
 	maps.Copy(newInherited, sc.inherited)
+
+	// Preserve margin origin tracking even though Push() itself does not add
+	// margin contributors. A non-block wrapper should not erase root/container
+	// contributor metadata needed by later margin-aware resolution.
+	newMarginOrigins := copyMarginOrigins(sc.marginOrigins)
 
 	// Track accumulated font-size: each CSS font-size (percentage/em) is relative
 	// to the parent. When a class overrides the tag's font-size, the accumulated
@@ -207,6 +246,7 @@ func (sc StyleContext) Push(tag, classes string) StyleContext {
 	return StyleContext{
 		registry:        sc.registry,
 		inherited:       newInherited,
+		marginOrigins:   newMarginOrigins,
 		fontSizeAccumEm: newAccumEm,
 		scopes:          newScopes,
 		emptyLine:       sc.emptyLine, // Preserve empty-line tracking

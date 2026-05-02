@@ -31,15 +31,7 @@ func (sc StyleContext) PushBlock(tag, classes string) StyleContext {
 	newAccumEm := sc.fontSizeAccumEm
 
 	// Copy existing margin origins (deep copy to preserve contributor sets)
-	newMarginOrigins := make(map[KFXSymbol]*marginOrigin, len(sc.marginOrigins))
-	for sym, origin := range sc.marginOrigins {
-		newContributors := make(map[string]bool, len(origin.contributors))
-		maps.Copy(newContributors, origin.contributors)
-		newMarginOrigins[sym] = &marginOrigin{
-			value:        origin.value,
-			contributors: newContributors,
-		}
-	}
+	newMarginOrigins := copyMarginOrigins(sc.marginOrigins)
 
 	// mergeBlockProperty applies block-inherited properties with cumulative merge for margins.
 	// This matches KP3's behavior where nested block margins accumulate.
@@ -140,6 +132,110 @@ func (sc StyleContext) PushBlock(tag, classes string) StyleContext {
 		scopes:          newScopes,
 		emptyLine:       sc.emptyLine, // Preserve empty-line tracking
 	}
+}
+
+// WithoutRootHorizontalMargins returns a copy of this context with horizontal
+// margins contributed by synthetic html/body root scopes removed.
+//
+// This keeps root inherited properties and root descendant-selector scopes intact,
+// but prevents page/root content insets from being baked into generated/nested
+// structures where KP3 does not propagate them (for example title paragraphs that
+// are wrappers around inline/image-only title art).
+func (sc StyleContext) WithoutRootHorizontalMargins() StyleContext {
+	out := StyleContext{
+		registry:        sc.registry,
+		inherited:       make(map[KFXSymbol]any, len(sc.inherited)),
+		marginOrigins:   copyMarginOrigins(sc.marginOrigins),
+		fontSizeAccumEm: sc.fontSizeAccumEm,
+		scopes:          append([]StyleScope(nil), sc.scopes...),
+		emptyLine:       sc.emptyLine,
+	}
+	maps.Copy(out.inherited, sc.inherited)
+
+	for _, sym := range []KFXSymbol{SymMarginLeft, SymMarginRight} {
+		origin := out.marginOrigins[sym]
+		if origin == nil || (!origin.contributors["html"] && !origin.contributors["body"]) {
+			continue
+		}
+
+		rootOnly := true
+		for contributor := range origin.contributors {
+			if contributor != "html" && contributor != "body" {
+				rootOnly = false
+				break
+			}
+		}
+		if rootOnly {
+			delete(out.inherited, sym)
+			delete(out.marginOrigins, sym)
+			continue
+		}
+
+		rootValue, ok := sc.rootHorizontalMargin(sym)
+		if !ok {
+			continue
+		}
+		adjusted, ok := subtractCumulative(out.inherited[sym], rootValue)
+		if !ok {
+			continue
+		}
+		if isZeroMargin(adjusted) {
+			delete(out.inherited, sym)
+		} else {
+			out.inherited[sym] = adjusted
+		}
+		origin.value = adjusted
+		delete(origin.contributors, "html")
+		delete(origin.contributors, "body")
+	}
+
+	return out
+}
+
+func (sc StyleContext) rootHorizontalMargin(sym KFXSymbol) (any, bool) {
+	if sc.registry == nil {
+		return nil, false
+	}
+
+	var (
+		rootValue any
+		hasRoot   bool
+	)
+	for _, styleName := range []string{"html", "body"} {
+		def, ok := sc.registry.Get(styleName)
+		if !ok {
+			continue
+		}
+		resolved := sc.registry.resolveInheritance(def)
+		val, ok := resolved.Properties[sym]
+		if !ok {
+			continue
+		}
+		if !hasRoot {
+			rootValue = val
+			hasRoot = true
+			continue
+		}
+		if merged, ok := mergeCumulative(rootValue, val); ok {
+			rootValue = merged
+		} else {
+			rootValue = val
+		}
+	}
+	return rootValue, hasRoot
+}
+
+func subtractCumulative(existing, subtract any) (any, bool) {
+	if adjusted, ok := mergeMeasure(existing, subtract, func(ev, sv float64) float64 { return ev - sv }); ok {
+		return adjusted, true
+	}
+
+	ev, eok := numericFromAny(existing)
+	sv, sok := numericFromAny(subtract)
+	if eok && sok {
+		return ev - sv, true
+	}
+	return nil, false
 }
 
 // ExtractContainerMargins resolves the CSS for a container and returns its vertical margins.

@@ -18,6 +18,12 @@ func (sb *StorylineBuilder) AddTable(c *content.Content, table *fb2.Table, style
 	tableEID := sb.eidCounter
 	sb.eidCounter++
 
+	// Table internals do not inherit the synthetic html/body root context.
+	// Root horizontal margins represent page/story content inset; applying them
+	// again to every cell container/text entry shifts cell content outside its
+	// own bounds, especially for negative html/body margins.
+	tableCellCtx := newBareStyleContext(styles)
+
 	// Build rows
 	var rowEntries []any
 	for _, row := range table.Rows {
@@ -36,9 +42,9 @@ func (sb *StorylineBuilder) AddTable(c *content.Content, table *fb2.Table, style
 			hasImages := len(cellImages) > 0
 
 			// Determine container style (border/padding/vertical-align)
-			containerStyle := NewStyleContext(styles).Resolve("", "td-container")
+			containerStyle := tableCellCtx.Resolve("", "td-container")
 			if cell.Header {
-				containerStyle = NewStyleContext(styles).Resolve("", "th-container")
+				containerStyle = tableCellCtx.Resolve("", "th-container")
 			}
 			styles.ResolveStyle(containerStyle, styleUsageWrapper)
 
@@ -68,13 +74,13 @@ func (sb *StorylineBuilder) AddTable(c *content.Content, table *fb2.Table, style
 					textStyle = prefix + "-text-justify"
 				}
 			}
-			resolvedTextStyle := NewStyleContext(styles).Resolve("", textStyle)
+			resolvedTextStyle := tableCellCtx.Resolve("", textStyle)
 
 			var contentList []any
 
 			if hasImages && !hasText {
 				// Image-only cell: create image entries directly
-				contentList = sb.buildImageOnlyCellContent(cell, cellImages, imageResources, styles)
+				contentList = sb.buildImageOnlyCellContent(cell, cellImages, imageResources, styles, tableCellCtx)
 			} else if hasImages && hasText {
 				// Mixed content cell: use content_list format with interleaved text and images
 				contentList = sb.buildMixedCellContent(c, cell, imageResources, styles, ancestorTag, resolvedTextStyle, idToEID)
@@ -162,7 +168,7 @@ func (sb *StorylineBuilder) AddTable(c *content.Content, table *fb2.Table, style
 }
 
 // buildImageOnlyCellContent creates content entries for a cell containing only images.
-func (sb *StorylineBuilder) buildImageOnlyCellContent(cell fb2.TableCell, cellImages []string, imageResources imageResourceInfoByID, styles *StyleRegistry) []any {
+func (sb *StorylineBuilder) buildImageOnlyCellContent(cell fb2.TableCell, cellImages []string, imageResources imageResourceInfoByID, styles *StyleRegistry, tableCellCtx StyleContext) []any {
 	var contentList []any
 
 	for _, imgID := range cellImages {
@@ -193,7 +199,7 @@ func (sb *StorylineBuilder) buildImageOnlyCellContent(cell fb2.TableCell, cellIm
 				imgStyleBase = prefix + "-left"
 			}
 		}
-		imgStyle := NewStyleContext(styles).ResolveImage(imgStyleBase)
+		imgStyle := tableCellCtx.ResolveImage(imgStyleBase)
 		styles.ResolveStyle(imgStyle, styleUsageImage)
 
 		// Get alt text from the original segment
@@ -224,8 +230,9 @@ func (sb *StorylineBuilder) buildImageOnlyCellContent(cell fb2.TableCell, cellIm
 // buildTextOnlyCellContent creates a text entry for a cell containing only text.
 func (sb *StorylineBuilder) buildTextOnlyCellContent(c *content.Content, cell fb2.TableCell, ca *ContentAccumulator, styles *StyleRegistry, ancestorTag, resolvedTextStyle string, idToEID eidByFB2ID) []any {
 	// Create inline style context for table cell content.
-	// This ensures inline styles inherit properties from the cell context.
-	inlineCtx := NewStyleContext(styles).Push(ancestorTag, "")
+	// This ensures inline styles inherit properties from the cell context without
+	// reapplying synthetic html/body root margins inside every table cell.
+	inlineCtx := newBareStyleContext(styles).Push(ancestorTag, "")
 
 	// Process cell content using shared inline segment processing
 	nw := newNormalizingWriter()
@@ -291,8 +298,9 @@ func (sb *StorylineBuilder) buildTextOnlyCellContent(c *content.Content, cell fb
 // This uses the same structure as AddMixedContent: interleaved text strings and inline images.
 func (sb *StorylineBuilder) buildMixedCellContent(c *content.Content, cell fb2.TableCell, imageResources imageResourceInfoByID, styles *StyleRegistry, ancestorTag, resolvedTextStyle string, idToEID eidByFB2ID) []any {
 	// Create inline style context for table cell content.
-	// This ensures inline styles inherit properties from the cell context.
-	inlineCtx := NewStyleContext(styles).Push(ancestorTag, "")
+	// This ensures inline styles inherit properties from the cell context without
+	// reapplying synthetic html/body root margins inside every table cell.
+	inlineCtx := newBareStyleContext(styles).Push(ancestorTag, "")
 
 	// Process cell content using shared mixed content processing
 	result := processMixedInlineSegments(cell.Content, styles, c, inlineCtx, imageResources)

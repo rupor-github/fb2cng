@@ -604,7 +604,9 @@ func addBacklinkParagraph(c *content.Content, refs []content.BackLinkRef, sb *St
 
 	// Resolve styles:
 	// - Paragraph style: basic paragraph without footnote class (backlink is outside footnote)
-	// - Link style: link-backlink with link color properties (for style_events)
+	// - Link style: link-backlink as an inline delta style_event. Do not use full
+	//   block resolution here: root/container/class margins are invalid for style
+	//   events and can make multiple backlinks render shifted or clipped.
 	paraStyle := "p"
 	linkStyle := "link-backlink"
 	if styles != nil {
@@ -612,8 +614,7 @@ func addBacklinkParagraph(c *content.Content, refs []content.BackLinkRef, sb *St
 	}
 	resolvedLink := linkStyle
 	if styles != nil {
-		// Link style uses StyleContext for style_events (standalone, no container context)
-		resolvedLink = NewStyleContext(styles).Resolve("", linkStyle)
+		resolvedLink = NewStyleContext(styles).ResolveInlineDelta(linkStyle)
 	}
 	// Don't pre-resolve paraStyle - will be done in Build() with position filtering
 
@@ -651,8 +652,8 @@ func addBacklinkParagraph(c *content.Content, refs []content.BackLinkRef, sb *St
 	contentName, contentOffset := ca.Add(textBuilder.String())
 
 	// Mark link style usage (paragraph style will be marked in Build() after position filtering)
-	if styles != nil {
-		styles.ResolveStyle(resolvedLink, styleUsageText)
+	if styles != nil && resolvedLink != "" {
+		styles.ResolveStyle(resolvedLink, styleUsageInline)
 	}
 
 	// Add the content entry: paragraph uses container style, events use link style

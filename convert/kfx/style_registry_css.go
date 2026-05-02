@@ -57,6 +57,10 @@ func NewStyleRegistryFromCSS(sheet *css.Stylesheet, tracer *StyleTracer, log *za
 	// inherit from the base footnote-title style rather than override it.
 	sr.applyKFXStyleAdjustments()
 
+	// Root vertical margins are intentionally not modeled for KFX story content.
+	// Log them once here instead of from NewStyleContext(), which is called many times.
+	sr.logIgnoredRootVerticalMargins(log)
+
 	// Apply KFX-specific post-processing (layout-hints, yj-break, etc.)
 	sr.PostProcessForKFX()
 
@@ -71,6 +75,43 @@ func parseAndCreateRegistry(cssData []byte, tracer *StyleTracer, log *zap.Logger
 	parser := css.NewParser(log)
 	sheet := parser.Parse(cssData)
 	return NewStyleRegistryFromCSS(sheet, tracer, log)
+}
+
+func (sr *StyleRegistry) logIgnoredRootVerticalMargins(log *zap.Logger) {
+	if log == nil {
+		return
+	}
+	for _, selector := range []string{"html", "body"} {
+		def, ok := sr.Get(selector)
+		if !ok {
+			continue
+		}
+		for _, margin := range []struct {
+			property string
+			symbol   KFXSymbol
+		}{
+			{property: "margin-top", symbol: SymMarginTop},
+			{property: "margin-bottom", symbol: SymMarginBottom},
+		} {
+			value, ok := def.Properties[margin.symbol]
+			if !ok || isZeroMargin(value) {
+				continue
+			}
+			fields := []zap.Field{
+				zap.String("selector", selector),
+				zap.String("property", margin.property),
+				zap.String("reason", "vertical margins on root elements are not modeled for split KFX storylines"),
+			}
+			if measure, unit, ok := measureParts(value); ok {
+				fields = append(fields,
+					zap.Float64("value", measure),
+					zap.String("unit", traceSymbolName(unit)))
+			} else {
+				fields = append(fields, zap.Any("value", value))
+			}
+			log.Warn("Ignoring KFX root vertical margin", fields...)
+		}
+	}
 }
 
 // applyKFXStyleAdjustments modifies CSS styles for KFX-specific requirements.
