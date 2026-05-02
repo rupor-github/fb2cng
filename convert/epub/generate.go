@@ -371,11 +371,11 @@ func generateCoverPageDoc(c *content.Content, cfg *config.DocumentConfig, log *z
 
 	switch cfg.Images.Cover.Resize {
 	case common.ImageResizeModeStretch:
-		style.SetText("html, body { margin: 0; padding: 0; width:100%; heignt: 100%; } svg { display: block; width: 100%; height: 100%; }")
+		style.SetText("html, body { margin: 0; padding: 0; width: 100%; height: 100%; } svg { display: block; width: 100%; height: 100%; }")
 	case common.ImageResizeModeKeepAR:
 		fallthrough
 	default:
-		style.SetText("html, body { margin: 0; padding: 0; width:100%; heignt: 100%; } svg { display: block; width: auto; height: 100%; margin: 0 auto }")
+		style.SetText("html, body { margin: 0; padding: 0; width: 100%; height: 100%; } svg { display: block; width: auto; height: 100%; margin: 0 auto }")
 	}
 
 	title := head.CreateElement("title")
