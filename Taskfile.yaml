@@ -201,13 +201,19 @@ tasks:
       DIR: 'content/text/dictionaries'
     dir: '{{.DIR}}'
     cmds:
-      - rm -f *.txt
-      - echo "{{.TATN}}Downloading dictionary patterns from \"ctan.math.utah.edu\"{{.TOFF}}"
-      - wget -q -r -l1 --no-parent -nd -A.pat.txt http://ctan.math.utah.edu/ctan/tex-archive/language/hyph-utf8/tex/patterns/txt
-      - wget -q -r -l1 --no-parent -nd -A.hyp.txt http://ctan.math.utah.edu/ctan/tex-archive/language/hyph-utf8/tex/patterns/txt
+      - rm -f hyph-*.txt hyph-*.txt.gz
+      - echo "{{.TATN}}Downloading dictionary patterns from CTAN mirror archive{{.TOFF}}"
+      - |
+        tmp="$(mktemp -d)"
+        trap 'rm -rf "$tmp"' EXIT
+        wget -q -O "$tmp/hyphenation-utf8.zip" https://mirrors.ctan.org/language/hyphenation-utf8.zip
+        unzip -q -j "$tmp/hyphenation-utf8.zip" \
+          'hyph-utf8/tex/patterns/txt/hyph-*.pat.txt' \
+          'hyph-utf8/tex/patterns/txt/hyph-*.hyp.txt' \
+          -d .
       - gzip -q -f hyph-*.txt
     status:
-      - find -type f -name 'hyph-*.txt.gz' | read
+      - test "$(find . -maxdepth 1 -type f -name 'hyph-*.txt.gz' | wc -l)" -ge 90
 
   get-sentences:
     internal: true
@@ -223,11 +229,11 @@ tasks:
       - gzip -q -f *.json
     status:
       - |
-        find -type f -name '*.json.gz' \
+        test "$(find . -maxdepth 1 -type f -name '*.json.gz' \
           -not -name 'russian.json.gz' \
           -not -name 'icelandic.json.gz' \
           -not -name 'korean.json.gz' \
-          -not -name 'hungarian.json.gz' | read
+          -not -name 'hungarian.json.gz' | wc -l)" -ge 17
 
   generate-enums:
     internal: true

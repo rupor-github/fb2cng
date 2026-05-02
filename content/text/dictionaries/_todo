@@ -1,8 +1,15 @@
-﻿To get TeX dictionaries execute in this directory:
+To get TeX hyphenation dictionaries manually, run in this directory:
 
-	wget -r -l1 --no-parent -nd -A.pat.txt http://ctan.math.utah.edu/ctan/tex-archive/language/hyph-utf8/tex/generic/hyph-utf8/patterns/txt
-	wget -r -l1 --no-parent -nd -A.hyp.txt http://ctan.math.utah.edu/ctan/tex-archive/language/hyph-utf8/tex/generic/hyph-utf8/patterns/txt
+	tmp="$(mktemp -d)"
+	trap 'rm -rf "$tmp"' EXIT
+	wget -O "$tmp/hyphenation-utf8.zip" https://mirrors.ctan.org/language/hyphenation-utf8.zip
+	unzip -j "$tmp/hyphenation-utf8.zip" \
+	  'hyph-utf8/tex/patterns/txt/hyph-*.pat.txt' \
+	  'hyph-utf8/tex/patterns/txt/hyph-*.hyp.txt' \
+	  -d .
 
-If you want to reduce resulting program size compress dictionaries
+If you want to reduce resulting program size, compress dictionaries:
 
-       for a in $(ls *.txt); do gzip $a; done
+	gzip -f hyph-*.txt
+
+The Taskfile get-dictionaries target performs these steps automatically.
