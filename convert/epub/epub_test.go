@@ -2293,6 +2293,49 @@ func TestWriteCoverPage(t *testing.T) {
 	}
 }
 
+func TestGenerateCoverPageDoc_Epub3CoverSemantics(t *testing.T) {
+	_, _, log := setupTestContext(t)
+
+	c := &content.Content{
+		Book: &fb2.FictionBook{
+			Description: fb2.Description{
+				TitleInfo: fb2.TitleInfo{
+					BookTitle: fb2.TextField{Value: "Test Book"},
+				},
+			},
+		},
+		OutputFormat: common.OutputFmtEpub3,
+		ImagesIndex: fb2.BookImages{
+			"cover": &fb2.BookImage{
+				Filename: "cover.jpg",
+				MimeType: "image/jpeg",
+			},
+		},
+		CoverID: "cover",
+	}
+
+	doc, err := generateCoverPageDoc(c, &config.DocumentConfig{}, log)
+	if err != nil {
+		t.Fatalf("generateCoverPageDoc() error = %v", err)
+	}
+
+	html := doc.SelectElement("html")
+	if html == nil {
+		t.Fatal("missing html element")
+	}
+	if got := html.SelectAttrValue("xmlns:epub", ""); got != "http://www.idpf.org/2007/ops" {
+		t.Errorf("xmlns:epub = %q, want EPUB namespace", got)
+	}
+
+	body := html.SelectElement("body")
+	if body == nil {
+		t.Fatal("missing body element")
+	}
+	if got := body.SelectAttrValue("epub:type", ""); got != "cover" {
+		t.Errorf("body epub:type = %q, want cover", got)
+	}
+}
+
 func TestGenerateTOCPage(t *testing.T) {
 	log := setupTestLogger(t)
 

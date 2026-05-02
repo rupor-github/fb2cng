@@ -363,6 +363,9 @@ func generateCoverPageDoc(c *content.Content, cfg *config.DocumentConfig, log *z
 
 	html := doc.CreateElement("html")
 	html.CreateAttr("xmlns", "http://www.w3.org/1999/xhtml")
+	if c.OutputFormat == common.OutputFmtEpub3 {
+		html.CreateAttr("xmlns:epub", "http://www.idpf.org/2007/ops")
+	}
 
 	head := html.CreateElement("head")
 
@@ -382,6 +385,9 @@ func generateCoverPageDoc(c *content.Content, cfg *config.DocumentConfig, log *z
 	title.SetText(c.Book.Description.TitleInfo.BookTitle.Value)
 
 	body := html.CreateElement("body")
+	if c.OutputFormat == common.OutputFmtEpub3 {
+		body.CreateAttr("epub:type", "cover")
+	}
 
 	svg := body.CreateElement("svg")
 	svg.CreateAttr("version", "1.1")
