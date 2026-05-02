@@ -89,13 +89,13 @@ tasks:
 
   escape:
     desc: |
-      Runs escape analisys on specified package.
+      Runs escape analysis on specified package.
       You could specify anything in the project, for example "task escape -- ./module1".
       If no package is specified assumes "./cmd/{{.PRJ_NAME}}".
     platforms: [linux]
     deps: [generate-project-version, get-dictionaries, get-sentences, generate-enums]
     cmds:
-      - echo "{{.TATN}}Building binary with escape analisys enabled{{.TOFF}}"
+      - echo "{{.TATN}}Building binary with escape analysis enabled{{.TOFF}}"
       - go build -mod=mod -gcflags 'all=-m' -o /dev/null {{default (joinPath "./cmd/" .PRJ_NAME) .CLI_ARGS}}
     method: none
 
@@ -405,7 +405,7 @@ tasks:
           GOOS={{with $arch := split "-" .ITEM}}{{$arch._0}}{{end}} GOARCH={{with $arch := split "-" .ITEM}}{{$arch._1}}{{end}} go mod vendor {{.CLI_ARGS}}
 
   clean:
-    desc: Cleans all build release aritfacts
+    desc: Cleans all build release artifacts
     platforms: [linux]
     cmds:
       - rm -rfv {{.REL_BUILD_DIR}}
