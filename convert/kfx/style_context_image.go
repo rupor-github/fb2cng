@@ -38,7 +38,7 @@ func (sc StyleContext) ResolveImage(classes string) string {
 // This unifies all dimension-based image styling, applying position filtering consistently.
 //
 // Parameters:
-//   - kind: ImageBlock or ImageInline
+//   - kind: ImageBlock, ImageInline, or ImageInlineFixed
 //   - imageWidth, imageHeight: pixel dimensions (height only used for ImageInline)
 //   - blockStyle: for block images, optional style spec to inherit from (e.g., "image", "subtitle")
 //     If blockStyle contains "image", this is a standalone block image.
@@ -56,7 +56,8 @@ func (sc StyleContext) ResolveImage(classes string) string {
 //   - Centered only if block has text-align: center
 //
 // Inline image behavior:
-//   - Uses em dimensions (width/height converted from pixels using 16px base)
+//   - ImageInline uses em dimensions (scales with the current text font-size)
+//   - ImageInlineFixed uses rem dimensions (does not scale with heading/title font-size)
 //   - baseline-style: center for vertical alignment within text
 //   - Applies properties from "image-inline" CSS style
 //   - No margin collapsing (inline images don't participate in margin collapsing)
@@ -70,21 +71,28 @@ func (sc StyleContext) ResolveImageWithDimensions(kind ImageKind, imageWidth, im
 
 	props := make(map[KFXSymbol]any)
 
-	if kind == ImageInline {
-		return sc.resolveInlineImage(props, imageWidth, imageHeight), false
+	if kind == ImageInline || kind == ImageInlineFixed {
+		return sc.resolveInlineImage(props, imageWidth, imageHeight, kind == ImageInlineFixed), false
 	}
 
 	return sc.resolveBlockImage(props, imageWidth, blockStyle)
 }
 
-// resolveInlineImage handles ImageInline styling.
-// Inline images use em dimensions and baseline-style for text alignment.
-func (sc StyleContext) resolveInlineImage(props map[KFXSymbol]any, imageWidth, imageHeight int) string {
-	const baseFontSizePx = 16.0 // Standard em base size
+// resolveInlineImage handles inline image styling.
+// Inline images use baseline-style for text alignment. Most inline images use em
+// dimensions so word-art inside normal text scales with the surrounding font.
+// Title art uses fixed rem dimensions so h1/h2 font-size does not magnify the
+// source image beyond the normal text column.
+func (sc StyleContext) resolveInlineImage(props map[KFXSymbol]any, imageWidth, imageHeight int, fixed bool) string {
+	const baseFontSizePx = 16.0 // Standard CSS pixel base size
 
-	// Convert pixel dimensions to em (using 16px base)
-	widthEm := float64(imageWidth) / baseFontSizePx
-	heightEm := float64(imageHeight) / baseFontSizePx
+	// Convert pixel dimensions using a 16px base.
+	width := float64(imageWidth) / baseFontSizePx
+	height := float64(imageHeight) / baseFontSizePx
+	unit := SymUnitEm
+	if fixed {
+		unit = SymUnitRem
+	}
 
 	// Apply properties from "image-inline" CSS style
 	sc.registry.EnsureBaseStyle("image-inline")
@@ -104,9 +112,9 @@ func (sc StyleContext) resolveInlineImage(props map[KFXSymbol]any, imageWidth, i
 	}
 
 	// Add KFX-specific inline image properties
-	props[SymBaselineStyle] = SymbolValue(SymCenter)       // baseline-style: center
-	props[SymWidth] = DimensionValue(widthEm, SymUnitEm)   // width in em
-	props[SymHeight] = DimensionValue(heightEm, SymUnitEm) // height in em
+	props[SymBaselineStyle] = SymbolValue(SymCenter) // baseline-style: center
+	props[SymWidth] = DimensionValue(width, unit)
+	props[SymHeight] = DimensionValue(height, unit)
 
 	return sc.registry.RegisterResolved(props, 0, true)
 }

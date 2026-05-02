@@ -90,6 +90,46 @@ func TestNewStyleContext_RootVerticalMarginsIgnored(t *testing.T) {
 	}
 }
 
+func TestStartBlock_DoesNotApplyRootMarginsToTitleChildren(t *testing.T) {
+	registry, _ := parseAndCreateRegistry([]byte(`
+		html { margin-left: -0.5em; margin-right: -0.5em; }
+		body { margin-left: -0.25em; margin-right: -0.25em; }
+	`), nil, zap.NewNop())
+
+	title := &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{
+		Kind: fb2.InlineText,
+		Text: "Wide title text",
+	}}}}}}
+	sb := NewStorylineBuilder("l1", "c1", 1, registry)
+	sb.StartBlock("chapter-title", registry, nil)
+	titleCtx := NewStyleContext(registry).Push("div", "chapter-title")
+	addTitleAsHeading(&content.Content{}, title, titleCtx, "chapter-title-header", 1, sb, registry, nil, NewContentAccumulator(1), nil)
+	sb.EndBlock()
+	sb.Build()
+
+	rootProps := resolvedStyleProps(t, registry, "", "")
+	requireMeasure(t, rootProps, SymMarginLeft, -0.75, SymUnitEm)
+	requireMeasure(t, rootProps, SymMarginRight, -0.75, SymUnitEm)
+
+	if len(sb.contentEntries) != 1 {
+		t.Fatalf("expected one title wrapper, got %d", len(sb.contentEntries))
+	}
+	wrapper := sb.contentEntries[0]
+	if len(wrapper.childRefs) != 1 {
+		t.Fatalf("expected one title child, got %d", len(wrapper.childRefs))
+	}
+	childStyle, ok := registry.Get(wrapper.childRefs[0].Style)
+	if !ok {
+		t.Fatalf("child style %q not registered", wrapper.childRefs[0].Style)
+	}
+	if _, ok := childStyle.Properties[SymMarginLeft]; ok {
+		t.Fatalf("root margin-left leaked into title child: %v", childStyle.Properties[SymMarginLeft])
+	}
+	if _, ok := childStyle.Properties[SymMarginRight]; ok {
+		t.Fatalf("root margin-right leaked into title child: %v", childStyle.Properties[SymMarginRight])
+	}
+}
+
 func TestAddTitleWithInlineImage_DoesNotApplyRootMarginsToTitleParagraph(t *testing.T) {
 	registry, _ := parseAndCreateRegistry([]byte(`
 		html { margin-left: -0.5em; margin-right: -0.5em; }
@@ -151,6 +191,8 @@ func TestAddTitleWithInlineImage_DoesNotApplyRootMarginsToTitleParagraph(t *test
 	if _, ok := imageStyle.Properties[SymMarginRight]; ok {
 		t.Fatalf("root margin-right leaked into inline title image: %v", imageStyle.Properties[SymMarginRight])
 	}
+	requireMeasure(t, imageStyle.Properties, SymWidth, 40, SymUnitRem)
+	requireMeasure(t, imageStyle.Properties, SymHeight, 5, SymUnitRem)
 }
 
 func TestAddBacklinkParagraph_InlineEventStyleDropsHorizontalMargins(t *testing.T) {

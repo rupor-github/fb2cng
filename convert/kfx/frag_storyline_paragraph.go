@@ -516,8 +516,14 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 				return
 			}
 
-			// Create inline image style with em-based dimensions
-			imgStyle, _ := inlineCtx.ResolveImageWithDimensions(ImageInline, imgInfo.Width, imgInfo.Height, "")
+			// Create inline image style. In heading/title contexts, keep image art
+			// independent from the heading font-size; otherwise title images are
+			// magnified relative to ordinary paragraph images.
+			imageKind := ImageInline
+			if headingLevel > 0 {
+				imageKind = ImageInlineFixed
+			}
+			imgStyle, _ := inlineCtx.ResolveImageWithDimensions(imageKind, imgInfo.Width, imgInfo.Height, "")
 			items = append(items, InlineContentItem{
 				IsImage:      true,
 				ResourceName: imgInfo.ResourceName,

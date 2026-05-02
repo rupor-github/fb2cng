@@ -52,8 +52,9 @@ type emptyLineState struct {
 type ImageKind int
 
 const (
-	ImageBlock  ImageKind = iota // Standalone block image (centered, width%)
-	ImageInline                  // Inline within text (em dimensions, baseline-style)
+	ImageBlock       ImageKind = iota // Standalone block image (centered, width%)
+	ImageInline                       // Inline within text (em dimensions, baseline-style)
+	ImageInlineFixed                  // Inline art that should not scale with current font-size
 )
 
 // StyleContext accumulates inherited CSS properties as we descend the element hierarchy.

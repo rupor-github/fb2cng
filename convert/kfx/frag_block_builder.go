@@ -90,8 +90,11 @@ func (sb *StorylineBuilder) StartBlock(styleSpec string, styles *StyleRegistry, 
 
 	// Create StyleContext for child resolution - children will be counted in EndBlock.
 	// Note: Use Push (not PushBlock) so container margins (ml/mr) stay on the wrapper
-	// unless explicitly inherited via CSS.
-	ctx := NewStyleContext(styles).Push("div", styleSpec)
+	// unless explicitly inherited via CSS. Strip synthetic root horizontal margins
+	// from the child context as well: root/content insets belong to the generated
+	// wrapper level, not to each nested child. Applying the same root inset to
+	// children makes title blocks wider than normal flow content.
+	ctx := NewStyleContext(styles).WithoutRootHorizontalMargins().Push("div", styleSpec)
 
 	sb.blockStack = append(sb.blockStack, &BlockBuilder{
 		styleSpec: styleSpec,
