@@ -1,0 +1,233 @@
+version: '3'
+
+includes:
+  website:
+    aliases: [w, docs, d]
+    taskfile: ./website
+    dir: ./website
+
+vars:
+  BIN: "{{.ROOT_DIR}}/bin"
+  GOTESTSUM_FORMAT: '{{if .CI}}github-actions{{else}}pkgname{{end}}'
+
+env:
+  CGO_ENABLED: '0'
+
+tasks:
+  default:
+    cmds:
+      - task: lint
+      - task: test
+
+  run:
+    desc: Runs Task
+    cmds:
+      - go run ./cmd/task {{.CLI_ARGS}}
+
+  install:
+    desc: Installs Task
+    aliases: [i]
+    sources:
+      - './**/*.go'
+      - go.mod
+    cmds:
+      - go install -v ./cmd/task
+
+  generate:
+    aliases: [gen, g]
+    desc: Runs all generate tasks
+    cmds:
+      - task: generate:mocks
+      - task: generate:fixtures
+
+  generate:mocks:
+    desc: Runs Mockery to create mocks
+    aliases: [gen:mocks, g:mocks]
+    deps: [install:mockery]
+    sources:
+      - "internal/fingerprint/checker.go"
+    generates:
+      - "internal/mocks/*.go"
+    cmds:
+      - find . -type f -name *_mock.go -delete
+      - "{{.BIN}}/mockery"
+
+  generate:fixtures:
+    desc: Runs tests and generates golden fixture files
+    aliases: [gen:fixtures, g:fixtures]
+    env:
+      GOLDIE_UPDATE: 'true'
+      GOLDIE_TEMPLATE: 'true'
+    cmds:
+      - find ./testdata -name '*.golden' -delete
+      - go test ./...
+
+  install:mockery:
+    desc: Installs mockgen; a tool to generate mock files
+    vars:
+      MOCKERY_VERSION: v3.2.2
+    env:
+      GOBIN: "{{.BIN}}"
+    status:
+      - go version -m {{.BIN}}/mockery | grep github.com/vektra/mockery | grep {{.MOCKERY_VERSION}}
+    cmds:
+      - GOBIN="{{.BIN}}" go install github.com/vektra/mockery/v3@{{.MOCKERY_VERSION}}
+
+  mod:
+    desc: Downloads and tidy Go modules
+    cmds:
+      - go mod download
+      - go mod tidy
+
+  clean:
+    desc: Cleans temp files and folders
+    aliases: [clear]
+    cmds:
+      - rm -rf dist/
+      - rm -rf tmp/
+
+  lint:
+    desc: Runs golangci-lint
+    aliases: [l]
+    sources:
+      - './**/*.go'
+      - .golangci.yml
+      - go.mod
+    cmds:
+      - golangci-lint run
+
+  lint:fix:
+    desc: Runs golangci-lint and fixes any issues
+    sources:
+      - './**/*.go'
+      - .golangci.yml
+      - go.mod
+    cmds:
+      - golangci-lint run --fix
+
+  format:
+    desc: Runs golangci-lint and formats any Go files
+    aliases: [fmt, f]
+    sources:
+      - './**/*.go'
+      - .golangci.yml
+    cmds:
+      - golangci-lint fmt
+
+  sleepit:build:
+    desc: Builds the sleepit test helper
+    sources:
+      - ./cmd/sleepit/**/*.go
+    generates:
+      - "{{.BIN}}/sleepit"
+    cmds:
+      - go build -o {{.BIN}}/sleepit{{exeExt}} ./cmd/sleepit
+
+  sleepit:run:
+    desc: Builds the sleepit test helper
+    deps: [sleepit:build]
+    cmds:
+      - "{{.BIN}}/sleepit {{.CLI_ARGS}}"
+    silent: true
+
+  test:
+    desc: Runs test suite
+    aliases: [t]
+    deps: [gotestsum:install]
+    sources:
+      - "**/*.go"
+      - "testdata/**/*"
+    cmds:
+      - gotestsum -f '{{.GOTESTSUM_FORMAT}}' ./...
+
+  test:watch:
+    desc: Runs test suite with watch tests included
+    deps: [sleepit:build, gotestsum:install]
+    cmds:
+      - gotestsum -f '{{.GOTESTSUM_FORMAT}}' ./... -tags 'watch'
+
+  test:all:
+    desc: Runs test suite with signals and watch tests included
+    deps: [sleepit:build, gotestsum:install]
+    cmds:
+      - gotestsum -f '{{.GOTESTSUM_FORMAT}}' -tags 'signals watch' ./...
+
+  goreleaser:test:
+    desc: Tests release process without publishing
+    cmds:
+      - goreleaser --snapshot --clean
+
+  gotestsum:install:
+    desc: Installs gotestsum
+    status:
+      - command -v gotestsum
+    cmds:
+      - go install gotest.tools/gotestsum@latest
+
+  goreleaser:install:
+    desc: Installs goreleaser
+    cmds:
+      - go install github.com/goreleaser/goreleaser/v2@latest
+
+  gorelease:install:
+    desc: "Installs gorelease: https://pkg.go.dev/golang.org/x/exp/cmd/gorelease"
+    status:
+      - command -v gorelease
+    cmds:
+      - go install golang.org/x/exp/cmd/gorelease@latest
+
+  api:check:
+    desc: Checks what changes have been made to the public API
+    deps: [gorelease:install]
+    vars:
+      LATEST:
+        sh: git describe --tags --abbrev=0
+    cmds:
+      - gorelease -base={{.LATEST}}
+
+  release:*:
+    desc: Prepare the project for a new release
+    summary: |
+      This task will do the following:
+
+      - Update the version and date in the CHANGELOG.md file
+      - Update the version in the package.json and package-lock.json files
+      - Copy the latest docs to the "current" version on the website
+      - Commit the changes
+      - Create a new tag
+      - Push the commit/tag to the repository
+      - Create a GitHub release
+
+      To use the task, run "task release:<version>" where "<version>" is is one of:
+
+      - "major" - Bumps the major number
+      - "minor" - Bumps the minor number
+      - "patch" - Bumps the patch number
+      - A semver compatible version number (e.g. "1.2.3")
+    vars:
+      VERSION:
+        sh: "go run ./cmd/release --version {{index .MATCH 0}}"
+      COMPLETE_MESSAGE: |
+        Creating release with GoReleaser: https://github.com/go-task/task/actions/workflows/release.yml
+
+        Please wait for the CI to finish and then do the following:
+
+        - Copy the changelog for v{{.VERSION}} to the GitHub release
+        - Update and push the snapcraft manifest in https://github.com/go-task/snap/blob/main/snap/snapcraft.yaml
+    preconditions:
+      - sh: test $(git rev-parse --abbrev-ref HEAD) = "main"
+        msg: "You must be on the main branch to release"
+      - sh: "[[ -z $(git diff --shortstat main) ]]"
+        msg: "You must have a clean working tree to release"
+    prompt: "Are you sure you want to release version {{.VERSION}}?"
+    cmds:
+      - cmd: echo "Releasing v{{.VERSION}}"
+        silent: true
+      - "go run ./cmd/release {{.VERSION}}"
+      - "git add --all"
+      - "git commit -m v{{.VERSION}}"
+      - "git push"
+      - "git tag -a v{{.VERSION}} -m v{{.VERSION}}"
+      - "git push origin tag v{{.VERSION}}"
+      - cmd: printf "%s" '{{.COMPLETE_MESSAGE}}'
+        silent: true

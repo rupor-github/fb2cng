@@ -20,25 +20,13 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v4
 
-      - name: Install Task
-        uses: go-task/setup-task@v1
-        with:
-          version: 3.x
-
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: 'go.mod'
 
       - name: Build everything
-        run: task release
-
-      - name: Sign release artifacts
-        uses: thomasdesr/minisign-action@v1
-        with:
-          args: -Sm release/fbc-*.zip
-          minisign_key: ${{ secrets.minisign_key }}
-          password: ${{ secrets.minisign_password }}
+        run: go tool task release
 
       - name: List results
         run: ls -lah release/
@@ -51,4 +39,3 @@ jobs:
           generate_release_notes: true
           files: |-
             release/fbc-*.zip
-            release/fbc-*.minisig

@@ -20,9 +20,3 @@
 ### Installation:
 
 Download from the [releases page](https://github.com/rupor-github/fb2cng/releases) and unpack it in a convenient location.
-
-You could use following public key and [minisign](https://github.com/jedisct1/minisign) tool to verify the authenticity of the release:
-<p>
-    <img src="docs/build_key.svg" style="vertical-align:middle; width:15%" align="absmiddle"/>
-    <span style="vertical-align:middle;">&nbsp;&nbsp;RWTNh1aN8DrXq26YRmWO3bPBx4m8jBATGXt4Z96DF4OVSzdCBmoAU+Vq</span>
-</p>

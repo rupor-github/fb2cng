@@ -1,0 +1,38 @@
+# Binaries for programs and plugins
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary, build with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Graphvis files
+*.gv
+
+# Project-local glide cache, RE: https://github.com/Masterminds/glide/issues/736
+.glide/
+
+./task
+.task
+dist/
+
+.DS_Store
+
+# editors
+.idea/
+.vscode/settings.json
+.fleet/
+
+# exuberant ctags
+tags
+
+/bin/*
+!/bin/.keep
+/testdata/vars/v1
+/tmp
+node_modules
+website/.netlify/

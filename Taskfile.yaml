@@ -368,7 +368,7 @@ tasks:
         [ -f {{.ROOT_DIR}}/go.sum ] && rm {{.ROOT_DIR}}/go.sum || true
       - go mod init {{.PRJ_NAME}}
       - go mod edit -go {{.GO_VERSION}} -toolchain go{{.GO_VERSION}}
-      # - go get -tool golang.org/x/tools/cmd/stringer
+      - go get -tool github.com/go-task/task/v3/cmd/task@latest
       - go get -tool github.com/abice/go-enum
       - go get -tool honnef.co/go/tools/cmd/staticcheck
       - go get -u ./...
