@@ -25,6 +25,7 @@
   - [Image Processing](#image-processing)
   - [Cover Image Configuration](#cover-image-configuration)
   - [Footnotes Processing](#footnotes-processing)
+  - [Device Table of Contents](#device-table-of-contents)
   - [Table of Contents Page](#table-of-contents-page)
   - [Annotation Page](#annotation-page)
   - [Vignettes (Decorative Images)](#vignettes-decorative-images)
@@ -777,9 +778,33 @@ label_template: |
 ```
 Result: `[Notes-1]`, `[Notes-2]`, ... (or `[1]`, `[2]`, ... if no title)
 
+### Device Table of Contents
+
+fb2cng always creates machine-readable navigation from the book's section structure. This is the TOC shown by the reading system's built-in navigation UI:
+
+- EPUB2: `toc.ncx`
+- EPUB3: `nav.xhtml`
+- KFX/AZW8: KFX book navigation
+
+Use `document.toc_type` to control how deeply nested this device navigation should be:
+
+```yaml
+document:
+  # normal, old_kindle, flat
+  toc_type: normal
+```
+
+Available values:
+
+- `normal` - preserve the book's section nesting. This is the default and gives modern readers the full hierarchy.
+- `old_kindle` - keep a shallow hierarchy compatible with old Kindle/kindlegen navigation behavior.
+- `flat` - make all navigation entries top-level siblings.
+
+This setting affects only machine/device navigation. Generated visible TOC pages inside the book content keep their normal/full structure regardless of `toc_type`.
+
 ### Table of Contents Page
 
-The TOC (table of contents) itself is always generated automatically from the book's section structure. The settings below control an optional **TOC page** — a visible page rendered inside the book content that lists chapters as clickable links. This is separate from the TOC metadata used by the reading system's built-in navigation.
+The TOC (table of contents) itself is always generated automatically from the book's section structure. The settings below control an optional **TOC page** — a visible page rendered inside the book content that lists chapters as clickable links. This is separate from the TOC metadata used by the reading system's built-in navigation and from the `document.toc_type` setting described above.
 
 ```yaml
 document:
@@ -1019,6 +1044,7 @@ version: 1
 
 document:
   open_from_cover: true
+  toc_type: normal
   
   metainformation:
     transliterate: false
