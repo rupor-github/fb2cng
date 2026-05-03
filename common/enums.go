@@ -20,6 +20,10 @@ type ImageResizeMode int
 // ENUM(none, before, after)
 type TOCPagePlacement int
 
+// Specification of device/navigation TOC hierarchy.
+// ENUM(normal, old_kindle, flat)
+type TOCType int
+
 // type of vignette
 // ENUM(book-title-top, book-title-bottom, chapter-title-top, chapter-title-bottom, chapter-end, section-title-top, section-title-bottom, section-end)
 type VignettePos string

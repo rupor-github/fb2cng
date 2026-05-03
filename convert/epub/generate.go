@@ -20,6 +20,7 @@ import (
 	"fbc/common"
 	"fbc/config"
 	"fbc/content"
+	"fbc/convert/tocnav"
 	"fbc/css"
 	"fbc/fb2"
 )
@@ -68,7 +69,7 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 	}
 
 	annotationEnabled := cfg.Annotation.Enable && c.Book.Description.TitleInfo.Annotation != nil
-	tocEnabled := cfg.TOCPage.Placement != common.TOCPagePlacementNone && c.OutputFormat != common.OutputFmtEpub3
+	tocEnabled := cfg.TOCPage.Placement != common.TOCPagePlacementNone
 
 	var chapters []chapterData
 	var idToFile idToFileMap
@@ -719,14 +720,10 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		}
 	}
 
-	// EPUB3: Add nav.xhtml to spine according to TOCPagePlacement
-	if c.OutputFormat == common.OutputFmtEpub3 && cfg.TOCPage.Placement == common.TOCPagePlacementBefore {
-		navRef := spine.CreateElement("itemref")
-		navRef.CreateAttr("idref", "nav")
-		navRef.CreateAttr("linear", "no")
-	}
-
-	// Add chapters to spine, but only reference each file once (use first chapter ID for files with fragments)
+	// Add chapters to spine, but only reference each file once (use first chapter ID for files with fragments).
+	// EPUB3 nav.xhtml is a machine navigation document and is not used as the
+	// visible TOC page. When a visible TOC page is requested, toc-page.xhtml is
+	// generated as a normal chapter and added to the spine here, same as EPUB2.
 	addedToSpine := make(map[string]bool)
 	var tocPageID string
 	for _, chapter := range chapters {
@@ -737,7 +734,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		}
 
 		// Track toc-page for guide/landmarks
-		if chapter.ID == "toc-page" {
+		if strings.HasPrefix(chapter.ID, "toc-page") {
 			tocPageID = addedFiles[filename]
 		}
 
@@ -751,13 +748,6 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 			}
 			addedToSpine[filename] = true
 		}
-	}
-
-	// EPUB3: Add nav.xhtml to spine at the end if placement is after
-	if c.OutputFormat == common.OutputFmtEpub3 && cfg.TOCPage.Placement == common.TOCPagePlacementAfter {
-		navRef := spine.CreateElement("itemref")
-		navRef.CreateAttr("idref", "nav")
-		navRef.CreateAttr("linear", "no")
 	}
 
 	// EPUB2: Add guide section
@@ -836,8 +826,9 @@ func writeNav(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	nav.CreateAttr("id", "toc")
 	nav.CreateAttr("role", "doc-toc")
 
-	// Build TOC content structure
-	buildTOCContent(nav, c, chapters, &cfg.TOCPage, idToFile, log)
+	// Build clean machine navigation. Visible/styled TOC pages are generated
+	// separately as toc-page.xhtml when requested.
+	buildNavTOCContent(nav, chapters, cfg, idToFile)
 
 	// EPUB3: Add landmarks navigation (replaces EPUB2 guide)
 	landmarksNav := body.CreateElement("nav")
@@ -860,6 +851,18 @@ func writeNav(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		a.SetText("Cover")
 	}
 
+	// Add visible table-of-contents page to landmarks if it exists.
+	for _, chapter := range chapters {
+		if strings.HasPrefix(chapter.ID, "toc-page") {
+			li := landmarksOL.CreateElement("li")
+			a := li.CreateElement("a")
+			a.CreateAttr("epub:type", "toc")
+			a.CreateAttr("href", chapter.Filename+getChapterAnchorSuffix(chapter))
+			a.SetText("Table of Contents")
+			break
+		}
+	}
+
 	// Add bodymatter landmark based on OpenFromCover setting
 	li := landmarksOL.CreateElement("li")
 	a := li.CreateElement("a")
@@ -868,9 +871,9 @@ func writeNav(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	if cfg.OpenFromCover && c.CoverID != "" {
 		a.CreateAttr("href", "cover.xhtml")
 	} else {
-		// Find first text chapter (skip annotation-page if present)
+		// Find first text chapter (skip generated annotation/TOC pages if present)
 		for _, chapter := range chapters {
-			if !strings.HasPrefix(chapter.ID, "annotation-page") {
+			if !strings.HasPrefix(chapter.ID, "annotation-page") && !strings.HasPrefix(chapter.ID, "toc-page") {
 				a.CreateAttr("href", chapter.Filename+getChapterAnchorSuffix(chapter))
 				break
 			}
@@ -919,20 +922,12 @@ func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, cfg *c
 	metaUID.CreateAttr("name", "dtb:uid")
 	metaUID.CreateAttr("content", c.Book.Description.DocumentInfo.ID)
 
-	// Calculate TOC depth
-	maxDepth := 1
-	for _, chapter := range chapters {
-		if !chapter.IncludeInTOC {
-			continue
-		}
-		if chapter.Section != nil {
-			maxDepth = max(maxDepth, calculateSectionDepth(chapter.Section, 1))
-		}
-	}
+	navItems := collectNCXNavItems(chapters, idToFile)
+	navNodes := tocnav.Shape(navItems, cfg.TOCType)
 
 	metaDepth := head.CreateElement("meta")
 	metaDepth.CreateAttr("name", "dtb:depth")
-	metaDepth.CreateAttr("content", fmt.Sprintf("%d", maxDepth))
+	metaDepth.CreateAttr("content", fmt.Sprintf("%d", max(1, tocnavDepth(navNodes))))
 
 	// Add page count metadata if page map is enabled
 	if c.PageSize > 0 {
@@ -952,33 +947,7 @@ func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, cfg *c
 	navMap := ncx.CreateElement("navMap")
 
 	playOrder := 0
-	for _, chapter := range chapters {
-		if !chapter.IncludeInTOC {
-			// Untitled wrapper chapter: promote its children to navMap level.
-			// This handles FB2 structures where a top-level <section> has no title
-			// but contains titled subsections that should appear in the TOC.
-			if chapter.Section != nil {
-				buildNCXNavPoints(navMap, chapter.Section, chapter.Filename, &playOrder, c, cfg.TOCPage.ChaptersWithoutTitle, nil, idToFile)
-			}
-			continue
-		}
-		playOrder++
-		navPoint := navMap.CreateElement("navPoint")
-		navPoint.CreateAttr("id", chapter.ID)
-		navPoint.CreateAttr("playOrder", fmt.Sprintf("%d", playOrder))
-
-		navLabel := navPoint.CreateElement("navLabel")
-		labelText := navLabel.CreateElement("text")
-		labelText.SetText(chapter.Title)
-
-		navContent := navPoint.CreateElement("content")
-		navContent.CreateAttr("src", chapter.Filename+getChapterAnchorSuffix(chapter))
-
-		// Add nested sections to TOC
-		if chapter.Section != nil {
-			buildNCXNavPoints(navPoint, chapter.Section, chapter.Filename, &playOrder, c, cfg.TOCPage.ChaptersWithoutTitle, nil, idToFile)
-		}
-	}
+	emitNCXNavNodes(navMap, navNodes, &playOrder)
 
 	// Add pageList for EPUB2 and KEPUB (only if not using AdobeDE page-map)
 	if c.PageSize > 0 && !c.AdobeDE {
@@ -1039,53 +1008,125 @@ func writeDataToZip(zw *zip.Writer, name string, data []byte) error {
 	return err
 }
 
-func buildNCXNavPoints(parent *etree.Element, section *fb2.Section, filename string, playOrder *int, c *content.Content, includeUntitled bool, lastNavPoint *etree.Element, idToFile idToFileMap) {
+func collectNCXNavItems(chapters []chapterData, idToFile idToFileMap) []tocnav.Item {
+	var items []tocnav.Item
+	for _, chapter := range chapters {
+		if !chapter.IncludeInTOC {
+			// Untitled wrapper chapter: promote its titled children to the current level.
+			if chapter.Section != nil {
+				items = append(items, collectSectionNavItems(chapter.Section, chapter.Filename, 1, idToFile)...)
+			}
+			continue
+		}
+
+		items = append(items, tocnav.Item{
+			ID:    chapter.ID,
+			Title: chapter.Title,
+			Href:  chapter.Filename + getChapterAnchorSuffix(chapter),
+			Level: 1,
+		})
+		if chapter.Section != nil {
+			items = append(items, collectSectionNavItems(chapter.Section, chapter.Filename, 2, idToFile)...)
+		}
+	}
+	return items
+}
+
+func collectSectionNavItems(section *fb2.Section, filename string, level int, idToFile idToFileMap) []tocnav.Item {
+	var (
+		items          []tocnav.Item
+		lastTitleLevel int
+		hasLastTitle   bool
+	)
+
 	for _, item := range section.Content {
-		if item.Kind == fb2.FlowSection && item.Section != nil {
-			// IMPORTANT: for nested TOC nodes we only consider explicit, non-empty titles.
-			// Wrapper sections with no effective title must not produce TOC entries.
-			titleText := ""
-			if item.Section.Title != nil {
-				titleText = item.Section.Title.AsTOCText("")
+		if item.Kind != fb2.FlowSection || item.Section == nil {
+			continue
+		}
+
+		titleText := ""
+		if item.Section.Title != nil {
+			titleText = item.Section.Title.AsTOCText("")
+		}
+		if titleText != "" {
+			sectionID := item.Section.ID
+			sectionFilename := filename
+			if mapped, ok := idToFile[sectionID]; ok {
+				sectionFilename = mapped
 			}
-			if titleText != "" {
-				*playOrder++
-				sectionID := item.Section.ID
-				navPoint := parent.CreateElement("navPoint")
-				navPoint.CreateAttr("id", fmt.Sprintf("navpoint-%s", sectionID))
-				navPoint.CreateAttr("playOrder", fmt.Sprintf("%d", *playOrder))
+			items = append(items, tocnav.Item{
+				ID:    "navpoint-" + sectionID,
+				Title: titleText,
+				Href:  sectionFilename + "#" + sectionID,
+				Level: level,
+			})
+			items = append(items, collectSectionNavItems(item.Section, sectionFilename, level+1, idToFile)...)
+			lastTitleLevel = level
+			hasLastTitle = true
+			continue
+		}
 
-				navLabel := navPoint.CreateElement("navLabel")
-				labelText := navLabel.CreateElement("text")
-				labelText.SetText(titleText)
+		// Untitled section: nest children inside the last titled sibling if one exists;
+		// otherwise promote them to the current level. This preserves the previous
+		// recursive NCX behavior before toc_type shaping is applied.
+		childLevel := level
+		if hasLastTitle {
+			childLevel = lastTitleLevel + 1
+		}
+		items = append(items, collectSectionNavItems(item.Section, filename, childLevel, idToFile)...)
+	}
+	return items
+}
 
-				// Use idToFile to resolve the correct filename for split sections
-				sectionFilename := filename
-				if mapped, ok := idToFile[sectionID]; ok {
-					sectionFilename = mapped
-				}
+func emitNCXNavNodes(parent *etree.Element, nodes []*tocnav.Node, playOrder *int) {
+	for _, node := range nodes {
+		*playOrder++
+		navPoint := parent.CreateElement("navPoint")
+		id := node.Item.ID
+		if id == "" {
+			id = fmt.Sprintf("navpoint%d", *playOrder)
+		}
+		navPoint.CreateAttr("id", id)
+		navPoint.CreateAttr("playOrder", fmt.Sprintf("%d", *playOrder))
 
-				navContent := navPoint.CreateElement("content")
-				navContent.CreateAttr("src", sectionFilename+"#"+sectionID)
+		navLabel := navPoint.CreateElement("navLabel")
+		labelText := navLabel.CreateElement("text")
+		labelText.SetText(node.Item.Title)
 
-				buildNCXNavPoints(navPoint, item.Section, sectionFilename, playOrder, c, includeUntitled, nil, idToFile)
-			} else {
-				// Untitled section: nest children inside the last titled sibling if one exists
-				if lastNavPoint != nil {
-					buildNCXNavPoints(lastNavPoint, item.Section, filename, playOrder, c, includeUntitled, nil, idToFile)
-				} else {
-					// No preceding titled sibling, children go to parent level
-					buildNCXNavPoints(parent, item.Section, filename, playOrder, c, includeUntitled, nil, idToFile)
-				}
-			}
-			// Track the last navPoint we created at this level
-			if titleText != "" {
-				// Find the navPoint we just created (last child of parent)
-				children := parent.ChildElements()
-				if len(children) > 0 {
-					lastNavPoint = children[len(children)-1]
-				}
-			}
+		navContent := navPoint.CreateElement("content")
+		navContent.CreateAttr("src", node.Item.Href)
+
+		emitNCXNavNodes(navPoint, node.Children, playOrder)
+	}
+}
+
+func tocnavDepth(nodes []*tocnav.Node) int {
+	maxDepth := 0
+	for _, node := range nodes {
+		maxDepth = max(maxDepth, 1+tocnavDepth(node.Children))
+	}
+	return maxDepth
+}
+
+// buildNavTOCContent creates a clean EPUB3 machine TOC without presentation classes.
+func buildNavTOCContent(parentContainer *etree.Element, chapters []chapterData, cfg *config.DocumentConfig, idToFile idToFileMap) {
+	h2 := parentContainer.CreateElement("h2")
+	h2.SetText("Table of Contents")
+
+	ol := parentContainer.CreateElement("ol")
+	emitNavTOCNodes(ol, tocnav.Shape(collectNCXNavItems(chapters, idToFile), cfg.TOCType))
+}
+
+func emitNavTOCNodes(parentOL *etree.Element, nodes []*tocnav.Node) {
+	for _, node := range nodes {
+		li := parentOL.CreateElement("li")
+		a := li.CreateElement("a")
+		a.CreateAttr("href", node.Item.Href)
+		a.SetText(node.Item.Title)
+
+		if len(node.Children) > 0 {
+			nestedOL := li.CreateElement("ol")
+			emitNavTOCNodes(nestedOL, node.Children)
 		}
 	}
 }
@@ -1254,19 +1295,6 @@ func getChapterAnchorSuffix(chapter chapterData) string {
 		return "#" + chapter.AnchorID
 	}
 	return ""
-}
-
-func calculateSectionDepth(section *fb2.Section, currentDepth int) int {
-	maxDepth := currentDepth
-	for _, item := range section.Content {
-		if item.Kind == fb2.FlowSubtitle && item.Subtitle != nil {
-			// Subtitles count as same depth as sections at this level
-			maxDepth = max(maxDepth, currentDepth)
-		} else if item.Kind == fb2.FlowSection && item.Section != nil && item.Section.Title != nil {
-			maxDepth = max(maxDepth, calculateSectionDepth(item.Section, currentDepth+1))
-		}
-	}
-	return maxDepth
 }
 
 func copyZipWithoutDataDescriptors(from, to string) error {

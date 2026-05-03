@@ -83,8 +83,47 @@ reporting:
 		t.Errorf("FootnotesMode = %d, want FootnotesModeFloat", cfg.Document.Footnotes.Mode)
 	}
 
+	if cfg.Document.TOCType != common.TOCTypeNormal {
+		t.Errorf("Default TOCType = %s, want normal", cfg.Document.TOCType)
+	}
+
 	if len(cfg.Document.Footnotes.BodyNames) != 2 {
 		t.Errorf("BodyNames length = %d, want 2", len(cfg.Document.Footnotes.BodyNames))
+	}
+}
+
+func TestLoadConfiguration_TOCType(t *testing.T) {
+	tests := []struct {
+		name string
+		yaml string
+		want common.TOCType
+	}{
+		{name: "normal", yaml: "normal", want: common.TOCTypeNormal},
+		{name: "old_kindle", yaml: "old_kindle", want: common.TOCTypeOldKindle},
+		{name: "flat", yaml: "flat", want: common.TOCTypeFlat},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "config.yaml")
+			configContent := `version: 1
+document:
+  toc_type: ` + tt.yaml + `
+`
+
+			if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+				t.Fatalf("Failed to write config file: %v", err)
+			}
+
+			cfg, err := LoadConfiguration(configPath)
+			if err != nil {
+				t.Fatalf("LoadConfiguration() error = %v", err)
+			}
+			if cfg.Document.TOCType != tt.want {
+				t.Errorf("TOCType = %s, want %s", cfg.Document.TOCType, tt.want)
+			}
+		})
 	}
 }
 

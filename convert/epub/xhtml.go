@@ -101,9 +101,10 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 				return nil, nil, err
 			}
 
-			// This is a workaround to make EPubCheck happy
-			// Check if we need to generate invisible link to nav.xhtml
-			addHiddenNavLink := env.Cfg.Document.TOCPage.Placement != common.TOCPagePlacementNone && body.Main() && j == 0
+			// EPUB3 nav.xhtml is a machine navigation document, not a spine item.
+			// Do not add hidden content links to it; visible TOC pages are generated
+			// separately as toc-page.xhtml when requested.
+			addHiddenNavLink := false
 
 			chapterNum++
 			baseID := fmt.Sprintf("index%05d", chapterNum)
@@ -408,7 +409,8 @@ func bodyToXHTML(c *content.Content, body *fb2.Body, section *fb2.Section, title
 		return nil, nil, err
 	}
 
-	// EPUB3: Add hidden navigation link at the end of the first main body section
+	// EPUB3: Add hidden navigation link at the end of the first main body section.
+	// Currently disabled by callers because nav.xhtml is not a spine item.
 	if addHiddenNav && c.OutputFormat == common.OutputFmtEpub3 {
 		hiddenP := bodyDiv.CreateElement("p")
 		hiddenP.CreateAttr("style", "display: none; visibility: hidden")

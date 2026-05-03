@@ -117,6 +117,7 @@ type (
 	DocumentConfig struct {
 		FixZip                bool                  `yaml:"fix_zip"`
 		OpenFromCover         bool                  `yaml:"open_from_cover"`
+		TOCType               common.TOCType        `yaml:"toc_type" validate:"oneof=0 1 2"`
 		StylesheetPath        string                `yaml:"stylesheet_path,omitempty" sanitize:"assure_file_access"`
 		OutputNameTemplate    string                `yaml:"output_name_template"`
 		FileNameTransliterate bool                  `yaml:"file_name_transliterate"`

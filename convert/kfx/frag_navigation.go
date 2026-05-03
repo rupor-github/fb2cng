@@ -3,7 +3,9 @@ package kfx
 import (
 	"fmt"
 
+	"fbc/common"
 	"fbc/content"
+	"fbc/convert/tocnav"
 	"fbc/fb2"
 )
 
@@ -14,9 +16,9 @@ import (
 // is also included in the navigation.
 // If landmarks has non-zero EIDs, a landmarks container is added.
 
-func BuildNavigation(tocEntries []*TOCEntry, startEID int, posItems []PositionItem, pageSize int, includeUntitled bool, landmarks LandmarkInfo) *Fragment {
+func BuildNavigation(tocEntries []*TOCEntry, startEID int, posItems []PositionItem, pageSize int, includeUntitled bool, tocType common.TOCType, landmarks LandmarkInfo) *Fragment {
 	// Build TOC entries recursively
-	entries := buildNavEntries(tocEntries, startEID, includeUntitled)
+	entries := buildNavEntries(tocEntries, startEID, includeUntitled, tocType)
 
 	// Create TOC navigation container
 	tocContainer := NewTOCContainer(entries)
@@ -90,20 +92,24 @@ func buildLandmarksContainer(landmarks LandmarkInfo) StructValue {
 }
 
 // buildNavEntries recursively builds navigation unit entries from TOC entries.
-func buildNavEntries(tocEntries []*TOCEntry, startEID int, includeUntitled bool) []any {
-	entries := make([]any, 0, len(tocEntries))
+func buildNavEntries(tocEntries []*TOCEntry, startEID int, includeUntitled bool, tocType common.TOCType) []any {
+	return buildNavEntriesFromNodes(tocnav.Shape(flattenTOCEntries(tocEntries, includeUntitled, 1), tocType))
+}
 
-	for _, entry := range tocEntries {
+func flattenTOCEntries(entries []*TOCEntry, includeUntitled bool, level int) []tocnav.Item {
+	var items []tocnav.Item
+	for _, entry := range entries {
+		if entry == nil {
+			continue
+		}
 		if !entry.IncludeInTOC && !includeUntitled {
 			// Untitled wrapper entry: promote its children to this level.
-			// This handles FB2 structures where a top-level <section> has no title
-			// but contains titled subsections that should appear in the TOC.
 			if len(entry.Children) > 0 {
-				childEntries := buildNavEntries(entry.Children, startEID, includeUntitled)
-				entries = append(entries, childEntries...)
+				items = append(items, flattenTOCEntries(entry.Children, includeUntitled, level)...)
 			}
 			continue
 		}
+
 		title := entry.Title
 		if title == "" && includeUntitled {
 			title = fb2.NoTitleText
@@ -112,15 +118,30 @@ func buildNavEntries(tocEntries []*TOCEntry, startEID int, includeUntitled bool)
 			continue
 		}
 
+		items = append(items, tocnav.Item{
+			ID:    entry.ID,
+			Title: title,
+			Level: level,
+			EID:   entry.FirstEID,
+		})
+		if len(entry.Children) > 0 {
+			items = append(items, flattenTOCEntries(entry.Children, includeUntitled, level+1)...)
+		}
+	}
+	return items
+}
+
+func buildNavEntriesFromNodes(nodes []*tocnav.Node) []any {
+	entries := make([]any, 0, len(nodes))
+	for _, node := range nodes {
 		// Create target position pointing to the first EID of the content
-		targetPos := NewStruct().SetInt(SymUniqueID, int64(entry.FirstEID)) // $155 = id
+		targetPos := NewStruct().SetInt(SymUniqueID, int64(node.Item.EID)) // $155 = id
 
 		// Create nav unit with label and target
-		navUnit := NewNavUnit(title, targetPos)
+		navUnit := NewNavUnit(node.Item.Title, targetPos)
 
-		// Add nested entries for children (hierarchical TOC)
-		if len(entry.Children) > 0 {
-			childEntries := buildNavEntries(entry.Children, startEID, includeUntitled)
+		if len(node.Children) > 0 {
+			childEntries := buildNavEntriesFromNodes(node.Children)
 			if len(childEntries) > 0 {
 				navUnit.SetList(SymEntries, childEntries) // $247 = nested entries
 			}
@@ -128,7 +149,6 @@ func buildNavEntries(tocEntries []*TOCEntry, startEID int, includeUntitled bool)
 
 		entries = append(entries, navUnit)
 	}
-
 	return entries
 }
 

@@ -18,6 +18,13 @@ document:
   # NOTE: ignored on Kindle devices
   open_from_cover: false
 
+  # Navigation hierarchy type for device TOCs/nav maps.
+  # "normal"     - preserve section nesting
+  # "old_kindle" - restrict nesting for old Kindle/kindlegen compatibility
+  # "flat"       - make all navigation entries siblings
+  # Note: generated visible TOC pages should keep their normal/full structure.
+  toc_type: normal
+
   # CSS stylesheet to use. If absent - default one will be supplied
   # stylesheet_path: "mystyle.css"
 

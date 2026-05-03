@@ -1,7 +1,10 @@
 package kfx
 
 import (
+	"reflect"
 	"testing"
+
+	"fbc/common"
 )
 
 func TestBuildNavEntries_UntitledWrapperPromotesChildren(t *testing.T) {
@@ -24,7 +27,7 @@ func TestBuildNavEntries_UntitledWrapperPromotesChildren(t *testing.T) {
 		},
 	}
 
-	result := buildNavEntries(entries, 1000, false)
+	result := buildNavEntries(entries, 1000, false, common.TOCTypeNormal)
 	if len(result) != 2 {
 		t.Fatalf("expected 2 promoted entries, got %d", len(result))
 	}
@@ -47,7 +50,7 @@ func TestBuildNavEntries_MixedTitledAndWrapper(t *testing.T) {
 		{ID: "epilog", Title: "Epilogue", IncludeInTOC: true, FirstEID: 1020},
 	}
 
-	result := buildNavEntries(entries, 1000, false)
+	result := buildNavEntries(entries, 1000, false, common.TOCTypeNormal)
 	// Introduction + Part 1 + Part 2 (promoted) + Epilogue = 4
 	if len(result) != 4 {
 		t.Fatalf("expected 4 entries, got %d", len(result))
@@ -76,7 +79,7 @@ func TestBuildNavEntries_NestedWrappers(t *testing.T) {
 		},
 	}
 
-	result := buildNavEntries(entries, 1000, false)
+	result := buildNavEntries(entries, 1000, false, common.TOCTypeNormal)
 	if len(result) != 1 {
 		t.Fatalf("expected 1 promoted entry from nested wrappers, got %d", len(result))
 	}
@@ -93,7 +96,7 @@ func TestBuildNavEntries_WrapperWithNoChildren(t *testing.T) {
 		},
 	}
 
-	result := buildNavEntries(entries, 1000, false)
+	result := buildNavEntries(entries, 1000, false, common.TOCTypeNormal)
 	if len(result) != 0 {
 		t.Fatalf("expected 0 entries for empty wrapper, got %d", len(result))
 	}
@@ -115,11 +118,96 @@ func TestBuildNavEntries_TitledEntryWithChildren(t *testing.T) {
 		},
 	}
 
-	result := buildNavEntries(entries, 1000, false)
+	result := buildNavEntries(entries, 1000, false, common.TOCTypeNormal)
 	// Should be 1 entry (Part 1) with children nested inside
 	if len(result) != 1 {
 		t.Fatalf("expected 1 top-level entry, got %d", len(result))
 	}
+}
+
+func TestBuildNavEntries_TOCTypeNesting(t *testing.T) {
+	entries := []*TOCEntry{{
+		ID:           "a",
+		Title:        "A",
+		IncludeInTOC: true,
+		FirstEID:     1000,
+		Children: []*TOCEntry{{
+			ID:           "b",
+			Title:        "B",
+			IncludeInTOC: true,
+			FirstEID:     1001,
+			Children: []*TOCEntry{{
+				ID:           "c",
+				Title:        "C",
+				IncludeInTOC: true,
+				FirstEID:     1002,
+				Children: []*TOCEntry{{
+					ID:           "d",
+					Title:        "D",
+					IncludeInTOC: true,
+					FirstEID:     1003,
+				}},
+			}},
+		}},
+	}}
+
+	tests := []struct {
+		name    string
+		tocType common.TOCType
+		want    []navSnapshot
+	}{
+		{
+			name:    "normal",
+			tocType: common.TOCTypeNormal,
+			want:    []navSnapshot{{Title: "A", Children: []navSnapshot{{Title: "B", Children: []navSnapshot{{Title: "C", Children: []navSnapshot{{Title: "D"}}}}}}}},
+		},
+		{
+			name:    "old kindle",
+			tocType: common.TOCTypeOldKindle,
+			want:    []navSnapshot{{Title: "A", Children: []navSnapshot{{Title: "B"}, {Title: "C"}, {Title: "D"}}}},
+		},
+		{
+			name:    "flat",
+			tocType: common.TOCTypeFlat,
+			want:    []navSnapshot{{Title: "A"}, {Title: "B"}, {Title: "C"}, {Title: "D"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := snapshotNavUnits(buildNavEntries(entries, 1000, false, tt.tocType))
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("buildNavEntries() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+type navSnapshot struct {
+	Title    string
+	Children []navSnapshot
+}
+
+func snapshotNavUnits(entries []any) []navSnapshot {
+	out := make([]navSnapshot, 0, len(entries))
+	for _, entry := range entries {
+		unit, ok := entry.(StructValue)
+		if !ok {
+			continue
+		}
+		var title string
+		if repr, ok := unit.GetStruct(SymRepresentation); ok {
+			if label, ok := repr.GetString(SymLabel); ok {
+				title = label
+			}
+		}
+		var children []navSnapshot
+		if nested, ok := unit.GetList(SymEntries); ok {
+			children = snapshotNavUnits(nested)
+		}
+		out = append(out, navSnapshot{Title: title, Children: children})
+	}
+	return out
 }
 
 func TestBuildTOCEntryTree_UntitledWrapperPromotesChildren(t *testing.T) {

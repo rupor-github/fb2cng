@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -530,6 +531,19 @@ func TestCalculateSectionDepth(t *testing.T) {
 			}
 		})
 	}
+}
+
+func calculateSectionDepth(section *fb2.Section, currentDepth int) int {
+	maxDepth := currentDepth
+	for _, item := range section.Content {
+		if item.Kind == fb2.FlowSubtitle && item.Subtitle != nil {
+			// Subtitles count as same depth as sections at this level
+			maxDepth = max(maxDepth, currentDepth)
+		} else if item.Kind == fb2.FlowSection && item.Section != nil && item.Section.Title != nil {
+			maxDepth = max(maxDepth, calculateSectionDepth(item.Section, currentDepth+1))
+		}
+	}
+	return maxDepth
 }
 
 func TestWriteXMLToZip(t *testing.T) {
@@ -2159,6 +2173,131 @@ func TestWriteNCX(t *testing.T) {
 	}
 }
 
+func TestWriteNCX_TOCTypeNesting(t *testing.T) {
+	_, _, log := setupTestContext(t)
+
+	title := func(text string) *fb2.Title {
+		return &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: text}}}}}}
+	}
+	section := func(id, titleText string, children ...fb2.FlowItem) *fb2.Section {
+		return &fb2.Section{ID: id, Title: title(titleText), Content: children}
+	}
+
+	chapters := []chapterData{{
+		ID:           "ch01",
+		Filename:     "ch01.xhtml",
+		Title:        "A",
+		IncludeInTOC: true,
+		Section: section("a", "A",
+			fb2.FlowItem{Kind: fb2.FlowSection, Section: section("b", "B",
+				fb2.FlowItem{Kind: fb2.FlowSection, Section: section("c", "C",
+					fb2.FlowItem{Kind: fb2.FlowSection, Section: section("d", "D")},
+				)},
+			)},
+		),
+	}}
+
+	tests := []struct {
+		name    string
+		tocType common.TOCType
+		want    []tocSnapshot
+	}{
+		{
+			name:    "normal",
+			tocType: common.TOCTypeNormal,
+			want:    []tocSnapshot{{Title: "A", Children: []tocSnapshot{{Title: "B", Children: []tocSnapshot{{Title: "C", Children: []tocSnapshot{{Title: "D"}}}}}}}},
+		},
+		{
+			name:    "old kindle",
+			tocType: common.TOCTypeOldKindle,
+			want:    []tocSnapshot{{Title: "A", Children: []tocSnapshot{{Title: "B"}, {Title: "C"}, {Title: "D"}}}},
+		},
+		{
+			name:    "flat",
+			tocType: common.TOCTypeFlat,
+			want:    []tocSnapshot{{Title: "A"}, {Title: "B"}, {Title: "C"}, {Title: "D"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			zw := zip.NewWriter(&buf)
+			c := &content.Content{
+				Book: &fb2.FictionBook{Description: fb2.Description{
+					TitleInfo:    fb2.TitleInfo{BookTitle: fb2.TextField{Value: "Book"}},
+					DocumentInfo: fb2.DocumentInfo{ID: "book-id"},
+				}},
+				OutputFormat: common.OutputFmtEpub2,
+			}
+			cfg := &config.DocumentConfig{TOCType: tt.tocType}
+
+			if err := writeNCX(zw, c, chapters, cfg, nil, log); err != nil {
+				t.Fatalf("writeNCX() error = %v", err)
+			}
+			if err := zw.Close(); err != nil {
+				t.Fatalf("close zip: %v", err)
+			}
+
+			doc := readSingleNCXFromZip(t, buf.Bytes())
+			navMap := doc.SelectElement("ncx").SelectElement("navMap")
+			got := snapshotNCXNavPoints(navMap)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("NCX tree = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+type tocSnapshot struct {
+	Title    string
+	Children []tocSnapshot
+}
+
+func readSingleNCXFromZip(t *testing.T, data []byte) *etree.Document {
+	t.Helper()
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("open zip: %v", err)
+	}
+	for _, f := range zr.File {
+		if strings.HasSuffix(f.Name, ".ncx") {
+			rc, err := f.Open()
+			if err != nil {
+				t.Fatalf("open ncx: %v", err)
+			}
+			content, _ := io.ReadAll(rc)
+			rc.Close()
+			doc := etree.NewDocument()
+			if err := doc.ReadFromBytes(content); err != nil {
+				t.Fatalf("parse NCX: %v", err)
+			}
+			return doc
+		}
+	}
+	t.Fatal("NCX file not found in zip")
+	return nil
+}
+
+func snapshotNCXNavPoints(parent *etree.Element) []tocSnapshot {
+	var out []tocSnapshot
+	for _, navPoint := range parent.SelectElements("navPoint") {
+		navLabel := navPoint.SelectElement("navLabel")
+		var title string
+		if navLabel != nil {
+			if text := navLabel.SelectElement("text"); text != nil {
+				title = text.Text()
+			}
+		}
+		var children []tocSnapshot
+		if child := snapshotNCXNavPoints(navPoint); len(child) > 0 {
+			children = child
+		}
+		out = append(out, tocSnapshot{Title: title, Children: children})
+	}
+	return out
+}
+
 func TestWriteNav(t *testing.T) {
 	_, _, log := setupTestContext(t)
 
@@ -2259,6 +2398,129 @@ func TestWriteNav(t *testing.T) {
 	if !foundNav {
 		t.Error("NAV file not found in zip")
 	}
+}
+
+func TestWriteNav_TOCTypeNesting(t *testing.T) {
+	_, _, log := setupTestContext(t)
+
+	title := func(text string) *fb2.Title {
+		return &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: text}}}}}}
+	}
+	section := func(id, titleText string, children ...fb2.FlowItem) *fb2.Section {
+		return &fb2.Section{ID: id, Title: title(titleText), Content: children}
+	}
+
+	chapters := []chapterData{{
+		ID:           "ch01",
+		Filename:     "ch01.xhtml",
+		Title:        "A",
+		IncludeInTOC: true,
+		Section: section("a", "A",
+			fb2.FlowItem{Kind: fb2.FlowSection, Section: section("b", "B",
+				fb2.FlowItem{Kind: fb2.FlowSection, Section: section("c", "C",
+					fb2.FlowItem{Kind: fb2.FlowSection, Section: section("d", "D")},
+				)},
+			)},
+		),
+	}}
+
+	tests := []struct {
+		name    string
+		tocType common.TOCType
+		want    []tocSnapshot
+	}{
+		{
+			name:    "normal",
+			tocType: common.TOCTypeNormal,
+			want:    []tocSnapshot{{Title: "A", Children: []tocSnapshot{{Title: "B", Children: []tocSnapshot{{Title: "C", Children: []tocSnapshot{{Title: "D"}}}}}}}},
+		},
+		{
+			name:    "old kindle",
+			tocType: common.TOCTypeOldKindle,
+			want:    []tocSnapshot{{Title: "A", Children: []tocSnapshot{{Title: "B"}, {Title: "C"}, {Title: "D"}}}},
+		},
+		{
+			name:    "flat",
+			tocType: common.TOCTypeFlat,
+			want:    []tocSnapshot{{Title: "A"}, {Title: "B"}, {Title: "C"}, {Title: "D"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			zw := zip.NewWriter(&buf)
+			c := &content.Content{
+				Book: &fb2.FictionBook{Description: fb2.Description{
+					TitleInfo: fb2.TitleInfo{BookTitle: fb2.TextField{Value: "Book"}},
+				}},
+				OutputFormat: common.OutputFmtEpub3,
+			}
+			cfg := &config.DocumentConfig{TOCType: tt.tocType}
+
+			if err := writeNav(zw, c, cfg, chapters, nil, log); err != nil {
+				t.Fatalf("writeNav() error = %v", err)
+			}
+			if err := zw.Close(); err != nil {
+				t.Fatalf("close zip: %v", err)
+			}
+
+			doc := readSingleNavFromZip(t, buf.Bytes())
+			nav := doc.FindElement("//nav[@epub:type='toc']")
+			if nav == nil {
+				t.Fatal("missing toc nav")
+			}
+			got := snapshotNavOL(nav.SelectElement("ol"))
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("NAV tree = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func readSingleNavFromZip(t *testing.T, data []byte) *etree.Document {
+	t.Helper()
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("open zip: %v", err)
+	}
+	for _, f := range zr.File {
+		if strings.Contains(f.Name, "nav.xhtml") {
+			rc, err := f.Open()
+			if err != nil {
+				t.Fatalf("open nav: %v", err)
+			}
+			content, _ := io.ReadAll(rc)
+			rc.Close()
+			doc := etree.NewDocument()
+			if err := doc.ReadFromBytes(content); err != nil {
+				t.Fatalf("parse NAV: %v", err)
+			}
+			return doc
+		}
+	}
+	t.Fatal("NAV file not found in zip")
+	return nil
+}
+
+func snapshotNavOL(ol *etree.Element) []tocSnapshot {
+	if ol == nil {
+		return nil
+	}
+	var out []tocSnapshot
+	for _, li := range ol.SelectElements("li") {
+		a := li.SelectElement("a")
+		var title string
+		if a != nil {
+			title = a.Text()
+		}
+		var children []tocSnapshot
+		if child := snapshotNavOL(li.SelectElement("ol")); len(child) > 0 {
+			children = child
+		}
+		out = append(out, tocSnapshot{Title: title, Children: children})
+	}
+	return out
 }
 
 func TestWriteCoverPage(t *testing.T) {
@@ -2708,27 +2970,49 @@ func TestGenerate_WithTOCPageAfter(t *testing.T) {
 	}
 	defer zr.Close()
 
-	// For EPUB3, check nav.xhtml instead of toc-page.xhtml
-	var foundNavPage bool
+	// EPUB3 keeps nav.xhtml as the machine navigation document and uses a
+	// separate generated toc-page.xhtml as the visible TOC page, matching EPUB2.
+	var foundTOCPage bool
+	var foundNav bool
+	var opfContent string
 	for _, f := range zr.File {
-		if strings.Contains(f.Name, "nav.xhtml") {
-			foundNavPage = true
+		switch {
+		case strings.Contains(f.Name, "toc-page.xhtml"):
+			foundTOCPage = true
 			rc, err := f.Open()
 			if err != nil {
-				t.Fatalf("open nav page: %v", err)
+				t.Fatalf("open toc page: %v", err)
 			}
 			content, _ := io.ReadAll(rc)
 			rc.Close()
 
-			// Check that nav.xhtml contains the book title
 			if !strings.Contains(string(content), "Тестовая книга") {
-				t.Error("Nav page should contain book title")
+				t.Error("TOC page should contain book title")
 			}
+		case strings.Contains(f.Name, "nav.xhtml"):
+			foundNav = true
+		case strings.HasSuffix(f.Name, "content.opf"):
+			rc, err := f.Open()
+			if err != nil {
+				t.Fatalf("open opf: %v", err)
+			}
+			content, _ := io.ReadAll(rc)
+			rc.Close()
+			opfContent = string(content)
 		}
 	}
 
-	if !foundNavPage {
-		t.Error("Nav page not found in zip")
+	if !foundTOCPage {
+		t.Error("TOC page not found in zip")
+	}
+	if !foundNav {
+		t.Error("nav.xhtml not found in zip")
+	}
+	if !strings.Contains(opfContent, "toc-page") {
+		t.Error("TOC page not found in OPF manifest/spine")
+	}
+	if strings.Contains(opfContent, `idref="nav"`) {
+		t.Error("nav.xhtml should not be used as the visible TOC spine item")
 	}
 }
 
