@@ -599,8 +599,11 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		}
 	}
 
-	// EPUB2 uses <meta name="cover">, EPUB3 uses properties="cover-image" on manifest item
-	if c.CoverID != "" && c.OutputFormat != common.OutputFmtEpub3 {
+	// EPUB2 uses <meta name="cover">. EPUB3 uses properties="cover-image" on
+	// the image manifest item, but Apple Books still relies on the legacy OPF2
+	// cover meta for reliable cover detection. Emit it for all EPUB variants,
+	// pointing directly to the cover image manifest item (not cover.xhtml).
+	if c.CoverID != "" {
 		meta := metadata.CreateElement("meta")
 		meta.CreateAttr("name", "cover")
 		meta.CreateAttr("content", "book-cover-image")

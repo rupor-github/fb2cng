@@ -1978,7 +1978,13 @@ func TestWriteOPF_Epub3(t *testing.T) {
 			},
 		},
 		OutputFormat: common.OutputFmtEpub3,
-		ImagesIndex:  make(fb2.BookImages),
+		ImagesIndex: fb2.BookImages{
+			"cover": &fb2.BookImage{
+				Filename: "images/cover.jpg",
+				MimeType: "image/jpeg",
+			},
+		},
+		CoverID: "cover",
 	}
 
 	chapters := []chapterData{
@@ -2017,6 +2023,30 @@ func TestWriteOPF_Epub3(t *testing.T) {
 			version := pkg.SelectAttrValue("version", "")
 			if version != "3.0" {
 				t.Errorf("EPUB3 version = %v, want 3.0", version)
+			}
+
+			metadata := pkg.SelectElement("metadata")
+			if metadata == nil {
+				t.Fatal("missing metadata")
+			}
+			coverMeta := metadata.FindElement("meta[@name='cover']")
+			if coverMeta == nil {
+				t.Fatal("missing legacy cover meta for EPUB3 Apple compatibility")
+			}
+			if got := coverMeta.SelectAttrValue("content", ""); got != "book-cover-image" {
+				t.Errorf("cover meta content = %q, want book-cover-image", got)
+			}
+
+			manifest := pkg.SelectElement("manifest")
+			if manifest == nil {
+				t.Fatal("missing manifest")
+			}
+			coverImage := manifest.FindElement("item[@id='book-cover-image']")
+			if coverImage == nil {
+				t.Fatal("missing cover image manifest item")
+			}
+			if got := coverImage.SelectAttrValue("properties", ""); got != "cover-image" {
+				t.Errorf("cover image properties = %q, want cover-image", got)
 			}
 		}
 	}
