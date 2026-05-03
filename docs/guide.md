@@ -515,7 +515,7 @@ This means you don't need to repeat `font-family` on every element — setting i
 
 fb2cng now preserves negative CSS margin values, including in KFX output. This allows custom stylesheets to use negative margins when needed instead of having them stripped during conversion.
 
-**Important KFX caveat:** Kindle Previewer 3 / the KFX rendering engine still has layout issues with some combinations of CSS, especially paragraphs that use drop caps together with negative `margin-left`. fb2cng includes a hacky workaround for this case: it inserts a narrow no-break space (NNBSP, `U+202F`) after the first character so Kindle keeps the layout closer to what we want. This improves some books, but the result is still not fully reliable and visual artifacts are still possible. If you run into rendering problems, avoid combining drop caps with negative margins in the same paragraph.
+**Important KFX caveat:** Kindle Previewer 3 / the KFX rendering engine lays out drop caps badly when the dropcap paragraph itself has negative horizontal margins. For KFX output, fb2cng avoids negative horizontal margins on dropcap paragraphs while preserving the dropcap styling itself.
 
 #### Resource Path Resolution
 
@@ -866,7 +866,7 @@ document:
     ignore_symbols: "'\"-.…0123456789‒–—«»""<>"
 ```
 
-**Note:** Drop caps work best with regular paragraph margins. Negative margins are supported, but some readers - most notably KFX/Kindle - still do not render the combination of drop caps and negative margins perfectly in all cases. fb2cng tries to mitigate this with the same NNBSP (`U+202F`) workaround described above, but it is still only a partial fix.
+**Note:** Drop caps work best with regular paragraph margins. Negative margins are supported, but some readers - most notably KFX/Kindle - still do not render the combination of drop caps and negative margins perfectly in all cases. For KFX output, fb2cng avoids negative horizontal margins on dropcap paragraphs while preserving the dropcap styling itself.
 
 ### Text Transformations
 

@@ -1,44 +1,51 @@
 package kfx
 
 import (
+	"math"
 	"testing"
 
 	"fbc/content"
-	"fbc/content/text"
 	"fbc/fb2"
 )
 
-func TestInsertSpacerAfterFirstRune(t *testing.T) {
-	got := insertSpacerAfterFirstRune("Abc", text.NNBSP)
-	if got != "A\u202Fbc" {
-		t.Fatalf("expected narrow no-break space after first rune, got %q", got)
-	}
-}
-
-func TestAdjustStyleEventsForInsertedRune(t *testing.T) {
-	events := []StyleEventRef{
-		{Offset: 0, Length: 1, Style: "dropcap"},
-		{Offset: 1, Length: 4, Style: "strong"},
-		{Offset: 0, Length: 5, Style: "outer"},
-	}
-
-	adjustStyleEventsForInsertedRune(events, 1)
-
-	if events[0].Offset != 0 || events[0].Length != 1 {
-		t.Fatalf("dropcap event changed unexpectedly: %+v", events[0])
-	}
-	if events[1].Offset != 2 || events[1].Length != 4 {
-		t.Fatalf("expected later event to shift right, got %+v", events[1])
-	}
-	if events[2].Offset != 0 || events[2].Length != 6 {
-		t.Fatalf("expected spanning event to expand, got %+v", events[2])
-	}
-}
-
-func TestAddParagraphWithImages_DropcapNegativeMarginInjectsSpacer(t *testing.T) {
+func TestAddParagraphWithImages_DropcapWithoutNegativeMarginZerosBottomMargin(t *testing.T) {
 	sr := NewStyleRegistry()
 	sr.Register(NewStyle("p").Build())
-	sr.Register(NewStyle("has-dropcap").Dropcap(1, 3).MarginLeft(-1, SymUnitEm).Build())
+	sr.Register(NewStyle("has-dropcap").Dropcap(1, 3).MarginBottom(1, SymUnitLh).Build())
+	sr.Register(NewStyle("has-dropcap--dropcap").FontWeight(SymBold).Build())
+
+	ctx := NewStyleContext(sr)
+	para := &fb2.Paragraph{
+		Style: "has-dropcap",
+		Text:  []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Abc"}},
+	}
+
+	sb := NewStorylineBuilder("l1", "c0", 1, sr)
+	ca := NewContentAccumulator(1)
+	addParagraphWithImages(&content.Content{}, para, ctx, para.Style, 0, sb, sr, nil, ca, nil)
+
+	if len(sb.contentEntries) != 1 {
+		t.Fatalf("expected one storyline entry, got %d", len(sb.contentEntries))
+	}
+	entry := sb.contentEntries[0]
+	if entry.Style == "" {
+		t.Fatal("expected resolved dropcap style")
+	}
+	def, ok := sr.Get(entry.Style)
+	if !ok {
+		t.Fatalf("style %q not found", entry.Style)
+	}
+	assertMeasure(t, def.Properties[SymMarginBottom], SymMarginBottom, 0, SymUnitLh)
+	if entry.StyleSpec == dropcapMarginWrapperStyle || len(entry.childRefs) > 0 {
+		t.Fatal("did not expect wrapper for dropcap paragraph without negative margins")
+	}
+}
+
+func TestAddParagraphWithImages_DropcapNegativeRootMarginWrapsParagraphWithoutSpacer(t *testing.T) {
+	sr := NewStyleRegistry()
+	sr.Register(NewStyle("html").MarginLeft(-1, SymUnitEm).MarginRight(-2, SymUnitEm).Build())
+	sr.Register(NewStyle("p").Build())
+	sr.Register(NewStyle("has-dropcap").Dropcap(1, 3).Build())
 	sr.Register(NewStyle("has-dropcap--dropcap").FontWeight(SymBold).Build())
 
 	ctx := NewStyleContext(sr)
@@ -56,31 +63,57 @@ func TestAddParagraphWithImages_DropcapNegativeMarginInjectsSpacer(t *testing.T)
 	if len(list) != 1 {
 		t.Fatalf("expected one content entry, got %d", len(list))
 	}
-	if list[0] != "A\u202Fbc" {
-		t.Fatalf("expected injected narrow no-break space content, got %q", list[0])
+	if list[0] != "Abc" {
+		t.Fatalf("expected original content without injected spacer, got %q", list[0])
 	}
 
 	if len(sb.contentEntries) != 1 {
-		t.Fatalf("expected one storyline entry, got %d", len(sb.contentEntries))
+		t.Fatalf("expected one storyline wrapper entry, got %d", len(sb.contentEntries))
 	}
-	entry := sb.contentEntries[0]
-	if entry.Style == "" {
-		t.Fatal("expected resolved style")
+	wrapper := &sb.contentEntries[0]
+	if wrapper.Style == "" {
+		t.Fatal("expected resolved dropcap margin wrapper style")
 	}
-	def, ok := sr.Get(entry.Style)
+	if len(wrapper.childRefs) != 1 {
+		t.Fatalf("expected one wrapped dropcap child, got %d", len(wrapper.childRefs))
+	}
+	child := wrapper.childRefs[0]
+	if child.Style == "" {
+		t.Fatal("expected resolved child style")
+	}
+	def, ok := sr.Get(child.Style)
 	if !ok {
-		t.Fatalf("style %q not found", entry.Style)
+		t.Fatalf("style %q not found", child.Style)
 	}
 	chars, ok := numericFromAny(def.Properties[SymDropcapChars])
-	if !ok || chars != 2 {
-		t.Fatalf("expected dropcap chars = 2, got %v", def.Properties[SymDropcapChars])
+	if !ok || chars != 1 {
+		t.Fatalf("expected dropcap chars = 1, got %v", def.Properties[SymDropcapChars])
 	}
-	if len(entry.StyleEvents) != 1 {
-		t.Fatalf("expected one style event, got %d", len(entry.StyleEvents))
+	if _, ok := def.Properties[SymMarginLeft]; ok {
+		t.Fatalf("expected wrapped dropcap child to have no margin-left, got %v", def.Properties[SymMarginLeft])
 	}
-	if entry.StyleEvents[0].Offset != 0 || entry.StyleEvents[0].Length != 1 {
-		t.Fatalf("expected glyph event to stay on first rune, got %+v", entry.StyleEvents[0])
+	if _, ok := def.Properties[SymMarginRight]; ok {
+		t.Fatalf("expected wrapped dropcap child to have no margin-right, got %v", def.Properties[SymMarginRight])
 	}
+	assertMeasure(t, def.Properties[SymMarginBottom], SymMarginBottom, 0, SymUnitLh)
+	if len(child.StyleEvents) != 1 {
+		t.Fatalf("expected one style event, got %d", len(child.StyleEvents))
+	}
+	if child.StyleEvents[0].Offset != 0 || child.StyleEvents[0].Length != 1 {
+		t.Fatalf("expected glyph event to stay on first rune, got %+v", child.StyleEvents[0])
+	}
+
+	beforeBuildWrapperStyle := wrapper.Style
+	sb.Build()
+	if wrapper.Style != beforeBuildWrapperStyle {
+		t.Fatalf("expected wrapper style to remain pre-resolved, got %q want %q", wrapper.Style, beforeBuildWrapperStyle)
+	}
+	wrapperDef, ok := sr.Get(wrapper.Style)
+	if !ok {
+		t.Fatalf("wrapper style %q not found", wrapper.Style)
+	}
+	assertMeasure(t, wrapperDef.Properties[SymMarginLeft], SymMarginLeft, -1, SymUnitEm)
+	assertMeasure(t, wrapperDef.Properties[SymMarginRight], SymMarginRight, -2, SymUnitEm)
 }
 
 func TestAddParagraphWithImages_PendingFootnoteMorePreservesInlineImages(t *testing.T) {
@@ -141,5 +174,19 @@ func TestAddParagraphWithImages_PendingFootnoteMorePreservesInlineImages(t *test
 	}
 	if entry.Style == "" && len(entry.StyleEvents) == 0 {
 		t.Fatal("expected marker styling to be preserved on the rendered paragraph")
+	}
+}
+
+func assertMeasure(t *testing.T, got any, sym KFXSymbol, want float64, unit KFXSymbol) {
+	t.Helper()
+	value, gotUnit, ok := measureParts(got)
+	if !ok {
+		t.Fatalf("property %s is not a measure: %v", traceSymbolName(sym), got)
+	}
+	if gotUnit != unit {
+		t.Fatalf("property %s unit = %s, want %s", traceSymbolName(sym), traceSymbolName(gotUnit), traceSymbolName(unit))
+	}
+	if math.Abs(value-want) > 1e-6 {
+		t.Fatalf("property %s value = %v, want %v", traceSymbolName(sym), value, want)
 	}
 }

@@ -4,17 +4,21 @@ import (
 	"fmt"
 	"maps"
 	"strings"
-	"unicode/utf8"
 
 	"fbc/content"
-	"fbc/content/text"
 	"fbc/fb2"
 )
+
+const dropcapMarginWrapperStyle = "dropcap-margin-wrapper"
 
 // addParagraphWithImages processes a paragraph with potential inline images.
 // ctx provides the style context with optional position for margin filtering.
 // extraClasses are additional CSS classes to append to the style (e.g., paragraph's custom style).
 func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleContext, extraClasses string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
+	addParagraphWithImagesInternal(c, para, ctx, extraClasses, headingLevel, sb, styles, imageResources, ca, idToEID, true, false)
+}
+
+func addParagraphWithImagesInternal(c *content.Content, para *fb2.Paragraph, ctx StyleContext, extraClasses string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, allowDropcapWrapper bool, wrappedDropcap bool) {
 	if sb != nil && sb.consumePendingFootnoteMore() && c != nil && c.MoreParaStr != "" {
 		para = paragraphWithMoreIndicator(para, c.MoreParaStr)
 	}
@@ -61,6 +65,16 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 	hasTextContent := paragraphHasTextContent(para)
 	hasInlineImages := paragraphHasInlineImages(para)
 
+	if allowDropcapWrapper && sb != nil && styles != nil && hasTextContent && shouldWrapDropcapParagraph(ctx, tag, spanningClasses) {
+		styles.EnsureBaseStyle(dropcapMarginWrapperStyle)
+		wrapperStyle := resolveDropcapMarginWrapperStyle(ctx)
+		sb.StartBlock(dropcapMarginWrapperStyle, styles, &BlockOptions{Kind: ContainerSection})
+		addParagraphWithImagesInternal(c, para, ctx.WithoutRootHorizontalMargins(), extraClasses, headingLevel, sb, styles, imageResources, ca, idToEID, false, true)
+		sb.EndBlock()
+		applyResolvedStyleToLastDropcapWrapper(sb, wrapperStyle)
+		return
+	}
+
 	// Use mixed content mode for:
 	// 1. Paragraphs with BOTH text and inline images - images flow with text
 	// 2. Image-only paragraphs in heading context - KP3 wraps these in text entry with content_list
@@ -79,7 +93,7 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 	// Skip for image-only blocks - they use ResolveImageWithDimensions() which creates its own style.
 	var resolvedStyle string
 	if !imageOnlyBlock {
-		resolvedStyle = ctx.Resolve(tag, spanningClasses)
+		resolvedStyle = resolveParagraphTextStyle(ctx, tag, spanningClasses, wrappedDropcap)
 	}
 
 	// Otherwise, use the original approach (text-only or block image paragraphs)
@@ -92,7 +106,6 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 	// KP3 emits a style_event for the first glyph in dropcap paragraphs.
 	// The event contains only lightweight text styling (e.g. font-weight: bold).
 	var dropcapGlyphDeltaStyle string
-	var injectDropcapSpacer bool
 
 	// Create inline style context by pushing the paragraph tag and classes.
 	// This ensures inline styles (like sub/sup) inherit font-size from the container.
@@ -115,12 +128,6 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 		// Apply segmentation to eliminate overlapping style events (KP3 requirement)
 		segmentedEvents := SegmentNestedStyleEvents(events)
 		contentText := nw.String()
-		if injectDropcapSpacer {
-			// HACK: KP3/KFX renders paragraphs with dropcaps and negative margin-left badly.
-			// Insert a narrow no-break spacer after the first rune as a layout workaround.
-			contentText = insertSpacerAfterFirstRune(contentText, text.NNBSP)
-			adjustStyleEventsForInsertedRune(segmentedEvents, 1)
-		}
 		contentName, offset := ca.Add(contentText)
 
 		// Mark usage only for styles that survived segmentation
@@ -376,23 +383,10 @@ func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleCo
 			_, hasLines := def.Properties[SymDropcapLines]
 			_, hasChars := def.Properties[SymDropcapChars]
 			if (hasLines || hasChars) && nw.RuneCountAfterPendingSpace() >= 1 {
-				// HACK: when KP3/KFX combines dropcaps with negative margin-left, surrounding
-				// text positioning is wrong. We compensate by inserting a narrow no-break spacer
-				// into the text stream and extending dropcap-chars to keep that spacer inside
-				// the dropcap span rather than letting it render as normal paragraph text.
-				injectDropcapSpacer = hasNegativeMarginLeft(def.Properties[SymMarginLeft])
 				if dropcapLineCount > 0 && hasLines {
 					props := make(map[KFXSymbol]any, len(def.Properties)+1)
 					maps.Copy(props, def.Properties)
 					props[SymDropcapLines] = dropcapLineCount
-					if injectDropcapSpacer {
-						props[SymDropcapChars] = incrementDropcapChars(props[SymDropcapChars])
-					}
-					resolvedStyle = styles.RegisterResolved(props, styleUsageText, true)
-				} else if injectDropcapSpacer {
-					props := make(map[KFXSymbol]any, len(def.Properties)+1)
-					maps.Copy(props, def.Properties)
-					props[SymDropcapChars] = incrementDropcapChars(props[SymDropcapChars])
 					resolvedStyle = styles.RegisterResolved(props, styleUsageText, true)
 				}
 				if dropcapGlyphDeltaStyle == "" {
@@ -447,7 +441,7 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 	_ = styleSpec // unused after simplification
 
 	// Resolve style immediately
-	resolvedStyle := ctx.Resolve(tag, spanningClasses)
+	resolvedStyle := resolveParagraphTextStyle(ctx, tag, spanningClasses, false)
 
 	// Parse spanningClasses for spanning style depth tracking
 	spanningStyleParts := strings.Fields(spanningClasses)
@@ -735,42 +729,94 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 	}
 }
 
-func hasNegativeMarginLeft(val any) bool {
-	v, _, ok := measureParts(val)
-	return ok && v < 0
-}
-
-func incrementDropcapChars(val any) int {
-	if n, ok := numericFromAny(val); ok && n >= 1 {
-		return int(n) + 1
+func shouldWrapDropcapParagraph(ctx StyleContext, tag, classes string) bool {
+	props := ctx.resolveProperties(tag, classes)
+	if !hasDropcapProperties(props) {
+		return false
 	}
-	return 2
-}
-
-func insertSpacerAfterFirstRune(s, spacer string) string {
-	if s == "" {
-		return s
-	}
-	_, size := utf8.DecodeRuneInString(s)
-	if size <= 0 {
-		return s
-	}
-	return s[:size] + spacer + s[size:]
-}
-
-func adjustStyleEventsForInsertedRune(events []StyleEventRef, insertAt int) {
-	for i := range events {
-		start := events[i].Offset
-		end := events[i].Offset + events[i].Length
-		if start >= insertAt {
-			start++
+	for _, sym := range []KFXSymbol{SymMarginLeft, SymMarginRight} {
+		if v, _, ok := measureParts(props[sym]); ok && v < 0 {
+			return true
 		}
-		if end > insertAt {
-			end++
-		}
-		events[i].Offset = start
-		events[i].Length = end - start
 	}
+	return false
+}
+
+func resolveDropcapMarginWrapperStyle(ctx StyleContext) string {
+	if ctx.registry == nil {
+		return ""
+	}
+	props := ctx.resolveProperties("", dropcapMarginWrapperStyle)
+	return ctx.registry.RegisterResolved(props, styleUsageWrapper, true)
+}
+
+func applyResolvedStyleToLastDropcapWrapper(sb *StorylineBuilder, style string) {
+	if sb == nil || style == "" {
+		return
+	}
+	if len(sb.blockStack) > 0 {
+		children := sb.blockStack[len(sb.blockStack)-1].children
+		if len(children) == 0 {
+			return
+		}
+		child := &sb.blockStack[len(sb.blockStack)-1].children[len(children)-1]
+		if child.StyleSpec == dropcapMarginWrapperStyle {
+			child.StyleSpec = ""
+			child.Style = style
+		}
+		return
+	}
+	if len(sb.contentEntries) == 0 {
+		return
+	}
+	entry := &sb.contentEntries[len(sb.contentEntries)-1]
+	if entry.StyleSpec == dropcapMarginWrapperStyle {
+		entry.StyleSpec = ""
+		entry.Style = style
+	}
+}
+
+func resolveParagraphTextStyle(ctx StyleContext, tag, classes string, wrappedDropcap bool) string {
+	if ctx.registry == nil {
+		return ""
+	}
+
+	props := ctx.resolveProperties(tag, classes)
+	adjustDropcapParagraphMargins(props, wrappedDropcap)
+	return ctx.registry.RegisterResolved(props, styleUsageText, true)
+}
+
+func hasDropcapProperties(props map[KFXSymbol]any) bool {
+	_, hasLines := props[SymDropcapLines]
+	_, hasChars := props[SymDropcapChars]
+	return hasLines || hasChars
+}
+
+func adjustDropcapParagraphMargins(props map[KFXSymbol]any, wrappedDropcap bool) {
+	if !hasDropcapProperties(props) {
+		return
+	}
+
+	// KP3/KFX lays out drop caps badly when the paragraph itself has negative
+	// horizontal margins: the normal text is wrapped as if it had a first-line
+	// indent, and spacer/letter-spacing workarounds cannot fix that geometry.
+	// Keep dropcap metrics and glyph styling, but avoid negative horizontal
+	// paragraph margins for dropcap blocks.
+	//
+	// Use explicit zero instead of deleting the properties. Deleting would remove
+	// the root/page inset only for the dropcap paragraph, making that whole
+	// paragraph visibly wider than the following negative-margin paragraphs.
+	for _, sym := range []KFXSymbol{SymMarginLeft, SymMarginRight} {
+		if v, _, ok := measureParts(props[sym]); ok && v < 0 {
+			props[sym] = DimensionValue(0, SymUnitEm)
+		}
+	}
+
+	// Dropcap paragraphs should not add extra spacing after the lines occupied by
+	// the dropped glyph. The default KFX/UA paragraph margin can otherwise leave a
+	// visible gap before the following paragraph even when the source CSS uses
+	// p.has-dropcap { margin: 0 }.
+	props[SymMarginBottom] = DimensionValue(0, SymUnitLh)
 }
 
 // detectSingleSpanningStyle checks if a paragraph's content is entirely wrapped in a single
