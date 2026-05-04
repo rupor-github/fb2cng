@@ -61,6 +61,17 @@ func TestNewStyleContext_HTMLHorizontalMargins(t *testing.T) {
 	requireMeasure(t, props, SymMarginRight, 1.5, SymUnitEm)
 }
 
+func TestNewStyleContext_RootHorizontalMarginsAccumulateWithParagraphMargins(t *testing.T) {
+	registry, _ := parseAndCreateRegistry([]byte(`
+		html { margin-left: -1em; margin-right: -1em; }
+		p { margin: 0 0 0 3em; }
+	`), nil, zap.NewNop())
+
+	props := resolvedStyleProps(t, registry, "p", "")
+	requireMeasure(t, props, SymMarginLeft, 2, SymUnitEm)
+	requireMeasure(t, props, SymMarginRight, -1, SymUnitEm)
+}
+
 func TestNewStyleContext_RootDescendantSelector(t *testing.T) {
 	registry, _ := parseAndCreateRegistry([]byte(`
 		body p { text-align: center; }

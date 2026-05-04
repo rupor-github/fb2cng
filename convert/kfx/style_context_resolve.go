@@ -42,6 +42,7 @@ func (sc StyleContext) resolveProperties(tag, classes string) map[KFXSymbol]any 
 		if def, ok := sc.registry.Get(tag); ok {
 			resolved := sc.registry.resolveInheritance(def)
 			propsToMerge := sc.filterTagDefaultsIfInherited(resolved.Properties)
+			propsToMerge = sc.handleContainerAwareMargins(merged, propsToMerge, tag)
 			sc.registry.mergePropertiesWithContext(merged, propsToMerge, mergeContextInline)
 
 			// Update accumulated font-size from tag
@@ -341,11 +342,14 @@ func (sc StyleContext) handleContainerAwareMargins(merged, props map[KFXSymbol]a
 func (sc StyleContext) filterTagDefaultsIfInherited(props map[KFXSymbol]any) map[KFXSymbol]any {
 	needsFilter := false
 
-	// Check container margin condition: if a block container contributed non-zero margin,
-	// the tag default margin should be filtered out (lower CSS specificity).
+	// Check container margin condition: if a non-root block container contributed
+	// non-zero margin, the tag default margin should be filtered out (lower CSS
+	// specificity). Synthetic html/body root margins are page/story insets, not
+	// ordinary container classes, so element margins (e.g. p { margin-left: 3em })
+	// must still accumulate with them.
 	for _, sym := range []KFXSymbol{SymMarginLeft, SymMarginRight} {
 		if _, hasMargin := props[sym]; hasMargin {
-			if !isZeroMargin(sc.inherited[sym]) {
+			if !isZeroMargin(sc.inherited[sym]) && sc.hasNonRootHorizontalMarginContributor(sym) {
 				needsFilter = true
 				break
 			}
@@ -375,7 +379,7 @@ func (sc StyleContext) filterTagDefaultsIfInherited(props map[KFXSymbol]any) map
 		// Tag selectors have lower CSS specificity than class selectors, so the container's
 		// accumulated margin (from PushBlock) should not be overridden by the tag default.
 		if sym == SymMarginLeft || sym == SymMarginRight {
-			if !isZeroMargin(sc.inherited[sym]) {
+			if !isZeroMargin(sc.inherited[sym]) && sc.hasNonRootHorizontalMarginContributor(sym) {
 				continue
 			}
 		}
@@ -390,6 +394,19 @@ func (sc StyleContext) filterTagDefaultsIfInherited(props map[KFXSymbol]any) map
 		filtered[sym] = val
 	}
 	return filtered
+}
+
+func (sc StyleContext) hasNonRootHorizontalMarginContributor(sym KFXSymbol) bool {
+	origin := sc.marginOrigins[sym]
+	if origin == nil {
+		return false
+	}
+	for contributor := range origin.contributors {
+		if contributor != "html" && contributor != "body" {
+			return true
+		}
+	}
+	return false
 }
 
 // isZeroMargin returns true if the margin value is zero or nil.
