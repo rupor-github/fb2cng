@@ -2628,56 +2628,6 @@ func TestGenerateCoverPageDoc_Epub3CoverSemantics(t *testing.T) {
 	}
 }
 
-func TestGenerateCoverPageDoc_SVGAccessibilityText(t *testing.T) {
-	_, _, log := setupTestContext(t)
-
-	c := &content.Content{
-		Book: &fb2.FictionBook{
-			Description: fb2.Description{
-				TitleInfo: fb2.TitleInfo{
-					BookTitle: fb2.TextField{Value: "Test Book"},
-					Coverpage: []fb2.InlineImage{{Href: "#cover", Alt: "Custom cover alt"}},
-				},
-			},
-		},
-		OutputFormat: common.OutputFmtEpub2,
-		ImagesIndex: fb2.BookImages{
-			"cover": &fb2.BookImage{
-				Filename: "cover.jpg",
-				MimeType: "image/jpeg",
-				Dim:      struct{ Width, Height int }{Width: 1000, Height: 1500},
-			},
-		},
-		CoverID: "cover",
-	}
-
-	doc, err := generateCoverPageDoc(c, &config.DocumentConfig{}, log)
-	if err != nil {
-		t.Fatalf("generateCoverPageDoc() error = %v", err)
-	}
-
-	svg := doc.FindElement("//svg")
-	if svg == nil {
-		t.Fatal("missing svg element")
-	}
-
-	title := svg.SelectElement("title")
-	if title == nil {
-		t.Fatal("missing svg title element")
-	}
-	if got := title.Text(); got != "Custom cover alt" {
-		t.Errorf("svg title = %q, want custom cover alt", got)
-	}
-
-	desc := svg.SelectElement("desc")
-	if desc == nil {
-		t.Fatal("missing svg desc element")
-	}
-	if got := desc.Text(); got != "Cover image for Test Book" {
-		t.Errorf("svg desc = %q, want cover image description", got)
-	}
-}
-
 func TestGenerateTOCPage(t *testing.T) {
 	log := setupTestLogger(t)
 

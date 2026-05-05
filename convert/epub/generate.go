@@ -382,8 +382,6 @@ func generateCoverPageDoc(c *content.Content, cfg *config.DocumentConfig, log *z
 		style.SetText("html, body { margin: 0; padding: 0; width: 100%; height: 100%; } svg { display: block; width: auto; height: 100%; margin: 0 auto }")
 	}
 
-	bookTitle := strings.TrimSpace(c.Book.Description.TitleInfo.BookTitle.Value)
-
 	title := head.CreateElement("title")
 	title.SetText(c.Book.Description.TitleInfo.BookTitle.Value)
 
@@ -396,21 +394,6 @@ func generateCoverPageDoc(c *content.Content, cfg *config.DocumentConfig, log *z
 	svg.CreateAttr("version", "1.1")
 	svg.CreateAttr("xmlns", "http://www.w3.org/2000/svg")
 	svg.CreateAttr("xmlns:xlink", "http://www.w3.org/1999/xlink")
-
-	coverTitle := "Cover"
-	if len(c.Book.Description.TitleInfo.Coverpage) > 0 {
-		if alt := strings.TrimSpace(c.Book.Description.TitleInfo.Coverpage[0].Alt); alt != "" {
-			coverTitle = alt
-		}
-	}
-	svgTitle := svg.CreateElement("title")
-	svgTitle.SetText(coverTitle)
-	svgDesc := svg.CreateElement("desc")
-	if bookTitle != "" {
-		svgDesc.SetText("Cover image for " + bookTitle)
-	} else {
-		svgDesc.SetText("Book cover image")
-	}
 
 	switch cfg.Images.Cover.Resize {
 	case common.ImageResizeModeStretch:
