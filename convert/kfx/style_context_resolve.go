@@ -356,8 +356,10 @@ func (sc StyleContext) filterTagDefaultsIfInherited(props map[KFXSymbol]any) map
 		}
 	}
 
-	// Check inherited CSS property condition
-	if !needsFilter {
+	// Check inherited CSS property condition. Only real non-root containers
+	// protect inherited properties from tag defaults; root html/body values are
+	// normal inherited CSS and direct element rules should override them.
+	if !needsFilter && sc.hasNonRootScope() {
 		for sym := range props {
 			if isInheritedProperty(sym) {
 				if _, hasInherited := sc.inherited[sym]; hasInherited {
@@ -384,9 +386,12 @@ func (sc StyleContext) filterTagDefaultsIfInherited(props map[KFXSymbol]any) map
 			}
 		}
 
-		// Filter inherited CSS properties if container already set them
+		// Filter inherited CSS properties only when a real non-root container
+		// already set them. Synthetic html/body scopes provide the root context,
+		// but direct element rules (for example p { line-height: 110% }) must
+		// still override inherited root values (body { line-height: 100% }).
 		if isInheritedProperty(sym) {
-			if _, hasInherited := sc.inherited[sym]; hasInherited {
+			if _, hasInherited := sc.inherited[sym]; hasInherited && sc.hasNonRootScope() {
 				continue
 			}
 		}
@@ -403,6 +408,18 @@ func (sc StyleContext) hasNonRootHorizontalMarginContributor(sym KFXSymbol) bool
 	}
 	for contributor := range origin.contributors {
 		if contributor != "html" && contributor != "body" {
+			return true
+		}
+	}
+	return false
+}
+
+func (sc StyleContext) hasNonRootScope() bool {
+	for _, scope := range sc.scopes {
+		if scope.Tag != "html" && scope.Tag != "body" {
+			return true
+		}
+		if len(scope.Classes) > 0 {
 			return true
 		}
 	}

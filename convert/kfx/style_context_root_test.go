@@ -72,6 +72,16 @@ func TestNewStyleContext_RootHorizontalMarginsAccumulateWithParagraphMargins(t *
 	requireMeasure(t, props, SymMarginRight, -1, SymUnitEm)
 }
 
+func TestNewStyleContext_RootLineHeightDoesNotOverrideParagraphLineHeight(t *testing.T) {
+	registry, _ := parseAndCreateRegistry([]byte(`
+		body { line-height: 100%; }
+		p { line-height: 110%; }
+	`), nil, zap.NewNop())
+
+	props := resolvedStyleProps(t, registry, "p", "")
+	requireMeasure(t, props, SymLineHeight, 110, SymUnitPercent)
+}
+
 func TestNewStyleContext_RootDescendantSelector(t *testing.T) {
 	registry, _ := parseAndCreateRegistry([]byte(`
 		body p { text-align: center; }
