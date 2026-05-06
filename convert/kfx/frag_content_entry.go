@@ -44,6 +44,11 @@ type ContentRef struct {
 	// the preceding element loses its mb and the empty-line's margin goes to the next element's mt.
 	StripMarginBottom bool
 
+	// StripMarginBottomTransfer overrides the margin value transferred to the following
+	// sibling when StripMarginBottom is processed. Nil preserves the default behavior of
+	// transferring the stripped margin-bottom. A pointer to zero strips without transfer.
+	StripMarginBottomTransfer *float64
+
 	// EmptyLineMarginBottom stores the empty-line margin to apply as this element's margin-bottom.
 	// This is set when an empty-line is followed by an image - KP3 puts the empty-line margin
 	// on the PREVIOUS element (as mb) rather than the image (as mt).

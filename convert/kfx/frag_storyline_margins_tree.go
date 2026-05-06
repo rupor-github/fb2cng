@@ -180,18 +180,19 @@ func (sb *StorylineBuilder) addContentNodeToTree(tree *ContentTree, containerNod
 
 	// Create content node
 	contentNode := &ContentNode{
-		Index:                 parentIndex,
-		EID:                   ref.EID,
-		ContentType:           contentType,
-		Style:                 ref.Style,
-		MarginTop:             ref.MarginTop,
-		MarginBottom:          ref.MarginBottom,
-		HasBreakAfterAvoid:    ref.HasBreakAfterAvoid,
-		StripMarginBottom:     ref.StripMarginBottom,
-		EmptyLineMarginBottom: ref.EmptyLineMarginBottom,
-		EmptyLineMarginTop:    ref.EmptyLineMarginTop,
-		IsFloatImage:          ref.IsFloatImage,
-		EntryOrder:            ref.EntryOrder,
+		Index:                     parentIndex,
+		EID:                       ref.EID,
+		ContentType:               contentType,
+		Style:                     ref.Style,
+		MarginTop:                 ref.MarginTop,
+		MarginBottom:              ref.MarginBottom,
+		HasBreakAfterAvoid:        ref.HasBreakAfterAvoid,
+		StripMarginBottom:         ref.StripMarginBottom,
+		StripMarginBottomTransfer: ref.StripMarginBottomTransfer,
+		EmptyLineMarginBottom:     ref.EmptyLineMarginBottom,
+		EmptyLineMarginTop:        ref.EmptyLineMarginTop,
+		IsFloatImage:              ref.IsFloatImage,
+		EntryOrder:                ref.EntryOrder,
 	}
 
 	// For child refs, store both parent and child index for later lookup

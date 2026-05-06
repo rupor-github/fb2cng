@@ -65,14 +65,17 @@ func addParagraphWithImagesInternal(c *content.Content, para *fb2.Paragraph, ctx
 	hasTextContent := paragraphHasTextContent(para)
 	hasInlineImages := paragraphHasInlineImages(para)
 
-	if allowDropcapWrapper && sb != nil && styles != nil && hasTextContent && shouldWrapDropcapParagraph(ctx, tag, spanningClasses) {
-		styles.EnsureBaseStyle(dropcapMarginWrapperStyle)
-		wrapperStyle := resolveDropcapMarginWrapperStyle(ctx)
-		sb.StartBlock(dropcapMarginWrapperStyle, styles, &BlockOptions{Kind: ContainerSection})
-		addParagraphWithImagesInternal(c, para, ctx.WithoutRootHorizontalMargins(), extraClasses, headingLevel, sb, styles, imageResources, ca, idToEID, false, true)
-		sb.EndBlock()
-		applyResolvedStyleToLastDropcapWrapper(sb, wrapperStyle)
-		return
+	if allowDropcapWrapper && sb != nil && styles != nil && hasTextContent {
+		paragraphProps := ctx.resolveProperties(tag, spanningClasses)
+		if shouldWrapDropcapParagraphProps(paragraphProps) {
+			styles.EnsureBaseStyle(dropcapMarginWrapperStyle)
+			wrapperStyle := resolveDropcapMarginWrapperStyle(ctx, paragraphProps)
+			sb.StartBlock(dropcapMarginWrapperStyle, styles, &BlockOptions{Kind: ContainerSection})
+			addParagraphWithImagesInternal(c, para, ctx.WithoutRootHorizontalMargins(), extraClasses, headingLevel, sb, styles, imageResources, ca, idToEID, false, true)
+			sb.EndBlock()
+			applyResolvedStyleToLastDropcapWrapper(sb, wrapperStyle)
+			return
+		}
 	}
 
 	// Use mixed content mode for:
@@ -729,11 +732,11 @@ func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx S
 	}
 }
 
-func shouldWrapDropcapParagraph(ctx StyleContext, tag, classes string) bool {
-	props := ctx.resolveProperties(tag, classes)
-	if !hasDropcapProperties(props) {
-		return false
-	}
+func shouldWrapDropcapParagraphProps(props map[KFXSymbol]any) bool {
+	return hasDropcapProperties(props) && hasNegativeHorizontalMargin(props)
+}
+
+func hasNegativeHorizontalMargin(props map[KFXSymbol]any) bool {
 	for _, sym := range []KFXSymbol{SymMarginLeft, SymMarginRight} {
 		if v, _, ok := measureParts(props[sym]); ok && v < 0 {
 			return true
@@ -742,11 +745,19 @@ func shouldWrapDropcapParagraph(ctx StyleContext, tag, classes string) bool {
 	return false
 }
 
-func resolveDropcapMarginWrapperStyle(ctx StyleContext) string {
+func resolveDropcapMarginWrapperStyle(ctx StyleContext, horizontalSources ...map[KFXSymbol]any) string {
 	if ctx.registry == nil {
 		return ""
 	}
 	props := ctx.resolveProperties("", dropcapMarginWrapperStyle)
+	for _, sym := range []KFXSymbol{SymMarginLeft, SymMarginRight} {
+		for _, source := range horizontalSources {
+			if v, _, ok := measureParts(source[sym]); ok && v < 0 {
+				props[sym] = source[sym]
+				break
+			}
+		}
+	}
 	return ctx.registry.RegisterResolved(props, styleUsageWrapper, true)
 }
 
@@ -793,7 +804,8 @@ func hasDropcapProperties(props map[KFXSymbol]any) bool {
 }
 
 func adjustDropcapParagraphMargins(props map[KFXSymbol]any, wrappedDropcap bool) {
-	if !hasDropcapProperties(props) {
+	hasDropcap := hasDropcapProperties(props)
+	if !hasDropcap && !wrappedDropcap {
 		return
 	}
 
@@ -801,22 +813,19 @@ func adjustDropcapParagraphMargins(props map[KFXSymbol]any, wrappedDropcap bool)
 	// horizontal margins: the normal text is wrapped as if it had a first-line
 	// indent, and spacer/letter-spacing workarounds cannot fix that geometry.
 	// Keep dropcap metrics and glyph styling, but avoid negative horizontal
-	// paragraph margins for dropcap blocks.
+	// paragraph margins for dropcap blocks. When the immediate following paragraph
+	// is placed inside the same dropcap wrapper, clamp it too so it does not
+	// reintroduce negative geometry inside the dropcap exclusion area.
 	//
 	// Use explicit zero instead of deleting the properties. Deleting would remove
-	// the root/page inset only for the dropcap paragraph, making that whole
-	// paragraph visibly wider than the following negative-margin paragraphs.
+	// the root/page inset only for the affected paragraph, making it visibly wider
+	// than surrounding negative-margin paragraphs.
 	for _, sym := range []KFXSymbol{SymMarginLeft, SymMarginRight} {
 		if v, _, ok := measureParts(props[sym]); ok && v < 0 {
 			props[sym] = DimensionValue(0, SymUnitEm)
 		}
 	}
 
-	// Dropcap paragraphs should not add extra spacing after the lines occupied by
-	// the dropped glyph. The default KFX/UA paragraph margin can otherwise leave a
-	// visible gap before the following paragraph even when the source CSS uses
-	// p.has-dropcap { margin: 0 }.
-	props[SymMarginBottom] = DimensionValue(0, SymUnitLh)
 }
 
 // detectSingleSpanningStyle checks if a paragraph's content is entirely wrapped in a single

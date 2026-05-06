@@ -255,7 +255,7 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 	sectionCtx := NewStyleContext(styles)
 	var lastTitledEntry *TOCEntry
 
-	for i := range section.Content {
+	for i := 0; i < len(section.Content); i++ {
 		item := &section.Content[i]
 		if item.Kind == fb2.FlowSection && item.Section != nil {
 			nestedSection := item.Section
@@ -333,11 +333,82 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 			if i+1 < len(section.Content) {
 				next = &section.Content[i+1]
 			}
+			if processDropcapParagraphPair(c, item, next, sectionCtx, sb, styles, imageResources, ca, idToEID) {
+				i++
+				continue
+			}
 			processFlowItem(c, item, next, sectionCtx, "section", sb, styles, imageResources, ca, idToEID)
 		}
 	}
 
 	return nil
+}
+
+func processDropcapParagraphPair(c *content.Content, item, next *fb2.FlowItem, ctx StyleContext, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) bool {
+	if item == nil || next == nil || item.Kind != fb2.FlowParagraph || next.Kind != fb2.FlowParagraph || item.Paragraph == nil || next.Paragraph == nil {
+		return false
+	}
+	if sb == nil || styles == nil || !paragraphHasTextContent(item.Paragraph) || !paragraphHasTextContent(next.Paragraph) {
+		return false
+	}
+
+	firstProps := ctx.resolveProperties("p", item.Paragraph.Style)
+	if !hasDropcapProperties(firstProps) {
+		return false
+	}
+	secondProps := ctx.resolveProperties("p", next.Paragraph.Style)
+	if !hasNegativeHorizontalMargin(firstProps) && !hasNegativeHorizontalMargin(secondProps) {
+		return false
+	}
+
+	// Match the single-paragraph wrapper path, but keep the immediate following
+	// paragraph in the same wrapper. This isolates both paragraphs from negative
+	// horizontal margins while preserving those margins on the wrapper. The trigger
+	// checks the following paragraph too: a common stylesheet shape is
+	// p.has-dropcap { margin-left/right: 0 } followed by ordinary p margins.
+	ctx.ConsumePendingMargin()
+	styles.EnsureBaseStyle(dropcapMarginWrapperStyle)
+	wrapperStyle := resolveDropcapMarginWrapperStyle(ctx, firstProps, secondProps)
+	sb.StartBlock(dropcapMarginWrapperStyle, styles, &BlockOptions{Kind: ContainerSection})
+	wrappedCtx := ctx.WithoutRootHorizontalMargins()
+	addParagraphWithImagesInternal(c, item.Paragraph, wrappedCtx, item.Paragraph.Style, 0, sb, styles, imageResources, ca, idToEID, false, true)
+	// Once the following paragraph is pulled into the same workaround wrapper, the
+	// dropcap paragraph's bottom margin becomes an internal boundary margin. Strip
+	// it from the dropcap paragraph, but transfer only the intended normal paragraph
+	// gap. This avoids leaking the UA/default 1em dropcap margin into the following
+	// paragraph when the source CSS requested margin: 0 or a smaller paragraph gap.
+	sb.MarkPreviousEntryStripMBWithTransfer(dropcapPairBoundaryMargin(firstProps, secondProps))
+	addParagraphWithImagesInternal(c, next.Paragraph, wrappedCtx, next.Paragraph.Style, 0, sb, styles, imageResources, ca, idToEID, false, true)
+	sb.EndBlock()
+	applyResolvedStyleToLastDropcapWrapper(sb, wrapperStyle)
+	return true
+}
+
+func dropcapPairBoundaryMargin(firstProps, secondProps map[KFXSymbol]any) float64 {
+	if mb, ok := marginLH(secondProps, SymMarginBottom); ok {
+		return mb
+	}
+
+	// If the dropcap paragraph has a custom/smaller bottom margin, preserve it.
+	// Do not transfer the built-in HTML paragraph default (1em == 0.833333lh): that
+	// is exactly the value that creates the oversized gap when p.has-dropcap or p
+	// requested zero/smaller spacing.
+	if mb, ok := marginLH(firstProps, SymMarginBottom); ok && mb < defaultParagraphMarginLH()-1e-6 {
+		return mb
+	}
+	return 0
+}
+
+func marginLH(props map[KFXSymbol]any, sym KFXSymbol) (float64, bool) {
+	v, unit, ok := measureParts(props[sym])
+	if !ok || unit != SymUnitLh || v <= 0 {
+		return 0, false
+	}
+	return v, true
+}
+
+func defaultParagraphMarginLH() float64 {
+	return 1.0 / LineHeightRatio
 }
 
 // sectionHasNonTrivialContent reports whether a section has content that should cause

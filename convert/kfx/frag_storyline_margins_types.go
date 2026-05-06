@@ -205,6 +205,10 @@ type ContentNode struct {
 	// This is set when an empty-line follows this element, matching KP3 behavior.
 	StripMarginBottom bool
 
+	// StripMarginBottomTransfer overrides the margin transferred to the following sibling.
+	// Nil means transfer the stripped margin-bottom; pointer to zero means strip only.
+	StripMarginBottomTransfer *float64
+
 	// EmptyLineMarginBottom stores the empty-line margin to apply as this element's margin-bottom.
 	// This is set when an empty-line is followed by an image - KP3 puts the empty-line margin
 	// on the PREVIOUS element (as mb) rather than the image (as mt).

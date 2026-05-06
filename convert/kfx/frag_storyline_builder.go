@@ -340,15 +340,34 @@ func (sb *StorylineBuilder) PageTemplateEID() int {
 }
 
 // MarkPreviousEntryStripMB marks the previous content entry to have its margin-bottom stripped.
-// This is called when an empty-line is encountered, matching KP3 behavior where the preceding
-// element loses its mb and the empty-line's margin goes to the next element's mt.
-// Does nothing if there are no previous entries.
+// This is called when an internal boundary should move the previous element's margin-bottom
+// onto the following element's margin-top during margin post-processing (for example empty-lines
+// and the synthetic dropcap-pair wrapper). Does nothing if there are no previous entries.
 func (sb *StorylineBuilder) MarkPreviousEntryStripMB() {
+	sb.markPreviousEntryStripMB(nil)
+}
+
+func (sb *StorylineBuilder) MarkPreviousEntryStripMBWithTransfer(transfer float64) {
+	sb.markPreviousEntryStripMB(&transfer)
+}
+
+func (sb *StorylineBuilder) markPreviousEntryStripMB(transfer *float64) {
+	if len(sb.blockStack) > 0 {
+		block := sb.blockStack[len(sb.blockStack)-1]
+		if len(block.children) == 0 {
+			return
+		}
+		prevIdx := len(block.children) - 1
+		block.children[prevIdx].StripMarginBottom = true
+		block.children[prevIdx].StripMarginBottomTransfer = transfer
+		return
+	}
 	if len(sb.contentEntries) == 0 {
 		return
 	}
 	prevIdx := len(sb.contentEntries) - 1
 	sb.contentEntries[prevIdx].StripMarginBottom = true
+	sb.contentEntries[prevIdx].StripMarginBottomTransfer = transfer
 }
 
 // SetPreviousEntryEmptyLineMarginBottom sets the empty-line margin as the previous entry's margin-bottom.

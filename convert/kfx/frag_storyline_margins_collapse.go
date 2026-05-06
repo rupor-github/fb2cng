@@ -200,10 +200,16 @@ func (t *ContentTree) stripMarkedMarginBottom(container *ContentNode) {
 
 		// Float images have fixed margins that don't participate in collapsing.
 		// Skip stripping mb from float images - they act as a collapse barrier.
-		if child.StripMarginBottom && child.MarginBottom != nil && !child.IsFloatImage {
-			strippedMB := *child.MarginBottom
+		if child.StripMarginBottom && !child.IsFloatImage {
+			transferMB := 0.0
+			if child.MarginBottom != nil {
+				transferMB = *child.MarginBottom
+			}
+			if child.StripMarginBottomTransfer != nil {
+				transferMB = *child.StripMarginBottomTransfer
+			}
 
-			// Trace the strip operation before clearing
+			// Trace the strip operation before clearing.
 			if t.tracer != nil && t.tracer.IsEnabled() {
 				beforeMT, beforeMB := child.MarginTop, child.MarginBottom
 				child.MarginBottom = nil
@@ -214,24 +220,24 @@ func (t *ContentTree) stripMarkedMarginBottom(container *ContentNode) {
 				child.MarginBottom = nil
 			}
 
-			// Transfer stripped margin to next sibling if it's larger than next's margin-top.
-			// This matches KP3 behavior: empty-line after subtitle gives next element
-			// max(emptyline_margin, subtitle_mb).
-			if i+1 < len(children) {
+			// Transfer stripped/overridden margin to next sibling if it's larger than next's margin-top.
+			// This matches KP3 behavior for empty-lines, while allowing synthetic boundaries
+			// (such as dropcap pairs) to cap or suppress the transferred value.
+			if transferMB > 0 && i+1 < len(children) {
 				next := children[i+1]
 				nextMT := 0.0
 				if next.MarginTop != nil {
 					nextMT = *next.MarginTop
 				}
-				if strippedMB > nextMT {
+				if transferMB > nextMT {
 					if t.tracer != nil && t.tracer.IsEnabled() {
 						beforeMT, beforeMB := next.MarginTop, next.MarginBottom
-						next.MarginTop = ptrFloat64(strippedMB)
+						next.MarginTop = ptrFloat64(transferMB)
 						t.tracer.TraceMarginCollapse("transfer-stripped-mb", next.TraceID(),
 							beforeMT, beforeMB, next.MarginTop, next.MarginBottom,
 							container.ContainerKind.String())
 					} else {
-						next.MarginTop = ptrFloat64(strippedMB)
+						next.MarginTop = ptrFloat64(transferMB)
 					}
 				}
 			}

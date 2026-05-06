@@ -8,7 +8,7 @@ import (
 	"fbc/fb2"
 )
 
-func TestAddParagraphWithImages_DropcapWithoutNegativeMarginZerosBottomMargin(t *testing.T) {
+func TestAddParagraphWithImages_DropcapWithoutNegativeMarginPreservesBottomMargin(t *testing.T) {
 	sr := NewStyleRegistry()
 	sr.Register(NewStyle("p").Build())
 	sr.Register(NewStyle("has-dropcap").Dropcap(1, 3).MarginBottom(1, SymUnitLh).Build())
@@ -35,7 +35,7 @@ func TestAddParagraphWithImages_DropcapWithoutNegativeMarginZerosBottomMargin(t 
 	if !ok {
 		t.Fatalf("style %q not found", entry.Style)
 	}
-	assertMeasure(t, def.Properties[SymMarginBottom], SymMarginBottom, 0, SymUnitLh)
+	assertMeasure(t, def.Properties[SymMarginBottom], SymMarginBottom, 1, SymUnitLh)
 	if entry.StyleSpec == dropcapMarginWrapperStyle || len(entry.childRefs) > 0 {
 		t.Fatal("did not expect wrapper for dropcap paragraph without negative margins")
 	}
@@ -95,7 +95,9 @@ func TestAddParagraphWithImages_DropcapNegativeRootMarginWrapsParagraphWithoutSp
 	if _, ok := def.Properties[SymMarginRight]; ok {
 		t.Fatalf("expected wrapped dropcap child to have no margin-right, got %v", def.Properties[SymMarginRight])
 	}
-	assertMeasure(t, def.Properties[SymMarginBottom], SymMarginBottom, 0, SymUnitLh)
+	if _, ok := def.Properties[SymMarginBottom]; ok {
+		t.Fatalf("expected wrapped dropcap child to preserve natural absent margin-bottom, got %v", def.Properties[SymMarginBottom])
+	}
 	if len(child.StyleEvents) != 1 {
 		t.Fatalf("expected one style event, got %d", len(child.StyleEvents))
 	}
@@ -114,6 +116,191 @@ func TestAddParagraphWithImages_DropcapNegativeRootMarginWrapsParagraphWithoutSp
 	}
 	assertMeasure(t, wrapperDef.Properties[SymMarginLeft], SymMarginLeft, -1, SymUnitEm)
 	assertMeasure(t, wrapperDef.Properties[SymMarginRight], SymMarginRight, -2, SymUnitEm)
+}
+
+func TestProcessDropcapParagraphPair_WrapsFollowingParagraphAndClampsChildMargins(t *testing.T) {
+	sr := NewStyleRegistry()
+	sr.Register(NewStyle("html").MarginLeft(-1, SymUnitEm).MarginRight(-2, SymUnitEm).Build())
+	sr.Register(NewStyle("p").MarginLeft(-0.5, SymUnitEm).MarginRight(-0.25, SymUnitEm).Build())
+	sr.Register(NewStyle("has-dropcap").Dropcap(1, 3).MarginBottom(0.75, SymUnitLh).Build())
+	sr.Register(NewStyle("has-dropcap--dropcap").FontWeight(SymBold).Build())
+
+	ctx := NewStyleContext(sr)
+	first := &fb2.FlowItem{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+		Style: "has-dropcap",
+		Text:  []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Abc"}},
+	}}
+	second := &fb2.FlowItem{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+		Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Second"}},
+	}}
+
+	sb := NewStorylineBuilder("l1", "c0", 1, sr)
+	ca := NewContentAccumulator(1)
+	if !processDropcapParagraphPair(&content.Content{}, first, second, ctx, sb, sr, nil, ca, nil) {
+		t.Fatal("expected dropcap pair wrapper to be used")
+	}
+
+	contentFrags := ca.Finish()
+	list := contentFrags["content_1"]
+	if len(list) != 2 || list[0] != "Abc" || list[1] != "Second" {
+		t.Fatalf("expected two paragraph content entries in wrapper, got %#v", list)
+	}
+
+	if len(sb.contentEntries) != 1 {
+		t.Fatalf("expected one wrapper entry, got %d", len(sb.contentEntries))
+	}
+	wrapper := &sb.contentEntries[0]
+	if len(wrapper.childRefs) != 2 {
+		t.Fatalf("expected dropcap wrapper to contain first and following paragraphs, got %d children", len(wrapper.childRefs))
+	}
+
+	wrapperDef, ok := sr.Get(wrapper.Style)
+	if !ok {
+		t.Fatalf("wrapper style %q not found", wrapper.Style)
+	}
+	assertMeasure(t, wrapperDef.Properties[SymMarginLeft], SymMarginLeft, -1.5, SymUnitEm)
+	assertMeasure(t, wrapperDef.Properties[SymMarginRight], SymMarginRight, -2.25, SymUnitEm)
+
+	for i, child := range wrapper.childRefs {
+		def, ok := sr.Get(child.Style)
+		if !ok {
+			t.Fatalf("child %d style %q not found", i, child.Style)
+		}
+		assertMeasure(t, def.Properties[SymMarginLeft], SymMarginLeft, 0, SymUnitEm)
+		assertMeasure(t, def.Properties[SymMarginRight], SymMarginRight, 0, SymUnitEm)
+	}
+
+	sb.Build()
+	firstDef, ok := sr.Get(wrapper.childRefs[0].Style)
+	if !ok {
+		t.Fatalf("first child style %q not found after build", wrapper.childRefs[0].Style)
+	}
+	if _, ok := firstDef.Properties[SymMarginBottom]; ok {
+		t.Fatalf("expected dropcap pair boundary to strip first paragraph margin-bottom, got %v", firstDef.Properties[SymMarginBottom])
+	}
+	secondDef, ok := sr.Get(wrapper.childRefs[1].Style)
+	if !ok {
+		t.Fatalf("second child style %q not found after build", wrapper.childRefs[1].Style)
+	}
+	assertMeasure(t, secondDef.Properties[SymMarginTop], SymMarginTop, 0.75, SymUnitLh)
+}
+
+func TestProcessDropcapParagraphPair_UsesNormalParagraphGapInsteadOfDefaultDropcapMargin(t *testing.T) {
+	sr := NewStyleRegistry()
+	sr.Register(NewStyle("p").MarginLeft(-0.5, SymUnitEm).MarginRight(-0.25, SymUnitEm).MarginBottom(0.25, SymUnitLh).Build())
+	sr.Register(NewStyle("has-dropcap").Dropcap(1, 3).MarginBottom(defaultParagraphMarginLH(), SymUnitLh).Build())
+	sr.Register(NewStyle("has-dropcap--dropcap").FontWeight(SymBold).Build())
+
+	ctx := NewStyleContext(sr)
+	first := &fb2.FlowItem{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+		Style: "has-dropcap",
+		Text:  []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Abc"}},
+	}}
+	second := &fb2.FlowItem{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+		Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Second"}},
+	}}
+
+	sb := NewStorylineBuilder("l1", "c0", 1, sr)
+	ca := NewContentAccumulator(1)
+	if !processDropcapParagraphPair(&content.Content{}, first, second, ctx, sb, sr, nil, ca, nil) {
+		t.Fatal("expected dropcap pair wrapper to be used")
+	}
+
+	sb.Build()
+	wrapper := &sb.contentEntries[0]
+	firstDef, ok := sr.Get(wrapper.childRefs[0].Style)
+	if !ok {
+		t.Fatalf("first child style %q not found after build", wrapper.childRefs[0].Style)
+	}
+	if _, ok := firstDef.Properties[SymMarginBottom]; ok {
+		t.Fatalf("expected first paragraph margin-bottom to be stripped, got %v", firstDef.Properties[SymMarginBottom])
+	}
+	secondDef, ok := sr.Get(wrapper.childRefs[1].Style)
+	if !ok {
+		t.Fatalf("second child style %q not found after build", wrapper.childRefs[1].Style)
+	}
+	assertMeasure(t, secondDef.Properties[SymMarginTop], SymMarginTop, 0.25, SymUnitLh)
+}
+
+func TestProcessDropcapParagraphPair_DoesNotTransferDefaultDropcapMarginWhenParagraphGapIsZero(t *testing.T) {
+	sr := NewStyleRegistry()
+	sr.Register(NewStyle("p").MarginLeft(-0.5, SymUnitEm).MarginRight(-0.25, SymUnitEm).Build())
+	sr.Register(NewStyle("has-dropcap").Dropcap(1, 3).MarginBottom(defaultParagraphMarginLH(), SymUnitLh).Build())
+	sr.Register(NewStyle("has-dropcap--dropcap").FontWeight(SymBold).Build())
+
+	ctx := NewStyleContext(sr)
+	first := &fb2.FlowItem{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+		Style: "has-dropcap",
+		Text:  []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Abc"}},
+	}}
+	second := &fb2.FlowItem{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+		Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Second"}},
+	}}
+
+	sb := NewStorylineBuilder("l1", "c0", 1, sr)
+	ca := NewContentAccumulator(1)
+	if !processDropcapParagraphPair(&content.Content{}, first, second, ctx, sb, sr, nil, ca, nil) {
+		t.Fatal("expected dropcap pair wrapper to be used")
+	}
+
+	sb.Build()
+	wrapper := &sb.contentEntries[0]
+	secondDef, ok := sr.Get(wrapper.childRefs[1].Style)
+	if !ok {
+		t.Fatalf("second child style %q not found after build", wrapper.childRefs[1].Style)
+	}
+	if _, ok := secondDef.Properties[SymMarginTop]; ok {
+		t.Fatalf("expected zero paragraph gap not to gain default dropcap margin, got %v", secondDef.Properties[SymMarginTop])
+	}
+}
+
+func TestProcessDropcapParagraphPair_WrapsWhenOnlyFollowingParagraphHasNegativeMargins(t *testing.T) {
+	sr := NewStyleRegistry()
+	sr.Register(NewStyle("p").MarginLeft(-0.5, SymUnitEm).MarginRight(-0.25, SymUnitEm).Build())
+	sr.Register(NewStyle("has-dropcap").Dropcap(1, 3).MarginLeft(0, SymUnitEm).MarginRight(0, SymUnitEm).MarginBottom(0.75, SymUnitLh).Build())
+	sr.Register(NewStyle("has-dropcap--dropcap").FontWeight(SymBold).Build())
+
+	ctx := NewStyleContext(sr)
+	first := &fb2.FlowItem{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+		Style: "has-dropcap",
+		Text:  []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Abc"}},
+	}}
+	second := &fb2.FlowItem{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+		Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Second"}},
+	}}
+
+	sb := NewStorylineBuilder("l1", "c0", 1, sr)
+	ca := NewContentAccumulator(1)
+	if !processDropcapParagraphPair(&content.Content{}, first, second, ctx, sb, sr, nil, ca, nil) {
+		t.Fatal("expected pair wrapper when the following paragraph has negative margins")
+	}
+	if len(sb.contentEntries) != 1 || len(sb.contentEntries[0].childRefs) != 2 {
+		t.Fatalf("expected one two-child wrapper, got %#v", sb.contentEntries)
+	}
+
+	wrapper := &sb.contentEntries[0]
+	wrapperDef, ok := sr.Get(wrapper.Style)
+	if !ok {
+		t.Fatalf("wrapper style %q not found", wrapper.Style)
+	}
+	assertMeasure(t, wrapperDef.Properties[SymMarginLeft], SymMarginLeft, -0.5, SymUnitEm)
+	assertMeasure(t, wrapperDef.Properties[SymMarginRight], SymMarginRight, -0.25, SymUnitEm)
+
+	sb.Build()
+	firstDef, ok := sr.Get(wrapper.childRefs[0].Style)
+	if !ok {
+		t.Fatalf("first child style %q not found after build", wrapper.childRefs[0].Style)
+	}
+	if _, ok := firstDef.Properties[SymMarginBottom]; ok {
+		t.Fatalf("expected first paragraph margin-bottom to move to following paragraph, got %v", firstDef.Properties[SymMarginBottom])
+	}
+	secondDef, ok := sr.Get(wrapper.childRefs[1].Style)
+	if !ok {
+		t.Fatalf("second child style %q not found after build", wrapper.childRefs[1].Style)
+	}
+	assertMeasure(t, secondDef.Properties[SymMarginTop], SymMarginTop, 0.75, SymUnitLh)
+	assertMeasure(t, secondDef.Properties[SymMarginLeft], SymMarginLeft, 0, SymUnitEm)
+	assertMeasure(t, secondDef.Properties[SymMarginRight], SymMarginRight, 0, SymUnitEm)
 }
 
 func TestAddParagraphWithImages_PendingFootnoteMorePreservesInlineImages(t *testing.T) {
