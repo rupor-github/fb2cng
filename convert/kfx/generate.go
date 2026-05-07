@@ -248,8 +248,9 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	}
 
 	// $262 Font + $418 bcRawFont (embedded fonts)
-	// Start font resource index after image resources to avoid location collisions
-	fontStartIndex := len(rawMedia) + 1
+	// Start font resource index after the highest image resource location to avoid
+	// collisions when unused image resources leave gaps after filtering.
+	fontStartIndex := nextResourceLocationIndex(rawMedia)
 	fontFrags, rawFontFrags := BuildFontFragments(fontInfo, fontStartIndex)
 	for _, frag := range fontFrags {
 		if err := container.Fragments.Add(frag); err != nil {

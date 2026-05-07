@@ -191,7 +191,7 @@ func (fl *FragmentList) Clone() *FragmentList {
 func (fl *FragmentList) SortedByType() []*Fragment {
 	sorted := make([]*Fragment, len(fl.fragments))
 	copy(sorted, fl.fragments)
-	sort.Slice(sorted, func(i, j int) bool {
+	sort.SliceStable(sorted, func(i, j int) bool {
 		if sorted[i].FType != sorted[j].FType {
 			return sorted[i].FType < sorted[j].FType
 		}

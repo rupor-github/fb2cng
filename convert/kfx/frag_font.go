@@ -1,6 +1,7 @@
 package kfx
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 
@@ -22,6 +23,11 @@ type FontInfo struct {
 	// Each family can have multiple resources for different weight/style combinations.
 	// This includes both body fonts and non-body fonts (like dropcap).
 	AllFonts map[string][]fontResource
+
+	// FontOrder records first-seen @font-face family order from CSS.
+	// AllFonts is a map, so this keeps generated resource locations deterministic
+	// while preserving author/KP3-like declaration order.
+	FontOrder []string
 }
 
 // HasBodyFont returns true if a body font family is specified.
@@ -32,6 +38,34 @@ func (fi *FontInfo) HasBodyFont() bool {
 // HasFonts returns true if there are any embedded fonts.
 func (fi *FontInfo) HasFonts() bool {
 	return fi != nil && len(fi.AllFonts) > 0
+}
+
+func (fi *FontInfo) orderedFontFamilies() []string {
+	if fi == nil || len(fi.AllFonts) == 0 {
+		return nil
+	}
+
+	families := make([]string, 0, len(fi.AllFonts))
+	seen := make(map[string]bool, len(fi.AllFonts))
+	for _, family := range fi.FontOrder {
+		if _, ok := fi.AllFonts[family]; ok && !seen[family] {
+			families = append(families, family)
+			seen[family] = true
+		}
+	}
+
+	// FontInfo values constructed outside BuildFontInfo may not have FontOrder.
+	// Add any remaining map entries sorted for deterministic output.
+	extra := make([]string, 0, len(fi.AllFonts)-len(families))
+	for family := range fi.AllFonts {
+		if !seen[family] {
+			extra = append(extra, family)
+		}
+	}
+	sort.Strings(extra)
+	families = append(families, extra...)
+
+	return families
 }
 
 // GetKFXFontFamily returns the KFX font family name used in document_data.
@@ -163,8 +197,11 @@ func BuildFontInfo(stylesheets []fb2.Stylesheet, parsedCSS *css.Stylesheet, log 
 		weight := normalizeWeightToSymbol(ff.Weight)
 		style := normalizeStyleToSymbol(ff.Style)
 
-		// Store under lowercase family name for case-insensitive lookup
+		// Store under lowercase family name for case-insensitive lookup.
 		familyKey := strings.ToLower(strings.Trim(ff.Family, `"'`))
+		if _, exists := info.AllFonts[familyKey]; !exists {
+			info.FontOrder = append(info.FontOrder, familyKey)
+		}
 		info.AllFonts[familyKey] = append(info.AllFonts[familyKey], fontResource{
 			Data:     res.Data,
 			MimeType: res.MimeType,
@@ -304,9 +341,15 @@ func BuildFontFragments(fontInfo *FontInfo, startIndex int) ([]*Fragment, []*Fra
 	seen := make(map[string]bool)
 	idx := startIndex
 
-	// Create bcRawFont ($418) and font ($262) for ALL font resources
-	// Each font variant needs both a raw data blob and a font declaration
-	for family, resources := range fontInfo.AllFonts {
+	// Create bcRawFont ($418) and font ($262) for ALL font resources.
+	// Iterate families in deterministic @font-face order: Go map iteration is randomized,
+	// and random font-to-resource assignment makes Kindle pick different embedded fonts
+	// between otherwise identical conversions.
+	families := fontInfo.orderedFontFamilies()
+
+	// Each font variant needs both a raw data blob and a font declaration.
+	for _, family := range families {
+		resources := fontInfo.AllFonts[family]
 		kfxFontFamily := ToKFXFontFamily(family)
 
 		for _, res := range resources {

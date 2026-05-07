@@ -87,6 +87,29 @@ func makeResourceName(idx int) string {
 	return fmt.Sprintf("e%s", toBase36(idx))
 }
 
+func nextResourceLocationIndex(rawMedia []*Fragment) int {
+	maxIdx := 0
+	for _, frag := range rawMedia {
+		idx := resourceLocationIndex(frag.FIDName)
+		if idx > maxIdx {
+			maxIdx = idx
+		}
+	}
+	return maxIdx + 1
+}
+
+func resourceLocationIndex(location string) int {
+	const prefix = "resource/rsrc"
+	if !strings.HasPrefix(location, prefix) {
+		return 0
+	}
+	idx, err := strconv.ParseInt(location[len(prefix):], 36, 64)
+	if err != nil || idx < 0 {
+		return 0
+	}
+	return int(idx)
+}
+
 // toBase36 converts an integer to a base36 string (0-9a-z).
 // Used for resource naming to match reference KFX format conventions.
 // Returns "0" for values <= 0.
