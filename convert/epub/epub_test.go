@@ -415,31 +415,6 @@ func TestCopyFile_NonExistentSource(t *testing.T) {
 	}
 }
 
-func TestCollectIDsFromSection(t *testing.T) {
-	section := &fb2.Section{
-		ID: "section1",
-		Content: []fb2.FlowItem{
-			{Kind: fb2.FlowSection, Section: &fb2.Section{ID: "section1-1"}},
-			{Kind: fb2.FlowSection, Section: &fb2.Section{ID: "section1-2"}},
-		},
-	}
-
-	filename := "chapter01.xhtml"
-	idToFile := make(idToFileMap)
-
-	collectIDsFromSection(section, filename, idToFile)
-
-	if idToFile["section1"] != filename {
-		t.Errorf("ID 'section1' should map to %v, got %v", filename, idToFile["section1"])
-	}
-	if idToFile["section1-1"] != filename {
-		t.Errorf("ID 'section1-1' should map to %v, got %v", filename, idToFile["section1-1"])
-	}
-	if idToFile["section1-2"] != filename {
-		t.Errorf("ID 'section1-2' should map to %v, got %v", filename, idToFile["section1-2"])
-	}
-}
-
 func TestCalculateSectionDepth(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -711,8 +686,7 @@ func TestProcessFootnoteBodies(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			idToFile := make(idToFileMap)
-			chapters, err := processFootnoteBodies(c, tt.bodies, idToFile, log)
+			chapters, err := processFootnoteBodies(c, tt.bodies, log)
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
@@ -784,6 +758,68 @@ func TestFixInternalLinks(t *testing.T) {
 	expected := "ch2.xhtml#para2"
 	if href != expected {
 		t.Errorf("Link href = %v, want %v", href, expected)
+	}
+}
+
+func TestFixInternalLinks_UsesRenderedIDsFromEpigraphs(t *testing.T) {
+	ctx, _, log := setupTestContext(t)
+
+	book := &fb2.FictionBook{
+		Bodies: []fb2.Body{
+			{
+				Kind: fb2.BodyMain,
+				Sections: []fb2.Section{
+					{
+						ID:    "source-section",
+						Title: makeTitle("Source"),
+						Content: []fb2.FlowItem{
+							{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
+								{Kind: fb2.InlineText, Text: "See "},
+								{Kind: fb2.InlineLink, Href: "#epigraph-target", Children: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "target"}}},
+							}}},
+						},
+					},
+					{
+						ID:    "target-section",
+						Title: makeTitle("Target"),
+						Epigraphs: []fb2.Epigraph{
+							{Flow: fb2.Flow{Items: []fb2.FlowItem{
+								{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+									ID:   "epigraph-target",
+									Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Target epigraph"}},
+								}},
+							}}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	c := &content.Content{
+		OutputFormat: common.OutputFmtEpub3,
+		Book:         book,
+		IDsIndex:     make(fb2.IDIndex),
+	}
+
+	chapters, idToFile, err := convertToXHTML(ctx, c, log)
+	if err != nil {
+		t.Fatalf("convertToXHTML error: %v", err)
+	}
+	if len(chapters) != 2 {
+		t.Fatalf("expected 2 chapters, got %d", len(chapters))
+	}
+	if got, want := idToFile["epigraph-target"], chapters[1].Filename; got != want {
+		t.Fatalf("epigraph target should map to rendered target file %q, got %q", want, got)
+	}
+
+	fixInternalLinks(chapters, idToFile, log)
+	link := chapters[0].Doc.FindElement("//a[@href]")
+	if link == nil {
+		t.Fatal("link not found")
+	}
+	if got, want := link.SelectAttrValue("href", ""), chapters[1].Filename+"#epigraph-target"; got != want {
+		t.Fatalf("link href = %q, want %q", got, want)
 	}
 }
 
@@ -1817,48 +1853,6 @@ func TestWriteXHTMLChapter(t *testing.T) {
 
 	if !foundChapter {
 		t.Error("Chapter file not found in zip")
-	}
-}
-
-func TestCollectIDsFromBody(t *testing.T) {
-	body := &fb2.Body{
-		Sections: []fb2.Section{
-			{
-				ID: "s1",
-				Content: []fb2.FlowItem{
-					{
-						Kind: fb2.FlowParagraph,
-						Paragraph: &fb2.Paragraph{
-							ID:   "p1",
-							Text: []fb2.InlineSegment{{Text: "test"}},
-						},
-					},
-					{
-						Kind: fb2.FlowSection,
-						Section: &fb2.Section{
-							ID: "s1-1",
-						},
-					},
-				},
-			},
-		},
-	}
-
-	filename := "test.xhtml"
-	idToFile := make(idToFileMap)
-
-	collectIDsFromBody(body, filename, idToFile)
-
-	if idToFile["s1"] != filename {
-		t.Errorf("Section s1 should map to %v", filename)
-	}
-
-	if idToFile["p1"] != filename {
-		t.Errorf("Paragraph p1 should map to %v", filename)
-	}
-
-	if idToFile["s1-1"] != filename {
-		t.Errorf("Subsection s1-1 should map to %v", filename)
 	}
 }
 

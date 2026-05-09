@@ -132,6 +132,10 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		}
 	}
 
+	// Generated pages can add their own rendered IDs. Rescan all in-memory XHTML
+	// before fixing links and before generating NAV/NCX metadata.
+	idToFile = collectRenderedIDs(chapters, log)
+
 	// Fix internal links to include chapter filenames
 	fixInternalLinks(chapters, idToFile, log)
 

@@ -50,7 +50,6 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 
 	var chapters []chapterData
 	chapterNum := 0
-	idToFile := make(idToFileMap)
 	var footnoteBodies []*fb2.Body
 
 	for i := range c.Book.Bodies {
@@ -90,7 +89,6 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 					Doc:          doc,
 					IncludeInTOC: true,
 				})
-				collectIDsFromBody(body, filename, idToFile)
 			}
 		}
 
@@ -137,7 +135,6 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 				Section:      section,
 				IncludeInTOC: includeInTOC,
 			})
-			collectIDsFromSection(section, filename, idToFile)
 
 			// Process split sections — nested sections that need their own files
 			for len(splits) > 0 {
@@ -167,8 +164,6 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 					Doc:          splitDoc,
 					IncludeInTOC: false, // TOC entry comes from parent's Section traversal
 				})
-				// Overwrite ID mappings: split section's IDs now point to new file
-				collectIDsFromSection(split.section, splitFilename, idToFile)
 
 				// Queue inner splits (depth-first) then remaining siblings
 				var next []splitResult
@@ -189,7 +184,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 	}
 
 	if len(footnoteBodies) == 0 {
-		return chapters, idToFile, nil
+		return chapters, collectRenderedIDs(chapters, log), nil
 	}
 
 	// Process all footnote bodies - each body becomes a separate top-level chapter
@@ -198,18 +193,18 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 	// (content is visible in both modes, just displayed differently)
 	c.PageTrackingEnabled = c.PageSize > 0
 
-	footnotesChapters, err := processFootnoteBodies(c, footnoteBodies, idToFile, log)
+	footnotesChapters, err := processFootnoteBodies(c, footnoteBodies, log)
 	if err != nil {
 		log.Error("Unable to convert footnotes", zap.Error(err))
-		return chapters, idToFile, nil
+		return chapters, collectRenderedIDs(chapters, log), nil
 	}
 
 	chapters = append(chapters, footnotesChapters...)
-	return chapters, idToFile, nil
+	return chapters, collectRenderedIDs(chapters, log), nil
 }
 
 // processFootnoteBodies converts all footnote bodies to XHTML and creates chapter entries
-func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, idToFile idToFileMap, log *zap.Logger) ([]chapterData, error) {
+func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, log *zap.Logger) ([]chapterData, error) {
 	_, filename := generateUniqueID("footnotes", c.IDsIndex)
 
 	docTitle := footnoteBodies[0].AsTitleText("Footnotes")
@@ -244,10 +239,9 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, idToF
 			}
 		}
 
-		// Write all sections from this body and collect IDs
+		// Write all sections from this body.
 		for i := range body.Sections {
 			section := &body.Sections[i]
-			collectIDsFromSection(section, filename, idToFile)
 
 			// Choose appropriate element type based on mode and format
 			if c.FootnotesMode.IsFloat() && c.OutputFormat == common.OutputFmtEpub3 {
@@ -1671,81 +1665,37 @@ func generateUniqueID(baseID string, fbIDs fb2.IDIndex) (id, filename string) {
 	return id, filename
 }
 
-// collectIDsFromBody collects all IDs from a body and maps them to the given filename
-func collectIDsFromBody(body *fb2.Body, filename string, idToFile idToFileMap) {
-	if body.Image != nil && body.Image.ID != "" {
-		idToFile[body.Image.ID] = filename
+// collectRenderedIDs maps actual XHTML id attributes to the files containing
+// them. Rendered XHTML is the source of truth after split-section processing:
+// source-tree traversals are easy to drift from rendering and can miss IDs in
+// structures such as epigraphs or annotations. This runs while all documents are
+// still in memory, before fixInternalLinks writes cross-file hrefs.
+func collectRenderedIDs(chapters []chapterData, log *zap.Logger) idToFileMap {
+	idToFile := make(idToFileMap)
+	for i := range chapters {
+		chapter := &chapters[i]
+		if chapter.Doc == nil || chapter.Filename == "" {
+			continue
+		}
+		root := chapter.Doc.Root()
+		if root == nil {
+			continue
+		}
+		collectRenderedIDsFromElement(root, chapter.Filename, idToFile, log)
 	}
-	for i := range body.Sections {
-		collectIDsFromSection(&body.Sections[i], filename, idToFile)
-	}
+	return idToFile
 }
 
-// collectIDsFromSection recursively collects all IDs from a section and its content
-func collectIDsFromSection(section *fb2.Section, filename string, idToFile idToFileMap) {
-	if section.ID != "" {
-		idToFile[section.ID] = filename
-	}
-	if section.Image != nil && section.Image.ID != "" {
-		idToFile[section.Image.ID] = filename
-	}
-	if section.Title != nil {
-		for i := range section.Title.Items {
-			if section.Title.Items[i].Paragraph != nil && section.Title.Items[i].Paragraph.ID != "" {
-				idToFile[section.Title.Items[i].Paragraph.ID] = filename
-			}
+func collectRenderedIDsFromElement(elem *etree.Element, filename string, idToFile idToFileMap, log *zap.Logger) {
+	if id := elem.SelectAttrValue("id", ""); id != "" {
+		if previous, exists := idToFile[id]; exists && previous != filename {
+			log.Debug("Duplicate XHTML id rendered in multiple files", zap.String("id", id), zap.String("first_file", previous), zap.String("duplicate_file", filename))
+		} else {
+			idToFile[id] = filename
 		}
 	}
-	for i := range section.Content {
-		collectIDsFromFlowItem(&section.Content[i], filename, idToFile)
-	}
-}
-
-// collectIDsFromFlowItem recursively collects IDs from flow items
-func collectIDsFromFlowItem(item *fb2.FlowItem, filename string, idToFile idToFileMap) {
-	switch item.Kind {
-	case fb2.FlowParagraph:
-		if item.Paragraph != nil && item.Paragraph.ID != "" {
-			idToFile[item.Paragraph.ID] = filename
-		}
-	case fb2.FlowSubtitle:
-		if item.Subtitle != nil && item.Subtitle.ID != "" {
-			idToFile[item.Subtitle.ID] = filename
-		}
-	case fb2.FlowImage:
-		if item.Image != nil && item.Image.ID != "" {
-			idToFile[item.Image.ID] = filename
-		}
-	case fb2.FlowPoem:
-		if item.Poem != nil && item.Poem.ID != "" {
-			idToFile[item.Poem.ID] = filename
-		}
-	case fb2.FlowCite:
-		if item.Cite != nil {
-			if item.Cite.ID != "" {
-				idToFile[item.Cite.ID] = filename
-			}
-			for i := range item.Cite.Items {
-				collectIDsFromFlowItem(&item.Cite.Items[i], filename, idToFile)
-			}
-		}
-	case fb2.FlowTable:
-		if item.Table != nil {
-			if item.Table.ID != "" {
-				idToFile[item.Table.ID] = filename
-			}
-			for i := range item.Table.Rows {
-				for j := range item.Table.Rows[i].Cells {
-					if item.Table.Rows[i].Cells[j].ID != "" {
-						idToFile[item.Table.Rows[i].Cells[j].ID] = filename
-					}
-				}
-			}
-		}
-	case fb2.FlowSection:
-		if item.Section != nil {
-			collectIDsFromSection(item.Section, filename, idToFile)
-		}
+	for _, child := range elem.ChildElements() {
+		collectRenderedIDsFromElement(child, filename, idToFile, log)
 	}
 }
 
