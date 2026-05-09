@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest"
 	"golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/encoding/unicode/utf32"
@@ -180,6 +181,26 @@ func TestProcess_SingleFile(t *testing.T) {
 	err := process(ctx, testFile, dstDir, common.OutputFmtEpub3, logger)
 	if err != nil {
 		t.Errorf("process() error = %v", err)
+	}
+}
+
+func TestProcess_SingleFileReturnsProcessBookError(t *testing.T) {
+	ctx, _ := setupTestEnv(t)
+	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+
+	tmpDir := t.TempDir()
+	dstDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "broken.fb2")
+	if err := os.WriteFile(testFile, []byte(`<?xml version="1.0" encoding="UTF-8"?><FictionBook`), 0644); err != nil {
+		t.Fatalf("failed to create invalid FB2 file: %v", err)
+	}
+
+	err := process(ctx, testFile, dstDir, common.OutputFmtEpub3, logger)
+	if err == nil {
+		t.Fatal("expected single-file conversion error, got nil")
+	}
+	if !strings.Contains(err.Error(), "unable to parse fb2 source") {
+		t.Fatalf("expected parse error to be returned, got: %v", err)
 	}
 }
 
@@ -474,6 +495,26 @@ func TestProcessBook(t *testing.T) {
 				t.Errorf("processBook() with encoding %v error = %v", enc, err)
 			}
 		})
+	}
+}
+
+func TestProcessBook_LogsFailureOnError(t *testing.T) {
+	ctx, _ := setupTestEnv(t)
+	var logs bytes.Buffer
+	encoderCfg := zap.NewProductionEncoderConfig()
+	core := zapcore.NewCore(zapcore.NewJSONEncoder(encoderCfg), zapcore.AddSync(&logs), zap.DebugLevel)
+	logger := zap.New(core)
+
+	err := processBook(ctx, strings.NewReader(`<?xml version="1.0" encoding="UTF-8"?><FictionBook`), "broken.fb2", t.TempDir(), common.OutputFmtEpub3, logger)
+	if err == nil {
+		t.Fatal("expected processBook error, got nil")
+	}
+	logOutput := logs.String()
+	if count := strings.Count(logOutput, `"msg":"Conversion failed"`); count != 1 {
+		t.Fatalf("expected one failure log, got %d in logs: %s", count, logOutput)
+	}
+	if strings.Contains(logOutput, `"msg":"Conversion completed"`) {
+		t.Fatalf("did not expect success log on failure, got logs: %s", logOutput)
 	}
 }
 

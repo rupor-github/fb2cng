@@ -200,13 +200,13 @@ func process(ctx context.Context, src, dst string, format common.OutputFmt, log 
 		if book && len(tail) == 0 {
 			// we have book, it cannot have tail
 			// encoding will be handled properly by processBook
-			if file, err := os.Open(head); err != nil {
-				log.Error("Unable to process file", zap.String("file", head), zap.Error(err))
-			} else {
-				defer file.Close()
-				if err := processBook(ctx, selectReader(file, enc), filepath.Base(head), dst, format, log); err != nil {
-					log.Error("Unable to process file", zap.String("file", head), zap.Error(err))
-				}
+			file, err := os.Open(head)
+			if err != nil {
+				return fmt.Errorf("unable to process file %q: %w", head, err)
+			}
+			defer file.Close()
+			if err := processBook(ctx, selectReader(file, enc), filepath.Base(head), dst, format, log); err != nil {
+				return fmt.Errorf("unable to process file %q: %w", head, err)
 			}
 			break
 		}
@@ -359,6 +359,8 @@ func processBook(ctx context.Context, r io.Reader, src string, dst string, forma
 			log.Error("Conversion ended with panic",
 				zap.Any("panic", r), zap.Duration("elapsed", time.Since(start)), zap.String("to", outputName), zap.ByteString("stack", debug.Stack()))
 			rerr = fmt.Errorf("conversion panic: %v", r)
+		} else if rerr != nil {
+			log.Error("Conversion failed", zap.Duration("elapsed", time.Since(start)), zap.String("to", outputName), zap.String("ref_id", refID), zap.Error(rerr))
 		} else {
 			log.Info("Conversion completed", zap.Duration("elapsed", time.Since(start)), zap.String("to", outputName), zap.String("ref_id", refID))
 		}
