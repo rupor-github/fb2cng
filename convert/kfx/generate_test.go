@@ -18,8 +18,10 @@ type cancelAfterNErrContext struct {
 }
 
 func (c *cancelAfterNErrContext) Deadline() (time.Time, bool) { return time.Time{}, false }
-func (c *cancelAfterNErrContext) Done() <-chan struct{}       { return nil }
-func (c *cancelAfterNErrContext) Value(key any) any           { return c.Context.Value(key) }
+
+func (c *cancelAfterNErrContext) Done() <-chan struct{} { return nil }
+
+func (c *cancelAfterNErrContext) Value(key any) any { return c.Context.Value(key) }
 
 func (c *cancelAfterNErrContext) Err() error {
 	if c.remainingNilErrs > 0 {
