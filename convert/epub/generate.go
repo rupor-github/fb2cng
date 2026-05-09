@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -1284,22 +1285,27 @@ func getChapterAnchorSuffix(chapter chapterData) string {
 	return ""
 }
 
-func copyZipWithoutDataDescriptors(from, to string) error {
-
+func copyZipWithoutDataDescriptors(from, to string) (err error) {
 	out, err := os.Create(to)
 	if err != nil {
 		return fmt.Errorf("unable to create target file (%s): %w", to, err)
 	}
-	defer out.Close()
+	defer func() {
+		err = errors.Join(err, closeWithContext(out.Close(), "unable to close target file (%s)", to))
+	}()
 
 	r, err := fixzip.OpenReader(from)
 	if err != nil {
 		return fmt.Errorf("unable to read archive file (%s): %w", from, err)
 	}
-	defer r.Close()
+	defer func() {
+		err = errors.Join(err, closeWithContext(r.Close(), "unable to close archive file (%s)", from))
+	}()
 
 	w := fixzip.NewWriter(out)
-	defer w.Close()
+	defer func() {
+		err = errors.Join(err, closeWithContext(w.Close(), "unable to finalize target archive (%s)", to))
+	}()
 
 	for _, file := range r.File {
 		// unset data descriptor flag.
@@ -1313,28 +1319,34 @@ func copyZipWithoutDataDescriptors(from, to string) error {
 	return nil
 }
 
-func copyFile(src, dst string) error {
-
+func copyFile(src, dst string) (err error) {
 	sourceFile, err := os.Open(src)
 	if err != nil {
 		return fmt.Errorf("failed to open source file: %w", err)
 	}
-	defer sourceFile.Close()
+	defer func() {
+		err = errors.Join(err, closeWithContext(sourceFile.Close(), "failed to close source file (%s)", src))
+	}()
 
 	destinationFile, err := os.Create(dst)
 	if err != nil {
 		return fmt.Errorf("failed to create destination file: %w", err)
 	}
-	defer destinationFile.Close()
+	defer func() {
+		err = errors.Join(err, closeWithContext(destinationFile.Close(), "failed to close destination file (%s)", dst))
+	}()
 
 	if _, err = io.Copy(destinationFile, sourceFile); err != nil {
 		return fmt.Errorf("failed to copy file contents: %w", err)
 	}
-
-	if err = destinationFile.Close(); err != nil {
-		return fmt.Errorf("failed to close destination file: %w", err)
-	}
 	return nil
+}
+
+func closeWithContext(err error, format string, args ...any) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf(format+": %w", append(args, err)...)
 }
 
 // addSequencesToMetadata adds EPUB3 belongs-to-collection metadata for all sequences.
