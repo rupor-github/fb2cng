@@ -21,7 +21,20 @@ import (
 	"fbc/state"
 )
 
-const sampleFB2Path = "../testdata/_Test.fb2"
+const (
+	sampleFB2Path     = "../testdata/_Test.fb2"
+	minimalFB2Content = `<?xml version="1.0" encoding="UTF-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+<description><title-info><book-title>Test</book-title></title-info></description>
+<body><section><p>Content</p></section></body>
+</FictionBook>`
+	malformedFB2Content = `<?xml version="1.0" encoding="UTF-8"?><FictionBook`
+)
+
+type zipTestFile struct {
+	name string
+	data []byte
+}
 
 // setupTestEnv creates a test environment with proper context and logger
 func setupTestEnv(t *testing.T) (context.Context, *state.LocalEnv) {
@@ -83,6 +96,33 @@ func encodeWithTransformer(t *testing.T, data []byte, encoder transform.Transfor
 	return buf.Bytes()
 }
 
+func writeZipTestFiles(t *testing.T, zipPath string, files ...zipTestFile) {
+	t.Helper()
+	zipFile, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatalf("create zip file: %v", err)
+	}
+	w := zip.NewWriter(zipFile)
+	for _, file := range files {
+		f, err := w.CreateHeader(&zip.FileHeader{
+			Name:   file.name,
+			Method: zip.Store,
+		})
+		if err != nil {
+			t.Fatalf("create %q in zip: %v", file.name, err)
+		}
+		if _, err := f.Write(file.data); err != nil {
+			t.Fatalf("write %q to zip: %v", file.name, err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("close zip writer: %v", err)
+	}
+	if err := zipFile.Close(); err != nil {
+		t.Fatalf("close zip file: %v", err)
+	}
+}
+
 // TestProcess_NonExistentPath tests process with non-existent path
 func TestProcess_NonExistentPath(t *testing.T) {
 	ctx, _ := setupTestEnv(t)
@@ -121,11 +161,7 @@ func TestProcess_Directory(t *testing.T) {
 	dstDir := t.TempDir()
 
 	// Create a valid FB2 file in the directory
-	fb2Content := []byte(`<?xml version="1.0" encoding="UTF-8"?>
-<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
-<description><title-info><book-title>Test</book-title></title-info></description>
-<body><section><p>Content</p></section></body>
-</FictionBook>`)
+	fb2Content := []byte(minimalFB2Content)
 
 	testFile := filepath.Join(tmpDir, "test.fb2")
 	if err := os.WriteFile(testFile, fb2Content, 0644); err != nil {
@@ -135,6 +171,31 @@ func TestProcess_Directory(t *testing.T) {
 	err := process(ctx, tmpDir, dstDir, common.OutputFmtEpub3, logger)
 	if err != nil {
 		t.Errorf("process() error = %v", err)
+	}
+}
+
+func TestProcess_DirectoryReturnsAggregatedBookFailures(t *testing.T) {
+	ctx, _ := setupTestEnv(t)
+	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(srcDir, "good.fb2"), []byte(minimalFB2Content), 0644); err != nil {
+		t.Fatalf("create valid FB2 file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "broken.fb2"), []byte(malformedFB2Content), 0644); err != nil {
+		t.Fatalf("create invalid FB2 file: %v", err)
+	}
+
+	err := process(ctx, srcDir, dstDir, common.OutputFmtEpub3, logger)
+	if err == nil {
+		t.Fatal("expected directory conversion error, got nil")
+	}
+	if !strings.Contains(err.Error(), "unable to process directory") || !strings.Contains(err.Error(), "broken.fb2") {
+		t.Fatalf("expected aggregated directory error for broken.fb2, got: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dstDir, "Test.epub")); err != nil {
+		t.Fatalf("expected valid book to be converted despite another failure: %v", err)
 	}
 }
 
@@ -271,30 +332,37 @@ func TestProcess_ArchiveWithPath(t *testing.T) {
 
 	// Create a ZIP archive with a subdirectory
 	zipPath := filepath.Join(tmpDir, "books.zip")
-	zipFile, err := os.Create(zipPath)
-	if err != nil {
-		t.Fatalf("Failed to create zip file: %v", err)
-	}
-
-	w := zip.NewWriter(zipFile)
-	f, err := w.CreateHeader(&zip.FileHeader{
-		Name:   "subdir/book.fb2",
-		Method: zip.Store,
-	})
-	if err != nil {
-		t.Fatalf("Failed to create file in zip: %v", err)
-	}
-	if _, err := f.Write(fb2Content); err != nil {
-		t.Fatalf("Failed to write to zip: %v", err)
-	}
-	w.Close()
-	zipFile.Close()
+	writeZipTestFiles(t, zipPath, zipTestFile{name: "subdir/book.fb2", data: fb2Content})
 
 	// Process with a path inside the archive
 	pathInArchive := zipPath + string(filepath.Separator) + "subdir"
-	err = process(ctx, pathInArchive, dstDir, common.OutputFmtEpub3, logger)
+	err := process(ctx, pathInArchive, dstDir, common.OutputFmtEpub3, logger)
 	if err != nil {
 		t.Errorf("process() error = %v", err)
+	}
+}
+
+func TestProcess_ArchiveReturnsAggregatedBookFailures(t *testing.T) {
+	ctx, _ := setupTestEnv(t)
+	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+
+	tmpDir := t.TempDir()
+	dstDir := t.TempDir()
+	zipPath := filepath.Join(tmpDir, "books.zip")
+	writeZipTestFiles(t, zipPath,
+		zipTestFile{name: "good.fb2", data: []byte(minimalFB2Content)},
+		zipTestFile{name: "broken.fb2", data: []byte(malformedFB2Content)},
+	)
+
+	err := process(ctx, zipPath, dstDir, common.OutputFmtEpub3, logger)
+	if err == nil {
+		t.Fatal("expected archive conversion error, got nil")
+	}
+	if !strings.Contains(err.Error(), "unable to process archive") || !strings.Contains(err.Error(), "broken.fb2") {
+		t.Fatalf("expected aggregated archive error for broken.fb2, got: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dstDir, "Test.epub")); err != nil {
+		t.Fatalf("expected valid archived book to be converted despite another failure: %v", err)
 	}
 }
 

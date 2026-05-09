@@ -168,7 +168,7 @@ func process(ctx context.Context, src, dst string, format common.OutputFmt, log 
 				return fmt.Errorf("input source was not found (%s) => (%s)", head, strings.TrimPrefix(src, head))
 			}
 			if err := processDir(ctx, head, dst, format, log); err != nil {
-				return errors.New("unable to process directory")
+				return fmt.Errorf("unable to process directory: %w", err)
 			}
 			break
 		}
@@ -222,6 +222,7 @@ func process(ctx context.Context, src, dst string, format common.OutputFmt, log 
 // processDir walks directory tree finding fb2 files and processes them.
 func processDir(ctx context.Context, dir, dst string, format common.OutputFmt, log *zap.Logger) (err error) {
 	count := 0
+	var failures []error
 	defer func() {
 		if err == nil && count == 0 {
 			log.Debug("Nothing to process", zap.String("dir", dir))
@@ -250,6 +251,7 @@ func processDir(ctx context.Context, dir, dst string, format common.OutputFmt, l
 		if archive {
 			if err := processArchive(ctx, path, "", filepath.Dir(strings.TrimPrefix(path, dir)), dst, format, log); err != nil {
 				log.Error("Unable to process archive", zap.String("file", path), zap.Error(err))
+				failures = append(failures, fmt.Errorf("unable to process archive %q: %w", path, err))
 			}
 			return nil
 		}
@@ -269,6 +271,7 @@ func processDir(ctx context.Context, dir, dst string, format common.OutputFmt, l
 		file, err := os.Open(path)
 		if err != nil {
 			log.Error("Unable to process file", zap.String("file", path), zap.Error(err))
+			failures = append(failures, fmt.Errorf("unable to open file %q: %w", path, err))
 			return nil
 		}
 		defer file.Close()
@@ -276,16 +279,24 @@ func processDir(ctx context.Context, dir, dst string, format common.OutputFmt, l
 		src := strings.TrimPrefix(strings.TrimPrefix(path, dir), string(filepath.Separator))
 		if err := processBook(ctx, selectReader(file, enc), src, dst, format, log); err != nil {
 			log.Error("Unable to process file", zap.String("file", path), zap.Error(err))
+			failures = append(failures, fmt.Errorf("unable to process file %q: %w", path, err))
 		}
 		return nil
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	if len(failures) != 0 {
+		return errors.Join(failures...)
+	}
+	return nil
 }
 
 // processArchive walks all files inside archive, finds fb2 files under
 // "pathIn" and processes them.
 func processArchive(ctx context.Context, path, pathIn, pathOut, dst string, format common.OutputFmt, log *zap.Logger) (err error) {
 	count := 0
+	var failures []error
 	defer func() {
 		if err == nil && count == 0 {
 			log.Debug("Nothing to process", zap.String("archive", path))
@@ -314,6 +325,7 @@ func processArchive(ctx context.Context, path, pathIn, pathOut, dst string, form
 		if err != nil {
 			log.Error("Unable to process file in archive",
 				zap.String("archive", archive), zap.String("file", f.FileHeader.Name), zap.Error(err))
+			failures = append(failures, fmt.Errorf("unable to open file %q in archive %q: %w", f.FileHeader.Name, archive, err))
 			return nil
 		}
 		defer r.Close()
@@ -334,10 +346,17 @@ func processArchive(ctx context.Context, path, pathIn, pathOut, dst string, form
 		if err := processBook(ctx, selectReader(r, enc), filepath.Join(pathOut, pathInArchive), dst, format, log); err != nil {
 			log.Error("Unable to process file in archive",
 				zap.String("archive", archive), zap.String("file", f.FileHeader.Name), zap.Error(err))
+			failures = append(failures, fmt.Errorf("unable to process file %q in archive %q: %w", f.FileHeader.Name, archive, err))
 		}
 		return nil
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	if len(failures) != 0 {
+		return errors.Join(failures...)
+	}
+	return nil
 }
 
 // processBook processes single FB2 file. "src" is part of the source path
