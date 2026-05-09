@@ -268,16 +268,8 @@ func processDir(ctx context.Context, dir, dst string, format common.OutputFmt, l
 
 		count++
 
-		file, err := os.Open(path)
-		if err != nil {
-			log.Error("Unable to process file", zap.String("file", path), zap.Error(err))
-			failures = append(failures, fmt.Errorf("unable to open file %q: %w", path, err))
-			return nil
-		}
-		defer file.Close()
-
 		src := strings.TrimPrefix(strings.TrimPrefix(path, dir), string(filepath.Separator))
-		if err := processBook(ctx, selectReader(file, enc), src, dst, format, log); err != nil {
+		if err := processBookFile(ctx, path, src, dst, enc, format, log); err != nil {
 			log.Error("Unable to process file", zap.String("file", path), zap.Error(err))
 			failures = append(failures, fmt.Errorf("unable to process file %q: %w", path, err))
 		}
@@ -321,15 +313,6 @@ func processArchive(ctx context.Context, path, pathIn, pathOut, dst string, form
 
 		count++
 
-		r, err := f.Open()
-		if err != nil {
-			log.Error("Unable to process file in archive",
-				zap.String("archive", archive), zap.String("file", f.FileHeader.Name), zap.Error(err))
-			failures = append(failures, fmt.Errorf("unable to open file %q in archive %q: %w", f.FileHeader.Name, archive, err))
-			return nil
-		}
-		defer r.Close()
-
 		cp := state.EnvFromContext(ctx).CodePage
 
 		pathInArchive := f.FileHeader.Name
@@ -343,7 +326,7 @@ func processArchive(ctx context.Context, path, pathIn, pathOut, dst string, form
 					zap.String("charset", n), zap.String("path", pathInArchive), zap.Error(err))
 			}
 		}
-		if err := processBook(ctx, selectReader(r, enc), filepath.Join(pathOut, pathInArchive), dst, format, log); err != nil {
+		if err := processBookArchiveEntry(ctx, f, enc, filepath.Join(pathOut, pathInArchive), dst, format, log); err != nil {
 			log.Error("Unable to process file in archive",
 				zap.String("archive", archive), zap.String("file", f.FileHeader.Name), zap.Error(err))
 			failures = append(failures, fmt.Errorf("unable to process file %q in archive %q: %w", f.FileHeader.Name, archive, err))
@@ -357,6 +340,32 @@ func processArchive(ctx context.Context, path, pathIn, pathOut, dst string, form
 		return errors.Join(failures...)
 	}
 	return nil
+}
+
+func processBookFile(ctx context.Context, path, src, dst string, enc srcEncoding, format common.OutputFmt, log *zap.Logger) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("open file: %w", err)
+	}
+
+	err = processBook(ctx, selectReader(file, enc), src, dst, format, log)
+	if closeErr := file.Close(); closeErr != nil {
+		err = errors.Join(err, fmt.Errorf("close file: %w", closeErr))
+	}
+	return err
+}
+
+func processBookArchiveEntry(ctx context.Context, f *zip.File, enc srcEncoding, src, dst string, format common.OutputFmt, log *zap.Logger) error {
+	r, err := f.Open()
+	if err != nil {
+		return fmt.Errorf("open archive entry: %w", err)
+	}
+
+	err = processBook(ctx, selectReader(r, enc), src, dst, format, log)
+	if closeErr := r.Close(); closeErr != nil {
+		err = errors.Join(err, fmt.Errorf("close archive entry: %w", closeErr))
+	}
+	return err
 }
 
 // processBook processes single FB2 file. "src" is part of the source path
