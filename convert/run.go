@@ -368,6 +368,22 @@ func processBookArchiveEntry(ctx context.Context, f *zip.File, enc srcEncoding, 
 	return err
 }
 
+func makeTempOutputPath(outputName string) (string, error) {
+	tmpFile, err := os.CreateTemp(filepath.Dir(outputName), "."+filepath.Base(outputName)+".*.tmp")
+	if err != nil {
+		return "", err
+	}
+	tmpName := tmpFile.Name()
+	if err := tmpFile.Close(); err != nil {
+		os.Remove(tmpName)
+		return "", err
+	}
+	if err := os.Remove(tmpName); err != nil {
+		return "", err
+	}
+	return tmpName, nil
+}
+
 // processBook processes single FB2 file. "src" is part of the source path
 // (always including file name) relative to the original path. When actual file
 // was specified it will be just base file name without a path. When looking
@@ -409,31 +425,42 @@ func processBook(ctx context.Context, r io.Reader, src string, dst string, forma
 	// Determine output file name and path based on input and configuration.
 	outputName = buildOutputPath(c, src, dst, env)
 
-	// Check if output file already exists
+	// Check if output file already exists, but do not remove it until a new
+	// output has been generated successfully.
 	if _, err := os.Stat(outputName); err == nil {
 		if !env.Overwrite {
 			return fmt.Errorf("output file already exists: %s", outputName)
 		}
 		log.Warn("Overwriting existing file", zap.String("file", outputName))
-		if err = os.Remove(outputName); err != nil {
-			return err
-		}
 	} else if !os.IsNotExist(err) {
 		return err
-	} else if err := os.MkdirAll(filepath.Dir(outputName), 0755); err != nil {
+	}
+	if err := os.MkdirAll(filepath.Dir(outputName), 0755); err != nil {
 		return fmt.Errorf("unable to create output directory: %w", err)
 	}
+
+	tmpOutputName, err := makeTempOutputPath(outputName)
+	if err != nil {
+		return fmt.Errorf("unable to create temporary output file: %w", err)
+	}
+	defer os.Remove(tmpOutputName)
 
 	// Generate output in the requested format
 	switch c.OutputFormat {
 	case common.OutputFmtEpub2, common.OutputFmtEpub3, common.OutputFmtKepub:
-		if err := epub.Generate(ctx, c, outputName, &env.Cfg.Document, log); err != nil {
+		if err := epub.Generate(ctx, c, tmpOutputName, &env.Cfg.Document, log); err != nil {
 			return fmt.Errorf("unable to generate output: %w", err)
 		}
 	case common.OutputFmtKfx, common.OutputFmtAzw8:
-		if err := kfx.Generate(ctx, c, outputName, &env.Cfg.Document, log); err != nil {
+		if err := kfx.Generate(ctx, c, tmpOutputName, &env.Cfg.Document, log); err != nil {
 			return fmt.Errorf("unable to generate output: %w", err)
 		}
+	default:
+		return fmt.Errorf("unsupported output format: %s", c.OutputFormat)
+	}
+
+	if err := replaceOutputFile(tmpOutputName, outputName); err != nil {
+		return fmt.Errorf("unable to replace output file: %w", err)
 	}
 
 	// Store conversion result for debugging

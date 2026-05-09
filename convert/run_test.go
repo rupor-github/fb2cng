@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,6 +35,20 @@ const (
 type zipTestFile struct {
 	name string
 	data []byte
+}
+
+type cancelOnEOFReader struct {
+	*bytes.Reader
+	cancel context.CancelFunc
+}
+
+func (r *cancelOnEOFReader) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	if err == io.EOF && r.cancel != nil {
+		r.cancel()
+		r.cancel = nil
+	}
+	return n, err
 }
 
 // setupTestEnv creates a test environment with proper context and logger
@@ -583,6 +598,48 @@ func TestProcessBook_LogsFailureOnError(t *testing.T) {
 	}
 	if strings.Contains(logOutput, `"msg":"Conversion completed"`) {
 		t.Fatalf("did not expect success log on failure, got logs: %s", logOutput)
+	}
+}
+
+func TestProcessBook_OverwriteKeepsExistingFileOnGenerationFailure(t *testing.T) {
+	ctx, env := setupTestEnv(t)
+	env.Overwrite = true
+	env.Cfg.Document.OutputNameTemplate = ""
+	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+
+	dstDir := t.TempDir()
+	outputPath := filepath.Join(dstDir, "book.epub")
+	existingContent := []byte("existing output")
+	if err := os.WriteFile(outputPath, existingContent, 0644); err != nil {
+		t.Fatalf("create existing output: %v", err)
+	}
+
+	cancelCtx, cancel := context.WithCancel(ctx)
+	reader := &cancelOnEOFReader{
+		Reader: bytes.NewReader([]byte(minimalFB2Content)),
+		cancel: cancel,
+	}
+	err := processBook(cancelCtx, reader, "book.fb2", dstDir, common.OutputFmtEpub3, logger)
+	if err == nil {
+		t.Fatal("expected generation error, got nil")
+	}
+	if !strings.Contains(err.Error(), context.Canceled.Error()) {
+		t.Fatalf("expected context cancellation error, got: %v", err)
+	}
+
+	actualContent, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read existing output after failed overwrite: %v", err)
+	}
+	if !bytes.Equal(actualContent, existingContent) {
+		t.Fatalf("existing output changed after failed overwrite: got %q, want %q", actualContent, existingContent)
+	}
+	tmpFiles, err := filepath.Glob(filepath.Join(dstDir, ".book.epub.*.tmp"))
+	if err != nil {
+		t.Fatalf("glob temporary output files: %v", err)
+	}
+	if len(tmpFiles) != 0 {
+		t.Fatalf("temporary output files were not cleaned up: %v", tmpFiles)
 	}
 }
 
