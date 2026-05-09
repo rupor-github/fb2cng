@@ -1,6 +1,7 @@
 package kfx
 
 import (
+	"context"
 	"strings"
 
 	"fbc/common"
@@ -29,9 +30,12 @@ type sectionWorkItem struct {
 // mapping of original FB2 IDs to EIDs (for $266 anchors), landmarks, and chapter-start section names.
 // Chapter-start sections are those that correspond to EPUB chapter boundaries (cover, body intro,
 // top-level sections, footnotes) - used for page map calculations.
-func generateStoryline(c *content.Content, styles *StyleRegistry,
+func generateStoryline(ctx context.Context, c *content.Content, styles *StyleRegistry,
 	imageResources imageResourceInfoByID, startEID int,
 ) (*FragmentList, int, sectionNameList, []*TOCEntry, sectionEIDsBySectionName, eidByFB2ID, LandmarkInfo, map[string]bool, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, 0, nil, nil, nil, nil, LandmarkInfo{}, nil, err
+	}
 	fragments := NewFragmentList()
 	eidCounter := startEID
 	sectionNames := make(sectionNameList, 0)
@@ -94,6 +98,9 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 
 	// Process each body
 	for i := range c.Book.Bodies {
+		if err := ctx.Err(); err != nil {
+			return nil, 0, nil, nil, nil, nil, landmarks, nil, err
+		}
 		body := &c.Book.Bodies[i]
 
 		// Collect footnote bodies for later processing (at the end, like EPUB does)
@@ -197,6 +204,9 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 		// If the section has nested titled sections that become separate storylines,
 		// isChapterEnd is transferred to the LAST nested section (see below).
 		for j := range body.Sections {
+			if err := ctx.Err(); err != nil {
+				return nil, 0, nil, nil, nil, nil, landmarks, nil, err
+			}
 			workQueue = append(workQueue, sectionWorkItem{
 				section:      &body.Sections[j],
 				depth:        1,
@@ -209,6 +219,9 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 
 		// Process sections from the queue
 		for len(workQueue) > 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, 0, nil, nil, nil, nil, landmarks, nil, err
+			}
 			// Pop first item (FIFO for document order)
 			work := workQueue[0]
 			workQueue = workQueue[1:]
@@ -310,6 +323,9 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 			// since the chapter continues through all nested storylines and ends at the last one.
 			parentIsUntitled := !section.HasTitle()
 			for i := range nestedTitledSections {
+				if err := ctx.Err(); err != nil {
+					return nil, 0, nil, nil, nil, nil, landmarks, nil, err
+				}
 				nestedTitledSections[i].parentEntry = tocEntry
 				if parentIsUntitled {
 					// Untitled wrapper: each child is an independent chapter
@@ -335,6 +351,9 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 	isFloatMode := c.FootnotesMode.IsFloat()
 
 	for _, body := range footnoteBodies {
+		if err := ctx.Err(); err != nil {
+			return nil, 0, nil, nil, nil, nil, landmarks, nil, err
+		}
 		sectionCount++
 		storyName := "l" + toBase36(sectionCount)
 		sectionName := "c" + toBase36(sectionCount-1)
@@ -374,6 +393,9 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 		// This ensures consistent handling of all section elements: title, epigraphs,
 		// image, annotation, and content.
 		for j := range body.Sections {
+			if err := ctx.Err(); err != nil {
+				return nil, 0, nil, nil, nil, nil, landmarks, nil, err
+			}
 			section := &body.Sections[j]
 
 			// In default mode (not float): record EID before processing for nested TOC entry
@@ -449,6 +471,9 @@ func generateStoryline(c *content.Content, styles *StyleRegistry,
 
 	// Create content fragments from accumulated content (single shared accumulator)
 	for name, contentList := range ca.Finish() {
+		if err := ctx.Err(); err != nil {
+			return nil, 0, nil, nil, nil, nil, landmarks, nil, err
+		}
 		contentFrag := buildContentFragmentByName(name, contentList)
 		if err := fragments.Add(contentFrag); err != nil {
 			return nil, 0, nil, nil, nil, nil, landmarks, nil, err

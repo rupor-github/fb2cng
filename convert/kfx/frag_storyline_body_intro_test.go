@@ -1,6 +1,7 @@
 package kfx
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -34,7 +35,7 @@ func TestBodyImageSplit_WithPageBreak(t *testing.T) {
 	imageResources := createBodyIntroResources(c.ImagesIndex)
 	styles := NewStyleRegistry()
 
-	fragments, _, _, _, _, _, _, _, err := generateStoryline(c, styles, imageResources, 1000)
+	fragments, _, _, _, _, _, _, _, err := generateStoryline(context.Background(), c, styles, imageResources, 1000)
 	if err != nil {
 		t.Fatalf("generateStoryline failed: %v", err)
 	}
@@ -101,7 +102,7 @@ func TestBodyImageNoSplit_WithoutPageBreak(t *testing.T) {
 	imageResources := createBodyIntroResources(c.ImagesIndex)
 	styles := NewStyleRegistry()
 
-	fragments, _, _, _, _, _, _, _, err := generateStoryline(c, styles, imageResources, 1000)
+	fragments, _, _, _, _, _, _, _, err := generateStoryline(context.Background(), c, styles, imageResources, 1000)
 	if err != nil {
 		t.Fatalf("generateStoryline failed: %v", err)
 	}
@@ -151,7 +152,7 @@ func TestBodyNoImage_WithPageBreak(t *testing.T) {
 	imageResources := createBodyIntroResources(c.ImagesIndex)
 	styles := NewStyleRegistry()
 
-	fragments, _, _, _, _, _, _, _, err := generateStoryline(c, styles, imageResources, 1000)
+	fragments, _, _, _, _, _, _, _, err := generateStoryline(context.Background(), c, styles, imageResources, 1000)
 	if err != nil {
 		t.Fatalf("generateStoryline failed: %v", err)
 	}

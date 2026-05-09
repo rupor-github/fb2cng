@@ -1,6 +1,7 @@
 package kfx
 
 import (
+	"context"
 	"strconv"
 	"strings"
 
@@ -306,11 +307,14 @@ func addTOCList(sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumula
 //
 // Returns (in order): updated sectionNames, updated tocEntries, updated sectionEIDs, nextEID, updated landmarks, updated idToEID, error.
 // It also appends the necessary fragments (content/storyline/section) into fragments.
-func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
+func addGeneratedSections(ctx context.Context, c *content.Content, cfg *config.DocumentConfig,
 	styles *StyleRegistry, fragments *FragmentList, sectionNames sectionNameList,
 	tocEntries []*TOCEntry, sectionEIDs sectionEIDsBySectionName, nextEID int, landmarks LandmarkInfo, idToEID eidByFB2ID,
 	imageResources imageResourceInfoByID, log *zap.Logger,
 ) (sectionNameList, []*TOCEntry, sectionEIDsBySectionName, int, LandmarkInfo, eidByFB2ID, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, nil, 0, landmarks, nil, err
+	}
 	annotationEnabled := cfg.Annotation.Enable && c.Book.Description.TitleInfo.Annotation != nil
 	tocPageEnabled := cfg.TOCPage.Placement != common.TOCPagePlacementNone
 
@@ -348,6 +352,9 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 		// Store container margins for post-processing
 		sb.SetContainerMargins(annotationCtx.ExtractContainerMargins("div", "annotation"))
 		for i := range c.Book.Description.TitleInfo.Annotation.Items {
+			if err := ctx.Err(); err != nil {
+				return nil, nil, nil, 0, landmarks, nil, err
+			}
 			item := &c.Book.Description.TitleInfo.Annotation.Items[i]
 			var next *fb2.FlowItem
 			if i+1 < len(c.Book.Description.TitleInfo.Annotation.Items) {
@@ -358,6 +365,9 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 		sb.ExitContainer() // Exit annotation container
 
 		for name, list := range ca.Finish() {
+			if err := ctx.Err(); err != nil {
+				return nil, nil, nil, 0, landmarks, nil, err
+			}
 			if err := fragments.Add(buildContentFragmentByName(name, list)); err != nil {
 				return nil, nil, nil, 0, landmarks, nil, err
 			}
@@ -386,6 +396,10 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 			tocEntries = append([]*TOCEntry{annotationEntry}, tocEntries...)
 		}
 		before = append(before, sectionName)
+	}
+
+	if err := ctx.Err(); err != nil {
+		return nil, nil, nil, 0, landmarks, nil, err
 	}
 
 	var tocSectionName string
@@ -424,6 +438,9 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 		addTOCList(sb, styles, ca, entries)
 
 		for name, list := range ca.Finish() {
+			if err := ctx.Err(); err != nil {
+				return nil, nil, nil, 0, landmarks, nil, err
+			}
 			if err := fragments.Add(buildContentFragmentByName(name, list)); err != nil {
 				return nil, nil, nil, 0, landmarks, nil, err
 			}
@@ -449,6 +466,10 @@ func addGeneratedSections(c *content.Content, cfg *config.DocumentConfig,
 		} else {
 			after = append(after, tocSectionName)
 		}
+	}
+
+	if err := ctx.Err(); err != nil {
+		return nil, nil, nil, 0, landmarks, nil, err
 	}
 
 	// Build the final section order.

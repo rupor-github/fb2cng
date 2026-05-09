@@ -43,13 +43,21 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 	container.GeneratorPkg = misc.GetVersion()
 
 	// Build minimal fragments from content
-	if err := buildFragments(container, c, cfg, log); err != nil {
+	if err := buildFragments(ctx, container, c, cfg, log); err != nil {
+		return err
+	}
+
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 
 	// Serialize container to KFX
 	kfxData, err := container.WriteContainer()
 	if err != nil {
+		return err
+	}
+
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 
@@ -63,11 +71,19 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 		}
 	}
 
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	// Ensure output directory exists
 	if dir := filepath.Dir(outputPath); dir != "" {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return err
 		}
+	}
+
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	// Write KFX file
@@ -85,7 +101,10 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 }
 
 // buildFragments creates KFX fragments from content.
-func buildFragments(container *Container, c *content.Content, cfg *config.DocumentConfig, log *zap.Logger) error {
+func buildFragments(ctx context.Context, container *Container, c *content.Content, cfg *config.DocumentConfig, log *zap.Logger) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	// Create style tracer if debug mode is enabled
 	var tracer *StyleTracer
 	if c.Debug {
@@ -94,6 +113,9 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 
 	// Create style registry from CSS stylesheets and get parsed CSS for font extraction
 	styles, parsedCSS := buildStyleRegistry(c.Book.Stylesheets, tracer, log)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	// Save parsed stylesheet to debug report when debug mode is enabled.
 	// For EPUB the stylesheet is always part of the output archive, but for KFX
@@ -116,17 +138,23 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	usedIDs := collectUsedImageIDs(c.Book)
 	usedImages := make(fb2.BookImages, len(usedIDs))
 	for id, img := range c.ImagesIndex {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if usedIDs[id] {
 			usedImages[id] = img
 		}
 	}
 
 	externalRes, rawMedia, imageResourceInfo := buildImageResourceFragments(usedImages)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	// Generate storyline and section fragments from book content
 	// EIDs start at 1000 - this is arbitrary but leaves room for future system IDs
 	startEID := 1000
-	contentFragments, nextEID, sectionNames, tocEntries, sectionEIDs, idToEID, landmarks, chapterStartSections, err := generateStoryline(c, styles, imageResourceInfo, startEID)
+	contentFragments, nextEID, sectionNames, tocEntries, sectionEIDs, idToEID, landmarks, chapterStartSections, err := generateStoryline(ctx, c, styles, imageResourceInfo, startEID)
 	if err != nil {
 		return err
 	}
@@ -134,7 +162,7 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	annotationEnabled := cfg.Annotation.Enable && c.Book.Description.TitleInfo.Annotation != nil
 	tocPageEnabled := cfg.TOCPage.Placement != common.TOCPagePlacementNone
 	if annotationEnabled || tocPageEnabled {
-		sectionNames, tocEntries, sectionEIDs, nextEID, landmarks, idToEID, err = addGeneratedSections(c, cfg, styles, contentFragments, sectionNames, tocEntries, sectionEIDs, nextEID, landmarks, idToEID, imageResourceInfo, log)
+		sectionNames, tocEntries, sectionEIDs, nextEID, landmarks, idToEID, err = addGeneratedSections(ctx, c, cfg, styles, contentFragments, sectionNames, tocEntries, sectionEIDs, nextEID, landmarks, idToEID, imageResourceInfo, log)
 		if err != nil {
 			return err
 		}
@@ -151,6 +179,9 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	if len(posItems) > 0 {
 		allEIDs = make([]int, 0, len(posItems))
 		for _, it := range posItems {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			allEIDs = append(allEIDs, it.EID)
 		}
 	}
@@ -167,6 +198,10 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 		if info, ok := imageResourceInfo[coverID]; ok {
 			coverResName = info.ResourceName
 		}
+	}
+
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	// $490 Book Metadata - categorised metadata (title, author, language, etc.)
@@ -188,6 +223,9 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 
 	// Add style fragments from registry (only used styles are included)
 	for _, styleFrag := range styles.BuildFragments() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := container.Fragments.Add(styleFrag); err != nil {
 			return err
 		}
@@ -195,6 +233,9 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 
 	// Add all content fragments to container
 	for _, frag := range contentFragments.All() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := container.Fragments.Add(frag); err != nil {
 			return err
 		}
@@ -237,11 +278,17 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 
 	// $164 External resources + $417 Raw media (images)
 	for _, frag := range externalRes {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := container.Fragments.Add(frag); err != nil {
 			return err
 		}
 	}
 	for _, frag := range rawMedia {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := container.Fragments.Add(frag); err != nil {
 			return err
 		}
@@ -253,11 +300,17 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	fontStartIndex := nextResourceLocationIndex(rawMedia)
 	fontFrags, rawFontFrags := BuildFontFragments(fontInfo, fontStartIndex)
 	for _, frag := range fontFrags {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := container.Fragments.Add(frag); err != nil {
 			return err
 		}
 	}
 	for _, frag := range rawFontFrags {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := container.Fragments.Add(frag); err != nil {
 			return err
 		}
@@ -266,6 +319,9 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 	// $266 Anchors (for internal links)
 	referencedAnchors := collectLinkTargets(contentFragments)
 	for _, frag := range buildAnchorFragments(idToEID, referencedAnchors) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := container.Fragments.Add(frag); err != nil {
 			return err
 		}
@@ -273,6 +329,9 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 
 	// $266 Anchors (for external links - URLs with anchor_name + uri)
 	for _, frag := range styles.BuildExternalLinkFragments() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := container.Fragments.Add(frag); err != nil {
 			return err
 		}
@@ -296,6 +355,9 @@ func buildFragments(container *Container, c *content.Content, cfg *config.Docume
 
 	// $597 auxiliary_data - reference uses this to mark target sections.
 	for _, frag := range BuildAuxiliaryDataFragments(sectionNames) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := container.Fragments.Add(frag); err != nil {
 			return err
 		}

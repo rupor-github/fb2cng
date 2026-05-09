@@ -1,6 +1,7 @@
 package kfx
 
 import (
+	"context"
 	"testing"
 
 	"golang.org/x/text/language"
@@ -24,7 +25,7 @@ func TestGenerateStoryline_SectionBreakDepthThree(t *testing.T) {
 	styles := NewStyleRegistry()
 	imageResources := make(imageResourceInfoByID)
 
-	_, _, sectionNames, tocEntries, _, _, _, _, err := generateStoryline(c, styles, imageResources, 1000)
+	_, _, sectionNames, tocEntries, _, _, _, _, err := generateStoryline(context.Background(), c, styles, imageResources, 1000)
 	if err != nil {
 		t.Fatalf("generateStoryline failed: %v", err)
 	}
@@ -89,7 +90,7 @@ func TestGenerateStoryline_SectionBreakDepthTwoOnly(t *testing.T) {
 	styles := NewStyleRegistry()
 	imageResources := make(imageResourceInfoByID)
 
-	_, _, sectionNames, tocEntries, _, _, _, _, err := generateStoryline(c, styles, imageResources, 1000)
+	_, _, sectionNames, tocEntries, _, _, _, _, err := generateStoryline(context.Background(), c, styles, imageResources, 1000)
 	if err != nil {
 		t.Fatalf("generateStoryline failed: %v", err)
 	}
