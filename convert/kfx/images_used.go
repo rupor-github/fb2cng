@@ -6,6 +6,15 @@ import (
 	"fbc/fb2"
 )
 
+// collectUsedImageIDs pre-scans the FB2 tree to decide which images need KFX
+// resource fragments before storyline generation starts.
+//
+// This is intentionally conservative and MUST mirror every image-rendering path
+// used by generateStoryline/processFlowItem/processPoem/etc. If rendering learns
+// to emit images from a new FB2 location, this traversal must be updated at the
+// same time; otherwise imageResources will not contain that image and rendering
+// may silently omit it. A render-time image resource registry would be less
+// fragile, but this pre-scan is the current architecture.
 func collectUsedImageIDs(book *fb2.FictionBook) map[string]bool {
 	used := make(map[string]bool)
 
@@ -117,19 +126,7 @@ func collectImageIDsFlowItem(item *fb2.FlowItem, used map[string]bool) {
 	case fb2.FlowSubtitle:
 		collectInlineImageIDsParagraph(item.Subtitle, used)
 	case fb2.FlowPoem:
-		if item.Poem != nil {
-			collectInlineImageIDsTitle(item.Poem.Title, used)
-			for si := range item.Poem.Stanzas {
-				st := &item.Poem.Stanzas[si]
-				collectInlineImageIDsTitle(st.Title, used)
-				for i := range st.Verses {
-					collectInlineImageIDsParagraph(&st.Verses[i], used)
-				}
-			}
-			for i := range item.Poem.TextAuthors {
-				collectInlineImageIDsParagraph(&item.Poem.TextAuthors[i], used)
-			}
-		}
+		collectImageIDsPoem(item.Poem, used)
 	case fb2.FlowCite:
 		if item.Cite != nil {
 			for i := range item.Cite.Items {
@@ -149,6 +146,34 @@ func collectImageIDsFlowItem(item *fb2.FlowItem, used map[string]bool) {
 				}
 			}
 		}
+	}
+}
+
+func collectImageIDsPoem(poem *fb2.Poem, used map[string]bool) {
+	if poem == nil {
+		return
+	}
+
+	collectInlineImageIDsTitle(poem.Title, used)
+	for _, epi := range poem.Epigraphs {
+		collectImageIDsFlow(&epi.Flow, used)
+		for i := range epi.TextAuthors {
+			collectInlineImageIDsParagraph(&epi.TextAuthors[i], used)
+		}
+	}
+	for i := range poem.Subtitles {
+		collectInlineImageIDsParagraph(&poem.Subtitles[i], used)
+	}
+	for si := range poem.Stanzas {
+		st := &poem.Stanzas[si]
+		collectInlineImageIDsTitle(st.Title, used)
+		collectInlineImageIDsParagraph(st.Subtitle, used)
+		for i := range st.Verses {
+			collectInlineImageIDsParagraph(&st.Verses[i], used)
+		}
+	}
+	for i := range poem.TextAuthors {
+		collectInlineImageIDsParagraph(&poem.TextAuthors[i], used)
 	}
 }
 
