@@ -141,11 +141,19 @@ func wrapText(face *builtinFontFace, text string, fontSize, maxWidth float64) ([
 }
 
 func shapedWidthPoints(text shapedText, fontSize float64) float64 {
+	return shapedWidthPointsWithSpacing(text, fontSize, 0)
+}
+
+func shapedWidthPointsWithSpacing(text shapedText, fontSize float64, letterSpacing float64) float64 {
 	width := 0
 	for _, glyph := range text.Glyphs {
 		width += glyph.Width
 	}
-	return float64(width) * fontSize / 1000.0
+	points := float64(width) * fontSize / 1000.0
+	if letterSpacing != 0 && len(text.Glyphs) > 1 {
+		points += letterSpacing * float64(len(text.Glyphs)-1)
+	}
+	return points
 }
 
 func fontUnitsToPDFWidth(width, unitsPerEm int) int {

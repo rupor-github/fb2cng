@@ -24,6 +24,7 @@ type paragraphStyle struct {
 	Italic          bool
 	FontSize        float64
 	LineHeight      float64
+	LetterSpacing   float64
 	FirstLineIndent float64
 	Align           textAlign
 	Color           pdfColor
@@ -87,12 +88,12 @@ func layoutParagraph(face *builtinFontFace, text string, style paragraphStyle, m
 	if err != nil {
 		return nil, fmt.Errorf("shape space: %w", err)
 	}
-	spaceWidth := shapedWidthPoints(space, style.FontSize)
+	spaceWidth := shapedWidthPointsWithSpacing(space, style.FontSize, style.LetterSpacing)
 	hyphen, err := shapeText(face, "-")
 	if err != nil {
 		return nil, fmt.Errorf("shape hyphen: %w", err)
 	}
-	hyphenWidth := shapedWidthPoints(hyphen, style.FontSize)
+	hyphenWidth := shapedWidthPointsWithSpacing(hyphen, style.FontSize, style.LetterSpacing) + max(style.LetterSpacing, 0)
 
 	atoms, err := paragraphAtoms(face, words, style)
 	if err != nil {
@@ -108,7 +109,7 @@ func layoutParagraph(face *builtinFontFace, text string, style paragraphStyle, m
 			return nil, fmt.Errorf("shape line: %w", err)
 		}
 
-		width := shapedWidthPoints(shaped, style.FontSize)
+		width := shapedWidthPointsWithSpacing(shaped, style.FontSize, style.LetterSpacing)
 		indent := 0.0
 		if start == 0 {
 			indent = min(max(style.FirstLineIndent, 0), maxWidth)
@@ -179,7 +180,7 @@ func paragraphAtoms(face *builtinFontFace, words []paragraphWord, style paragrap
 			}
 			atoms = append(atoms, paragraphAtom{
 				Text:        part,
-				Width:       shapedWidthPoints(shaped, style.FontSize),
+				Width:       shapedWidthPointsWithSpacing(shaped, style.FontSize, style.LetterSpacing),
 				WordIndex:   i,
 				EndWord:     j == len(parts)-1,
 				HyphenAfter: j != len(parts)-1,

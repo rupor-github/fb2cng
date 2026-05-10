@@ -187,7 +187,7 @@ func pdfTraceFormatCSSProperties(props map[string]css.Value) string {
 }
 
 func pdfTraceFormatResolvedStyle(style pdfBlockResolvedStyle) string {
-	return fmt.Sprintf("font-family=%s, font-weight=%s, font-style=%s, color=%s, underline=%t, strikethrough=%t, font-size=%gpt, line-height=%gpt, text-indent=%gpt, align=%s, hyphens=%s, margins=%g/%g/%g/%g, keep-together=%t, keep-next=%d, page-break-before=%t, page-break-after=%t, hidden=%t, orphans=%d, widows=%d",
+	return fmt.Sprintf("font-family=%s, font-weight=%s, font-style=%s, color=%s, underline=%t, strikethrough=%t, font-size=%gpt, line-height=%gpt, letter-spacing=%gpt, text-indent=%gpt, align=%s, hyphens=%s, margins=%g/%g/%g/%g, keep-together=%t, keep-next=%d, page-break-before=%t, page-break-after=%t, hidden=%t, orphans=%d, widows=%d",
 		normalizedPDFFontFamily(style.Paragraph.FontFamily),
 		pdfCSSFontWeightString(style.Paragraph.Bold),
 		pdfCSSFontStyleString(style.Paragraph.Italic),
@@ -196,6 +196,7 @@ func pdfTraceFormatResolvedStyle(style pdfBlockResolvedStyle) string {
 		style.Paragraph.Strikethrough,
 		style.Paragraph.FontSize,
 		style.Paragraph.LineHeight,
+		style.Paragraph.LetterSpacing,
 		style.Paragraph.FirstLineIndent,
 		style.Paragraph.Align.String(),
 		pdfHyphenationString(style.Paragraph.Hyphenation),
@@ -251,6 +252,7 @@ func pdfTraceStyleDiff(before, after pdfBlockResolvedStyle) string {
 	}
 	appendFloatChange("font-size", before.Paragraph.FontSize, after.Paragraph.FontSize)
 	appendFloatChange("line-height", before.Paragraph.LineHeight, after.Paragraph.LineHeight)
+	appendFloatChange("letter-spacing", before.Paragraph.LetterSpacing, after.Paragraph.LetterSpacing)
 	appendFloatChange("text-indent", before.Paragraph.FirstLineIndent, after.Paragraph.FirstLineIndent)
 	appendFloatChange("margin-top", before.SpaceBefore, after.SpaceBefore)
 	appendFloatChange("margin-bottom", before.SpaceAfter, after.SpaceAfter)

@@ -150,6 +150,13 @@ func TestWrapText(t *testing.T) {
 	}
 }
 
+func TestShapedWidthPointsWithSpacing(t *testing.T) {
+	text := shapedText{Glyphs: []shapedGlyph{{Width: 500}, {Width: 250}, {Width: 250}}}
+	if got := shapedWidthPointsWithSpacing(text, 10, 1.5); got != 13 {
+		t.Fatalf("shapedWidthPointsWithSpacing() = %v, want 13", got)
+	}
+}
+
 func TestGlyphHex(t *testing.T) {
 	got := docwriter.Format(glyphHex([]shapedGlyph{{GlyphID: 1}, {GlyphID: 0x0416}}))
 	if got != "<00010416>" {

@@ -90,6 +90,7 @@ type pdfDebugResolvedStyle struct {
 	FontStyle         string  `json:"font_style,omitempty"`
 	FontSize          float64 `json:"font_size"`
 	LineHeight        float64 `json:"line_height"`
+	LetterSpacing     float64 `json:"letter_spacing,omitempty"`
 	FirstLineIndent   float64 `json:"first_line_indent,omitempty"`
 	TextAlign         string  `json:"text_align"`
 	Color             string  `json:"color,omitempty"`
@@ -261,6 +262,9 @@ func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfB
 	}
 	if override.Paragraph.LineHeight != fallback.Paragraph.LineHeight {
 		base.Paragraph.LineHeight = override.Paragraph.LineHeight
+	}
+	if override.Paragraph.LetterSpacing != fallback.Paragraph.LetterSpacing {
+		base.Paragraph.LetterSpacing = override.Paragraph.LetterSpacing
 	}
 	if override.Paragraph.FirstLineIndent != fallback.Paragraph.FirstLineIndent {
 		base.Paragraph.FirstLineIndent = override.Paragraph.FirstLineIndent
@@ -463,10 +467,15 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 			style.Paragraph.LineHeight = points
 		}
 	}
+	if value, ok := props["letter-spacing"]; ok {
+		if points, ok := pdfCSSLetterSpacingPoints(value, style.Paragraph.FontSize); ok {
+			style.Paragraph.LetterSpacing = points
+		}
+	}
 	names := make([]string, 0, len(props))
 	for name := range props {
 		lower := strings.ToLower(name)
-		if lower != "font-family" && lower != "font-weight" && lower != "font-style" && lower != "color" && lower != "text-decoration" && lower != "font-size" && lower != "line-height" {
+		if lower != "font-family" && lower != "font-weight" && lower != "font-style" && lower != "color" && lower != "text-decoration" && lower != "font-size" && lower != "line-height" && lower != "letter-spacing" {
 			names = append(names, name)
 		}
 	}
@@ -644,6 +653,13 @@ func pdfCSSLineHeightPoints(value css.Value, fontSize float64) (float64, bool) {
 	return pdfCSSLengthPoints(value, fontSize)
 }
 
+func pdfCSSLetterSpacingPoints(value css.Value, fontSize float64) (float64, bool) {
+	if cssKeyword(value) == "normal" {
+		return 0, true
+	}
+	return pdfCSSLengthPoints(value, fontSize)
+}
+
 func pdfCSSLengthPoints(value css.Value, fontSize float64) (float64, bool) {
 	if !value.IsNumeric() {
 		return 0, false
@@ -810,6 +826,7 @@ func (r *pdfStyleResolver) debugStyles() []pdfDebugResolvedStyle {
 			FontStyle:         pdfCSSFontStyleString(style.Paragraph.Italic),
 			FontSize:          style.Paragraph.FontSize,
 			LineHeight:        style.Paragraph.LineHeight,
+			LetterSpacing:     style.Paragraph.LetterSpacing,
 			FirstLineIndent:   style.Paragraph.FirstLineIndent,
 			TextAlign:         style.Paragraph.Align.String(),
 			Color:             style.Paragraph.Color.String(),

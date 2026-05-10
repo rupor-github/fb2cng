@@ -20,6 +20,7 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 				text-decoration: underline line-through;
 				font-size: 12pt;
 				line-height: 1.5;
+				letter-spacing: 0.2em;
 				text-align: center;
 				text-indent: 2em;
 				margin: 1em 2em 0.5em 3em;
@@ -55,6 +56,9 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 	}
 	if paragraph.Paragraph.LineHeight != 18 {
 		t.Fatalf("paragraph line height = %v, want 18", paragraph.Paragraph.LineHeight)
+	}
+	if paragraph.Paragraph.LetterSpacing < 2.399 || paragraph.Paragraph.LetterSpacing > 2.401 {
+		t.Fatalf("paragraph letter spacing = %v, want 2.4", paragraph.Paragraph.LetterSpacing)
 	}
 	if paragraph.Paragraph.Align != textAlignCenter {
 		t.Fatalf("paragraph align = %v, want center", paragraph.Paragraph.Align)

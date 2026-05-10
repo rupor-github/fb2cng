@@ -23,6 +23,7 @@ func pageContent(page pdfPage) []byte {
 	buf.WriteString("q\nBT\n")
 	currentFontName := ""
 	currentFontSize := -1.0
+	currentLetterSpacing := 0.0
 	currentColor := pdfColor{}
 	colorInitialized := false
 	for _, line := range page.Lines {
@@ -33,6 +34,10 @@ func pageContent(page pdfPage) []byte {
 			fmt.Fprintf(&buf, "/%s %s Tf\n", line.FontName, docwriter.FormatNumber(line.FontSize))
 			currentFontName = line.FontName
 			currentFontSize = line.FontSize
+		}
+		if line.LetterSpacing != currentLetterSpacing {
+			fmt.Fprintf(&buf, "%s Tc\n", docwriter.FormatNumber(line.LetterSpacing))
+			currentLetterSpacing = line.LetterSpacing
 		}
 		if !colorInitialized || line.Color != currentColor {
 			fmt.Fprintf(&buf, "%s\n", line.Color.contentOperator())
@@ -85,7 +90,7 @@ func writeDecorationLine(buf *bytes.Buffer, x1, y, x2 float64) {
 }
 
 func decoratedLineWidth(line pdfPageLine) float64 {
-	width := shapedWidthPoints(line.Text, line.FontSize)
+	width := shapedWidthPointsWithSpacing(line.Text, line.FontSize, line.LetterSpacing)
 	if line.ExtraWordSpacing == 0 {
 		return width
 	}
