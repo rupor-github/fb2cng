@@ -114,8 +114,15 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 			continue
 		}
 
+		style := blockStyles[blockIndex]
+		if style.Hidden {
+			continue
+		}
+		if style.PageBreakBefore && pageHasText {
+			newTextPage()
+		}
+
 		if block.Kind == pdfBlockImage {
-			style := blockStyles[blockIndex]
 			blockWidth := blockContentWidth(contentWidth, style)
 			img := doc.Images[block.ImageID]
 			if img == nil {
@@ -146,10 +153,12 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 			})
 			pageHasText = true
 			y -= style.SpaceAfter
+			if style.PageBreakAfter && pageHasText {
+				newTextPage()
+			}
 			continue
 		}
 
-		style := blockStyles[blockIndex]
 		style.Paragraph.Hyphenator = doc.Hyphenator
 		blockWidth := blockContentWidth(contentWidth, style)
 		if block.Kind == pdfBlockEmptyLine {
@@ -230,6 +239,9 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 			pageHasText = true
 		}
 		y -= style.SpaceAfter
+		if style.PageBreakAfter && pageHasText {
+			newTextPage()
+		}
 	}
 
 	if len(pages[len(pages)-1].Lines) == 0 && len(pages[len(pages)-1].Images) == 0 {
@@ -249,11 +261,14 @@ func nextBlockKeepHeight(face *builtinFontFace, blocks []pdfTextBlock, hyphenato
 		case pdfBlockEmptyLine:
 			continue
 		}
+		style := styles.styleForBlock(block)
+		if style.Hidden || style.PageBreakBefore {
+			return 0, nil
+		}
 		text := strings.TrimSpace(block.Text)
 		if text == "" {
 			continue
 		}
-		style := styles.styleForBlock(block)
 		style.Paragraph.Hyphenator = hyphenator
 		lines, err := layoutParagraph(face, text, style.Paragraph, blockContentWidth(contentWidth, style))
 		if err != nil {

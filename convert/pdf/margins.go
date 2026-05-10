@@ -11,6 +11,9 @@ func (r *pdfStyleResolver) collapsedBlockStyles(blocks []pdfTextBlock) []pdfBloc
 
 	previous := -1
 	for i, block := range blocks {
+		if resolved[i].Hidden {
+			continue
+		}
 		if !pdfBlockParticipatesInMarginCollapse(block) {
 			previous = -1
 			continue

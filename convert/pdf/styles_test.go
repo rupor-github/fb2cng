@@ -18,6 +18,7 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 				text-align: center;
 				text-indent: 2em;
 				margin: 1em 2em 0.5em 3em;
+				hyphens: manual;
 				orphans: 3;
 				widows: 4;
 			}
@@ -49,6 +50,9 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 	}
 	if paragraph.MarginLeft != 36 || paragraph.MarginRight != 24 {
 		t.Fatalf("paragraph horizontal margins = %v/%v, want 36/24", paragraph.MarginLeft, paragraph.MarginRight)
+	}
+	if paragraph.Paragraph.Hyphenation != paragraphHyphenationManual {
+		t.Fatalf("paragraph hyphenation = %s, want manual", pdfHyphenationString(paragraph.Paragraph.Hyphenation))
 	}
 	if paragraph.Orphans != 3 || paragraph.Widows != 4 {
 		t.Fatalf("paragraph orphans/widows = %d/%d, want 3/4", paragraph.Orphans, paragraph.Widows)
@@ -138,6 +142,22 @@ func TestPDFCollapsedBlockStylesTreatsPageBreakAndEmptyLineAsBarriers(t *testing
 	}
 }
 
+func TestPDFCollapsedBlockStylesSkipsHiddenBlocks(t *testing.T) {
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	resolver.styles["before"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceAfter: 4}
+	resolver.styles["hidden"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceBefore: 100, SpaceAfter: 100, Hidden: true}
+	resolver.styles["after"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceBefore: 6}
+
+	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
+		{Kind: pdfBlockParagraph, StyleName: "before", Text: "before"},
+		{Kind: pdfBlockParagraph, StyleName: "hidden", Text: "hidden"},
+		{Kind: pdfBlockParagraph, StyleName: "after", Text: "after"},
+	})
+	if styles[0].SpaceAfter != 0 || styles[2].SpaceBefore != 6 {
+		t.Fatalf("hidden block margins affected collapse: before mb=%v after mt=%v", styles[0].SpaceAfter, styles[2].SpaceBefore)
+	}
+}
+
 func TestPDFStyleResolverMapsHeadingAndTOCStyles(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",
@@ -168,5 +188,26 @@ func TestPDFStyleResolverMapsHeadingAndTOCStyles(t *testing.T) {
 	subtitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockSubtitle})
 	if subtitle.KeepWithNextLines != 1 {
 		t.Fatalf("subtitle keep-with-next = %d, want 1", subtitle.KeepWithNextLines)
+	}
+}
+
+func TestPDFStyleResolverPageBreakDisplayAndAbsoluteUnits(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			.forced { page-break-before: always; break-after: page; display: none; }
+			.metric { margin-left: 25.4mm; margin-right: 2.54cm; margin-top: 1in; }
+		`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	forced := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "forced"})
+	if !forced.PageBreakBefore || !forced.PageBreakAfter || !forced.Hidden {
+		t.Fatalf("forced style page/visibility flags = before:%t after:%t hidden:%t, want all true", forced.PageBreakBefore, forced.PageBreakAfter, forced.Hidden)
+	}
+
+	metric := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "metric"})
+	if metric.MarginLeft != 72 || metric.MarginRight != 72 || metric.SpaceBefore != 72 {
+		t.Fatalf("metric margins = left:%v right:%v top:%v, want all 72pt", metric.MarginLeft, metric.MarginRight, metric.SpaceBefore)
 	}
 }

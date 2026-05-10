@@ -107,6 +107,78 @@ func TestLayoutParagraphDropsUnbrokenSoftHyphen(t *testing.T) {
 	}
 }
 
+func TestLayoutParagraphHonorsHyphenationModes(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	prefix, err := shapeText(face, "hy-")
+	if err != nil {
+		t.Fatalf("shapeText() error = %v", err)
+	}
+	maxWidth := shapedWidthPoints(prefix, 10) + 1
+
+	tests := []struct {
+		name       string
+		text       string
+		style      paragraphStyle
+		wantLines  int
+		wantFirst  string
+		wantSecond string
+	}{
+		{
+			name:       "auto uses dictionary hyphenation",
+			text:       "hyphenation",
+			style:      paragraphStyle{FontSize: 10, LineHeight: 12, Hyphenation: paragraphHyphenationAuto, Hyphenator: fakeHyphenator{"hyphenation": "hy\u00adphenation"}},
+			wantLines:  2,
+			wantFirst:  "hy-",
+			wantSecond: "phenation",
+		},
+		{
+			name:      "none disables dictionary and manual hyphenation",
+			text:      "hy\u00adphenation",
+			style:     paragraphStyle{FontSize: 10, LineHeight: 12, Hyphenation: paragraphHyphenationNone, Hyphenator: fakeHyphenator{"hyphenation": "hy\u00adphenation"}},
+			wantLines: 1,
+			wantFirst: "hyphenation",
+		},
+		{
+			name:       "manual honors source soft hyphen only",
+			text:       "hy\u00adphenation",
+			style:      paragraphStyle{FontSize: 10, LineHeight: 12, Hyphenation: paragraphHyphenationManual},
+			wantLines:  2,
+			wantFirst:  "hy-",
+			wantSecond: "phenation",
+		},
+		{
+			name:      "manual ignores dictionary hyphenation",
+			text:      "hyphenation",
+			style:     paragraphStyle{FontSize: 10, LineHeight: 12, Hyphenation: paragraphHyphenationManual, Hyphenator: fakeHyphenator{"hyphenation": "hy\u00adphenation"}},
+			wantLines: 1,
+			wantFirst: "hyphenation",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lines, err := layoutParagraph(face, tt.text, tt.style, maxWidth)
+			if err != nil {
+				t.Fatalf("layoutParagraph() error = %v", err)
+			}
+			if len(lines) != tt.wantLines {
+				t.Fatalf("layoutParagraph() produced %d lines, want %d", len(lines), tt.wantLines)
+			}
+			if got := shapedRunes(lines[0].Text); got != tt.wantFirst {
+				t.Fatalf("first line = %q, want %q", got, tt.wantFirst)
+			}
+			if tt.wantSecond != "" {
+				if got := shapedRunes(lines[1].Text); got != tt.wantSecond {
+					t.Fatalf("second line = %q, want %q", got, tt.wantSecond)
+				}
+			}
+		})
+	}
+}
+
 func TestBreakableWordsKeepsNoBreakSpaceInsideWord(t *testing.T) {
 	got := breakableWords("one  two\u00a0three\tfour")
 	want := []string{"one", "two\u00a0three", "four"}

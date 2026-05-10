@@ -61,6 +61,9 @@ type pdfBlockResolvedStyle struct {
 	MarginRight       float64
 	KeepTogether      bool
 	KeepWithNextLines int
+	PageBreakBefore   bool
+	PageBreakAfter    bool
+	Hidden            bool
 	Orphans           int
 	Widows            int
 }
@@ -80,8 +83,12 @@ type pdfDebugResolvedStyle struct {
 	SpaceAfter        float64 `json:"space_after,omitempty"`
 	MarginLeft        float64 `json:"margin_left,omitempty"`
 	MarginRight       float64 `json:"margin_right,omitempty"`
+	Hyphenation       string  `json:"hyphenation,omitempty"`
 	KeepTogether      bool    `json:"keep_together,omitempty"`
 	KeepWithNextLines int     `json:"keep_with_next_lines,omitempty"`
+	PageBreakBefore   bool    `json:"page_break_before,omitempty"`
+	PageBreakAfter    bool    `json:"page_break_after,omitempty"`
+	Hidden            bool    `json:"hidden,omitempty"`
 	Orphans           int     `json:"orphans,omitempty"`
 	Widows            int     `json:"widows,omitempty"`
 }
@@ -131,7 +138,7 @@ func newPDFStyleResolver(book *fb2.FictionBook, log *zap.Logger, tracers ...*pdf
 func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 	styles := map[string]pdfBlockResolvedStyle{
 		pdfStyleParagraph: {
-			Paragraph:  paragraphStyle{FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, FirstLineIndent: pdfBodyIndent, Align: textAlignJustify},
+			Paragraph:  paragraphStyle{FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, FirstLineIndent: pdfBodyIndent, Align: textAlignJustify, Hyphenation: paragraphHyphenationAuto},
 			SpaceAfter: pdfParagraphSpaceAfter,
 			Orphans:    pdfDefaultKeepLines,
 			Widows:     pdfDefaultKeepLines,
@@ -139,32 +146,32 @@ func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 		pdfStyleChapterTitleHeader: headingPDFStyle(1),
 		pdfStyleSectionTitleHeader: headingPDFStyle(2),
 		pdfStyleSubtitle: {
-			Paragraph:         paragraphStyle{FontSize: pdfSubtitleFontSize, LineHeight: pdfSubtitleLineHeight, Align: textAlignCenter},
+			Paragraph:         paragraphStyle{FontSize: pdfSubtitleFontSize, LineHeight: pdfSubtitleLineHeight, Align: textAlignCenter, Hyphenation: paragraphHyphenationAuto},
 			SpaceBefore:       pdfSubtitleSpaceBefore,
 			SpaceAfter:        pdfSubtitleSpaceAfter,
 			KeepTogether:      true,
 			KeepWithNextLines: pdfSingleKeepLine,
 		},
 		pdfStyleVerse: {
-			Paragraph:  paragraphStyle{FontSize: pdfBaseFontSize, LineHeight: pdfVerseLineHeight, Align: textAlignLeft},
+			Paragraph:  paragraphStyle{FontSize: pdfBaseFontSize, LineHeight: pdfVerseLineHeight, Align: textAlignLeft, Hyphenation: paragraphHyphenationAuto},
 			SpaceAfter: pdfVerseSpaceAfter,
 			Orphans:    pdfDefaultKeepLines,
 			Widows:     pdfDefaultKeepLines,
 		},
 		pdfStyleTextAuthor: {
-			Paragraph:  paragraphStyle{FontSize: pdfTextAuthorFontSize, LineHeight: pdfTextAuthorLineHeight, Align: textAlignRight},
+			Paragraph:  paragraphStyle{FontSize: pdfTextAuthorFontSize, LineHeight: pdfTextAuthorLineHeight, Align: textAlignRight, Hyphenation: paragraphHyphenationAuto},
 			SpaceAfter: pdfTextAuthorSpaceAfter,
 			Orphans:    pdfDefaultKeepLines,
 			Widows:     pdfDefaultKeepLines,
 		},
 		pdfStyleImage: {
-			Paragraph:    paragraphStyle{FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight},
+			Paragraph:    paragraphStyle{FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, Hyphenation: paragraphHyphenationAuto},
 			SpaceBefore:  pdfImageSpace,
 			SpaceAfter:   pdfImageSpace,
 			KeepTogether: true,
 		},
 		pdfStyleTOCItem: {
-			Paragraph:  paragraphStyle{FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, Align: textAlignLeft},
+			Paragraph:  paragraphStyle{FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, Align: textAlignLeft, Hyphenation: paragraphHyphenationAuto},
 			SpaceAfter: pdfTOCSpaceAfter,
 			Orphans:    pdfSingleKeepLine,
 			Widows:     pdfSingleKeepLine,
@@ -172,7 +179,7 @@ func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 		pdfStyleTOCTitle:        headingPDFStyle(1),
 		pdfStyleAnnotationTitle: headingPDFStyle(1),
 		pdfStyleEmptyLine: {
-			Paragraph: paragraphStyle{FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight},
+			Paragraph: paragraphStyle{FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, Hyphenation: paragraphHyphenationAuto},
 		},
 	}
 	return styles
@@ -195,7 +202,7 @@ func (r *pdfStyleResolver) traceDefaults() {
 func headingPDFStyle(depth int) pdfBlockResolvedStyle {
 	fontSize := max(pdfHeadingBaseFontSize-float64(depth-1), pdfHeadingMinFontSize)
 	return pdfBlockResolvedStyle{
-		Paragraph:         paragraphStyle{FontSize: fontSize, LineHeight: fontSize * pdfHeadingLineHeightFactor, Align: textAlignCenter},
+		Paragraph:         paragraphStyle{FontSize: fontSize, LineHeight: fontSize * pdfHeadingLineHeightFactor, Align: textAlignCenter, Hyphenation: paragraphHyphenationAuto},
 		SpaceBefore:       pdfHeadingSpaceBefore,
 		SpaceAfter:        pdfHeadingSpaceAfter,
 		KeepTogether:      true,
@@ -236,6 +243,9 @@ func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfB
 	if override.Paragraph.Align != fallback.Paragraph.Align {
 		base.Paragraph.Align = override.Paragraph.Align
 	}
+	if override.Paragraph.Hyphenation != fallback.Paragraph.Hyphenation {
+		base.Paragraph.Hyphenation = override.Paragraph.Hyphenation
+	}
 	if override.SpaceBefore != fallback.SpaceBefore {
 		base.SpaceBefore = override.SpaceBefore
 	}
@@ -253,6 +263,15 @@ func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfB
 	}
 	if override.KeepWithNextLines != fallback.KeepWithNextLines {
 		base.KeepWithNextLines = override.KeepWithNextLines
+	}
+	if override.PageBreakBefore != fallback.PageBreakBefore {
+		base.PageBreakBefore = override.PageBreakBefore
+	}
+	if override.PageBreakAfter != fallback.PageBreakAfter {
+		base.PageBreakAfter = override.PageBreakAfter
+	}
+	if override.Hidden != fallback.Hidden {
+		base.Hidden = override.Hidden
 	}
 	if override.Orphans != fallback.Orphans {
 		base.Orphans = override.Orphans
@@ -423,12 +442,27 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 				style.MarginRight = points
 			}
 		case "page-break-inside", "break-inside":
-			if cssKeyword(value) == "avoid" {
+			if pdfCSSAvoidPageBreakKeyword(value) {
 				style.KeepTogether = true
 			}
+		case "page-break-before", "break-before":
+			if pdfCSSForcedPageBreakKeyword(value) {
+				style.PageBreakBefore = true
+			}
 		case "page-break-after", "break-after":
-			if cssKeyword(value) == "avoid" && style.KeepWithNextLines == 0 {
+			switch {
+			case pdfCSSForcedPageBreakKeyword(value):
+				style.PageBreakAfter = true
+			case pdfCSSAvoidPageBreakKeyword(value) && style.KeepWithNextLines == 0:
 				style.KeepWithNextLines = 1
+			}
+		case "hyphens", "-webkit-hyphens":
+			if hyphenation, ok := pdfCSSHyphenation(value); ok {
+				style.Paragraph.Hyphenation = hyphenation
+			}
+		case "display":
+			if cssKeyword(value) == "none" {
+				style.Hidden = true
 			}
 		case "orphans":
 			if count, ok := pdfCSSPositiveInt(value); ok {
@@ -507,6 +541,12 @@ func pdfCSSLengthPoints(value css.Value, fontSize float64) (float64, bool) {
 		return value.Value * pdfBaseFontSize, true
 	case "%":
 		return value.Value * fontSize / 100, true
+	case "in":
+		return value.Value * pdfPointsPerInch, true
+	case "cm":
+		return value.Value * pdfPointsPerInch / 2.54, true
+	case "mm":
+		return value.Value * pdfPointsPerInch / 25.4, true
 	default:
 		return 0, false
 	}
@@ -532,6 +572,50 @@ func pdfCSSPositiveInt(value css.Value) (int, bool) {
 		return 0, false
 	}
 	return int(value.Value), true
+}
+
+func pdfCSSForcedPageBreakKeyword(value css.Value) bool {
+	switch cssKeyword(value) {
+	case "always", "page", "left", "right":
+		return true
+	default:
+		return false
+	}
+}
+
+func pdfCSSAvoidPageBreakKeyword(value css.Value) bool {
+	switch cssKeyword(value) {
+	case "avoid", "avoid-page":
+		return true
+	default:
+		return false
+	}
+}
+
+func pdfCSSHyphenation(value css.Value) (paragraphHyphenation, bool) {
+	switch cssKeyword(value) {
+	case "none":
+		return paragraphHyphenationNone, true
+	case "manual":
+		return paragraphHyphenationManual, true
+	case "auto":
+		return paragraphHyphenationAuto, true
+	default:
+		return paragraphHyphenationAuto, false
+	}
+}
+
+func pdfHyphenationString(mode paragraphHyphenation) string {
+	switch mode {
+	case paragraphHyphenationNone:
+		return "none"
+	case paragraphHyphenationManual:
+		return "manual"
+	case paragraphHyphenationAuto:
+		return "auto"
+	default:
+		return "auto"
+	}
 }
 
 func parsePDFCSSValueToken(token string) css.Value {
@@ -593,12 +677,16 @@ func (r *pdfStyleResolver) debugStyles() []pdfDebugResolvedStyle {
 			LineHeight:        style.Paragraph.LineHeight,
 			FirstLineIndent:   style.Paragraph.FirstLineIndent,
 			TextAlign:         style.Paragraph.Align.String(),
+			Hyphenation:       pdfHyphenationString(style.Paragraph.Hyphenation),
 			SpaceBefore:       style.SpaceBefore,
 			SpaceAfter:        style.SpaceAfter,
 			MarginLeft:        style.MarginLeft,
 			MarginRight:       style.MarginRight,
 			KeepTogether:      style.KeepTogether,
 			KeepWithNextLines: style.KeepWithNextLines,
+			PageBreakBefore:   style.PageBreakBefore,
+			PageBreakAfter:    style.PageBreakAfter,
+			Hidden:            style.Hidden,
 			Orphans:           style.Orphans,
 			Widows:            style.Widows,
 		})

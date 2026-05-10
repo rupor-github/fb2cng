@@ -187,17 +187,21 @@ func pdfTraceFormatCSSProperties(props map[string]css.Value) string {
 }
 
 func pdfTraceFormatResolvedStyle(style pdfBlockResolvedStyle) string {
-	return fmt.Sprintf("font-size=%gpt, line-height=%gpt, text-indent=%gpt, align=%s, margins=%g/%g/%g/%g, keep-together=%t, keep-next=%d, orphans=%d, widows=%d",
+	return fmt.Sprintf("font-size=%gpt, line-height=%gpt, text-indent=%gpt, align=%s, hyphens=%s, margins=%g/%g/%g/%g, keep-together=%t, keep-next=%d, page-break-before=%t, page-break-after=%t, hidden=%t, orphans=%d, widows=%d",
 		style.Paragraph.FontSize,
 		style.Paragraph.LineHeight,
 		style.Paragraph.FirstLineIndent,
 		style.Paragraph.Align.String(),
+		pdfHyphenationString(style.Paragraph.Hyphenation),
 		style.SpaceBefore,
 		style.MarginRight,
 		style.SpaceAfter,
 		style.MarginLeft,
 		style.KeepTogether,
 		style.KeepWithNextLines,
+		style.PageBreakBefore,
+		style.PageBreakAfter,
+		style.Hidden,
 		style.Orphans,
 		style.Widows)
 }
@@ -222,6 +226,9 @@ func pdfTraceStyleDiff(before, after pdfBlockResolvedStyle) string {
 	if before.Paragraph.Align != after.Paragraph.Align {
 		changes = append(changes, fmt.Sprintf("text-align: %s -> %s", before.Paragraph.Align, after.Paragraph.Align))
 	}
+	if before.Paragraph.Hyphenation != after.Paragraph.Hyphenation {
+		changes = append(changes, fmt.Sprintf("hyphens: %s -> %s", pdfHyphenationString(before.Paragraph.Hyphenation), pdfHyphenationString(after.Paragraph.Hyphenation)))
+	}
 	appendFloatChange("font-size", before.Paragraph.FontSize, after.Paragraph.FontSize)
 	appendFloatChange("line-height", before.Paragraph.LineHeight, after.Paragraph.LineHeight)
 	appendFloatChange("text-indent", before.Paragraph.FirstLineIndent, after.Paragraph.FirstLineIndent)
@@ -231,6 +238,9 @@ func pdfTraceStyleDiff(before, after pdfBlockResolvedStyle) string {
 	appendFloatChange("margin-right", before.MarginRight, after.MarginRight)
 	appendBoolChange("keep-together", before.KeepTogether, after.KeepTogether)
 	appendIntChange("keep-next", before.KeepWithNextLines, after.KeepWithNextLines)
+	appendBoolChange("page-break-before", before.PageBreakBefore, after.PageBreakBefore)
+	appendBoolChange("page-break-after", before.PageBreakAfter, after.PageBreakAfter)
+	appendBoolChange("hidden", before.Hidden, after.Hidden)
 	appendIntChange("orphans", before.Orphans, after.Orphans)
 	appendIntChange("widows", before.Widows, after.Widows)
 	return strings.Join(changes, "\n  ")

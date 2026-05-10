@@ -23,8 +23,17 @@ type paragraphStyle struct {
 	LineHeight      float64
 	FirstLineIndent float64
 	Align           textAlign
+	Hyphenation     paragraphHyphenation
 	Hyphenator      paragraphHyphenator
 }
+
+type paragraphHyphenation int
+
+const (
+	paragraphHyphenationAuto paragraphHyphenation = iota
+	paragraphHyphenationNone
+	paragraphHyphenationManual
+)
 
 type paragraphHyphenator interface {
 	Hyphenate(string) string
@@ -156,7 +165,7 @@ func isBreakableSpace(r rune) bool {
 func paragraphAtoms(face *builtinFontFace, words []paragraphWord, style paragraphStyle) ([]paragraphAtom, error) {
 	atoms := make([]paragraphAtom, 0, len(words))
 	for i, word := range words {
-		parts := hyphenatedWordParts(word.Text, style.Hyphenator)
+		parts := hyphenatedWordParts(word.Text, style.Hyphenator, style.Hyphenation)
 		for j, part := range parts {
 			shaped, err := shapeText(face, part)
 			if err != nil {
@@ -174,14 +183,27 @@ func paragraphAtoms(face *builtinFontFace, words []paragraphWord, style paragrap
 	return atoms, nil
 }
 
-func hyphenatedWordParts(word string, hyphenator paragraphHyphenator) []string {
+func hyphenatedWordParts(word string, hyphenator paragraphHyphenator, mode paragraphHyphenation) []string {
 	if word == "" {
 		return nil
 	}
+
 	hyphenated := word
-	if hyphenator != nil {
-		hyphenated = hyphenator.Hyphenate(word)
+	switch mode {
+	case paragraphHyphenationNone:
+		return []string{strings.ReplaceAll(word, string(softHyphen), "")}
+	case paragraphHyphenationManual:
+		// Honor only explicit soft hyphens already present in the source text.
+	case paragraphHyphenationAuto:
+		if hyphenator != nil {
+			hyphenated = hyphenator.Hyphenate(word)
+		}
+	default:
+		if hyphenator != nil {
+			hyphenated = hyphenator.Hyphenate(word)
+		}
 	}
+
 	parts := strings.FieldsFunc(hyphenated, func(r rune) bool { return r == softHyphen })
 	if len(parts) == 0 {
 		return []string{strings.ReplaceAll(word, string(softHyphen), "")}

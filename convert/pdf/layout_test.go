@@ -73,6 +73,53 @@ func TestLayoutPDFPagesAvoidsParagraphWidowOrphanSplit(t *testing.T) {
 	}
 }
 
+func TestLayoutPDFPagesHonorsCSSPageBreakAndHiddenStyles(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	before := resolver.styles[pdfStyleParagraph]
+	before.PageBreakBefore = true
+	resolver.styles["forced-before"] = before
+	after := resolver.styles[pdfStyleParagraph]
+	after.PageBreakAfter = true
+	resolver.styles["forced-after"] = after
+	hidden := resolver.styles[pdfStyleParagraph]
+	hidden.Hidden = true
+	resolver.styles["hidden"] = hidden
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  220,
+		PageHeight: 180,
+		Title:      "Title",
+		Author:     "Author",
+		Styles:     resolver,
+		Blocks: []pdfTextBlock{
+			{Kind: pdfBlockParagraph, Text: "first paragraph"},
+			{Kind: pdfBlockParagraph, Text: "hidden paragraph", StyleClasses: "hidden"},
+			{Kind: pdfBlockParagraph, Text: "second paragraph", StyleClasses: "forced-before"},
+			{Kind: pdfBlockParagraph, Text: "third paragraph", StyleClasses: "forced-after"},
+			{Kind: pdfBlockParagraph, Text: "fourth paragraph"},
+		},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 4 {
+		t.Fatalf("layoutPDFPages() produced %d pages, want 4", len(pages))
+	}
+	if got := pageText(pages[1]); !strings.Contains(got, "first paragraph") || strings.Contains(got, "hidden paragraph") || strings.Contains(got, "second paragraph") {
+		t.Fatalf("first body page text = %q, want first visible paragraph only", got)
+	}
+	if got := pageText(pages[2]); !strings.Contains(got, "second paragraph") || !strings.Contains(got, "third paragraph") || strings.Contains(got, "fourth paragraph") {
+		t.Fatalf("second body page text = %q, want second and third paragraphs before forced break-after", got)
+	}
+	if got := pageText(pages[3]); !strings.Contains(got, "fourth paragraph") {
+		t.Fatalf("third body page text = %q, want fourth paragraph", got)
+	}
+}
+
 func textWithParagraphLineCount(t *testing.T, face *builtinFontFace, style paragraphStyle, width float64, wantLines int, word string) string {
 	t.Helper()
 	for words := 1; words <= 80; words++ {
