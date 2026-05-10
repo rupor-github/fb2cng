@@ -26,8 +26,9 @@ import (
 )
 
 const (
-	pdfVersion = "1.4"
-	defaultDPI = 300
+	pdfVersion              = "1.4"
+	defaultDPI              = 300
+	metadataExcerptMaxRunes = 500
 )
 
 // Generate writes a native PDF document.
@@ -64,6 +65,8 @@ func Generate(ctx context.Context, c *content.Content, outputName string, cfg *c
 		ScreenHeightPx: cfg.Images.Screen.Height,
 		Title:          bookTitle(c),
 		Author:         bookAuthors(c),
+		Subject:        bookSubject(c),
+		Keywords:       bookKeywords(c),
 		Blocks:         contentPlan.Blocks,
 		TOC:            contentPlan.TOC,
 		Images:         c.ImagesIndex,
@@ -97,6 +100,8 @@ type skeletonDocument struct {
 	ScreenHeightPx int
 	Title          string
 	Author         string
+	Subject        string
+	Keywords       string
 	Blocks         []pdfTextBlock
 	TOC            []*structure.TOCEntry
 	Images         fb2.BookImages
@@ -1585,6 +1590,12 @@ func infoDictionary(doc skeletonDocument) docwriter.Dict {
 	if doc.Author != "" {
 		info["Author"] = docwriter.UTF16TextString(doc.Author)
 	}
+	if doc.Subject != "" {
+		info["Subject"] = docwriter.UTF16TextString(doc.Subject)
+	}
+	if doc.Keywords != "" {
+		info["Keywords"] = docwriter.UTF16TextString(doc.Keywords)
+	}
 	return info
 }
 
@@ -1623,6 +1634,32 @@ func bookAuthors(c *content.Content) string {
 		}
 	}
 	return strings.Join(authors, ", ")
+}
+
+func bookSubject(c *content.Content) string {
+	if c == nil || c.Book == nil || c.Book.Description.TitleInfo.Annotation == nil {
+		return ""
+	}
+	return metadataExcerpt(c.Book.Description.TitleInfo.Annotation.AsPlainText(), metadataExcerptMaxRunes)
+}
+
+func bookKeywords(c *content.Content) string {
+	if c == nil || c.Book == nil || c.Book.Description.TitleInfo.Keywords == nil {
+		return ""
+	}
+	return metadataExcerpt(c.Book.Description.TitleInfo.Keywords.Value, metadataExcerptMaxRunes)
+}
+
+func metadataExcerpt(text string, maxRunes int) string {
+	text = strings.Join(strings.Fields(text), " ")
+	if maxRunes <= 0 {
+		return text
+	}
+	runes := []rune(text)
+	if len(runes) <= maxRunes {
+		return text
+	}
+	return string(runes[:maxRunes])
 }
 
 func authorName(author *fb2.Author) string {

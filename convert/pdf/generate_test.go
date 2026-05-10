@@ -48,6 +48,45 @@ func TestPageSizePoints_DefaultDPI(t *testing.T) {
 	}
 }
 
+func TestInfoDictionaryIncludesSubjectAndKeywords(t *testing.T) {
+	info := docwriter.Format(infoDictionary(skeletonDocument{
+		Title:    "Title",
+		Author:   "Author",
+		Subject:  "Annotation excerpt",
+		Keywords: "one, two",
+	}))
+	for _, want := range []string{
+		"/Title " + docwriter.Format(docwriter.UTF16TextString("Title")),
+		"/Author " + docwriter.Format(docwriter.UTF16TextString("Author")),
+		"/Subject " + docwriter.Format(docwriter.UTF16TextString("Annotation excerpt")),
+		"/Keywords " + docwriter.Format(docwriter.UTF16TextString("one, two")),
+	} {
+		if !strings.Contains(info, want) {
+			t.Fatalf("info dictionary = %q, missing %q", info, want)
+		}
+	}
+}
+
+func TestBookMetadataSubjectAndKeywords(t *testing.T) {
+	longAnnotation := strings.Repeat("слово ", 120)
+	c := &content.Content{Book: &fb2.FictionBook{Description: fb2.Description{TitleInfo: fb2.TitleInfo{
+		Annotation: &fb2.Flow{Items: []fb2.FlowItem{{
+			Kind:      fb2.FlowParagraph,
+			Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: longAnnotation}}},
+		}}},
+		Keywords: &fb2.TextField{Value: "one\n two\tthree"},
+	}}}}
+	if got := bookSubject(c); len([]rune(got)) != metadataExcerptMaxRunes {
+		t.Fatalf("bookSubject length = %d, want %d", len([]rune(got)), metadataExcerptMaxRunes)
+	}
+	if strings.Contains(bookSubject(c), "\n") || strings.Contains(bookSubject(c), "\t") {
+		t.Fatalf("bookSubject did not normalize whitespace: %q", bookSubject(c))
+	}
+	if got := bookKeywords(c); got != "one two three" {
+		t.Fatalf("bookKeywords() = %q, want normalized keywords", got)
+	}
+}
+
 func TestGenerateSkeletonPDF(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputName := filepath.Join(tmpDir, "book.pdf")
@@ -109,6 +148,37 @@ func TestGenerateSkeletonPDF(t *testing.T) {
 	}
 	if !strings.Contains(pdfText, docwriter.Format(docwriter.UTF16TextString("First Author, Second"))) {
 		t.Errorf("generated PDF does not contain UTF-16BE author metadata")
+	}
+}
+
+func TestGeneratePDFMetadataSubjectAndKeywords(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputName := filepath.Join(tmpDir, "book.pdf")
+	cfg := &config.DocumentConfig{Images: config.ImagesConfig{Screen: config.ScreenConfig{Width: 1264, Height: 1680, DPI: 300}}}
+	c := &content.Content{
+		SrcName: "book.fb2",
+		Book: &fb2.FictionBook{Description: fb2.Description{TitleInfo: fb2.TitleInfo{
+			BookTitle:  fb2.TextField{Value: "Metadata Book"},
+			Annotation: &fb2.Flow{Items: []fb2.FlowItem{{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Annotation text."}}}}}},
+			Keywords:   &fb2.TextField{Value: "alpha, beta"},
+		}}},
+	}
+
+	if err := Generate(context.Background(), c, outputName, cfg, zaptest.NewLogger(t)); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	data, err := os.ReadFile(outputName)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	pdfText := string(data)
+	for _, want := range []string{
+		docwriter.Format(docwriter.UTF16TextString("Annotation text.")),
+		docwriter.Format(docwriter.UTF16TextString("alpha, beta")),
+	} {
+		if !strings.Contains(pdfText, want) {
+			t.Fatalf("generated PDF does not contain metadata %q", want)
+		}
 	}
 }
 
