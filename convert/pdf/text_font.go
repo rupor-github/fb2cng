@@ -11,7 +11,7 @@ import (
 	"golang.org/x/image/font/sfnt"
 	"golang.org/x/image/math/fixed"
 
-	"fbc/convert/pdf/internal/pdfdoc"
+	"fbc/convert/pdf/docwriter"
 )
 
 type shapedGlyph struct {
@@ -112,12 +112,12 @@ func fontUnitsToPDFWidth(width, unitsPerEm int) int {
 	return (width*1000 + unitsPerEm/2) / unitsPerEm
 }
 
-func glyphHex(glyphs []shapedGlyph) pdfdoc.HexString {
+func glyphHex(glyphs []shapedGlyph) docwriter.HexString {
 	data := make([]byte, 0, len(glyphs)*2)
 	for _, glyph := range glyphs {
 		data = append(data, byte(glyph.GlyphID>>8), byte(glyph.GlyphID))
 	}
-	return pdfdoc.HexString(data)
+	return docwriter.HexString(data)
 }
 
 func fontResourceObjects(face *builtinFontFace, used map[uint16]shapedGlyph, objectIDs fontObjectIDs) (fontObjects, error) {
@@ -128,42 +128,42 @@ func fontResourceObjects(face *builtinFontFace, used map[uint16]shapedGlyph, obj
 		return fontObjects{}, fmt.Errorf("at least one used glyph is required")
 	}
 
-	fontName := pdfdoc.Name(face.PostScriptName)
+	fontName := docwriter.Name(face.PostScriptName)
 	return fontObjects{
-		Type0Font: pdfdoc.Dict{
+		Type0Font: docwriter.Dict{
 			"BaseFont":        fontName,
-			"DescendantFonts": pdfdoc.Array{pdfdoc.Ref{ObjectNumber: objectIDs.CIDFont}},
-			"Encoding":        pdfdoc.Name("Identity-H"),
-			"Subtype":         pdfdoc.Name("Type0"),
-			"ToUnicode":       pdfdoc.Ref{ObjectNumber: objectIDs.ToUnicode},
-			"Type":            pdfdoc.Name("Font"),
+			"DescendantFonts": docwriter.Array{docwriter.Ref{ObjectNumber: objectIDs.CIDFont}},
+			"Encoding":        docwriter.Name("Identity-H"),
+			"Subtype":         docwriter.Name("Type0"),
+			"ToUnicode":       docwriter.Ref{ObjectNumber: objectIDs.ToUnicode},
+			"Type":            docwriter.Name("Font"),
 		},
-		CIDFont: pdfdoc.Dict{
+		CIDFont: docwriter.Dict{
 			"BaseFont":      fontName,
 			"CIDSystemInfo": cidSystemInfo("Adobe", "Identity"),
-			"CIDToGIDMap":   pdfdoc.Name("Identity"),
-			"DW":            pdfdoc.Integer(1000),
-			"FontDescriptor": pdfdoc.Ref{
+			"CIDToGIDMap":   docwriter.Name("Identity"),
+			"DW":            docwriter.Integer(1000),
+			"FontDescriptor": docwriter.Ref{
 				ObjectNumber: objectIDs.FontDescriptor,
 			},
-			"Subtype": pdfdoc.Name("CIDFontType2"),
-			"Type":    pdfdoc.Name("Font"),
+			"Subtype": docwriter.Name("CIDFontType2"),
+			"Type":    docwriter.Name("Font"),
 			"W":       widthsArray(used),
 		},
-		FontDescriptor: pdfdoc.Dict{
-			"Ascent":      pdfdoc.Integer(face.Ascent),
-			"CapHeight":   pdfdoc.Integer(face.CapHeight),
-			"Descent":     pdfdoc.Integer(face.Descent),
-			"Flags":       pdfdoc.Integer(face.Flags),
+		FontDescriptor: docwriter.Dict{
+			"Ascent":      docwriter.Integer(face.Ascent),
+			"CapHeight":   docwriter.Integer(face.CapHeight),
+			"Descent":     docwriter.Integer(face.Descent),
+			"Flags":       docwriter.Integer(face.Flags),
 			"FontBBox":    intArray(face.BBox[:]...),
-			"FontFile2":   pdfdoc.Ref{ObjectNumber: objectIDs.FontFile},
+			"FontFile2":   docwriter.Ref{ObjectNumber: objectIDs.FontFile},
 			"FontName":    fontName,
-			"ItalicAngle": pdfdoc.Integer(face.ItalicAngle),
-			"StemV":       pdfdoc.Integer(80),
-			"Type":        pdfdoc.Name("FontDescriptor"),
+			"ItalicAngle": docwriter.Integer(face.ItalicAngle),
+			"StemV":       docwriter.Integer(80),
+			"Type":        docwriter.Name("FontDescriptor"),
 		},
-		FontFile: pdfdoc.Dict{
-			"Length1": pdfdoc.Integer(len(face.Data)),
+		FontFile: docwriter.Dict{
+			"Length1": docwriter.Integer(len(face.Data)),
 		},
 		FontFileData: face.Data,
 		ToUnicode:    toUnicodeCMap(used),
@@ -179,41 +179,41 @@ type fontObjectIDs struct {
 }
 
 type fontObjects struct {
-	Type0Font      pdfdoc.Dict
-	CIDFont        pdfdoc.Dict
-	FontDescriptor pdfdoc.Dict
-	FontFile       pdfdoc.Dict
+	Type0Font      docwriter.Dict
+	CIDFont        docwriter.Dict
+	FontDescriptor docwriter.Dict
+	FontFile       docwriter.Dict
 	FontFileData   []byte
 	ToUnicode      []byte
 }
 
-func cidSystemInfo(registry, ordering string) pdfdoc.Dict {
-	return pdfdoc.Dict{
-		"Ordering":   pdfdoc.HexString([]byte(ordering)),
-		"Registry":   pdfdoc.HexString([]byte(registry)),
-		"Supplement": pdfdoc.Integer(0),
+func cidSystemInfo(registry, ordering string) docwriter.Dict {
+	return docwriter.Dict{
+		"Ordering":   docwriter.HexString([]byte(ordering)),
+		"Registry":   docwriter.HexString([]byte(registry)),
+		"Supplement": docwriter.Integer(0),
 	}
 }
 
-func widthsArray(used map[uint16]shapedGlyph) pdfdoc.Array {
+func widthsArray(used map[uint16]shapedGlyph) docwriter.Array {
 	ids := make([]int, 0, len(used))
 	for id := range used {
 		ids = append(ids, int(id))
 	}
 	slices.Sort(ids)
 
-	items := make(pdfdoc.Array, 0, len(ids)*2)
+	items := make(docwriter.Array, 0, len(ids)*2)
 	for _, id := range ids {
 		glyph := used[uint16(id)]
-		items = append(items, pdfdoc.Integer(id), pdfdoc.Array{pdfdoc.Integer(glyph.Width)})
+		items = append(items, docwriter.Integer(id), docwriter.Array{docwriter.Integer(glyph.Width)})
 	}
 	return items
 }
 
-func intArray(values ...int) pdfdoc.Array {
-	items := make(pdfdoc.Array, 0, len(values))
+func intArray(values ...int) docwriter.Array {
+	items := make(docwriter.Array, 0, len(values))
 	for _, value := range values {
-		items = append(items, pdfdoc.Integer(value))
+		items = append(items, docwriter.Integer(value))
 	}
 	return items
 }

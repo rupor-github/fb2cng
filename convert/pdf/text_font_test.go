@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"fbc/convert/pdf/internal/pdfdoc"
+	"fbc/convert/pdf/docwriter"
 )
 
 func TestShapeTextAndFontResourceObjects(t *testing.T) {
@@ -48,7 +48,7 @@ func TestShapeTextAndFontResourceObjects(t *testing.T) {
 		"/DescendantFonts [7 0 R]",
 		"/ToUnicode 10 0 R",
 	} {
-		if got := pdfdoc.Format(objects.Type0Font); !strings.Contains(got, want) {
+		if got := docwriter.Format(objects.Type0Font); !strings.Contains(got, want) {
 			t.Errorf("Type0 font dictionary %q does not contain %q", got, want)
 		}
 	}
@@ -58,7 +58,7 @@ func TestShapeTextAndFontResourceObjects(t *testing.T) {
 		"/FontDescriptor 8 0 R",
 		"/W [",
 	} {
-		if got := pdfdoc.Format(objects.CIDFont); !strings.Contains(got, want) {
+		if got := docwriter.Format(objects.CIDFont); !strings.Contains(got, want) {
 			t.Errorf("CID font dictionary %q does not contain %q", got, want)
 		}
 	}
@@ -90,7 +90,7 @@ func TestWrapText(t *testing.T) {
 }
 
 func TestGlyphHex(t *testing.T) {
-	got := pdfdoc.Format(glyphHex([]shapedGlyph{{GlyphID: 1}, {GlyphID: 0x0416}}))
+	got := docwriter.Format(glyphHex([]shapedGlyph{{GlyphID: 1}, {GlyphID: 0x0416}}))
 	if got != "<00010416>" {
 		t.Errorf("glyphHex() = %q, want %q", got, "<00010416>")
 	}

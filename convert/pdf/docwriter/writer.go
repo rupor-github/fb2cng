@@ -1,4 +1,4 @@
-package pdfdoc
+package docwriter
 
 import (
 	"bytes"

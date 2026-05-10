@@ -18,7 +18,7 @@ import (
 	"fbc/config"
 	"fbc/content"
 	contenttext "fbc/content/text"
-	"fbc/convert/pdf/internal/pdfdoc"
+	"fbc/convert/pdf/docwriter"
 	"fbc/convert/structure"
 	"fbc/fb2"
 )
@@ -196,7 +196,7 @@ func pageSizePoints(screen config.ScreenConfig) (float64, float64, error) {
 }
 
 func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
-	writer := pdfdoc.NewWriter(pdfVersion)
+	writer := docwriter.NewWriter(pdfVersion)
 
 	const (
 		catalogID        = 1
@@ -249,12 +249,12 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 		return nil, err
 	}
 
-	catalog := pdfdoc.Dict{
-		"Pages": pdfdoc.Ref{ObjectNumber: pagesID},
-		"Type":  pdfdoc.Name("Catalog"),
+	catalog := docwriter.Dict{
+		"Pages": docwriter.Ref{ObjectNumber: pagesID},
+		"Type":  docwriter.Name("Catalog"),
 	}
 	if outlines.RootID != 0 {
-		catalog["Outlines"] = pdfdoc.Ref{ObjectNumber: outlines.RootID}
+		catalog["Outlines"] = docwriter.Ref{ObjectNumber: outlines.RootID}
 	}
 	if names := namedDestinations(pages); names != nil {
 		catalog["Names"] = names
@@ -262,38 +262,38 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 	if err := writer.Object(catalogID, catalog); err != nil {
 		return nil, err
 	}
-	kids := make(pdfdoc.Array, 0, len(pages))
+	kids := make(docwriter.Array, 0, len(pages))
 	for _, page := range pages {
-		kids = append(kids, pdfdoc.Ref{ObjectNumber: page.ObjectID})
+		kids = append(kids, docwriter.Ref{ObjectNumber: page.ObjectID})
 	}
-	if err := writer.Object(pagesID, pdfdoc.Dict{
-		"Count": pdfdoc.Integer(len(pages)),
+	if err := writer.Object(pagesID, docwriter.Dict{
+		"Count": docwriter.Integer(len(pages)),
 		"Kids":  kids,
-		"Type":  pdfdoc.Name("Pages"),
+		"Type":  docwriter.Name("Pages"),
 	}); err != nil {
 		return nil, err
 	}
 	for _, page := range pages {
-		pageDict := pdfdoc.Dict{
-			"Contents": pdfdoc.Ref{ObjectNumber: page.ContentID},
-			"MediaBox": pdfdoc.Array{
-				pdfdoc.Integer(0),
-				pdfdoc.Integer(0),
-				pdfdoc.Number(doc.PageWidth),
-				pdfdoc.Number(doc.PageHeight),
+		pageDict := docwriter.Dict{
+			"Contents": docwriter.Ref{ObjectNumber: page.ContentID},
+			"MediaBox": docwriter.Array{
+				docwriter.Integer(0),
+				docwriter.Integer(0),
+				docwriter.Number(doc.PageWidth),
+				docwriter.Number(doc.PageHeight),
 			},
-			"Parent": pdfdoc.Ref{ObjectNumber: pagesID},
-			"Resources": pdfdoc.Dict{
-				"Font": pdfdoc.Dict{
-					"F1": pdfdoc.Ref{ObjectNumber: type0FontID},
+			"Parent": docwriter.Ref{ObjectNumber: pagesID},
+			"Resources": docwriter.Dict{
+				"Font": docwriter.Dict{
+					"F1": docwriter.Ref{ObjectNumber: type0FontID},
 				},
 			},
-			"Type": pdfdoc.Name("Page"),
+			"Type": docwriter.Name("Page"),
 		}
 		if len(page.Annotations) != 0 {
-			annots := make(pdfdoc.Array, 0, len(page.Annotations))
+			annots := make(docwriter.Array, 0, len(page.Annotations))
 			for _, annot := range page.Annotations {
-				annots = append(annots, pdfdoc.Ref{ObjectNumber: annot.ObjectID})
+				annots = append(annots, docwriter.Ref{ObjectNumber: annot.ObjectID})
 			}
 			pageDict["Annots"] = annots
 		}
@@ -307,8 +307,8 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := writer.StreamObject(page.ContentID, pdfdoc.Dict{
-			"Filter": pdfdoc.Name("FlateDecode"),
+		if err := writer.StreamObject(page.ContentID, docwriter.Dict{
+			"Filter": docwriter.Name("FlateDecode"),
 		}, stream); err != nil {
 			return nil, err
 		}
@@ -328,7 +328,7 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 	if err := writer.StreamObject(fontFileID, fontObjs.FontFile, fontObjs.FontFileData); err != nil {
 		return nil, err
 	}
-	if err := writer.StreamObject(toUnicodeID, pdfdoc.Dict{}, fontObjs.ToUnicode); err != nil {
+	if err := writer.StreamObject(toUnicodeID, docwriter.Dict{}, fontObjs.ToUnicode); err != nil {
 		return nil, err
 	}
 	if err := writeOutlineObjects(writer, outlines); err != nil {
@@ -338,9 +338,9 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 		return nil, err
 	}
 
-	infoRef := pdfdoc.Ref{ObjectNumber: infoID}
-	return writer.Finish(pdfdoc.Trailer{
-		Root: pdfdoc.Ref{ObjectNumber: catalogID},
+	infoRef := docwriter.Ref{ObjectNumber: infoID}
+	return writer.Finish(docwriter.Trailer{
+		Root: docwriter.Ref{ObjectNumber: catalogID},
 		Info: &infoRef,
 	})
 }
@@ -454,41 +454,41 @@ func flattenOutlineItems(items []*pdfOutlineItem) []*pdfOutlineItem {
 	return out
 }
 
-func writeOutlineObjects(writer *pdfdoc.Writer, outlines pdfOutlines) error {
+func writeOutlineObjects(writer *docwriter.Writer, outlines pdfOutlines) error {
 	if outlines.RootID == 0 {
 		return nil
 	}
-	root := pdfdoc.Dict{
-		"Count": pdfdoc.Integer(len(outlines.Items)),
-		"Type":  pdfdoc.Name("Outlines"),
+	root := docwriter.Dict{
+		"Count": docwriter.Integer(len(outlines.Items)),
+		"Type":  docwriter.Name("Outlines"),
 	}
 	topLevel := topLevelOutlineItems(outlines)
 	if len(topLevel) != 0 {
-		root["First"] = pdfdoc.Ref{ObjectNumber: topLevel[0].ObjectID}
-		root["Last"] = pdfdoc.Ref{ObjectNumber: topLevel[len(topLevel)-1].ObjectID}
+		root["First"] = docwriter.Ref{ObjectNumber: topLevel[0].ObjectID}
+		root["Last"] = docwriter.Ref{ObjectNumber: topLevel[len(topLevel)-1].ObjectID}
 	}
 	if err := writer.Object(outlines.RootID, root); err != nil {
 		return err
 	}
 	for _, item := range outlines.Items {
-		dict := pdfdoc.Dict{
-			"Dest": pdfdoc.Array{
-				pdfdoc.Ref{ObjectNumber: item.PageID},
-				pdfdoc.Name("Fit"),
+		dict := docwriter.Dict{
+			"Dest": docwriter.Array{
+				docwriter.Ref{ObjectNumber: item.PageID},
+				docwriter.Name("Fit"),
 			},
-			"Parent": pdfdoc.Ref{ObjectNumber: item.ParentID},
-			"Title":  pdfdoc.UTF16TextString(item.Title),
+			"Parent": docwriter.Ref{ObjectNumber: item.ParentID},
+			"Title":  docwriter.UTF16TextString(item.Title),
 		}
 		if item.PrevID != 0 {
-			dict["Prev"] = pdfdoc.Ref{ObjectNumber: item.PrevID}
+			dict["Prev"] = docwriter.Ref{ObjectNumber: item.PrevID}
 		}
 		if item.NextID != 0 {
-			dict["Next"] = pdfdoc.Ref{ObjectNumber: item.NextID}
+			dict["Next"] = docwriter.Ref{ObjectNumber: item.NextID}
 		}
 		if item.FirstID != 0 {
-			dict["First"] = pdfdoc.Ref{ObjectNumber: item.FirstID}
-			dict["Last"] = pdfdoc.Ref{ObjectNumber: item.LastID}
-			dict["Count"] = pdfdoc.Integer(item.Count)
+			dict["First"] = docwriter.Ref{ObjectNumber: item.FirstID}
+			dict["Last"] = docwriter.Ref{ObjectNumber: item.LastID}
+			dict["Count"] = docwriter.Integer(item.Count)
 		}
 		if err := writer.Object(item.ObjectID, dict); err != nil {
 			return err
@@ -583,21 +583,21 @@ func assignAnnotationObjectIDs(pages []pdfPage, nextObjectID *int) {
 	}
 }
 
-func writeAnnotationObjects(writer *pdfdoc.Writer, pages []pdfPage) error {
+func writeAnnotationObjects(writer *docwriter.Writer, pages []pdfPage) error {
 	for _, page := range pages {
 		for _, annot := range page.Annotations {
-			dict := pdfdoc.Dict{
-				"Border":  pdfdoc.Array{pdfdoc.Integer(0), pdfdoc.Integer(0), pdfdoc.Integer(0)},
+			dict := docwriter.Dict{
+				"Border":  docwriter.Array{docwriter.Integer(0), docwriter.Integer(0), docwriter.Integer(0)},
 				"Rect":    rectArray(annot.Rect),
-				"Subtype": pdfdoc.Name("Link"),
-				"Type":    pdfdoc.Name("Annot"),
+				"Subtype": docwriter.Name("Link"),
+				"Type":    docwriter.Name("Annot"),
 			}
 			if target, ok := strings.CutPrefix(annot.Href, "#"); ok && target != "" {
-				dict["Dest"] = pdfdoc.HexString([]byte(target))
+				dict["Dest"] = docwriter.HexString([]byte(target))
 			} else {
-				dict["A"] = pdfdoc.Dict{
-					"S":   pdfdoc.Name("URI"),
-					"URI": pdfdoc.HexString([]byte(annot.Href)),
+				dict["A"] = docwriter.Dict{
+					"S":   docwriter.Name("URI"),
+					"URI": docwriter.HexString([]byte(annot.Href)),
 				}
 			}
 			if err := writer.Object(annot.ObjectID, dict); err != nil {
@@ -608,16 +608,16 @@ func writeAnnotationObjects(writer *pdfdoc.Writer, pages []pdfPage) error {
 	return nil
 }
 
-func rectArray(rect pdfRect) pdfdoc.Array {
-	return pdfdoc.Array{
-		pdfdoc.Number(rect.X1),
-		pdfdoc.Number(rect.Y1),
-		pdfdoc.Number(rect.X2),
-		pdfdoc.Number(rect.Y2),
+func rectArray(rect pdfRect) docwriter.Array {
+	return docwriter.Array{
+		docwriter.Number(rect.X1),
+		docwriter.Number(rect.Y1),
+		docwriter.Number(rect.X2),
+		docwriter.Number(rect.Y2),
 	}
 }
 
-func namedDestinations(pages []pdfPage) pdfdoc.Dict {
+func namedDestinations(pages []pdfPage) docwriter.Dict {
 	anchors := make(map[string]int)
 	for i := range pages {
 		for _, id := range pages[i].Anchors {
@@ -636,15 +636,15 @@ func namedDestinations(pages []pdfPage) pdfdoc.Dict {
 	}
 	slices.Sort(ids)
 
-	items := make(pdfdoc.Array, 0, len(ids)*2)
+	items := make(docwriter.Array, 0, len(ids)*2)
 	for _, id := range ids {
 		items = append(items,
-			pdfdoc.HexString([]byte(id)),
-			pdfdoc.Array{pdfdoc.Ref{ObjectNumber: anchors[id]}, pdfdoc.Name("Fit")},
+			docwriter.HexString([]byte(id)),
+			docwriter.Array{docwriter.Ref{ObjectNumber: anchors[id]}, docwriter.Name("Fit")},
 		)
 	}
-	return pdfdoc.Dict{
-		"Dests": pdfdoc.Dict{
+	return docwriter.Dict{
+		"Dests": docwriter.Dict{
 			"Names": items,
 		},
 	}
@@ -659,15 +659,15 @@ func pageContent(page pdfPage) []byte {
 			continue
 		}
 		if line.FontSize != currentFontSize {
-			fmt.Fprintf(&buf, "/F1 %s Tf\n", pdfdoc.FormatNumber(line.FontSize))
+			fmt.Fprintf(&buf, "/F1 %s Tf\n", docwriter.FormatNumber(line.FontSize))
 			currentFontSize = line.FontSize
 		}
-		fmt.Fprintf(&buf, "1 0 0 1 %s %s Tm\n", pdfdoc.FormatNumber(line.X), pdfdoc.FormatNumber(line.Y))
+		fmt.Fprintf(&buf, "1 0 0 1 %s %s Tm\n", docwriter.FormatNumber(line.X), docwriter.FormatNumber(line.Y))
 		if line.ExtraWordSpacing != 0 {
 			fmt.Fprintf(&buf, "%s TJ\n", justifiedGlyphArray(line.Text.Glyphs, line.ExtraWordSpacing, line.FontSize))
 			continue
 		}
-		fmt.Fprintf(&buf, "%s Tj\n", pdfdoc.Format(glyphHex(line.Text.Glyphs)))
+		fmt.Fprintf(&buf, "%s Tj\n", docwriter.Format(glyphHex(line.Text.Glyphs)))
 	}
 	buf.WriteString("ET\nQ\n")
 	return buf.Bytes()
@@ -1028,10 +1028,10 @@ func justifiedGlyphArray(glyphs []shapedGlyph, extraWordSpacing, fontSize float6
 		if i > 0 {
 			buf.WriteByte(' ')
 		}
-		buf.WriteString(pdfdoc.Format(glyphHex([]shapedGlyph{glyph})))
+		buf.WriteString(docwriter.Format(glyphHex([]shapedGlyph{glyph})))
 		if glyph.Rune == ' ' && i != len(glyphs)-1 {
 			buf.WriteByte(' ')
-			buf.WriteString(pdfdoc.FormatNumber(adjustment))
+			buf.WriteString(docwriter.FormatNumber(adjustment))
 		}
 	}
 	buf.WriteByte(']')
@@ -1308,16 +1308,16 @@ func pdfHyphenator(c *content.Content, log *zap.Logger) paragraphHyphenator {
 	return contenttext.NewHyphenator(c.Book.Description.TitleInfo.Lang, log)
 }
 
-func infoDictionary(doc skeletonDocument) pdfdoc.Dict {
-	info := pdfdoc.Dict{
-		"Creator":  pdfdoc.UTF16TextString("fbc"),
-		"Producer": pdfdoc.UTF16TextString("fbc"),
+func infoDictionary(doc skeletonDocument) docwriter.Dict {
+	info := docwriter.Dict{
+		"Creator":  docwriter.UTF16TextString("fbc"),
+		"Producer": docwriter.UTF16TextString("fbc"),
 	}
 	if doc.Title != "" {
-		info["Title"] = pdfdoc.UTF16TextString(doc.Title)
+		info["Title"] = docwriter.UTF16TextString(doc.Title)
 	}
 	if doc.Author != "" {
-		info["Author"] = pdfdoc.UTF16TextString(doc.Author)
+		info["Author"] = docwriter.UTF16TextString(doc.Author)
 	}
 	return info
 }

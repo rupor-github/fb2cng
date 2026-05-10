@@ -13,7 +13,7 @@ import (
 
 	"fbc/config"
 	"fbc/content"
-	"fbc/convert/pdf/internal/pdfdoc"
+	"fbc/convert/pdf/docwriter"
 	"fbc/fb2"
 )
 
@@ -99,10 +99,10 @@ func TestGenerateSkeletonPDF(t *testing.T) {
 			t.Errorf("generated PDF does not contain %q", want)
 		}
 	}
-	if !strings.Contains(pdfText, pdfdoc.Format(pdfdoc.UTF16TextString("Test Book"))) {
+	if !strings.Contains(pdfText, docwriter.Format(docwriter.UTF16TextString("Test Book"))) {
 		t.Errorf("generated PDF does not contain UTF-16BE title metadata")
 	}
-	if !strings.Contains(pdfText, pdfdoc.Format(pdfdoc.UTF16TextString("First Author, Second"))) {
+	if !strings.Contains(pdfText, docwriter.Format(docwriter.UTF16TextString("First Author, Second"))) {
 		t.Errorf("generated PDF does not contain UTF-16BE author metadata")
 	}
 }
@@ -373,7 +373,7 @@ func TestCollectTextBlocksIncludesLinkSpans(t *testing.T) {
 }
 
 func TestNamedDestinations(t *testing.T) {
-	got := pdfdoc.Format(namedDestinations([]pdfPage{
+	got := docwriter.Format(namedDestinations([]pdfPage{
 		{ObjectID: 4, Anchors: []string{"z", "a"}},
 		{ObjectID: 8, Anchors: []string{"a", "m"}},
 	}))
