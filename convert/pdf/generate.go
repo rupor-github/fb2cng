@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"go.uber.org/zap"
@@ -232,6 +233,9 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 	}
 	if outlines.RootID != 0 {
 		catalog["Outlines"] = pdfdoc.Ref{ObjectNumber: outlines.RootID}
+	}
+	if names := namedDestinations(pages); names != nil {
+		catalog["Names"] = names
 	}
 	if err := writer.Object(catalogID, catalog); err != nil {
 		return nil, err
@@ -468,6 +472,39 @@ func topLevelOutlineItems(outlines pdfOutlines) []*pdfOutlineItem {
 		}
 	}
 	return items
+}
+
+func namedDestinations(pages []pdfPage) pdfdoc.Dict {
+	anchors := make(map[string]int)
+	for i := range pages {
+		for _, id := range pages[i].Anchors {
+			if _, exists := anchors[id]; !exists {
+				anchors[id] = pages[i].ObjectID
+			}
+		}
+	}
+	if len(anchors) == 0 {
+		return nil
+	}
+
+	ids := make([]string, 0, len(anchors))
+	for id := range anchors {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+
+	items := make(pdfdoc.Array, 0, len(ids)*2)
+	for _, id := range ids {
+		items = append(items,
+			pdfdoc.HexString([]byte(id)),
+			pdfdoc.Array{pdfdoc.Ref{ObjectNumber: anchors[id]}, pdfdoc.Name("Fit")},
+		)
+	}
+	return pdfdoc.Dict{
+		"Dests": pdfdoc.Dict{
+			"Names": items,
+		},
+	}
 }
 
 func pageContent(page pdfPage) []byte {
