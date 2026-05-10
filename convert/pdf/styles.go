@@ -73,6 +73,12 @@ type pdfBlockResolvedStyle struct {
 	PaddingRight      float64
 	PaddingBottom     float64
 	PaddingLeft       float64
+	Width             pdfBlockLength
+	HasWidth          bool
+	MinWidth          pdfBlockLength
+	HasMinWidth       bool
+	MaxWidth          pdfBlockLength
+	HasMaxWidth       bool
 	BackgroundColor   pdfColor
 	HasBackground     bool
 	BorderWidth       float64
@@ -85,6 +91,11 @@ type pdfBlockResolvedStyle struct {
 	Hidden            bool
 	Orphans           int
 	Widows            int
+}
+
+type pdfBlockLength struct {
+	Value   float64
+	Percent bool
 }
 
 type pdfStyleResolver struct {
@@ -113,6 +124,9 @@ type pdfDebugResolvedStyle struct {
 	PaddingRight      float64 `json:"padding_right,omitempty"`
 	PaddingBottom     float64 `json:"padding_bottom,omitempty"`
 	PaddingLeft       float64 `json:"padding_left,omitempty"`
+	Width             string  `json:"width,omitempty"`
+	MinWidth          string  `json:"min_width,omitempty"`
+	MaxWidth          string  `json:"max_width,omitempty"`
 	BackgroundColor   string  `json:"background_color,omitempty"`
 	BorderWidth       float64 `json:"border_width,omitempty"`
 	BorderColor       string  `json:"border_color,omitempty"`
@@ -324,6 +338,18 @@ func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfB
 	if override.PaddingLeft != fallback.PaddingLeft {
 		base.PaddingLeft = override.PaddingLeft
 	}
+	if override.HasWidth != fallback.HasWidth || override.Width != fallback.Width {
+		base.HasWidth = override.HasWidth
+		base.Width = override.Width
+	}
+	if override.HasMinWidth != fallback.HasMinWidth || override.MinWidth != fallback.MinWidth {
+		base.HasMinWidth = override.HasMinWidth
+		base.MinWidth = override.MinWidth
+	}
+	if override.HasMaxWidth != fallback.HasMaxWidth || override.MaxWidth != fallback.MaxWidth {
+		base.HasMaxWidth = override.HasMaxWidth
+		base.MaxWidth = override.MaxWidth
+	}
 	if override.HasBackground != fallback.HasBackground {
 		base.HasBackground = override.HasBackground
 		base.BackgroundColor = override.BackgroundColor
@@ -402,7 +428,29 @@ func pdfHeadingStyleName(depth int) string {
 }
 
 func blockContentWidth(contentWidth float64, style pdfBlockResolvedStyle) float64 {
-	return max(contentWidth-style.MarginLeft-style.MarginRight-style.PaddingLeft-style.PaddingRight, pdfMinBlockWidth)
+	available := max(contentWidth-style.MarginLeft-style.MarginRight-style.PaddingLeft-style.PaddingRight, pdfMinBlockWidth)
+	width := available
+	if style.HasWidth {
+		width = style.Width.resolve(available)
+	}
+	if style.HasMinWidth {
+		width = max(width, style.MinWidth.resolve(available))
+	}
+	if style.HasMaxWidth {
+		width = min(width, style.MaxWidth.resolve(available))
+	}
+	return min(max(width, pdfMinBlockWidth), available)
+}
+
+func blockBoxWidth(contentWidth float64, style pdfBlockResolvedStyle) float64 {
+	return blockContentWidth(contentWidth, style) + style.PaddingLeft + style.PaddingRight
+}
+
+func (l pdfBlockLength) resolve(available float64) float64 {
+	if l.Percent {
+		return available * l.Value / 100
+	}
+	return l.Value
 }
 
 func (r *pdfStyleResolver) applyStylesheet(sheet *css.Stylesheet) {
@@ -593,6 +641,36 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 		case "padding-left":
 			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
 				style.PaddingLeft = points
+			}
+		case "width":
+			if cssKeyword(value) == "auto" {
+				style.Width = pdfBlockLength{}
+				style.HasWidth = false
+				continue
+			}
+			if length, ok := pdfCSSBlockLength(value, style.Paragraph.FontSize); ok {
+				style.Width = length
+				style.HasWidth = true
+			}
+		case "min-width":
+			if cssKeyword(value) == "auto" {
+				style.MinWidth = pdfBlockLength{}
+				style.HasMinWidth = false
+				continue
+			}
+			if length, ok := pdfCSSBlockLength(value, style.Paragraph.FontSize); ok {
+				style.MinWidth = length
+				style.HasMinWidth = true
+			}
+		case "max-width":
+			if cssKeyword(value) == "none" {
+				style.MaxWidth = pdfBlockLength{}
+				style.HasMaxWidth = false
+				continue
+			}
+			if length, ok := pdfCSSBlockLength(value, style.Paragraph.FontSize); ok {
+				style.MaxWidth = length
+				style.HasMaxWidth = true
 			}
 		case "page-break-inside", "break-inside":
 			if pdfCSSAvoidPageBreakKeyword(value) {
@@ -809,6 +887,20 @@ func pdfCSSLetterSpacingPoints(value css.Value, fontSize float64) (float64, bool
 	return pdfCSSLengthPoints(value, fontSize)
 }
 
+func pdfCSSBlockLength(value css.Value, fontSize float64) (pdfBlockLength, bool) {
+	if cssKeyword(value) == "auto" {
+		return pdfBlockLength{}, false
+	}
+	if value.IsNumeric() && value.Unit == "%" {
+		return pdfBlockLength{Value: value.Value, Percent: true}, true
+	}
+	points, ok := pdfCSSLengthPoints(value, fontSize)
+	if !ok {
+		return pdfBlockLength{}, false
+	}
+	return pdfBlockLength{Value: points}, true
+}
+
 func pdfCSSLengthPoints(value css.Value, fontSize float64) (float64, bool) {
 	if !value.IsNumeric() {
 		return 0, false
@@ -915,6 +1007,16 @@ func pdfCSSFontStyleString(italic bool) string {
 	return "normal"
 }
 
+func pdfBlockLengthString(length pdfBlockLength, ok bool) string {
+	if !ok {
+		return ""
+	}
+	if length.Percent {
+		return strconv.FormatFloat(length.Value, 'f', -1, 64) + "%"
+	}
+	return strconv.FormatFloat(length.Value, 'f', -1, 64) + "pt"
+}
+
 func parsePDFCSSValueToken(token string) css.Value {
 	token = strings.TrimSpace(token)
 	if token == "" {
@@ -1004,6 +1106,9 @@ func (r *pdfStyleResolver) debugStyles() []pdfDebugResolvedStyle {
 			PaddingRight:      style.PaddingRight,
 			PaddingBottom:     style.PaddingBottom,
 			PaddingLeft:       style.PaddingLeft,
+			Width:             pdfBlockLengthString(style.Width, style.HasWidth),
+			MinWidth:          pdfBlockLengthString(style.MinWidth, style.HasMinWidth),
+			MaxWidth:          pdfBlockLengthString(style.MaxWidth, style.HasMaxWidth),
 			BackgroundColor:   pdfDebugBackgroundColor(style),
 			BorderWidth:       style.BorderWidth,
 			BorderColor:       pdfDebugBorderColor(style),

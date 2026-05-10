@@ -25,6 +25,9 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 				text-indent: 2em;
 				margin: 1em 2em 0.5em 3em;
 				padding: 0.25em 0.5em 0.75em 1em;
+				width: 80%;
+				min-width: 30pt;
+				max-width: 72pt;
 				background-color: #eee;
 				border: 2px solid red;
 				hyphens: manual;
@@ -77,6 +80,12 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 	}
 	if paragraph.PaddingTop != 3 || paragraph.PaddingRight != 6 || paragraph.PaddingBottom != 9 || paragraph.PaddingLeft != 12 {
 		t.Fatalf("paragraph padding = %v/%v/%v/%v, want 3/6/9/12", paragraph.PaddingTop, paragraph.PaddingRight, paragraph.PaddingBottom, paragraph.PaddingLeft)
+	}
+	if !paragraph.HasWidth || !paragraph.Width.Percent || paragraph.Width.Value != 80 || !paragraph.HasMinWidth || paragraph.MinWidth.Value != 30 || !paragraph.HasMaxWidth || paragraph.MaxWidth.Value != 72 {
+		t.Fatalf("paragraph width constraints = %#v/%#v/%#v", paragraph.Width, paragraph.MinWidth, paragraph.MaxWidth)
+	}
+	if width := blockContentWidth(220, paragraph); width != 72 {
+		t.Fatalf("paragraph constrained content width = %v, want 72", width)
 	}
 	if !paragraph.HasBackground || paragraph.BackgroundColor.String() != "#eeeeee" {
 		t.Fatalf("paragraph background = %t %s, want #eeeeee", paragraph.HasBackground, paragraph.BackgroundColor)

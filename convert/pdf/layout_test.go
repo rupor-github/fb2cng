@@ -172,6 +172,50 @@ func TestLayoutPDFPagesAppliesPadding(t *testing.T) {
 	}
 }
 
+func TestLayoutPDFPagesAppliesBlockWidth(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	fixed := resolver.styles[pdfStyleParagraph]
+	fixed.Paragraph.FirstLineIndent = 0
+	fixed.SpaceBefore = 0
+	fixed.SpaceAfter = 0
+	fixed.PaddingLeft = 5
+	fixed.PaddingRight = 7
+	fixed.Width = pdfBlockLength{Value: 60}
+	fixed.HasWidth = true
+	fixed.BackgroundColor = pdfColor{G: 1}
+	fixed.HasBackground = true
+	resolver.styles["fixed-width"] = fixed
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  220,
+		PageHeight: 180,
+		Title:      "Title",
+		Author:     "Author",
+		Styles:     resolver,
+		Blocks: []pdfTextBlock{
+			{Kind: pdfBlockParagraph, Text: "fixed", StyleClasses: "fixed-width"},
+		},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 || len(pages[1].Lines) != 1 || len(pages[1].Backgrounds) != 1 {
+		t.Fatalf("layoutPDFPages() pages = %#v, want one body line and background", pages)
+	}
+	line := pages[1].Lines[0]
+	if line.X != 29 { // 24pt page margin + 5pt left padding.
+		t.Fatalf("line X = %v, want 29", line.X)
+	}
+	background := pages[1].Backgrounds[0]
+	if background.X != 24 || background.Width != 72 { // 60pt content width + 12pt horizontal padding.
+		t.Fatalf("background = %#v, want 72pt fixed-width block", background)
+	}
+}
+
 func textWithParagraphLineCount(t *testing.T, face *builtinFontFace, style paragraphStyle, width float64, wantLines int, word string) string {
 	t.Helper()
 	for words := 1; words <= 80; words++ {

@@ -187,7 +187,7 @@ func pdfTraceFormatCSSProperties(props map[string]css.Value) string {
 }
 
 func pdfTraceFormatResolvedStyle(style pdfBlockResolvedStyle) string {
-	return fmt.Sprintf("font-family=%s, font-weight=%s, font-style=%s, color=%s, background=%s, border=%gpt %s, underline=%t, strikethrough=%t, font-size=%gpt, line-height=%gpt, letter-spacing=%gpt, text-indent=%gpt, align=%s, hyphens=%s, margins=%g/%g/%g/%g, padding=%g/%g/%g/%g, keep-together=%t, keep-next=%d, page-break-before=%t, page-break-after=%t, hidden=%t, orphans=%d, widows=%d",
+	return fmt.Sprintf("font-family=%s, font-weight=%s, font-style=%s, color=%s, background=%s, border=%gpt %s, underline=%t, strikethrough=%t, font-size=%gpt, line-height=%gpt, letter-spacing=%gpt, text-indent=%gpt, align=%s, hyphens=%s, margins=%g/%g/%g/%g, padding=%g/%g/%g/%g, width=%s, min-width=%s, max-width=%s, keep-together=%t, keep-next=%d, page-break-before=%t, page-break-after=%t, hidden=%t, orphans=%d, widows=%d",
 		normalizedPDFFontFamily(style.Paragraph.FontFamily),
 		pdfCSSFontWeightString(style.Paragraph.Bold),
 		pdfCSSFontStyleString(style.Paragraph.Italic),
@@ -211,6 +211,9 @@ func pdfTraceFormatResolvedStyle(style pdfBlockResolvedStyle) string {
 		style.PaddingRight,
 		style.PaddingBottom,
 		style.PaddingLeft,
+		pdfTraceBlockLength(style.Width, style.HasWidth),
+		pdfTraceBlockLength(style.MinWidth, style.HasMinWidth),
+		pdfTraceBlockLength(style.MaxWidth, style.HasMaxWidth),
 		style.KeepTogether,
 		style.KeepWithNextLines,
 		style.PageBreakBefore,
@@ -218,6 +221,13 @@ func pdfTraceFormatResolvedStyle(style pdfBlockResolvedStyle) string {
 		style.Hidden,
 		style.Orphans,
 		style.Widows)
+}
+
+func pdfTraceBlockLength(length pdfBlockLength, ok bool) string {
+	if !ok {
+		return "auto"
+	}
+	return pdfBlockLengthString(length, true)
 }
 
 func pdfTraceBackgroundColor(style pdfBlockResolvedStyle) string {
@@ -283,6 +293,14 @@ func pdfTraceStyleDiff(before, after pdfBlockResolvedStyle) string {
 	appendFloatChange("padding-right", before.PaddingRight, after.PaddingRight)
 	appendFloatChange("padding-bottom", before.PaddingBottom, after.PaddingBottom)
 	appendFloatChange("padding-left", before.PaddingLeft, after.PaddingLeft)
+	appendBlockLengthChange := func(name string, beforeLength pdfBlockLength, beforeOK bool, afterLength pdfBlockLength, afterOK bool) {
+		if beforeOK != afterOK || beforeLength != afterLength {
+			changes = append(changes, fmt.Sprintf("%s: %s -> %s", name, pdfTraceBlockLength(beforeLength, beforeOK), pdfTraceBlockLength(afterLength, afterOK)))
+		}
+	}
+	appendBlockLengthChange("width", before.Width, before.HasWidth, after.Width, after.HasWidth)
+	appendBlockLengthChange("min-width", before.MinWidth, before.HasMinWidth, after.MinWidth, after.HasMinWidth)
+	appendBlockLengthChange("max-width", before.MaxWidth, before.HasMaxWidth, after.MaxWidth, after.HasMaxWidth)
 	if before.HasBackground != after.HasBackground || before.BackgroundColor != after.BackgroundColor {
 		changes = append(changes, fmt.Sprintf("background-color: %s -> %s", pdfTraceBackgroundColor(before), pdfTraceBackgroundColor(after)))
 	}

@@ -160,7 +160,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 
 		if block.Kind == pdfBlockImage {
 			backgroundX := margin + style.MarginLeft
-			backgroundWidth := max(contentWidth-style.MarginLeft-style.MarginRight, pdfMinBlockWidth)
+			backgroundWidth := blockBoxWidth(contentWidth, style)
 			blockWidth := blockContentWidth(contentWidth, style)
 			img := doc.Images[block.ImageID]
 			if img == nil {
@@ -256,7 +256,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 			y -= style.SpaceBefore
 		}
 		backgroundX := margin + style.MarginLeft
-		backgroundWidth := max(contentWidth-style.MarginLeft-style.MarginRight, pdfMinBlockWidth)
+		backgroundWidth := blockBoxWidth(contentWidth, style)
 		y -= style.PaddingTop
 		fragmentPage := page
 		fragmentTop := y + style.PaddingTop
