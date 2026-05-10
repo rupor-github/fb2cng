@@ -172,6 +172,68 @@ func TestLayoutPDFPagesAppliesPadding(t *testing.T) {
 	}
 }
 
+func TestLayoutPDFPagesAppliesInlineStyles(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	pages, used, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  520,
+		PageHeight: 180,
+		Title:      "Title",
+		Author:     "Author",
+		Blocks: []pdfTextBlock{{
+			Kind: pdfBlockParagraph,
+			Text: "plain bold strike sub sup code",
+			Runs: []pdfInlineRun{
+				{Text: "plain "},
+				{Text: "bold", Bold: true, Italic: true},
+				{Text: " "},
+				{Text: "strike", Strikethrough: true},
+				{Text: " "},
+				{Text: "sub", Subscript: true},
+				{Text: " "},
+				{Text: "sup", Superscript: true},
+				{Text: " "},
+				{Text: "code", Code: true},
+			},
+		}},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 || len(pages[1].Lines) != 1 {
+		t.Fatalf("layoutPDFPages() pages = %#v, want one styled body line", pages)
+	}
+	line := pages[1].Lines[0]
+	if got := pdfPageLineText(line); got != "plain bold strike sub sup code" {
+		t.Fatalf("line text = %q", got)
+	}
+	var sawBoldItalic, sawStrike, sawSub, sawSup, sawCode bool
+	for _, fragment := range line.Fragments {
+		switch shapedRunes(fragment.Text) {
+		case "bold":
+			sawBoldItalic = fragment.FontKey.Bold && fragment.FontKey.Italic
+		case "strike":
+			sawStrike = fragment.Strikethrough
+		case "sub":
+			sawSub = fragment.BaselineShift < 0 && fragment.FontSize < line.FontSize
+		case "sup":
+			sawSup = fragment.BaselineShift > 0 && fragment.FontSize < line.FontSize
+		case "code":
+			sawCode = fragment.FontKey.Family == "monospace"
+		}
+	}
+	if !sawBoldItalic || !sawStrike || !sawSub || !sawSup || !sawCode {
+		t.Fatalf("inline fragments = %#v", line.Fragments)
+	}
+	for _, key := range []pdfFontKey{{Family: "serif"}, {Family: "serif", Bold: true, Italic: true}, {Family: "monospace"}} {
+		if len(used[key]) == 0 {
+			t.Fatalf("used glyphs for font key %#v missing in %#v", key, used)
+		}
+	}
+}
+
 func TestLayoutPDFPagesAppliesBlockWidth(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {

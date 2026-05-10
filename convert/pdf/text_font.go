@@ -238,6 +238,10 @@ func assignPDFFontResourceNames(pages []pdfPage, resources []pdfFontResource) {
 	for pageIndex := range pages {
 		for lineIndex := range pages[pageIndex].Lines {
 			pages[pageIndex].Lines[lineIndex].FontName = names[pages[pageIndex].Lines[lineIndex].FontKey]
+			for fragmentIndex := range pages[pageIndex].Lines[lineIndex].Fragments {
+				fragment := &pages[pageIndex].Lines[lineIndex].Fragments[fragmentIndex]
+				fragment.FontName = names[fragment.FontKey]
+			}
 		}
 	}
 }

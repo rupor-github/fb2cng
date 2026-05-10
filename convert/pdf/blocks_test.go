@@ -37,6 +37,37 @@ func TestCollectTextBlocksIncludesLinkChildren(t *testing.T) {
 	}
 }
 
+func TestParagraphInlineRunsPreserveFB2InlineStyles(t *testing.T) {
+	paragraph := &fb2.Paragraph{Text: []fb2.InlineSegment{
+		{Text: "plain "},
+		{Kind: fb2.InlineStrong, Children: []fb2.InlineSegment{{Kind: fb2.InlineEmphasis, Text: "bold italic"}}},
+		{Text: " "},
+		{Kind: fb2.InlineStrikethrough, Children: []fb2.InlineSegment{{Text: "strike"}}},
+		{Text: " "},
+		{Kind: fb2.InlineSub, Children: []fb2.InlineSegment{{Text: "sub"}}},
+		{Text: " "},
+		{Kind: fb2.InlineSup, Children: []fb2.InlineSegment{{Text: "sup"}}},
+		{Text: " "},
+		{Kind: fb2.InlineCode, Children: []fb2.InlineSegment{{Text: "code"}}},
+	}}
+
+	runs := paragraphInlineRuns(paragraph)
+	if len(runs) != 10 {
+		t.Fatalf("inline runs = %#v, want 10 style-preserving runs", runs)
+	}
+	assertRun := func(index int, text string, check func(pdfInlineRun) bool) {
+		t.Helper()
+		if runs[index].Text != text || !check(runs[index]) {
+			t.Fatalf("run[%d] = %#v", index, runs[index])
+		}
+	}
+	assertRun(1, "bold italic", func(run pdfInlineRun) bool { return run.Bold && run.Italic })
+	assertRun(3, "strike", func(run pdfInlineRun) bool { return run.Strikethrough })
+	assertRun(5, "sub", func(run pdfInlineRun) bool { return run.Subscript && !run.Superscript })
+	assertRun(7, "sup", func(run pdfInlineRun) bool { return run.Superscript && !run.Subscript })
+	assertRun(9, "code", func(run pdfInlineRun) bool { return run.Code })
+}
+
 func TestCollectPDFContentAddsAnnotationPage(t *testing.T) {
 	book := &fb2.FictionBook{
 		Description: fb2.Description{TitleInfo: fb2.TitleInfo{

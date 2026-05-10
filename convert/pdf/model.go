@@ -75,11 +75,22 @@ type pdfTextBlock struct {
 	Kind         pdfBlockKind
 	ID           string
 	Text         string
+	Runs         []pdfInlineRun
 	Depth        int
 	StyleName    string
 	StyleClasses string
 	ImageID      string
 	Links        []pdfTextLink
+}
+
+type pdfInlineRun struct {
+	Text          string
+	Bold          bool
+	Italic        bool
+	Strikethrough bool
+	Subscript     bool
+	Superscript   bool
+	Code          bool
 }
 
 type pdfTextLink struct {
@@ -99,7 +110,21 @@ type pdfPageLine struct {
 	Underline        bool
 	Strikethrough    bool
 	Text             shapedText
+	Fragments        []pdfPageLineFragment
 	ExtraWordSpacing float64
+}
+
+type pdfPageLineFragment struct {
+	Text          shapedText
+	Width         float64
+	FontSize      float64
+	LetterSpacing float64
+	FontKey       pdfFontKey
+	FontName      string
+	Color         pdfColor
+	Underline     bool
+	Strikethrough bool
+	BaselineShift float64
 }
 
 type pdfPage struct {

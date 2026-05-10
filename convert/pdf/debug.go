@@ -193,6 +193,28 @@ func writePDFDebugDumps(doc skeletonDocument, pages []pdfPage, fontResources []p
 	return writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-fonts.json"), pdfDebugFonts(fontResources))
 }
 
+func pdfPageLineText(line pdfPageLine) string {
+	if len(line.Fragments) == 0 {
+		return shapedRunes(line.Text)
+	}
+	var b strings.Builder
+	for _, fragment := range line.Fragments {
+		b.WriteString(shapedRunes(fragment.Text))
+	}
+	return b.String()
+}
+
+func pdfPageLineWidth(line pdfPageLine) float64 {
+	if len(line.Fragments) == 0 {
+		return shapedWidthPointsWithSpacing(line.Text, line.FontSize, line.LetterSpacing)
+	}
+	width := 0.0
+	for _, fragment := range line.Fragments {
+		width += fragment.Width
+	}
+	return width
+}
+
 func pdfDebugPages(pages []pdfPage) ([]pdfDebugPage, []pdfDebugImage, []pdfDebugLink) {
 	debugPages := make([]pdfDebugPage, 0, len(pages))
 	debugImages := make([]pdfDebugImage, 0)
@@ -211,7 +233,7 @@ func pdfDebugPages(pages []pdfPage) ([]pdfDebugPage, []pdfDebugImage, []pdfDebug
 		}
 		for _, line := range page.Lines {
 			debugPage.Lines = append(debugPage.Lines, pdfDebugLine{
-				Text:             shapedRunes(line.Text),
+				Text:             pdfPageLineText(line),
 				X:                line.X,
 				Y:                line.Y,
 				FontSize:         line.FontSize,
@@ -223,7 +245,7 @@ func pdfDebugPages(pages []pdfPage) ([]pdfDebugPage, []pdfDebugImage, []pdfDebug
 				Color:            line.Color.String(),
 				Underline:        line.Underline,
 				Strikethrough:    line.Strikethrough,
-				Width:            shapedWidthPointsWithSpacing(line.Text, line.FontSize, line.LetterSpacing),
+				Width:            pdfPageLineWidth(line),
 				ExtraWordSpacing: line.ExtraWordSpacing,
 			})
 		}

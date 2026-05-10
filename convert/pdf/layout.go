@@ -16,6 +16,24 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 		return &pages[len(pages)-1]
 	}
 	addLine := func(page *pdfPage, line pdfPageLine) {
+		if len(line.Fragments) != 0 {
+			page.Lines = append(page.Lines, line)
+			for _, fragment := range line.Fragments {
+				key := fragment.FontKey
+				if key.Family == "" {
+					key = pdfFontKey{Family: "serif"}
+				}
+				fontUsed := used[key]
+				if fontUsed == nil {
+					fontUsed = make(map[uint16]shapedGlyph)
+					used[key] = fontUsed
+				}
+				for id, glyph := range fragment.Text.Used {
+					fontUsed[id] = glyph
+				}
+			}
+			return
+		}
 		if line.FontKey.Family == "" {
 			line.FontKey = pdfFontKey{Family: "serif"}
 		}
@@ -218,7 +236,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 		if err != nil {
 			return nil, nil, err
 		}
-		lines, err := layoutParagraph(face, text, style.Paragraph, blockWidth)
+		lines, err := layoutInlineParagraph(doc.Fonts, face, block.Text, block.Runs, style.Paragraph, blockWidth)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -295,6 +313,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 				Underline:        style.Paragraph.Underline,
 				Strikethrough:    style.Paragraph.Strikethrough,
 				Text:             line.Text,
+				Fragments:        pageLineFragments(line.Fragments),
 				ExtraWordSpacing: line.ExtraWordSpacing,
 			})
 			y -= style.Paragraph.LineHeight
@@ -338,7 +357,7 @@ func nextBlockKeepHeight(blocks []pdfTextBlock, hyphenator paragraphHyphenator, 
 		if err != nil {
 			return 0, err
 		}
-		lines, err := layoutParagraph(face, text, style.Paragraph, blockContentWidth(contentWidth, style))
+		lines, err := layoutInlineParagraph(fonts, face, block.Text, block.Runs, style.Paragraph, blockContentWidth(contentWidth, style))
 		if err != nil {
 			return 0, err
 		}

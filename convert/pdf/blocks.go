@@ -403,7 +403,7 @@ func appendParagraphBlockWithClasses(blocks *[]pdfTextBlock, kind pdfBlockKind, 
 	}
 	text, links := paragraphTextAndLinks(paragraph)
 	if text != "" {
-		*blocks = append(*blocks, pdfTextBlock{Kind: kind, ID: paragraph.ID, Text: text, Depth: depth, StyleName: pdfStyleNameForKind(kind), StyleClasses: joinStyleClasses(paragraph.Style, styleClasses), Links: links})
+		*blocks = append(*blocks, pdfTextBlock{Kind: kind, ID: paragraph.ID, Text: text, Runs: paragraphInlineRuns(paragraph), Depth: depth, StyleName: pdfStyleNameForKind(kind), StyleClasses: joinStyleClasses(paragraph.Style, styleClasses), Links: links})
 	}
 }
 
@@ -464,6 +464,17 @@ func paragraphTextAndLinks(paragraph *fb2.Paragraph) (string, []pdfTextLink) {
 	return inlineSegmentsTextAndLinks(paragraph.Text)
 }
 
+func paragraphInlineRuns(paragraph *fb2.Paragraph) []pdfInlineRun {
+	if paragraph == nil {
+		return nil
+	}
+	var runs []pdfInlineRun
+	for i := range paragraph.Text {
+		appendInlineSegmentRun(&runs, &paragraph.Text[i], pdfInlineRun{})
+	}
+	return trimInlineRuns(runs)
+}
+
 func inlineSegmentsTextAndLinks(segments []fb2.InlineSegment) (string, []pdfTextLink) {
 	var b strings.Builder
 	var links []pdfTextLink
@@ -501,6 +512,87 @@ func appendInlineSegmentText(b *strings.Builder, links *[]pdfTextLink, seg *fb2.
 			*links = append(*links, pdfTextLink{Start: start, End: end, Href: seg.Href})
 		}
 	}
+}
+
+func appendInlineSegmentRun(runs *[]pdfInlineRun, seg *fb2.InlineSegment, inherited pdfInlineRun) {
+	if seg == nil {
+		return
+	}
+	style := inherited
+	style.Text = ""
+	style = applyInlineSegmentStyle(style, seg)
+	if seg.Kind == fb2.InlineImageSegment {
+		if seg.Image != nil && seg.Image.Alt != "" {
+			style.Text = " " + seg.Image.Alt + " "
+			appendInlineRun(runs, style)
+		}
+		return
+	}
+	if seg.Text != "" {
+		style.Text = seg.Text
+		appendInlineRun(runs, style)
+	}
+	style.Text = ""
+	for i := range seg.Children {
+		appendInlineSegmentRun(runs, &seg.Children[i], style)
+	}
+}
+
+func applyInlineSegmentStyle(style pdfInlineRun, seg *fb2.InlineSegment) pdfInlineRun {
+	switch seg.Kind {
+	case fb2.InlineStrong:
+		style.Bold = true
+	case fb2.InlineEmphasis:
+		style.Italic = true
+	case fb2.InlineStrikethrough:
+		style.Strikethrough = true
+	case fb2.InlineSub:
+		style.Subscript = true
+		style.Superscript = false
+	case fb2.InlineSup:
+		style.Superscript = true
+		style.Subscript = false
+	case fb2.InlineCode:
+		style.Code = true
+	}
+	return style
+}
+
+func appendInlineRun(runs *[]pdfInlineRun, run pdfInlineRun) {
+	if run.Text == "" {
+		return
+	}
+	last := len(*runs) - 1
+	if last >= 0 && sameInlineStyle((*runs)[last], run) {
+		(*runs)[last].Text += run.Text
+		return
+	}
+	*runs = append(*runs, run)
+}
+
+func sameInlineStyle(a, b pdfInlineRun) bool {
+	return a.Bold == b.Bold && a.Italic == b.Italic && a.Strikethrough == b.Strikethrough && a.Subscript == b.Subscript && a.Superscript == b.Superscript && a.Code == b.Code
+}
+
+func trimInlineRuns(runs []pdfInlineRun) []pdfInlineRun {
+	for len(runs) > 0 {
+		trimmed := strings.TrimLeft(runs[0].Text, " \t\n\r")
+		if trimmed != "" {
+			runs[0].Text = trimmed
+			break
+		}
+		runs = runs[1:]
+	}
+	for len(runs) > 0 {
+		last := len(runs) - 1
+		trimmed := strings.TrimRight(runs[last].Text, " \t\n\r")
+		if trimmed != "" {
+			runs[last].Text = trimmed
+			break
+		}
+		runs = runs[:last]
+	}
+	return runs
 }
 
 func subtitleStyleClasses(containerClasses string) string {

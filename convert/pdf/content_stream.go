@@ -50,24 +50,24 @@ func pageContent(page pdfPage) []byte {
 	currentColor := pdfColor{}
 	colorInitialized := false
 	for _, line := range page.Lines {
+		if len(line.Fragments) != 0 {
+			currentX := line.X
+			for i, fragment := range line.Fragments {
+				if len(fragment.Text.Glyphs) == 0 || fragment.FontName == "" {
+					continue
+				}
+				writeTextFragment(&buf, fragment.FontName, fragment.FontSize, fragment.LetterSpacing, fragment.Color, currentX, line.Y+fragment.BaselineShift, fragment.Text.Glyphs, &currentFontName, &currentFontSize, &currentLetterSpacing, &currentColor, &colorInitialized)
+				currentX += fragment.Width
+				if line.ExtraWordSpacing != 0 && i != len(line.Fragments)-1 && fragmentEndsWithSpace(fragment) {
+					currentX += line.ExtraWordSpacing
+				}
+			}
+			continue
+		}
 		if len(line.Text.Glyphs) == 0 || line.FontName == "" {
 			continue
 		}
-		if line.FontName != currentFontName || line.FontSize != currentFontSize {
-			fmt.Fprintf(&buf, "/%s %s Tf\n", line.FontName, docwriter.FormatNumber(line.FontSize))
-			currentFontName = line.FontName
-			currentFontSize = line.FontSize
-		}
-		if line.LetterSpacing != currentLetterSpacing {
-			fmt.Fprintf(&buf, "%s Tc\n", docwriter.FormatNumber(line.LetterSpacing))
-			currentLetterSpacing = line.LetterSpacing
-		}
-		if !colorInitialized || line.Color != currentColor {
-			fmt.Fprintf(&buf, "%s\n", line.Color.contentOperator())
-			currentColor = line.Color
-			colorInitialized = true
-		}
-		fmt.Fprintf(&buf, "1 0 0 1 %s %s Tm\n", docwriter.FormatNumber(line.X), docwriter.FormatNumber(line.Y))
+		writeTextState(&buf, line.FontName, line.FontSize, line.LetterSpacing, line.Color, line.X, line.Y, &currentFontName, &currentFontSize, &currentLetterSpacing, &currentColor, &colorInitialized)
 		if line.ExtraWordSpacing != 0 {
 			fmt.Fprintf(&buf, "%s TJ\n", justifiedGlyphArray(line.Text.Glyphs, line.ExtraWordSpacing, line.FontSize))
 			continue
@@ -79,9 +79,41 @@ func pageContent(page pdfPage) []byte {
 	return buf.Bytes()
 }
 
+func writeTextFragment(buf *bytes.Buffer, fontName string, fontSize float64, letterSpacing float64, color pdfColor, x float64, y float64, glyphs []shapedGlyph, currentFontName *string, currentFontSize *float64, currentLetterSpacing *float64, currentColor *pdfColor, colorInitialized *bool) {
+	writeTextState(buf, fontName, fontSize, letterSpacing, color, x, y, currentFontName, currentFontSize, currentLetterSpacing, currentColor, colorInitialized)
+	fmt.Fprintf(buf, "%s Tj\n", docwriter.Format(glyphHex(glyphs)))
+}
+
+func writeTextState(buf *bytes.Buffer, fontName string, fontSize float64, letterSpacing float64, color pdfColor, x float64, y float64, currentFontName *string, currentFontSize *float64, currentLetterSpacing *float64, currentColor *pdfColor, colorInitialized *bool) {
+	if fontName != *currentFontName || fontSize != *currentFontSize {
+		fmt.Fprintf(buf, "/%s %s Tf\n", fontName, docwriter.FormatNumber(fontSize))
+		*currentFontName = fontName
+		*currentFontSize = fontSize
+	}
+	if letterSpacing != *currentLetterSpacing {
+		fmt.Fprintf(buf, "%s Tc\n", docwriter.FormatNumber(letterSpacing))
+		*currentLetterSpacing = letterSpacing
+	}
+	if !*colorInitialized || color != *currentColor {
+		fmt.Fprintf(buf, "%s\n", color.contentOperator())
+		*currentColor = color
+		*colorInitialized = true
+	}
+	fmt.Fprintf(buf, "1 0 0 1 %s %s Tm\n", docwriter.FormatNumber(x), docwriter.FormatNumber(y))
+}
+
+func fragmentEndsWithSpace(fragment pdfPageLineFragment) bool {
+	glyphs := fragment.Text.Glyphs
+	return len(glyphs) != 0 && glyphs[len(glyphs)-1].Rune == ' '
+}
+
 func pageTextDecorations(page pdfPage) []byte {
 	var buf bytes.Buffer
 	for _, line := range page.Lines {
+		if len(line.Fragments) != 0 {
+			writeFragmentDecorations(&buf, line)
+			continue
+		}
 		if len(line.Text.Glyphs) == 0 || (!line.Underline && !line.Strikethrough) {
 			continue
 		}
@@ -102,6 +134,32 @@ func pageTextDecorations(page pdfPage) []byte {
 		buf.WriteString("Q\n")
 	}
 	return buf.Bytes()
+}
+
+func writeFragmentDecorations(buf *bytes.Buffer, line pdfPageLine) {
+	currentX := line.X
+	for i, fragment := range line.Fragments {
+		if len(fragment.Text.Glyphs) == 0 {
+			continue
+		}
+		if fragment.Underline || fragment.Strikethrough {
+			thickness := max(fragment.FontSize/18, 0.4)
+			fmt.Fprintf(buf, "q\n%s\n%s w\n", fragment.Color.strokeOperator(), docwriter.FormatNumber(thickness))
+			if fragment.Underline {
+				y := line.Y + fragment.BaselineShift - fragment.FontSize*0.12
+				writeDecorationLine(buf, currentX, y, currentX+fragment.Width)
+			}
+			if fragment.Strikethrough {
+				y := line.Y + fragment.BaselineShift + fragment.FontSize*0.30
+				writeDecorationLine(buf, currentX, y, currentX+fragment.Width)
+			}
+			buf.WriteString("Q\n")
+		}
+		currentX += fragment.Width
+		if line.ExtraWordSpacing != 0 && i != len(line.Fragments)-1 && fragmentEndsWithSpace(fragment) {
+			currentX += line.ExtraWordSpacing
+		}
+	}
 }
 
 func writeDecorationLine(buf *bytes.Buffer, x1, y, x2 float64) {

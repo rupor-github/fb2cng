@@ -52,6 +52,19 @@ type paragraphLine struct {
 	Indent            float64
 	ExtraWordSpacing  float64
 	JustificationGaps int
+	Fragments         []paragraphLineFragment
+}
+
+type paragraphLineFragment struct {
+	Text          shapedText
+	Width         float64
+	FontSize      float64
+	LetterSpacing float64
+	FontKey       pdfFontKey
+	Color         pdfColor
+	Underline     bool
+	Strikethrough bool
+	BaselineShift float64
 }
 
 type paragraphWord struct {
