@@ -11,6 +11,8 @@ import (
 type DpiType uint8
 
 const (
+	defaultJPEGDPI = 300
+
 	DpiNoUnits DpiType = iota
 	DpiPxPerInch
 	DpiPxPerSm
@@ -51,6 +53,16 @@ func EnsureJFIFAPP0(jpegData []byte, dpit DpiType, xdensity, ydensity int16) ([]
 	buf.Write(seg[:])
 	buf.Write(jpegData[2:])
 	return buf.Bytes(), true, nil
+}
+
+func JPEGDensityFromDPI(dpi int) int16 {
+	if dpi <= 0 {
+		return defaultJPEGDPI
+	}
+	if dpi > 32767 {
+		return 32767
+	}
+	return int16(dpi)
 }
 
 func EncodeJPEGWithDPI(img image.Image, quality int, dpit DpiType, xdensity, ydensity int16) ([]byte, error) {

@@ -3,6 +3,7 @@ package fb2
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/binary"
 	"image"
 	"image/color"
 	"image/gif"
@@ -692,6 +693,30 @@ func TestFictionBook_PrepareImages_CoverDetection(t *testing.T) {
 	// Should have been resized to match height
 	if img.Bounds().Dy() != 1200 {
 		t.Errorf("expected cover height 1200, got %d", img.Bounds().Dy())
+	}
+}
+
+func TestBinaryObject_EncodeImageUsesConfiguredDPI(t *testing.T) {
+	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+	cfg := &config.ImagesConfig{
+		JPEGQuality: 85,
+		Screen:      config.ScreenConfig{DPI: 144},
+	}
+	bo := &BinaryObject{ID: "dpi-test"}
+	img := image.NewRGBA(image.Rect(0, 0, 10, 10))
+
+	out, err := bo.encodeImage(img, "jpeg", cfg, log)
+	if err != nil {
+		t.Fatalf("encodeImage() error = %v", err)
+	}
+	if len(out) < 18 || out[13] != byte(imgutil.DpiPxPerInch) {
+		t.Fatalf("encoded JPEG missing JFIF DPI marker")
+	}
+	if got := binary.BigEndian.Uint16(out[14:16]); got != 144 {
+		t.Fatalf("x density = %d, want 144", got)
+	}
+	if got := binary.BigEndian.Uint16(out[16:18]); got != 144 {
+		t.Fatalf("y density = %d, want 144", got)
 	}
 }
 
