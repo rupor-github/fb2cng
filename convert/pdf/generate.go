@@ -56,15 +56,19 @@ func Generate(ctx context.Context, c *content.Content, outputName string, cfg *c
 	}
 
 	data, err := buildSkeletonPDF(skeletonDocument{
-		PageWidth:  pageWidth,
-		PageHeight: pageHeight,
-		Title:      bookTitle(c),
-		Author:     bookAuthors(c),
-		Blocks:     contentPlan.Blocks,
-		TOC:        contentPlan.TOC,
-		Hyphenator: pdfHyphenator(c, log),
-		Debug:      c.Debug,
-		WorkDir:    c.WorkDir,
+		PageWidth:      pageWidth,
+		PageHeight:     pageHeight,
+		ScreenWidthPx:  cfg.Images.Screen.Width,
+		ScreenHeightPx: cfg.Images.Screen.Height,
+		Title:          bookTitle(c),
+		Author:         bookAuthors(c),
+		Blocks:         contentPlan.Blocks,
+		TOC:            contentPlan.TOC,
+		Images:         c.ImagesIndex,
+		CoverID:        c.CoverID,
+		Hyphenator:     pdfHyphenator(c, log),
+		Debug:          c.Debug,
+		WorkDir:        c.WorkDir,
 	})
 	if err != nil {
 		return fmt.Errorf("build pdf: %w", err)
@@ -85,15 +89,19 @@ func Generate(ctx context.Context, c *content.Content, outputName string, cfg *c
 }
 
 type skeletonDocument struct {
-	PageWidth  float64
-	PageHeight float64
-	Title      string
-	Author     string
-	Blocks     []pdfTextBlock
-	TOC        []*structure.TOCEntry
-	Hyphenator paragraphHyphenator
-	Debug      bool
-	WorkDir    string
+	PageWidth      float64
+	PageHeight     float64
+	ScreenWidthPx  int
+	ScreenHeightPx int
+	Title          string
+	Author         string
+	Blocks         []pdfTextBlock
+	TOC            []*structure.TOCEntry
+	Images         fb2.BookImages
+	CoverID        string
+	Hyphenator     paragraphHyphenator
+	Debug          bool
+	WorkDir        string
 }
 
 type pdfBlockKind int
@@ -112,6 +120,8 @@ func (k pdfBlockKind) String() string {
 		return "text-author"
 	case pdfBlockEmptyLine:
 		return "empty-line"
+	case pdfBlockImage:
+		return "image"
 	case pdfBlockPageBreak:
 		return "page-break"
 	default:
@@ -126,6 +136,7 @@ const (
 	pdfBlockPoem
 	pdfBlockTextAuthor
 	pdfBlockEmptyLine
+	pdfBlockImage
 	pdfBlockPageBreak
 )
 
@@ -135,11 +146,12 @@ type pdfContentPlan struct {
 }
 
 type pdfTextBlock struct {
-	Kind  pdfBlockKind
-	ID    string
-	Text  string
-	Depth int
-	Links []pdfTextLink
+	Kind    pdfBlockKind
+	ID      string
+	Text    string
+	Depth   int
+	ImageID string
+	Links   []pdfTextLink
 }
 
 type pdfTextLink struct {
@@ -160,8 +172,18 @@ type pdfPage struct {
 	ObjectID    int
 	ContentID   int
 	Lines       []pdfPageLine
+	Images      []pdfPageImage
 	Anchors     []string
 	Annotations []pdfLinkAnnotation
+}
+
+type pdfPageImage struct {
+	ImageID string
+	Name    string
+	X       float64
+	Y       float64
+	Width   float64
+	Height  float64
 }
 
 type pdfLinkAnnotation struct {
@@ -235,6 +257,11 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 		pages[i].ContentID = nextObjectID
 		nextObjectID++
 	}
+	imageResources, err := preparePDFImageResources(doc.Images, pages, &nextObjectID)
+	if err != nil {
+		return nil, err
+	}
+	assignPDFImageResourceNames(pages, imageResources)
 	outlines := buildOutlines(doc.TOC, pages, &nextObjectID)
 	assignAnnotationObjectIDs(pages, &nextObjectID)
 
@@ -274,6 +301,14 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 		return nil, err
 	}
 	for _, page := range pages {
+		resources := docwriter.Dict{
+			"Font": docwriter.Dict{
+				"F1": docwriter.Ref{ObjectNumber: type0FontID},
+			},
+		}
+		if xobjects := pageImageXObjects(page, imageResources); xobjects != nil {
+			resources["XObject"] = xobjects
+		}
 		pageDict := docwriter.Dict{
 			"Contents": docwriter.Ref{ObjectNumber: page.ContentID},
 			"MediaBox": docwriter.Array{
@@ -282,13 +317,9 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 				docwriter.Number(doc.PageWidth),
 				docwriter.Number(doc.PageHeight),
 			},
-			"Parent": docwriter.Ref{ObjectNumber: pagesID},
-			"Resources": docwriter.Dict{
-				"Font": docwriter.Dict{
-					"F1": docwriter.Ref{ObjectNumber: type0FontID},
-				},
-			},
-			"Type": docwriter.Name("Page"),
+			"Parent":    docwriter.Ref{ObjectNumber: pagesID},
+			"Resources": resources,
+			"Type":      docwriter.Name("Page"),
 		}
 		if len(page.Annotations) != 0 {
 			annots := make(docwriter.Array, 0, len(page.Annotations))
@@ -335,6 +366,9 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 		return nil, err
 	}
 	if err := writeAnnotationObjects(writer, pages); err != nil {
+		return nil, err
+	}
+	if err := writePDFImageObjects(writer, imageResources); err != nil {
 		return nil, err
 	}
 
@@ -652,6 +686,17 @@ func namedDestinations(pages []pdfPage) docwriter.Dict {
 
 func pageContent(page pdfPage) []byte {
 	var buf bytes.Buffer
+	for _, img := range page.Images {
+		if img.Name == "" || img.Width <= 0 || img.Height <= 0 {
+			continue
+		}
+		fmt.Fprintf(&buf, "q\n%s 0 0 %s %s %s cm\n/%s Do\nQ\n",
+			docwriter.FormatNumber(img.Width),
+			docwriter.FormatNumber(img.Height),
+			docwriter.FormatNumber(img.X),
+			docwriter.FormatNumber(img.Y),
+			img.Name)
+	}
 	buf.WriteString("q\nBT\n")
 	currentFontSize := -1.0
 	for _, line := range page.Lines {
@@ -700,6 +745,20 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 			}
 		}
 		page.Anchors = append(page.Anchors, id)
+	}
+
+	if cover := doc.Images[doc.CoverID]; cover != nil {
+		if rect, ok := fitPDFImageInBox(doc, cover, 0, 0, doc.PageWidth, doc.PageHeight); ok {
+			coverPage := addPage()
+			addAnchor(coverPage, doc.CoverID)
+			coverPage.Images = append(coverPage.Images, pdfPageImage{
+				ImageID: doc.CoverID,
+				X:       rect.X1,
+				Y:       rect.Y1,
+				Width:   rect.X2 - rect.X1,
+				Height:  rect.Y2 - rect.Y1,
+			})
+		}
 	}
 
 	titlePage := addPage()
@@ -760,6 +819,40 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 				newTextPage()
 			}
 			addAnchor(page, block.ID)
+			continue
+		}
+
+		if block.Kind == pdfBlockImage {
+			style := pdfStyleForBlock(block)
+			img := doc.Images[block.ImageID]
+			if img == nil {
+				continue
+			}
+			width, height, ok := fitPDFImageSize(doc, img, contentWidth, top-bottom)
+			if !ok {
+				continue
+			}
+			needed := style.SpaceBefore + height + style.SpaceAfter
+			if pageHasText && y-needed < bottom {
+				newTextPage()
+			}
+			addAnchor(page, block.ID)
+			if pageHasText {
+				y -= style.SpaceBefore
+			}
+			if y-height < bottom {
+				newTextPage()
+			}
+			y -= height
+			page.Images = append(page.Images, pdfPageImage{
+				ImageID: block.ImageID,
+				X:       margin + max((contentWidth-width)/2, 0),
+				Y:       y,
+				Width:   width,
+				Height:  height,
+			})
+			pageHasText = true
+			y -= style.SpaceAfter
 			continue
 		}
 
@@ -845,7 +938,7 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 		y -= style.SpaceAfter
 	}
 
-	if len(pages[len(pages)-1].Lines) == 0 {
+	if len(pages[len(pages)-1].Lines) == 0 && len(pages[len(pages)-1].Images) == 0 {
 		pages = pages[:len(pages)-1]
 	}
 	return pages, used, nil
@@ -894,6 +987,13 @@ func pdfStyleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
 			Orphans:    2,
 			Widows:     2,
 		}
+	case pdfBlockImage:
+		return pdfBlockResolvedStyle{
+			Paragraph:    paragraphStyle{FontSize: 10.5, LineHeight: 13.4},
+			SpaceBefore:  6,
+			SpaceAfter:   6,
+			KeepTogether: true,
+		}
 	default:
 		return pdfBlockResolvedStyle{
 			Paragraph:  paragraphStyle{FontSize: 10.5, LineHeight: 13.4, FirstLineIndent: 14, Align: textAlignJustify},
@@ -905,11 +1005,12 @@ func pdfStyleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
 }
 
 type pdfDebugBlock struct {
-	Index int    `json:"index"`
-	Kind  string `json:"kind"`
-	ID    string `json:"id,omitempty"`
-	Depth int    `json:"depth,omitempty"`
-	Text  string `json:"text,omitempty"`
+	Index   int    `json:"index"`
+	Kind    string `json:"kind"`
+	ID      string `json:"id,omitempty"`
+	Depth   int    `json:"depth,omitempty"`
+	ImageID string `json:"image_id,omitempty"`
+	Text    string `json:"text,omitempty"`
 }
 
 type pdfDebugPage struct {
@@ -933,11 +1034,12 @@ func writePDFDebugDumps(doc skeletonDocument, pages []pdfPage) error {
 	blocks := make([]pdfDebugBlock, 0, len(doc.Blocks))
 	for i, block := range doc.Blocks {
 		blocks = append(blocks, pdfDebugBlock{
-			Index: i,
-			Kind:  block.Kind.String(),
-			ID:    block.ID,
-			Depth: block.Depth,
-			Text:  block.Text,
+			Index:   i,
+			Kind:    block.Kind.String(),
+			ID:      block.ID,
+			Depth:   block.Depth,
+			ImageID: block.ImageID,
+			Text:    block.Text,
 		})
 	}
 	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-text-blocks.json"), blocks); err != nil {
@@ -1057,12 +1159,13 @@ func collectPDFContent(c *content.Content) (pdfContentPlan, error) {
 
 	blocks := make([]pdfTextBlock, 0, 64)
 	splitSections := splitSectionIDs(plan)
+	splitBodies := splitBodyImageBodies(plan)
 	for i := range plan.Units {
 		unit := &plan.Units[i]
-		if unit.ForceNewPage {
+		if unit.ForceNewPage && unit.Kind != structure.UnitCover {
 			blocks = append(blocks, pdfTextBlock{Kind: pdfBlockPageBreak, ID: unit.ID, Text: unit.Title})
 		}
-		appendUnitBlocks(&blocks, unit, splitSections)
+		appendUnitBlocks(&blocks, unit, splitSections, splitBodies)
 	}
 	return pdfContentPlan{Blocks: blocks, TOC: plan.TOC}, nil
 }
@@ -1081,13 +1184,31 @@ func splitSectionIDs(plan *structure.Plan) map[string]bool {
 	return ids
 }
 
-func appendUnitBlocks(blocks *[]pdfTextBlock, unit *structure.Unit, splitSections map[string]bool) {
+func splitBodyImageBodies(plan *structure.Plan) map[*fb2.Body]bool {
+	bodies := make(map[*fb2.Body]bool)
+	if plan == nil {
+		return bodies
+	}
+	for i := range plan.Units {
+		unit := &plan.Units[i]
+		if unit.Kind == structure.UnitBodyImage && unit.Body != nil {
+			bodies[unit.Body] = true
+		}
+	}
+	return bodies
+}
+
+func appendUnitBlocks(blocks *[]pdfTextBlock, unit *structure.Unit, splitSections map[string]bool, splitBodies map[*fb2.Body]bool) {
 	if unit == nil {
 		return
 	}
 	switch unit.Kind {
+	case structure.UnitBodyImage:
+		if unit.Body != nil {
+			appendImageBlock(blocks, unit.Body.Image, unit.ID)
+		}
 	case structure.UnitBodyIntro:
-		appendBodyIntroBlocks(blocks, unit.Body)
+		appendBodyIntroBlocks(blocks, unit.Body, !splitBodies[unit.Body])
 	case structure.UnitSection:
 		appendSectionBlocks(blocks, unit.Section, unit.TitleDepth, splitSections)
 	case structure.UnitFootnotesBody:
@@ -1095,9 +1216,12 @@ func appendUnitBlocks(blocks *[]pdfTextBlock, unit *structure.Unit, splitSection
 	}
 }
 
-func appendBodyIntroBlocks(blocks *[]pdfTextBlock, body *fb2.Body) {
+func appendBodyIntroBlocks(blocks *[]pdfTextBlock, body *fb2.Body, includeImage bool) {
 	if body == nil {
 		return
+	}
+	if includeImage {
+		appendImageBlock(blocks, body.Image, "")
 	}
 	appendTitleBlocks(blocks, body.Title, 1)
 	for i := range body.Epigraphs {
@@ -1109,7 +1233,7 @@ func appendBodyBlocks(blocks *[]pdfTextBlock, body *fb2.Body, splitSections map[
 	if body == nil {
 		return
 	}
-	appendBodyIntroBlocks(blocks, body)
+	appendBodyIntroBlocks(blocks, body, true)
 	for i := range body.Sections {
 		appendSectionBlocks(blocks, &body.Sections[i], 1, splitSections)
 	}
@@ -1123,6 +1247,7 @@ func appendSectionBlocks(blocks *[]pdfTextBlock, section *fb2.Section, depth int
 	for i := range section.Epigraphs {
 		appendEpigraphBlocks(blocks, &section.Epigraphs[i])
 	}
+	appendImageBlock(blocks, section.Image, section.ID)
 	if section.Annotation != nil {
 		appendFlowBlocks(blocks, section.Annotation.Items, depth, splitSections)
 	}
@@ -1173,6 +1298,8 @@ func appendFlowItemBlock(blocks *[]pdfTextBlock, item *fb2.FlowItem, depth int, 
 		appendParagraphBlock(blocks, pdfBlockSubtitle, item.Subtitle, depth)
 	case fb2.FlowEmptyLine:
 		*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine})
+	case fb2.FlowImage:
+		appendImageBlock(blocks, item.Image, "")
 	case fb2.FlowSection:
 		if item.Section != nil && splitSections[item.Section.ID] {
 			return
@@ -1190,6 +1317,26 @@ func appendFlowItemBlock(blocks *[]pdfTextBlock, item *fb2.FlowItem, depth int, 
 			}
 		}
 	}
+}
+
+func appendImageBlock(blocks *[]pdfTextBlock, image *fb2.Image, fallbackID string) {
+	if image == nil {
+		return
+	}
+	imageID := imageRefID(image.Href)
+	if imageID == "" {
+		return
+	}
+	anchorID := image.ID
+	if anchorID == "" {
+		anchorID = fallbackID
+	}
+	*blocks = append(*blocks, pdfTextBlock{
+		Kind:    pdfBlockImage,
+		ID:      anchorID,
+		Text:    strings.TrimSpace(image.Alt),
+		ImageID: imageID,
+	})
 }
 
 func appendParagraphBlock(blocks *[]pdfTextBlock, kind pdfBlockKind, paragraph *fb2.Paragraph, depth int) {
@@ -1266,6 +1413,10 @@ func inlineSegmentsTextAndLinks(segments []fb2.InlineSegment) (string, []pdfText
 		appendInlineSegmentText(&b, &links, &segments[i])
 	}
 	return strings.TrimSpace(b.String()), links
+}
+
+func imageRefID(href string) string {
+	return strings.TrimPrefix(strings.TrimSpace(href), "#")
 }
 
 func appendInlineSegmentText(b *strings.Builder, links *[]pdfTextLink, seg *fb2.InlineSegment) {
