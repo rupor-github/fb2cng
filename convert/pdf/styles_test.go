@@ -13,6 +13,9 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 		Type: "text/css",
 		Data: `
 			p {
+				font-family: "Noto Sans", sans-serif;
+				font-weight: bold;
+				font-style: italic;
 				font-size: 12pt;
 				line-height: 1.5;
 				text-align: center;
@@ -33,6 +36,12 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 
 	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
+	if paragraph.Paragraph.FontFamily != "Noto Sans" {
+		t.Fatalf("paragraph font family = %q, want Noto Sans", paragraph.Paragraph.FontFamily)
+	}
+	if !paragraph.Paragraph.Bold || !paragraph.Paragraph.Italic {
+		t.Fatalf("paragraph font weight/style = bold:%t italic:%t, want both true", paragraph.Paragraph.Bold, paragraph.Paragraph.Italic)
+	}
 	if paragraph.Paragraph.FontSize != 12 {
 		t.Fatalf("paragraph font size = %v, want 12", paragraph.Paragraph.FontSize)
 	}

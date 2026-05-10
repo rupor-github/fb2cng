@@ -5,10 +5,10 @@ import (
 	"strings"
 )
 
-func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map[uint16]shapedGlyph, error) {
+func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage, map[pdfFontKey]map[uint16]shapedGlyph, error) {
 	const margin = 24.0
 	contentWidth := max(doc.PageWidth-margin*2, 12)
-	used := make(map[uint16]shapedGlyph)
+	used := make(map[pdfFontKey]map[uint16]shapedGlyph)
 	pages := make([]pdfPage, 0, 2)
 
 	addPage := func() *pdfPage {
@@ -16,9 +16,17 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 		return &pages[len(pages)-1]
 	}
 	addLine := func(page *pdfPage, line pdfPageLine) {
+		if line.FontKey.Family == "" {
+			line.FontKey = pdfFontKey{Family: "serif"}
+		}
 		page.Lines = append(page.Lines, line)
+		fontUsed := used[line.FontKey]
+		if fontUsed == nil {
+			fontUsed = make(map[uint16]shapedGlyph)
+			used[line.FontKey] = fontUsed
+		}
 		for id, glyph := range line.Text.Used {
-			used[id] = glyph
+			fontUsed[id] = glyph
 		}
 	}
 	addAnchor := func(page *pdfPage, id string) {
@@ -57,7 +65,8 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 	if authorText == "" {
 		authorText = "fbc"
 	}
-	title, err := shapeText(face, titleText)
+	titleKey := pdfFontKey{Family: "sans-serif"}
+	title, err := shapeText(titleFace, titleText)
 	if err != nil {
 		return nil, nil, fmt.Errorf("shape title: %w", err)
 	}
@@ -65,9 +74,10 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 		X:        margin,
 		Y:        max(doc.PageHeight-54.0, margin),
 		FontSize: 14,
+		FontKey:  titleKey,
 		Text:     title,
 	})
-	authorLines, err := wrapText(face, authorText, 9, contentWidth)
+	authorLines, err := wrapText(titleFace, authorText, 9, contentWidth)
 	if err != nil {
 		return nil, nil, fmt.Errorf("shape author: %w", err)
 	}
@@ -81,6 +91,7 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 			X:        margin,
 			Y:        y,
 			FontSize: 9,
+			FontKey:  titleKey,
 			Text:     line,
 		})
 	}
@@ -172,6 +183,10 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 		if text == "" {
 			continue
 		}
+		face, fontKey, err := builtinFontForStyle(style.Paragraph)
+		if err != nil {
+			return nil, nil, err
+		}
 		lines, err := layoutParagraph(face, text, style.Paragraph, blockWidth)
 		if err != nil {
 			return nil, nil, err
@@ -185,7 +200,7 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 			newTextPage()
 		}
 		if style.KeepWithNextLines > 0 && pageHasText {
-			keepWithNext, err := nextBlockKeepHeight(face, doc.Blocks[blockIndex+1:], doc.Hyphenator, styles, contentWidth, style.KeepWithNextLines)
+			keepWithNext, err := nextBlockKeepHeight(doc.Blocks[blockIndex+1:], doc.Hyphenator, styles, contentWidth, style.KeepWithNextLines)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -232,6 +247,7 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 				X:                x,
 				Y:                y,
 				FontSize:         style.Paragraph.FontSize,
+				FontKey:          fontKey,
 				Text:             line.Text,
 				ExtraWordSpacing: line.ExtraWordSpacing,
 			})
@@ -250,7 +266,7 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 	return pages, used, nil
 }
 
-func nextBlockKeepHeight(face *builtinFontFace, blocks []pdfTextBlock, hyphenator paragraphHyphenator, styles *pdfStyleResolver, contentWidth float64, minLines int) (float64, error) {
+func nextBlockKeepHeight(blocks []pdfTextBlock, hyphenator paragraphHyphenator, styles *pdfStyleResolver, contentWidth float64, minLines int) (float64, error) {
 	if styles == nil {
 		styles = newPDFStyleResolver(nil, nil)
 	}
@@ -270,6 +286,10 @@ func nextBlockKeepHeight(face *builtinFontFace, blocks []pdfTextBlock, hyphenato
 			continue
 		}
 		style.Paragraph.Hyphenator = hyphenator
+		face, _, err := builtinFontForStyle(style.Paragraph)
+		if err != nil {
+			return 0, err
+		}
 		lines, err := layoutParagraph(face, text, style.Paragraph, blockContentWidth(contentWidth, style))
 		if err != nil {
 			return 0, err

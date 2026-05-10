@@ -70,6 +70,39 @@ func TestShapeTextAndFontResourceObjects(t *testing.T) {
 	}
 }
 
+func TestPreparePDFFontResources(t *testing.T) {
+	sans, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont(sans-serif) error = %v", err)
+	}
+	serifBold, err := builtinFont("serif", true, false)
+	if err != nil {
+		t.Fatalf("builtinFont(serif bold) error = %v", err)
+	}
+	sansText, err := shapeText(sans, "Sans")
+	if err != nil {
+		t.Fatalf("shapeText(sans) error = %v", err)
+	}
+	serifText, err := shapeText(serifBold, "Serif")
+	if err != nil {
+		t.Fatalf("shapeText(serif) error = %v", err)
+	}
+	nextObjectID := 20
+	resources, err := preparePDFFontResources(map[pdfFontKey]map[uint16]shapedGlyph{
+		{Family: "serif", Bold: true}: serifText.Used,
+		{Family: "sans-serif"}:        sansText.Used,
+	}, &nextObjectID)
+	if err != nil {
+		t.Fatalf("preparePDFFontResources() error = %v", err)
+	}
+	if len(resources) != 2 {
+		t.Fatalf("font resources = %d, want 2", len(resources))
+	}
+	if resources[0].Name != "F1" || resources[1].Name != "F2" || nextObjectID != 30 {
+		t.Fatalf("resources = %#v nextObjectID=%d, want F1/F2 and next id 30", resources, nextObjectID)
+	}
+}
+
 func TestWrapText(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {

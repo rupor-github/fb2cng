@@ -85,6 +85,9 @@ type pdfStyleResolver struct {
 
 type pdfDebugResolvedStyle struct {
 	Name              string  `json:"name"`
+	FontFamily        string  `json:"font_family,omitempty"`
+	FontWeight        string  `json:"font_weight,omitempty"`
+	FontStyle         string  `json:"font_style,omitempty"`
 	FontSize          float64 `json:"font_size"`
 	LineHeight        float64 `json:"line_height"`
 	FirstLineIndent   float64 `json:"first_line_indent,omitempty"`
@@ -148,7 +151,7 @@ func newPDFStyleResolver(book *fb2.FictionBook, log *zap.Logger, tracers ...*pdf
 func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 	styles := map[string]pdfBlockResolvedStyle{
 		pdfStyleParagraph: {
-			Paragraph:  paragraphStyle{FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, FirstLineIndent: pdfBodyIndent, Align: textAlignJustify, Hyphenation: paragraphHyphenationAuto},
+			Paragraph:  paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, FirstLineIndent: pdfBodyIndent, Align: textAlignJustify, Hyphenation: paragraphHyphenationAuto},
 			SpaceAfter: pdfParagraphSpaceAfter,
 			Orphans:    pdfDefaultKeepLines,
 			Widows:     pdfDefaultKeepLines,
@@ -156,32 +159,32 @@ func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 		pdfStyleChapterTitleHeader: headingPDFStyle(1),
 		pdfStyleSectionTitleHeader: headingPDFStyle(2),
 		pdfStyleSubtitle: {
-			Paragraph:         paragraphStyle{FontSize: pdfSubtitleFontSize, LineHeight: pdfSubtitleLineHeight, Align: textAlignCenter, Hyphenation: paragraphHyphenationAuto},
+			Paragraph:         paragraphStyle{FontFamily: "serif", Bold: true, FontSize: pdfSubtitleFontSize, LineHeight: pdfSubtitleLineHeight, Align: textAlignCenter, Hyphenation: paragraphHyphenationAuto},
 			SpaceBefore:       pdfSubtitleSpaceBefore,
 			SpaceAfter:        pdfSubtitleSpaceAfter,
 			KeepTogether:      true,
 			KeepWithNextLines: pdfSingleKeepLine,
 		},
 		pdfStyleVerse: {
-			Paragraph:  paragraphStyle{FontSize: pdfBaseFontSize, LineHeight: pdfVerseLineHeight, Align: textAlignLeft, Hyphenation: paragraphHyphenationAuto},
+			Paragraph:  paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfVerseLineHeight, Align: textAlignLeft, Hyphenation: paragraphHyphenationAuto},
 			SpaceAfter: pdfVerseSpaceAfter,
 			Orphans:    pdfDefaultKeepLines,
 			Widows:     pdfDefaultKeepLines,
 		},
 		pdfStyleTextAuthor: {
-			Paragraph:  paragraphStyle{FontSize: pdfTextAuthorFontSize, LineHeight: pdfTextAuthorLineHeight, Align: textAlignRight, Hyphenation: paragraphHyphenationAuto},
+			Paragraph:  paragraphStyle{FontFamily: "serif", FontSize: pdfTextAuthorFontSize, LineHeight: pdfTextAuthorLineHeight, Align: textAlignRight, Hyphenation: paragraphHyphenationAuto},
 			SpaceAfter: pdfTextAuthorSpaceAfter,
 			Orphans:    pdfDefaultKeepLines,
 			Widows:     pdfDefaultKeepLines,
 		},
 		pdfStyleImage: {
-			Paragraph:    paragraphStyle{FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, Hyphenation: paragraphHyphenationAuto},
+			Paragraph:    paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, Hyphenation: paragraphHyphenationAuto},
 			SpaceBefore:  pdfImageSpace,
 			SpaceAfter:   pdfImageSpace,
 			KeepTogether: true,
 		},
 		pdfStyleTOCItem: {
-			Paragraph:  paragraphStyle{FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, Align: textAlignLeft, Hyphenation: paragraphHyphenationAuto},
+			Paragraph:  paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, Align: textAlignLeft, Hyphenation: paragraphHyphenationAuto},
 			SpaceAfter: pdfTOCSpaceAfter,
 			Orphans:    pdfSingleKeepLine,
 			Widows:     pdfSingleKeepLine,
@@ -189,7 +192,7 @@ func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 		pdfStyleTOCTitle:        headingPDFStyle(1),
 		pdfStyleAnnotationTitle: headingPDFStyle(1),
 		pdfStyleEmptyLine: {
-			Paragraph: paragraphStyle{FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, Hyphenation: paragraphHyphenationAuto},
+			Paragraph: paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, Hyphenation: paragraphHyphenationAuto},
 		},
 	}
 	return styles
@@ -212,7 +215,7 @@ func (r *pdfStyleResolver) traceDefaults() {
 func headingPDFStyle(depth int) pdfBlockResolvedStyle {
 	fontSize := max(pdfHeadingBaseFontSize-float64(depth-1), pdfHeadingMinFontSize)
 	return pdfBlockResolvedStyle{
-		Paragraph:         paragraphStyle{FontSize: fontSize, LineHeight: fontSize * pdfHeadingLineHeightFactor, Align: textAlignCenter, Hyphenation: paragraphHyphenationAuto},
+		Paragraph:         paragraphStyle{FontFamily: "serif", Bold: true, FontSize: fontSize, LineHeight: fontSize * pdfHeadingLineHeightFactor, Align: textAlignCenter, Hyphenation: paragraphHyphenationAuto},
 		SpaceBefore:       pdfHeadingSpaceBefore,
 		SpaceAfter:        pdfHeadingSpaceAfter,
 		KeepTogether:      true,
@@ -241,6 +244,15 @@ func (r *pdfStyleResolver) styleForBlock(block pdfTextBlock) pdfBlockResolvedSty
 }
 
 func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfBlockResolvedStyle {
+	if override.Paragraph.FontFamily != fallback.Paragraph.FontFamily {
+		base.Paragraph.FontFamily = override.Paragraph.FontFamily
+	}
+	if override.Paragraph.Bold != fallback.Paragraph.Bold {
+		base.Paragraph.Bold = override.Paragraph.Bold
+	}
+	if override.Paragraph.Italic != fallback.Paragraph.Italic {
+		base.Paragraph.Italic = override.Paragraph.Italic
+	}
 	if override.Paragraph.FontSize != fallback.Paragraph.FontSize {
 		base.Paragraph.FontSize = override.Paragraph.FontSize
 	}
@@ -404,6 +416,21 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 	if style == nil {
 		return
 	}
+	if value, ok := props["font-family"]; ok {
+		if family, ok := pdfCSSFontFamily(value); ok {
+			style.Paragraph.FontFamily = family
+		}
+	}
+	if value, ok := props["font-weight"]; ok {
+		if bold, ok := pdfCSSFontWeightBold(value); ok {
+			style.Paragraph.Bold = bold
+		}
+	}
+	if value, ok := props["font-style"]; ok {
+		if italic, ok := pdfCSSFontStyleItalic(value); ok {
+			style.Paragraph.Italic = italic
+		}
+	}
 	if value, ok := props["font-size"]; ok {
 		if points, ok := pdfCSSFontSizePoints(value, style.Paragraph.FontSize); ok {
 			ratio := points / style.Paragraph.FontSize
@@ -419,7 +446,7 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 	names := make([]string, 0, len(props))
 	for name := range props {
 		lower := strings.ToLower(name)
-		if lower != "font-size" && lower != "line-height" {
+		if lower != "font-family" && lower != "font-weight" && lower != "font-style" && lower != "font-size" && lower != "line-height" {
 			names = append(names, name)
 		}
 	}
@@ -519,6 +546,47 @@ func applyPDFMarginShorthand(style *pdfBlockResolvedStyle, value css.Value) {
 	style.SpaceAfter = bottom
 	style.MarginLeft = left
 	style.MarginRight = right
+}
+
+func pdfCSSFontFamily(value css.Value) (string, bool) {
+	raw := strings.TrimSpace(formatCSSValue(value))
+	if raw == "" {
+		return "", false
+	}
+	first, _, _ := strings.Cut(raw, ",")
+	first = strings.TrimSpace(first)
+	first = strings.Trim(first, `"'`)
+	if first == "" {
+		return "", false
+	}
+	return first, true
+}
+
+func pdfCSSFontWeightBold(value css.Value) (bool, bool) {
+	keyword := cssKeyword(value)
+	switch keyword {
+	case "normal", "regular":
+		return false, true
+	case "bold", "bolder":
+		return true, true
+	case "lighter":
+		return false, true
+	}
+	if value.IsNumeric() {
+		return value.Value >= 600, true
+	}
+	return false, false
+}
+
+func pdfCSSFontStyleItalic(value css.Value) (bool, bool) {
+	switch cssKeyword(value) {
+	case "normal":
+		return false, true
+	case "italic", "oblique":
+		return true, true
+	default:
+		return false, false
+	}
 }
 
 func pdfCSSFontSizePoints(value css.Value, current float64) (float64, bool) {
@@ -630,6 +698,20 @@ func pdfHyphenationString(mode paragraphHyphenation) string {
 	}
 }
 
+func pdfCSSFontWeightString(bold bool) string {
+	if bold {
+		return "bold"
+	}
+	return "normal"
+}
+
+func pdfCSSFontStyleString(italic bool) string {
+	if italic {
+		return "italic"
+	}
+	return "normal"
+}
+
 func parsePDFCSSValueToken(token string) css.Value {
 	token = strings.TrimSpace(token)
 	if token == "" {
@@ -685,6 +767,9 @@ func (r *pdfStyleResolver) debugStyles() []pdfDebugResolvedStyle {
 		style := r.styles[name]
 		out = append(out, pdfDebugResolvedStyle{
 			Name:              name,
+			FontFamily:        normalizedPDFFontFamily(style.Paragraph.FontFamily),
+			FontWeight:        pdfCSSFontWeightString(style.Paragraph.Bold),
+			FontStyle:         pdfCSSFontStyleString(style.Paragraph.Italic),
 			FontSize:          style.Paragraph.FontSize,
 			LineHeight:        style.Paragraph.LineHeight,
 			FirstLineIndent:   style.Paragraph.FirstLineIndent,

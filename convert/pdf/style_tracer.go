@@ -187,7 +187,10 @@ func pdfTraceFormatCSSProperties(props map[string]css.Value) string {
 }
 
 func pdfTraceFormatResolvedStyle(style pdfBlockResolvedStyle) string {
-	return fmt.Sprintf("font-size=%gpt, line-height=%gpt, text-indent=%gpt, align=%s, hyphens=%s, margins=%g/%g/%g/%g, keep-together=%t, keep-next=%d, page-break-before=%t, page-break-after=%t, hidden=%t, orphans=%d, widows=%d",
+	return fmt.Sprintf("font-family=%s, font-weight=%s, font-style=%s, font-size=%gpt, line-height=%gpt, text-indent=%gpt, align=%s, hyphens=%s, margins=%g/%g/%g/%g, keep-together=%t, keep-next=%d, page-break-before=%t, page-break-after=%t, hidden=%t, orphans=%d, widows=%d",
+		normalizedPDFFontFamily(style.Paragraph.FontFamily),
+		pdfCSSFontWeightString(style.Paragraph.Bold),
+		pdfCSSFontStyleString(style.Paragraph.Italic),
 		style.Paragraph.FontSize,
 		style.Paragraph.LineHeight,
 		style.Paragraph.FirstLineIndent,
@@ -222,6 +225,15 @@ func pdfTraceStyleDiff(before, after pdfBlockResolvedStyle) string {
 		if old != new {
 			changes = append(changes, fmt.Sprintf("%s: %t -> %t", name, old, new))
 		}
+	}
+	if before.Paragraph.FontFamily != after.Paragraph.FontFamily {
+		changes = append(changes, fmt.Sprintf("font-family: %s -> %s", normalizedPDFFontFamily(before.Paragraph.FontFamily), normalizedPDFFontFamily(after.Paragraph.FontFamily)))
+	}
+	if before.Paragraph.Bold != after.Paragraph.Bold {
+		changes = append(changes, fmt.Sprintf("font-weight: %s -> %s", pdfCSSFontWeightString(before.Paragraph.Bold), pdfCSSFontWeightString(after.Paragraph.Bold)))
+	}
+	if before.Paragraph.Italic != after.Paragraph.Italic {
+		changes = append(changes, fmt.Sprintf("font-style: %s -> %s", pdfCSSFontStyleString(before.Paragraph.Italic), pdfCSSFontStyleString(after.Paragraph.Italic)))
 	}
 	if before.Paragraph.Align != after.Paragraph.Align {
 		changes = append(changes, fmt.Sprintf("text-align: %s -> %s", before.Paragraph.Align, after.Paragraph.Align))

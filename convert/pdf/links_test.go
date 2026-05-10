@@ -102,7 +102,7 @@ func TestGenerateAnnotationPage(t *testing.T) {
 	for _, want := range []string{
 		"/Outlines",
 		"/Names [<616E6E6F746174696F6E2D70616765>",
-		"/Dest [11 0 R /Fit]",
+		"/Fit]",
 	} {
 		if !strings.Contains(pdfText, want) {
 			t.Fatalf("generated PDF does not contain %q", want)

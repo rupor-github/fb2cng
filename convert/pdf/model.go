@@ -91,6 +91,8 @@ type pdfPageLine struct {
 	X                float64
 	Y                float64
 	FontSize         float64
+	FontKey          pdfFontKey
+	FontName         string
 	Text             shapedText
 	ExtraWordSpacing float64
 }

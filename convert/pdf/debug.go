@@ -72,6 +72,10 @@ type pdfDebugLine struct {
 	X                float64 `json:"x"`
 	Y                float64 `json:"y"`
 	FontSize         float64 `json:"font_size"`
+	FontResource     string  `json:"font_resource,omitempty"`
+	FontFamily       string  `json:"font_family,omitempty"`
+	FontWeight       string  `json:"font_weight,omitempty"`
+	FontStyle        string  `json:"font_style,omitempty"`
 	Width            float64 `json:"width"`
 	ExtraWordSpacing float64 `json:"extra_word_spacing,omitempty"`
 }
@@ -102,6 +106,10 @@ type pdfDebugRect struct {
 }
 
 type pdfDebugFont struct {
+	ResourceName   string   `json:"resource_name"`
+	Family         string   `json:"family"`
+	Bold           bool     `json:"bold,omitempty"`
+	Italic         bool     `json:"italic,omitempty"`
 	PostScriptName string   `json:"post_script_name"`
 	UnitsPerEm     int      `json:"units_per_em"`
 	Ascent         int      `json:"ascent"`
@@ -114,7 +122,7 @@ type pdfDebugFont struct {
 	UsedGlyphIDs   []uint16 `json:"used_glyph_ids"`
 }
 
-func writePDFDebugDumps(doc skeletonDocument, pages []pdfPage, face *builtinFontFace, usedGlyphs map[uint16]shapedGlyph) error {
+func writePDFDebugDumps(doc skeletonDocument, pages []pdfPage, fontResources []pdfFontResource) error {
 	if !doc.Debug || doc.WorkDir == "" {
 		return nil
 	}
@@ -159,7 +167,7 @@ func writePDFDebugDumps(doc skeletonDocument, pages []pdfPage, face *builtinFont
 	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-links.json"), debugLinks); err != nil {
 		return err
 	}
-	return writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-fonts.json"), pdfDebugFonts(face, usedGlyphs))
+	return writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-fonts.json"), pdfDebugFonts(fontResources))
 }
 
 func pdfDebugPages(pages []pdfPage) ([]pdfDebugPage, []pdfDebugImage, []pdfDebugLink) {
@@ -182,6 +190,10 @@ func pdfDebugPages(pages []pdfPage) ([]pdfDebugPage, []pdfDebugImage, []pdfDebug
 				X:                line.X,
 				Y:                line.Y,
 				FontSize:         line.FontSize,
+				FontResource:     line.FontName,
+				FontFamily:       line.FontKey.Family,
+				FontWeight:       pdfCSSFontWeightString(line.FontKey.Bold),
+				FontStyle:        pdfCSSFontStyleString(line.FontKey.Italic),
 				Width:            shapedWidthPoints(line.Text, line.FontSize),
 				ExtraWordSpacing: line.ExtraWordSpacing,
 			})
@@ -220,27 +232,35 @@ func pdfDebugPages(pages []pdfPage) ([]pdfDebugPage, []pdfDebugImage, []pdfDebug
 	return debugPages, debugImages, debugLinks
 }
 
-func pdfDebugFonts(face *builtinFontFace, usedGlyphs map[uint16]shapedGlyph) []pdfDebugFont {
-	if face == nil {
-		return nil
+func pdfDebugFonts(resources []pdfFontResource) []pdfDebugFont {
+	out := make([]pdfDebugFont, 0, len(resources))
+	for _, resource := range resources {
+		if resource.Face == nil {
+			continue
+		}
+		usedGlyphIDs := make([]uint16, 0, len(resource.Used))
+		for glyphID := range resource.Used {
+			usedGlyphIDs = append(usedGlyphIDs, glyphID)
+		}
+		slices.Sort(usedGlyphIDs)
+		out = append(out, pdfDebugFont{
+			ResourceName:   resource.Name,
+			Family:         resource.Key.Family,
+			Bold:           resource.Key.Bold,
+			Italic:         resource.Key.Italic,
+			PostScriptName: resource.Face.PostScriptName,
+			UnitsPerEm:     resource.Face.UnitsPerEm,
+			Ascent:         resource.Face.Ascent,
+			Descent:        resource.Face.Descent,
+			CapHeight:      resource.Face.CapHeight,
+			BBox:           resource.Face.BBox,
+			Flags:          resource.Face.Flags,
+			ItalicAngle:    resource.Face.ItalicAngle,
+			UsedGlyphCount: len(usedGlyphIDs),
+			UsedGlyphIDs:   usedGlyphIDs,
+		})
 	}
-	usedGlyphIDs := make([]uint16, 0, len(usedGlyphs))
-	for glyphID := range usedGlyphs {
-		usedGlyphIDs = append(usedGlyphIDs, glyphID)
-	}
-	slices.Sort(usedGlyphIDs)
-	return []pdfDebugFont{{
-		PostScriptName: face.PostScriptName,
-		UnitsPerEm:     face.UnitsPerEm,
-		Ascent:         face.Ascent,
-		Descent:        face.Descent,
-		CapHeight:      face.CapHeight,
-		BBox:           face.BBox,
-		Flags:          face.Flags,
-		ItalicAngle:    face.ItalicAngle,
-		UsedGlyphCount: len(usedGlyphIDs),
-		UsedGlyphIDs:   usedGlyphIDs,
-	}}
+	return out
 }
 
 func writeJSONDebugDump(path string, v any) error {

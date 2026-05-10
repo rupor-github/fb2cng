@@ -30,16 +30,11 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 	writer := docwriter.NewWriter(pdfVersion)
 
 	const (
-		catalogID        = 1
-		pagesID          = 2
-		firstPageID      = 3
-		firstContentID   = 4
-		infoID           = 5
-		type0FontID      = 6
-		cidFontID        = 7
-		fontDescriptorID = 8
-		fontFileID       = 9
-		toUnicodeID      = 10
+		catalogID      = 1
+		pagesID        = 2
+		firstPageID    = 3
+		firstContentID = 4
+		infoID         = 5
 	)
 
 	fontFace, err := builtinFont("sans-serif", false, false)
@@ -56,7 +51,7 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 
 	pages[0].ObjectID = firstPageID
 	pages[0].ContentID = firstContentID
-	nextObjectID := toUnicodeID + 1
+	nextObjectID := infoID + 1
 	for i := 1; i < len(pages); i++ {
 		pages[i].ObjectID = nextObjectID
 		nextObjectID++
@@ -70,18 +65,12 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 	assignPDFImageResourceNames(pages, imageResources)
 	outlines := buildOutlines(doc.TOC, pages, &nextObjectID)
 	assignAnnotationObjectIDs(pages, &nextObjectID)
-	if err := writePDFDebugDumps(doc, pages, fontFace, usedGlyphs); err != nil {
+	fontResources, err := preparePDFFontResources(usedGlyphs, &nextObjectID)
+	if err != nil {
 		return nil, err
 	}
-
-	fontObjs, err := fontResourceObjects(fontFace, usedGlyphs, fontObjectIDs{
-		Type0Font:      type0FontID,
-		CIDFont:        cidFontID,
-		FontDescriptor: fontDescriptorID,
-		FontFile:       fontFileID,
-		ToUnicode:      toUnicodeID,
-	})
-	if err != nil {
+	assignPDFFontResourceNames(pages, fontResources)
+	if err := writePDFDebugDumps(doc, pages, fontResources); err != nil {
 		return nil, err
 	}
 
@@ -111,9 +100,7 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 	}
 	for _, page := range pages {
 		resources := docwriter.Dict{
-			"Font": docwriter.Dict{
-				"F1": docwriter.Ref{ObjectNumber: type0FontID},
-			},
+			"Font": pageFontResources(fontResources),
 		}
 		if xobjects := pageImageXObjects(page, imageResources); xobjects != nil {
 			resources["XObject"] = xobjects
@@ -156,19 +143,7 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 	if err := writer.Object(infoID, infoDictionary(doc)); err != nil {
 		return nil, err
 	}
-	if err := writer.Object(type0FontID, fontObjs.Type0Font); err != nil {
-		return nil, err
-	}
-	if err := writer.Object(cidFontID, fontObjs.CIDFont); err != nil {
-		return nil, err
-	}
-	if err := writer.Object(fontDescriptorID, fontObjs.FontDescriptor); err != nil {
-		return nil, err
-	}
-	if err := writer.StreamObject(fontFileID, fontObjs.FontFile, fontObjs.FontFileData); err != nil {
-		return nil, err
-	}
-	if err := writer.StreamObject(toUnicodeID, docwriter.Dict{}, fontObjs.ToUnicode); err != nil {
+	if err := writePDFFontObjects(writer, fontResources); err != nil {
 		return nil, err
 	}
 	if err := writeOutlineObjects(writer, outlines); err != nil {

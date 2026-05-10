@@ -112,8 +112,13 @@ func TestGenerateDebugDumps(t *testing.T) {
 
 	var fonts []pdfDebugFont
 	readJSONDebugFile(t, filepath.Join(tmpDir, "pdf-fonts.json"), &fonts)
-	if len(fonts) != 1 || fonts[0].PostScriptName == "" || fonts[0].UsedGlyphCount == 0 {
-		t.Fatalf("debug fonts = %#v, want one used font", fonts)
+	if len(fonts) < 2 {
+		t.Fatalf("debug fonts = %#v, want multiple used fonts", fonts)
+	}
+	for _, font := range fonts {
+		if font.ResourceName == "" || font.PostScriptName == "" || font.UsedGlyphCount == 0 {
+			t.Fatalf("debug font = %#v, want resource name, PostScript name, and used glyphs", font)
+		}
 	}
 }
 

@@ -21,13 +21,15 @@ func pageContent(page pdfPage) []byte {
 			img.Name)
 	}
 	buf.WriteString("q\nBT\n")
+	currentFontName := ""
 	currentFontSize := -1.0
 	for _, line := range page.Lines {
-		if len(line.Text.Glyphs) == 0 {
+		if len(line.Text.Glyphs) == 0 || line.FontName == "" {
 			continue
 		}
-		if line.FontSize != currentFontSize {
-			fmt.Fprintf(&buf, "/F1 %s Tf\n", docwriter.FormatNumber(line.FontSize))
+		if line.FontName != currentFontName || line.FontSize != currentFontSize {
+			fmt.Fprintf(&buf, "/%s %s Tf\n", line.FontName, docwriter.FormatNumber(line.FontSize))
+			currentFontName = line.FontName
 			currentFontSize = line.FontSize
 		}
 		fmt.Fprintf(&buf, "1 0 0 1 %s %s Tm\n", docwriter.FormatNumber(line.X), docwriter.FormatNumber(line.Y))

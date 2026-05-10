@@ -145,14 +145,15 @@ func TestGenerateTextBodyAddsPaginatedBodyPage(t *testing.T) {
 	pdfText := string(data)
 	for _, want := range []string{
 		"/Count 2",
-		"/Kids [3 0 R 11 0 R]",
-		"/FontFile2 9 0 R",
-		"/ToUnicode 10 0 R",
-		"/Outlines 13 0 R",
+		"/Kids [3 0 R 6 0 R]",
+		"/FontFile2",
+		"/ToUnicode",
+		"/Outlines",
 		"/Type /Outlines",
-		"/Dest [11 0 R /Fit]",
-		"/Names [<636861707465722D31> [11 0 R /Fit]]",
-		"xref\n0 15",
+		"/Dest [6 0 R /Fit]",
+		"/Names [<636861707465722D31> [6 0 R /Fit]]",
+		"/BaseFont /Literata-Regular",
+		"/BaseFont /Literata-Bold",
 	} {
 		if !strings.Contains(pdfText, want) {
 			t.Errorf("generated PDF does not contain %q", want)

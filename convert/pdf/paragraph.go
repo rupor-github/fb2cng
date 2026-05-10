@@ -19,6 +19,9 @@ const (
 )
 
 type paragraphStyle struct {
+	FontFamily      string
+	Bold            bool
+	Italic          bool
 	FontSize        float64
 	LineHeight      float64
 	FirstLineIndent float64
