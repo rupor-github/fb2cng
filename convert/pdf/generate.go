@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"compress/zlib"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"go.uber.org/zap"
@@ -59,6 +61,8 @@ func Generate(ctx context.Context, c *content.Content, outputName string, cfg *c
 		Author:     bookAuthors(c),
 		Blocks:     blocks,
 		Hyphenator: pdfHyphenator(c, log),
+		Debug:      c.Debug,
+		WorkDir:    c.WorkDir,
 	})
 	if err != nil {
 		return fmt.Errorf("build pdf: %w", err)
@@ -85,9 +89,32 @@ type skeletonDocument struct {
 	Author     string
 	Blocks     []pdfTextBlock
 	Hyphenator paragraphHyphenator
+	Debug      bool
+	WorkDir    string
 }
 
 type pdfBlockKind int
+
+func (k pdfBlockKind) String() string {
+	switch k {
+	case pdfBlockParagraph:
+		return "paragraph"
+	case pdfBlockHeading:
+		return "heading"
+	case pdfBlockSubtitle:
+		return "subtitle"
+	case pdfBlockPoem:
+		return "poem"
+	case pdfBlockTextAuthor:
+		return "text-author"
+	case pdfBlockEmptyLine:
+		return "empty-line"
+	case pdfBlockPageBreak:
+		return "page-break"
+	default:
+		return "unknown"
+	}
+}
 
 const (
 	pdfBlockParagraph pdfBlockKind = iota
@@ -163,6 +190,9 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 	}
 	if len(pages) == 0 {
 		return nil, errors.New("pdf document must contain at least one page")
+	}
+	if err := writePDFDebugDumps(doc, pages); err != nil {
+		return nil, err
 	}
 
 	pages[0].ObjectID = firstPageID
@@ -496,6 +526,85 @@ func pdfStyleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
 			Widows:     2,
 		}
 	}
+}
+
+type pdfDebugBlock struct {
+	Index int    `json:"index"`
+	Kind  string `json:"kind"`
+	Depth int    `json:"depth,omitempty"`
+	Text  string `json:"text,omitempty"`
+}
+
+type pdfDebugPage struct {
+	Number int            `json:"number"`
+	Lines  []pdfDebugLine `json:"lines"`
+}
+
+type pdfDebugLine struct {
+	Text             string  `json:"text"`
+	X                float64 `json:"x"`
+	Y                float64 `json:"y"`
+	FontSize         float64 `json:"font_size"`
+	Width            float64 `json:"width"`
+	ExtraWordSpacing float64 `json:"extra_word_spacing,omitempty"`
+}
+
+func writePDFDebugDumps(doc skeletonDocument, pages []pdfPage) error {
+	if !doc.Debug || doc.WorkDir == "" {
+		return nil
+	}
+	blocks := make([]pdfDebugBlock, 0, len(doc.Blocks))
+	for i, block := range doc.Blocks {
+		blocks = append(blocks, pdfDebugBlock{
+			Index: i,
+			Kind:  block.Kind.String(),
+			Depth: block.Depth,
+			Text:  block.Text,
+		})
+	}
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-text-blocks.json"), blocks); err != nil {
+		return err
+	}
+
+	debugPages := make([]pdfDebugPage, 0, len(pages))
+	for i, page := range pages {
+		debugPage := pdfDebugPage{
+			Number: i + 1,
+			Lines:  make([]pdfDebugLine, 0, len(page.Lines)),
+		}
+		for _, line := range page.Lines {
+			debugPage.Lines = append(debugPage.Lines, pdfDebugLine{
+				Text:             shapedRunes(line.Text),
+				X:                line.X,
+				Y:                line.Y,
+				FontSize:         line.FontSize,
+				Width:            shapedWidthPoints(line.Text, line.FontSize),
+				ExtraWordSpacing: line.ExtraWordSpacing,
+			})
+		}
+		debugPages = append(debugPages, debugPage)
+	}
+	return writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-layout-pages.json"), debugPages)
+}
+
+func writeJSONDebugDump(path string, v any) error {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal %s: %w", filepath.Base(path), err)
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("write %s: %w", filepath.Base(path), err)
+	}
+	return nil
+}
+
+func shapedRunes(text shapedText) string {
+	runes := make([]rune, 0, len(text.Glyphs))
+	for _, glyph := range text.Glyphs {
+		runes = append(runes, glyph.Rune)
+	}
+	return string(runes)
 }
 
 func nextBlockKeepHeight(face *builtinFontFace, blocks []pdfTextBlock, hyphenator paragraphHyphenator, contentWidth float64, minLines int) (float64, error) {

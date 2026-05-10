@@ -3,6 +3,7 @@ package pdf
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -286,6 +287,63 @@ func pageText(page pdfPage) string {
 		parts = append(parts, shapedRunes(line.Text))
 	}
 	return strings.Join(parts, "\n")
+}
+
+func TestGenerateDebugDumps(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputName := filepath.Join(tmpDir, "book.pdf")
+	cfg := &config.DocumentConfig{
+		Images: config.ImagesConfig{
+			Screen: config.ScreenConfig{Width: 1264, Height: 1680, DPI: 300},
+		},
+	}
+	c := &content.Content{
+		SrcName: "book.fb2",
+		Debug:   true,
+		WorkDir: tmpDir,
+		Book: &fb2.FictionBook{
+			Description: fb2.Description{
+				TitleInfo: fb2.TitleInfo{BookTitle: fb2.TextField{Value: "Debug Book"}},
+			},
+			Bodies: []fb2.Body{{
+				Kind: fb2.BodyMain,
+				Sections: []fb2.Section{{
+					Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter"}}}}}},
+					Content: []fb2.FlowItem{{
+						Kind:      fb2.FlowParagraph,
+						Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Debug body text."}}},
+					}},
+				}},
+			}},
+		},
+	}
+
+	if err := Generate(context.Background(), c, outputName, cfg, zaptest.NewLogger(t)); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	blockData, err := os.ReadFile(filepath.Join(tmpDir, "pdf-text-blocks.json"))
+	if err != nil {
+		t.Fatalf("read pdf-text-blocks.json: %v", err)
+	}
+	if !bytes.Contains(blockData, []byte(`"Chapter"`)) || !bytes.Contains(blockData, []byte(`"page-break"`)) {
+		t.Fatalf("pdf-text-blocks.json missing expected content: %s", blockData)
+	}
+
+	pageData, err := os.ReadFile(filepath.Join(tmpDir, "pdf-layout-pages.json"))
+	if err != nil {
+		t.Fatalf("read pdf-layout-pages.json: %v", err)
+	}
+	var pages []pdfDebugPage
+	if err := json.Unmarshal(pageData, &pages); err != nil {
+		t.Fatalf("unmarshal pdf-layout-pages.json: %v", err)
+	}
+	if len(pages) < 2 {
+		t.Fatalf("debug pages = %d, want at least 2", len(pages))
+	}
+	if got := pages[0].Lines[0].Text; got != "Debug Book" {
+		t.Fatalf("first debug line = %q, want Debug Book", got)
+	}
 }
 
 func TestGenerateTextBodyAddsPaginatedBodyPage(t *testing.T) {

@@ -107,14 +107,6 @@ func TestLayoutParagraphDropsUnbrokenSoftHyphen(t *testing.T) {
 	}
 }
 
-func shapedRunes(text shapedText) string {
-	runes := make([]rune, 0, len(text.Glyphs))
-	for _, glyph := range text.Glyphs {
-		runes = append(runes, glyph.Rune)
-	}
-	return string(runes)
-}
-
 func TestBreakableWordsKeepsNoBreakSpaceInsideWord(t *testing.T) {
 	got := breakableWords("one  two\u00a0three\tfour")
 	want := []string{"one", "two\u00a0three", "four"}
