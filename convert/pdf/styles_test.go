@@ -18,6 +18,7 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 				font-style: italic;
 				color: #336699;
 				text-decoration: underline line-through;
+				vertical-align: super;
 				font-size: 12pt;
 				line-height: 1.5;
 				letter-spacing: 0.2em;
@@ -56,6 +57,9 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 	}
 	if !paragraph.Paragraph.Underline || !paragraph.Paragraph.Strikethrough {
 		t.Fatalf("paragraph decorations = underline:%t strikethrough:%t, want both true", paragraph.Paragraph.Underline, paragraph.Paragraph.Strikethrough)
+	}
+	if paragraph.Paragraph.VerticalAlign != textVerticalAlignSuper {
+		t.Fatalf("paragraph vertical align = %s, want super", paragraph.Paragraph.VerticalAlign)
 	}
 	if paragraph.Paragraph.FontSize != 12 {
 		t.Fatalf("paragraph font size = %v, want 12", paragraph.Paragraph.FontSize)

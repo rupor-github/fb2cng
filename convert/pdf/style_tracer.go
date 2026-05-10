@@ -187,7 +187,7 @@ func pdfTraceFormatCSSProperties(props map[string]css.Value) string {
 }
 
 func pdfTraceFormatResolvedStyle(style pdfBlockResolvedStyle) string {
-	return fmt.Sprintf("font-family=%s, font-weight=%s, font-style=%s, color=%s, background=%s, border=%gpt %s, underline=%t, strikethrough=%t, font-size=%gpt, line-height=%gpt, letter-spacing=%gpt, text-indent=%gpt, align=%s, hyphens=%s, margins=%g/%g/%g/%g, padding=%g/%g/%g/%g, width=%s, min-width=%s, max-width=%s, keep-together=%t, keep-next=%d, page-break-before=%t, page-break-after=%t, hidden=%t, orphans=%d, widows=%d",
+	return fmt.Sprintf("font-family=%s, font-weight=%s, font-style=%s, color=%s, background=%s, border=%gpt %s, underline=%t, strikethrough=%t, font-size=%gpt, line-height=%gpt, letter-spacing=%gpt, text-indent=%gpt, align=%s, vertical-align=%s, hyphens=%s, margins=%g/%g/%g/%g, padding=%g/%g/%g/%g, width=%s, min-width=%s, max-width=%s, keep-together=%t, keep-next=%d, page-break-before=%t, page-break-after=%t, hidden=%t, orphans=%d, widows=%d",
 		normalizedPDFFontFamily(style.Paragraph.FontFamily),
 		pdfCSSFontWeightString(style.Paragraph.Bold),
 		pdfCSSFontStyleString(style.Paragraph.Italic),
@@ -202,6 +202,7 @@ func pdfTraceFormatResolvedStyle(style pdfBlockResolvedStyle) string {
 		style.Paragraph.LetterSpacing,
 		style.Paragraph.FirstLineIndent,
 		style.Paragraph.Align.String(),
+		style.Paragraph.VerticalAlign.String(),
 		pdfHyphenationString(style.Paragraph.Hyphenation),
 		style.SpaceBefore,
 		style.MarginRight,
@@ -272,6 +273,9 @@ func pdfTraceStyleDiff(before, after pdfBlockResolvedStyle) string {
 	}
 	if before.Paragraph.Align != after.Paragraph.Align {
 		changes = append(changes, fmt.Sprintf("text-align: %s -> %s", before.Paragraph.Align, after.Paragraph.Align))
+	}
+	if before.Paragraph.VerticalAlign != after.Paragraph.VerticalAlign {
+		changes = append(changes, fmt.Sprintf("vertical-align: %s -> %s", before.Paragraph.VerticalAlign, after.Paragraph.VerticalAlign))
 	}
 	if before.Paragraph.Color != after.Paragraph.Color {
 		changes = append(changes, fmt.Sprintf("color: %s -> %s", before.Paragraph.Color, after.Paragraph.Color))

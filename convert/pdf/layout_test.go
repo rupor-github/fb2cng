@@ -246,6 +246,7 @@ func TestLayoutPDFPagesAppliesInlineNamedStyleClasses(t *testing.T) {
 	accent.Paragraph.Italic = true
 	accent.Paragraph.Color = pdfColor{R: 1}
 	accent.Paragraph.Underline = true
+	accent.Paragraph.VerticalAlign = textVerticalAlignSuper
 	resolver.styles["accent"] = accent
 
 	pages, _, err := layoutPDFPages(skeletonDocument{
@@ -280,7 +281,7 @@ func TestLayoutPDFPagesAppliesInlineNamedStyleClasses(t *testing.T) {
 	if styled == nil {
 		t.Fatalf("styled fragment missing: %#v", pages[1].Lines[0].Fragments)
 	}
-	if styled.FontKey.Family != "sans-serif" || !styled.FontKey.Bold || !styled.FontKey.Italic || !styled.Underline || styled.Color.String() != "#ff0000" {
+	if styled.FontKey.Family != "sans-serif" || !styled.FontKey.Bold || !styled.FontKey.Italic || !styled.Underline || styled.Color.String() != "#ff0000" || styled.BaselineShift <= 0 || styled.FontSize >= pages[1].Lines[0].FontSize {
 		t.Fatalf("styled fragment = %#v, want accent class styling", *styled)
 	}
 }

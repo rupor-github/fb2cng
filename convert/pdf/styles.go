@@ -113,6 +113,7 @@ type pdfDebugResolvedStyle struct {
 	LetterSpacing     float64 `json:"letter_spacing,omitempty"`
 	FirstLineIndent   float64 `json:"first_line_indent,omitempty"`
 	TextAlign         string  `json:"text_align"`
+	VerticalAlign     string  `json:"vertical_align,omitempty"`
 	Color             string  `json:"color,omitempty"`
 	Underline         bool    `json:"underline,omitempty"`
 	Strikethrough     bool    `json:"strikethrough,omitempty"`
@@ -150,6 +151,19 @@ func (a textAlign) String() string {
 		return "right"
 	case textAlignJustify:
 		return "justify"
+	default:
+		return "unknown"
+	}
+}
+
+func (a textVerticalAlign) String() string {
+	switch a {
+	case textVerticalAlignBaseline:
+		return "baseline"
+	case textVerticalAlignSub:
+		return "sub"
+	case textVerticalAlignSuper:
+		return "super"
 	default:
 		return "unknown"
 	}
@@ -301,6 +315,9 @@ func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfB
 	}
 	if override.Paragraph.Align != fallback.Paragraph.Align {
 		base.Paragraph.Align = override.Paragraph.Align
+	}
+	if override.Paragraph.VerticalAlign != fallback.Paragraph.VerticalAlign {
+		base.Paragraph.VerticalAlign = override.Paragraph.VerticalAlign
 	}
 	if override.Paragraph.Color != fallback.Paragraph.Color {
 		base.Paragraph.Color = override.Paragraph.Color
@@ -587,10 +604,15 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 			style.Paragraph.LetterSpacing = points
 		}
 	}
+	if value, ok := props["vertical-align"]; ok {
+		if align, ok := pdfCSSVerticalAlign(value); ok {
+			style.Paragraph.VerticalAlign = align
+		}
+	}
 	names := make([]string, 0, len(props))
 	for name := range props {
 		lower := strings.ToLower(name)
-		if lower != "font-family" && lower != "font-weight" && lower != "font-style" && lower != "color" && lower != "background-color" && lower != "background" && lower != "border" && lower != "border-width" && lower != "border-color" && lower != "border-style" && lower != "text-decoration" && lower != "font-size" && lower != "line-height" && lower != "letter-spacing" {
+		if lower != "font-family" && lower != "font-weight" && lower != "font-style" && lower != "color" && lower != "background-color" && lower != "background" && lower != "border" && lower != "border-width" && lower != "border-color" && lower != "border-style" && lower != "text-decoration" && lower != "font-size" && lower != "line-height" && lower != "letter-spacing" && lower != "vertical-align" {
 			names = append(names, name)
 		}
 	}
@@ -942,6 +964,19 @@ func pdfCSSTextAlign(value css.Value) (textAlign, bool) {
 	}
 }
 
+func pdfCSSVerticalAlign(value css.Value) (textVerticalAlign, bool) {
+	switch cssKeyword(value) {
+	case "baseline":
+		return textVerticalAlignBaseline, true
+	case "sub":
+		return textVerticalAlignSub, true
+	case "super", "sup":
+		return textVerticalAlignSuper, true
+	default:
+		return textVerticalAlignBaseline, false
+	}
+}
+
 func pdfCSSPositiveInt(value css.Value) (int, bool) {
 	if !value.IsNumeric() || value.Value < 1 {
 		return 0, false
@@ -1094,6 +1129,7 @@ func (r *pdfStyleResolver) debugStyles() []pdfDebugResolvedStyle {
 			LetterSpacing:     style.Paragraph.LetterSpacing,
 			FirstLineIndent:   style.Paragraph.FirstLineIndent,
 			TextAlign:         style.Paragraph.Align.String(),
+			VerticalAlign:     style.Paragraph.VerticalAlign.String(),
 			Color:             style.Paragraph.Color.String(),
 			Underline:         style.Paragraph.Underline,
 			Strikethrough:     style.Paragraph.Strikethrough,

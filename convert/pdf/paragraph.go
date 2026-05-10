@@ -27,12 +27,21 @@ type paragraphStyle struct {
 	LetterSpacing   float64
 	FirstLineIndent float64
 	Align           textAlign
+	VerticalAlign   textVerticalAlign
 	Color           pdfColor
 	Underline       bool
 	Strikethrough   bool
 	Hyphenation     paragraphHyphenation
 	Hyphenator      paragraphHyphenator
 }
+
+type textVerticalAlign int
+
+const (
+	textVerticalAlignBaseline textVerticalAlign = iota
+	textVerticalAlignSub
+	textVerticalAlignSuper
+)
 
 type paragraphHyphenation int
 

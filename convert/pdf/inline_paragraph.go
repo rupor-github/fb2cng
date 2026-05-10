@@ -166,7 +166,7 @@ func inlineRunFragment(registry *pdfFontRegistry, resolver *pdfStyleResolver, ba
 		Color:         style.Color,
 		Underline:     style.Underline,
 		Strikethrough: style.Strikethrough,
-		BaselineShift: inlineRunBaselineShift(base, run),
+		BaselineShift: inlineRunBaselineShift(base, style),
 	}, nil
 }
 
@@ -178,7 +178,13 @@ func inlineRunParagraphStyle(resolver *pdfStyleResolver, base paragraphStyle, ru
 	if run.Code {
 		style.FontFamily = "monospace"
 	}
-	if run.Subscript || run.Superscript {
+	if run.Subscript {
+		style.VerticalAlign = textVerticalAlignSub
+	}
+	if run.Superscript {
+		style.VerticalAlign = textVerticalAlignSuper
+	}
+	if style.VerticalAlign == textVerticalAlignSub || style.VerticalAlign == textVerticalAlignSuper {
 		style.FontSize *= pdfInlineScriptScale
 		style.LetterSpacing *= pdfInlineScriptScale
 	}
@@ -220,6 +226,9 @@ func mergeInlineParagraphStyle(base, override, fallback paragraphStyle) paragrap
 	if override.LetterSpacing != fallback.LetterSpacing {
 		base.LetterSpacing = override.LetterSpacing
 	}
+	if override.VerticalAlign != fallback.VerticalAlign {
+		base.VerticalAlign = override.VerticalAlign
+	}
 	if override.Color != fallback.Color {
 		base.Color = override.Color
 	}
@@ -232,11 +241,11 @@ func mergeInlineParagraphStyle(base, override, fallback paragraphStyle) paragrap
 	return base
 }
 
-func inlineRunBaselineShift(base paragraphStyle, run pdfInlineRun) float64 {
-	switch {
-	case run.Superscript:
+func inlineRunBaselineShift(base paragraphStyle, style paragraphStyle) float64 {
+	switch style.VerticalAlign {
+	case textVerticalAlignSuper:
 		return base.FontSize * pdfInlineSuperscriptRise
-	case run.Subscript:
+	case textVerticalAlignSub:
 		return -base.FontSize * pdfInlineSubscriptDrop
 	default:
 		return 0
