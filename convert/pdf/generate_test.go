@@ -346,6 +346,32 @@ func TestGenerateDebugDumps(t *testing.T) {
 	}
 }
 
+func TestCollectTextBlocksIncludesLinkSpans(t *testing.T) {
+	blocks, err := collectTextBlocks(&content.Content{Book: &fb2.FictionBook{Bodies: []fb2.Body{{
+		Kind: fb2.BodyMain,
+		Sections: []fb2.Section{{Content: []fb2.FlowItem{{
+			Kind: fb2.FlowParagraph,
+			Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{
+				Text: "See ",
+			}, {
+				Kind:     fb2.InlineLink,
+				Href:     "https://example.com",
+				Children: []fb2.InlineSegment{{Text: "example"}},
+			}}},
+		}}}},
+	}}}})
+	if err != nil {
+		t.Fatalf("collectTextBlocks() error = %v", err)
+	}
+	blocks = textBlocksOnly(blocks)
+	if len(blocks) != 1 {
+		t.Fatalf("text blocks = %d, want 1", len(blocks))
+	}
+	if got := blocks[0].Links; len(got) != 1 || got[0].Start != 4 || got[0].End != 11 || got[0].Href != "https://example.com" {
+		t.Fatalf("links = %#v, want example span", got)
+	}
+}
+
 func TestNamedDestinations(t *testing.T) {
 	got := pdfdoc.Format(namedDestinations([]pdfPage{
 		{ObjectID: 4, Anchors: []string{"z", "a"}},
@@ -363,6 +389,59 @@ func TestNamedDestinations(t *testing.T) {
 	}
 	if strings.Contains(got, "[8 0 R /Fit] <6D>") {
 		t.Fatalf("named destinations are not sorted by name: %q", got)
+	}
+}
+
+func TestGenerateLinkAnnotations(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputName := filepath.Join(tmpDir, "book.pdf")
+	cfg := &config.DocumentConfig{
+		Images: config.ImagesConfig{
+			Screen: config.ScreenConfig{Width: 1264, Height: 1680, DPI: 300},
+		},
+	}
+	c := &content.Content{
+		SrcName: "book.fb2",
+		Book: &fb2.FictionBook{
+			Description: fb2.Description{
+				TitleInfo: fb2.TitleInfo{BookTitle: fb2.TextField{Value: "Link Book"}},
+			},
+			Bodies: []fb2.Body{{
+				Kind: fb2.BodyMain,
+				Sections: []fb2.Section{{
+					ID:    "target",
+					Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Target"}}}}}},
+					Content: []fb2.FlowItem{{
+						Kind: fb2.FlowParagraph,
+						Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
+							{Text: "Visit "},
+							{Kind: fb2.InlineLink, Href: "https://example.com", Children: []fb2.InlineSegment{{Text: "example"}}},
+							{Text: " and "},
+							{Kind: fb2.InlineLink, Href: "#target", Children: []fb2.InlineSegment{{Text: "target"}}},
+						}},
+					}},
+				}},
+			}},
+		},
+	}
+
+	if err := Generate(context.Background(), c, outputName, cfg, zaptest.NewLogger(t)); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	data, err := os.ReadFile(outputName)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	pdfText := string(data)
+	for _, want := range []string{
+		"/Annots [",
+		"/Subtype /Link",
+		"/URI <68747470733A2F2F6578616D706C652E636F6D>",
+		"/Dest <746172676574>",
+	} {
+		if !strings.Contains(pdfText, want) {
+			t.Fatalf("generated PDF does not contain %q", want)
+		}
 	}
 }
 

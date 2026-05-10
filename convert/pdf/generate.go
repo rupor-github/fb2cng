@@ -139,6 +139,13 @@ type pdfTextBlock struct {
 	ID    string
 	Text  string
 	Depth int
+	Links []pdfTextLink
+}
+
+type pdfTextLink struct {
+	Start int
+	End   int
+	Href  string
 }
 
 type pdfPageLine struct {
@@ -150,10 +157,24 @@ type pdfPageLine struct {
 }
 
 type pdfPage struct {
-	ObjectID  int
-	ContentID int
-	Lines     []pdfPageLine
-	Anchors   []string
+	ObjectID    int
+	ContentID   int
+	Lines       []pdfPageLine
+	Anchors     []string
+	Annotations []pdfLinkAnnotation
+}
+
+type pdfLinkAnnotation struct {
+	ObjectID int
+	Rect     pdfRect
+	Href     string
+}
+
+type pdfRect struct {
+	X1 float64
+	Y1 float64
+	X2 float64
+	Y2 float64
 }
 
 func pageSizePoints(screen config.ScreenConfig) (float64, float64, error) {
@@ -215,6 +236,7 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 		nextObjectID++
 	}
 	outlines := buildOutlines(doc.TOC, pages, &nextObjectID)
+	assignAnnotationObjectIDs(pages, &nextObjectID)
 
 	fontObjs, err := fontResourceObjects(fontFace, usedGlyphs, fontObjectIDs{
 		Type0Font:      type0FontID,
@@ -252,7 +274,7 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 		return nil, err
 	}
 	for _, page := range pages {
-		if err := writer.Object(page.ObjectID, pdfdoc.Dict{
+		pageDict := pdfdoc.Dict{
 			"Contents": pdfdoc.Ref{ObjectNumber: page.ContentID},
 			"MediaBox": pdfdoc.Array{
 				pdfdoc.Integer(0),
@@ -267,7 +289,15 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 				},
 			},
 			"Type": pdfdoc.Name("Page"),
-		}); err != nil {
+		}
+		if len(page.Annotations) != 0 {
+			annots := make(pdfdoc.Array, 0, len(page.Annotations))
+			for _, annot := range page.Annotations {
+				annots = append(annots, pdfdoc.Ref{ObjectNumber: annot.ObjectID})
+			}
+			pageDict["Annots"] = annots
+		}
+		if err := writer.Object(page.ObjectID, pageDict); err != nil {
 			return nil, err
 		}
 	}
@@ -302,6 +332,9 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 		return nil, err
 	}
 	if err := writeOutlineObjects(writer, outlines); err != nil {
+		return nil, err
+	}
+	if err := writeAnnotationObjects(writer, pages); err != nil {
 		return nil, err
 	}
 
@@ -472,6 +505,116 @@ func topLevelOutlineItems(outlines pdfOutlines) []*pdfOutlineItem {
 		}
 	}
 	return items
+}
+
+func addLinkAnnotations(page *pdfPage, block pdfTextBlock, line paragraphLine, searchStart int, x float64, y float64, fontSize float64) {
+	if len(block.Links) == 0 || len(line.Text.Glyphs) == 0 {
+		return
+	}
+	lineText := shapedRunes(line.Text)
+	lineStart, lineEnd, ok := lineRuneRange(block.Text, lineText, searchStart)
+	if !ok {
+		return
+	}
+	for _, link := range block.Links {
+		start := max(link.Start, lineStart)
+		end := min(link.End, lineEnd)
+		if start >= end || strings.TrimSpace(link.Href) == "" {
+			continue
+		}
+		x1 := x + glyphAdvanceRange(line.Text.Glyphs, 0, start-lineStart, fontSize)
+		x2 := x + glyphAdvanceRange(line.Text.Glyphs, 0, end-lineStart, fontSize)
+		if x2 <= x1 {
+			continue
+		}
+		page.Annotations = append(page.Annotations, pdfLinkAnnotation{
+			Rect: pdfRect{
+				X1: x1,
+				Y1: y - fontSize*0.2,
+				X2: x2,
+				Y2: y + fontSize,
+			},
+			Href: link.Href,
+		})
+	}
+}
+
+func nextLineSearchStart(text string, line paragraphLine, searchStart int) int {
+	lineText := shapedRunes(line.Text)
+	_, end, ok := lineRuneRange(text, lineText, searchStart)
+	if !ok {
+		return searchStart
+	}
+	return end
+}
+
+func lineRuneRange(text string, lineText string, searchStart int) (int, int, bool) {
+	lineText = strings.TrimSuffix(lineText, "-")
+	lineText = strings.TrimSpace(lineText)
+	if lineText == "" {
+		return searchStart, searchStart, false
+	}
+	runes := []rune(text)
+	lineRunes := []rune(lineText)
+	for start := max(searchStart, 0); start+len(lineRunes) <= len(runes); start++ {
+		if string(runes[start:start+len(lineRunes)]) == lineText {
+			return start, start + len(lineRunes), true
+		}
+	}
+	return searchStart, searchStart, false
+}
+
+func glyphAdvanceRange(glyphs []shapedGlyph, start int, end int, fontSize float64) float64 {
+	start = max(start, 0)
+	end = min(max(end, start), len(glyphs))
+	width := 0
+	for _, glyph := range glyphs[start:end] {
+		width += glyph.Width
+	}
+	return float64(width) * fontSize / 1000.0
+}
+
+func assignAnnotationObjectIDs(pages []pdfPage, nextObjectID *int) {
+	for i := range pages {
+		for j := range pages[i].Annotations {
+			pages[i].Annotations[j].ObjectID = *nextObjectID
+			(*nextObjectID)++
+		}
+	}
+}
+
+func writeAnnotationObjects(writer *pdfdoc.Writer, pages []pdfPage) error {
+	for _, page := range pages {
+		for _, annot := range page.Annotations {
+			dict := pdfdoc.Dict{
+				"Border":  pdfdoc.Array{pdfdoc.Integer(0), pdfdoc.Integer(0), pdfdoc.Integer(0)},
+				"Rect":    rectArray(annot.Rect),
+				"Subtype": pdfdoc.Name("Link"),
+				"Type":    pdfdoc.Name("Annot"),
+			}
+			if target, ok := strings.CutPrefix(annot.Href, "#"); ok && target != "" {
+				dict["Dest"] = pdfdoc.HexString([]byte(target))
+			} else {
+				dict["A"] = pdfdoc.Dict{
+					"S":   pdfdoc.Name("URI"),
+					"URI": pdfdoc.HexString([]byte(annot.Href)),
+				}
+			}
+			if err := writer.Object(annot.ObjectID, dict); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func rectArray(rect pdfRect) pdfdoc.Array {
+	return pdfdoc.Array{
+		pdfdoc.Number(rect.X1),
+		pdfdoc.Number(rect.Y1),
+		pdfdoc.Number(rect.X2),
+		pdfdoc.Number(rect.Y2),
+	}
 }
 
 func namedDestinations(pages []pdfPage) pdfdoc.Dict {
@@ -670,6 +813,7 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 		if pageHasText {
 			y -= style.SpaceBefore
 		}
+		lineSearchStart := 0
 		for lineIndex, line := range lines {
 			if y-style.Paragraph.FontSize < bottom {
 				newTextPage()
@@ -686,6 +830,8 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 			case textAlignRight:
 				x += max(available-line.Width, 0)
 			}
+			addLinkAnnotations(page, block, line, lineSearchStart, x, y, style.Paragraph.FontSize)
+			lineSearchStart = nextLineSearchStart(block.Text, line, lineSearchStart)
 			addLine(page, pdfPageLine{
 				X:                x,
 				Y:                y,
@@ -1050,8 +1196,9 @@ func appendParagraphBlock(blocks *[]pdfTextBlock, kind pdfBlockKind, paragraph *
 	if paragraph == nil {
 		return
 	}
-	if text := paragraphText(paragraph); text != "" {
-		*blocks = append(*blocks, pdfTextBlock{Kind: kind, Text: text, Depth: depth})
+	text, links := paragraphTextAndLinks(paragraph)
+	if text != "" {
+		*blocks = append(*blocks, pdfTextBlock{Kind: kind, ID: paragraph.ID, Text: text, Depth: depth, Links: links})
 	}
 }
 
@@ -1101,21 +1248,27 @@ func appendEpigraphBlocks(blocks *[]pdfTextBlock, epigraph *fb2.Epigraph) {
 }
 
 func paragraphText(paragraph *fb2.Paragraph) string {
+	text, _ := paragraphTextAndLinks(paragraph)
+	return text
+}
+
+func paragraphTextAndLinks(paragraph *fb2.Paragraph) (string, []pdfTextLink) {
 	if paragraph == nil {
-		return ""
+		return "", nil
 	}
-	return strings.TrimSpace(inlineSegmentsText(paragraph.Text))
+	return inlineSegmentsTextAndLinks(paragraph.Text)
 }
 
-func inlineSegmentsText(segments []fb2.InlineSegment) string {
+func inlineSegmentsTextAndLinks(segments []fb2.InlineSegment) (string, []pdfTextLink) {
 	var b strings.Builder
+	var links []pdfTextLink
 	for i := range segments {
-		appendInlineSegmentText(&b, &segments[i])
+		appendInlineSegmentText(&b, &links, &segments[i])
 	}
-	return b.String()
+	return strings.TrimSpace(b.String()), links
 }
 
-func appendInlineSegmentText(b *strings.Builder, seg *fb2.InlineSegment) {
+func appendInlineSegmentText(b *strings.Builder, links *[]pdfTextLink, seg *fb2.InlineSegment) {
 	if seg == nil {
 		return
 	}
@@ -1128,10 +1281,21 @@ func appendInlineSegmentText(b *strings.Builder, seg *fb2.InlineSegment) {
 		}
 		return
 	}
+	start := runeLenString(b.String())
 	b.WriteString(seg.Text)
 	for i := range seg.Children {
-		appendInlineSegmentText(b, &seg.Children[i])
+		appendInlineSegmentText(b, links, &seg.Children[i])
 	}
+	if seg.Kind == fb2.InlineLink && seg.Href != "" {
+		end := runeLenString(b.String())
+		if end > start {
+			*links = append(*links, pdfTextLink{Start: start, End: end, Href: seg.Href})
+		}
+	}
+}
+
+func runeLenString(s string) int {
+	return len([]rune(s))
 }
 
 func pdfHyphenator(c *content.Content, log *zap.Logger) paragraphHyphenator {
