@@ -15,11 +15,13 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/text/language"
 
+	"fbc/common"
 	"fbc/config"
 	"fbc/content"
 	contenttext "fbc/content/text"
 	"fbc/convert/pdf/docwriter"
 	"fbc/convert/structure"
+	"fbc/convert/tocnav"
 	"fbc/fb2"
 )
 
@@ -50,7 +52,7 @@ func Generate(ctx context.Context, c *content.Content, outputName string, cfg *c
 		return err
 	}
 
-	contentPlan, err := collectPDFContent(c)
+	contentPlan, err := collectPDFContent(c, cfg)
 	if err != nil {
 		return fmt.Errorf("collect pdf content: %w", err)
 	}
@@ -122,6 +124,8 @@ func (k pdfBlockKind) String() string {
 		return "empty-line"
 	case pdfBlockImage:
 		return "image"
+	case pdfBlockTOCEntry:
+		return "toc-entry"
 	case pdfBlockPageBreak:
 		return "page-break"
 	default:
@@ -137,6 +141,7 @@ const (
 	pdfBlockTextAuthor
 	pdfBlockEmptyLine
 	pdfBlockImage
+	pdfBlockTOCEntry
 	pdfBlockPageBreak
 )
 
@@ -994,6 +999,14 @@ func pdfStyleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
 			SpaceAfter:   6,
 			KeepTogether: true,
 		}
+	case pdfBlockTOCEntry:
+		indent := max(float64(block.Depth-1)*12, 0)
+		return pdfBlockResolvedStyle{
+			Paragraph:  paragraphStyle{FontSize: 10.5, LineHeight: 13.4, FirstLineIndent: indent, Align: textAlignLeft},
+			SpaceAfter: 1.5,
+			Orphans:    1,
+			Widows:     1,
+		}
 	default:
 		return pdfBlockResolvedStyle{
 			Paragraph:  paragraphStyle{FontSize: 10.5, LineHeight: 13.4, FirstLineIndent: 14, Align: textAlignJustify},
@@ -1141,14 +1154,14 @@ func justifiedGlyphArray(glyphs []shapedGlyph, extraWordSpacing, fontSize float6
 }
 
 func collectTextBlocks(c *content.Content) ([]pdfTextBlock, error) {
-	plan, err := collectPDFContent(c)
+	plan, err := collectPDFContent(c, nil)
 	if err != nil {
 		return nil, err
 	}
 	return plan.Blocks, nil
 }
 
-func collectPDFContent(c *content.Content) (pdfContentPlan, error) {
+func collectPDFContent(c *content.Content, cfg *config.DocumentConfig) (pdfContentPlan, error) {
 	if c == nil || c.Book == nil {
 		return pdfContentPlan{}, nil
 	}
@@ -1167,7 +1180,82 @@ func collectPDFContent(c *content.Content) (pdfContentPlan, error) {
 		}
 		appendUnitBlocks(&blocks, unit, splitSections, splitBodies)
 	}
+	blocks = insertTOCPageBlocks(blocks, plan.TOC, cfg)
 	return pdfContentPlan{Blocks: blocks, TOC: plan.TOC}, nil
+}
+
+func insertTOCPageBlocks(blocks []pdfTextBlock, entries []*structure.TOCEntry, cfg *config.DocumentConfig) []pdfTextBlock {
+	if cfg == nil || cfg.TOCPage.Placement == common.TOCPagePlacementNone || len(entries) == 0 {
+		return blocks
+	}
+	tocBlocks := buildTOCPageBlocks(entries, cfg.TOCPage.ChaptersWithoutTitle, cfg.TOCType)
+	if len(tocBlocks) == 0 {
+		return blocks
+	}
+	switch cfg.TOCPage.Placement {
+	case common.TOCPagePlacementBefore:
+		out := make([]pdfTextBlock, 0, len(tocBlocks)+len(blocks))
+		out = append(out, tocBlocks...)
+		out = append(out, blocks...)
+		return out
+	case common.TOCPagePlacementAfter:
+		out := make([]pdfTextBlock, 0, len(blocks)+len(tocBlocks))
+		out = append(out, blocks...)
+		out = append(out, tocBlocks...)
+		return out
+	default:
+		return blocks
+	}
+}
+
+func buildTOCPageBlocks(entries []*structure.TOCEntry, includeUntitled bool, tocType common.TOCType) []pdfTextBlock {
+	items := flattenPDFTOCEntries(entries, includeUntitled, 1)
+	if len(items) == 0 {
+		return nil
+	}
+	blocks := []pdfTextBlock{
+		{Kind: pdfBlockPageBreak, ID: "toc-page", Text: "Contents"},
+		{Kind: pdfBlockHeading, ID: "toc-page-title", Text: "Contents", Depth: 1},
+	}
+	var appendTOCNodeBlocks func(nodes []*tocnav.Node)
+	appendTOCNodeBlocks = func(nodes []*tocnav.Node) {
+		for _, node := range nodes {
+			if node == nil || strings.TrimSpace(node.Item.Title) == "" || node.Item.ID == "" {
+				continue
+			}
+			title := strings.TrimSpace(node.Item.Title)
+			blocks = append(blocks, pdfTextBlock{
+				Kind:  pdfBlockTOCEntry,
+				Text:  title,
+				Depth: max(node.Item.Level, 1),
+				Links: []pdfTextLink{{Start: 0, End: runeLenString(title), Href: "#" + node.Item.ID}},
+			})
+			appendTOCNodeBlocks(node.Children)
+		}
+	}
+	appendTOCNodeBlocks(tocnav.Shape(items, tocType))
+	if len(blocks) == 2 {
+		return nil
+	}
+	return blocks
+}
+
+func flattenPDFTOCEntries(entries []*structure.TOCEntry, includeUntitled bool, level int) []tocnav.Item {
+	items := make([]tocnav.Item, 0, len(entries))
+	for _, entry := range entries {
+		if entry == nil {
+			continue
+		}
+		title := strings.TrimSpace(entry.Title)
+		include := entry.IncludeInTOC || includeUntitled
+		if include && title != "" && entry.ID != "" {
+			items = append(items, tocnav.Item{ID: entry.ID, Title: title, Href: "#" + entry.ID, Level: level})
+			items = append(items, flattenPDFTOCEntries(entry.Children, includeUntitled, level+1)...)
+			continue
+		}
+		items = append(items, flattenPDFTOCEntries(entry.Children, includeUntitled, level)...)
+	}
+	return items
 }
 
 func splitSectionIDs(plan *structure.Plan) map[string]bool {

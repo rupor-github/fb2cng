@@ -15,6 +15,7 @@ import (
 
 	"go.uber.org/zap/zaptest"
 
+	"fbc/common"
 	"fbc/config"
 	"fbc/content"
 	"fbc/convert/pdf/docwriter"
@@ -136,6 +137,34 @@ func TestCollectTextBlocksIncludesLinkChildren(t *testing.T) {
 	}
 	if got := blocks[0].Text; got != "See linked text" {
 		t.Fatalf("block text = %q, want %q", got, "See linked text")
+	}
+}
+
+func TestCollectPDFContentAddsTOCPageBeforeContent(t *testing.T) {
+	book := &fb2.FictionBook{Bodies: []fb2.Body{{
+		Kind: fb2.BodyMain,
+		Sections: []fb2.Section{{
+			ID:    "chapter-1",
+			Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 1"}}}}}},
+		}},
+	}}}
+	plan, err := collectPDFContent(&content.Content{Book: book}, &config.DocumentConfig{
+		TOCPage: config.TOCPageConfig{Placement: common.TOCPagePlacementBefore},
+	})
+	if err != nil {
+		t.Fatalf("collectPDFContent() error = %v", err)
+	}
+	if len(plan.Blocks) < 4 {
+		t.Fatalf("blocks = %#v, want TOC and chapter blocks", plan.Blocks)
+	}
+	if got := plan.Blocks[0]; got.Kind != pdfBlockPageBreak || got.ID != "toc-page" {
+		t.Fatalf("first block = %#v, want TOC page break", got)
+	}
+	if got := plan.Blocks[1]; got.Kind != pdfBlockHeading || got.Text != "Contents" {
+		t.Fatalf("second block = %#v, want TOC heading", got)
+	}
+	if got := plan.Blocks[2]; got.Kind != pdfBlockTOCEntry || got.Text != "Chapter 1" || len(got.Links) != 1 || got.Links[0].Href != "#chapter-1" {
+		t.Fatalf("TOC entry block = %#v", got)
 	}
 }
 
@@ -567,6 +596,52 @@ func TestNamedDestinations(t *testing.T) {
 	}
 	if strings.Contains(got, "[8 0 R /Fit] <6D>") {
 		t.Fatalf("named destinations are not sorted by name: %q", got)
+	}
+}
+
+func TestGenerateTOCPageLinkAnnotations(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputName := filepath.Join(tmpDir, "book.pdf")
+	cfg := &config.DocumentConfig{
+		TOCPage: config.TOCPageConfig{Placement: common.TOCPagePlacementBefore},
+		Images: config.ImagesConfig{
+			Screen: config.ScreenConfig{Width: 1264, Height: 1680, DPI: 300},
+		},
+	}
+	c := &content.Content{
+		SrcName: "book.fb2",
+		Book: &fb2.FictionBook{
+			Description: fb2.Description{TitleInfo: fb2.TitleInfo{BookTitle: fb2.TextField{Value: "TOC Book"}}},
+			Bodies: []fb2.Body{{
+				Kind: fb2.BodyMain,
+				Sections: []fb2.Section{{
+					ID:    "chapter-1",
+					Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 1"}}}}}},
+					Content: []fb2.FlowItem{{
+						Kind:      fb2.FlowParagraph,
+						Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Body text."}}},
+					}},
+				}},
+			}},
+		},
+	}
+
+	if err := Generate(context.Background(), c, outputName, cfg, zaptest.NewLogger(t)); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	data, err := os.ReadFile(outputName)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	pdfText := string(data)
+	for _, want := range []string{
+		"/Subtype /Link",
+		"/Dest <636861707465722D31>",
+		"/Names [<636861707465722D31>",
+	} {
+		if !strings.Contains(pdfText, want) {
+			t.Fatalf("generated PDF does not contain %q", want)
+		}
 	}
 }
 
