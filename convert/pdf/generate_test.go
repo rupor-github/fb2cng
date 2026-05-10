@@ -192,6 +192,102 @@ func textBlocksOnly(blocks []pdfTextBlock) []pdfTextBlock {
 	return out
 }
 
+func TestLayoutPDFPagesKeepsHeadingWithNextParagraph(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	contentWidth := 220.0 - 48.0
+	filler := textWithParagraphLineCount(t, face, pdfStyleForBlock(pdfTextBlock{Kind: pdfBlockParagraph}).Paragraph, contentWidth, 2, "filler")
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  220,
+		PageHeight: 110,
+		Title:      "Title",
+		Author:     "Author",
+		Blocks: []pdfTextBlock{
+			{Kind: pdfBlockParagraph, Text: filler},
+			{Kind: pdfBlockHeading, Text: "Heading", Depth: 1},
+			{Kind: pdfBlockParagraph, Text: "Body text after heading."},
+		},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 3 {
+		t.Fatalf("layoutPDFPages() produced %d pages, want 3", len(pages))
+	}
+	if got := pageText(pages[1]); strings.Contains(got, "Heading") {
+		t.Fatalf("heading stranded on previous page: %q", got)
+	}
+	if got := pageText(pages[2]); !strings.Contains(got, "Heading") || !strings.Contains(got, "Body text") {
+		t.Fatalf("heading page text = %q, want heading with following paragraph", got)
+	}
+}
+
+func TestLayoutPDFPagesAvoidsParagraphWidowOrphanSplit(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	contentWidth := 220.0 - 48.0
+	style := pdfStyleForBlock(pdfTextBlock{Kind: pdfBlockParagraph}).Paragraph
+	filler := textWithParagraphLineCount(t, face, style, contentWidth, 2, "filler")
+	target := textWithParagraphLineCount(t, face, style, contentWidth, 3, "target")
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  220,
+		PageHeight: 98,
+		Title:      "Title",
+		Author:     "Author",
+		Blocks: []pdfTextBlock{
+			{Kind: pdfBlockParagraph, Text: filler},
+			{Kind: pdfBlockParagraph, Text: target},
+		},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 3 {
+		t.Fatalf("layoutPDFPages() produced %d pages, want 3", len(pages))
+	}
+	targetFirstWord := strings.Fields(target)[0]
+	if got := pageText(pages[1]); strings.Contains(got, targetFirstWord) {
+		t.Fatalf("paragraph orphan left on previous page: %q", got)
+	}
+	if got := pageText(pages[2]); !strings.Contains(got, targetFirstWord) {
+		t.Fatalf("paragraph did not move to next page: %q", got)
+	}
+}
+
+func textWithParagraphLineCount(t *testing.T, face *builtinFontFace, style paragraphStyle, width float64, wantLines int, word string) string {
+	t.Helper()
+	for words := 1; words <= 80; words++ {
+		parts := make([]string, words)
+		for i := range parts {
+			parts[i] = word
+		}
+		text := strings.Join(parts, " ")
+		lines, err := layoutParagraph(face, text, style, width)
+		if err != nil {
+			t.Fatalf("layoutParagraph() error = %v", err)
+		}
+		if len(lines) == wantLines {
+			return text
+		}
+	}
+	t.Fatalf("could not build paragraph with %d lines", wantLines)
+	return ""
+}
+
+func pageText(page pdfPage) string {
+	parts := make([]string, 0, len(page.Lines))
+	for _, line := range page.Lines {
+		parts = append(parts, shapedRunes(line.Text))
+	}
+	return strings.Join(parts, "\n")
+}
+
 func TestGenerateTextBodyAddsPaginatedBodyPage(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputName := filepath.Join(tmpDir, "book.pdf")

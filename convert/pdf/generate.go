@@ -353,7 +353,7 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 		pageHasText = false
 	}
 
-	for _, block := range doc.Blocks {
+	for blockIndex, block := range doc.Blocks {
 		if block.Kind == pdfBlockPageBreak {
 			if pageHasText {
 				newTextPage()
@@ -386,11 +386,36 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 		if style.KeepTogether && pageHasText && y-needed < bottom {
 			newTextPage()
 		}
+		if style.KeepWithNextLines > 0 && pageHasText {
+			keepWithNext, err := nextBlockKeepHeight(face, doc.Blocks[blockIndex+1:], doc.Hyphenator, contentWidth, style.KeepWithNextLines)
+			if err != nil {
+				return nil, nil, err
+			}
+			if keepWithNext > 0 && y-needed-style.SpaceAfter-keepWithNext < bottom {
+				newTextPage()
+			}
+		}
+		if !style.KeepTogether && pageHasText {
+			linesFit := countFittingLines(y-style.SpaceBefore, bottom, style.Paragraph.FontSize, style.Paragraph.LineHeight)
+			if linesFit > 0 && linesFit < len(lines) {
+				firstFragmentLines := linesFit
+				if remaining := len(lines) - firstFragmentLines; remaining < style.Widows {
+					firstFragmentLines = len(lines) - style.Widows
+				}
+				if firstFragmentLines < min(style.Orphans, len(lines)) {
+					newTextPage()
+				}
+			}
+		}
 		if pageHasText {
 			y -= style.SpaceBefore
 		}
-		for _, line := range lines {
+		for lineIndex, line := range lines {
 			if y-style.Paragraph.FontSize < bottom {
+				newTextPage()
+			}
+			remainingAfterLine := len(lines) - lineIndex - 1
+			if remainingAfterLine > 0 && remainingAfterLine < style.Widows && y-style.Paragraph.LineHeight-style.Paragraph.FontSize < bottom {
 				newTextPage()
 			}
 			x := margin + line.Indent
@@ -421,10 +446,13 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 }
 
 type pdfBlockResolvedStyle struct {
-	Paragraph    paragraphStyle
-	SpaceBefore  float64
-	SpaceAfter   float64
-	KeepTogether bool
+	Paragraph         paragraphStyle
+	SpaceBefore       float64
+	SpaceAfter        float64
+	KeepTogether      bool
+	KeepWithNextLines int
+	Orphans           int
+	Widows            int
 }
 
 func pdfStyleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
@@ -432,34 +460,77 @@ func pdfStyleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
 	case pdfBlockHeading:
 		fontSize := max(16-float64(block.Depth-1), 11)
 		return pdfBlockResolvedStyle{
-			Paragraph:    paragraphStyle{FontSize: fontSize, LineHeight: fontSize * 1.25, Align: textAlignCenter},
-			SpaceBefore:  10,
-			SpaceAfter:   8,
-			KeepTogether: true,
+			Paragraph:         paragraphStyle{FontSize: fontSize, LineHeight: fontSize * 1.25, Align: textAlignCenter},
+			SpaceBefore:       10,
+			SpaceAfter:        8,
+			KeepTogether:      true,
+			KeepWithNextLines: 2,
 		}
 	case pdfBlockSubtitle:
 		return pdfBlockResolvedStyle{
-			Paragraph:    paragraphStyle{FontSize: 11, LineHeight: 14, Align: textAlignCenter},
-			SpaceBefore:  6,
-			SpaceAfter:   5,
-			KeepTogether: true,
+			Paragraph:         paragraphStyle{FontSize: 11, LineHeight: 14, Align: textAlignCenter},
+			SpaceBefore:       6,
+			SpaceAfter:        5,
+			KeepTogether:      true,
+			KeepWithNextLines: 1,
 		}
 	case pdfBlockPoem:
 		return pdfBlockResolvedStyle{
 			Paragraph:  paragraphStyle{FontSize: 10.5, LineHeight: 13.2, Align: textAlignLeft},
 			SpaceAfter: 2,
+			Orphans:    2,
+			Widows:     2,
 		}
 	case pdfBlockTextAuthor:
 		return pdfBlockResolvedStyle{
 			Paragraph:  paragraphStyle{FontSize: 10, LineHeight: 12.5, Align: textAlignRight},
 			SpaceAfter: 4,
+			Orphans:    2,
+			Widows:     2,
 		}
 	default:
 		return pdfBlockResolvedStyle{
 			Paragraph:  paragraphStyle{FontSize: 10.5, LineHeight: 13.4, FirstLineIndent: 14, Align: textAlignJustify},
 			SpaceAfter: 3,
+			Orphans:    2,
+			Widows:     2,
 		}
 	}
+}
+
+func nextBlockKeepHeight(face *builtinFontFace, blocks []pdfTextBlock, hyphenator paragraphHyphenator, contentWidth float64, minLines int) (float64, error) {
+	for _, block := range blocks {
+		switch block.Kind {
+		case pdfBlockPageBreak:
+			return 0, nil
+		case pdfBlockEmptyLine:
+			continue
+		}
+		text := strings.TrimSpace(block.Text)
+		if text == "" {
+			continue
+		}
+		style := pdfStyleForBlock(block)
+		style.Paragraph.Hyphenator = hyphenator
+		lines, err := layoutParagraph(face, text, style.Paragraph, contentWidth)
+		if err != nil {
+			return 0, err
+		}
+		if len(lines) == 0 {
+			continue
+		}
+		return style.SpaceBefore + float64(min(minLines, len(lines)))*style.Paragraph.LineHeight, nil
+	}
+	return 0, nil
+}
+
+func countFittingLines(y float64, bottom float64, fontSize float64, lineHeight float64) int {
+	count := 0
+	for y-fontSize >= bottom {
+		count++
+		y -= lineHeight
+	}
+	return count
 }
 
 func justifiedGlyphArray(glyphs []shapedGlyph, extraWordSpacing, fontSize float64) string {
