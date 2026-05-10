@@ -95,6 +95,8 @@ type pdfPageLine struct {
 	FontKey          pdfFontKey
 	FontName         string
 	Color            pdfColor
+	Underline        bool
+	Strikethrough    bool
 	Text             shapedText
 	ExtraWordSpacing float64
 }

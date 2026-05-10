@@ -19,6 +19,10 @@ func (c pdfColor) contentOperator() string {
 	return docwriter.FormatNumber(c.clampedR()) + " " + docwriter.FormatNumber(c.clampedG()) + " " + docwriter.FormatNumber(c.clampedB()) + " rg"
 }
 
+func (c pdfColor) strokeOperator() string {
+	return docwriter.FormatNumber(c.clampedR()) + " " + docwriter.FormatNumber(c.clampedG()) + " " + docwriter.FormatNumber(c.clampedB()) + " RG"
+}
+
 func (c pdfColor) String() string {
 	return fmt.Sprintf("#%02x%02x%02x", int(c.clampedR()*255+0.5), int(c.clampedG()*255+0.5), int(c.clampedB()*255+0.5))
 }

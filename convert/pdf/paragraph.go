@@ -27,6 +27,8 @@ type paragraphStyle struct {
 	FirstLineIndent float64
 	Align           textAlign
 	Color           pdfColor
+	Underline       bool
+	Strikethrough   bool
 	Hyphenation     paragraphHyphenation
 	Hyphenator      paragraphHyphenator
 }

@@ -47,7 +47,59 @@ func pageContent(page pdfPage) []byte {
 		fmt.Fprintf(&buf, "%s Tj\n", docwriter.Format(glyphHex(line.Text.Glyphs)))
 	}
 	buf.WriteString("ET\nQ\n")
+	buf.Write(pageTextDecorations(page))
 	return buf.Bytes()
+}
+
+func pageTextDecorations(page pdfPage) []byte {
+	var buf bytes.Buffer
+	for _, line := range page.Lines {
+		if len(line.Text.Glyphs) == 0 || (!line.Underline && !line.Strikethrough) {
+			continue
+		}
+		width := decoratedLineWidth(line)
+		if width <= 0 {
+			continue
+		}
+		thickness := max(line.FontSize/18, 0.4)
+		fmt.Fprintf(&buf, "q\n%s\n%s w\n", line.Color.strokeOperator(), docwriter.FormatNumber(thickness))
+		if line.Underline {
+			y := line.Y - line.FontSize*0.12
+			writeDecorationLine(&buf, line.X, y, line.X+width)
+		}
+		if line.Strikethrough {
+			y := line.Y + line.FontSize*0.30
+			writeDecorationLine(&buf, line.X, y, line.X+width)
+		}
+		buf.WriteString("Q\n")
+	}
+	return buf.Bytes()
+}
+
+func writeDecorationLine(buf *bytes.Buffer, x1, y, x2 float64) {
+	fmt.Fprintf(buf, "%s %s m %s %s l S\n",
+		docwriter.FormatNumber(x1),
+		docwriter.FormatNumber(y),
+		docwriter.FormatNumber(x2),
+		docwriter.FormatNumber(y))
+}
+
+func decoratedLineWidth(line pdfPageLine) float64 {
+	width := shapedWidthPoints(line.Text, line.FontSize)
+	if line.ExtraWordSpacing == 0 {
+		return width
+	}
+	return width + line.ExtraWordSpacing*float64(justificationSpaceCount(line.Text.Glyphs))
+}
+
+func justificationSpaceCount(glyphs []shapedGlyph) int {
+	count := 0
+	for i, glyph := range glyphs {
+		if glyph.Rune == ' ' && i != len(glyphs)-1 {
+			count++
+		}
+	}
+	return count
 }
 
 func justifiedGlyphArray(glyphs []shapedGlyph, extraWordSpacing, fontSize float64) string {

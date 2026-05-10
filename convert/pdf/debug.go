@@ -77,6 +77,8 @@ type pdfDebugLine struct {
 	FontWeight       string  `json:"font_weight,omitempty"`
 	FontStyle        string  `json:"font_style,omitempty"`
 	Color            string  `json:"color,omitempty"`
+	Underline        bool    `json:"underline,omitempty"`
+	Strikethrough    bool    `json:"strikethrough,omitempty"`
 	Width            float64 `json:"width"`
 	ExtraWordSpacing float64 `json:"extra_word_spacing,omitempty"`
 }
@@ -196,6 +198,8 @@ func pdfDebugPages(pages []pdfPage) ([]pdfDebugPage, []pdfDebugImage, []pdfDebug
 				FontWeight:       pdfCSSFontWeightString(line.FontKey.Bold),
 				FontStyle:        pdfCSSFontStyleString(line.FontKey.Italic),
 				Color:            line.Color.String(),
+				Underline:        line.Underline,
+				Strikethrough:    line.Strikethrough,
 				Width:            shapedWidthPoints(line.Text, line.FontSize),
 				ExtraWordSpacing: line.ExtraWordSpacing,
 			})

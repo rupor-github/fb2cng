@@ -17,6 +17,7 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 				font-weight: bold;
 				font-style: italic;
 				color: #336699;
+				text-decoration: underline line-through;
 				font-size: 12pt;
 				line-height: 1.5;
 				text-align: center;
@@ -45,6 +46,9 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 	}
 	if paragraph.Paragraph.Color.String() != "#336699" {
 		t.Fatalf("paragraph color = %s, want #336699", paragraph.Paragraph.Color)
+	}
+	if !paragraph.Paragraph.Underline || !paragraph.Paragraph.Strikethrough {
+		t.Fatalf("paragraph decorations = underline:%t strikethrough:%t, want both true", paragraph.Paragraph.Underline, paragraph.Paragraph.Strikethrough)
 	}
 	if paragraph.Paragraph.FontSize != 12 {
 		t.Fatalf("paragraph font size = %v, want 12", paragraph.Paragraph.FontSize)

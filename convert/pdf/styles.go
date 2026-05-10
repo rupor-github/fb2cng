@@ -93,6 +93,8 @@ type pdfDebugResolvedStyle struct {
 	FirstLineIndent   float64 `json:"first_line_indent,omitempty"`
 	TextAlign         string  `json:"text_align"`
 	Color             string  `json:"color,omitempty"`
+	Underline         bool    `json:"underline,omitempty"`
+	Strikethrough     bool    `json:"strikethrough,omitempty"`
 	SpaceBefore       float64 `json:"space_before,omitempty"`
 	SpaceAfter        float64 `json:"space_after,omitempty"`
 	MarginLeft        float64 `json:"margin_left,omitempty"`
@@ -269,6 +271,12 @@ func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfB
 	if override.Paragraph.Color != fallback.Paragraph.Color {
 		base.Paragraph.Color = override.Paragraph.Color
 	}
+	if override.Paragraph.Underline != fallback.Paragraph.Underline {
+		base.Paragraph.Underline = override.Paragraph.Underline
+	}
+	if override.Paragraph.Strikethrough != fallback.Paragraph.Strikethrough {
+		base.Paragraph.Strikethrough = override.Paragraph.Strikethrough
+	}
 	if override.Paragraph.Hyphenation != fallback.Paragraph.Hyphenation {
 		base.Paragraph.Hyphenation = override.Paragraph.Hyphenation
 	}
@@ -440,6 +448,9 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 			style.Paragraph.Color = color
 		}
 	}
+	if value, ok := props["text-decoration"]; ok {
+		applyPDFTextDecoration(style, value)
+	}
 	if value, ok := props["font-size"]; ok {
 		if points, ok := pdfCSSFontSizePoints(value, style.Paragraph.FontSize); ok {
 			ratio := points / style.Paragraph.FontSize
@@ -455,7 +466,7 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 	names := make([]string, 0, len(props))
 	for name := range props {
 		lower := strings.ToLower(name)
-		if lower != "font-family" && lower != "font-weight" && lower != "font-style" && lower != "color" && lower != "font-size" && lower != "line-height" {
+		if lower != "font-family" && lower != "font-weight" && lower != "font-style" && lower != "color" && lower != "text-decoration" && lower != "font-size" && lower != "line-height" {
 			names = append(names, name)
 		}
 	}
@@ -520,6 +531,24 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 			if count, ok := pdfCSSPositiveInt(value); ok {
 				style.Widows = count
 			}
+		}
+	}
+}
+
+func applyPDFTextDecoration(style *pdfBlockResolvedStyle, value css.Value) {
+	decorations := strings.Fields(strings.ToLower(formatCSSValue(value)))
+	if len(decorations) == 0 {
+		decorations = []string{cssKeyword(value)}
+	}
+	for _, decoration := range decorations {
+		switch strings.TrimSpace(decoration) {
+		case "none":
+			style.Paragraph.Underline = false
+			style.Paragraph.Strikethrough = false
+		case "underline":
+			style.Paragraph.Underline = true
+		case "line-through":
+			style.Paragraph.Strikethrough = true
 		}
 	}
 }
@@ -784,6 +813,8 @@ func (r *pdfStyleResolver) debugStyles() []pdfDebugResolvedStyle {
 			FirstLineIndent:   style.Paragraph.FirstLineIndent,
 			TextAlign:         style.Paragraph.Align.String(),
 			Color:             style.Paragraph.Color.String(),
+			Underline:         style.Paragraph.Underline,
+			Strikethrough:     style.Paragraph.Strikethrough,
 			Hyphenation:       pdfHyphenationString(style.Paragraph.Hyphenation),
 			SpaceBefore:       style.SpaceBefore,
 			SpaceAfter:        style.SpaceAfter,
