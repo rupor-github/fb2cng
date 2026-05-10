@@ -120,6 +120,45 @@ func TestLayoutPDFPagesHonorsCSSPageBreakAndHiddenStyles(t *testing.T) {
 	}
 }
 
+func TestLayoutPDFPagesAppliesPadding(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	padded := resolver.styles[pdfStyleParagraph]
+	padded.Paragraph.FirstLineIndent = 0
+	padded.SpaceBefore = 0
+	padded.SpaceAfter = 0
+	padded.PaddingTop = 5
+	padded.PaddingLeft = 7
+	resolver.styles["padded"] = padded
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  220,
+		PageHeight: 180,
+		Title:      "Title",
+		Author:     "Author",
+		Styles:     resolver,
+		Blocks: []pdfTextBlock{
+			{Kind: pdfBlockParagraph, Text: "padded text", StyleClasses: "padded"},
+		},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 || len(pages[1].Lines) != 1 {
+		t.Fatalf("layoutPDFPages() pages = %#v, want one body line", pages)
+	}
+	line := pages[1].Lines[0]
+	if line.X != 31 { // 24pt page margin + 7pt left padding.
+		t.Fatalf("line X = %v, want 31", line.X)
+	}
+	if line.Y != 151 { // 180pt page height - 24pt page margin - 5pt top padding.
+		t.Fatalf("line Y = %v, want 151", line.Y)
+	}
+}
+
 func textWithParagraphLineCount(t *testing.T, face *builtinFontFace, style paragraphStyle, width float64, wantLines int, word string) string {
 	t.Helper()
 	for words := 1; words <= 80; words++ {

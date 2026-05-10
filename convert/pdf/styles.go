@@ -69,6 +69,10 @@ type pdfBlockResolvedStyle struct {
 	SpaceAfter        float64
 	MarginLeft        float64
 	MarginRight       float64
+	PaddingTop        float64
+	PaddingRight      float64
+	PaddingBottom     float64
+	PaddingLeft       float64
 	KeepTogether      bool
 	KeepWithNextLines int
 	PageBreakBefore   bool
@@ -100,6 +104,10 @@ type pdfDebugResolvedStyle struct {
 	SpaceAfter        float64 `json:"space_after,omitempty"`
 	MarginLeft        float64 `json:"margin_left,omitempty"`
 	MarginRight       float64 `json:"margin_right,omitempty"`
+	PaddingTop        float64 `json:"padding_top,omitempty"`
+	PaddingRight      float64 `json:"padding_right,omitempty"`
+	PaddingBottom     float64 `json:"padding_bottom,omitempty"`
+	PaddingLeft       float64 `json:"padding_left,omitempty"`
 	Hyphenation       string  `json:"hyphenation,omitempty"`
 	KeepTogether      bool    `json:"keep_together,omitempty"`
 	KeepWithNextLines int     `json:"keep_with_next_lines,omitempty"`
@@ -296,6 +304,18 @@ func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfB
 	if override.MarginRight != fallback.MarginRight {
 		base.MarginRight = override.MarginRight
 	}
+	if override.PaddingTop != fallback.PaddingTop {
+		base.PaddingTop = override.PaddingTop
+	}
+	if override.PaddingRight != fallback.PaddingRight {
+		base.PaddingRight = override.PaddingRight
+	}
+	if override.PaddingBottom != fallback.PaddingBottom {
+		base.PaddingBottom = override.PaddingBottom
+	}
+	if override.PaddingLeft != fallback.PaddingLeft {
+		base.PaddingLeft = override.PaddingLeft
+	}
 	if override.KeepTogether != fallback.KeepTogether {
 		base.KeepTogether = override.KeepTogether
 	}
@@ -365,7 +385,7 @@ func pdfHeadingStyleName(depth int) string {
 }
 
 func blockContentWidth(contentWidth float64, style pdfBlockResolvedStyle) float64 {
-	return max(contentWidth-style.MarginLeft-style.MarginRight, pdfMinBlockWidth)
+	return max(contentWidth-style.MarginLeft-style.MarginRight-style.PaddingLeft-style.PaddingRight, pdfMinBlockWidth)
 }
 
 func (r *pdfStyleResolver) applyStylesheet(sheet *css.Stylesheet) {
@@ -509,6 +529,24 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
 				style.MarginRight = points
 			}
+		case "padding":
+			applyPDFPaddingShorthand(style, value)
+		case "padding-top":
+			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
+				style.PaddingTop = points
+			}
+		case "padding-right":
+			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
+				style.PaddingRight = points
+			}
+		case "padding-bottom":
+			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
+				style.PaddingBottom = points
+			}
+		case "padding-left":
+			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
+				style.PaddingLeft = points
+			}
 		case "page-break-inside", "break-inside":
 			if pdfCSSAvoidPageBreakKeyword(value) {
 				style.KeepTogether = true
@@ -563,36 +601,53 @@ func applyPDFTextDecoration(style *pdfBlockResolvedStyle, value css.Value) {
 }
 
 func applyPDFMarginShorthand(style *pdfBlockResolvedStyle, value css.Value) {
-	tokens := strings.Fields(value.Raw)
-	if len(tokens) == 0 && value.Raw == "" {
-		tokens = []string{formatCSSValue(value)}
-	}
-	if len(tokens) == 0 {
+	top, right, bottom, left, ok := pdfCSSBoxShorthand(value, style.Paragraph.FontSize)
+	if !ok {
 		return
-	}
-	values := make([]float64, 0, len(tokens))
-	for _, token := range tokens {
-		points, ok := pdfCSSLengthPoints(parsePDFCSSValueToken(token), style.Paragraph.FontSize)
-		if !ok {
-			return
-		}
-		values = append(values, points)
-	}
-	var top, right, bottom, left float64
-	switch len(values) {
-	case 1:
-		top, right, bottom, left = values[0], values[0], values[0], values[0]
-	case 2:
-		top, right, bottom, left = values[0], values[1], values[0], values[1]
-	case 3:
-		top, right, bottom, left = values[0], values[1], values[2], values[1]
-	default:
-		top, right, bottom, left = values[0], values[1], values[2], values[3]
 	}
 	style.SpaceBefore = top
 	style.SpaceAfter = bottom
 	style.MarginLeft = left
 	style.MarginRight = right
+}
+
+func applyPDFPaddingShorthand(style *pdfBlockResolvedStyle, value css.Value) {
+	top, right, bottom, left, ok := pdfCSSBoxShorthand(value, style.Paragraph.FontSize)
+	if !ok {
+		return
+	}
+	style.PaddingTop = top
+	style.PaddingRight = right
+	style.PaddingBottom = bottom
+	style.PaddingLeft = left
+}
+
+func pdfCSSBoxShorthand(value css.Value, fontSize float64) (float64, float64, float64, float64, bool) {
+	tokens := strings.Fields(value.Raw)
+	if len(tokens) == 0 && value.Raw == "" {
+		tokens = []string{formatCSSValue(value)}
+	}
+	if len(tokens) == 0 {
+		return 0, 0, 0, 0, false
+	}
+	values := make([]float64, 0, len(tokens))
+	for _, token := range tokens {
+		points, ok := pdfCSSLengthPoints(parsePDFCSSValueToken(token), fontSize)
+		if !ok {
+			return 0, 0, 0, 0, false
+		}
+		values = append(values, points)
+	}
+	switch len(values) {
+	case 1:
+		return values[0], values[0], values[0], values[0], true
+	case 2:
+		return values[0], values[1], values[0], values[1], true
+	case 3:
+		return values[0], values[1], values[2], values[1], true
+	default:
+		return values[0], values[1], values[2], values[3], true
+	}
 }
 
 func pdfCSSFontFamily(value css.Value) (string, bool) {
@@ -837,6 +892,10 @@ func (r *pdfStyleResolver) debugStyles() []pdfDebugResolvedStyle {
 			SpaceAfter:        style.SpaceAfter,
 			MarginLeft:        style.MarginLeft,
 			MarginRight:       style.MarginRight,
+			PaddingTop:        style.PaddingTop,
+			PaddingRight:      style.PaddingRight,
+			PaddingBottom:     style.PaddingBottom,
+			PaddingLeft:       style.PaddingLeft,
 			KeepTogether:      style.KeepTogether,
 			KeepWithNextLines: style.KeepWithNextLines,
 			PageBreakBefore:   style.PageBreakBefore,

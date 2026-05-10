@@ -187,7 +187,7 @@ func pdfTraceFormatCSSProperties(props map[string]css.Value) string {
 }
 
 func pdfTraceFormatResolvedStyle(style pdfBlockResolvedStyle) string {
-	return fmt.Sprintf("font-family=%s, font-weight=%s, font-style=%s, color=%s, underline=%t, strikethrough=%t, font-size=%gpt, line-height=%gpt, letter-spacing=%gpt, text-indent=%gpt, align=%s, hyphens=%s, margins=%g/%g/%g/%g, keep-together=%t, keep-next=%d, page-break-before=%t, page-break-after=%t, hidden=%t, orphans=%d, widows=%d",
+	return fmt.Sprintf("font-family=%s, font-weight=%s, font-style=%s, color=%s, underline=%t, strikethrough=%t, font-size=%gpt, line-height=%gpt, letter-spacing=%gpt, text-indent=%gpt, align=%s, hyphens=%s, margins=%g/%g/%g/%g, padding=%g/%g/%g/%g, keep-together=%t, keep-next=%d, page-break-before=%t, page-break-after=%t, hidden=%t, orphans=%d, widows=%d",
 		normalizedPDFFontFamily(style.Paragraph.FontFamily),
 		pdfCSSFontWeightString(style.Paragraph.Bold),
 		pdfCSSFontStyleString(style.Paragraph.Italic),
@@ -204,6 +204,10 @@ func pdfTraceFormatResolvedStyle(style pdfBlockResolvedStyle) string {
 		style.MarginRight,
 		style.SpaceAfter,
 		style.MarginLeft,
+		style.PaddingTop,
+		style.PaddingRight,
+		style.PaddingBottom,
+		style.PaddingLeft,
 		style.KeepTogether,
 		style.KeepWithNextLines,
 		style.PageBreakBefore,
@@ -258,6 +262,10 @@ func pdfTraceStyleDiff(before, after pdfBlockResolvedStyle) string {
 	appendFloatChange("margin-bottom", before.SpaceAfter, after.SpaceAfter)
 	appendFloatChange("margin-left", before.MarginLeft, after.MarginLeft)
 	appendFloatChange("margin-right", before.MarginRight, after.MarginRight)
+	appendFloatChange("padding-top", before.PaddingTop, after.PaddingTop)
+	appendFloatChange("padding-right", before.PaddingRight, after.PaddingRight)
+	appendFloatChange("padding-bottom", before.PaddingBottom, after.PaddingBottom)
+	appendFloatChange("padding-left", before.PaddingLeft, after.PaddingLeft)
 	appendBoolChange("keep-together", before.KeepTogether, after.KeepTogether)
 	appendIntChange("keep-next", before.KeepWithNextLines, after.KeepWithNextLines)
 	appendBoolChange("page-break-before", before.PageBreakBefore, after.PageBreakBefore)

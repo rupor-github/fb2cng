@@ -143,7 +143,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 			if !ok {
 				continue
 			}
-			needed := style.SpaceBefore + height + style.SpaceAfter
+			needed := style.SpaceBefore + style.PaddingTop + height + style.PaddingBottom + style.SpaceAfter
 			if pageHasText && y-needed < bottom {
 				newTextPage()
 			}
@@ -151,19 +151,20 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 			if pageHasText {
 				y -= style.SpaceBefore
 			}
+			y -= style.PaddingTop
 			if y-height < bottom {
 				newTextPage()
 			}
 			y -= height
 			page.Images = append(page.Images, pdfPageImage{
 				ImageID: block.ImageID,
-				X:       margin + style.MarginLeft + max((blockWidth-width)/2, 0),
+				X:       margin + style.MarginLeft + style.PaddingLeft + max((blockWidth-width)/2, 0),
 				Y:       y,
 				Width:   width,
 				Height:  height,
 			})
 			pageHasText = true
-			y -= style.SpaceAfter
+			y -= style.PaddingBottom + style.SpaceAfter
 			if style.PageBreakAfter && pageHasText {
 				newTextPage()
 			}
@@ -195,7 +196,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 			continue
 		}
 
-		needed := style.SpaceBefore + float64(len(lines))*style.Paragraph.LineHeight
+		needed := style.SpaceBefore + style.PaddingTop + float64(len(lines))*style.Paragraph.LineHeight + style.PaddingBottom
 		if style.KeepTogether && pageHasText && y-needed < bottom {
 			newTextPage()
 		}
@@ -209,7 +210,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 			}
 		}
 		if !style.KeepTogether && pageHasText {
-			linesFit := countFittingLines(y-style.SpaceBefore, bottom, style.Paragraph.FontSize, style.Paragraph.LineHeight)
+			linesFit := countFittingLines(y-style.SpaceBefore-style.PaddingTop, bottom, style.Paragraph.FontSize, style.Paragraph.LineHeight)
 			if linesFit > 0 && linesFit < len(lines) {
 				firstFragmentLines := linesFit
 				if remaining := len(lines) - firstFragmentLines; remaining < style.Widows {
@@ -224,6 +225,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 		if pageHasText {
 			y -= style.SpaceBefore
 		}
+		y -= style.PaddingTop
 		lineSearchStart := 0
 		for lineIndex, line := range lines {
 			if y-style.Paragraph.FontSize < bottom {
@@ -233,7 +235,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 			if remainingAfterLine > 0 && remainingAfterLine < style.Widows && y-style.Paragraph.LineHeight-style.Paragraph.FontSize < bottom {
 				newTextPage()
 			}
-			x := margin + style.MarginLeft + line.Indent
+			x := margin + style.MarginLeft + style.PaddingLeft + line.Indent
 			available := blockWidth - line.Indent
 			switch style.Paragraph.Align {
 			case textAlignCenter:
@@ -258,7 +260,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 			y -= style.Paragraph.LineHeight
 			pageHasText = true
 		}
-		y -= style.SpaceAfter
+		y -= style.PaddingBottom + style.SpaceAfter
 		if style.PageBreakAfter && pageHasText {
 			newTextPage()
 		}
@@ -301,7 +303,7 @@ func nextBlockKeepHeight(blocks []pdfTextBlock, hyphenator paragraphHyphenator, 
 		if len(lines) == 0 {
 			continue
 		}
-		return style.SpaceBefore + float64(min(minLines, len(lines)))*style.Paragraph.LineHeight, nil
+		return style.SpaceBefore + style.PaddingTop + float64(min(minLines, len(lines)))*style.Paragraph.LineHeight + style.PaddingBottom, nil
 	}
 	return 0, nil
 }
