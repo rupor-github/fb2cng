@@ -12,6 +12,7 @@ import (
 
 	"fbc/config"
 	"fbc/content"
+	"fbc/convert/pdf/internal/pdfdoc"
 	"fbc/fb2"
 )
 
@@ -91,10 +92,10 @@ func TestGenerateSkeletonPDF(t *testing.T) {
 			t.Errorf("generated PDF does not contain %q", want)
 		}
 	}
-	if !strings.Contains(pdfText, pdfUnicodeString("Test Book")) {
+	if !strings.Contains(pdfText, pdfdoc.Format(pdfdoc.UTF16TextString("Test Book"))) {
 		t.Errorf("generated PDF does not contain UTF-16BE title metadata")
 	}
-	if !strings.Contains(pdfText, pdfUnicodeString("First Author, Second")) {
+	if !strings.Contains(pdfText, pdfdoc.Format(pdfdoc.UTF16TextString("First Author, Second"))) {
 		t.Errorf("generated PDF does not contain UTF-16BE author metadata")
 	}
 }

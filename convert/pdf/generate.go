@@ -4,18 +4,16 @@ import (
 	"bytes"
 	"compress/zlib"
 	"context"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
-	"unicode/utf16"
 
 	"go.uber.org/zap"
 
 	"fbc/config"
 	"fbc/content"
+	"fbc/convert/pdf/internal/pdfdoc"
 	"fbc/fb2"
 )
 
@@ -95,8 +93,7 @@ func pageSizePoints(screen config.ScreenConfig) (float64, float64, error) {
 }
 
 func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
-	writer := newPDFWriter()
-	writer.writeHeader()
+	writer := pdfdoc.NewWriter(pdfVersion)
 
 	const (
 		catalogID = 1
@@ -106,39 +103,66 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 		infoID    = 5
 	)
 
-	writer.object(catalogID, fmt.Sprintf("<< /Type /Catalog /Pages %d 0 R >>", pagesID))
-	writer.object(pagesID, fmt.Sprintf("<< /Type /Pages /Kids [%d 0 R] /Count 1 >>", pageID))
-	writer.object(pageID, fmt.Sprintf(
-		"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 %s %s] /Resources << >> /Contents %d 0 R >>",
-		pagesID,
-		formatPDFNumber(doc.PageWidth),
-		formatPDFNumber(doc.PageHeight),
-		contentID,
-	))
+	if err := writer.Object(catalogID, pdfdoc.Dict{
+		"Pages": pdfdoc.Ref{ObjectNumber: pagesID},
+		"Type":  pdfdoc.Name("Catalog"),
+	}); err != nil {
+		return nil, err
+	}
+	if err := writer.Object(pagesID, pdfdoc.Dict{
+		"Count": pdfdoc.Integer(1),
+		"Kids":  pdfdoc.Array{pdfdoc.Ref{ObjectNumber: pageID}},
+		"Type":  pdfdoc.Name("Pages"),
+	}); err != nil {
+		return nil, err
+	}
+	if err := writer.Object(pageID, pdfdoc.Dict{
+		"Contents": pdfdoc.Ref{ObjectNumber: contentID},
+		"MediaBox": pdfdoc.Array{
+			pdfdoc.Integer(0),
+			pdfdoc.Integer(0),
+			pdfdoc.Number(doc.PageWidth),
+			pdfdoc.Number(doc.PageHeight),
+		},
+		"Parent":    pdfdoc.Ref{ObjectNumber: pagesID},
+		"Resources": pdfdoc.Dict{},
+		"Type":      pdfdoc.Name("Page"),
+	}); err != nil {
+		return nil, err
+	}
 
 	stream, err := flateStream([]byte("q\nQ\n"))
 	if err != nil {
 		return nil, err
 	}
-	writer.streamObject(contentID, "<< /Filter /FlateDecode", stream)
-	writer.object(infoID, infoDictionary(doc))
+	if err := writer.StreamObject(contentID, pdfdoc.Dict{
+		"Filter": pdfdoc.Name("FlateDecode"),
+	}, stream); err != nil {
+		return nil, err
+	}
+	if err := writer.Object(infoID, infoDictionary(doc)); err != nil {
+		return nil, err
+	}
 
-	writer.writeXrefAndTrailer(catalogID, infoID)
-	return writer.bytes(), nil
+	infoRef := pdfdoc.Ref{ObjectNumber: infoID}
+	return writer.Finish(pdfdoc.Trailer{
+		Root: pdfdoc.Ref{ObjectNumber: catalogID},
+		Info: &infoRef,
+	})
 }
 
-func infoDictionary(doc skeletonDocument) string {
-	parts := []string{
-		"/Creator " + pdfUnicodeString("fbc"),
-		"/Producer " + pdfUnicodeString("fbc"),
+func infoDictionary(doc skeletonDocument) pdfdoc.Dict {
+	info := pdfdoc.Dict{
+		"Creator":  pdfdoc.UTF16TextString("fbc"),
+		"Producer": pdfdoc.UTF16TextString("fbc"),
 	}
 	if doc.Title != "" {
-		parts = append(parts, "/Title "+pdfUnicodeString(doc.Title))
+		info["Title"] = pdfdoc.UTF16TextString(doc.Title)
 	}
 	if doc.Author != "" {
-		parts = append(parts, "/Author "+pdfUnicodeString(doc.Author))
+		info["Author"] = pdfdoc.UTF16TextString(doc.Author)
 	}
-	return "<< " + strings.Join(parts, " ") + " >>"
+	return info
 }
 
 func flateStream(data []byte) ([]byte, error) {
@@ -151,27 +175,6 @@ func flateStream(data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("finish content stream compression: %w", err)
 	}
 	return buf.Bytes(), nil
-}
-
-func formatPDFNumber(n float64) string {
-	formatted := strconv.FormatFloat(n, 'f', 4, 64)
-	formatted = strings.TrimRight(formatted, "0")
-	formatted = strings.TrimRight(formatted, ".")
-	if formatted == "-0" {
-		return "0"
-	}
-	return formatted
-}
-
-func pdfUnicodeString(s string) string {
-	words := utf16.Encode([]rune(s))
-	data := make([]byte, 2, 2+len(words)*2)
-	data[0] = 0xfe
-	data[1] = 0xff
-	for _, word := range words {
-		data = append(data, byte(word>>8), byte(word))
-	}
-	return "<" + strings.ToUpper(hex.EncodeToString(data)) + ">"
 }
 
 func bookTitle(c *content.Content) string {
@@ -213,49 +216,4 @@ func authorName(author *fb2.Author) string {
 		return strings.Join(parts, " ")
 	}
 	return strings.TrimSpace(author.Nickname)
-}
-
-type pdfWriter struct {
-	buf     bytes.Buffer
-	offsets map[int]int
-}
-
-func newPDFWriter() *pdfWriter {
-	return &pdfWriter{offsets: make(map[int]int)}
-}
-
-func (w *pdfWriter) writeHeader() {
-	fmt.Fprintf(&w.buf, "%%PDF-%s\n", pdfVersion)
-	w.buf.WriteString("%\xE2\xE3\xCF\xD3\n")
-}
-
-func (w *pdfWriter) object(id int, body string) {
-	w.offsets[id] = w.buf.Len()
-	fmt.Fprintf(&w.buf, "%d 0 obj\n%s\nendobj\n", id, body)
-}
-
-func (w *pdfWriter) streamObject(id int, dictPrefix string, data []byte) {
-	w.offsets[id] = w.buf.Len()
-	fmt.Fprintf(&w.buf, "%d 0 obj\n%s /Length %d >>\nstream\n", id, dictPrefix, len(data))
-	w.buf.Write(data)
-	w.buf.WriteString("\nendstream\nendobj\n")
-}
-
-func (w *pdfWriter) writeXrefAndTrailer(rootID, infoID int) {
-	startXref := w.buf.Len()
-	maxID := 0
-	for id := range w.offsets {
-		maxID = max(maxID, id)
-	}
-
-	fmt.Fprintf(&w.buf, "xref\n0 %d\n", maxID+1)
-	w.buf.WriteString("0000000000 65535 f \n")
-	for id := 1; id <= maxID; id++ {
-		fmt.Fprintf(&w.buf, "%010d 00000 n \n", w.offsets[id])
-	}
-	fmt.Fprintf(&w.buf, "trailer\n<< /Size %d /Root %d 0 R /Info %d 0 R >>\nstartxref\n%d\n%%%%EOF\n", maxID+1, rootID, infoID, startXref)
-}
-
-func (w *pdfWriter) bytes() []byte {
-	return w.buf.Bytes()
 }
