@@ -624,10 +624,15 @@ func TestGenerateDebugDumps(t *testing.T) {
 			Bodies: []fb2.Body{{
 				Kind: fb2.BodyMain,
 				Sections: []fb2.Section{{
+					ID:    "debug-section",
 					Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter"}}}}}},
 					Content: []fb2.FlowItem{{
-						Kind:      fb2.FlowParagraph,
-						Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Debug body text."}}},
+						Kind: fb2.FlowParagraph,
+						Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
+							{Text: "Debug body "},
+							{Kind: fb2.InlineLink, Href: "https://example.com", Children: []fb2.InlineSegment{{Text: "link"}}},
+							{Text: "."},
+						}},
 					}},
 				}},
 			}},
@@ -636,6 +641,12 @@ func TestGenerateDebugDumps(t *testing.T) {
 
 	if err := Generate(context.Background(), c, outputName, cfg, zaptest.NewLogger(t)); err != nil {
 		t.Fatalf("Generate() error = %v", err)
+	}
+
+	var structurePlan pdfDebugStructurePlan
+	readJSONDebugFile(t, filepath.Join(tmpDir, "pdf-structure-plan.json"), &structurePlan)
+	if len(structurePlan.Units) == 0 || structurePlan.Units[0].ID != "debug-section" || structurePlan.Units[0].Kind != "section" {
+		t.Fatalf("debug structure plan = %#v, want debug section unit", structurePlan)
 	}
 
 	blockData, err := os.ReadFile(filepath.Join(tmpDir, "pdf-text-blocks.json"))
@@ -659,6 +670,38 @@ func TestGenerateDebugDumps(t *testing.T) {
 	}
 	if got := pages[0].Lines[0].Text; got != "Debug Book" {
 		t.Fatalf("first debug line = %q, want Debug Book", got)
+	}
+	if len(pages[1].Anchors) == 0 || pages[1].Anchors[0] != "debug-section" {
+		t.Fatalf("body page anchors = %#v, want debug-section", pages[1].Anchors)
+	}
+
+	var links []pdfDebugLink
+	readJSONDebugFile(t, filepath.Join(tmpDir, "pdf-links.json"), &links)
+	if len(links) != 1 || links[0].Href != "https://example.com" || links[0].ObjectID == 0 {
+		t.Fatalf("debug links = %#v, want external link with object id", links)
+	}
+
+	var images []pdfDebugImage
+	readJSONDebugFile(t, filepath.Join(tmpDir, "pdf-images.json"), &images)
+	if images == nil {
+		t.Fatalf("debug images should unmarshal to an empty array, got nil")
+	}
+
+	var fonts []pdfDebugFont
+	readJSONDebugFile(t, filepath.Join(tmpDir, "pdf-fonts.json"), &fonts)
+	if len(fonts) != 1 || fonts[0].PostScriptName == "" || fonts[0].UsedGlyphCount == 0 {
+		t.Fatalf("debug fonts = %#v, want one used font", fonts)
+	}
+}
+
+func readJSONDebugFile(t *testing.T, path string, v any) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", filepath.Base(path), err)
+	}
+	if err := json.Unmarshal(data, v); err != nil {
+		t.Fatalf("unmarshal %s: %v", filepath.Base(path), err)
 	}
 }
 

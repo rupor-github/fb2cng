@@ -69,6 +69,7 @@ func Generate(ctx context.Context, c *content.Content, outputName string, cfg *c
 		Keywords:       bookKeywords(c),
 		Blocks:         contentPlan.Blocks,
 		TOC:            contentPlan.TOC,
+		DebugPlan:      contentPlan.DebugPlan,
 		Images:         c.ImagesIndex,
 		CoverID:        c.CoverID,
 		Hyphenator:     pdfHyphenator(c, log),
@@ -104,6 +105,7 @@ type skeletonDocument struct {
 	Keywords       string
 	Blocks         []pdfTextBlock
 	TOC            []*structure.TOCEntry
+	DebugPlan      pdfDebugStructurePlan
 	Images         fb2.BookImages
 	CoverID        string
 	Hyphenator     paragraphHyphenator
@@ -151,8 +153,9 @@ const (
 )
 
 type pdfContentPlan struct {
-	Blocks []pdfTextBlock
-	TOC    []*structure.TOCEntry
+	Blocks    []pdfTextBlock
+	TOC       []*structure.TOCEntry
+	DebugPlan pdfDebugStructurePlan
 }
 
 type pdfTextBlock struct {
@@ -254,9 +257,6 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 	if len(pages) == 0 {
 		return nil, errors.New("pdf document must contain at least one page")
 	}
-	if err := writePDFDebugDumps(doc, pages); err != nil {
-		return nil, err
-	}
 
 	pages[0].ObjectID = firstPageID
 	pages[0].ContentID = firstContentID
@@ -274,6 +274,9 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 	assignPDFImageResourceNames(pages, imageResources)
 	outlines := buildOutlines(doc.TOC, pages, &nextObjectID)
 	assignAnnotationObjectIDs(pages, &nextObjectID)
+	if err := writePDFDebugDumps(doc, pages, fontFace, usedGlyphs); err != nil {
+		return nil, err
+	}
 
 	fontObjs, err := fontResourceObjects(fontFace, usedGlyphs, fontObjectIDs{
 		Type0Font:      type0FontID,
@@ -1022,6 +1025,41 @@ func pdfStyleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
 	}
 }
 
+type pdfDebugStructurePlan struct {
+	Units     []pdfDebugStructureUnit     `json:"units"`
+	TOC       []pdfDebugStructureTOCEntry `json:"toc,omitempty"`
+	Landmarks structure.LandmarkInfo      `json:"landmarks"`
+	Generated pdfDebugStructureGenerated  `json:"generated"`
+}
+
+type pdfDebugStructureUnit struct {
+	Index        int    `json:"index"`
+	Kind         string `json:"kind"`
+	ID           string `json:"id,omitempty"`
+	Title        string `json:"title,omitempty"`
+	Depth        int    `json:"depth,omitempty"`
+	TitleDepth   int    `json:"title_depth,omitempty"`
+	ForceNewPage bool   `json:"force_new_page,omitempty"`
+	BodyName     string `json:"body_name,omitempty"`
+	SectionID    string `json:"section_id,omitempty"`
+	IsTopLevel   bool   `json:"is_top_level,omitempty"`
+}
+
+type pdfDebugStructureTOCEntry struct {
+	ID           string                      `json:"id,omitempty"`
+	Title        string                      `json:"title,omitempty"`
+	IncludeInTOC bool                        `json:"include_in_toc"`
+	Children     []pdfDebugStructureTOCEntry `json:"children,omitempty"`
+}
+
+type pdfDebugStructureGenerated struct {
+	AnnotationPage                 bool   `json:"annotation_page"`
+	AnnotationInTOC                bool   `json:"annotation_in_toc"`
+	TOCPagePlacement               string `json:"toc_page_placement,omitempty"`
+	TOCIncludeChaptersWithoutTitle bool   `json:"toc_include_chapters_without_title,omitempty"`
+	TOCType                        string `json:"toc_type,omitempty"`
+}
+
 type pdfDebugBlock struct {
 	Index   int    `json:"index"`
 	Kind    string `json:"kind"`
@@ -1032,8 +1070,13 @@ type pdfDebugBlock struct {
 }
 
 type pdfDebugPage struct {
-	Number int            `json:"number"`
-	Lines  []pdfDebugLine `json:"lines"`
+	Number    int             `json:"number"`
+	ObjectID  int             `json:"object_id,omitempty"`
+	ContentID int             `json:"content_id,omitempty"`
+	Anchors   []string        `json:"anchors,omitempty"`
+	Lines     []pdfDebugLine  `json:"lines"`
+	Images    []pdfDebugImage `json:"images,omitempty"`
+	Links     []pdfDebugLink  `json:"links,omitempty"`
 }
 
 type pdfDebugLine struct {
@@ -1045,10 +1088,52 @@ type pdfDebugLine struct {
 	ExtraWordSpacing float64 `json:"extra_word_spacing,omitempty"`
 }
 
-func writePDFDebugDumps(doc skeletonDocument, pages []pdfPage) error {
+type pdfDebugImage struct {
+	Page         int     `json:"page,omitempty"`
+	ImageID      string  `json:"image_id"`
+	ResourceName string  `json:"resource_name,omitempty"`
+	X            float64 `json:"x"`
+	Y            float64 `json:"y"`
+	Width        float64 `json:"width"`
+	Height       float64 `json:"height"`
+}
+
+type pdfDebugLink struct {
+	Page     int          `json:"page,omitempty"`
+	ObjectID int          `json:"object_id,omitempty"`
+	Href     string       `json:"href"`
+	Internal bool         `json:"internal"`
+	Rect     pdfDebugRect `json:"rect"`
+}
+
+type pdfDebugRect struct {
+	X1 float64 `json:"x1"`
+	Y1 float64 `json:"y1"`
+	X2 float64 `json:"x2"`
+	Y2 float64 `json:"y2"`
+}
+
+type pdfDebugFont struct {
+	PostScriptName string   `json:"post_script_name"`
+	UnitsPerEm     int      `json:"units_per_em"`
+	Ascent         int      `json:"ascent"`
+	Descent        int      `json:"descent"`
+	CapHeight      int      `json:"cap_height"`
+	BBox           [4]int   `json:"bbox"`
+	Flags          int      `json:"flags"`
+	ItalicAngle    int      `json:"italic_angle"`
+	UsedGlyphCount int      `json:"used_glyph_count"`
+	UsedGlyphIDs   []uint16 `json:"used_glyph_ids"`
+}
+
+func writePDFDebugDumps(doc skeletonDocument, pages []pdfPage, face *builtinFontFace, usedGlyphs map[uint16]shapedGlyph) error {
 	if !doc.Debug || doc.WorkDir == "" {
 		return nil
 	}
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-structure-plan.json"), doc.DebugPlan); err != nil {
+		return err
+	}
+
 	blocks := make([]pdfDebugBlock, 0, len(doc.Blocks))
 	for i, block := range doc.Blocks {
 		blocks = append(blocks, pdfDebugBlock{
@@ -1064,11 +1149,32 @@ func writePDFDebugDumps(doc skeletonDocument, pages []pdfPage) error {
 		return err
 	}
 
+	debugPages, debugImages, debugLinks := pdfDebugPages(pages)
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-layout-pages.json"), debugPages); err != nil {
+		return err
+	}
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-images.json"), debugImages); err != nil {
+		return err
+	}
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-links.json"), debugLinks); err != nil {
+		return err
+	}
+	return writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-fonts.json"), pdfDebugFonts(face, usedGlyphs))
+}
+
+func pdfDebugPages(pages []pdfPage) ([]pdfDebugPage, []pdfDebugImage, []pdfDebugLink) {
 	debugPages := make([]pdfDebugPage, 0, len(pages))
+	debugImages := make([]pdfDebugImage, 0)
+	debugLinks := make([]pdfDebugLink, 0)
 	for i, page := range pages {
 		debugPage := pdfDebugPage{
-			Number: i + 1,
-			Lines:  make([]pdfDebugLine, 0, len(page.Lines)),
+			Number:    i + 1,
+			ObjectID:  page.ObjectID,
+			ContentID: page.ContentID,
+			Anchors:   slices.Clone(page.Anchors),
+			Lines:     make([]pdfDebugLine, 0, len(page.Lines)),
+			Images:    make([]pdfDebugImage, 0, len(page.Images)),
+			Links:     make([]pdfDebugLink, 0, len(page.Annotations)),
 		}
 		for _, line := range page.Lines {
 			debugPage.Lines = append(debugPage.Lines, pdfDebugLine{
@@ -1080,9 +1186,61 @@ func writePDFDebugDumps(doc skeletonDocument, pages []pdfPage) error {
 				ExtraWordSpacing: line.ExtraWordSpacing,
 			})
 		}
+		for _, image := range page.Images {
+			debugImage := pdfDebugImage{
+				Page:         i + 1,
+				ImageID:      image.ImageID,
+				ResourceName: image.Name,
+				X:            image.X,
+				Y:            image.Y,
+				Width:        image.Width,
+				Height:       image.Height,
+			}
+			debugPage.Images = append(debugPage.Images, debugImage)
+			debugImages = append(debugImages, debugImage)
+		}
+		for _, link := range page.Annotations {
+			debugLink := pdfDebugLink{
+				Page:     i + 1,
+				ObjectID: link.ObjectID,
+				Href:     link.Href,
+				Internal: strings.HasPrefix(link.Href, "#"),
+				Rect: pdfDebugRect{
+					X1: link.Rect.X1,
+					Y1: link.Rect.Y1,
+					X2: link.Rect.X2,
+					Y2: link.Rect.Y2,
+				},
+			}
+			debugPage.Links = append(debugPage.Links, debugLink)
+			debugLinks = append(debugLinks, debugLink)
+		}
 		debugPages = append(debugPages, debugPage)
 	}
-	return writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-layout-pages.json"), debugPages)
+	return debugPages, debugImages, debugLinks
+}
+
+func pdfDebugFonts(face *builtinFontFace, usedGlyphs map[uint16]shapedGlyph) []pdfDebugFont {
+	if face == nil {
+		return nil
+	}
+	usedGlyphIDs := make([]uint16, 0, len(usedGlyphs))
+	for glyphID := range usedGlyphs {
+		usedGlyphIDs = append(usedGlyphIDs, glyphID)
+	}
+	slices.Sort(usedGlyphIDs)
+	return []pdfDebugFont{{
+		PostScriptName: face.PostScriptName,
+		UnitsPerEm:     face.UnitsPerEm,
+		Ascent:         face.Ascent,
+		Descent:        face.Descent,
+		CapHeight:      face.CapHeight,
+		BBox:           face.BBox,
+		Flags:          face.Flags,
+		ItalicAngle:    face.ItalicAngle,
+		UsedGlyphCount: len(usedGlyphIDs),
+		UsedGlyphIDs:   usedGlyphIDs,
+	}}
 }
 
 func writeJSONDebugDump(path string, v any) error {
@@ -1175,6 +1333,7 @@ func collectPDFContent(c *content.Content, cfg *config.DocumentConfig) (pdfConte
 		return pdfContentPlan{}, err
 	}
 
+	debugPlan := pdfDebugStructurePlanFromPlan(plan, cfg)
 	blocks := make([]pdfTextBlock, 0, 64)
 	splitSections := splitSectionIDs(plan)
 	splitBodies := splitBodyImageBodies(plan)
@@ -1188,7 +1347,85 @@ func collectPDFContent(c *content.Content, cfg *config.DocumentConfig) (pdfConte
 	toc := plan.TOC
 	blocks, toc = insertAnnotationPageBlocks(blocks, toc, c.Book.Description.TitleInfo.Annotation, cfg)
 	blocks = insertTOCPageBlocks(blocks, toc, cfg)
-	return pdfContentPlan{Blocks: blocks, TOC: toc}, nil
+	debugPlan.TOC = pdfDebugStructureTOCEntries(toc)
+	return pdfContentPlan{Blocks: blocks, TOC: toc, DebugPlan: debugPlan}, nil
+}
+
+func pdfDebugStructurePlanFromPlan(plan *structure.Plan, cfg *config.DocumentConfig) pdfDebugStructurePlan {
+	if plan == nil {
+		return pdfDebugStructurePlan{}
+	}
+	debugPlan := pdfDebugStructurePlan{
+		Units:     make([]pdfDebugStructureUnit, 0, len(plan.Units)),
+		Landmarks: plan.Landmarks,
+	}
+	for i := range plan.Units {
+		unit := &plan.Units[i]
+		debugUnit := pdfDebugStructureUnit{
+			Index:        i,
+			Kind:         structureUnitKindString(unit.Kind),
+			ID:           unit.ID,
+			Title:        unit.Title,
+			Depth:        unit.Depth,
+			TitleDepth:   unit.TitleDepth,
+			ForceNewPage: unit.ForceNewPage,
+			IsTopLevel:   unit.IsTopLevel,
+		}
+		if unit.Body != nil {
+			debugUnit.BodyName = unit.Body.Name
+		}
+		if unit.Section != nil {
+			debugUnit.SectionID = unit.Section.ID
+		}
+		debugPlan.Units = append(debugPlan.Units, debugUnit)
+	}
+	if cfg != nil {
+		debugPlan.Generated = pdfDebugStructureGenerated{
+			AnnotationPage:                 cfg.Annotation.Enable,
+			AnnotationInTOC:                cfg.Annotation.InTOC,
+			TOCPagePlacement:               cfg.TOCPage.Placement.String(),
+			TOCIncludeChaptersWithoutTitle: cfg.TOCPage.ChaptersWithoutTitle,
+			TOCType:                        cfg.TOCType.String(),
+		}
+	}
+	return debugPlan
+}
+
+func structureUnitKindString(kind structure.UnitKind) string {
+	switch kind {
+	case structure.UnitCover:
+		return "cover"
+	case structure.UnitBodyImage:
+		return "body-image"
+	case structure.UnitBodyIntro:
+		return "body-intro"
+	case structure.UnitSection:
+		return "section"
+	case structure.UnitFootnotesBody:
+		return "footnotes-body"
+	case structure.UnitAnnotation:
+		return "annotation"
+	case structure.UnitTOC:
+		return "toc"
+	default:
+		return "unknown"
+	}
+}
+
+func pdfDebugStructureTOCEntries(entries []*structure.TOCEntry) []pdfDebugStructureTOCEntry {
+	out := make([]pdfDebugStructureTOCEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry == nil {
+			continue
+		}
+		out = append(out, pdfDebugStructureTOCEntry{
+			ID:           entry.ID,
+			Title:        entry.Title,
+			IncludeInTOC: entry.IncludeInTOC,
+			Children:     pdfDebugStructureTOCEntries(entry.Children),
+		})
+	}
+	return out
 }
 
 func insertAnnotationPageBlocks(blocks []pdfTextBlock, toc []*structure.TOCEntry, annotation *fb2.Flow, cfg *config.DocumentConfig) ([]pdfTextBlock, []*structure.TOCEntry) {
