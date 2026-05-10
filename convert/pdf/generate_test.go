@@ -121,13 +121,75 @@ func TestCollectTextBlocksIncludesLinkChildren(t *testing.T) {
 		}}}},
 	}}}}
 
-	blocks := collectTextBlocks(c)
+	blocks, err := collectTextBlocks(c)
+	if err != nil {
+		t.Fatalf("collectTextBlocks() error = %v", err)
+	}
+	blocks = textBlocksOnly(blocks)
 	if len(blocks) != 1 {
-		t.Fatalf("collectTextBlocks() produced %d blocks, want 1", len(blocks))
+		t.Fatalf("collectTextBlocks() produced %d text blocks, want 1", len(blocks))
 	}
 	if got := blocks[0].Text; got != "See linked text" {
 		t.Fatalf("block text = %q, want %q", got, "See linked text")
 	}
+}
+
+func TestCollectTextBlocksUsesStructuralPageBreaks(t *testing.T) {
+	book := &fb2.FictionBook{Bodies: []fb2.Body{{
+		Kind: fb2.BodyMain,
+		Sections: []fb2.Section{{
+			ID:    "chapter",
+			Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter"}}}}}},
+			Content: []fb2.FlowItem{{
+				Kind: fb2.FlowSection,
+				Section: &fb2.Section{
+					ID:    "nested",
+					Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Nested"}}}}}},
+					Content: []fb2.FlowItem{{
+						Kind:      fb2.FlowParagraph,
+						Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Nested body."}}},
+					}},
+				},
+			}},
+		}},
+	}}}
+	book.SetSectionPageBreaks(map[int]bool{2: true})
+
+	blocks, err := collectTextBlocks(&content.Content{Book: book})
+	if err != nil {
+		t.Fatalf("collectTextBlocks() error = %v", err)
+	}
+	var pageBreaks int
+	var texts []string
+	for _, block := range blocks {
+		if block.Kind == pdfBlockPageBreak {
+			pageBreaks++
+			continue
+		}
+		texts = append(texts, block.Text)
+	}
+	if pageBreaks != 2 {
+		t.Fatalf("page breaks = %d, want 2", pageBreaks)
+	}
+	wantTexts := []string{"Chapter", "Nested", "Nested body."}
+	if len(texts) != len(wantTexts) {
+		t.Fatalf("texts = %#v, want %#v", texts, wantTexts)
+	}
+	for i := range wantTexts {
+		if texts[i] != wantTexts[i] {
+			t.Fatalf("texts = %#v, want %#v", texts, wantTexts)
+		}
+	}
+}
+
+func textBlocksOnly(blocks []pdfTextBlock) []pdfTextBlock {
+	out := make([]pdfTextBlock, 0, len(blocks))
+	for _, block := range blocks {
+		if block.Kind != pdfBlockPageBreak {
+			out = append(out, block)
+		}
+	}
+	return out
 }
 
 func TestGenerateTextBodyAddsPaginatedBodyPage(t *testing.T) {

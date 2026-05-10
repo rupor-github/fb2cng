@@ -14,6 +14,7 @@ import (
 	"fbc/config"
 	"fbc/content"
 	"fbc/convert/pdf/internal/pdfdoc"
+	"fbc/convert/structure"
 	"fbc/fb2"
 )
 
@@ -44,12 +45,17 @@ func Generate(ctx context.Context, c *content.Content, outputName string, cfg *c
 		return err
 	}
 
+	blocks, err := collectTextBlocks(c)
+	if err != nil {
+		return fmt.Errorf("collect pdf text blocks: %w", err)
+	}
+
 	data, err := buildSkeletonPDF(skeletonDocument{
 		PageWidth:  pageWidth,
 		PageHeight: pageHeight,
 		Title:      bookTitle(c),
 		Author:     bookAuthors(c),
-		Blocks:     collectTextBlocks(c),
+		Blocks:     blocks,
 	})
 	if err != nil {
 		return fmt.Errorf("build pdf: %w", err)
@@ -86,6 +92,7 @@ const (
 	pdfBlockPoem
 	pdfBlockTextAuthor
 	pdfBlockEmptyLine
+	pdfBlockPageBreak
 )
 
 type pdfTextBlock struct {
@@ -343,6 +350,13 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 	}
 
 	for _, block := range doc.Blocks {
+		if block.Kind == pdfBlockPageBreak {
+			if pageHasText {
+				newTextPage()
+			}
+			continue
+		}
+
 		style := pdfStyleForBlock(block)
 		if block.Kind == pdfBlockEmptyLine {
 			if y-style.Paragraph.LineHeight < bottom {
@@ -461,28 +475,56 @@ func justifiedGlyphArray(glyphs []shapedGlyph, extraWordSpacing, fontSize float6
 	return buf.String()
 }
 
-func collectTextBlocks(c *content.Content) []pdfTextBlock {
+func collectTextBlocks(c *content.Content) ([]pdfTextBlock, error) {
 	if c == nil || c.Book == nil {
-		return nil
+		return nil, nil
 	}
+	plan, err := structure.BuildPlan(c)
+	if err != nil {
+		return nil, err
+	}
+
 	blocks := make([]pdfTextBlock, 0, 64)
-	for i := range c.Book.Bodies {
-		body := &c.Book.Bodies[i]
-		if body.Footnotes() {
-			continue
+	splitSections := splitSectionIDs(plan)
+	for i := range plan.Units {
+		unit := &plan.Units[i]
+		if unit.ForceNewPage {
+			blocks = append(blocks, pdfTextBlock{Kind: pdfBlockPageBreak})
 		}
-		appendBodyBlocks(&blocks, body)
+		appendUnitBlocks(&blocks, unit, splitSections)
 	}
-	for i := range c.Book.Bodies {
-		body := &c.Book.Bodies[i]
-		if body.Footnotes() {
-			appendBodyBlocks(&blocks, body)
-		}
-	}
-	return blocks
+	return blocks, nil
 }
 
-func appendBodyBlocks(blocks *[]pdfTextBlock, body *fb2.Body) {
+func splitSectionIDs(plan *structure.Plan) map[string]bool {
+	ids := make(map[string]bool)
+	if plan == nil {
+		return ids
+	}
+	for i := range plan.Units {
+		unit := &plan.Units[i]
+		if unit.Kind == structure.UnitSection && unit.Section != nil && unit.ID != "" {
+			ids[unit.ID] = true
+		}
+	}
+	return ids
+}
+
+func appendUnitBlocks(blocks *[]pdfTextBlock, unit *structure.Unit, splitSections map[string]bool) {
+	if unit == nil {
+		return
+	}
+	switch unit.Kind {
+	case structure.UnitBodyIntro:
+		appendBodyIntroBlocks(blocks, unit.Body)
+	case structure.UnitSection:
+		appendSectionBlocks(blocks, unit.Section, unit.TitleDepth, splitSections)
+	case structure.UnitFootnotesBody:
+		appendBodyBlocks(blocks, unit.Body, splitSections)
+	}
+}
+
+func appendBodyIntroBlocks(blocks *[]pdfTextBlock, body *fb2.Body) {
 	if body == nil {
 		return
 	}
@@ -490,12 +532,19 @@ func appendBodyBlocks(blocks *[]pdfTextBlock, body *fb2.Body) {
 	for i := range body.Epigraphs {
 		appendEpigraphBlocks(blocks, &body.Epigraphs[i])
 	}
+}
+
+func appendBodyBlocks(blocks *[]pdfTextBlock, body *fb2.Body, splitSections map[string]bool) {
+	if body == nil {
+		return
+	}
+	appendBodyIntroBlocks(blocks, body)
 	for i := range body.Sections {
-		appendSectionBlocks(blocks, &body.Sections[i], 1)
+		appendSectionBlocks(blocks, &body.Sections[i], 1, splitSections)
 	}
 }
 
-func appendSectionBlocks(blocks *[]pdfTextBlock, section *fb2.Section, depth int) {
+func appendSectionBlocks(blocks *[]pdfTextBlock, section *fb2.Section, depth int, splitSections map[string]bool) {
 	if section == nil {
 		return
 	}
@@ -504,10 +553,10 @@ func appendSectionBlocks(blocks *[]pdfTextBlock, section *fb2.Section, depth int
 		appendEpigraphBlocks(blocks, &section.Epigraphs[i])
 	}
 	if section.Annotation != nil {
-		appendFlowBlocks(blocks, section.Annotation.Items, depth)
+		appendFlowBlocks(blocks, section.Annotation.Items, depth, splitSections)
 	}
 	for i := range section.Content {
-		appendFlowItemBlock(blocks, &section.Content[i], depth)
+		appendFlowItemBlock(blocks, &section.Content[i], depth, splitSections)
 	}
 }
 
@@ -530,13 +579,13 @@ func appendTitleBlocks(blocks *[]pdfTextBlock, title *fb2.Title, depth int) {
 	}
 }
 
-func appendFlowBlocks(blocks *[]pdfTextBlock, items []fb2.FlowItem, depth int) {
+func appendFlowBlocks(blocks *[]pdfTextBlock, items []fb2.FlowItem, depth int, splitSections map[string]bool) {
 	for i := range items {
-		appendFlowItemBlock(blocks, &items[i], depth)
+		appendFlowItemBlock(blocks, &items[i], depth, splitSections)
 	}
 }
 
-func appendFlowItemBlock(blocks *[]pdfTextBlock, item *fb2.FlowItem, depth int) {
+func appendFlowItemBlock(blocks *[]pdfTextBlock, item *fb2.FlowItem, depth int, splitSections map[string]bool) {
 	if item == nil {
 		return
 	}
@@ -548,11 +597,14 @@ func appendFlowItemBlock(blocks *[]pdfTextBlock, item *fb2.FlowItem, depth int) 
 	case fb2.FlowEmptyLine:
 		*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine})
 	case fb2.FlowSection:
-		appendSectionBlocks(blocks, item.Section, depth+1)
+		if item.Section != nil && splitSections[item.Section.ID] {
+			return
+		}
+		appendSectionBlocks(blocks, item.Section, depth+1, splitSections)
 	case fb2.FlowPoem:
-		appendPoemBlocks(blocks, item.Poem, depth)
+		appendPoemBlocks(blocks, item.Poem, depth, splitSections)
 	case fb2.FlowCite:
-		appendCiteBlocks(blocks, item.Cite, depth)
+		appendCiteBlocks(blocks, item.Cite, depth, splitSections)
 	case fb2.FlowTable:
 		if item.Table != nil {
 			text := item.Table.AsPlainText()
@@ -572,7 +624,7 @@ func appendParagraphBlock(blocks *[]pdfTextBlock, kind pdfBlockKind, paragraph *
 	}
 }
 
-func appendPoemBlocks(blocks *[]pdfTextBlock, poem *fb2.Poem, depth int) {
+func appendPoemBlocks(blocks *[]pdfTextBlock, poem *fb2.Poem, depth int, splitSections map[string]bool) {
 	if poem == nil {
 		return
 	}
@@ -597,11 +649,11 @@ func appendPoemBlocks(blocks *[]pdfTextBlock, poem *fb2.Poem, depth int) {
 	}
 }
 
-func appendCiteBlocks(blocks *[]pdfTextBlock, cite *fb2.Cite, depth int) {
+func appendCiteBlocks(blocks *[]pdfTextBlock, cite *fb2.Cite, depth int, splitSections map[string]bool) {
 	if cite == nil {
 		return
 	}
-	appendFlowBlocks(blocks, cite.Items, depth)
+	appendFlowBlocks(blocks, cite.Items, depth, splitSections)
 	for i := range cite.TextAuthors {
 		appendParagraphBlock(blocks, pdfBlockTextAuthor, &cite.TextAuthors[i], depth)
 	}
@@ -611,7 +663,7 @@ func appendEpigraphBlocks(blocks *[]pdfTextBlock, epigraph *fb2.Epigraph) {
 	if epigraph == nil {
 		return
 	}
-	appendFlowBlocks(blocks, epigraph.Flow.Items, 1)
+	appendFlowBlocks(blocks, epigraph.Flow.Items, 1, nil)
 	for i := range epigraph.TextAuthors {
 		appendParagraphBlock(blocks, pdfBlockTextAuthor, &epigraph.TextAuthors[i], 1)
 	}
