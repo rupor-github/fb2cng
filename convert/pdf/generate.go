@@ -827,6 +827,7 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 	if styles == nil {
 		styles = newPDFStyleResolver(nil, nil)
 	}
+	blockStyles := styles.collapsedBlockStyles(doc.Blocks)
 	page := addPage()
 	top := doc.PageHeight - margin
 	bottom := margin
@@ -848,7 +849,7 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 		}
 
 		if block.Kind == pdfBlockImage {
-			style := styles.styleForBlock(block)
+			style := blockStyles[blockIndex]
 			blockWidth := blockContentWidth(contentWidth, style)
 			img := doc.Images[block.ImageID]
 			if img == nil {
@@ -882,7 +883,7 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 			continue
 		}
 
-		style := styles.styleForBlock(block)
+		style := blockStyles[blockIndex]
 		style.Paragraph.Hyphenator = doc.Hyphenator
 		blockWidth := blockContentWidth(contentWidth, style)
 		if block.Kind == pdfBlockEmptyLine {

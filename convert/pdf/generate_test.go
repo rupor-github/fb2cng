@@ -666,7 +666,7 @@ func TestGenerateDebugDumps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read pdf-style-trace.txt: %v", err)
 	}
-	if !bytes.Contains(traceData, []byte("=== PDF Style Trace ===")) || !bytes.Contains(traceData, []byte("ASSIGN")) {
+	if !bytes.Contains(traceData, []byte("=== PDF Style Trace ===")) || !bytes.Contains(traceData, []byte("ASSIGN")) || !bytes.Contains(traceData, []byte("COLLAPSE")) {
 		t.Fatalf("pdf-style-trace.txt missing expected content: %s", traceData)
 	}
 

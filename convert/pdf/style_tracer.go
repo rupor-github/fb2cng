@@ -87,6 +87,22 @@ func (t *pdfStyleTracer) traceStyleUpdate(name string, before, after pdfBlockRes
 	t.sections["style_update"]++
 }
 
+func (t *pdfStyleTracer) traceMarginCollapse(previousIndex, currentIndex int, previousBlock, currentBlock pdfTextBlock, previousMargin, currentMargin, collapsed float64) {
+	if !t.isEnabled() {
+		return
+	}
+	details := fmt.Sprintf("previous #%d %s margin-bottom=%g\n  current #%d %s margin-top=%g\n  collapsed margin-top=%g",
+		previousIndex,
+		previousBlock.Kind.String(),
+		previousMargin,
+		currentIndex,
+		currentBlock.Kind.String(),
+		currentMargin,
+		collapsed)
+	t.append("COLLAPSE", fmt.Sprintf("#%d -> #%d", previousIndex, currentIndex), details)
+	t.sections["margin_collapsed"]++
+}
+
 func (t *pdfStyleTracer) traceAssign(block pdfTextBlock, styleName string, style pdfBlockResolvedStyle) {
 	if !t.isEnabled() {
 		return

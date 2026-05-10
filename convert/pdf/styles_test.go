@@ -60,6 +60,61 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 	}
 }
 
+func TestPDFCollapsedBlockStylesCollapseAdjacentMargins(t *testing.T) {
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	resolver.styles["before"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceAfter: 4}
+	resolver.styles["after"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceBefore: 6}
+
+	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
+		{Kind: pdfBlockParagraph, StyleName: "before", Text: "before"},
+		{Kind: pdfBlockParagraph, StyleName: "after", Text: "after"},
+	})
+	if styles[0].SpaceAfter != 0 {
+		t.Fatalf("previous margin-bottom = %v, want 0", styles[0].SpaceAfter)
+	}
+	if styles[1].SpaceBefore != 6 {
+		t.Fatalf("current margin-top = %v, want collapsed max 6", styles[1].SpaceBefore)
+	}
+}
+
+func TestPDFCollapsedBlockStylesHandlesNegativeMargins(t *testing.T) {
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	resolver.styles["positive"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceAfter: 6}
+	resolver.styles["negative"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceBefore: -2}
+	resolver.styles["more-negative"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceAfter: -3}
+	resolver.styles["least-negative"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceBefore: -5}
+
+	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
+		{Kind: pdfBlockParagraph, StyleName: "positive", Text: "positive"},
+		{Kind: pdfBlockParagraph, StyleName: "negative", Text: "negative"},
+		{Kind: pdfBlockParagraph, StyleName: "more-negative", Text: "more-negative"},
+		{Kind: pdfBlockParagraph, StyleName: "least-negative", Text: "least-negative"},
+	})
+	if styles[1].SpaceBefore != 4 {
+		t.Fatalf("mixed-sign collapsed margin = %v, want 4", styles[1].SpaceBefore)
+	}
+	if styles[3].SpaceBefore != -5 {
+		t.Fatalf("negative collapsed margin = %v, want -5", styles[3].SpaceBefore)
+	}
+}
+
+func TestPDFCollapsedBlockStylesTreatsPageBreakAndEmptyLineAsBarriers(t *testing.T) {
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	resolver.styles["before"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceAfter: 4}
+	resolver.styles["after"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceBefore: 6}
+
+	for _, barrier := range []pdfBlockKind{pdfBlockPageBreak, pdfBlockEmptyLine} {
+		styles := resolver.collapsedBlockStyles([]pdfTextBlock{
+			{Kind: pdfBlockParagraph, StyleName: "before", Text: "before"},
+			{Kind: barrier},
+			{Kind: pdfBlockParagraph, StyleName: "after", Text: "after"},
+		})
+		if styles[0].SpaceAfter != 4 || styles[2].SpaceBefore != 6 {
+			t.Fatalf("barrier %s collapsed margins unexpectedly: before mb=%v after mt=%v", barrier, styles[0].SpaceAfter, styles[2].SpaceBefore)
+		}
+	}
+}
+
 func TestPDFStyleResolverMapsHeadingAndTOCStyles(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",
