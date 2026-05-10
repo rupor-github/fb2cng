@@ -53,6 +53,18 @@ const (
 	pdfStyleEmptyLine          = "emptyline"
 )
 
+type pdfBlockResolvedStyle struct {
+	Paragraph         paragraphStyle
+	SpaceBefore       float64
+	SpaceAfter        float64
+	MarginLeft        float64
+	MarginRight       float64
+	KeepTogether      bool
+	KeepWithNextLines int
+	Orphans           int
+	Widows            int
+}
+
 type pdfStyleResolver struct {
 	styles map[string]pdfBlockResolvedStyle
 	tracer *pdfStyleTracer

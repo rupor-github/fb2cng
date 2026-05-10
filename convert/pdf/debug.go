@@ -1,0 +1,264 @@
+package pdf
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+
+	"fbc/convert/structure"
+)
+
+type pdfDebugStructurePlan struct {
+	Units     []pdfDebugStructureUnit     `json:"units"`
+	TOC       []pdfDebugStructureTOCEntry `json:"toc,omitempty"`
+	Landmarks structure.LandmarkInfo      `json:"landmarks"`
+	Generated pdfDebugStructureGenerated  `json:"generated"`
+}
+
+type pdfDebugStructureUnit struct {
+	Index        int    `json:"index"`
+	Kind         string `json:"kind"`
+	ID           string `json:"id,omitempty"`
+	Title        string `json:"title,omitempty"`
+	Depth        int    `json:"depth,omitempty"`
+	TitleDepth   int    `json:"title_depth,omitempty"`
+	ForceNewPage bool   `json:"force_new_page,omitempty"`
+	BodyName     string `json:"body_name,omitempty"`
+	SectionID    string `json:"section_id,omitempty"`
+	IsTopLevel   bool   `json:"is_top_level,omitempty"`
+}
+
+type pdfDebugStructureTOCEntry struct {
+	ID           string                      `json:"id,omitempty"`
+	Title        string                      `json:"title,omitempty"`
+	IncludeInTOC bool                        `json:"include_in_toc"`
+	Children     []pdfDebugStructureTOCEntry `json:"children,omitempty"`
+}
+
+type pdfDebugStructureGenerated struct {
+	AnnotationPage                 bool   `json:"annotation_page"`
+	AnnotationInTOC                bool   `json:"annotation_in_toc"`
+	TOCPagePlacement               string `json:"toc_page_placement,omitempty"`
+	TOCIncludeChaptersWithoutTitle bool   `json:"toc_include_chapters_without_title,omitempty"`
+	TOCType                        string `json:"toc_type,omitempty"`
+}
+
+type pdfDebugBlock struct {
+	Index        int    `json:"index"`
+	Kind         string `json:"kind"`
+	ID           string `json:"id,omitempty"`
+	Depth        int    `json:"depth,omitempty"`
+	StyleName    string `json:"style_name,omitempty"`
+	StyleClasses string `json:"style_classes,omitempty"`
+	ImageID      string `json:"image_id,omitempty"`
+	Text         string `json:"text,omitempty"`
+}
+
+type pdfDebugPage struct {
+	Number    int             `json:"number"`
+	ObjectID  int             `json:"object_id,omitempty"`
+	ContentID int             `json:"content_id,omitempty"`
+	Anchors   []string        `json:"anchors,omitempty"`
+	Lines     []pdfDebugLine  `json:"lines"`
+	Images    []pdfDebugImage `json:"images,omitempty"`
+	Links     []pdfDebugLink  `json:"links,omitempty"`
+}
+
+type pdfDebugLine struct {
+	Text             string  `json:"text"`
+	X                float64 `json:"x"`
+	Y                float64 `json:"y"`
+	FontSize         float64 `json:"font_size"`
+	Width            float64 `json:"width"`
+	ExtraWordSpacing float64 `json:"extra_word_spacing,omitempty"`
+}
+
+type pdfDebugImage struct {
+	Page         int     `json:"page,omitempty"`
+	ImageID      string  `json:"image_id"`
+	ResourceName string  `json:"resource_name,omitempty"`
+	X            float64 `json:"x"`
+	Y            float64 `json:"y"`
+	Width        float64 `json:"width"`
+	Height       float64 `json:"height"`
+}
+
+type pdfDebugLink struct {
+	Page     int          `json:"page,omitempty"`
+	ObjectID int          `json:"object_id,omitempty"`
+	Href     string       `json:"href"`
+	Internal bool         `json:"internal"`
+	Rect     pdfDebugRect `json:"rect"`
+}
+
+type pdfDebugRect struct {
+	X1 float64 `json:"x1"`
+	Y1 float64 `json:"y1"`
+	X2 float64 `json:"x2"`
+	Y2 float64 `json:"y2"`
+}
+
+type pdfDebugFont struct {
+	PostScriptName string   `json:"post_script_name"`
+	UnitsPerEm     int      `json:"units_per_em"`
+	Ascent         int      `json:"ascent"`
+	Descent        int      `json:"descent"`
+	CapHeight      int      `json:"cap_height"`
+	BBox           [4]int   `json:"bbox"`
+	Flags          int      `json:"flags"`
+	ItalicAngle    int      `json:"italic_angle"`
+	UsedGlyphCount int      `json:"used_glyph_count"`
+	UsedGlyphIDs   []uint16 `json:"used_glyph_ids"`
+}
+
+func writePDFDebugDumps(doc skeletonDocument, pages []pdfPage, face *builtinFontFace, usedGlyphs map[uint16]shapedGlyph) error {
+	if !doc.Debug || doc.WorkDir == "" {
+		return nil
+	}
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-structure-plan.json"), doc.DebugPlan); err != nil {
+		return err
+	}
+	styles := doc.Styles
+	if styles == nil {
+		styles = newPDFStyleResolver(nil, nil)
+	}
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-resolved-styles.json"), styles.debugStyles()); err != nil {
+		return err
+	}
+
+	blocks := make([]pdfDebugBlock, 0, len(doc.Blocks))
+	for i, block := range doc.Blocks {
+		styleName := pdfStyleNameForBlock(block)
+		styles.tracer.traceAssign(block, styleName, styles.styleForBlock(block))
+		blocks = append(blocks, pdfDebugBlock{
+			Index:        i,
+			Kind:         block.Kind.String(),
+			ID:           block.ID,
+			Depth:        block.Depth,
+			StyleName:    styleName,
+			StyleClasses: strings.TrimSpace(block.StyleClasses),
+			ImageID:      block.ImageID,
+			Text:         block.Text,
+		})
+	}
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-text-blocks.json"), blocks); err != nil {
+		return err
+	}
+	styles.tracer.flush()
+
+	debugPages, debugImages, debugLinks := pdfDebugPages(pages)
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-layout-pages.json"), debugPages); err != nil {
+		return err
+	}
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-images.json"), debugImages); err != nil {
+		return err
+	}
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-links.json"), debugLinks); err != nil {
+		return err
+	}
+	return writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-fonts.json"), pdfDebugFonts(face, usedGlyphs))
+}
+
+func pdfDebugPages(pages []pdfPage) ([]pdfDebugPage, []pdfDebugImage, []pdfDebugLink) {
+	debugPages := make([]pdfDebugPage, 0, len(pages))
+	debugImages := make([]pdfDebugImage, 0)
+	debugLinks := make([]pdfDebugLink, 0)
+	for i, page := range pages {
+		debugPage := pdfDebugPage{
+			Number:    i + 1,
+			ObjectID:  page.ObjectID,
+			ContentID: page.ContentID,
+			Anchors:   slices.Clone(page.Anchors),
+			Lines:     make([]pdfDebugLine, 0, len(page.Lines)),
+			Images:    make([]pdfDebugImage, 0, len(page.Images)),
+			Links:     make([]pdfDebugLink, 0, len(page.Annotations)),
+		}
+		for _, line := range page.Lines {
+			debugPage.Lines = append(debugPage.Lines, pdfDebugLine{
+				Text:             shapedRunes(line.Text),
+				X:                line.X,
+				Y:                line.Y,
+				FontSize:         line.FontSize,
+				Width:            shapedWidthPoints(line.Text, line.FontSize),
+				ExtraWordSpacing: line.ExtraWordSpacing,
+			})
+		}
+		for _, image := range page.Images {
+			debugImage := pdfDebugImage{
+				Page:         i + 1,
+				ImageID:      image.ImageID,
+				ResourceName: image.Name,
+				X:            image.X,
+				Y:            image.Y,
+				Width:        image.Width,
+				Height:       image.Height,
+			}
+			debugPage.Images = append(debugPage.Images, debugImage)
+			debugImages = append(debugImages, debugImage)
+		}
+		for _, link := range page.Annotations {
+			debugLink := pdfDebugLink{
+				Page:     i + 1,
+				ObjectID: link.ObjectID,
+				Href:     link.Href,
+				Internal: strings.HasPrefix(link.Href, "#"),
+				Rect: pdfDebugRect{
+					X1: link.Rect.X1,
+					Y1: link.Rect.Y1,
+					X2: link.Rect.X2,
+					Y2: link.Rect.Y2,
+				},
+			}
+			debugPage.Links = append(debugPage.Links, debugLink)
+			debugLinks = append(debugLinks, debugLink)
+		}
+		debugPages = append(debugPages, debugPage)
+	}
+	return debugPages, debugImages, debugLinks
+}
+
+func pdfDebugFonts(face *builtinFontFace, usedGlyphs map[uint16]shapedGlyph) []pdfDebugFont {
+	if face == nil {
+		return nil
+	}
+	usedGlyphIDs := make([]uint16, 0, len(usedGlyphs))
+	for glyphID := range usedGlyphs {
+		usedGlyphIDs = append(usedGlyphIDs, glyphID)
+	}
+	slices.Sort(usedGlyphIDs)
+	return []pdfDebugFont{{
+		PostScriptName: face.PostScriptName,
+		UnitsPerEm:     face.UnitsPerEm,
+		Ascent:         face.Ascent,
+		Descent:        face.Descent,
+		CapHeight:      face.CapHeight,
+		BBox:           face.BBox,
+		Flags:          face.Flags,
+		ItalicAngle:    face.ItalicAngle,
+		UsedGlyphCount: len(usedGlyphIDs),
+		UsedGlyphIDs:   usedGlyphIDs,
+	}}
+}
+
+func writeJSONDebugDump(path string, v any) error {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal %s: %w", filepath.Base(path), err)
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("write %s: %w", filepath.Base(path), err)
+	}
+	return nil
+}
+
+func shapedRunes(text shapedText) string {
+	runes := make([]rune, 0, len(text.Glyphs))
+	for _, glyph := range text.Glyphs {
+		runes = append(runes, glyph.Rune)
+	}
+	return string(runes)
+}
