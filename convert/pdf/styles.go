@@ -49,7 +49,17 @@ const (
 	pdfStyleImage              = "image"
 	pdfStyleTOCItem            = "toc-item"
 	pdfStyleTOCTitle           = "toc-title"
+	pdfStyleAnnotation         = "annotation"
 	pdfStyleAnnotationTitle    = "annotation-title"
+	pdfStyleAnnotationSubtitle = "annotation-subtitle"
+	pdfStylePoem               = "poem"
+	pdfStylePoemSubtitle       = "poem-subtitle"
+	pdfStyleStanzaSubtitle     = "stanza-subtitle"
+	pdfStyleEpigraph           = "epigraph"
+	pdfStyleEpigraphSubtitle   = "epigraph-subtitle"
+	pdfStyleCite               = "cite"
+	pdfStyleCiteSubtitle       = "cite-subtitle"
+	pdfStyleTable              = "table"
 	pdfStyleEmptyLine          = "emptyline"
 )
 
@@ -383,6 +393,8 @@ func pdfSelectorStyleNames(sel css.Selector) []string {
 		return []string{pdfStyleSectionTitleHeader}
 	case "img":
 		return []string{pdfStyleImage}
+	case "table":
+		return []string{pdfStyleTable}
 	default:
 		return nil
 	}

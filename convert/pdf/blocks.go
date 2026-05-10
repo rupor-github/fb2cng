@@ -135,7 +135,7 @@ func insertAnnotationPageBlocks(blocks []pdfTextBlock, toc []*structure.TOCEntry
 		{Kind: pdfBlockPageBreak, ID: "annotation-page", Text: title},
 		{Kind: pdfBlockHeading, ID: "annotation-page-title", Text: title, Depth: 1, StyleName: pdfStyleAnnotationTitle},
 	}
-	appendFlowBlocks(&annotationBlocks, annotation.Items, 1, nil)
+	appendFlowBlocks(&annotationBlocks, annotation.Items, 1, nil, pdfStyleAnnotation)
 	out := make([]pdfTextBlock, 0, len(annotationBlocks)+len(blocks))
 	out = append(out, annotationBlocks...)
 	out = append(out, blocks...)
@@ -302,10 +302,10 @@ func appendSectionBlocks(blocks *[]pdfTextBlock, section *fb2.Section, depth int
 	}
 	appendImageBlock(blocks, section.Image, section.ID)
 	if section.Annotation != nil {
-		appendFlowBlocks(blocks, section.Annotation.Items, depth, splitSections)
+		appendFlowBlocks(blocks, section.Annotation.Items, depth, splitSections, pdfStyleAnnotation)
 	}
 	for i := range section.Content {
-		appendFlowItemBlock(blocks, &section.Content[i], depth, splitSections)
+		appendFlowItemBlock(blocks, &section.Content[i], depth, splitSections, "")
 	}
 }
 
@@ -334,21 +334,21 @@ func appendTitleBlocksWithID(blocks *[]pdfTextBlock, title *fb2.Title, depth int
 	}
 }
 
-func appendFlowBlocks(blocks *[]pdfTextBlock, items []fb2.FlowItem, depth int, splitSections map[string]bool) {
+func appendFlowBlocks(blocks *[]pdfTextBlock, items []fb2.FlowItem, depth int, splitSections map[string]bool, styleClasses string) {
 	for i := range items {
-		appendFlowItemBlock(blocks, &items[i], depth, splitSections)
+		appendFlowItemBlock(blocks, &items[i], depth, splitSections, styleClasses)
 	}
 }
 
-func appendFlowItemBlock(blocks *[]pdfTextBlock, item *fb2.FlowItem, depth int, splitSections map[string]bool) {
+func appendFlowItemBlock(blocks *[]pdfTextBlock, item *fb2.FlowItem, depth int, splitSections map[string]bool, styleClasses string) {
 	if item == nil {
 		return
 	}
 	switch item.Kind {
 	case fb2.FlowParagraph:
-		appendParagraphBlock(blocks, pdfBlockParagraph, item.Paragraph, depth)
+		appendParagraphBlockWithClasses(blocks, pdfBlockParagraph, item.Paragraph, depth, styleClasses)
 	case fb2.FlowSubtitle:
-		appendParagraphBlock(blocks, pdfBlockSubtitle, item.Subtitle, depth)
+		appendParagraphBlockWithClasses(blocks, pdfBlockSubtitle, item.Subtitle, depth, subtitleStyleClasses(styleClasses))
 	case fb2.FlowEmptyLine:
 		*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine})
 	case fb2.FlowImage:
@@ -366,7 +366,7 @@ func appendFlowItemBlock(blocks *[]pdfTextBlock, item *fb2.FlowItem, depth int, 
 		if item.Table != nil {
 			text := item.Table.AsPlainText()
 			if text != "" {
-				*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockParagraph, Text: text, Depth: depth, StyleName: pdfStyleParagraph})
+				*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockParagraph, Text: text, Depth: depth, StyleName: pdfStyleParagraph, StyleClasses: joinStyleClasses(styleClasses, pdfStyleTable)})
 			}
 		}
 	}
@@ -394,12 +394,16 @@ func appendImageBlock(blocks *[]pdfTextBlock, image *fb2.Image, fallbackID strin
 }
 
 func appendParagraphBlock(blocks *[]pdfTextBlock, kind pdfBlockKind, paragraph *fb2.Paragraph, depth int) {
+	appendParagraphBlockWithClasses(blocks, kind, paragraph, depth, "")
+}
+
+func appendParagraphBlockWithClasses(blocks *[]pdfTextBlock, kind pdfBlockKind, paragraph *fb2.Paragraph, depth int, styleClasses string) {
 	if paragraph == nil {
 		return
 	}
 	text, links := paragraphTextAndLinks(paragraph)
 	if text != "" {
-		*blocks = append(*blocks, pdfTextBlock{Kind: kind, ID: paragraph.ID, Text: text, Depth: depth, StyleName: pdfStyleNameForKind(kind), StyleClasses: paragraph.Style, Links: links})
+		*blocks = append(*blocks, pdfTextBlock{Kind: kind, ID: paragraph.ID, Text: text, Depth: depth, StyleName: pdfStyleNameForKind(kind), StyleClasses: joinStyleClasses(paragraph.Style, styleClasses), Links: links})
 	}
 }
 
@@ -412,14 +416,14 @@ func appendPoemBlocks(blocks *[]pdfTextBlock, poem *fb2.Poem, depth int, splitSe
 		appendEpigraphBlocks(blocks, &poem.Epigraphs[i])
 	}
 	for i := range poem.Subtitles {
-		appendParagraphBlock(blocks, pdfBlockSubtitle, &poem.Subtitles[i], depth)
+		appendParagraphBlockWithClasses(blocks, pdfBlockSubtitle, &poem.Subtitles[i], depth, pdfStylePoemSubtitle)
 	}
 	for i := range poem.Stanzas {
 		stanza := &poem.Stanzas[i]
 		appendTitleBlocks(blocks, stanza.Title, depth+1)
-		appendParagraphBlock(blocks, pdfBlockSubtitle, stanza.Subtitle, depth)
+		appendParagraphBlockWithClasses(blocks, pdfBlockSubtitle, stanza.Subtitle, depth, pdfStyleStanzaSubtitle)
 		for j := range stanza.Verses {
-			appendParagraphBlock(blocks, pdfBlockPoem, &stanza.Verses[j], depth)
+			appendParagraphBlockWithClasses(blocks, pdfBlockPoem, &stanza.Verses[j], depth, pdfStylePoem)
 		}
 		*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine})
 	}
@@ -432,7 +436,7 @@ func appendCiteBlocks(blocks *[]pdfTextBlock, cite *fb2.Cite, depth int, splitSe
 	if cite == nil {
 		return
 	}
-	appendFlowBlocks(blocks, cite.Items, depth, splitSections)
+	appendFlowBlocks(blocks, cite.Items, depth, splitSections, pdfStyleCite)
 	for i := range cite.TextAuthors {
 		appendParagraphBlock(blocks, pdfBlockTextAuthor, &cite.TextAuthors[i], depth)
 	}
@@ -442,7 +446,7 @@ func appendEpigraphBlocks(blocks *[]pdfTextBlock, epigraph *fb2.Epigraph) {
 	if epigraph == nil {
 		return
 	}
-	appendFlowBlocks(blocks, epigraph.Flow.Items, 1, nil)
+	appendFlowBlocks(blocks, epigraph.Flow.Items, 1, nil, pdfStyleEpigraph)
 	for i := range epigraph.TextAuthors {
 		appendParagraphBlock(blocks, pdfBlockTextAuthor, &epigraph.TextAuthors[i], 1)
 	}
@@ -497,6 +501,38 @@ func appendInlineSegmentText(b *strings.Builder, links *[]pdfTextLink, seg *fb2.
 			*links = append(*links, pdfTextLink{Start: start, End: end, Href: seg.Href})
 		}
 	}
+}
+
+func subtitleStyleClasses(containerClasses string) string {
+	classes := strings.Fields(containerClasses)
+	for i, class := range classes {
+		switch class {
+		case pdfStyleAnnotation:
+			classes[i] = pdfStyleAnnotationSubtitle
+		case pdfStylePoem:
+			classes[i] = pdfStylePoemSubtitle
+		case pdfStyleEpigraph:
+			classes[i] = pdfStyleEpigraphSubtitle
+		case pdfStyleCite:
+			classes[i] = pdfStyleCiteSubtitle
+		}
+	}
+	return strings.Join(classes, " ")
+}
+
+func joinStyleClasses(values ...string) string {
+	seen := make(map[string]bool)
+	classes := make([]string, 0, len(values))
+	for _, value := range values {
+		for _, class := range strings.Fields(value) {
+			if seen[class] {
+				continue
+			}
+			seen[class] = true
+			classes = append(classes, class)
+		}
+	}
+	return strings.Join(classes, " ")
 }
 
 func runeLenString(s string) int {

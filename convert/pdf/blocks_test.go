@@ -68,7 +68,7 @@ func TestCollectPDFContentAddsAnnotationPage(t *testing.T) {
 	if got := plan.Blocks[1]; got.Kind != pdfBlockHeading || got.Text != "About" {
 		t.Fatalf("second block = %#v, want annotation heading", got)
 	}
-	if got := plan.Blocks[2]; got.Kind != pdfBlockParagraph || got.Text != "Book annotation." {
+	if got := plan.Blocks[2]; got.Kind != pdfBlockParagraph || got.Text != "Book annotation." || got.StyleClasses != pdfStyleAnnotation {
 		t.Fatalf("annotation paragraph = %#v", got)
 	}
 	if len(plan.TOC) == 0 || plan.TOC[0].ID != "annotation-page" || plan.TOC[0].Title != "About" {
@@ -148,6 +148,72 @@ func TestCollectTextBlocksUsesStructuralPageBreaks(t *testing.T) {
 	for i := range wantTexts {
 		if texts[i] != wantTexts[i] {
 			t.Fatalf("texts = %#v, want %#v", texts, wantTexts)
+		}
+	}
+}
+
+func TestCollectTextBlocksPreservesContainerStyleClasses(t *testing.T) {
+	book := &fb2.FictionBook{Bodies: []fb2.Body{{
+		Kind: fb2.BodyMain,
+		Sections: []fb2.Section{{
+			Epigraphs: []fb2.Epigraph{{
+				Flow: fb2.Flow{Items: []fb2.FlowItem{{
+					Kind:      fb2.FlowParagraph,
+					Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Epigraph text."}}},
+				}, {
+					Kind:     fb2.FlowSubtitle,
+					Subtitle: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Epigraph subtitle."}}},
+				}}},
+			}},
+			Content: []fb2.FlowItem{{
+				Kind: fb2.FlowCite,
+				Cite: &fb2.Cite{Items: []fb2.FlowItem{{
+					Kind:      fb2.FlowParagraph,
+					Paragraph: &fb2.Paragraph{Style: "source-class", Text: []fb2.InlineSegment{{Text: "Cite text."}}},
+				}, {
+					Kind:     fb2.FlowSubtitle,
+					Subtitle: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Cite subtitle."}}},
+				}}},
+			}, {
+				Kind: fb2.FlowPoem,
+				Poem: &fb2.Poem{
+					Subtitles: []fb2.Paragraph{{Text: []fb2.InlineSegment{{Text: "Poem subtitle."}}}},
+					Stanzas: []fb2.Stanza{{
+						Subtitle: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Stanza subtitle."}}},
+						Verses:   []fb2.Paragraph{{Text: []fb2.InlineSegment{{Text: "Verse line."}}}},
+					}},
+				},
+			}},
+		}},
+	}}}
+
+	blocks, err := collectTextBlocks(&content.Content{Book: book})
+	if err != nil {
+		t.Fatalf("collectTextBlocks() error = %v", err)
+	}
+
+	wantClasses := map[string]string{
+		"Epigraph text.":     pdfStyleEpigraph,
+		"Epigraph subtitle.": pdfStyleEpigraphSubtitle,
+		"Cite text.":         "source-class " + pdfStyleCite,
+		"Cite subtitle.":     pdfStyleCiteSubtitle,
+		"Poem subtitle.":     pdfStylePoemSubtitle,
+		"Stanza subtitle.":   pdfStyleStanzaSubtitle,
+		"Verse line.":        pdfStylePoem,
+	}
+	for text, want := range wantClasses {
+		found := false
+		for _, block := range blocks {
+			if block.Text != text {
+				continue
+			}
+			found = true
+			if block.StyleClasses != want {
+				t.Fatalf("block %q classes = %q, want %q", text, block.StyleClasses, want)
+			}
+		}
+		if !found {
+			t.Fatalf("missing block %q in %#v", text, blocks)
 		}
 	}
 }
