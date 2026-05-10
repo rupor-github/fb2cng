@@ -25,6 +25,7 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 				text-indent: 2em;
 				margin: 1em 2em 0.5em 3em;
 				padding: 0.25em 0.5em 0.75em 1em;
+				background-color: #eee;
 				hyphens: manual;
 				orphans: 3;
 				widows: 4;
@@ -75,6 +76,9 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 	}
 	if paragraph.PaddingTop != 3 || paragraph.PaddingRight != 6 || paragraph.PaddingBottom != 9 || paragraph.PaddingLeft != 12 {
 		t.Fatalf("paragraph padding = %v/%v/%v/%v, want 3/6/9/12", paragraph.PaddingTop, paragraph.PaddingRight, paragraph.PaddingBottom, paragraph.PaddingLeft)
+	}
+	if !paragraph.HasBackground || paragraph.BackgroundColor.String() != "#eeeeee" {
+		t.Fatalf("paragraph background = %t %s, want #eeeeee", paragraph.HasBackground, paragraph.BackgroundColor)
 	}
 	if paragraph.Paragraph.Hyphenation != paragraphHyphenationManual {
 		t.Fatalf("paragraph hyphenation = %s, want manual", pdfHyphenationString(paragraph.Paragraph.Hyphenation))

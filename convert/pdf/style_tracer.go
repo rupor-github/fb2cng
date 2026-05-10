@@ -187,11 +187,12 @@ func pdfTraceFormatCSSProperties(props map[string]css.Value) string {
 }
 
 func pdfTraceFormatResolvedStyle(style pdfBlockResolvedStyle) string {
-	return fmt.Sprintf("font-family=%s, font-weight=%s, font-style=%s, color=%s, underline=%t, strikethrough=%t, font-size=%gpt, line-height=%gpt, letter-spacing=%gpt, text-indent=%gpt, align=%s, hyphens=%s, margins=%g/%g/%g/%g, padding=%g/%g/%g/%g, keep-together=%t, keep-next=%d, page-break-before=%t, page-break-after=%t, hidden=%t, orphans=%d, widows=%d",
+	return fmt.Sprintf("font-family=%s, font-weight=%s, font-style=%s, color=%s, background=%s, underline=%t, strikethrough=%t, font-size=%gpt, line-height=%gpt, letter-spacing=%gpt, text-indent=%gpt, align=%s, hyphens=%s, margins=%g/%g/%g/%g, padding=%g/%g/%g/%g, keep-together=%t, keep-next=%d, page-break-before=%t, page-break-after=%t, hidden=%t, orphans=%d, widows=%d",
 		normalizedPDFFontFamily(style.Paragraph.FontFamily),
 		pdfCSSFontWeightString(style.Paragraph.Bold),
 		pdfCSSFontStyleString(style.Paragraph.Italic),
 		style.Paragraph.Color.String(),
+		pdfTraceBackgroundColor(style),
 		style.Paragraph.Underline,
 		style.Paragraph.Strikethrough,
 		style.Paragraph.FontSize,
@@ -215,6 +216,13 @@ func pdfTraceFormatResolvedStyle(style pdfBlockResolvedStyle) string {
 		style.Hidden,
 		style.Orphans,
 		style.Widows)
+}
+
+func pdfTraceBackgroundColor(style pdfBlockResolvedStyle) string {
+	if !style.HasBackground {
+		return "none"
+	}
+	return style.BackgroundColor.String()
 }
 
 func pdfTraceStyleDiff(before, after pdfBlockResolvedStyle) string {
@@ -266,6 +274,9 @@ func pdfTraceStyleDiff(before, after pdfBlockResolvedStyle) string {
 	appendFloatChange("padding-right", before.PaddingRight, after.PaddingRight)
 	appendFloatChange("padding-bottom", before.PaddingBottom, after.PaddingBottom)
 	appendFloatChange("padding-left", before.PaddingLeft, after.PaddingLeft)
+	if before.HasBackground != after.HasBackground || before.BackgroundColor != after.BackgroundColor {
+		changes = append(changes, fmt.Sprintf("background-color: %s -> %s", pdfTraceBackgroundColor(before), pdfTraceBackgroundColor(after)))
+	}
 	appendBoolChange("keep-together", before.KeepTogether, after.KeepTogether)
 	appendIntChange("keep-next", before.KeepWithNextLines, after.KeepWithNextLines)
 	appendBoolChange("page-break-before", before.PageBreakBefore, after.PageBreakBefore)

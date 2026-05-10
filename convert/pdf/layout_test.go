@@ -132,6 +132,8 @@ func TestLayoutPDFPagesAppliesPadding(t *testing.T) {
 	padded.SpaceAfter = 0
 	padded.PaddingTop = 5
 	padded.PaddingLeft = 7
+	padded.BackgroundColor = pdfColor{B: 1}
+	padded.HasBackground = true
 	resolver.styles["padded"] = padded
 
 	pages, _, err := layoutPDFPages(skeletonDocument{
@@ -147,8 +149,8 @@ func TestLayoutPDFPagesAppliesPadding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if len(pages) != 2 || len(pages[1].Lines) != 1 {
-		t.Fatalf("layoutPDFPages() pages = %#v, want one body line", pages)
+	if len(pages) != 2 || len(pages[1].Lines) != 1 || len(pages[1].Backgrounds) != 1 {
+		t.Fatalf("layoutPDFPages() pages = %#v, want one body line and one background", pages)
 	}
 	line := pages[1].Lines[0]
 	if line.X != 31 { // 24pt page margin + 7pt left padding.
@@ -156,6 +158,10 @@ func TestLayoutPDFPagesAppliesPadding(t *testing.T) {
 	}
 	if line.Y != 151 { // 180pt page height - 24pt page margin - 5pt top padding.
 		t.Fatalf("line Y = %v, want 151", line.Y)
+	}
+	background := pages[1].Backgrounds[0]
+	if background.X != 24 || background.Y != 137.6 || background.Width != 172 || background.Height < 18.399 || background.Height > 18.401 || background.Color.String() != "#0000ff" {
+		t.Fatalf("background = %#v, want padded block background", background)
 	}
 }
 

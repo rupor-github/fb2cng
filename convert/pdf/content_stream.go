@@ -9,6 +9,17 @@ import (
 
 func pageContent(page pdfPage) []byte {
 	var buf bytes.Buffer
+	for _, background := range page.Backgrounds {
+		if background.Width <= 0 || background.Height <= 0 {
+			continue
+		}
+		fmt.Fprintf(&buf, "q\n%s\n%s %s %s %s re f\nQ\n",
+			background.Color.contentOperator(),
+			docwriter.FormatNumber(background.X),
+			docwriter.FormatNumber(background.Y),
+			docwriter.FormatNumber(background.Width),
+			docwriter.FormatNumber(background.Height))
+	}
 	for _, img := range page.Images {
 		if img.Name == "" || img.Width <= 0 || img.Height <= 0 {
 			continue

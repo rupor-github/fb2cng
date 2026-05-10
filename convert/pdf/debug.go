@@ -58,13 +58,22 @@ type pdfDebugBlock struct {
 }
 
 type pdfDebugPage struct {
-	Number    int             `json:"number"`
-	ObjectID  int             `json:"object_id,omitempty"`
-	ContentID int             `json:"content_id,omitempty"`
-	Anchors   []string        `json:"anchors,omitempty"`
-	Lines     []pdfDebugLine  `json:"lines"`
-	Images    []pdfDebugImage `json:"images,omitempty"`
-	Links     []pdfDebugLink  `json:"links,omitempty"`
+	Number      int                  `json:"number"`
+	ObjectID    int                  `json:"object_id,omitempty"`
+	ContentID   int                  `json:"content_id,omitempty"`
+	Anchors     []string             `json:"anchors,omitempty"`
+	Lines       []pdfDebugLine       `json:"lines"`
+	Images      []pdfDebugImage      `json:"images,omitempty"`
+	Backgrounds []pdfDebugBackground `json:"backgrounds,omitempty"`
+	Links       []pdfDebugLink       `json:"links,omitempty"`
+}
+
+type pdfDebugBackground struct {
+	X      float64 `json:"x"`
+	Y      float64 `json:"y"`
+	Width  float64 `json:"width"`
+	Height float64 `json:"height"`
+	Color  string  `json:"color"`
 }
 
 type pdfDebugLine struct {
@@ -180,13 +189,14 @@ func pdfDebugPages(pages []pdfPage) ([]pdfDebugPage, []pdfDebugImage, []pdfDebug
 	debugLinks := make([]pdfDebugLink, 0)
 	for i, page := range pages {
 		debugPage := pdfDebugPage{
-			Number:    i + 1,
-			ObjectID:  page.ObjectID,
-			ContentID: page.ContentID,
-			Anchors:   slices.Clone(page.Anchors),
-			Lines:     make([]pdfDebugLine, 0, len(page.Lines)),
-			Images:    make([]pdfDebugImage, 0, len(page.Images)),
-			Links:     make([]pdfDebugLink, 0, len(page.Annotations)),
+			Number:      i + 1,
+			ObjectID:    page.ObjectID,
+			ContentID:   page.ContentID,
+			Anchors:     slices.Clone(page.Anchors),
+			Lines:       make([]pdfDebugLine, 0, len(page.Lines)),
+			Images:      make([]pdfDebugImage, 0, len(page.Images)),
+			Backgrounds: make([]pdfDebugBackground, 0, len(page.Backgrounds)),
+			Links:       make([]pdfDebugLink, 0, len(page.Annotations)),
 		}
 		for _, line := range page.Lines {
 			debugPage.Lines = append(debugPage.Lines, pdfDebugLine{
@@ -204,6 +214,15 @@ func pdfDebugPages(pages []pdfPage) ([]pdfDebugPage, []pdfDebugImage, []pdfDebug
 				Strikethrough:    line.Strikethrough,
 				Width:            shapedWidthPointsWithSpacing(line.Text, line.FontSize, line.LetterSpacing),
 				ExtraWordSpacing: line.ExtraWordSpacing,
+			})
+		}
+		for _, background := range page.Backgrounds {
+			debugPage.Backgrounds = append(debugPage.Backgrounds, pdfDebugBackground{
+				X:      background.X,
+				Y:      background.Y,
+				Width:  background.Width,
+				Height: background.Height,
+				Color:  background.Color.String(),
 			})
 		}
 		for _, image := range page.Images {

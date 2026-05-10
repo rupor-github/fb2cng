@@ -73,6 +73,8 @@ type pdfBlockResolvedStyle struct {
 	PaddingRight      float64
 	PaddingBottom     float64
 	PaddingLeft       float64
+	BackgroundColor   pdfColor
+	HasBackground     bool
 	KeepTogether      bool
 	KeepWithNextLines int
 	PageBreakBefore   bool
@@ -108,6 +110,7 @@ type pdfDebugResolvedStyle struct {
 	PaddingRight      float64 `json:"padding_right,omitempty"`
 	PaddingBottom     float64 `json:"padding_bottom,omitempty"`
 	PaddingLeft       float64 `json:"padding_left,omitempty"`
+	BackgroundColor   string  `json:"background_color,omitempty"`
 	Hyphenation       string  `json:"hyphenation,omitempty"`
 	KeepTogether      bool    `json:"keep_together,omitempty"`
 	KeepWithNextLines int     `json:"keep_with_next_lines,omitempty"`
@@ -316,6 +319,10 @@ func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfB
 	if override.PaddingLeft != fallback.PaddingLeft {
 		base.PaddingLeft = override.PaddingLeft
 	}
+	if override.HasBackground != fallback.HasBackground {
+		base.HasBackground = override.HasBackground
+		base.BackgroundColor = override.BackgroundColor
+	}
 	if override.KeepTogether != fallback.KeepTogether {
 		base.KeepTogether = override.KeepTogether
 	}
@@ -472,6 +479,18 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 			style.Paragraph.Color = color
 		}
 	}
+	if value, ok := props["background-color"]; ok {
+		if color, ok := pdfCSSColor(value); ok {
+			style.BackgroundColor = color
+			style.HasBackground = true
+		}
+	}
+	if value, ok := props["background"]; ok {
+		if color, ok := pdfCSSColor(value); ok {
+			style.BackgroundColor = color
+			style.HasBackground = true
+		}
+	}
 	if value, ok := props["text-decoration"]; ok {
 		applyPDFTextDecoration(style, value)
 	}
@@ -495,7 +514,7 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 	names := make([]string, 0, len(props))
 	for name := range props {
 		lower := strings.ToLower(name)
-		if lower != "font-family" && lower != "font-weight" && lower != "font-style" && lower != "color" && lower != "text-decoration" && lower != "font-size" && lower != "line-height" && lower != "letter-spacing" {
+		if lower != "font-family" && lower != "font-weight" && lower != "font-style" && lower != "color" && lower != "background-color" && lower != "background" && lower != "text-decoration" && lower != "font-size" && lower != "line-height" && lower != "letter-spacing" {
 			names = append(names, name)
 		}
 	}
@@ -862,6 +881,13 @@ func formatCSSValue(value css.Value) string {
 	return strconv.FormatFloat(value.Value, 'f', -1, 64) + value.Unit
 }
 
+func pdfDebugBackgroundColor(style pdfBlockResolvedStyle) string {
+	if !style.HasBackground {
+		return ""
+	}
+	return style.BackgroundColor.String()
+}
+
 func (r *pdfStyleResolver) debugStyles() []pdfDebugResolvedStyle {
 	if r == nil {
 		return nil
@@ -896,6 +922,7 @@ func (r *pdfStyleResolver) debugStyles() []pdfDebugResolvedStyle {
 			PaddingRight:      style.PaddingRight,
 			PaddingBottom:     style.PaddingBottom,
 			PaddingLeft:       style.PaddingLeft,
+			BackgroundColor:   pdfDebugBackgroundColor(style),
 			KeepTogether:      style.KeepTogether,
 			KeepWithNextLines: style.KeepWithNextLines,
 			PageBreakBefore:   style.PageBreakBefore,

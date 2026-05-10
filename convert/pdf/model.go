@@ -105,10 +105,19 @@ type pdfPageLine struct {
 type pdfPage struct {
 	ObjectID    int
 	ContentID   int
+	Backgrounds []pdfPageRect
 	Lines       []pdfPageLine
 	Images      []pdfPageImage
 	Anchors     []string
 	Annotations []pdfLinkAnnotation
+}
+
+type pdfPageRect struct {
+	X      float64
+	Y      float64
+	Width  float64
+	Height float64
+	Color  pdfColor
 }
 
 type pdfPageImage struct {
