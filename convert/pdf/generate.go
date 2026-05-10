@@ -49,9 +49,9 @@ func Generate(ctx context.Context, c *content.Content, outputName string, cfg *c
 		return err
 	}
 
-	blocks, err := collectTextBlocks(c)
+	contentPlan, err := collectPDFContent(c)
 	if err != nil {
-		return fmt.Errorf("collect pdf text blocks: %w", err)
+		return fmt.Errorf("collect pdf content: %w", err)
 	}
 
 	data, err := buildSkeletonPDF(skeletonDocument{
@@ -59,7 +59,8 @@ func Generate(ctx context.Context, c *content.Content, outputName string, cfg *c
 		PageHeight: pageHeight,
 		Title:      bookTitle(c),
 		Author:     bookAuthors(c),
-		Blocks:     blocks,
+		Blocks:     contentPlan.Blocks,
+		TOC:        contentPlan.TOC,
 		Hyphenator: pdfHyphenator(c, log),
 		Debug:      c.Debug,
 		WorkDir:    c.WorkDir,
@@ -88,6 +89,7 @@ type skeletonDocument struct {
 	Title      string
 	Author     string
 	Blocks     []pdfTextBlock
+	TOC        []*structure.TOCEntry
 	Hyphenator paragraphHyphenator
 	Debug      bool
 	WorkDir    string
@@ -126,8 +128,14 @@ const (
 	pdfBlockPageBreak
 )
 
+type pdfContentPlan struct {
+	Blocks []pdfTextBlock
+	TOC    []*structure.TOCEntry
+}
+
 type pdfTextBlock struct {
 	Kind  pdfBlockKind
+	ID    string
 	Text  string
 	Depth int
 }
@@ -144,6 +152,7 @@ type pdfPage struct {
 	ObjectID  int
 	ContentID int
 	Lines     []pdfPageLine
+	Anchors   []string
 }
 
 func pageSizePoints(screen config.ScreenConfig) (float64, float64, error) {
@@ -204,6 +213,7 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 		pages[i].ContentID = nextObjectID
 		nextObjectID++
 	}
+	outlines := buildOutlines(doc.TOC, pages, &nextObjectID)
 
 	fontObjs, err := fontResourceObjects(fontFace, usedGlyphs, fontObjectIDs{
 		Type0Font:      type0FontID,
@@ -216,10 +226,14 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 		return nil, err
 	}
 
-	if err := writer.Object(catalogID, pdfdoc.Dict{
+	catalog := pdfdoc.Dict{
 		"Pages": pdfdoc.Ref{ObjectNumber: pagesID},
 		"Type":  pdfdoc.Name("Catalog"),
-	}); err != nil {
+	}
+	if outlines.RootID != 0 {
+		catalog["Outlines"] = pdfdoc.Ref{ObjectNumber: outlines.RootID}
+	}
+	if err := writer.Object(catalogID, catalog); err != nil {
 		return nil, err
 	}
 	kids := make(pdfdoc.Array, 0, len(pages))
@@ -283,12 +297,177 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 	if err := writer.StreamObject(toUnicodeID, pdfdoc.Dict{}, fontObjs.ToUnicode); err != nil {
 		return nil, err
 	}
+	if err := writeOutlineObjects(writer, outlines); err != nil {
+		return nil, err
+	}
 
 	infoRef := pdfdoc.Ref{ObjectNumber: infoID}
 	return writer.Finish(pdfdoc.Trailer{
 		Root: pdfdoc.Ref{ObjectNumber: catalogID},
 		Info: &infoRef,
 	})
+}
+
+type pdfOutlines struct {
+	RootID int
+	Items  []*pdfOutlineItem
+}
+
+type pdfOutlineItem struct {
+	ObjectID int
+	Title    string
+	PageID   int
+	ParentID int
+	PrevID   int
+	NextID   int
+	FirstID  int
+	LastID   int
+	Count    int
+	Children []*pdfOutlineItem
+}
+
+func buildOutlines(entries []*structure.TOCEntry, pages []pdfPage, nextObjectID *int) pdfOutlines {
+	anchorPages := make(map[string]int)
+	for i := range pages {
+		for _, id := range pages[i].Anchors {
+			if _, exists := anchorPages[id]; !exists {
+				anchorPages[id] = i
+			}
+		}
+	}
+	nodes := resolveOutlineItems(entries, pages, anchorPages)
+	if len(nodes) == 0 {
+		return pdfOutlines{}
+	}
+	outlines := pdfOutlines{
+		RootID: *nextObjectID,
+	}
+	(*nextObjectID)++
+	assignOutlineObjectIDs(nodes, nextObjectID)
+	linkOutlineSiblings(outlines.RootID, nodes)
+	outlines.Items = flattenOutlineItems(nodes)
+	return outlines
+}
+
+func resolveOutlineItems(entries []*structure.TOCEntry, pages []pdfPage, anchorPages map[string]int) []*pdfOutlineItem {
+	items := make([]*pdfOutlineItem, 0, len(entries))
+	for _, entry := range entries {
+		if entry == nil {
+			continue
+		}
+		children := resolveOutlineItems(entry.Children, pages, anchorPages)
+		pageIndex, ok := anchorPages[entry.ID]
+		if !ok || pageIndex < 0 || pageIndex >= len(pages) || strings.TrimSpace(entry.Title) == "" {
+			items = append(items, children...)
+			continue
+		}
+		items = append(items, &pdfOutlineItem{
+			Title:    entry.Title,
+			PageID:   pages[pageIndex].ObjectID,
+			Children: children,
+		})
+	}
+	return items
+}
+
+func assignOutlineObjectIDs(items []*pdfOutlineItem, nextObjectID *int) {
+	for _, item := range items {
+		item.ObjectID = *nextObjectID
+		(*nextObjectID)++
+		assignOutlineObjectIDs(item.Children, nextObjectID)
+	}
+}
+
+func linkOutlineSiblings(parentID int, items []*pdfOutlineItem) {
+	for i, item := range items {
+		item.ParentID = parentID
+		if i > 0 {
+			item.PrevID = items[i-1].ObjectID
+		}
+		if i+1 < len(items) {
+			item.NextID = items[i+1].ObjectID
+		}
+		if len(item.Children) != 0 {
+			item.FirstID = item.Children[0].ObjectID
+			item.LastID = item.Children[len(item.Children)-1].ObjectID
+			item.Count = countOutlineDescendants(item.Children)
+			linkOutlineSiblings(item.ObjectID, item.Children)
+		}
+	}
+}
+
+func countOutlineDescendants(items []*pdfOutlineItem) int {
+	count := len(items)
+	for _, item := range items {
+		count += countOutlineDescendants(item.Children)
+	}
+	return count
+}
+
+func flattenOutlineItems(items []*pdfOutlineItem) []*pdfOutlineItem {
+	out := make([]*pdfOutlineItem, 0, countOutlineDescendants(items))
+	var walk func([]*pdfOutlineItem)
+	walk = func(items []*pdfOutlineItem) {
+		for _, item := range items {
+			out = append(out, item)
+			walk(item.Children)
+		}
+	}
+	walk(items)
+	return out
+}
+
+func writeOutlineObjects(writer *pdfdoc.Writer, outlines pdfOutlines) error {
+	if outlines.RootID == 0 {
+		return nil
+	}
+	root := pdfdoc.Dict{
+		"Count": pdfdoc.Integer(len(outlines.Items)),
+		"Type":  pdfdoc.Name("Outlines"),
+	}
+	topLevel := topLevelOutlineItems(outlines)
+	if len(topLevel) != 0 {
+		root["First"] = pdfdoc.Ref{ObjectNumber: topLevel[0].ObjectID}
+		root["Last"] = pdfdoc.Ref{ObjectNumber: topLevel[len(topLevel)-1].ObjectID}
+	}
+	if err := writer.Object(outlines.RootID, root); err != nil {
+		return err
+	}
+	for _, item := range outlines.Items {
+		dict := pdfdoc.Dict{
+			"Dest": pdfdoc.Array{
+				pdfdoc.Ref{ObjectNumber: item.PageID},
+				pdfdoc.Name("Fit"),
+			},
+			"Parent": pdfdoc.Ref{ObjectNumber: item.ParentID},
+			"Title":  pdfdoc.UTF16TextString(item.Title),
+		}
+		if item.PrevID != 0 {
+			dict["Prev"] = pdfdoc.Ref{ObjectNumber: item.PrevID}
+		}
+		if item.NextID != 0 {
+			dict["Next"] = pdfdoc.Ref{ObjectNumber: item.NextID}
+		}
+		if item.FirstID != 0 {
+			dict["First"] = pdfdoc.Ref{ObjectNumber: item.FirstID}
+			dict["Last"] = pdfdoc.Ref{ObjectNumber: item.LastID}
+			dict["Count"] = pdfdoc.Integer(item.Count)
+		}
+		if err := writer.Object(item.ObjectID, dict); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func topLevelOutlineItems(outlines pdfOutlines) []*pdfOutlineItem {
+	items := make([]*pdfOutlineItem, 0)
+	for _, item := range outlines.Items {
+		if item.ParentID == outlines.RootID {
+			items = append(items, item)
+		}
+	}
+	return items
 }
 
 func pageContent(page pdfPage) []byte {
@@ -329,6 +508,18 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 		for id, glyph := range line.Text.Used {
 			used[id] = glyph
 		}
+	}
+	addAnchor := func(page *pdfPage, id string) {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			return
+		}
+		for _, existing := range page.Anchors {
+			if existing == id {
+				return
+			}
+		}
+		page.Anchors = append(page.Anchors, id)
 	}
 
 	titlePage := addPage()
@@ -388,6 +579,7 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 			if pageHasText {
 				newTextPage()
 			}
+			addAnchor(page, block.ID)
 			continue
 		}
 
@@ -437,6 +629,7 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 				}
 			}
 		}
+		addAnchor(page, block.ID)
 		if pageHasText {
 			y -= style.SpaceBefore
 		}
@@ -531,6 +724,7 @@ func pdfStyleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
 type pdfDebugBlock struct {
 	Index int    `json:"index"`
 	Kind  string `json:"kind"`
+	ID    string `json:"id,omitempty"`
 	Depth int    `json:"depth,omitempty"`
 	Text  string `json:"text,omitempty"`
 }
@@ -558,6 +752,7 @@ func writePDFDebugDumps(doc skeletonDocument, pages []pdfPage) error {
 		blocks = append(blocks, pdfDebugBlock{
 			Index: i,
 			Kind:  block.Kind.String(),
+			ID:    block.ID,
 			Depth: block.Depth,
 			Text:  block.Text,
 		})
@@ -661,12 +856,20 @@ func justifiedGlyphArray(glyphs []shapedGlyph, extraWordSpacing, fontSize float6
 }
 
 func collectTextBlocks(c *content.Content) ([]pdfTextBlock, error) {
+	plan, err := collectPDFContent(c)
+	if err != nil {
+		return nil, err
+	}
+	return plan.Blocks, nil
+}
+
+func collectPDFContent(c *content.Content) (pdfContentPlan, error) {
 	if c == nil || c.Book == nil {
-		return nil, nil
+		return pdfContentPlan{}, nil
 	}
 	plan, err := structure.BuildPlan(c)
 	if err != nil {
-		return nil, err
+		return pdfContentPlan{}, err
 	}
 
 	blocks := make([]pdfTextBlock, 0, 64)
@@ -674,11 +877,11 @@ func collectTextBlocks(c *content.Content) ([]pdfTextBlock, error) {
 	for i := range plan.Units {
 		unit := &plan.Units[i]
 		if unit.ForceNewPage {
-			blocks = append(blocks, pdfTextBlock{Kind: pdfBlockPageBreak})
+			blocks = append(blocks, pdfTextBlock{Kind: pdfBlockPageBreak, ID: unit.ID, Text: unit.Title})
 		}
 		appendUnitBlocks(&blocks, unit, splitSections)
 	}
-	return blocks, nil
+	return pdfContentPlan{Blocks: blocks, TOC: plan.TOC}, nil
 }
 
 func splitSectionIDs(plan *structure.Plan) map[string]bool {
@@ -733,7 +936,7 @@ func appendSectionBlocks(blocks *[]pdfTextBlock, section *fb2.Section, depth int
 	if section == nil {
 		return
 	}
-	appendTitleBlocks(blocks, section.Title, depth)
+	appendTitleBlocksWithID(blocks, section.Title, depth, section.ID)
 	for i := range section.Epigraphs {
 		appendEpigraphBlocks(blocks, &section.Epigraphs[i])
 	}
@@ -746,9 +949,14 @@ func appendSectionBlocks(blocks *[]pdfTextBlock, section *fb2.Section, depth int
 }
 
 func appendTitleBlocks(blocks *[]pdfTextBlock, title *fb2.Title, depth int) {
+	appendTitleBlocksWithID(blocks, title, depth, "")
+}
+
+func appendTitleBlocksWithID(blocks *[]pdfTextBlock, title *fb2.Title, depth int, id string) {
 	if title == nil {
 		return
 	}
+	anchorID := id
 	for i := range title.Items {
 		item := &title.Items[i]
 		if item.EmptyLine {
@@ -759,7 +967,8 @@ func appendTitleBlocks(blocks *[]pdfTextBlock, title *fb2.Title, depth int) {
 			continue
 		}
 		if text := paragraphText(item.Paragraph); text != "" {
-			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockHeading, Text: text, Depth: depth})
+			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockHeading, ID: anchorID, Text: text, Depth: depth})
+			anchorID = ""
 		}
 	}
 }
