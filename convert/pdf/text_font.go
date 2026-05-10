@@ -105,16 +105,6 @@ func shapedWidthPoints(text shapedText, fontSize float64) float64 {
 	return float64(width) * fontSize / 1000.0
 }
 
-func mergeUsedGlyphs(items ...shapedText) map[uint16]shapedGlyph {
-	used := make(map[uint16]shapedGlyph)
-	for _, item := range items {
-		for id, glyph := range item.Used {
-			used[id] = glyph
-		}
-	}
-	return used
-}
-
 func fontUnitsToPDFWidth(width, unitsPerEm int) int {
 	if unitsPerEm <= 0 {
 		return width

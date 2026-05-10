@@ -24,10 +24,10 @@ const (
 
 // Generate writes a native PDF document.
 //
-// This initial implementation creates a valid PDF 1.4 file with one fixed-size
-// page, embedded Unicode font resources, selectable title/author text, and Info
-// dictionary metadata. Later milestones will replace the title page scaffold
-// with the real book layout pipeline.
+// The current native renderer writes fixed-size PDF 1.4 pages with embedded
+// Unicode font resources, selectable title/author text, initial FB2 text body
+// pagination, and Info dictionary metadata. Later milestones will replace the
+// fixed default styles with the KFX-aligned CSS pipeline.
 func Generate(ctx context.Context, c *content.Content, outputName string, cfg *config.DocumentConfig, log *zap.Logger) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -49,13 +49,14 @@ func Generate(ctx context.Context, c *content.Content, outputName string, cfg *c
 		PageHeight: pageHeight,
 		Title:      bookTitle(c),
 		Author:     bookAuthors(c),
+		Blocks:     collectTextBlocks(c),
 	})
 	if err != nil {
-		return fmt.Errorf("build skeleton pdf: %w", err)
+		return fmt.Errorf("build pdf: %w", err)
 	}
 
 	if log != nil {
-		log.Debug("Writing PDF skeleton",
+		log.Debug("Writing PDF",
 			zap.String("file", outputName),
 			zap.Float64("page_width_pt", pageWidth),
 			zap.Float64("page_height_pt", pageHeight),
@@ -73,6 +74,38 @@ type skeletonDocument struct {
 	PageHeight float64
 	Title      string
 	Author     string
+	Blocks     []pdfTextBlock
+}
+
+type pdfBlockKind int
+
+const (
+	pdfBlockParagraph pdfBlockKind = iota
+	pdfBlockHeading
+	pdfBlockSubtitle
+	pdfBlockPoem
+	pdfBlockTextAuthor
+	pdfBlockEmptyLine
+)
+
+type pdfTextBlock struct {
+	Kind  pdfBlockKind
+	Text  string
+	Depth int
+}
+
+type pdfPageLine struct {
+	X                float64
+	Y                float64
+	FontSize         float64
+	Text             shapedText
+	ExtraWordSpacing float64
+}
+
+type pdfPage struct {
+	ObjectID  int
+	ContentID int
+	Lines     []pdfPageLine
 }
 
 func pageSizePoints(screen config.ScreenConfig) (float64, float64, error) {
@@ -99,8 +132,8 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 	const (
 		catalogID        = 1
 		pagesID          = 2
-		pageID           = 3
-		contentID        = 4
+		firstPageID      = 3
+		firstContentID   = 4
 		infoID           = 5
 		type0FontID      = 6
 		cidFontID        = 7
@@ -113,24 +146,25 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	titleText := strings.TrimSpace(doc.Title)
-	if titleText == "" {
-		titleText = "Untitled"
-	}
-	authorText := strings.TrimSpace(doc.Author)
-	if authorText == "" {
-		authorText = "fbc"
-	}
-	title, err := shapeText(fontFace, titleText)
+	pages, usedGlyphs, err := layoutPDFPages(doc, fontFace)
 	if err != nil {
-		return nil, fmt.Errorf("shape title: %w", err)
+		return nil, err
 	}
-	authorLines, err := wrapText(fontFace, authorText, 9, doc.PageWidth-48)
-	if err != nil {
-		return nil, fmt.Errorf("shape author: %w", err)
+	if len(pages) == 0 {
+		return nil, errors.New("pdf document must contain at least one page")
 	}
-	usedText := append([]shapedText{title}, authorLines...)
-	fontObjs, err := fontResourceObjects(fontFace, mergeUsedGlyphs(usedText...), fontObjectIDs{
+
+	pages[0].ObjectID = firstPageID
+	pages[0].ContentID = firstContentID
+	nextObjectID := toUnicodeID + 1
+	for i := 1; i < len(pages); i++ {
+		pages[i].ObjectID = nextObjectID
+		nextObjectID++
+		pages[i].ContentID = nextObjectID
+		nextObjectID++
+	}
+
+	fontObjs, err := fontResourceObjects(fontFace, usedGlyphs, fontObjectIDs{
 		Type0Font:      type0FontID,
 		CIDFont:        cidFontID,
 		FontDescriptor: fontDescriptorID,
@@ -147,40 +181,48 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 	}); err != nil {
 		return nil, err
 	}
+	kids := make(pdfdoc.Array, 0, len(pages))
+	for _, page := range pages {
+		kids = append(kids, pdfdoc.Ref{ObjectNumber: page.ObjectID})
+	}
 	if err := writer.Object(pagesID, pdfdoc.Dict{
-		"Count": pdfdoc.Integer(1),
-		"Kids":  pdfdoc.Array{pdfdoc.Ref{ObjectNumber: pageID}},
+		"Count": pdfdoc.Integer(len(pages)),
+		"Kids":  kids,
 		"Type":  pdfdoc.Name("Pages"),
 	}); err != nil {
 		return nil, err
 	}
-	if err := writer.Object(pageID, pdfdoc.Dict{
-		"Contents": pdfdoc.Ref{ObjectNumber: contentID},
-		"MediaBox": pdfdoc.Array{
-			pdfdoc.Integer(0),
-			pdfdoc.Integer(0),
-			pdfdoc.Number(doc.PageWidth),
-			pdfdoc.Number(doc.PageHeight),
-		},
-		"Parent": pdfdoc.Ref{ObjectNumber: pagesID},
-		"Resources": pdfdoc.Dict{
-			"Font": pdfdoc.Dict{
-				"F1": pdfdoc.Ref{ObjectNumber: type0FontID},
+	for _, page := range pages {
+		if err := writer.Object(page.ObjectID, pdfdoc.Dict{
+			"Contents": pdfdoc.Ref{ObjectNumber: page.ContentID},
+			"MediaBox": pdfdoc.Array{
+				pdfdoc.Integer(0),
+				pdfdoc.Integer(0),
+				pdfdoc.Number(doc.PageWidth),
+				pdfdoc.Number(doc.PageHeight),
 			},
-		},
-		"Type": pdfdoc.Name("Page"),
-	}); err != nil {
-		return nil, err
+			"Parent": pdfdoc.Ref{ObjectNumber: pagesID},
+			"Resources": pdfdoc.Dict{
+				"Font": pdfdoc.Dict{
+					"F1": pdfdoc.Ref{ObjectNumber: type0FontID},
+				},
+			},
+			"Type": pdfdoc.Name("Page"),
+		}); err != nil {
+			return nil, err
+		}
 	}
 
-	stream, err := flateStream(titlePageContent(doc, title, authorLines))
-	if err != nil {
-		return nil, err
-	}
-	if err := writer.StreamObject(contentID, pdfdoc.Dict{
-		"Filter": pdfdoc.Name("FlateDecode"),
-	}, stream); err != nil {
-		return nil, err
+	for _, page := range pages {
+		stream, err := flateStream(pageContent(page))
+		if err != nil {
+			return nil, err
+		}
+		if err := writer.StreamObject(page.ContentID, pdfdoc.Dict{
+			"Filter": pdfdoc.Name("FlateDecode"),
+		}, stream); err != nil {
+			return nil, err
+		}
 	}
 	if err := writer.Object(infoID, infoDictionary(doc)); err != nil {
 		return nil, err
@@ -208,35 +250,405 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 	})
 }
 
-func titlePageContent(doc skeletonDocument, title shapedText, authorLines []shapedText) []byte {
-	x := 24.0
-	titleY := doc.PageHeight - 54.0
-	authorY := titleY - 20.0
-	if authorY < 24.0 {
-		authorY = 24.0
-	}
-
+func pageContent(page pdfPage) []byte {
 	var buf bytes.Buffer
 	buf.WriteString("q\nBT\n")
-	fmt.Fprintf(&buf, "/F1 14 Tf\n1 0 0 1 %s %s Tm\n%s Tj\n",
-		pdfdoc.FormatNumber(x),
-		pdfdoc.FormatNumber(titleY),
-		pdfdoc.Format(glyphHex(title.Glyphs)),
-	)
-	buf.WriteString("/F1 9 Tf\n")
-	for i, line := range authorLines {
-		y := authorY - float64(i)*11.0
-		if y < 24.0 {
-			break
+	currentFontSize := -1.0
+	for _, line := range page.Lines {
+		if len(line.Text.Glyphs) == 0 {
+			continue
 		}
-		fmt.Fprintf(&buf, "1 0 0 1 %s %s Tm\n%s Tj\n",
-			pdfdoc.FormatNumber(x),
-			pdfdoc.FormatNumber(y),
-			pdfdoc.Format(glyphHex(line.Glyphs)),
-		)
+		if line.FontSize != currentFontSize {
+			fmt.Fprintf(&buf, "/F1 %s Tf\n", pdfdoc.FormatNumber(line.FontSize))
+			currentFontSize = line.FontSize
+		}
+		fmt.Fprintf(&buf, "1 0 0 1 %s %s Tm\n", pdfdoc.FormatNumber(line.X), pdfdoc.FormatNumber(line.Y))
+		if line.ExtraWordSpacing != 0 {
+			fmt.Fprintf(&buf, "%s TJ\n", justifiedGlyphArray(line.Text.Glyphs, line.ExtraWordSpacing, line.FontSize))
+			continue
+		}
+		fmt.Fprintf(&buf, "%s Tj\n", pdfdoc.Format(glyphHex(line.Text.Glyphs)))
 	}
 	buf.WriteString("ET\nQ\n")
 	return buf.Bytes()
+}
+
+func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map[uint16]shapedGlyph, error) {
+	const margin = 24.0
+	contentWidth := max(doc.PageWidth-margin*2, 12)
+	used := make(map[uint16]shapedGlyph)
+	pages := make([]pdfPage, 0, 2)
+
+	addPage := func() *pdfPage {
+		pages = append(pages, pdfPage{})
+		return &pages[len(pages)-1]
+	}
+	addLine := func(page *pdfPage, line pdfPageLine) {
+		page.Lines = append(page.Lines, line)
+		for id, glyph := range line.Text.Used {
+			used[id] = glyph
+		}
+	}
+
+	titlePage := addPage()
+	titleText := strings.TrimSpace(doc.Title)
+	if titleText == "" {
+		titleText = "Untitled"
+	}
+	authorText := strings.TrimSpace(doc.Author)
+	if authorText == "" {
+		authorText = "fbc"
+	}
+	title, err := shapeText(face, titleText)
+	if err != nil {
+		return nil, nil, fmt.Errorf("shape title: %w", err)
+	}
+	addLine(titlePage, pdfPageLine{
+		X:        margin,
+		Y:        max(doc.PageHeight-54.0, margin),
+		FontSize: 14,
+		Text:     title,
+	})
+	authorLines, err := wrapText(face, authorText, 9, contentWidth)
+	if err != nil {
+		return nil, nil, fmt.Errorf("shape author: %w", err)
+	}
+	authorY := max(doc.PageHeight-74.0, margin)
+	for i, line := range authorLines {
+		y := authorY - float64(i)*11.0
+		if y < margin {
+			break
+		}
+		addLine(titlePage, pdfPageLine{
+			X:        margin,
+			Y:        y,
+			FontSize: 9,
+			Text:     line,
+		})
+	}
+
+	if len(doc.Blocks) == 0 {
+		return pages, used, nil
+	}
+
+	page := addPage()
+	top := doc.PageHeight - margin
+	bottom := margin
+	y := top
+	pageHasText := false
+	newTextPage := func() {
+		page = addPage()
+		y = top
+		pageHasText = false
+	}
+
+	for _, block := range doc.Blocks {
+		style := pdfStyleForBlock(block)
+		if block.Kind == pdfBlockEmptyLine {
+			if y-style.Paragraph.LineHeight < bottom {
+				newTextPage()
+			}
+			y -= style.Paragraph.LineHeight
+			continue
+		}
+		text := strings.TrimSpace(block.Text)
+		if text == "" {
+			continue
+		}
+		lines, err := layoutParagraph(face, text, style.Paragraph, contentWidth)
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(lines) == 0 {
+			continue
+		}
+
+		needed := style.SpaceBefore + float64(len(lines))*style.Paragraph.LineHeight
+		if style.KeepTogether && pageHasText && y-needed < bottom {
+			newTextPage()
+		}
+		if pageHasText {
+			y -= style.SpaceBefore
+		}
+		for _, line := range lines {
+			if y-style.Paragraph.FontSize < bottom {
+				newTextPage()
+			}
+			x := margin + line.Indent
+			available := contentWidth - line.Indent
+			switch style.Paragraph.Align {
+			case textAlignCenter:
+				x += max((available-line.Width)/2, 0)
+			case textAlignRight:
+				x += max(available-line.Width, 0)
+			}
+			addLine(page, pdfPageLine{
+				X:                x,
+				Y:                y,
+				FontSize:         style.Paragraph.FontSize,
+				Text:             line.Text,
+				ExtraWordSpacing: line.ExtraWordSpacing,
+			})
+			y -= style.Paragraph.LineHeight
+			pageHasText = true
+		}
+		y -= style.SpaceAfter
+	}
+
+	if len(pages[len(pages)-1].Lines) == 0 {
+		pages = pages[:len(pages)-1]
+	}
+	return pages, used, nil
+}
+
+type pdfBlockResolvedStyle struct {
+	Paragraph    paragraphStyle
+	SpaceBefore  float64
+	SpaceAfter   float64
+	KeepTogether bool
+}
+
+func pdfStyleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
+	switch block.Kind {
+	case pdfBlockHeading:
+		fontSize := max(16-float64(block.Depth-1), 11)
+		return pdfBlockResolvedStyle{
+			Paragraph:    paragraphStyle{FontSize: fontSize, LineHeight: fontSize * 1.25, Align: textAlignCenter},
+			SpaceBefore:  10,
+			SpaceAfter:   8,
+			KeepTogether: true,
+		}
+	case pdfBlockSubtitle:
+		return pdfBlockResolvedStyle{
+			Paragraph:    paragraphStyle{FontSize: 11, LineHeight: 14, Align: textAlignCenter},
+			SpaceBefore:  6,
+			SpaceAfter:   5,
+			KeepTogether: true,
+		}
+	case pdfBlockPoem:
+		return pdfBlockResolvedStyle{
+			Paragraph:  paragraphStyle{FontSize: 10.5, LineHeight: 13.2, Align: textAlignLeft},
+			SpaceAfter: 2,
+		}
+	case pdfBlockTextAuthor:
+		return pdfBlockResolvedStyle{
+			Paragraph:  paragraphStyle{FontSize: 10, LineHeight: 12.5, Align: textAlignRight},
+			SpaceAfter: 4,
+		}
+	default:
+		return pdfBlockResolvedStyle{
+			Paragraph:  paragraphStyle{FontSize: 10.5, LineHeight: 13.4, FirstLineIndent: 14, Align: textAlignJustify},
+			SpaceAfter: 3,
+		}
+	}
+}
+
+func justifiedGlyphArray(glyphs []shapedGlyph, extraWordSpacing, fontSize float64) string {
+	adjustment := -extraWordSpacing * 1000 / fontSize
+	var buf bytes.Buffer
+	buf.WriteByte('[')
+	for i, glyph := range glyphs {
+		if i > 0 {
+			buf.WriteByte(' ')
+		}
+		buf.WriteString(pdfdoc.Format(glyphHex([]shapedGlyph{glyph})))
+		if glyph.Rune == ' ' && i != len(glyphs)-1 {
+			buf.WriteByte(' ')
+			buf.WriteString(pdfdoc.FormatNumber(adjustment))
+		}
+	}
+	buf.WriteByte(']')
+	return buf.String()
+}
+
+func collectTextBlocks(c *content.Content) []pdfTextBlock {
+	if c == nil || c.Book == nil {
+		return nil
+	}
+	blocks := make([]pdfTextBlock, 0, 64)
+	for i := range c.Book.Bodies {
+		body := &c.Book.Bodies[i]
+		if body.Footnotes() {
+			continue
+		}
+		appendBodyBlocks(&blocks, body)
+	}
+	for i := range c.Book.Bodies {
+		body := &c.Book.Bodies[i]
+		if body.Footnotes() {
+			appendBodyBlocks(&blocks, body)
+		}
+	}
+	return blocks
+}
+
+func appendBodyBlocks(blocks *[]pdfTextBlock, body *fb2.Body) {
+	if body == nil {
+		return
+	}
+	appendTitleBlocks(blocks, body.Title, 1)
+	for i := range body.Epigraphs {
+		appendEpigraphBlocks(blocks, &body.Epigraphs[i])
+	}
+	for i := range body.Sections {
+		appendSectionBlocks(blocks, &body.Sections[i], 1)
+	}
+}
+
+func appendSectionBlocks(blocks *[]pdfTextBlock, section *fb2.Section, depth int) {
+	if section == nil {
+		return
+	}
+	appendTitleBlocks(blocks, section.Title, depth)
+	for i := range section.Epigraphs {
+		appendEpigraphBlocks(blocks, &section.Epigraphs[i])
+	}
+	if section.Annotation != nil {
+		appendFlowBlocks(blocks, section.Annotation.Items, depth)
+	}
+	for i := range section.Content {
+		appendFlowItemBlock(blocks, &section.Content[i], depth)
+	}
+}
+
+func appendTitleBlocks(blocks *[]pdfTextBlock, title *fb2.Title, depth int) {
+	if title == nil {
+		return
+	}
+	for i := range title.Items {
+		item := &title.Items[i]
+		if item.EmptyLine {
+			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine})
+			continue
+		}
+		if item.Paragraph == nil {
+			continue
+		}
+		if text := paragraphText(item.Paragraph); text != "" {
+			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockHeading, Text: text, Depth: depth})
+		}
+	}
+}
+
+func appendFlowBlocks(blocks *[]pdfTextBlock, items []fb2.FlowItem, depth int) {
+	for i := range items {
+		appendFlowItemBlock(blocks, &items[i], depth)
+	}
+}
+
+func appendFlowItemBlock(blocks *[]pdfTextBlock, item *fb2.FlowItem, depth int) {
+	if item == nil {
+		return
+	}
+	switch item.Kind {
+	case fb2.FlowParagraph:
+		appendParagraphBlock(blocks, pdfBlockParagraph, item.Paragraph, depth)
+	case fb2.FlowSubtitle:
+		appendParagraphBlock(blocks, pdfBlockSubtitle, item.Subtitle, depth)
+	case fb2.FlowEmptyLine:
+		*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine})
+	case fb2.FlowSection:
+		appendSectionBlocks(blocks, item.Section, depth+1)
+	case fb2.FlowPoem:
+		appendPoemBlocks(blocks, item.Poem, depth)
+	case fb2.FlowCite:
+		appendCiteBlocks(blocks, item.Cite, depth)
+	case fb2.FlowTable:
+		if item.Table != nil {
+			text := item.Table.AsPlainText()
+			if text != "" {
+				*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockParagraph, Text: text, Depth: depth})
+			}
+		}
+	}
+}
+
+func appendParagraphBlock(blocks *[]pdfTextBlock, kind pdfBlockKind, paragraph *fb2.Paragraph, depth int) {
+	if paragraph == nil {
+		return
+	}
+	if text := paragraphText(paragraph); text != "" {
+		*blocks = append(*blocks, pdfTextBlock{Kind: kind, Text: text, Depth: depth})
+	}
+}
+
+func appendPoemBlocks(blocks *[]pdfTextBlock, poem *fb2.Poem, depth int) {
+	if poem == nil {
+		return
+	}
+	appendTitleBlocks(blocks, poem.Title, depth+1)
+	for i := range poem.Epigraphs {
+		appendEpigraphBlocks(blocks, &poem.Epigraphs[i])
+	}
+	for i := range poem.Subtitles {
+		appendParagraphBlock(blocks, pdfBlockSubtitle, &poem.Subtitles[i], depth)
+	}
+	for i := range poem.Stanzas {
+		stanza := &poem.Stanzas[i]
+		appendTitleBlocks(blocks, stanza.Title, depth+1)
+		appendParagraphBlock(blocks, pdfBlockSubtitle, stanza.Subtitle, depth)
+		for j := range stanza.Verses {
+			appendParagraphBlock(blocks, pdfBlockPoem, &stanza.Verses[j], depth)
+		}
+		*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine})
+	}
+	for i := range poem.TextAuthors {
+		appendParagraphBlock(blocks, pdfBlockTextAuthor, &poem.TextAuthors[i], depth)
+	}
+}
+
+func appendCiteBlocks(blocks *[]pdfTextBlock, cite *fb2.Cite, depth int) {
+	if cite == nil {
+		return
+	}
+	appendFlowBlocks(blocks, cite.Items, depth)
+	for i := range cite.TextAuthors {
+		appendParagraphBlock(blocks, pdfBlockTextAuthor, &cite.TextAuthors[i], depth)
+	}
+}
+
+func appendEpigraphBlocks(blocks *[]pdfTextBlock, epigraph *fb2.Epigraph) {
+	if epigraph == nil {
+		return
+	}
+	appendFlowBlocks(blocks, epigraph.Flow.Items, 1)
+	for i := range epigraph.TextAuthors {
+		appendParagraphBlock(blocks, pdfBlockTextAuthor, &epigraph.TextAuthors[i], 1)
+	}
+}
+
+func paragraphText(paragraph *fb2.Paragraph) string {
+	if paragraph == nil {
+		return ""
+	}
+	return strings.TrimSpace(inlineSegmentsText(paragraph.Text))
+}
+
+func inlineSegmentsText(segments []fb2.InlineSegment) string {
+	var b strings.Builder
+	for i := range segments {
+		appendInlineSegmentText(&b, &segments[i])
+	}
+	return b.String()
+}
+
+func appendInlineSegmentText(b *strings.Builder, seg *fb2.InlineSegment) {
+	if seg == nil {
+		return
+	}
+	if seg.Kind == fb2.InlineImageSegment {
+		if seg.Image != nil && seg.Image.Alt != "" {
+			if b.Len() > 0 {
+				b.WriteByte(' ')
+			}
+			b.WriteString(seg.Image.Alt)
+		}
+		return
+	}
+	b.WriteString(seg.Text)
+	for i := range seg.Children {
+		appendInlineSegmentText(b, &seg.Children[i])
+	}
 }
 
 func infoDictionary(doc skeletonDocument) pdfdoc.Dict {
