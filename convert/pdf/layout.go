@@ -236,7 +236,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 		if err != nil {
 			return nil, nil, err
 		}
-		lines, err := layoutInlineParagraph(doc.Fonts, face, block.Text, block.Runs, style.Paragraph, blockWidth)
+		lines, err := layoutInlineParagraph(doc.Fonts, styles, face, block.Text, block.Runs, style.Paragraph, blockWidth)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -357,7 +357,7 @@ func nextBlockKeepHeight(blocks []pdfTextBlock, hyphenator paragraphHyphenator, 
 		if err != nil {
 			return 0, err
 		}
-		lines, err := layoutInlineParagraph(fonts, face, block.Text, block.Runs, style.Paragraph, blockContentWidth(contentWidth, style))
+		lines, err := layoutInlineParagraph(fonts, styles, face, block.Text, block.Runs, style.Paragraph, blockContentWidth(contentWidth, style))
 		if err != nil {
 			return 0, err
 		}

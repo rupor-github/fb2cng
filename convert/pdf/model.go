@@ -85,6 +85,7 @@ type pdfTextBlock struct {
 
 type pdfInlineRun struct {
 	Text          string
+	StyleClasses  string
 	Bold          bool
 	Italic        bool
 	Strikethrough bool

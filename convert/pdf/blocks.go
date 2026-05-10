@@ -544,6 +544,8 @@ func applyInlineSegmentStyle(style pdfInlineRun, seg *fb2.InlineSegment) pdfInli
 		style.Bold = true
 	case fb2.InlineEmphasis:
 		style.Italic = true
+	case fb2.InlineNamedStyle:
+		style.StyleClasses = joinStyleClasses(style.StyleClasses, seg.Style)
 	case fb2.InlineStrikethrough:
 		style.Strikethrough = true
 	case fb2.InlineSub:
@@ -571,7 +573,7 @@ func appendInlineRun(runs *[]pdfInlineRun, run pdfInlineRun) {
 }
 
 func sameInlineStyle(a, b pdfInlineRun) bool {
-	return a.Bold == b.Bold && a.Italic == b.Italic && a.Strikethrough == b.Strikethrough && a.Subscript == b.Subscript && a.Superscript == b.Superscript && a.Code == b.Code
+	return a.StyleClasses == b.StyleClasses && a.Bold == b.Bold && a.Italic == b.Italic && a.Strikethrough == b.Strikethrough && a.Subscript == b.Subscript && a.Superscript == b.Superscript && a.Code == b.Code
 }
 
 func trimInlineRuns(runs []pdfInlineRun) []pdfInlineRun {

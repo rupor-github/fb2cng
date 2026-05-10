@@ -49,11 +49,13 @@ func TestParagraphInlineRunsPreserveFB2InlineStyles(t *testing.T) {
 		{Kind: fb2.InlineSup, Children: []fb2.InlineSegment{{Text: "sup"}}},
 		{Text: " "},
 		{Kind: fb2.InlineCode, Children: []fb2.InlineSegment{{Text: "code"}}},
+		{Text: " "},
+		{Kind: fb2.InlineNamedStyle, Style: "accent", Children: []fb2.InlineSegment{{Text: "styled"}}},
 	}}
 
 	runs := paragraphInlineRuns(paragraph)
-	if len(runs) != 10 {
-		t.Fatalf("inline runs = %#v, want 10 style-preserving runs", runs)
+	if len(runs) != 12 {
+		t.Fatalf("inline runs = %#v, want 12 style-preserving runs", runs)
 	}
 	assertRun := func(index int, text string, check func(pdfInlineRun) bool) {
 		t.Helper()
@@ -66,6 +68,7 @@ func TestParagraphInlineRunsPreserveFB2InlineStyles(t *testing.T) {
 	assertRun(5, "sub", func(run pdfInlineRun) bool { return run.Subscript && !run.Superscript })
 	assertRun(7, "sup", func(run pdfInlineRun) bool { return run.Superscript && !run.Subscript })
 	assertRun(9, "code", func(run pdfInlineRun) bool { return run.Code })
+	assertRun(11, "styled", func(run pdfInlineRun) bool { return run.StyleClasses == "accent" })
 }
 
 func TestCollectPDFContentAddsAnnotationPage(t *testing.T) {

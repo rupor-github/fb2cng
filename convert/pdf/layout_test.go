@@ -234,6 +234,57 @@ func TestLayoutPDFPagesAppliesInlineStyles(t *testing.T) {
 	}
 }
 
+func TestLayoutPDFPagesAppliesInlineNamedStyleClasses(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	accent := resolver.styles[pdfStyleParagraph]
+	accent.Paragraph.FontFamily = "sans-serif"
+	accent.Paragraph.Bold = true
+	accent.Paragraph.Italic = true
+	accent.Paragraph.Color = pdfColor{R: 1}
+	accent.Paragraph.Underline = true
+	resolver.styles["accent"] = accent
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  520,
+		PageHeight: 180,
+		Title:      "Title",
+		Author:     "Author",
+		Styles:     resolver,
+		Blocks: []pdfTextBlock{{
+			Kind: pdfBlockParagraph,
+			Text: "plain styled",
+			Runs: []pdfInlineRun{
+				{Text: "plain "},
+				{Text: "styled", StyleClasses: "accent"},
+			},
+		}},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 || len(pages[1].Lines) != 1 {
+		t.Fatalf("layoutPDFPages() pages = %#v, want one styled body line", pages)
+	}
+	var styled *pdfPageLineFragment
+	for i := range pages[1].Lines[0].Fragments {
+		fragment := &pages[1].Lines[0].Fragments[i]
+		if shapedRunes(fragment.Text) == "styled" {
+			styled = fragment
+			break
+		}
+	}
+	if styled == nil {
+		t.Fatalf("styled fragment missing: %#v", pages[1].Lines[0].Fragments)
+	}
+	if styled.FontKey.Family != "sans-serif" || !styled.FontKey.Bold || !styled.FontKey.Italic || !styled.Underline || styled.Color.String() != "#ff0000" {
+		t.Fatalf("styled fragment = %#v, want accent class styling", *styled)
+	}
+}
+
 func TestLayoutPDFPagesAppliesBlockWidth(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {

@@ -18,7 +18,7 @@ type paragraphInlineWord struct {
 	Width     float64
 }
 
-func layoutInlineParagraph(registry *pdfFontRegistry, baseFace *builtinFontFace, text string, runs []pdfInlineRun, style paragraphStyle, maxWidth float64) ([]paragraphLine, error) {
+func layoutInlineParagraph(registry *pdfFontRegistry, resolver *pdfStyleResolver, baseFace *builtinFontFace, text string, runs []pdfInlineRun, style paragraphStyle, maxWidth float64) ([]paragraphLine, error) {
 	if len(runs) == 0 {
 		runs = []pdfInlineRun{{Text: text}}
 	}
@@ -32,7 +32,7 @@ func layoutInlineParagraph(registry *pdfFontRegistry, baseFace *builtinFontFace,
 		return nil, fmt.Errorf("paragraph width must be positive: %g", maxWidth)
 	}
 
-	words, err := inlineParagraphWords(registry, runs, style)
+	words, err := inlineParagraphWords(registry, resolver, runs, style)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func layoutInlineParagraph(registry *pdfFontRegistry, baseFace *builtinFontFace,
 
 func hasInlineStyle(runs []pdfInlineRun) bool {
 	for _, run := range runs {
-		if run.Bold || run.Italic || run.Strikethrough || run.Subscript || run.Superscript || run.Code {
+		if run.StyleClasses != "" || run.Bold || run.Italic || run.Strikethrough || run.Subscript || run.Superscript || run.Code {
 			return true
 		}
 	}
@@ -90,7 +90,7 @@ func plainInlineRunText(runs []pdfInlineRun) string {
 	return strings.TrimSpace(b.String())
 }
 
-func inlineParagraphWords(registry *pdfFontRegistry, runs []pdfInlineRun, base paragraphStyle) ([]paragraphInlineWord, error) {
+func inlineParagraphWords(registry *pdfFontRegistry, resolver *pdfStyleResolver, runs []pdfInlineRun, base paragraphStyle) ([]paragraphInlineWord, error) {
 	words := make([]paragraphInlineWord, 0)
 	current := paragraphInlineWord{}
 	flushCurrent := func() {
@@ -105,7 +105,7 @@ func inlineParagraphWords(registry *pdfFontRegistry, runs []pdfInlineRun, base p
 		if text == "" {
 			return nil
 		}
-		fragment, err := inlineRunFragment(registry, base, run, text)
+		fragment, err := inlineRunFragment(registry, resolver, base, run, text)
 		if err != nil {
 			return err
 		}
@@ -144,11 +144,11 @@ func inlineParagraphWords(registry *pdfFontRegistry, runs []pdfInlineRun, base p
 }
 
 func inlineParagraphSpace(registry *pdfFontRegistry, base paragraphStyle) (paragraphLineFragment, error) {
-	return inlineRunFragment(registry, base, pdfInlineRun{}, " ")
+	return inlineRunFragment(registry, nil, base, pdfInlineRun{}, " ")
 }
 
-func inlineRunFragment(registry *pdfFontRegistry, base paragraphStyle, run pdfInlineRun, text string) (paragraphLineFragment, error) {
-	style := inlineRunParagraphStyle(base, run)
+func inlineRunFragment(registry *pdfFontRegistry, resolver *pdfStyleResolver, base paragraphStyle, run pdfInlineRun, text string) (paragraphLineFragment, error) {
+	style := inlineRunParagraphStyle(resolver, base, run)
 	face, key, err := fontForStyle(registry, style)
 	if err != nil {
 		return paragraphLineFragment{}, err
@@ -170,8 +170,8 @@ func inlineRunFragment(registry *pdfFontRegistry, base paragraphStyle, run pdfIn
 	}, nil
 }
 
-func inlineRunParagraphStyle(base paragraphStyle, run pdfInlineRun) paragraphStyle {
-	style := base
+func inlineRunParagraphStyle(resolver *pdfStyleResolver, base paragraphStyle, run pdfInlineRun) paragraphStyle {
+	style := inlineClassParagraphStyle(resolver, base, run.StyleClasses)
 	style.Bold = style.Bold || run.Bold
 	style.Italic = style.Italic || run.Italic
 	style.Strikethrough = style.Strikethrough || run.Strikethrough
@@ -183,6 +183,53 @@ func inlineRunParagraphStyle(base paragraphStyle, run pdfInlineRun) paragraphSty
 		style.LetterSpacing *= pdfInlineScriptScale
 	}
 	return style
+}
+
+func inlineClassParagraphStyle(resolver *pdfStyleResolver, base paragraphStyle, classes string) paragraphStyle {
+	if resolver == nil || strings.TrimSpace(classes) == "" {
+		return base
+	}
+	fallback := resolver.styles[pdfStyleParagraph].Paragraph
+	style := base
+	for _, class := range strings.Fields(classes) {
+		classStyle, ok := resolver.styles[class]
+		if !ok {
+			continue
+		}
+		style = mergeInlineParagraphStyle(style, classStyle.Paragraph, fallback)
+	}
+	return style
+}
+
+func mergeInlineParagraphStyle(base, override, fallback paragraphStyle) paragraphStyle {
+	if override.FontFamily != fallback.FontFamily {
+		base.FontFamily = override.FontFamily
+	}
+	if override.Bold != fallback.Bold {
+		base.Bold = override.Bold
+	}
+	if override.Italic != fallback.Italic {
+		base.Italic = override.Italic
+	}
+	if override.FontSize != fallback.FontSize {
+		base.FontSize = override.FontSize
+	}
+	if override.LineHeight != fallback.LineHeight {
+		base.LineHeight = override.LineHeight
+	}
+	if override.LetterSpacing != fallback.LetterSpacing {
+		base.LetterSpacing = override.LetterSpacing
+	}
+	if override.Color != fallback.Color {
+		base.Color = override.Color
+	}
+	if override.Underline != fallback.Underline {
+		base.Underline = override.Underline
+	}
+	if override.Strikethrough != fallback.Strikethrough {
+		base.Strikethrough = override.Strikethrough
+	}
+	return base
 }
 
 func inlineRunBaselineShift(base paragraphStyle, run pdfInlineRun) float64 {
