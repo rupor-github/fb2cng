@@ -140,6 +140,45 @@ func TestCollectTextBlocksIncludesLinkChildren(t *testing.T) {
 	}
 }
 
+func TestCollectPDFContentAddsAnnotationPage(t *testing.T) {
+	book := &fb2.FictionBook{
+		Description: fb2.Description{TitleInfo: fb2.TitleInfo{
+			Annotation: &fb2.Flow{Items: []fb2.FlowItem{{
+				Kind:      fb2.FlowParagraph,
+				Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Book annotation."}}},
+			}}},
+		}},
+		Bodies: []fb2.Body{{
+			Kind: fb2.BodyMain,
+			Sections: []fb2.Section{{
+				ID:    "chapter-1",
+				Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 1"}}}}}},
+			}},
+		}},
+	}
+	plan, err := collectPDFContent(&content.Content{Book: book}, &config.DocumentConfig{
+		Annotation: config.AnnotationConfig{Enable: true, Title: "About", InTOC: true},
+	})
+	if err != nil {
+		t.Fatalf("collectPDFContent() error = %v", err)
+	}
+	if len(plan.Blocks) < 4 {
+		t.Fatalf("blocks = %#v, want annotation and chapter blocks", plan.Blocks)
+	}
+	if got := plan.Blocks[0]; got.Kind != pdfBlockPageBreak || got.ID != "annotation-page" {
+		t.Fatalf("first block = %#v, want annotation page break", got)
+	}
+	if got := plan.Blocks[1]; got.Kind != pdfBlockHeading || got.Text != "About" {
+		t.Fatalf("second block = %#v, want annotation heading", got)
+	}
+	if got := plan.Blocks[2]; got.Kind != pdfBlockParagraph || got.Text != "Book annotation." {
+		t.Fatalf("annotation paragraph = %#v", got)
+	}
+	if len(plan.TOC) == 0 || plan.TOC[0].ID != "annotation-page" || plan.TOC[0].Title != "About" {
+		t.Fatalf("TOC = %#v, want annotation entry first", plan.TOC)
+	}
+}
+
 func TestCollectPDFContentAddsTOCPageBeforeContent(t *testing.T) {
 	book := &fb2.FictionBook{Bodies: []fb2.Body{{
 		Kind: fb2.BodyMain,
@@ -596,6 +635,54 @@ func TestNamedDestinations(t *testing.T) {
 	}
 	if strings.Contains(got, "[8 0 R /Fit] <6D>") {
 		t.Fatalf("named destinations are not sorted by name: %q", got)
+	}
+}
+
+func TestGenerateAnnotationPage(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputName := filepath.Join(tmpDir, "book.pdf")
+	cfg := &config.DocumentConfig{
+		Annotation: config.AnnotationConfig{Enable: true, Title: "About", InTOC: true},
+		Images: config.ImagesConfig{
+			Screen: config.ScreenConfig{Width: 1264, Height: 1680, DPI: 300},
+		},
+	}
+	c := &content.Content{
+		SrcName: "book.fb2",
+		Book: &fb2.FictionBook{
+			Description: fb2.Description{TitleInfo: fb2.TitleInfo{
+				BookTitle: fb2.TextField{Value: "Annotation Book"},
+				Annotation: &fb2.Flow{Items: []fb2.FlowItem{{
+					Kind:      fb2.FlowParagraph,
+					Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Book annotation."}}},
+				}}},
+			}},
+			Bodies: []fb2.Body{{
+				Kind: fb2.BodyMain,
+				Sections: []fb2.Section{{
+					ID:    "chapter-1",
+					Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 1"}}}}}},
+				}},
+			}},
+		},
+	}
+
+	if err := Generate(context.Background(), c, outputName, cfg, zaptest.NewLogger(t)); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	data, err := os.ReadFile(outputName)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	pdfText := string(data)
+	for _, want := range []string{
+		"/Outlines",
+		"/Names [<616E6E6F746174696F6E2D70616765>",
+		"/Dest [11 0 R /Fit]",
+	} {
+		if !strings.Contains(pdfText, want) {
+			t.Fatalf("generated PDF does not contain %q", want)
+		}
 	}
 }
 

@@ -1180,8 +1180,35 @@ func collectPDFContent(c *content.Content, cfg *config.DocumentConfig) (pdfConte
 		}
 		appendUnitBlocks(&blocks, unit, splitSections, splitBodies)
 	}
-	blocks = insertTOCPageBlocks(blocks, plan.TOC, cfg)
-	return pdfContentPlan{Blocks: blocks, TOC: plan.TOC}, nil
+	toc := plan.TOC
+	blocks, toc = insertAnnotationPageBlocks(blocks, toc, c.Book.Description.TitleInfo.Annotation, cfg)
+	blocks = insertTOCPageBlocks(blocks, toc, cfg)
+	return pdfContentPlan{Blocks: blocks, TOC: toc}, nil
+}
+
+func insertAnnotationPageBlocks(blocks []pdfTextBlock, toc []*structure.TOCEntry, annotation *fb2.Flow, cfg *config.DocumentConfig) ([]pdfTextBlock, []*structure.TOCEntry) {
+	if cfg == nil || !cfg.Annotation.Enable || annotation == nil || len(annotation.Items) == 0 {
+		return blocks, toc
+	}
+	title := strings.TrimSpace(cfg.Annotation.Title)
+	if title == "" {
+		title = "Annotation"
+	}
+	annotationBlocks := []pdfTextBlock{
+		{Kind: pdfBlockPageBreak, ID: "annotation-page", Text: title},
+		{Kind: pdfBlockHeading, ID: "annotation-page-title", Text: title, Depth: 1},
+	}
+	appendFlowBlocks(&annotationBlocks, annotation.Items, 1, nil)
+	out := make([]pdfTextBlock, 0, len(annotationBlocks)+len(blocks))
+	out = append(out, annotationBlocks...)
+	out = append(out, blocks...)
+	if !cfg.Annotation.InTOC {
+		return out, toc
+	}
+	tocOut := make([]*structure.TOCEntry, 0, len(toc)+1)
+	tocOut = append(tocOut, &structure.TOCEntry{ID: "annotation-page", Title: title, IncludeInTOC: true})
+	tocOut = append(tocOut, toc...)
+	return out, tocOut
 }
 
 func insertTOCPageBlocks(blocks []pdfTextBlock, entries []*structure.TOCEntry, cfg *config.DocumentConfig) []pdfTextBlock {
