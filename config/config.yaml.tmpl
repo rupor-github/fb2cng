@@ -190,11 +190,14 @@ document:
     jpeg_quality_level: 95
 
     screen:
-      # Reader screen size so images could be adjusted properly
+      # Reader screen size so images could be adjusted properly.
+      # Width and height are device pixels; PDF uses them with dpi to derive
+      # fixed page size in PDF points.
       # This is used to prepare cover and some other operations, like SVG
-      # rasterization for kindle devices
+      # rasterization for kindle devices.
       width: 1264
       height: 1680
+      dpi: 300
 
     cover:
       # When book does not have cover image supply one. For Amazon formats
