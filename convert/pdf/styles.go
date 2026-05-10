@@ -75,6 +75,9 @@ type pdfBlockResolvedStyle struct {
 	PaddingLeft       float64
 	BackgroundColor   pdfColor
 	HasBackground     bool
+	BorderWidth       float64
+	BorderColor       pdfColor
+	HasBorder         bool
 	KeepTogether      bool
 	KeepWithNextLines int
 	PageBreakBefore   bool
@@ -111,6 +114,8 @@ type pdfDebugResolvedStyle struct {
 	PaddingBottom     float64 `json:"padding_bottom,omitempty"`
 	PaddingLeft       float64 `json:"padding_left,omitempty"`
 	BackgroundColor   string  `json:"background_color,omitempty"`
+	BorderWidth       float64 `json:"border_width,omitempty"`
+	BorderColor       string  `json:"border_color,omitempty"`
 	Hyphenation       string  `json:"hyphenation,omitempty"`
 	KeepTogether      bool    `json:"keep_together,omitempty"`
 	KeepWithNextLines int     `json:"keep_with_next_lines,omitempty"`
@@ -323,6 +328,11 @@ func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfB
 		base.HasBackground = override.HasBackground
 		base.BackgroundColor = override.BackgroundColor
 	}
+	if override.HasBorder != fallback.HasBorder || override.BorderWidth != fallback.BorderWidth || override.BorderColor != fallback.BorderColor {
+		base.HasBorder = override.HasBorder
+		base.BorderWidth = override.BorderWidth
+		base.BorderColor = override.BorderColor
+	}
 	if override.KeepTogether != fallback.KeepTogether {
 		base.KeepTogether = override.KeepTogether
 	}
@@ -491,6 +501,24 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 			style.HasBackground = true
 		}
 	}
+	if value, ok := props["border"]; ok {
+		applyPDFBorderShorthand(style, value)
+	}
+	if value, ok := props["border-width"]; ok {
+		if width, ok := pdfCSSBorderWidth(value, style.Paragraph.FontSize); ok {
+			style.BorderWidth = width
+			style.HasBorder = width > 0
+		}
+	}
+	if value, ok := props["border-color"]; ok {
+		if color, ok := pdfCSSColor(value); ok {
+			style.BorderColor = color
+			style.HasBorder = style.BorderWidth > 0
+		}
+	}
+	if value, ok := props["border-style"]; ok {
+		applyPDFBorderStyle(style, value)
+	}
 	if value, ok := props["text-decoration"]; ok {
 		applyPDFTextDecoration(style, value)
 	}
@@ -514,7 +542,7 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 	names := make([]string, 0, len(props))
 	for name := range props {
 		lower := strings.ToLower(name)
-		if lower != "font-family" && lower != "font-weight" && lower != "font-style" && lower != "color" && lower != "background-color" && lower != "background" && lower != "text-decoration" && lower != "font-size" && lower != "line-height" && lower != "letter-spacing" {
+		if lower != "font-family" && lower != "font-weight" && lower != "font-style" && lower != "color" && lower != "background-color" && lower != "background" && lower != "border" && lower != "border-width" && lower != "border-color" && lower != "border-style" && lower != "text-decoration" && lower != "font-size" && lower != "line-height" && lower != "letter-spacing" {
 			names = append(names, name)
 		}
 	}
@@ -599,6 +627,53 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 			}
 		}
 	}
+}
+
+func applyPDFBorderShorthand(style *pdfBlockResolvedStyle, value css.Value) {
+	tokens := strings.Fields(formatCSSValue(value))
+	if len(tokens) == 0 {
+		return
+	}
+	style.BorderWidth = 1
+	style.BorderColor = pdfColor{}
+	style.HasBorder = true
+	for _, token := range tokens {
+		parsed := parsePDFCSSValueToken(token)
+		if width, ok := pdfCSSBorderWidth(parsed, style.Paragraph.FontSize); ok {
+			style.BorderWidth = width
+			style.HasBorder = width > 0
+			continue
+		}
+		if color, ok := pdfCSSColor(parsed); ok {
+			style.BorderColor = color
+			continue
+		}
+		applyPDFBorderStyle(style, parsed)
+	}
+}
+
+func applyPDFBorderStyle(style *pdfBlockResolvedStyle, value css.Value) {
+	switch cssKeyword(value) {
+	case "none", "hidden":
+		style.HasBorder = false
+	case "solid", "dotted", "dashed", "double":
+		if style.BorderWidth <= 0 {
+			style.BorderWidth = 1
+		}
+		style.HasBorder = true
+	}
+}
+
+func pdfCSSBorderWidth(value css.Value, fontSize float64) (float64, bool) {
+	switch cssKeyword(value) {
+	case "thin":
+		return 0.5, true
+	case "medium":
+		return 1, true
+	case "thick":
+		return 2, true
+	}
+	return pdfCSSLengthPoints(value, fontSize)
 }
 
 func applyPDFTextDecoration(style *pdfBlockResolvedStyle, value css.Value) {
@@ -888,6 +963,13 @@ func pdfDebugBackgroundColor(style pdfBlockResolvedStyle) string {
 	return style.BackgroundColor.String()
 }
 
+func pdfDebugBorderColor(style pdfBlockResolvedStyle) string {
+	if !style.HasBorder || style.BorderWidth <= 0 {
+		return ""
+	}
+	return style.BorderColor.String()
+}
+
 func (r *pdfStyleResolver) debugStyles() []pdfDebugResolvedStyle {
 	if r == nil {
 		return nil
@@ -923,6 +1005,8 @@ func (r *pdfStyleResolver) debugStyles() []pdfDebugResolvedStyle {
 			PaddingBottom:     style.PaddingBottom,
 			PaddingLeft:       style.PaddingLeft,
 			BackgroundColor:   pdfDebugBackgroundColor(style),
+			BorderWidth:       style.BorderWidth,
+			BorderColor:       pdfDebugBorderColor(style),
 			KeepTogether:      style.KeepTogether,
 			KeepWithNextLines: style.KeepWithNextLines,
 			PageBreakBefore:   style.PageBreakBefore,

@@ -26,6 +26,7 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 				margin: 1em 2em 0.5em 3em;
 				padding: 0.25em 0.5em 0.75em 1em;
 				background-color: #eee;
+				border: 2px solid red;
 				hyphens: manual;
 				orphans: 3;
 				widows: 4;
@@ -79,6 +80,9 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 	}
 	if !paragraph.HasBackground || paragraph.BackgroundColor.String() != "#eeeeee" {
 		t.Fatalf("paragraph background = %t %s, want #eeeeee", paragraph.HasBackground, paragraph.BackgroundColor)
+	}
+	if !paragraph.HasBorder || paragraph.BorderWidth != 1.5 || paragraph.BorderColor.String() != "#ff0000" {
+		t.Fatalf("paragraph border = %t %v %s, want 1.5pt red", paragraph.HasBorder, paragraph.BorderWidth, paragraph.BorderColor)
 	}
 	if paragraph.Paragraph.Hyphenation != paragraphHyphenationManual {
 		t.Fatalf("paragraph hyphenation = %s, want manual", pdfHyphenationString(paragraph.Paragraph.Hyphenation))

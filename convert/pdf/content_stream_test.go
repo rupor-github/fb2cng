@@ -5,13 +5,20 @@ import (
 	"testing"
 )
 
-func TestPageContentDrawsBackgroundsAndImages(t *testing.T) {
+func TestPageContentDrawsBackgroundsBordersAndImages(t *testing.T) {
 	content := string(pageContent(pdfPage{Backgrounds: []pdfPageRect{{
 		X:      1,
 		Y:      2,
 		Width:  3,
 		Height: 4,
 		Color:  pdfColor{G: 1},
+	}}, Borders: []pdfPageBorder{{
+		X:         5,
+		Y:         6,
+		Width:     7,
+		Height:    8,
+		LineWidth: 1.5,
+		Color:     pdfColor{R: 1},
 	}}, Images: []pdfPageImage{{
 		Name:   "Im1",
 		X:      10,
@@ -19,7 +26,7 @@ func TestPageContentDrawsBackgroundsAndImages(t *testing.T) {
 		Width:  30,
 		Height: 40,
 	}}}))
-	for _, want := range []string{"0 1 0 rg", "1 2 3 4 re f", "30 0 0 40 10 20 cm", "/Im1 Do"} {
+	for _, want := range []string{"0 1 0 rg", "1 2 3 4 re f", "1 0 0 RG", "1.5 w", "5 6 7 8 re S", "30 0 0 40 10 20 cm", "/Im1 Do"} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("page content = %q, missing %q", content, want)
 		}

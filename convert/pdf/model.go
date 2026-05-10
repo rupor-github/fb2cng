@@ -106,6 +106,7 @@ type pdfPage struct {
 	ObjectID    int
 	ContentID   int
 	Backgrounds []pdfPageRect
+	Borders     []pdfPageBorder
 	Lines       []pdfPageLine
 	Images      []pdfPageImage
 	Anchors     []string
@@ -118,6 +119,15 @@ type pdfPageRect struct {
 	Width  float64
 	Height float64
 	Color  pdfColor
+}
+
+type pdfPageBorder struct {
+	X         float64
+	Y         float64
+	Width     float64
+	Height    float64
+	LineWidth float64
+	Color     pdfColor
 }
 
 type pdfPageImage struct {

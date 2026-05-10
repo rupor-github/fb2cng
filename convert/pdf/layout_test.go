@@ -134,6 +134,9 @@ func TestLayoutPDFPagesAppliesPadding(t *testing.T) {
 	padded.PaddingLeft = 7
 	padded.BackgroundColor = pdfColor{B: 1}
 	padded.HasBackground = true
+	padded.BorderWidth = 1
+	padded.BorderColor = pdfColor{R: 1}
+	padded.HasBorder = true
 	resolver.styles["padded"] = padded
 
 	pages, _, err := layoutPDFPages(skeletonDocument{
@@ -149,8 +152,8 @@ func TestLayoutPDFPagesAppliesPadding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if len(pages) != 2 || len(pages[1].Lines) != 1 || len(pages[1].Backgrounds) != 1 {
-		t.Fatalf("layoutPDFPages() pages = %#v, want one body line and one background", pages)
+	if len(pages) != 2 || len(pages[1].Lines) != 1 || len(pages[1].Backgrounds) != 1 || len(pages[1].Borders) != 1 {
+		t.Fatalf("layoutPDFPages() pages = %#v, want one body line and decorations", pages)
 	}
 	line := pages[1].Lines[0]
 	if line.X != 31 { // 24pt page margin + 7pt left padding.
@@ -162,6 +165,10 @@ func TestLayoutPDFPagesAppliesPadding(t *testing.T) {
 	background := pages[1].Backgrounds[0]
 	if background.X != 24 || background.Y != 137.6 || background.Width != 172 || background.Height < 18.399 || background.Height > 18.401 || background.Color.String() != "#0000ff" {
 		t.Fatalf("background = %#v, want padded block background", background)
+	}
+	border := pages[1].Borders[0]
+	if border.X != background.X || border.Y != background.Y || border.Width != background.Width || border.Height != background.Height || border.LineWidth != 1 || border.Color.String() != "#ff0000" {
+		t.Fatalf("border = %#v, want matching padded block border", border)
 	}
 }
 

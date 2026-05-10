@@ -41,17 +41,30 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 		}
 		page.Anchors = append(page.Anchors, id)
 	}
-	addBackground := func(page *pdfPage, style pdfBlockResolvedStyle, x, topY, width, bottomY float64) {
-		if page == nil || !style.HasBackground || width <= 0 || topY <= bottomY {
+	addBlockDecoration := func(page *pdfPage, style pdfBlockResolvedStyle, x, topY, width, bottomY float64) {
+		if page == nil || width <= 0 || topY <= bottomY {
 			return
 		}
-		page.Backgrounds = append(page.Backgrounds, pdfPageRect{
-			X:      x,
-			Y:      bottomY,
-			Width:  width,
-			Height: topY - bottomY,
-			Color:  style.BackgroundColor,
-		})
+		height := topY - bottomY
+		if style.HasBackground {
+			page.Backgrounds = append(page.Backgrounds, pdfPageRect{
+				X:      x,
+				Y:      bottomY,
+				Width:  width,
+				Height: height,
+				Color:  style.BackgroundColor,
+			})
+		}
+		if style.HasBorder && style.BorderWidth > 0 {
+			page.Borders = append(page.Borders, pdfPageBorder{
+				X:         x,
+				Y:         bottomY,
+				Width:     width,
+				Height:    height,
+				LineWidth: style.BorderWidth,
+				Color:     style.BorderColor,
+			})
+		}
 	}
 
 	if cover := doc.Images[doc.CoverID]; cover != nil {
@@ -180,7 +193,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 			})
 			pageHasText = true
 			backgroundBottom := y - style.PaddingBottom
-			addBackground(page, style, backgroundX, backgroundTop, backgroundWidth, backgroundBottom)
+			addBlockDecoration(page, style, backgroundX, backgroundTop, backgroundWidth, backgroundBottom)
 			y -= style.PaddingBottom + style.SpaceAfter
 			if style.PageBreakAfter && pageHasText {
 				newTextPage()
@@ -250,14 +263,14 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 		lineSearchStart := 0
 		for lineIndex, line := range lines {
 			if y-style.Paragraph.FontSize < bottom {
-				addBackground(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, y)
+				addBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, y)
 				newTextPage()
 				fragmentPage = page
 				fragmentTop = y
 			}
 			remainingAfterLine := len(lines) - lineIndex - 1
 			if remainingAfterLine > 0 && remainingAfterLine < style.Widows && y-style.Paragraph.LineHeight-style.Paragraph.FontSize < bottom {
-				addBackground(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, y)
+				addBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, y)
 				newTextPage()
 				fragmentPage = page
 				fragmentTop = y
@@ -288,7 +301,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 			pageHasText = true
 		}
 		backgroundBottom := y - style.PaddingBottom
-		addBackground(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, backgroundBottom)
+		addBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, backgroundBottom)
 		y -= style.PaddingBottom + style.SpaceAfter
 		if style.PageBreakAfter && pageHasText {
 			newTextPage()

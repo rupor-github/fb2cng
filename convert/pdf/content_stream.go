@@ -20,6 +20,18 @@ func pageContent(page pdfPage) []byte {
 			docwriter.FormatNumber(background.Width),
 			docwriter.FormatNumber(background.Height))
 	}
+	for _, border := range page.Borders {
+		if border.Width <= 0 || border.Height <= 0 || border.LineWidth <= 0 {
+			continue
+		}
+		fmt.Fprintf(&buf, "q\n%s\n%s w\n%s %s %s %s re S\nQ\n",
+			border.Color.strokeOperator(),
+			docwriter.FormatNumber(border.LineWidth),
+			docwriter.FormatNumber(border.X),
+			docwriter.FormatNumber(border.Y),
+			docwriter.FormatNumber(border.Width),
+			docwriter.FormatNumber(border.Height))
+	}
 	for _, img := range page.Images {
 		if img.Name == "" || img.Width <= 0 || img.Height <= 0 {
 			continue
