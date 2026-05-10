@@ -65,7 +65,7 @@ func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
 	assignPDFImageResourceNames(pages, imageResources)
 	outlines := buildOutlines(doc.TOC, pages, &nextObjectID)
 	assignAnnotationObjectIDs(pages, &nextObjectID)
-	fontResources, err := preparePDFFontResources(usedGlyphs, &nextObjectID)
+	fontResources, err := preparePDFFontResources(doc.Fonts, usedGlyphs, &nextObjectID)
 	if err != nil {
 		return nil, err
 	}

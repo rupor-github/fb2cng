@@ -156,20 +156,28 @@ func loadBuiltinFont(label string, gzData []byte, fixedPitch, italic bool) (*bui
 	if err != nil {
 		return nil, fmt.Errorf("load builtin font %s: %w", label, err)
 	}
+	face, err := loadRawFont(label, data, fixedPitch, italic)
+	if err != nil {
+		return nil, fmt.Errorf("load builtin font %s: %w", label, err)
+	}
+	return face, nil
+}
+
+func loadRawFont(label string, data []byte, fixedPitch, italic bool) (*builtinFontFace, error) {
 	parsed, err := sfnt.Parse(data)
 	if err != nil {
-		return nil, fmt.Errorf("parse builtin font %s: %w", label, err)
+		return nil, fmt.Errorf("parse font: %w", err)
 	}
 
 	units := int(parsed.UnitsPerEm())
 	ppem := fixed.I(units)
 	metrics, err := parsed.Metrics(nil, ppem, font.HintingNone)
 	if err != nil {
-		return nil, fmt.Errorf("read metrics for builtin font %s: %w", label, err)
+		return nil, fmt.Errorf("read metrics: %w", err)
 	}
 	bounds, err := parsed.Bounds(nil, ppem, font.HintingNone)
 	if err != nil {
-		return nil, fmt.Errorf("read bounds for builtin font %s: %w", label, err)
+		return nil, fmt.Errorf("read bounds: %w", err)
 	}
 
 	postScriptName, err := parsed.Name(nil, sfnt.NameIDPostScript)

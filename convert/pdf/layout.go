@@ -183,7 +183,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 		if text == "" {
 			continue
 		}
-		face, fontKey, err := builtinFontForStyle(style.Paragraph)
+		face, fontKey, err := fontForStyle(doc.Fonts, style.Paragraph)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -200,7 +200,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 			newTextPage()
 		}
 		if style.KeepWithNextLines > 0 && pageHasText {
-			keepWithNext, err := nextBlockKeepHeight(doc.Blocks[blockIndex+1:], doc.Hyphenator, styles, contentWidth, style.KeepWithNextLines)
+			keepWithNext, err := nextBlockKeepHeight(doc.Blocks[blockIndex+1:], doc.Hyphenator, doc.Fonts, styles, contentWidth, style.KeepWithNextLines)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -266,7 +266,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 	return pages, used, nil
 }
 
-func nextBlockKeepHeight(blocks []pdfTextBlock, hyphenator paragraphHyphenator, styles *pdfStyleResolver, contentWidth float64, minLines int) (float64, error) {
+func nextBlockKeepHeight(blocks []pdfTextBlock, hyphenator paragraphHyphenator, fonts *pdfFontRegistry, styles *pdfStyleResolver, contentWidth float64, minLines int) (float64, error) {
 	if styles == nil {
 		styles = newPDFStyleResolver(nil, nil)
 	}
@@ -286,7 +286,7 @@ func nextBlockKeepHeight(blocks []pdfTextBlock, hyphenator paragraphHyphenator, 
 			continue
 		}
 		style.Paragraph.Hyphenator = hyphenator
-		face, _, err := builtinFontForStyle(style.Paragraph)
+		face, _, err := fontForStyle(fonts, style.Paragraph)
 		if err != nil {
 			return 0, err
 		}

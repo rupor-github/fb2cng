@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"fbc/convert/pdf/docwriter"
+	"fbc/fb2"
 )
 
 func TestShapeTextAndFontResourceObjects(t *testing.T) {
@@ -70,6 +71,33 @@ func TestShapeTextAndFontResourceObjects(t *testing.T) {
 	}
 }
 
+func TestPDFFontRegistryLoadsStylesheetFontFace(t *testing.T) {
+	fontData, err := gunzipFont(notoMonoRegularGZ)
+	if err != nil {
+		t.Fatalf("gunzipFont() error = %v", err)
+	}
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			@font-face { font-family: CustomMono; src: url("#custom-mono"); font-weight: 400; font-style: normal; }
+			p.custom { font-family: CustomMono; }
+		`,
+		Resources: []fb2.StylesheetResource{{OriginalURL: "#custom-mono", MimeType: "font/ttf", Data: fontData}},
+	}}}
+
+	registry := newPDFFontRegistry(book, nil)
+	face, key, err := fontForStyle(registry, paragraphStyle{FontFamily: "CustomMono"})
+	if err != nil {
+		t.Fatalf("fontForStyle() error = %v", err)
+	}
+	if key.Family != "CustomMono" {
+		t.Fatalf("font key family = %q, want CustomMono", key.Family)
+	}
+	if face == nil || face.PostScriptName != "NotoSansMono-Regular" {
+		t.Fatalf("font face = %#v, want embedded NotoSansMono-Regular", face)
+	}
+}
+
 func TestPreparePDFFontResources(t *testing.T) {
 	sans, err := builtinFont("sans-serif", false, false)
 	if err != nil {
@@ -88,7 +116,7 @@ func TestPreparePDFFontResources(t *testing.T) {
 		t.Fatalf("shapeText(serif) error = %v", err)
 	}
 	nextObjectID := 20
-	resources, err := preparePDFFontResources(map[pdfFontKey]map[uint16]shapedGlyph{
+	resources, err := preparePDFFontResources(nil, map[pdfFontKey]map[uint16]shapedGlyph{
 		{Family: "serif", Bold: true}: serifText.Used,
 		{Family: "sans-serif"}:        sansText.Used,
 	}, &nextObjectID)

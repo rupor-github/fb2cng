@@ -52,13 +52,20 @@ func pdfFontKeyForStyle(style paragraphStyle) pdfFontKey {
 	return pdfFontKey{Family: normalizedPDFFontFamily(style.FontFamily), Bold: style.Bold, Italic: style.Italic}
 }
 
-func builtinFontForStyle(style paragraphStyle) (*builtinFontFace, pdfFontKey, error) {
+func fontForStyle(registry *pdfFontRegistry, style paragraphStyle) (*builtinFontFace, pdfFontKey, error) {
 	key := pdfFontKeyForStyle(style)
-	face, err := builtinFont(key.Family, key.Bold, key.Italic)
+	face, err := fontForKey(registry, key)
 	if err != nil {
 		return nil, pdfFontKey{}, err
 	}
 	return face, key, nil
+}
+
+func fontForKey(registry *pdfFontRegistry, key pdfFontKey) (*builtinFontFace, error) {
+	if registry != nil {
+		return registry.fontForKey(key)
+	}
+	return builtinFont(key.Family, key.Bold, key.Italic)
 }
 
 func shapeText(face *builtinFontFace, text string) (shapedText, error) {
@@ -156,7 +163,7 @@ func glyphHex(glyphs []shapedGlyph) docwriter.HexString {
 	return docwriter.HexString(data)
 }
 
-func preparePDFFontResources(used map[pdfFontKey]map[uint16]shapedGlyph, nextObjectID *int) ([]pdfFontResource, error) {
+func preparePDFFontResources(registry *pdfFontRegistry, used map[pdfFontKey]map[uint16]shapedGlyph, nextObjectID *int) ([]pdfFontResource, error) {
 	keys := make([]pdfFontKey, 0, len(used))
 	for key, glyphs := range used {
 		if len(glyphs) == 0 {
@@ -168,7 +175,7 @@ func preparePDFFontResources(used map[pdfFontKey]map[uint16]shapedGlyph, nextObj
 
 	resources := make([]pdfFontResource, 0, len(keys))
 	for i, key := range keys {
-		face, err := builtinFont(key.Family, key.Bold, key.Italic)
+		face, err := fontForKey(registry, key)
 		if err != nil {
 			return nil, err
 		}

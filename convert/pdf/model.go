@@ -21,6 +21,7 @@ type skeletonDocument struct {
 	Images         fb2.BookImages
 	CoverID        string
 	Hyphenator     paragraphHyphenator
+	Fonts          *pdfFontRegistry
 	Debug          bool
 	WorkDir        string
 }

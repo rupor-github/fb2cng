@@ -106,6 +106,53 @@ func TestGenerateSkeletonPDF(t *testing.T) {
 	}
 }
 
+func TestGeneratePDFEmbedsStylesheetFontFace(t *testing.T) {
+	fontData, err := gunzipFont(notoMonoRegularGZ)
+	if err != nil {
+		t.Fatalf("gunzipFont() error = %v", err)
+	}
+	tmpDir := t.TempDir()
+	outputName := filepath.Join(tmpDir, "book.pdf")
+	cfg := &config.DocumentConfig{
+		Images: config.ImagesConfig{
+			Screen: config.ScreenConfig{Width: 1264, Height: 1680, DPI: 300},
+		},
+	}
+	c := &content.Content{
+		SrcName: "book.fb2",
+		Book: &fb2.FictionBook{
+			Stylesheets: []fb2.Stylesheet{{
+				Type: "text/css",
+				Data: `
+					@font-face { font-family: CustomMono; src: url("#custom-mono"); font-weight: 400; font-style: normal; }
+					p.custom { font-family: CustomMono; }
+				`,
+				Resources: []fb2.StylesheetResource{{OriginalURL: "#custom-mono", MimeType: "font/ttf", Data: fontData}},
+			}},
+			Description: fb2.Description{TitleInfo: fb2.TitleInfo{BookTitle: fb2.TextField{Value: "Font Book"}}},
+			Bodies: []fb2.Body{{
+				Kind: fb2.BodyMain,
+				Sections: []fb2.Section{{Content: []fb2.FlowItem{{
+					Kind:      fb2.FlowParagraph,
+					Paragraph: &fb2.Paragraph{Style: "custom", Text: []fb2.InlineSegment{{Text: "Custom embedded font paragraph."}}},
+				}}}},
+			}},
+		},
+	}
+
+	if err := Generate(context.Background(), c, outputName, cfg, zaptest.NewLogger(t)); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	data, err := os.ReadFile(outputName)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	if !strings.Contains(string(data), "/BaseFont /NotoSansMono-Regular") {
+		t.Fatalf("generated PDF does not contain embedded CustomMono font")
+	}
+}
+
 func TestGenerateTextBodyAddsPaginatedBodyPage(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputName := filepath.Join(tmpDir, "book.pdf")

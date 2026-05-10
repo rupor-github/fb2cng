@@ -66,6 +66,7 @@ func Generate(ctx context.Context, c *content.Content, outputName string, cfg *c
 		Images:         c.ImagesIndex,
 		CoverID:        c.CoverID,
 		Hyphenator:     pdfHyphenator(c, log),
+		Fonts:          newPDFFontRegistry(c.Book, log),
 		Debug:          c.Debug,
 		WorkDir:        c.WorkDir,
 	})
