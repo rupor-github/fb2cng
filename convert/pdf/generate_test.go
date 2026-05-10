@@ -653,8 +653,21 @@ func TestGenerateDebugDumps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read pdf-text-blocks.json: %v", err)
 	}
-	if !bytes.Contains(blockData, []byte(`"Chapter"`)) || !bytes.Contains(blockData, []byte(`"page-break"`)) {
+	if !bytes.Contains(blockData, []byte(`"Chapter"`)) || !bytes.Contains(blockData, []byte(`"page-break"`)) || !bytes.Contains(blockData, []byte(`"style_name"`)) {
 		t.Fatalf("pdf-text-blocks.json missing expected content: %s", blockData)
+	}
+
+	var styles []pdfDebugResolvedStyle
+	readJSONDebugFile(t, filepath.Join(tmpDir, "pdf-resolved-styles.json"), &styles)
+	if len(styles) == 0 || styles[0].Name == "" {
+		t.Fatalf("debug resolved styles = %#v, want named styles", styles)
+	}
+	traceData, err := os.ReadFile(filepath.Join(tmpDir, "pdf-style-trace.txt"))
+	if err != nil {
+		t.Fatalf("read pdf-style-trace.txt: %v", err)
+	}
+	if !bytes.Contains(traceData, []byte("=== PDF Style Trace ===")) || !bytes.Contains(traceData, []byte("ASSIGN")) {
+		t.Fatalf("pdf-style-trace.txt missing expected content: %s", traceData)
 	}
 
 	pageData, err := os.ReadFile(filepath.Join(tmpDir, "pdf-layout-pages.json"))

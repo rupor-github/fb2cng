@@ -58,6 +58,11 @@ func Generate(ctx context.Context, c *content.Content, outputName string, cfg *c
 		return fmt.Errorf("collect pdf content: %w", err)
 	}
 
+	styleTracer := newPDFStyleTracer("")
+	if c.Debug {
+		styleTracer = newPDFStyleTracer(c.WorkDir)
+	}
+
 	data, err := buildSkeletonPDF(skeletonDocument{
 		PageWidth:      pageWidth,
 		PageHeight:     pageHeight,
@@ -70,6 +75,7 @@ func Generate(ctx context.Context, c *content.Content, outputName string, cfg *c
 		Blocks:         contentPlan.Blocks,
 		TOC:            contentPlan.TOC,
 		DebugPlan:      contentPlan.DebugPlan,
+		Styles:         newPDFStyleResolver(c.Book, log, styleTracer),
 		Images:         c.ImagesIndex,
 		CoverID:        c.CoverID,
 		Hyphenator:     pdfHyphenator(c, log),
@@ -106,6 +112,7 @@ type skeletonDocument struct {
 	Blocks         []pdfTextBlock
 	TOC            []*structure.TOCEntry
 	DebugPlan      pdfDebugStructurePlan
+	Styles         *pdfStyleResolver
 	Images         fb2.BookImages
 	CoverID        string
 	Hyphenator     paragraphHyphenator
@@ -159,12 +166,13 @@ type pdfContentPlan struct {
 }
 
 type pdfTextBlock struct {
-	Kind    pdfBlockKind
-	ID      string
-	Text    string
-	Depth   int
-	ImageID string
-	Links   []pdfTextLink
+	Kind      pdfBlockKind
+	ID        string
+	Text      string
+	Depth     int
+	StyleName string
+	ImageID   string
+	Links     []pdfTextLink
 }
 
 type pdfTextLink struct {
@@ -815,6 +823,10 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 		return pages, used, nil
 	}
 
+	styles := doc.Styles
+	if styles == nil {
+		styles = newPDFStyleResolver(nil, nil)
+	}
 	page := addPage()
 	top := doc.PageHeight - margin
 	bottom := margin
@@ -836,12 +848,13 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 		}
 
 		if block.Kind == pdfBlockImage {
-			style := pdfStyleForBlock(block)
+			style := styles.styleForBlock(block)
+			blockWidth := blockContentWidth(contentWidth, style)
 			img := doc.Images[block.ImageID]
 			if img == nil {
 				continue
 			}
-			width, height, ok := fitPDFImageSize(doc, img, contentWidth, top-bottom)
+			width, height, ok := fitPDFImageSize(doc, img, blockWidth, top-bottom)
 			if !ok {
 				continue
 			}
@@ -859,7 +872,7 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 			y -= height
 			page.Images = append(page.Images, pdfPageImage{
 				ImageID: block.ImageID,
-				X:       margin + max((contentWidth-width)/2, 0),
+				X:       margin + style.MarginLeft + max((blockWidth-width)/2, 0),
 				Y:       y,
 				Width:   width,
 				Height:  height,
@@ -869,8 +882,9 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 			continue
 		}
 
-		style := pdfStyleForBlock(block)
+		style := styles.styleForBlock(block)
 		style.Paragraph.Hyphenator = doc.Hyphenator
+		blockWidth := blockContentWidth(contentWidth, style)
 		if block.Kind == pdfBlockEmptyLine {
 			if y-style.Paragraph.LineHeight < bottom {
 				newTextPage()
@@ -882,7 +896,7 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 		if text == "" {
 			continue
 		}
-		lines, err := layoutParagraph(face, text, style.Paragraph, contentWidth)
+		lines, err := layoutParagraph(face, text, style.Paragraph, blockWidth)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -895,7 +909,7 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 			newTextPage()
 		}
 		if style.KeepWithNextLines > 0 && pageHasText {
-			keepWithNext, err := nextBlockKeepHeight(face, doc.Blocks[blockIndex+1:], doc.Hyphenator, contentWidth, style.KeepWithNextLines)
+			keepWithNext, err := nextBlockKeepHeight(face, doc.Blocks[blockIndex+1:], doc.Hyphenator, styles, contentWidth, style.KeepWithNextLines)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -928,8 +942,8 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 			if remainingAfterLine > 0 && remainingAfterLine < style.Widows && y-style.Paragraph.LineHeight-style.Paragraph.FontSize < bottom {
 				newTextPage()
 			}
-			x := margin + line.Indent
-			available := contentWidth - line.Indent
+			x := margin + style.MarginLeft + line.Indent
+			available := blockWidth - line.Indent
 			switch style.Paragraph.Align {
 			case textAlignCenter:
 				x += max((available-line.Width)/2, 0)
@@ -961,68 +975,12 @@ type pdfBlockResolvedStyle struct {
 	Paragraph         paragraphStyle
 	SpaceBefore       float64
 	SpaceAfter        float64
+	MarginLeft        float64
+	MarginRight       float64
 	KeepTogether      bool
 	KeepWithNextLines int
 	Orphans           int
 	Widows            int
-}
-
-func pdfStyleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
-	switch block.Kind {
-	case pdfBlockHeading:
-		fontSize := max(16-float64(block.Depth-1), 11)
-		return pdfBlockResolvedStyle{
-			Paragraph:         paragraphStyle{FontSize: fontSize, LineHeight: fontSize * 1.25, Align: textAlignCenter},
-			SpaceBefore:       10,
-			SpaceAfter:        8,
-			KeepTogether:      true,
-			KeepWithNextLines: 2,
-		}
-	case pdfBlockSubtitle:
-		return pdfBlockResolvedStyle{
-			Paragraph:         paragraphStyle{FontSize: 11, LineHeight: 14, Align: textAlignCenter},
-			SpaceBefore:       6,
-			SpaceAfter:        5,
-			KeepTogether:      true,
-			KeepWithNextLines: 1,
-		}
-	case pdfBlockPoem:
-		return pdfBlockResolvedStyle{
-			Paragraph:  paragraphStyle{FontSize: 10.5, LineHeight: 13.2, Align: textAlignLeft},
-			SpaceAfter: 2,
-			Orphans:    2,
-			Widows:     2,
-		}
-	case pdfBlockTextAuthor:
-		return pdfBlockResolvedStyle{
-			Paragraph:  paragraphStyle{FontSize: 10, LineHeight: 12.5, Align: textAlignRight},
-			SpaceAfter: 4,
-			Orphans:    2,
-			Widows:     2,
-		}
-	case pdfBlockImage:
-		return pdfBlockResolvedStyle{
-			Paragraph:    paragraphStyle{FontSize: 10.5, LineHeight: 13.4},
-			SpaceBefore:  6,
-			SpaceAfter:   6,
-			KeepTogether: true,
-		}
-	case pdfBlockTOCEntry:
-		indent := max(float64(block.Depth-1)*12, 0)
-		return pdfBlockResolvedStyle{
-			Paragraph:  paragraphStyle{FontSize: 10.5, LineHeight: 13.4, FirstLineIndent: indent, Align: textAlignLeft},
-			SpaceAfter: 1.5,
-			Orphans:    1,
-			Widows:     1,
-		}
-	default:
-		return pdfBlockResolvedStyle{
-			Paragraph:  paragraphStyle{FontSize: 10.5, LineHeight: 13.4, FirstLineIndent: 14, Align: textAlignJustify},
-			SpaceAfter: 3,
-			Orphans:    2,
-			Widows:     2,
-		}
-	}
 }
 
 type pdfDebugStructurePlan struct {
@@ -1061,12 +1019,13 @@ type pdfDebugStructureGenerated struct {
 }
 
 type pdfDebugBlock struct {
-	Index   int    `json:"index"`
-	Kind    string `json:"kind"`
-	ID      string `json:"id,omitempty"`
-	Depth   int    `json:"depth,omitempty"`
-	ImageID string `json:"image_id,omitempty"`
-	Text    string `json:"text,omitempty"`
+	Index     int    `json:"index"`
+	Kind      string `json:"kind"`
+	ID        string `json:"id,omitempty"`
+	Depth     int    `json:"depth,omitempty"`
+	StyleName string `json:"style_name,omitempty"`
+	ImageID   string `json:"image_id,omitempty"`
+	Text      string `json:"text,omitempty"`
 }
 
 type pdfDebugPage struct {
@@ -1133,21 +1092,32 @@ func writePDFDebugDumps(doc skeletonDocument, pages []pdfPage, face *builtinFont
 	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-structure-plan.json"), doc.DebugPlan); err != nil {
 		return err
 	}
+	styles := doc.Styles
+	if styles == nil {
+		styles = newPDFStyleResolver(nil, nil)
+	}
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-resolved-styles.json"), styles.debugStyles()); err != nil {
+		return err
+	}
 
 	blocks := make([]pdfDebugBlock, 0, len(doc.Blocks))
 	for i, block := range doc.Blocks {
+		styleName := pdfStyleNameForBlock(block)
+		styles.tracer.traceAssign(block, styleName, styles.styleForBlock(block))
 		blocks = append(blocks, pdfDebugBlock{
-			Index:   i,
-			Kind:    block.Kind.String(),
-			ID:      block.ID,
-			Depth:   block.Depth,
-			ImageID: block.ImageID,
-			Text:    block.Text,
+			Index:     i,
+			Kind:      block.Kind.String(),
+			ID:        block.ID,
+			Depth:     block.Depth,
+			StyleName: styleName,
+			ImageID:   block.ImageID,
+			Text:      block.Text,
 		})
 	}
 	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-text-blocks.json"), blocks); err != nil {
 		return err
 	}
+	styles.tracer.flush()
 
 	debugPages, debugImages, debugLinks := pdfDebugPages(pages)
 	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-layout-pages.json"), debugPages); err != nil {
@@ -1263,7 +1233,10 @@ func shapedRunes(text shapedText) string {
 	return string(runes)
 }
 
-func nextBlockKeepHeight(face *builtinFontFace, blocks []pdfTextBlock, hyphenator paragraphHyphenator, contentWidth float64, minLines int) (float64, error) {
+func nextBlockKeepHeight(face *builtinFontFace, blocks []pdfTextBlock, hyphenator paragraphHyphenator, styles *pdfStyleResolver, contentWidth float64, minLines int) (float64, error) {
+	if styles == nil {
+		styles = newPDFStyleResolver(nil, nil)
+	}
 	for _, block := range blocks {
 		switch block.Kind {
 		case pdfBlockPageBreak:
@@ -1275,9 +1248,9 @@ func nextBlockKeepHeight(face *builtinFontFace, blocks []pdfTextBlock, hyphenato
 		if text == "" {
 			continue
 		}
-		style := pdfStyleForBlock(block)
+		style := styles.styleForBlock(block)
 		style.Paragraph.Hyphenator = hyphenator
-		lines, err := layoutParagraph(face, text, style.Paragraph, contentWidth)
+		lines, err := layoutParagraph(face, text, style.Paragraph, blockContentWidth(contentWidth, style))
 		if err != nil {
 			return 0, err
 		}
@@ -1438,7 +1411,7 @@ func insertAnnotationPageBlocks(blocks []pdfTextBlock, toc []*structure.TOCEntry
 	}
 	annotationBlocks := []pdfTextBlock{
 		{Kind: pdfBlockPageBreak, ID: "annotation-page", Text: title},
-		{Kind: pdfBlockHeading, ID: "annotation-page-title", Text: title, Depth: 1},
+		{Kind: pdfBlockHeading, ID: "annotation-page-title", Text: title, Depth: 1, StyleName: pdfStyleAnnotationTitle},
 	}
 	appendFlowBlocks(&annotationBlocks, annotation.Items, 1, nil)
 	out := make([]pdfTextBlock, 0, len(annotationBlocks)+len(blocks))
@@ -1484,7 +1457,7 @@ func buildTOCPageBlocks(entries []*structure.TOCEntry, includeUntitled bool, toc
 	}
 	blocks := []pdfTextBlock{
 		{Kind: pdfBlockPageBreak, ID: "toc-page", Text: "Contents"},
-		{Kind: pdfBlockHeading, ID: "toc-page-title", Text: "Contents", Depth: 1},
+		{Kind: pdfBlockHeading, ID: "toc-page-title", Text: "Contents", Depth: 1, StyleName: pdfStyleTOCTitle},
 	}
 	var appendTOCNodeBlocks func(nodes []*tocnav.Node)
 	appendTOCNodeBlocks = func(nodes []*tocnav.Node) {
@@ -1494,10 +1467,11 @@ func buildTOCPageBlocks(entries []*structure.TOCEntry, includeUntitled bool, toc
 			}
 			title := strings.TrimSpace(node.Item.Title)
 			blocks = append(blocks, pdfTextBlock{
-				Kind:  pdfBlockTOCEntry,
-				Text:  title,
-				Depth: max(node.Item.Level, 1),
-				Links: []pdfTextLink{{Start: 0, End: runeLenString(title), Href: "#" + node.Item.ID}},
+				Kind:      pdfBlockTOCEntry,
+				Text:      title,
+				Depth:     max(node.Item.Level, 1),
+				StyleName: pdfStyleTOCItem,
+				Links:     []pdfTextLink{{Start: 0, End: runeLenString(title), Href: "#" + node.Item.ID}},
 			})
 			appendTOCNodeBlocks(node.Children)
 		}
@@ -1625,14 +1599,14 @@ func appendTitleBlocksWithID(blocks *[]pdfTextBlock, title *fb2.Title, depth int
 	for i := range title.Items {
 		item := &title.Items[i]
 		if item.EmptyLine {
-			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine})
+			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine})
 			continue
 		}
 		if item.Paragraph == nil {
 			continue
 		}
 		if text := paragraphText(item.Paragraph); text != "" {
-			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockHeading, ID: anchorID, Text: text, Depth: depth})
+			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockHeading, ID: anchorID, Text: text, Depth: depth, StyleName: pdfHeadingStyleName(depth)})
 			anchorID = ""
 		}
 	}
@@ -1654,7 +1628,7 @@ func appendFlowItemBlock(blocks *[]pdfTextBlock, item *fb2.FlowItem, depth int, 
 	case fb2.FlowSubtitle:
 		appendParagraphBlock(blocks, pdfBlockSubtitle, item.Subtitle, depth)
 	case fb2.FlowEmptyLine:
-		*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine})
+		*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine})
 	case fb2.FlowImage:
 		appendImageBlock(blocks, item.Image, "")
 	case fb2.FlowSection:
@@ -1670,7 +1644,7 @@ func appendFlowItemBlock(blocks *[]pdfTextBlock, item *fb2.FlowItem, depth int, 
 		if item.Table != nil {
 			text := item.Table.AsPlainText()
 			if text != "" {
-				*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockParagraph, Text: text, Depth: depth})
+				*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockParagraph, Text: text, Depth: depth, StyleName: pdfStyleParagraph})
 			}
 		}
 	}
@@ -1689,10 +1663,11 @@ func appendImageBlock(blocks *[]pdfTextBlock, image *fb2.Image, fallbackID strin
 		anchorID = fallbackID
 	}
 	*blocks = append(*blocks, pdfTextBlock{
-		Kind:    pdfBlockImage,
-		ID:      anchorID,
-		Text:    strings.TrimSpace(image.Alt),
-		ImageID: imageID,
+		Kind:      pdfBlockImage,
+		ID:        anchorID,
+		Text:      strings.TrimSpace(image.Alt),
+		StyleName: pdfStyleImage,
+		ImageID:   imageID,
 	})
 }
 
@@ -1702,7 +1677,7 @@ func appendParagraphBlock(blocks *[]pdfTextBlock, kind pdfBlockKind, paragraph *
 	}
 	text, links := paragraphTextAndLinks(paragraph)
 	if text != "" {
-		*blocks = append(*blocks, pdfTextBlock{Kind: kind, ID: paragraph.ID, Text: text, Depth: depth, Links: links})
+		*blocks = append(*blocks, pdfTextBlock{Kind: kind, ID: paragraph.ID, Text: text, Depth: depth, StyleName: pdfStyleNameForKind(kind), Links: links})
 	}
 }
 
@@ -1724,7 +1699,7 @@ func appendPoemBlocks(blocks *[]pdfTextBlock, poem *fb2.Poem, depth int, splitSe
 		for j := range stanza.Verses {
 			appendParagraphBlock(blocks, pdfBlockPoem, &stanza.Verses[j], depth)
 		}
-		*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine})
+		*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine})
 	}
 	for i := range poem.TextAuthors {
 		appendParagraphBlock(blocks, pdfBlockTextAuthor, &poem.TextAuthors[i], depth)
