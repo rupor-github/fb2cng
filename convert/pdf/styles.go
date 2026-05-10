@@ -92,6 +92,7 @@ type pdfDebugResolvedStyle struct {
 	LineHeight        float64 `json:"line_height"`
 	FirstLineIndent   float64 `json:"first_line_indent,omitempty"`
 	TextAlign         string  `json:"text_align"`
+	Color             string  `json:"color,omitempty"`
 	SpaceBefore       float64 `json:"space_before,omitempty"`
 	SpaceAfter        float64 `json:"space_after,omitempty"`
 	MarginLeft        float64 `json:"margin_left,omitempty"`
@@ -265,6 +266,9 @@ func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfB
 	if override.Paragraph.Align != fallback.Paragraph.Align {
 		base.Paragraph.Align = override.Paragraph.Align
 	}
+	if override.Paragraph.Color != fallback.Paragraph.Color {
+		base.Paragraph.Color = override.Paragraph.Color
+	}
 	if override.Paragraph.Hyphenation != fallback.Paragraph.Hyphenation {
 		base.Paragraph.Hyphenation = override.Paragraph.Hyphenation
 	}
@@ -431,6 +435,11 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 			style.Paragraph.Italic = italic
 		}
 	}
+	if value, ok := props["color"]; ok {
+		if color, ok := pdfCSSColor(value); ok {
+			style.Paragraph.Color = color
+		}
+	}
 	if value, ok := props["font-size"]; ok {
 		if points, ok := pdfCSSFontSizePoints(value, style.Paragraph.FontSize); ok {
 			ratio := points / style.Paragraph.FontSize
@@ -446,7 +455,7 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 	names := make([]string, 0, len(props))
 	for name := range props {
 		lower := strings.ToLower(name)
-		if lower != "font-family" && lower != "font-weight" && lower != "font-style" && lower != "font-size" && lower != "line-height" {
+		if lower != "font-family" && lower != "font-weight" && lower != "font-style" && lower != "color" && lower != "font-size" && lower != "line-height" {
 			names = append(names, name)
 		}
 	}
@@ -774,6 +783,7 @@ func (r *pdfStyleResolver) debugStyles() []pdfDebugResolvedStyle {
 			LineHeight:        style.Paragraph.LineHeight,
 			FirstLineIndent:   style.Paragraph.FirstLineIndent,
 			TextAlign:         style.Paragraph.Align.String(),
+			Color:             style.Paragraph.Color.String(),
 			Hyphenation:       pdfHyphenationString(style.Paragraph.Hyphenation),
 			SpaceBefore:       style.SpaceBefore,
 			SpaceAfter:        style.SpaceAfter,

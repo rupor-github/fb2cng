@@ -187,10 +187,11 @@ func pdfTraceFormatCSSProperties(props map[string]css.Value) string {
 }
 
 func pdfTraceFormatResolvedStyle(style pdfBlockResolvedStyle) string {
-	return fmt.Sprintf("font-family=%s, font-weight=%s, font-style=%s, font-size=%gpt, line-height=%gpt, text-indent=%gpt, align=%s, hyphens=%s, margins=%g/%g/%g/%g, keep-together=%t, keep-next=%d, page-break-before=%t, page-break-after=%t, hidden=%t, orphans=%d, widows=%d",
+	return fmt.Sprintf("font-family=%s, font-weight=%s, font-style=%s, color=%s, font-size=%gpt, line-height=%gpt, text-indent=%gpt, align=%s, hyphens=%s, margins=%g/%g/%g/%g, keep-together=%t, keep-next=%d, page-break-before=%t, page-break-after=%t, hidden=%t, orphans=%d, widows=%d",
 		normalizedPDFFontFamily(style.Paragraph.FontFamily),
 		pdfCSSFontWeightString(style.Paragraph.Bold),
 		pdfCSSFontStyleString(style.Paragraph.Italic),
+		style.Paragraph.Color.String(),
 		style.Paragraph.FontSize,
 		style.Paragraph.LineHeight,
 		style.Paragraph.FirstLineIndent,
@@ -237,6 +238,9 @@ func pdfTraceStyleDiff(before, after pdfBlockResolvedStyle) string {
 	}
 	if before.Paragraph.Align != after.Paragraph.Align {
 		changes = append(changes, fmt.Sprintf("text-align: %s -> %s", before.Paragraph.Align, after.Paragraph.Align))
+	}
+	if before.Paragraph.Color != after.Paragraph.Color {
+		changes = append(changes, fmt.Sprintf("color: %s -> %s", before.Paragraph.Color, after.Paragraph.Color))
 	}
 	if before.Paragraph.Hyphenation != after.Paragraph.Hyphenation {
 		changes = append(changes, fmt.Sprintf("hyphens: %s -> %s", pdfHyphenationString(before.Paragraph.Hyphenation), pdfHyphenationString(after.Paragraph.Hyphenation)))

@@ -94,6 +94,7 @@ type pdfPageLine struct {
 	FontSize         float64
 	FontKey          pdfFontKey
 	FontName         string
+	Color            pdfColor
 	Text             shapedText
 	ExtraWordSpacing float64
 }

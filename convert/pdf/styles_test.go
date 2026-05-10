@@ -16,6 +16,7 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 				font-family: "Noto Sans", sans-serif;
 				font-weight: bold;
 				font-style: italic;
+				color: #336699;
 				font-size: 12pt;
 				line-height: 1.5;
 				text-align: center;
@@ -41,6 +42,9 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 	}
 	if !paragraph.Paragraph.Bold || !paragraph.Paragraph.Italic {
 		t.Fatalf("paragraph font weight/style = bold:%t italic:%t, want both true", paragraph.Paragraph.Bold, paragraph.Paragraph.Italic)
+	}
+	if paragraph.Paragraph.Color.String() != "#336699" {
+		t.Fatalf("paragraph color = %s, want #336699", paragraph.Paragraph.Color)
 	}
 	if paragraph.Paragraph.FontSize != 12 {
 		t.Fatalf("paragraph font size = %v, want 12", paragraph.Paragraph.FontSize)

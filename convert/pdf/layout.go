@@ -248,6 +248,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 				Y:                y,
 				FontSize:         style.Paragraph.FontSize,
 				FontKey:          fontKey,
+				Color:            style.Paragraph.Color,
 				Text:             line.Text,
 				ExtraWordSpacing: line.ExtraWordSpacing,
 			})

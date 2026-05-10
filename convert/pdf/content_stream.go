@@ -23,6 +23,8 @@ func pageContent(page pdfPage) []byte {
 	buf.WriteString("q\nBT\n")
 	currentFontName := ""
 	currentFontSize := -1.0
+	currentColor := pdfColor{}
+	colorInitialized := false
 	for _, line := range page.Lines {
 		if len(line.Text.Glyphs) == 0 || line.FontName == "" {
 			continue
@@ -31,6 +33,11 @@ func pageContent(page pdfPage) []byte {
 			fmt.Fprintf(&buf, "/%s %s Tf\n", line.FontName, docwriter.FormatNumber(line.FontSize))
 			currentFontName = line.FontName
 			currentFontSize = line.FontSize
+		}
+		if !colorInitialized || line.Color != currentColor {
+			fmt.Fprintf(&buf, "%s\n", line.Color.contentOperator())
+			currentColor = line.Color
+			colorInitialized = true
 		}
 		fmt.Fprintf(&buf, "1 0 0 1 %s %s Tm\n", docwriter.FormatNumber(line.X), docwriter.FormatNumber(line.Y))
 		if line.ExtraWordSpacing != 0 {
