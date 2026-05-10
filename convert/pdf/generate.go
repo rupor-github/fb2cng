@@ -10,9 +10,11 @@ import (
 	"strings"
 
 	"go.uber.org/zap"
+	"golang.org/x/text/language"
 
 	"fbc/config"
 	"fbc/content"
+	contenttext "fbc/content/text"
 	"fbc/convert/pdf/internal/pdfdoc"
 	"fbc/convert/structure"
 	"fbc/fb2"
@@ -56,6 +58,7 @@ func Generate(ctx context.Context, c *content.Content, outputName string, cfg *c
 		Title:      bookTitle(c),
 		Author:     bookAuthors(c),
 		Blocks:     blocks,
+		Hyphenator: pdfHyphenator(c, log),
 	})
 	if err != nil {
 		return fmt.Errorf("build pdf: %w", err)
@@ -81,6 +84,7 @@ type skeletonDocument struct {
 	Title      string
 	Author     string
 	Blocks     []pdfTextBlock
+	Hyphenator paragraphHyphenator
 }
 
 type pdfBlockKind int
@@ -358,6 +362,7 @@ func layoutPDFPages(doc skeletonDocument, face *builtinFontFace) ([]pdfPage, map
 		}
 
 		style := pdfStyleForBlock(block)
+		style.Paragraph.Hyphenator = doc.Hyphenator
 		if block.Kind == pdfBlockEmptyLine {
 			if y-style.Paragraph.LineHeight < bottom {
 				newTextPage()
@@ -701,6 +706,16 @@ func appendInlineSegmentText(b *strings.Builder, seg *fb2.InlineSegment) {
 	for i := range seg.Children {
 		appendInlineSegmentText(b, &seg.Children[i])
 	}
+}
+
+func pdfHyphenator(c *content.Content, log *zap.Logger) paragraphHyphenator {
+	if c == nil || c.Book == nil || c.Book.Description.TitleInfo.Lang == language.Und {
+		return nil
+	}
+	if log == nil {
+		log = zap.NewNop()
+	}
+	return contenttext.NewHyphenator(c.Book.Description.TitleInfo.Lang, log)
 }
 
 func infoDictionary(doc skeletonDocument) pdfdoc.Dict {

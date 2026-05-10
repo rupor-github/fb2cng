@@ -7,6 +7,8 @@ import (
 	"unicode"
 )
 
+const softHyphen = '\u00ad'
+
 type textAlign int
 
 const (
@@ -21,6 +23,11 @@ type paragraphStyle struct {
 	LineHeight      float64
 	FirstLineIndent float64
 	Align           textAlign
+	Hyphenator      paragraphHyphenator
+}
+
+type paragraphHyphenator interface {
+	Hyphenate(string) string
 }
 
 type paragraphLine struct {
@@ -32,10 +39,20 @@ type paragraphLine struct {
 }
 
 type paragraphWord struct {
-	Text   string
-	Shape  shapedText
-	Width  float64
-	Spaces int
+	Text string
+}
+
+type paragraphAtom struct {
+	Text        string
+	Width       float64
+	WordIndex   int
+	EndWord     bool
+	HyphenAfter bool
+}
+
+type paragraphBreak struct {
+	End         int
+	HyphenAfter bool
 }
 
 func layoutParagraph(face *builtinFontFace, text string, style paragraphStyle, maxWidth float64) ([]paragraphLine, error) {
@@ -46,10 +63,7 @@ func layoutParagraph(face *builtinFontFace, text string, style paragraphStyle, m
 		return nil, fmt.Errorf("paragraph width must be positive: %g", maxWidth)
 	}
 
-	words, err := shapeParagraphWords(face, text, style.FontSize)
-	if err != nil {
-		return nil, err
-	}
+	words := paragraphWords(text)
 	if len(words) == 0 {
 		return nil, nil
 	}
@@ -59,12 +73,21 @@ func layoutParagraph(face *builtinFontFace, text string, style paragraphStyle, m
 		return nil, fmt.Errorf("shape space: %w", err)
 	}
 	spaceWidth := shapedWidthPoints(space, style.FontSize)
+	hyphen, err := shapeText(face, "-")
+	if err != nil {
+		return nil, fmt.Errorf("shape hyphen: %w", err)
+	}
+	hyphenWidth := shapedWidthPoints(hyphen, style.FontSize)
 
-	breaks := chooseParagraphBreaks(words, spaceWidth, style, maxWidth)
+	atoms, err := paragraphAtoms(face, words, style)
+	if err != nil {
+		return nil, err
+	}
+	breaks := chooseParagraphBreaks(atoms, spaceWidth, hyphenWidth, style, maxWidth)
 	lines := make([]paragraphLine, 0, len(breaks))
 	start := 0
-	for i, end := range breaks {
-		lineText := joinWords(words[start:end])
+	for i, br := range breaks {
+		lineText := joinAtoms(atoms[start:br.End], br.HyphenAfter)
 		shaped, err := shapeText(face, lineText)
 		if err != nil {
 			return nil, fmt.Errorf("shape line: %w", err)
@@ -80,32 +103,24 @@ func layoutParagraph(face *builtinFontFace, text string, style paragraphStyle, m
 			Text:              shaped,
 			Width:             width,
 			Indent:            indent,
-			JustificationGaps: max(0, end-start-1),
+			JustificationGaps: countJustificationGaps(atoms[start:br.End]),
 		}
 		if style.Align == textAlignJustify && i != len(breaks)-1 && line.JustificationGaps > 0 && width < available {
 			line.ExtraWordSpacing = (available - width) / float64(line.JustificationGaps)
 		}
 		lines = append(lines, line)
-		start = end
+		start = br.End
 	}
 	return lines, nil
 }
 
-func shapeParagraphWords(face *builtinFontFace, text string, fontSize float64) ([]paragraphWord, error) {
+func paragraphWords(text string) []paragraphWord {
 	parts := breakableWords(text)
 	words := make([]paragraphWord, 0, len(parts))
 	for _, part := range parts {
-		shaped, err := shapeText(face, part)
-		if err != nil {
-			return nil, fmt.Errorf("shape word %q: %w", part, err)
-		}
-		words = append(words, paragraphWord{
-			Text:  part,
-			Shape: shaped,
-			Width: shapedWidthPoints(shaped, fontSize),
-		})
+		words = append(words, paragraphWord{Text: part})
 	}
-	return words, nil
+	return words
 }
 
 func breakableWords(text string) []string {
@@ -138,14 +153,50 @@ func isBreakableSpace(r rune) bool {
 	return unicode.IsSpace(r) && r != '\u00a0'
 }
 
-func chooseParagraphBreaks(words []paragraphWord, spaceWidth float64, style paragraphStyle, maxWidth float64) []int {
-	n := len(words)
+func paragraphAtoms(face *builtinFontFace, words []paragraphWord, style paragraphStyle) ([]paragraphAtom, error) {
+	atoms := make([]paragraphAtom, 0, len(words))
+	for i, word := range words {
+		parts := hyphenatedWordParts(word.Text, style.Hyphenator)
+		for j, part := range parts {
+			shaped, err := shapeText(face, part)
+			if err != nil {
+				return nil, fmt.Errorf("shape word segment %q: %w", part, err)
+			}
+			atoms = append(atoms, paragraphAtom{
+				Text:        part,
+				Width:       shapedWidthPoints(shaped, style.FontSize),
+				WordIndex:   i,
+				EndWord:     j == len(parts)-1,
+				HyphenAfter: j != len(parts)-1,
+			})
+		}
+	}
+	return atoms, nil
+}
+
+func hyphenatedWordParts(word string, hyphenator paragraphHyphenator) []string {
+	if word == "" {
+		return nil
+	}
+	hyphenated := word
+	if hyphenator != nil {
+		hyphenated = hyphenator.Hyphenate(word)
+	}
+	parts := strings.FieldsFunc(hyphenated, func(r rune) bool { return r == softHyphen })
+	if len(parts) == 0 {
+		return []string{strings.ReplaceAll(word, string(softHyphen), "")}
+	}
+	return parts
+}
+
+func chooseParagraphBreaks(atoms []paragraphAtom, spaceWidth float64, hyphenWidth float64, style paragraphStyle, maxWidth float64) []paragraphBreak {
+	n := len(atoms)
 	if n == 0 {
 		return nil
 	}
 
 	cost := make([]float64, n+1)
-	next := make([]int, n)
+	next := make([]paragraphBreak, n)
 	for i := range cost {
 		cost[i] = math.Inf(1)
 	}
@@ -154,40 +205,51 @@ func chooseParagraphBreaks(words []paragraphWord, spaceWidth float64, style para
 	for i := n - 1; i >= 0; i-- {
 		width := 0.0
 		for j := i; j < n; j++ {
-			if j > i {
+			if j > i && atoms[j].WordIndex != atoms[j-1].WordIndex {
 				width += spaceWidth
 			}
-			width += words[j].Width
+			width += atoms[j].Width
+			if !atoms[j].EndWord && !atoms[j].HyphenAfter {
+				continue
+			}
 
+			lineWidth := width
+			if atoms[j].HyphenAfter {
+				lineWidth += hyphenWidth
+			}
 			indent := 0.0
 			if i == 0 {
 				indent = min(max(style.FirstLineIndent, 0), maxWidth)
 			}
 			available := max(maxWidth-indent, 1)
-			lineCost := paragraphLineCost(width, available, j == n-1, j == i)
+			singleWord := atoms[i].WordIndex == atoms[j].WordIndex
+			lineCost := paragraphLineCost(lineWidth, available, j == n-1, singleWord)
 			if math.IsInf(lineCost, 1) {
 				break
+			}
+			if atoms[j].HyphenAfter {
+				lineCost += 80
 			}
 			candidate := lineCost + cost[j+1]
 			if candidate < cost[i] {
 				cost[i] = candidate
-				next[i] = j + 1
+				next[i] = paragraphBreak{End: j + 1, HyphenAfter: atoms[j].HyphenAfter}
 			}
 		}
 		if math.IsInf(cost[i], 1) {
-			next[i] = i + 1
+			next[i] = paragraphBreak{End: i + 1}
 			cost[i] = cost[i+1] + 1_000_000
 		}
 	}
 
-	breaks := make([]int, 0, n)
+	breaks := make([]paragraphBreak, 0, n)
 	for i := 0; i < n; {
-		j := next[i]
-		if j <= i || j > n {
-			j = i + 1
+		br := next[i]
+		if br.End <= i || br.End > n {
+			br = paragraphBreak{End: i + 1}
 		}
-		breaks = append(breaks, j)
-		i = j
+		breaks = append(breaks, br)
+		i = br.End
 	}
 	return breaks
 }
@@ -212,13 +274,26 @@ func paragraphLineCost(width, available float64, last bool, singleWord bool) flo
 	return cost
 }
 
-func joinWords(words []paragraphWord) string {
+func joinAtoms(atoms []paragraphAtom, hyphenAfter bool) string {
 	var b strings.Builder
-	for i, word := range words {
-		if i > 0 {
+	for i, atom := range atoms {
+		if i > 0 && atom.WordIndex != atoms[i-1].WordIndex {
 			b.WriteByte(' ')
 		}
-		b.WriteString(word.Text)
+		b.WriteString(atom.Text)
+	}
+	if hyphenAfter {
+		b.WriteByte('-')
 	}
 	return b.String()
+}
+
+func countJustificationGaps(atoms []paragraphAtom) int {
+	gaps := 0
+	for i := 1; i < len(atoms); i++ {
+		if atoms[i].WordIndex != atoms[i-1].WordIndex {
+			gaps++
+		}
+	}
+	return gaps
 }

@@ -42,6 +42,79 @@ func TestLayoutParagraphBalancesLinesAndJustifies(t *testing.T) {
 	}
 }
 
+type fakeHyphenator map[string]string
+
+func (h fakeHyphenator) Hyphenate(s string) string {
+	if v, ok := h[s]; ok {
+		return v
+	}
+	return s
+}
+
+func TestLayoutParagraphUsesHyphenationPoints(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+
+	style := paragraphStyle{
+		FontSize:   10,
+		LineHeight: 12,
+		Hyphenator: fakeHyphenator{"hyphenation": "hy\u00adphenation"},
+	}
+	prefix, err := shapeText(face, "hy-")
+	if err != nil {
+		t.Fatalf("shapeText() error = %v", err)
+	}
+	full, err := shapeText(face, "hyphenation")
+	if err != nil {
+		t.Fatalf("shapeText() error = %v", err)
+	}
+	maxWidth := shapedWidthPoints(prefix, style.FontSize) + 1
+	if maxWidth >= shapedWidthPoints(full, style.FontSize) {
+		t.Fatal("test width is not narrow enough to require hyphenation")
+	}
+
+	lines, err := layoutParagraph(face, "hyphenation", style, maxWidth)
+	if err != nil {
+		t.Fatalf("layoutParagraph() error = %v", err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("layoutParagraph() produced %d lines, want 2", len(lines))
+	}
+	if got := shapedRunes(lines[0].Text); got != "hy-" {
+		t.Fatalf("first line = %q, want %q", got, "hy-")
+	}
+	if got := shapedRunes(lines[1].Text); got != "phenation" {
+		t.Fatalf("second line = %q, want %q", got, "phenation")
+	}
+}
+
+func TestLayoutParagraphDropsUnbrokenSoftHyphen(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	lines, err := layoutParagraph(face, "hy\u00adphenation", paragraphStyle{FontSize: 10, LineHeight: 12}, 1000)
+	if err != nil {
+		t.Fatalf("layoutParagraph() error = %v", err)
+	}
+	if len(lines) != 1 {
+		t.Fatalf("layoutParagraph() produced %d lines, want 1", len(lines))
+	}
+	if got := shapedRunes(lines[0].Text); got != "hyphenation" {
+		t.Fatalf("line = %q, want %q", got, "hyphenation")
+	}
+}
+
+func shapedRunes(text shapedText) string {
+	runes := make([]rune, 0, len(text.Glyphs))
+	for _, glyph := range text.Glyphs {
+		runes = append(runes, glyph.Rune)
+	}
+	return string(runes)
+}
+
 func TestBreakableWordsKeepsNoBreakSpaceInsideWord(t *testing.T) {
 	got := breakableWords("one  two\u00a0three\tfour")
 	want := []string{"one", "two\u00a0three", "four"}
