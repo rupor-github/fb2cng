@@ -60,6 +60,29 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 	}
 }
 
+func TestPDFStyleResolverAppliesParagraphStyleClasses(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			p { text-indent: 2em; text-align: justify; }
+			p.has-dropcap { text-indent: 0; }
+			.warning { text-align: right; margin-left: 1em; }
+		`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	style := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "has-dropcap warning"})
+	if style.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("class-adjusted first-line indent = %v, want 0", style.Paragraph.FirstLineIndent)
+	}
+	if style.Paragraph.Align != textAlignRight {
+		t.Fatalf("class-adjusted text align = %v, want right", style.Paragraph.Align)
+	}
+	if style.MarginLeft != pdfBaseFontSize {
+		t.Fatalf("class-adjusted margin-left = %v, want %v", style.MarginLeft, pdfBaseFontSize)
+	}
+}
+
 func TestPDFCollapsedBlockStylesCollapseAdjacentMargins(t *testing.T) {
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 	resolver.styles["before"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceAfter: 4}

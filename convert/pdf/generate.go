@@ -166,13 +166,14 @@ type pdfContentPlan struct {
 }
 
 type pdfTextBlock struct {
-	Kind      pdfBlockKind
-	ID        string
-	Text      string
-	Depth     int
-	StyleName string
-	ImageID   string
-	Links     []pdfTextLink
+	Kind         pdfBlockKind
+	ID           string
+	Text         string
+	Depth        int
+	StyleName    string
+	StyleClasses string
+	ImageID      string
+	Links        []pdfTextLink
 }
 
 type pdfTextLink struct {
@@ -1020,13 +1021,14 @@ type pdfDebugStructureGenerated struct {
 }
 
 type pdfDebugBlock struct {
-	Index     int    `json:"index"`
-	Kind      string `json:"kind"`
-	ID        string `json:"id,omitempty"`
-	Depth     int    `json:"depth,omitempty"`
-	StyleName string `json:"style_name,omitempty"`
-	ImageID   string `json:"image_id,omitempty"`
-	Text      string `json:"text,omitempty"`
+	Index        int    `json:"index"`
+	Kind         string `json:"kind"`
+	ID           string `json:"id,omitempty"`
+	Depth        int    `json:"depth,omitempty"`
+	StyleName    string `json:"style_name,omitempty"`
+	StyleClasses string `json:"style_classes,omitempty"`
+	ImageID      string `json:"image_id,omitempty"`
+	Text         string `json:"text,omitempty"`
 }
 
 type pdfDebugPage struct {
@@ -1106,13 +1108,14 @@ func writePDFDebugDumps(doc skeletonDocument, pages []pdfPage, face *builtinFont
 		styleName := pdfStyleNameForBlock(block)
 		styles.tracer.traceAssign(block, styleName, styles.styleForBlock(block))
 		blocks = append(blocks, pdfDebugBlock{
-			Index:     i,
-			Kind:      block.Kind.String(),
-			ID:        block.ID,
-			Depth:     block.Depth,
-			StyleName: styleName,
-			ImageID:   block.ImageID,
-			Text:      block.Text,
+			Index:        i,
+			Kind:         block.Kind.String(),
+			ID:           block.ID,
+			Depth:        block.Depth,
+			StyleName:    styleName,
+			StyleClasses: strings.TrimSpace(block.StyleClasses),
+			ImageID:      block.ImageID,
+			Text:         block.Text,
 		})
 	}
 	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-text-blocks.json"), blocks); err != nil {
@@ -1678,7 +1681,7 @@ func appendParagraphBlock(blocks *[]pdfTextBlock, kind pdfBlockKind, paragraph *
 	}
 	text, links := paragraphTextAndLinks(paragraph)
 	if text != "" {
-		*blocks = append(*blocks, pdfTextBlock{Kind: kind, ID: paragraph.ID, Text: text, Depth: depth, StyleName: pdfStyleNameForKind(kind), Links: links})
+		*blocks = append(*blocks, pdfTextBlock{Kind: kind, ID: paragraph.ID, Text: text, Depth: depth, StyleName: pdfStyleNameForKind(kind), StyleClasses: paragraph.Style, Links: links})
 	}
 }
 

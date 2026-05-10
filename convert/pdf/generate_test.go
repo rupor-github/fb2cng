@@ -628,7 +628,7 @@ func TestGenerateDebugDumps(t *testing.T) {
 					Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter"}}}}}},
 					Content: []fb2.FlowItem{{
 						Kind: fb2.FlowParagraph,
-						Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
+						Paragraph: &fb2.Paragraph{Style: "has-dropcap", Text: []fb2.InlineSegment{
 							{Text: "Debug body "},
 							{Kind: fb2.InlineLink, Href: "https://example.com", Children: []fb2.InlineSegment{{Text: "link"}}},
 							{Text: "."},
@@ -653,7 +653,7 @@ func TestGenerateDebugDumps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read pdf-text-blocks.json: %v", err)
 	}
-	if !bytes.Contains(blockData, []byte(`"Chapter"`)) || !bytes.Contains(blockData, []byte(`"page-break"`)) || !bytes.Contains(blockData, []byte(`"style_name"`)) {
+	if !bytes.Contains(blockData, []byte(`"Chapter"`)) || !bytes.Contains(blockData, []byte(`"page-break"`)) || !bytes.Contains(blockData, []byte(`"style_name"`)) || !bytes.Contains(blockData, []byte(`"style_classes": "has-dropcap"`)) {
 		t.Fatalf("pdf-text-blocks.json missing expected content: %s", blockData)
 	}
 

@@ -115,6 +115,9 @@ func (t *pdfStyleTracer) traceAssign(block pdfTextBlock, styleName string, style
 	if block.Depth != 0 {
 		details.WriteString(fmt.Sprintf(", depth=%d", block.Depth))
 	}
+	if strings.TrimSpace(block.StyleClasses) != "" {
+		details.WriteString(fmt.Sprintf(", classes=%q", strings.TrimSpace(block.StyleClasses)))
+	}
 	if block.ImageID != "" {
 		details.WriteString(fmt.Sprintf(", image_id=%q", block.ImageID))
 	}

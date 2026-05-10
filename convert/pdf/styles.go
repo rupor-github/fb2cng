@@ -197,10 +197,58 @@ func (r *pdfStyleResolver) styleForBlock(block pdfTextBlock) pdfBlockResolvedSty
 	if !ok {
 		style = r.styles[pdfStyleParagraph]
 	}
+	fallback := r.styles[pdfStyleParagraph]
+	for _, class := range strings.Fields(block.StyleClasses) {
+		classStyle, ok := r.styles[class]
+		if !ok {
+			continue
+		}
+		style = mergePDFStyleOverrides(style, classStyle, fallback)
+	}
 	if block.Kind == pdfBlockTOCEntry {
 		style.Paragraph.FirstLineIndent = max(float64(block.Depth-1)*pdfTOCIndentPerDepth, 0)
 	}
 	return style
+}
+
+func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfBlockResolvedStyle {
+	if override.Paragraph.FontSize != fallback.Paragraph.FontSize {
+		base.Paragraph.FontSize = override.Paragraph.FontSize
+	}
+	if override.Paragraph.LineHeight != fallback.Paragraph.LineHeight {
+		base.Paragraph.LineHeight = override.Paragraph.LineHeight
+	}
+	if override.Paragraph.FirstLineIndent != fallback.Paragraph.FirstLineIndent {
+		base.Paragraph.FirstLineIndent = override.Paragraph.FirstLineIndent
+	}
+	if override.Paragraph.Align != fallback.Paragraph.Align {
+		base.Paragraph.Align = override.Paragraph.Align
+	}
+	if override.SpaceBefore != fallback.SpaceBefore {
+		base.SpaceBefore = override.SpaceBefore
+	}
+	if override.SpaceAfter != fallback.SpaceAfter {
+		base.SpaceAfter = override.SpaceAfter
+	}
+	if override.MarginLeft != fallback.MarginLeft {
+		base.MarginLeft = override.MarginLeft
+	}
+	if override.MarginRight != fallback.MarginRight {
+		base.MarginRight = override.MarginRight
+	}
+	if override.KeepTogether != fallback.KeepTogether {
+		base.KeepTogether = override.KeepTogether
+	}
+	if override.KeepWithNextLines != fallback.KeepWithNextLines {
+		base.KeepWithNextLines = override.KeepWithNextLines
+	}
+	if override.Orphans != fallback.Orphans {
+		base.Orphans = override.Orphans
+	}
+	if override.Widows != fallback.Widows {
+		base.Widows = override.Widows
+	}
+	return base
 }
 
 func pdfStyleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
