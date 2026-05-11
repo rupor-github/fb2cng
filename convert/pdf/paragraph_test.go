@@ -179,6 +179,67 @@ func TestLayoutParagraphHonorsHyphenationModes(t *testing.T) {
 	}
 }
 
+func TestParagraphBreakerAvoidsShortFinalLineWhenBalancedBreaksFit(t *testing.T) {
+	units := []paragraphUnit{
+		{Text: "one", Width: 20, WordIndex: 0, EndWord: true},
+		{Text: "two", Width: 20, WordIndex: 1, EndWord: true},
+		{Text: "three", Width: 20, WordIndex: 2, EndWord: true},
+		{Text: "four", Width: 20, WordIndex: 3, EndWord: true},
+		{Text: "five", Width: 20, WordIndex: 4, EndWord: true},
+	}
+
+	breaks := chooseParagraphBreaks(units, 5, paragraphStyle{FontSize: 10}, 70)
+	if len(breaks) != 2 {
+		t.Fatalf("chooseParagraphBreaks() produced %#v, want two balanced lines", breaks)
+	}
+	if breaks[0].End != 3 || breaks[1].End != 5 {
+		t.Fatalf("chooseParagraphBreaks() = %#v, want 3/2 word split", breaks)
+	}
+}
+
+func TestParagraphDemeritsPenalizeConsecutiveHyphenatedLines(t *testing.T) {
+	first := paragraphLineDemerits(40, 45, 0, false, false, true, true, false, paragraphFitnessDecent)
+	consecutive := paragraphLineDemerits(40, 45, 0, false, false, true, true, true, paragraphFitnessDecent)
+	if consecutive <= first {
+		t.Fatalf("consecutive hyphen demerits = %v, want > first hyphen demerits %v", consecutive, first)
+	}
+}
+
+func TestLayoutInlineParagraphHyphenatesStyledRuns(t *testing.T) {
+	baseFace, err := builtinFont("serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	boldFace, err := builtinFont("serif", true, false)
+	if err != nil {
+		t.Fatalf("builtinFont() bold error = %v", err)
+	}
+	prefix, err := shapeText(boldFace, "hy-")
+	if err != nil {
+		t.Fatalf("shapeText() error = %v", err)
+	}
+	style := paragraphStyle{
+		FontSize:    10,
+		LineHeight:  12,
+		Hyphenator:  fakeHyphenator{"hyphenation": "hy\u00adphenation"},
+		Hyphenation: paragraphHyphenationAuto,
+	}
+
+	lines, err := layoutInlineParagraph(nil, nil, baseFace, "hyphenation", []pdfInlineRun{{Text: "hyphenation", Bold: true}}, style, shapedWidthPoints(prefix, style.FontSize)+1)
+	if err != nil {
+		t.Fatalf("layoutInlineParagraph() error = %v", err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("layoutInlineParagraph() produced %d lines, want 2", len(lines))
+	}
+	if got := shapedRunes(lines[0].Text); got != "hy-" {
+		t.Fatalf("first line = %q, want hyphenated prefix", got)
+	}
+	if len(lines[0].Fragments) == 0 || !lines[0].Fragments[0].FontKey.Bold {
+		t.Fatalf("first line fragments = %#v, want bold fragment preserved", lines[0].Fragments)
+	}
+}
+
 func TestBreakableWordsKeepsNoBreakSpaceInsideWord(t *testing.T) {
 	got := breakableWords("one  two\u00a0three\tfour")
 	want := []string{"one", "two\u00a0three", "four"}

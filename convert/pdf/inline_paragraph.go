@@ -2,7 +2,6 @@ package pdf
 
 import (
 	"fmt"
-	"math"
 	"strings"
 )
 
@@ -16,6 +15,11 @@ type paragraphInlineWord struct {
 	Text      string
 	Fragments []paragraphLineFragment
 	Width     float64
+}
+
+type inlineGlyphPiece struct {
+	Glyph    shapedGlyph
+	Template paragraphLineFragment
 }
 
 func layoutInlineParagraph(registry *pdfFontRegistry, resolver *pdfStyleResolver, baseFace *builtinFontFace, text string, runs []pdfInlineRun, style paragraphStyle, maxWidth float64) ([]paragraphLine, error) {
@@ -43,30 +47,29 @@ func layoutInlineParagraph(registry *pdfFontRegistry, resolver *pdfStyleResolver
 	if err != nil {
 		return nil, err
 	}
-	breaks := chooseInlineParagraphBreaks(words, spaceFragment.Width, style, maxWidth)
+	units, err := inlineParagraphUnits(registry, words, style)
+	if err != nil {
+		return nil, err
+	}
+	breaks := chooseParagraphBreaks(units, spaceFragment.Width, style, maxWidth)
 	lines := make([]paragraphLine, 0, len(breaks))
 	start := 0
 	for i, br := range breaks {
-		fragments, text, width := inlineParagraphLineFragments(words[start:br.End], spaceFragment)
-		shaped, err := shapeText(baseFace, text)
+		fragments, lineText, width := inlineParagraphLineFragments(units[start:br.End], spaceFragment, br.HyphenAfter)
+		shaped, err := shapeText(baseFace, lineText)
 		if err != nil {
 			return nil, fmt.Errorf("shape inline line text: %w", err)
 		}
-		indent := 0.0
-		if start == 0 {
-			indent = min(max(style.FirstLineIndent, 0), maxWidth)
-		}
+		indent := paragraphLineIndent(start, style, maxWidth)
 		available := max(maxWidth-indent, 1)
 		line := paragraphLine{
 			Text:              shaped,
 			Width:             width,
 			Indent:            indent,
-			JustificationGaps: max(br.End-start-1, 0),
+			JustificationGaps: countJustificationGaps(units[start:br.End]),
 			Fragments:         fragments,
 		}
-		if style.Align == textAlignJustify && i != len(breaks)-1 && line.JustificationGaps > 0 && width < available {
-			line.ExtraWordSpacing = (available - width) / float64(line.JustificationGaps)
-		}
+		line.ExtraWordSpacing = paragraphExtraWordSpacing(style, i == len(breaks)-1, width, available, line.JustificationGaps)
 		lines = append(lines, line)
 		start = br.End
 	}
@@ -94,7 +97,7 @@ func inlineParagraphWords(registry *pdfFontRegistry, resolver *pdfStyleResolver,
 	words := make([]paragraphInlineWord, 0)
 	current := paragraphInlineWord{}
 	flushCurrent := func() {
-		if strings.TrimSpace(current.Text) == "" {
+		if strings.TrimSpace(strings.ReplaceAll(current.Text, string(softHyphen), "")) == "" {
 			current = paragraphInlineWord{}
 			return
 		}
@@ -252,69 +255,140 @@ func inlineRunBaselineShift(base paragraphStyle, style paragraphStyle) float64 {
 	}
 }
 
-func chooseInlineParagraphBreaks(words []paragraphInlineWord, spaceWidth float64, style paragraphStyle, maxWidth float64) []paragraphBreak {
-	n := len(words)
-	if n == 0 {
-		return nil
-	}
-	cost := make([]float64, n+1)
-	next := make([]paragraphBreak, n)
-	for i := range cost {
-		cost[i] = math.Inf(1)
-	}
-	cost[n] = 0
-	for i := n - 1; i >= 0; i-- {
-		width := 0.0
-		for j := i; j < n; j++ {
-			if j > i {
-				width += spaceWidth
+func inlineParagraphUnits(registry *pdfFontRegistry, words []paragraphInlineWord, style paragraphStyle) ([]paragraphUnit, error) {
+	units := make([]paragraphUnit, 0, len(words))
+	for wordIndex, word := range words {
+		parts := hyphenatedWordParts(word.Text, style.Hyphenator, style.Hyphenation)
+		pieces := inlineWordGlyphPieces(word)
+		cursor := 0
+		for partIndex, part := range parts {
+			count := len([]rune(part))
+			if cursor+count > len(pieces) {
+				count = max(len(pieces)-cursor, 0)
 			}
-			width += words[j].Width
-			indent := 0.0
-			if i == 0 {
-				indent = min(max(style.FirstLineIndent, 0), maxWidth)
+			fragments := inlinePiecesToFragments(pieces[cursor : cursor+count])
+			cursor += count
+			width := paragraphFragmentsWidth(fragments)
+			hyphenFragments, hyphenWidth, err := inlineHyphenFragments(registry, fragments)
+			if err != nil {
+				return nil, err
 			}
-			available := max(maxWidth-indent, 1)
-			lineCost := paragraphLineCost(width, available, j == n-1, i == j)
-			if math.IsInf(lineCost, 1) {
-				break
-			}
-			candidate := lineCost + cost[j+1]
-			if candidate < cost[i] {
-				cost[i] = candidate
-				next[i] = paragraphBreak{End: j + 1}
-			}
-		}
-		if math.IsInf(cost[i], 1) {
-			next[i] = paragraphBreak{End: i + 1}
-			cost[i] = cost[i+1] + 1_000_000
+			units = append(units, paragraphUnit{
+				Text:            part,
+				Width:           width,
+				WordIndex:       wordIndex,
+				EndWord:         partIndex == len(parts)-1,
+				HyphenAfter:     partIndex != len(parts)-1,
+				HyphenText:      "-",
+				HyphenWidth:     hyphenWidth,
+				Fragments:       fragments,
+				HyphenFragments: hyphenFragments,
+			})
 		}
 	}
-	breaks := make([]paragraphBreak, 0, n)
-	for i := 0; i < n; {
-		br := next[i]
-		if br.End <= i || br.End > n {
-			br = paragraphBreak{End: i + 1}
-		}
-		breaks = append(breaks, br)
-		i = br.End
-	}
-	return breaks
+	return units, nil
 }
 
-func inlineParagraphLineFragments(words []paragraphInlineWord, space paragraphLineFragment) ([]paragraphLineFragment, string, float64) {
-	fragments := make([]paragraphLineFragment, 0, len(words)*2)
+func inlineWordGlyphPieces(word paragraphInlineWord) []inlineGlyphPiece {
+	pieces := make([]inlineGlyphPiece, 0, len([]rune(word.Text)))
+	for _, fragment := range word.Fragments {
+		for _, glyph := range fragment.Text.Glyphs {
+			if glyph.Rune == softHyphen {
+				continue
+			}
+			pieces = append(pieces, inlineGlyphPiece{Glyph: glyph, Template: fragment})
+		}
+	}
+	return pieces
+}
+
+func inlinePiecesToFragments(pieces []inlineGlyphPiece) []paragraphLineFragment {
+	if len(pieces) == 0 {
+		return nil
+	}
+	fragments := make([]paragraphLineFragment, 0, len(pieces))
+	start := 0
+	for start < len(pieces) {
+		end := start + 1
+		for end < len(pieces) && sameInlineFragmentStyle(pieces[start].Template, pieces[end].Template) {
+			end++
+		}
+		fragments = append(fragments, inlinePiecesFragment(pieces[start:end], pieces[start].Template))
+		start = end
+	}
+	return fragments
+}
+
+func sameInlineFragmentStyle(a, b paragraphLineFragment) bool {
+	return a.FontSize == b.FontSize &&
+		a.LetterSpacing == b.LetterSpacing &&
+		a.FontKey == b.FontKey &&
+		a.Color == b.Color &&
+		a.Underline == b.Underline &&
+		a.Strikethrough == b.Strikethrough &&
+		a.BaselineShift == b.BaselineShift
+}
+
+func inlinePiecesFragment(pieces []inlineGlyphPiece, template paragraphLineFragment) paragraphLineFragment {
+	glyphs := make([]shapedGlyph, 0, len(pieces))
+	used := make(map[uint16]shapedGlyph)
+	for _, piece := range pieces {
+		glyphs = append(glyphs, piece.Glyph)
+		if piece.Glyph.GlyphID != 0 {
+			used[piece.Glyph.GlyphID] = piece.Glyph
+		}
+	}
+	fragment := template
+	fragment.Text = shapedText{Glyphs: glyphs, Used: used}
+	fragment.Width = shapedWidthPointsWithSpacing(fragment.Text, fragment.FontSize, fragment.LetterSpacing)
+	return fragment
+}
+
+func inlineHyphenFragments(registry *pdfFontRegistry, fragments []paragraphLineFragment) ([]paragraphLineFragment, float64, error) {
+	if len(fragments) == 0 {
+		return nil, 0, nil
+	}
+	style := fragments[len(fragments)-1]
+	face, err := fontForKey(registry, style.FontKey)
+	if err != nil {
+		return nil, 0, err
+	}
+	shaped, err := shapeText(face, "-")
+	if err != nil {
+		return nil, 0, fmt.Errorf("shape inline hyphen: %w", err)
+	}
+	style.Text = shaped
+	style.Width = shapedWidthPointsWithSpacing(shaped, style.FontSize, style.LetterSpacing) + max(style.LetterSpacing, 0)
+	return []paragraphLineFragment{style}, style.Width, nil
+}
+
+func paragraphFragmentsWidth(fragments []paragraphLineFragment) float64 {
+	width := 0.0
+	for _, fragment := range fragments {
+		width += fragment.Width
+	}
+	return width
+}
+
+func inlineParagraphLineFragments(units []paragraphUnit, space paragraphLineFragment, hyphenAfter bool) ([]paragraphLineFragment, string, float64) {
+	fragments := make([]paragraphLineFragment, 0, len(units)*2)
 	var text strings.Builder
 	width := 0.0
-	for i, word := range words {
-		if i > 0 {
+	for i, unit := range units {
+		if i > 0 && unit.WordIndex != units[i-1].WordIndex {
 			fragments = append(fragments, space)
 			text.WriteByte(' ')
 			width += space.Width
 		}
-		fragments = append(fragments, word.Fragments...)
-		text.WriteString(word.Text)
-		width += word.Width
+		fragments = append(fragments, unit.Fragments...)
+		text.WriteString(unit.Text)
+		width += unit.Width
+	}
+	if hyphenAfter && len(units) > 0 {
+		last := units[len(units)-1]
+		fragments = append(fragments, last.HyphenFragments...)
+		text.WriteString(last.HyphenText)
+		width += last.HyphenWidth
 	}
 	return fragments, text.String(), width
 }
