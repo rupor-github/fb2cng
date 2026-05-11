@@ -84,6 +84,7 @@ type paragraphLineFragment struct {
 	Underline     bool
 	Strikethrough bool
 	BaselineShift float64
+	LinkHref      string
 }
 
 type paragraphWord struct {

@@ -61,6 +61,10 @@ const (
 	pdfStyleCiteSubtitle       = "cite-subtitle"
 	pdfStyleTable              = "table"
 	pdfStyleEmptyLine          = "emptyline"
+	pdfStyleLinkExternal       = "link-external"
+	pdfStyleLinkInternal       = "link-internal"
+	pdfStyleLinkFootnote       = "link-footnote"
+	pdfStyleLinkTOC            = "link-toc"
 )
 
 type pdfBlockResolvedStyle struct {

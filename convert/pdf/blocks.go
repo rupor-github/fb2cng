@@ -191,6 +191,7 @@ func buildTOCPageBlocks(entries []*structure.TOCEntry, includeUntitled bool, toc
 			blocks = append(blocks, pdfTextBlock{
 				Kind:      pdfBlockTOCEntry,
 				Text:      title,
+				Runs:      []pdfInlineRun{{Text: title, StyleClasses: pdfStyleLinkTOC}},
 				Depth:     max(node.Item.Level, 1),
 				StyleName: pdfStyleTOCItem,
 				Links:     []pdfTextLink{{Start: 0, End: runeLenString(title), Href: "#" + node.Item.ID}},
@@ -327,8 +328,9 @@ func appendTitleBlocksWithID(blocks *[]pdfTextBlock, title *fb2.Title, depth int
 		if item.Paragraph == nil {
 			continue
 		}
-		if text := paragraphText(item.Paragraph); text != "" {
-			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockHeading, ID: anchorID, Text: text, Depth: depth, StyleName: pdfHeadingStyleName(depth)})
+		text, links := paragraphTextAndLinks(item.Paragraph)
+		if text != "" {
+			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockHeading, ID: anchorID, Text: text, Runs: paragraphInlineRuns(item.Paragraph), Depth: depth, StyleName: pdfHeadingStyleName(depth), Links: links})
 			anchorID = ""
 		}
 	}
@@ -452,11 +454,6 @@ func appendEpigraphBlocks(blocks *[]pdfTextBlock, epigraph *fb2.Epigraph) {
 	}
 }
 
-func paragraphText(paragraph *fb2.Paragraph) string {
-	text, _ := paragraphTextAndLinks(paragraph)
-	return text
-}
-
 func paragraphTextAndLinks(paragraph *fb2.Paragraph) (string, []pdfTextLink) {
 	if paragraph == nil {
 		return "", nil
@@ -481,11 +478,64 @@ func inlineSegmentsTextAndLinks(segments []fb2.InlineSegment) (string, []pdfText
 	for i := range segments {
 		appendInlineSegmentText(&b, &links, &segments[i])
 	}
-	return strings.TrimSpace(b.String()), links
+	return normalizeInlineTextAndLinks(b.String(), links)
 }
 
 func imageRefID(href string) string {
 	return strings.TrimPrefix(strings.TrimSpace(href), "#")
+}
+
+func normalizeInlineTextAndLinks(raw string, links []pdfTextLink) (string, []pdfTextLink) {
+	runes := []rune(raw)
+	boundary := make([]int, len(runes)+1)
+	var b strings.Builder
+	normalizedLen := 0
+	pendingSpace := false
+	for i, r := range runes {
+		if isBreakableSpace(r) {
+			boundary[i] = normalizedLen
+			if normalizedLen > 0 {
+				pendingSpace = true
+			}
+			continue
+		}
+		if pendingSpace && normalizedLen > 0 {
+			b.WriteByte(' ')
+			normalizedLen++
+		}
+		pendingSpace = false
+		boundary[i] = normalizedLen
+		b.WriteRune(r)
+		normalizedLen++
+	}
+	boundary[len(runes)] = normalizedLen
+
+	normalizedLinks := make([]pdfTextLink, 0, len(links))
+	for _, link := range links {
+		start, end := trimRawLinkRange(runes, link.Start, link.End)
+		if start >= end || strings.TrimSpace(link.Href) == "" {
+			continue
+		}
+		normalizedStart := boundary[start]
+		normalizedEnd := boundary[end]
+		if normalizedStart >= normalizedEnd {
+			continue
+		}
+		normalizedLinks = append(normalizedLinks, pdfTextLink{Start: normalizedStart, End: normalizedEnd, Href: link.Href})
+	}
+	return b.String(), normalizedLinks
+}
+
+func trimRawLinkRange(runes []rune, start int, end int) (int, int) {
+	start = min(max(start, 0), len(runes))
+	end = min(max(end, start), len(runes))
+	for start < end && isBreakableSpace(runes[start]) {
+		start++
+	}
+	for end > start && isBreakableSpace(runes[end-1]) {
+		end--
+	}
+	return start, end
 }
 
 func appendInlineSegmentText(b *strings.Builder, links *[]pdfTextLink, seg *fb2.InlineSegment) {
@@ -538,6 +588,19 @@ func appendInlineSegmentRun(runs *[]pdfInlineRun, seg *fb2.InlineSegment, inheri
 	}
 }
 
+func pdfLinkStyleClass(seg *fb2.InlineSegment) string {
+	if seg == nil || strings.TrimSpace(seg.Href) == "" {
+		return ""
+	}
+	if strings.EqualFold(seg.LinkType, "note") {
+		return pdfStyleLinkFootnote
+	}
+	if strings.HasPrefix(strings.TrimSpace(seg.Href), "#") {
+		return pdfStyleLinkInternal
+	}
+	return pdfStyleLinkExternal
+}
+
 func applyInlineSegmentStyle(style pdfInlineRun, seg *fb2.InlineSegment) pdfInlineRun {
 	switch seg.Kind {
 	case fb2.InlineStrong:
@@ -556,6 +619,9 @@ func applyInlineSegmentStyle(style pdfInlineRun, seg *fb2.InlineSegment) pdfInli
 		style.Subscript = false
 	case fb2.InlineCode:
 		style.Code = true
+	case fb2.InlineLink:
+		style.StyleClasses = joinStyleClasses(style.StyleClasses, pdfLinkStyleClass(seg))
+		style.LinkHref = strings.TrimSpace(seg.Href)
 	}
 	return style
 }
@@ -576,7 +642,7 @@ func appendInlineRun(runs *[]pdfInlineRun, run pdfInlineRun) {
 }
 
 func sameInlineStyle(a, b pdfInlineRun) bool {
-	return a.StyleClasses == b.StyleClasses && a.Bold == b.Bold && a.Italic == b.Italic && a.Strikethrough == b.Strikethrough && a.Subscript == b.Subscript && a.Superscript == b.Superscript && a.Code == b.Code
+	return a.StyleClasses == b.StyleClasses && a.LinkHref == b.LinkHref && a.Bold == b.Bold && a.Italic == b.Italic && a.Underline == b.Underline && a.Strikethrough == b.Strikethrough && a.Subscript == b.Subscript && a.Superscript == b.Superscript && a.Code == b.Code
 }
 
 func trimInlineRuns(runs []pdfInlineRun) []pdfInlineRun {

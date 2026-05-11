@@ -8,6 +8,9 @@ import (
 )
 
 func addLinkAnnotations(page *pdfPage, block pdfTextBlock, line paragraphLine, searchStart int, x float64, y float64, fontSize float64) {
+	if addFragmentLinkAnnotations(page, line, x, y) {
+		return
+	}
 	if len(block.Links) == 0 || len(line.Text.Glyphs) == 0 {
 		return
 	}
@@ -37,6 +40,39 @@ func addLinkAnnotations(page *pdfPage, block pdfTextBlock, line paragraphLine, s
 			Href: link.Href,
 		})
 	}
+}
+
+func addFragmentLinkAnnotations(page *pdfPage, line paragraphLine, x float64, y float64) bool {
+	currentX := x
+	added := false
+	for i, fragment := range line.Fragments {
+		href := strings.TrimSpace(fragment.LinkHref)
+		if href != "" && fragment.Width > 0 && len(fragment.Text.Glyphs) > 0 {
+			page.Annotations = append(page.Annotations, pdfLinkAnnotation{
+				Rect: pdfRect{
+					X1: currentX,
+					Y1: y + fragment.BaselineShift - fragment.FontSize*0.2,
+					X2: currentX + fragment.Width,
+					Y2: y + fragment.BaselineShift + fragment.FontSize,
+				},
+				Href: href,
+			})
+			added = true
+		}
+		currentX += fragment.Width + line.ExtraCharSpacing*float64(max(len(fragment.Text.Glyphs)-1, 0))
+		if i != len(line.Fragments)-1 {
+			currentX += line.ExtraCharSpacing
+		}
+		if line.ExtraWordSpacing != 0 && i != len(line.Fragments)-1 && paragraphFragmentEndsWithSpace(fragment) {
+			currentX += line.ExtraWordSpacing
+		}
+	}
+	return added
+}
+
+func paragraphFragmentEndsWithSpace(fragment paragraphLineFragment) bool {
+	glyphs := fragment.Text.Glyphs
+	return len(glyphs) != 0 && glyphs[len(glyphs)-1].Rune == ' '
 }
 
 func nextLineSearchStart(text string, line paragraphLine, searchStart int) int {

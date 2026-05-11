@@ -6,6 +6,7 @@ import (
 	"fbc/common"
 	"fbc/config"
 	"fbc/content"
+	"fbc/convert/structure"
 	"fbc/fb2"
 )
 
@@ -34,6 +35,80 @@ func TestCollectTextBlocksIncludesLinkChildren(t *testing.T) {
 	}
 	if got := blocks[0].Text; got != "See linked text" {
 		t.Fatalf("block text = %q, want %q", got, "See linked text")
+	}
+}
+
+func TestInlineSegmentsTextAndLinksNormalizesWhitespaceAndLinkRanges(t *testing.T) {
+	text, links := inlineSegmentsTextAndLinks([]fb2.InlineSegment{
+		{Text: "\n  "},
+		{Kind: fb2.InlineEmphasis, Children: []fb2.InlineSegment{
+			{Kind: fb2.InlineLink, Href: "#one", Children: []fb2.InlineSegment{{Text: "One"}}},
+			{Text: "\n   |\n   "},
+			{Kind: fb2.InlineLink, Href: "#two", Children: []fb2.InlineSegment{{Text: "Two"}}},
+		}},
+		{Text: "\n"},
+	})
+
+	if text != "One | Two" {
+		t.Fatalf("text = %q, want normalized text", text)
+	}
+	want := []pdfTextLink{{Start: 0, End: 3, Href: "#one"}, {Start: 6, End: 9, Href: "#two"}}
+	if len(links) != len(want) {
+		t.Fatalf("links = %#v, want %#v", links, want)
+	}
+	for i := range want {
+		if links[i] != want[i] {
+			t.Fatalf("links[%d] = %#v, want %#v", i, links[i], want[i])
+		}
+	}
+}
+
+func TestTitleBlocksPreserveInlineLinkFormatting(t *testing.T) {
+	var blocks []pdfTextBlock
+	appendTitleBlocksWithID(&blocks, &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
+		{Text: "Heading"},
+		{Kind: fb2.InlineLink, Href: "#note", LinkType: "note", Children: []fb2.InlineSegment{{Text: "1.1"}}},
+	}}}}}, 1, "heading-id")
+
+	if len(blocks) != 1 {
+		t.Fatalf("title blocks = %#v, want one heading", blocks)
+	}
+	if len(blocks[0].Links) != 1 || blocks[0].Links[0].Href != "#note" {
+		t.Fatalf("title block links = %#v, want note link", blocks[0].Links)
+	}
+	if len(blocks[0].Runs) != 2 || blocks[0].Runs[1].Text != "1.1" || blocks[0].Runs[1].StyleClasses != pdfStyleLinkFootnote {
+		t.Fatalf("title block runs = %#v, want footnote link class", blocks[0].Runs)
+	}
+}
+
+func TestParagraphInlineRunsClassifyLinks(t *testing.T) {
+	paragraph := &fb2.Paragraph{Text: []fb2.InlineSegment{
+		{Text: "See "},
+		{Kind: fb2.InlineLink, Href: "https://example.com", Children: []fb2.InlineSegment{{Text: "external"}}},
+		{Text: " and note"},
+		{Kind: fb2.InlineLink, Href: "#note", LinkType: "note", Children: []fb2.InlineSegment{{Text: "1.1"}}},
+	}}
+
+	runs := paragraphInlineRuns(paragraph)
+	if len(runs) != 4 {
+		t.Fatalf("inline runs = %#v, want 4 runs", runs)
+	}
+	if runs[1].Text != "external" || runs[1].StyleClasses != pdfStyleLinkExternal {
+		t.Fatalf("external link run = %#v, want external link class", runs[1])
+	}
+	if runs[3].Text != "1.1" || runs[3].StyleClasses != pdfStyleLinkFootnote {
+		t.Fatalf("note link run = %#v, want footnote link class", runs[3])
+	}
+}
+
+func TestBuildTOCPageBlocksClassifiesEntryLinks(t *testing.T) {
+	blocks := buildTOCPageBlocks([]*structure.TOCEntry{{ID: "chapter", Title: "Chapter", IncludeInTOC: true}}, true, common.TOCTypeFlat)
+	if len(blocks) != 3 {
+		t.Fatalf("toc blocks = %#v, want title and one entry", blocks)
+	}
+	entry := blocks[2]
+	if len(entry.Runs) != 1 || entry.Runs[0].Text != "Chapter" || entry.Runs[0].StyleClasses != pdfStyleLinkTOC {
+		t.Fatalf("toc entry runs = %#v, want TOC link class", entry.Runs)
 	}
 }
 

@@ -85,7 +85,7 @@ func layoutInlineParagraph(registry *pdfFontRegistry, resolver *pdfStyleResolver
 
 func hasInlineStyle(runs []pdfInlineRun) bool {
 	for _, run := range runs {
-		if run.StyleClasses != "" || run.Bold || run.Italic || run.Strikethrough || run.Subscript || run.Superscript || run.Code {
+		if run.StyleClasses != "" || run.LinkHref != "" || run.Bold || run.Italic || run.Underline || run.Strikethrough || run.Subscript || run.Superscript || run.Code {
 			return true
 		}
 	}
@@ -177,6 +177,7 @@ func inlineRunFragment(registry *pdfFontRegistry, resolver *pdfStyleResolver, ba
 		Underline:     style.Underline,
 		Strikethrough: style.Strikethrough,
 		BaselineShift: inlineRunBaselineShift(base, style),
+		LinkHref:      run.LinkHref,
 	}, nil
 }
 
@@ -184,6 +185,7 @@ func inlineRunParagraphStyle(resolver *pdfStyleResolver, base paragraphStyle, ru
 	style := inlineClassParagraphStyle(resolver, base, run.StyleClasses)
 	style.Bold = style.Bold || run.Bold
 	style.Italic = style.Italic || run.Italic
+	style.Underline = style.Underline || run.Underline
 	style.Strikethrough = style.Strikethrough || run.Strikethrough
 	if run.Code {
 		style.FontFamily = "monospace"
@@ -339,7 +341,8 @@ func sameInlineFragmentStyle(a, b paragraphLineFragment) bool {
 		a.Color == b.Color &&
 		a.Underline == b.Underline &&
 		a.Strikethrough == b.Strikethrough &&
-		a.BaselineShift == b.BaselineShift
+		a.BaselineShift == b.BaselineShift &&
+		a.LinkHref == b.LinkHref
 }
 
 func inlinePiecesFragment(pieces []inlineGlyphPiece, template paragraphLineFragment) paragraphLineFragment {

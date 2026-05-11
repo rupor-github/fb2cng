@@ -42,6 +42,27 @@ func TestCollectTextBlocksIncludesLinkSpans(t *testing.T) {
 	}
 }
 
+func TestAddLinkAnnotationsUsesInlineFragments(t *testing.T) {
+	page := &pdfPage{}
+	line := paragraphLine{Fragments: []paragraphLineFragment{
+		{Text: shapedText{Glyphs: []shapedGlyph{{GlyphID: 1, Rune: 'A', Width: 500}}}, Width: 20, FontSize: 10},
+		{Text: shapedText{Glyphs: []shapedGlyph{{GlyphID: 2, Rune: '1', Width: 300}, {GlyphID: 3, Rune: '.', Width: 150}, {GlyphID: 4, Rune: '1', Width: 300}}}, Width: 12, FontSize: 7.5, BaselineShift: 3.4, LinkHref: "#note"},
+	}}
+
+	addLinkAnnotations(page, pdfTextBlock{}, line, 0, 100, 200, 10)
+
+	if len(page.Annotations) != 1 {
+		t.Fatalf("annotations = %#v, want one fragment annotation", page.Annotations)
+	}
+	annotation := page.Annotations[0]
+	if annotation.Href != "#note" {
+		t.Fatalf("annotation href = %q, want #note", annotation.Href)
+	}
+	if annotation.Rect.X1 != 120 || annotation.Rect.X2 != 132 || annotation.Rect.Y1 != 201.9 || annotation.Rect.Y2 != 210.9 {
+		t.Fatalf("annotation rect = %#v, want fragment visual bounds", annotation.Rect)
+	}
+}
+
 func TestNamedDestinations(t *testing.T) {
 	got := docwriter.Format(namedDestinations([]pdfPage{
 		{ObjectID: 4, Anchors: []string{"z", "a"}},
