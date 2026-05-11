@@ -69,7 +69,7 @@ func layoutInlineParagraph(registry *pdfFontRegistry, resolver *pdfStyleResolver
 			JustificationGaps: countJustificationGaps(units[start:br.End]),
 			Fragments:         fragments,
 		}
-		line.ExtraWordSpacing = paragraphExtraWordSpacing(style, i == len(breaks)-1, width, available, line.JustificationGaps)
+		line.ExtraWordSpacing, line.ExtraCharSpacing = paragraphJustificationSpacing(style, i == len(breaks)-1, width, available, line.JustificationGaps, len(shaped.Glyphs))
 		lines = append(lines, line)
 		start = br.End
 	}

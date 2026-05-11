@@ -56,8 +56,11 @@ func pageContent(page pdfPage) []byte {
 				if len(fragment.Text.Glyphs) == 0 || fragment.FontName == "" {
 					continue
 				}
-				writeTextFragment(&buf, fragment.FontName, fragment.FontSize, fragment.LetterSpacing, fragment.Color, currentX, line.Y+fragment.BaselineShift, fragment.Text.Glyphs, &currentFontName, &currentFontSize, &currentLetterSpacing, &currentColor, &colorInitialized)
-				currentX += fragment.Width
+				writeTextFragment(&buf, fragment.FontName, fragment.FontSize, fragment.LetterSpacing+line.ExtraCharSpacing, fragment.Color, currentX, line.Y+fragment.BaselineShift, fragment.Text.Glyphs, &currentFontName, &currentFontSize, &currentLetterSpacing, &currentColor, &colorInitialized)
+				currentX += fragment.Width + line.ExtraCharSpacing*float64(max(len(fragment.Text.Glyphs)-1, 0))
+				if i != len(line.Fragments)-1 {
+					currentX += line.ExtraCharSpacing
+				}
 				if line.ExtraWordSpacing != 0 && i != len(line.Fragments)-1 && fragmentEndsWithSpace(fragment) {
 					currentX += line.ExtraWordSpacing
 				}
@@ -67,7 +70,7 @@ func pageContent(page pdfPage) []byte {
 		if len(line.Text.Glyphs) == 0 || line.FontName == "" {
 			continue
 		}
-		writeTextState(&buf, line.FontName, line.FontSize, line.LetterSpacing, line.Color, line.X, line.Y, &currentFontName, &currentFontSize, &currentLetterSpacing, &currentColor, &colorInitialized)
+		writeTextState(&buf, line.FontName, line.FontSize, line.LetterSpacing+line.ExtraCharSpacing, line.Color, line.X, line.Y, &currentFontName, &currentFontSize, &currentLetterSpacing, &currentColor, &colorInitialized)
 		if line.ExtraWordSpacing != 0 {
 			fmt.Fprintf(&buf, "%s TJ\n", justifiedGlyphArray(line.Text.Glyphs, line.ExtraWordSpacing, line.FontSize))
 			continue
@@ -155,7 +158,10 @@ func writeFragmentDecorations(buf *bytes.Buffer, line pdfPageLine) {
 			}
 			buf.WriteString("Q\n")
 		}
-		currentX += fragment.Width
+		currentX += fragment.Width + line.ExtraCharSpacing*float64(max(len(fragment.Text.Glyphs)-1, 0))
+		if i != len(line.Fragments)-1 {
+			currentX += line.ExtraCharSpacing
+		}
 		if line.ExtraWordSpacing != 0 && i != len(line.Fragments)-1 && fragmentEndsWithSpace(fragment) {
 			currentX += line.ExtraWordSpacing
 		}
@@ -172,6 +178,7 @@ func writeDecorationLine(buf *bytes.Buffer, x1, y, x2 float64) {
 
 func decoratedLineWidth(line pdfPageLine) float64 {
 	width := shapedWidthPointsWithSpacing(line.Text, line.FontSize, line.LetterSpacing)
+	width += line.ExtraCharSpacing * float64(max(len(line.Text.Glyphs)-1, 0))
 	if line.ExtraWordSpacing == 0 {
 		return width
 	}

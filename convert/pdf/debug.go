@@ -101,6 +101,7 @@ type pdfDebugLine struct {
 	Strikethrough    bool    `json:"strikethrough,omitempty"`
 	Width            float64 `json:"width"`
 	ExtraWordSpacing float64 `json:"extra_word_spacing,omitempty"`
+	ExtraCharSpacing float64 `json:"extra_char_spacing,omitempty"`
 }
 
 type pdfDebugImage struct {
@@ -206,13 +207,30 @@ func pdfPageLineText(line pdfPageLine) string {
 
 func pdfPageLineWidth(line pdfPageLine) float64 {
 	if len(line.Fragments) == 0 {
-		return shapedWidthPointsWithSpacing(line.Text, line.FontSize, line.LetterSpacing)
+		width := shapedWidthPointsWithSpacing(line.Text, line.FontSize, line.LetterSpacing)
+		width += line.ExtraCharSpacing * float64(max(len(line.Text.Glyphs)-1, 0))
+		width += line.ExtraWordSpacing * float64(justificationSpaceCount(line.Text.Glyphs))
+		return width
 	}
 	width := 0.0
+	glyphs := 0
 	for _, fragment := range line.Fragments {
 		width += fragment.Width
+		glyphs += len(fragment.Text.Glyphs)
 	}
+	width += line.ExtraCharSpacing * float64(max(glyphs-1, 0))
+	width += line.ExtraWordSpacing * float64(fragmentSpaceCount(line.Fragments))
 	return width
+}
+
+func fragmentSpaceCount(fragments []pdfPageLineFragment) int {
+	count := 0
+	for i, fragment := range fragments {
+		if i != len(fragments)-1 && fragmentEndsWithSpace(fragment) {
+			count++
+		}
+	}
+	return count
 }
 
 func pdfDebugPages(pages []pdfPage) ([]pdfDebugPage, []pdfDebugImage, []pdfDebugLink) {
@@ -247,6 +265,7 @@ func pdfDebugPages(pages []pdfPage) ([]pdfDebugPage, []pdfDebugImage, []pdfDebug
 				Strikethrough:    line.Strikethrough,
 				Width:            pdfPageLineWidth(line),
 				ExtraWordSpacing: line.ExtraWordSpacing,
+				ExtraCharSpacing: line.ExtraCharSpacing,
 			})
 		}
 		for _, background := range page.Backgrounds {

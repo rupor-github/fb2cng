@@ -113,6 +113,7 @@ type pdfPageLine struct {
 	Text             shapedText
 	Fragments        []pdfPageLineFragment
 	ExtraWordSpacing float64
+	ExtraCharSpacing float64
 }
 
 type pdfPageLineFragment struct {

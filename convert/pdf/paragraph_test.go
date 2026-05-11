@@ -34,7 +34,7 @@ func TestLayoutParagraphBalancesLinesAndJustifies(t *testing.T) {
 	}
 	sawJustifiedLine := false
 	for i, line := range lines[:len(lines)-1] {
-		if line.ExtraWordSpacing > max(style.FontSize*0.55, 2.5) {
+		if line.ExtraWordSpacing > max(style.FontSize*0.40, 3.0) {
 			t.Fatalf("line %d extra word spacing = %v, want capped", i, line.ExtraWordSpacing)
 		}
 		if line.ExtraWordSpacing > 0 {
@@ -183,6 +183,16 @@ func TestLayoutParagraphHonorsHyphenationModes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestParagraphJustificationUsesCharacterSpacingAfterWordSpacingCap(t *testing.T) {
+	word, char := paragraphJustificationSpacing(paragraphStyle{FontSize: 10, Align: textAlignJustify}, false, 70, 100, 2, 20)
+	if word != 4 {
+		t.Fatalf("word spacing = %v, want capped 4", word)
+	}
+	if char <= 0 || char > 0.7 {
+		t.Fatalf("char spacing = %v, want positive capped spacing", char)
 	}
 }
 

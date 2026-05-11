@@ -68,6 +68,7 @@ type paragraphLine struct {
 	Width             float64
 	Indent            float64
 	ExtraWordSpacing  float64
+	ExtraCharSpacing  float64
 	JustificationGaps int
 	Fragments         []paragraphLineFragment
 }
@@ -283,7 +284,7 @@ func assembleParagraphLines(face *builtinFontFace, units []paragraphUnit, style 
 			Indent:            indent,
 			JustificationGaps: countJustificationGaps(units[start:br.End]),
 		}
-		line.ExtraWordSpacing = paragraphExtraWordSpacing(style, i == len(breaks)-1, width, available, line.JustificationGaps)
+		line.ExtraWordSpacing, line.ExtraCharSpacing = paragraphJustificationSpacing(style, i == len(breaks)-1, width, available, line.JustificationGaps, len(shaped.Glyphs))
 		lines = append(lines, line)
 		start = br.End
 	}
@@ -570,15 +571,25 @@ func paragraphLineIndent(start int, style paragraphStyle, maxWidth float64) floa
 	return min(max(style.FirstLineIndent, 0), maxWidth)
 }
 
-func paragraphExtraWordSpacing(style paragraphStyle, last bool, width, available float64, gaps int) float64 {
+func paragraphJustificationSpacing(style paragraphStyle, last bool, width, available float64, gaps int, glyphs int) (float64, float64) {
 	if style.Align != textAlignJustify || last || gaps <= 0 || width >= available {
-		return 0
+		return 0, 0
 	}
-	extra := (available - width) / float64(gaps)
-	if extra > max(style.FontSize*0.55, 2.5) {
-		return 0
+	remaining := available - width
+	wordCap := max(style.FontSize*0.40, 3.0)
+	wordSpacing := min(remaining/float64(gaps), wordCap)
+	remaining -= wordSpacing * float64(gaps)
+	if remaining <= 0 || glyphs < 2 {
+		return wordSpacing, 0
 	}
-	return extra
+
+	// When word spacing alone would create rivers, distribute the remaining
+	// adjustment as small character spacing. This is closer to book composition:
+	// spaces carry most of the stretch, but tiny tracking changes can make the
+	// margin even without obvious holes between words.
+	charCap := min(max(style.FontSize*0.06, 0.25), 0.70)
+	charSpacing := min(remaining/float64(glyphs-1), charCap)
+	return wordSpacing, charSpacing
 }
 
 func joinUnits(units []paragraphUnit, hyphenAfter bool) string {

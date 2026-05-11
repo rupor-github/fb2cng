@@ -315,6 +315,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 				Text:             line.Text,
 				Fragments:        pageLineFragments(line.Fragments),
 				ExtraWordSpacing: line.ExtraWordSpacing,
+				ExtraCharSpacing: line.ExtraCharSpacing,
 			})
 			y -= style.Paragraph.LineHeight
 			pageHasText = true
