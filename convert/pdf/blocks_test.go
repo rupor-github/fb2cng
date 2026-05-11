@@ -112,6 +112,26 @@ func TestBuildTOCPageBlocksClassifiesEntryLinks(t *testing.T) {
 	}
 }
 
+func TestParagraphInlineRunsPreserveInlineImages(t *testing.T) {
+	paragraph := &fb2.Paragraph{Text: []fb2.InlineSegment{
+		{Text: "before "},
+		{Kind: fb2.InlineImageSegment, Image: &fb2.InlineImage{Href: "#inline.png", Alt: "ALT"}},
+		{Text: " after"},
+	}}
+
+	text, links := paragraphTextAndLinks(paragraph)
+	if text != "before after" || len(links) != 0 {
+		t.Fatalf("paragraph text/links = %q %#v, want text without image alt and no links", text, links)
+	}
+	runs := paragraphInlineRuns(paragraph)
+	if len(runs) != 3 {
+		t.Fatalf("inline runs = %#v, want text/image/text", runs)
+	}
+	if runs[1].ImageID != "inline.png" || runs[1].Text != "" {
+		t.Fatalf("image run = %#v, want inline image without alt text", runs[1])
+	}
+}
+
 func TestParagraphInlineRunsTrimScriptWhitespace(t *testing.T) {
 	paragraph := &fb2.Paragraph{Text: []fb2.InlineSegment{
 		{Text: "word"},

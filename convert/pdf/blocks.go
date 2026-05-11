@@ -329,8 +329,9 @@ func appendTitleBlocksWithID(blocks *[]pdfTextBlock, title *fb2.Title, depth int
 			continue
 		}
 		text, links := paragraphTextAndLinks(item.Paragraph)
-		if text != "" {
-			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockHeading, ID: anchorID, Text: text, Runs: paragraphInlineRuns(item.Paragraph), Depth: depth, StyleName: pdfHeadingStyleName(depth), Links: links})
+		runs := paragraphInlineRuns(item.Paragraph)
+		if text != "" || inlineRunsRenderable(runs) {
+			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockHeading, ID: anchorID, Text: text, Runs: runs, Depth: depth, StyleName: pdfHeadingStyleName(depth), Links: links})
 			anchorID = ""
 		}
 	}
@@ -404,8 +405,9 @@ func appendParagraphBlockWithClasses(blocks *[]pdfTextBlock, kind pdfBlockKind, 
 		return
 	}
 	text, links := paragraphTextAndLinks(paragraph)
-	if text != "" {
-		*blocks = append(*blocks, pdfTextBlock{Kind: kind, ID: paragraph.ID, Text: text, Runs: paragraphInlineRuns(paragraph), Depth: depth, StyleName: pdfStyleNameForKind(kind), StyleClasses: joinStyleClasses(paragraph.Style, styleClasses), Links: links})
+	runs := paragraphInlineRuns(paragraph)
+	if text != "" || inlineRunsRenderable(runs) {
+		*blocks = append(*blocks, pdfTextBlock{Kind: kind, ID: paragraph.ID, Text: text, Runs: runs, Depth: depth, StyleName: pdfStyleNameForKind(kind), StyleClasses: joinStyleClasses(paragraph.Style, styleClasses), Links: links})
 	}
 }
 
@@ -459,6 +461,15 @@ func paragraphTextAndLinks(paragraph *fb2.Paragraph) (string, []pdfTextLink) {
 		return "", nil
 	}
 	return inlineSegmentsTextAndLinks(paragraph.Text)
+}
+
+func inlineRunsRenderable(runs []pdfInlineRun) bool {
+	for _, run := range runs {
+		if run.Text != "" || run.ImageID != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func paragraphInlineRuns(paragraph *fb2.Paragraph) []pdfInlineRun {
@@ -543,12 +554,6 @@ func appendInlineSegmentText(b *strings.Builder, links *[]pdfTextLink, seg *fb2.
 		return
 	}
 	if seg.Kind == fb2.InlineImageSegment {
-		if seg.Image != nil && seg.Image.Alt != "" {
-			if b.Len() > 0 {
-				b.WriteByte(' ')
-			}
-			b.WriteString(seg.Image.Alt)
-		}
 		return
 	}
 	start := runeLenString(b.String())
@@ -572,8 +577,8 @@ func appendInlineSegmentRun(runs *[]pdfInlineRun, seg *fb2.InlineSegment, inheri
 	style.Text = ""
 	style = applyInlineSegmentStyle(style, seg)
 	if seg.Kind == fb2.InlineImageSegment {
-		if seg.Image != nil && seg.Image.Alt != "" {
-			style.Text = " " + seg.Image.Alt + " "
+		if seg.Image != nil {
+			style.ImageID = imageRefID(seg.Image.Href)
 			appendInlineRun(runs, style)
 		}
 		return
@@ -630,7 +635,7 @@ func appendInlineRun(runs *[]pdfInlineRun, run pdfInlineRun) {
 	if run.Superscript || run.Subscript {
 		run.Text = strings.TrimSpace(run.Text)
 	}
-	if run.Text == "" {
+	if run.Text == "" && run.ImageID == "" {
 		return
 	}
 	last := len(*runs) - 1
@@ -642,7 +647,7 @@ func appendInlineRun(runs *[]pdfInlineRun, run pdfInlineRun) {
 }
 
 func sameInlineStyle(a, b pdfInlineRun) bool {
-	return a.StyleClasses == b.StyleClasses && a.LinkHref == b.LinkHref && a.Bold == b.Bold && a.Italic == b.Italic && a.Underline == b.Underline && a.Strikethrough == b.Strikethrough && a.Subscript == b.Subscript && a.Superscript == b.Superscript && a.Code == b.Code
+	return a.StyleClasses == b.StyleClasses && a.LinkHref == b.LinkHref && a.ImageID == b.ImageID && a.Bold == b.Bold && a.Italic == b.Italic && a.Underline == b.Underline && a.Strikethrough == b.Strikethrough && a.Subscript == b.Subscript && a.Superscript == b.Superscript && a.Code == b.Code
 }
 
 func trimInlineRuns(runs []pdfInlineRun) []pdfInlineRun {

@@ -87,6 +87,7 @@ type pdfInlineRun struct {
 	Text          string
 	StyleClasses  string
 	LinkHref      string
+	ImageID       string
 	Bold          bool
 	Italic        bool
 	Underline     bool
@@ -130,6 +131,9 @@ type pdfPageLineFragment struct {
 	Underline     bool
 	Strikethrough bool
 	BaselineShift float64
+	LinkHref      string
+	ImageID       string
+	ImageHeight   float64
 }
 
 type pdfPage struct {

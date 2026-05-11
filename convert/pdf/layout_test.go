@@ -3,6 +3,8 @@ package pdf
 import (
 	"strings"
 	"testing"
+
+	"fbc/fb2"
 )
 
 func TestLayoutPDFPagesKeepsHeadingWithNextParagraph(t *testing.T) {
@@ -231,6 +233,58 @@ func TestLayoutPDFPagesAppliesInlineStyles(t *testing.T) {
 		if len(used[key]) == 0 {
 			t.Fatalf("used glyphs for font key %#v missing in %#v", key, used)
 		}
+	}
+}
+
+func TestLayoutPDFPagesRendersInlineImages(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	img := &fb2.BookImage{}
+	img.Dim.Width = 120
+	img.Dim.Height = 60
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:      520,
+		PageHeight:     180,
+		ScreenWidthPx:  1200,
+		ScreenHeightPx: 1600,
+		Title:          "Title",
+		Author:         "Author",
+		Images:         fb2.BookImages{"inline": img},
+		Blocks: []pdfTextBlock{{
+			Kind: pdfBlockParagraph,
+			Text: "before after",
+			Runs: []pdfInlineRun{
+				{Text: "before "},
+				{ImageID: "inline"},
+				{Text: " after"},
+			},
+		}},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 || len(pages[1].Images) != 1 {
+		t.Fatalf("layout pages images = %#v, want one inline image on body page", pages)
+	}
+	image := pages[1].Images[0]
+	if image.ImageID != "inline" || image.Width <= 0 || image.Height <= 0 {
+		t.Fatalf("inline image = %#v, want placed image", image)
+	}
+	if len(pages[1].Lines) != 1 {
+		t.Fatalf("lines = %#v, want one body line", pages[1].Lines)
+	}
+	foundImageFragment := false
+	for _, fragment := range pages[1].Lines[0].Fragments {
+		if fragment.ImageID == "inline" {
+			foundImageFragment = true
+			break
+		}
+	}
+	if !foundImageFragment {
+		t.Fatalf("line fragments = %#v, want inline image fragment", pages[1].Lines[0].Fragments)
 	}
 }
 

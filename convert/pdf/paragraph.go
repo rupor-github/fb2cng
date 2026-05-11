@@ -85,6 +85,8 @@ type paragraphLineFragment struct {
 	Strikethrough bool
 	BaselineShift float64
 	LinkHref      string
+	ImageID       string
+	ImageHeight   float64
 }
 
 type paragraphWord struct {

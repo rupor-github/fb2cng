@@ -53,10 +53,9 @@ func pageContent(page pdfPage) []byte {
 		if len(line.Fragments) != 0 {
 			currentX := line.X
 			for i, fragment := range line.Fragments {
-				if len(fragment.Text.Glyphs) == 0 || fragment.FontName == "" {
-					continue
+				if len(fragment.Text.Glyphs) != 0 && fragment.FontName != "" {
+					writeTextFragment(&buf, fragment.FontName, fragment.FontSize, fragment.LetterSpacing+line.ExtraCharSpacing, fragment.Color, currentX, line.Y+fragment.BaselineShift, fragment.Text.Glyphs, &currentFontName, &currentFontSize, &currentLetterSpacing, &currentColor, &colorInitialized)
 				}
-				writeTextFragment(&buf, fragment.FontName, fragment.FontSize, fragment.LetterSpacing+line.ExtraCharSpacing, fragment.Color, currentX, line.Y+fragment.BaselineShift, fragment.Text.Glyphs, &currentFontName, &currentFontSize, &currentLetterSpacing, &currentColor, &colorInitialized)
 				currentX += fragment.Width + line.ExtraCharSpacing*float64(max(len(fragment.Text.Glyphs)-1, 0))
 				if i != len(line.Fragments)-1 {
 					currentX += line.ExtraCharSpacing
@@ -142,10 +141,7 @@ func pageTextDecorations(page pdfPage) []byte {
 func writeFragmentDecorations(buf *bytes.Buffer, line pdfPageLine) {
 	currentX := line.X
 	for i, fragment := range line.Fragments {
-		if len(fragment.Text.Glyphs) == 0 {
-			continue
-		}
-		if fragment.Underline || fragment.Strikethrough {
+		if len(fragment.Text.Glyphs) != 0 && (fragment.Underline || fragment.Strikethrough) {
 			thickness := max(fragment.FontSize/18, 0.4)
 			fmt.Fprintf(buf, "q\n%s\n%s w\n", fragment.Color.strokeOperator(), docwriter.FormatNumber(thickness))
 			if fragment.Underline {

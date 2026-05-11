@@ -59,6 +59,27 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 		}
 		page.Anchors = append(page.Anchors, id)
 	}
+	addInlineImages := func(page *pdfPage, line paragraphLine, x float64, y float64) {
+		currentX := x
+		for i, fragment := range line.Fragments {
+			if fragment.ImageID != "" && fragment.Width > 0 && fragment.ImageHeight > 0 {
+				page.Images = append(page.Images, pdfPageImage{
+					ImageID: fragment.ImageID,
+					X:       currentX,
+					Y:       y - fragment.ImageHeight*0.2,
+					Width:   fragment.Width,
+					Height:  fragment.ImageHeight,
+				})
+			}
+			currentX += fragment.Width + line.ExtraCharSpacing*float64(max(len(fragment.Text.Glyphs)-1, 0))
+			if i != len(line.Fragments)-1 {
+				currentX += line.ExtraCharSpacing
+			}
+			if line.ExtraWordSpacing != 0 && i != len(line.Fragments)-1 && paragraphFragmentEndsWithSpace(fragment) {
+				currentX += line.ExtraWordSpacing
+			}
+		}
+	}
 	addBlockDecoration := func(page *pdfPage, style pdfBlockResolvedStyle, x, topY, width, bottomY float64) {
 		if page == nil || width <= 0 || topY <= bottomY {
 			return
@@ -229,14 +250,14 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 			continue
 		}
 		text := strings.TrimSpace(block.Text)
-		if text == "" {
+		if text == "" && !inlineRunsRenderable(block.Runs) {
 			continue
 		}
 		face, fontKey, err := fontForStyle(doc.Fonts, style.Paragraph)
 		if err != nil {
 			return nil, nil, err
 		}
-		lines, err := layoutInlineParagraph(doc.Fonts, styles, face, block.Text, block.Runs, style.Paragraph, blockWidth)
+		lines, err := layoutInlineParagraph(doc, doc.Fonts, styles, face, block.Text, block.Runs, style.Paragraph, blockWidth)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -301,6 +322,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 			case textAlignRight:
 				x += max(available-line.Width, 0)
 			}
+			addInlineImages(page, line, x, y)
 			addLinkAnnotations(page, block, line, lineSearchStart, x, y, style.Paragraph.FontSize)
 			lineSearchStart = nextLineSearchStart(block.Text, line, lineSearchStart)
 			addLine(page, pdfPageLine{
@@ -351,7 +373,7 @@ func nextBlockKeepHeight(blocks []pdfTextBlock, hyphenator paragraphHyphenator, 
 			return 0, nil
 		}
 		text := strings.TrimSpace(block.Text)
-		if text == "" {
+		if text == "" && !inlineRunsRenderable(block.Runs) {
 			continue
 		}
 		style.Paragraph.Hyphenator = hyphenator
@@ -359,7 +381,7 @@ func nextBlockKeepHeight(blocks []pdfTextBlock, hyphenator paragraphHyphenator, 
 		if err != nil {
 			return 0, err
 		}
-		lines, err := layoutInlineParagraph(fonts, styles, face, block.Text, block.Runs, style.Paragraph, blockContentWidth(contentWidth, style))
+		lines, err := layoutInlineParagraph(skeletonDocument{Images: nil}, fonts, styles, face, block.Text, block.Runs, style.Paragraph, blockContentWidth(contentWidth, style))
 		if err != nil {
 			return 0, err
 		}

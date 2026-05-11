@@ -22,7 +22,7 @@ type inlineGlyphPiece struct {
 	Template paragraphLineFragment
 }
 
-func layoutInlineParagraph(registry *pdfFontRegistry, resolver *pdfStyleResolver, baseFace *builtinFontFace, text string, runs []pdfInlineRun, style paragraphStyle, maxWidth float64) ([]paragraphLine, error) {
+func layoutInlineParagraph(doc skeletonDocument, registry *pdfFontRegistry, resolver *pdfStyleResolver, baseFace *builtinFontFace, text string, runs []pdfInlineRun, style paragraphStyle, maxWidth float64) ([]paragraphLine, error) {
 	if len(runs) == 0 {
 		runs = []pdfInlineRun{{Text: text}}
 	}
@@ -36,7 +36,7 @@ func layoutInlineParagraph(registry *pdfFontRegistry, resolver *pdfStyleResolver
 		return nil, fmt.Errorf("paragraph width must be positive: %g", maxWidth)
 	}
 
-	words, err := inlineParagraphWords(registry, resolver, runs, style)
+	words, err := inlineParagraphWords(doc, registry, resolver, runs, style)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func layoutInlineParagraph(registry *pdfFontRegistry, resolver *pdfStyleResolver
 
 func hasInlineStyle(runs []pdfInlineRun) bool {
 	for _, run := range runs {
-		if run.StyleClasses != "" || run.LinkHref != "" || run.Bold || run.Italic || run.Underline || run.Strikethrough || run.Subscript || run.Superscript || run.Code {
+		if run.StyleClasses != "" || run.LinkHref != "" || run.ImageID != "" || run.Bold || run.Italic || run.Underline || run.Strikethrough || run.Subscript || run.Superscript || run.Code {
 			return true
 		}
 	}
@@ -100,11 +100,11 @@ func plainInlineRunText(runs []pdfInlineRun) string {
 	return strings.TrimSpace(b.String())
 }
 
-func inlineParagraphWords(registry *pdfFontRegistry, resolver *pdfStyleResolver, runs []pdfInlineRun, base paragraphStyle) ([]paragraphInlineWord, error) {
+func inlineParagraphWords(doc skeletonDocument, registry *pdfFontRegistry, resolver *pdfStyleResolver, runs []pdfInlineRun, base paragraphStyle) ([]paragraphInlineWord, error) {
 	words := make([]paragraphInlineWord, 0)
 	current := paragraphInlineWord{}
 	flushCurrent := func() {
-		if strings.TrimSpace(strings.ReplaceAll(current.Text, string(softHyphen), "")) == "" {
+		if strings.TrimSpace(strings.ReplaceAll(current.Text, string(softHyphen), "")) == "" && len(current.Fragments) == 0 {
 			current = paragraphInlineWord{}
 			return
 		}
@@ -112,10 +112,10 @@ func inlineParagraphWords(registry *pdfFontRegistry, resolver *pdfStyleResolver,
 		current = paragraphInlineWord{}
 	}
 	appendSegment := func(run pdfInlineRun, text string) error {
-		if text == "" {
+		if text == "" && run.ImageID == "" {
 			return nil
 		}
-		fragment, err := inlineRunFragment(registry, resolver, base, run, text)
+		fragment, err := inlineRunFragment(doc, registry, resolver, base, run, text)
 		if err != nil {
 			return err
 		}
@@ -126,6 +126,12 @@ func inlineParagraphWords(registry *pdfFontRegistry, resolver *pdfStyleResolver,
 	}
 
 	for _, run := range runs {
+		if run.ImageID != "" {
+			if err := appendSegment(run, ""); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		var segment strings.Builder
 		flushSegment := func() error {
 			if segment.Len() == 0 {
@@ -154,11 +160,22 @@ func inlineParagraphWords(registry *pdfFontRegistry, resolver *pdfStyleResolver,
 }
 
 func inlineParagraphSpace(registry *pdfFontRegistry, base paragraphStyle) (paragraphLineFragment, error) {
-	return inlineRunFragment(registry, nil, base, pdfInlineRun{}, " ")
+	return inlineRunFragment(skeletonDocument{}, registry, nil, base, pdfInlineRun{}, " ")
 }
 
-func inlineRunFragment(registry *pdfFontRegistry, resolver *pdfStyleResolver, base paragraphStyle, run pdfInlineRun, text string) (paragraphLineFragment, error) {
+func inlineRunFragment(doc skeletonDocument, registry *pdfFontRegistry, resolver *pdfStyleResolver, base paragraphStyle, run pdfInlineRun, text string) (paragraphLineFragment, error) {
 	style := inlineRunParagraphStyle(resolver, base, run)
+	if run.ImageID != "" {
+		width, height := inlineImageFragmentSize(doc, run.ImageID, style)
+		return paragraphLineFragment{
+			Width:       width,
+			FontSize:    style.FontSize,
+			Color:       style.Color,
+			LinkHref:    run.LinkHref,
+			ImageID:     run.ImageID,
+			ImageHeight: height,
+		}, nil
+	}
 	face, key, err := fontForStyle(registry, style)
 	if err != nil {
 		return paragraphLineFragment{}, err
@@ -179,6 +196,27 @@ func inlineRunFragment(registry *pdfFontRegistry, resolver *pdfStyleResolver, ba
 		BaselineShift: inlineRunBaselineShift(base, style),
 		LinkHref:      run.LinkHref,
 	}, nil
+}
+
+func inlineImageFragmentSize(doc skeletonDocument, imageID string, style paragraphStyle) (float64, float64) {
+	lineHeight := max(style.LineHeight, style.FontSize)
+	if lineHeight <= 0 {
+		lineHeight = pdfBaseLineHeight
+	}
+	img := doc.Images[imageID]
+	if img == nil {
+		return lineHeight, lineHeight
+	}
+	width, height := naturalPDFImageSize(doc, img)
+	if width <= 0 || height <= 0 {
+		return lineHeight, lineHeight
+	}
+	if height > lineHeight {
+		scale := lineHeight / height
+		width *= scale
+		height = lineHeight
+	}
+	return width, height
 }
 
 func inlineRunParagraphStyle(resolver *pdfStyleResolver, base paragraphStyle, run pdfInlineRun) paragraphStyle {
@@ -267,6 +305,16 @@ func inlineRunBaselineShift(base paragraphStyle, style paragraphStyle) float64 {
 func inlineParagraphUnits(registry *pdfFontRegistry, words []paragraphInlineWord, style paragraphStyle) ([]paragraphUnit, error) {
 	units := make([]paragraphUnit, 0, len(words))
 	for wordIndex, word := range words {
+		if inlineWordHasImage(word) {
+			units = append(units, paragraphUnit{
+				Text:      word.Text,
+				Width:     paragraphFragmentsWidth(word.Fragments),
+				WordIndex: wordIndex,
+				EndWord:   true,
+				Fragments: word.Fragments,
+			})
+			continue
+		}
 		parts := hyphenatedWordParts(word.Text, style.Hyphenator, style.Hyphenation)
 		pieces := inlineWordGlyphPieces(word)
 		cursor := 0
@@ -302,6 +350,15 @@ func inlineParagraphUnits(registry *pdfFontRegistry, words []paragraphInlineWord
 		}
 	}
 	return units, nil
+}
+
+func inlineWordHasImage(word paragraphInlineWord) bool {
+	for _, fragment := range word.Fragments {
+		if fragment.ImageID != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func inlineWordGlyphPieces(word paragraphInlineWord) []inlineGlyphPiece {
@@ -342,7 +399,9 @@ func sameInlineFragmentStyle(a, b paragraphLineFragment) bool {
 		a.Underline == b.Underline &&
 		a.Strikethrough == b.Strikethrough &&
 		a.BaselineShift == b.BaselineShift &&
-		a.LinkHref == b.LinkHref
+		a.LinkHref == b.LinkHref &&
+		a.ImageID == b.ImageID &&
+		a.ImageHeight == b.ImageHeight
 }
 
 func inlinePiecesFragment(pieces []inlineGlyphPiece, template paragraphLineFragment) paragraphLineFragment {
@@ -425,6 +484,9 @@ func pageLineFragments(fragments []paragraphLineFragment) []pdfPageLineFragment 
 			Underline:     fragment.Underline,
 			Strikethrough: fragment.Strikethrough,
 			BaselineShift: fragment.BaselineShift,
+			LinkHref:      fragment.LinkHref,
+			ImageID:       fragment.ImageID,
+			ImageHeight:   fragment.ImageHeight,
 		})
 	}
 	return out
