@@ -114,6 +114,7 @@ type pdfPageLine struct {
 	Fragments        []pdfPageLineFragment
 	ExtraWordSpacing float64
 	ExtraCharSpacing float64
+	BreakStats       paragraphLineBreakStats
 }
 
 type pdfPageLineFragment struct {

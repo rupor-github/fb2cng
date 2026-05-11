@@ -97,6 +97,21 @@ func TestGenerateDebugDumps(t *testing.T) {
 	if len(pages[1].Anchors) == 0 || pages[1].Anchors[0] != "debug-section" {
 		t.Fatalf("body page anchors = %#v, want debug-section", pages[1].Anchors)
 	}
+	lineBreakFound := false
+	for _, page := range pages[1:] {
+		for _, line := range page.Lines {
+			if line.LineBreak == nil {
+				continue
+			}
+			lineBreakFound = true
+			if line.LineBreak.AvailableWidth <= 0 || line.LineBreak.Demerits <= 0 || line.LineBreak.Fitness == "" {
+				t.Fatalf("debug line break = %#v, want populated diagnostics", line.LineBreak)
+			}
+		}
+	}
+	if !lineBreakFound {
+		t.Fatal("pdf-layout-pages.json missing line_break diagnostics")
+	}
 
 	var links []pdfDebugLink
 	readJSONDebugFile(t, filepath.Join(tmpDir, "pdf-links.json"), &links)

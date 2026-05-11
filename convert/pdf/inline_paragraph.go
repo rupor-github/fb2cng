@@ -54,6 +54,8 @@ func layoutInlineParagraph(registry *pdfFontRegistry, resolver *pdfStyleResolver
 	breaks := chooseParagraphBreaks(units, spaceFragment.Width, style, maxWidth)
 	lines := make([]paragraphLine, 0, len(breaks))
 	start := 0
+	previousHyphenated := false
+	previousFitness := paragraphFitnessDecent
 	for i, br := range breaks {
 		fragments, lineText, width := inlineParagraphLineFragments(units[start:br.End], spaceFragment, br.HyphenAfter)
 		shaped, err := shapeText(baseFace, lineText)
@@ -69,8 +71,13 @@ func layoutInlineParagraph(registry *pdfFontRegistry, resolver *pdfStyleResolver
 			JustificationGaps: countJustificationGaps(units[start:br.End]),
 			Fragments:         fragments,
 		}
-		line.ExtraWordSpacing, line.ExtraCharSpacing = paragraphJustificationSpacing(style, i == len(breaks)-1, width, available, line.JustificationGaps, len(shaped.Glyphs))
+		last := i == len(breaks)-1
+		singleWord := units[start].WordIndex == units[br.End-1].WordIndex
+		line.BreakStats = paragraphLineBreakStatsFor(width, available, line.JustificationGaps, start == 0, last, singleWord, br.HyphenAfter, previousHyphenated, previousFitness)
+		line.ExtraWordSpacing, line.ExtraCharSpacing = paragraphJustificationSpacing(style, last, width, available, line.JustificationGaps, len(shaped.Glyphs))
 		lines = append(lines, line)
+		previousHyphenated = br.HyphenAfter
+		previousFitness = line.BreakStats.Fitness
 		start = br.End
 	}
 	return lines, nil

@@ -71,6 +71,7 @@ type paragraphLine struct {
 	ExtraCharSpacing  float64
 	JustificationGaps int
 	Fragments         []paragraphLineFragment
+	BreakStats        paragraphLineBreakStats
 }
 
 type paragraphLineFragment struct {
@@ -110,6 +111,17 @@ type paragraphBreakCandidate struct {
 	Break   paragraphBreak
 	Cost    float64
 	Fitness paragraphFitness
+}
+
+type paragraphLineBreakStats struct {
+	AvailableWidth  float64
+	AdjustmentRatio float64
+	Badness         float64
+	Demerits        float64
+	Fitness         paragraphFitness
+	Hyphenated      bool
+	Emergency       bool
+	SingleWord      bool
 }
 
 type paragraphFitness int
@@ -268,6 +280,8 @@ func assembleParagraphLines(face *builtinFontFace, units []paragraphUnit, style 
 	breaks := chooseParagraphBreaks(units, spaceWidth, style, maxWidth)
 	lines := make([]paragraphLine, 0, len(breaks))
 	start := 0
+	previousHyphenated := false
+	previousFitness := paragraphFitnessDecent
 	for i, br := range breaks {
 		lineText := joinUnits(units[start:br.End], br.HyphenAfter)
 		shaped, err := shapeText(face, lineText)
@@ -284,8 +298,13 @@ func assembleParagraphLines(face *builtinFontFace, units []paragraphUnit, style 
 			Indent:            indent,
 			JustificationGaps: countJustificationGaps(units[start:br.End]),
 		}
-		line.ExtraWordSpacing, line.ExtraCharSpacing = paragraphJustificationSpacing(style, i == len(breaks)-1, width, available, line.JustificationGaps, len(shaped.Glyphs))
+		last := i == len(breaks)-1
+		singleWord := units[start].WordIndex == units[br.End-1].WordIndex
+		line.BreakStats = paragraphLineBreakStatsFor(width, available, line.JustificationGaps, start == 0, last, singleWord, br.HyphenAfter, previousHyphenated, previousFitness)
+		line.ExtraWordSpacing, line.ExtraCharSpacing = paragraphJustificationSpacing(style, last, width, available, line.JustificationGaps, len(shaped.Glyphs))
 		lines = append(lines, line)
+		previousHyphenated = br.HyphenAfter
+		previousFitness = line.BreakStats.Fitness
 		start = br.End
 	}
 	return lines, nil
@@ -395,9 +414,21 @@ func paragraphBreakCandidates(units []paragraphUnit, start int, spaceWidth float
 }
 
 func paragraphLineDemerits(width, available float64, gaps int, firstLine bool, last bool, singleWord bool, hyphenated bool, previousHyphenated bool, previousFitness paragraphFitness) float64 {
+	return paragraphLineBreakStatsFor(width, available, gaps, firstLine, last, singleWord, hyphenated, previousHyphenated, previousFitness).Demerits
+}
+
+func paragraphLineBreakStatsFor(width, available float64, gaps int, firstLine bool, last bool, singleWord bool, hyphenated bool, previousHyphenated bool, previousFitness paragraphFitness) paragraphLineBreakStats {
 	ratio, emergency := paragraphAdjustmentRatio(width, available, gaps, last, singleWord)
 	if math.IsInf(ratio, 1) {
-		return math.Inf(1)
+		return paragraphLineBreakStats{
+			AvailableWidth:  available,
+			AdjustmentRatio: ratio,
+			Badness:         math.Inf(1),
+			Demerits:        math.Inf(1),
+			Fitness:         paragraphFitnessVeryLoose,
+			Hyphenated:      hyphenated,
+			SingleWord:      singleWord,
+		}
 	}
 	badness := paragraphBadness(ratio)
 	if last {
@@ -424,7 +455,16 @@ func paragraphLineDemerits(width, available float64, gaps int, firstLine bool, l
 		unused := max(available-width, 0) / max(available, 1)
 		demerits += 5_000 + unused*unused*20_000
 	}
-	return demerits
+	return paragraphLineBreakStats{
+		AvailableWidth:  available,
+		AdjustmentRatio: ratio,
+		Badness:         badness,
+		Demerits:        demerits,
+		Fitness:         fitness,
+		Hyphenated:      hyphenated,
+		Emergency:       emergency,
+		SingleWord:      singleWord,
+	}
 }
 
 func paragraphAdjustmentRatio(width, available float64, gaps int, last bool, singleWord bool) (float64, bool) {
@@ -500,6 +540,21 @@ func paragraphFitnessClass(ratio float64) paragraphFitness {
 		return paragraphFitnessLoose
 	default:
 		return paragraphFitnessVeryLoose
+	}
+}
+
+func paragraphFitnessString(fitness paragraphFitness) string {
+	switch fitness {
+	case paragraphFitnessTight:
+		return "tight"
+	case paragraphFitnessDecent:
+		return "decent"
+	case paragraphFitnessLoose:
+		return "loose"
+	case paragraphFitnessVeryLoose:
+		return "very-loose"
+	default:
+		return "unknown"
 	}
 }
 

@@ -3,6 +3,7 @@ package pdf
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -87,21 +88,33 @@ type pdfDebugBorder struct {
 }
 
 type pdfDebugLine struct {
-	Text             string  `json:"text"`
-	X                float64 `json:"x"`
-	Y                float64 `json:"y"`
-	FontSize         float64 `json:"font_size"`
-	LetterSpacing    float64 `json:"letter_spacing,omitempty"`
-	FontResource     string  `json:"font_resource,omitempty"`
-	FontFamily       string  `json:"font_family,omitempty"`
-	FontWeight       string  `json:"font_weight,omitempty"`
-	FontStyle        string  `json:"font_style,omitempty"`
-	Color            string  `json:"color,omitempty"`
-	Underline        bool    `json:"underline,omitempty"`
-	Strikethrough    bool    `json:"strikethrough,omitempty"`
-	Width            float64 `json:"width"`
-	ExtraWordSpacing float64 `json:"extra_word_spacing,omitempty"`
-	ExtraCharSpacing float64 `json:"extra_char_spacing,omitempty"`
+	Text             string             `json:"text"`
+	X                float64            `json:"x"`
+	Y                float64            `json:"y"`
+	FontSize         float64            `json:"font_size"`
+	LetterSpacing    float64            `json:"letter_spacing,omitempty"`
+	FontResource     string             `json:"font_resource,omitempty"`
+	FontFamily       string             `json:"font_family,omitempty"`
+	FontWeight       string             `json:"font_weight,omitempty"`
+	FontStyle        string             `json:"font_style,omitempty"`
+	Color            string             `json:"color,omitempty"`
+	Underline        bool               `json:"underline,omitempty"`
+	Strikethrough    bool               `json:"strikethrough,omitempty"`
+	Width            float64            `json:"width"`
+	ExtraWordSpacing float64            `json:"extra_word_spacing,omitempty"`
+	ExtraCharSpacing float64            `json:"extra_char_spacing,omitempty"`
+	LineBreak        *pdfDebugLineBreak `json:"line_break,omitempty"`
+}
+
+type pdfDebugLineBreak struct {
+	AvailableWidth  float64 `json:"available_width"`
+	AdjustmentRatio float64 `json:"adjustment_ratio"`
+	Badness         float64 `json:"badness"`
+	Demerits        float64 `json:"demerits"`
+	Fitness         string  `json:"fitness"`
+	Hyphenated      bool    `json:"hyphenated,omitempty"`
+	Emergency       bool    `json:"emergency,omitempty"`
+	SingleWord      bool    `json:"single_word,omitempty"`
 }
 
 type pdfDebugImage struct {
@@ -233,6 +246,22 @@ func fragmentSpaceCount(fragments []pdfPageLineFragment) int {
 	return count
 }
 
+func pdfDebugLineBreakStats(stats paragraphLineBreakStats) *pdfDebugLineBreak {
+	if stats.AvailableWidth <= 0 || math.IsInf(stats.AdjustmentRatio, 0) || math.IsInf(stats.Badness, 0) || math.IsInf(stats.Demerits, 0) {
+		return nil
+	}
+	return &pdfDebugLineBreak{
+		AvailableWidth:  stats.AvailableWidth,
+		AdjustmentRatio: stats.AdjustmentRatio,
+		Badness:         stats.Badness,
+		Demerits:        stats.Demerits,
+		Fitness:         paragraphFitnessString(stats.Fitness),
+		Hyphenated:      stats.Hyphenated,
+		Emergency:       stats.Emergency,
+		SingleWord:      stats.SingleWord,
+	}
+}
+
 func pdfDebugPages(pages []pdfPage) ([]pdfDebugPage, []pdfDebugImage, []pdfDebugLink) {
 	debugPages := make([]pdfDebugPage, 0, len(pages))
 	debugImages := make([]pdfDebugImage, 0)
@@ -266,6 +295,7 @@ func pdfDebugPages(pages []pdfPage) ([]pdfDebugPage, []pdfDebugImage, []pdfDebug
 				Width:            pdfPageLineWidth(line),
 				ExtraWordSpacing: line.ExtraWordSpacing,
 				ExtraCharSpacing: line.ExtraCharSpacing,
+				LineBreak:        pdfDebugLineBreakStats(line.BreakStats),
 			})
 		}
 		for _, background := range page.Backgrounds {

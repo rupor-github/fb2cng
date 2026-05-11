@@ -196,6 +196,40 @@ func TestParagraphJustificationUsesCharacterSpacingAfterWordSpacingCap(t *testin
 	}
 }
 
+func TestLayoutParagraphRecordsLineBreakStats(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	style := paragraphStyle{
+		FontSize:    10,
+		LineHeight:  12,
+		Hyphenator:  fakeHyphenator{"hyphenation": "hy\u00adphenation"},
+		Hyphenation: paragraphHyphenationAuto,
+	}
+	prefix, err := shapeText(face, "hy-")
+	if err != nil {
+		t.Fatalf("shapeText() error = %v", err)
+	}
+	lines, err := layoutParagraph(face, "hyphenation", style, shapedWidthPoints(prefix, style.FontSize)+1)
+	if err != nil {
+		t.Fatalf("layoutParagraph() error = %v", err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("layoutParagraph() produced %d lines, want 2", len(lines))
+	}
+	stats := lines[0].BreakStats
+	if stats.AvailableWidth <= 0 || stats.Demerits <= 0 {
+		t.Fatalf("line break stats = %#v, want populated diagnostics", stats)
+	}
+	if !stats.Hyphenated || !stats.SingleWord {
+		t.Fatalf("line break stats = %#v, want hyphenated single-word line", stats)
+	}
+	if got := paragraphFitnessString(stats.Fitness); got == "unknown" {
+		t.Fatalf("fitness string = %q", got)
+	}
+}
+
 func TestParagraphBreakerAvoidsShortFinalLineWhenBalancedBreaksFit(t *testing.T) {
 	units := []paragraphUnit{
 		{Text: "one", Width: 20, WordIndex: 0, EndWord: true},
