@@ -420,7 +420,8 @@ func paragraphLineDemerits(width, available float64, gaps int, firstLine bool, l
 		demerits += paragraphFitnessPenalty
 	}
 	if singleWord && !last {
-		demerits += 250
+		unused := max(available-width, 0) / max(available, 1)
+		demerits += 5_000 + unused*unused*20_000
 	}
 	return demerits
 }
@@ -443,7 +444,11 @@ func paragraphAdjustmentRatio(width, available float64, gaps int, last bool, sin
 			}
 			return math.Inf(1), false
 		}
-		stretch := max(float64(gaps)*max(available*0.02, 0.5), float64(gaps)*2)
+		// Use paragraph-wide raggedness tolerance for break choice, not only the
+		// amount of spacing we are willing to add while drawing justified text. A
+		// line with few word gaps may be visually better left slightly ragged than
+		// replaced by a very short single-word line.
+		stretch := max(available*0.20, float64(gaps)*max(available*0.02, 0.5))
 		return delta / stretch, false
 	}
 	if gaps == 0 || singleWord {

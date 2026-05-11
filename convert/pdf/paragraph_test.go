@@ -32,10 +32,17 @@ func TestLayoutParagraphBalancesLinesAndJustifies(t *testing.T) {
 			t.Fatalf("line %d indent = %v, want 0", i, line.Indent)
 		}
 	}
+	sawJustifiedLine := false
 	for i, line := range lines[:len(lines)-1] {
-		if line.JustificationGaps > 0 && line.ExtraWordSpacing <= 0 {
-			t.Fatalf("line %d extra word spacing = %v, want positive", i, line.ExtraWordSpacing)
+		if line.ExtraWordSpacing > max(style.FontSize*0.55, 2.5) {
+			t.Fatalf("line %d extra word spacing = %v, want capped", i, line.ExtraWordSpacing)
 		}
+		if line.ExtraWordSpacing > 0 {
+			sawJustifiedLine = true
+		}
+	}
+	if !sawJustifiedLine {
+		t.Fatal("layoutParagraph() produced no justified non-final lines")
 	}
 	if got := lines[len(lines)-1].ExtraWordSpacing; got != 0 {
 		t.Fatalf("last line extra word spacing = %v, want 0", got)
