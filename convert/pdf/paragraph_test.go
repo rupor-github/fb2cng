@@ -114,6 +114,69 @@ func TestLayoutParagraphDropsUnbrokenSoftHyphen(t *testing.T) {
 	}
 }
 
+func TestLayoutParagraphBreaksAfterHardHyphenWithoutExtraHyphen(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	style := paragraphStyle{FontSize: 10, LineHeight: 12, Hyphenation: paragraphHyphenationNone}
+	prefix, err := shapeText(face, "alpha-")
+	if err != nil {
+		t.Fatalf("shapeText() error = %v", err)
+	}
+	full, err := shapeText(face, "alpha-beta")
+	if err != nil {
+		t.Fatalf("shapeText() error = %v", err)
+	}
+	maxWidth := shapedWidthPoints(prefix, style.FontSize) + 0.1
+	if maxWidth >= shapedWidthPoints(full, style.FontSize) {
+		t.Fatal("test width is not narrow enough to require hard hyphen break")
+	}
+
+	lines, err := layoutParagraph(face, "alpha-beta", style, maxWidth)
+	if err != nil {
+		t.Fatalf("layoutParagraph() error = %v", err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("layoutParagraph() produced %d lines, want 2", len(lines))
+	}
+	if got := shapedRunes(lines[0].Text); got != "alpha-" {
+		t.Fatalf("first line = %q, want hard hyphen without extra inserted hyphen", got)
+	}
+	if got := shapedRunes(lines[1].Text); got != "beta" {
+		t.Fatalf("second line = %q, want beta", got)
+	}
+	if !lines[0].BreakStats.Hyphenated {
+		t.Fatalf("first line break stats = %#v, want hyphenated hard-break diagnostic", lines[0].BreakStats)
+	}
+}
+
+func TestLayoutParagraphBreaksAfterPunctuationWithoutHyphenPenalty(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	style := paragraphStyle{FontSize: 10, LineHeight: 12, Hyphenation: paragraphHyphenationNone}
+	prefix, err := shapeText(face, "alpha/")
+	if err != nil {
+		t.Fatalf("shapeText() error = %v", err)
+	}
+
+	lines, err := layoutParagraph(face, "alpha/beta", style, shapedWidthPoints(prefix, style.FontSize)+0.1)
+	if err != nil {
+		t.Fatalf("layoutParagraph() error = %v", err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("layoutParagraph() produced %d lines, want 2", len(lines))
+	}
+	if got := shapedRunes(lines[0].Text); got != "alpha/" {
+		t.Fatalf("first line = %q, want punctuation break without inserted hyphen", got)
+	}
+	if lines[0].BreakStats.Hyphenated {
+		t.Fatalf("first line break stats = %#v, want punctuation break without hyphen penalty", lines[0].BreakStats)
+	}
+}
+
 func TestLayoutParagraphHonorsHyphenationModes(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {

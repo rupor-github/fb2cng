@@ -73,10 +73,10 @@ func layoutInlineParagraph(registry *pdfFontRegistry, resolver *pdfStyleResolver
 		}
 		last := i == len(breaks)-1
 		singleWord := units[start].WordIndex == units[br.End-1].WordIndex
-		line.BreakStats = paragraphLineBreakStatsFor(width, available, line.JustificationGaps, start == 0, last, singleWord, br.HyphenAfter, previousHyphenated, previousFitness)
+		line.BreakStats = paragraphLineBreakStatsFor(width, available, line.JustificationGaps, start == 0, last, singleWord, br.Hyphenated, previousHyphenated, previousFitness)
 		line.ExtraWordSpacing, line.ExtraCharSpacing = paragraphJustificationSpacing(style, last, width, available, line.JustificationGaps, len(shaped.Glyphs))
 		lines = append(lines, line)
-		previousHyphenated = br.HyphenAfter
+		previousHyphenated = br.Hyphenated
 		previousFitness = line.BreakStats.Fitness
 		start = br.End
 	}
@@ -269,24 +269,30 @@ func inlineParagraphUnits(registry *pdfFontRegistry, words []paragraphInlineWord
 		pieces := inlineWordGlyphPieces(word)
 		cursor := 0
 		for partIndex, part := range parts {
-			count := len([]rune(part))
+			count := len([]rune(part.Text))
 			if cursor+count > len(pieces) {
 				count = max(len(pieces)-cursor, 0)
 			}
 			fragments := inlinePiecesToFragments(pieces[cursor : cursor+count])
 			cursor += count
 			width := paragraphFragmentsWidth(fragments)
-			hyphenFragments, hyphenWidth, err := inlineHyphenFragments(registry, fragments)
-			if err != nil {
-				return nil, err
+			var hyphenFragments []paragraphLineFragment
+			hyphenWidth := 0.0
+			if part.HyphenText != "" {
+				var err error
+				hyphenFragments, hyphenWidth, err = inlineHyphenFragments(registry, fragments)
+				if err != nil {
+					return nil, err
+				}
 			}
 			units = append(units, paragraphUnit{
-				Text:            part,
+				Text:            part.Text,
 				Width:           width,
 				WordIndex:       wordIndex,
 				EndWord:         partIndex == len(parts)-1,
-				HyphenAfter:     partIndex != len(parts)-1,
-				HyphenText:      "-",
+				BreakAfter:      part.BreakAfter,
+				Hyphenated:      part.Hyphenated,
+				HyphenText:      part.HyphenText,
 				HyphenWidth:     hyphenWidth,
 				Fragments:       fragments,
 				HyphenFragments: hyphenFragments,
