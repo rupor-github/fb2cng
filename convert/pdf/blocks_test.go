@@ -37,6 +37,22 @@ func TestCollectTextBlocksIncludesLinkChildren(t *testing.T) {
 	}
 }
 
+func TestParagraphInlineRunsTrimScriptWhitespace(t *testing.T) {
+	paragraph := &fb2.Paragraph{Text: []fb2.InlineSegment{
+		{Text: "word"},
+		{Kind: fb2.InlineSup, Text: "\n  1.1\n  "},
+		{Text: " next"},
+	}}
+
+	runs := paragraphInlineRuns(paragraph)
+	if len(runs) != 3 {
+		t.Fatalf("inline runs = %#v, want 3 runs", runs)
+	}
+	if runs[1].Text != "1.1" || !runs[1].Superscript {
+		t.Fatalf("superscript run = %#v, want trimmed superscript label", runs[1])
+	}
+}
+
 func TestParagraphInlineRunsPreserveFB2InlineStyles(t *testing.T) {
 	paragraph := &fb2.Paragraph{Text: []fb2.InlineSegment{
 		{Text: "plain "},

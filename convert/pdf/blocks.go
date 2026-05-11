@@ -561,6 +561,9 @@ func applyInlineSegmentStyle(style pdfInlineRun, seg *fb2.InlineSegment) pdfInli
 }
 
 func appendInlineRun(runs *[]pdfInlineRun, run pdfInlineRun) {
+	if run.Superscript || run.Subscript {
+		run.Text = strings.TrimSpace(run.Text)
+	}
 	if run.Text == "" {
 		return
 	}

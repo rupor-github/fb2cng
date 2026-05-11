@@ -805,6 +805,52 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 		}
 	})
 
+	t.Run("preserve_link_wrapped_superscript_label", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Kind: BodyMain,
+					Sections: []Section{{
+						ID: "s1",
+						Content: []FlowItem{{
+							Kind: FlowParagraph,
+							Paragraph: &Paragraph{Text: []InlineSegment{{
+								Kind: InlineLink,
+								Href: "#n1",
+								Children: []InlineSegment{{
+									Kind: InlineText,
+									Text: "\n  ",
+								}, {
+									Kind:     InlineSup,
+									Children: []InlineSegment{{Kind: InlineText, Text: "[1]"}},
+								}, {
+									Kind: InlineText,
+									Text: "\n  ",
+								}},
+							}}},
+						}},
+					}},
+				},
+				{
+					Kind:     BodyFootnotes,
+					Sections: []Section{{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}}}}},
+				},
+			},
+		}
+
+		footnotesIndex := FootnoteRefs{"n1": {BodyIdx: 1, SectionIdx: 0}}
+		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+
+		link := result.Bodies[0].Sections[0].Content[0].Paragraph.Text[0]
+		if link.Text != "" {
+			t.Fatalf("link text = %q, want empty after label replacement", link.Text)
+		}
+		children := link.Children
+		if len(children) != 1 || children[0].Kind != InlineSup || children[0].Text != "0.1" || len(children[0].Children) != 0 {
+			t.Fatalf("link children = %#v, want superscript label", children)
+		}
+	})
+
 	t.Run("multiple_footnote_bodies", func(t *testing.T) {
 		book := &FictionBook{
 			Bodies: []Body{
