@@ -385,12 +385,11 @@ func pdfPageContentMargins(doc skeletonDocument, styles *pdfStyleResolver, baseM
 	top := baseMargin
 	bottom := baseMargin
 	if styles != nil {
-		if pageStyle, ok := styles.styles[pdfStylePage]; ok {
-			left += pageStyle.MarginLeft
-			right += pageStyle.MarginRight
-			top += pageStyle.SpaceBefore
-			bottom += pageStyle.SpaceAfter
-		}
+		pageStyle := styles.pageStyle()
+		left += pageStyle.MarginLeft
+		right += pageStyle.MarginRight
+		top += pageStyle.SpaceBefore
+		bottom += pageStyle.SpaceAfter
 	}
 	left = max(left, 0)
 	right = max(right, 0)

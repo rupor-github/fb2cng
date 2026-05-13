@@ -152,13 +152,43 @@ func TestPDFStyleResolverAppliesParagraphStyleClasses(t *testing.T) {
 func TestPDFStyleResolverAppliesRootPageMargins(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",
-		Data: `html { margin: 0 -10pt 0 -8pt; }`,
+		Data: `html { margin: 0 -10pt 0 -8pt; } body { margin: 1pt 2pt 3pt 4pt; }`,
 	}}}
 
 	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
-	page := resolver.styles[pdfStylePage]
-	if page.MarginLeft != -8 || page.MarginRight != -10 || page.SpaceBefore != 0 || page.SpaceAfter != 0 {
-		t.Fatalf("page margins = top %v right %v bottom %v left %v, want 0/-10/0/-8", page.SpaceBefore, page.MarginRight, page.SpaceAfter, page.MarginLeft)
+	page := resolver.pageStyle()
+	if page.MarginLeft != -4 || page.MarginRight != -8 || page.SpaceBefore != 1 || page.SpaceAfter != 3 {
+		t.Fatalf("page margins = top %v right %v bottom %v left %v, want 1/-8/3/-4", page.SpaceBefore, page.MarginRight, page.SpaceAfter, page.MarginLeft)
+	}
+}
+
+func TestPDFStyleResolverAppliesBodyTypographyAsRootInheritance(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			body { font-family: "Noto Sans", sans-serif; line-height: 1.5; color: #336699; }
+			p { margin: 0; }
+		`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
+	if paragraph.Paragraph.FontFamily != "Noto Sans" {
+		t.Fatalf("paragraph font family = %q, want body-inherited Noto Sans", paragraph.Paragraph.FontFamily)
+	}
+	if paragraph.Paragraph.LineHeight != pdfBaseFontSize*1.5 {
+		t.Fatalf("paragraph line height = %v, want body-inherited %v", paragraph.Paragraph.LineHeight, pdfBaseFontSize*1.5)
+	}
+	if paragraph.Paragraph.Color.String() != "#336699" {
+		t.Fatalf("paragraph color = %s, want body-inherited #336699", paragraph.Paragraph.Color)
+	}
+
+	heading := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, Depth: 1})
+	if heading.Paragraph.FontFamily != "Noto Sans" {
+		t.Fatalf("heading font family = %q, want body-inherited Noto Sans", heading.Paragraph.FontFamily)
+	}
+	if heading.Paragraph.LineHeight != resolver.defaultStyle(pdfStyleChapterTitleHeader).Paragraph.LineHeight {
+		t.Fatalf("heading line height = %v, want explicit heading line-height preserved", heading.Paragraph.LineHeight)
 	}
 }
 

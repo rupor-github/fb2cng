@@ -75,6 +75,8 @@ const (
 	pdfStyleLinkFootnote       = "link-footnote"
 	pdfStyleLinkTOC            = "link-toc"
 	pdfStyleTitleAfterImage    = "title-after-image"
+	pdfStyleHTML               = "__html__"
+	pdfStyleBody               = "__body__"
 	pdfStylePage               = "__page__"
 )
 
@@ -116,8 +118,9 @@ type pdfBlockLength struct {
 }
 
 type pdfStyleResolver struct {
-	styles map[string]pdfBlockResolvedStyle
-	tracer *pdfStyleTracer
+	styles   map[string]pdfBlockResolvedStyle
+	defaults map[string]pdfBlockResolvedStyle
+	tracer   *pdfStyleTracer
 }
 
 type pdfDebugResolvedStyle struct {
@@ -195,7 +198,8 @@ func newPDFStyleResolver(book *fb2.FictionBook, log *zap.Logger, tracers ...*pdf
 	if len(tracers) > 0 {
 		tracer = tracers[0]
 	}
-	resolver := &pdfStyleResolver{styles: defaultPDFStyles(), tracer: tracer}
+	defaults := defaultPDFStyles()
+	resolver := &pdfStyleResolver{styles: clonePDFStyles(defaults), defaults: defaults, tracer: tracer}
 	resolver.traceDefaults()
 	if book == nil {
 		return resolver
@@ -216,6 +220,12 @@ func newPDFStyleResolver(book *fb2.FictionBook, log *zap.Logger, tracers ...*pdf
 
 func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 	styles := map[string]pdfBlockResolvedStyle{
+		pdfStyleHTML: {
+			Paragraph: paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, Align: textAlignLeft, Hyphenation: paragraphHyphenationAuto},
+		},
+		pdfStyleBody: {
+			Paragraph: paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, Align: textAlignLeft, Hyphenation: paragraphHyphenationAuto},
+		},
 		pdfStylePage: {
 			Paragraph: paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, Hyphenation: paragraphHyphenationAuto},
 		},
@@ -342,17 +352,16 @@ func titleHeaderNextVariantPDFStyle(base pdfBlockResolvedStyle) pdfBlockResolved
 
 func (r *pdfStyleResolver) styleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
 	name := pdfStyleNameForBlock(block)
-	style, ok := r.styles[name]
-	if !ok {
-		style = r.styles[pdfStyleParagraph]
-	}
-	fallback := r.styles[pdfStyleParagraph]
+	defaultStyle := r.defaultStyle(name)
+	style := r.applyRootInheritedParagraphDefaults(defaultStyle)
+	style = mergePDFStyleOverrides(style, r.namedStyle(name), defaultStyle)
+	classFallback := r.namedStyle(pdfStyleParagraph)
 	for _, class := range strings.Fields(block.StyleClasses) {
 		classStyle, ok := r.styles[class]
 		if !ok {
 			continue
 		}
-		style = mergePDFStyleOverrides(style, classStyle, fallback)
+		style = mergePDFStyleOverrides(style, classStyle, classFallback)
 	}
 	if block.Kind == pdfBlockTOCEntry {
 		style.Paragraph.FirstLineIndent = max(float64(block.Depth-1)*pdfTOCIndentPerDepth, 0)
@@ -472,6 +481,146 @@ func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfB
 	return base
 }
 
+func clonePDFStyles(src map[string]pdfBlockResolvedStyle) map[string]pdfBlockResolvedStyle {
+	cloned := make(map[string]pdfBlockResolvedStyle, len(src))
+	for name, style := range src {
+		cloned[name] = style
+	}
+	return cloned
+}
+
+func (r *pdfStyleResolver) namedStyle(name string) pdfBlockResolvedStyle {
+	if r != nil {
+		if style, ok := r.styles[name]; ok {
+			return style
+		}
+	}
+	if r != nil {
+		if style, ok := r.styles[pdfStyleParagraph]; ok {
+			return style
+		}
+	}
+	return defaultPDFStyles()[pdfStyleParagraph]
+}
+
+func (r *pdfStyleResolver) defaultStyle(name string) pdfBlockResolvedStyle {
+	if r != nil && r.defaults != nil {
+		if style, ok := r.defaults[name]; ok {
+			return style
+		}
+		if style, ok := r.defaults[pdfStyleParagraph]; ok {
+			return style
+		}
+	}
+	return defaultPDFStyles()[pdfStyleParagraph]
+}
+
+func (r *pdfStyleResolver) rootParagraphStyle() paragraphStyle {
+	base := r.defaultStyle(pdfStyleHTML).Paragraph
+	rootDefault := r.defaultStyle(pdfStyleBody).Paragraph
+	base = mergePDFInheritedParagraphStyle(base, r.namedStyle(pdfStyleHTML).Paragraph, r.defaultStyle(pdfStyleHTML).Paragraph)
+	base = mergePDFInheritedParagraphStyle(base, r.namedStyle(pdfStyleBody).Paragraph, rootDefault)
+	return base
+}
+
+func (r *pdfStyleResolver) applyRootInheritedParagraphDefaults(style pdfBlockResolvedStyle) pdfBlockResolvedStyle {
+	root := r.rootParagraphStyle()
+	rootDefault := r.defaultStyle(pdfStyleBody).Paragraph
+	if style.Paragraph.FontFamily == rootDefault.FontFamily {
+		style.Paragraph.FontFamily = root.FontFamily
+	}
+	if style.Paragraph.Bold == rootDefault.Bold {
+		style.Paragraph.Bold = root.Bold
+	}
+	if style.Paragraph.Italic == rootDefault.Italic {
+		style.Paragraph.Italic = root.Italic
+	}
+	if style.Paragraph.FontSize == rootDefault.FontSize {
+		style.Paragraph.FontSize = root.FontSize
+	}
+	if style.Paragraph.LineHeight == rootDefault.LineHeight {
+		style.Paragraph.LineHeight = root.LineHeight
+	}
+	if style.Paragraph.LetterSpacing == rootDefault.LetterSpacing {
+		style.Paragraph.LetterSpacing = root.LetterSpacing
+	}
+	if style.Paragraph.FirstLineIndent == rootDefault.FirstLineIndent {
+		style.Paragraph.FirstLineIndent = root.FirstLineIndent
+	}
+	if style.Paragraph.Align == rootDefault.Align {
+		style.Paragraph.Align = root.Align
+	}
+	if style.Paragraph.Color == rootDefault.Color {
+		style.Paragraph.Color = root.Color
+	}
+	if style.Paragraph.PreserveSpace == rootDefault.PreserveSpace {
+		style.Paragraph.PreserveSpace = root.PreserveSpace
+	}
+	if style.Paragraph.Hyphenation == rootDefault.Hyphenation {
+		style.Paragraph.Hyphenation = root.Hyphenation
+	}
+	return style
+}
+
+func mergePDFInheritedParagraphStyle(base, override, fallback paragraphStyle) paragraphStyle {
+	if override.FontFamily != fallback.FontFamily {
+		base.FontFamily = override.FontFamily
+	}
+	if override.Bold != fallback.Bold {
+		base.Bold = override.Bold
+	}
+	if override.Italic != fallback.Italic {
+		base.Italic = override.Italic
+	}
+	if override.FontSize != fallback.FontSize {
+		base.FontSize = override.FontSize
+	}
+	if override.LineHeight != fallback.LineHeight {
+		base.LineHeight = override.LineHeight
+	}
+	if override.LetterSpacing != fallback.LetterSpacing {
+		base.LetterSpacing = override.LetterSpacing
+	}
+	if override.FirstLineIndent != fallback.FirstLineIndent {
+		base.FirstLineIndent = override.FirstLineIndent
+	}
+	if override.Align != fallback.Align {
+		base.Align = override.Align
+	}
+	if override.Color != fallback.Color {
+		base.Color = override.Color
+	}
+	if override.PreserveSpace != fallback.PreserveSpace {
+		base.PreserveSpace = override.PreserveSpace
+	}
+	if override.Hyphenation != fallback.Hyphenation {
+		base.Hyphenation = override.Hyphenation
+	}
+	return base
+}
+
+func (r *pdfStyleResolver) pageStyle() pdfBlockResolvedStyle {
+	page := r.defaultStyle(pdfStylePage)
+	page = mergePDFStyleOverrides(page, r.namedStyle(pdfStylePage), r.defaultStyle(pdfStylePage))
+	for _, name := range []string{pdfStyleHTML, pdfStyleBody} {
+		root := r.namedStyle(name)
+		fallback := r.defaultStyle(name)
+		if root.MarginLeft != fallback.MarginLeft {
+			page.MarginLeft += root.MarginLeft
+		}
+		if root.MarginRight != fallback.MarginRight {
+			page.MarginRight += root.MarginRight
+		}
+		if root.HasSpaceBefore || root.SpaceBefore != fallback.SpaceBefore {
+			page.SpaceBefore += root.SpaceBefore
+		}
+		if root.HasSpaceAfter || root.SpaceAfter != fallback.SpaceAfter {
+			page.SpaceAfter += root.SpaceAfter
+		}
+	}
+	return page
+}
+
 func pdfStyleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
 	return newPDFStyleResolver(nil, nil).styleForBlock(block)
 }
@@ -587,8 +736,10 @@ func pdfSelectorStyleNames(sel css.Selector) []string {
 		return []string{sel.Class}
 	}
 	switch strings.ToLower(sel.Element) {
-	case "html", "body":
-		return []string{pdfStylePage}
+	case "html":
+		return []string{pdfStyleHTML}
+	case "body":
+		return []string{pdfStyleBody}
 	case "p":
 		return []string{pdfStyleParagraph}
 	case "h1":
