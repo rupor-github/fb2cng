@@ -249,8 +249,8 @@ tasks:
       - |
         cd '{{.DIR}}'
         curl -sL -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" \
-          "https://fonts.googleapis.com/css2?family=Literata:ital,wght@0,400;0,700;1,400;1,700" \
-          | awk '/font-style:/{gsub(/;/,"",$2);style=$2} /font-weight:/{gsub(/;/,"",$2);weight=$2} /url\(/{url=$0;gsub(/.*url\(/,"",url);gsub(/\).*/,"",url);if(style=="italic"&&weight=="400")s="Italic";else if(style=="italic"&&weight=="700")s="BoldItalic";else if(weight=="400")s="Regular";else if(weight=="700")s="Bold";else next;system("curl -sL \""url"\" -o \"Literata-"s".ttf\"")}'
+          "https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,700;1,400;1,700" \
+          | awk '/font-style:/{gsub(/;/,"",$2);style=$2} /font-weight:/{gsub(/;/,"",$2);weight=$2} /url\(/{url=$0;gsub(/.*url\(/,"",url);gsub(/\).*/,"",url);if(style=="italic"&&weight=="400")s="Italic";else if(style=="italic"&&weight=="700")s="BoldItalic";else if(weight=="400")s="Regular";else if(weight=="700")s="Bold";else next;system("curl -sL \""url"\" -o \"NotoSerif-"s".ttf\"")}'
         curl -sL -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" \
           "https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,400;0,700;1,400;1,700" \
           | awk '/font-style:/{gsub(/;/,"",$2);style=$2} /font-weight:/{gsub(/;/,"",$2);weight=$2} /url\(/{url=$0;gsub(/.*url\(/,"",url);gsub(/\).*/,"",url);if(style=="italic"&&weight=="400")s="Italic";else if(style=="italic"&&weight=="700")s="BoldItalic";else if(weight=="400")s="Regular";else if(weight=="700")s="Bold";else next;system("curl -sL \""url"\" -o \"NotoSans-"s".ttf\"")}'
@@ -260,7 +260,13 @@ tasks:
         gzip -q -f *.ttf
         test "$(find . -maxdepth 1 -type f -name '*.ttf.gz' | wc -l)" -eq 10
     status:
-      - test "$(find '{{.DIR}}' -maxdepth 1 -type f -name '*.ttf.gz' 2>/dev/null | wc -l)" -eq 10
+      - |
+        for font in \
+          NotoSerif-Regular NotoSerif-Bold NotoSerif-Italic NotoSerif-BoldItalic \
+          NotoSans-Regular NotoSans-Bold NotoSans-Italic NotoSans-BoldItalic \
+          NotoSansMono-Regular NotoSansMono-Bold; do
+          test -f "{{.DIR}}/${font}.ttf.gz"
+        done
 
   generate-enums:
     internal: true

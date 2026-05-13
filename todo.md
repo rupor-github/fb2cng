@@ -26,7 +26,7 @@ generation pipelines.
 
 - [x] **Heading font sizes & embedded fonts** — Fixed heading text rendering at
   body size (12pt) by resolving heading style before creating text runs.
-  Replaced standard PDF fonts and system fallback with embedded Literata
+  Replaced standard PDF fonts and system fallback with embedded Noto Serif
   (serif), Noto Sans (sans-serif), and Noto Sans Mono (monospace). Fonts are
   gzip-compressed, SIL OFL licensed, downloaded via Taskfile `get-fonts` task.
 

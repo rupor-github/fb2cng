@@ -199,8 +199,8 @@ func TestGenerateTextBodyAddsPaginatedBodyPage(t *testing.T) {
 		"/Type /Outlines",
 		"/Dest [6 0 R /Fit]",
 		"/Names [<636861707465722D31> [6 0 R /Fit]]",
-		"/BaseFont /Literata-Regular",
-		"/BaseFont /Literata-Bold",
+		"/BaseFont /NotoSerif-Regular",
+		"/BaseFont /NotoSerif-Bold",
 	} {
 		if !strings.Contains(pdfText, want) {
 			t.Errorf("generated PDF does not contain %q", want)

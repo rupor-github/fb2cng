@@ -15,19 +15,19 @@ import (
 )
 
 // Embedded font data (gzip-compressed TTF).
-// Literata — serif (SIL OFL, https://github.com/googlefonts/literata)
+// Noto Serif — serif (SIL OFL, https://github.com/notofonts/latin-greek-cyrillic)
 //
-//go:embed fonts/Literata-Regular.ttf.gz
-var literataRegularGZ []byte
+//go:embed fonts/NotoSerif-Regular.ttf.gz
+var notoSerifRegularGZ []byte
 
-//go:embed fonts/Literata-Bold.ttf.gz
-var literataBoldGZ []byte
+//go:embed fonts/NotoSerif-Bold.ttf.gz
+var notoSerifBoldGZ []byte
 
-//go:embed fonts/Literata-Italic.ttf.gz
-var literataItalicGZ []byte
+//go:embed fonts/NotoSerif-Italic.ttf.gz
+var notoSerifItalicGZ []byte
 
-//go:embed fonts/Literata-BoldItalic.ttf.gz
-var literataBoldItalicGZ []byte
+//go:embed fonts/NotoSerif-BoldItalic.ttf.gz
+var notoSerifBoldItalicGZ []byte
 
 // Noto Sans — sans-serif (SIL OFL, https://github.com/notofonts/latin-greek-cyrillic)
 //
@@ -102,7 +102,7 @@ func builtinFont(fontFamily string, bold, italic bool) (*builtinFontFace, error)
 
 func initBuiltinFonts() error {
 	builtinOnce.Do(func() {
-		builtinSerif, builtinErr = loadBuiltinFamily("Literata", false, literataRegularGZ, literataBoldGZ, literataItalicGZ, literataBoldItalicGZ)
+		builtinSerif, builtinErr = loadBuiltinFamily("NotoSerif", false, notoSerifRegularGZ, notoSerifBoldGZ, notoSerifItalicGZ, notoSerifBoldItalicGZ)
 		if builtinErr != nil {
 			return
 		}
@@ -189,7 +189,7 @@ func loadRawFont(label string, data []byte, fixedPitch, italic bool) (*builtinFo
 	if fixedPitch {
 		flags |= 1
 	}
-	if strings.Contains(strings.ToLower(postScriptName), "literata") {
+	if strings.Contains(strings.ToLower(postScriptName), "serif") {
 		flags |= 1 << 1 // Serif.
 	}
 	if italic {

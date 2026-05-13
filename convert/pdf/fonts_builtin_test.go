@@ -13,8 +13,8 @@ func TestBuiltinFontSelectionAndMetrics(t *testing.T) {
 		italic     bool
 		wantPrefix string
 	}{
-		{name: "default serif", family: "", wantPrefix: "Literata"},
-		{name: "serif bold italic", family: "serif", bold: true, italic: true, wantPrefix: "Literata"},
+		{name: "default serif", family: "", wantPrefix: "NotoSerif"},
+		{name: "serif bold italic", family: "serif", bold: true, italic: true, wantPrefix: "NotoSerif"},
 		{name: "sans", family: "Noto Sans, sans-serif", wantPrefix: "NotoSans"},
 		{name: "mono", family: "monospace", bold: true, wantPrefix: "NotoSansMono"},
 	}
@@ -84,7 +84,7 @@ func TestSanitizePDFName(t *testing.T) {
 		in   string
 		want string
 	}{
-		{in: "Literata 12pt Regular", want: "Literata-12pt-Regular"},
+		{in: "Noto Serif 12pt Regular", want: "Noto-Serif-12pt-Regular"},
 		{in: "NotoSans-Regular", want: "NotoSans-Regular"},
 		{in: "bad/name#with spaces", want: "badnamewith-spaces"},
 		{in: "", want: "FBCFont"},
