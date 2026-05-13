@@ -228,13 +228,12 @@ func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 		pdfStyleBodyTitleHeader:    headingPDFStyle(1),
 		pdfStyleChapterTitleHeader: headingPDFStyle(1),
 		pdfStyleSectionTitleHeader: headingPDFStyle(2),
-		pdfStyleSubtitle: {
-			Paragraph:         paragraphStyle{FontFamily: "serif", Bold: true, FontSize: pdfSubtitleFontSize, LineHeight: pdfSubtitleLineHeight, Align: textAlignCenter, Hyphenation: paragraphHyphenationAuto},
-			SpaceBefore:       pdfSubtitleSpaceBefore,
-			SpaceAfter:        pdfSubtitleSpaceAfter,
-			KeepTogether:      true,
-			KeepWithNextLines: pdfSingleKeepLine,
-		},
+		pdfStyleSubtitle:           subtitlePDFStyle(textAlignCenter, true, false, pdfSubtitleSpaceBefore, pdfSubtitleSpaceAfter, true),
+		pdfStyleAnnotationSubtitle: subtitlePDFStyle(textAlignCenter, true, false, pdfBaseFontSize*0.5, pdfBaseFontSize*0.5, false),
+		pdfStylePoemSubtitle:       subtitlePDFStyle(textAlignCenter, false, false, pdfBaseFontSize*0.5, pdfBaseFontSize*0.5, false),
+		pdfStyleStanzaSubtitle:     subtitlePDFStyle(textAlignCenter, false, false, pdfBaseFontSize*0.25, pdfBaseFontSize*0.25, false),
+		pdfStyleEpigraphSubtitle:   subtitlePDFStyle(textAlignRight, false, true, pdfBaseFontSize*0.3, pdfBaseFontSize*0.3, false),
+		pdfStyleCiteSubtitle:       subtitlePDFStyle(textAlignLeft, false, false, pdfBaseFontSize*0.5, pdfBaseFontSize*0.5, false),
 		pdfStyleVerse: {
 			Paragraph:  paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfVerseLineHeight, Align: textAlignLeft, Hyphenation: paragraphHyphenationAuto},
 			SpaceAfter: pdfVerseSpaceAfter,
@@ -310,6 +309,19 @@ func headingPDFStyle(depth int) pdfBlockResolvedStyle {
 		KeepTogether:      true,
 		KeepWithNextLines: pdfDefaultKeepLines,
 	}
+}
+
+func subtitlePDFStyle(align textAlign, bold bool, italic bool, spaceBefore float64, spaceAfter float64, keepWithNext bool) pdfBlockResolvedStyle {
+	style := pdfBlockResolvedStyle{
+		Paragraph:    paragraphStyle{FontFamily: "serif", Bold: bold, Italic: italic, FontSize: pdfSubtitleFontSize, LineHeight: pdfSubtitleLineHeight, Align: align, Hyphenation: paragraphHyphenationAuto},
+		SpaceBefore:  spaceBefore,
+		SpaceAfter:   spaceAfter,
+		KeepTogether: true,
+	}
+	if keepWithNext {
+		style.KeepWithNextLines = pdfSingleKeepLine
+	}
+	return style
 }
 
 func titleHeaderFirstVariantPDFStyle(base pdfBlockResolvedStyle) pdfBlockResolvedStyle {

@@ -439,14 +439,21 @@ func appendImageBlockWithClasses(blocks *[]pdfTextBlock, image *fb2.Image, fallb
 }
 
 func appendImageIDBlock(blocks *[]pdfTextBlock, imageID string, anchorID string, alt string, styleClasses string) {
+	appendStyledImageIDBlock(blocks, imageID, anchorID, alt, pdfStyleImage, styleClasses)
+}
+
+func appendStyledImageIDBlock(blocks *[]pdfTextBlock, imageID string, anchorID string, alt string, styleName string, styleClasses string) {
 	if strings.TrimSpace(imageID) == "" {
 		return
+	}
+	if strings.TrimSpace(styleName) == "" {
+		styleName = pdfStyleImage
 	}
 	*blocks = append(*blocks, pdfTextBlock{
 		Kind:         pdfBlockImage,
 		ID:           anchorID,
 		Text:         strings.TrimSpace(alt),
-		StyleName:    pdfStyleImage,
+		StyleName:    styleName,
 		StyleClasses: strings.TrimSpace(styleClasses),
 		ImageID:      imageID,
 	})
@@ -540,14 +547,23 @@ func appendParagraphBlockWithClasses(blocks *[]pdfTextBlock, kind pdfBlockKind, 
 	if paragraph == nil {
 		return
 	}
+	styleName := pdfStyleNameForKind(kind)
+	if kind == pdfBlockSubtitle {
+		styleName = subtitleStyleName(joinStyleClasses(paragraph.Style, styleClasses))
+	}
 	if imageID, alt, ok := paragraphImageOnly(paragraph); ok {
+		imageStyleName := pdfStyleImage
 		imageStyleClasses := strings.TrimSpace(paragraph.Style)
 		if kind == pdfBlockHeading {
 			imageStyleClasses = joinStyleClasses(pdfHeadingStyleName(depth), imageStyleClasses, styleClasses, pdfStyleHeadingImage)
 		} else if kind == pdfBlockSubtitle {
-			imageStyleClasses = joinStyleClasses(pdfStyleSubtitle, imageStyleClasses, styleClasses)
+			imageStyleName = styleName
+			imageStyleClasses = joinStyleClasses(styleName, imageStyleClasses, styleClasses)
+		} else if kind == pdfBlockParagraph {
+			imageStyleName = styleName
+			imageStyleClasses = joinStyleClasses(imageStyleClasses, styleClasses)
 		}
-		appendImageIDBlock(blocks, imageID, paragraph.ID, alt, imageStyleClasses)
+		appendStyledImageIDBlock(blocks, imageID, paragraph.ID, alt, imageStyleName, imageStyleClasses)
 		return
 	}
 	text, links := paragraphTextAndLinks(paragraph)
@@ -556,7 +572,7 @@ func appendParagraphBlockWithClasses(blocks *[]pdfTextBlock, kind pdfBlockKind, 
 		styleClasses = joinStyleClasses(styleClasses, pdfStyleCode)
 	}
 	if text != "" || inlineRunsRenderable(runs) {
-		*blocks = append(*blocks, pdfTextBlock{Kind: kind, ID: paragraph.ID, Text: text, Runs: runs, Depth: depth, StyleName: pdfStyleNameForKind(kind), StyleClasses: joinStyleClasses(paragraph.Style, styleClasses), Links: links})
+		*blocks = append(*blocks, pdfTextBlock{Kind: kind, ID: paragraph.ID, Text: text, Runs: runs, Depth: depth, StyleName: styleName, StyleClasses: joinStyleClasses(paragraph.Style, styleClasses), Links: links})
 	}
 }
 
@@ -938,6 +954,16 @@ func subtitleStyleClasses(containerClasses string) string {
 		}
 	}
 	return strings.Join(classes, " ")
+}
+
+func subtitleStyleName(classes string) string {
+	for _, class := range strings.Fields(classes) {
+		switch class {
+		case pdfStyleAnnotationSubtitle, pdfStylePoemSubtitle, pdfStyleStanzaSubtitle, pdfStyleEpigraphSubtitle, pdfStyleCiteSubtitle:
+			return class
+		}
+	}
+	return pdfStyleSubtitle
 }
 
 func joinStyleClasses(values ...string) string {

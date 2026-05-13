@@ -381,6 +381,45 @@ func TestLayoutPDFPagesUpscalesVignettesToContentWidth(t *testing.T) {
 	}
 }
 
+func TestLayoutPDFPagesLeftAlignsImageOnlyParagraphsInsideCite(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	img := &fb2.BookImage{}
+	img.Dim.Width = 100
+	img.Dim.Height = 80
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{
+		Paragraph: paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, FirstLineIndent: pdfBodyIndent, Align: textAlignJustify, Hyphenation: paragraphHyphenationAuto},
+	}
+	resolver.styles[pdfStyleCite] = pdfBlockResolvedStyle{MarginLeft: 21, MarginRight: 21}
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  520,
+		PageHeight: 220,
+		Title:      "Title",
+		Author:     "Author",
+		Styles:     resolver,
+		Images:     fb2.BookImages{"block": img},
+		Blocks: []pdfTextBlock{{
+			Kind:         pdfBlockImage,
+			StyleName:    pdfStyleParagraph,
+			StyleClasses: pdfStyleCite,
+			ImageID:      "block",
+		}},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 || len(pages[1].Images) != 1 {
+		t.Fatalf("layout pages images = %#v, want one cite image", pages)
+	}
+	if got, want := pages[1].Images[0].X, 24.0+21.0; math.Abs(got-want) > 0.001 {
+		t.Fatalf("cite image x = %v, want left-aligned at %v", got, want)
+	}
+}
+
 func TestLayoutPDFPagesSizesBlockImagesLikeKP3(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {

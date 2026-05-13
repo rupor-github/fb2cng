@@ -161,7 +161,7 @@ func TestParagraphInlineRunsPreserveImageOnlyParagraphs(t *testing.T) {
 	}
 }
 
-func TestAppendParagraphBlockWithClassesConvertsImageOnlyParagraphsToImageBlocks(t *testing.T) {
+func TestAppendParagraphBlockWithClassesConvertsImageOnlyParagraphsToContextStyledImageBlocks(t *testing.T) {
 	paragraph := &fb2.Paragraph{ID: "p", Text: []fb2.InlineSegment{{Kind: fb2.InlineImageSegment, Image: &fb2.InlineImage{Href: "#block.png", Alt: "Block"}}}}
 	var blocks []pdfTextBlock
 
@@ -170,8 +170,19 @@ func TestAppendParagraphBlockWithClassesConvertsImageOnlyParagraphsToImageBlocks
 	if len(blocks) != 1 || blocks[0].Kind != pdfBlockImage || blocks[0].ImageID != "block.png" || blocks[0].ID != "p" || blocks[0].Text != "Block" {
 		t.Fatalf("blocks = %#v, want image-only paragraph block", blocks)
 	}
-	if blocks[0].StyleClasses != "" {
-		t.Fatalf("image-only paragraph style classes = %q, want container classes filtered", blocks[0].StyleClasses)
+	if blocks[0].StyleName != pdfStyleParagraph || blocks[0].StyleClasses != pdfStyleCite {
+		t.Fatalf("image-only paragraph image style = %q / %q, want paragraph style name with cite context", blocks[0].StyleName, blocks[0].StyleClasses)
+	}
+}
+
+func TestAppendParagraphBlockWithClassesUsesContextSpecificSubtitleStyleName(t *testing.T) {
+	paragraph := &fb2.Paragraph{ID: "s", Text: []fb2.InlineSegment{{Text: "Quote subtitle"}}}
+	var blocks []pdfTextBlock
+
+	appendParagraphBlockWithClasses(&blocks, pdfBlockSubtitle, paragraph, 1, pdfStyleCiteSubtitle)
+
+	if len(blocks) != 1 || blocks[0].Kind != pdfBlockSubtitle || blocks[0].StyleName != pdfStyleCiteSubtitle || blocks[0].StyleClasses != pdfStyleCiteSubtitle {
+		t.Fatalf("blocks = %#v, want cite-subtitle style name without section-subtitle inheritance", blocks)
 	}
 }
 

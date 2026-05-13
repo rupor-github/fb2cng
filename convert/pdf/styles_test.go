@@ -375,6 +375,29 @@ func TestPDFStyleResolverMapsHeadingAndTOCStyles(t *testing.T) {
 	}
 }
 
+func TestPDFStyleResolverUsesContextSpecificSubtitleDefaults(t *testing.T) {
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+
+	citeSubtitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockSubtitle, StyleName: pdfStyleCiteSubtitle, StyleClasses: pdfStyleCiteSubtitle})
+	if citeSubtitle.Paragraph.Bold {
+		t.Fatalf("cite-subtitle bold = true, want false to match KFX/default.css semantics")
+	}
+	if citeSubtitle.Paragraph.Align != textAlignLeft {
+		t.Fatalf("cite-subtitle align = %v, want left", citeSubtitle.Paragraph.Align)
+	}
+	if citeSubtitle.KeepWithNextLines != 0 {
+		t.Fatalf("cite-subtitle keep-with-next = %d, want 0", citeSubtitle.KeepWithNextLines)
+	}
+
+	sectionSubtitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockSubtitle})
+	if !sectionSubtitle.Paragraph.Bold {
+		t.Fatalf("section subtitle bold = false, want true")
+	}
+	if sectionSubtitle.Paragraph.Align != textAlignCenter {
+		t.Fatalf("section subtitle align = %v, want center", sectionSubtitle.Paragraph.Align)
+	}
+}
+
 func TestPDFStyleResolverPageBreakDisplayAndAbsoluteUnits(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",

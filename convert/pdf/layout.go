@@ -231,9 +231,20 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 			addAnchor(page, block.ID)
 			backgroundTop := y + style.PaddingTop
 			y -= height
+			imageX := contentLeft + style.MarginLeft + style.PaddingLeft
+			switch style.Paragraph.Align {
+			case textAlignCenter:
+				imageX += max((blockWidth-width)/2, 0)
+			case textAlignRight:
+				imageX += max(blockWidth-width, 0)
+			default:
+				if style.MarginLeft == 0 && style.Paragraph.FirstLineIndent > 0 {
+					imageX += style.Paragraph.FirstLineIndent
+				}
+			}
 			page.Images = append(page.Images, pdfPageImage{
 				ImageID: block.ImageID,
-				X:       contentLeft + style.MarginLeft + style.PaddingLeft + max((blockWidth-width)/2, 0),
+				X:       imageX,
 				Y:       y,
 				Width:   width,
 				Height:  height,
