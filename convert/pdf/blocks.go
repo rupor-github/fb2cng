@@ -720,7 +720,7 @@ func trimCodeBlockInlineRuns(runs []pdfInlineRun) []pdfInlineRun {
 func trimInlineRuns(runs []pdfInlineRun) []pdfInlineRun {
 	for len(runs) > 0 {
 		trimmed := strings.TrimLeft(runs[0].Text, " \t\n\r")
-		if trimmed != "" {
+		if trimmed != "" || runs[0].ImageID != "" {
 			runs[0].Text = trimmed
 			break
 		}
@@ -729,7 +729,7 @@ func trimInlineRuns(runs []pdfInlineRun) []pdfInlineRun {
 	for len(runs) > 0 {
 		last := len(runs) - 1
 		trimmed := strings.TrimRight(runs[last].Text, " \t\n\r")
-		if trimmed != "" {
+		if trimmed != "" || runs[last].ImageID != "" {
 			runs[last].Text = trimmed
 			break
 		}

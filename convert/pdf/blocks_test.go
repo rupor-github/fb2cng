@@ -148,6 +148,15 @@ func TestParagraphInlineRunsPreserveLinkedInlineImages(t *testing.T) {
 	}
 }
 
+func TestParagraphInlineRunsPreserveImageOnlyParagraphs(t *testing.T) {
+	paragraph := &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineImageSegment, Image: &fb2.InlineImage{Href: "#heading.png"}}}}
+
+	runs := paragraphInlineRuns(paragraph)
+	if len(runs) != 1 || runs[0].ImageID != "heading.png" {
+		t.Fatalf("inline runs = %#v, want image-only run", runs)
+	}
+}
+
 func TestParagraphInlineRunsTrimScriptWhitespace(t *testing.T) {
 	paragraph := &fb2.Paragraph{Text: []fb2.InlineSegment{
 		{Text: "word"},

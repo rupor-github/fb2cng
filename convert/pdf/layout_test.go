@@ -277,6 +277,39 @@ func TestLayoutPDFPagesPreservesCodeBlockWhitespace(t *testing.T) {
 	}
 }
 
+func TestLayoutPDFPagesRendersImageOnlyHeadings(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	img := &fb2.BookImage{}
+	img.Dim.Width = 380
+	img.Dim.Height = 30
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:      520,
+		PageHeight:     180,
+		ScreenWidthPx:  1200,
+		ScreenHeightPx: 1600,
+		Title:          "Title",
+		Author:         "Author",
+		Images:         fb2.BookImages{"heading": img},
+		Blocks: []pdfTextBlock{{
+			Kind: pdfBlockSubtitle,
+			Runs: []pdfInlineRun{{ImageID: "heading"}},
+		}},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 || len(pages[1].Images) != 1 {
+		t.Fatalf("layout pages images = %#v, want image-only heading image", pages)
+	}
+	if len(pages[1].Lines) != 1 || len(pages[1].Lines[0].Fragments) != 1 || pages[1].Lines[0].Fragments[0].ImageID != "heading" {
+		t.Fatalf("heading line = %#v, want image-only fragment", pages[1].Lines)
+	}
+}
+
 func TestLayoutPDFPagesRendersInlineImages(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {
