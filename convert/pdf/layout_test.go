@@ -418,6 +418,44 @@ func TestLayoutPDFPagesSizesBlockImagesLikeKP3(t *testing.T) {
 	}
 }
 
+func TestLayoutPDFPagesAvoidsBlankPageBeforeTallImageAfterEmptyLine(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	img := &fb2.BookImage{}
+	img.Dim.Width = 600
+	img.Dim.Height = 800
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  520,
+		PageHeight: 220,
+		Title:      "Title",
+		Author:     "Author",
+		Images:     fb2.BookImages{"block": img},
+		Blocks: []pdfTextBlock{
+			{Kind: pdfBlockParagraph, Text: "Intro paragraph."},
+			{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine},
+			{Kind: pdfBlockImage, ID: "img", ImageID: "block"},
+		},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 3 {
+		t.Fatalf("layout pages = %#v, want title page + text page + image page", pages)
+	}
+	if len(pages[1].Lines) == 0 || len(pages[1].Images) != 0 {
+		t.Fatalf("text page = %#v, want only intro text", pages[1])
+	}
+	if len(pages[2].Images) != 1 || len(pages[2].Lines) != 0 {
+		t.Fatalf("image page = %#v, want only image", pages[2])
+	}
+	if len(pages[2].Anchors) != 1 || pages[2].Anchors[0] != "img" {
+		t.Fatalf("image anchors = %#v, want image anchor on rendered image page", pages[2].Anchors)
+	}
+}
+
 func TestLayoutPDFPagesRendersImageOnlyHeadings(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {

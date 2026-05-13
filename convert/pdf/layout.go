@@ -209,7 +209,11 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 			if img == nil {
 				continue
 			}
-			width, height, ok := fitPDFBlockImageSize(img, blockWidth, top-bottom, isVignetteBlock(block) || isHeadingImageBlock(block))
+			maxImageHeight := top - bottom - style.SpaceBefore - style.PaddingTop - style.PaddingBottom - style.SpaceAfter
+			if maxImageHeight <= 0 {
+				continue
+			}
+			width, height, ok := fitPDFBlockImageSize(img, blockWidth, maxImageHeight, isVignetteBlock(block) || isHeadingImageBlock(block))
 			if !ok {
 				continue
 			}
@@ -217,7 +221,6 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 			if pageHasText && y-needed < bottom {
 				newTextPage()
 			}
-			addAnchor(page, block.ID)
 			y -= style.SpaceBefore
 			y -= style.PaddingTop
 			if y-height < bottom {
@@ -225,6 +228,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 				y -= style.SpaceBefore
 				y -= style.PaddingTop
 			}
+			addAnchor(page, block.ID)
 			backgroundTop := y + style.PaddingTop
 			y -= height
 			page.Images = append(page.Images, pdfPageImage{
