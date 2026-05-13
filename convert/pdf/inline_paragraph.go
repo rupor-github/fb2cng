@@ -497,9 +497,7 @@ func mergeInlineParagraphStyle(base, override, fallback paragraphStyle) paragrap
 	if override.FontSize != fallback.FontSize {
 		base.FontSize = override.FontSize
 	}
-	if override.LineHeight != fallback.LineHeight {
-		base.LineHeight = override.LineHeight
-	}
+	base = mergePDFLineHeightOverride(base, override, fallback)
 	if override.LetterSpacing != fallback.LetterSpacing {
 		base.LetterSpacing = override.LetterSpacing
 	}

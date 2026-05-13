@@ -389,9 +389,7 @@ func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfB
 	if override.Paragraph.FontSize != fallback.Paragraph.FontSize {
 		base.Paragraph.FontSize = override.Paragraph.FontSize
 	}
-	if override.Paragraph.LineHeight != fallback.Paragraph.LineHeight {
-		base.Paragraph.LineHeight = override.Paragraph.LineHeight
-	}
+	base.Paragraph = mergePDFLineHeightOverride(base.Paragraph, override.Paragraph, fallback.Paragraph)
 	if override.Paragraph.LetterSpacing != fallback.Paragraph.LetterSpacing {
 		base.Paragraph.LetterSpacing = override.Paragraph.LetterSpacing
 	}
@@ -545,8 +543,9 @@ func (r *pdfStyleResolver) applyRootInheritedParagraphDefaults(style pdfBlockRes
 	if style.Paragraph.FontSize == rootDefault.FontSize {
 		style.Paragraph.FontSize = root.FontSize
 	}
-	if style.Paragraph.LineHeight == rootDefault.LineHeight {
+	if !style.Paragraph.LineHeightExplicit && style.Paragraph.LineHeight == rootDefault.LineHeight {
 		style.Paragraph.LineHeight = root.LineHeight
+		style.Paragraph.LineHeightExplicit = root.LineHeightExplicit
 	}
 	if style.Paragraph.LetterSpacing == rootDefault.LetterSpacing {
 		style.Paragraph.LetterSpacing = root.LetterSpacing
@@ -582,9 +581,7 @@ func mergePDFInheritedParagraphStyle(base, override, fallback paragraphStyle) pa
 	if override.FontSize != fallback.FontSize {
 		base.FontSize = override.FontSize
 	}
-	if override.LineHeight != fallback.LineHeight {
-		base.LineHeight = override.LineHeight
-	}
+	base = mergePDFLineHeightOverride(base, override, fallback)
 	if override.LetterSpacing != fallback.LetterSpacing {
 		base.LetterSpacing = override.LetterSpacing
 	}
@@ -830,6 +827,18 @@ func pdfDescendantSelectorStyleNames(sel css.Selector) []string {
 	return mapped
 }
 
+func mergePDFLineHeightOverride(base, override, fallback paragraphStyle) paragraphStyle {
+	if override.LineHeightExplicit {
+		base.LineHeight = override.LineHeight
+		base.LineHeightExplicit = true
+		return base
+	}
+	if !base.LineHeightExplicit && override.LineHeight != fallback.LineHeight {
+		base.LineHeight = override.LineHeight
+	}
+	return base
+}
+
 func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.Value) {
 	if style == nil {
 		return
@@ -891,12 +900,15 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 		if points, ok := pdfCSSFontSizePoints(value, style.Paragraph.FontSize); ok {
 			ratio := points / style.Paragraph.FontSize
 			style.Paragraph.FontSize = points
-			style.Paragraph.LineHeight *= ratio
+			if !style.Paragraph.LineHeightExplicit {
+				style.Paragraph.LineHeight *= ratio
+			}
 		}
 	}
 	if value, ok := props["line-height"]; ok {
 		if points, ok := pdfCSSLineHeightPoints(value, style.Paragraph.FontSize); ok {
 			style.Paragraph.LineHeight = points
+			style.Paragraph.LineHeightExplicit = true
 		}
 	}
 	if value, ok := props["letter-spacing"]; ok {
