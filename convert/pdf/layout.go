@@ -7,7 +7,7 @@ import (
 
 func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage, map[pdfFontKey]map[uint16]shapedGlyph, error) {
 	const margin = 24.0
-	contentWidth := max(doc.PageWidth-margin*2, 12)
+	titleContentWidth := max(doc.PageWidth-margin*2, 12)
 	used := make(map[pdfFontKey]map[uint16]shapedGlyph)
 	pages := make([]pdfPage, 0, 2)
 
@@ -141,7 +141,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 		FontKey:  titleKey,
 		Text:     title,
 	})
-	authorLines, err := wrapText(titleFace, authorText, 9, contentWidth)
+	authorLines, err := wrapText(titleFace, authorText, 9, titleContentWidth)
 	if err != nil {
 		return nil, nil, fmt.Errorf("shape author: %w", err)
 	}
@@ -169,15 +169,19 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 		styles = newPDFStyleResolver(nil, nil)
 	}
 	blockStyles := styles.collapsedBlockStyles(doc.Blocks)
+	contentLeft, contentRight, contentTop, contentBottom := pdfPageContentMargins(doc, styles, margin)
+	contentWidth := max(doc.PageWidth-contentLeft-contentRight, 12)
 	page := addPage()
-	top := doc.PageHeight - margin
-	bottom := margin
+	top := doc.PageHeight - contentTop
+	bottom := contentBottom
 	y := top
 	pageHasText := false
+	previousRenderedImage := false
 	newTextPage := func() {
 		page = addPage()
 		y = top
 		pageHasText = false
+		previousRenderedImage = false
 	}
 
 	for blockIndex, block := range doc.Blocks {
@@ -198,7 +202,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 		}
 
 		if block.Kind == pdfBlockImage {
-			backgroundX := margin + style.MarginLeft
+			backgroundX := contentLeft + style.MarginLeft
 			backgroundWidth := blockBoxWidth(contentWidth, style)
 			blockWidth := blockContentWidth(contentWidth, style)
 			img := doc.Images[block.ImageID]
@@ -214,23 +218,24 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 				newTextPage()
 			}
 			addAnchor(page, block.ID)
-			if pageHasText {
-				y -= style.SpaceBefore
-			}
+			y -= style.SpaceBefore
 			y -= style.PaddingTop
 			if y-height < bottom {
 				newTextPage()
+				y -= style.SpaceBefore
+				y -= style.PaddingTop
 			}
 			backgroundTop := y + style.PaddingTop
 			y -= height
 			page.Images = append(page.Images, pdfPageImage{
 				ImageID: block.ImageID,
-				X:       margin + style.MarginLeft + style.PaddingLeft + max((blockWidth-width)/2, 0),
+				X:       contentLeft + style.MarginLeft + style.PaddingLeft + max((blockWidth-width)/2, 0),
 				Y:       y,
 				Width:   width,
 				Height:  height,
 			})
 			pageHasText = true
+			previousRenderedImage = true
 			backgroundBottom := y - style.PaddingBottom
 			addBlockDecoration(page, style, backgroundX, backgroundTop, backgroundWidth, backgroundBottom)
 			y -= style.PaddingBottom + style.SpaceAfter
@@ -287,21 +292,26 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 			}
 		}
 		addAnchor(page, block.ID)
-		if pageHasText {
-			y -= style.SpaceBefore
-		}
-		backgroundX := margin + style.MarginLeft
+		y -= style.SpaceBefore
+		backgroundX := contentLeft + style.MarginLeft
 		backgroundWidth := blockBoxWidth(contentWidth, style)
 		y -= style.PaddingTop
 		fragmentPage := page
 		fragmentTop := y + style.PaddingTop
 		lineSearchStart := 0
 		for lineIndex, line := range lines {
+			if !pageHasText || previousRenderedImage {
+				y -= style.Paragraph.FontSize
+				previousRenderedImage = false
+			}
 			if y-style.Paragraph.FontSize < bottom {
-				addBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, y)
+				if pageHasText {
+					addBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, y)
+				}
 				newTextPage()
 				fragmentPage = page
-				fragmentTop = y
+				fragmentTop = y + style.Paragraph.FontSize
+				y -= style.Paragraph.FontSize
 			}
 			remainingAfterLine := len(lines) - lineIndex - 1
 			if remainingAfterLine > 0 && remainingAfterLine < style.Widows && y-style.Paragraph.LineHeight-style.Paragraph.FontSize < bottom {
@@ -310,7 +320,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 				fragmentPage = page
 				fragmentTop = y
 			}
-			x := margin + style.MarginLeft + style.PaddingLeft + line.Indent
+			x := contentLeft + style.MarginLeft + style.PaddingLeft + line.Indent
 			available := blockWidth - line.Indent
 			switch style.Paragraph.Align {
 			case textAlignCenter:
@@ -338,6 +348,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 			})
 			y -= style.Paragraph.LineHeight
 			pageHasText = true
+			previousRenderedImage = false
 		}
 		backgroundBottom := y - style.PaddingBottom
 		addBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, backgroundBottom)
@@ -351,6 +362,36 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 		pages = pages[:len(pages)-1]
 	}
 	return pages, used, nil
+}
+
+func pdfPageContentMargins(doc skeletonDocument, styles *pdfStyleResolver, baseMargin float64) (float64, float64, float64, float64) {
+	left := baseMargin
+	right := baseMargin
+	top := baseMargin
+	bottom := baseMargin
+	if styles != nil {
+		if pageStyle, ok := styles.styles[pdfStylePage]; ok {
+			left += pageStyle.MarginLeft
+			right += pageStyle.MarginRight
+			top += pageStyle.SpaceBefore
+			bottom += pageStyle.SpaceAfter
+		}
+	}
+	left = max(left, 0)
+	right = max(right, 0)
+	top = max(top, 0)
+	bottom = max(bottom, 0)
+	if left+right > doc.PageWidth-pdfMinBlockWidth {
+		overflow := left + right - (doc.PageWidth - pdfMinBlockWidth)
+		left = max(left-overflow/2, 0)
+		right = max(right-overflow/2, 0)
+	}
+	if top+bottom > doc.PageHeight-pdfMinBlockWidth {
+		overflow := top + bottom - (doc.PageHeight - pdfMinBlockWidth)
+		top = max(top-overflow/2, 0)
+		bottom = max(bottom-overflow/2, 0)
+	}
+	return left, right, top, bottom
 }
 
 func nextBlockKeepHeight(blocks []pdfTextBlock, hyphenator paragraphHyphenator, fonts *pdfFontRegistry, styles *pdfStyleResolver, contentWidth float64, minLines int) (float64, error) {

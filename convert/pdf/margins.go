@@ -1,5 +1,7 @@
 package pdf
 
+import "strings"
+
 func (r *pdfStyleResolver) collapsedBlockStyles(blocks []pdfTextBlock) []pdfBlockResolvedStyle {
 	if r == nil {
 		r = newPDFStyleResolver(nil, nil)
@@ -8,6 +10,8 @@ func (r *pdfStyleResolver) collapsedBlockStyles(blocks []pdfTextBlock) []pdfBloc
 	for i, block := range blocks {
 		resolved[i] = r.styleForBlock(block)
 	}
+
+	r.adjustContainerMargins(blocks, resolved)
 
 	previousContent := -1
 	for i, block := range blocks {
@@ -57,6 +61,70 @@ func (r *pdfStyleResolver) collapsedBlockStyles(blocks []pdfTextBlock) []pdfBloc
 		previous = i
 	}
 	return resolved
+}
+
+func (r *pdfStyleResolver) adjustContainerMargins(blocks []pdfTextBlock, resolved []pdfBlockResolvedStyle) {
+	for i, block := range blocks {
+		if resolved[i].Hidden || block.Kind == pdfBlockPageBreak {
+			continue
+		}
+		class := pdfContainerMarginClass(block)
+		if class == "" {
+			continue
+		}
+		base := r.styleForBlock(pdfTextBlock{
+			Kind:         block.Kind,
+			ID:           block.ID,
+			Text:         block.Text,
+			Runs:         block.Runs,
+			Depth:        block.Depth,
+			StyleName:    block.StyleName,
+			StyleClasses: pdfRemoveStyleClass(block.StyleClasses, class),
+			ImageID:      block.ImageID,
+			Links:        block.Links,
+		})
+		if pdfAdjacentBlockHasContainerClass(blocks, resolved, i, -1, class) {
+			resolved[i].SpaceBefore = base.SpaceBefore
+			resolved[i].PageBreakBefore = base.PageBreakBefore
+		}
+		if pdfAdjacentBlockHasContainerClass(blocks, resolved, i, 1, class) {
+			resolved[i].SpaceAfter = base.SpaceAfter
+			resolved[i].PageBreakAfter = base.PageBreakAfter
+		}
+	}
+}
+
+func pdfAdjacentBlockHasContainerClass(blocks []pdfTextBlock, resolved []pdfBlockResolvedStyle, index int, direction int, class string) bool {
+	for i := index + direction; i >= 0 && i < len(blocks); i += direction {
+		if blocks[i].Kind == pdfBlockPageBreak {
+			return false
+		}
+		if resolved[i].Hidden {
+			continue
+		}
+		return blockHasStyleClass(blocks[i], class)
+	}
+	return false
+}
+
+func pdfContainerMarginClass(block pdfTextBlock) string {
+	for _, class := range []string{pdfStyleBodyTitle, pdfStyleChapterTitle, pdfStyleSectionTitle, pdfStyleAnnotation, pdfStyleEpigraph, pdfStyleCite} {
+		if blockHasStyleClass(block, class) {
+			return class
+		}
+	}
+	return ""
+}
+
+func pdfRemoveStyleClass(classes string, remove string) string {
+	out := make([]string, 0, len(classes))
+	for _, class := range strings.Fields(classes) {
+		if class == remove {
+			continue
+		}
+		out = append(out, class)
+	}
+	return strings.Join(out, " ")
 }
 
 func pdfNextContentBlock(blocks []pdfTextBlock, resolved []pdfBlockResolvedStyle, start int) int {

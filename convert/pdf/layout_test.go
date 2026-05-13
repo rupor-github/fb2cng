@@ -18,7 +18,7 @@ func TestLayoutPDFPagesKeepsHeadingWithNextParagraph(t *testing.T) {
 
 	pages, _, err := layoutPDFPages(skeletonDocument{
 		PageWidth:  220,
-		PageHeight: 110,
+		PageHeight: 120,
 		Title:      "Title",
 		Author:     "Author",
 		Blocks: []pdfTextBlock{
@@ -123,6 +123,75 @@ func TestLayoutPDFPagesHonorsCSSPageBreakAndHiddenStyles(t *testing.T) {
 	}
 }
 
+func TestLayoutPDFPagesAppliesRootPageMargins(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	resolver.styles[pdfStylePage] = pdfBlockResolvedStyle{MarginLeft: -6, MarginRight: -4, SpaceBefore: 5, SpaceAfter: -3}
+	paragraph := resolver.styles[pdfStyleParagraph]
+	paragraph.Paragraph.FirstLineIndent = 0
+	resolver.styles[pdfStyleParagraph] = paragraph
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  220,
+		PageHeight: 180,
+		Title:      "Title",
+		Author:     "Author",
+		Styles:     resolver,
+		Blocks: []pdfTextBlock{
+			{Kind: pdfBlockParagraph, Text: "root margins"},
+		},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 || len(pages[1].Lines) != 1 {
+		t.Fatalf("layoutPDFPages() pages = %#v, want one body line", pages)
+	}
+	line := pages[1].Lines[0]
+	if line.X != 18 || line.Y != 140.5 {
+		t.Fatalf("line position = %v/%v, want 18/140.5", line.X, line.Y)
+	}
+}
+
+func TestLayoutPDFPagesAppliesFirstBlockTopMargin(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	topGap := resolver.styles[pdfStyleParagraph]
+	topGap.Paragraph.FirstLineIndent = 0
+	topGap.SpaceBefore = 7
+	topGap.SpaceAfter = 0
+	resolver.styles["top-gap"] = topGap
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  220,
+		PageHeight: 180,
+		Title:      "Title",
+		Author:     "Author",
+		Styles:     resolver,
+		Blocks: []pdfTextBlock{{
+			Kind:         pdfBlockParagraph,
+			Text:         "top margin",
+			StyleClasses: "top-gap",
+		}},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 || len(pages[1].Lines) != 1 {
+		t.Fatalf("layoutPDFPages() pages = %#v, want one body line", pages)
+	}
+	line := pages[1].Lines[0]
+	if line.X != 24 || line.Y != 138.5 {
+		t.Fatalf("line position = %v/%v, want 24/138.5", line.X, line.Y)
+	}
+}
+
 func TestLayoutPDFPagesAppliesPadding(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {
@@ -162,11 +231,11 @@ func TestLayoutPDFPagesAppliesPadding(t *testing.T) {
 	if line.X != 31 { // 24pt page margin + 7pt left padding.
 		t.Fatalf("line X = %v, want 31", line.X)
 	}
-	if line.Y != 151 { // 180pt page height - 24pt page margin - 5pt top padding.
-		t.Fatalf("line Y = %v, want 151", line.Y)
+	if line.Y != 140.5 { // 180pt page height - 24pt page margin - 5pt top padding - 10.5pt font size.
+		t.Fatalf("line Y = %v, want 140.5", line.Y)
 	}
 	background := pages[1].Backgrounds[0]
-	if background.X != 24 || background.Y != 137.6 || background.Width != 172 || background.Height < 18.399 || background.Height > 18.401 || background.Color.String() != "#0000ff" {
+	if background.X != 24 || background.Y != 127.1 || background.Width != 172 || background.Height < 28.899 || background.Height > 28.901 || background.Color.String() != "#0000ff" {
 		t.Fatalf("background = %#v, want padded block background", background)
 	}
 	border := pages[1].Borders[0]
@@ -384,6 +453,81 @@ func TestLayoutPDFPagesRendersImageOnlyHeadings(t *testing.T) {
 	}
 	if got, want := pages[1].Images[0].Width, 520.0-48.0; math.Abs(got-want) > 0.001 {
 		t.Fatalf("heading image width = %v, want content width %v", got, want)
+	}
+}
+
+func TestLayoutPDFPagesKeepsGapBetweenTitleVignetteAndHeadingImage(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	vignette := &fb2.BookImage{}
+	vignette.Dim.Width = 120
+	vignette.Dim.Height = 10
+	heading := &fb2.BookImage{}
+	heading.Dim.Width = 380
+	heading.Dim.Height = 30
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:      520,
+		PageHeight:     220,
+		ScreenWidthPx:  1200,
+		ScreenHeightPx: 1600,
+		Title:          "Title",
+		Author:         "Author",
+		Images:         fb2.BookImages{"vignette": vignette, "heading": heading},
+		Blocks: []pdfTextBlock{
+			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses("vignette", "vignette-chapter-title-top", pdfStyleChapterTitle), ImageID: "vignette"},
+			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses(pdfStyleChapterTitleHeader, pdfStyleChapterTitle, pdfStyleHeadingImage), ImageID: "heading"},
+		},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 || len(pages[1].Images) != 2 {
+		t.Fatalf("layout pages images = %#v, want title vignette plus heading image", pages)
+	}
+	gap := pages[1].Images[0].Y - (pages[1].Images[1].Y + pages[1].Images[1].Height)
+	if math.Abs(gap-pdfHeadingSpaceBefore) > 0.001 {
+		t.Fatalf("title image gap = %v, want %v", gap, pdfHeadingSpaceBefore)
+	}
+}
+
+func TestLayoutPDFPagesKeepsGapAfterImageOnlySubtitle(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	img := &fb2.BookImage{}
+	img.Dim.Width = 380
+	img.Dim.Height = 30
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:      520,
+		PageHeight:     180,
+		ScreenWidthPx:  1200,
+		ScreenHeightPx: 1600,
+		Title:          "Title",
+		Author:         "Author",
+		Images:         fb2.BookImages{"subtitle": img},
+		Blocks: []pdfTextBlock{
+			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: pdfStyleSubtitle, ImageID: "subtitle"},
+			{Kind: pdfBlockParagraph, Text: "Body after subtitle image."},
+		},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 || len(pages[1].Images) != 1 || len(pages[1].Lines) == 0 {
+		t.Fatalf("layout pages = %#v, want image plus following text", pages)
+	}
+	wantWidth := (520.0 - 48.0) * 380.0 / pdfKP3ContentWidthPx
+	if got := pages[1].Images[0].Width; math.Abs(got-wantWidth) > 0.001 {
+		t.Fatalf("subtitle image width = %v, want KP3-style width %v", got, wantWidth)
+	}
+	gap := pages[1].Images[0].Y - pages[1].Lines[0].Y
+	if math.Abs(gap-(pdfSubtitleSpaceAfter+pdfBaseFontSize)) > 0.001 {
+		t.Fatalf("subtitle image gap = %v, want %v", gap, pdfSubtitleSpaceAfter+pdfBaseFontSize)
 	}
 }
 

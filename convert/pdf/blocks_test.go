@@ -74,6 +74,9 @@ func TestTitleBlocksPreserveInlineLinkFormatting(t *testing.T) {
 	if len(blocks) != 1 {
 		t.Fatalf("title blocks = %#v, want one heading", blocks)
 	}
+	if blocks[0].StyleName != pdfStyleChapterTitleHeader || blocks[0].StyleClasses != pdfStyleChapterTitleHeader+"-first" {
+		t.Fatalf("title block style = %q / %q, want chapter title first-line styling", blocks[0].StyleName, blocks[0].StyleClasses)
+	}
 	if len(blocks[0].Links) != 1 || blocks[0].Links[0].Href != "#note" {
 		t.Fatalf("title block links = %#v, want note link", blocks[0].Links)
 	}
@@ -172,14 +175,62 @@ func TestAppendParagraphBlockWithClassesConvertsImageOnlyParagraphsToImageBlocks
 	}
 }
 
-func TestAppendParagraphBlockWithClassesConvertsImageOnlyHeadingsToImageBlocks(t *testing.T) {
+func TestAppendParagraphBlockWithClassesConvertsImageOnlySubtitlesToImageBlocks(t *testing.T) {
 	paragraph := &fb2.Paragraph{ID: "h", Text: []fb2.InlineSegment{{Kind: fb2.InlineImageSegment, Image: &fb2.InlineImage{Href: "#heading.png", Alt: "Heading"}}}}
 	var blocks []pdfTextBlock
 
 	appendParagraphBlockWithClasses(&blocks, pdfBlockSubtitle, paragraph, 1, "custom")
 
-	if len(blocks) != 1 || blocks[0].Kind != pdfBlockImage || blocks[0].ImageID != "heading.png" || blocks[0].ID != "h" || blocks[0].Text != "Heading" || blocks[0].StyleClasses != "custom "+pdfStyleHeadingImage {
-		t.Fatalf("blocks = %#v, want image-only heading block", blocks)
+	if len(blocks) != 1 || blocks[0].Kind != pdfBlockImage || blocks[0].ImageID != "heading.png" || blocks[0].ID != "h" || blocks[0].Text != "Heading" || blocks[0].StyleClasses != pdfStyleSubtitle+" custom" {
+		t.Fatalf("blocks = %#v, want image-only subtitle block without force-upscale class", blocks)
+	}
+}
+
+func TestAppendTitleBlocksWithIDAndClassesConvertsImageOnlyTitlesToStyledImageBlocks(t *testing.T) {
+	title := &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineImageSegment, Image: &fb2.InlineImage{Href: "#title.png", Alt: "Title"}}}}}}}
+	var blocks []pdfTextBlock
+
+	appendTitleBlocksWithIDAndClasses(&blocks, title, 1, "title-id", pdfStyleChapterTitle)
+
+	if len(blocks) != 1 || blocks[0].Kind != pdfBlockImage || blocks[0].ImageID != "title.png" || blocks[0].ID != "title-id" || blocks[0].Text != "Title" || blocks[0].StyleClasses != pdfStyleChapterTitleHeader+" "+pdfStyleChapterTitle+" "+pdfStyleChapterTitleHeader+"-first "+pdfStyleHeadingImage {
+		t.Fatalf("blocks = %#v, want styled image-only title block", blocks)
+	}
+}
+
+func TestAppendTitleBlocksWithIDHeaderAndClassesUsesBodyTitleHeaderAndPositionClasses(t *testing.T) {
+	title := &fb2.Title{Items: []fb2.TitleItem{
+		{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Line 1"}}}},
+		{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Line 2"}}}},
+	}}
+	var blocks []pdfTextBlock
+
+	appendTitleBlocksWithIDHeaderAndClasses(&blocks, title, 1, "body-title", pdfStyleBodyTitleHeader, pdfStyleBodyTitle)
+
+	if len(blocks) != 2 {
+		t.Fatalf("blocks = %#v, want 2 title blocks", blocks)
+	}
+	if blocks[0].StyleName != pdfStyleBodyTitleHeader || blocks[0].StyleClasses != pdfStyleBodyTitle+" "+pdfStyleBodyTitleHeader+"-first" {
+		t.Fatalf("first title block = %#v, want body-title-header first", blocks[0])
+	}
+	if blocks[1].StyleName != pdfStyleBodyTitleHeader || blocks[1].StyleClasses != pdfStyleBodyTitle+" "+pdfStyleBodyTitleHeader+"-next" {
+		t.Fatalf("second title block = %#v, want body-title-header next", blocks[1])
+	}
+}
+
+func TestAppendTitleBlocksWithIDHeaderAndClassesMarksTextAfterImage(t *testing.T) {
+	title := &fb2.Title{Items: []fb2.TitleItem{
+		{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineImageSegment, Image: &fb2.InlineImage{Href: "#title.png", Alt: "Title"}}}}},
+		{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Caption"}}}},
+	}}
+	var blocks []pdfTextBlock
+
+	appendTitleBlocksWithIDHeaderAndClasses(&blocks, title, 1, "title-id", pdfStyleChapterTitleHeader, pdfStyleChapterTitle)
+
+	if len(blocks) != 2 {
+		t.Fatalf("blocks = %#v, want image plus following text", blocks)
+	}
+	if blocks[1].StyleClasses != pdfStyleChapterTitle+" "+pdfStyleChapterTitleHeader+"-next "+pdfStyleTitleAfterImage {
+		t.Fatalf("text-after-image classes = %q, want title-after-image marker", blocks[1].StyleClasses)
 	}
 }
 
@@ -454,10 +505,10 @@ func TestCollectTextBlocksIncludesVignettes(t *testing.T) {
 		}
 	}
 	want := []string{
-		"book-top:vignette vignette-book-title-top",
-		"book-bottom:vignette vignette-book-title-bottom",
-		"chapter-top:vignette vignette-chapter-title-top",
-		"chapter-bottom:vignette vignette-chapter-title-bottom",
+		"book-top:vignette vignette-book-title-top body-title",
+		"book-bottom:vignette vignette-book-title-bottom body-title",
+		"chapter-top:vignette vignette-chapter-title-top chapter-title",
+		"chapter-bottom:vignette vignette-chapter-title-bottom chapter-title",
 		"chapter-end:vignette vignette-chapter-end",
 	}
 	if len(got) != len(want) {

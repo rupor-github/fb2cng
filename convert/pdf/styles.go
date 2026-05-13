@@ -17,30 +17,37 @@ const (
 	pdfKP3ContentWidthPx = 512.0
 	pdfMinBlockWidth     = 12.0
 
-	pdfBaseFontSize            = 10.5
-	pdfBaseLineHeight          = 13.4
-	pdfBodyIndent              = 14.0
-	pdfParagraphSpaceAfter     = pdfBaseFontSize * 0.3
-	pdfHeadingBaseFontSize     = 16.0
-	pdfHeadingMinFontSize      = 11.0
-	pdfHeadingLineHeightFactor = 1.25
-	pdfHeadingSpaceBefore      = 10.0
-	pdfHeadingSpaceAfter       = 8.0
-	pdfSubtitleFontSize        = 11.0
-	pdfSubtitleLineHeight      = 14.0
-	pdfSubtitleSpaceBefore     = 6.0
-	pdfSubtitleSpaceAfter      = 5.0
-	pdfVerseLineHeight         = 13.2
-	pdfVerseSpaceAfter         = 2.0
-	pdfTextAuthorFontSize      = 10.0
-	pdfTextAuthorLineHeight    = 12.5
-	pdfTextAuthorSpaceAfter    = 4.0
-	pdfTOCIndentPerDepth       = 12.0
-	pdfTOCSpaceAfter           = 1.5
-	pdfDefaultKeepLines        = 2
-	pdfSingleKeepLine          = 1
+	pdfBaseFontSize               = 10.5
+	pdfBaseLineHeight             = 13.4
+	pdfBodyIndent                 = 14.0
+	pdfParagraphSpaceAfter        = pdfBaseFontSize * 0.3
+	pdfHeadingBaseFontSize        = 16.0
+	pdfHeadingMinFontSize         = 11.0
+	pdfHeadingLineHeightFactor    = 1.25
+	pdfHeadingSpaceBefore         = 10.0
+	pdfHeadingSpaceAfter          = 8.0
+	pdfTitleFirstSpaceBefore      = pdfBaseLineHeight * 1.7
+	pdfTitleAfterImageSpaceBefore = pdfBaseLineHeight * 1.5
+	pdfSubtitleFontSize           = 11.0
+	pdfSubtitleLineHeight         = 14.0
+	pdfSubtitleSpaceBefore        = 6.0
+	pdfSubtitleSpaceAfter         = 5.0
+	pdfVerseLineHeight            = 13.2
+	pdfVerseSpaceAfter            = 2.0
+	pdfTextAuthorFontSize         = 10.0
+	pdfTextAuthorLineHeight       = 12.5
+	pdfTextAuthorSpaceAfter       = 4.0
+	pdfTOCIndentPerDepth          = 12.0
+	pdfTOCSpaceAfter              = 1.5
+	pdfDefaultKeepLines           = 2
+	pdfSingleKeepLine             = 1
 
 	pdfStyleParagraph          = "p"
+	pdfStyleBodyTitle          = "body-title"
+	pdfStyleChapterTitle       = "chapter-title"
+	pdfStyleSectionTitle       = "section-title"
+	pdfStyleSectionTitleH2     = "section-title-h2"
+	pdfStyleBodyTitleHeader    = "body-title-header"
 	pdfStyleChapterTitleHeader = "chapter-title-header"
 	pdfStyleSectionTitleHeader = "section-title-header"
 	pdfStyleSubtitle           = "section-subtitle"
@@ -67,12 +74,16 @@ const (
 	pdfStyleLinkInternal       = "link-internal"
 	pdfStyleLinkFootnote       = "link-footnote"
 	pdfStyleLinkTOC            = "link-toc"
+	pdfStyleTitleAfterImage    = "title-after-image"
+	pdfStylePage               = "__page__"
 )
 
 type pdfBlockResolvedStyle struct {
 	Paragraph         paragraphStyle
 	SpaceBefore       float64
+	HasSpaceBefore    bool
 	SpaceAfter        float64
+	HasSpaceAfter     bool
 	MarginLeft        float64
 	MarginRight       float64
 	PaddingTop        float64
@@ -205,12 +216,16 @@ func newPDFStyleResolver(book *fb2.FictionBook, log *zap.Logger, tracers ...*pdf
 
 func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 	styles := map[string]pdfBlockResolvedStyle{
+		pdfStylePage: {
+			Paragraph: paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, Hyphenation: paragraphHyphenationAuto},
+		},
 		pdfStyleParagraph: {
 			Paragraph:  paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, FirstLineIndent: pdfBodyIndent, Align: textAlignJustify, Hyphenation: paragraphHyphenationAuto},
 			SpaceAfter: pdfParagraphSpaceAfter,
 			Orphans:    pdfDefaultKeepLines,
 			Widows:     pdfDefaultKeepLines,
 		},
+		pdfStyleBodyTitleHeader:    headingPDFStyle(1),
 		pdfStyleChapterTitleHeader: headingPDFStyle(1),
 		pdfStyleSectionTitleHeader: headingPDFStyle(2),
 		pdfStyleSubtitle: {
@@ -253,6 +268,16 @@ func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 			Paragraph: paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, Hyphenation: paragraphHyphenationAuto},
 		},
 	}
+	styles[pdfStyleBodyTitleHeader+"-first"] = titleHeaderFirstVariantPDFStyle(styles[pdfStyleBodyTitleHeader])
+	styles[pdfStyleBodyTitleHeader+"-next"] = titleHeaderNextVariantPDFStyle(styles[pdfStyleBodyTitleHeader])
+	styles[pdfStyleChapterTitleHeader+"-first"] = titleHeaderFirstVariantPDFStyle(styles[pdfStyleChapterTitleHeader])
+	styles[pdfStyleChapterTitleHeader+"-next"] = titleHeaderNextVariantPDFStyle(styles[pdfStyleChapterTitleHeader])
+	styles[pdfStyleSectionTitleHeader+"-first"] = titleHeaderFirstVariantPDFStyle(styles[pdfStyleSectionTitleHeader])
+	styles[pdfStyleSectionTitleHeader+"-next"] = titleHeaderNextVariantPDFStyle(styles[pdfStyleSectionTitleHeader])
+	titleAfterImageStyle := styles[pdfStyleParagraph]
+	titleAfterImageStyle.SpaceBefore = pdfTitleAfterImageSpaceBefore
+	styles[pdfStyleTitleAfterImage] = titleAfterImageStyle
+
 	linkStyle := styles[pdfStyleParagraph]
 	linkStyle.Paragraph.Underline = true
 	styles[pdfStyleLinkExternal] = linkStyle
@@ -285,6 +310,22 @@ func headingPDFStyle(depth int) pdfBlockResolvedStyle {
 		KeepTogether:      true,
 		KeepWithNextLines: pdfDefaultKeepLines,
 	}
+}
+
+func titleHeaderFirstVariantPDFStyle(base pdfBlockResolvedStyle) pdfBlockResolvedStyle {
+	base.SpaceBefore = pdfTitleFirstSpaceBefore
+	base.HasSpaceBefore = true
+	base.SpaceAfter = 0
+	base.HasSpaceAfter = true
+	return base
+}
+
+func titleHeaderNextVariantPDFStyle(base pdfBlockResolvedStyle) pdfBlockResolvedStyle {
+	base.SpaceBefore = 0
+	base.HasSpaceBefore = true
+	base.SpaceAfter = 0
+	base.HasSpaceAfter = true
+	return base
 }
 
 func (r *pdfStyleResolver) styleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
@@ -350,10 +391,10 @@ func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfB
 	if override.Paragraph.Hyphenation != fallback.Paragraph.Hyphenation {
 		base.Paragraph.Hyphenation = override.Paragraph.Hyphenation
 	}
-	if override.SpaceBefore != fallback.SpaceBefore {
+	if override.HasSpaceBefore || override.SpaceBefore != fallback.SpaceBefore {
 		base.SpaceBefore = override.SpaceBefore
 	}
-	if override.SpaceAfter != fallback.SpaceAfter {
+	if override.HasSpaceAfter || override.SpaceAfter != fallback.SpaceAfter {
 		base.SpaceAfter = override.SpaceAfter
 	}
 	if override.MarginLeft != fallback.MarginLeft {
@@ -534,6 +575,8 @@ func pdfSelectorStyleNames(sel css.Selector) []string {
 		return []string{sel.Class}
 	}
 	switch strings.ToLower(sel.Element) {
+	case "html", "body":
+		return []string{pdfStylePage}
 	case "p":
 		return []string{pdfStyleParagraph}
 	case "h1":
@@ -662,10 +705,12 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 		case "margin-top":
 			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
 				style.SpaceBefore = points
+				style.HasSpaceBefore = true
 			}
 		case "margin-bottom":
 			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
 				style.SpaceAfter = points
+				style.HasSpaceAfter = true
 			}
 		case "margin-left":
 			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
@@ -829,7 +874,9 @@ func applyPDFMarginShorthand(style *pdfBlockResolvedStyle, value css.Value) {
 		return
 	}
 	style.SpaceBefore = top
+	style.HasSpaceBefore = true
 	style.SpaceAfter = bottom
+	style.HasSpaceAfter = true
 	style.MarginLeft = left
 	style.MarginRight = right
 }

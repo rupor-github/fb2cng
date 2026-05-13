@@ -278,11 +278,11 @@ func appendBodyIntroBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, body *
 		appendImageBlock(blocks, body.Image, "")
 	}
 	if body.Title != nil && body.Main() {
-		appendVignetteBlock(blocks, book, common.VignettePosBookTitleTop)
+		appendVignetteBlockWithClasses(blocks, book, common.VignettePosBookTitleTop, pdfStyleBodyTitle)
 	}
-	appendTitleBlocks(blocks, body.Title, 1)
+	appendTitleBlocksWithIDHeaderAndClasses(blocks, body.Title, 1, "", pdfStyleBodyTitleHeader, pdfStyleBodyTitle)
 	if body.Title != nil && body.Main() {
-		appendVignetteBlock(blocks, book, common.VignettePosBookTitleBottom)
+		appendVignetteBlockWithClasses(blocks, book, common.VignettePosBookTitleBottom, pdfStyleBodyTitle)
 	}
 	for i := range body.Epigraphs {
 		appendEpigraphBlocks(blocks, &body.Epigraphs[i])
@@ -303,12 +303,14 @@ func appendSectionBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, section 
 	if section == nil {
 		return
 	}
+	titleClasses := sectionTitleContainerClasses(depth)
+	headerStyle := sectionTitleHeaderStyleName(depth)
 	if section.Title != nil {
-		appendTitleVignetteBlock(blocks, book, depth, true)
+		appendTitleVignetteBlock(blocks, book, depth, true, titleClasses)
 	}
-	appendTitleBlocksWithID(blocks, section.Title, depth, section.ID)
+	appendTitleBlocksWithIDHeaderAndClasses(blocks, section.Title, depth, section.ID, headerStyle, titleClasses)
 	if section.Title != nil {
-		appendTitleVignetteBlock(blocks, book, depth, false)
+		appendTitleVignetteBlock(blocks, book, depth, false, titleClasses)
 	}
 	for i := range section.Epigraphs {
 		appendEpigraphBlocks(blocks, &section.Epigraphs[i])
@@ -326,37 +328,55 @@ func appendSectionBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, section 
 }
 
 func appendTitleBlocks(blocks *[]pdfTextBlock, title *fb2.Title, depth int) {
-	appendTitleBlocksWithID(blocks, title, depth, "")
+	appendTitleBlocksWithIDHeaderAndClasses(blocks, title, depth, "", pdfHeadingStyleName(depth), "")
 }
 
 func appendTitleBlocksWithID(blocks *[]pdfTextBlock, title *fb2.Title, depth int, id string) {
+	appendTitleBlocksWithIDHeaderAndClasses(blocks, title, depth, id, pdfHeadingStyleName(depth), "")
+}
+
+func appendTitleBlocksWithIDAndClasses(blocks *[]pdfTextBlock, title *fb2.Title, depth int, id string, styleClasses string) {
+	appendTitleBlocksWithIDHeaderAndClasses(blocks, title, depth, id, pdfHeadingStyleName(depth), styleClasses)
+}
+
+func appendTitleBlocksWithIDHeaderAndClasses(blocks *[]pdfTextBlock, title *fb2.Title, depth int, id string, headerStyleName string, styleClasses string) {
 	if title == nil {
 		return
 	}
 	anchorID := id
+	firstParagraph := true
+	prevWasImageOnlyHeadingParagraph := false
 	for i := range title.Items {
 		item := &title.Items[i]
 		if item.EmptyLine {
-			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine})
+			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine, StyleClasses: joinStyleClasses(styleClasses, headerStyleName+"-emptyline")})
+			prevWasImageOnlyHeadingParagraph = false
 			continue
 		}
 		if item.Paragraph == nil {
 			continue
 		}
+		positionClass := titleParagraphPositionStyleClass(headerStyleName, firstParagraph)
+		firstParagraph = false
 		if imageID, alt, ok := paragraphImageOnly(item.Paragraph); ok {
-			appendImageIDBlock(blocks, imageID, anchorID, alt, joinStyleClasses(pdfStyleHeadingImage))
+			appendImageIDBlock(blocks, imageID, anchorID, alt, joinStyleClasses(headerStyleName, item.Paragraph.Style, styleClasses, positionClass, pdfStyleHeadingImage))
 			anchorID = ""
+			prevWasImageOnlyHeadingParagraph = true
 			continue
 		}
 		text, links := paragraphTextAndLinks(item.Paragraph)
 		runs := paragraphInlineRuns(item.Paragraph)
-		classes := ""
+		classes := joinStyleClasses(item.Paragraph.Style, styleClasses, positionClass)
+		if prevWasImageOnlyHeadingParagraph {
+			classes = joinStyleClasses(classes, pdfStyleTitleAfterImage)
+		}
 		if paragraphIsCodeBlock(item.Paragraph) {
-			classes = pdfStyleCode
+			classes = joinStyleClasses(classes, pdfStyleCode)
 		}
 		if text != "" || inlineRunsRenderable(runs) {
-			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockHeading, ID: anchorID, Text: text, Runs: runs, Depth: depth, StyleName: pdfHeadingStyleName(depth), StyleClasses: classes, Links: links})
+			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockHeading, ID: anchorID, Text: text, Runs: runs, Depth: depth, StyleName: headerStyleName, StyleClasses: classes, Links: links})
 			anchorID = ""
+			prevWasImageOnlyHeadingParagraph = false
 		}
 	}
 }
@@ -377,9 +397,9 @@ func appendFlowItemBlock(blocks *[]pdfTextBlock, book *fb2.FictionBook, item *fb
 	case fb2.FlowSubtitle:
 		appendParagraphBlockWithClasses(blocks, pdfBlockSubtitle, item.Subtitle, depth, subtitleStyleClasses(styleClasses))
 	case fb2.FlowEmptyLine:
-		*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine})
+		*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine, StyleClasses: strings.TrimSpace(styleClasses)})
 	case fb2.FlowImage:
-		appendImageBlock(blocks, item.Image, "")
+		appendImageBlockWithClasses(blocks, item.Image, "", styleClasses)
 	case fb2.FlowSection:
 		if item.Section != nil && splitSections[item.Section.ID] {
 			return
@@ -400,6 +420,10 @@ func appendFlowItemBlock(blocks *[]pdfTextBlock, book *fb2.FictionBook, item *fb
 }
 
 func appendImageBlock(blocks *[]pdfTextBlock, image *fb2.Image, fallbackID string) {
+	appendImageBlockWithClasses(blocks, image, fallbackID, "")
+}
+
+func appendImageBlockWithClasses(blocks *[]pdfTextBlock, image *fb2.Image, fallbackID string, styleClasses string) {
 	if image == nil {
 		return
 	}
@@ -411,7 +435,7 @@ func appendImageBlock(blocks *[]pdfTextBlock, image *fb2.Image, fallbackID strin
 	if anchorID == "" {
 		anchorID = fallbackID
 	}
-	appendImageIDBlock(blocks, imageID, anchorID, strings.TrimSpace(image.Alt), "")
+	appendImageIDBlock(blocks, imageID, anchorID, strings.TrimSpace(image.Alt), strings.TrimSpace(styleClasses))
 }
 
 func appendImageIDBlock(blocks *[]pdfTextBlock, imageID string, anchorID string, alt string, styleClasses string) {
@@ -428,20 +452,20 @@ func appendImageIDBlock(blocks *[]pdfTextBlock, imageID string, anchorID string,
 	})
 }
 
-func appendTitleVignetteBlock(blocks *[]pdfTextBlock, book *fb2.FictionBook, depth int, top bool) {
+func appendTitleVignetteBlock(blocks *[]pdfTextBlock, book *fb2.FictionBook, depth int, top bool, styleClasses string) {
 	if depth == 1 {
 		if top {
-			appendVignetteBlock(blocks, book, common.VignettePosChapterTitleTop)
+			appendVignetteBlockWithClasses(blocks, book, common.VignettePosChapterTitleTop, styleClasses)
 			return
 		}
-		appendVignetteBlock(blocks, book, common.VignettePosChapterTitleBottom)
+		appendVignetteBlockWithClasses(blocks, book, common.VignettePosChapterTitleBottom, styleClasses)
 		return
 	}
 	if top {
-		appendVignetteBlock(blocks, book, common.VignettePosSectionTitleTop)
+		appendVignetteBlockWithClasses(blocks, book, common.VignettePosSectionTitleTop, styleClasses)
 		return
 	}
-	appendVignetteBlock(blocks, book, common.VignettePosSectionTitleBottom)
+	appendVignetteBlockWithClasses(blocks, book, common.VignettePosSectionTitleBottom, styleClasses)
 }
 
 func appendEndVignetteBlock(blocks *[]pdfTextBlock, book *fb2.FictionBook, depth int) {
@@ -452,7 +476,35 @@ func appendEndVignetteBlock(blocks *[]pdfTextBlock, book *fb2.FictionBook, depth
 	appendVignetteBlock(blocks, book, common.VignettePosSectionEnd)
 }
 
+func sectionTitleContainerClasses(depth int) string {
+	if depth <= 1 {
+		return pdfStyleChapterTitle
+	}
+	if depth == 2 {
+		return joinStyleClasses(pdfStyleSectionTitle, pdfStyleSectionTitleH2)
+	}
+	return pdfStyleSectionTitle
+}
+
+func sectionTitleHeaderStyleName(depth int) string {
+	if depth <= 1 {
+		return pdfStyleChapterTitleHeader
+	}
+	return pdfStyleSectionTitleHeader
+}
+
+func titleParagraphPositionStyleClass(headerStyleName string, first bool) string {
+	if first {
+		return headerStyleName + "-first"
+	}
+	return headerStyleName + "-next"
+}
+
 func appendVignetteBlock(blocks *[]pdfTextBlock, book *fb2.FictionBook, position common.VignettePos) {
+	appendVignetteBlockWithClasses(blocks, book, position, "")
+}
+
+func appendVignetteBlockWithClasses(blocks *[]pdfTextBlock, book *fb2.FictionBook, position common.VignettePos, styleClasses string) {
 	if book == nil || !book.IsVignetteEnabled(position) {
 		return
 	}
@@ -460,7 +512,7 @@ func appendVignetteBlock(blocks *[]pdfTextBlock, book *fb2.FictionBook, position
 	if imageID == "" {
 		return
 	}
-	appendImageIDBlock(blocks, imageID, "", "", joinStyleClasses("vignette", "vignette-"+position.String()))
+	appendImageIDBlock(blocks, imageID, "", "", joinStyleClasses("vignette", "vignette-"+position.String(), styleClasses))
 }
 
 func isVignetteBlock(block pdfTextBlock) bool {
@@ -490,8 +542,10 @@ func appendParagraphBlockWithClasses(blocks *[]pdfTextBlock, kind pdfBlockKind, 
 	}
 	if imageID, alt, ok := paragraphImageOnly(paragraph); ok {
 		imageStyleClasses := strings.TrimSpace(paragraph.Style)
-		if kind == pdfBlockHeading || kind == pdfBlockSubtitle {
-			imageStyleClasses = joinStyleClasses(styleClasses, imageStyleClasses, pdfStyleHeadingImage)
+		if kind == pdfBlockHeading {
+			imageStyleClasses = joinStyleClasses(pdfHeadingStyleName(depth), imageStyleClasses, styleClasses, pdfStyleHeadingImage)
+		} else if kind == pdfBlockSubtitle {
+			imageStyleClasses = joinStyleClasses(pdfStyleSubtitle, imageStyleClasses, styleClasses)
 		}
 		appendImageIDBlock(blocks, imageID, paragraph.ID, alt, imageStyleClasses)
 		return

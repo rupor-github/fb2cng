@@ -149,6 +149,96 @@ func TestPDFStyleResolverAppliesParagraphStyleClasses(t *testing.T) {
 	}
 }
 
+func TestPDFStyleResolverAppliesRootPageMargins(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `html { margin: 0 -10pt 0 -8pt; }`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	page := resolver.styles[pdfStylePage]
+	if page.MarginLeft != -8 || page.MarginRight != -10 || page.SpaceBefore != 0 || page.SpaceAfter != 0 {
+		t.Fatalf("page margins = top %v right %v bottom %v left %v, want 0/-10/0/-8", page.SpaceBefore, page.MarginRight, page.SpaceAfter, page.MarginLeft)
+	}
+}
+
+func TestPDFStyleResolverTitleNextVariantClearsHeadingMargins(t *testing.T) {
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+
+	style := resolver.styleForBlock(pdfTextBlock{
+		Kind:         pdfBlockHeading,
+		StyleName:    pdfStyleChapterTitleHeader,
+		StyleClasses: pdfStyleChapterTitleHeader + "-next",
+	})
+
+	if style.SpaceBefore != 0 || style.SpaceAfter != 0 {
+		t.Fatalf("title-next margins = %v/%v, want 0/0", style.SpaceBefore, style.SpaceAfter)
+	}
+}
+
+func TestPDFStyleResolverTitleAfterImageKeepsHeadingTextAlignment(t *testing.T) {
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+
+	style := resolver.styleForBlock(pdfTextBlock{
+		Kind:         pdfBlockHeading,
+		StyleName:    pdfStyleChapterTitleHeader,
+		StyleClasses: joinStyleClasses(pdfStyleChapterTitleHeader+"-next", pdfStyleTitleAfterImage),
+	})
+
+	if style.Paragraph.Align != textAlignCenter {
+		t.Fatalf("title-after-image alignment = %v, want heading center alignment", style.Paragraph.Align)
+	}
+	if style.Paragraph.FontSize != resolver.styles[pdfStyleChapterTitleHeader].Paragraph.FontSize {
+		t.Fatalf("title-after-image font size = %v, want heading font size", style.Paragraph.FontSize)
+	}
+	if style.SpaceBefore != pdfTitleAfterImageSpaceBefore || style.SpaceAfter != 0 {
+		t.Fatalf("title-after-image margins = %v/%v, want %v/0", style.SpaceBefore, style.SpaceAfter, pdfTitleAfterImageSpaceBefore)
+	}
+}
+
+func TestPDFCollapsedBlockStylesApplyContainerVerticalMarginsOnlyAtEdges(t *testing.T) {
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceAfter: 1}
+	resolver.styles[pdfStyleAnnotation] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceBefore: 20, SpaceAfter: 10, MarginLeft: 5, MarginRight: 7}
+
+	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
+		{Kind: pdfBlockParagraph, Text: "one", StyleClasses: pdfStyleAnnotation},
+		{Kind: pdfBlockParagraph, Text: "two", StyleClasses: pdfStyleAnnotation},
+		{Kind: pdfBlockParagraph, Text: "outside"},
+	})
+	if styles[0].SpaceBefore != 20 || styles[0].SpaceAfter != 0 {
+		t.Fatalf("first annotation margins = %v/%v, want 20/0 after collapse", styles[0].SpaceBefore, styles[0].SpaceAfter)
+	}
+	if styles[1].SpaceBefore != 1 || styles[1].SpaceAfter != 0 {
+		t.Fatalf("last annotation margins = %v/%v, want collapsed base paragraph gap/top and zero after collapse", styles[1].SpaceBefore, styles[1].SpaceAfter)
+	}
+	if styles[2].SpaceBefore != 10 {
+		t.Fatalf("following block margin-top = %v, want collapsed annotation bottom", styles[2].SpaceBefore)
+	}
+	if styles[0].MarginLeft != 5 || styles[1].MarginRight != 7 {
+		t.Fatalf("container horizontal margins were not preserved: %#v %#v", styles[0], styles[1])
+	}
+}
+
+func TestPDFCollapsedBlockStylesKeepContainerThroughEmptyLine(t *testing.T) {
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}}
+	resolver.styles[pdfStyleEmptyLine] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceBefore: 10, SpaceAfter: 10}
+	resolver.styles[pdfStyleAnnotation] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceBefore: 20, SpaceAfter: 10, MarginLeft: 5}
+
+	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
+		{Kind: pdfBlockParagraph, Text: "one", StyleClasses: pdfStyleAnnotation},
+		{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine, StyleClasses: pdfStyleAnnotation},
+		{Kind: pdfBlockParagraph, Text: "two", StyleClasses: pdfStyleAnnotation},
+	})
+	if !styles[1].Hidden {
+		t.Fatalf("empty line hidden = false, want hidden")
+	}
+	if styles[0].SpaceBefore != 20 || styles[0].SpaceAfter != 0 || styles[2].SpaceBefore != 6 || styles[2].SpaceAfter != 10 {
+		t.Fatalf("container empty-line margins = first %v/%v second %v/%v, want 20/0 6/10", styles[0].SpaceBefore, styles[0].SpaceAfter, styles[2].SpaceBefore, styles[2].SpaceAfter)
+	}
+}
+
 func TestPDFCollapsedBlockStylesCollapseAdjacentMargins(t *testing.T) {
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 	resolver.styles["before"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceAfter: 4}
