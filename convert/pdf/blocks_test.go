@@ -244,8 +244,28 @@ func TestAppendTitleBlocksWithIDHeaderAndClassesUsesBodyTitleHeaderAndPositionCl
 	if blocks[0].StyleName != pdfStyleBodyTitleHeader || blocks[0].StyleClasses != pdfStyleBodyTitle+" "+pdfStyleBodyTitleHeader+"-first" {
 		t.Fatalf("first title block = %#v, want body-title-header first", blocks[0])
 	}
+	if !blocks[0].StripRootHorizontalMargins {
+		t.Fatalf("first body-title block should strip root horizontal margins")
+	}
 	if blocks[1].StyleName != pdfStyleBodyTitleHeader || blocks[1].StyleClasses != pdfStyleBodyTitle+" "+pdfStyleBodyTitleHeader+"-next" {
 		t.Fatalf("second title block = %#v, want body-title-header next", blocks[1])
+	}
+	if !blocks[1].StripRootHorizontalMargins {
+		t.Fatalf("second body-title block should strip root horizontal margins")
+	}
+}
+
+func TestAppendTitleBlocksWithoutWrapperClassesDoNotStripRootHorizontalMargins(t *testing.T) {
+	title := &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Line 1"}}}}}}
+	var blocks []pdfTextBlock
+
+	appendTitleBlocks(&blocks, title, 1)
+
+	if len(blocks) != 1 || blocks[0].Kind != pdfBlockHeading {
+		t.Fatalf("blocks = %#v, want one heading block", blocks)
+	}
+	if blocks[0].StripRootHorizontalMargins {
+		t.Fatalf("plain title block should not strip root horizontal margins")
 	}
 }
 
@@ -263,6 +283,9 @@ func TestAppendTitleBlocksWithIDHeaderAndClassesMarksTextAfterImage(t *testing.T
 	}
 	if blocks[1].StyleClasses != pdfStyleChapterTitle+" "+pdfStyleChapterTitleHeader+"-next "+pdfStyleTitleAfterImage {
 		t.Fatalf("text-after-image classes = %q, want title-after-image marker", blocks[1].StyleClasses)
+	}
+	if !blocks[1].StripRootHorizontalMargins {
+		t.Fatalf("title text after image should strip root horizontal margins as wrapper child")
 	}
 }
 
@@ -533,15 +556,19 @@ func TestCollectTextBlocksIncludesVignettes(t *testing.T) {
 	var got []string
 	for _, block := range textBlocksOnly(blocks) {
 		if block.Kind == pdfBlockImage && strings.Contains(block.StyleClasses, "vignette") {
-			got = append(got, block.ImageID+":"+block.StyleClasses)
+			flag := "keep"
+			if block.StripRootHorizontalMargins {
+				flag = "strip"
+			}
+			got = append(got, flag+":"+block.ImageID+":"+block.StyleClasses)
 		}
 	}
 	want := []string{
-		"book-top:vignette vignette-book-title-top body-title",
-		"book-bottom:vignette vignette-book-title-bottom body-title",
-		"chapter-top:vignette vignette-chapter-title-top chapter-title",
-		"chapter-bottom:vignette vignette-chapter-title-bottom chapter-title",
-		"chapter-end:vignette vignette-chapter-end",
+		"strip:book-top:vignette vignette-book-title-top body-title",
+		"strip:book-bottom:vignette vignette-book-title-bottom body-title",
+		"strip:chapter-top:vignette vignette-chapter-title-top chapter-title",
+		"strip:chapter-bottom:vignette vignette-chapter-title-bottom chapter-title",
+		"keep:chapter-end:vignette vignette-chapter-end",
 	}
 	if len(got) != len(want) {
 		t.Fatalf("vignette blocks = %#v, want %#v", got, want)

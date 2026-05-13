@@ -278,11 +278,11 @@ func appendBodyIntroBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, body *
 		appendImageBlock(blocks, body.Image, "")
 	}
 	if body.Title != nil && body.Main() {
-		appendVignetteBlockWithClasses(blocks, book, common.VignettePosBookTitleTop, pdfStyleBodyTitle)
+		appendVignetteBlockWithClassesAndRootHorizontalMargins(blocks, book, common.VignettePosBookTitleTop, pdfStyleBodyTitle, true)
 	}
 	appendTitleBlocksWithIDHeaderAndClasses(blocks, body.Title, 1, "", pdfStyleBodyTitleHeader, pdfStyleBodyTitle)
 	if body.Title != nil && body.Main() {
-		appendVignetteBlockWithClasses(blocks, book, common.VignettePosBookTitleBottom, pdfStyleBodyTitle)
+		appendVignetteBlockWithClassesAndRootHorizontalMargins(blocks, book, common.VignettePosBookTitleBottom, pdfStyleBodyTitle, true)
 	}
 	for i := range body.Epigraphs {
 		appendEpigraphBlocks(blocks, &body.Epigraphs[i])
@@ -349,7 +349,7 @@ func appendTitleBlocksWithIDHeaderAndClasses(blocks *[]pdfTextBlock, title *fb2.
 	for i := range title.Items {
 		item := &title.Items[i]
 		if item.EmptyLine {
-			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine, StyleClasses: joinStyleClasses(styleClasses, headerStyleName+"-emptyline")})
+			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine, StyleClasses: joinStyleClasses(styleClasses, headerStyleName+"-emptyline"), StripRootHorizontalMargins: titleWrapperStripRootHorizontalMargins(styleClasses)})
 			prevWasImageOnlyHeadingParagraph = false
 			continue
 		}
@@ -359,7 +359,7 @@ func appendTitleBlocksWithIDHeaderAndClasses(blocks *[]pdfTextBlock, title *fb2.
 		positionClass := titleParagraphPositionStyleClass(headerStyleName, firstParagraph)
 		firstParagraph = false
 		if imageID, alt, ok := paragraphImageOnly(item.Paragraph); ok {
-			appendStyledImageIDBlockWithRootHorizontalMargins(blocks, imageID, anchorID, alt, pdfStyleImage, joinStyleClasses(headerStyleName, item.Paragraph.Style, styleClasses, positionClass, pdfStyleHeadingImage), true)
+			appendStyledImageIDBlockWithRootHorizontalMargins(blocks, imageID, anchorID, alt, pdfStyleImage, joinStyleClasses(headerStyleName, item.Paragraph.Style, styleClasses, positionClass, pdfStyleHeadingImage), titleWrapperStripRootHorizontalMargins(styleClasses))
 			anchorID = ""
 			prevWasImageOnlyHeadingParagraph = true
 			continue
@@ -374,7 +374,7 @@ func appendTitleBlocksWithIDHeaderAndClasses(blocks *[]pdfTextBlock, title *fb2.
 			classes = joinStyleClasses(classes, pdfStyleCode)
 		}
 		if text != "" || inlineRunsRenderable(runs) {
-			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockHeading, ID: anchorID, Text: text, Runs: runs, Depth: depth, StyleName: headerStyleName, StyleClasses: classes, StripRootHorizontalMargins: inlineRunsHaveImages(runs), Links: links})
+			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockHeading, ID: anchorID, Text: text, Runs: runs, Depth: depth, StyleName: headerStyleName, StyleClasses: classes, StripRootHorizontalMargins: titleWrapperStripRootHorizontalMargins(styleClasses), Links: links})
 			anchorID = ""
 			prevWasImageOnlyHeadingParagraph = false
 		}
@@ -467,17 +467,17 @@ func appendStyledImageIDBlockWithRootHorizontalMargins(blocks *[]pdfTextBlock, i
 func appendTitleVignetteBlock(blocks *[]pdfTextBlock, book *fb2.FictionBook, depth int, top bool, styleClasses string) {
 	if depth == 1 {
 		if top {
-			appendVignetteBlockWithClasses(blocks, book, common.VignettePosChapterTitleTop, styleClasses)
+			appendVignetteBlockWithClassesAndRootHorizontalMargins(blocks, book, common.VignettePosChapterTitleTop, styleClasses, true)
 			return
 		}
-		appendVignetteBlockWithClasses(blocks, book, common.VignettePosChapterTitleBottom, styleClasses)
+		appendVignetteBlockWithClassesAndRootHorizontalMargins(blocks, book, common.VignettePosChapterTitleBottom, styleClasses, true)
 		return
 	}
 	if top {
-		appendVignetteBlockWithClasses(blocks, book, common.VignettePosSectionTitleTop, styleClasses)
+		appendVignetteBlockWithClassesAndRootHorizontalMargins(blocks, book, common.VignettePosSectionTitleTop, styleClasses, true)
 		return
 	}
-	appendVignetteBlockWithClasses(blocks, book, common.VignettePosSectionTitleBottom, styleClasses)
+	appendVignetteBlockWithClassesAndRootHorizontalMargins(blocks, book, common.VignettePosSectionTitleBottom, styleClasses, true)
 }
 
 func appendEndVignetteBlock(blocks *[]pdfTextBlock, book *fb2.FictionBook, depth int) {
@@ -517,6 +517,10 @@ func appendVignetteBlock(blocks *[]pdfTextBlock, book *fb2.FictionBook, position
 }
 
 func appendVignetteBlockWithClasses(blocks *[]pdfTextBlock, book *fb2.FictionBook, position common.VignettePos, styleClasses string) {
+	appendVignetteBlockWithClassesAndRootHorizontalMargins(blocks, book, position, styleClasses, false)
+}
+
+func appendVignetteBlockWithClassesAndRootHorizontalMargins(blocks *[]pdfTextBlock, book *fb2.FictionBook, position common.VignettePos, styleClasses string, stripRootHorizontalMargins bool) {
 	if book == nil || !book.IsVignetteEnabled(position) {
 		return
 	}
@@ -524,11 +528,21 @@ func appendVignetteBlockWithClasses(blocks *[]pdfTextBlock, book *fb2.FictionBoo
 	if imageID == "" {
 		return
 	}
-	appendImageIDBlock(blocks, imageID, "", "", joinStyleClasses("vignette", "vignette-"+position.String(), styleClasses))
+	appendStyledImageIDBlockWithRootHorizontalMargins(blocks, imageID, "", "", pdfStyleImage, joinStyleClasses("vignette", "vignette-"+position.String(), styleClasses), stripRootHorizontalMargins)
 }
 
 func isVignetteBlock(block pdfTextBlock) bool {
 	return blockHasStyleClass(block, "vignette")
+}
+
+func titleWrapperStripRootHorizontalMargins(styleClasses string) bool {
+	for _, class := range strings.Fields(styleClasses) {
+		switch class {
+		case pdfStyleBodyTitle, pdfStyleChapterTitle, pdfStyleSectionTitle:
+			return true
+		}
+	}
+	return false
 }
 
 func isHeadingImageBlock(block pdfTextBlock) bool {
@@ -636,15 +650,6 @@ func paragraphTextAndLinks(paragraph *fb2.Paragraph) (string, []pdfTextLink) {
 func inlineRunsRenderable(runs []pdfInlineRun) bool {
 	for _, run := range runs {
 		if run.Text != "" || run.ImageID != "" {
-			return true
-		}
-	}
-	return false
-}
-
-func inlineRunsHaveImages(runs []pdfInlineRun) bool {
-	for _, run := range runs {
-		if run.ImageID != "" {
 			return true
 		}
 	}
