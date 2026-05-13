@@ -192,6 +192,28 @@ func TestPDFStyleResolverAppliesBodyTypographyAsRootInheritance(t *testing.T) {
 	}
 }
 
+func TestPDFStyleResolverAppliesRootDescendantSelectors(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			body p { text-align: center; line-height: 110%; }
+			html p { text-indent: 0; }
+		`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
+	if paragraph.Paragraph.Align != textAlignCenter {
+		t.Fatalf("paragraph align = %v, want center from body p", paragraph.Paragraph.Align)
+	}
+	if paragraph.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("paragraph indent = %v, want 0 from html p", paragraph.Paragraph.FirstLineIndent)
+	}
+	if paragraph.Paragraph.LineHeight != pdfBaseFontSize*1.1 {
+		t.Fatalf("paragraph line height = %v, want %v from body p", paragraph.Paragraph.LineHeight, pdfBaseFontSize*1.1)
+	}
+}
+
 func TestPDFStyleResolverTitleNextVariantClearsHeadingMargins(t *testing.T) {
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 

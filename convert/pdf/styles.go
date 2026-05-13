@@ -363,6 +363,13 @@ func (r *pdfStyleResolver) styleForBlock(block pdfTextBlock) pdfBlockResolvedSty
 		}
 		style = mergePDFStyleOverrides(style, classStyle, classFallback)
 	}
+	for _, descStyleName := range r.rootDescendantStyleNames(block) {
+		descStyle, ok := r.styles[descStyleName]
+		if !ok {
+			continue
+		}
+		style = mergePDFStyleOverrides(style, descStyle, classFallback)
+	}
 	if block.Kind == pdfBlockTOCEntry {
 		style.Paragraph.FirstLineIndent = max(float64(block.Depth-1)*pdfTOCIndentPerDepth, 0)
 	}
@@ -621,6 +628,25 @@ func (r *pdfStyleResolver) pageStyle() pdfBlockResolvedStyle {
 	return page
 }
 
+func (r *pdfStyleResolver) rootDescendantStyleNames(block pdfTextBlock) []string {
+	ancestors := []string{pdfStyleHTML, pdfStyleBody}
+	candidates := make([]string, 0, 1+len(strings.Fields(block.StyleClasses)))
+	if tag := pdfElementTagForBlock(block); tag != "" {
+		candidates = append(candidates, tag)
+	}
+	candidates = append(candidates, strings.Fields(block.StyleClasses)...)
+	var names []string
+	for _, ancestor := range ancestors {
+		for _, candidate := range candidates {
+			name := ancestor + "--" + candidate
+			if _, ok := r.styles[name]; ok {
+				names = append(names, name)
+			}
+		}
+	}
+	return names
+}
+
 func pdfStyleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
 	return newPDFStyleResolver(nil, nil).styleForBlock(block)
 }
@@ -655,6 +681,25 @@ func pdfStyleNameForKind(kind pdfBlockKind) string {
 		return pdfStyleEmptyLine
 	default:
 		return pdfStyleParagraph
+	}
+}
+
+func pdfElementTagForBlock(block pdfTextBlock) string {
+	switch block.Kind {
+	case pdfBlockParagraph, pdfBlockSubtitle, pdfBlockPoem, pdfBlockTextAuthor, pdfBlockTOCEntry:
+		return "p"
+	case pdfBlockHeading:
+		if block.Depth <= 1 {
+			return "h1"
+		}
+		return "h2"
+	case pdfBlockImage:
+		if block.StyleName != "" && block.StyleName != pdfStyleImage {
+			return "p"
+		}
+		return "img"
+	default:
+		return ""
 	}
 }
 
@@ -732,6 +777,9 @@ func (r *pdfStyleResolver) applyRule(rule css.Rule) {
 }
 
 func pdfSelectorStyleNames(sel css.Selector) []string {
+	if sel.Ancestor != nil {
+		return pdfDescendantSelectorStyleNames(sel)
+	}
 	if sel.Class != "" {
 		return []string{sel.Class}
 	}
@@ -755,6 +803,31 @@ func pdfSelectorStyleNames(sel css.Selector) []string {
 	default:
 		return nil
 	}
+}
+
+func pdfDescendantSelectorStyleNames(sel css.Selector) []string {
+	if sel.Ancestor == nil {
+		return nil
+	}
+	ancestorNames := pdfSelectorStyleNames(*sel.Ancestor)
+	if len(ancestorNames) == 0 {
+		return nil
+	}
+	right := css.Selector{Element: sel.Element, Class: sel.Class}
+	rightNames := pdfSelectorStyleNames(right)
+	if len(rightNames) == 0 {
+		return nil
+	}
+	mapped := make([]string, 0, len(ancestorNames)*len(rightNames))
+	for _, ancestor := range ancestorNames {
+		if ancestor != pdfStyleHTML && ancestor != pdfStyleBody {
+			continue
+		}
+		for _, rightName := range rightNames {
+			mapped = append(mapped, ancestor+"--"+rightName)
+		}
+	}
+	return mapped
 }
 
 func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.Value) {
