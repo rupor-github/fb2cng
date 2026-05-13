@@ -312,6 +312,43 @@ func TestLayoutPDFPagesUpscalesVignettesToContentWidth(t *testing.T) {
 	}
 }
 
+func TestLayoutPDFPagesSizesBlockImagesLikeKP3(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	img := &fb2.BookImage{}
+	img.Dim.Width = 100
+	img.Dim.Height = 50
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  520,
+		PageHeight: 220,
+		Title:      "Title",
+		Author:     "Author",
+		Images:     fb2.BookImages{"block": img},
+		Blocks: []pdfTextBlock{{
+			Kind:    pdfBlockImage,
+			ImageID: "block",
+		}},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 || len(pages[1].Images) != 1 {
+		t.Fatalf("layout pages images = %#v, want one block image", pages)
+	}
+	contentWidth := 520.0 - 48.0
+	wantWidth := contentWidth * 100.0 / pdfKP3ContentWidthPx
+	if got := pages[1].Images[0].Width; math.Abs(got-wantWidth) > 0.001 {
+		t.Fatalf("block image width = %v, want KP3-style width %v", got, wantWidth)
+	}
+	wantHeight := wantWidth / 2
+	if got := pages[1].Images[0].Height; math.Abs(got-wantHeight) > 0.001 {
+		t.Fatalf("block image height = %v, want aspect-preserving height %v", got, wantHeight)
+	}
+}
+
 func TestLayoutPDFPagesRendersImageOnlyHeadings(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {

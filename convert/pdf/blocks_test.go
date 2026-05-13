@@ -158,6 +158,20 @@ func TestParagraphInlineRunsPreserveImageOnlyParagraphs(t *testing.T) {
 	}
 }
 
+func TestAppendParagraphBlockWithClassesConvertsImageOnlyParagraphsToImageBlocks(t *testing.T) {
+	paragraph := &fb2.Paragraph{ID: "p", Text: []fb2.InlineSegment{{Kind: fb2.InlineImageSegment, Image: &fb2.InlineImage{Href: "#block.png", Alt: "Block"}}}}
+	var blocks []pdfTextBlock
+
+	appendParagraphBlockWithClasses(&blocks, pdfBlockParagraph, paragraph, 1, pdfStyleCite)
+
+	if len(blocks) != 1 || blocks[0].Kind != pdfBlockImage || blocks[0].ImageID != "block.png" || blocks[0].ID != "p" || blocks[0].Text != "Block" {
+		t.Fatalf("blocks = %#v, want image-only paragraph block", blocks)
+	}
+	if blocks[0].StyleClasses != "" {
+		t.Fatalf("image-only paragraph style classes = %q, want container classes filtered", blocks[0].StyleClasses)
+	}
+}
+
 func TestAppendParagraphBlockWithClassesConvertsImageOnlyHeadingsToImageBlocks(t *testing.T) {
 	paragraph := &fb2.Paragraph{ID: "h", Text: []fb2.InlineSegment{{Kind: fb2.InlineImageSegment, Image: &fb2.InlineImage{Href: "#heading.png", Alt: "Heading"}}}}
 	var blocks []pdfTextBlock

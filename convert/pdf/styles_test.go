@@ -187,20 +187,52 @@ func TestPDFCollapsedBlockStylesHandlesNegativeMargins(t *testing.T) {
 	}
 }
 
-func TestPDFCollapsedBlockStylesTreatsPageBreakAndEmptyLineAsBarriers(t *testing.T) {
+func TestPDFCollapsedBlockStylesTreatsPageBreakAsBarrier(t *testing.T) {
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 	resolver.styles["before"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceAfter: 4}
 	resolver.styles["after"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceBefore: 6}
 
-	for _, barrier := range []pdfBlockKind{pdfBlockPageBreak, pdfBlockEmptyLine} {
-		styles := resolver.collapsedBlockStyles([]pdfTextBlock{
-			{Kind: pdfBlockParagraph, StyleName: "before", Text: "before"},
-			{Kind: barrier},
-			{Kind: pdfBlockParagraph, StyleName: "after", Text: "after"},
-		})
-		if styles[0].SpaceAfter != 4 || styles[2].SpaceBefore != 6 {
-			t.Fatalf("barrier %s collapsed margins unexpectedly: before mb=%v after mt=%v", barrier, styles[0].SpaceAfter, styles[2].SpaceBefore)
-		}
+	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
+		{Kind: pdfBlockParagraph, StyleName: "before", Text: "before"},
+		{Kind: pdfBlockPageBreak},
+		{Kind: pdfBlockParagraph, StyleName: "after", Text: "after"},
+	})
+	if styles[0].SpaceAfter != 4 || styles[2].SpaceBefore != 6 {
+		t.Fatalf("page break collapsed margins unexpectedly: before mb=%v after mt=%v", styles[0].SpaceAfter, styles[2].SpaceBefore)
+	}
+}
+
+func TestPDFCollapsedBlockStylesAppliesEmptyLineMarginToNextText(t *testing.T) {
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	resolver.styles["before"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceAfter: 4}
+	resolver.styles["empty"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceBefore: 10}
+	resolver.styles["after"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}}
+
+	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
+		{Kind: pdfBlockParagraph, StyleName: "before", Text: "before"},
+		{Kind: pdfBlockEmptyLine, StyleName: "empty"},
+		{Kind: pdfBlockParagraph, StyleName: "after", Text: "after"},
+	})
+	if !styles[1].Hidden {
+		t.Fatalf("empty line style hidden = false, want skipped layout block")
+	}
+	if styles[0].SpaceAfter != 0 || styles[2].SpaceBefore != 6 {
+		t.Fatalf("empty line margins: before mb=%v after mt=%v, want 0/6", styles[0].SpaceAfter, styles[2].SpaceBefore)
+	}
+}
+
+func TestPDFCollapsedBlockStylesAppliesEmptyLineBeforeImageToPreviousBlock(t *testing.T) {
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	resolver.styles["before"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceAfter: 4}
+	resolver.styles["empty"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceBefore: 10}
+
+	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
+		{Kind: pdfBlockParagraph, StyleName: "before", Text: "before"},
+		{Kind: pdfBlockEmptyLine, StyleName: "empty"},
+		{Kind: pdfBlockImage, ImageID: "image"},
+	})
+	if styles[0].SpaceAfter != 0 || styles[2].SpaceBefore != 6 {
+		t.Fatalf("empty line before image collapsed margins: before mb=%v image mt=%v, want 0/6", styles[0].SpaceAfter, styles[2].SpaceBefore)
 	}
 }
 

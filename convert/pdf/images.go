@@ -48,6 +48,24 @@ func fitPDFImageSize(doc skeletonDocument, img *fb2.BookImage, maxWidth, maxHeig
 
 func fitPDFImageSizeWithUpscale(doc skeletonDocument, img *fb2.BookImage, maxWidth, maxHeight float64, allowUpscale bool) (float64, float64, bool) {
 	width, height := naturalPDFImageSize(doc, img)
+	return fitPDFImageDimensions(width, height, maxWidth, maxHeight, allowUpscale)
+}
+
+func fitPDFBlockImageSize(img *fb2.BookImage, maxWidth, maxHeight float64, forceContentWidth bool) (float64, float64, bool) {
+	widthPx, heightPx := pdfImagePixelSize(img)
+	if widthPx <= 0 || heightPx <= 0 || maxWidth <= 0 || maxHeight <= 0 {
+		return 0, 0, false
+	}
+
+	width := maxWidth
+	if !forceContentWidth {
+		width = maxWidth * min(float64(widthPx)/pdfKP3ContentWidthPx, 1)
+	}
+	height := width * float64(heightPx) / float64(widthPx)
+	return fitPDFImageDimensions(width, height, maxWidth, maxHeight, false)
+}
+
+func fitPDFImageDimensions(width, height, maxWidth, maxHeight float64, allowUpscale bool) (float64, float64, bool) {
 	if width <= 0 || height <= 0 || maxWidth <= 0 || maxHeight <= 0 {
 		return 0, 0, false
 	}

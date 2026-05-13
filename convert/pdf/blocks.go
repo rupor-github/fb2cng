@@ -488,11 +488,13 @@ func appendParagraphBlockWithClasses(blocks *[]pdfTextBlock, kind pdfBlockKind, 
 	if paragraph == nil {
 		return
 	}
-	if kind == pdfBlockHeading || kind == pdfBlockSubtitle {
-		if imageID, alt, ok := paragraphImageOnly(paragraph); ok {
-			appendImageIDBlock(blocks, imageID, paragraph.ID, alt, joinStyleClasses(styleClasses, pdfStyleHeadingImage))
-			return
+	if imageID, alt, ok := paragraphImageOnly(paragraph); ok {
+		imageStyleClasses := strings.TrimSpace(paragraph.Style)
+		if kind == pdfBlockHeading || kind == pdfBlockSubtitle {
+			imageStyleClasses = joinStyleClasses(styleClasses, imageStyleClasses, pdfStyleHeadingImage)
 		}
+		appendImageIDBlock(blocks, imageID, paragraph.ID, alt, imageStyleClasses)
+		return
 	}
 	text, links := paragraphTextAndLinks(paragraph)
 	runs := paragraphInlineRuns(paragraph)

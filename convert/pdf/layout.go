@@ -205,7 +205,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 			if img == nil {
 				continue
 			}
-			width, height, ok := fitPDFImageSizeWithUpscale(doc, img, blockWidth, top-bottom, isVignetteBlock(block) || isHeadingImageBlock(block))
+			width, height, ok := fitPDFBlockImageSize(img, blockWidth, top-bottom, isVignetteBlock(block) || isHeadingImageBlock(block))
 			if !ok {
 				continue
 			}
@@ -243,10 +243,6 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 		style.Paragraph.Hyphenator = doc.Hyphenator
 		blockWidth := blockContentWidth(contentWidth, style)
 		if block.Kind == pdfBlockEmptyLine {
-			if y-style.Paragraph.LineHeight < bottom {
-				newTextPage()
-			}
-			y -= style.Paragraph.LineHeight
 			continue
 		}
 		text := strings.TrimSpace(block.Text)

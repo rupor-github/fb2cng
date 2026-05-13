@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	pdfPointsPerInch  = 72.0
-	pdfCSSPixelsPerIn = 96.0
-	pdfMinBlockWidth  = 12.0
+	pdfPointsPerInch     = 72.0
+	pdfCSSPixelsPerIn    = 96.0
+	pdfKP3ContentWidthPx = 512.0
+	pdfMinBlockWidth     = 12.0
 
 	pdfBaseFontSize            = 10.5
 	pdfBaseLineHeight          = 13.4
@@ -34,7 +35,6 @@ const (
 	pdfTextAuthorFontSize      = 10.0
 	pdfTextAuthorLineHeight    = 12.5
 	pdfTextAuthorSpaceAfter    = 4.0
-	pdfImageSpace              = 6.0
 	pdfTOCIndentPerDepth       = 12.0
 	pdfTOCSpaceAfter           = 1.5
 	pdfDefaultKeepLines        = 2
@@ -234,8 +234,6 @@ func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 		},
 		pdfStyleImage: {
 			Paragraph:    paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, Hyphenation: paragraphHyphenationAuto},
-			SpaceBefore:  pdfImageSpace,
-			SpaceAfter:   pdfImageSpace,
 			KeepTogether: true,
 		},
 		pdfStyleTOCItem: {
