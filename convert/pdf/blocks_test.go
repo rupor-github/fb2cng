@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"strings"
 	"testing"
 
 	"fbc/common"
@@ -396,6 +397,52 @@ func textBlocksOnly(blocks []pdfTextBlock) []pdfTextBlock {
 		}
 	}
 	return out
+}
+
+func TestCollectTextBlocksIncludesVignettes(t *testing.T) {
+	book := &fb2.FictionBook{
+		VignetteIDs: map[common.VignettePos]string{
+			common.VignettePosBookTitleTop:       "book-top",
+			common.VignettePosBookTitleBottom:    "book-bottom",
+			common.VignettePosChapterTitleTop:    "chapter-top",
+			common.VignettePosChapterTitleBottom: "chapter-bottom",
+			common.VignettePosChapterEnd:         "chapter-end",
+		},
+		Bodies: []fb2.Body{{
+			Kind:  fb2.BodyMain,
+			Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Book title"}}}}}},
+			Sections: []fb2.Section{{
+				Title:   &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter"}}}}}},
+				Content: []fb2.FlowItem{{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Body."}}}}},
+			}},
+		}},
+	}
+
+	blocks, err := collectTextBlocks(&content.Content{Book: book})
+	if err != nil {
+		t.Fatalf("collectTextBlocks() error = %v", err)
+	}
+	var got []string
+	for _, block := range textBlocksOnly(blocks) {
+		if block.Kind == pdfBlockImage && strings.Contains(block.StyleClasses, "vignette") {
+			got = append(got, block.ImageID+":"+block.StyleClasses)
+		}
+	}
+	want := []string{
+		"book-top:vignette vignette-book-title-top",
+		"book-bottom:vignette vignette-book-title-bottom",
+		"chapter-top:vignette vignette-chapter-title-top",
+		"chapter-bottom:vignette vignette-chapter-title-bottom",
+		"chapter-end:vignette vignette-chapter-end",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("vignette blocks = %#v, want %#v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("vignette block %d = %q, want %q (all: %#v)", i, got[i], want[i], got)
+		}
+	}
 }
 
 func TestCollectTextBlocksIncludesBlockImages(t *testing.T) {

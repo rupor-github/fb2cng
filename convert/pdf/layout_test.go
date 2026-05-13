@@ -277,6 +277,41 @@ func TestLayoutPDFPagesPreservesCodeBlockWhitespace(t *testing.T) {
 	}
 }
 
+func TestLayoutPDFPagesUpscalesVignettesToContentWidth(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	img := &fb2.BookImage{}
+	img.Dim.Width = 120
+	img.Dim.Height = 10
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:      520,
+		PageHeight:     220,
+		ScreenWidthPx:  1200,
+		ScreenHeightPx: 1600,
+		Title:          "Title",
+		Author:         "Author",
+		Images:         fb2.BookImages{"vignette": img},
+		Blocks: []pdfTextBlock{{
+			Kind:         pdfBlockImage,
+			StyleName:    pdfStyleImage,
+			StyleClasses: "vignette vignette-chapter-title-top",
+			ImageID:      "vignette",
+		}},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 || len(pages[1].Images) != 1 {
+		t.Fatalf("layout pages images = %#v, want one vignette image", pages)
+	}
+	if got, want := pages[1].Images[0].Width, 520.0-48.0; math.Abs(got-want) > 0.001 {
+		t.Fatalf("vignette width = %v, want content width %v", got, want)
+	}
+}
+
 func TestLayoutPDFPagesRendersImageOnlyHeadings(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {

@@ -37,7 +37,7 @@ func collectPDFContent(c *content.Content, cfg *config.DocumentConfig) (pdfConte
 		if unit.ForceNewPage && unit.Kind != structure.UnitCover {
 			blocks = append(blocks, pdfTextBlock{Kind: pdfBlockPageBreak, ID: unit.ID, Text: unit.Title})
 		}
-		appendUnitBlocks(&blocks, unit, splitSections, splitBodies)
+		appendUnitBlocks(&blocks, c.Book, unit, splitSections, splitBodies)
 	}
 	toc := plan.TOC
 	blocks, toc = insertAnnotationPageBlocks(blocks, toc, c.Book.Description.TitleInfo.Annotation, cfg)
@@ -135,7 +135,7 @@ func insertAnnotationPageBlocks(blocks []pdfTextBlock, toc []*structure.TOCEntry
 		{Kind: pdfBlockPageBreak, ID: "annotation-page", Text: title},
 		{Kind: pdfBlockHeading, ID: "annotation-page-title", Text: title, Depth: 1, StyleName: pdfStyleAnnotationTitle},
 	}
-	appendFlowBlocks(&annotationBlocks, annotation.Items, 1, nil, pdfStyleAnnotation)
+	appendFlowBlocks(&annotationBlocks, nil, annotation.Items, 1, nil, pdfStyleAnnotation)
 	out := make([]pdfTextBlock, 0, len(annotationBlocks)+len(blocks))
 	out = append(out, annotationBlocks...)
 	out = append(out, blocks...)
@@ -252,7 +252,7 @@ func splitBodyImageBodies(plan *structure.Plan) map[*fb2.Body]bool {
 	return bodies
 }
 
-func appendUnitBlocks(blocks *[]pdfTextBlock, unit *structure.Unit, splitSections map[string]bool, splitBodies map[*fb2.Body]bool) {
+func appendUnitBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, unit *structure.Unit, splitSections map[string]bool, splitBodies map[*fb2.Body]bool) {
 	if unit == nil {
 		return
 	}
@@ -262,51 +262,66 @@ func appendUnitBlocks(blocks *[]pdfTextBlock, unit *structure.Unit, splitSection
 			appendImageBlock(blocks, unit.Body.Image, unit.ID)
 		}
 	case structure.UnitBodyIntro:
-		appendBodyIntroBlocks(blocks, unit.Body, !splitBodies[unit.Body])
+		appendBodyIntroBlocks(blocks, book, unit.Body, !splitBodies[unit.Body])
 	case structure.UnitSection:
-		appendSectionBlocks(blocks, unit.Section, unit.TitleDepth, splitSections)
+		appendSectionBlocks(blocks, book, unit.Section, unit.TitleDepth, splitSections)
 	case structure.UnitFootnotesBody:
-		appendBodyBlocks(blocks, unit.Body, splitSections)
+		appendBodyBlocks(blocks, book, unit.Body, splitSections)
 	}
 }
 
-func appendBodyIntroBlocks(blocks *[]pdfTextBlock, body *fb2.Body, includeImage bool) {
+func appendBodyIntroBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, body *fb2.Body, includeImage bool) {
 	if body == nil {
 		return
 	}
 	if includeImage {
 		appendImageBlock(blocks, body.Image, "")
 	}
+	if body.Title != nil && body.Main() {
+		appendVignetteBlock(blocks, book, common.VignettePosBookTitleTop)
+	}
 	appendTitleBlocks(blocks, body.Title, 1)
+	if body.Title != nil && body.Main() {
+		appendVignetteBlock(blocks, book, common.VignettePosBookTitleBottom)
+	}
 	for i := range body.Epigraphs {
 		appendEpigraphBlocks(blocks, &body.Epigraphs[i])
 	}
 }
 
-func appendBodyBlocks(blocks *[]pdfTextBlock, body *fb2.Body, splitSections map[string]bool) {
+func appendBodyBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, body *fb2.Body, splitSections map[string]bool) {
 	if body == nil {
 		return
 	}
-	appendBodyIntroBlocks(blocks, body, true)
+	appendBodyIntroBlocks(blocks, book, body, true)
 	for i := range body.Sections {
-		appendSectionBlocks(blocks, &body.Sections[i], 1, splitSections)
+		appendSectionBlocks(blocks, book, &body.Sections[i], 1, splitSections)
 	}
 }
 
-func appendSectionBlocks(blocks *[]pdfTextBlock, section *fb2.Section, depth int, splitSections map[string]bool) {
+func appendSectionBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, section *fb2.Section, depth int, splitSections map[string]bool) {
 	if section == nil {
 		return
 	}
+	if section.Title != nil {
+		appendTitleVignetteBlock(blocks, book, depth, true)
+	}
 	appendTitleBlocksWithID(blocks, section.Title, depth, section.ID)
+	if section.Title != nil {
+		appendTitleVignetteBlock(blocks, book, depth, false)
+	}
 	for i := range section.Epigraphs {
 		appendEpigraphBlocks(blocks, &section.Epigraphs[i])
 	}
 	appendImageBlock(blocks, section.Image, section.ID)
 	if section.Annotation != nil {
-		appendFlowBlocks(blocks, section.Annotation.Items, depth, splitSections, pdfStyleAnnotation)
+		appendFlowBlocks(blocks, book, section.Annotation.Items, depth, splitSections, pdfStyleAnnotation)
 	}
 	for i := range section.Content {
-		appendFlowItemBlock(blocks, &section.Content[i], depth, splitSections, "")
+		appendFlowItemBlock(blocks, book, &section.Content[i], depth, splitSections, "")
+	}
+	if section.Title != nil {
+		appendEndVignetteBlock(blocks, book, depth)
 	}
 }
 
@@ -341,13 +356,13 @@ func appendTitleBlocksWithID(blocks *[]pdfTextBlock, title *fb2.Title, depth int
 	}
 }
 
-func appendFlowBlocks(blocks *[]pdfTextBlock, items []fb2.FlowItem, depth int, splitSections map[string]bool, styleClasses string) {
+func appendFlowBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, items []fb2.FlowItem, depth int, splitSections map[string]bool, styleClasses string) {
 	for i := range items {
-		appendFlowItemBlock(blocks, &items[i], depth, splitSections, styleClasses)
+		appendFlowItemBlock(blocks, book, &items[i], depth, splitSections, styleClasses)
 	}
 }
 
-func appendFlowItemBlock(blocks *[]pdfTextBlock, item *fb2.FlowItem, depth int, splitSections map[string]bool, styleClasses string) {
+func appendFlowItemBlock(blocks *[]pdfTextBlock, book *fb2.FictionBook, item *fb2.FlowItem, depth int, splitSections map[string]bool, styleClasses string) {
 	if item == nil {
 		return
 	}
@@ -364,7 +379,7 @@ func appendFlowItemBlock(blocks *[]pdfTextBlock, item *fb2.FlowItem, depth int, 
 		if item.Section != nil && splitSections[item.Section.ID] {
 			return
 		}
-		appendSectionBlocks(blocks, item.Section, depth+1, splitSections)
+		appendSectionBlocks(blocks, book, item.Section, depth+1, splitSections)
 	case fb2.FlowPoem:
 		appendPoemBlocks(blocks, item.Poem, depth, splitSections)
 	case fb2.FlowCite:
@@ -398,6 +413,55 @@ func appendImageBlock(blocks *[]pdfTextBlock, image *fb2.Image, fallbackID strin
 		StyleName: pdfStyleImage,
 		ImageID:   imageID,
 	})
+}
+
+func appendTitleVignetteBlock(blocks *[]pdfTextBlock, book *fb2.FictionBook, depth int, top bool) {
+	if depth == 1 {
+		if top {
+			appendVignetteBlock(blocks, book, common.VignettePosChapterTitleTop)
+			return
+		}
+		appendVignetteBlock(blocks, book, common.VignettePosChapterTitleBottom)
+		return
+	}
+	if top {
+		appendVignetteBlock(blocks, book, common.VignettePosSectionTitleTop)
+		return
+	}
+	appendVignetteBlock(blocks, book, common.VignettePosSectionTitleBottom)
+}
+
+func appendEndVignetteBlock(blocks *[]pdfTextBlock, book *fb2.FictionBook, depth int) {
+	if depth == 1 {
+		appendVignetteBlock(blocks, book, common.VignettePosChapterEnd)
+		return
+	}
+	appendVignetteBlock(blocks, book, common.VignettePosSectionEnd)
+}
+
+func appendVignetteBlock(blocks *[]pdfTextBlock, book *fb2.FictionBook, position common.VignettePos) {
+	if book == nil || !book.IsVignetteEnabled(position) {
+		return
+	}
+	imageID := strings.TrimSpace(book.VignetteIDs[position])
+	if imageID == "" {
+		return
+	}
+	*blocks = append(*blocks, pdfTextBlock{
+		Kind:         pdfBlockImage,
+		StyleName:    pdfStyleImage,
+		StyleClasses: joinStyleClasses("vignette", "vignette-"+position.String()),
+		ImageID:      imageID,
+	})
+}
+
+func isVignetteBlock(block pdfTextBlock) bool {
+	for _, class := range strings.Fields(block.StyleClasses) {
+		if class == "vignette" {
+			return true
+		}
+	}
+	return false
 }
 
 func appendParagraphBlock(blocks *[]pdfTextBlock, kind pdfBlockKind, paragraph *fb2.Paragraph, depth int) {
@@ -447,7 +511,7 @@ func appendCiteBlocks(blocks *[]pdfTextBlock, cite *fb2.Cite, depth int, splitSe
 	if cite == nil {
 		return
 	}
-	appendFlowBlocks(blocks, cite.Items, depth, splitSections, pdfStyleCite)
+	appendFlowBlocks(blocks, nil, cite.Items, depth, splitSections, pdfStyleCite)
 	for i := range cite.TextAuthors {
 		appendParagraphBlock(blocks, pdfBlockTextAuthor, &cite.TextAuthors[i], depth)
 	}
@@ -457,7 +521,7 @@ func appendEpigraphBlocks(blocks *[]pdfTextBlock, epigraph *fb2.Epigraph) {
 	if epigraph == nil {
 		return
 	}
-	appendFlowBlocks(blocks, epigraph.Flow.Items, 1, nil, pdfStyleEpigraph)
+	appendFlowBlocks(blocks, nil, epigraph.Flow.Items, 1, nil, pdfStyleEpigraph)
 	for i := range epigraph.TextAuthors {
 		appendParagraphBlock(blocks, pdfBlockTextAuthor, &epigraph.TextAuthors[i], 1)
 	}

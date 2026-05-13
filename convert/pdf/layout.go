@@ -205,7 +205,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 			if img == nil {
 				continue
 			}
-			width, height, ok := fitPDFImageSize(doc, img, blockWidth, top-bottom)
+			width, height, ok := fitPDFImageSizeWithUpscale(doc, img, blockWidth, top-bottom, isVignetteBlock(block))
 			if !ok {
 				continue
 			}

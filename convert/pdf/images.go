@@ -43,6 +43,10 @@ func fitPDFImageInBox(doc skeletonDocument, img *fb2.BookImage, x, y, maxWidth, 
 }
 
 func fitPDFImageSize(doc skeletonDocument, img *fb2.BookImage, maxWidth, maxHeight float64) (float64, float64, bool) {
+	return fitPDFImageSizeWithUpscale(doc, img, maxWidth, maxHeight, false)
+}
+
+func fitPDFImageSizeWithUpscale(doc skeletonDocument, img *fb2.BookImage, maxWidth, maxHeight float64, allowUpscale bool) (float64, float64, bool) {
 	width, height := naturalPDFImageSize(doc, img)
 	if width <= 0 || height <= 0 || maxWidth <= 0 || maxHeight <= 0 {
 		return 0, 0, false
@@ -51,7 +55,7 @@ func fitPDFImageSize(doc skeletonDocument, img *fb2.BookImage, maxWidth, maxHeig
 	if scale <= 0 || math.IsNaN(scale) || math.IsInf(scale, 0) {
 		return 0, 0, false
 	}
-	if scale > 1 {
+	if !allowUpscale && scale > 1 {
 		scale = 1
 	}
 	width *= scale
