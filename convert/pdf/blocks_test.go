@@ -206,6 +206,27 @@ func TestAppendTitleBlocksWithIDAndClassesConvertsImageOnlyTitlesToStyledImageBl
 	if len(blocks) != 1 || blocks[0].Kind != pdfBlockImage || blocks[0].ImageID != "title.png" || blocks[0].ID != "title-id" || blocks[0].Text != "Title" || blocks[0].StyleClasses != pdfStyleChapterTitleHeader+" "+pdfStyleChapterTitle+" "+pdfStyleChapterTitleHeader+"-first "+pdfStyleHeadingImage {
 		t.Fatalf("blocks = %#v, want styled image-only title block", blocks)
 	}
+	if !blocks[0].StripRootHorizontalMargins {
+		t.Fatalf("image-only title block should strip root horizontal margins")
+	}
+}
+
+func TestAppendTitleBlocksWithInlineImagesStripRootHorizontalMargins(t *testing.T) {
+	title := &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
+		{Text: "Before "},
+		{Kind: fb2.InlineImageSegment, Image: &fb2.InlineImage{Href: "#title.png", Alt: "Title"}},
+		{Text: " After"},
+	}}}}}
+	var blocks []pdfTextBlock
+
+	appendTitleBlocksWithIDHeaderAndClasses(&blocks, title, 1, "title-id", pdfStyleChapterTitleHeader, pdfStyleChapterTitle)
+
+	if len(blocks) != 1 || blocks[0].Kind != pdfBlockHeading {
+		t.Fatalf("blocks = %#v, want one heading block", blocks)
+	}
+	if !blocks[0].StripRootHorizontalMargins {
+		t.Fatalf("title block with inline image should strip root horizontal margins")
+	}
 }
 
 func TestAppendTitleBlocksWithIDHeaderAndClassesUsesBodyTitleHeaderAndPositionClasses(t *testing.T) {

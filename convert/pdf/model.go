@@ -72,15 +72,16 @@ type pdfContentPlan struct {
 }
 
 type pdfTextBlock struct {
-	Kind         pdfBlockKind
-	ID           string
-	Text         string
-	Runs         []pdfInlineRun
-	Depth        int
-	StyleName    string
-	StyleClasses string
-	ImageID      string
-	Links        []pdfTextLink
+	Kind                       pdfBlockKind
+	ID                         string
+	Text                       string
+	Runs                       []pdfInlineRun
+	Depth                      int
+	StyleName                  string
+	StyleClasses               string
+	StripRootHorizontalMargins bool
+	ImageID                    string
+	Links                      []pdfTextLink
 }
 
 type pdfInlineRun struct {

@@ -606,15 +606,12 @@ func mergePDFInheritedParagraphStyle(base, override, fallback paragraphStyle) pa
 func (r *pdfStyleResolver) pageStyle() pdfBlockResolvedStyle {
 	page := r.defaultStyle(pdfStylePage)
 	page = mergePDFStyleOverrides(page, r.namedStyle(pdfStylePage), r.defaultStyle(pdfStylePage))
+	rootLeft, rootRight := r.rootHorizontalMargins()
+	page.MarginLeft += rootLeft
+	page.MarginRight += rootRight
 	for _, name := range []string{pdfStyleHTML, pdfStyleBody} {
 		root := r.namedStyle(name)
 		fallback := r.defaultStyle(name)
-		if root.MarginLeft != fallback.MarginLeft {
-			page.MarginLeft += root.MarginLeft
-		}
-		if root.MarginRight != fallback.MarginRight {
-			page.MarginRight += root.MarginRight
-		}
 		if root.HasSpaceBefore || root.SpaceBefore != fallback.SpaceBefore {
 			page.SpaceBefore += root.SpaceBefore
 		}
@@ -623,6 +620,22 @@ func (r *pdfStyleResolver) pageStyle() pdfBlockResolvedStyle {
 		}
 	}
 	return page
+}
+
+func (r *pdfStyleResolver) rootHorizontalMargins() (float64, float64) {
+	var left float64
+	var right float64
+	for _, name := range []string{pdfStyleHTML, pdfStyleBody} {
+		root := r.namedStyle(name)
+		fallback := r.defaultStyle(name)
+		if root.MarginLeft != fallback.MarginLeft {
+			left += root.MarginLeft
+		}
+		if root.MarginRight != fallback.MarginRight {
+			right += root.MarginRight
+		}
+	}
+	return left, right
 }
 
 func (r *pdfStyleResolver) rootDescendantStyleNames(block pdfTextBlock) []string {

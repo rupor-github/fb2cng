@@ -359,7 +359,7 @@ func appendTitleBlocksWithIDHeaderAndClasses(blocks *[]pdfTextBlock, title *fb2.
 		positionClass := titleParagraphPositionStyleClass(headerStyleName, firstParagraph)
 		firstParagraph = false
 		if imageID, alt, ok := paragraphImageOnly(item.Paragraph); ok {
-			appendImageIDBlock(blocks, imageID, anchorID, alt, joinStyleClasses(headerStyleName, item.Paragraph.Style, styleClasses, positionClass, pdfStyleHeadingImage))
+			appendStyledImageIDBlockWithRootHorizontalMargins(blocks, imageID, anchorID, alt, pdfStyleImage, joinStyleClasses(headerStyleName, item.Paragraph.Style, styleClasses, positionClass, pdfStyleHeadingImage), true)
 			anchorID = ""
 			prevWasImageOnlyHeadingParagraph = true
 			continue
@@ -374,7 +374,7 @@ func appendTitleBlocksWithIDHeaderAndClasses(blocks *[]pdfTextBlock, title *fb2.
 			classes = joinStyleClasses(classes, pdfStyleCode)
 		}
 		if text != "" || inlineRunsRenderable(runs) {
-			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockHeading, ID: anchorID, Text: text, Runs: runs, Depth: depth, StyleName: headerStyleName, StyleClasses: classes, Links: links})
+			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockHeading, ID: anchorID, Text: text, Runs: runs, Depth: depth, StyleName: headerStyleName, StyleClasses: classes, StripRootHorizontalMargins: inlineRunsHaveImages(runs), Links: links})
 			anchorID = ""
 			prevWasImageOnlyHeadingParagraph = false
 		}
@@ -443,6 +443,10 @@ func appendImageIDBlock(blocks *[]pdfTextBlock, imageID string, anchorID string,
 }
 
 func appendStyledImageIDBlock(blocks *[]pdfTextBlock, imageID string, anchorID string, alt string, styleName string, styleClasses string) {
+	appendStyledImageIDBlockWithRootHorizontalMargins(blocks, imageID, anchorID, alt, styleName, styleClasses, false)
+}
+
+func appendStyledImageIDBlockWithRootHorizontalMargins(blocks *[]pdfTextBlock, imageID string, anchorID string, alt string, styleName string, styleClasses string, stripRootHorizontalMargins bool) {
 	if strings.TrimSpace(imageID) == "" {
 		return
 	}
@@ -450,12 +454,13 @@ func appendStyledImageIDBlock(blocks *[]pdfTextBlock, imageID string, anchorID s
 		styleName = pdfStyleImage
 	}
 	*blocks = append(*blocks, pdfTextBlock{
-		Kind:         pdfBlockImage,
-		ID:           anchorID,
-		Text:         strings.TrimSpace(alt),
-		StyleName:    styleName,
-		StyleClasses: strings.TrimSpace(styleClasses),
-		ImageID:      imageID,
+		Kind:                       pdfBlockImage,
+		ID:                         anchorID,
+		Text:                       strings.TrimSpace(alt),
+		StyleName:                  styleName,
+		StyleClasses:               strings.TrimSpace(styleClasses),
+		StripRootHorizontalMargins: stripRootHorizontalMargins,
+		ImageID:                    imageID,
 	})
 }
 
@@ -631,6 +636,15 @@ func paragraphTextAndLinks(paragraph *fb2.Paragraph) (string, []pdfTextLink) {
 func inlineRunsRenderable(runs []pdfInlineRun) bool {
 	for _, run := range runs {
 		if run.Text != "" || run.ImageID != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func inlineRunsHaveImages(runs []pdfInlineRun) bool {
+	for _, run := range runs {
+		if run.ImageID != "" {
 			return true
 		}
 	}

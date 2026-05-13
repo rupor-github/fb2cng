@@ -170,7 +170,9 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 	}
 	blockStyles := styles.collapsedBlockStyles(doc.Blocks)
 	contentLeft, contentRight, contentTop, contentBottom := pdfPageContentMargins(doc, styles, margin)
+	rootlessContentLeft, rootlessContentRight, _, _ := pdfPageContentMarginsWithoutRootHorizontal(doc, styles, margin)
 	contentWidth := max(doc.PageWidth-contentLeft-contentRight, 12)
+	rootlessContentWidth := max(doc.PageWidth-rootlessContentLeft-rootlessContentRight, 12)
 	page := addPage()
 	top := doc.PageHeight - contentTop
 	bottom := contentBottom
@@ -201,10 +203,17 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 			newTextPage()
 		}
 
+		blockLeft := contentLeft
+		blockWidthLimit := contentWidth
+		if block.StripRootHorizontalMargins {
+			blockLeft = rootlessContentLeft
+			blockWidthLimit = rootlessContentWidth
+		}
+
 		if block.Kind == pdfBlockImage {
-			backgroundX := contentLeft + style.MarginLeft
-			backgroundWidth := blockBoxWidth(contentWidth, style)
-			blockWidth := blockContentWidth(contentWidth, style)
+			backgroundX := blockLeft + style.MarginLeft
+			backgroundWidth := blockBoxWidth(blockWidthLimit, style)
+			blockWidth := blockContentWidth(blockWidthLimit, style)
 			img := doc.Images[block.ImageID]
 			if img == nil {
 				continue
@@ -231,7 +240,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 			addAnchor(page, block.ID)
 			backgroundTop := y + style.PaddingTop
 			y -= height
-			imageX := contentLeft + style.MarginLeft + style.PaddingLeft
+			imageX := blockLeft + style.MarginLeft + style.PaddingLeft
 			switch style.Paragraph.Align {
 			case textAlignCenter:
 				imageX += max((blockWidth-width)/2, 0)
@@ -261,7 +270,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 		}
 
 		style.Paragraph.Hyphenator = doc.Hyphenator
-		blockWidth := blockContentWidth(contentWidth, style)
+		blockWidth := blockContentWidth(blockWidthLimit, style)
 		if block.Kind == pdfBlockEmptyLine {
 			continue
 		}
@@ -286,7 +295,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 			newTextPage()
 		}
 		if style.KeepWithNextLines > 0 && pageHasText {
-			keepWithNext, err := nextBlockKeepHeight(doc.Blocks[blockIndex+1:], doc.Hyphenator, doc.Fonts, styles, contentWidth, style.KeepWithNextLines)
+			keepWithNext, err := nextBlockKeepHeight(doc.Blocks[blockIndex+1:], doc.Hyphenator, doc.Fonts, styles, contentWidth, rootlessContentWidth, style.KeepWithNextLines)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -308,8 +317,8 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 		}
 		addAnchor(page, block.ID)
 		y -= style.SpaceBefore
-		backgroundX := contentLeft + style.MarginLeft
-		backgroundWidth := blockBoxWidth(contentWidth, style)
+		backgroundX := blockLeft + style.MarginLeft
+		backgroundWidth := blockBoxWidth(blockWidthLimit, style)
 		y -= style.PaddingTop
 		fragmentPage := page
 		fragmentTop := y + style.PaddingTop
@@ -335,7 +344,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 				fragmentPage = page
 				fragmentTop = y
 			}
-			x := contentLeft + style.MarginLeft + style.PaddingLeft + line.Indent
+			x := blockLeft + style.MarginLeft + style.PaddingLeft + line.Indent
 			available := blockWidth - line.Indent
 			switch style.Paragraph.Align {
 			case textAlignCenter:
@@ -380,6 +389,14 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 }
 
 func pdfPageContentMargins(doc skeletonDocument, styles *pdfStyleResolver, baseMargin float64) (float64, float64, float64, float64) {
+	return pdfPageContentMarginsWithOptions(doc, styles, baseMargin, false)
+}
+
+func pdfPageContentMarginsWithoutRootHorizontal(doc skeletonDocument, styles *pdfStyleResolver, baseMargin float64) (float64, float64, float64, float64) {
+	return pdfPageContentMarginsWithOptions(doc, styles, baseMargin, true)
+}
+
+func pdfPageContentMarginsWithOptions(doc skeletonDocument, styles *pdfStyleResolver, baseMargin float64, stripRootHorizontal bool) (float64, float64, float64, float64) {
 	left := baseMargin
 	right := baseMargin
 	top := baseMargin
@@ -390,6 +407,11 @@ func pdfPageContentMargins(doc skeletonDocument, styles *pdfStyleResolver, baseM
 		right += pageStyle.MarginRight
 		top += pageStyle.SpaceBefore
 		bottom += pageStyle.SpaceAfter
+		if stripRootHorizontal {
+			rootLeft, rootRight := styles.rootHorizontalMargins()
+			left -= rootLeft
+			right -= rootRight
+		}
 	}
 	left = max(left, 0)
 	right = max(right, 0)
@@ -408,7 +430,7 @@ func pdfPageContentMargins(doc skeletonDocument, styles *pdfStyleResolver, baseM
 	return left, right, top, bottom
 }
 
-func nextBlockKeepHeight(blocks []pdfTextBlock, hyphenator paragraphHyphenator, fonts *pdfFontRegistry, styles *pdfStyleResolver, contentWidth float64, minLines int) (float64, error) {
+func nextBlockKeepHeight(blocks []pdfTextBlock, hyphenator paragraphHyphenator, fonts *pdfFontRegistry, styles *pdfStyleResolver, contentWidth float64, rootlessContentWidth float64, minLines int) (float64, error) {
 	if styles == nil {
 		styles = newPDFStyleResolver(nil, nil)
 	}
@@ -432,7 +454,11 @@ func nextBlockKeepHeight(blocks []pdfTextBlock, hyphenator paragraphHyphenator, 
 		if err != nil {
 			return 0, err
 		}
-		lines, err := layoutInlineParagraph(skeletonDocument{Images: nil}, fonts, styles, face, block.Text, block.Runs, style.Paragraph, blockContentWidth(contentWidth, style))
+		availableWidth := contentWidth
+		if block.StripRootHorizontalMargins {
+			availableWidth = rootlessContentWidth
+		}
+		lines, err := layoutInlineParagraph(skeletonDocument{Images: nil}, fonts, styles, face, block.Text, block.Runs, style.Paragraph, blockContentWidth(availableWidth, style))
 		if err != nil {
 			return 0, err
 		}
