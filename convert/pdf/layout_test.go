@@ -330,8 +330,10 @@ func TestLayoutPDFPagesRendersImageOnlyHeadings(t *testing.T) {
 		Author:         "Author",
 		Images:         fb2.BookImages{"heading": img},
 		Blocks: []pdfTextBlock{{
-			Kind: pdfBlockSubtitle,
-			Runs: []pdfInlineRun{{ImageID: "heading"}},
+			Kind:         pdfBlockImage,
+			StyleName:    pdfStyleImage,
+			StyleClasses: pdfStyleHeadingImage,
+			ImageID:      "heading",
 		}},
 	}, face)
 	if err != nil {
@@ -340,8 +342,11 @@ func TestLayoutPDFPagesRendersImageOnlyHeadings(t *testing.T) {
 	if len(pages) != 2 || len(pages[1].Images) != 1 {
 		t.Fatalf("layout pages images = %#v, want image-only heading image", pages)
 	}
-	if len(pages[1].Lines) != 1 || len(pages[1].Lines[0].Fragments) != 1 || pages[1].Lines[0].Fragments[0].ImageID != "heading" {
-		t.Fatalf("heading line = %#v, want image-only fragment", pages[1].Lines)
+	if len(pages[1].Lines) != 0 {
+		t.Fatalf("heading lines = %#v, want image-only heading rendered as block image", pages[1].Lines)
+	}
+	if got, want := pages[1].Images[0].Width, 520.0-48.0; math.Abs(got-want) > 0.001 {
+		t.Fatalf("heading image width = %v, want content width %v", got, want)
 	}
 }
 

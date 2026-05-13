@@ -158,6 +158,17 @@ func TestParagraphInlineRunsPreserveImageOnlyParagraphs(t *testing.T) {
 	}
 }
 
+func TestAppendParagraphBlockWithClassesConvertsImageOnlyHeadingsToImageBlocks(t *testing.T) {
+	paragraph := &fb2.Paragraph{ID: "h", Text: []fb2.InlineSegment{{Kind: fb2.InlineImageSegment, Image: &fb2.InlineImage{Href: "#heading.png", Alt: "Heading"}}}}
+	var blocks []pdfTextBlock
+
+	appendParagraphBlockWithClasses(&blocks, pdfBlockSubtitle, paragraph, 1, "custom")
+
+	if len(blocks) != 1 || blocks[0].Kind != pdfBlockImage || blocks[0].ImageID != "heading.png" || blocks[0].ID != "h" || blocks[0].Text != "Heading" || blocks[0].StyleClasses != "custom "+pdfStyleHeadingImage {
+		t.Fatalf("blocks = %#v, want image-only heading block", blocks)
+	}
+}
+
 func TestParagraphInlineRunsTrimScriptWhitespace(t *testing.T) {
 	paragraph := &fb2.Paragraph{Text: []fb2.InlineSegment{
 		{Text: "word"},

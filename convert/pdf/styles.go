@@ -47,6 +47,7 @@ const (
 	pdfStyleVerse              = "verse"
 	pdfStyleTextAuthor         = "text-author"
 	pdfStyleImage              = "image"
+	pdfStyleHeadingImage       = "heading-image"
 	pdfStyleTOCItem            = "toc-item"
 	pdfStyleTOCTitle           = "toc-title"
 	pdfStyleAnnotation         = "annotation"

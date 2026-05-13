@@ -343,6 +343,11 @@ func appendTitleBlocksWithID(blocks *[]pdfTextBlock, title *fb2.Title, depth int
 		if item.Paragraph == nil {
 			continue
 		}
+		if imageID, alt, ok := paragraphImageOnly(item.Paragraph); ok {
+			appendImageIDBlock(blocks, imageID, anchorID, alt, joinStyleClasses(pdfStyleHeadingImage))
+			anchorID = ""
+			continue
+		}
 		text, links := paragraphTextAndLinks(item.Paragraph)
 		runs := paragraphInlineRuns(item.Paragraph)
 		classes := ""
@@ -406,12 +411,20 @@ func appendImageBlock(blocks *[]pdfTextBlock, image *fb2.Image, fallbackID strin
 	if anchorID == "" {
 		anchorID = fallbackID
 	}
+	appendImageIDBlock(blocks, imageID, anchorID, strings.TrimSpace(image.Alt), "")
+}
+
+func appendImageIDBlock(blocks *[]pdfTextBlock, imageID string, anchorID string, alt string, styleClasses string) {
+	if strings.TrimSpace(imageID) == "" {
+		return
+	}
 	*blocks = append(*blocks, pdfTextBlock{
-		Kind:      pdfBlockImage,
-		ID:        anchorID,
-		Text:      strings.TrimSpace(image.Alt),
-		StyleName: pdfStyleImage,
-		ImageID:   imageID,
+		Kind:         pdfBlockImage,
+		ID:           anchorID,
+		Text:         strings.TrimSpace(alt),
+		StyleName:    pdfStyleImage,
+		StyleClasses: strings.TrimSpace(styleClasses),
+		ImageID:      imageID,
 	})
 }
 
@@ -447,17 +460,20 @@ func appendVignetteBlock(blocks *[]pdfTextBlock, book *fb2.FictionBook, position
 	if imageID == "" {
 		return
 	}
-	*blocks = append(*blocks, pdfTextBlock{
-		Kind:         pdfBlockImage,
-		StyleName:    pdfStyleImage,
-		StyleClasses: joinStyleClasses("vignette", "vignette-"+position.String()),
-		ImageID:      imageID,
-	})
+	appendImageIDBlock(blocks, imageID, "", "", joinStyleClasses("vignette", "vignette-"+position.String()))
 }
 
 func isVignetteBlock(block pdfTextBlock) bool {
+	return blockHasStyleClass(block, "vignette")
+}
+
+func isHeadingImageBlock(block pdfTextBlock) bool {
+	return blockHasStyleClass(block, pdfStyleHeadingImage)
+}
+
+func blockHasStyleClass(block pdfTextBlock, className string) bool {
 	for _, class := range strings.Fields(block.StyleClasses) {
-		if class == "vignette" {
+		if class == className {
 			return true
 		}
 	}
@@ -471,6 +487,12 @@ func appendParagraphBlock(blocks *[]pdfTextBlock, kind pdfBlockKind, paragraph *
 func appendParagraphBlockWithClasses(blocks *[]pdfTextBlock, kind pdfBlockKind, paragraph *fb2.Paragraph, depth int, styleClasses string) {
 	if paragraph == nil {
 		return
+	}
+	if kind == pdfBlockHeading || kind == pdfBlockSubtitle {
+		if imageID, alt, ok := paragraphImageOnly(paragraph); ok {
+			appendImageIDBlock(blocks, imageID, paragraph.ID, alt, joinStyleClasses(styleClasses, pdfStyleHeadingImage))
+			return
+		}
 	}
 	text, links := paragraphTextAndLinks(paragraph)
 	runs := paragraphInlineRuns(paragraph)
@@ -555,6 +577,49 @@ func paragraphInlineRuns(paragraph *fb2.Paragraph) []pdfInlineRun {
 		return trimCodeBlockInlineRuns(runs)
 	}
 	return trimInlineRuns(runs)
+}
+
+func paragraphImageOnly(paragraph *fb2.Paragraph) (string, string, bool) {
+	if paragraph == nil || len(paragraph.Text) == 0 {
+		return "", "", false
+	}
+	var imageID string
+	var alt string
+	for i := range paragraph.Text {
+		if !inlineSegmentImageOnly(&paragraph.Text[i], &imageID, &alt) {
+			return "", "", false
+		}
+	}
+	return imageID, alt, imageID != ""
+}
+
+func inlineSegmentImageOnly(seg *fb2.InlineSegment, imageID *string, alt *string) bool {
+	if seg == nil {
+		return true
+	}
+	if seg.Text != "" && strings.TrimSpace(seg.Text) != "" {
+		return false
+	}
+	if seg.Kind == fb2.InlineImageSegment {
+		if seg.Image == nil {
+			return true
+		}
+		id := imageRefID(seg.Image.Href)
+		if id == "" {
+			return true
+		}
+		if *imageID != "" {
+			return false
+		}
+		*imageID = id
+		*alt = strings.TrimSpace(seg.Image.Alt)
+	}
+	for i := range seg.Children {
+		if !inlineSegmentImageOnly(&seg.Children[i], imageID, alt) {
+			return false
+		}
+	}
+	return true
 }
 
 func paragraphIsCodeBlock(paragraph *fb2.Paragraph) bool {
