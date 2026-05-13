@@ -194,7 +194,7 @@ func TestParagraphInlineRunsPreserveFB2InlineStyles(t *testing.T) {
 	assertRun(3, "strike", func(run pdfInlineRun) bool { return run.Strikethrough })
 	assertRun(5, "sub", func(run pdfInlineRun) bool { return run.Subscript && !run.Superscript })
 	assertRun(7, "sup", func(run pdfInlineRun) bool { return run.Superscript && !run.Subscript })
-	assertRun(9, "code", func(run pdfInlineRun) bool { return run.Code })
+	assertRun(9, "code", func(run pdfInlineRun) bool { return run.Code && run.StyleClasses == pdfStyleCode })
 	assertRun(11, "styled", func(run pdfInlineRun) bool { return run.StyleClasses == "accent" })
 }
 

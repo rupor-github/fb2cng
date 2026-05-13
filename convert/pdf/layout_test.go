@@ -224,7 +224,7 @@ func TestLayoutPDFPagesAppliesInlineStyles(t *testing.T) {
 		case "sup":
 			sawSup = fragment.BaselineShift > 0 && fragment.FontSize < line.FontSize
 		case "code":
-			sawCode = fragment.FontKey.Family == "monospace"
+			sawCode = fragment.FontKey.Family == "monospace" && fragment.FontSize < line.FontSize
 		}
 	}
 	if !sawBoldItalic || !sawStrike || !sawSub || !sawSup || !sawCode {
@@ -233,6 +233,46 @@ func TestLayoutPDFPagesAppliesInlineStyles(t *testing.T) {
 	for _, key := range []pdfFontKey{{Family: "serif"}, {Family: "serif", Bold: true, Italic: true}, {Family: "monospace"}} {
 		if len(used[key]) == 0 {
 			t.Fatalf("used glyphs for font key %#v missing in %#v", key, used)
+		}
+	}
+}
+
+func TestLayoutPDFPagesPreservesCodeBlockWhitespace(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  260,
+		PageHeight: 180,
+		Title:      "Title",
+		Author:     "Author",
+		Blocks: []pdfTextBlock{{
+			Kind:         pdfBlockParagraph,
+			Text:         "alpha beta",
+			StyleClasses: pdfStyleCode,
+			Runs: []pdfInlineRun{{
+				Text:         "\n  alpha\n    beta\n  ",
+				StyleClasses: pdfStyleCode,
+				Code:         true,
+			}},
+		}},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 || len(pages[1].Lines) != 2 {
+		t.Fatalf("layoutPDFPages() pages = %#v, want two preformatted code lines", pages)
+	}
+	if got := pdfPageLineText(pages[1].Lines[0]); got != "  alpha" {
+		t.Fatalf("first code line = %q, want preserved indentation", got)
+	}
+	if got := pdfPageLineText(pages[1].Lines[1]); got != "    beta" {
+		t.Fatalf("second code line = %q, want preserved indentation", got)
+	}
+	for _, line := range pages[1].Lines {
+		if line.X != 24 || line.Fragments[0].FontKey.Family != "monospace" || line.Fragments[0].FontSize >= pdfBaseFontSize {
+			t.Fatalf("code line = %#v, want left-aligned smaller monospace", line)
 		}
 	}
 }

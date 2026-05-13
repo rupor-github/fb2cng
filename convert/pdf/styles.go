@@ -60,6 +60,7 @@ const (
 	pdfStyleCite               = "cite"
 	pdfStyleCiteSubtitle       = "cite-subtitle"
 	pdfStyleTable              = "table"
+	pdfStyleCode               = "code"
 	pdfStyleEmptyLine          = "emptyline"
 	pdfStyleLinkExternal       = "link-external"
 	pdfStyleLinkInternal       = "link-internal"
@@ -121,6 +122,7 @@ type pdfDebugResolvedStyle struct {
 	Color             string  `json:"color,omitempty"`
 	Underline         bool    `json:"underline,omitempty"`
 	Strikethrough     bool    `json:"strikethrough,omitempty"`
+	PreserveSpace     bool    `json:"preserve_space,omitempty"`
 	SpaceBefore       float64 `json:"space_before,omitempty"`
 	SpaceAfter        float64 `json:"space_after,omitempty"`
 	MarginLeft        float64 `json:"margin_left,omitempty"`
@@ -241,6 +243,11 @@ func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 			Orphans:    pdfSingleKeepLine,
 			Widows:     pdfSingleKeepLine,
 		},
+		pdfStyleCode: {
+			Paragraph: paragraphStyle{FontFamily: "monospace", FontSize: pdfBaseFontSize * 0.70, LineHeight: pdfBaseLineHeight, Align: textAlignLeft, PreserveSpace: true, Hyphenation: paragraphHyphenationNone},
+			Orphans:   pdfSingleKeepLine,
+			Widows:    pdfSingleKeepLine,
+		},
 		pdfStyleTOCTitle:        headingPDFStyle(1),
 		pdfStyleAnnotationTitle: headingPDFStyle(1),
 		pdfStyleEmptyLine: {
@@ -337,6 +344,9 @@ func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfB
 	}
 	if override.Paragraph.Strikethrough != fallback.Paragraph.Strikethrough {
 		base.Paragraph.Strikethrough = override.Paragraph.Strikethrough
+	}
+	if override.Paragraph.PreserveSpace != fallback.Paragraph.PreserveSpace {
+		base.Paragraph.PreserveSpace = override.Paragraph.PreserveSpace
 	}
 	if override.Paragraph.Hyphenation != fallback.Paragraph.Hyphenation {
 		base.Paragraph.Hyphenation = override.Paragraph.Hyphenation
@@ -535,6 +545,8 @@ func pdfSelectorStyleNames(sel css.Selector) []string {
 		return []string{pdfStyleImage}
 	case "table":
 		return []string{pdfStyleTable}
+	case "code":
+		return []string{pdfStyleCode}
 	default:
 		return nil
 	}
@@ -619,10 +631,18 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 			style.Paragraph.VerticalAlign = align
 		}
 	}
+	if value, ok := props["white-space"]; ok {
+		switch cssKeyword(value) {
+		case "pre", "pre-wrap", "break-spaces":
+			style.Paragraph.PreserveSpace = true
+		case "normal", "nowrap", "pre-line":
+			style.Paragraph.PreserveSpace = false
+		}
+	}
 	names := make([]string, 0, len(props))
 	for name := range props {
 		lower := strings.ToLower(name)
-		if lower != "font-family" && lower != "font-weight" && lower != "font-style" && lower != "color" && lower != "background-color" && lower != "background" && lower != "border" && lower != "border-width" && lower != "border-color" && lower != "border-style" && lower != "text-decoration" && lower != "font-size" && lower != "line-height" && lower != "letter-spacing" && lower != "vertical-align" {
+		if lower != "font-family" && lower != "font-weight" && lower != "font-style" && lower != "color" && lower != "background-color" && lower != "background" && lower != "border" && lower != "border-width" && lower != "border-color" && lower != "border-style" && lower != "text-decoration" && lower != "font-size" && lower != "line-height" && lower != "letter-spacing" && lower != "vertical-align" && lower != "white-space" {
 			names = append(names, name)
 		}
 	}
@@ -1143,6 +1163,7 @@ func (r *pdfStyleResolver) debugStyles() []pdfDebugResolvedStyle {
 			Color:             style.Paragraph.Color.String(),
 			Underline:         style.Paragraph.Underline,
 			Strikethrough:     style.Paragraph.Strikethrough,
+			PreserveSpace:     style.Paragraph.PreserveSpace,
 			Hyphenation:       pdfHyphenationString(style.Paragraph.Hyphenation),
 			SpaceBefore:       style.SpaceBefore,
 			SpaceAfter:        style.SpaceAfter,

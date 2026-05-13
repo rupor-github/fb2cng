@@ -330,8 +330,12 @@ func appendTitleBlocksWithID(blocks *[]pdfTextBlock, title *fb2.Title, depth int
 		}
 		text, links := paragraphTextAndLinks(item.Paragraph)
 		runs := paragraphInlineRuns(item.Paragraph)
+		classes := ""
+		if paragraphIsCodeBlock(item.Paragraph) {
+			classes = pdfStyleCode
+		}
 		if text != "" || inlineRunsRenderable(runs) {
-			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockHeading, ID: anchorID, Text: text, Runs: runs, Depth: depth, StyleName: pdfHeadingStyleName(depth), Links: links})
+			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockHeading, ID: anchorID, Text: text, Runs: runs, Depth: depth, StyleName: pdfHeadingStyleName(depth), StyleClasses: classes, Links: links})
 			anchorID = ""
 		}
 	}
@@ -406,6 +410,9 @@ func appendParagraphBlockWithClasses(blocks *[]pdfTextBlock, kind pdfBlockKind, 
 	}
 	text, links := paragraphTextAndLinks(paragraph)
 	runs := paragraphInlineRuns(paragraph)
+	if paragraphIsCodeBlock(paragraph) {
+		styleClasses = joinStyleClasses(styleClasses, pdfStyleCode)
+	}
 	if text != "" || inlineRunsRenderable(runs) {
 		*blocks = append(*blocks, pdfTextBlock{Kind: kind, ID: paragraph.ID, Text: text, Runs: runs, Depth: depth, StyleName: pdfStyleNameForKind(kind), StyleClasses: joinStyleClasses(paragraph.Style, styleClasses), Links: links})
 	}
@@ -480,7 +487,45 @@ func paragraphInlineRuns(paragraph *fb2.Paragraph) []pdfInlineRun {
 	for i := range paragraph.Text {
 		appendInlineSegmentRun(&runs, &paragraph.Text[i], pdfInlineRun{})
 	}
+	if paragraphIsCodeBlock(paragraph) {
+		return trimCodeBlockInlineRuns(runs)
+	}
 	return trimInlineRuns(runs)
+}
+
+func paragraphIsCodeBlock(paragraph *fb2.Paragraph) bool {
+	if paragraph == nil || len(paragraph.Text) == 0 {
+		return false
+	}
+	seenCode := false
+	for i := range paragraph.Text {
+		if !inlineSegmentIsCodeBlockContent(&paragraph.Text[i], false, &seenCode) {
+			return false
+		}
+	}
+	return seenCode
+}
+
+func inlineSegmentIsCodeBlockContent(seg *fb2.InlineSegment, inCode bool, seenCode *bool) bool {
+	if seg == nil {
+		return true
+	}
+	if seg.Kind == fb2.InlineCode {
+		inCode = true
+		*seenCode = true
+	}
+	if seg.Text != "" && !inCode && strings.TrimSpace(seg.Text) != "" {
+		return false
+	}
+	if seg.Kind == fb2.InlineImageSegment && !inCode {
+		return false
+	}
+	for i := range seg.Children {
+		if !inlineSegmentIsCodeBlockContent(&seg.Children[i], inCode, seenCode) {
+			return false
+		}
+	}
+	return true
 }
 
 func inlineSegmentsTextAndLinks(segments []fb2.InlineSegment) (string, []pdfTextLink) {
@@ -624,6 +669,7 @@ func applyInlineSegmentStyle(style pdfInlineRun, seg *fb2.InlineSegment) pdfInli
 		style.Subscript = false
 	case fb2.InlineCode:
 		style.Code = true
+		style.StyleClasses = joinStyleClasses(style.StyleClasses, pdfStyleCode)
 	case fb2.InlineLink:
 		style.StyleClasses = joinStyleClasses(style.StyleClasses, pdfLinkStyleClass(seg))
 		style.LinkHref = strings.TrimSpace(seg.Href)
@@ -648,6 +694,27 @@ func appendInlineRun(runs *[]pdfInlineRun, run pdfInlineRun) {
 
 func sameInlineStyle(a, b pdfInlineRun) bool {
 	return a.StyleClasses == b.StyleClasses && a.LinkHref == b.LinkHref && a.ImageID == b.ImageID && a.Bold == b.Bold && a.Italic == b.Italic && a.Underline == b.Underline && a.Strikethrough == b.Strikethrough && a.Subscript == b.Subscript && a.Superscript == b.Superscript && a.Code == b.Code
+}
+
+func trimCodeBlockInlineRuns(runs []pdfInlineRun) []pdfInlineRun {
+	for len(runs) > 0 {
+		trimmed := strings.TrimLeft(runs[0].Text, "\r\n")
+		if trimmed != "" || runs[0].ImageID != "" {
+			runs[0].Text = trimmed
+			break
+		}
+		runs = runs[1:]
+	}
+	for len(runs) > 0 {
+		last := len(runs) - 1
+		trimmed := strings.TrimRight(runs[last].Text, " \t\n\r")
+		if trimmed != "" || runs[last].ImageID != "" {
+			runs[last].Text = trimmed
+			break
+		}
+		runs = runs[:last]
+	}
+	return runs
 }
 
 func trimInlineRuns(runs []pdfInlineRun) []pdfInlineRun {

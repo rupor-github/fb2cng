@@ -8,6 +8,22 @@ import (
 	"fbc/fb2"
 )
 
+func TestPDFStyleResolverAppliesCodeStylesheet(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `code { white-space: pre-wrap; font-family: monospace; font-size: 70%; text-align: left; }`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	style := resolver.styles[pdfStyleCode]
+	if !style.Paragraph.PreserveSpace || style.Paragraph.FontFamily != "monospace" || style.Paragraph.Align != textAlignLeft {
+		t.Fatalf("code style = %#v, want pre-wrap monospace left alignment", style.Paragraph)
+	}
+	if style.Paragraph.FontSize < 7.34 || style.Paragraph.FontSize > 7.36 {
+		t.Fatalf("code font size = %v, want 70%% base font size", style.Paragraph.FontSize)
+	}
+}
+
 func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",

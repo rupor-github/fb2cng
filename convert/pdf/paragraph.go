@@ -39,6 +39,7 @@ type paragraphStyle struct {
 	Color           pdfColor
 	Underline       bool
 	Strikethrough   bool
+	PreserveSpace   bool
 	Hyphenation     paragraphHyphenation
 	Hyphenator      paragraphHyphenator
 }

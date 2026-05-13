@@ -20,11 +20,15 @@ type paragraphInlineWord struct {
 type inlineGlyphPiece struct {
 	Glyph    shapedGlyph
 	Template paragraphLineFragment
+	Newline  bool
 }
 
 func layoutInlineParagraph(doc skeletonDocument, registry *pdfFontRegistry, resolver *pdfStyleResolver, baseFace *builtinFontFace, text string, runs []pdfInlineRun, style paragraphStyle, maxWidth float64) ([]paragraphLine, error) {
 	if len(runs) == 0 {
 		runs = []pdfInlineRun{{Text: text}}
+	}
+	if style.PreserveSpace {
+		return layoutPreformattedParagraph(doc, registry, resolver, runs, style, maxWidth)
 	}
 	if !hasInlineStyle(runs) {
 		return layoutParagraph(baseFace, plainInlineRunText(runs), style, maxWidth)
@@ -98,6 +102,185 @@ func plainInlineRunText(runs []pdfInlineRun) string {
 		b.WriteString(run.Text)
 	}
 	return strings.TrimSpace(b.String())
+}
+
+func layoutPreformattedParagraph(doc skeletonDocument, registry *pdfFontRegistry, resolver *pdfStyleResolver, runs []pdfInlineRun, style paragraphStyle, maxWidth float64) ([]paragraphLine, error) {
+	if style.FontSize <= 0 {
+		return nil, fmt.Errorf("paragraph font size must be positive: %g", style.FontSize)
+	}
+	if maxWidth <= 0 {
+		return nil, fmt.Errorf("paragraph width must be positive: %g", maxWidth)
+	}
+	pieces, err := preformattedPieces(doc, registry, resolver, runs, style, maxWidth)
+	if err != nil {
+		return nil, err
+	}
+	pieces = trimPreformattedPieces(pieces)
+	if len(pieces) == 0 {
+		return nil, nil
+	}
+	linePieces := wrapPreformattedPieces(pieces, maxWidth)
+	lines := make([]paragraphLine, 0, len(linePieces))
+	for _, pieces := range linePieces {
+		fragments := inlinePiecesToFragments(pieces)
+		line := paragraphLine{
+			Fragments: fragments,
+			Width:     paragraphFragmentsWidth(fragments),
+		}
+		line.Text = shapedTextFromFragments(fragments)
+		line.BreakStats = paragraphLineBreakStatsFor(line.Width, maxWidth, 0, len(lines) == 0, false, false, false, false, paragraphFitnessDecent)
+		lines = append(lines, line)
+	}
+	if len(lines) > 0 {
+		last := len(lines) - 1
+		lines[last].BreakStats = paragraphLineBreakStatsFor(lines[last].Width, maxWidth, 0, last == 0, true, false, false, false, paragraphFitnessDecent)
+	}
+	return lines, nil
+}
+
+func preformattedPieces(doc skeletonDocument, registry *pdfFontRegistry, resolver *pdfStyleResolver, runs []pdfInlineRun, base paragraphStyle, maxWidth float64) ([]inlineGlyphPiece, error) {
+	pieces := make([]inlineGlyphPiece, 0)
+	for _, run := range runs {
+		text := strings.ReplaceAll(run.Text, "\r\n", "\n")
+		text = strings.ReplaceAll(text, "\r", "\n")
+		if run.ImageID != "" {
+			fragment, err := inlineRunFragment(doc, registry, resolver, base, run, "", maxWidth)
+			if err != nil {
+				return nil, err
+			}
+			pieces = append(pieces, inlineGlyphPiece{Template: fragment})
+			continue
+		}
+		parts := strings.Split(text, "\n")
+		for i, part := range parts {
+			if part != "" {
+				fragment, err := inlineRunFragment(doc, registry, resolver, base, run, part, maxWidth)
+				if err != nil {
+					return nil, err
+				}
+				for _, glyph := range fragment.Text.Glyphs {
+					pieces = append(pieces, inlineGlyphPiece{Glyph: glyph, Template: fragment})
+				}
+			}
+			if i != len(parts)-1 {
+				pieces = append(pieces, inlineGlyphPiece{Newline: true})
+			}
+		}
+	}
+	return pieces, nil
+}
+
+func trimPreformattedPieces(pieces []inlineGlyphPiece) []inlineGlyphPiece {
+	for len(pieces) > 0 && pieces[0].Newline {
+		pieces = pieces[1:]
+	}
+	for len(pieces) > 0 {
+		last := pieces[len(pieces)-1]
+		if !last.Newline && !isBreakableSpace(last.Glyph.Rune) {
+			break
+		}
+		pieces = pieces[:len(pieces)-1]
+	}
+	return pieces
+}
+
+func wrapPreformattedPieces(pieces []inlineGlyphPiece, maxWidth float64) [][]inlineGlyphPiece {
+	lines := make([][]inlineGlyphPiece, 0)
+	current := make([]inlineGlyphPiece, 0)
+	currentWidth := 0.0
+	lastBreak := -1
+	flush := func(line []inlineGlyphPiece) {
+		line = trimTrailingBreakableSpacePieces(line)
+		lines = append(lines, append([]inlineGlyphPiece(nil), line...))
+	}
+	for _, piece := range pieces {
+		if piece.Newline {
+			flush(current)
+			current = current[:0]
+			currentWidth = 0
+			lastBreak = -1
+			continue
+		}
+		pieceWidth := preformattedPieceWidth(piece)
+		if len(current) > 0 && currentWidth+pieceWidth > maxWidth {
+			breakAt := len(current)
+			if lastBreak > 0 && !allBreakableSpacePieces(current[:lastBreak]) {
+				breakAt = lastBreak
+			}
+			flush(current[:breakAt])
+			current = append([]inlineGlyphPiece{}, trimLeadingBreakableSpacePieces(current[breakAt:])...)
+			currentWidth = preformattedPiecesWidth(current)
+			lastBreak = lastBreakIndex(current)
+		}
+		current = append(current, piece)
+		currentWidth += pieceWidth
+		if isBreakableSpace(piece.Glyph.Rune) {
+			lastBreak = len(current)
+		}
+	}
+	if len(current) > 0 || len(lines) == 0 {
+		flush(current)
+	}
+	return lines
+}
+
+func trimTrailingBreakableSpacePieces(pieces []inlineGlyphPiece) []inlineGlyphPiece {
+	for len(pieces) > 0 && !pieces[len(pieces)-1].Newline && isBreakableSpace(pieces[len(pieces)-1].Glyph.Rune) {
+		pieces = pieces[:len(pieces)-1]
+	}
+	return pieces
+}
+
+func trimLeadingBreakableSpacePieces(pieces []inlineGlyphPiece) []inlineGlyphPiece {
+	for len(pieces) > 0 && !pieces[0].Newline && isBreakableSpace(pieces[0].Glyph.Rune) {
+		pieces = pieces[1:]
+	}
+	return pieces
+}
+
+func allBreakableSpacePieces(pieces []inlineGlyphPiece) bool {
+	for _, piece := range pieces {
+		if piece.Newline || !isBreakableSpace(piece.Glyph.Rune) {
+			return false
+		}
+	}
+	return len(pieces) > 0
+}
+
+func lastBreakIndex(pieces []inlineGlyphPiece) int {
+	last := -1
+	for i, piece := range pieces {
+		if !piece.Newline && isBreakableSpace(piece.Glyph.Rune) {
+			last = i + 1
+		}
+	}
+	return last
+}
+
+func preformattedPiecesWidth(pieces []inlineGlyphPiece) float64 {
+	width := 0.0
+	for _, piece := range pieces {
+		width += preformattedPieceWidth(piece)
+	}
+	return width
+}
+
+func preformattedPieceWidth(piece inlineGlyphPiece) float64 {
+	if piece.Template.ImageID != "" {
+		return piece.Template.Width
+	}
+	return float64(piece.Glyph.Width) * piece.Template.FontSize / 1000.0
+}
+
+func shapedTextFromFragments(fragments []paragraphLineFragment) shapedText {
+	shaped := shapedText{Used: make(map[uint16]shapedGlyph)}
+	for _, fragment := range fragments {
+		shaped.Glyphs = append(shaped.Glyphs, fragment.Text.Glyphs...)
+		for id, glyph := range fragment.Text.Used {
+			shaped.Used[id] = glyph
+		}
+	}
+	return shaped
 }
 
 func inlineParagraphWords(doc skeletonDocument, registry *pdfFontRegistry, resolver *pdfStyleResolver, runs []pdfInlineRun, base paragraphStyle, maxWidth float64) ([]paragraphInlineWord, error) {
@@ -259,6 +442,9 @@ func inlineRunParagraphStyle(resolver *pdfStyleResolver, base paragraphStyle, ru
 	style.Strikethrough = style.Strikethrough || run.Strikethrough
 	if run.Code {
 		style.FontFamily = "monospace"
+		if !inlineRunHasStyleClass(run, pdfStyleCode) {
+			style.FontSize *= 0.70
+		}
 	}
 	if run.Subscript {
 		style.VerticalAlign = textVerticalAlignSub
@@ -271,6 +457,15 @@ func inlineRunParagraphStyle(resolver *pdfStyleResolver, base paragraphStyle, ru
 		style.LetterSpacing *= pdfInlineScriptScale
 	}
 	return style
+}
+
+func inlineRunHasStyleClass(run pdfInlineRun, className string) bool {
+	for _, class := range strings.Fields(run.StyleClasses) {
+		if class == className {
+			return true
+		}
+	}
+	return false
 }
 
 func inlineClassParagraphStyle(resolver *pdfStyleResolver, base paragraphStyle, classes string) paragraphStyle {
@@ -319,6 +514,9 @@ func mergeInlineParagraphStyle(base, override, fallback paragraphStyle) paragrap
 	}
 	if override.Strikethrough != fallback.Strikethrough {
 		base.Strikethrough = override.Strikethrough
+	}
+	if override.PreserveSpace != fallback.PreserveSpace {
+		base.PreserveSpace = override.PreserveSpace
 	}
 	return base
 }
