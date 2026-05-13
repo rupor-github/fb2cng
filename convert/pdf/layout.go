@@ -66,7 +66,7 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 				page.Images = append(page.Images, pdfPageImage{
 					ImageID: fragment.ImageID,
 					X:       currentX,
-					Y:       y - fragment.ImageHeight*0.2,
+					Y:       y + fragment.BaselineShift,
 					Width:   fragment.Width,
 					Height:  fragment.ImageHeight,
 				})

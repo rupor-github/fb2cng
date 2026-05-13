@@ -141,15 +141,15 @@ func pageTextDecorations(page pdfPage) []byte {
 func writeFragmentDecorations(buf *bytes.Buffer, line pdfPageLine) {
 	currentX := line.X
 	for i, fragment := range line.Fragments {
-		if len(fragment.Text.Glyphs) != 0 && (fragment.Underline || fragment.Strikethrough) {
+		if fragment.Width > 0 && (fragment.Underline || fragment.Strikethrough) && (len(fragment.Text.Glyphs) != 0 || fragment.ImageID != "") {
 			thickness := max(fragment.FontSize/18, 0.4)
 			fmt.Fprintf(buf, "q\n%s\n%s w\n", fragment.Color.strokeOperator(), docwriter.FormatNumber(thickness))
 			if fragment.Underline {
-				y := line.Y + fragment.BaselineShift - fragment.FontSize*0.12
+				y := fragmentUnderlineY(line, fragment)
 				writeDecorationLine(buf, currentX, y, currentX+fragment.Width)
 			}
 			if fragment.Strikethrough {
-				y := line.Y + fragment.BaselineShift + fragment.FontSize*0.30
+				y := fragmentStrikethroughY(line, fragment)
 				writeDecorationLine(buf, currentX, y, currentX+fragment.Width)
 			}
 			buf.WriteString("Q\n")
@@ -162,6 +162,17 @@ func writeFragmentDecorations(buf *bytes.Buffer, line pdfPageLine) {
 			currentX += line.ExtraWordSpacing
 		}
 	}
+}
+
+func fragmentUnderlineY(line pdfPageLine, fragment pdfPageLineFragment) float64 {
+	return line.Y + fragment.BaselineShift - fragment.FontSize*0.12
+}
+
+func fragmentStrikethroughY(line pdfPageLine, fragment pdfPageLineFragment) float64 {
+	if fragment.ImageID != "" && fragment.ImageHeight > 0 {
+		return line.Y + fragment.BaselineShift + fragment.ImageHeight*0.5
+	}
+	return line.Y + fragment.BaselineShift + fragment.FontSize*0.30
 }
 
 func writeDecorationLine(buf *bytes.Buffer, x1, y, x2 float64) {

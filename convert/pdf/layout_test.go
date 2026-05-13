@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"math"
 	"strings"
 	"testing"
 
@@ -258,7 +259,7 @@ func TestLayoutPDFPagesRendersInlineImages(t *testing.T) {
 			Text: "before after",
 			Runs: []pdfInlineRun{
 				{Text: "before "},
-				{ImageID: "inline"},
+				{ImageID: "inline", StyleClasses: pdfStyleLinkInternal, LinkHref: "#target"},
 				{Text: " after"},
 			},
 		}},
@@ -276,15 +277,33 @@ func TestLayoutPDFPagesRendersInlineImages(t *testing.T) {
 	if len(pages[1].Lines) != 1 {
 		t.Fatalf("lines = %#v, want one body line", pages[1].Lines)
 	}
-	foundImageFragment := false
-	for _, fragment := range pages[1].Lines[0].Fragments {
+	line := pages[1].Lines[0]
+	var imageFragment *pdfPageLineFragment
+	for i := range line.Fragments {
+		fragment := &line.Fragments[i]
 		if fragment.ImageID == "inline" {
-			foundImageFragment = true
+			imageFragment = fragment
 			break
 		}
 	}
-	if !foundImageFragment {
-		t.Fatalf("line fragments = %#v, want inline image fragment", pages[1].Lines[0].Fragments)
+	if imageFragment == nil {
+		t.Fatalf("line fragments = %#v, want inline image fragment", line.Fragments)
+	}
+	if !imageFragment.Underline {
+		t.Fatalf("inline image fragment = %#v, want link underline decoration", *imageFragment)
+	}
+	if math.Abs(image.Height-pdfBaseLineHeight) > 0.001 || math.Abs(imageFragment.ImageHeight-pdfBaseLineHeight) > 0.001 {
+		t.Fatalf("inline image height = %v / fragment %v, want current line height %v", image.Height, imageFragment.ImageHeight, pdfBaseLineHeight)
+	}
+	if math.Abs(image.Y-(line.Y+imageFragment.BaselineShift)) > 0.001 || image.Y >= line.Y || image.Y+image.Height <= line.Y {
+		t.Fatalf("inline image Y = %v, line Y = %v, fragment baseline shift = %v", image.Y, line.Y, imageFragment.BaselineShift)
+	}
+	if len(pages[1].Annotations) != 1 {
+		t.Fatalf("annotations = %#v, want inline image link annotation", pages[1].Annotations)
+	}
+	annotation := pages[1].Annotations[0]
+	if annotation.Href != "#target" || math.Abs(annotation.Rect.X1-image.X) > 0.001 || math.Abs(annotation.Rect.Y1-image.Y) > 0.001 || math.Abs(annotation.Rect.X2-(image.X+image.Width)) > 0.001 || math.Abs(annotation.Rect.Y2-(image.Y+image.Height)) > 0.001 {
+		t.Fatalf("annotation = %#v, image = %#v, want image rectangle link", annotation, image)
 	}
 }
 

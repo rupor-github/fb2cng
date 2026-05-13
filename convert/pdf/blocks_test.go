@@ -132,6 +132,22 @@ func TestParagraphInlineRunsPreserveInlineImages(t *testing.T) {
 	}
 }
 
+func TestParagraphInlineRunsPreserveLinkedInlineImages(t *testing.T) {
+	paragraph := &fb2.Paragraph{Text: []fb2.InlineSegment{
+		{Text: "before "},
+		{Kind: fb2.InlineLink, Href: "#target", Children: []fb2.InlineSegment{{Kind: fb2.InlineImageSegment, Image: &fb2.InlineImage{Href: "#inline.png"}}}},
+		{Text: " after"},
+	}}
+
+	runs := paragraphInlineRuns(paragraph)
+	if len(runs) != 3 {
+		t.Fatalf("inline runs = %#v, want text/image/text", runs)
+	}
+	if runs[1].ImageID != "inline.png" || runs[1].LinkHref != "#target" || runs[1].StyleClasses != pdfStyleLinkInternal {
+		t.Fatalf("linked image run = %#v, want image carrying internal link style", runs[1])
+	}
+}
+
 func TestParagraphInlineRunsTrimScriptWhitespace(t *testing.T) {
 	paragraph := &fb2.Paragraph{Text: []fb2.InlineSegment{
 		{Text: "word"},

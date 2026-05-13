@@ -247,6 +247,12 @@ func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 			Paragraph: paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, Hyphenation: paragraphHyphenationAuto},
 		},
 	}
+	linkStyle := styles[pdfStyleParagraph]
+	linkStyle.Paragraph.Underline = true
+	styles[pdfStyleLinkExternal] = linkStyle
+	styles[pdfStyleLinkInternal] = linkStyle
+	styles[pdfStyleLinkFootnote] = linkStyle
+	styles[pdfStyleLinkTOC] = linkStyle
 	return styles
 }
 

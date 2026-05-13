@@ -36,7 +36,7 @@ func layoutInlineParagraph(doc skeletonDocument, registry *pdfFontRegistry, reso
 		return nil, fmt.Errorf("paragraph width must be positive: %g", maxWidth)
 	}
 
-	words, err := inlineParagraphWords(doc, registry, resolver, runs, style)
+	words, err := inlineParagraphWords(doc, registry, resolver, runs, style, maxWidth)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +100,7 @@ func plainInlineRunText(runs []pdfInlineRun) string {
 	return strings.TrimSpace(b.String())
 }
 
-func inlineParagraphWords(doc skeletonDocument, registry *pdfFontRegistry, resolver *pdfStyleResolver, runs []pdfInlineRun, base paragraphStyle) ([]paragraphInlineWord, error) {
+func inlineParagraphWords(doc skeletonDocument, registry *pdfFontRegistry, resolver *pdfStyleResolver, runs []pdfInlineRun, base paragraphStyle, maxWidth float64) ([]paragraphInlineWord, error) {
 	words := make([]paragraphInlineWord, 0)
 	current := paragraphInlineWord{}
 	flushCurrent := func() {
@@ -115,7 +115,7 @@ func inlineParagraphWords(doc skeletonDocument, registry *pdfFontRegistry, resol
 		if text == "" && run.ImageID == "" {
 			return nil
 		}
-		fragment, err := inlineRunFragment(doc, registry, resolver, base, run, text)
+		fragment, err := inlineRunFragment(doc, registry, resolver, base, run, text, maxWidth)
 		if err != nil {
 			return err
 		}
@@ -160,25 +160,29 @@ func inlineParagraphWords(doc skeletonDocument, registry *pdfFontRegistry, resol
 }
 
 func inlineParagraphSpace(registry *pdfFontRegistry, base paragraphStyle) (paragraphLineFragment, error) {
-	return inlineRunFragment(skeletonDocument{}, registry, nil, base, pdfInlineRun{}, " ")
+	return inlineRunFragment(skeletonDocument{}, registry, nil, base, pdfInlineRun{}, " ", 0)
 }
 
-func inlineRunFragment(doc skeletonDocument, registry *pdfFontRegistry, resolver *pdfStyleResolver, base paragraphStyle, run pdfInlineRun, text string) (paragraphLineFragment, error) {
+func inlineRunFragment(doc skeletonDocument, registry *pdfFontRegistry, resolver *pdfStyleResolver, base paragraphStyle, run pdfInlineRun, text string, maxWidth float64) (paragraphLineFragment, error) {
 	style := inlineRunParagraphStyle(resolver, base, run)
-	if run.ImageID != "" {
-		width, height := inlineImageFragmentSize(doc, run.ImageID, style)
-		return paragraphLineFragment{
-			Width:       width,
-			FontSize:    style.FontSize,
-			Color:       style.Color,
-			LinkHref:    run.LinkHref,
-			ImageID:     run.ImageID,
-			ImageHeight: height,
-		}, nil
-	}
 	face, key, err := fontForStyle(registry, style)
 	if err != nil {
 		return paragraphLineFragment{}, err
+	}
+	if run.ImageID != "" {
+		width, height, baselineShift := inlineImageFragmentSize(doc, run.ImageID, style, face, maxWidth)
+		return paragraphLineFragment{
+			Width:         width,
+			FontSize:      style.FontSize,
+			FontKey:       key,
+			Color:         style.Color,
+			Underline:     style.Underline,
+			Strikethrough: style.Strikethrough,
+			BaselineShift: baselineShift,
+			LinkHref:      run.LinkHref,
+			ImageID:       run.ImageID,
+			ImageHeight:   height,
+		}, nil
 	}
 	shaped, err := shapeText(face, text)
 	if err != nil {
@@ -198,25 +202,53 @@ func inlineRunFragment(doc skeletonDocument, registry *pdfFontRegistry, resolver
 	}, nil
 }
 
-func inlineImageFragmentSize(doc skeletonDocument, imageID string, style paragraphStyle) (float64, float64) {
+func inlineImageFragmentSize(doc skeletonDocument, imageID string, style paragraphStyle, face *builtinFontFace, maxWidth float64) (float64, float64, float64) {
 	lineHeight := max(style.LineHeight, style.FontSize)
 	if lineHeight <= 0 {
 		lineHeight = pdfBaseLineHeight
 	}
-	img := doc.Images[imageID]
-	if img == nil {
-		return lineHeight, lineHeight
+	lineAscent, lineDescent := inlineLineBoxMetrics(face, style, lineHeight)
+	targetHeight := lineHeight
+	width, height := targetHeight, targetHeight
+	if img := doc.Images[imageID]; img != nil {
+		naturalWidth, naturalHeight := naturalPDFImageSize(doc, img)
+		if naturalWidth > 0 && naturalHeight > 0 {
+			scale := targetHeight / naturalHeight
+			width = naturalWidth * scale
+			height = naturalHeight * scale
+		}
 	}
-	width, height := naturalPDFImageSize(doc, img)
-	if width <= 0 || height <= 0 {
-		return lineHeight, lineHeight
-	}
-	if height > lineHeight {
-		scale := lineHeight / height
+	if maxWidth > 0 && width > maxWidth {
+		scale := maxWidth / width
 		width *= scale
-		height = lineHeight
+		height *= scale
 	}
-	return width, height
+	baselineShift := -lineDescent + max((lineHeight-height)/2, 0)
+	if height > lineAscent+lineDescent {
+		baselineShift = -lineDescent
+	}
+	return width, height, baselineShift
+}
+
+func inlineLineBoxMetrics(face *builtinFontFace, style paragraphStyle, lineHeight float64) (float64, float64) {
+	fontSize := style.FontSize
+	if fontSize <= 0 {
+		fontSize = pdfBaseFontSize
+	}
+	if face == nil || face.UnitsPerEm <= 0 {
+		ascent := fontSize * 0.8
+		descent := fontSize * 0.2
+		leading := max(lineHeight-ascent-descent, 0) / 2
+		return ascent + leading, descent + leading
+	}
+	ascent := float64(face.Ascent) * fontSize / float64(face.UnitsPerEm)
+	descent := float64(face.Descent) * fontSize / float64(face.UnitsPerEm)
+	if ascent <= 0 || descent < 0 {
+		ascent = fontSize * 0.8
+		descent = fontSize * 0.2
+	}
+	leading := max(lineHeight-ascent-descent, 0) / 2
+	return ascent + leading, descent + leading
 }
 
 func inlineRunParagraphStyle(resolver *pdfStyleResolver, base paragraphStyle, run pdfInlineRun) paragraphStyle {

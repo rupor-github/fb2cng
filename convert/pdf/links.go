@@ -59,6 +59,18 @@ func addFragmentLinkAnnotations(page *pdfPage, line paragraphLine, x float64, y 
 			})
 			added = true
 		}
+		if href != "" && fragment.ImageID != "" && fragment.Width > 0 && fragment.ImageHeight > 0 {
+			page.Annotations = append(page.Annotations, pdfLinkAnnotation{
+				Rect: pdfRect{
+					X1: currentX,
+					Y1: y + fragment.BaselineShift,
+					X2: currentX + fragment.Width,
+					Y2: y + fragment.BaselineShift + fragment.ImageHeight,
+				},
+				Href: href,
+			})
+			added = true
+		}
 		currentX += fragment.Width + line.ExtraCharSpacing*float64(max(len(fragment.Text.Glyphs)-1, 0))
 		if i != len(line.Fragments)-1 {
 			currentX += line.ExtraCharSpacing

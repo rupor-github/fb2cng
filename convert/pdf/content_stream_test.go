@@ -33,6 +33,27 @@ func TestPageContentDrawsBackgroundsBordersAndImages(t *testing.T) {
 	}
 }
 
+func TestPageContentDecoratesLinkedInlineImages(t *testing.T) {
+	content := string(pageContent(pdfPage{Lines: []pdfPageLine{{
+		X: 10,
+		Y: 20,
+		Fragments: []pdfPageLineFragment{{
+			Width:         20,
+			FontSize:      10,
+			Color:         pdfColor{R: 1},
+			Underline:     true,
+			BaselineShift: -1,
+			ImageID:       "inline",
+			ImageHeight:   12,
+		}},
+	}}}))
+	for _, want := range []string{"1 0 0 RG", "10 17.8 m 30 17.8 l S"} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("page content = %q, missing %q", content, want)
+		}
+	}
+}
+
 func TestPageContentSwitchesFontResourcesAndColors(t *testing.T) {
 	content := string(pageContent(pdfPage{Lines: []pdfPageLine{{
 		X:             10,
