@@ -768,6 +768,44 @@ func TestLayoutPDFPagesRendersInlineImages(t *testing.T) {
 	}
 }
 
+func TestLayoutPDFPagesAnnotationWrapperParagraphCanStripRootHorizontalMargins(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	resolver := newPDFStyleResolver(&fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			html { margin: 0 -20pt 0 -20pt; }
+			p { margin: 0; text-indent: 0; }
+			.annotation { margin-left: 12pt; margin-right: 12pt; }
+		`,
+	}}}, nil)
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  220,
+		PageHeight: 180,
+		Title:      "Title",
+		Author:     "Author",
+		Styles:     resolver,
+		Blocks: []pdfTextBlock{{
+			Kind:                       pdfBlockParagraph,
+			Text:                       "Wrapped annotation.",
+			StyleClasses:               pdfStyleAnnotation,
+			StripRootHorizontalMargins: true,
+		}},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 || len(pages[1].Lines) != 1 {
+		t.Fatalf("layoutPDFPages() pages = %#v, want one annotation line", pages)
+	}
+	if got := pages[1].Lines[0].X; math.Abs(got-36) > 0.001 {
+		t.Fatalf("annotation line X = %v, want 36 (24 base margin + 12 annotation margin)", got)
+	}
+}
+
 func TestLayoutPDFPagesAppliesInlineNamedStyleClasses(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {

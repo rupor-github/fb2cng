@@ -373,9 +373,73 @@ func TestCollectPDFContentAddsAnnotationPage(t *testing.T) {
 	if got := plan.Blocks[2]; got.Kind != pdfBlockParagraph || got.Text != "Book annotation." || got.StyleClasses != pdfStyleAnnotation {
 		t.Fatalf("annotation paragraph = %#v", got)
 	}
+	if plan.Blocks[2].StripRootHorizontalMargins {
+		t.Fatalf("generated annotation page paragraph should keep normal root margins")
+	}
 	if len(plan.TOC) == 0 || plan.TOC[0].ID != "annotation-page" || plan.TOC[0].Title != "About" {
 		t.Fatalf("TOC = %#v, want annotation entry first", plan.TOC)
 	}
+}
+
+func TestCollectTextBlocksMarksMultiBlockSectionAnnotationForRootHorizontalStripping(t *testing.T) {
+	book := &fb2.FictionBook{Bodies: []fb2.Body{{
+		Kind: fb2.BodyMain,
+		Sections: []fb2.Section{{
+			ID:    "chapter-1",
+			Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 1"}}}}}},
+			Annotation: &fb2.Flow{Items: []fb2.FlowItem{
+				{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "First annotation."}}}},
+				{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Second annotation."}}}},
+			}},
+		}},
+	}}}
+
+	blocks, err := collectTextBlocks(&content.Content{Book: book})
+	if err != nil {
+		t.Fatalf("collectTextBlocks() error = %v", err)
+	}
+	var annotationBlocks []pdfTextBlock
+	for _, block := range blocks {
+		if block.Kind == pdfBlockParagraph && block.StyleClasses == pdfStyleAnnotation {
+			annotationBlocks = append(annotationBlocks, block)
+		}
+	}
+	if len(annotationBlocks) != 2 {
+		t.Fatalf("annotation blocks = %#v, want 2 section annotation paragraphs", annotationBlocks)
+	}
+	for i, block := range annotationBlocks {
+		if !block.StripRootHorizontalMargins {
+			t.Fatalf("annotation block %d should strip root horizontal margins: %#v", i, block)
+		}
+	}
+}
+
+func TestCollectTextBlocksKeepsSingleBlockSectionAnnotationOnNormalRootMargins(t *testing.T) {
+	book := &fb2.FictionBook{Bodies: []fb2.Body{{
+		Kind: fb2.BodyMain,
+		Sections: []fb2.Section{{
+			ID:    "chapter-1",
+			Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 1"}}}}}},
+			Annotation: &fb2.Flow{Items: []fb2.FlowItem{{
+				Kind:      fb2.FlowParagraph,
+				Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Only annotation."}}},
+			}}},
+		}},
+	}}}
+
+	blocks, err := collectTextBlocks(&content.Content{Book: book})
+	if err != nil {
+		t.Fatalf("collectTextBlocks() error = %v", err)
+	}
+	for _, block := range blocks {
+		if block.Kind == pdfBlockParagraph && block.Text == "Only annotation." {
+			if block.StripRootHorizontalMargins {
+				t.Fatalf("single-block section annotation should keep normal root margins: %#v", block)
+			}
+			return
+		}
+	}
+	t.Fatalf("single-block annotation paragraph not found in %#v", blocks)
 }
 
 func TestCollectPDFContentAddsTOCPageBeforeContent(t *testing.T) {

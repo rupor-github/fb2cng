@@ -317,7 +317,7 @@ func appendSectionBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, section 
 	}
 	appendImageBlock(blocks, section.Image, section.ID)
 	if section.Annotation != nil {
-		appendFlowBlocks(blocks, book, section.Annotation.Items, depth, splitSections, pdfStyleAnnotation)
+		appendFlowBlocksWithRootHorizontalMargins(blocks, book, section.Annotation.Items, depth, splitSections, pdfStyleAnnotation, len(section.Annotation.Items) > 1)
 	}
 	for i := range section.Content {
 		appendFlowItemBlock(blocks, book, &section.Content[i], depth, splitSections, "")
@@ -382,24 +382,32 @@ func appendTitleBlocksWithIDHeaderAndClasses(blocks *[]pdfTextBlock, title *fb2.
 }
 
 func appendFlowBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, items []fb2.FlowItem, depth int, splitSections map[string]bool, styleClasses string) {
+	appendFlowBlocksWithRootHorizontalMargins(blocks, book, items, depth, splitSections, styleClasses, false)
+}
+
+func appendFlowBlocksWithRootHorizontalMargins(blocks *[]pdfTextBlock, book *fb2.FictionBook, items []fb2.FlowItem, depth int, splitSections map[string]bool, styleClasses string, stripRootHorizontalMargins bool) {
 	for i := range items {
-		appendFlowItemBlock(blocks, book, &items[i], depth, splitSections, styleClasses)
+		appendFlowItemBlockWithRootHorizontalMargins(blocks, book, &items[i], depth, splitSections, styleClasses, stripRootHorizontalMargins)
 	}
 }
 
 func appendFlowItemBlock(blocks *[]pdfTextBlock, book *fb2.FictionBook, item *fb2.FlowItem, depth int, splitSections map[string]bool, styleClasses string) {
+	appendFlowItemBlockWithRootHorizontalMargins(blocks, book, item, depth, splitSections, styleClasses, false)
+}
+
+func appendFlowItemBlockWithRootHorizontalMargins(blocks *[]pdfTextBlock, book *fb2.FictionBook, item *fb2.FlowItem, depth int, splitSections map[string]bool, styleClasses string, stripRootHorizontalMargins bool) {
 	if item == nil {
 		return
 	}
 	switch item.Kind {
 	case fb2.FlowParagraph:
-		appendParagraphBlockWithClasses(blocks, pdfBlockParagraph, item.Paragraph, depth, styleClasses)
+		appendParagraphBlockWithClassesAndRootHorizontalMargins(blocks, pdfBlockParagraph, item.Paragraph, depth, styleClasses, stripRootHorizontalMargins)
 	case fb2.FlowSubtitle:
-		appendParagraphBlockWithClasses(blocks, pdfBlockSubtitle, item.Subtitle, depth, subtitleStyleClasses(styleClasses))
+		appendParagraphBlockWithClassesAndRootHorizontalMargins(blocks, pdfBlockSubtitle, item.Subtitle, depth, subtitleStyleClasses(styleClasses), stripRootHorizontalMargins)
 	case fb2.FlowEmptyLine:
-		*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine, StyleClasses: strings.TrimSpace(styleClasses)})
+		*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine, StyleClasses: strings.TrimSpace(styleClasses), StripRootHorizontalMargins: stripRootHorizontalMargins})
 	case fb2.FlowImage:
-		appendImageBlockWithClasses(blocks, item.Image, "", styleClasses)
+		appendImageBlockWithClassesAndRootHorizontalMargins(blocks, item.Image, "", styleClasses, stripRootHorizontalMargins)
 	case fb2.FlowSection:
 		if item.Section != nil && splitSections[item.Section.ID] {
 			return
@@ -413,7 +421,7 @@ func appendFlowItemBlock(blocks *[]pdfTextBlock, book *fb2.FictionBook, item *fb
 		if item.Table != nil {
 			text := item.Table.AsPlainText()
 			if text != "" {
-				*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockParagraph, Text: text, Depth: depth, StyleName: pdfStyleParagraph, StyleClasses: joinStyleClasses(styleClasses, pdfStyleTable)})
+				*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockParagraph, Text: text, Depth: depth, StyleName: pdfStyleParagraph, StyleClasses: joinStyleClasses(styleClasses, pdfStyleTable), StripRootHorizontalMargins: stripRootHorizontalMargins})
 			}
 		}
 	}
@@ -424,6 +432,10 @@ func appendImageBlock(blocks *[]pdfTextBlock, image *fb2.Image, fallbackID strin
 }
 
 func appendImageBlockWithClasses(blocks *[]pdfTextBlock, image *fb2.Image, fallbackID string, styleClasses string) {
+	appendImageBlockWithClassesAndRootHorizontalMargins(blocks, image, fallbackID, styleClasses, false)
+}
+
+func appendImageBlockWithClassesAndRootHorizontalMargins(blocks *[]pdfTextBlock, image *fb2.Image, fallbackID string, styleClasses string, stripRootHorizontalMargins bool) {
 	if image == nil {
 		return
 	}
@@ -435,7 +447,7 @@ func appendImageBlockWithClasses(blocks *[]pdfTextBlock, image *fb2.Image, fallb
 	if anchorID == "" {
 		anchorID = fallbackID
 	}
-	appendImageIDBlock(blocks, imageID, anchorID, strings.TrimSpace(image.Alt), strings.TrimSpace(styleClasses))
+	appendStyledImageIDBlockWithRootHorizontalMargins(blocks, imageID, anchorID, strings.TrimSpace(image.Alt), pdfStyleImage, strings.TrimSpace(styleClasses), stripRootHorizontalMargins)
 }
 
 func appendImageIDBlock(blocks *[]pdfTextBlock, imageID string, anchorID string, alt string, styleClasses string) {
@@ -563,6 +575,10 @@ func appendParagraphBlock(blocks *[]pdfTextBlock, kind pdfBlockKind, paragraph *
 }
 
 func appendParagraphBlockWithClasses(blocks *[]pdfTextBlock, kind pdfBlockKind, paragraph *fb2.Paragraph, depth int, styleClasses string) {
+	appendParagraphBlockWithClassesAndRootHorizontalMargins(blocks, kind, paragraph, depth, styleClasses, false)
+}
+
+func appendParagraphBlockWithClassesAndRootHorizontalMargins(blocks *[]pdfTextBlock, kind pdfBlockKind, paragraph *fb2.Paragraph, depth int, styleClasses string, stripRootHorizontalMargins bool) {
 	if paragraph == nil {
 		return
 	}
@@ -582,7 +598,7 @@ func appendParagraphBlockWithClasses(blocks *[]pdfTextBlock, kind pdfBlockKind, 
 			imageStyleName = styleName
 			imageStyleClasses = joinStyleClasses(imageStyleClasses, styleClasses)
 		}
-		appendStyledImageIDBlock(blocks, imageID, paragraph.ID, alt, imageStyleName, imageStyleClasses)
+		appendStyledImageIDBlockWithRootHorizontalMargins(blocks, imageID, paragraph.ID, alt, imageStyleName, imageStyleClasses, stripRootHorizontalMargins)
 		return
 	}
 	text, links := paragraphTextAndLinks(paragraph)
@@ -591,7 +607,7 @@ func appendParagraphBlockWithClasses(blocks *[]pdfTextBlock, kind pdfBlockKind, 
 		styleClasses = joinStyleClasses(styleClasses, pdfStyleCode)
 	}
 	if text != "" || inlineRunsRenderable(runs) {
-		*blocks = append(*blocks, pdfTextBlock{Kind: kind, ID: paragraph.ID, Text: text, Runs: runs, Depth: depth, StyleName: styleName, StyleClasses: joinStyleClasses(paragraph.Style, styleClasses), Links: links})
+		*blocks = append(*blocks, pdfTextBlock{Kind: kind, ID: paragraph.ID, Text: text, Runs: runs, Depth: depth, StyleName: styleName, StyleClasses: joinStyleClasses(paragraph.Style, styleClasses), StripRootHorizontalMargins: stripRootHorizontalMargins, Links: links})
 	}
 }
 
