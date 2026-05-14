@@ -214,6 +214,40 @@ func TestPDFStyleResolverAppliesRootDescendantSelectors(t *testing.T) {
 	}
 }
 
+func TestPDFStyleResolverAppliesRootDescendantSelectorsToHeadingDepthAndImages(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			body h1 { margin-left: 13pt; }
+			html h3 { margin-right: 7pt; }
+			body img { margin-left: 11pt; }
+		`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+
+	h1 := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, Depth: 1})
+	if h1.MarginLeft != 13 {
+		t.Fatalf("h1 margin-left = %v, want 13 from body h1", h1.MarginLeft)
+	}
+	if h1.MarginRight != 0 {
+		t.Fatalf("h1 margin-right = %v, want 0 (no html h3 match)", h1.MarginRight)
+	}
+
+	h3 := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, Depth: 3})
+	if h3.MarginRight != 7 {
+		t.Fatalf("h3 margin-right = %v, want 7 from html h3", h3.MarginRight)
+	}
+	if h3.MarginLeft != 0 {
+		t.Fatalf("h3 margin-left = %v, want 0 (no body h1 match)", h3.MarginLeft)
+	}
+
+	image := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockImage})
+	if image.MarginLeft != 11 {
+		t.Fatalf("image margin-left = %v, want 11 from body img", image.MarginLeft)
+	}
+}
+
 func TestPDFStyleResolverPreservesExplicitParagraphLineHeightAgainstRootInheritance(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",

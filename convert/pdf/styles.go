@@ -699,10 +699,8 @@ func pdfElementTagForBlock(block pdfTextBlock) string {
 	case pdfBlockParagraph, pdfBlockSubtitle, pdfBlockPoem, pdfBlockTextAuthor, pdfBlockTOCEntry:
 		return "p"
 	case pdfBlockHeading:
-		if block.Depth <= 1 {
-			return "h1"
-		}
-		return "h2"
+		level := min(max(block.Depth, 1), 6)
+		return "h" + strconv.Itoa(level)
 	case pdfBlockImage:
 		if block.StyleName != "" && block.StyleName != pdfStyleImage {
 			return "p"
@@ -823,8 +821,7 @@ func pdfDescendantSelectorStyleNames(sel css.Selector) []string {
 	if len(ancestorNames) == 0 {
 		return nil
 	}
-	right := css.Selector{Element: sel.Element, Class: sel.Class}
-	rightNames := pdfSelectorStyleNames(right)
+	rightNames := pdfDescendantSelectorTargets(sel)
 	if len(rightNames) == 0 {
 		return nil
 	}
@@ -838,6 +835,20 @@ func pdfDescendantSelectorStyleNames(sel css.Selector) []string {
 		}
 	}
 	return mapped
+}
+
+func pdfDescendantSelectorTargets(sel css.Selector) []string {
+	var targets []string
+	if sel.Element != "" {
+		switch strings.ToLower(sel.Element) {
+		case "p", "h1", "h2", "h3", "h4", "h5", "h6", "img", "table", "code":
+			targets = append(targets, strings.ToLower(sel.Element))
+		}
+	}
+	if sel.Class != "" {
+		targets = append(targets, sel.Class)
+	}
+	return slices.Compact(targets)
 }
 
 func mergePDFLineHeightOverride(base, override, fallback paragraphStyle) paragraphStyle {
