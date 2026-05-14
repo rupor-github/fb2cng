@@ -64,6 +64,7 @@ const (
 	pdfStyleFootnoteTitle      = "footnote-title"
 	pdfStylePoem               = "poem"
 	pdfStylePoemSubtitle       = "poem-subtitle"
+	pdfStyleStanza             = "stanza"
 	pdfStyleStanzaSubtitle     = "stanza-subtitle"
 	pdfStyleEpigraph           = "epigraph"
 	pdfStyleEpigraphSubtitle   = "epigraph-subtitle"
@@ -646,7 +647,7 @@ func contextStyleClassShouldSkipInheritedAndHorizontalMargins(block pdfTextBlock
 		return false
 	}
 	switch class {
-	case pdfStyleBodyTitle, pdfStyleChapterTitle, pdfStyleSectionTitle, pdfStyleAnnotation, pdfStyleFootnote, pdfStylePoem, pdfStyleEpigraph, pdfStyleCite:
+	case pdfStyleBodyTitle, pdfStyleChapterTitle, pdfStyleSectionTitle, pdfStyleAnnotation, pdfStyleFootnote, pdfStylePoem, pdfStyleStanza, pdfStyleEpigraph, pdfStyleCite:
 		return true
 	default:
 		return false

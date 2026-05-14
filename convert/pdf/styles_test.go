@@ -419,6 +419,28 @@ func TestPDFStyleResolverAccumulatesNestedContainerMarginsAcrossContextChain(t *
 	}
 }
 
+func TestPDFStyleResolverAppliesNestedStanzaContextInheritance(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			.poem { margin-left: 3em; font-style: italic; }
+			.stanza { margin-left: 1em; font-family: "Noto Sans", sans-serif; }
+		`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	verse := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockPoem, StyleClasses: pdfStylePoem, ContextClasses: joinStyleClasses(pdfStylePoem, pdfStyleStanza)})
+	if verse.MarginLeft != pdfBaseFontSize*4 {
+		t.Fatalf("stanza verse margin-left = %v, want accumulated %v", verse.MarginLeft, pdfBaseFontSize*4)
+	}
+	if verse.Paragraph.FontFamily != "Noto Sans" {
+		t.Fatalf("stanza verse font family = %q, want Noto Sans from stanza context", verse.Paragraph.FontFamily)
+	}
+	if !verse.Paragraph.Italic {
+		t.Fatalf("stanza verse italic = false, want inherited true from poem context")
+	}
+}
+
 func TestPDFStyleResolverAppliesElementQualifiedImageSelectors(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",

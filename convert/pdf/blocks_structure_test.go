@@ -75,6 +75,30 @@ func TestAppendEpigraphBlocksPropagatesEpigraphContextClasses(t *testing.T) {
 	}
 }
 
+func TestAppendPoemBlocksPropagatesStanzaContextClasses(t *testing.T) {
+	poem := &fb2.Poem{Stanzas: []fb2.Stanza{{
+		Title:    &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Stanza title"}}}}}},
+		Subtitle: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Stanza subtitle"}}},
+		Verses:   []fb2.Paragraph{{Text: []fb2.InlineSegment{{Text: "Verse line"}}}},
+	}}}
+	var blocks []pdfTextBlock
+
+	appendPoemBlocks(&blocks, poem, 1, nil, "", false)
+
+	wantContext := joinStyleClasses(pdfStylePoem, pdfStyleStanza)
+	for _, block := range blocks {
+		switch block.Text {
+		case "Stanza title", "Stanza subtitle", "Verse line":
+			if block.ContextClasses != wantContext {
+				t.Fatalf("block %q context = %q, want %q", block.Text, block.ContextClasses, wantContext)
+			}
+		}
+	}
+	if len(blocks) == 0 || blocks[len(blocks)-1].Kind != pdfBlockEmptyLine || blocks[len(blocks)-1].ContextClasses != wantContext {
+		t.Fatalf("stanza empty line = %#v, want stanza context %q", blocks, wantContext)
+	}
+}
+
 func TestAppendTitleBlocksWithIDAndClassesConvertsImageOnlyTitlesToStyledImageBlocks(t *testing.T) {
 	title := &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineImageSegment, Image: &fb2.InlineImage{Href: "#title.png", Alt: "Title"}}}}}}}
 	var blocks []pdfTextBlock

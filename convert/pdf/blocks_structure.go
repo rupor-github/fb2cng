@@ -386,12 +386,13 @@ func appendPoemBlocks(blocks *[]pdfTextBlock, poem *fb2.Poem, depth int, splitSe
 	}
 	for i := range poem.Stanzas {
 		stanza := &poem.Stanzas[i]
-		appendTitleBlocksFull(blocks, stanza.Title, depth+1, "", pdfHeadingStyleName(depth+1), "", poemContextClasses, stripRootHorizontalMargins)
-		appendParagraphBlockFull(blocks, pdfBlockSubtitle, stanza.Subtitle, depth, pdfStyleStanzaSubtitle, poemContextClasses, stripRootHorizontalMargins)
+		stanzaContextClasses := joinStyleClasses(poemContextClasses, pdfStyleStanza)
+		appendTitleBlocksFull(blocks, stanza.Title, depth+1, "", pdfHeadingStyleName(depth+1), "", stanzaContextClasses, stripRootHorizontalMargins)
+		appendParagraphBlockFull(blocks, pdfBlockSubtitle, stanza.Subtitle, depth, pdfStyleStanzaSubtitle, stanzaContextClasses, stripRootHorizontalMargins)
 		for j := range stanza.Verses {
-			appendParagraphBlockFull(blocks, pdfBlockPoem, &stanza.Verses[j], depth, pdfStylePoem, poemContextClasses, stripRootHorizontalMargins)
+			appendParagraphBlockFull(blocks, pdfBlockPoem, &stanza.Verses[j], depth, pdfStylePoem, stanzaContextClasses, stripRootHorizontalMargins)
 		}
-		*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine, ContextClasses: strings.TrimSpace(poemContextClasses), StripRootHorizontalMargins: stripRootHorizontalMargins})
+		*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine, ContextClasses: strings.TrimSpace(stanzaContextClasses), StripRootHorizontalMargins: stripRootHorizontalMargins})
 	}
 	for i := range poem.TextAuthors {
 		appendParagraphBlockFull(blocks, pdfBlockTextAuthor, &poem.TextAuthors[i], depth, "", poemContextClasses, stripRootHorizontalMargins)
