@@ -365,6 +365,10 @@ func (r *pdfStyleResolver) styleForBlock(block pdfTextBlock) pdfBlockResolvedSty
 		if !ok {
 			continue
 		}
+		if contextStyleClassShouldSkipInheritedAndHorizontalMargins(block, class) {
+			style = mergePDFContextClassStyleOverrides(style, classStyle, classFallback)
+			continue
+		}
 		style = mergePDFStyleOverrides(style, classStyle, classFallback)
 	}
 	for _, selectorStyleName := range pdfElementClassStyleNames(block) {
@@ -547,18 +551,26 @@ func (r *pdfStyleResolver) tagStyleForBlock(block pdfTextBlock) pdfBlockResolved
 
 func (r *pdfStyleResolver) contextInheritedBlockStyle(tagStyle pdfBlockResolvedStyle, block pdfTextBlock) pdfBlockResolvedStyle {
 	style := tagStyle
-	for _, class := range strings.Fields(block.ContextClasses) {
+	contextClasses := strings.Fields(block.ContextClasses)
+	for _, class := range contextClasses {
 		contextStyle, ok := r.styles[class]
 		if !ok {
 			continue
 		}
 		fallback := r.defaultStyle(class)
 		style.Paragraph = mergePDFInheritedParagraphStyle(style.Paragraph, contextStyle.Paragraph, fallback.Paragraph)
-		if contextStyle.MarginLeft != fallback.MarginLeft {
-			style.MarginLeft = contextStyle.MarginLeft
-		}
-		if contextStyle.MarginRight != fallback.MarginRight {
-			style.MarginRight = contextStyle.MarginRight
+	}
+	if len(contextClasses) > 0 {
+		last := contextClasses[len(contextClasses)-1]
+		contextStyle, ok := r.styles[last]
+		if ok {
+			fallback := r.defaultStyle(last)
+			if contextStyle.MarginLeft != fallback.MarginLeft {
+				style.MarginLeft = contextStyle.MarginLeft
+			}
+			if contextStyle.MarginRight != fallback.MarginRight {
+				style.MarginRight = contextStyle.MarginRight
+			}
 		}
 	}
 	return style
@@ -602,11 +614,101 @@ func (r *pdfStyleResolver) applyContextInheritedBlockDefaults(style, tagStyle pd
 	}
 	if style.MarginLeft == tagStyle.MarginLeft {
 		style.MarginLeft = contextStyle.MarginLeft
+	} else if contextStyle.MarginLeft != tagStyle.MarginLeft {
+		style.MarginLeft += contextStyle.MarginLeft
 	}
 	if style.MarginRight == tagStyle.MarginRight {
 		style.MarginRight = contextStyle.MarginRight
+	} else if contextStyle.MarginRight != tagStyle.MarginRight {
+		style.MarginRight += contextStyle.MarginRight
 	}
 	return style
+}
+
+func contextStyleClassShouldSkipInheritedAndHorizontalMargins(block pdfTextBlock, class string) bool {
+	if class == "" {
+		return false
+	}
+	found := false
+	for _, contextClass := range strings.Fields(block.ContextClasses) {
+		if contextClass == class {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return false
+	}
+	switch class {
+	case pdfStyleBodyTitle, pdfStyleChapterTitle, pdfStyleSectionTitle, pdfStyleAnnotation, pdfStyleFootnote, pdfStylePoem, pdfStyleEpigraph, pdfStyleCite:
+		return true
+	default:
+		return false
+	}
+}
+
+func mergePDFContextClassStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfBlockResolvedStyle {
+	if override.HasSpaceBefore || override.SpaceBefore != fallback.SpaceBefore {
+		base.SpaceBefore = override.SpaceBefore
+	}
+	if override.HasSpaceAfter || override.SpaceAfter != fallback.SpaceAfter {
+		base.SpaceAfter = override.SpaceAfter
+	}
+	if override.PaddingTop != fallback.PaddingTop {
+		base.PaddingTop = override.PaddingTop
+	}
+	if override.PaddingRight != fallback.PaddingRight {
+		base.PaddingRight = override.PaddingRight
+	}
+	if override.PaddingBottom != fallback.PaddingBottom {
+		base.PaddingBottom = override.PaddingBottom
+	}
+	if override.PaddingLeft != fallback.PaddingLeft {
+		base.PaddingLeft = override.PaddingLeft
+	}
+	if override.HasWidth != fallback.HasWidth || override.Width != fallback.Width {
+		base.HasWidth = override.HasWidth
+		base.Width = override.Width
+	}
+	if override.HasMinWidth != fallback.HasMinWidth || override.MinWidth != fallback.MinWidth {
+		base.HasMinWidth = override.HasMinWidth
+		base.MinWidth = override.MinWidth
+	}
+	if override.HasMaxWidth != fallback.HasMaxWidth || override.MaxWidth != fallback.MaxWidth {
+		base.HasMaxWidth = override.HasMaxWidth
+		base.MaxWidth = override.MaxWidth
+	}
+	if override.HasBackground != fallback.HasBackground {
+		base.HasBackground = override.HasBackground
+		base.BackgroundColor = override.BackgroundColor
+	}
+	if override.HasBorder != fallback.HasBorder || override.BorderWidth != fallback.BorderWidth || override.BorderColor != fallback.BorderColor {
+		base.HasBorder = override.HasBorder
+		base.BorderWidth = override.BorderWidth
+		base.BorderColor = override.BorderColor
+	}
+	if override.KeepTogether != fallback.KeepTogether {
+		base.KeepTogether = override.KeepTogether
+	}
+	if override.KeepWithNextLines != fallback.KeepWithNextLines {
+		base.KeepWithNextLines = override.KeepWithNextLines
+	}
+	if override.PageBreakBefore != fallback.PageBreakBefore {
+		base.PageBreakBefore = override.PageBreakBefore
+	}
+	if override.PageBreakAfter != fallback.PageBreakAfter {
+		base.PageBreakAfter = override.PageBreakAfter
+	}
+	if override.Hidden != fallback.Hidden {
+		base.Hidden = override.Hidden
+	}
+	if override.Orphans != fallback.Orphans {
+		base.Orphans = override.Orphans
+	}
+	if override.Widows != fallback.Widows {
+		base.Widows = override.Widows
+	}
+	return base
 }
 
 func (r *pdfStyleResolver) applyRootInheritedParagraphDefaults(style pdfBlockResolvedStyle) pdfBlockResolvedStyle {

@@ -364,6 +364,39 @@ func TestPDFStyleResolverDescendantSelectorOverridesContainerInheritedProperty(t
 	}
 }
 
+func TestPDFStyleResolverAccumulatesInnermostContainerMarginWithExplicitVerseMargin(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			p { margin-left: -8pt; }
+			.poem { margin-left: 3em; font-style: italic; }
+			.verse { margin-left: 2em; text-indent: 0; }
+		`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	verse := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockPoem, ContextClasses: pdfStylePoem, StyleClasses: pdfStylePoem})
+	if verse.MarginLeft != pdfBaseFontSize*5 {
+		t.Fatalf("poem verse margin-left = %v, want accumulated %v", verse.MarginLeft, pdfBaseFontSize*5)
+	}
+	if !verse.Paragraph.Italic {
+		t.Fatalf("poem verse italic = false, want inherited true")
+	}
+}
+
+func TestPDFStyleResolverDoesNotDoubleCountDuplicateContextClassMargins(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `.cite { margin-left: 2em; margin-right: 1em; }`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleCite, ContextClasses: pdfStyleCite})
+	if paragraph.MarginLeft != pdfBaseFontSize*2 || paragraph.MarginRight != pdfBaseFontSize {
+		t.Fatalf("cite paragraph margins = %v/%v, want 2em/1em without double count", paragraph.MarginLeft, paragraph.MarginRight)
+	}
+}
+
 func TestPDFStyleResolverAppliesElementQualifiedImageSelectors(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",
