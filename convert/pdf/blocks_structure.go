@@ -40,7 +40,7 @@ func appendFootnoteSectionBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, 
 	if section == nil {
 		return
 	}
-	appendTitleParagraphBlocksWithIDAndClasses(blocks, section.Title, section.ID, pdfStyleFootnoteTitle)
+	appendTitleParagraphBlocks(blocks, section.Title, section.ID, pdfStyleFootnoteTitle, pdfStyleFootnoteTitle, false)
 	for i := range section.Epigraphs {
 		appendEpigraphBlocks(blocks, &section.Epigraphs[i])
 	}
@@ -83,10 +83,6 @@ func appendSectionBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, section 
 
 func appendTitleBlocks(blocks *[]pdfTextBlock, title *fb2.Title, depth int) {
 	appendTitleBlocksFull(blocks, title, depth, "", pdfHeadingStyleName(depth), "", "", false)
-}
-
-func appendTitleParagraphBlocksWithIDAndClasses(blocks *[]pdfTextBlock, title *fb2.Title, id string, styleClass string) {
-	appendTitleParagraphBlocks(blocks, title, id, styleClass, "", false)
 }
 
 func appendTitleParagraphBlocks(blocks *[]pdfTextBlock, title *fb2.Title, id string, styleClass string, contextClasses string, stripRootHorizontalMargins bool) {

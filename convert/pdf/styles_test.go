@@ -611,7 +611,7 @@ func TestPDFStyleResolverFootnoteTitleInheritsParagraphAlignment(t *testing.T) {
 	}}}
 
 	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
-	title := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleFootnoteTitle + " " + pdfStyleFootnoteTitle + "-first"})
+	title := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleFootnoteTitle + " " + pdfStyleFootnoteTitle + "-first", ContextClasses: pdfStyleFootnoteTitle})
 	if title.Paragraph.Align != textAlignRight {
 		t.Fatalf("footnote title align = %v, want right from paragraph inheritance", title.Paragraph.Align)
 	}
@@ -620,6 +620,25 @@ func TestPDFStyleResolverFootnoteTitleInheritsParagraphAlignment(t *testing.T) {
 	}
 	if title.Paragraph.FirstLineIndent != 0 {
 		t.Fatalf("footnote title indent = %v, want 0 from first variant", title.Paragraph.FirstLineIndent)
+	}
+}
+
+func TestPDFStyleResolverAppliesFootnoteTitleContextDescendantSelectors(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			.footnote-title p { text-indent: 0.5em; letter-spacing: 0.1em; }
+			.footnote-title-first { text-indent: 0; }
+		`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	title := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleFootnoteTitle + " " + pdfStyleFootnoteTitle + "-first", ContextClasses: pdfStyleFootnoteTitle})
+	if title.Paragraph.FirstLineIndent != pdfBaseFontSize*0.5 {
+		t.Fatalf("footnote title indent = %v, want %v from .footnote-title p", title.Paragraph.FirstLineIndent, pdfBaseFontSize*0.5)
+	}
+	if title.Paragraph.LetterSpacing != pdfBaseFontSize*0.1 {
+		t.Fatalf("footnote title letter-spacing = %v, want %v from .footnote-title p", title.Paragraph.LetterSpacing, pdfBaseFontSize*0.1)
 	}
 }
 

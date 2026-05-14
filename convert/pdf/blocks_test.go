@@ -322,6 +322,9 @@ func TestCollectTextBlocksUsesFootnoteSectionSemantics(t *testing.T) {
 			if block.StyleClasses != pdfStyleFootnoteTitle+" "+pdfStyleFootnoteTitle+"-first" {
 				t.Fatalf("footnote title classes = %q, want footnote-title first variant", block.StyleClasses)
 			}
+			if block.ContextClasses != pdfStyleFootnoteTitle {
+				t.Fatalf("footnote title context = %q, want %q", block.ContextClasses, pdfStyleFootnoteTitle)
+			}
 		case block.Text == "Footnote body.":
 			foundBody = true
 			if block.Kind != pdfBlockParagraph {
