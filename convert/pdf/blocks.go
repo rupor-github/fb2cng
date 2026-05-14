@@ -41,7 +41,7 @@ func collectPDFContent(c *content.Content, cfg *config.DocumentConfig) (pdfConte
 	}
 	toc := plan.TOC
 	blocks, toc = insertAnnotationPageBlocks(blocks, toc, c.Book.Description.TitleInfo.Annotation, cfg)
-	blocks = insertTOCPageBlocks(blocks, toc, cfg)
+	blocks = insertTOCPageBlocks(blocks, c, toc, cfg)
 	debugPlan.TOC = pdfDebugStructureTOCEntries(toc)
 	return pdfContentPlan{Blocks: blocks, TOC: toc, DebugPlan: debugPlan}, nil
 }
@@ -148,11 +148,11 @@ func insertAnnotationPageBlocks(blocks []pdfTextBlock, toc []*structure.TOCEntry
 	return out, tocOut
 }
 
-func insertTOCPageBlocks(blocks []pdfTextBlock, entries []*structure.TOCEntry, cfg *config.DocumentConfig) []pdfTextBlock {
+func insertTOCPageBlocks(blocks []pdfTextBlock, c *content.Content, entries []*structure.TOCEntry, cfg *config.DocumentConfig) []pdfTextBlock {
 	if cfg == nil || cfg.TOCPage.Placement == common.TOCPagePlacementNone || len(entries) == 0 {
 		return blocks
 	}
-	tocBlocks := buildTOCPageBlocks(entries, cfg.TOCPage.ChaptersWithoutTitle, cfg.TOCType)
+	tocBlocks := buildTOCPageBlocksWithTitle(pdfTOCPageTitle(c, cfg), entries, cfg.TOCPage.ChaptersWithoutTitle, cfg.TOCType)
 	if len(tocBlocks) == 0 {
 		return blocks
 	}
@@ -173,14 +173,16 @@ func insertTOCPageBlocks(blocks []pdfTextBlock, entries []*structure.TOCEntry, c
 }
 
 func buildTOCPageBlocks(entries []*structure.TOCEntry, includeUntitled bool, tocType common.TOCType) []pdfTextBlock {
+	return buildTOCPageBlocksWithTitle(pdfTitleFromStrings("Contents"), entries, includeUntitled, tocType)
+}
+
+func buildTOCPageBlocksWithTitle(title *fb2.Title, entries []*structure.TOCEntry, includeUntitled bool, tocType common.TOCType) []pdfTextBlock {
 	items := flattenPDFTOCEntries(entries, includeUntitled, 1)
 	if len(items) == 0 {
 		return nil
 	}
-	blocks := []pdfTextBlock{
-		{Kind: pdfBlockPageBreak, ID: "toc-page", Text: "Contents"},
-		{Kind: pdfBlockHeading, ID: "toc-page-title", Text: "Contents", Depth: 1, StyleName: pdfStyleTOCTitle, ContextClasses: pdfStyleTOCTitle},
-	}
+	blocks := []pdfTextBlock{{Kind: pdfBlockPageBreak, ID: "toc-page", Text: "Contents"}}
+	appendTitleBlocksFull(&blocks, title, 1, "toc-page-title", pdfStyleTOCTitle, "", pdfStyleTOCTitle, false)
 	var appendTOCNodeBlocks func(nodes []*tocnav.Node)
 	appendTOCNodeBlocks = func(nodes []*tocnav.Node) {
 		for _, node := range nodes {
@@ -200,10 +202,40 @@ func buildTOCPageBlocks(entries []*structure.TOCEntry, includeUntitled bool, toc
 		}
 	}
 	appendTOCNodeBlocks(tocnav.Shape(items, tocType))
-	if len(blocks) == 2 {
+	if len(blocks) == 1 {
 		return nil
 	}
 	return blocks
+}
+
+func pdfTOCPageTitle(c *content.Content, cfg *config.DocumentConfig) *fb2.Title {
+	title := "Contents"
+	if c != nil && c.Book != nil {
+		if bookTitle := strings.TrimSpace(c.Book.Description.TitleInfo.BookTitle.Value); bookTitle != "" {
+			title = bookTitle
+		}
+	}
+	var authors string
+	if c != nil && c.Book != nil && cfg != nil && strings.TrimSpace(cfg.TOCPage.AuthorsTemplate) != "" {
+		if expanded, err := c.Book.ExpandTemplateMetainfo(config.AuthorsTemplateFieldName, cfg.TOCPage.AuthorsTemplate, c.SrcName, c.OutputFormat); err == nil {
+			authors = strings.TrimSpace(expanded)
+		}
+	}
+	return pdfTitleFromStrings(title, authors)
+}
+
+func pdfTitleFromStrings(lines ...string) *fb2.Title {
+	items := make([]fb2.TitleItem, 0, len(lines))
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		items = append(items, fb2.TitleItem{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: strings.TrimSpace(line)}}}})
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	return &fb2.Title{Items: items}
 }
 
 func flattenPDFTOCEntries(entries []*structure.TOCEntry, includeUntitled bool, level int) []tocnav.Item {

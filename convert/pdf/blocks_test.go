@@ -282,10 +282,47 @@ func TestCollectPDFContentAddsTOCPageBeforeContent(t *testing.T) {
 	if got := plan.Blocks[0]; got.Kind != pdfBlockPageBreak || got.ID != "toc-page" {
 		t.Fatalf("first block = %#v, want TOC page break", got)
 	}
-	if got := plan.Blocks[1]; got.Kind != pdfBlockHeading || got.Text != "Contents" {
-		t.Fatalf("second block = %#v, want TOC heading", got)
+	if got := plan.Blocks[1]; got.Kind != pdfBlockHeading || got.Text != "Contents" || got.StyleName != pdfStyleTOCTitle || got.StyleClasses != pdfStyleTOCTitle+"-first" {
+		t.Fatalf("second block = %#v, want TOC heading via title helper", got)
 	}
 	if got := plan.Blocks[2]; got.Kind != pdfBlockTOCEntry || got.Text != "Chapter 1" || len(got.Links) != 1 || got.Links[0].Href != "#chapter-1" {
+		t.Fatalf("TOC entry block = %#v", got)
+	}
+}
+
+func TestCollectPDFContentTOCPageUsesBookTitleAndAuthorsTemplate(t *testing.T) {
+	book := &fb2.FictionBook{
+		Description: fb2.Description{TitleInfo: fb2.TitleInfo{
+			BookTitle: fb2.TextField{Value: "My Great Book"},
+			Authors:   []fb2.Author{{FirstName: "Ada", LastName: "Lovelace"}},
+		}},
+		Bodies: []fb2.Body{{
+			Kind: fb2.BodyMain,
+			Sections: []fb2.Section{{
+				ID:    "chapter-1",
+				Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 1"}}}}}},
+			}},
+		}},
+	}
+	plan, err := collectPDFContent(&content.Content{Book: book, SrcName: "book.fb2", OutputFormat: common.OutputFmtPdf}, &config.DocumentConfig{
+		TOCPage: config.TOCPageConfig{
+			Placement:       common.TOCPagePlacementBefore,
+			AuthorsTemplate: "{{ (index .Authors 0).FirstName }} {{ (index .Authors 0).LastName }}",
+		},
+	})
+	if err != nil {
+		t.Fatalf("collectPDFContent() error = %v", err)
+	}
+	if len(plan.Blocks) < 5 {
+		t.Fatalf("blocks = %#v, want TOC title lines, entry, and chapter", plan.Blocks)
+	}
+	if got := plan.Blocks[1]; got.Kind != pdfBlockHeading || got.Text != "My Great Book" || got.StyleName != pdfStyleTOCTitle || got.StyleClasses != pdfStyleTOCTitle+"-first" {
+		t.Fatalf("first TOC title block = %#v, want book-title first line", got)
+	}
+	if got := plan.Blocks[2]; got.Kind != pdfBlockHeading || got.Text != "Ada Lovelace" || got.StyleName != pdfStyleTOCTitle || got.StyleClasses != pdfStyleTOCTitle+"-next" {
+		t.Fatalf("second TOC title block = %#v, want author next line", got)
+	}
+	if got := plan.Blocks[3]; got.Kind != pdfBlockTOCEntry || got.Text != "Chapter 1" {
 		t.Fatalf("TOC entry block = %#v", got)
 	}
 }
