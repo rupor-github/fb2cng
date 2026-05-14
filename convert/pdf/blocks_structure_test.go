@@ -76,26 +76,52 @@ func TestAppendEpigraphBlocksPropagatesEpigraphContextClasses(t *testing.T) {
 }
 
 func TestAppendPoemBlocksPropagatesStanzaContextClasses(t *testing.T) {
-	poem := &fb2.Poem{Stanzas: []fb2.Stanza{{
-		Title:    &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Stanza title"}}}}}},
-		Subtitle: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Stanza subtitle"}}},
-		Verses:   []fb2.Paragraph{{Text: []fb2.InlineSegment{{Text: "Verse line"}}}},
-	}}}
+	poem := &fb2.Poem{
+		Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Poem title"}}}}}},
+		Stanzas: []fb2.Stanza{{
+			Title:    &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Stanza title"}}}}}},
+			Subtitle: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Stanza subtitle"}}},
+			Verses:   []fb2.Paragraph{{Text: []fb2.InlineSegment{{Text: "Verse line"}}}},
+		}},
+	}
 	var blocks []pdfTextBlock
 
 	appendPoemBlocks(&blocks, poem, 1, nil, "", false)
 
-	wantContext := joinStyleClasses(pdfStylePoem, pdfStyleStanza)
+	poemSeen := false
+	wantStanzaContext := joinStyleClasses(pdfStylePoem, pdfStyleStanza)
 	for _, block := range blocks {
 		switch block.Text {
+		case "Poem title":
+			poemSeen = true
+			if block.Kind != pdfBlockParagraph {
+				t.Fatalf("poem title kind = %v, want paragraph", block.Kind)
+			}
+			if block.StyleClasses != pdfStylePoemTitle+" "+pdfStylePoemTitle+"-first" {
+				t.Fatalf("poem title classes = %q, want poem-title first variant", block.StyleClasses)
+			}
+			if block.ContextClasses != pdfStylePoem {
+				t.Fatalf("poem title context = %q, want %q", block.ContextClasses, pdfStylePoem)
+			}
 		case "Stanza title", "Stanza subtitle", "Verse line":
-			if block.ContextClasses != wantContext {
-				t.Fatalf("block %q context = %q, want %q", block.Text, block.ContextClasses, wantContext)
+			if block.ContextClasses != wantStanzaContext {
+				t.Fatalf("block %q context = %q, want %q", block.Text, block.ContextClasses, wantStanzaContext)
+			}
+			if block.Text == "Stanza title" {
+				if block.Kind != pdfBlockParagraph {
+					t.Fatalf("stanza title kind = %v, want paragraph", block.Kind)
+				}
+				if block.StyleClasses != pdfStyleStanzaTitle+" "+pdfStyleStanzaTitle+"-first" {
+					t.Fatalf("stanza title classes = %q, want stanza-title first variant", block.StyleClasses)
+				}
 			}
 		}
 	}
-	if len(blocks) == 0 || blocks[len(blocks)-1].Kind != pdfBlockEmptyLine || blocks[len(blocks)-1].ContextClasses != wantContext {
-		t.Fatalf("stanza empty line = %#v, want stanza context %q", blocks, wantContext)
+	if !poemSeen {
+		t.Fatalf("poem title not found in %#v", blocks)
+	}
+	if len(blocks) == 0 || blocks[len(blocks)-1].Kind != pdfBlockEmptyLine || blocks[len(blocks)-1].ContextClasses != wantStanzaContext {
+		t.Fatalf("stanza empty line = %#v, want stanza context %q", blocks, wantStanzaContext)
 	}
 }
 

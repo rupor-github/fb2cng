@@ -377,7 +377,7 @@ func appendPoemBlocks(blocks *[]pdfTextBlock, poem *fb2.Poem, depth int, splitSe
 		return
 	}
 	poemContextClasses := joinStyleClasses(contextClasses, pdfStylePoem)
-	appendTitleBlocksFull(blocks, poem.Title, depth+1, "", pdfHeadingStyleName(depth+1), "", poemContextClasses, stripRootHorizontalMargins)
+	appendTitleParagraphBlocks(blocks, poem.Title, "", pdfStylePoemTitle, poemContextClasses, stripRootHorizontalMargins)
 	for i := range poem.Epigraphs {
 		appendEpigraphBlocksFull(blocks, &poem.Epigraphs[i], poemContextClasses, stripRootHorizontalMargins)
 	}
@@ -387,7 +387,7 @@ func appendPoemBlocks(blocks *[]pdfTextBlock, poem *fb2.Poem, depth int, splitSe
 	for i := range poem.Stanzas {
 		stanza := &poem.Stanzas[i]
 		stanzaContextClasses := joinStyleClasses(poemContextClasses, pdfStyleStanza)
-		appendTitleBlocksFull(blocks, stanza.Title, depth+1, "", pdfHeadingStyleName(depth+1), "", stanzaContextClasses, stripRootHorizontalMargins)
+		appendTitleParagraphBlocks(blocks, stanza.Title, "", pdfStyleStanzaTitle, stanzaContextClasses, stripRootHorizontalMargins)
 		appendParagraphBlockFull(blocks, pdfBlockSubtitle, stanza.Subtitle, depth, pdfStyleStanzaSubtitle, stanzaContextClasses, stripRootHorizontalMargins)
 		for j := range stanza.Verses {
 			appendParagraphBlockFull(blocks, pdfBlockPoem, &stanza.Verses[j], depth, pdfStylePoem, stanzaContextClasses, stripRootHorizontalMargins)

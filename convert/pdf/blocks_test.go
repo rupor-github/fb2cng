@@ -177,8 +177,17 @@ func TestCollectTextBlocksPropagatesWrappedAnnotationRootHorizontalStrippingInto
 	seenVerse := false
 	for _, block := range blocks {
 		switch {
-		case block.Kind == pdfBlockHeading && block.Text == "Poem title":
+		case block.Text == "Poem title":
 			seenTitle = true
+			if block.Kind != pdfBlockParagraph {
+				t.Fatalf("poem title kind = %v, want paragraph: %#v", block.Kind, block)
+			}
+			if block.StyleClasses != pdfStylePoemTitle+" "+pdfStylePoemTitle+"-first" {
+				t.Fatalf("poem title classes = %q, want poem-title first variant", block.StyleClasses)
+			}
+			if block.ContextClasses != pdfStyleAnnotation+" "+pdfStylePoem {
+				t.Fatalf("poem title context = %q, want annotation poem context", block.ContextClasses)
+			}
 			if !block.StripRootHorizontalMargins {
 				t.Fatalf("poem title should inherit wrapped-annotation root stripping: %#v", block)
 			}
