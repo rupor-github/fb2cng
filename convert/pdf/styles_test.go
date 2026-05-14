@@ -257,6 +257,56 @@ func TestPDFStyleResolverAppliesRootDescendantSelectorsToHeadingDepthAndImages(t
 	}
 }
 
+func TestPDFStyleResolverAppliesContainerDescendantSelectors(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			.epigraph p { text-align: right; text-indent: 0; margin-left: 11pt; }
+			.annotation img { margin-left: 9pt; }
+		`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+
+	epigraphParagraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, ContextClasses: pdfStyleEpigraph})
+	if epigraphParagraph.Paragraph.Align != textAlignRight {
+		t.Fatalf("epigraph paragraph align = %v, want right from .epigraph p", epigraphParagraph.Paragraph.Align)
+	}
+	if epigraphParagraph.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("epigraph paragraph indent = %v, want 0 from .epigraph p", epigraphParagraph.Paragraph.FirstLineIndent)
+	}
+	if epigraphParagraph.MarginLeft != 11 {
+		t.Fatalf("epigraph paragraph margin-left = %v, want 11 from .epigraph p", epigraphParagraph.MarginLeft)
+	}
+
+	annotationImage := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockImage, StyleClasses: "image-block", ContextClasses: pdfStyleAnnotation})
+	if annotationImage.MarginLeft != 9 {
+		t.Fatalf("annotation image margin-left = %v, want 9 from .annotation img", annotationImage.MarginLeft)
+	}
+}
+
+func TestPDFStyleResolverAppliesNestedContainerDescendantSelectorsInOrder(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			.annotation p { text-align: center; text-indent: 0; }
+			.cite p { text-align: left; margin-left: 9pt; }
+		`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, ContextClasses: joinStyleClasses(pdfStyleAnnotation, pdfStyleCite)})
+	if paragraph.Paragraph.Align != textAlignLeft {
+		t.Fatalf("nested paragraph align = %v, want inner cite left", paragraph.Paragraph.Align)
+	}
+	if paragraph.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("nested paragraph indent = %v, want outer annotation indent reset", paragraph.Paragraph.FirstLineIndent)
+	}
+	if paragraph.MarginLeft != 9 {
+		t.Fatalf("nested paragraph margin-left = %v, want 9 from inner cite", paragraph.MarginLeft)
+	}
+}
+
 func TestPDFStyleResolverAppliesElementQualifiedImageSelectors(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",

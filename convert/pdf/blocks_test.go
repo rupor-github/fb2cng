@@ -44,6 +44,9 @@ func TestCollectPDFContentAddsAnnotationPage(t *testing.T) {
 	if got := plan.Blocks[2]; got.Kind != pdfBlockParagraph || got.Text != "Book annotation." || got.StyleClasses != pdfStyleAnnotation {
 		t.Fatalf("annotation paragraph = %#v", got)
 	}
+	if plan.Blocks[2].ContextClasses != pdfStyleAnnotation {
+		t.Fatalf("annotation paragraph context = %q, want %q", plan.Blocks[2].ContextClasses, pdfStyleAnnotation)
+	}
 	if plan.Blocks[2].StripRootHorizontalMargins {
 		t.Fatalf("generated annotation page paragraph should keep normal root margins")
 	}
@@ -137,6 +140,9 @@ func TestCollectTextBlocksPropagatesWrappedAnnotationRootHorizontalStrippingInto
 		if block.Kind == pdfBlockParagraph && block.Text == "Nested cite." {
 			if block.StyleClasses != pdfStyleCite {
 				t.Fatalf("nested cite block classes = %q, want %q", block.StyleClasses, pdfStyleCite)
+			}
+			if block.ContextClasses != joinStyleClasses(pdfStyleAnnotation, pdfStyleCite) {
+				t.Fatalf("nested cite block context = %q, want %q", block.ContextClasses, joinStyleClasses(pdfStyleAnnotation, pdfStyleCite))
 			}
 			if !block.StripRootHorizontalMargins {
 				t.Fatalf("nested cite block should inherit wrapped-annotation root stripping: %#v", block)
@@ -308,6 +314,9 @@ func TestCollectTextBlocksUsesFootnoteSectionSemantics(t *testing.T) {
 			}
 			if block.StyleClasses != pdfStyleFootnote {
 				t.Fatalf("footnote body classes = %q, want %q", block.StyleClasses, pdfStyleFootnote)
+			}
+			if block.ContextClasses != pdfStyleFootnote {
+				t.Fatalf("footnote body context = %q, want %q", block.ContextClasses, pdfStyleFootnote)
 			}
 		}
 	}

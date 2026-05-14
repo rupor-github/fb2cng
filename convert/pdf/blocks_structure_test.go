@@ -53,6 +53,28 @@ func TestAppendParagraphBlockWithClassesConvertsImageOnlySubtitlesToImageBlocks(
 	}
 }
 
+func TestAppendEpigraphBlocksPropagatesEpigraphContextClasses(t *testing.T) {
+	epigraph := &fb2.Epigraph{
+		Flow: fb2.Flow{Items: []fb2.FlowItem{{
+			Kind:      fb2.FlowParagraph,
+			Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Quote"}}},
+		}}},
+		TextAuthors: []fb2.Paragraph{{Text: []fb2.InlineSegment{{Text: "Author"}}}},
+	}
+	var blocks []pdfTextBlock
+
+	appendEpigraphBlocks(&blocks, epigraph)
+
+	if len(blocks) != 2 {
+		t.Fatalf("blocks = %#v, want epigraph paragraph and text-author", blocks)
+	}
+	for i, block := range blocks {
+		if block.ContextClasses != pdfStyleEpigraph {
+			t.Fatalf("block %d context = %q, want %q", i, block.ContextClasses, pdfStyleEpigraph)
+		}
+	}
+}
+
 func TestAppendTitleBlocksWithIDAndClassesConvertsImageOnlyTitlesToStyledImageBlocks(t *testing.T) {
 	title := &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineImageSegment, Image: &fb2.InlineImage{Href: "#title.png", Alt: "Title"}}}}}}}
 	var blocks []pdfTextBlock

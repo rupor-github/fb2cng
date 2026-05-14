@@ -79,6 +79,7 @@ type pdfTextBlock struct {
 	Depth                      int
 	StyleName                  string
 	StyleClasses               string
+	ContextClasses             string
 	StripRootHorizontalMargins bool
 	ImageID                    string
 	Links                      []pdfTextLink

@@ -133,9 +133,9 @@ func insertAnnotationPageBlocks(blocks []pdfTextBlock, toc []*structure.TOCEntry
 	}
 	annotationBlocks := []pdfTextBlock{
 		{Kind: pdfBlockPageBreak, ID: "annotation-page", Text: title},
-		{Kind: pdfBlockHeading, ID: "annotation-page-title", Text: title, Depth: 1, StyleName: pdfStyleAnnotationTitle},
+		{Kind: pdfBlockHeading, ID: "annotation-page-title", Text: title, Depth: 1, StyleName: pdfStyleAnnotationTitle, ContextClasses: pdfStyleAnnotationTitle},
 	}
-	appendFlowBlocks(&annotationBlocks, nil, annotation.Items, 1, nil, pdfStyleAnnotation, false)
+	appendFlowBlocks(&annotationBlocks, nil, annotation.Items, 1, nil, pdfStyleAnnotation, pdfStyleAnnotation, false)
 	out := make([]pdfTextBlock, 0, len(annotationBlocks)+len(blocks))
 	out = append(out, annotationBlocks...)
 	out = append(out, blocks...)
@@ -179,7 +179,7 @@ func buildTOCPageBlocks(entries []*structure.TOCEntry, includeUntitled bool, toc
 	}
 	blocks := []pdfTextBlock{
 		{Kind: pdfBlockPageBreak, ID: "toc-page", Text: "Contents"},
-		{Kind: pdfBlockHeading, ID: "toc-page-title", Text: "Contents", Depth: 1, StyleName: pdfStyleTOCTitle},
+		{Kind: pdfBlockHeading, ID: "toc-page-title", Text: "Contents", Depth: 1, StyleName: pdfStyleTOCTitle, ContextClasses: pdfStyleTOCTitle},
 	}
 	var appendTOCNodeBlocks func(nodes []*tocnav.Node)
 	appendTOCNodeBlocks = func(nodes []*tocnav.Node) {
@@ -264,7 +264,7 @@ func appendUnitBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, unit *struc
 	case structure.UnitBodyIntro:
 		appendBodyIntroBlocks(blocks, book, unit.Body, !splitBodies[unit.Body])
 	case structure.UnitSection:
-		appendSectionBlocks(blocks, book, unit.Section, unit.TitleDepth, splitSections, false)
+		appendSectionBlocks(blocks, book, unit.Section, unit.TitleDepth, splitSections, "", false)
 	case structure.UnitFootnotesBody:
 		appendFootnoteBodyBlocks(blocks, book, unit.Body, splitSections)
 	}

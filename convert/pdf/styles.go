@@ -372,7 +372,7 @@ func (r *pdfStyleResolver) styleForBlock(block pdfTextBlock) pdfBlockResolvedSty
 		}
 		style = mergePDFStyleOverrides(style, selectorStyle, classFallback)
 	}
-	for _, descStyleName := range r.rootDescendantStyleNames(block) {
+	for _, descStyleName := range r.contextDescendantStyleNames(block) {
 		descStyle, ok := r.styles[descStyleName]
 		if !ok {
 			continue
@@ -647,8 +647,10 @@ func (r *pdfStyleResolver) rootHorizontalMargins() (float64, float64) {
 	return left, right
 }
 
-func (r *pdfStyleResolver) rootDescendantStyleNames(block pdfTextBlock) []string {
+func (r *pdfStyleResolver) contextDescendantStyleNames(block pdfTextBlock) []string {
 	ancestors := []string{pdfStyleHTML, pdfStyleBody}
+	ancestors = append(ancestors, strings.Fields(block.ContextClasses)...)
+	ancestors = slices.Compact(ancestors)
 	candidates := pdfSelectorCandidatesForBlock(block)
 	var names []string
 	for _, ancestor := range ancestors {
@@ -659,7 +661,7 @@ func (r *pdfStyleResolver) rootDescendantStyleNames(block pdfTextBlock) []string
 			}
 		}
 	}
-	return names
+	return slices.Compact(names)
 }
 
 func pdfSelectorCandidatesForBlock(block pdfTextBlock) []string {
@@ -860,14 +862,11 @@ func pdfDescendantSelectorStyleNames(sel css.Selector) []string {
 	}
 	mapped := make([]string, 0, len(ancestorNames)*len(rightNames))
 	for _, ancestor := range ancestorNames {
-		if ancestor != pdfStyleHTML && ancestor != pdfStyleBody {
-			continue
-		}
 		for _, rightName := range rightNames {
 			mapped = append(mapped, ancestor+"--"+rightName)
 		}
 	}
-	return mapped
+	return slices.Compact(mapped)
 }
 
 func pdfDescendantSelectorTargets(sel css.Selector) []string {
