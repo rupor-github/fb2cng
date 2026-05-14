@@ -229,6 +229,9 @@ func TestCollectTextBlocksPropagatesWrappedAnnotationRootHorizontalStrippingInto
 		switch {
 		case block.Kind == pdfBlockParagraph && block.Text == "Nested section body.":
 			seenBody = true
+			if block.ContextClasses != "" {
+				t.Fatalf("nested section body context = %q, want reset empty context", block.ContextClasses)
+			}
 			if !block.StripRootHorizontalMargins {
 				t.Fatalf("nested section body should inherit wrapped-annotation root stripping: %#v", block)
 			}
@@ -236,6 +239,9 @@ func TestCollectTextBlocksPropagatesWrappedAnnotationRootHorizontalStrippingInto
 			seenAnnotation = true
 			if block.StyleClasses != pdfStyleAnnotation {
 				t.Fatalf("nested section annotation classes = %q, want %q", block.StyleClasses, pdfStyleAnnotation)
+			}
+			if block.ContextClasses != pdfStyleAnnotation {
+				t.Fatalf("nested section annotation context = %q, want %q", block.ContextClasses, pdfStyleAnnotation)
 			}
 			if !block.StripRootHorizontalMargins {
 				t.Fatalf("nested section annotation should inherit wrapped-annotation root stripping: %#v", block)

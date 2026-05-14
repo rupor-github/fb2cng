@@ -307,6 +307,63 @@ func TestPDFStyleResolverAppliesNestedContainerDescendantSelectorsInOrder(t *tes
 	}
 }
 
+func TestPDFStyleResolverAppliesContainerInheritedPropertiesBeforeTagDefaults(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			p { text-indent: 1em; text-align: justify; }
+			.footnote { text-indent: 0; text-align: center; }
+		`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, ContextClasses: pdfStyleFootnote})
+	if paragraph.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("footnote paragraph indent = %v, want 0 from container inheritance", paragraph.Paragraph.FirstLineIndent)
+	}
+	if paragraph.Paragraph.Align != textAlignCenter {
+		t.Fatalf("footnote paragraph align = %v, want center from container inheritance", paragraph.Paragraph.Align)
+	}
+}
+
+func TestPDFStyleResolverAppliesContainerInheritedMarginsAndKeepsExplicitTextAuthorStyle(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			.cite { margin-left: 9pt; margin-right: 7pt; font-style: italic; text-align: left; }
+		`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	textAuthor := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockTextAuthor, ContextClasses: pdfStyleCite})
+	if textAuthor.MarginLeft != 9 || textAuthor.MarginRight != 7 {
+		t.Fatalf("cite text-author margins = %v/%v, want 9/7 from container inheritance", textAuthor.MarginLeft, textAuthor.MarginRight)
+	}
+	if !textAuthor.Paragraph.Italic {
+		t.Fatalf("cite text-author italic = false, want true from container inheritance")
+	}
+	if textAuthor.Paragraph.Align != textAlignRight {
+		t.Fatalf("cite text-author align = %v, want explicit text-author right preserved", textAuthor.Paragraph.Align)
+	}
+}
+
+func TestPDFStyleResolverDescendantSelectorOverridesContainerInheritedProperty(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			p { text-indent: 1em; }
+			.footnote { text-indent: 0; }
+			.footnote p { text-indent: 0.5em; }
+		`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, ContextClasses: pdfStyleFootnote})
+	if paragraph.Paragraph.FirstLineIndent != pdfBaseFontSize*0.5 {
+		t.Fatalf("footnote paragraph indent = %v, want %v from descendant selector", paragraph.Paragraph.FirstLineIndent, pdfBaseFontSize*0.5)
+	}
+}
+
 func TestPDFStyleResolverAppliesElementQualifiedImageSelectors(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",

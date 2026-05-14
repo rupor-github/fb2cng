@@ -355,8 +355,10 @@ func titleHeaderNextVariantPDFStyle(base pdfBlockResolvedStyle) pdfBlockResolved
 func (r *pdfStyleResolver) styleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
 	name := pdfStyleNameForBlock(block)
 	defaultStyle := r.defaultStyle(name)
+	tagStyle := r.tagStyleForBlock(block)
 	style := r.applyRootInheritedParagraphDefaults(defaultStyle)
 	style = mergePDFStyleOverrides(style, r.namedStyle(name), defaultStyle)
+	style = r.applyContextInheritedBlockDefaults(style, tagStyle, block)
 	classFallback := r.namedStyle(pdfStyleParagraph)
 	for _, class := range strings.Fields(block.StyleClasses) {
 		classStyle, ok := r.styles[class]
@@ -537,6 +539,76 @@ func (r *pdfStyleResolver) rootParagraphStyle() paragraphStyle {
 	return base
 }
 
+func (r *pdfStyleResolver) tagStyleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
+	name := pdfTagStyleNameForBlock(block)
+	style := r.applyRootInheritedParagraphDefaults(r.defaultStyle(name))
+	return mergePDFStyleOverrides(style, r.namedStyle(name), r.defaultStyle(name))
+}
+
+func (r *pdfStyleResolver) contextInheritedBlockStyle(tagStyle pdfBlockResolvedStyle, block pdfTextBlock) pdfBlockResolvedStyle {
+	style := tagStyle
+	for _, class := range strings.Fields(block.ContextClasses) {
+		contextStyle, ok := r.styles[class]
+		if !ok {
+			continue
+		}
+		fallback := r.defaultStyle(class)
+		style.Paragraph = mergePDFInheritedParagraphStyle(style.Paragraph, contextStyle.Paragraph, fallback.Paragraph)
+		if contextStyle.MarginLeft != fallback.MarginLeft {
+			style.MarginLeft = contextStyle.MarginLeft
+		}
+		if contextStyle.MarginRight != fallback.MarginRight {
+			style.MarginRight = contextStyle.MarginRight
+		}
+	}
+	return style
+}
+
+func (r *pdfStyleResolver) applyContextInheritedBlockDefaults(style, tagStyle pdfBlockResolvedStyle, block pdfTextBlock) pdfBlockResolvedStyle {
+	contextStyle := r.contextInheritedBlockStyle(tagStyle, block)
+	if style.Paragraph.FontFamily == tagStyle.Paragraph.FontFamily {
+		style.Paragraph.FontFamily = contextStyle.Paragraph.FontFamily
+	}
+	if style.Paragraph.Bold == tagStyle.Paragraph.Bold {
+		style.Paragraph.Bold = contextStyle.Paragraph.Bold
+	}
+	if style.Paragraph.Italic == tagStyle.Paragraph.Italic {
+		style.Paragraph.Italic = contextStyle.Paragraph.Italic
+	}
+	if style.Paragraph.FontSize == tagStyle.Paragraph.FontSize {
+		style.Paragraph.FontSize = contextStyle.Paragraph.FontSize
+	}
+	if !style.Paragraph.LineHeightExplicit && style.Paragraph.LineHeight == tagStyle.Paragraph.LineHeight {
+		style.Paragraph.LineHeight = contextStyle.Paragraph.LineHeight
+		style.Paragraph.LineHeightExplicit = contextStyle.Paragraph.LineHeightExplicit
+	}
+	if style.Paragraph.LetterSpacing == tagStyle.Paragraph.LetterSpacing {
+		style.Paragraph.LetterSpacing = contextStyle.Paragraph.LetterSpacing
+	}
+	if style.Paragraph.FirstLineIndent == tagStyle.Paragraph.FirstLineIndent {
+		style.Paragraph.FirstLineIndent = contextStyle.Paragraph.FirstLineIndent
+	}
+	if style.Paragraph.Align == tagStyle.Paragraph.Align {
+		style.Paragraph.Align = contextStyle.Paragraph.Align
+	}
+	if style.Paragraph.Color == tagStyle.Paragraph.Color {
+		style.Paragraph.Color = contextStyle.Paragraph.Color
+	}
+	if style.Paragraph.PreserveSpace == tagStyle.Paragraph.PreserveSpace {
+		style.Paragraph.PreserveSpace = contextStyle.Paragraph.PreserveSpace
+	}
+	if style.Paragraph.Hyphenation == tagStyle.Paragraph.Hyphenation {
+		style.Paragraph.Hyphenation = contextStyle.Paragraph.Hyphenation
+	}
+	if style.MarginLeft == tagStyle.MarginLeft {
+		style.MarginLeft = contextStyle.MarginLeft
+	}
+	if style.MarginRight == tagStyle.MarginRight {
+		style.MarginRight = contextStyle.MarginRight
+	}
+	return style
+}
+
 func (r *pdfStyleResolver) applyRootInheritedParagraphDefaults(style pdfBlockResolvedStyle) pdfBlockResolvedStyle {
 	root := r.rootParagraphStyle()
 	rootDefault := r.defaultStyle(pdfStyleBody).Paragraph
@@ -691,6 +763,25 @@ func pdfElementClassStyleNames(block pdfTextBlock) []string {
 
 func pdfStyleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
 	return newPDFStyleResolver(nil, nil).styleForBlock(block)
+}
+
+func pdfTagStyleNameForBlock(block pdfTextBlock) string {
+	switch pdfElementTagForBlock(block) {
+	case "p":
+		return pdfStyleParagraph
+	case "h1":
+		return pdfStyleChapterTitleHeader
+	case "h2", "h3", "h4", "h5", "h6":
+		return pdfStyleSectionTitleHeader
+	case "img":
+		return pdfStyleImage
+	case "table":
+		return pdfStyleTable
+	case "code":
+		return pdfStyleCode
+	default:
+		return pdfStyleNameForBlock(block)
+	}
 }
 
 func pdfStyleNameForBlock(block pdfTextBlock) string {

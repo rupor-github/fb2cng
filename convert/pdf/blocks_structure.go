@@ -192,7 +192,7 @@ func appendFlowItem(blocks *[]pdfTextBlock, book *fb2.FictionBook, item *fb2.Flo
 		if item.Section != nil && splitSections[item.Section.ID] {
 			return
 		}
-		appendSectionBlocks(blocks, book, item.Section, depth+1, splitSections, contextClasses, stripRootHorizontalMargins)
+		appendSectionBlocks(blocks, book, item.Section, depth+1, splitSections, "", stripRootHorizontalMargins)
 	case fb2.FlowPoem:
 		appendPoemBlocks(blocks, item.Poem, depth, splitSections, contextClasses, stripRootHorizontalMargins)
 	case fb2.FlowCite:
