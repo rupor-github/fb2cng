@@ -551,27 +551,33 @@ func (r *pdfStyleResolver) tagStyleForBlock(block pdfTextBlock) pdfBlockResolved
 
 func (r *pdfStyleResolver) contextInheritedBlockStyle(tagStyle pdfBlockResolvedStyle, block pdfTextBlock) pdfBlockResolvedStyle {
 	style := tagStyle
-	contextClasses := strings.Fields(block.ContextClasses)
-	for _, class := range contextClasses {
+	var (
+		left     float64
+		right    float64
+		hasLeft  bool
+		hasRight bool
+	)
+	for _, class := range strings.Fields(block.ContextClasses) {
 		contextStyle, ok := r.styles[class]
 		if !ok {
 			continue
 		}
 		fallback := r.defaultStyle(class)
 		style.Paragraph = mergePDFInheritedParagraphStyle(style.Paragraph, contextStyle.Paragraph, fallback.Paragraph)
-	}
-	if len(contextClasses) > 0 {
-		last := contextClasses[len(contextClasses)-1]
-		contextStyle, ok := r.styles[last]
-		if ok {
-			fallback := r.defaultStyle(last)
-			if contextStyle.MarginLeft != fallback.MarginLeft {
-				style.MarginLeft = contextStyle.MarginLeft
-			}
-			if contextStyle.MarginRight != fallback.MarginRight {
-				style.MarginRight = contextStyle.MarginRight
-			}
+		if contextStyle.MarginLeft != fallback.MarginLeft {
+			left += contextStyle.MarginLeft
+			hasLeft = true
 		}
+		if contextStyle.MarginRight != fallback.MarginRight {
+			right += contextStyle.MarginRight
+			hasRight = true
+		}
+	}
+	if hasLeft {
+		style.MarginLeft = left
+	}
+	if hasRight {
+		style.MarginRight = right
 	}
 	return style
 }

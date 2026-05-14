@@ -397,6 +397,28 @@ func TestPDFStyleResolverDoesNotDoubleCountDuplicateContextClassMargins(t *testi
 	}
 }
 
+func TestPDFStyleResolverAccumulatesNestedContainerMarginsAcrossContextChain(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			.annotation { margin-left: 1em; margin-right: 0.5em; }
+			.cite { margin-left: 2em; margin-right: 0.25em; font-style: italic; }
+		`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleCite, ContextClasses: joinStyleClasses(pdfStyleAnnotation, pdfStyleCite)})
+	if paragraph.MarginLeft != pdfBaseFontSize*3 {
+		t.Fatalf("nested cite margin-left = %v, want accumulated %v", paragraph.MarginLeft, pdfBaseFontSize*3)
+	}
+	if paragraph.MarginRight != pdfBaseFontSize*0.75 {
+		t.Fatalf("nested cite margin-right = %v, want accumulated %v", paragraph.MarginRight, pdfBaseFontSize*0.75)
+	}
+	if !paragraph.Paragraph.Italic {
+		t.Fatalf("nested cite italic = false, want inherited true")
+	}
+}
+
 func TestPDFStyleResolverAppliesElementQualifiedImageSelectors(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",
