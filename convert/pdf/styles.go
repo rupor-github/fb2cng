@@ -349,6 +349,10 @@ func (r *pdfStyleResolver) applyPDFStyleAdjustments() {
 		style.HasSpaceAfter = false
 		r.styles[name] = style
 	}
+	if style, ok := r.styles[pdfStyleCode]; ok {
+		style.Paragraph.Align = r.namedStyle(pdfStyleParagraph).Paragraph.Align
+		r.styles[pdfStyleCode] = style
+	}
 	if style, ok := r.styles[pdfStyleFootnoteTitle]; ok {
 		style.Paragraph.Align = r.namedStyle(pdfStyleParagraph).Paragraph.Align
 		r.styles[pdfStyleFootnoteTitle] = style

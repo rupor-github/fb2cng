@@ -16,11 +16,33 @@ func TestPDFStyleResolverAppliesCodeStylesheet(t *testing.T) {
 
 	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
 	style := resolver.styles[pdfStyleCode]
-	if !style.Paragraph.PreserveSpace || style.Paragraph.FontFamily != "monospace" || style.Paragraph.Align != textAlignLeft {
-		t.Fatalf("code style = %#v, want pre-wrap monospace left alignment", style.Paragraph)
+	if !style.Paragraph.PreserveSpace || style.Paragraph.FontFamily != "monospace" {
+		t.Fatalf("code style = %#v, want pre-wrap monospace", style.Paragraph)
 	}
 	if style.Paragraph.FontSize < 7.34 || style.Paragraph.FontSize > 7.36 {
 		t.Fatalf("code font size = %v, want 70%% base font size", style.Paragraph.FontSize)
+	}
+}
+
+func TestPDFStyleResolverCodeBlockInheritsParagraphAlignment(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			p { text-align: right; }
+			code { white-space: pre-wrap; font-family: monospace; font-size: 70%; text-align: left; }
+		`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleCode})
+	if paragraph.Paragraph.Align != textAlignRight {
+		t.Fatalf("code block align = %v, want right from paragraph inheritance", paragraph.Paragraph.Align)
+	}
+	if paragraph.Paragraph.FontFamily != "monospace" {
+		t.Fatalf("code block font family = %q, want monospace", paragraph.Paragraph.FontFamily)
+	}
+	if !paragraph.Paragraph.PreserveSpace {
+		t.Fatalf("code block preserve-space = false, want true")
 	}
 }
 
