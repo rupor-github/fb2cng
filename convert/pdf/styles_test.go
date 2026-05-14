@@ -578,6 +578,29 @@ func TestPDFStyleResolverFootnoteTitleVariantKeepsBaseVerticalMargins(t *testing
 	}
 }
 
+func TestPDFStyleResolverFootnoteTitleInheritsParagraphAlignment(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			p { text-align: right; }
+			.footnote-title { text-align: left; font-weight: bold; }
+			.footnote-title-first { text-indent: 0; }
+		`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	title := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleFootnoteTitle + " " + pdfStyleFootnoteTitle + "-first"})
+	if title.Paragraph.Align != textAlignRight {
+		t.Fatalf("footnote title align = %v, want right from paragraph inheritance", title.Paragraph.Align)
+	}
+	if !title.Paragraph.Bold {
+		t.Fatalf("footnote title bold = false, want true from footnote-title")
+	}
+	if title.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("footnote title indent = %v, want 0 from first variant", title.Paragraph.FirstLineIndent)
+	}
+}
+
 func TestPDFStyleResolverTitleAfterImageKeepsHeadingTextAlignment(t *testing.T) {
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 
