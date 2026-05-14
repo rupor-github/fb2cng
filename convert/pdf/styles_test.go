@@ -537,6 +537,47 @@ func TestPDFStyleResolverTitleNextVariantClearsHeadingMargins(t *testing.T) {
 	}
 }
 
+func TestPDFStyleResolverParagraphTitleZeroMarginVariantKeepsBaseVerticalMargins(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			.poem-title { margin: 10pt 0 5pt 0; }
+			.poem-title-first { margin: 0; text-align: center; text-indent: 0; }
+		`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	title := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStylePoemTitle + " " + pdfStylePoemTitle + "-first"})
+	if title.SpaceBefore != 10 || title.SpaceAfter != 5 {
+		t.Fatalf("poem title margins = %v/%v, want base 10/5 preserved", title.SpaceBefore, title.SpaceAfter)
+	}
+	if title.Paragraph.Align != textAlignCenter {
+		t.Fatalf("poem title align = %v, want center from first variant", title.Paragraph.Align)
+	}
+	if title.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("poem title indent = %v, want 0 from first variant", title.Paragraph.FirstLineIndent)
+	}
+}
+
+func TestPDFStyleResolverFootnoteTitleVariantKeepsBaseVerticalMargins(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			.footnote-title { margin: 12pt 0 6pt 0; text-align: left; }
+			.footnote-title-first { margin: 2pt 0; text-indent: 0; }
+		`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	title := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleFootnoteTitle + " " + pdfStyleFootnoteTitle + "-first"})
+	if title.SpaceBefore != 12 || title.SpaceAfter != 6 {
+		t.Fatalf("footnote title margins = %v/%v, want base 12/6 preserved", title.SpaceBefore, title.SpaceAfter)
+	}
+	if title.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("footnote title indent = %v, want 0 from first variant", title.Paragraph.FirstLineIndent)
+	}
+}
+
 func TestPDFStyleResolverTitleAfterImageKeepsHeadingTextAlignment(t *testing.T) {
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 

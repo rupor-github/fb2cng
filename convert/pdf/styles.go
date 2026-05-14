@@ -220,6 +220,7 @@ func newPDFStyleResolver(book *fb2.FictionBook, log *zap.Logger, tracers ...*pdf
 		}
 		resolver.applyStylesheet(parser.Parse([]byte(stylesheet.Data), "pdf stylesheet"))
 	}
+	resolver.applyPDFStyleAdjustments()
 	return resolver
 }
 
@@ -323,6 +324,30 @@ func headingPDFStyle(depth int) pdfBlockResolvedStyle {
 		SpaceAfter:        pdfHeadingSpaceAfter,
 		KeepTogether:      true,
 		KeepWithNextLines: pdfDefaultKeepLines,
+	}
+}
+
+func (r *pdfStyleResolver) applyPDFStyleAdjustments() {
+	if r == nil {
+		return
+	}
+	for _, name := range []string{
+		pdfStylePoemTitle + "-first",
+		pdfStylePoemTitle + "-next",
+		pdfStyleStanzaTitle + "-first",
+		pdfStyleStanzaTitle + "-next",
+		pdfStyleFootnoteTitle + "-first",
+		pdfStyleFootnoteTitle + "-next",
+	} {
+		style, ok := r.styles[name]
+		if !ok {
+			continue
+		}
+		style.SpaceBefore = r.defaultStyle(pdfStyleParagraph).SpaceBefore
+		style.HasSpaceBefore = false
+		style.SpaceAfter = r.defaultStyle(pdfStyleParagraph).SpaceAfter
+		style.HasSpaceAfter = false
+		r.styles[name] = style
 	}
 }
 
