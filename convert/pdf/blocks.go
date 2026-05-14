@@ -300,6 +300,10 @@ func appendBodyBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, body *fb2.B
 }
 
 func appendSectionBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, section *fb2.Section, depth int, splitSections map[string]bool) {
+	appendSectionBlocksWithRootHorizontalMargins(blocks, book, section, depth, splitSections, false)
+}
+
+func appendSectionBlocksWithRootHorizontalMargins(blocks *[]pdfTextBlock, book *fb2.FictionBook, section *fb2.Section, depth int, splitSections map[string]bool, stripRootHorizontalMargins bool) {
 	if section == nil {
 		return
 	}
@@ -308,22 +312,22 @@ func appendSectionBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, section 
 	if section.Title != nil {
 		appendTitleVignetteBlock(blocks, book, depth, true, titleClasses)
 	}
-	appendTitleBlocksWithIDHeaderAndClasses(blocks, section.Title, depth, section.ID, headerStyle, titleClasses)
+	appendTitleBlocksWithIDHeaderAndClassesAndRootHorizontalMargins(blocks, section.Title, depth, section.ID, headerStyle, titleClasses, stripRootHorizontalMargins)
 	if section.Title != nil {
 		appendTitleVignetteBlock(blocks, book, depth, false, titleClasses)
 	}
 	for i := range section.Epigraphs {
-		appendEpigraphBlocks(blocks, &section.Epigraphs[i])
+		appendEpigraphBlocksWithRootHorizontalMargins(blocks, &section.Epigraphs[i], stripRootHorizontalMargins)
 	}
-	appendImageBlock(blocks, section.Image, section.ID)
+	appendImageBlockWithClassesAndRootHorizontalMargins(blocks, section.Image, section.ID, "", stripRootHorizontalMargins)
 	if section.Annotation != nil {
-		appendFlowBlocksWithRootHorizontalMargins(blocks, book, section.Annotation.Items, depth, splitSections, pdfStyleAnnotation, len(section.Annotation.Items) > 1)
+		appendFlowBlocksWithRootHorizontalMargins(blocks, book, section.Annotation.Items, depth, splitSections, pdfStyleAnnotation, stripRootHorizontalMargins || len(section.Annotation.Items) > 1)
 	}
 	for i := range section.Content {
-		appendFlowItemBlock(blocks, book, &section.Content[i], depth, splitSections, "")
+		appendFlowItemBlockWithRootHorizontalMargins(blocks, book, &section.Content[i], depth, splitSections, "", stripRootHorizontalMargins)
 	}
 	if section.Title != nil {
-		appendEndVignetteBlock(blocks, book, depth)
+		appendEndVignetteBlockWithRootHorizontalMargins(blocks, book, depth, stripRootHorizontalMargins)
 	}
 }
 
@@ -417,7 +421,7 @@ func appendFlowItemBlockWithRootHorizontalMargins(blocks *[]pdfTextBlock, book *
 		if item.Section != nil && splitSections[item.Section.ID] {
 			return
 		}
-		appendSectionBlocks(blocks, book, item.Section, depth+1, splitSections)
+		appendSectionBlocksWithRootHorizontalMargins(blocks, book, item.Section, depth+1, splitSections, stripRootHorizontalMargins)
 	case fb2.FlowPoem:
 		appendPoemBlocksWithRootHorizontalMargins(blocks, item.Poem, depth, splitSections, stripRootHorizontalMargins)
 	case fb2.FlowCite:
@@ -498,11 +502,15 @@ func appendTitleVignetteBlock(blocks *[]pdfTextBlock, book *fb2.FictionBook, dep
 }
 
 func appendEndVignetteBlock(blocks *[]pdfTextBlock, book *fb2.FictionBook, depth int) {
+	appendEndVignetteBlockWithRootHorizontalMargins(blocks, book, depth, false)
+}
+
+func appendEndVignetteBlockWithRootHorizontalMargins(blocks *[]pdfTextBlock, book *fb2.FictionBook, depth int, stripRootHorizontalMargins bool) {
 	if depth == 1 {
-		appendVignetteBlock(blocks, book, common.VignettePosChapterEnd)
+		appendVignetteBlockWithClassesAndRootHorizontalMargins(blocks, book, common.VignettePosChapterEnd, "", stripRootHorizontalMargins)
 		return
 	}
-	appendVignetteBlock(blocks, book, common.VignettePosSectionEnd)
+	appendVignetteBlockWithClassesAndRootHorizontalMargins(blocks, book, common.VignettePosSectionEnd, "", stripRootHorizontalMargins)
 }
 
 func sectionTitleContainerClasses(depth int) string {

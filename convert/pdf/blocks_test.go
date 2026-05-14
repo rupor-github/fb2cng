@@ -520,6 +520,56 @@ func TestCollectTextBlocksPropagatesWrappedAnnotationRootHorizontalStrippingInto
 	}
 }
 
+func TestCollectTextBlocksPropagatesWrappedAnnotationRootHorizontalStrippingIntoNestedSection(t *testing.T) {
+	book := &fb2.FictionBook{Bodies: []fb2.Body{{
+		Kind: fb2.BodyMain,
+		Sections: []fb2.Section{{
+			ID:    "chapter-1",
+			Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 1"}}}}}},
+			Annotation: &fb2.Flow{Items: []fb2.FlowItem{
+				{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Lead annotation."}}}},
+				{Kind: fb2.FlowSection, Section: &fb2.Section{
+					Annotation: &fb2.Flow{Items: []fb2.FlowItem{{
+						Kind:      fb2.FlowParagraph,
+						Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Nested section note."}}},
+					}}},
+					Content: []fb2.FlowItem{{
+						Kind:      fb2.FlowParagraph,
+						Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Nested section body."}}},
+					}},
+				}},
+			}},
+		}},
+	}}}
+
+	blocks, err := collectTextBlocks(&content.Content{Book: book})
+	if err != nil {
+		t.Fatalf("collectTextBlocks() error = %v", err)
+	}
+	seenBody := false
+	seenAnnotation := false
+	for _, block := range blocks {
+		switch {
+		case block.Kind == pdfBlockParagraph && block.Text == "Nested section body.":
+			seenBody = true
+			if !block.StripRootHorizontalMargins {
+				t.Fatalf("nested section body should inherit wrapped-annotation root stripping: %#v", block)
+			}
+		case block.Kind == pdfBlockParagraph && block.Text == "Nested section note.":
+			seenAnnotation = true
+			if block.StyleClasses != pdfStyleAnnotation {
+				t.Fatalf("nested section annotation classes = %q, want %q", block.StyleClasses, pdfStyleAnnotation)
+			}
+			if !block.StripRootHorizontalMargins {
+				t.Fatalf("nested section annotation should inherit wrapped-annotation root stripping: %#v", block)
+			}
+		}
+	}
+	if !seenBody || !seenAnnotation {
+		t.Fatalf("expected stripped nested section body and annotation, got %#v", blocks)
+	}
+}
+
 func TestCollectPDFContentAddsTOCPageBeforeContent(t *testing.T) {
 	book := &fb2.FictionBook{Bodies: []fb2.Body{{
 		Kind: fb2.BodyMain,
