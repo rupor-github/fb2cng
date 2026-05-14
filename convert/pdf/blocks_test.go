@@ -609,6 +609,78 @@ func TestCollectPDFContentAddsTOCPageBeforeContent(t *testing.T) {
 	}
 }
 
+func TestCollectTextBlocksUsesFootnoteSectionSemantics(t *testing.T) {
+	book := &fb2.FictionBook{Bodies: []fb2.Body{
+		{Kind: fb2.BodyMain, Sections: []fb2.Section{{ID: "chapter-1", Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 1"}}}}}}}}},
+		{Kind: fb2.BodyFootnotes, Name: "notes", Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Notes"}}}}}}, Sections: []fb2.Section{{
+			ID:    "note-1",
+			Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "1"}}}}}},
+			Content: []fb2.FlowItem{{
+				Kind:      fb2.FlowParagraph,
+				Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Footnote body."}}},
+			}},
+		}}},
+	}}
+
+	blocks, err := collectTextBlocks(&content.Content{Book: book})
+	if err != nil {
+		t.Fatalf("collectTextBlocks() error = %v", err)
+	}
+	foundTitle := false
+	foundBody := false
+	for _, block := range blocks {
+		switch {
+		case block.Text == "1":
+			foundTitle = true
+			if block.Kind != pdfBlockParagraph {
+				t.Fatalf("footnote title kind = %v, want paragraph: %#v", block.Kind, block)
+			}
+			if block.ID != "note-1" {
+				t.Fatalf("footnote title ID = %q, want note-1", block.ID)
+			}
+			if block.StyleClasses != pdfStyleFootnoteTitle+" "+pdfStyleFootnoteTitle+"-first" {
+				t.Fatalf("footnote title classes = %q, want footnote-title first variant", block.StyleClasses)
+			}
+		case block.Text == "Footnote body.":
+			foundBody = true
+			if block.Kind != pdfBlockParagraph {
+				t.Fatalf("footnote body kind = %v, want paragraph: %#v", block.Kind, block)
+			}
+			if block.StyleClasses != pdfStyleFootnote {
+				t.Fatalf("footnote body classes = %q, want %q", block.StyleClasses, pdfStyleFootnote)
+			}
+		}
+	}
+	if !foundTitle || !foundBody {
+		t.Fatalf("expected footnote title/body blocks, got %#v", blocks)
+	}
+}
+
+func TestCollectTextBlocksFootnoteSectionsDoNotEmitChapterEndVignette(t *testing.T) {
+	book := &fb2.FictionBook{
+		VignetteIDs: map[common.VignettePos]string{common.VignettePosChapterEnd: "chapter-end"},
+		Bodies: []fb2.Body{{
+			Kind: fb2.BodyFootnotes,
+			Name: "notes",
+			Sections: []fb2.Section{{
+				ID:      "note-1",
+				Title:   &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "1"}}}}}},
+				Content: []fb2.FlowItem{{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Footnote body."}}}}},
+			}},
+		}},
+	}
+
+	blocks, err := collectTextBlocks(&content.Content{Book: book})
+	if err != nil {
+		t.Fatalf("collectTextBlocks() error = %v", err)
+	}
+	for _, block := range blocks {
+		if block.Kind == pdfBlockImage && block.ImageID == "chapter-end" {
+			t.Fatalf("footnote section should not emit chapter-end vignette: %#v", block)
+		}
+	}
+}
+
 func TestCollectTextBlocksUsesStructuralPageBreaks(t *testing.T) {
 	book := &fb2.FictionBook{Bodies: []fb2.Body{{
 		Kind: fb2.BodyMain,

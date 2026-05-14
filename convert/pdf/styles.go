@@ -60,6 +60,8 @@ const (
 	pdfStyleAnnotation         = "annotation"
 	pdfStyleAnnotationTitle    = "annotation-title"
 	pdfStyleAnnotationSubtitle = "annotation-subtitle"
+	pdfStyleFootnote           = "footnote"
+	pdfStyleFootnoteTitle      = "footnote-title"
 	pdfStylePoem               = "poem"
 	pdfStylePoemSubtitle       = "poem-subtitle"
 	pdfStyleStanzaSubtitle     = "stanza-subtitle"

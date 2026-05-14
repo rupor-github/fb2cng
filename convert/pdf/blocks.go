@@ -266,7 +266,7 @@ func appendUnitBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, unit *struc
 	case structure.UnitSection:
 		appendSectionBlocks(blocks, book, unit.Section, unit.TitleDepth, splitSections)
 	case structure.UnitFootnotesBody:
-		appendBodyBlocks(blocks, book, unit.Body, splitSections)
+		appendFootnoteBodyBlocks(blocks, book, unit.Body, splitSections)
 	}
 }
 
@@ -297,6 +297,31 @@ func appendBodyBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, body *fb2.B
 	for i := range body.Sections {
 		appendSectionBlocks(blocks, book, &body.Sections[i], 1, splitSections)
 	}
+}
+
+func appendFootnoteBodyBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, body *fb2.Body, splitSections map[string]bool) {
+	if body == nil {
+		return
+	}
+	appendBodyIntroBlocks(blocks, book, body, true)
+	for i := range body.Sections {
+		appendFootnoteSectionBlocks(blocks, book, &body.Sections[i], splitSections)
+	}
+}
+
+func appendFootnoteSectionBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, section *fb2.Section, splitSections map[string]bool) {
+	if section == nil {
+		return
+	}
+	appendTitleParagraphBlocksWithIDAndClasses(blocks, section.Title, section.ID, pdfStyleFootnoteTitle)
+	for i := range section.Epigraphs {
+		appendEpigraphBlocks(blocks, &section.Epigraphs[i])
+	}
+	appendImageBlock(blocks, section.Image, section.ID)
+	if section.Annotation != nil {
+		appendFlowBlocks(blocks, book, section.Annotation.Items, 1, splitSections, pdfStyleAnnotation)
+	}
+	appendFlowBlocks(blocks, book, section.Content, 1, splitSections, pdfStyleFootnote)
 }
 
 func appendSectionBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, section *fb2.Section, depth int, splitSections map[string]bool) {
@@ -333,6 +358,35 @@ func appendSectionBlocksWithRootHorizontalMargins(blocks *[]pdfTextBlock, book *
 
 func appendTitleBlocks(blocks *[]pdfTextBlock, title *fb2.Title, depth int) {
 	appendTitleBlocksWithIDHeaderAndClassesAndRootHorizontalMargins(blocks, title, depth, "", pdfHeadingStyleName(depth), "", false)
+}
+
+func appendTitleParagraphBlocksWithIDAndClasses(blocks *[]pdfTextBlock, title *fb2.Title, id string, styleClass string) {
+	appendTitleParagraphBlocksWithIDAndClassesAndRootHorizontalMargins(blocks, title, id, styleClass, false)
+}
+
+func appendTitleParagraphBlocksWithIDAndClassesAndRootHorizontalMargins(blocks *[]pdfTextBlock, title *fb2.Title, id string, styleClass string, stripRootHorizontalMargins bool) {
+	if title == nil {
+		return
+	}
+	anchorID := id
+	firstParagraph := true
+	for i := range title.Items {
+		item := &title.Items[i]
+		if item.Paragraph == nil {
+			continue
+		}
+		paragraph := *item.Paragraph
+		if anchorID != "" && paragraph.ID == "" {
+			paragraph.ID = anchorID
+		}
+		positionClass := titleParagraphPositionStyleClass(styleClass, firstParagraph)
+		firstParagraph = false
+		before := len(*blocks)
+		appendParagraphBlockWithClassesAndRootHorizontalMargins(blocks, pdfBlockParagraph, &paragraph, 1, joinStyleClasses(styleClass, positionClass), stripRootHorizontalMargins)
+		if len(*blocks) > before {
+			anchorID = ""
+		}
+	}
 }
 
 func appendTitleBlocksWithID(blocks *[]pdfTextBlock, title *fb2.Title, depth int, id string) {
