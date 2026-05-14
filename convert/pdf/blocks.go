@@ -328,28 +328,33 @@ func appendSectionBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, section 
 }
 
 func appendTitleBlocks(blocks *[]pdfTextBlock, title *fb2.Title, depth int) {
-	appendTitleBlocksWithIDHeaderAndClasses(blocks, title, depth, "", pdfHeadingStyleName(depth), "")
+	appendTitleBlocksWithIDHeaderAndClassesAndRootHorizontalMargins(blocks, title, depth, "", pdfHeadingStyleName(depth), "", false)
 }
 
 func appendTitleBlocksWithID(blocks *[]pdfTextBlock, title *fb2.Title, depth int, id string) {
-	appendTitleBlocksWithIDHeaderAndClasses(blocks, title, depth, id, pdfHeadingStyleName(depth), "")
+	appendTitleBlocksWithIDHeaderAndClassesAndRootHorizontalMargins(blocks, title, depth, id, pdfHeadingStyleName(depth), "", false)
 }
 
 func appendTitleBlocksWithIDAndClasses(blocks *[]pdfTextBlock, title *fb2.Title, depth int, id string, styleClasses string) {
-	appendTitleBlocksWithIDHeaderAndClasses(blocks, title, depth, id, pdfHeadingStyleName(depth), styleClasses)
+	appendTitleBlocksWithIDHeaderAndClassesAndRootHorizontalMargins(blocks, title, depth, id, pdfHeadingStyleName(depth), styleClasses, false)
 }
 
 func appendTitleBlocksWithIDHeaderAndClasses(blocks *[]pdfTextBlock, title *fb2.Title, depth int, id string, headerStyleName string, styleClasses string) {
+	appendTitleBlocksWithIDHeaderAndClassesAndRootHorizontalMargins(blocks, title, depth, id, headerStyleName, styleClasses, false)
+}
+
+func appendTitleBlocksWithIDHeaderAndClassesAndRootHorizontalMargins(blocks *[]pdfTextBlock, title *fb2.Title, depth int, id string, headerStyleName string, styleClasses string, stripRootHorizontalMargins bool) {
 	if title == nil {
 		return
 	}
+	blockStripRootHorizontalMargins := stripRootHorizontalMargins || titleWrapperStripRootHorizontalMargins(styleClasses)
 	anchorID := id
 	firstParagraph := true
 	prevWasImageOnlyHeadingParagraph := false
 	for i := range title.Items {
 		item := &title.Items[i]
 		if item.EmptyLine {
-			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine, StyleClasses: joinStyleClasses(styleClasses, headerStyleName+"-emptyline"), StripRootHorizontalMargins: titleWrapperStripRootHorizontalMargins(styleClasses)})
+			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine, StyleClasses: joinStyleClasses(styleClasses, headerStyleName+"-emptyline"), StripRootHorizontalMargins: blockStripRootHorizontalMargins})
 			prevWasImageOnlyHeadingParagraph = false
 			continue
 		}
@@ -359,7 +364,7 @@ func appendTitleBlocksWithIDHeaderAndClasses(blocks *[]pdfTextBlock, title *fb2.
 		positionClass := titleParagraphPositionStyleClass(headerStyleName, firstParagraph)
 		firstParagraph = false
 		if imageID, alt, ok := paragraphImageOnly(item.Paragraph); ok {
-			appendStyledImageIDBlockWithRootHorizontalMargins(blocks, imageID, anchorID, alt, pdfStyleImage, joinStyleClasses(headerStyleName, item.Paragraph.Style, styleClasses, positionClass, pdfStyleHeadingImage), titleWrapperStripRootHorizontalMargins(styleClasses))
+			appendStyledImageIDBlockWithRootHorizontalMargins(blocks, imageID, anchorID, alt, pdfStyleImage, joinStyleClasses(headerStyleName, item.Paragraph.Style, styleClasses, positionClass, pdfStyleHeadingImage), blockStripRootHorizontalMargins)
 			anchorID = ""
 			prevWasImageOnlyHeadingParagraph = true
 			continue
@@ -374,7 +379,7 @@ func appendTitleBlocksWithIDHeaderAndClasses(blocks *[]pdfTextBlock, title *fb2.
 			classes = joinStyleClasses(classes, pdfStyleCode)
 		}
 		if text != "" || inlineRunsRenderable(runs) {
-			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockHeading, ID: anchorID, Text: text, Runs: runs, Depth: depth, StyleName: headerStyleName, StyleClasses: classes, StripRootHorizontalMargins: titleWrapperStripRootHorizontalMargins(styleClasses), Links: links})
+			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockHeading, ID: anchorID, Text: text, Runs: runs, Depth: depth, StyleName: headerStyleName, StyleClasses: classes, StripRootHorizontalMargins: blockStripRootHorizontalMargins, Links: links})
 			anchorID = ""
 			prevWasImageOnlyHeadingParagraph = false
 		}
@@ -414,7 +419,7 @@ func appendFlowItemBlockWithRootHorizontalMargins(blocks *[]pdfTextBlock, book *
 		}
 		appendSectionBlocks(blocks, book, item.Section, depth+1, splitSections)
 	case fb2.FlowPoem:
-		appendPoemBlocks(blocks, item.Poem, depth, splitSections)
+		appendPoemBlocksWithRootHorizontalMargins(blocks, item.Poem, depth, splitSections, stripRootHorizontalMargins)
 	case fb2.FlowCite:
 		appendCiteBlocksWithRootHorizontalMargins(blocks, item.Cite, depth, splitSections, stripRootHorizontalMargins)
 	case fb2.FlowTable:
@@ -612,27 +617,31 @@ func appendParagraphBlockWithClassesAndRootHorizontalMargins(blocks *[]pdfTextBl
 }
 
 func appendPoemBlocks(blocks *[]pdfTextBlock, poem *fb2.Poem, depth int, splitSections map[string]bool) {
+	appendPoemBlocksWithRootHorizontalMargins(blocks, poem, depth, splitSections, false)
+}
+
+func appendPoemBlocksWithRootHorizontalMargins(blocks *[]pdfTextBlock, poem *fb2.Poem, depth int, splitSections map[string]bool, stripRootHorizontalMargins bool) {
 	if poem == nil {
 		return
 	}
-	appendTitleBlocks(blocks, poem.Title, depth+1)
+	appendTitleBlocksWithIDHeaderAndClassesAndRootHorizontalMargins(blocks, poem.Title, depth+1, "", pdfHeadingStyleName(depth+1), "", stripRootHorizontalMargins)
 	for i := range poem.Epigraphs {
-		appendEpigraphBlocks(blocks, &poem.Epigraphs[i])
+		appendEpigraphBlocksWithRootHorizontalMargins(blocks, &poem.Epigraphs[i], stripRootHorizontalMargins)
 	}
 	for i := range poem.Subtitles {
-		appendParagraphBlockWithClasses(blocks, pdfBlockSubtitle, &poem.Subtitles[i], depth, pdfStylePoemSubtitle)
+		appendParagraphBlockWithClassesAndRootHorizontalMargins(blocks, pdfBlockSubtitle, &poem.Subtitles[i], depth, pdfStylePoemSubtitle, stripRootHorizontalMargins)
 	}
 	for i := range poem.Stanzas {
 		stanza := &poem.Stanzas[i]
-		appendTitleBlocks(blocks, stanza.Title, depth+1)
-		appendParagraphBlockWithClasses(blocks, pdfBlockSubtitle, stanza.Subtitle, depth, pdfStyleStanzaSubtitle)
+		appendTitleBlocksWithIDHeaderAndClassesAndRootHorizontalMargins(blocks, stanza.Title, depth+1, "", pdfHeadingStyleName(depth+1), "", stripRootHorizontalMargins)
+		appendParagraphBlockWithClassesAndRootHorizontalMargins(blocks, pdfBlockSubtitle, stanza.Subtitle, depth, pdfStyleStanzaSubtitle, stripRootHorizontalMargins)
 		for j := range stanza.Verses {
-			appendParagraphBlockWithClasses(blocks, pdfBlockPoem, &stanza.Verses[j], depth, pdfStylePoem)
+			appendParagraphBlockWithClassesAndRootHorizontalMargins(blocks, pdfBlockPoem, &stanza.Verses[j], depth, pdfStylePoem, stripRootHorizontalMargins)
 		}
-		*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine})
+		*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine, StripRootHorizontalMargins: stripRootHorizontalMargins})
 	}
 	for i := range poem.TextAuthors {
-		appendParagraphBlock(blocks, pdfBlockTextAuthor, &poem.TextAuthors[i], depth)
+		appendParagraphBlockWithClassesAndRootHorizontalMargins(blocks, pdfBlockTextAuthor, &poem.TextAuthors[i], depth, "", stripRootHorizontalMargins)
 	}
 }
 
@@ -651,12 +660,16 @@ func appendCiteBlocksWithRootHorizontalMargins(blocks *[]pdfTextBlock, cite *fb2
 }
 
 func appendEpigraphBlocks(blocks *[]pdfTextBlock, epigraph *fb2.Epigraph) {
+	appendEpigraphBlocksWithRootHorizontalMargins(blocks, epigraph, false)
+}
+
+func appendEpigraphBlocksWithRootHorizontalMargins(blocks *[]pdfTextBlock, epigraph *fb2.Epigraph, stripRootHorizontalMargins bool) {
 	if epigraph == nil {
 		return
 	}
-	appendFlowBlocks(blocks, nil, epigraph.Flow.Items, 1, nil, pdfStyleEpigraph)
+	appendFlowBlocksWithRootHorizontalMargins(blocks, nil, epigraph.Flow.Items, 1, nil, pdfStyleEpigraph, stripRootHorizontalMargins)
 	for i := range epigraph.TextAuthors {
-		appendParagraphBlock(blocks, pdfBlockTextAuthor, &epigraph.TextAuthors[i], 1)
+		appendParagraphBlockWithClassesAndRootHorizontalMargins(blocks, pdfBlockTextAuthor, &epigraph.TextAuthors[i], 1, "", stripRootHorizontalMargins)
 	}
 }
 

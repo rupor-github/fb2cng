@@ -844,6 +844,44 @@ func TestLayoutPDFPagesAnnotationWrapperNestedCiteCanStripRootHorizontalMargins(
 	}
 }
 
+func TestLayoutPDFPagesAnnotationWrapperNestedPoemCanStripRootHorizontalMargins(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	resolver := newPDFStyleResolver(&fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			html { margin: 0 -20pt 0 -20pt; }
+			p { margin: 0; text-indent: 0; }
+			.verse { margin-left: 15pt; margin-right: 15pt; }
+		`,
+	}}}, nil)
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  220,
+		PageHeight: 180,
+		Title:      "Title",
+		Author:     "Author",
+		Styles:     resolver,
+		Blocks: []pdfTextBlock{{
+			Kind:                       pdfBlockPoem,
+			Text:                       "Verse line.",
+			StyleClasses:               pdfStylePoem,
+			StripRootHorizontalMargins: true,
+		}},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 || len(pages[1].Lines) != 1 {
+		t.Fatalf("layoutPDFPages() pages = %#v, want one verse line", pages)
+	}
+	if got := pages[1].Lines[0].X; math.Abs(got-39) > 0.001 {
+		t.Fatalf("verse line X = %v, want 39 (24 base margin + 15 verse margin)", got)
+	}
+}
+
 func TestLayoutPDFPagesAppliesInlineNamedStyleClasses(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {

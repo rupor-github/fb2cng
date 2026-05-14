@@ -476,6 +476,50 @@ func TestCollectTextBlocksPropagatesWrappedAnnotationRootHorizontalStrippingInto
 	t.Fatalf("nested cite block not found in %#v", blocks)
 }
 
+func TestCollectTextBlocksPropagatesWrappedAnnotationRootHorizontalStrippingIntoPoem(t *testing.T) {
+	book := &fb2.FictionBook{Bodies: []fb2.Body{{
+		Kind: fb2.BodyMain,
+		Sections: []fb2.Section{{
+			ID:    "chapter-1",
+			Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 1"}}}}}},
+			Annotation: &fb2.Flow{Items: []fb2.FlowItem{
+				{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Lead annotation."}}}},
+				{Kind: fb2.FlowPoem, Poem: &fb2.Poem{
+					Title:   &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Poem title"}}}}}},
+					Stanzas: []fb2.Stanza{{Verses: []fb2.Paragraph{{Text: []fb2.InlineSegment{{Text: "Verse line."}}}}}},
+				}},
+			}},
+		}},
+	}}}
+
+	blocks, err := collectTextBlocks(&content.Content{Book: book})
+	if err != nil {
+		t.Fatalf("collectTextBlocks() error = %v", err)
+	}
+	seenTitle := false
+	seenVerse := false
+	for _, block := range blocks {
+		switch {
+		case block.Kind == pdfBlockHeading && block.Text == "Poem title":
+			seenTitle = true
+			if !block.StripRootHorizontalMargins {
+				t.Fatalf("poem title should inherit wrapped-annotation root stripping: %#v", block)
+			}
+		case block.Kind == pdfBlockPoem && block.Text == "Verse line.":
+			seenVerse = true
+			if block.StyleClasses != pdfStylePoem {
+				t.Fatalf("verse block classes = %q, want %q", block.StyleClasses, pdfStylePoem)
+			}
+			if !block.StripRootHorizontalMargins {
+				t.Fatalf("verse block should inherit wrapped-annotation root stripping: %#v", block)
+			}
+		}
+	}
+	if !seenTitle || !seenVerse {
+		t.Fatalf("expected stripped poem title and verse, got %#v", blocks)
+	}
+}
+
 func TestCollectPDFContentAddsTOCPageBeforeContent(t *testing.T) {
 	book := &fb2.FictionBook{Bodies: []fb2.Body{{
 		Kind: fb2.BodyMain,
