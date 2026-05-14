@@ -442,6 +442,40 @@ func TestCollectTextBlocksKeepsSingleBlockSectionAnnotationOnNormalRootMargins(t
 	t.Fatalf("single-block annotation paragraph not found in %#v", blocks)
 }
 
+func TestCollectTextBlocksPropagatesWrappedAnnotationRootHorizontalStrippingIntoCite(t *testing.T) {
+	book := &fb2.FictionBook{Bodies: []fb2.Body{{
+		Kind: fb2.BodyMain,
+		Sections: []fb2.Section{{
+			ID:    "chapter-1",
+			Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 1"}}}}}},
+			Annotation: &fb2.Flow{Items: []fb2.FlowItem{
+				{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Lead annotation."}}}},
+				{Kind: fb2.FlowCite, Cite: &fb2.Cite{Items: []fb2.FlowItem{{
+					Kind:      fb2.FlowParagraph,
+					Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Nested cite."}}},
+				}}}},
+			}},
+		}},
+	}}}
+
+	blocks, err := collectTextBlocks(&content.Content{Book: book})
+	if err != nil {
+		t.Fatalf("collectTextBlocks() error = %v", err)
+	}
+	for _, block := range blocks {
+		if block.Kind == pdfBlockParagraph && block.Text == "Nested cite." {
+			if block.StyleClasses != pdfStyleCite {
+				t.Fatalf("nested cite block classes = %q, want %q", block.StyleClasses, pdfStyleCite)
+			}
+			if !block.StripRootHorizontalMargins {
+				t.Fatalf("nested cite block should inherit wrapped-annotation root stripping: %#v", block)
+			}
+			return
+		}
+	}
+	t.Fatalf("nested cite block not found in %#v", blocks)
+}
+
 func TestCollectPDFContentAddsTOCPageBeforeContent(t *testing.T) {
 	book := &fb2.FictionBook{Bodies: []fb2.Body{{
 		Kind: fb2.BodyMain,

@@ -416,7 +416,7 @@ func appendFlowItemBlockWithRootHorizontalMargins(blocks *[]pdfTextBlock, book *
 	case fb2.FlowPoem:
 		appendPoemBlocks(blocks, item.Poem, depth, splitSections)
 	case fb2.FlowCite:
-		appendCiteBlocks(blocks, item.Cite, depth, splitSections)
+		appendCiteBlocksWithRootHorizontalMargins(blocks, item.Cite, depth, splitSections, stripRootHorizontalMargins)
 	case fb2.FlowTable:
 		if item.Table != nil {
 			text := item.Table.AsPlainText()
@@ -637,12 +637,16 @@ func appendPoemBlocks(blocks *[]pdfTextBlock, poem *fb2.Poem, depth int, splitSe
 }
 
 func appendCiteBlocks(blocks *[]pdfTextBlock, cite *fb2.Cite, depth int, splitSections map[string]bool) {
+	appendCiteBlocksWithRootHorizontalMargins(blocks, cite, depth, splitSections, false)
+}
+
+func appendCiteBlocksWithRootHorizontalMargins(blocks *[]pdfTextBlock, cite *fb2.Cite, depth int, splitSections map[string]bool, stripRootHorizontalMargins bool) {
 	if cite == nil {
 		return
 	}
-	appendFlowBlocks(blocks, nil, cite.Items, depth, splitSections, pdfStyleCite)
+	appendFlowBlocksWithRootHorizontalMargins(blocks, nil, cite.Items, depth, splitSections, pdfStyleCite, stripRootHorizontalMargins)
 	for i := range cite.TextAuthors {
-		appendParagraphBlock(blocks, pdfBlockTextAuthor, &cite.TextAuthors[i], depth)
+		appendParagraphBlockWithClassesAndRootHorizontalMargins(blocks, pdfBlockTextAuthor, &cite.TextAuthors[i], depth, "", stripRootHorizontalMargins)
 	}
 }
 
