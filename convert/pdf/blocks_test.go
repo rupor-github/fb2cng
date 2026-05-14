@@ -175,6 +175,17 @@ func TestAppendParagraphBlockWithClassesConvertsImageOnlyParagraphsToContextStyl
 	}
 }
 
+func TestAppendImageBlockAddsImageBlockClass(t *testing.T) {
+	var blocks []pdfTextBlock
+	appendImageBlock(&blocks, &fb2.Image{Href: "#block.png", Alt: "Block"}, "anchor")
+	if len(blocks) != 1 || blocks[0].Kind != pdfBlockImage {
+		t.Fatalf("blocks = %#v, want one image block", blocks)
+	}
+	if blocks[0].StyleClasses != "image-block" {
+		t.Fatalf("image block classes = %q, want %q", blocks[0].StyleClasses, "image-block")
+	}
+}
+
 func TestAppendParagraphBlockWithClassesUsesContextSpecificSubtitleStyleName(t *testing.T) {
 	paragraph := &fb2.Paragraph{ID: "s", Text: []fb2.InlineSegment{{Text: "Quote subtitle"}}}
 	var blocks []pdfTextBlock
@@ -756,11 +767,11 @@ func TestCollectTextBlocksIncludesVignettes(t *testing.T) {
 		}
 	}
 	want := []string{
-		"strip:book-top:vignette vignette-book-title-top body-title",
-		"strip:book-bottom:vignette vignette-book-title-bottom body-title",
-		"strip:chapter-top:vignette vignette-chapter-title-top chapter-title",
-		"strip:chapter-bottom:vignette vignette-chapter-title-bottom chapter-title",
-		"keep:chapter-end:vignette vignette-chapter-end",
+		"strip:book-top:image-vignette vignette vignette-book-title-top body-title",
+		"strip:book-bottom:image-vignette vignette vignette-book-title-bottom body-title",
+		"strip:chapter-top:image-vignette vignette vignette-chapter-title-top chapter-title",
+		"strip:chapter-bottom:image-vignette vignette vignette-chapter-title-bottom chapter-title",
+		"keep:chapter-end:image-vignette vignette vignette-chapter-end",
 	}
 	if len(got) != len(want) {
 		t.Fatalf("vignette blocks = %#v, want %#v", got, want)

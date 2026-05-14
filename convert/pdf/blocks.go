@@ -456,7 +456,7 @@ func appendImageBlockWithClassesAndRootHorizontalMargins(blocks *[]pdfTextBlock,
 	if anchorID == "" {
 		anchorID = fallbackID
 	}
-	appendStyledImageIDBlockWithRootHorizontalMargins(blocks, imageID, anchorID, strings.TrimSpace(image.Alt), pdfStyleImage, strings.TrimSpace(styleClasses), stripRootHorizontalMargins)
+	appendStyledImageIDBlockWithRootHorizontalMargins(blocks, imageID, anchorID, strings.TrimSpace(image.Alt), pdfStyleImage, joinStyleClasses("image-block", strings.TrimSpace(styleClasses)), stripRootHorizontalMargins)
 }
 
 func appendImageIDBlock(blocks *[]pdfTextBlock, imageID string, anchorID string, alt string, styleClasses string) {
@@ -553,7 +553,7 @@ func appendVignetteBlockWithClassesAndRootHorizontalMargins(blocks *[]pdfTextBlo
 	if imageID == "" {
 		return
 	}
-	appendStyledImageIDBlockWithRootHorizontalMargins(blocks, imageID, "", "", pdfStyleImage, joinStyleClasses("vignette", "vignette-"+position.String(), styleClasses), stripRootHorizontalMargins)
+	appendStyledImageIDBlockWithRootHorizontalMargins(blocks, imageID, "", "", pdfStyleImage, joinStyleClasses("image-vignette", "vignette", "vignette-"+position.String(), styleClasses), stripRootHorizontalMargins)
 }
 
 func isVignetteBlock(block pdfTextBlock) bool {

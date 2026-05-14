@@ -363,6 +363,13 @@ func (r *pdfStyleResolver) styleForBlock(block pdfTextBlock) pdfBlockResolvedSty
 		}
 		style = mergePDFStyleOverrides(style, classStyle, classFallback)
 	}
+	for _, selectorStyleName := range pdfElementClassStyleNames(block) {
+		selectorStyle, ok := r.styles[selectorStyleName]
+		if !ok {
+			continue
+		}
+		style = mergePDFStyleOverrides(style, selectorStyle, classFallback)
+	}
 	for _, descStyleName := range r.rootDescendantStyleNames(block) {
 		descStyle, ok := r.styles[descStyleName]
 		if !ok {
@@ -640,11 +647,7 @@ func (r *pdfStyleResolver) rootHorizontalMargins() (float64, float64) {
 
 func (r *pdfStyleResolver) rootDescendantStyleNames(block pdfTextBlock) []string {
 	ancestors := []string{pdfStyleHTML, pdfStyleBody}
-	candidates := make([]string, 0, 1+len(strings.Fields(block.StyleClasses)))
-	if tag := pdfElementTagForBlock(block); tag != "" {
-		candidates = append(candidates, tag)
-	}
-	candidates = append(candidates, strings.Fields(block.StyleClasses)...)
+	candidates := pdfSelectorCandidatesForBlock(block)
 	var names []string
 	for _, ancestor := range ancestors {
 		for _, candidate := range candidates {
@@ -655,6 +658,31 @@ func (r *pdfStyleResolver) rootDescendantStyleNames(block pdfTextBlock) []string
 		}
 	}
 	return names
+}
+
+func pdfSelectorCandidatesForBlock(block pdfTextBlock) []string {
+	var candidates []string
+	if tag := pdfElementTagForBlock(block); tag != "" {
+		candidates = append(candidates, tag)
+		for _, class := range strings.Fields(block.StyleClasses) {
+			candidates = append(candidates, class)
+			candidates = append(candidates, tag+"."+class)
+		}
+		return slices.Compact(candidates)
+	}
+	candidates = append(candidates, strings.Fields(block.StyleClasses)...)
+	return slices.Compact(candidates)
+}
+
+func pdfElementClassStyleNames(block pdfTextBlock) []string {
+	if tag := pdfElementTagForBlock(block); tag != "" {
+		names := make([]string, 0, len(strings.Fields(block.StyleClasses)))
+		for _, class := range strings.Fields(block.StyleClasses) {
+			names = append(names, tag+"."+class)
+		}
+		return slices.Compact(names)
+	}
+	return nil
 }
 
 func pdfStyleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
@@ -788,6 +816,9 @@ func pdfSelectorStyleNames(sel css.Selector) []string {
 	if sel.Ancestor != nil {
 		return pdfDescendantSelectorStyleNames(sel)
 	}
+	if sel.Element != "" && sel.Class != "" {
+		return []string{strings.ToLower(sel.Element) + "." + sel.Class}
+	}
 	if sel.Class != "" {
 		return []string{sel.Class}
 	}
@@ -838,6 +869,13 @@ func pdfDescendantSelectorStyleNames(sel css.Selector) []string {
 }
 
 func pdfDescendantSelectorTargets(sel css.Selector) []string {
+	if sel.Element != "" && sel.Class != "" {
+		switch strings.ToLower(sel.Element) {
+		case "p", "h1", "h2", "h3", "h4", "h5", "h6", "img", "table", "code":
+			return []string{strings.ToLower(sel.Element) + "." + sel.Class}
+		}
+		return nil
+	}
 	var targets []string
 	if sel.Element != "" {
 		switch strings.ToLower(sel.Element) {

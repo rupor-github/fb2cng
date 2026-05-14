@@ -221,6 +221,7 @@ func TestPDFStyleResolverAppliesRootDescendantSelectorsToHeadingDepthAndImages(t
 			body h1 { margin-left: 13pt; }
 			html h3 { margin-right: 7pt; }
 			body img { margin-left: 11pt; }
+			body img.image-vignette { margin-right: 5pt; }
 		`,
 	}}}
 
@@ -245,6 +246,39 @@ func TestPDFStyleResolverAppliesRootDescendantSelectorsToHeadingDepthAndImages(t
 	image := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockImage})
 	if image.MarginLeft != 11 {
 		t.Fatalf("image margin-left = %v, want 11 from body img", image.MarginLeft)
+	}
+
+	vignette := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockImage, StyleClasses: "image-vignette vignette"})
+	if vignette.MarginLeft != 11 {
+		t.Fatalf("vignette margin-left = %v, want 11 from body img", vignette.MarginLeft)
+	}
+	if vignette.MarginRight != 5 {
+		t.Fatalf("vignette margin-right = %v, want 5 from body img.image-vignette", vignette.MarginRight)
+	}
+}
+
+func TestPDFStyleResolverAppliesElementQualifiedImageSelectors(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			img.image-block { margin-left: 9pt; }
+			img.image-vignette { margin-right: 4pt; }
+		`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+
+	image := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockImage, StyleClasses: "image-block"})
+	if image.MarginLeft != 9 {
+		t.Fatalf("image-block margin-left = %v, want 9", image.MarginLeft)
+	}
+	if image.MarginRight != 0 {
+		t.Fatalf("image-block margin-right = %v, want 0", image.MarginRight)
+	}
+
+	vignette := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockImage, StyleClasses: "image-vignette vignette"})
+	if vignette.MarginRight != 4 {
+		t.Fatalf("image-vignette margin-right = %v, want 4", vignette.MarginRight)
 	}
 }
 
