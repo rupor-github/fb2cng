@@ -1,12 +1,29 @@
 package pdf
 
 import (
+	"math"
 	"testing"
 
 	"go.uber.org/zap/zaptest"
 
 	"fbc/fb2"
 )
+
+func TestPDFInlineRunFootnoteLinkDefaultsMatchDefaultCSS(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	base := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph}).Paragraph
+
+	footnote := inlineRunParagraphStyle(resolver, base, pdfInlineRun{StyleClasses: pdfStyleLinkFootnote})
+	if !footnote.Underline {
+		t.Fatalf("footnote link underline = false, want default link underline")
+	}
+	if math.Abs(footnote.FontSize-pdfFootnoteLinkFontSize) > 0.001 {
+		t.Fatalf("footnote link font size = %v, want default.css 80%% %v", footnote.FontSize, pdfFootnoteLinkFontSize)
+	}
+	if footnote.VerticalAlign != textVerticalAlignSuper {
+		t.Fatalf("footnote link vertical-align = %v, want super", footnote.VerticalAlign)
+	}
+}
 
 func TestPDFInlineRunAppliesContextDescendantSelectors(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{

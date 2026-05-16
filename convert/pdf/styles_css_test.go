@@ -100,6 +100,69 @@ func TestPDFStyleResolverCiteMarginsMatchDefaultCSS(t *testing.T) {
 	}
 }
 
+func TestPDFStyleResolverTableDefaultsMatchDefaultCSS(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	table := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleTable})
+	if table.SpaceBefore != pdfBaseFontSize || table.SpaceAfter != pdfBaseFontSize {
+		t.Fatalf("table margins = %v/%v, want default.css 1em/1em", table.SpaceBefore, table.SpaceAfter)
+	}
+	if !table.KeepTogether {
+		t.Fatalf("table keep-together = false, want default.css page-break-inside avoid")
+	}
+	if table.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("table flattened paragraph indent = %v, want 0", table.Paragraph.FirstLineIndent)
+	}
+}
+
+func TestPDFStyleResolverFootnoteDefaultsMatchDefaultCSS(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleFootnote, ContextClasses: pdfStyleFootnote})
+	if paragraph.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("footnote paragraph indent = %v, want default.css 0", paragraph.Paragraph.FirstLineIndent)
+	}
+}
+
+func TestPDFStyleResolverVignetteDefaultsMatchDefaultCSS(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+
+	generic := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockImage, StyleClasses: joinStyleClasses(pdfStyleImageVignette, pdfStyleVignette)})
+	if generic.SpaceBefore != pdfVignetteSpace || generic.SpaceAfter != pdfVignetteSpace {
+		t.Fatalf("vignette margins = %v/%v, want default.css 0.5em/0.5em", generic.SpaceBefore, generic.SpaceAfter)
+	}
+	if generic.Paragraph.Align != textAlignCenter || generic.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("vignette text style = align:%v indent:%v, want center/0", generic.Paragraph.Align, generic.Paragraph.FirstLineIndent)
+	}
+
+	chapterTop := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockImage, StyleClasses: joinStyleClasses(pdfStyleImageVignette, pdfStyleVignette, pdfStyleVignetteChapterTop)})
+	if chapterTop.SpaceBefore != pdfVignetteTitleTopSpaceBefore || chapterTop.SpaceAfter != pdfVignetteTitleTopSpaceAfter {
+		t.Fatalf("chapter top vignette margins = %v/%v, want default.css 1em/0.5em", chapterTop.SpaceBefore, chapterTop.SpaceAfter)
+	}
+
+	sectionBottom := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockImage, StyleClasses: joinStyleClasses(pdfStyleImageVignette, pdfStyleVignette, pdfStyleVignetteSectionBot)})
+	if sectionBottom.SpaceBefore != pdfVignetteSectionTitleBottomBefore || sectionBottom.SpaceAfter != pdfVignetteSectionTitleBottomAfter {
+		t.Fatalf("section bottom vignette margins = %v/%v, want default.css 0.4em/0.8em", sectionBottom.SpaceBefore, sectionBottom.SpaceAfter)
+	}
+
+	chapterEnd := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockImage, StyleClasses: joinStyleClasses(pdfStyleImageVignette, pdfStyleVignette, pdfStyleVignetteChapterEnd)})
+	if chapterEnd.SpaceBefore != pdfVignetteChapterEndSpace || chapterEnd.SpaceAfter != pdfVignetteChapterEndSpace {
+		t.Fatalf("chapter end vignette margins = %v/%v, want default.css 1.5em/1.5em", chapterEnd.SpaceBefore, chapterEnd.SpaceAfter)
+	}
+}
+
+func TestPDFStyleResolverPoemDefaultsMatchDefaultCSS(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	verse := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockPoem, StyleClasses: pdfStylePoem, ContextClasses: pdfStylePoem})
+	if verse.MarginLeft != pdfPoemMarginLeft+pdfVerseMarginLeft {
+		t.Fatalf("poem verse margin-left = %v, want default.css poem 3em + verse 2em", verse.MarginLeft)
+	}
+	if !verse.Paragraph.Italic {
+		t.Fatalf("poem verse italic = false, want inherited from default.css .poem")
+	}
+	if verse.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("poem verse indent = %v, want default.css poem/verse zero indent", verse.Paragraph.FirstLineIndent)
+	}
+}
+
 func TestPDFStyleResolverVerseMarginsMatchDefaultCSS(t *testing.T) {
 	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
 	verse := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockPoem})

@@ -108,6 +108,7 @@ func TestLayoutPDFPagesAnnotationWrapperNestedPoemCanStripRootHorizontalMargins(
 			Kind:                       pdfBlockPoem,
 			Text:                       "Verse line.",
 			StyleClasses:               pdfStylePoem,
+			ContextClasses:             pdfStylePoem,
 			StripRootHorizontalMargins: true,
 		}},
 	}, face)
@@ -117,8 +118,9 @@ func TestLayoutPDFPagesAnnotationWrapperNestedPoemCanStripRootHorizontalMargins(
 	if len(pages) != 2 || len(pages[1].Lines) != 1 {
 		t.Fatalf("layoutPDFPages() pages = %#v, want one verse line", pages)
 	}
-	if got := pages[1].Lines[0].X; math.Abs(got-39) > 0.001 {
-		t.Fatalf("verse line X = %v, want 39 (24 base margin + 15 verse margin)", got)
+	wantX := 24 + pdfPoemMarginLeft + 15
+	if got := pages[1].Lines[0].X; math.Abs(got-wantX) > 0.001 {
+		t.Fatalf("verse line X = %v, want %v (24 base margin + poem margin + 15 verse margin)", got, wantX)
 	}
 }
 

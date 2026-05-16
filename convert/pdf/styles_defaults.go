@@ -39,12 +39,19 @@ func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 			SpaceAfter:  pdfEpigraphSpaceAfter,
 			MarginLeft:  pdfEpigraphMarginLeft,
 		},
+		pdfStyleFootnote: {
+			Paragraph: paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, FirstLineIndent: 0, HasFirstLineIndent: true, Align: textAlignJustify, Hyphenation: paragraphHyphenationAuto},
+		},
 		pdfStyleCite: {
 			Paragraph:   paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, FirstLineIndent: pdfBodyIndent, Align: textAlignJustify, Hyphenation: paragraphHyphenationAuto},
 			SpaceBefore: pdfBaseFontSize,
 			SpaceAfter:  pdfBaseFontSize,
 			MarginLeft:  pdfBaseFontSize * 2,
 			MarginRight: pdfBaseFontSize * 2,
+		},
+		pdfStylePoem: {
+			Paragraph:  paragraphStyle{FontFamily: "serif", Italic: true, FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, FirstLineIndent: 0, HasFirstLineIndent: true, Align: textAlignJustify, Hyphenation: paragraphHyphenationAuto},
+			MarginLeft: pdfPoemMarginLeft,
 		},
 		pdfStyleVerse: {
 			Paragraph:   paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfVerseLineHeight, HasFirstLineIndent: true, Align: textAlignLeft, Hyphenation: paragraphHyphenationAuto},
@@ -64,6 +71,15 @@ func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 			Paragraph:    paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, HasFirstLineIndent: true, Align: textAlignCenter, Hyphenation: paragraphHyphenationAuto},
 			KeepTogether: true,
 		},
+		pdfStyleVignette:           vignettePDFStyle(pdfVignetteSpace, pdfVignetteSpace),
+		pdfStyleVignetteBookTop:    vignettePDFStyle(pdfVignetteTitleTopSpaceBefore, pdfVignetteTitleTopSpaceAfter),
+		pdfStyleVignetteBookBottom: vignettePDFStyle(pdfVignetteTitleBottomSpaceBefore, pdfVignetteTitleBottomSpaceAfter),
+		pdfStyleVignetteChapterTop: vignettePDFStyle(pdfVignetteTitleTopSpaceBefore, pdfVignetteTitleTopSpaceAfter),
+		pdfStyleVignetteChapterBot: vignettePDFStyle(pdfVignetteTitleBottomSpaceBefore, pdfVignetteTitleBottomSpaceAfter),
+		pdfStyleVignetteChapterEnd: vignettePDFStyle(pdfVignetteChapterEndSpace, pdfVignetteChapterEndSpace),
+		pdfStyleVignetteSectionTop: vignettePDFStyle(pdfVignetteSectionTitleTopSpaceBefore, pdfVignetteSectionTitleTopSpaceAfter),
+		pdfStyleVignetteSectionBot: vignettePDFStyle(pdfVignetteSectionTitleBottomBefore, pdfVignetteSectionTitleBottomAfter),
+		pdfStyleVignetteSectionEnd: vignettePDFStyle(pdfVignetteSectionEndSpace, pdfVignetteSectionEndSpace),
 		pdfStyleTOCItem: {
 			Paragraph:  paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, Align: textAlignLeft, Hyphenation: paragraphHyphenationAuto},
 			SpaceAfter: pdfTOCSpaceAfter,
@@ -74,6 +90,12 @@ func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 			Paragraph: paragraphStyle{FontFamily: "monospace", FontSize: pdfCodeFontSize, LineHeight: pdfCodeLineHeight, Align: textAlignLeft, PreserveSpace: true, Hyphenation: paragraphHyphenationNone},
 			Orphans:   pdfSingleKeepLine,
 			Widows:    pdfSingleKeepLine,
+		},
+		pdfStyleTable: {
+			Paragraph:    paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, FirstLineIndent: 0, HasFirstLineIndent: true, Align: textAlignJustify, Hyphenation: paragraphHyphenationAuto},
+			SpaceBefore:  pdfBaseFontSize,
+			SpaceAfter:   pdfBaseFontSize,
+			KeepTogether: true,
 		},
 		pdfStyleTOCTitle:        headingPDFStyle(1),
 		pdfStyleAnnotationTitle: headingPDFStyle(1),
@@ -95,7 +117,11 @@ func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 	linkStyle.Paragraph.Underline = true
 	styles[pdfStyleLinkExternal] = linkStyle
 	styles[pdfStyleLinkInternal] = linkStyle
-	styles[pdfStyleLinkFootnote] = linkStyle
+	footnoteLinkStyle := linkStyle
+	footnoteLinkStyle.Paragraph.FontSize = pdfFootnoteLinkFontSize / pdfInlineScriptScale
+	footnoteLinkStyle.Paragraph.LineHeight = pdfFootnoteLinkLineHeight / pdfInlineScriptScale
+	footnoteLinkStyle.Paragraph.VerticalAlign = textVerticalAlignSuper
+	styles[pdfStyleLinkFootnote] = footnoteLinkStyle
 	styles[pdfStyleLinkTOC] = linkStyle
 	return styles
 }
@@ -154,6 +180,15 @@ func (r *pdfStyleResolver) applyPDFStyleAdjustments() {
 	if style, ok := r.styles[pdfStyleFootnoteTitle]; ok {
 		style.Paragraph.Align = r.namedStyle(pdfStyleParagraph).Paragraph.Align
 		r.styles[pdfStyleFootnoteTitle] = style
+	}
+}
+
+func vignettePDFStyle(spaceBefore float64, spaceAfter float64) pdfBlockResolvedStyle {
+	return pdfBlockResolvedStyle{
+		Paragraph:    paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, HasFirstLineIndent: true, Align: textAlignCenter, Hyphenation: paragraphHyphenationAuto},
+		SpaceBefore:  spaceBefore,
+		SpaceAfter:   spaceAfter,
+		KeepTogether: true,
 	}
 }
 
