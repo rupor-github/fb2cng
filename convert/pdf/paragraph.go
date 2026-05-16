@@ -5,9 +5,9 @@ import (
 	"math"
 	"strings"
 	"unicode"
-)
 
-const softHyphen = '\u00ad'
+	contentText "fbc/content/text"
+)
 
 const (
 	paragraphLinePenalty              = 10.0
@@ -271,7 +271,7 @@ func hyphenatedWordParts(word string, hyphenator paragraphHyphenator, mode parag
 	hyphenated := word
 	switch mode {
 	case paragraphHyphenationNone:
-		return punctuationWordParts(strings.ReplaceAll(word, string(softHyphen), ""))
+		return punctuationWordParts(strings.ReplaceAll(word, contentText.SOFTHYPHEN, ""))
 	case paragraphHyphenationManual:
 		// Honor only explicit soft hyphens already present in the source text.
 	case paragraphHyphenationAuto:
@@ -284,7 +284,7 @@ func hyphenatedWordParts(word string, hyphenator paragraphHyphenator, mode parag
 		}
 	}
 
-	segments := strings.Split(hyphenated, string(softHyphen))
+	segments := strings.Split(hyphenated, contentText.SOFTHYPHEN)
 	parts := make([]paragraphWordPart, 0, len(segments))
 	for segmentIndex, segment := range segments {
 		segmentParts := punctuationWordParts(segment)
@@ -300,7 +300,7 @@ func hyphenatedWordParts(word string, hyphenator paragraphHyphenator, mode parag
 		parts = append(parts, segmentParts...)
 	}
 	if len(parts) == 0 {
-		return punctuationWordParts(strings.ReplaceAll(word, string(softHyphen), ""))
+		return punctuationWordParts(strings.ReplaceAll(word, contentText.SOFTHYPHEN, ""))
 	}
 	return parts
 }

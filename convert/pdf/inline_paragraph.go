@@ -3,6 +3,8 @@ package pdf
 import (
 	"fmt"
 	"strings"
+
+	contentText "fbc/content/text"
 )
 
 const (
@@ -287,7 +289,7 @@ func inlineParagraphWords(doc skeletonDocument, registry *pdfFontRegistry, resol
 	words := make([]paragraphInlineWord, 0)
 	current := paragraphInlineWord{}
 	flushCurrent := func() {
-		if strings.TrimSpace(strings.ReplaceAll(current.Text, string(softHyphen), "")) == "" && len(current.Fragments) == 0 {
+		if strings.TrimSpace(strings.ReplaceAll(current.Text, contentText.SOFTHYPHEN, "")) == "" && len(current.Fragments) == 0 {
 			current = paragraphInlineWord{}
 			return
 		}
@@ -672,7 +674,7 @@ func inlineWordGlyphPieces(word paragraphInlineWord) []inlineGlyphPiece {
 	pieces := make([]inlineGlyphPiece, 0, len([]rune(word.Text)))
 	for _, fragment := range word.Fragments {
 		for _, glyph := range fragment.Text.Glyphs {
-			if glyph.Rune == softHyphen {
+			if string(glyph.Rune) == contentText.SOFTHYPHEN {
 				continue
 			}
 			pieces = append(pieces, inlineGlyphPiece{Glyph: glyph, Template: fragment})
