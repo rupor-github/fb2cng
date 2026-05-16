@@ -177,6 +177,24 @@ func TestPDFStyleResolverPoemDefaultsMatchDefaultCSS(t *testing.T) {
 	}
 }
 
+func TestPDFStyleResolverTitleHeaderBreakDefaultsMatchDefaultCSS(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	for _, tt := range []struct {
+		class string
+		bold  bool
+	}{
+		{class: pdfStyleBodyTitleHeader + "-break", bold: true},
+		{class: pdfStyleChapterTitleHeader + "-break"},
+		{class: pdfStyleSectionTitleHeader + "-break"},
+		{class: pdfStyleTOCTitle + "-break"},
+	} {
+		br := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: tt.class})
+		if br.Paragraph.Align != textAlignCenter || br.Paragraph.Bold != tt.bold || br.SpaceBefore != 0 || br.SpaceAfter != 0 {
+			t.Fatalf("%s style = align:%v bold:%t margins:%v/%v, want default.css block break semantics", tt.class, br.Paragraph.Align, br.Paragraph.Bold, br.SpaceBefore, br.SpaceAfter)
+		}
+	}
+}
+
 func TestPDFStyleResolverEmptyLineDefaultsMatchDefaultCSS(t *testing.T) {
 	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
 	emptyLine := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine})

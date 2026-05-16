@@ -122,13 +122,17 @@ func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 	}
 	styles[pdfStyleBodyTitleHeader+"-first"] = titleHeaderFirstVariantPDFStyle(styles[pdfStyleBodyTitleHeader])
 	styles[pdfStyleBodyTitleHeader+"-next"] = titleHeaderNextVariantPDFStyle(styles[pdfStyleBodyTitleHeader])
+	styles[pdfStyleBodyTitleHeader+"-break"] = titleHeaderBreakPDFStyle(true)
 	styles[pdfStyleBodyTitleHeader+"-emptyline"] = titleHeaderEmptyLinePDFStyle(true)
 	styles[pdfStyleChapterTitleHeader+"-first"] = titleHeaderFirstVariantPDFStyle(styles[pdfStyleChapterTitleHeader])
 	styles[pdfStyleChapterTitleHeader+"-next"] = titleHeaderNextVariantPDFStyle(styles[pdfStyleChapterTitleHeader])
+	styles[pdfStyleChapterTitleHeader+"-break"] = titleHeaderBreakPDFStyle(false)
 	styles[pdfStyleChapterTitleHeader+"-emptyline"] = titleHeaderEmptyLinePDFStyle(false)
 	styles[pdfStyleSectionTitleHeader+"-first"] = titleHeaderFirstVariantPDFStyle(styles[pdfStyleSectionTitleHeader])
 	styles[pdfStyleSectionTitleHeader+"-next"] = titleHeaderNextVariantPDFStyle(styles[pdfStyleSectionTitleHeader])
+	styles[pdfStyleSectionTitleHeader+"-break"] = titleHeaderBreakPDFStyle(false)
 	styles[pdfStyleSectionTitleHeader+"-emptyline"] = titleHeaderEmptyLinePDFStyle(false)
+	styles[pdfStyleTOCTitle+"-break"] = titleHeaderBreakPDFStyle(false)
 	styles[pdfStyleTOCTitle+"-emptyline"] = titleHeaderEmptyLinePDFStyle(false)
 	styles[pdfStylePoemTitle+"-first"] = paragraphTitleVariantPDFStyle(true)
 	styles[pdfStylePoemTitle+"-next"] = paragraphTitleVariantPDFStyle(true)
@@ -237,6 +241,12 @@ func vignettePDFStyle(spaceBefore float64, spaceAfter float64) pdfBlockResolvedS
 		SpaceBefore:  spaceBefore,
 		SpaceAfter:   spaceAfter,
 		KeepTogether: true,
+	}
+}
+
+func titleHeaderBreakPDFStyle(bold bool) pdfBlockResolvedStyle {
+	return pdfBlockResolvedStyle{
+		Paragraph: paragraphStyle{FontFamily: "serif", Bold: bold, FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, Align: textAlignCenter, Hyphenation: paragraphHyphenationAuto},
 	}
 }
 
