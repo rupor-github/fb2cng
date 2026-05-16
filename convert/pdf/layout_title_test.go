@@ -39,8 +39,9 @@ func TestLayoutPDFPagesKeepsGapBetweenTitleVignetteAndHeadingImage(t *testing.T)
 		t.Fatalf("layout pages images = %#v, want title vignette plus heading image", pages)
 	}
 	gap := pages[1].Images[0].Y - (pages[1].Images[1].Y + pages[1].Images[1].Height)
-	if math.Abs(gap-pdfHeadingSpaceBefore) > 0.001 {
-		t.Fatalf("title image gap = %v, want %v", gap, pdfHeadingSpaceBefore)
+	wantGap := headingPDFStyle(1).SpaceBefore
+	if math.Abs(gap-wantGap) > 0.001 {
+		t.Fatalf("title image gap = %v, want %v", gap, wantGap)
 	}
 }
 

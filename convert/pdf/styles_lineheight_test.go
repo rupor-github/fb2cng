@@ -75,12 +75,11 @@ func TestPDFStyleResolverClassFontSizeStillAdjustsImplicitLineHeight(t *testing.
 	}
 }
 
-func TestPDFStyleResolverCodeLineHeightUsesKP3NormalRatioAtCodeFontSize(t *testing.T) {
+func TestPDFStyleResolverCodeLineHeightPreservesKP3BaseRhythm(t *testing.T) {
 	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
 	code := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleCode})
-	wantLineHeight := pdfCodeFontSize * pdfNormalLineHeightFactor
-	if math.Abs(code.Paragraph.LineHeight-wantLineHeight) > 0.001 {
-		t.Fatalf("code line height = %v, want KP3 normal ratio at code font size %v", code.Paragraph.LineHeight, wantLineHeight)
+	if math.Abs(code.Paragraph.LineHeight-pdfBaseLineHeight) > 0.001 {
+		t.Fatalf("code line height = %v, want KP3 1lh base rhythm %v", code.Paragraph.LineHeight, pdfBaseLineHeight)
 	}
 }
 

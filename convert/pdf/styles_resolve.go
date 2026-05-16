@@ -40,7 +40,7 @@ func (r *pdfStyleResolver) styleForBlock(block pdfTextBlock) pdfBlockResolvedSty
 		style = mergePDFStyleOverrides(style, descStyle, classFallback)
 	}
 	if block.Kind == pdfBlockTOCEntry {
-		style.Paragraph.FirstLineIndent = max(float64(block.Depth-1)*pdfTOCIndentPerDepth, 0)
+		style.Paragraph.FirstLineIndent = max(float64(block.Depth-1)*pdfTOCNestedListIndent, 0)
 	}
 	return injectPDFImplicitLineHeight(style, defaultStyle)
 }

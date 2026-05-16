@@ -117,7 +117,6 @@ func layoutPreformattedParagraph(doc skeletonDocument, registry *pdfFontRegistry
 	if err != nil {
 		return nil, err
 	}
-	pieces = trimPreformattedPieces(pieces)
 	if len(pieces) == 0 {
 		return nil, nil
 	}
@@ -170,20 +169,6 @@ func preformattedPieces(doc skeletonDocument, registry *pdfFontRegistry, resolve
 		}
 	}
 	return pieces, nil
-}
-
-func trimPreformattedPieces(pieces []inlineGlyphPiece) []inlineGlyphPiece {
-	for len(pieces) > 0 && pieces[0].Newline {
-		pieces = pieces[1:]
-	}
-	for len(pieces) > 0 {
-		last := pieces[len(pieces)-1]
-		if !last.Newline && !isBreakableSpace(last.Glyph.Rune) {
-			break
-		}
-		pieces = pieces[:len(pieces)-1]
-	}
-	return pieces
 }
 
 func wrapPreformattedPieces(pieces []inlineGlyphPiece, maxWidth float64) [][]inlineGlyphPiece {

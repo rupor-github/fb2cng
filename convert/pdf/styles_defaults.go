@@ -87,7 +87,7 @@ func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 			Widows:     pdfSingleKeepLine,
 		},
 		pdfStyleCode: {
-			Paragraph: paragraphStyle{FontFamily: "monospace", FontSize: pdfCodeFontSize, LineHeight: pdfCodeLineHeight, Align: textAlignLeft, PreserveSpace: true, Hyphenation: paragraphHyphenationNone},
+			Paragraph: paragraphStyle{FontFamily: "monospace", FontSize: pdfCodeFontSize, LineHeight: pdfCodeLineHeight, LineHeightExplicit: true, Align: textAlignLeft, PreserveSpace: true, Hyphenation: paragraphHyphenationNone},
 			Orphans:   pdfSingleKeepLine,
 			Widows:    pdfSingleKeepLine,
 		},
@@ -127,11 +127,11 @@ func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 }
 
 func headingPDFStyle(depth int) pdfBlockResolvedStyle {
-	return headingPDFStyleWithLineHeightFactor(pdfHeadingFontSize(depth), pdfHeadingLineHeightFactor)
+	return headingPDFStyleWithLineHeightFactor(pdfHeadingFontSize(depth), pdfHeadingLineHeightFactor, pdfHeadingMarginFactor(depth))
 }
 
 func sectionTitleHeaderPDFStyle(depth int) pdfBlockResolvedStyle {
-	return headingPDFStyleWithLineHeightFactor(pdfHeadingFontSize(depth), pdfSectionTitleHeaderLineHeightFactor)
+	return headingPDFStyleWithLineHeightFactor(pdfHeadingFontSize(depth), pdfSectionTitleHeaderLineHeightFactor, pdfHeadingMarginFactor(depth))
 }
 
 func pdfHeadingFontSize(depth int) float64 {
@@ -141,14 +141,22 @@ func pdfHeadingFontSize(depth int) float64 {
 	return pdfHeadingNestedFontSize
 }
 
-func headingPDFStyleWithLineHeightFactor(fontSize float64, lineHeightFactor float64) pdfBlockResolvedStyle {
+func headingPDFStyleWithLineHeightFactor(fontSize float64, lineHeightFactor float64, marginFactor float64) pdfBlockResolvedStyle {
+	space := fontSize * marginFactor
 	return pdfBlockResolvedStyle{
 		Paragraph:         paragraphStyle{FontFamily: "serif", Bold: true, FontSize: fontSize, LineHeight: fontSize * lineHeightFactor, HasFirstLineIndent: true, Align: textAlignCenter, Hyphenation: paragraphHyphenationAuto},
-		SpaceBefore:       pdfHeadingSpaceBefore,
-		SpaceAfter:        pdfHeadingSpaceAfter,
+		SpaceBefore:       space,
+		SpaceAfter:        space,
 		KeepTogether:      true,
 		KeepWithNextLines: pdfDefaultKeepLines,
 	}
+}
+
+func pdfHeadingMarginFactor(depth int) float64 {
+	if depth <= 1 {
+		return pdfHeadingH1MarginFactor
+	}
+	return pdfHeadingNestedMarginFactor
 }
 
 func (r *pdfStyleResolver) applyPDFStyleAdjustments() {

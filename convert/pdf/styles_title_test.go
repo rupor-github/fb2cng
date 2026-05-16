@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"math"
 	"testing"
 
 	"go.uber.org/zap/zaptest"
@@ -8,17 +9,25 @@ import (
 	"fbc/fb2"
 )
 
-func TestPDFStyleResolverTitleNextVariantClearsHeadingMargins(t *testing.T) {
+func TestPDFStyleResolverTitleVariantMarginsMatchFlattenedWrapperDefaults(t *testing.T) {
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 
-	style := resolver.styleForBlock(pdfTextBlock{
+	first := resolver.styleForBlock(pdfTextBlock{
+		Kind:         pdfBlockHeading,
+		StyleName:    pdfStyleChapterTitleHeader,
+		StyleClasses: pdfStyleChapterTitleHeader + "-first",
+	})
+	if first.SpaceBefore != pdfBaseFontSize*2 || first.SpaceAfter != 0 {
+		t.Fatalf("title-first margins = %v/%v, want flattened default.css wrapper top 2em and no inner bottom", first.SpaceBefore, first.SpaceAfter)
+	}
+
+	next := resolver.styleForBlock(pdfTextBlock{
 		Kind:         pdfBlockHeading,
 		StyleName:    pdfStyleChapterTitleHeader,
 		StyleClasses: pdfStyleChapterTitleHeader + "-next",
 	})
-
-	if style.SpaceBefore != 0 || style.SpaceAfter != 0 {
-		t.Fatalf("title-next margins = %v/%v, want 0/0", style.SpaceBefore, style.SpaceAfter)
+	if next.SpaceBefore != 0 || next.SpaceAfter != 0 {
+		t.Fatalf("title-next margins = %v/%v, want 0/0", next.SpaceBefore, next.SpaceAfter)
 	}
 }
 
@@ -125,17 +134,25 @@ func TestPDFStyleResolverTitleAfterImageKeepsHeadingTextAlignment(t *testing.T) 
 	}
 }
 
-func TestPDFStyleResolverHeadingFontSizesMatchDefaultCSS(t *testing.T) {
+func TestPDFStyleResolverHeadingDefaultsMatchCSSAndKFX(t *testing.T) {
 	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
 
 	h1 := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, Depth: 1})
 	if h1.Paragraph.FontSize != pdfBaseFontSize*1.4 {
 		t.Fatalf("h1 font size = %v, want default.css 140%%", h1.Paragraph.FontSize)
 	}
+	wantH1Margin := h1.Paragraph.FontSize * pdfHeadingH1MarginFactor
+	if math.Abs(h1.SpaceBefore-wantH1Margin) > 0.001 || math.Abs(h1.SpaceAfter-wantH1Margin) > 0.001 {
+		t.Fatalf("h1 margins = %v/%v, want KFX/CSS heading margins %v/%v", h1.SpaceBefore, h1.SpaceAfter, wantH1Margin, wantH1Margin)
+	}
 
 	h2 := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, Depth: 2})
 	if h2.Paragraph.FontSize != pdfBaseFontSize*1.2 {
 		t.Fatalf("h2 font size = %v, want default.css 120%%", h2.Paragraph.FontSize)
+	}
+	wantH2Margin := h2.Paragraph.FontSize * pdfHeadingNestedMarginFactor
+	if math.Abs(h2.SpaceBefore-wantH2Margin) > 0.001 || math.Abs(h2.SpaceAfter-wantH2Margin) > 0.001 {
+		t.Fatalf("h2 margins = %v/%v, want KFX/CSS heading margins %v/%v", h2.SpaceBefore, h2.SpaceAfter, wantH2Margin, wantH2Margin)
 	}
 }
 
@@ -159,8 +176,8 @@ func TestPDFStyleResolverMapsHeadingAndTOCStyles(t *testing.T) {
 	if tocEntry.Paragraph.Align != textAlignRight {
 		t.Fatalf("toc align = %v, want right", tocEntry.Paragraph.Align)
 	}
-	if tocEntry.Paragraph.FirstLineIndent != 24 {
-		t.Fatalf("toc indent = %v, want 24", tocEntry.Paragraph.FirstLineIndent)
+	if tocEntry.Paragraph.FirstLineIndent != pdfTOCNestedListIndent*2 {
+		t.Fatalf("toc indent = %v, want %v", tocEntry.Paragraph.FirstLineIndent, pdfTOCNestedListIndent*2)
 	}
 	if tocEntry.SpaceAfter != 2 {
 		t.Fatalf("toc margin-bottom = %v, want 2", tocEntry.SpaceAfter)

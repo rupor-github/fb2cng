@@ -32,6 +32,20 @@ func TestPDFStyleResolverParagraphMarginsMatchDefaultCSS(t *testing.T) {
 	}
 }
 
+func TestPDFStyleResolverTOCItemDefaultsMatchDefaultCSS(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	tocEntry := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockTOCEntry, Depth: 2})
+	if tocEntry.Paragraph.Align != textAlignLeft {
+		t.Fatalf("toc-item align = %v, want default.css left", tocEntry.Paragraph.Align)
+	}
+	if tocEntry.SpaceBefore != 0 || tocEntry.SpaceAfter != 0 {
+		t.Fatalf("toc-item margins = %v/%v, want default.css no margins", tocEntry.SpaceBefore, tocEntry.SpaceAfter)
+	}
+	if tocEntry.Paragraph.FirstLineIndent != pdfTOCNestedListIndent {
+		t.Fatalf("toc-item indent = %v, want native nested-list indent %v", tocEntry.Paragraph.FirstLineIndent, pdfTOCNestedListIndent)
+	}
+}
+
 func TestPDFStyleResolverImageDefaultsMatchDefaultCSS(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",

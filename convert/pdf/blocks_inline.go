@@ -31,7 +31,7 @@ func paragraphInlineRuns(paragraph *fb2.Paragraph) []pdfInlineRun {
 		appendInlineSegmentRun(&runs, &paragraph.Text[i], pdfInlineRun{})
 	}
 	if paragraphIsCodeBlock(paragraph) {
-		return trimCodeBlockInlineRuns(runs)
+		return runs
 	}
 	return trimInlineRuns(runs)
 }
@@ -280,27 +280,6 @@ func appendInlineRun(runs *[]pdfInlineRun, run pdfInlineRun) {
 
 func sameInlineStyle(a, b pdfInlineRun) bool {
 	return a.StyleClasses == b.StyleClasses && a.ContextClasses == b.ContextClasses && a.LinkHref == b.LinkHref && a.ImageID == b.ImageID && a.Bold == b.Bold && a.Italic == b.Italic && a.Underline == b.Underline && a.Strikethrough == b.Strikethrough && a.Subscript == b.Subscript && a.Superscript == b.Superscript && a.Code == b.Code
-}
-
-func trimCodeBlockInlineRuns(runs []pdfInlineRun) []pdfInlineRun {
-	for len(runs) > 0 {
-		trimmed := strings.TrimLeft(runs[0].Text, "\r\n")
-		if trimmed != "" || runs[0].ImageID != "" {
-			runs[0].Text = trimmed
-			break
-		}
-		runs = runs[1:]
-	}
-	for len(runs) > 0 {
-		last := len(runs) - 1
-		trimmed := strings.TrimRight(runs[last].Text, " \t\n\r")
-		if trimmed != "" || runs[last].ImageID != "" {
-			runs[last].Text = trimmed
-			break
-		}
-		runs = runs[:last]
-	}
-	return runs
 }
 
 func trimInlineRuns(runs []pdfInlineRun) []pdfInlineRun {

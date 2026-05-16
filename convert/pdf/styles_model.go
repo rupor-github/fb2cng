@@ -18,16 +18,16 @@ const (
 	pdfHeadingH1FontSize                  = pdfBaseFontSize * 1.4
 	pdfHeadingNestedFontSize              = pdfBaseFontSize * 1.2
 	pdfHeadingLineHeightFactor            = pdfAdjustedLineHeightFactor
-	pdfHeadingSpaceBefore                 = 10.0
-	pdfHeadingSpaceAfter                  = 8.0
-	pdfTitleFirstSpaceBefore              = pdfBaseLineHeight * 1.7
+	pdfHeadingH1MarginFactor              = 0.67
+	pdfHeadingNestedMarginFactor          = 0.83
+	pdfTitleFirstSpaceBefore              = pdfBaseFontSize * 2.0
 	pdfTitleAfterImageSpaceBefore         = pdfBaseLineHeight * 1.5
 	pdfSubtitleFontSize                   = pdfBaseFontSize
 	pdfSubtitleLineHeight                 = pdfSubtitleFontSize * pdfNormalLineHeightFactor
 	pdfSubtitleSpaceBefore                = pdfBaseFontSize
 	pdfSubtitleSpaceAfter                 = pdfBaseFontSize
 	pdfCodeFontSize                       = pdfBaseFontSize * 0.70
-	pdfCodeLineHeight                     = pdfCodeFontSize * pdfNormalLineHeightFactor
+	pdfCodeLineHeight                     = pdfBaseLineHeight
 	pdfFootnoteLinkFontSize               = pdfBaseFontSize * 0.80
 	pdfFootnoteLinkLineHeight             = pdfFootnoteLinkFontSize * pdfNormalLineHeightFactor
 	pdfVerseLineHeight                    = pdfBaseFontSize * pdfNormalLineHeightFactor
@@ -55,8 +55,8 @@ const (
 	pdfVignetteSectionTitleBottomBefore   = pdfBaseFontSize * 0.4
 	pdfVignetteSectionTitleBottomAfter    = pdfBaseFontSize * 0.8
 	pdfVignetteSectionEndSpace            = pdfBaseFontSize
-	pdfTOCIndentPerDepth                  = 12.0
-	pdfTOCSpaceAfter                      = 1.5
+	pdfTOCNestedListIndent                = pdfBaseFontSize
+	pdfTOCSpaceAfter                      = 0.0
 	pdfDefaultKeepLines                   = 2
 	pdfSingleKeepLine                     = 1
 

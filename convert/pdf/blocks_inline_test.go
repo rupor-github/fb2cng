@@ -175,6 +175,18 @@ func TestParagraphInlineRunsTrimScriptWhitespace(t *testing.T) {
 	}
 }
 
+func TestParagraphInlineRunsPreserveCodeBlockWhitespace(t *testing.T) {
+	paragraph := &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineCode, Text: "\n  alpha\n    beta\n  "}}}
+
+	runs := paragraphInlineRuns(paragraph)
+	if len(runs) != 1 {
+		t.Fatalf("inline runs = %#v, want one code run", runs)
+	}
+	if runs[0].Text != "\n  alpha\n    beta\n  " || !runs[0].Code || runs[0].StyleClasses != pdfStyleCode {
+		t.Fatalf("code run = %#v, want raw preformatted whitespace preserved", runs[0])
+	}
+}
+
 func TestParagraphInlineRunsPreserveFB2InlineStyles(t *testing.T) {
 	paragraph := &fb2.Paragraph{Text: []fb2.InlineSegment{
 		{Text: "plain "},

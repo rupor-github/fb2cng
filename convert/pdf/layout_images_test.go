@@ -42,6 +42,43 @@ func TestLayoutPDFPagesUpscalesVignettesToContentWidth(t *testing.T) {
 	}
 }
 
+func TestLayoutPDFPagesDoesNotApplyTextIndentToImageOnlyParagraphs(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	img := &fb2.BookImage{}
+	img.Dim.Width = 100
+	img.Dim.Height = 80
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{
+		Paragraph: paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, FirstLineIndent: pdfBodyIndent, HasFirstLineIndent: true, Align: textAlignJustify, Hyphenation: paragraphHyphenationAuto},
+	}
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  520,
+		PageHeight: 220,
+		Title:      "Title",
+		Author:     "Author",
+		Styles:     resolver,
+		Images:     fb2.BookImages{"block": img},
+		Blocks: []pdfTextBlock{{
+			Kind:      pdfBlockImage,
+			StyleName: pdfStyleParagraph,
+			ImageID:   "block",
+		}},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 || len(pages[1].Images) != 1 {
+		t.Fatalf("layout pages images = %#v, want one image-only paragraph", pages)
+	}
+	if got, want := pages[1].Images[0].X, 24.0; math.Abs(got-want) > 0.001 {
+		t.Fatalf("image-only paragraph x = %v, want left edge %v without text indent", got, want)
+	}
+}
+
 func TestLayoutPDFPagesLeftAlignsImageOnlyParagraphsInsideCite(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {
