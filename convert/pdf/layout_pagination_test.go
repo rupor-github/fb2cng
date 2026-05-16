@@ -232,7 +232,7 @@ func TestLayoutPDFPagesAppliesPadding(t *testing.T) {
 		t.Fatalf("line Y = %v, want 140.5", line.Y)
 	}
 	background := pages[1].Backgrounds[0]
-	if background.X != 24 || background.Y != 127.1 || background.Width != 172 || background.Height < 28.899 || background.Height > 28.901 || background.Color.String() != "#0000ff" {
+	if background.X != 24 || background.Y != 127.9 || background.Width != 172 || background.Height < 28.099 || background.Height > 28.101 || background.Color.String() != "#0000ff" {
 		t.Fatalf("background = %#v, want padded block background", background)
 	}
 	border := pages[1].Borders[0]

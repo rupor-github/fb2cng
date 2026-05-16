@@ -7,13 +7,13 @@ const (
 	pdfMinBlockWidth     = 12.0
 
 	pdfBaseFontSize               = 10.5
-	pdfBaseLineHeight             = 13.4
+	pdfNormalLineHeightFactor     = 1.2
+	pdfBaseLineHeight             = pdfBaseFontSize * pdfNormalLineHeightFactor
 	pdfBodyIndent                 = 14.0
 	pdfParagraphSpaceAfter        = pdfBaseFontSize * 0.3
 	pdfHeadingBaseFontSize        = 16.0
 	pdfHeadingMinFontSize         = 11.0
 	pdfHeadingLineHeightFactor    = 1.25
-	pdfNormalLineHeightFactor     = 1.2
 	pdfHeadingSpaceBefore         = 10.0
 	pdfHeadingSpaceAfter          = 8.0
 	pdfTitleFirstSpaceBefore      = pdfBaseLineHeight * 1.7
@@ -22,6 +22,8 @@ const (
 	pdfSubtitleLineHeight         = 14.0
 	pdfSubtitleSpaceBefore        = 6.0
 	pdfSubtitleSpaceAfter         = 5.0
+	pdfCodeFontSize               = pdfBaseFontSize * 0.70
+	pdfCodeLineHeight             = pdfCodeFontSize * pdfNormalLineHeightFactor
 	pdfVerseLineHeight            = 13.2
 	pdfVerseSpaceAfter            = 2.0
 	pdfTextAuthorFontSize         = 10.0

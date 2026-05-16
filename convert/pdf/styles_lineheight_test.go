@@ -9,6 +9,15 @@ import (
 	"fbc/fb2"
 )
 
+func TestPDFStyleResolverBaseLineHeightUsesKP3NormalRatio(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
+	wantLineHeight := pdfBaseFontSize * pdfNormalLineHeightFactor
+	if math.Abs(paragraph.Paragraph.LineHeight-wantLineHeight) > 0.001 {
+		t.Fatalf("paragraph line height = %v, want KP3 normal ratio %v", paragraph.Paragraph.LineHeight, wantLineHeight)
+	}
+}
+
 func TestPDFStyleResolverPreservesExplicitParagraphLineHeightAgainstRootInheritance(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",
@@ -20,8 +29,8 @@ func TestPDFStyleResolverPreservesExplicitParagraphLineHeightAgainstRootInherita
 
 	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
-	if paragraph.Paragraph.LineHeight != pdfBaseLineHeight {
-		t.Fatalf("paragraph line height = %v, want explicit paragraph %v", paragraph.Paragraph.LineHeight, pdfBaseLineHeight)
+	if paragraph.Paragraph.LineHeight != 13.4 {
+		t.Fatalf("paragraph line height = %v, want explicit paragraph 13.4", paragraph.Paragraph.LineHeight)
 	}
 	if !paragraph.Paragraph.LineHeightExplicit {
 		t.Fatalf("paragraph line height should stay marked explicit")
@@ -63,6 +72,15 @@ func TestPDFStyleResolverClassFontSizeStillAdjustsImplicitLineHeight(t *testing.
 	}
 	if paragraph.Paragraph.LineHeightExplicit {
 		t.Fatalf("implicit scaled line height should not be marked explicit")
+	}
+}
+
+func TestPDFStyleResolverCodeLineHeightUsesKP3NormalRatioAtCodeFontSize(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	code := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleCode})
+	wantLineHeight := pdfCodeFontSize * pdfNormalLineHeightFactor
+	if math.Abs(code.Paragraph.LineHeight-wantLineHeight) > 0.001 {
+		t.Fatalf("code line height = %v, want KP3 normal ratio at code font size %v", code.Paragraph.LineHeight, wantLineHeight)
 	}
 }
 

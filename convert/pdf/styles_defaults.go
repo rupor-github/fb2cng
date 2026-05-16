@@ -49,7 +49,7 @@ func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 			Widows:     pdfSingleKeepLine,
 		},
 		pdfStyleCode: {
-			Paragraph: paragraphStyle{FontFamily: "monospace", FontSize: pdfBaseFontSize * 0.70, LineHeight: pdfBaseLineHeight, Align: textAlignLeft, PreserveSpace: true, Hyphenation: paragraphHyphenationNone},
+			Paragraph: paragraphStyle{FontFamily: "monospace", FontSize: pdfCodeFontSize, LineHeight: pdfCodeLineHeight, Align: textAlignLeft, PreserveSpace: true, Hyphenation: paragraphHyphenationNone},
 			Orphans:   pdfSingleKeepLine,
 			Widows:    pdfSingleKeepLine,
 		},
