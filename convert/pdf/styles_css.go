@@ -67,11 +67,7 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 	}
 	if value, ok := props["font-size"]; ok {
 		if points, ok := pdfCSSFontSizePoints(value, style.Paragraph.FontSize); ok {
-			ratio := points / style.Paragraph.FontSize
 			style.Paragraph.FontSize = points
-			if !style.Paragraph.LineHeightExplicit {
-				style.Paragraph.LineHeight *= ratio
-			}
 		}
 	}
 	if value, ok := props["line-height"]; ok {

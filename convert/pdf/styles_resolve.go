@@ -38,6 +38,17 @@ func (r *pdfStyleResolver) styleForBlock(block pdfTextBlock) pdfBlockResolvedSty
 	if block.Kind == pdfBlockTOCEntry {
 		style.Paragraph.FirstLineIndent = max(float64(block.Depth-1)*pdfTOCIndentPerDepth, 0)
 	}
+	return injectPDFImplicitLineHeight(style, defaultStyle)
+}
+
+func injectPDFImplicitLineHeight(style, fallback pdfBlockResolvedStyle) pdfBlockResolvedStyle {
+	if style.Paragraph.LineHeightExplicit || fallback.Paragraph.FontSize <= 0 || fallback.Paragraph.LineHeight <= 0 || style.Paragraph.FontSize <= 0 {
+		return style
+	}
+	if style.Paragraph.LineHeight != fallback.Paragraph.LineHeight || style.Paragraph.FontSize == fallback.Paragraph.FontSize {
+		return style
+	}
+	style.Paragraph.LineHeight = fallback.Paragraph.LineHeight * style.Paragraph.FontSize / fallback.Paragraph.FontSize
 	return style
 }
 
