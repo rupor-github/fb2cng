@@ -38,8 +38,8 @@ func TestCollectPDFContentAddsAnnotationPage(t *testing.T) {
 	if got := plan.Blocks[0]; got.Kind != pdfBlockPageBreak || got.ID != "annotation-page" {
 		t.Fatalf("first block = %#v, want annotation page break", got)
 	}
-	if got := plan.Blocks[1]; got.Kind != pdfBlockHeading || got.Text != "About" {
-		t.Fatalf("second block = %#v, want annotation heading", got)
+	if got := plan.Blocks[1]; got.Kind != pdfBlockHeading || got.Text != "About" || got.StyleName != pdfStyleAnnotationTitle || got.StyleClasses != pdfStyleAnnotationTitle+"-first" || got.ContextClasses != pdfStyleAnnotationTitle {
+		t.Fatalf("second block = %#v, want annotation heading via title helper", got)
 	}
 	if got := plan.Blocks[2]; got.Kind != pdfBlockParagraph || got.Text != "Book annotation." || got.StyleClasses != pdfStyleAnnotation {
 		t.Fatalf("annotation paragraph = %#v", got)

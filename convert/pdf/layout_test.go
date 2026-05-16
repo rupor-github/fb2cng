@@ -1061,6 +1061,42 @@ func TestLayoutPDFPagesAppliesInlineContextDescendantSelectors(t *testing.T) {
 	}
 }
 
+func TestLayoutPDFPagesAppliesInlineDescendantSelectorsFromBlockStyleName(t *testing.T) {
+	face, err := builtinFont("serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `.toc-item .link-toc { color: #ff0000; font-weight: bold; }`,
+	}}}
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  520,
+		PageHeight: 180,
+		Title:      "Title",
+		Author:     "Author",
+		Styles:     resolver,
+		Blocks: []pdfTextBlock{{
+			Kind:      pdfBlockTOCEntry,
+			Text:      "Chapter",
+			StyleName: pdfStyleTOCItem,
+			Runs:      []pdfInlineRun{{Text: "Chapter", StyleClasses: pdfStyleLinkTOC}},
+		}},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 || len(pages[1].Lines) != 1 || len(pages[1].Lines[0].Fragments) != 1 {
+		t.Fatalf("layoutPDFPages() pages = %#v, want one TOC entry fragment", pages)
+	}
+	fragment := pages[1].Lines[0].Fragments[0]
+	if fragment.Color.String() != "#ff0000" || !fragment.FontKey.Bold {
+		t.Fatalf("TOC link fragment = %#v, want descendant styling from block style name", fragment)
+	}
+}
+
 func TestLayoutPDFPagesAppliesBlockWidth(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {

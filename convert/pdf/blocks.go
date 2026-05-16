@@ -131,10 +131,8 @@ func insertAnnotationPageBlocks(blocks []pdfTextBlock, toc []*structure.TOCEntry
 	if title == "" {
 		title = "Annotation"
 	}
-	annotationBlocks := []pdfTextBlock{
-		{Kind: pdfBlockPageBreak, ID: "annotation-page", Text: title},
-		{Kind: pdfBlockHeading, ID: "annotation-page-title", Text: title, Depth: 1, StyleName: pdfStyleAnnotationTitle, ContextClasses: pdfStyleAnnotationTitle},
-	}
+	annotationBlocks := []pdfTextBlock{{Kind: pdfBlockPageBreak, ID: "annotation-page", Text: title}}
+	appendTitleBlocksFull(&annotationBlocks, pdfTitleFromStrings(title), 1, "annotation-page-title", pdfStyleAnnotationTitle, "", pdfStyleAnnotationTitle, false)
 	appendFlowBlocks(&annotationBlocks, nil, annotation.Items, 1, nil, pdfStyleAnnotation, pdfStyleAnnotation, false)
 	out := make([]pdfTextBlock, 0, len(annotationBlocks)+len(blocks))
 	out = append(out, annotationBlocks...)

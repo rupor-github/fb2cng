@@ -505,7 +505,7 @@ func inlineRunsWithContext(runs []pdfInlineRun, contextClasses string) []pdfInli
 }
 
 func inlineRunContextClassesForBlock(block pdfTextBlock) string {
-	return joinStyleClasses(block.ContextClasses, pdfElementTagForBlock(block), block.StyleClasses)
+	return joinStyleClasses(block.ContextClasses, pdfElementTagForBlock(block), pdfStyleNameForBlock(block), block.StyleClasses)
 }
 
 func inlineRunContextDescendantStyleNames(resolver *pdfStyleResolver, run pdfInlineRun) []string {
