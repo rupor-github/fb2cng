@@ -279,6 +279,30 @@ func TestPDFStyleResolverAppliesRootDescendantSelectorsToHeadingDepthAndImages(t
 	}
 }
 
+func TestPDFStyleResolverMapsNonImageElementClassSelectorsLikeKFX(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			p.warning { text-indent: 0; text-align: right; }
+			div.annotation p { font-style: italic; }
+		`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	warning := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "warning"})
+	if warning.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("warning indent = %v, want 0 from p.warning mapped as class", warning.Paragraph.FirstLineIndent)
+	}
+	if warning.Paragraph.Align != textAlignRight {
+		t.Fatalf("warning align = %v, want right from p.warning mapped as class", warning.Paragraph.Align)
+	}
+
+	annotation := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, ContextClasses: pdfStyleAnnotation})
+	if !annotation.Paragraph.Italic {
+		t.Fatalf("annotation italic = false, want true from div.annotation p mapped as .annotation p")
+	}
+}
+
 func TestPDFStyleResolverAppliesContainerDescendantSelectors(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",

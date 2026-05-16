@@ -1056,7 +1056,10 @@ func pdfSelectorStyleNames(sel css.Selector) []string {
 		return pdfDescendantSelectorStyleNames(sel)
 	}
 	if sel.Element != "" && sel.Class != "" {
-		return []string{strings.ToLower(sel.Element) + "." + sel.Class}
+		if strings.EqualFold(sel.Element, "img") {
+			return []string{strings.ToLower(sel.Element) + "." + sel.Class}
+		}
+		return []string{sel.Class}
 	}
 	if sel.Class != "" {
 		return []string{sel.Class}
