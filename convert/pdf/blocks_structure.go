@@ -71,7 +71,7 @@ func appendSectionBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, section 
 	appendImageBlockFull(blocks, section.Image, section.ID, "", contextClasses, stripRootHorizontalMargins)
 	if section.Annotation != nil {
 		annotationContextClasses := joinStyleClasses(contextClasses, pdfStyleAnnotation)
-		appendFlowBlocks(blocks, book, section.Annotation.Items, depth, splitSections, pdfStyleAnnotation, annotationContextClasses, stripRootHorizontalMargins || len(section.Annotation.Items) > 1)
+		appendFlowBlocks(blocks, book, section.Annotation.Items, depth, splitSections, pdfStyleAnnotation, annotationContextClasses, stripRootHorizontalMargins)
 	}
 	for i := range section.Content {
 		appendFlowItem(blocks, book, &section.Content[i], depth, splitSections, "", contextClasses, stripRootHorizontalMargins)

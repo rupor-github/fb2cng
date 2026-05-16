@@ -48,6 +48,47 @@ func TestPDFStyleResolverImageDefaultsMatchDefaultCSS(t *testing.T) {
 	}
 }
 
+func TestPDFStyleResolverAnnotationMarginsMatchDefaultCSS(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `p { text-indent: 0; }`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleAnnotation, ContextClasses: pdfStyleAnnotation})
+	if paragraph.SpaceBefore != pdfBaseFontSize*2 || paragraph.SpaceAfter != pdfBaseFontSize {
+		t.Fatalf("annotation vertical margins = %v/%v, want default.css 2em/1em", paragraph.SpaceBefore, paragraph.SpaceAfter)
+	}
+	if paragraph.MarginLeft != pdfBaseFontSize || paragraph.MarginRight != pdfBaseFontSize {
+		t.Fatalf("annotation horizontal margins = %v/%v, want default.css 1em/1em", paragraph.MarginLeft, paragraph.MarginRight)
+	}
+	if paragraph.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("annotation paragraph indent = %v, want paragraph CSS indent preserved", paragraph.Paragraph.FirstLineIndent)
+	}
+}
+
+func TestPDFStyleResolverEpigraphDefaultsMatchDefaultCSS(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `p { text-indent: 0; }`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleEpigraph, ContextClasses: pdfStyleEpigraph})
+	if paragraph.SpaceBefore != pdfBaseFontSize*0.4 || paragraph.SpaceAfter != pdfBaseFontSize*0.2 {
+		t.Fatalf("epigraph vertical margins = %v/%v, want default.css 0.4em/0.2em", paragraph.SpaceBefore, paragraph.SpaceAfter)
+	}
+	if paragraph.MarginLeft != pdfBaseFontSize*4 || paragraph.MarginRight != 0 {
+		t.Fatalf("epigraph horizontal margins = %v/%v, want default.css 4em/0", paragraph.MarginLeft, paragraph.MarginRight)
+	}
+	if paragraph.Paragraph.Align != textAlignRight || !paragraph.Paragraph.Italic {
+		t.Fatalf("epigraph text style = align:%v italic:%t, want right italic", paragraph.Paragraph.Align, paragraph.Paragraph.Italic)
+	}
+	if paragraph.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("epigraph paragraph indent = %v, want paragraph CSS indent preserved", paragraph.Paragraph.FirstLineIndent)
+	}
+}
+
 func TestPDFStyleResolverCiteMarginsMatchDefaultCSS(t *testing.T) {
 	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleCite, ContextClasses: pdfStyleCite})

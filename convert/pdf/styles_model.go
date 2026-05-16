@@ -35,6 +35,12 @@ const (
 	pdfTextAuthorFontSize                 = pdfBaseFontSize
 	pdfTextAuthorLineHeight               = pdfTextAuthorFontSize * pdfNormalLineHeightFactor
 	pdfTextAuthorSpaceAfter               = 0.0
+	pdfAnnotationSpaceBefore              = pdfBaseFontSize * 2.0
+	pdfAnnotationSpaceAfter               = pdfBaseFontSize
+	pdfAnnotationHorizontalMargin         = pdfBaseFontSize
+	pdfEpigraphSpaceBefore                = pdfBaseFontSize * 0.4
+	pdfEpigraphSpaceAfter                 = pdfBaseFontSize * 0.2
+	pdfEpigraphMarginLeft                 = pdfBaseFontSize * 4.0
 	pdfTOCIndentPerDepth                  = 12.0
 	pdfTOCSpaceAfter                      = 1.5
 	pdfDefaultKeepLines                   = 2

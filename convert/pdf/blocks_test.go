@@ -55,7 +55,7 @@ func TestCollectPDFContentAddsAnnotationPage(t *testing.T) {
 	}
 }
 
-func TestCollectTextBlocksMarksMultiBlockSectionAnnotationForRootHorizontalStripping(t *testing.T) {
+func TestCollectTextBlocksKeepsMultiBlockSectionAnnotationOnNormalRootMargins(t *testing.T) {
 	book := &fb2.FictionBook{Bodies: []fb2.Body{{
 		Kind: fb2.BodyMain,
 		Sections: []fb2.Section{{
@@ -82,8 +82,8 @@ func TestCollectTextBlocksMarksMultiBlockSectionAnnotationForRootHorizontalStrip
 		t.Fatalf("annotation blocks = %#v, want 2 section annotation paragraphs", annotationBlocks)
 	}
 	for i, block := range annotationBlocks {
-		if !block.StripRootHorizontalMargins {
-			t.Fatalf("annotation block %d should strip root horizontal margins: %#v", i, block)
+		if block.StripRootHorizontalMargins {
+			t.Fatalf("annotation block %d should keep normal root margins like KFX annotation children: %#v", i, block)
 		}
 	}
 }
@@ -116,7 +116,7 @@ func TestCollectTextBlocksKeepsSingleBlockSectionAnnotationOnNormalRootMargins(t
 	t.Fatalf("single-block annotation paragraph not found in %#v", blocks)
 }
 
-func TestCollectTextBlocksPropagatesWrappedAnnotationRootHorizontalStrippingIntoCite(t *testing.T) {
+func TestCollectTextBlocksPreservesRootHorizontalMarginsInAnnotationNestedCite(t *testing.T) {
 	book := &fb2.FictionBook{Bodies: []fb2.Body{{
 		Kind: fb2.BodyMain,
 		Sections: []fb2.Section{{
@@ -144,8 +144,8 @@ func TestCollectTextBlocksPropagatesWrappedAnnotationRootHorizontalStrippingInto
 			if block.ContextClasses != joinStyleClasses(pdfStyleAnnotation, pdfStyleCite) {
 				t.Fatalf("nested cite block context = %q, want %q", block.ContextClasses, joinStyleClasses(pdfStyleAnnotation, pdfStyleCite))
 			}
-			if !block.StripRootHorizontalMargins {
-				t.Fatalf("nested cite block should inherit wrapped-annotation root stripping: %#v", block)
+			if block.StripRootHorizontalMargins {
+				t.Fatalf("nested cite block should preserve normal root margins like KFX annotation children: %#v", block)
 			}
 			return
 		}
@@ -153,7 +153,7 @@ func TestCollectTextBlocksPropagatesWrappedAnnotationRootHorizontalStrippingInto
 	t.Fatalf("nested cite block not found in %#v", blocks)
 }
 
-func TestCollectTextBlocksPropagatesWrappedAnnotationRootHorizontalStrippingIntoPoem(t *testing.T) {
+func TestCollectTextBlocksPreservesRootHorizontalMarginsInAnnotationNestedPoem(t *testing.T) {
 	book := &fb2.FictionBook{Bodies: []fb2.Body{{
 		Kind: fb2.BodyMain,
 		Sections: []fb2.Section{{
@@ -188,25 +188,25 @@ func TestCollectTextBlocksPropagatesWrappedAnnotationRootHorizontalStrippingInto
 			if block.ContextClasses != pdfStyleAnnotation+" "+pdfStylePoem {
 				t.Fatalf("poem title context = %q, want annotation poem context", block.ContextClasses)
 			}
-			if !block.StripRootHorizontalMargins {
-				t.Fatalf("poem title should inherit wrapped-annotation root stripping: %#v", block)
+			if block.StripRootHorizontalMargins {
+				t.Fatalf("poem title should preserve normal root margins like KFX annotation children: %#v", block)
 			}
 		case block.Kind == pdfBlockPoem && block.Text == "Verse line.":
 			seenVerse = true
 			if block.StyleClasses != pdfStylePoem {
 				t.Fatalf("verse block classes = %q, want %q", block.StyleClasses, pdfStylePoem)
 			}
-			if !block.StripRootHorizontalMargins {
-				t.Fatalf("verse block should inherit wrapped-annotation root stripping: %#v", block)
+			if block.StripRootHorizontalMargins {
+				t.Fatalf("verse block should preserve normal root margins like KFX annotation children: %#v", block)
 			}
 		}
 	}
 	if !seenTitle || !seenVerse {
-		t.Fatalf("expected stripped poem title and verse, got %#v", blocks)
+		t.Fatalf("expected poem title and verse, got %#v", blocks)
 	}
 }
 
-func TestCollectTextBlocksPropagatesWrappedAnnotationRootHorizontalStrippingIntoNestedSection(t *testing.T) {
+func TestCollectTextBlocksPreservesRootHorizontalMarginsInAnnotationNestedSection(t *testing.T) {
 	book := &fb2.FictionBook{Bodies: []fb2.Body{{
 		Kind: fb2.BodyMain,
 		Sections: []fb2.Section{{
@@ -241,8 +241,8 @@ func TestCollectTextBlocksPropagatesWrappedAnnotationRootHorizontalStrippingInto
 			if block.ContextClasses != "" {
 				t.Fatalf("nested section body context = %q, want reset empty context", block.ContextClasses)
 			}
-			if !block.StripRootHorizontalMargins {
-				t.Fatalf("nested section body should inherit wrapped-annotation root stripping: %#v", block)
+			if block.StripRootHorizontalMargins {
+				t.Fatalf("nested section body should preserve normal root margins like KFX annotation children: %#v", block)
 			}
 		case block.Kind == pdfBlockParagraph && block.Text == "Nested section note.":
 			seenAnnotation = true
@@ -252,13 +252,13 @@ func TestCollectTextBlocksPropagatesWrappedAnnotationRootHorizontalStrippingInto
 			if block.ContextClasses != pdfStyleAnnotation {
 				t.Fatalf("nested section annotation context = %q, want %q", block.ContextClasses, pdfStyleAnnotation)
 			}
-			if !block.StripRootHorizontalMargins {
-				t.Fatalf("nested section annotation should inherit wrapped-annotation root stripping: %#v", block)
+			if block.StripRootHorizontalMargins {
+				t.Fatalf("nested section annotation should preserve normal root margins like KFX annotation children: %#v", block)
 			}
 		}
 	}
 	if !seenBody || !seenAnnotation {
-		t.Fatalf("expected stripped nested section body and annotation, got %#v", blocks)
+		t.Fatalf("expected nested section body and annotation, got %#v", blocks)
 	}
 }
 

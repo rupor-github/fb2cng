@@ -223,9 +223,9 @@ func (r *pdfStyleResolver) contextInheritedBlockStyle(tagStyle pdfBlockResolvedS
 		if !ok {
 			continue
 		}
-		fallback := r.defaultStyle(class)
+		fallback := r.defaultStyle(pdfStyleParagraph)
 		style.Paragraph = mergePDFInheritedParagraphStyle(style.Paragraph, contextStyle.Paragraph, fallback.Paragraph)
-		marginFallback := r.defaultStyle(pdfStyleParagraph)
+		marginFallback := fallback
 		if contextStyle.MarginLeft != marginFallback.MarginLeft {
 			left += contextStyle.MarginLeft
 			hasLeft = true

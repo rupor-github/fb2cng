@@ -122,7 +122,7 @@ func TestLayoutPDFPagesAnnotationWrapperNestedPoemCanStripRootHorizontalMargins(
 	}
 }
 
-func TestLayoutPDFPagesAnnotationWrapperNestedSectionCanStripRootHorizontalMargins(t *testing.T) {
+func TestLayoutPDFPagesAnnotationNestedSectionPreservesRootHorizontalMargins(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {
 		t.Fatalf("builtinFont() error = %v", err)
@@ -189,10 +189,10 @@ func TestLayoutPDFPagesAnnotationWrapperNestedSectionCanStripRootHorizontalMargi
 	if !foundBody || !foundNote {
 		t.Fatalf("expected nested section body and note lines, got %#v", pages)
 	}
-	if math.Abs(bodyX-24) > 0.001 {
-		t.Fatalf("nested section body X = %v, want 24 (base margin without synthetic root inset)", bodyX)
+	if math.Abs(bodyX-4) > 0.001 {
+		t.Fatalf("nested section body X = %v, want 4 (24 base margin - 20 root inset)", bodyX)
 	}
-	if math.Abs(noteX-36) > 0.001 {
-		t.Fatalf("nested section note X = %v, want 36 (24 base margin + 12 annotation margin)", noteX)
+	if math.Abs(noteX-16) > 0.001 {
+		t.Fatalf("nested section note X = %v, want 16 (24 base margin - 20 root inset + 12 annotation margin)", noteX)
 	}
 }
