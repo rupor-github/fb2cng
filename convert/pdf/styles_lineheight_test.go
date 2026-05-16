@@ -104,3 +104,37 @@ func TestPDFStyleResolverImplicitLineHeightInjectedAfterRootFontSize(t *testing.
 		t.Fatalf("injected line height should not be marked explicit")
 	}
 }
+
+func TestPDFStyleResolverSupportsNormalLineHeight(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `body { line-height: 200%; } p { line-height: normal; }`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
+	wantLineHeight := pdfBaseFontSize * pdfNormalLineHeightFactor
+	if math.Abs(paragraph.Paragraph.LineHeight-wantLineHeight) > 0.001 {
+		t.Fatalf("paragraph line height = %v, want normal %v", paragraph.Paragraph.LineHeight, wantLineHeight)
+	}
+	if !paragraph.Paragraph.LineHeightExplicit {
+		t.Fatalf("normal line height should override inherited line height")
+	}
+}
+
+func TestPDFStyleResolverNormalLineHeightUsesResolvedFontSize(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `.big { font-size: 200%; line-height: normal; }`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "big"})
+	wantLineHeight := pdfBaseFontSize * 2 * pdfNormalLineHeightFactor
+	if math.Abs(paragraph.Paragraph.LineHeight-wantLineHeight) > 0.001 {
+		t.Fatalf("paragraph line height = %v, want normal at class font size %v", paragraph.Paragraph.LineHeight, wantLineHeight)
+	}
+	if !paragraph.Paragraph.LineHeightExplicit {
+		t.Fatalf("normal line height should be explicit")
+	}
+}

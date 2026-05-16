@@ -382,6 +382,9 @@ func pdfCSSFontSizePoints(value css.Value, current float64) (float64, bool) {
 }
 
 func pdfCSSLineHeightPoints(value css.Value, fontSize float64) (float64, bool) {
+	if cssKeyword(value) == "normal" {
+		return fontSize * pdfNormalLineHeightFactor, true
+	}
 	if value.Unit == "" && value.IsNumeric() {
 		return fontSize * value.Value, true
 	}

@@ -13,6 +13,7 @@ const (
 	pdfHeadingBaseFontSize        = 16.0
 	pdfHeadingMinFontSize         = 11.0
 	pdfHeadingLineHeightFactor    = 1.25
+	pdfNormalLineHeightFactor     = 1.2
 	pdfHeadingSpaceBefore         = 10.0
 	pdfHeadingSpaceAfter          = 8.0
 	pdfTitleFirstSpaceBefore      = pdfBaseLineHeight * 1.7
