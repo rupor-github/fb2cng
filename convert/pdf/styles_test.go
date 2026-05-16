@@ -279,6 +279,26 @@ func TestPDFStyleResolverAppliesRootDescendantSelectorsToHeadingDepthAndImages(t
 	}
 }
 
+func TestPDFStyleResolverDoesNotLetClassOnlyHTMLTagNamesOverrideElementDefaults(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			.p { text-align: right; }
+			p.warning { text-indent: 0; }
+		`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
+	if paragraph.Paragraph.Align != textAlignJustify {
+		t.Fatalf("paragraph align = %v, want default justify; .p must not override p", paragraph.Paragraph.Align)
+	}
+	warning := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "warning"})
+	if warning.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("warning indent = %v, want 0 from element-qualified p.warning", warning.Paragraph.FirstLineIndent)
+	}
+}
+
 func TestPDFStyleResolverMapsNonImageElementClassSelectorsLikeKFX(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",

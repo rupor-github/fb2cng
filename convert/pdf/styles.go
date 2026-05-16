@@ -1062,7 +1062,7 @@ func pdfSelectorStyleNames(sel css.Selector) []string {
 		return []string{sel.Class}
 	}
 	if sel.Class != "" {
-		return []string{sel.Class}
+		return []string{pdfClassSelectorStyleName(sel.Class)}
 	}
 	switch strings.ToLower(sel.Element) {
 	case "html":
@@ -1083,6 +1083,22 @@ func pdfSelectorStyleNames(sel css.Selector) []string {
 		return []string{pdfStyleCode}
 	default:
 		return nil
+	}
+}
+
+func pdfClassSelectorStyleName(class string) string {
+	if pdfSelectorClassCollidesWithElement(class) {
+		return "." + class
+	}
+	return class
+}
+
+func pdfSelectorClassCollidesWithElement(class string) bool {
+	switch strings.ToLower(class) {
+	case "html", "body", "p", "h1", "h2", "h3", "h4", "h5", "h6", "img", "table", "code", "a", "span", "div":
+		return true
+	default:
+		return false
 	}
 }
 
