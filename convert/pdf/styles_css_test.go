@@ -177,6 +177,109 @@ func TestPDFStyleResolverPoemDefaultsMatchDefaultCSS(t *testing.T) {
 	}
 }
 
+func TestPDFStyleResolverEmptyLineDefaultsMatchDefaultCSS(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	emptyLine := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine})
+	if emptyLine.SpaceBefore != pdfBaseFontSize || emptyLine.SpaceAfter != pdfBaseFontSize {
+		t.Fatalf("emptyline margins = %v/%v, want default.css 1em/1em", emptyLine.SpaceBefore, emptyLine.SpaceAfter)
+	}
+	if margin := pdfEmptyLineMargin(emptyLine); margin != pdfBaseLineHeight*0.5 {
+		t.Fatalf("emptyline collapsed margin = %v, want KP3 0.5lh", margin)
+	}
+}
+
+func TestPDFStyleResolverTitleHeaderEmptyLineDefaultsMatchDefaultCSS(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	for _, class := range []string{
+		pdfStyleBodyTitleHeader + "-emptyline",
+		pdfStyleChapterTitleHeader + "-emptyline",
+		pdfStyleSectionTitleHeader + "-emptyline",
+		pdfStyleTOCTitle + "-emptyline",
+	} {
+		emptyLine := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine, StyleClasses: class})
+		if emptyLine.SpaceBefore != pdfTitleEmptyLineSpace || emptyLine.SpaceAfter != pdfTitleEmptyLineSpace {
+			t.Fatalf("%s margins = %v/%v, want default.css 0.8em/0.8em", class, emptyLine.SpaceBefore, emptyLine.SpaceAfter)
+		}
+		if margin := pdfEmptyLineMargin(emptyLine); margin != pdfBaseLineHeight*0.4 {
+			t.Fatalf("%s collapsed empty-line margin = %v, want KP3 0.4lh", class, margin)
+		}
+	}
+}
+
+func TestPDFStyleResolverStanzaWrapperMarginsMatchDefaultCSS(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
+		{Kind: pdfBlockTextAuthor, Text: "Князь Вяземский", ContextClasses: pdfStyleEpigraph},
+		{Kind: pdfBlockPoem, Text: "«Мой дядя...", StyleClasses: joinStyleClasses(pdfStylePoem, pdfStyleStanza), ContextClasses: joinStyleClasses(pdfStylePoem, pdfStyleStanza)},
+		{Kind: pdfBlockPoem, Text: "Когда не в шутку занемог,", StyleClasses: joinStyleClasses(pdfStylePoem, pdfStyleStanza), ContextClasses: joinStyleClasses(pdfStylePoem, pdfStyleStanza)},
+	})
+	if styles[1].SpaceBefore != pdfStanzaSpace {
+		t.Fatalf("first stanza line margin-top = %v, want default.css stanza top %v", styles[1].SpaceBefore, pdfStanzaSpace)
+	}
+	if styles[2].SpaceBefore != pdfVerseSpaceBefore {
+		t.Fatalf("next stanza line margin-top = %v, want verse margin %v after wrapper edge adjustment", styles[2].SpaceBefore, pdfVerseSpaceBefore)
+	}
+}
+
+func TestPDFStyleResolverAnnotationTitleDefaultsMatchDefaultCSS(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	annotationTitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, StyleName: pdfStyleAnnotationTitle, StyleClasses: pdfStyleAnnotationTitle + "-first", ContextClasses: pdfStyleAnnotationTitle})
+	if annotationTitle.SpaceBefore != pdfBaseFontSize || annotationTitle.SpaceAfter != pdfBaseFontSize {
+		t.Fatalf("annotation title margins = %v/%v, want default.css 1em/1em", annotationTitle.SpaceBefore, annotationTitle.SpaceAfter)
+	}
+	if annotationTitle.Paragraph.FontSize != pdfBaseFontSize || annotationTitle.Paragraph.LineHeight != pdfBaseLineHeight {
+		t.Fatalf("annotation title font/line = %v/%v, want base font and line-height", annotationTitle.Paragraph.FontSize, annotationTitle.Paragraph.LineHeight)
+	}
+	if !annotationTitle.Paragraph.Bold || annotationTitle.Paragraph.Align != textAlignCenter || annotationTitle.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("annotation title style = bold:%t align:%v indent:%v, want bold centered zero-indent", annotationTitle.Paragraph.Bold, annotationTitle.Paragraph.Align, annotationTitle.Paragraph.FirstLineIndent)
+	}
+}
+
+func TestPDFStyleResolverParagraphTitleDefaultsMatchDefaultCSS(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+
+	poemTitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStylePoemTitle + " " + pdfStylePoemTitle + "-first", ContextClasses: pdfStylePoem})
+	if poemTitle.SpaceBefore != pdfPoemTitleSpace || poemTitle.SpaceAfter != pdfPoemTitleSpace {
+		t.Fatalf("poem title margins = %v/%v, want default.css 1em/1em", poemTitle.SpaceBefore, poemTitle.SpaceAfter)
+	}
+	if poemTitle.Paragraph.Align != textAlignCenter || poemTitle.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("poem title align/indent = %v/%v, want centered zero-indent variant", poemTitle.Paragraph.Align, poemTitle.Paragraph.FirstLineIndent)
+	}
+	if !poemTitle.Paragraph.Italic {
+		t.Fatalf("poem title italic = false, want inherited from poem context")
+	}
+
+	stanzaTitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleStanzaTitle + " " + pdfStyleStanzaTitle + "-first", ContextClasses: joinStyleClasses(pdfStylePoem, pdfStyleStanza)})
+	if stanzaTitle.SpaceBefore != pdfStanzaTitleSpace || stanzaTitle.SpaceAfter != pdfStanzaTitleSpace {
+		t.Fatalf("stanza title margins = %v/%v, want default.css 0.5em/0.5em", stanzaTitle.SpaceBefore, stanzaTitle.SpaceAfter)
+	}
+	if stanzaTitle.Paragraph.Align != textAlignCenter || stanzaTitle.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("stanza title align/indent = %v/%v, want centered zero-indent variant", stanzaTitle.Paragraph.Align, stanzaTitle.Paragraph.FirstLineIndent)
+	}
+}
+
+func TestPDFStyleResolverFootnoteTitleDefaultsMatchKFXDefaultCSS(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `p { text-align: right; }`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	footnoteTitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleFootnoteTitle + " " + pdfStyleFootnoteTitle + "-first", ContextClasses: pdfStyleFootnoteTitle})
+	if footnoteTitle.SpaceBefore != pdfFootnoteTitleSpaceBefore || footnoteTitle.SpaceAfter != pdfFootnoteTitleSpaceAfter {
+		t.Fatalf("footnote title margins = %v/%v, want default.css base 1em/0.5em", footnoteTitle.SpaceBefore, footnoteTitle.SpaceAfter)
+	}
+	if !footnoteTitle.Paragraph.Bold {
+		t.Fatalf("footnote title bold = false, want default.css bold")
+	}
+	if footnoteTitle.Paragraph.Align != textAlignRight {
+		t.Fatalf("footnote title align = %v, want inherited paragraph alignment", footnoteTitle.Paragraph.Align)
+	}
+	if footnoteTitle.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("footnote title indent = %v, want default.css zero-indent variant", footnoteTitle.Paragraph.FirstLineIndent)
+	}
+}
+
 func TestPDFStyleResolverVerseMarginsMatchDefaultCSS(t *testing.T) {
 	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
 	verse := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockPoem})
@@ -188,6 +291,56 @@ func TestPDFStyleResolverVerseMarginsMatchDefaultCSS(t *testing.T) {
 	}
 	if verse.Paragraph.FirstLineIndent != 0 {
 		t.Fatalf("verse indent = %v, want default.css 0", verse.Paragraph.FirstLineIndent)
+	}
+}
+
+func TestPDFStyleResolverContextSubtitleDefaultsMatchDefaultCSS(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	tests := []struct {
+		name      string
+		styleName string
+		space     float64
+		align     textAlign
+		bold      bool
+		italic    bool
+		keepWith  int
+	}{
+		{name: "annotation", styleName: pdfStyleAnnotationSubtitle, space: pdfAnnotationSubtitleSpace, align: textAlignCenter, bold: true},
+		{name: "poem", styleName: pdfStylePoemSubtitle, space: pdfPoemSubtitleSpace, align: textAlignCenter},
+		{name: "stanza", styleName: pdfStyleStanzaSubtitle, space: pdfStanzaSubtitleSpace, align: textAlignCenter},
+		{name: "epigraph", styleName: pdfStyleEpigraphSubtitle, space: pdfEpigraphSubtitleSpace, align: textAlignRight, italic: true},
+		{name: "cite", styleName: pdfStyleCiteSubtitle, space: pdfCiteSubtitleSpace, align: textAlignLeft},
+	}
+	for _, tt := range tests {
+		subtitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockSubtitle, StyleName: tt.styleName, StyleClasses: tt.styleName})
+		if subtitle.SpaceBefore != tt.space || subtitle.SpaceAfter != tt.space {
+			t.Fatalf("%s subtitle margins = %v/%v, want default.css %v/%v", tt.name, subtitle.SpaceBefore, subtitle.SpaceAfter, tt.space, tt.space)
+		}
+		if subtitle.Paragraph.Align != tt.align || subtitle.Paragraph.Bold != tt.bold || subtitle.Paragraph.Italic != tt.italic || subtitle.Paragraph.FirstLineIndent != 0 {
+			t.Fatalf("%s subtitle style = align:%v bold:%t italic:%t indent:%v, want align:%v bold:%t italic:%t indent:0", tt.name, subtitle.Paragraph.Align, subtitle.Paragraph.Bold, subtitle.Paragraph.Italic, subtitle.Paragraph.FirstLineIndent, tt.align, tt.bold, tt.italic)
+		}
+		if subtitle.KeepWithNextLines != tt.keepWith {
+			t.Fatalf("%s subtitle keep-with-next = %d, want %d", tt.name, subtitle.KeepWithNextLines, tt.keepWith)
+		}
+	}
+}
+
+func TestPDFStyleResolverDateDefaultsMatchDefaultCSS(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `body { text-indent: 2em; text-align: left; }`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	date := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleDate, ContextClasses: pdfStylePoem})
+	if date.Paragraph.Align != textAlignRight {
+		t.Fatalf("date align = %v, want default.css right", date.Paragraph.Align)
+	}
+	if date.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("date indent = %v, want default.css zero indent", date.Paragraph.FirstLineIndent)
+	}
+	if date.SpaceBefore != pdfDateSpace || date.SpaceAfter != pdfDateSpace {
+		t.Fatalf("date margins = %v/%v, want default.css 0.5em/0.5em", date.SpaceBefore, date.SpaceAfter)
 	}
 }
 

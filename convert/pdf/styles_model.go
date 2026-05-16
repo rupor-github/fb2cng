@@ -21,11 +21,17 @@ const (
 	pdfHeadingH1MarginFactor              = 0.67
 	pdfHeadingNestedMarginFactor          = 0.83
 	pdfTitleFirstSpaceBefore              = pdfBaseFontSize * 2.0
+	pdfTitleEmptyLineSpace                = pdfBaseFontSize * 0.8
 	pdfTitleAfterImageSpaceBefore         = pdfBaseLineHeight * 1.5
 	pdfSubtitleFontSize                   = pdfBaseFontSize
 	pdfSubtitleLineHeight                 = pdfSubtitleFontSize * pdfNormalLineHeightFactor
 	pdfSubtitleSpaceBefore                = pdfBaseFontSize
 	pdfSubtitleSpaceAfter                 = pdfBaseFontSize
+	pdfAnnotationSubtitleSpace            = pdfBaseFontSize * 0.5
+	pdfPoemSubtitleSpace                  = pdfBaseFontSize * 0.5
+	pdfStanzaSubtitleSpace                = pdfBaseFontSize * 0.25
+	pdfEpigraphSubtitleSpace              = pdfBaseFontSize * 0.3
+	pdfCiteSubtitleSpace                  = pdfBaseFontSize * 0.5
 	pdfCodeFontSize                       = pdfBaseFontSize * 0.70
 	pdfCodeLineHeight                     = pdfBaseLineHeight
 	pdfFootnoteLinkFontSize               = pdfBaseFontSize * 0.80
@@ -37,6 +43,7 @@ const (
 	pdfTextAuthorFontSize                 = pdfBaseFontSize
 	pdfTextAuthorLineHeight               = pdfTextAuthorFontSize * pdfNormalLineHeightFactor
 	pdfTextAuthorSpaceAfter               = 0.0
+	pdfDateSpace                          = pdfBaseFontSize * 0.5
 	pdfAnnotationSpaceBefore              = pdfBaseFontSize * 2.0
 	pdfAnnotationSpaceAfter               = pdfBaseFontSize
 	pdfAnnotationHorizontalMargin         = pdfBaseFontSize
@@ -44,6 +51,11 @@ const (
 	pdfEpigraphSpaceAfter                 = pdfBaseFontSize * 0.2
 	pdfEpigraphMarginLeft                 = pdfBaseFontSize * 4.0
 	pdfPoemMarginLeft                     = pdfBaseFontSize * 3.0
+	pdfStanzaSpace                        = pdfBaseFontSize * 0.5
+	pdfPoemTitleSpace                     = pdfBaseFontSize
+	pdfStanzaTitleSpace                   = pdfBaseFontSize * 0.5
+	pdfFootnoteTitleSpaceBefore           = pdfBaseFontSize
+	pdfFootnoteTitleSpaceAfter            = pdfBaseFontSize * 0.5
 	pdfVignetteSpace                      = pdfBaseFontSize * 0.5
 	pdfVignetteTitleTopSpaceBefore        = pdfBaseFontSize
 	pdfVignetteTitleTopSpaceAfter         = pdfBaseFontSize * 0.5
@@ -71,6 +83,7 @@ const (
 	pdfStyleSubtitle           = "section-subtitle"
 	pdfStyleVerse              = "verse"
 	pdfStyleTextAuthor         = "text-author"
+	pdfStyleDate               = "date"
 	pdfStyleImage              = "image"
 	pdfStyleImageVignette      = "image-vignette"
 	pdfStyleVignette           = "vignette"
@@ -107,6 +120,7 @@ const (
 	pdfStyleLinkInternal       = "link-internal"
 	pdfStyleLinkFootnote       = "link-footnote"
 	pdfStyleLinkTOC            = "link-toc"
+	pdfStyleLinkBacklink       = "link-backlink"
 	pdfStyleTitleAfterImage    = "title-after-image"
 	pdfStyleHTML               = "__html__"
 	pdfStyleBody               = "__body__"

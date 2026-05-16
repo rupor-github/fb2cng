@@ -25,6 +25,16 @@ func TestPDFInlineRunFootnoteLinkDefaultsMatchDefaultCSS(t *testing.T) {
 	}
 }
 
+func TestPDFInlineRunBacklinkDefaultsMatchDefaultCSS(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	base := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph}).Paragraph
+
+	backlink := inlineRunParagraphStyle(resolver, base, pdfInlineRun{StyleClasses: pdfStyleLinkBacklink})
+	if !backlink.Underline || !backlink.Bold || backlink.Color.String() != "#808080" {
+		t.Fatalf("backlink style = underline:%t bold:%t color:%s, want default.css underline bold gray", backlink.Underline, backlink.Bold, backlink.Color)
+	}
+}
+
 func TestPDFInlineRunAppliesContextDescendantSelectors(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",

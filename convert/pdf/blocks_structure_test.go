@@ -2,6 +2,7 @@ package pdf
 
 import (
 	"testing"
+	"time"
 
 	"fbc/fb2"
 )
@@ -107,12 +108,15 @@ func TestAppendPoemBlocksPropagatesStanzaContextClasses(t *testing.T) {
 			if block.ContextClasses != wantStanzaContext {
 				t.Fatalf("block %q context = %q, want %q", block.Text, block.ContextClasses, wantStanzaContext)
 			}
+			if !blockHasStyleClass(block, pdfStyleStanza) {
+				t.Fatalf("block %q classes = %q, want stanza wrapper class", block.Text, block.StyleClasses)
+			}
 			if block.Text == "Stanza title" {
 				if block.Kind != pdfBlockParagraph {
 					t.Fatalf("stanza title kind = %v, want paragraph", block.Kind)
 				}
-				if block.StyleClasses != pdfStyleStanzaTitle+" "+pdfStyleStanzaTitle+"-first" {
-					t.Fatalf("stanza title classes = %q, want stanza-title first variant", block.StyleClasses)
+				if block.StyleClasses != pdfStyleStanzaTitle+" "+pdfStyleStanzaTitle+"-first "+pdfStyleStanza {
+					t.Fatalf("stanza title classes = %q, want stanza-title first variant plus stanza wrapper", block.StyleClasses)
 				}
 			}
 		}
@@ -122,6 +126,31 @@ func TestAppendPoemBlocksPropagatesStanzaContextClasses(t *testing.T) {
 	}
 	if len(blocks) == 0 || blocks[len(blocks)-1].Kind != pdfBlockEmptyLine || blocks[len(blocks)-1].ContextClasses != wantStanzaContext {
 		t.Fatalf("stanza empty line = %#v, want stanza context %q", blocks, wantStanzaContext)
+	}
+}
+
+func TestAppendPoemBlocksEmitsDateWithPoemContext(t *testing.T) {
+	poem := &fb2.Poem{Date: &fb2.Date{Display: "December 2025"}}
+	var blocks []pdfTextBlock
+
+	appendPoemBlocks(&blocks, poem, 1, nil, "", false)
+
+	if len(blocks) != 1 {
+		t.Fatalf("blocks = %#v, want one poem date block", blocks)
+	}
+	if got := blocks[0]; got.Kind != pdfBlockParagraph || got.Text != "December 2025" || got.StyleName != pdfStyleParagraph || got.StyleClasses != pdfStyleDate || got.ContextClasses != pdfStylePoem {
+		t.Fatalf("poem date block = %#v, want date paragraph in poem context", got)
+	}
+}
+
+func TestAppendPoemBlocksEmitsValueOnlyDate(t *testing.T) {
+	poem := &fb2.Poem{Date: &fb2.Date{Value: time.Date(2025, time.December, 31, 0, 0, 0, 0, time.UTC)}}
+	var blocks []pdfTextBlock
+
+	appendPoemBlocks(&blocks, poem, 1, nil, "", false)
+
+	if len(blocks) != 1 || blocks[0].Text != "2025-12-31" || blocks[0].StyleClasses != pdfStyleDate {
+		t.Fatalf("poem value date block = %#v, want ISO date paragraph", blocks)
 	}
 }
 

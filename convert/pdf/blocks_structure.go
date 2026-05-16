@@ -383,16 +383,40 @@ func appendPoemBlocks(blocks *[]pdfTextBlock, poem *fb2.Poem, depth int, splitSe
 	for i := range poem.Stanzas {
 		stanza := &poem.Stanzas[i]
 		stanzaContextClasses := joinStyleClasses(poemContextClasses, pdfStyleStanza)
+		stanzaStart := len(*blocks)
 		appendTitleParagraphBlocks(blocks, stanza.Title, "", pdfStyleStanzaTitle, stanzaContextClasses, stripRootHorizontalMargins)
 		appendParagraphBlockFull(blocks, pdfBlockSubtitle, stanza.Subtitle, depth, pdfStyleStanzaSubtitle, stanzaContextClasses, stripRootHorizontalMargins)
 		for j := range stanza.Verses {
 			appendParagraphBlockFull(blocks, pdfBlockPoem, &stanza.Verses[j], depth, pdfStylePoem, stanzaContextClasses, stripRootHorizontalMargins)
 		}
+		applyStyleClassToBlocks((*blocks)[stanzaStart:], pdfStyleStanza)
 		*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine, ContextClasses: strings.TrimSpace(stanzaContextClasses), StripRootHorizontalMargins: stripRootHorizontalMargins})
 	}
 	for i := range poem.TextAuthors {
 		appendParagraphBlockFull(blocks, pdfBlockTextAuthor, &poem.TextAuthors[i], depth, "", poemContextClasses, stripRootHorizontalMargins)
 	}
+	if dateText := poemDateText(poem.Date); dateText != "" {
+		appendParagraphBlockFull(blocks, pdfBlockParagraph, &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: dateText}}}, depth, pdfStyleDate, poemContextClasses, stripRootHorizontalMargins)
+	}
+}
+
+func applyStyleClassToBlocks(blocks []pdfTextBlock, class string) {
+	for i := range blocks {
+		blocks[i].StyleClasses = joinStyleClasses(blocks[i].StyleClasses, class)
+	}
+}
+
+func poemDateText(date *fb2.Date) string {
+	if date == nil {
+		return ""
+	}
+	if date.Display != "" {
+		return date.Display
+	}
+	if !date.Value.IsZero() {
+		return date.Value.Format("2006-01-02")
+	}
+	return ""
 }
 
 func appendCiteBlocks(blocks *[]pdfTextBlock, cite *fb2.Cite, depth int, splitSections map[string]bool, contextClasses string, stripRootHorizontalMargins bool) {

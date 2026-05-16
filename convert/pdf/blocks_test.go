@@ -193,8 +193,8 @@ func TestCollectTextBlocksPreservesRootHorizontalMarginsInAnnotationNestedPoem(t
 			}
 		case block.Kind == pdfBlockPoem && block.Text == "Verse line.":
 			seenVerse = true
-			if block.StyleClasses != pdfStylePoem {
-				t.Fatalf("verse block classes = %q, want %q", block.StyleClasses, pdfStylePoem)
+			if block.StyleClasses != joinStyleClasses(pdfStylePoem, pdfStyleStanza) {
+				t.Fatalf("verse block classes = %q, want poem plus stanza wrapper", block.StyleClasses)
 			}
 			if block.StripRootHorizontalMargins {
 				t.Fatalf("verse block should preserve normal root margins like KFX annotation children: %#v", block)
@@ -499,8 +499,8 @@ func TestCollectTextBlocksPreservesContainerStyleClasses(t *testing.T) {
 		"Cite text.":         "source-class " + pdfStyleCite,
 		"Cite subtitle.":     pdfStyleCiteSubtitle,
 		"Poem subtitle.":     pdfStylePoemSubtitle,
-		"Stanza subtitle.":   pdfStyleStanzaSubtitle,
-		"Verse line.":        pdfStylePoem,
+		"Stanza subtitle.":   joinStyleClasses(pdfStyleStanzaSubtitle, pdfStyleStanza),
+		"Verse line.":        joinStyleClasses(pdfStylePoem, pdfStyleStanza),
 	}
 	for text, want := range wantClasses {
 		found := false

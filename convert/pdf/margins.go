@@ -108,7 +108,7 @@ func pdfAdjacentBlockHasContainerClass(blocks []pdfTextBlock, resolved []pdfBloc
 }
 
 func pdfContainerMarginClass(block pdfTextBlock) string {
-	for _, class := range []string{pdfStyleBodyTitle, pdfStyleChapterTitle, pdfStyleSectionTitle, pdfStyleAnnotation, pdfStyleEpigraph, pdfStyleCite} {
+	for _, class := range []string{pdfStyleBodyTitle, pdfStyleChapterTitle, pdfStyleSectionTitle, pdfStyleAnnotation, pdfStyleEpigraph, pdfStyleCite, pdfStyleStanza} {
 		if blockHasStyleClass(block, class) {
 			return class
 		}
