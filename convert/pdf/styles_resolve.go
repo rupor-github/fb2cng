@@ -60,11 +60,13 @@ func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfB
 	if override.Paragraph.FontFamily != fallback.Paragraph.FontFamily {
 		base.Paragraph.FontFamily = override.Paragraph.FontFamily
 	}
-	if override.Paragraph.Bold != fallback.Paragraph.Bold {
+	if override.Paragraph.HasBold || override.Paragraph.Bold != fallback.Paragraph.Bold {
 		base.Paragraph.Bold = override.Paragraph.Bold
+		base.Paragraph.HasBold = override.Paragraph.HasBold
 	}
-	if override.Paragraph.Italic != fallback.Paragraph.Italic {
+	if override.Paragraph.HasItalic || override.Paragraph.Italic != fallback.Paragraph.Italic {
 		base.Paragraph.Italic = override.Paragraph.Italic
+		base.Paragraph.HasItalic = override.Paragraph.HasItalic
 	}
 	if override.Paragraph.FontSize != fallback.Paragraph.FontSize {
 		base.Paragraph.FontSize = override.Paragraph.FontSize
@@ -77,26 +79,32 @@ func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfB
 		base.Paragraph.FirstLineIndent = override.Paragraph.FirstLineIndent
 		base.Paragraph.HasFirstLineIndent = override.Paragraph.HasFirstLineIndent
 	}
-	if override.Paragraph.Align != fallback.Paragraph.Align {
+	if override.Paragraph.HasAlign || override.Paragraph.Align != fallback.Paragraph.Align {
 		base.Paragraph.Align = override.Paragraph.Align
+		base.Paragraph.HasAlign = override.Paragraph.HasAlign
 	}
-	if override.Paragraph.VerticalAlign != fallback.Paragraph.VerticalAlign {
+	if override.Paragraph.HasVerticalAlign || override.Paragraph.VerticalAlign != fallback.Paragraph.VerticalAlign {
 		base.Paragraph.VerticalAlign = override.Paragraph.VerticalAlign
+		base.Paragraph.HasVerticalAlign = override.Paragraph.HasVerticalAlign
 	}
 	if override.Paragraph.Color != fallback.Paragraph.Color {
 		base.Paragraph.Color = override.Paragraph.Color
 	}
-	if override.Paragraph.Underline != fallback.Paragraph.Underline {
+	if override.Paragraph.HasUnderline || override.Paragraph.Underline != fallback.Paragraph.Underline {
 		base.Paragraph.Underline = override.Paragraph.Underline
+		base.Paragraph.HasUnderline = override.Paragraph.HasUnderline
 	}
-	if override.Paragraph.Strikethrough != fallback.Paragraph.Strikethrough {
+	if override.Paragraph.HasStrikethrough || override.Paragraph.Strikethrough != fallback.Paragraph.Strikethrough {
 		base.Paragraph.Strikethrough = override.Paragraph.Strikethrough
+		base.Paragraph.HasStrikethrough = override.Paragraph.HasStrikethrough
 	}
-	if override.Paragraph.PreserveSpace != fallback.Paragraph.PreserveSpace {
+	if override.Paragraph.HasPreserveSpace || override.Paragraph.PreserveSpace != fallback.Paragraph.PreserveSpace {
 		base.Paragraph.PreserveSpace = override.Paragraph.PreserveSpace
+		base.Paragraph.HasPreserveSpace = override.Paragraph.HasPreserveSpace
 	}
-	if override.Paragraph.Hyphenation != fallback.Paragraph.Hyphenation {
+	if override.Paragraph.HasHyphenation || override.Paragraph.Hyphenation != fallback.Paragraph.Hyphenation {
 		base.Paragraph.Hyphenation = override.Paragraph.Hyphenation
+		base.Paragraph.HasHyphenation = override.Paragraph.HasHyphenation
 	}
 	if override.HasSpaceBefore || override.SpaceBefore != fallback.SpaceBefore {
 		base.SpaceBefore = override.SpaceBefore
@@ -143,20 +151,24 @@ func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfB
 		base.BorderWidth = override.BorderWidth
 		base.BorderColor = override.BorderColor
 	}
-	if override.KeepTogether != fallback.KeepTogether {
+	if override.HasKeepTogether || override.KeepTogether != fallback.KeepTogether {
 		base.KeepTogether = override.KeepTogether
+		base.HasKeepTogether = override.HasKeepTogether
 	}
 	if override.KeepWithNextLines != fallback.KeepWithNextLines {
 		base.KeepWithNextLines = override.KeepWithNextLines
 	}
-	if override.PageBreakBefore != fallback.PageBreakBefore {
+	if override.HasPageBreakBefore || override.PageBreakBefore != fallback.PageBreakBefore {
 		base.PageBreakBefore = override.PageBreakBefore
+		base.HasPageBreakBefore = override.HasPageBreakBefore
 	}
-	if override.PageBreakAfter != fallback.PageBreakAfter {
+	if override.HasPageBreakAfter || override.PageBreakAfter != fallback.PageBreakAfter {
 		base.PageBreakAfter = override.PageBreakAfter
+		base.HasPageBreakAfter = override.HasPageBreakAfter
 	}
-	if override.Hidden != fallback.Hidden {
+	if override.HasHidden || override.Hidden != fallback.Hidden {
 		base.Hidden = override.Hidden
+		base.HasHidden = override.HasHidden
 	}
 	if override.Orphans != fallback.Orphans {
 		base.Orphans = override.Orphans
@@ -223,7 +235,7 @@ func (r *pdfStyleResolver) contextInheritedBlockStyle(tagStyle pdfBlockResolvedS
 		if !ok {
 			continue
 		}
-		fallback := r.defaultStyle(pdfStyleParagraph)
+		fallback := r.namedStyle(pdfStyleParagraph)
 		style.Paragraph = mergePDFInheritedParagraphStyle(style.Paragraph, contextStyle.Paragraph, fallback.Paragraph)
 		marginFallback := fallback
 		if contextStyle.MarginLeft != marginFallback.MarginLeft {
@@ -251,9 +263,11 @@ func (r *pdfStyleResolver) applyContextInheritedBlockDefaults(style, tagStyle pd
 	}
 	if style.Paragraph.Bold == tagStyle.Paragraph.Bold {
 		style.Paragraph.Bold = contextStyle.Paragraph.Bold
+		style.Paragraph.HasBold = contextStyle.Paragraph.HasBold
 	}
 	if style.Paragraph.Italic == tagStyle.Paragraph.Italic {
 		style.Paragraph.Italic = contextStyle.Paragraph.Italic
+		style.Paragraph.HasItalic = contextStyle.Paragraph.HasItalic
 	}
 	if style.Paragraph.FontSize == tagStyle.Paragraph.FontSize {
 		style.Paragraph.FontSize = contextStyle.Paragraph.FontSize
@@ -271,15 +285,18 @@ func (r *pdfStyleResolver) applyContextInheritedBlockDefaults(style, tagStyle pd
 	}
 	if style.Paragraph.Align == tagStyle.Paragraph.Align {
 		style.Paragraph.Align = contextStyle.Paragraph.Align
+		style.Paragraph.HasAlign = contextStyle.Paragraph.HasAlign
 	}
 	if style.Paragraph.Color == tagStyle.Paragraph.Color {
 		style.Paragraph.Color = contextStyle.Paragraph.Color
 	}
 	if style.Paragraph.PreserveSpace == tagStyle.Paragraph.PreserveSpace {
 		style.Paragraph.PreserveSpace = contextStyle.Paragraph.PreserveSpace
+		style.Paragraph.HasPreserveSpace = contextStyle.Paragraph.HasPreserveSpace
 	}
 	if style.Paragraph.Hyphenation == tagStyle.Paragraph.Hyphenation {
 		style.Paragraph.Hyphenation = contextStyle.Paragraph.Hyphenation
+		style.Paragraph.HasHyphenation = contextStyle.Paragraph.HasHyphenation
 	}
 	if style.MarginLeft == tagStyle.MarginLeft {
 		style.MarginLeft = contextStyle.MarginLeft
@@ -327,10 +344,10 @@ func mergePDFContainerClassStyleOverrides(base, override, fallback pdfBlockResol
 }
 
 func mergePDFContextClassStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfBlockResolvedStyle {
-	if override.HasSpaceBefore || override.SpaceBefore != fallback.SpaceBefore {
+	if (override.HasSpaceBefore && override.SpaceBefore != 0) || (!override.HasSpaceBefore && override.SpaceBefore != fallback.SpaceBefore) {
 		base.SpaceBefore = override.SpaceBefore
 	}
-	if override.HasSpaceAfter || override.SpaceAfter != fallback.SpaceAfter {
+	if (override.HasSpaceAfter && override.SpaceAfter != 0) || (!override.HasSpaceAfter && override.SpaceAfter != fallback.SpaceAfter) {
 		base.SpaceAfter = override.SpaceAfter
 	}
 	if override.PaddingTop != fallback.PaddingTop {
@@ -366,20 +383,24 @@ func mergePDFContextClassStyleOverrides(base, override, fallback pdfBlockResolve
 		base.BorderWidth = override.BorderWidth
 		base.BorderColor = override.BorderColor
 	}
-	if override.KeepTogether != fallback.KeepTogether {
+	if override.HasKeepTogether || override.KeepTogether != fallback.KeepTogether {
 		base.KeepTogether = override.KeepTogether
+		base.HasKeepTogether = override.HasKeepTogether
 	}
 	if override.KeepWithNextLines != fallback.KeepWithNextLines {
 		base.KeepWithNextLines = override.KeepWithNextLines
 	}
-	if override.PageBreakBefore != fallback.PageBreakBefore {
+	if override.HasPageBreakBefore || override.PageBreakBefore != fallback.PageBreakBefore {
 		base.PageBreakBefore = override.PageBreakBefore
+		base.HasPageBreakBefore = override.HasPageBreakBefore
 	}
-	if override.PageBreakAfter != fallback.PageBreakAfter {
+	if override.HasPageBreakAfter || override.PageBreakAfter != fallback.PageBreakAfter {
 		base.PageBreakAfter = override.PageBreakAfter
+		base.HasPageBreakAfter = override.HasPageBreakAfter
 	}
-	if override.Hidden != fallback.Hidden {
+	if override.HasHidden || override.Hidden != fallback.Hidden {
 		base.Hidden = override.Hidden
+		base.HasHidden = override.HasHidden
 	}
 	if override.Orphans != fallback.Orphans {
 		base.Orphans = override.Orphans
@@ -396,11 +417,13 @@ func (r *pdfStyleResolver) applyRootInheritedParagraphDefaults(style pdfBlockRes
 	if style.Paragraph.FontFamily == rootDefault.FontFamily {
 		style.Paragraph.FontFamily = root.FontFamily
 	}
-	if style.Paragraph.Bold == rootDefault.Bold {
+	if !style.Paragraph.HasBold && style.Paragraph.Bold == rootDefault.Bold {
 		style.Paragraph.Bold = root.Bold
+		style.Paragraph.HasBold = root.HasBold
 	}
-	if style.Paragraph.Italic == rootDefault.Italic {
+	if !style.Paragraph.HasItalic && style.Paragraph.Italic == rootDefault.Italic {
 		style.Paragraph.Italic = root.Italic
+		style.Paragraph.HasItalic = root.HasItalic
 	}
 	if style.Paragraph.FontSize == rootDefault.FontSize {
 		style.Paragraph.FontSize = root.FontSize
@@ -416,17 +439,20 @@ func (r *pdfStyleResolver) applyRootInheritedParagraphDefaults(style pdfBlockRes
 		style.Paragraph.FirstLineIndent = root.FirstLineIndent
 		style.Paragraph.HasFirstLineIndent = root.HasFirstLineIndent
 	}
-	if style.Paragraph.Align == rootDefault.Align {
+	if !style.Paragraph.HasAlign && style.Paragraph.Align == rootDefault.Align {
 		style.Paragraph.Align = root.Align
+		style.Paragraph.HasAlign = root.HasAlign
 	}
 	if style.Paragraph.Color == rootDefault.Color {
 		style.Paragraph.Color = root.Color
 	}
-	if style.Paragraph.PreserveSpace == rootDefault.PreserveSpace {
+	if !style.Paragraph.HasPreserveSpace && style.Paragraph.PreserveSpace == rootDefault.PreserveSpace {
 		style.Paragraph.PreserveSpace = root.PreserveSpace
+		style.Paragraph.HasPreserveSpace = root.HasPreserveSpace
 	}
-	if style.Paragraph.Hyphenation == rootDefault.Hyphenation {
+	if !style.Paragraph.HasHyphenation && style.Paragraph.Hyphenation == rootDefault.Hyphenation {
 		style.Paragraph.Hyphenation = root.Hyphenation
+		style.Paragraph.HasHyphenation = root.HasHyphenation
 	}
 	return style
 }
@@ -435,11 +461,13 @@ func mergePDFInheritedParagraphStyle(base, override, fallback paragraphStyle) pa
 	if override.FontFamily != fallback.FontFamily {
 		base.FontFamily = override.FontFamily
 	}
-	if override.Bold != fallback.Bold {
+	if override.HasBold {
 		base.Bold = override.Bold
+		base.HasBold = true
 	}
-	if override.Italic != fallback.Italic {
+	if override.HasItalic {
 		base.Italic = override.Italic
+		base.HasItalic = true
 	}
 	if override.FontSize != fallback.FontSize {
 		base.FontSize = override.FontSize
@@ -448,21 +476,24 @@ func mergePDFInheritedParagraphStyle(base, override, fallback paragraphStyle) pa
 	if override.LetterSpacing != fallback.LetterSpacing {
 		base.LetterSpacing = override.LetterSpacing
 	}
-	if override.HasFirstLineIndent || override.FirstLineIndent != fallback.FirstLineIndent {
+	if override.HasFirstLineIndent {
 		base.FirstLineIndent = override.FirstLineIndent
-		base.HasFirstLineIndent = override.HasFirstLineIndent
+		base.HasFirstLineIndent = true
 	}
-	if override.Align != fallback.Align {
+	if override.HasAlign {
 		base.Align = override.Align
+		base.HasAlign = true
 	}
 	if override.Color != fallback.Color {
 		base.Color = override.Color
 	}
-	if override.PreserveSpace != fallback.PreserveSpace {
+	if override.HasPreserveSpace {
 		base.PreserveSpace = override.PreserveSpace
+		base.HasPreserveSpace = true
 	}
-	if override.Hyphenation != fallback.Hyphenation {
+	if override.HasHyphenation {
 		base.Hyphenation = override.Hyphenation
+		base.HasHyphenation = true
 	}
 	return base
 }

@@ -128,35 +128,39 @@ const (
 )
 
 type pdfBlockResolvedStyle struct {
-	Paragraph         paragraphStyle
-	SpaceBefore       float64
-	HasSpaceBefore    bool
-	SpaceAfter        float64
-	HasSpaceAfter     bool
-	MarginLeft        float64
-	MarginRight       float64
-	PaddingTop        float64
-	PaddingRight      float64
-	PaddingBottom     float64
-	PaddingLeft       float64
-	Width             pdfBlockLength
-	HasWidth          bool
-	MinWidth          pdfBlockLength
-	HasMinWidth       bool
-	MaxWidth          pdfBlockLength
-	HasMaxWidth       bool
-	BackgroundColor   pdfColor
-	HasBackground     bool
-	BorderWidth       float64
-	BorderColor       pdfColor
-	HasBorder         bool
-	KeepTogether      bool
-	KeepWithNextLines int
-	PageBreakBefore   bool
-	PageBreakAfter    bool
-	Hidden            bool
-	Orphans           int
-	Widows            int
+	Paragraph          paragraphStyle
+	SpaceBefore        float64
+	HasSpaceBefore     bool
+	SpaceAfter         float64
+	HasSpaceAfter      bool
+	MarginLeft         float64
+	MarginRight        float64
+	PaddingTop         float64
+	PaddingRight       float64
+	PaddingBottom      float64
+	PaddingLeft        float64
+	Width              pdfBlockLength
+	HasWidth           bool
+	MinWidth           pdfBlockLength
+	HasMinWidth        bool
+	MaxWidth           pdfBlockLength
+	HasMaxWidth        bool
+	BackgroundColor    pdfColor
+	HasBackground      bool
+	BorderWidth        float64
+	BorderColor        pdfColor
+	HasBorder          bool
+	KeepTogether       bool
+	HasKeepTogether    bool
+	KeepWithNextLines  int
+	PageBreakBefore    bool
+	HasPageBreakBefore bool
+	PageBreakAfter     bool
+	HasPageBreakAfter  bool
+	Hidden             bool
+	HasHidden          bool
+	Orphans            int
+	Widows             int
 }
 
 type pdfBlockLength struct {

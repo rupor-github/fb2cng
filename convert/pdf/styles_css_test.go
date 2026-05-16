@@ -25,7 +25,7 @@ func TestPDFStyleResolverAppliesCodeStylesheet(t *testing.T) {
 }
 
 func TestPDFStyleResolverParagraphMarginsMatchDefaultCSS(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
 	if paragraph.SpaceBefore != 0 || paragraph.SpaceAfter != 0 {
 		t.Fatalf("paragraph margins = %v/%v, want default.css no margins", paragraph.SpaceBefore, paragraph.SpaceAfter)
@@ -33,7 +33,7 @@ func TestPDFStyleResolverParagraphMarginsMatchDefaultCSS(t *testing.T) {
 }
 
 func TestPDFStyleResolverTOCItemDefaultsMatchDefaultCSS(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	tocEntry := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockTOCEntry, Depth: 2})
 	if tocEntry.Paragraph.Align != textAlignLeft {
 		t.Fatalf("toc-item align = %v, want default.css left", tocEntry.Paragraph.Align)
@@ -63,12 +63,7 @@ func TestPDFStyleResolverImageDefaultsMatchDefaultCSS(t *testing.T) {
 }
 
 func TestPDFStyleResolverAnnotationMarginsMatchDefaultCSS(t *testing.T) {
-	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
-		Type: "text/css",
-		Data: `p { text-indent: 0; }`,
-	}}}
-
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t, `p { text-indent: 0; }`)
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleAnnotation, ContextClasses: pdfStyleAnnotation})
 	if paragraph.SpaceBefore != pdfBaseFontSize*2 || paragraph.SpaceAfter != pdfBaseFontSize {
 		t.Fatalf("annotation vertical margins = %v/%v, want default.css 2em/1em", paragraph.SpaceBefore, paragraph.SpaceAfter)
@@ -82,12 +77,7 @@ func TestPDFStyleResolverAnnotationMarginsMatchDefaultCSS(t *testing.T) {
 }
 
 func TestPDFStyleResolverEpigraphDefaultsMatchDefaultCSS(t *testing.T) {
-	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
-		Type: "text/css",
-		Data: `p { text-indent: 0; }`,
-	}}}
-
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t, `p { text-indent: 0; }`)
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleEpigraph, ContextClasses: pdfStyleEpigraph})
 	if paragraph.SpaceBefore != pdfBaseFontSize*0.4 || paragraph.SpaceAfter != pdfBaseFontSize*0.2 {
 		t.Fatalf("epigraph vertical margins = %v/%v, want default.css 0.4em/0.2em", paragraph.SpaceBefore, paragraph.SpaceAfter)
@@ -104,7 +94,7 @@ func TestPDFStyleResolverEpigraphDefaultsMatchDefaultCSS(t *testing.T) {
 }
 
 func TestPDFStyleResolverCiteMarginsMatchDefaultCSS(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleCite, ContextClasses: pdfStyleCite})
 	if paragraph.SpaceBefore != pdfBaseFontSize || paragraph.SpaceAfter != pdfBaseFontSize {
 		t.Fatalf("cite paragraph vertical margins = %v/%v, want default.css 1em/1em", paragraph.SpaceBefore, paragraph.SpaceAfter)
@@ -115,7 +105,7 @@ func TestPDFStyleResolverCiteMarginsMatchDefaultCSS(t *testing.T) {
 }
 
 func TestPDFStyleResolverTableDefaultsMatchDefaultCSS(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	table := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleTable})
 	if table.SpaceBefore != pdfBaseFontSize || table.SpaceAfter != pdfBaseFontSize {
 		t.Fatalf("table margins = %v/%v, want default.css 1em/1em", table.SpaceBefore, table.SpaceAfter)
@@ -129,7 +119,7 @@ func TestPDFStyleResolverTableDefaultsMatchDefaultCSS(t *testing.T) {
 }
 
 func TestPDFStyleResolverFootnoteDefaultsMatchDefaultCSS(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleFootnote, ContextClasses: pdfStyleFootnote})
 	if paragraph.Paragraph.FirstLineIndent != 0 {
 		t.Fatalf("footnote paragraph indent = %v, want default.css 0", paragraph.Paragraph.FirstLineIndent)
@@ -137,7 +127,7 @@ func TestPDFStyleResolverFootnoteDefaultsMatchDefaultCSS(t *testing.T) {
 }
 
 func TestPDFStyleResolverVignetteDefaultsMatchDefaultCSS(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 
 	generic := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockImage, StyleClasses: joinStyleClasses(pdfStyleImageVignette, pdfStyleVignette)})
 	if generic.SpaceBefore != pdfVignetteSpace || generic.SpaceAfter != pdfVignetteSpace {
@@ -164,7 +154,7 @@ func TestPDFStyleResolverVignetteDefaultsMatchDefaultCSS(t *testing.T) {
 }
 
 func TestPDFStyleResolverPoemDefaultsMatchDefaultCSS(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	verse := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockPoem, StyleClasses: pdfStylePoem, ContextClasses: pdfStylePoem})
 	if verse.MarginLeft != pdfPoemMarginLeft+pdfVerseMarginLeft {
 		t.Fatalf("poem verse margin-left = %v, want default.css poem 3em + verse 2em", verse.MarginLeft)
@@ -178,15 +168,15 @@ func TestPDFStyleResolverPoemDefaultsMatchDefaultCSS(t *testing.T) {
 }
 
 func TestPDFStyleResolverTitleHeaderBreakDefaultsMatchDefaultCSS(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	for _, tt := range []struct {
 		class string
 		bold  bool
 	}{
 		{class: pdfStyleBodyTitleHeader + "-break", bold: true},
-		{class: pdfStyleChapterTitleHeader + "-break"},
-		{class: pdfStyleSectionTitleHeader + "-break"},
-		{class: pdfStyleTOCTitle + "-break"},
+		{class: pdfStyleChapterTitleHeader + "-break", bold: true},
+		{class: pdfStyleSectionTitleHeader + "-break", bold: true},
+		{class: pdfStyleTOCTitle + "-break", bold: true},
 	} {
 		br := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: tt.class})
 		if br.Paragraph.Align != textAlignCenter || br.Paragraph.Bold != tt.bold || br.SpaceBefore != 0 || br.SpaceAfter != 0 {
@@ -196,7 +186,7 @@ func TestPDFStyleResolverTitleHeaderBreakDefaultsMatchDefaultCSS(t *testing.T) {
 }
 
 func TestPDFStyleResolverEmptyLineDefaultsMatchDefaultCSS(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	emptyLine := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine})
 	if emptyLine.SpaceBefore != pdfBaseFontSize || emptyLine.SpaceAfter != pdfBaseFontSize {
 		t.Fatalf("emptyline margins = %v/%v, want default.css 1em/1em", emptyLine.SpaceBefore, emptyLine.SpaceAfter)
@@ -207,7 +197,7 @@ func TestPDFStyleResolverEmptyLineDefaultsMatchDefaultCSS(t *testing.T) {
 }
 
 func TestPDFStyleResolverTitleHeaderEmptyLineDefaultsMatchDefaultCSS(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	for _, class := range []string{
 		pdfStyleBodyTitleHeader + "-emptyline",
 		pdfStyleChapterTitleHeader + "-emptyline",
@@ -225,7 +215,7 @@ func TestPDFStyleResolverTitleHeaderEmptyLineDefaultsMatchDefaultCSS(t *testing.
 }
 
 func TestPDFStyleResolverStanzaWrapperMarginsMatchDefaultCSS(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
 		{Kind: pdfBlockTextAuthor, Text: "Князь Вяземский", ContextClasses: pdfStyleEpigraph},
 		{Kind: pdfBlockPoem, Text: "«Мой дядя...", StyleClasses: joinStyleClasses(pdfStylePoem, pdfStyleStanza), ContextClasses: joinStyleClasses(pdfStylePoem, pdfStyleStanza)},
@@ -240,7 +230,7 @@ func TestPDFStyleResolverStanzaWrapperMarginsMatchDefaultCSS(t *testing.T) {
 }
 
 func TestPDFStyleResolverAnnotationTitleDefaultsMatchDefaultCSS(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	annotationTitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, StyleName: pdfStyleAnnotationTitle, StyleClasses: pdfStyleAnnotationTitle + "-first", ContextClasses: pdfStyleAnnotationTitle})
 	if annotationTitle.SpaceBefore != pdfBaseFontSize || annotationTitle.SpaceAfter != pdfBaseFontSize {
 		t.Fatalf("annotation title margins = %v/%v, want default.css 1em/1em", annotationTitle.SpaceBefore, annotationTitle.SpaceAfter)
@@ -254,7 +244,7 @@ func TestPDFStyleResolverAnnotationTitleDefaultsMatchDefaultCSS(t *testing.T) {
 }
 
 func TestPDFStyleResolverParagraphTitleDefaultsMatchDefaultCSS(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 
 	poemTitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStylePoemTitle + " " + pdfStylePoemTitle + "-first", ContextClasses: pdfStylePoem})
 	if poemTitle.SpaceBefore != pdfPoemTitleSpace || poemTitle.SpaceAfter != pdfPoemTitleSpace {
@@ -277,12 +267,7 @@ func TestPDFStyleResolverParagraphTitleDefaultsMatchDefaultCSS(t *testing.T) {
 }
 
 func TestPDFStyleResolverFootnoteTitleDefaultsMatchKFXDefaultCSS(t *testing.T) {
-	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
-		Type: "text/css",
-		Data: `p { text-align: right; }`,
-	}}}
-
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t, `p { text-align: right; }`)
 	footnoteTitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleFootnoteTitle + " " + pdfStyleFootnoteTitle + "-first", ContextClasses: pdfStyleFootnoteTitle})
 	if footnoteTitle.SpaceBefore != pdfFootnoteTitleSpaceBefore || footnoteTitle.SpaceAfter != pdfFootnoteTitleSpaceAfter {
 		t.Fatalf("footnote title margins = %v/%v, want default.css base 1em/0.5em", footnoteTitle.SpaceBefore, footnoteTitle.SpaceAfter)
@@ -299,7 +284,7 @@ func TestPDFStyleResolverFootnoteTitleDefaultsMatchKFXDefaultCSS(t *testing.T) {
 }
 
 func TestPDFStyleResolverVerseMarginsMatchDefaultCSS(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	verse := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockPoem})
 	if verse.SpaceBefore != pdfBaseFontSize*0.25 || verse.SpaceAfter != pdfBaseFontSize*0.25 {
 		t.Fatalf("verse vertical margins = %v/%v, want default.css 0.25em/0.25em", verse.SpaceBefore, verse.SpaceAfter)
@@ -313,7 +298,7 @@ func TestPDFStyleResolverVerseMarginsMatchDefaultCSS(t *testing.T) {
 }
 
 func TestPDFStyleResolverContextSubtitleDefaultsMatchDefaultCSS(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	tests := []struct {
 		name      string
 		styleName string
@@ -344,12 +329,7 @@ func TestPDFStyleResolverContextSubtitleDefaultsMatchDefaultCSS(t *testing.T) {
 }
 
 func TestPDFStyleResolverDateDefaultsMatchDefaultCSS(t *testing.T) {
-	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
-		Type: "text/css",
-		Data: `body { text-indent: 2em; text-align: left; }`,
-	}}}
-
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t, `body { text-indent: 2em; text-align: left; }`)
 	date := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleDate, ContextClasses: pdfStylePoem})
 	if date.Paragraph.Align != textAlignRight {
 		t.Fatalf("date align = %v, want default.css right", date.Paragraph.Align)
@@ -363,12 +343,7 @@ func TestPDFStyleResolverDateDefaultsMatchDefaultCSS(t *testing.T) {
 }
 
 func TestPDFStyleResolverTextAuthorDefaultsMatchKFXDefaultCSS(t *testing.T) {
-	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
-		Type: "text/css",
-		Data: `body { text-indent: 2em; }`,
-	}}}
-
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t, `body { text-indent: 2em; }`)
 	textAuthor := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockTextAuthor})
 	if textAuthor.Paragraph.Align != textAlignRight {
 		t.Fatalf("text-author align = %v, want right", textAuthor.Paragraph.Align)
@@ -506,8 +481,8 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 	}
 
 	verse := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockPoem})
-	if verse.MarginLeft != 21 {
-		t.Fatalf("verse margin-left = %v, want 21", verse.MarginLeft)
+	if verse.MarginLeft != 24 {
+		t.Fatalf("verse margin-left = %v, want 24", verse.MarginLeft)
 	}
 }
 
@@ -552,5 +527,59 @@ func TestPDFStyleResolverPageBreakDisplayAndAbsoluteUnits(t *testing.T) {
 	metric := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "metric"})
 	if metric.MarginLeft != 72 || metric.MarginRight != 72 || metric.SpaceBefore != 72 {
 		t.Fatalf("metric margins = left:%v right:%v top:%v, want all 72pt", metric.MarginLeft, metric.MarginRight, metric.SpaceBefore)
+	}
+}
+
+func TestPDFStyleResolverReplacementStylesheetDoesNotKeepDefaultCSSClasses(t *testing.T) {
+	resolver := newPDFStyleResolverWithCSS(t, `p { text-indent: 0; text-align: left; }`)
+
+	annotation := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleAnnotation, ContextClasses: pdfStyleAnnotation})
+	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
+	if annotation.SpaceBefore != paragraph.SpaceBefore || annotation.SpaceAfter != paragraph.SpaceAfter || annotation.MarginLeft != 0 || annotation.MarginRight != 0 {
+		t.Fatalf("annotation style survived replacement stylesheet: margins=%v/%v horizontal=%v/%v paragraph=%v/%v", annotation.SpaceBefore, annotation.SpaceAfter, annotation.MarginLeft, annotation.MarginRight, paragraph.SpaceBefore, paragraph.SpaceAfter)
+	}
+
+	footnote := inlineRunParagraphStyle(resolver, paragraph.Paragraph, pdfInlineRun{StyleClasses: pdfStyleLinkFootnote})
+	if footnote.Underline || footnote.VerticalAlign != textVerticalAlignBaseline || footnote.FontSize != paragraph.Paragraph.FontSize {
+		t.Fatalf("link-footnote defaults survived replacement stylesheet: underline:%t valign:%v font:%v paragraph font:%v", footnote.Underline, footnote.VerticalAlign, footnote.FontSize, paragraph.Paragraph.FontSize)
+	}
+}
+
+func TestPDFStyleResolverExplicitCSSResetsOverrideEarlierRules(t *testing.T) {
+	resolver := newPDFStyleResolverWithDefaultCSS(t, `
+		.section-title-h2 { page-break-before: auto; }
+		.hidden { display: none; }
+		.hidden { display: block; }
+		.italic { font-style: italic; }
+		.italic { font-style: normal; }
+		.bold { font-weight: bold; }
+		.bold { font-weight: normal; }
+		.link-external { text-decoration: none; }
+	`)
+
+	sectionH2 := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, StyleClasses: pdfStyleSectionTitleH2})
+	if sectionH2.PageBreakBefore {
+		t.Fatalf("section-title-h2 page-break-before survived explicit auto reset")
+	}
+
+	hidden := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "hidden"})
+	if hidden.Hidden {
+		t.Fatalf("display:none survived explicit display:block reset")
+	}
+
+	italic := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "italic"})
+	if italic.Paragraph.Italic {
+		t.Fatalf("font-style:italic survived explicit normal reset")
+	}
+
+	bold := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "bold"})
+	if bold.Paragraph.Bold {
+		t.Fatalf("font-weight:bold survived explicit normal reset")
+	}
+
+	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
+	link := inlineRunParagraphStyle(resolver, paragraph.Paragraph, pdfInlineRun{StyleClasses: pdfStyleLinkExternal})
+	if link.Underline {
+		t.Fatalf("link underline survived explicit text-decoration:none reset")
 	}
 }

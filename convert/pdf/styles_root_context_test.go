@@ -52,12 +52,7 @@ func TestPDFStyleResolverAppliesBodyTypographyAsRootInheritance(t *testing.T) {
 }
 
 func TestPDFStyleResolverDefaultIndentsOverrideRootInheritedIndent(t *testing.T) {
-	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
-		Type: "text/css",
-		Data: `body { text-indent: 2em; }`,
-	}}}
-
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t, `body { text-indent: 2em; }`)
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
 	if paragraph.Paragraph.FirstLineIndent != pdfBodyIndent {
 		t.Fatalf("paragraph indent = %v, want default paragraph indent %v", paragraph.Paragraph.FirstLineIndent, pdfBodyIndent)
@@ -142,15 +137,10 @@ func TestPDFStyleResolverAppliesRootDescendantSelectorsToHeadingDepthAndImages(t
 }
 
 func TestPDFStyleResolverDoesNotLetClassOnlyHTMLTagNamesOverrideElementDefaults(t *testing.T) {
-	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
-		Type: "text/css",
-		Data: `
-			.p { text-align: right; }
-			p.warning { text-indent: 0; }
-		`,
-	}}}
-
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t, `
+		.p { text-align: right; }
+		p.warning { text-indent: 0; }
+	`)
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
 	if paragraph.Paragraph.Align != textAlignJustify {
 		t.Fatalf("paragraph align = %v, want default justify; .p must not override p", paragraph.Paragraph.Align)
@@ -255,14 +245,9 @@ func TestPDFStyleResolverAppliesContainerInheritedPropertiesBeforeTagDefaults(t 
 }
 
 func TestPDFStyleResolverAppliesContainerInheritedMarginsAndKeepsExplicitTextAuthorStyle(t *testing.T) {
-	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
-		Type: "text/css",
-		Data: `
-			.cite { margin-left: 9pt; margin-right: 7pt; font-style: italic; text-align: left; }
-		`,
-	}}}
-
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t, `
+		.cite { margin-left: 9pt; margin-right: 7pt; font-style: italic; text-align: left; }
+	`)
 	textAuthor := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockTextAuthor, ContextClasses: pdfStyleCite})
 	if textAuthor.MarginLeft != 9 || textAuthor.MarginRight != 7 {
 		t.Fatalf("cite text-author margins = %v/%v, want 9/7 from container inheritance", textAuthor.MarginLeft, textAuthor.MarginRight)
@@ -353,6 +338,7 @@ func TestPDFStyleResolverAppliesNestedStanzaContextInheritance(t *testing.T) {
 		Data: `
 			.poem { margin-left: 3em; font-style: italic; }
 			.stanza { margin-left: 1em; font-family: "Noto Sans", sans-serif; }
+			.verse { margin-left: 2em; text-indent: 0; }
 		`,
 	}}}
 

@@ -81,6 +81,7 @@ func TestLayoutPDFPagesPreservesCodeBlockWhitespace(t *testing.T) {
 		PageHeight: 180,
 		Title:      "Title",
 		Author:     "Author",
+		Styles:     newPDFStyleResolverWithDefaultCSS(t),
 		Blocks: []pdfTextBlock{{
 			Kind:         pdfBlockParagraph,
 			Text:         "alpha beta",
@@ -127,6 +128,7 @@ func TestLayoutPDFPagesKeepsBaseRhythmAfterCodeBlock(t *testing.T) {
 		PageHeight: 240,
 		Title:      "Title",
 		Author:     "Author",
+		Styles:     newPDFStyleResolverWithDefaultCSS(t),
 		Blocks: []pdfTextBlock{
 			{
 				Kind:         pdfBlockParagraph,
@@ -170,6 +172,7 @@ func TestLayoutPDFPagesRendersInlineImages(t *testing.T) {
 		ScreenHeightPx: 1600,
 		Title:          "Title",
 		Author:         "Author",
+		Styles:         newPDFStyleResolverWithDefaultCSS(t),
 		Images:         fb2.BookImages{"inline": img},
 		Blocks: []pdfTextBlock{{
 			Kind: pdfBlockParagraph,

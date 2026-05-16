@@ -1,9 +1,34 @@
 package pdf
 
 import (
+	"os"
 	"strings"
 	"testing"
+
+	"go.uber.org/zap/zaptest"
+
+	"fbc/fb2"
 )
+
+func newPDFStyleResolverWithDefaultCSS(t *testing.T, extraCSS ...string) *pdfStyleResolver {
+	t.Helper()
+	data, err := os.ReadFile("../default.css")
+	if err != nil {
+		t.Fatalf("read default.css: %v", err)
+	}
+	stylesheets := []fb2.Stylesheet{{Type: "text/css", Data: string(data)}}
+	for _, css := range extraCSS {
+		stylesheets = append(stylesheets, fb2.Stylesheet{Type: "text/css", Data: css})
+	}
+	book := &fb2.FictionBook{Stylesheets: stylesheets}
+	return newPDFStyleResolver(book, zaptest.NewLogger(t))
+}
+
+func newPDFStyleResolverWithCSS(t *testing.T, css string) *pdfStyleResolver {
+	t.Helper()
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{Type: "text/css", Data: css}}}
+	return newPDFStyleResolver(book, zaptest.NewLogger(t))
+}
 
 func textWithParagraphLineCount(t *testing.T, face *builtinFontFace, style paragraphStyle, width float64, wantLines int, word string) string {
 	t.Helper()

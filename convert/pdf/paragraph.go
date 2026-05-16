@@ -29,7 +29,9 @@ const (
 type paragraphStyle struct {
 	FontFamily         string
 	Bold               bool
+	HasBold            bool
 	Italic             bool
+	HasItalic          bool
 	FontSize           float64
 	LineHeight         float64
 	LineHeightExplicit bool
@@ -37,12 +39,18 @@ type paragraphStyle struct {
 	FirstLineIndent    float64
 	HasFirstLineIndent bool
 	Align              textAlign
+	HasAlign           bool
 	VerticalAlign      textVerticalAlign
+	HasVerticalAlign   bool
 	Color              pdfColor
 	Underline          bool
+	HasUnderline       bool
 	Strikethrough      bool
+	HasStrikethrough   bool
 	PreserveSpace      bool
+	HasPreserveSpace   bool
 	Hyphenation        paragraphHyphenation
+	HasHyphenation     bool
 	Hyphenator         paragraphHyphenator
 }
 

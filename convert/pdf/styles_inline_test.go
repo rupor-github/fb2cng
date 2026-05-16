@@ -10,7 +10,7 @@ import (
 )
 
 func TestPDFInlineRunFootnoteLinkDefaultsMatchDefaultCSS(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	base := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph}).Paragraph
 
 	footnote := inlineRunParagraphStyle(resolver, base, pdfInlineRun{StyleClasses: pdfStyleLinkFootnote})
@@ -26,7 +26,7 @@ func TestPDFInlineRunFootnoteLinkDefaultsMatchDefaultCSS(t *testing.T) {
 }
 
 func TestPDFInlineRunBacklinkDefaultsMatchDefaultCSS(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	base := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph}).Paragraph
 
 	backlink := inlineRunParagraphStyle(resolver, base, pdfInlineRun{StyleClasses: pdfStyleLinkBacklink})

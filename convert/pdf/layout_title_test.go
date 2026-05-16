@@ -26,6 +26,7 @@ func TestLayoutPDFPagesKeepsGapBetweenTitleVignetteAndHeadingImage(t *testing.T)
 		ScreenHeightPx: 1600,
 		Title:          "Title",
 		Author:         "Author",
+		Styles:         newPDFStyleResolverWithDefaultCSS(t),
 		Images:         fb2.BookImages{"vignette": vignette, "heading": heading},
 		Blocks: []pdfTextBlock{
 			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses("vignette", "vignette-chapter-title-top", pdfStyleChapterTitle), ImageID: "vignette"},

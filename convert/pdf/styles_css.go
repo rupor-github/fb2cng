@@ -20,11 +20,13 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 	if value, ok := props["font-weight"]; ok {
 		if bold, ok := pdfCSSFontWeightBold(value); ok {
 			style.Paragraph.Bold = bold
+			style.Paragraph.HasBold = true
 		}
 	}
 	if value, ok := props["font-style"]; ok {
 		if italic, ok := pdfCSSFontStyleItalic(value); ok {
 			style.Paragraph.Italic = italic
+			style.Paragraph.HasItalic = true
 		}
 	}
 	if value, ok := props["color"]; ok {
@@ -84,14 +86,17 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 	if value, ok := props["vertical-align"]; ok {
 		if align, ok := pdfCSSVerticalAlign(value); ok {
 			style.Paragraph.VerticalAlign = align
+			style.Paragraph.HasVerticalAlign = true
 		}
 	}
 	if value, ok := props["white-space"]; ok {
 		switch cssKeyword(value) {
 		case "pre", "pre-wrap", "break-spaces":
 			style.Paragraph.PreserveSpace = true
+			style.Paragraph.HasPreserveSpace = true
 		case "normal", "nowrap", "pre-line":
 			style.Paragraph.PreserveSpace = false
+			style.Paragraph.HasPreserveSpace = true
 		}
 	}
 	names := make([]string, 0, len(props))
@@ -113,6 +118,7 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 		case "text-align":
 			if align, ok := pdfCSSTextAlign(value); ok {
 				style.Paragraph.Align = align
+				style.Paragraph.HasAlign = true
 			}
 		case "margin":
 			applyPDFMarginShorthand(style, value)
@@ -183,27 +189,47 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 				style.HasMaxWidth = true
 			}
 		case "page-break-inside", "break-inside":
-			if pdfCSSAvoidPageBreakKeyword(value) {
+			switch {
+			case pdfCSSAvoidPageBreakKeyword(value):
 				style.KeepTogether = true
+				style.HasKeepTogether = true
+			case pdfCSSAutoPageBreakKeyword(value):
+				style.KeepTogether = false
+				style.HasKeepTogether = true
 			}
 		case "page-break-before", "break-before":
-			if pdfCSSForcedPageBreakKeyword(value) {
+			switch {
+			case pdfCSSForcedPageBreakKeyword(value):
 				style.PageBreakBefore = true
+				style.HasPageBreakBefore = true
+			case pdfCSSAutoPageBreakKeyword(value):
+				style.PageBreakBefore = false
+				style.HasPageBreakBefore = true
 			}
 		case "page-break-after", "break-after":
 			switch {
 			case pdfCSSForcedPageBreakKeyword(value):
 				style.PageBreakAfter = true
+				style.HasPageBreakAfter = true
+			case pdfCSSAutoPageBreakKeyword(value):
+				style.PageBreakAfter = false
+				style.HasPageBreakAfter = true
 			case pdfCSSAvoidPageBreakKeyword(value) && style.KeepWithNextLines == 0:
 				style.KeepWithNextLines = 1
 			}
 		case "hyphens", "-webkit-hyphens":
 			if hyphenation, ok := pdfCSSHyphenation(value); ok {
 				style.Paragraph.Hyphenation = hyphenation
+				style.Paragraph.HasHyphenation = true
 			}
 		case "display":
-			if cssKeyword(value) == "none" {
+			switch cssKeyword(value) {
+			case "none":
 				style.Hidden = true
+				style.HasHidden = true
+			case "block", "inline", "inline-block", "list-item", "table", "table-row", "table-cell":
+				style.Hidden = false
+				style.HasHidden = true
 			}
 		case "orphans":
 			if count, ok := pdfCSSPositiveInt(value); ok {
@@ -269,17 +295,28 @@ func applyPDFTextDecoration(style *pdfBlockResolvedStyle, value css.Value) {
 	if len(decorations) == 0 {
 		decorations = []string{cssKeyword(value)}
 	}
+	underline := false
+	strikethrough := false
+	recognized := false
 	for _, decoration := range decorations {
 		switch strings.TrimSpace(decoration) {
 		case "none":
-			style.Paragraph.Underline = false
-			style.Paragraph.Strikethrough = false
+			recognized = true
 		case "underline":
-			style.Paragraph.Underline = true
+			underline = true
+			recognized = true
 		case "line-through":
-			style.Paragraph.Strikethrough = true
+			strikethrough = true
+			recognized = true
 		}
 	}
+	if !recognized {
+		return
+	}
+	style.Paragraph.Underline = underline
+	style.Paragraph.HasUnderline = true
+	style.Paragraph.Strikethrough = strikethrough
+	style.Paragraph.HasStrikethrough = true
 }
 
 func applyPDFMarginShorthand(style *pdfBlockResolvedStyle, value css.Value) {
@@ -489,6 +526,15 @@ func pdfCSSForcedPageBreakKeyword(value css.Value) bool {
 func pdfCSSAvoidPageBreakKeyword(value css.Value) bool {
 	switch cssKeyword(value) {
 	case "avoid", "avoid-page":
+		return true
+	default:
+		return false
+	}
+}
+
+func pdfCSSAutoPageBreakKeyword(value css.Value) bool {
+	switch cssKeyword(value) {
+	case "auto", "initial", "unset", "revert":
 		return true
 	default:
 		return false

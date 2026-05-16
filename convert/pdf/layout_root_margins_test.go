@@ -94,6 +94,7 @@ func TestLayoutPDFPagesAnnotationWrapperNestedPoemCanStripRootHorizontalMargins(
 		Data: `
 			html { margin: 0 -20pt 0 -20pt; }
 			p { margin: 0; text-indent: 0; }
+			.poem { margin-left: 3em; }
 			.verse { margin-left: 15pt; margin-right: 15pt; }
 		`,
 	}}}, nil)

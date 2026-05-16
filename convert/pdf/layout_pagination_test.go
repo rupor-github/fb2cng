@@ -129,6 +129,8 @@ func TestLayoutPDFPagesAppliesRootPageMargins(t *testing.T) {
 	resolver.styles[pdfStylePage] = pdfBlockResolvedStyle{MarginLeft: -6, MarginRight: -4, SpaceBefore: 5, SpaceAfter: -3}
 	paragraph := resolver.styles[pdfStyleParagraph]
 	paragraph.Paragraph.FirstLineIndent = 0
+	paragraph.SpaceBefore = 0
+	paragraph.SpaceAfter = 0
 	resolver.styles[pdfStyleParagraph] = paragraph
 
 	pages, _, err := layoutPDFPages(skeletonDocument{

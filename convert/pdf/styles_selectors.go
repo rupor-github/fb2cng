@@ -161,14 +161,32 @@ func (r *pdfStyleResolver) applyRule(rule css.Rule) {
 	for _, name := range mapped {
 		style, ok := r.styles[name]
 		if !ok {
-			style = r.styles[pdfStyleParagraph]
-			style.Paragraph.HasFirstLineIndent = false
+			style = pdfStyleSeedWithoutExplicitFlags(r.namedStyle(pdfStyleParagraph))
 		}
 		before := style
 		applyPDFStyleProperties(&style, rule.Properties)
 		r.tracer.traceStyleUpdate(name, before, style)
 		r.styles[name] = style
 	}
+}
+
+func pdfStyleSeedWithoutExplicitFlags(style pdfBlockResolvedStyle) pdfBlockResolvedStyle {
+	style.Paragraph.HasBold = false
+	style.Paragraph.HasItalic = false
+	style.Paragraph.HasFirstLineIndent = false
+	style.Paragraph.HasAlign = false
+	style.Paragraph.HasVerticalAlign = false
+	style.Paragraph.HasUnderline = false
+	style.Paragraph.HasStrikethrough = false
+	style.Paragraph.HasPreserveSpace = false
+	style.Paragraph.HasHyphenation = false
+	style.HasSpaceBefore = false
+	style.HasSpaceAfter = false
+	style.HasKeepTogether = false
+	style.HasPageBreakBefore = false
+	style.HasPageBreakAfter = false
+	style.HasHidden = false
+	return style
 }
 
 func pdfSelectorStyleNames(sel css.Selector) []string {
@@ -192,7 +210,7 @@ func pdfSelectorStyleNames(sel css.Selector) []string {
 	case "p":
 		return []string{pdfStyleParagraph}
 	case "h1":
-		return []string{pdfStyleChapterTitleHeader, pdfStyleTOCTitle, pdfStyleAnnotationTitle}
+		return []string{pdfStyleBodyTitleHeader, pdfStyleChapterTitleHeader, pdfStyleTOCTitle}
 	case "h2", "h3", "h4", "h5", "h6":
 		return []string{pdfStyleSectionTitleHeader}
 	case "img":

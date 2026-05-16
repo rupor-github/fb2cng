@@ -554,11 +554,13 @@ func mergeInlineParagraphStyle(base, override, fallback paragraphStyle) paragrap
 	if override.FontFamily != fallback.FontFamily {
 		base.FontFamily = override.FontFamily
 	}
-	if override.Bold != fallback.Bold {
+	if override.HasBold || override.Bold != fallback.Bold {
 		base.Bold = override.Bold
+		base.HasBold = override.HasBold
 	}
-	if override.Italic != fallback.Italic {
+	if override.HasItalic || override.Italic != fallback.Italic {
 		base.Italic = override.Italic
+		base.HasItalic = override.HasItalic
 	}
 	if override.FontSize != fallback.FontSize {
 		base.FontSize = override.FontSize
@@ -567,20 +569,24 @@ func mergeInlineParagraphStyle(base, override, fallback paragraphStyle) paragrap
 	if override.LetterSpacing != fallback.LetterSpacing {
 		base.LetterSpacing = override.LetterSpacing
 	}
-	if override.VerticalAlign != fallback.VerticalAlign {
+	if override.HasVerticalAlign || override.VerticalAlign != fallback.VerticalAlign {
 		base.VerticalAlign = override.VerticalAlign
+		base.HasVerticalAlign = override.HasVerticalAlign
 	}
 	if override.Color != fallback.Color {
 		base.Color = override.Color
 	}
-	if override.Underline != fallback.Underline {
+	if override.HasUnderline || override.Underline != fallback.Underline {
 		base.Underline = override.Underline
+		base.HasUnderline = override.HasUnderline
 	}
-	if override.Strikethrough != fallback.Strikethrough {
+	if override.HasStrikethrough || override.Strikethrough != fallback.Strikethrough {
 		base.Strikethrough = override.Strikethrough
+		base.HasStrikethrough = override.HasStrikethrough
 	}
-	if override.PreserveSpace != fallback.PreserveSpace {
+	if override.HasPreserveSpace || override.PreserveSpace != fallback.PreserveSpace {
 		base.PreserveSpace = override.PreserveSpace
+		base.HasPreserveSpace = override.HasPreserveSpace
 	}
 	return base
 }

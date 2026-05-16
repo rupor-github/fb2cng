@@ -10,24 +10,24 @@ import (
 )
 
 func TestPDFStyleResolverTitleVariantMarginsMatchFlattenedWrapperDefaults(t *testing.T) {
-	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 
 	first := resolver.styleForBlock(pdfTextBlock{
 		Kind:         pdfBlockHeading,
 		StyleName:    pdfStyleChapterTitleHeader,
-		StyleClasses: pdfStyleChapterTitleHeader + "-first",
+		StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-first"),
 	})
-	if first.SpaceBefore != pdfBaseFontSize*2 || first.SpaceAfter != 0 {
-		t.Fatalf("title-first margins = %v/%v, want flattened default.css wrapper top 2em and no inner bottom", first.SpaceBefore, first.SpaceAfter)
+	if first.SpaceBefore != pdfBaseFontSize*2 || first.SpaceAfter != pdfBaseFontSize {
+		t.Fatalf("title-first margins = %v/%v, want default.css wrapper 2em/1em", first.SpaceBefore, first.SpaceAfter)
 	}
 
 	next := resolver.styleForBlock(pdfTextBlock{
 		Kind:         pdfBlockHeading,
 		StyleName:    pdfStyleChapterTitleHeader,
-		StyleClasses: pdfStyleChapterTitleHeader + "-next",
+		StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next"),
 	})
-	if next.SpaceBefore != 0 || next.SpaceAfter != 0 {
-		t.Fatalf("title-next margins = %v/%v, want 0/0", next.SpaceBefore, next.SpaceAfter)
+	if next.SpaceBefore != pdfBaseFontSize*2 || next.SpaceAfter != pdfBaseFontSize {
+		t.Fatalf("title-next margins = %v/%v, want default.css wrapper 2em/1em", next.SpaceBefore, next.SpaceAfter)
 	}
 }
 
@@ -135,7 +135,7 @@ func TestPDFStyleResolverTitleAfterImageKeepsHeadingTextAlignment(t *testing.T) 
 }
 
 func TestPDFStyleResolverHeadingDefaultsMatchCSSAndKFX(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 
 	h1 := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, Depth: 1})
 	if h1.Paragraph.FontSize != pdfBaseFontSize*1.4 {
@@ -190,7 +190,7 @@ func TestPDFStyleResolverMapsHeadingAndTOCStyles(t *testing.T) {
 }
 
 func TestPDFStyleResolverSectionSubtitleMarginsMatchDefaultCSS(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	sectionSubtitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockSubtitle})
 	if sectionSubtitle.SpaceBefore != pdfBaseFontSize || sectionSubtitle.SpaceAfter != pdfBaseFontSize {
 		t.Fatalf("section subtitle margins = %v/%v, want default.css 1em/1em", sectionSubtitle.SpaceBefore, sectionSubtitle.SpaceAfter)
@@ -198,7 +198,7 @@ func TestPDFStyleResolverSectionSubtitleMarginsMatchDefaultCSS(t *testing.T) {
 }
 
 func TestPDFStyleResolverUsesContextSpecificSubtitleDefaults(t *testing.T) {
-	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 
 	citeSubtitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockSubtitle, StyleName: pdfStyleCiteSubtitle, StyleClasses: pdfStyleCiteSubtitle})
 	if citeSubtitle.Paragraph.Bold {

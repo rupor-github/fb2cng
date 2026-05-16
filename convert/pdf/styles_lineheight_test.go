@@ -84,7 +84,7 @@ func TestPDFStyleResolverCodeLineHeightPreservesKP3BaseRhythm(t *testing.T) {
 }
 
 func TestPDFStyleResolverHeadingLineHeightUsesKP3AdjustedRatio(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	for _, styleName := range []string{
 		pdfStyleBodyTitleHeader,
 		pdfStyleChapterTitleHeader,
@@ -99,7 +99,7 @@ func TestPDFStyleResolverHeadingLineHeightUsesKP3AdjustedRatio(t *testing.T) {
 }
 
 func TestPDFStyleResolverSectionTitleHeaderLineHeightUsesKP3SpecialRatio(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	sectionTitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, Depth: 2})
 	wantLineHeight := sectionTitle.Paragraph.FontSize * pdfSectionTitleHeaderLineHeightFactor
 	if math.Abs(sectionTitle.Paragraph.LineHeight-wantLineHeight) > 0.001 {
@@ -108,7 +108,7 @@ func TestPDFStyleResolverSectionTitleHeaderLineHeightUsesKP3SpecialRatio(t *test
 }
 
 func TestPDFStyleResolverSubtitleLineHeightUsesKP3NormalRatio(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	for _, styleName := range []string{
 		pdfStyleSubtitle,
 		pdfStyleAnnotationSubtitle,
@@ -126,7 +126,7 @@ func TestPDFStyleResolverSubtitleLineHeightUsesKP3NormalRatio(t *testing.T) {
 }
 
 func TestPDFStyleResolverVerseTextAuthorAndDateLineHeightUseKP3NormalRatio(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	for _, block := range []pdfTextBlock{
 		{Kind: pdfBlockPoem},
 		{Kind: pdfBlockTextAuthor},
