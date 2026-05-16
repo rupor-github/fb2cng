@@ -162,6 +162,7 @@ func (r *pdfStyleResolver) applyRule(rule css.Rule) {
 		style, ok := r.styles[name]
 		if !ok {
 			style = r.styles[pdfStyleParagraph]
+			style.Paragraph.HasFirstLineIndent = false
 		}
 		before := style
 		applyPDFStyleProperties(&style, rule.Properties)

@@ -84,6 +84,63 @@ func TestPDFStyleResolverCodeLineHeightUsesKP3NormalRatioAtCodeFontSize(t *testi
 	}
 }
 
+func TestPDFStyleResolverHeadingLineHeightUsesKP3AdjustedRatio(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	for _, styleName := range []string{
+		pdfStyleBodyTitleHeader,
+		pdfStyleChapterTitleHeader,
+		pdfStyleTOCTitle,
+		pdfStyleAnnotationTitle,
+	} {
+		heading := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, StyleName: styleName})
+		wantLineHeight := heading.Paragraph.FontSize * pdfAdjustedLineHeightFactor
+		if math.Abs(heading.Paragraph.LineHeight-wantLineHeight) > 0.001 {
+			t.Fatalf("%s line height = %v, want KP3 adjusted ratio %v", styleName, heading.Paragraph.LineHeight, wantLineHeight)
+		}
+	}
+}
+
+func TestPDFStyleResolverSectionTitleHeaderLineHeightUsesKP3SpecialRatio(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	sectionTitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, Depth: 2})
+	wantLineHeight := sectionTitle.Paragraph.FontSize * pdfSectionTitleHeaderLineHeightFactor
+	if math.Abs(sectionTitle.Paragraph.LineHeight-wantLineHeight) > 0.001 {
+		t.Fatalf("section-title-header line height = %v, want KP3 special ratio %v", sectionTitle.Paragraph.LineHeight, wantLineHeight)
+	}
+}
+
+func TestPDFStyleResolverSubtitleLineHeightUsesKP3NormalRatio(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	for _, styleName := range []string{
+		pdfStyleSubtitle,
+		pdfStyleAnnotationSubtitle,
+		pdfStylePoemSubtitle,
+		pdfStyleStanzaSubtitle,
+		pdfStyleEpigraphSubtitle,
+		pdfStyleCiteSubtitle,
+	} {
+		subtitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockSubtitle, StyleName: styleName})
+		wantLineHeight := subtitle.Paragraph.FontSize * pdfNormalLineHeightFactor
+		if math.Abs(subtitle.Paragraph.LineHeight-wantLineHeight) > 0.001 {
+			t.Fatalf("%s line height = %v, want KP3 normal ratio %v", styleName, subtitle.Paragraph.LineHeight, wantLineHeight)
+		}
+	}
+}
+
+func TestPDFStyleResolverVerseAndTextAuthorLineHeightUseKP3NormalRatio(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	for _, block := range []pdfTextBlock{
+		{Kind: pdfBlockPoem},
+		{Kind: pdfBlockTextAuthor},
+	} {
+		style := resolver.styleForBlock(block)
+		wantLineHeight := style.Paragraph.FontSize * pdfNormalLineHeightFactor
+		if math.Abs(style.Paragraph.LineHeight-wantLineHeight) > 0.001 {
+			t.Fatalf("%s line height = %v, want KP3 normal ratio %v", block.Kind, style.Paragraph.LineHeight, wantLineHeight)
+		}
+	}
+}
+
 func TestPDFStyleResolverImplicitLineHeightUsesSemanticBlockDefault(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",

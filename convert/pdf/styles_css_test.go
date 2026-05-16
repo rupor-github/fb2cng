@@ -24,6 +24,25 @@ func TestPDFStyleResolverAppliesCodeStylesheet(t *testing.T) {
 	}
 }
 
+func TestPDFStyleResolverTextAuthorDefaultsMatchKFXDefaultCSS(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `body { text-indent: 2em; }`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	textAuthor := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockTextAuthor})
+	if textAuthor.Paragraph.Align != textAlignRight {
+		t.Fatalf("text-author align = %v, want right", textAuthor.Paragraph.Align)
+	}
+	if !textAuthor.Paragraph.Bold || !textAuthor.Paragraph.Italic {
+		t.Fatalf("text-author weight/style = bold:%t italic:%t, want both true", textAuthor.Paragraph.Bold, textAuthor.Paragraph.Italic)
+	}
+	if textAuthor.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("text-author indent = %v, want 0", textAuthor.Paragraph.FirstLineIndent)
+	}
+}
+
 func TestPDFStyleResolverCodeBlockInheritsParagraphAlignment(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",

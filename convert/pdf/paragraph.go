@@ -35,6 +35,7 @@ type paragraphStyle struct {
 	LineHeightExplicit bool
 	LetterSpacing      float64
 	FirstLineIndent    float64
+	HasFirstLineIndent bool
 	Align              textAlign
 	VerticalAlign      textVerticalAlign
 	Color              pdfColor

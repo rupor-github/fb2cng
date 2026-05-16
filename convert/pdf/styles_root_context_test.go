@@ -51,6 +51,31 @@ func TestPDFStyleResolverAppliesBodyTypographyAsRootInheritance(t *testing.T) {
 	}
 }
 
+func TestPDFStyleResolverDefaultIndentsOverrideRootInheritedIndent(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `body { text-indent: 2em; }`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
+	if paragraph.Paragraph.FirstLineIndent != pdfBodyIndent {
+		t.Fatalf("paragraph indent = %v, want default paragraph indent %v", paragraph.Paragraph.FirstLineIndent, pdfBodyIndent)
+	}
+	for _, block := range []pdfTextBlock{
+		{Kind: pdfBlockHeading, Depth: 1},
+		{Kind: pdfBlockSubtitle},
+		{Kind: pdfBlockPoem},
+		{Kind: pdfBlockTextAuthor},
+		{Kind: pdfBlockImage},
+	} {
+		style := resolver.styleForBlock(block)
+		if style.Paragraph.FirstLineIndent != 0 {
+			t.Fatalf("%s indent = %v, want explicit default zero indent", block.Kind, style.Paragraph.FirstLineIndent)
+		}
+	}
+}
+
 func TestPDFStyleResolverAppliesRootDescendantSelectors(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",

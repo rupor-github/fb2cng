@@ -108,6 +108,7 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 		case "text-indent":
 			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
 				style.Paragraph.FirstLineIndent = points
+				style.Paragraph.HasFirstLineIndent = true
 			}
 		case "text-align":
 			if align, ok := pdfCSSTextAlign(value); ok {

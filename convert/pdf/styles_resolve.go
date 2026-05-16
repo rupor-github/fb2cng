@@ -69,8 +69,9 @@ func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfB
 	if override.Paragraph.LetterSpacing != fallback.Paragraph.LetterSpacing {
 		base.Paragraph.LetterSpacing = override.Paragraph.LetterSpacing
 	}
-	if override.Paragraph.FirstLineIndent != fallback.Paragraph.FirstLineIndent {
+	if override.Paragraph.HasFirstLineIndent || override.Paragraph.FirstLineIndent != fallback.Paragraph.FirstLineIndent {
 		base.Paragraph.FirstLineIndent = override.Paragraph.FirstLineIndent
+		base.Paragraph.HasFirstLineIndent = override.Paragraph.HasFirstLineIndent
 	}
 	if override.Paragraph.Align != fallback.Paragraph.Align {
 		base.Paragraph.Align = override.Paragraph.Align
@@ -258,6 +259,7 @@ func (r *pdfStyleResolver) applyContextInheritedBlockDefaults(style, tagStyle pd
 	}
 	if style.Paragraph.FirstLineIndent == tagStyle.Paragraph.FirstLineIndent {
 		style.Paragraph.FirstLineIndent = contextStyle.Paragraph.FirstLineIndent
+		style.Paragraph.HasFirstLineIndent = contextStyle.Paragraph.HasFirstLineIndent
 	}
 	if style.Paragraph.Align == tagStyle.Paragraph.Align {
 		style.Paragraph.Align = contextStyle.Paragraph.Align
@@ -392,8 +394,9 @@ func (r *pdfStyleResolver) applyRootInheritedParagraphDefaults(style pdfBlockRes
 	if style.Paragraph.LetterSpacing == rootDefault.LetterSpacing {
 		style.Paragraph.LetterSpacing = root.LetterSpacing
 	}
-	if style.Paragraph.FirstLineIndent == rootDefault.FirstLineIndent {
+	if !style.Paragraph.HasFirstLineIndent && style.Paragraph.FirstLineIndent == rootDefault.FirstLineIndent {
 		style.Paragraph.FirstLineIndent = root.FirstLineIndent
+		style.Paragraph.HasFirstLineIndent = root.HasFirstLineIndent
 	}
 	if style.Paragraph.Align == rootDefault.Align {
 		style.Paragraph.Align = root.Align
@@ -427,8 +430,9 @@ func mergePDFInheritedParagraphStyle(base, override, fallback paragraphStyle) pa
 	if override.LetterSpacing != fallback.LetterSpacing {
 		base.LetterSpacing = override.LetterSpacing
 	}
-	if override.FirstLineIndent != fallback.FirstLineIndent {
+	if override.HasFirstLineIndent || override.FirstLineIndent != fallback.FirstLineIndent {
 		base.FirstLineIndent = override.FirstLineIndent
+		base.HasFirstLineIndent = override.HasFirstLineIndent
 	}
 	if override.Align != fallback.Align {
 		base.Align = override.Align
