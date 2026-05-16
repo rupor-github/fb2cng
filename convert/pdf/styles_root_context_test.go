@@ -358,8 +358,8 @@ func TestPDFStyleResolverAppliesNestedStanzaContextInheritance(t *testing.T) {
 
 	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
 	verse := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockPoem, StyleClasses: pdfStylePoem, ContextClasses: joinStyleClasses(pdfStylePoem, pdfStyleStanza)})
-	if verse.MarginLeft != pdfBaseFontSize*4 {
-		t.Fatalf("stanza verse margin-left = %v, want accumulated %v", verse.MarginLeft, pdfBaseFontSize*4)
+	if verse.MarginLeft != pdfBaseFontSize*6 {
+		t.Fatalf("stanza verse margin-left = %v, want accumulated %v", verse.MarginLeft, pdfBaseFontSize*6)
 	}
 	if verse.Paragraph.FontFamily != "Noto Sans" {
 		t.Fatalf("stanza verse font family = %q, want Noto Sans from stanza context", verse.Paragraph.FontFamily)

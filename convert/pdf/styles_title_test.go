@@ -125,6 +125,20 @@ func TestPDFStyleResolverTitleAfterImageKeepsHeadingTextAlignment(t *testing.T) 
 	}
 }
 
+func TestPDFStyleResolverHeadingFontSizesMatchDefaultCSS(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+
+	h1 := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, Depth: 1})
+	if h1.Paragraph.FontSize != pdfBaseFontSize*1.4 {
+		t.Fatalf("h1 font size = %v, want default.css 140%%", h1.Paragraph.FontSize)
+	}
+
+	h2 := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, Depth: 2})
+	if h2.Paragraph.FontSize != pdfBaseFontSize*1.2 {
+		t.Fatalf("h2 font size = %v, want default.css 120%%", h2.Paragraph.FontSize)
+	}
+}
+
 func TestPDFStyleResolverMapsHeadingAndTOCStyles(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",
@@ -158,6 +172,14 @@ func TestPDFStyleResolverMapsHeadingAndTOCStyles(t *testing.T) {
 	}
 }
 
+func TestPDFStyleResolverSectionSubtitleMarginsMatchDefaultCSS(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	sectionSubtitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockSubtitle})
+	if sectionSubtitle.SpaceBefore != pdfBaseFontSize || sectionSubtitle.SpaceAfter != pdfBaseFontSize {
+		t.Fatalf("section subtitle margins = %v/%v, want default.css 1em/1em", sectionSubtitle.SpaceBefore, sectionSubtitle.SpaceAfter)
+	}
+}
+
 func TestPDFStyleResolverUsesContextSpecificSubtitleDefaults(t *testing.T) {
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 
@@ -178,5 +200,8 @@ func TestPDFStyleResolverUsesContextSpecificSubtitleDefaults(t *testing.T) {
 	}
 	if sectionSubtitle.Paragraph.Align != textAlignCenter {
 		t.Fatalf("section subtitle align = %v, want center", sectionSubtitle.Paragraph.Align)
+	}
+	if sectionSubtitle.Paragraph.FontSize != pdfBaseFontSize {
+		t.Fatalf("section subtitle font size = %v, want base font size %v", sectionSubtitle.Paragraph.FontSize, pdfBaseFontSize)
 	}
 }

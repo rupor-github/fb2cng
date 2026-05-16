@@ -24,6 +24,55 @@ func TestPDFStyleResolverAppliesCodeStylesheet(t *testing.T) {
 	}
 }
 
+func TestPDFStyleResolverParagraphMarginsMatchDefaultCSS(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
+	if paragraph.SpaceBefore != 0 || paragraph.SpaceAfter != 0 {
+		t.Fatalf("paragraph margins = %v/%v, want default.css no margins", paragraph.SpaceBefore, paragraph.SpaceAfter)
+	}
+}
+
+func TestPDFStyleResolverImageDefaultsMatchDefaultCSS(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `body { text-indent: 2em; text-align: right; }`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	image := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockImage})
+	if image.Paragraph.Align != textAlignCenter {
+		t.Fatalf("image align = %v, want center", image.Paragraph.Align)
+	}
+	if image.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("image indent = %v, want 0", image.Paragraph.FirstLineIndent)
+	}
+}
+
+func TestPDFStyleResolverCiteMarginsMatchDefaultCSS(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleCite, ContextClasses: pdfStyleCite})
+	if paragraph.SpaceBefore != pdfBaseFontSize || paragraph.SpaceAfter != pdfBaseFontSize {
+		t.Fatalf("cite paragraph vertical margins = %v/%v, want default.css 1em/1em", paragraph.SpaceBefore, paragraph.SpaceAfter)
+	}
+	if paragraph.MarginLeft != pdfBaseFontSize*2 || paragraph.MarginRight != pdfBaseFontSize*2 {
+		t.Fatalf("cite paragraph horizontal margins = %v/%v, want default.css 2em/2em", paragraph.MarginLeft, paragraph.MarginRight)
+	}
+}
+
+func TestPDFStyleResolverVerseMarginsMatchDefaultCSS(t *testing.T) {
+	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	verse := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockPoem})
+	if verse.SpaceBefore != pdfBaseFontSize*0.25 || verse.SpaceAfter != pdfBaseFontSize*0.25 {
+		t.Fatalf("verse vertical margins = %v/%v, want default.css 0.25em/0.25em", verse.SpaceBefore, verse.SpaceAfter)
+	}
+	if verse.MarginLeft != pdfBaseFontSize*2 {
+		t.Fatalf("verse margin-left = %v, want default.css 2em", verse.MarginLeft)
+	}
+	if verse.Paragraph.FirstLineIndent != 0 {
+		t.Fatalf("verse indent = %v, want default.css 0", verse.Paragraph.FirstLineIndent)
+	}
+}
+
 func TestPDFStyleResolverTextAuthorDefaultsMatchKFXDefaultCSS(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",
@@ -38,8 +87,14 @@ func TestPDFStyleResolverTextAuthorDefaultsMatchKFXDefaultCSS(t *testing.T) {
 	if !textAuthor.Paragraph.Bold || !textAuthor.Paragraph.Italic {
 		t.Fatalf("text-author weight/style = bold:%t italic:%t, want both true", textAuthor.Paragraph.Bold, textAuthor.Paragraph.Italic)
 	}
+	if textAuthor.Paragraph.FontSize != pdfBaseFontSize {
+		t.Fatalf("text-author font size = %v, want base font size %v", textAuthor.Paragraph.FontSize, pdfBaseFontSize)
+	}
 	if textAuthor.Paragraph.FirstLineIndent != 0 {
 		t.Fatalf("text-author indent = %v, want 0", textAuthor.Paragraph.FirstLineIndent)
+	}
+	if textAuthor.SpaceBefore != 0 || textAuthor.SpaceAfter != 0 {
+		t.Fatalf("text-author margins = %v/%v, want default.css no margins", textAuthor.SpaceBefore, textAuthor.SpaceAfter)
 	}
 }
 

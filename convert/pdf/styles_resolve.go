@@ -19,6 +19,10 @@ func (r *pdfStyleResolver) styleForBlock(block pdfTextBlock) pdfBlockResolvedSty
 			style = mergePDFContextClassStyleOverrides(style, classStyle, classFallback)
 			continue
 		}
+		if pdfContainerStyleClass(class) {
+			style = mergePDFContainerClassStyleOverrides(style, classStyle, classFallback)
+			continue
+		}
 		style = mergePDFStyleOverrides(style, classStyle, classFallback)
 	}
 	for _, selectorStyleName := range pdfElementClassStyleNames(block) {
@@ -212,17 +216,21 @@ func (r *pdfStyleResolver) contextInheritedBlockStyle(tagStyle pdfBlockResolvedS
 		hasRight bool
 	)
 	for _, class := range strings.Fields(block.ContextClasses) {
+		if class == pdfStyleNameForBlock(block) {
+			continue
+		}
 		contextStyle, ok := r.styles[class]
 		if !ok {
 			continue
 		}
 		fallback := r.defaultStyle(class)
 		style.Paragraph = mergePDFInheritedParagraphStyle(style.Paragraph, contextStyle.Paragraph, fallback.Paragraph)
-		if contextStyle.MarginLeft != fallback.MarginLeft {
+		marginFallback := r.defaultStyle(pdfStyleParagraph)
+		if contextStyle.MarginLeft != marginFallback.MarginLeft {
 			left += contextStyle.MarginLeft
 			hasLeft = true
 		}
-		if contextStyle.MarginRight != fallback.MarginRight {
+		if contextStyle.MarginRight != marginFallback.MarginRight {
 			right += contextStyle.MarginRight
 			hasRight = true
 		}
@@ -287,25 +295,35 @@ func (r *pdfStyleResolver) applyContextInheritedBlockDefaults(style, tagStyle pd
 }
 
 func contextStyleClassShouldSkipInheritedAndHorizontalMargins(block pdfTextBlock, class string) bool {
-	if class == "" {
+	if class == "" || !pdfContainerStyleClass(class) {
 		return false
 	}
-	found := false
 	for _, contextClass := range strings.Fields(block.ContextClasses) {
 		if contextClass == class {
-			found = true
-			break
+			return true
 		}
 	}
-	if !found {
-		return false
-	}
+	return false
+}
+
+func pdfContainerStyleClass(class string) bool {
 	switch class {
 	case pdfStyleBodyTitle, pdfStyleChapterTitle, pdfStyleSectionTitle, pdfStyleAnnotation, pdfStyleFootnote, pdfStylePoem, pdfStyleStanza, pdfStyleEpigraph, pdfStyleCite:
 		return true
 	default:
 		return false
 	}
+}
+
+func mergePDFContainerClassStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfBlockResolvedStyle {
+	base = mergePDFContextClassStyleOverrides(base, override, fallback)
+	if override.MarginLeft != fallback.MarginLeft {
+		base.MarginLeft = override.MarginLeft
+	}
+	if override.MarginRight != fallback.MarginRight {
+		base.MarginRight = override.MarginRight
+	}
+	return base
 }
 
 func mergePDFContextClassStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfBlockResolvedStyle {

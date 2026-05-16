@@ -26,11 +26,20 @@ func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 		pdfStyleStanzaSubtitle:     subtitlePDFStyle(textAlignCenter, false, false, pdfBaseFontSize*0.25, pdfBaseFontSize*0.25, false),
 		pdfStyleEpigraphSubtitle:   subtitlePDFStyle(textAlignRight, false, true, pdfBaseFontSize*0.3, pdfBaseFontSize*0.3, false),
 		pdfStyleCiteSubtitle:       subtitlePDFStyle(textAlignLeft, false, false, pdfBaseFontSize*0.5, pdfBaseFontSize*0.5, false),
+		pdfStyleCite: {
+			Paragraph:   paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, FirstLineIndent: pdfBodyIndent, HasFirstLineIndent: true, Align: textAlignJustify, Hyphenation: paragraphHyphenationAuto},
+			SpaceBefore: pdfBaseFontSize,
+			SpaceAfter:  pdfBaseFontSize,
+			MarginLeft:  pdfBaseFontSize * 2,
+			MarginRight: pdfBaseFontSize * 2,
+		},
 		pdfStyleVerse: {
-			Paragraph:  paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfVerseLineHeight, HasFirstLineIndent: true, Align: textAlignLeft, Hyphenation: paragraphHyphenationAuto},
-			SpaceAfter: pdfVerseSpaceAfter,
-			Orphans:    pdfDefaultKeepLines,
-			Widows:     pdfDefaultKeepLines,
+			Paragraph:   paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfVerseLineHeight, HasFirstLineIndent: true, Align: textAlignLeft, Hyphenation: paragraphHyphenationAuto},
+			SpaceBefore: pdfVerseSpaceBefore,
+			SpaceAfter:  pdfVerseSpaceAfter,
+			MarginLeft:  pdfVerseMarginLeft,
+			Orphans:     pdfDefaultKeepLines,
+			Widows:      pdfDefaultKeepLines,
 		},
 		pdfStyleTextAuthor: {
 			Paragraph:  paragraphStyle{FontFamily: "serif", Bold: true, Italic: true, FontSize: pdfTextAuthorFontSize, LineHeight: pdfTextAuthorLineHeight, HasFirstLineIndent: true, Align: textAlignRight, Hyphenation: paragraphHyphenationAuto},
@@ -39,7 +48,7 @@ func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 			Widows:     pdfDefaultKeepLines,
 		},
 		pdfStyleImage: {
-			Paragraph:    paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, HasFirstLineIndent: true, Hyphenation: paragraphHyphenationAuto},
+			Paragraph:    paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, HasFirstLineIndent: true, Align: textAlignCenter, Hyphenation: paragraphHyphenationAuto},
 			KeepTogether: true,
 		},
 		pdfStyleTOCItem: {
@@ -79,13 +88,18 @@ func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 }
 
 func headingPDFStyle(depth int) pdfBlockResolvedStyle {
-	fontSize := max(pdfHeadingBaseFontSize-float64(depth-1), pdfHeadingMinFontSize)
-	return headingPDFStyleWithLineHeightFactor(fontSize, pdfHeadingLineHeightFactor)
+	return headingPDFStyleWithLineHeightFactor(pdfHeadingFontSize(depth), pdfHeadingLineHeightFactor)
 }
 
 func sectionTitleHeaderPDFStyle(depth int) pdfBlockResolvedStyle {
-	fontSize := max(pdfHeadingBaseFontSize-float64(depth-1), pdfHeadingMinFontSize)
-	return headingPDFStyleWithLineHeightFactor(fontSize, pdfSectionTitleHeaderLineHeightFactor)
+	return headingPDFStyleWithLineHeightFactor(pdfHeadingFontSize(depth), pdfSectionTitleHeaderLineHeightFactor)
+}
+
+func pdfHeadingFontSize(depth int) float64 {
+	if depth <= 1 {
+		return pdfHeadingH1FontSize
+	}
+	return pdfHeadingNestedFontSize
 }
 
 func headingPDFStyleWithLineHeightFactor(fontSize float64, lineHeightFactor float64) pdfBlockResolvedStyle {
