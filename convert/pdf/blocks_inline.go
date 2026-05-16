@@ -279,7 +279,7 @@ func appendInlineRun(runs *[]pdfInlineRun, run pdfInlineRun) {
 }
 
 func sameInlineStyle(a, b pdfInlineRun) bool {
-	return a.StyleClasses == b.StyleClasses && a.LinkHref == b.LinkHref && a.ImageID == b.ImageID && a.Bold == b.Bold && a.Italic == b.Italic && a.Underline == b.Underline && a.Strikethrough == b.Strikethrough && a.Subscript == b.Subscript && a.Superscript == b.Superscript && a.Code == b.Code
+	return a.StyleClasses == b.StyleClasses && a.ContextClasses == b.ContextClasses && a.LinkHref == b.LinkHref && a.ImageID == b.ImageID && a.Bold == b.Bold && a.Italic == b.Italic && a.Underline == b.Underline && a.Strikethrough == b.Strikethrough && a.Subscript == b.Subscript && a.Superscript == b.Superscript && a.Code == b.Code
 }
 
 func trimCodeBlockInlineRuns(runs []pdfInlineRun) []pdfInlineRun {

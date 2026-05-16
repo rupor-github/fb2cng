@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"go.uber.org/zap/zaptest"
+
 	"fbc/content"
 	"fbc/fb2"
 )
@@ -1007,6 +1009,55 @@ func TestLayoutPDFPagesAppliesInlineNamedStyleClasses(t *testing.T) {
 	}
 	if styled.FontKey.Family != "sans-serif" || !styled.FontKey.Bold || !styled.FontKey.Italic || !styled.Underline || styled.Color.String() != "#ff0000" || styled.BaselineShift <= 0 || styled.FontSize >= pages[1].Lines[0].FontSize {
 		t.Fatalf("styled fragment = %#v, want accent class styling", *styled)
+	}
+}
+
+func TestLayoutPDFPagesAppliesInlineContextDescendantSelectors(t *testing.T) {
+	face, err := builtinFont("serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `.footnote .accent { color: #ff0000; font-weight: bold; }`,
+	}}}
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  520,
+		PageHeight: 180,
+		Title:      "Title",
+		Author:     "Author",
+		Styles:     resolver,
+		Blocks: []pdfTextBlock{{
+			Kind:           pdfBlockParagraph,
+			Text:           "plain styled",
+			ContextClasses: pdfStyleFootnote,
+			Runs: []pdfInlineRun{
+				{Text: "plain "},
+				{Text: "styled", StyleClasses: "accent"},
+			},
+		}},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 || len(pages[1].Lines) != 1 {
+		t.Fatalf("layoutPDFPages() pages = %#v, want one styled body line", pages)
+	}
+	var styled *pdfPageLineFragment
+	for i := range pages[1].Lines[0].Fragments {
+		fragment := &pages[1].Lines[0].Fragments[i]
+		if shapedRunes(fragment.Text) == "styled" {
+			styled = fragment
+			break
+		}
+	}
+	if styled == nil {
+		t.Fatalf("styled fragment missing: %#v", pages[1].Lines[0].Fragments)
+	}
+	if styled.Color.String() != "#ff0000" || !styled.FontKey.Bold {
+		t.Fatalf("styled fragment = %#v, want footnote descendant styling", *styled)
 	}
 }
 

@@ -435,7 +435,7 @@ func inlineLineBoxMetrics(face *builtinFontFace, style paragraphStyle, lineHeigh
 }
 
 func inlineRunParagraphStyle(resolver *pdfStyleResolver, base paragraphStyle, run pdfInlineRun) paragraphStyle {
-	style := inlineClassParagraphStyle(resolver, base, run.StyleClasses)
+	style := inlineClassParagraphStyle(resolver, base, run)
 	style.Bold = style.Bold || run.Bold
 	style.Italic = style.Italic || run.Italic
 	style.Underline = style.Underline || run.Underline
@@ -468,20 +468,99 @@ func inlineRunHasStyleClass(run pdfInlineRun, className string) bool {
 	return false
 }
 
-func inlineClassParagraphStyle(resolver *pdfStyleResolver, base paragraphStyle, classes string) paragraphStyle {
-	if resolver == nil || strings.TrimSpace(classes) == "" {
+func inlineClassParagraphStyle(resolver *pdfStyleResolver, base paragraphStyle, run pdfInlineRun) paragraphStyle {
+	if resolver == nil {
 		return base
 	}
 	fallback := resolver.styles[pdfStyleParagraph].Paragraph
 	style := base
-	for _, class := range strings.Fields(classes) {
+	for _, class := range strings.Fields(run.StyleClasses) {
 		classStyle, ok := resolver.styles[class]
 		if !ok {
 			continue
 		}
 		style = mergeInlineParagraphStyle(style, classStyle.Paragraph, fallback)
 	}
+	for _, descStyleName := range inlineRunContextDescendantStyleNames(resolver, run) {
+		descStyle, ok := resolver.styles[descStyleName]
+		if !ok {
+			continue
+		}
+		style = mergeInlineParagraphStyle(style, descStyle.Paragraph, fallback)
+	}
 	return style
+}
+
+func inlineRunsWithContext(runs []pdfInlineRun, contextClasses string) []pdfInlineRun {
+	contextClasses = strings.TrimSpace(contextClasses)
+	if contextClasses == "" || len(runs) == 0 {
+		return runs
+	}
+	withContext := make([]pdfInlineRun, len(runs))
+	for i := range runs {
+		withContext[i] = runs[i]
+		withContext[i].ContextClasses = joinStyleClasses(contextClasses, runs[i].ContextClasses)
+	}
+	return withContext
+}
+
+func inlineRunContextClassesForBlock(block pdfTextBlock) string {
+	return joinStyleClasses(block.ContextClasses, pdfElementTagForBlock(block), block.StyleClasses)
+}
+
+func inlineRunContextDescendantStyleNames(resolver *pdfStyleResolver, run pdfInlineRun) []string {
+	if resolver == nil {
+		return nil
+	}
+	ancestors := []string{pdfStyleHTML, pdfStyleBody}
+	ancestors = append(ancestors, strings.Fields(run.ContextClasses)...)
+	candidates := inlineRunSelectorCandidates(run)
+	var names []string
+	for _, ancestor := range ancestors {
+		for _, candidate := range candidates {
+			name := ancestor + "--" + candidate
+			if _, ok := resolver.styles[name]; ok {
+				names = appendUniqueString(names, name)
+			}
+		}
+	}
+	return names
+}
+
+func inlineRunSelectorCandidates(run pdfInlineRun) []string {
+	classList := strings.Fields(run.StyleClasses)
+	candidates := make([]string, 0, len(classList)+1)
+	for _, class := range classList {
+		candidates = appendUniqueString(candidates, class)
+	}
+	if run.Code || stringListContains(classList, pdfStyleCode) {
+		candidates = appendUniqueString(candidates, "code")
+		for _, class := range classList {
+			candidates = appendUniqueString(candidates, "code."+class)
+		}
+	}
+	return candidates
+}
+
+func appendUniqueString(values []string, value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return values
+	}
+	for _, existing := range values {
+		if existing == value {
+			return values
+		}
+	}
+	return append(values, value)
+}
+
+func stringListContains(values []string, value string) bool {
+	for _, existing := range values {
+		if existing == value {
+			return true
+		}
+	}
+	return false
 }
 
 func mergeInlineParagraphStyle(base, override, fallback paragraphStyle) paragraphStyle {
