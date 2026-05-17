@@ -2,6 +2,8 @@ package pdf
 
 import (
 	"testing"
+
+	"fbc/fb2"
 )
 
 func TestPDFCollapsedBlockStylesApplyContainerVerticalMarginsOnlyAtEdges(t *testing.T) {
@@ -84,6 +86,20 @@ func TestPDFCollapsedBlockStylesCollapseAdjacentMargins(t *testing.T) {
 	}
 	if styles[1].SpaceBefore != 6 {
 		t.Fatalf("current margin-top = %v, want collapsed max 6", styles[1].SpaceBefore)
+	}
+}
+
+func TestPDFCollapsedBlockStylesDoesNotCollapseTableMargins(t *testing.T) {
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	resolver.styles[pdfStyleTable] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceBefore: 7, SpaceAfter: 11}
+	resolver.styles[pdfStyleImage] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceBefore: 13, SpaceAfter: 5}
+
+	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
+		{Kind: pdfBlockTable, StyleName: pdfStyleTable, Table: &fb2.Table{}},
+		{Kind: pdfBlockImage, StyleName: pdfStyleImage, ImageID: "after"},
+	})
+	if styles[0].SpaceAfter != 11 || styles[1].SpaceBefore != 13 {
+		t.Fatalf("table/image margins collapsed: table after=%v image before=%v, want 11/13", styles[0].SpaceAfter, styles[1].SpaceBefore)
 	}
 }
 

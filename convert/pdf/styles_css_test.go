@@ -106,7 +106,7 @@ func TestPDFStyleResolverCiteMarginsMatchDefaultCSS(t *testing.T) {
 
 func TestPDFStyleResolverTableDefaultsMatchDefaultCSS(t *testing.T) {
 	resolver := newPDFStyleResolverWithDefaultCSS(t)
-	table := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleTable})
+	table := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockTable, StyleName: pdfStyleTable})
 	if table.SpaceBefore != pdfBaseFontSize || table.SpaceAfter != pdfBaseFontSize {
 		t.Fatalf("table margins = %v/%v, want default.css 1em/1em", table.SpaceBefore, table.SpaceAfter)
 	}
@@ -114,7 +114,15 @@ func TestPDFStyleResolverTableDefaultsMatchDefaultCSS(t *testing.T) {
 		t.Fatalf("table keep-together = false, want default.css page-break-inside avoid")
 	}
 	if table.Paragraph.FirstLineIndent != 0 {
-		t.Fatalf("table flattened paragraph indent = %v, want 0", table.Paragraph.FirstLineIndent)
+		t.Fatalf("table indent = %v, want 0", table.Paragraph.FirstLineIndent)
+	}
+	td := resolver.styleForTableCell(fb2.TableRow{}, fb2.TableCell{})
+	if td.PaddingLeft != pdfBaseFontSize*0.5 || td.BorderWidth == 0 || !td.HasBorder {
+		t.Fatalf("td style padding/border = %v/%v/%t, want default.css cell padding and border", td.PaddingLeft, td.BorderWidth, td.HasBorder)
+	}
+	th := resolver.styleForTableCell(fb2.TableRow{}, fb2.TableCell{Header: true})
+	if !th.HasBackground || th.PaddingLeft != pdfBaseFontSize*0.5 || th.BorderWidth == 0 || !th.Paragraph.Bold || th.Paragraph.Align != textAlignCenter {
+		t.Fatalf("th style bg/padding/border/bold/align = %t/%v/%v/%t/%v", th.HasBackground, th.PaddingLeft, th.BorderWidth, th.Paragraph.Bold, th.Paragraph.Align)
 	}
 }
 

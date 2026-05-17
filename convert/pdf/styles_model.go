@@ -70,6 +70,8 @@ const (
 	pdfTOCSpaceAfter                      = 0.0
 	pdfDefaultKeepLines                   = 2
 	pdfSingleKeepLine                     = 1
+	pdfTableCellPadding                   = pdfBaseFontSize * 0.5
+	pdfTableCellBorderWidth               = 0.45
 
 	pdfStyleParagraph          = "p"
 	pdfStyleBodyTitle          = "body-title"
@@ -113,6 +115,8 @@ const (
 	pdfStyleCite               = "cite"
 	pdfStyleCiteSubtitle       = "cite-subtitle"
 	pdfStyleTable              = "table"
+	pdfStyleTableCell          = "td"
+	pdfStyleTableHeaderCell    = "th"
 	pdfStyleCode               = "code"
 	pdfStyleEmptyLine          = "emptyline"
 	pdfStyleLinkExternal       = "link-external"
@@ -198,6 +202,7 @@ type pdfDebugResolvedStyle struct {
 	Underline         bool    `json:"underline,omitempty"`
 	Strikethrough     bool    `json:"strikethrough,omitempty"`
 	PreserveSpace     bool    `json:"preserve_space,omitempty"`
+	NoWrap            bool    `json:"no_wrap,omitempty"`
 	SpaceBefore       float64 `json:"space_before,omitempty"`
 	SpaceAfter        float64 `json:"space_after,omitempty"`
 	MarginLeft        float64 `json:"margin_left,omitempty"`

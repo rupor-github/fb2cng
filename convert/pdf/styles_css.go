@@ -94,9 +94,18 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 		case "pre", "pre-wrap", "break-spaces":
 			style.Paragraph.PreserveSpace = true
 			style.Paragraph.HasPreserveSpace = true
-		case "normal", "nowrap", "pre-line":
+			style.Paragraph.NoWrap = false
+			style.Paragraph.HasNoWrap = true
+		case "nowrap":
 			style.Paragraph.PreserveSpace = false
 			style.Paragraph.HasPreserveSpace = true
+			style.Paragraph.NoWrap = true
+			style.Paragraph.HasNoWrap = true
+		case "normal", "pre-line":
+			style.Paragraph.PreserveSpace = false
+			style.Paragraph.HasPreserveSpace = true
+			style.Paragraph.NoWrap = false
+			style.Paragraph.HasNoWrap = true
 		}
 	}
 	names := make([]string, 0, len(props))

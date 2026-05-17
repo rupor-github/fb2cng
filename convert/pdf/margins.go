@@ -172,7 +172,7 @@ func pdfEmptyLineMargin(style pdfBlockResolvedStyle) float64 {
 
 func pdfBlockParticipatesInMarginCollapse(block pdfTextBlock) bool {
 	switch block.Kind {
-	case pdfBlockPageBreak, pdfBlockEmptyLine:
+	case pdfBlockPageBreak, pdfBlockEmptyLine, pdfBlockTable:
 		return false
 	default:
 		return true

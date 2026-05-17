@@ -66,6 +66,10 @@ func pdfTagStyleNameForBlock(block pdfTextBlock) string {
 		return pdfStyleImage
 	case "table":
 		return pdfStyleTable
+	case "td":
+		return pdfStyleTableCell
+	case "th":
+		return pdfStyleTableHeaderCell
 	case "code":
 		return pdfStyleCode
 	default:
@@ -97,6 +101,8 @@ func pdfStyleNameForKind(kind pdfBlockKind) string {
 		return pdfStyleTextAuthor
 	case pdfBlockImage:
 		return pdfStyleImage
+	case pdfBlockTable:
+		return pdfStyleTable
 	case pdfBlockTOCEntry:
 		return pdfStyleTOCItem
 	case pdfBlockEmptyLine:
@@ -118,6 +124,13 @@ func pdfElementTagForBlock(block pdfTextBlock) string {
 			return "p"
 		}
 		return "img"
+	case pdfBlockTable:
+		return "table"
+	case pdfBlockTableCell:
+		if block.StyleName == pdfStyleTableHeaderCell {
+			return "th"
+		}
+		return "td"
 	default:
 		return ""
 	}
@@ -179,6 +192,7 @@ func pdfStyleSeedWithoutExplicitFlags(style pdfBlockResolvedStyle) pdfBlockResol
 	style.Paragraph.HasUnderline = false
 	style.Paragraph.HasStrikethrough = false
 	style.Paragraph.HasPreserveSpace = false
+	style.Paragraph.HasNoWrap = false
 	style.Paragraph.HasHyphenation = false
 	style.HasSpaceBefore = false
 	style.HasSpaceAfter = false
@@ -209,6 +223,10 @@ func pdfSelectorStyleNames(sel css.Selector) []string {
 		return []string{pdfStyleBody}
 	case "p":
 		return []string{pdfStyleParagraph}
+	case "td":
+		return []string{pdfStyleTableCell}
+	case "th":
+		return []string{pdfStyleTableHeaderCell}
 	case "h1":
 		return []string{pdfStyleBodyTitleHeader, pdfStyleChapterTitleHeader, pdfStyleTOCTitle}
 	case "h2", "h3", "h4", "h5", "h6":
@@ -233,7 +251,7 @@ func pdfClassSelectorStyleName(class string) string {
 
 func pdfSelectorClassCollidesWithElement(class string) bool {
 	switch strings.ToLower(class) {
-	case "html", "body", "p", "h1", "h2", "h3", "h4", "h5", "h6", "img", "table", "code", "a", "span", "div":
+	case "html", "body", "p", "h1", "h2", "h3", "h4", "h5", "h6", "img", "table", "td", "th", "code", "a", "span", "div":
 		return true
 	default:
 		return false
@@ -264,7 +282,7 @@ func pdfDescendantSelectorStyleNames(sel css.Selector) []string {
 func pdfDescendantSelectorTargets(sel css.Selector) []string {
 	if sel.Element != "" && sel.Class != "" {
 		switch strings.ToLower(sel.Element) {
-		case "p", "h1", "h2", "h3", "h4", "h5", "h6", "img", "table", "code":
+		case "p", "h1", "h2", "h3", "h4", "h5", "h6", "img", "table", "td", "th", "code":
 			return []string{strings.ToLower(sel.Element) + "." + sel.Class}
 		}
 		return nil
@@ -272,7 +290,7 @@ func pdfDescendantSelectorTargets(sel css.Selector) []string {
 	var targets []string
 	if sel.Element != "" {
 		switch strings.ToLower(sel.Element) {
-		case "p", "h1", "h2", "h3", "h4", "h5", "h6", "img", "table", "code":
+		case "p", "h1", "h2", "h3", "h4", "h5", "h6", "img", "table", "td", "th", "code":
 			targets = append(targets, strings.ToLower(sel.Element))
 		}
 	}

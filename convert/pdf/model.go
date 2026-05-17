@@ -48,6 +48,10 @@ func (k pdfBlockKind) String() string {
 		return "toc-entry"
 	case pdfBlockPageBreak:
 		return "page-break"
+	case pdfBlockTable:
+		return "table"
+	case pdfBlockTableCell:
+		return "table-cell"
 	default:
 		return "unknown"
 	}
@@ -63,6 +67,8 @@ const (
 	pdfBlockImage
 	pdfBlockTOCEntry
 	pdfBlockPageBreak
+	pdfBlockTable
+	pdfBlockTableCell
 )
 
 type pdfContentPlan struct {
@@ -83,6 +89,7 @@ type pdfTextBlock struct {
 	StripRootHorizontalMargins bool
 	ImageID                    string
 	Links                      []pdfTextLink
+	Table                      *fb2.Table
 }
 
 type pdfInlineRun struct {

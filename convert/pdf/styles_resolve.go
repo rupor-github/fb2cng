@@ -102,6 +102,10 @@ func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfB
 		base.Paragraph.PreserveSpace = override.Paragraph.PreserveSpace
 		base.Paragraph.HasPreserveSpace = override.Paragraph.HasPreserveSpace
 	}
+	if override.Paragraph.HasNoWrap || override.Paragraph.NoWrap != fallback.Paragraph.NoWrap {
+		base.Paragraph.NoWrap = override.Paragraph.NoWrap
+		base.Paragraph.HasNoWrap = override.Paragraph.HasNoWrap
+	}
 	if override.Paragraph.HasHyphenation || override.Paragraph.Hyphenation != fallback.Paragraph.Hyphenation {
 		base.Paragraph.Hyphenation = override.Paragraph.Hyphenation
 		base.Paragraph.HasHyphenation = override.Paragraph.HasHyphenation
@@ -296,6 +300,10 @@ func (r *pdfStyleResolver) applyContextInheritedBlockDefaults(style, tagStyle pd
 		style.Paragraph.PreserveSpace = contextStyle.Paragraph.PreserveSpace
 		style.Paragraph.HasPreserveSpace = contextStyle.Paragraph.HasPreserveSpace
 	}
+	if style.Paragraph.NoWrap == tagStyle.Paragraph.NoWrap {
+		style.Paragraph.NoWrap = contextStyle.Paragraph.NoWrap
+		style.Paragraph.HasNoWrap = contextStyle.Paragraph.HasNoWrap
+	}
 	if style.Paragraph.Hyphenation == tagStyle.Paragraph.Hyphenation {
 		style.Paragraph.Hyphenation = contextStyle.Paragraph.Hyphenation
 		style.Paragraph.HasHyphenation = contextStyle.Paragraph.HasHyphenation
@@ -454,6 +462,10 @@ func (r *pdfStyleResolver) applyRootInheritedParagraphDefaults(style pdfBlockRes
 		style.Paragraph.PreserveSpace = root.PreserveSpace
 		style.Paragraph.HasPreserveSpace = root.HasPreserveSpace
 	}
+	if !style.Paragraph.HasNoWrap && style.Paragraph.NoWrap == rootDefault.NoWrap {
+		style.Paragraph.NoWrap = root.NoWrap
+		style.Paragraph.HasNoWrap = root.HasNoWrap
+	}
 	if !style.Paragraph.HasHyphenation && style.Paragraph.Hyphenation == rootDefault.Hyphenation {
 		style.Paragraph.Hyphenation = root.Hyphenation
 		style.Paragraph.HasHyphenation = root.HasHyphenation
@@ -494,6 +506,10 @@ func mergePDFInheritedParagraphStyle(base, override, fallback paragraphStyle) pa
 	if override.HasPreserveSpace {
 		base.PreserveSpace = override.PreserveSpace
 		base.HasPreserveSpace = true
+	}
+	if override.HasNoWrap {
+		base.NoWrap = override.NoWrap
+		base.HasNoWrap = true
 	}
 	if override.HasHyphenation {
 		base.Hyphenation = override.Hyphenation

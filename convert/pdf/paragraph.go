@@ -49,6 +49,8 @@ type paragraphStyle struct {
 	HasStrikethrough   bool
 	PreserveSpace      bool
 	HasPreserveSpace   bool
+	NoWrap             bool
+	HasNoWrap          bool
 	Hyphenation        paragraphHyphenation
 	HasHyphenation     bool
 	Hyphenator         paragraphHyphenator
@@ -173,7 +175,7 @@ func layoutParagraph(face *builtinFontFace, text string, style paragraphStyle, m
 		return nil, fmt.Errorf("paragraph width must be positive: %g", maxWidth)
 	}
 
-	words := paragraphWords(text)
+	words := paragraphWords(text, style.NoWrap)
 	if len(words) == 0 {
 		return nil, nil
 	}
@@ -189,8 +191,11 @@ func layoutParagraph(face *builtinFontFace, text string, style paragraphStyle, m
 	return assembleParagraphLines(face, units, style, maxWidth)
 }
 
-func paragraphWords(text string) []paragraphWord {
+func paragraphWords(text string, noWrap bool) []paragraphWord {
 	parts := breakableWords(text)
+	if noWrap && len(parts) > 0 {
+		return []paragraphWord{{Text: strings.Join(parts, " ")}}
+	}
 	words := make([]paragraphWord, 0, len(parts))
 	for _, part := range parts {
 		words = append(words, paragraphWord{Text: part})
@@ -247,7 +252,7 @@ func plainSpaceWidth(face *builtinFontFace, style paragraphStyle) (float64, erro
 func paragraphUnits(face *builtinFontFace, words []paragraphWord, style paragraphStyle, softHyphenWidth float64) ([]paragraphUnit, error) {
 	units := make([]paragraphUnit, 0, len(words))
 	for i, word := range words {
-		parts := hyphenatedWordParts(word.Text, style.Hyphenator, style.Hyphenation)
+		parts := hyphenatedWordParts(word.Text, style.Hyphenator, pdfEffectiveHyphenation(style))
 		for j, part := range parts {
 			shaped, err := shapeText(face, part.Text)
 			if err != nil {
@@ -270,6 +275,13 @@ func paragraphUnits(face *builtinFontFace, words []paragraphWord, style paragrap
 		}
 	}
 	return units, nil
+}
+
+func pdfEffectiveHyphenation(style paragraphStyle) paragraphHyphenation {
+	if style.NoWrap {
+		return paragraphHyphenationNone
+	}
+	return style.Hyphenation
 }
 
 func hyphenatedWordParts(word string, hyphenator paragraphHyphenator, mode paragraphHyphenation) []paragraphWordPart {

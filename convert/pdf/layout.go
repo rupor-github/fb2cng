@@ -171,6 +171,97 @@ func layoutPDFPages(doc skeletonDocument, _ *builtinFontFace) ([]pdfPage, map[pd
 			blockWidthLimit = rootlessContentWidth
 		}
 
+		if block.Kind == pdfBlockTable {
+			tableWidth := blockContentWidth(blockWidthLimit, style)
+			table, err := layoutPDFTable(doc, styles, block, style, tableWidth)
+			if err != nil {
+				return nil, nil, err
+			}
+			if table.Width <= 0 || len(table.Groups) == 0 {
+				continue
+			}
+			needed := style.SpaceBefore + style.PaddingTop + table.Height + style.PaddingBottom + style.SpaceAfter
+			if style.KeepTogether && pageHasText && y-needed < bottom && needed <= top-bottom {
+				newTextPage()
+			}
+			addAnchor(page, block.ID)
+			y -= style.SpaceBefore + style.PaddingTop
+			tableX := blockLeft + style.MarginLeft + style.PaddingLeft
+			for groupIndex, group := range table.Groups {
+				if pageHasText && y-group.Height < bottom && (!style.KeepTogether || groupIndex > 0 || needed > top-bottom) {
+					newTextPage()
+				}
+				groupTop := y
+				for _, cell := range table.Cells {
+					if cell.Row < group.Start || cell.Row > group.End {
+						continue
+					}
+					cellTop := groupTop - pdfTableRowsHeight(table.Rows, group.Start, cell.Row-1)
+					cellBottom := cellTop - pdfTableRowsHeight(table.Rows, cell.Row, min(cell.Row+cell.RowSpan-1, group.End))
+					cellX := tableX + cell.X
+					addBlockDecoration(page, cell.Style, cellX, cellTop, cell.Width, cellBottom)
+					if len(cell.Lines) == 0 {
+						continue
+					}
+					innerWidth := max(cell.Width-cell.Style.PaddingLeft-cell.Style.PaddingRight-2*cell.Style.BorderWidth, 1)
+					textHeight := pdfTableCellTextHeight(cell.Style, cell.Lines)
+					availableHeight := max(cellTop-cellBottom-cell.Style.PaddingTop-cell.Style.PaddingBottom-2*cell.Style.BorderWidth, 0)
+					verticalOffset := 0.0
+					switch strings.ToLower(strings.TrimSpace(cell.VAlign)) {
+					case "top":
+					case "bottom":
+						verticalOffset = max(availableHeight-textHeight, 0)
+					default:
+						verticalOffset = max((availableHeight-textHeight)/2, 0)
+					}
+					_, fontKey, err := fontForStyle(doc.Fonts, cell.Style.Paragraph)
+					if err != nil {
+						return nil, nil, err
+					}
+					lineY := cellTop - cell.Style.BorderWidth - cell.Style.PaddingTop - verticalOffset - cell.Style.Paragraph.FontSize
+					lineSearchStart := 0
+					linkBlock := pdfTextBlock{Text: cell.Text, Links: cell.Links}
+					for _, line := range cell.Lines {
+						x := cellX + cell.Style.BorderWidth + cell.Style.PaddingLeft + line.Indent
+						available := innerWidth - line.Indent
+						switch cell.Style.Paragraph.Align {
+						case textAlignCenter:
+							x += max((available-line.Width)/2, 0)
+						case textAlignRight:
+							x += max(available-line.Width, 0)
+						}
+						addInlineImages(page, line, x, lineY)
+						addLinkAnnotations(page, linkBlock, line, lineSearchStart, x, lineY, cell.Style.Paragraph.FontSize)
+						lineSearchStart = nextLineSearchStart(cell.Text, line, lineSearchStart)
+						addLine(page, pdfPageLine{
+							X:                x,
+							Y:                lineY,
+							FontSize:         cell.Style.Paragraph.FontSize,
+							LetterSpacing:    cell.Style.Paragraph.LetterSpacing,
+							FontKey:          fontKey,
+							Color:            cell.Style.Paragraph.Color,
+							Text:             line.Text,
+							Underline:        cell.Style.Paragraph.Underline,
+							Strikethrough:    cell.Style.Paragraph.Strikethrough,
+							Fragments:        pageLineFragments(line.Fragments),
+							ExtraWordSpacing: line.ExtraWordSpacing,
+							ExtraCharSpacing: line.ExtraCharSpacing,
+							BreakStats:       line.BreakStats,
+						})
+						lineY -= cell.Style.Paragraph.LineHeight
+					}
+				}
+				y -= group.Height
+				pageHasText = true
+				previousRenderedImage = false
+			}
+			y -= style.PaddingBottom + style.SpaceAfter
+			if pdfStyleForcesPageBreakAfter(style) && pageHasText {
+				newTextPage()
+			}
+			continue
+		}
+
 		if block.Kind == pdfBlockImage {
 			backgroundX := blockLeft + style.MarginLeft
 			backgroundWidth := blockBoxWidth(blockWidthLimit, style)
@@ -569,6 +660,16 @@ func nextBlockKeepHeight(doc skeletonDocument, blockStyles []pdfBlockResolvedSty
 				return 0, nil
 			}
 			return style.SpaceBefore + style.PaddingTop + height + style.PaddingBottom, nil
+		}
+		if block.Kind == pdfBlockTable {
+			table, err := layoutPDFTable(doc, styles, block, style, blockContentWidth(availableWidth, style))
+			if err != nil {
+				return 0, err
+			}
+			if len(table.Groups) == 0 {
+				continue
+			}
+			return style.SpaceBefore + style.PaddingTop + table.Groups[0].Height + style.PaddingBottom, nil
 		}
 		text := strings.TrimSpace(block.Text)
 		if text == "" && !inlineRunsRenderable(block.Runs) {

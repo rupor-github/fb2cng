@@ -312,7 +312,7 @@ func inlineParagraphWords(doc skeletonDocument, registry *pdfFontRegistry, resol
 			return appendSegment(run, text)
 		}
 		for _, r := range run.Text {
-			if isBreakableSpace(r) {
+			if isBreakableSpace(r) && !base.NoWrap {
 				if err := flushSegment(); err != nil {
 					return nil, err
 				}
@@ -588,6 +588,10 @@ func mergeInlineParagraphStyle(base, override, fallback paragraphStyle) paragrap
 		base.PreserveSpace = override.PreserveSpace
 		base.HasPreserveSpace = override.HasPreserveSpace
 	}
+	if override.HasNoWrap || override.NoWrap != fallback.NoWrap {
+		base.NoWrap = override.NoWrap
+		base.HasNoWrap = override.HasNoWrap
+	}
 	return base
 }
 
@@ -615,7 +619,17 @@ func inlineParagraphUnits(registry *pdfFontRegistry, words []paragraphInlineWord
 			})
 			continue
 		}
-		parts := hyphenatedWordParts(word.Text, style.Hyphenator, style.Hyphenation)
+		if style.NoWrap {
+			units = append(units, paragraphUnit{
+				Text:      word.Text,
+				Width:     paragraphFragmentsWidth(word.Fragments),
+				WordIndex: wordIndex,
+				EndWord:   true,
+				Fragments: word.Fragments,
+			})
+			continue
+		}
+		parts := hyphenatedWordParts(word.Text, style.Hyphenator, pdfEffectiveHyphenation(style))
 		pieces := inlineWordGlyphPieces(word)
 		cursor := 0
 		for partIndex, part := range parts {

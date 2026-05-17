@@ -97,6 +97,7 @@ func (r *pdfStyleResolver) debugStyles() []pdfDebugResolvedStyle {
 			Underline:         style.Paragraph.Underline,
 			Strikethrough:     style.Paragraph.Strikethrough,
 			PreserveSpace:     style.Paragraph.PreserveSpace,
+			NoWrap:            style.Paragraph.NoWrap,
 			Hyphenation:       pdfHyphenationString(style.Paragraph.Hyphenation),
 			SpaceBefore:       style.SpaceBefore,
 			SpaceAfter:        style.SpaceAfter,

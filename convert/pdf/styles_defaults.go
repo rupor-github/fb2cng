@@ -31,6 +31,26 @@ func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 			SpaceAfter:   pdfBaseFontSize,
 			KeepTogether: true,
 		},
+		pdfStyleTableCell: {
+			Paragraph:     paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, FirstLineIndent: 0, HasFirstLineIndent: true, Align: textAlignLeft, Hyphenation: paragraphHyphenationAuto},
+			PaddingTop:    pdfTableCellPadding,
+			PaddingRight:  pdfTableCellPadding,
+			PaddingBottom: pdfTableCellPadding,
+			PaddingLeft:   pdfTableCellPadding,
+			BorderWidth:   pdfTableCellBorderWidth,
+			BorderColor:   pdfColor{R: 0, G: 0, B: 0},
+			HasBorder:     true,
+		},
+		pdfStyleTableHeaderCell: {
+			Paragraph:     paragraphStyle{FontFamily: "serif", Bold: true, FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, FirstLineIndent: 0, HasFirstLineIndent: true, Align: textAlignCenter, Hyphenation: paragraphHyphenationAuto},
+			PaddingTop:    pdfTableCellPadding,
+			PaddingRight:  pdfTableCellPadding,
+			PaddingBottom: pdfTableCellPadding,
+			PaddingLeft:   pdfTableCellPadding,
+			BorderWidth:   pdfTableCellBorderWidth,
+			BorderColor:   pdfColor{R: 0, G: 0, B: 0},
+			HasBorder:     true,
+		},
 	}
 
 	titleAfterImageStyle := styles[pdfStyleParagraph]
@@ -177,6 +197,7 @@ func pdfParagraphClassFallbackStyle(paragraph paragraphStyle) paragraphStyle {
 	paragraph.HasUnderline = false
 	paragraph.HasStrikethrough = false
 	paragraph.HasPreserveSpace = false
+	paragraph.HasNoWrap = false
 	paragraph.HasHyphenation = false
 	paragraph.Hyphenator = nil
 	return paragraph

@@ -201,11 +201,8 @@ func appendFlowItem(blocks *[]pdfTextBlock, book *fb2.FictionBook, item *fb2.Flo
 	case fb2.FlowCite:
 		appendCiteBlocks(blocks, item.Cite, depth, splitSections, contextClasses, stripRootHorizontalMargins)
 	case fb2.FlowTable:
-		if item.Table != nil {
-			text := item.Table.AsPlainText()
-			if text != "" {
-				*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockParagraph, Text: text, Depth: depth, StyleName: pdfStyleParagraph, StyleClasses: joinStyleClasses(styleClasses, pdfStyleTable), ContextClasses: strings.TrimSpace(contextClasses), StripRootHorizontalMargins: stripRootHorizontalMargins})
-			}
+		if item.Table != nil && len(item.Table.Rows) > 0 {
+			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockTable, ID: item.Table.ID, Depth: depth, StyleName: pdfStyleTable, StyleClasses: joinStyleClasses(styleClasses, item.Table.Style), ContextClasses: strings.TrimSpace(contextClasses), StripRootHorizontalMargins: stripRootHorizontalMargins, Table: item.Table})
 		}
 	}
 }
