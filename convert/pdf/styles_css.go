@@ -201,21 +201,36 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 			switch {
 			case pdfCSSForcedPageBreakKeyword(value):
 				style.PageBreakBefore = true
+				style.PageBreakBeforeMode = pdfPageBreakAlways
+				style.HasPageBreakBefore = true
+			case pdfCSSAvoidPageBreakKeyword(value):
+				style.PageBreakBefore = false
+				style.PageBreakBeforeMode = pdfPageBreakAvoid
 				style.HasPageBreakBefore = true
 			case pdfCSSAutoPageBreakKeyword(value):
 				style.PageBreakBefore = false
+				style.PageBreakBeforeMode = pdfPageBreakAuto
 				style.HasPageBreakBefore = true
 			}
 		case "page-break-after", "break-after":
 			switch {
 			case pdfCSSForcedPageBreakKeyword(value):
+				pdfClearPageBreakAfterAvoidKeep(style)
 				style.PageBreakAfter = true
+				style.PageBreakAfterMode = pdfPageBreakAlways
 				style.HasPageBreakAfter = true
 			case pdfCSSAutoPageBreakKeyword(value):
+				pdfClearPageBreakAfterAvoidKeep(style)
 				style.PageBreakAfter = false
+				style.PageBreakAfterMode = pdfPageBreakAuto
 				style.HasPageBreakAfter = true
-			case pdfCSSAvoidPageBreakKeyword(value) && style.KeepWithNextLines == 0:
-				style.KeepWithNextLines = 1
+			case pdfCSSAvoidPageBreakKeyword(value):
+				style.PageBreakAfter = false
+				style.PageBreakAfterMode = pdfPageBreakAvoid
+				style.HasPageBreakAfter = true
+				if style.KeepWithNextLines == 0 {
+					style.KeepWithNextLines = pdfSingleKeepLine
+				}
 			}
 		case "hyphens", "-webkit-hyphens":
 			if hyphenation, ok := pdfCSSHyphenation(value); ok {
@@ -512,6 +527,12 @@ func pdfCSSPositiveInt(value css.Value) (int, bool) {
 		return 0, false
 	}
 	return int(value.Value), true
+}
+
+func pdfClearPageBreakAfterAvoidKeep(style *pdfBlockResolvedStyle) {
+	if style.PageBreakAfterMode == pdfPageBreakAvoid && style.KeepWithNextLines <= pdfSingleKeepLine {
+		style.KeepWithNextLines = 0
+	}
 }
 
 func pdfCSSForcedPageBreakKeyword(value css.Value) bool {

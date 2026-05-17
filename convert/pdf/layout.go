@@ -160,7 +160,7 @@ func layoutPDFPages(doc skeletonDocument, _ *builtinFontFace) ([]pdfPage, map[pd
 		if style.Hidden {
 			continue
 		}
-		if style.PageBreakBefore && pageHasText {
+		if pdfStyleForcesPageBreakBefore(style) && pageHasText {
 			newTextPage()
 		}
 
@@ -188,8 +188,16 @@ func layoutPDFPages(doc skeletonDocument, _ *builtinFontFace) ([]pdfPage, map[pd
 				continue
 			}
 			needed := style.SpaceBefore + style.PaddingTop + height + style.PaddingBottom + style.SpaceAfter
-			if pageHasText && y-needed < bottom {
-				newTextPage()
+			if pageHasText {
+				keepWithNext, err := nextBlockKeepHeight(doc, blockStyles, blockIndex+1, contentWidth, rootlessContentWidth, top-bottom, pdfKeepWithNextLines(doc.Blocks, blockStyles, blockIndex))
+				if err != nil {
+					return nil, nil, err
+				}
+				if keepWithNext > 0 && y-needed-keepWithNext < bottom {
+					newTextPage()
+				} else if y-needed < bottom {
+					newTextPage()
+				}
 			}
 			y -= style.SpaceBefore
 			y -= style.PaddingTop
@@ -228,7 +236,7 @@ func layoutPDFPages(doc skeletonDocument, _ *builtinFontFace) ([]pdfPage, map[pd
 			backgroundBottom := y - style.PaddingBottom
 			addBlockDecoration(page, style, backgroundX, backgroundTop, backgroundWidth, backgroundBottom)
 			y -= style.PaddingBottom + style.SpaceAfter
-			if style.PageBreakAfter && pageHasText {
+			if pdfStyleForcesPageBreakAfter(style) && pageHasText {
 				newTextPage()
 			}
 			continue
@@ -263,8 +271,8 @@ func layoutPDFPages(doc skeletonDocument, _ *builtinFontFace) ([]pdfPage, map[pd
 		if style.KeepTogether && pageHasText && y-needed < bottom {
 			newTextPage()
 		}
-		if style.KeepWithNextLines > 0 && pageHasText {
-			keepWithNext, err := nextBlockKeepHeight(doc.Blocks[blockIndex+1:], doc.Hyphenator, doc.Fonts, styles, contentWidth, rootlessContentWidth, style.KeepWithNextLines)
+		if keepLines := pdfKeepWithNextLines(doc.Blocks, blockStyles, blockIndex); keepLines > 0 && pageHasText {
+			keepWithNext, err := nextBlockKeepHeight(doc, blockStyles, blockIndex+1, contentWidth, rootlessContentWidth, top-bottom, keepLines)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -346,7 +354,7 @@ func layoutPDFPages(doc skeletonDocument, _ *builtinFontFace) ([]pdfPage, map[pd
 		backgroundBottom := y - style.PaddingBottom
 		addBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, backgroundBottom)
 		y -= style.PaddingBottom + style.SpaceAfter
-		if style.PageBreakAfter && pageHasText {
+		if pdfStyleForcesPageBreakAfter(style) && pageHasText {
 			newTextPage()
 		}
 	}
@@ -526,36 +534,53 @@ func pdfPageContentMarginsWithOptions(doc skeletonDocument, styles *pdfStyleReso
 	return left, right, top, bottom
 }
 
-func nextBlockKeepHeight(blocks []pdfTextBlock, hyphenator paragraphHyphenator, fonts *pdfFontRegistry, styles *pdfStyleResolver, contentWidth float64, rootlessContentWidth float64, minLines int) (float64, error) {
+func nextBlockKeepHeight(doc skeletonDocument, blockStyles []pdfBlockResolvedStyle, start int, contentWidth float64, rootlessContentWidth float64, contentHeight float64, minLines int) (float64, error) {
+	styles := doc.Styles
 	if styles == nil {
 		styles = newPDFStyleResolver(nil, nil)
 	}
-	for _, block := range blocks {
+	for i := start; i < len(doc.Blocks); i++ {
+		block := doc.Blocks[i]
 		switch block.Kind {
 		case pdfBlockPageBreak:
 			return 0, nil
 		case pdfBlockEmptyLine:
 			continue
 		}
-		style := styles.styleForBlock(block)
-		if style.Hidden || style.PageBreakBefore {
+		style := blockStyles[i]
+		if style.Hidden || pdfStyleForcesPageBreakBefore(style) {
 			return 0, nil
-		}
-		text := strings.TrimSpace(block.Text)
-		if text == "" && !inlineRunsRenderable(block.Runs) {
-			continue
-		}
-		style.Paragraph.Hyphenator = hyphenator
-		face, _, err := fontForStyle(fonts, style.Paragraph)
-		if err != nil {
-			return 0, err
 		}
 		availableWidth := contentWidth
 		if block.StripRootHorizontalMargins {
 			availableWidth = rootlessContentWidth
 		}
+		if block.Kind == pdfBlockImage {
+			img := doc.Images[block.ImageID]
+			if img == nil {
+				continue
+			}
+			maxImageHeight := contentHeight - style.SpaceBefore - style.PaddingTop - style.PaddingBottom - style.SpaceAfter
+			if maxImageHeight <= 0 {
+				return 0, nil
+			}
+			_, height, ok := fitPDFBlockImageSize(img, blockContentWidth(availableWidth, style), maxImageHeight, isVignetteBlock(block) || isHeadingImageBlock(block))
+			if !ok {
+				return 0, nil
+			}
+			return style.SpaceBefore + style.PaddingTop + height + style.PaddingBottom, nil
+		}
+		text := strings.TrimSpace(block.Text)
+		if text == "" && !inlineRunsRenderable(block.Runs) {
+			continue
+		}
+		style.Paragraph.Hyphenator = doc.Hyphenator
+		face, _, err := fontForStyle(doc.Fonts, style.Paragraph)
+		if err != nil {
+			return 0, err
+		}
 		runs := inlineRunsWithContext(block.Runs, inlineRunContextClassesForBlock(block))
-		lines, err := layoutInlineParagraph(skeletonDocument{Images: nil}, fonts, styles, face, block.Text, runs, style.Paragraph, blockContentWidth(availableWidth, style))
+		lines, err := layoutInlineParagraph(doc, doc.Fonts, styles, face, block.Text, runs, style.Paragraph, blockContentWidth(availableWidth, style))
 		if err != nil {
 			return 0, err
 		}
@@ -565,6 +590,39 @@ func nextBlockKeepHeight(blocks []pdfTextBlock, hyphenator paragraphHyphenator, 
 		return style.SpaceBefore + style.PaddingTop + float64(min(minLines, len(lines)))*style.Paragraph.LineHeight + style.PaddingBottom, nil
 	}
 	return 0, nil
+}
+
+func pdfKeepWithNextLines(blocks []pdfTextBlock, styles []pdfBlockResolvedStyle, index int) int {
+	lines := styles[index].KeepWithNextLines
+	if styles[index].PageBreakAfterMode == pdfPageBreakAvoid {
+		lines = max(lines, pdfSingleKeepLine)
+	}
+	next := pdfNextKeepBlockIndex(blocks, styles, index+1)
+	if next >= 0 && styles[next].PageBreakBeforeMode == pdfPageBreakAvoid {
+		lines = max(lines, pdfSingleKeepLine)
+	}
+	return lines
+}
+
+func pdfNextKeepBlockIndex(blocks []pdfTextBlock, styles []pdfBlockResolvedStyle, start int) int {
+	for i := start; i < len(blocks); i++ {
+		if blocks[i].Kind == pdfBlockPageBreak {
+			return -1
+		}
+		if styles[i].Hidden || blocks[i].Kind == pdfBlockEmptyLine {
+			continue
+		}
+		return i
+	}
+	return -1
+}
+
+func pdfStyleForcesPageBreakBefore(style pdfBlockResolvedStyle) bool {
+	return style.PageBreakBefore || style.PageBreakBeforeMode == pdfPageBreakAlways
+}
+
+func pdfStyleForcesPageBreakAfter(style pdfBlockResolvedStyle) bool {
+	return style.PageBreakAfter || style.PageBreakAfterMode == pdfPageBreakAlways
 }
 
 func countFittingLines(y float64, bottom float64, fontSize float64, lineHeight float64) int {

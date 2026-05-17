@@ -37,11 +37,17 @@ func TestPDFCollapsedBlockStylesKeepsSectionH2PageBreakOnlyAtWrapperStart(t *tes
 		{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses("image-vignette", "vignette", pdfStyleVignetteSectionBot, pdfStyleSectionTitle, pdfStyleSectionTitleH2), ImageID: "bottom"},
 	})
 
-	if !styles[0].PageBreakBefore {
-		t.Fatalf("first section-title-h2 child page-break-before = false, want wrapper page break")
+	if !styles[0].PageBreakBefore || styles[0].PageBreakBeforeMode != pdfPageBreakAlways {
+		t.Fatalf("first section-title-h2 child page-break-before = %t/%v, want wrapper page break", styles[0].PageBreakBefore, styles[0].PageBreakBeforeMode)
 	}
 	if styles[1].PageBreakBefore || styles[2].PageBreakBefore {
 		t.Fatalf("inner section-title-h2 page breaks = %t/%t, want false/false", styles[1].PageBreakBefore, styles[2].PageBreakBefore)
+	}
+	if styles[0].PageBreakAfterMode == pdfPageBreakAvoid || styles[1].PageBreakAfterMode == pdfPageBreakAvoid || styles[0].KeepWithNextLines != 0 {
+		t.Fatalf("inner section-title page-break-after avoid survived on top/heading children: %v/%v keep:%d", styles[0].PageBreakAfterMode, styles[1].PageBreakAfterMode, styles[0].KeepWithNextLines)
+	}
+	if styles[2].PageBreakAfterMode != pdfPageBreakAvoid {
+		t.Fatalf("last section-title child page-break-after mode = %v, want avoid at wrapper edge", styles[2].PageBreakAfterMode)
 	}
 }
 

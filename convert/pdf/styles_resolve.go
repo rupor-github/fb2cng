@@ -158,12 +158,14 @@ func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfB
 	if override.KeepWithNextLines != fallback.KeepWithNextLines {
 		base.KeepWithNextLines = override.KeepWithNextLines
 	}
-	if override.HasPageBreakBefore || override.PageBreakBefore != fallback.PageBreakBefore {
+	if override.HasPageBreakBefore || override.PageBreakBefore != fallback.PageBreakBefore || override.PageBreakBeforeMode != fallback.PageBreakBeforeMode {
 		base.PageBreakBefore = override.PageBreakBefore
+		base.PageBreakBeforeMode = override.PageBreakBeforeMode
 		base.HasPageBreakBefore = override.HasPageBreakBefore
 	}
-	if override.HasPageBreakAfter || override.PageBreakAfter != fallback.PageBreakAfter {
+	if override.HasPageBreakAfter || override.PageBreakAfter != fallback.PageBreakAfter || override.PageBreakAfterMode != fallback.PageBreakAfterMode {
 		base.PageBreakAfter = override.PageBreakAfter
+		base.PageBreakAfterMode = override.PageBreakAfterMode
 		base.HasPageBreakAfter = override.HasPageBreakAfter
 	}
 	if override.HasHidden || override.Hidden != fallback.Hidden {
@@ -390,12 +392,14 @@ func mergePDFContextClassStyleOverrides(base, override, fallback pdfBlockResolve
 	if override.KeepWithNextLines != fallback.KeepWithNextLines {
 		base.KeepWithNextLines = override.KeepWithNextLines
 	}
-	if override.HasPageBreakBefore || override.PageBreakBefore != fallback.PageBreakBefore {
+	if override.HasPageBreakBefore || override.PageBreakBefore != fallback.PageBreakBefore || override.PageBreakBeforeMode != fallback.PageBreakBeforeMode {
 		base.PageBreakBefore = override.PageBreakBefore
+		base.PageBreakBeforeMode = override.PageBreakBeforeMode
 		base.HasPageBreakBefore = override.HasPageBreakBefore
 	}
-	if override.HasPageBreakAfter || override.PageBreakAfter != fallback.PageBreakAfter {
+	if override.HasPageBreakAfter || override.PageBreakAfter != fallback.PageBreakAfter || override.PageBreakAfterMode != fallback.PageBreakAfterMode {
 		base.PageBreakAfter = override.PageBreakAfter
+		base.PageBreakAfterMode = override.PageBreakAfterMode
 		base.HasPageBreakAfter = override.HasPageBreakAfter
 	}
 	if override.HasHidden || override.Hidden != fallback.Hidden {

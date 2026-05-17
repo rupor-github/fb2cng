@@ -86,10 +86,15 @@ func (r *pdfStyleResolver) adjustContainerMargins(blocks []pdfTextBlock, resolve
 		if pdfAdjacentBlockHasContainerClass(blocks, resolved, i, -1, class) {
 			resolved[i].SpaceBefore = base.SpaceBefore
 			resolved[i].PageBreakBefore = base.PageBreakBefore
+			resolved[i].PageBreakBeforeMode = base.PageBreakBeforeMode
+			resolved[i].HasPageBreakBefore = base.HasPageBreakBefore
 		}
 		if pdfAdjacentBlockHasContainerClass(blocks, resolved, i, 1, class) {
 			resolved[i].SpaceAfter = base.SpaceAfter
+			resolved[i].KeepWithNextLines = base.KeepWithNextLines
 			resolved[i].PageBreakAfter = base.PageBreakAfter
+			resolved[i].PageBreakAfterMode = base.PageBreakAfterMode
+			resolved[i].HasPageBreakAfter = base.HasPageBreakAfter
 		}
 	}
 }

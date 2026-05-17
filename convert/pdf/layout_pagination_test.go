@@ -3,6 +3,8 @@ package pdf
 import (
 	"strings"
 	"testing"
+
+	"fbc/fb2"
 )
 
 func TestLayoutPDFPagesKeepsHeadingWithNextParagraph(t *testing.T) {
@@ -117,6 +119,131 @@ func TestLayoutPDFPagesHonorsCSSPageBreakAndHiddenStyles(t *testing.T) {
 	}
 	if got := pageText(pages[2]); !strings.Contains(got, "fourth paragraph") {
 		t.Fatalf("third body page text = %q, want fourth paragraph", got)
+	}
+}
+
+func TestLayoutPDFPagesHonorsPageBreakBeforeAvoidFromDefaultCSS(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	resolver := newPDFStyleResolverWithDefaultCSS(t, `
+		p { margin: 0; }
+		.text-author { margin: 0; }
+	`)
+	contentWidth := 220.0 - 48.0
+	style := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph}).Paragraph
+	filler := textWithParagraphLineCount(t, face, style, contentWidth, 2, "filler")
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  220,
+		PageHeight: 100,
+		Title:      "Title",
+		Author:     "Author",
+		Styles:     resolver,
+		Blocks: []pdfTextBlock{
+			{Kind: pdfBlockParagraph, Text: filler},
+			{Kind: pdfBlockParagraph, Text: "kept paragraph"},
+			{Kind: pdfBlockParagraph, Text: "Author", StyleClasses: pdfStyleTextAuthor},
+		},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 {
+		t.Fatalf("layoutPDFPages() produced %d pages, want 2", len(pages))
+	}
+	if got := pageText(pages[0]); strings.Contains(got, "kept paragraph") || strings.Contains(got, "Author") {
+		t.Fatalf("page-break-before:avoid did not move previous paragraph: %q", got)
+	}
+	if got := pageText(pages[1]); !strings.Contains(got, "kept paragraph") || !strings.Contains(got, "Author") {
+		t.Fatalf("second page text = %q, want kept paragraph with author", got)
+	}
+}
+
+func TestLayoutPDFPagesHonorsPageBreakBeforeAvoidForDefaultVignettes(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	resolver := newPDFStyleResolverWithDefaultCSS(t, `
+		p { margin: 0; }
+		.vignette-section-end { margin: 0; }
+	`)
+	contentWidth := 220.0 - 48.0
+	style := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph}).Paragraph
+	filler := textWithParagraphLineCount(t, face, style, contentWidth, 6, "filler")
+	img := &fb2.BookImage{}
+	img.Dim.Width = 100
+	img.Dim.Height = 20
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  220,
+		PageHeight: 155,
+		Title:      "Title",
+		Author:     "Author",
+		Styles:     resolver,
+		Images:     fb2.BookImages{"vignette": img},
+		Blocks: []pdfTextBlock{
+			{Kind: pdfBlockParagraph, Text: filler},
+			{Kind: pdfBlockParagraph, Text: "before vignette"},
+			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses(pdfStyleImageVignette, pdfStyleVignette, pdfStyleVignetteSectionEnd), ImageID: "vignette"},
+		},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 {
+		t.Fatalf("layoutPDFPages() produced %d pages, want 2", len(pages))
+	}
+	if got := pageText(pages[0]); strings.Contains(got, "before vignette") || len(pages[0].Images) != 0 {
+		t.Fatalf("page-break-before:avoid vignette did not move previous paragraph: images=%d text=%q", len(pages[0].Images), got)
+	}
+	if got := pageText(pages[1]); !strings.Contains(got, "before vignette") || len(pages[1].Images) != 1 {
+		t.Fatalf("second page images/text = %d/%q, want paragraph with vignette", len(pages[1].Images), got)
+	}
+}
+
+func TestLayoutPDFPagesHonorsPageBreakAfterAvoidForImages(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	resolver := newPDFStyleResolverWithCSS(t, `
+		p { margin: 0; }
+		.keep-image { page-break-after: avoid; margin: 0; }
+	`)
+	contentWidth := 220.0 - 48.0
+	style := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph}).Paragraph
+	filler := textWithParagraphLineCount(t, face, style, contentWidth, 6, "filler")
+	img := &fb2.BookImage{}
+	img.Dim.Width = 100
+	img.Dim.Height = 30
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  220,
+		PageHeight: 155,
+		Title:      "Title",
+		Author:     "Author",
+		Styles:     resolver,
+		Images:     fb2.BookImages{"img": img},
+		Blocks: []pdfTextBlock{
+			{Kind: pdfBlockParagraph, Text: filler},
+			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: "keep-image", ImageID: "img"},
+			{Kind: pdfBlockParagraph, Text: "after image"},
+		},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 {
+		t.Fatalf("layoutPDFPages() produced %d pages, want 2", len(pages))
+	}
+	if len(pages[0].Images) != 0 || strings.Contains(pageText(pages[0]), "after image") {
+		t.Fatalf("image was stranded before page-break-after:avoid target: images=%d text=%q", len(pages[0].Images), pageText(pages[0]))
+	}
+	if len(pages[1].Images) != 1 || !strings.Contains(pageText(pages[1]), "after image") {
+		t.Fatalf("second page images/text = %d/%q, want image with following text", len(pages[1].Images), pageText(pages[1]))
 	}
 }
 

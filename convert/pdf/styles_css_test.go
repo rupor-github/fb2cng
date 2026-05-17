@@ -554,14 +554,20 @@ func TestPDFStyleResolverPageBreakDisplayAndAbsoluteUnits(t *testing.T) {
 		Type: "text/css",
 		Data: `
 			.forced { page-break-before: always; break-after: page; display: none; }
+			.avoid { page-break-before: avoid; page-break-after: avoid; }
 			.metric { margin-left: 25.4mm; margin-right: 2.54cm; margin-top: 1in; }
 		`,
 	}}}
 
 	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
 	forced := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "forced"})
-	if !forced.PageBreakBefore || !forced.PageBreakAfter || !forced.Hidden {
-		t.Fatalf("forced style page/visibility flags = before:%t after:%t hidden:%t, want all true", forced.PageBreakBefore, forced.PageBreakAfter, forced.Hidden)
+	if !forced.PageBreakBefore || forced.PageBreakBeforeMode != pdfPageBreakAlways || !forced.PageBreakAfter || forced.PageBreakAfterMode != pdfPageBreakAlways || !forced.Hidden {
+		t.Fatalf("forced style page/visibility flags = before:%t/%v after:%t/%v hidden:%t, want forced breaks and hidden", forced.PageBreakBefore, forced.PageBreakBeforeMode, forced.PageBreakAfter, forced.PageBreakAfterMode, forced.Hidden)
+	}
+
+	avoid := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "avoid"})
+	if avoid.PageBreakBefore || avoid.PageBreakBeforeMode != pdfPageBreakAvoid || avoid.PageBreakAfter || avoid.PageBreakAfterMode != pdfPageBreakAvoid || avoid.KeepWithNextLines != pdfSingleKeepLine {
+		t.Fatalf("avoid style page-breaks = before:%t/%v after:%t/%v keep:%d, want avoid/avoid keep-next", avoid.PageBreakBefore, avoid.PageBreakBeforeMode, avoid.PageBreakAfter, avoid.PageBreakAfterMode, avoid.KeepWithNextLines)
 	}
 
 	metric := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "metric"})
@@ -607,9 +613,20 @@ func TestPDFStyleResolverReplacementStylesheetDoesNotKeepDefaultCSSClasses(t *te
 	}
 }
 
+func TestPDFStyleResolverDefaultCSSPageBreakAvoidControls(t *testing.T) {
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
+	for _, class := range []string{pdfStyleTextAuthor, pdfStyleDate, pdfStyleVignetteChapterEnd, pdfStyleVignetteSectionEnd} {
+		style := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: class})
+		if style.PageBreakBefore || style.PageBreakBeforeMode != pdfPageBreakAvoid {
+			t.Fatalf("%s page-break-before = %t/%v, want avoid", class, style.PageBreakBefore, style.PageBreakBeforeMode)
+		}
+	}
+}
+
 func TestPDFStyleResolverExplicitCSSResetsOverrideEarlierRules(t *testing.T) {
 	resolver := newPDFStyleResolverWithDefaultCSS(t, `
 		.section-title-h2 { page-break-before: auto; }
+		.section-subtitle { page-break-after: auto; }
 		.hidden { display: none; }
 		.hidden { display: block; }
 		.italic { font-style: italic; }
@@ -620,8 +637,13 @@ func TestPDFStyleResolverExplicitCSSResetsOverrideEarlierRules(t *testing.T) {
 	`)
 
 	sectionH2 := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, StyleClasses: pdfStyleSectionTitleH2})
-	if sectionH2.PageBreakBefore {
-		t.Fatalf("section-title-h2 page-break-before survived explicit auto reset")
+	if sectionH2.PageBreakBefore || sectionH2.PageBreakBeforeMode != pdfPageBreakAuto {
+		t.Fatalf("section-title-h2 page-break-before survived explicit auto reset: %t/%v", sectionH2.PageBreakBefore, sectionH2.PageBreakBeforeMode)
+	}
+
+	sectionSubtitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleSubtitle})
+	if sectionSubtitle.PageBreakAfter || sectionSubtitle.PageBreakAfterMode != pdfPageBreakAuto || sectionSubtitle.KeepWithNextLines != 0 {
+		t.Fatalf("section-subtitle page-break-after avoid survived explicit auto reset: %t/%v keep:%d", sectionSubtitle.PageBreakAfter, sectionSubtitle.PageBreakAfterMode, sectionSubtitle.KeepWithNextLines)
 	}
 
 	hidden := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "hidden"})
