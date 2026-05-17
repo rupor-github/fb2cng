@@ -179,6 +179,54 @@ func TestPDFStyleResolverImplicitLineHeightInjectedAfterRootFontSize(t *testing.
 	}
 }
 
+func TestPDFStyleResolverRelativeFontSizeAndSpacingUseInheritedFont(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `
+			body { font-size: 80%; line-height: 170%; }
+			h1 { font-size: 140%; }
+			.chapter-title { margin: 2em 0 1em 0; }
+			.section-subtitle { margin: 1em 0; }
+			p { font-size: 120%; }
+			.note { margin-left: 2em; padding-left: 0.5em; }
+		`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	rootFont := pdfBaseFontSize * 0.8
+
+	heading := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, Depth: 1})
+	wantHeadingFont := rootFont * 1.4
+	if math.Abs(heading.Paragraph.FontSize-wantHeadingFont) > 0.001 {
+		t.Fatalf("heading font size = %v, want inherited 140%% %v", heading.Paragraph.FontSize, wantHeadingFont)
+	}
+	if math.Abs(heading.Paragraph.LineHeight-wantHeadingFont*pdfAdjustedLineHeightFactor) > 0.001 {
+		t.Fatalf("heading line height = %v, want adjusted ratio from inherited font", heading.Paragraph.LineHeight)
+	}
+
+	chapterHeading := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, Depth: 1, StyleClasses: pdfStyleChapterTitle, ContextClasses: pdfStyleChapterTitle})
+	if math.Abs(chapterHeading.SpaceBefore-rootFont*2) > 0.001 || math.Abs(chapterHeading.SpaceAfter-rootFont) > 0.001 {
+		t.Fatalf("chapter title wrapper margins = %v/%v, want %v/%v", chapterHeading.SpaceBefore, chapterHeading.SpaceAfter, rootFont*2, rootFont)
+	}
+
+	subtitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockSubtitle, StyleName: pdfStyleSubtitle})
+	if math.Abs(subtitle.Paragraph.FontSize-rootFont) > 0.001 || math.Abs(subtitle.SpaceBefore-rootFont) > 0.001 || math.Abs(subtitle.SpaceAfter-rootFont) > 0.001 {
+		t.Fatalf("subtitle font/margins = %v %v/%v, want root %v", subtitle.Paragraph.FontSize, subtitle.SpaceBefore, subtitle.SpaceAfter, rootFont)
+	}
+	if math.Abs(subtitle.Paragraph.LineHeight-rootFont*1.7) > 0.001 {
+		t.Fatalf("subtitle line height = %v, want inherited body 170%% %v", subtitle.Paragraph.LineHeight, rootFont*1.7)
+	}
+
+	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "note"})
+	wantParagraphFont := rootFont * 1.2
+	if math.Abs(paragraph.Paragraph.FontSize-wantParagraphFont) > 0.001 {
+		t.Fatalf("paragraph font size = %v, want inherited 120%% %v", paragraph.Paragraph.FontSize, wantParagraphFont)
+	}
+	if math.Abs(paragraph.MarginLeft-wantParagraphFont*2) > 0.001 || math.Abs(paragraph.PaddingLeft-wantParagraphFont*0.5) > 0.001 {
+		t.Fatalf("paragraph relative spacing = margin %v padding %v, want %v/%v", paragraph.MarginLeft, paragraph.PaddingLeft, wantParagraphFont*2, wantParagraphFont*0.5)
+	}
+}
+
 func TestPDFStyleResolverSupportsNormalLineHeight(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",

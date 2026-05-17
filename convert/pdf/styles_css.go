@@ -70,17 +70,20 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 	if value, ok := props["font-size"]; ok {
 		if points, ok := pdfCSSFontSizePoints(value, style.Paragraph.FontSize); ok {
 			style.Paragraph.FontSize = points
+			style.Paragraph.FontSizeSpec = pdfCSSRelativeLengthSpec(value)
 		}
 	}
 	if value, ok := props["line-height"]; ok {
 		if points, ok := pdfCSSLineHeightPoints(value, style.Paragraph.FontSize); ok {
 			style.Paragraph.LineHeight = points
+			style.Paragraph.LineHeightSpec = pdfCSSLineHeightSpec(value)
 			style.Paragraph.LineHeightExplicit = true
 		}
 	}
 	if value, ok := props["letter-spacing"]; ok {
 		if points, ok := pdfCSSLetterSpacingPoints(value, style.Paragraph.FontSize); ok {
 			style.Paragraph.LetterSpacing = points
+			style.Paragraph.LetterSpacingSpec = pdfCSSRelativeLengthSpec(value)
 		}
 	}
 	if value, ok := props["vertical-align"]; ok {
@@ -122,6 +125,7 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 		case "text-indent":
 			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
 				style.Paragraph.FirstLineIndent = points
+				style.Paragraph.FirstLineIndentSpec = pdfCSSRelativeLengthSpec(value)
 				style.Paragraph.HasFirstLineIndent = true
 			}
 		case "text-align":
@@ -134,38 +138,46 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 		case "margin-top":
 			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
 				style.SpaceBefore = points
+				style.SpaceBeforeSpec = pdfCSSRelativeLengthSpec(value)
 				style.HasSpaceBefore = true
 			}
 		case "margin-bottom":
 			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
 				style.SpaceAfter = points
+				style.SpaceAfterSpec = pdfCSSRelativeLengthSpec(value)
 				style.HasSpaceAfter = true
 			}
 		case "margin-left":
 			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
 				style.MarginLeft = points
+				style.MarginLeftSpec = pdfCSSRelativeLengthSpec(value)
 			}
 		case "margin-right":
 			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
 				style.MarginRight = points
+				style.MarginRightSpec = pdfCSSRelativeLengthSpec(value)
 			}
 		case "padding":
 			applyPDFPaddingShorthand(style, value)
 		case "padding-top":
 			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
 				style.PaddingTop = points
+				style.PaddingTopSpec = pdfCSSRelativeLengthSpec(value)
 			}
 		case "padding-right":
 			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
 				style.PaddingRight = points
+				style.PaddingRightSpec = pdfCSSRelativeLengthSpec(value)
 			}
 		case "padding-bottom":
 			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
 				style.PaddingBottom = points
+				style.PaddingBottomSpec = pdfCSSRelativeLengthSpec(value)
 			}
 		case "padding-left":
 			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
 				style.PaddingLeft = points
+				style.PaddingLeftSpec = pdfCSSRelativeLengthSpec(value)
 			}
 		case "width":
 			if cssKeyword(value) == "auto" {
@@ -344,54 +356,65 @@ func applyPDFTextDecoration(style *pdfBlockResolvedStyle, value css.Value) {
 }
 
 func applyPDFMarginShorthand(style *pdfBlockResolvedStyle, value css.Value) {
-	top, right, bottom, left, ok := pdfCSSBoxShorthand(value, style.Paragraph.FontSize)
+	top, right, bottom, left, topSpec, rightSpec, bottomSpec, leftSpec, ok := pdfCSSBoxShorthand(value, style.Paragraph.FontSize)
 	if !ok {
 		return
 	}
 	style.SpaceBefore = top
+	style.SpaceBeforeSpec = topSpec
 	style.HasSpaceBefore = true
 	style.SpaceAfter = bottom
+	style.SpaceAfterSpec = bottomSpec
 	style.HasSpaceAfter = true
 	style.MarginLeft = left
+	style.MarginLeftSpec = leftSpec
 	style.MarginRight = right
+	style.MarginRightSpec = rightSpec
 }
 
 func applyPDFPaddingShorthand(style *pdfBlockResolvedStyle, value css.Value) {
-	top, right, bottom, left, ok := pdfCSSBoxShorthand(value, style.Paragraph.FontSize)
+	top, right, bottom, left, topSpec, rightSpec, bottomSpec, leftSpec, ok := pdfCSSBoxShorthand(value, style.Paragraph.FontSize)
 	if !ok {
 		return
 	}
 	style.PaddingTop = top
+	style.PaddingTopSpec = topSpec
 	style.PaddingRight = right
+	style.PaddingRightSpec = rightSpec
 	style.PaddingBottom = bottom
+	style.PaddingBottomSpec = bottomSpec
 	style.PaddingLeft = left
+	style.PaddingLeftSpec = leftSpec
 }
 
-func pdfCSSBoxShorthand(value css.Value, fontSize float64) (float64, float64, float64, float64, bool) {
+func pdfCSSBoxShorthand(value css.Value, fontSize float64) (float64, float64, float64, float64, pdfCSSLengthSpec, pdfCSSLengthSpec, pdfCSSLengthSpec, pdfCSSLengthSpec, bool) {
 	tokens := strings.Fields(value.Raw)
 	if len(tokens) == 0 && value.Raw == "" {
 		tokens = []string{formatCSSValue(value)}
 	}
 	if len(tokens) == 0 {
-		return 0, 0, 0, 0, false
+		return 0, 0, 0, 0, pdfCSSLengthSpec{}, pdfCSSLengthSpec{}, pdfCSSLengthSpec{}, pdfCSSLengthSpec{}, false
 	}
 	values := make([]float64, 0, len(tokens))
+	specs := make([]pdfCSSLengthSpec, 0, len(tokens))
 	for _, token := range tokens {
-		points, ok := pdfCSSLengthPoints(parsePDFCSSValueToken(token), fontSize)
+		value := parsePDFCSSValueToken(token)
+		points, ok := pdfCSSLengthPoints(value, fontSize)
 		if !ok {
-			return 0, 0, 0, 0, false
+			return 0, 0, 0, 0, pdfCSSLengthSpec{}, pdfCSSLengthSpec{}, pdfCSSLengthSpec{}, pdfCSSLengthSpec{}, false
 		}
 		values = append(values, points)
+		specs = append(specs, pdfCSSRelativeLengthSpec(value))
 	}
 	switch len(values) {
 	case 1:
-		return values[0], values[0], values[0], values[0], true
+		return values[0], values[0], values[0], values[0], specs[0], specs[0], specs[0], specs[0], true
 	case 2:
-		return values[0], values[1], values[0], values[1], true
+		return values[0], values[1], values[0], values[1], specs[0], specs[1], specs[0], specs[1], true
 	case 3:
-		return values[0], values[1], values[2], values[1], true
+		return values[0], values[1], values[2], values[1], specs[0], specs[1], specs[2], specs[1], true
 	default:
-		return values[0], values[1], values[2], values[3], true
+		return values[0], values[1], values[2], values[3], specs[0], specs[1], specs[2], specs[3], true
 	}
 }
 
@@ -475,6 +498,31 @@ func pdfCSSBlockLength(value css.Value, fontSize float64) (pdfBlockLength, bool)
 		return pdfBlockLength{}, false
 	}
 	return pdfBlockLength{Value: points}, true
+}
+
+func pdfCSSRelativeLengthSpec(value css.Value) pdfCSSLengthSpec {
+	if !value.IsNumeric() {
+		return pdfCSSLengthSpec{}
+	}
+	switch strings.ToLower(value.Unit) {
+	case "em", "rem", "%":
+		return pdfCSSLengthSpec{Value: value.Value, Unit: strings.ToLower(value.Unit), Set: true}
+	default:
+		return pdfCSSLengthSpec{}
+	}
+}
+
+func pdfCSSLineHeightSpec(value css.Value) pdfCSSLengthSpec {
+	if keyword := cssKeyword(value); keyword == "normal" {
+		return pdfCSSLengthSpec{Keyword: keyword, Set: true}
+	}
+	if !value.IsNumeric() {
+		return pdfCSSLengthSpec{}
+	}
+	if value.Unit == "" {
+		return pdfCSSLengthSpec{Value: value.Value, Unit: "number", Set: true}
+	}
+	return pdfCSSRelativeLengthSpec(value)
 }
 
 func pdfCSSLengthPoints(value css.Value, fontSize float64) (float64, bool) {

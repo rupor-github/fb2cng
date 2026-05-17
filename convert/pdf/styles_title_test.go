@@ -109,7 +109,7 @@ func TestPDFStyleResolverAppliesFootnoteTitleContextDescendantSelectors(t *testi
 	if title.Paragraph.FirstLineIndent != pdfBaseFontSize*0.5 {
 		t.Fatalf("footnote title indent = %v, want %v from .footnote-title p", title.Paragraph.FirstLineIndent, pdfBaseFontSize*0.5)
 	}
-	if title.Paragraph.LetterSpacing != pdfBaseFontSize*0.1 {
+	if math.Abs(title.Paragraph.LetterSpacing-pdfBaseFontSize*0.1) > 0.001 {
 		t.Fatalf("footnote title letter-spacing = %v, want %v from .footnote-title p", title.Paragraph.LetterSpacing, pdfBaseFontSize*0.1)
 	}
 }
@@ -169,8 +169,8 @@ func TestPDFStyleResolverMapsHeadingAndTOCStyles(t *testing.T) {
 	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
 
 	heading := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, Depth: 1})
-	if heading.Paragraph.FontSize != 15.75 {
-		t.Fatalf("heading font size = %v, want 15.75", heading.Paragraph.FontSize)
+	if math.Abs(heading.Paragraph.FontSize-pdfBaseFontSize*1.5) > 0.001 {
+		t.Fatalf("heading font size = %v, want 150%% base %v", heading.Paragraph.FontSize, pdfBaseFontSize*1.5)
 	}
 
 	tocEntry := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockTOCEntry, Depth: 3})

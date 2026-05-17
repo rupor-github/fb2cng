@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"math"
 	"strings"
 	"testing"
 
@@ -277,8 +278,8 @@ func TestLayoutPDFPagesAppliesRootPageMargins(t *testing.T) {
 		t.Fatalf("layoutPDFPages() pages = %#v, want one body line", pages)
 	}
 	line := pages[0].Lines[0]
-	if line.X != 18 || line.Y != 140.5 {
-		t.Fatalf("line position = %v/%v, want 18/140.5", line.X, line.Y)
+	if line.X != 18 || math.Abs(line.Y-142.6) > 0.001 {
+		t.Fatalf("line position = %v/%v, want 18/142.6", line.X, line.Y)
 	}
 }
 
@@ -313,8 +314,8 @@ func TestLayoutPDFPagesAppliesFirstBlockTopMargin(t *testing.T) {
 		t.Fatalf("layoutPDFPages() pages = %#v, want one body line", pages)
 	}
 	line := pages[0].Lines[0]
-	if line.X != 24 || line.Y != 138.5 {
-		t.Fatalf("line position = %v/%v, want 24/138.5", line.X, line.Y)
+	if line.X != 24 || math.Abs(line.Y-140.6) > 0.001 {
+		t.Fatalf("line position = %v/%v, want 24/140.6", line.X, line.Y)
 	}
 }
 
@@ -357,11 +358,11 @@ func TestLayoutPDFPagesAppliesPadding(t *testing.T) {
 	if line.X != 31 { // 24pt page margin + 7pt left padding.
 		t.Fatalf("line X = %v, want 31", line.X)
 	}
-	if line.Y != 140.5 { // 180pt page height - 24pt page margin - 5pt top padding - 10.5pt font size.
-		t.Fatalf("line Y = %v, want 140.5", line.Y)
+	if math.Abs(line.Y-142.6) > 0.001 { // 180pt page height - 24pt page margin - 5pt top padding - 8.4pt font size.
+		t.Fatalf("line Y = %v, want 142.6", line.Y)
 	}
 	background := pages[0].Backgrounds[0]
-	if background.X != 24 || background.Y != 127.9 || background.Width != 172 || background.Height < 28.099 || background.Height > 28.101 || background.Color.String() != "#0000ff" {
+	if background.X != 24 || math.Abs(background.Y-128.32) > 0.001 || background.Width != 172 || background.Height < 27.679 || background.Height > 27.681 || background.Color.String() != "#0000ff" {
 		t.Fatalf("background = %#v, want padded block background", background)
 	}
 	border := pages[0].Borders[0]

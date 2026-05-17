@@ -184,8 +184,12 @@ func (r *pdfStyleResolver) applyRule(rule css.Rule) {
 }
 
 func pdfStyleSeedWithoutExplicitFlags(style pdfBlockResolvedStyle) pdfBlockResolvedStyle {
+	style.Paragraph.FontSizeSpec = pdfCSSLengthSpec{}
 	style.Paragraph.HasBold = false
 	style.Paragraph.HasItalic = false
+	style.Paragraph.LineHeightSpec = pdfCSSLengthSpec{}
+	style.Paragraph.LetterSpacingSpec = pdfCSSLengthSpec{}
+	style.Paragraph.FirstLineIndentSpec = pdfCSSLengthSpec{}
 	style.Paragraph.HasFirstLineIndent = false
 	style.Paragraph.HasAlign = false
 	style.Paragraph.HasVerticalAlign = false
@@ -194,8 +198,16 @@ func pdfStyleSeedWithoutExplicitFlags(style pdfBlockResolvedStyle) pdfBlockResol
 	style.Paragraph.HasPreserveSpace = false
 	style.Paragraph.HasNoWrap = false
 	style.Paragraph.HasHyphenation = false
+	style.SpaceBeforeSpec = pdfCSSLengthSpec{}
 	style.HasSpaceBefore = false
+	style.SpaceAfterSpec = pdfCSSLengthSpec{}
 	style.HasSpaceAfter = false
+	style.MarginLeftSpec = pdfCSSLengthSpec{}
+	style.MarginRightSpec = pdfCSSLengthSpec{}
+	style.PaddingTopSpec = pdfCSSLengthSpec{}
+	style.PaddingRightSpec = pdfCSSLengthSpec{}
+	style.PaddingBottomSpec = pdfCSSLengthSpec{}
+	style.PaddingLeftSpec = pdfCSSLengthSpec{}
 	style.HasKeepTogether = false
 	style.HasPageBreakBefore = false
 	style.HasPageBreakAfter = false

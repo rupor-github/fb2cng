@@ -5,9 +5,10 @@ import "strings"
 func (r *pdfStyleResolver) styleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
 	name := pdfStyleNameForBlock(block)
 	defaultStyle := r.defaultStyle(name)
+	inheritedFontSize := r.inheritedFontSizeForBlock(block)
 	tagStyle := r.tagStyleForBlock(block)
 	style := r.applyRootInheritedParagraphDefaults(defaultStyle)
-	style = mergePDFStyleOverrides(style, r.namedStyle(name), defaultStyle)
+	style = mergePDFStyleOverridesWithInheritedFont(style, r.namedStyle(name), defaultStyle, inheritedFontSize)
 	style = r.applyContextInheritedBlockDefaults(style, tagStyle, block)
 	classFallback := r.namedStyle(pdfStyleParagraph)
 	for _, class := range strings.Fields(block.StyleClasses) {
@@ -16,28 +17,28 @@ func (r *pdfStyleResolver) styleForBlock(block pdfTextBlock) pdfBlockResolvedSty
 			continue
 		}
 		if contextStyleClassShouldSkipInheritedAndHorizontalMargins(block, class) {
-			style = mergePDFContextClassStyleOverrides(style, classStyle, classFallback)
+			style = mergePDFContextClassStyleOverridesWithInheritedFont(style, classStyle, classFallback, inheritedFontSize)
 			continue
 		}
 		if pdfContainerStyleClass(class) {
-			style = mergePDFContainerClassStyleOverrides(style, classStyle, classFallback)
+			style = mergePDFContainerClassStyleOverridesWithInheritedFont(style, classStyle, classFallback, inheritedFontSize)
 			continue
 		}
-		style = mergePDFStyleOverrides(style, classStyle, classFallback)
+		style = mergePDFStyleOverridesWithInheritedFont(style, classStyle, classFallback, inheritedFontSize)
 	}
 	for _, selectorStyleName := range pdfElementClassStyleNames(block) {
 		selectorStyle, ok := r.styles[selectorStyleName]
 		if !ok {
 			continue
 		}
-		style = mergePDFStyleOverrides(style, selectorStyle, classFallback)
+		style = mergePDFStyleOverridesWithInheritedFont(style, selectorStyle, classFallback, inheritedFontSize)
 	}
 	for _, descStyleName := range r.contextDescendantStyleNames(block) {
 		descStyle, ok := r.styles[descStyleName]
 		if !ok {
 			continue
 		}
-		style = mergePDFStyleOverrides(style, descStyle, classFallback)
+		style = mergePDFStyleOverridesWithInheritedFont(style, descStyle, classFallback, inheritedFontSize)
 	}
 	if block.Kind == pdfBlockTOCEntry {
 		style.Paragraph.FirstLineIndent = max(float64(block.Depth-1)*pdfTOCNestedListIndent, 0)
@@ -57,6 +58,11 @@ func injectPDFImplicitLineHeight(style, fallback pdfBlockResolvedStyle) pdfBlock
 }
 
 func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfBlockResolvedStyle {
+	return mergePDFStyleOverridesWithInheritedFont(base, override, fallback, base.Paragraph.FontSize)
+}
+
+func mergePDFStyleOverridesWithInheritedFont(base, override, fallback pdfBlockResolvedStyle, inheritedFontSize float64) pdfBlockResolvedStyle {
+	relativeLengthFontSize := pdfRelativeLengthFontSize(base, override, fallback, inheritedFontSize)
 	if override.Paragraph.FontFamily != fallback.Paragraph.FontFamily {
 		base.Paragraph.FontFamily = override.Paragraph.FontFamily
 	}
@@ -68,15 +74,42 @@ func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfB
 		base.Paragraph.Italic = override.Paragraph.Italic
 		base.Paragraph.HasItalic = override.Paragraph.HasItalic
 	}
-	if override.Paragraph.FontSize != fallback.Paragraph.FontSize {
+	if override.Paragraph.FontSizeSpec.Set {
+		base.Paragraph.FontSize = pdfResolveCSSFontSizeSpec(override.Paragraph.FontSizeSpec, inheritedFontSize)
+		base.Paragraph.FontSizeSpec = override.Paragraph.FontSizeSpec
+	} else if override.Paragraph.FontSize != fallback.Paragraph.FontSize {
 		base.Paragraph.FontSize = override.Paragraph.FontSize
+		base.Paragraph.FontSizeSpec = pdfCSSLengthSpec{}
 	}
-	base.Paragraph = mergePDFLineHeightOverride(base.Paragraph, override.Paragraph, fallback.Paragraph)
-	if override.Paragraph.LetterSpacing != fallback.Paragraph.LetterSpacing {
+	lineHeightOverride := override.Paragraph
+	if override.Paragraph.FontSizeSpec.Set && !override.Paragraph.LineHeightExplicit {
+		if override.Paragraph.LineHeight != fallback.Paragraph.LineHeight && override.Paragraph.FontSize > 0 {
+			base.Paragraph.LineHeight = override.Paragraph.LineHeight * base.Paragraph.FontSize / override.Paragraph.FontSize
+			lineHeightOverride.LineHeight = fallback.Paragraph.LineHeight
+		} else {
+			lineHeightOverride.LineHeight = fallback.Paragraph.LineHeight
+		}
+	}
+	base.Paragraph = mergePDFLineHeightOverride(base.Paragraph, lineHeightOverride, fallback.Paragraph)
+	if override.Paragraph.LineHeightSpec.Set {
+		base.Paragraph.LineHeight = pdfResolveCSSLineHeightSpec(override.Paragraph.LineHeightSpec, base.Paragraph.FontSize)
+		base.Paragraph.LineHeightSpec = override.Paragraph.LineHeightSpec
+		base.Paragraph.LineHeightExplicit = true
+	}
+	if override.Paragraph.LetterSpacingSpec.Set {
+		base.Paragraph.LetterSpacing = pdfResolveCSSLengthSpec(override.Paragraph.LetterSpacingSpec, base.Paragraph.FontSize)
+		base.Paragraph.LetterSpacingSpec = override.Paragraph.LetterSpacingSpec
+	} else if override.Paragraph.LetterSpacing != fallback.Paragraph.LetterSpacing {
 		base.Paragraph.LetterSpacing = override.Paragraph.LetterSpacing
+		base.Paragraph.LetterSpacingSpec = pdfCSSLengthSpec{}
 	}
-	if override.Paragraph.HasFirstLineIndent || override.Paragraph.FirstLineIndent != fallback.Paragraph.FirstLineIndent {
+	if override.Paragraph.FirstLineIndentSpec.Set {
+		base.Paragraph.FirstLineIndent = pdfResolveCSSLengthSpec(override.Paragraph.FirstLineIndentSpec, base.Paragraph.FontSize)
+		base.Paragraph.FirstLineIndentSpec = override.Paragraph.FirstLineIndentSpec
+		base.Paragraph.HasFirstLineIndent = override.Paragraph.HasFirstLineIndent
+	} else if override.Paragraph.HasFirstLineIndent || override.Paragraph.FirstLineIndent != fallback.Paragraph.FirstLineIndent {
 		base.Paragraph.FirstLineIndent = override.Paragraph.FirstLineIndent
+		base.Paragraph.FirstLineIndentSpec = pdfCSSLengthSpec{}
 		base.Paragraph.HasFirstLineIndent = override.Paragraph.HasFirstLineIndent
 	}
 	if override.Paragraph.HasAlign || override.Paragraph.Align != fallback.Paragraph.Align {
@@ -110,29 +143,61 @@ func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfB
 		base.Paragraph.Hyphenation = override.Paragraph.Hyphenation
 		base.Paragraph.HasHyphenation = override.Paragraph.HasHyphenation
 	}
-	if override.HasSpaceBefore || override.SpaceBefore != fallback.SpaceBefore {
+	if override.SpaceBeforeSpec.Set {
+		base.SpaceBefore = pdfResolveCSSLengthSpec(override.SpaceBeforeSpec, relativeLengthFontSize)
+		base.SpaceBeforeSpec = override.SpaceBeforeSpec
+	} else if override.HasSpaceBefore || override.SpaceBefore != fallback.SpaceBefore {
 		base.SpaceBefore = override.SpaceBefore
+		base.SpaceBeforeSpec = pdfCSSLengthSpec{}
 	}
-	if override.HasSpaceAfter || override.SpaceAfter != fallback.SpaceAfter {
+	if override.SpaceAfterSpec.Set {
+		base.SpaceAfter = pdfResolveCSSLengthSpec(override.SpaceAfterSpec, relativeLengthFontSize)
+		base.SpaceAfterSpec = override.SpaceAfterSpec
+	} else if override.HasSpaceAfter || override.SpaceAfter != fallback.SpaceAfter {
 		base.SpaceAfter = override.SpaceAfter
+		base.SpaceAfterSpec = pdfCSSLengthSpec{}
 	}
-	if override.MarginLeft != fallback.MarginLeft {
+	if override.MarginLeftSpec.Set {
+		base.MarginLeft = pdfResolveCSSLengthSpec(override.MarginLeftSpec, relativeLengthFontSize)
+		base.MarginLeftSpec = override.MarginLeftSpec
+	} else if override.MarginLeft != fallback.MarginLeft {
 		base.MarginLeft = override.MarginLeft
+		base.MarginLeftSpec = pdfCSSLengthSpec{}
 	}
-	if override.MarginRight != fallback.MarginRight {
+	if override.MarginRightSpec.Set {
+		base.MarginRight = pdfResolveCSSLengthSpec(override.MarginRightSpec, relativeLengthFontSize)
+		base.MarginRightSpec = override.MarginRightSpec
+	} else if override.MarginRight != fallback.MarginRight {
 		base.MarginRight = override.MarginRight
+		base.MarginRightSpec = pdfCSSLengthSpec{}
 	}
-	if override.PaddingTop != fallback.PaddingTop {
+	if override.PaddingTopSpec.Set {
+		base.PaddingTop = pdfResolveCSSLengthSpec(override.PaddingTopSpec, relativeLengthFontSize)
+		base.PaddingTopSpec = override.PaddingTopSpec
+	} else if override.PaddingTop != fallback.PaddingTop {
 		base.PaddingTop = override.PaddingTop
+		base.PaddingTopSpec = pdfCSSLengthSpec{}
 	}
-	if override.PaddingRight != fallback.PaddingRight {
+	if override.PaddingRightSpec.Set {
+		base.PaddingRight = pdfResolveCSSLengthSpec(override.PaddingRightSpec, relativeLengthFontSize)
+		base.PaddingRightSpec = override.PaddingRightSpec
+	} else if override.PaddingRight != fallback.PaddingRight {
 		base.PaddingRight = override.PaddingRight
+		base.PaddingRightSpec = pdfCSSLengthSpec{}
 	}
-	if override.PaddingBottom != fallback.PaddingBottom {
+	if override.PaddingBottomSpec.Set {
+		base.PaddingBottom = pdfResolveCSSLengthSpec(override.PaddingBottomSpec, relativeLengthFontSize)
+		base.PaddingBottomSpec = override.PaddingBottomSpec
+	} else if override.PaddingBottom != fallback.PaddingBottom {
 		base.PaddingBottom = override.PaddingBottom
+		base.PaddingBottomSpec = pdfCSSLengthSpec{}
 	}
-	if override.PaddingLeft != fallback.PaddingLeft {
+	if override.PaddingLeftSpec.Set {
+		base.PaddingLeft = pdfResolveCSSLengthSpec(override.PaddingLeftSpec, relativeLengthFontSize)
+		base.PaddingLeftSpec = override.PaddingLeftSpec
+	} else if override.PaddingLeft != fallback.PaddingLeft {
 		base.PaddingLeft = override.PaddingLeft
+		base.PaddingLeftSpec = pdfCSSLengthSpec{}
 	}
 	if override.HasWidth != fallback.HasWidth || override.Width != fallback.Width {
 		base.HasWidth = override.HasWidth
@@ -222,7 +287,32 @@ func (r *pdfStyleResolver) rootParagraphStyle() paragraphStyle {
 func (r *pdfStyleResolver) tagStyleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
 	name := pdfTagStyleNameForBlock(block)
 	style := r.applyRootInheritedParagraphDefaults(r.defaultStyle(name))
-	return mergePDFStyleOverrides(style, r.namedStyle(name), r.defaultStyle(name))
+	return mergePDFStyleOverridesWithInheritedFont(style, r.namedStyle(name), r.defaultStyle(name), r.inheritedFontSizeForBlock(block))
+}
+
+func (r *pdfStyleResolver) inheritedFontSizeForBlock(block pdfTextBlock) float64 {
+	fontSize := r.rootParagraphStyle().FontSize
+	fallback := r.defaultStyle(pdfStyleParagraph).Paragraph
+	for _, class := range strings.Fields(block.ContextClasses) {
+		if class == pdfStyleNameForBlock(block) {
+			continue
+		}
+		contextStyle, ok := r.styles[class]
+		if !ok {
+			continue
+		}
+		if contextStyle.Paragraph.FontSizeSpec.Set {
+			fontSize = pdfResolveCSSFontSizeSpec(contextStyle.Paragraph.FontSizeSpec, fontSize)
+			continue
+		}
+		if contextStyle.Paragraph.FontSize != fallback.FontSize {
+			fontSize = contextStyle.Paragraph.FontSize
+		}
+	}
+	if fontSize <= 0 {
+		return pdfBaseFontSize
+	}
+	return fontSize
 }
 
 func (r *pdfStyleResolver) contextInheritedBlockStyle(tagStyle pdfBlockResolvedStyle, block pdfTextBlock) pdfBlockResolvedStyle {
@@ -342,35 +432,75 @@ func pdfContainerStyleClass(class string) bool {
 	}
 }
 
-func mergePDFContainerClassStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfBlockResolvedStyle {
-	base = mergePDFContextClassStyleOverrides(base, override, fallback)
-	if override.MarginLeft != fallback.MarginLeft {
+func mergePDFContainerClassStyleOverridesWithInheritedFont(base, override, fallback pdfBlockResolvedStyle, inheritedFontSize float64) pdfBlockResolvedStyle {
+	base = mergePDFContextClassStyleOverridesWithInheritedFont(base, override, fallback, inheritedFontSize)
+	relativeLengthFontSize := pdfContextRelativeLengthFontSize(override, fallback, inheritedFontSize)
+	if override.MarginLeftSpec.Set {
+		base.MarginLeft = pdfResolveCSSLengthSpec(override.MarginLeftSpec, relativeLengthFontSize)
+		base.MarginLeftSpec = override.MarginLeftSpec
+	} else if override.MarginLeft != fallback.MarginLeft {
 		base.MarginLeft = override.MarginLeft
+		base.MarginLeftSpec = pdfCSSLengthSpec{}
 	}
-	if override.MarginRight != fallback.MarginRight {
+	if override.MarginRightSpec.Set {
+		base.MarginRight = pdfResolveCSSLengthSpec(override.MarginRightSpec, relativeLengthFontSize)
+		base.MarginRightSpec = override.MarginRightSpec
+	} else if override.MarginRight != fallback.MarginRight {
 		base.MarginRight = override.MarginRight
+		base.MarginRightSpec = pdfCSSLengthSpec{}
 	}
 	return base
 }
 
-func mergePDFContextClassStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfBlockResolvedStyle {
-	if (override.HasSpaceBefore && override.SpaceBefore != 0) || (!override.HasSpaceBefore && override.SpaceBefore != fallback.SpaceBefore) {
+func mergePDFContextClassStyleOverridesWithInheritedFont(base, override, fallback pdfBlockResolvedStyle, inheritedFontSize float64) pdfBlockResolvedStyle {
+	relativeLengthFontSize := pdfContextRelativeLengthFontSize(override, fallback, inheritedFontSize)
+	if override.SpaceBeforeSpec.Set {
+		spaceBefore := pdfResolveCSSLengthSpec(override.SpaceBeforeSpec, relativeLengthFontSize)
+		if spaceBefore != 0 {
+			base.SpaceBefore = spaceBefore
+			base.SpaceBeforeSpec = override.SpaceBeforeSpec
+		}
+	} else if (override.HasSpaceBefore && override.SpaceBefore != 0) || (!override.HasSpaceBefore && override.SpaceBefore != fallback.SpaceBefore) {
 		base.SpaceBefore = override.SpaceBefore
+		base.SpaceBeforeSpec = pdfCSSLengthSpec{}
 	}
-	if (override.HasSpaceAfter && override.SpaceAfter != 0) || (!override.HasSpaceAfter && override.SpaceAfter != fallback.SpaceAfter) {
+	if override.SpaceAfterSpec.Set {
+		spaceAfter := pdfResolveCSSLengthSpec(override.SpaceAfterSpec, relativeLengthFontSize)
+		if spaceAfter != 0 {
+			base.SpaceAfter = spaceAfter
+			base.SpaceAfterSpec = override.SpaceAfterSpec
+		}
+	} else if (override.HasSpaceAfter && override.SpaceAfter != 0) || (!override.HasSpaceAfter && override.SpaceAfter != fallback.SpaceAfter) {
 		base.SpaceAfter = override.SpaceAfter
+		base.SpaceAfterSpec = pdfCSSLengthSpec{}
 	}
-	if override.PaddingTop != fallback.PaddingTop {
+	if override.PaddingTopSpec.Set {
+		base.PaddingTop = pdfResolveCSSLengthSpec(override.PaddingTopSpec, relativeLengthFontSize)
+		base.PaddingTopSpec = override.PaddingTopSpec
+	} else if override.PaddingTop != fallback.PaddingTop {
 		base.PaddingTop = override.PaddingTop
+		base.PaddingTopSpec = pdfCSSLengthSpec{}
 	}
-	if override.PaddingRight != fallback.PaddingRight {
+	if override.PaddingRightSpec.Set {
+		base.PaddingRight = pdfResolveCSSLengthSpec(override.PaddingRightSpec, relativeLengthFontSize)
+		base.PaddingRightSpec = override.PaddingRightSpec
+	} else if override.PaddingRight != fallback.PaddingRight {
 		base.PaddingRight = override.PaddingRight
+		base.PaddingRightSpec = pdfCSSLengthSpec{}
 	}
-	if override.PaddingBottom != fallback.PaddingBottom {
+	if override.PaddingBottomSpec.Set {
+		base.PaddingBottom = pdfResolveCSSLengthSpec(override.PaddingBottomSpec, relativeLengthFontSize)
+		base.PaddingBottomSpec = override.PaddingBottomSpec
+	} else if override.PaddingBottom != fallback.PaddingBottom {
 		base.PaddingBottom = override.PaddingBottom
+		base.PaddingBottomSpec = pdfCSSLengthSpec{}
 	}
-	if override.PaddingLeft != fallback.PaddingLeft {
+	if override.PaddingLeftSpec.Set {
+		base.PaddingLeft = pdfResolveCSSLengthSpec(override.PaddingLeftSpec, relativeLengthFontSize)
+		base.PaddingLeftSpec = override.PaddingLeftSpec
+	} else if override.PaddingLeft != fallback.PaddingLeft {
 		base.PaddingLeft = override.PaddingLeft
+		base.PaddingLeftSpec = pdfCSSLengthSpec{}
 	}
 	if override.HasWidth != fallback.HasWidth || override.Width != fallback.Width {
 		base.HasWidth = override.HasWidth
@@ -423,6 +553,74 @@ func mergePDFContextClassStyleOverrides(base, override, fallback pdfBlockResolve
 	return base
 }
 
+func pdfRelativeLengthFontSize(base, override, fallback pdfBlockResolvedStyle, inheritedFontSize float64) float64 {
+	if override.Paragraph.FontSizeSpec.Set {
+		return pdfResolveCSSFontSizeSpec(override.Paragraph.FontSizeSpec, inheritedFontSize)
+	}
+	if override.Paragraph.FontSize != fallback.Paragraph.FontSize {
+		return override.Paragraph.FontSize
+	}
+	if base.Paragraph.FontSize > 0 {
+		return base.Paragraph.FontSize
+	}
+	if inheritedFontSize > 0 {
+		return inheritedFontSize
+	}
+	return pdfBaseFontSize
+}
+
+func pdfContextRelativeLengthFontSize(override, fallback pdfBlockResolvedStyle, inheritedFontSize float64) float64 {
+	if override.Paragraph.FontSizeSpec.Set {
+		return pdfResolveCSSFontSizeSpec(override.Paragraph.FontSizeSpec, inheritedFontSize)
+	}
+	if override.Paragraph.FontSize != fallback.Paragraph.FontSize && override.Paragraph.FontSize != pdfBaseFontSize {
+		return override.Paragraph.FontSize
+	}
+	if inheritedFontSize > 0 {
+		return inheritedFontSize
+	}
+	return pdfBaseFontSize
+}
+
+func pdfResolveCSSFontSizeSpec(spec pdfCSSLengthSpec, inheritedFontSize float64) float64 {
+	if inheritedFontSize <= 0 {
+		inheritedFontSize = pdfBaseFontSize
+	}
+	return pdfResolveCSSLengthSpec(spec, inheritedFontSize)
+}
+
+func pdfResolveCSSLineHeightSpec(spec pdfCSSLengthSpec, fontSize float64) float64 {
+	if fontSize <= 0 {
+		fontSize = pdfBaseFontSize
+	}
+	if spec.Keyword == "normal" {
+		return fontSize * pdfNormalLineHeightFactor
+	}
+	if spec.Unit == "number" {
+		return fontSize * spec.Value
+	}
+	return pdfResolveCSSLengthSpec(spec, fontSize)
+}
+
+func pdfResolveCSSLengthSpec(spec pdfCSSLengthSpec, fontSize float64) float64 {
+	if !spec.Set {
+		return 0
+	}
+	if fontSize <= 0 {
+		fontSize = pdfBaseFontSize
+	}
+	switch spec.Unit {
+	case "em":
+		return spec.Value * fontSize
+	case "rem":
+		return spec.Value * pdfBaseFontSize
+	case "%":
+		return spec.Value * fontSize / 100
+	default:
+		return spec.Value
+	}
+}
+
 func (r *pdfStyleResolver) applyRootInheritedParagraphDefaults(style pdfBlockResolvedStyle) pdfBlockResolvedStyle {
 	root := r.rootParagraphStyle()
 	rootDefault := r.defaultStyle(pdfStyleBody).Paragraph
@@ -439,16 +637,20 @@ func (r *pdfStyleResolver) applyRootInheritedParagraphDefaults(style pdfBlockRes
 	}
 	if style.Paragraph.FontSize == rootDefault.FontSize {
 		style.Paragraph.FontSize = root.FontSize
+		style.Paragraph.FontSizeSpec = root.FontSizeSpec
 	}
 	if !style.Paragraph.LineHeightExplicit && style.Paragraph.LineHeight == rootDefault.LineHeight {
 		style.Paragraph.LineHeight = root.LineHeight
+		style.Paragraph.LineHeightSpec = root.LineHeightSpec
 		style.Paragraph.LineHeightExplicit = root.LineHeightExplicit
 	}
 	if style.Paragraph.LetterSpacing == rootDefault.LetterSpacing {
 		style.Paragraph.LetterSpacing = root.LetterSpacing
+		style.Paragraph.LetterSpacingSpec = root.LetterSpacingSpec
 	}
 	if !style.Paragraph.HasFirstLineIndent && style.Paragraph.FirstLineIndent == rootDefault.FirstLineIndent {
 		style.Paragraph.FirstLineIndent = root.FirstLineIndent
+		style.Paragraph.FirstLineIndentSpec = root.FirstLineIndentSpec
 		style.Paragraph.HasFirstLineIndent = root.HasFirstLineIndent
 	}
 	if !style.Paragraph.HasAlign && style.Paragraph.Align == rootDefault.Align {
@@ -485,15 +687,33 @@ func mergePDFInheritedParagraphStyle(base, override, fallback paragraphStyle) pa
 		base.Italic = override.Italic
 		base.HasItalic = true
 	}
-	if override.FontSize != fallback.FontSize {
+	if override.FontSizeSpec.Set {
+		base.FontSize = pdfResolveCSSFontSizeSpec(override.FontSizeSpec, base.FontSize)
+		base.FontSizeSpec = override.FontSizeSpec
+	} else if override.FontSize != fallback.FontSize {
 		base.FontSize = override.FontSize
+		base.FontSizeSpec = pdfCSSLengthSpec{}
 	}
 	base = mergePDFLineHeightOverride(base, override, fallback)
-	if override.LetterSpacing != fallback.LetterSpacing {
-		base.LetterSpacing = override.LetterSpacing
+	if override.LineHeightSpec.Set {
+		base.LineHeight = pdfResolveCSSLineHeightSpec(override.LineHeightSpec, base.FontSize)
+		base.LineHeightSpec = override.LineHeightSpec
+		base.LineHeightExplicit = true
 	}
-	if override.HasFirstLineIndent {
+	if override.LetterSpacingSpec.Set {
+		base.LetterSpacing = pdfResolveCSSLengthSpec(override.LetterSpacingSpec, base.FontSize)
+		base.LetterSpacingSpec = override.LetterSpacingSpec
+	} else if override.LetterSpacing != fallback.LetterSpacing {
+		base.LetterSpacing = override.LetterSpacing
+		base.LetterSpacingSpec = pdfCSSLengthSpec{}
+	}
+	if override.FirstLineIndentSpec.Set {
+		base.FirstLineIndent = pdfResolveCSSLengthSpec(override.FirstLineIndentSpec, base.FontSize)
+		base.FirstLineIndentSpec = override.FirstLineIndentSpec
+		base.HasFirstLineIndent = true
+	} else if override.HasFirstLineIndent {
 		base.FirstLineIndent = override.FirstLineIndent
+		base.FirstLineIndentSpec = pdfCSSLengthSpec{}
 		base.HasFirstLineIndent = true
 	}
 	if override.HasAlign {
@@ -521,11 +741,13 @@ func mergePDFInheritedParagraphStyle(base, override, fallback paragraphStyle) pa
 func mergePDFLineHeightOverride(base, override, fallback paragraphStyle) paragraphStyle {
 	if override.LineHeightExplicit {
 		base.LineHeight = override.LineHeight
+		base.LineHeightSpec = override.LineHeightSpec
 		base.LineHeightExplicit = true
 		return base
 	}
 	if !base.LineHeightExplicit && override.LineHeight != fallback.LineHeight {
 		base.LineHeight = override.LineHeight
+		base.LineHeightSpec = override.LineHeightSpec
 	}
 	return base
 }

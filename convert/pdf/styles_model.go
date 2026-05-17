@@ -6,8 +6,8 @@ const (
 	pdfKP3ContentWidthPx = 512.0
 	pdfMinBlockWidth     = 12.0
 
-	pdfBaseFontSize                       = 10.5
-	pdfNormalLineHeightFactor             = 1.2
+	pdfBaseFontSize                       = 8.4
+	pdfNormalLineHeightFactor             = 1.7
 	pdfAdjustedLineHeightLH               = 100.0 / 99.0
 	pdfAdjustedLineHeightFactor           = pdfNormalLineHeightFactor * pdfAdjustedLineHeightLH
 	pdfSectionTitleHeaderLineHeightLH     = 0.982323
@@ -138,18 +138,33 @@ const (
 	pdfPageBreakAvoid
 )
 
+type pdfCSSLengthSpec struct {
+	Value   float64
+	Unit    string
+	Keyword string
+	Set     bool
+}
+
 type pdfBlockResolvedStyle struct {
 	Paragraph           paragraphStyle
 	SpaceBefore         float64
+	SpaceBeforeSpec     pdfCSSLengthSpec
 	HasSpaceBefore      bool
 	SpaceAfter          float64
+	SpaceAfterSpec      pdfCSSLengthSpec
 	HasSpaceAfter       bool
 	MarginLeft          float64
+	MarginLeftSpec      pdfCSSLengthSpec
 	MarginRight         float64
+	MarginRightSpec     pdfCSSLengthSpec
 	PaddingTop          float64
+	PaddingTopSpec      pdfCSSLengthSpec
 	PaddingRight        float64
+	PaddingRightSpec    pdfCSSLengthSpec
 	PaddingBottom       float64
+	PaddingBottomSpec   pdfCSSLengthSpec
 	PaddingLeft         float64
+	PaddingLeftSpec     pdfCSSLengthSpec
 	Width               pdfBlockLength
 	HasWidth            bool
 	MinWidth            pdfBlockLength

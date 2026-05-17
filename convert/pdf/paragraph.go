@@ -27,33 +27,37 @@ const (
 )
 
 type paragraphStyle struct {
-	FontFamily         string
-	Bold               bool
-	HasBold            bool
-	Italic             bool
-	HasItalic          bool
-	FontSize           float64
-	LineHeight         float64
-	LineHeightExplicit bool
-	LetterSpacing      float64
-	FirstLineIndent    float64
-	HasFirstLineIndent bool
-	Align              textAlign
-	HasAlign           bool
-	VerticalAlign      textVerticalAlign
-	HasVerticalAlign   bool
-	Color              pdfColor
-	Underline          bool
-	HasUnderline       bool
-	Strikethrough      bool
-	HasStrikethrough   bool
-	PreserveSpace      bool
-	HasPreserveSpace   bool
-	NoWrap             bool
-	HasNoWrap          bool
-	Hyphenation        paragraphHyphenation
-	HasHyphenation     bool
-	Hyphenator         paragraphHyphenator
+	FontFamily          string
+	Bold                bool
+	HasBold             bool
+	Italic              bool
+	HasItalic           bool
+	FontSize            float64
+	FontSizeSpec        pdfCSSLengthSpec
+	LineHeight          float64
+	LineHeightSpec      pdfCSSLengthSpec
+	LineHeightExplicit  bool
+	LetterSpacing       float64
+	LetterSpacingSpec   pdfCSSLengthSpec
+	FirstLineIndent     float64
+	FirstLineIndentSpec pdfCSSLengthSpec
+	HasFirstLineIndent  bool
+	Align               textAlign
+	HasAlign            bool
+	VerticalAlign       textVerticalAlign
+	HasVerticalAlign    bool
+	Color               pdfColor
+	Underline           bool
+	HasUnderline        bool
+	Strikethrough       bool
+	HasStrikethrough    bool
+	PreserveSpace       bool
+	HasPreserveSpace    bool
+	NoWrap              bool
+	HasNoWrap           bool
+	Hyphenation         paragraphHyphenation
+	HasHyphenation      bool
+	Hyphenator          paragraphHyphenator
 }
 
 type textVerticalAlign int

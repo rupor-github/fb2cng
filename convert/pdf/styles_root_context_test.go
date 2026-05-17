@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"math"
 	"testing"
 
 	"go.uber.org/zap/zaptest"
@@ -35,7 +36,7 @@ func TestPDFStyleResolverAppliesBodyTypographyAsRootInheritance(t *testing.T) {
 	if paragraph.Paragraph.FontFamily != "Noto Sans" {
 		t.Fatalf("paragraph font family = %q, want body-inherited Noto Sans", paragraph.Paragraph.FontFamily)
 	}
-	if paragraph.Paragraph.LineHeight != pdfBaseFontSize*1.5 {
+	if math.Abs(paragraph.Paragraph.LineHeight-pdfBaseFontSize*1.5) > 0.001 {
 		t.Fatalf("paragraph line height = %v, want body-inherited %v", paragraph.Paragraph.LineHeight, pdfBaseFontSize*1.5)
 	}
 	if paragraph.Paragraph.Color.String() != "#336699" {
@@ -321,10 +322,10 @@ func TestPDFStyleResolverAccumulatesNestedContainerMarginsAcrossContextChain(t *
 
 	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleCite, ContextClasses: joinStyleClasses(pdfStyleAnnotation, pdfStyleCite)})
-	if paragraph.MarginLeft != pdfBaseFontSize*3 {
+	if math.Abs(paragraph.MarginLeft-pdfBaseFontSize*3) > 0.001 {
 		t.Fatalf("nested cite margin-left = %v, want accumulated %v", paragraph.MarginLeft, pdfBaseFontSize*3)
 	}
-	if paragraph.MarginRight != pdfBaseFontSize*0.75 {
+	if math.Abs(paragraph.MarginRight-pdfBaseFontSize*0.75) > 0.001 {
 		t.Fatalf("nested cite margin-right = %v, want accumulated %v", paragraph.MarginRight, pdfBaseFontSize*0.75)
 	}
 	if !paragraph.Paragraph.Italic {
@@ -344,7 +345,7 @@ func TestPDFStyleResolverAppliesNestedStanzaContextInheritance(t *testing.T) {
 
 	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
 	verse := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockPoem, StyleClasses: pdfStylePoem, ContextClasses: joinStyleClasses(pdfStylePoem, pdfStyleStanza)})
-	if verse.MarginLeft != pdfBaseFontSize*6 {
+	if math.Abs(verse.MarginLeft-pdfBaseFontSize*6) > 0.001 {
 		t.Fatalf("stanza verse margin-left = %v, want accumulated %v", verse.MarginLeft, pdfBaseFontSize*6)
 	}
 	if verse.Paragraph.FontFamily != "Noto Sans" {

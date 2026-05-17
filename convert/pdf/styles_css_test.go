@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"math"
 	"testing"
 
 	"go.uber.org/zap/zaptest"
@@ -19,7 +20,7 @@ func TestPDFStyleResolverAppliesCodeStylesheet(t *testing.T) {
 	if !style.Paragraph.PreserveSpace || style.Paragraph.FontFamily != "monospace" {
 		t.Fatalf("code style = %#v, want pre-wrap monospace", style.Paragraph)
 	}
-	if style.Paragraph.FontSize < 7.34 || style.Paragraph.FontSize > 7.36 {
+	if math.Abs(style.Paragraph.FontSize-pdfBaseFontSize*0.7) > 0.001 {
 		t.Fatalf("code font size = %v, want 70%% base font size", style.Paragraph.FontSize)
 	}
 }
@@ -79,7 +80,7 @@ func TestPDFStyleResolverAnnotationMarginsMatchDefaultCSS(t *testing.T) {
 func TestPDFStyleResolverEpigraphDefaultsMatchDefaultCSS(t *testing.T) {
 	resolver := newPDFStyleResolverWithDefaultCSS(t, `p { text-indent: 0; }`)
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleEpigraph, ContextClasses: pdfStyleEpigraph})
-	if paragraph.SpaceBefore != pdfBaseFontSize*0.4 || paragraph.SpaceAfter != pdfBaseFontSize*0.2 {
+	if math.Abs(paragraph.SpaceBefore-pdfBaseFontSize*0.4) > 0.001 || math.Abs(paragraph.SpaceAfter-pdfBaseFontSize*0.2) > 0.001 {
 		t.Fatalf("epigraph vertical margins = %v/%v, want default.css 0.4em/0.2em", paragraph.SpaceBefore, paragraph.SpaceAfter)
 	}
 	if paragraph.MarginLeft != pdfBaseFontSize*4 || paragraph.MarginRight != 0 {
@@ -151,12 +152,12 @@ func TestPDFStyleResolverVignetteDefaultsMatchDefaultCSS(t *testing.T) {
 	}
 
 	sectionBottom := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockImage, StyleClasses: joinStyleClasses(pdfStyleImageVignette, pdfStyleVignette, pdfStyleVignetteSectionBot)})
-	if sectionBottom.SpaceBefore != pdfVignetteSectionTitleBottomBefore || sectionBottom.SpaceAfter != pdfVignetteSectionTitleBottomAfter {
+	if math.Abs(sectionBottom.SpaceBefore-pdfVignetteSectionTitleBottomBefore) > 0.001 || math.Abs(sectionBottom.SpaceAfter-pdfVignetteSectionTitleBottomAfter) > 0.001 {
 		t.Fatalf("section bottom vignette margins = %v/%v, want default.css 0.4em/0.8em", sectionBottom.SpaceBefore, sectionBottom.SpaceAfter)
 	}
 
 	chapterEnd := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockImage, StyleClasses: joinStyleClasses(pdfStyleImageVignette, pdfStyleVignette, pdfStyleVignetteChapterEnd)})
-	if chapterEnd.SpaceBefore != pdfVignetteChapterEndSpace || chapterEnd.SpaceAfter != pdfVignetteChapterEndSpace {
+	if math.Abs(chapterEnd.SpaceBefore-pdfVignetteChapterEndSpace) > 0.001 || math.Abs(chapterEnd.SpaceAfter-pdfVignetteChapterEndSpace) > 0.001 {
 		t.Fatalf("chapter end vignette margins = %v/%v, want default.css 1.5em/1.5em", chapterEnd.SpaceBefore, chapterEnd.SpaceAfter)
 	}
 }
@@ -253,7 +254,7 @@ func TestPDFStyleResolverTitleHeaderEmptyLineDefaultsMatchDefaultCSS(t *testing.
 		pdfStyleTOCTitle + "-emptyline",
 	} {
 		emptyLine := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine, StyleClasses: class})
-		if emptyLine.SpaceBefore != pdfTitleEmptyLineSpace || emptyLine.SpaceAfter != pdfTitleEmptyLineSpace {
+		if math.Abs(emptyLine.SpaceBefore-pdfTitleEmptyLineSpace) > 0.001 || math.Abs(emptyLine.SpaceAfter-pdfTitleEmptyLineSpace) > 0.001 {
 			t.Fatalf("%s margins = %v/%v, want default.css 0.8em/0.8em", class, emptyLine.SpaceBefore, emptyLine.SpaceAfter)
 		}
 		if margin := pdfEmptyLineMargin(emptyLine); margin != pdfBaseLineHeight*0.4 {

@@ -153,8 +153,10 @@ func (r *pdfStyleResolver) applyPDFStyleAdjustments() {
 		}
 		paragraph := r.namedStyle(pdfStyleParagraph)
 		style.SpaceBefore = paragraph.SpaceBefore
+		style.SpaceBeforeSpec = pdfCSSLengthSpec{}
 		style.HasSpaceBefore = false
 		style.SpaceAfter = paragraph.SpaceAfter
+		style.SpaceAfterSpec = pdfCSSLengthSpec{}
 		style.HasSpaceAfter = false
 		r.styles[name] = style
 	}

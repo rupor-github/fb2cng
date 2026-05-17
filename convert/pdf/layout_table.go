@@ -229,17 +229,29 @@ func (r *pdfStyleResolver) scaled(scale float64) *pdfStyleResolver {
 
 func pdfScaleResolvedStyle(style pdfBlockResolvedStyle, scale float64) pdfBlockResolvedStyle {
 	style.Paragraph.FontSize *= scale
+	style.Paragraph.FontSizeSpec = pdfCSSLengthSpec{}
 	style.Paragraph.LineHeight *= scale
+	style.Paragraph.LineHeightSpec = pdfCSSLengthSpec{}
 	style.Paragraph.LetterSpacing *= scale
+	style.Paragraph.LetterSpacingSpec = pdfCSSLengthSpec{}
 	style.Paragraph.FirstLineIndent *= scale
+	style.Paragraph.FirstLineIndentSpec = pdfCSSLengthSpec{}
 	style.SpaceBefore *= scale
+	style.SpaceBeforeSpec = pdfCSSLengthSpec{}
 	style.SpaceAfter *= scale
+	style.SpaceAfterSpec = pdfCSSLengthSpec{}
 	style.MarginLeft *= scale
+	style.MarginLeftSpec = pdfCSSLengthSpec{}
 	style.MarginRight *= scale
+	style.MarginRightSpec = pdfCSSLengthSpec{}
 	style.PaddingTop *= scale
+	style.PaddingTopSpec = pdfCSSLengthSpec{}
 	style.PaddingRight *= scale
+	style.PaddingRightSpec = pdfCSSLengthSpec{}
 	style.PaddingBottom *= scale
+	style.PaddingBottomSpec = pdfCSSLengthSpec{}
 	style.PaddingLeft *= scale
+	style.PaddingLeftSpec = pdfCSSLengthSpec{}
 	style.BorderWidth *= scale
 	return style
 }
