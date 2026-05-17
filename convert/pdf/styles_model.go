@@ -35,7 +35,6 @@ const (
 	pdfCodeFontSize                       = pdfBaseFontSize * 0.70
 	pdfCodeLineHeight                     = pdfBaseLineHeight
 	pdfFootnoteLinkFontSize               = pdfBaseFontSize * 0.80
-	pdfFootnoteLinkLineHeight             = pdfFootnoteLinkFontSize * pdfNormalLineHeightFactor
 	pdfVerseLineHeight                    = pdfBaseFontSize * pdfNormalLineHeightFactor
 	pdfVerseSpaceBefore                   = pdfBaseFontSize * 0.25
 	pdfVerseSpaceAfter                    = pdfBaseFontSize * 0.25

@@ -145,7 +145,6 @@ func (r *pdfStyleResolver) applyPDFStyleAdjustments() {
 	}
 	if style, ok := r.styles[pdfStyleLinkFootnote]; ok && style.Paragraph.VerticalAlign == textVerticalAlignSuper {
 		style.Paragraph.FontSize /= pdfInlineScriptScale
-		style.Paragraph.LineHeight /= pdfInlineScriptScale
 		r.styles[pdfStyleLinkFootnote] = style
 	}
 	paragraphAlign := r.namedStyle(pdfStyleParagraph).Paragraph.Align

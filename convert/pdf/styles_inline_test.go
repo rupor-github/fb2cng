@@ -23,6 +23,41 @@ func TestPDFInlineRunFootnoteLinkDefaultsMatchDefaultCSS(t *testing.T) {
 	if footnote.VerticalAlign != textVerticalAlignSuper {
 		t.Fatalf("footnote link vertical-align = %v, want super", footnote.VerticalAlign)
 	}
+	if footnote.LineHeight != base.LineHeight {
+		t.Fatalf("footnote link line-height = %v, want inherited base line-height %v", footnote.LineHeight, base.LineHeight)
+	}
+}
+
+func TestPDFInlineRunFootnoteLinkClearsItalicWithDefaultCSS(t *testing.T) {
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
+	poem := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockPoem, StyleClasses: pdfStylePoem, ContextClasses: pdfStylePoem}).Paragraph
+	if !poem.Italic {
+		t.Fatalf("poem italic = false, want default.css italic context")
+	}
+
+	footnote := inlineRunParagraphStyle(resolver, poem, pdfInlineRun{StyleClasses: pdfStyleLinkFootnote})
+	if footnote.Italic {
+		t.Fatalf("footnote link italic = true, want default.css font-style: normal to clear inherited italic")
+	}
+	if !footnote.Underline || footnote.VerticalAlign != textVerticalAlignSuper {
+		t.Fatalf("footnote link style = underline:%t valign:%v, want default.css underline/superscript", footnote.Underline, footnote.VerticalAlign)
+	}
+	if footnote.LineHeight != poem.LineHeight {
+		t.Fatalf("footnote link line-height = %v, want inherited poem line-height %v", footnote.LineHeight, poem.LineHeight)
+	}
+}
+
+func TestPDFInlineRunReplacementStylesheetDoesNotKeepFootnoteLinkDefaults(t *testing.T) {
+	resolver := newPDFStyleResolverWithCSS(t, `.poem { font-style: italic; }`)
+	poem := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockPoem, StyleClasses: pdfStylePoem, ContextClasses: pdfStylePoem}).Paragraph
+	if !poem.Italic {
+		t.Fatalf("poem italic = false, want replacement stylesheet italic context")
+	}
+
+	footnote := inlineRunParagraphStyle(resolver, poem, pdfInlineRun{StyleClasses: pdfStyleLinkFootnote})
+	if !footnote.Italic || footnote.Underline || footnote.VerticalAlign != textVerticalAlignBaseline || footnote.FontSize != poem.FontSize {
+		t.Fatalf("link-footnote defaults survived replacement stylesheet: italic:%t underline:%t valign:%v font:%v poem font:%v", footnote.Italic, footnote.Underline, footnote.VerticalAlign, footnote.FontSize, poem.FontSize)
+	}
 }
 
 func TestPDFInlineRunBacklinkDefaultsMatchDefaultCSS(t *testing.T) {
