@@ -143,6 +143,10 @@ func (r *pdfStyleResolver) applyPDFStyleAdjustments() {
 		style.Paragraph.HasAlign = false
 		r.styles[pdfStyleCode] = style
 	}
+	if style, ok := r.styles[pdfStyleTitleAfterImage]; ok {
+		style.Paragraph = pdfParagraphClassFallbackStyle(r.namedStyle(pdfStyleParagraph).Paragraph)
+		r.styles[pdfStyleTitleAfterImage] = style
+	}
 	if style, ok := r.styles[pdfStyleLinkFootnote]; ok && style.Paragraph.VerticalAlign == textVerticalAlignSuper {
 		style.Paragraph.FontSize /= pdfInlineScriptScale
 		r.styles[pdfStyleLinkFootnote] = style
@@ -161,6 +165,21 @@ func (r *pdfStyleResolver) applyPDFStyleAdjustments() {
 		style.Paragraph.HasAlign = false
 		r.styles[name] = style
 	}
+}
+
+func pdfParagraphClassFallbackStyle(paragraph paragraphStyle) paragraphStyle {
+	paragraph.HasBold = false
+	paragraph.HasItalic = false
+	paragraph.LineHeightExplicit = false
+	paragraph.HasFirstLineIndent = false
+	paragraph.HasAlign = false
+	paragraph.HasVerticalAlign = false
+	paragraph.HasUnderline = false
+	paragraph.HasStrikethrough = false
+	paragraph.HasPreserveSpace = false
+	paragraph.HasHyphenation = false
+	paragraph.Hyphenator = nil
+	return paragraph
 }
 
 func (r *pdfStyleResolver) applyPDFVariantInheritance() {

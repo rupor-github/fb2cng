@@ -46,6 +46,48 @@ func TestLayoutPDFPagesKeepsGapBetweenTitleVignetteAndHeadingImage(t *testing.T)
 	}
 }
 
+func TestLayoutPDFPagesCentersTitleContentBetweenVignettes(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	vignette := &fb2.BookImage{}
+	vignette.Dim.Width = 120
+	vignette.Dim.Height = 10
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:      520,
+		PageHeight:     420,
+		ScreenWidthPx:  1200,
+		ScreenHeightPx: 1600,
+		Title:          "Title",
+		Author:         "Author",
+		Styles:         newPDFStyleResolverWithDefaultCSS(t),
+		Images:         fb2.BookImages{"top": vignette, "bottom": vignette},
+		Blocks: []pdfTextBlock{
+			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses("vignette", "vignette-book-title-top", pdfStyleBodyTitle), ImageID: "top"},
+			{Kind: pdfBlockHeading, Text: "Author", Depth: 1, StyleName: pdfStyleBodyTitleHeader, StyleClasses: joinStyleClasses(pdfStyleBodyTitle, pdfStyleBodyTitleHeader+"-first")},
+			{Kind: pdfBlockHeading, Text: "Book", Depth: 1, StyleName: pdfStyleBodyTitleHeader, StyleClasses: joinStyleClasses(pdfStyleBodyTitle, pdfStyleBodyTitleHeader+"-next")},
+			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses("vignette", "vignette-book-title-bottom", pdfStyleBodyTitle), ImageID: "bottom"},
+		},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 1 || len(pages[0].Images) != 2 || len(pages[0].Lines) != 2 {
+		t.Fatalf("layout pages = %#v, want two title lines between two vignettes", pages)
+	}
+	visualTop, visualBottom, ok := pdfPageTitleContentVisualBounds(&pages[0], 0, len(pages[0].Lines), 1, 1, nil)
+	if !ok {
+		t.Fatalf("title content has no visual bounds: %#v", pages[0])
+	}
+	gotCenter := (visualTop + visualBottom) / 2
+	wantCenter := (pages[0].Images[0].Y + pages[0].Images[1].Y + pages[0].Images[1].Height) / 2
+	if math.Abs(gotCenter-wantCenter) > 0.001 {
+		t.Fatalf("title visual center = %v, want center between vignettes %v (visual bounds %v/%v)", gotCenter, wantCenter, visualTop, visualBottom)
+	}
+}
+
 func TestLayoutPDFPagesTitleImageCanStripRootHorizontalMargins(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {

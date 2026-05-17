@@ -322,6 +322,27 @@ func isHeadingImageBlock(block pdfTextBlock) bool {
 	return blockHasStyleClass(block, pdfStyleHeadingImage)
 }
 
+func isTitleTopVignetteBlock(block pdfTextBlock) bool {
+	return blockHasStyleClass(block, pdfStyleVignetteBookTop) || blockHasStyleClass(block, pdfStyleVignetteChapterTop) || blockHasStyleClass(block, pdfStyleVignetteSectionTop)
+}
+
+func isTitleBottomVignetteBlock(block pdfTextBlock) bool {
+	return blockHasStyleClass(block, pdfStyleVignetteBookBottom) || blockHasStyleClass(block, pdfStyleVignetteChapterBot) || blockHasStyleClass(block, pdfStyleVignetteSectionBot)
+}
+
+func isTitleHeaderBlock(block pdfTextBlock) bool {
+	switch block.StyleName {
+	case pdfStyleBodyTitleHeader, pdfStyleChapterTitleHeader, pdfStyleSectionTitleHeader:
+		return true
+	default:
+		return false
+	}
+}
+
+func isTitleHeaderImageBlock(block pdfTextBlock) bool {
+	return block.Kind == pdfBlockImage && isHeadingImageBlock(block)
+}
+
 func blockHasStyleClass(block pdfTextBlock, className string) bool {
 	for _, class := range strings.Fields(block.StyleClasses) {
 		if class == className {

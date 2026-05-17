@@ -115,12 +115,13 @@ func TestPDFStyleResolverAppliesFootnoteTitleContextDescendantSelectors(t *testi
 }
 
 func TestPDFStyleResolverTitleAfterImageKeepsHeadingTextAlignment(t *testing.T) {
-	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
 
 	style := resolver.styleForBlock(pdfTextBlock{
-		Kind:         pdfBlockHeading,
-		StyleName:    pdfStyleChapterTitleHeader,
-		StyleClasses: joinStyleClasses(pdfStyleChapterTitleHeader+"-next", pdfStyleTitleAfterImage),
+		Kind:           pdfBlockHeading,
+		StyleName:      pdfStyleChapterTitleHeader,
+		StyleClasses:   joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next", pdfStyleTitleAfterImage),
+		ContextClasses: pdfStyleChapterTitle,
 	})
 
 	if style.Paragraph.Align != textAlignCenter {
