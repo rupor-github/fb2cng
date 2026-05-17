@@ -167,6 +167,46 @@ func TestPDFStyleResolverPoemDefaultsMatchDefaultCSS(t *testing.T) {
 	}
 }
 
+func TestPDFStyleResolverTitleWrapperControlsMatchDefaultCSS(t *testing.T) {
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
+
+	chapter := resolver.styleForBlock(pdfTextBlock{
+		Kind:           pdfBlockHeading,
+		Depth:          1,
+		StyleName:      pdfStyleChapterTitleHeader,
+		StyleClasses:   joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-first"),
+		ContextClasses: pdfStyleChapterTitle,
+	})
+	if !chapter.PageBreakBefore || !chapter.KeepTogether || chapter.KeepWithNextLines != pdfSingleKeepLine {
+		t.Fatalf("chapter title controls = page-before:%t keep:%t keep-next:%d, want default.css title wrapper controls", chapter.PageBreakBefore, chapter.KeepTogether, chapter.KeepWithNextLines)
+	}
+	if chapter.SpaceBefore != pdfBaseFontSize*2 || chapter.SpaceAfter != pdfBaseFontSize {
+		t.Fatalf("chapter title margins = %v/%v, want default.css 2em/1em", chapter.SpaceBefore, chapter.SpaceAfter)
+	}
+
+	sectionH2 := resolver.styleForBlock(pdfTextBlock{
+		Kind:           pdfBlockHeading,
+		Depth:          2,
+		StyleName:      pdfStyleSectionTitleHeader,
+		StyleClasses:   joinStyleClasses(pdfStyleSectionTitle, pdfStyleSectionTitleH2, pdfStyleSectionTitleHeader+"-first"),
+		ContextClasses: joinStyleClasses(pdfStyleSectionTitle, pdfStyleSectionTitleH2),
+	})
+	if !sectionH2.PageBreakBefore || !sectionH2.KeepTogether || sectionH2.KeepWithNextLines != pdfSingleKeepLine {
+		t.Fatalf("section h2 controls = page-before:%t keep:%t keep-next:%d, want default.css section-title-h2/title wrapper controls", sectionH2.PageBreakBefore, sectionH2.KeepTogether, sectionH2.KeepWithNextLines)
+	}
+
+	sectionH3 := resolver.styleForBlock(pdfTextBlock{
+		Kind:           pdfBlockHeading,
+		Depth:          3,
+		StyleName:      pdfStyleSectionTitleHeader,
+		StyleClasses:   joinStyleClasses(pdfStyleSectionTitle, pdfStyleSectionTitleHeader+"-first"),
+		ContextClasses: pdfStyleSectionTitle,
+	})
+	if sectionH3.PageBreakBefore || !sectionH3.KeepTogether || sectionH3.KeepWithNextLines != pdfSingleKeepLine {
+		t.Fatalf("section h3 controls = page-before:%t keep:%t keep-next:%d, want default.css section-title without h2 page break", sectionH3.PageBreakBefore, sectionH3.KeepTogether, sectionH3.KeepWithNextLines)
+	}
+}
+
 func TestPDFStyleResolverTitleHeaderBreakDefaultsMatchDefaultCSS(t *testing.T) {
 	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	for _, tt := range []struct {
@@ -537,6 +577,28 @@ func TestPDFStyleResolverReplacementStylesheetDoesNotKeepDefaultCSSClasses(t *te
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
 	if annotation.SpaceBefore != paragraph.SpaceBefore || annotation.SpaceAfter != paragraph.SpaceAfter || annotation.MarginLeft != 0 || annotation.MarginRight != 0 {
 		t.Fatalf("annotation style survived replacement stylesheet: margins=%v/%v horizontal=%v/%v paragraph=%v/%v", annotation.SpaceBefore, annotation.SpaceAfter, annotation.MarginLeft, annotation.MarginRight, paragraph.SpaceBefore, paragraph.SpaceAfter)
+	}
+
+	chapterTitle := resolver.styleForBlock(pdfTextBlock{
+		Kind:           pdfBlockHeading,
+		Depth:          1,
+		StyleName:      pdfStyleChapterTitleHeader,
+		StyleClasses:   joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-first"),
+		ContextClasses: pdfStyleChapterTitle,
+	})
+	if chapterTitle.PageBreakBefore {
+		t.Fatalf("chapter-title page break survived replacement stylesheet")
+	}
+
+	sectionH2 := resolver.styleForBlock(pdfTextBlock{
+		Kind:           pdfBlockHeading,
+		Depth:          2,
+		StyleName:      pdfStyleSectionTitleHeader,
+		StyleClasses:   joinStyleClasses(pdfStyleSectionTitle, pdfStyleSectionTitleH2, pdfStyleSectionTitleHeader+"-first"),
+		ContextClasses: joinStyleClasses(pdfStyleSectionTitle, pdfStyleSectionTitleH2),
+	})
+	if sectionH2.PageBreakBefore {
+		t.Fatalf("section-title-h2 page break survived replacement stylesheet")
 	}
 
 	footnote := inlineRunParagraphStyle(resolver, paragraph.Paragraph, pdfInlineRun{StyleClasses: pdfStyleLinkFootnote})

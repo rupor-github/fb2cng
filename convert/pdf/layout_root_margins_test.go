@@ -4,6 +4,8 @@ import (
 	"math"
 	"testing"
 
+	"fbc/common"
+	"fbc/config"
 	"fbc/content"
 	"fbc/fb2"
 )
@@ -197,5 +199,74 @@ func TestLayoutPDFPagesAnnotationNestedSectionPreservesRootHorizontalMargins(t *
 	}
 	if math.Abs(noteX-16) > 0.001 {
 		t.Fatalf("nested section note X = %v, want 16 (24 base margin - 20 root inset + 12 annotation margin)", noteX)
+	}
+}
+
+func TestLayoutPDFPagesGeneratedHelperTitlesPreserveRootHorizontalMargins(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	book := &fb2.FictionBook{
+		Stylesheets: []fb2.Stylesheet{{
+			Type: "text/css",
+			Data: `
+				html { margin: 0 -20pt 0 -20pt; }
+				p { margin: 0; text-indent: 0; text-align: left; }
+				.annotation-title, .annotation-title-first, .toc-title, .toc-title-first { margin: 0; text-align: left; font-size: 10.5pt; line-height: 12.6pt; }
+			`,
+		}},
+		Description: fb2.Description{TitleInfo: fb2.TitleInfo{
+			BookTitle: fb2.TextField{Value: "TOC Heading"},
+			Annotation: &fb2.Flow{Items: []fb2.FlowItem{{
+				Kind:      fb2.FlowParagraph,
+				Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Generated annotation body."}}},
+			}}},
+		}},
+		Bodies: []fb2.Body{{
+			Kind: fb2.BodyMain,
+			Sections: []fb2.Section{{
+				ID:    "chapter-1",
+				Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 1"}}}}}},
+			}},
+		}},
+	}
+	plan, err := collectPDFContent(&content.Content{Book: book}, &config.DocumentConfig{
+		Annotation: config.AnnotationConfig{Enable: true, Title: "About", InTOC: true},
+		TOCPage:    config.TOCPageConfig{Placement: common.TOCPagePlacementBefore},
+	})
+	if err != nil {
+		t.Fatalf("collectPDFContent() error = %v", err)
+	}
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  220,
+		PageHeight: 220,
+		Title:      "Title",
+		Author:     "Author",
+		Styles:     newPDFStyleResolver(book, nil),
+		Blocks:     plan.Blocks,
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+
+	positions := map[string]float64{}
+	for _, page := range pages {
+		for _, line := range page.Lines {
+			text := shapedRunes(line.Text)
+			if text == "TOC Heading" || text == "About" {
+				positions[text] = line.X
+			}
+		}
+	}
+	for _, text := range []string{"TOC Heading", "About"} {
+		got, ok := positions[text]
+		if !ok {
+			t.Fatalf("generated helper title %q not found in %#v", text, pages)
+		}
+		if math.Abs(got-4) > 0.001 {
+			t.Fatalf("generated helper title %q X = %v, want 4 (24 base margin - 20 root inset)", text, got)
+		}
 	}
 }
