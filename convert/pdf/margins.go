@@ -79,7 +79,7 @@ func (r *pdfStyleResolver) adjustContainerMargins(blocks []pdfTextBlock, resolve
 			Runs:         block.Runs,
 			Depth:        block.Depth,
 			StyleName:    block.StyleName,
-			StyleClasses: pdfRemoveStyleClass(block.StyleClasses, class),
+			StyleClasses: pdfRemoveContainerControlClasses(block.StyleClasses, class),
 			ImageID:      block.ImageID,
 			Links:        block.Links,
 		})
@@ -116,15 +116,24 @@ func pdfContainerMarginClass(block pdfTextBlock) string {
 	return ""
 }
 
-func pdfRemoveStyleClass(classes string, remove string) string {
+func pdfRemoveContainerControlClasses(classes string, container string) string {
 	out := make([]string, 0, len(classes))
 	for _, class := range strings.Fields(classes) {
-		if class == remove {
+		if class == container || pdfContainerCompanionClass(container, class) {
 			continue
 		}
 		out = append(out, class)
 	}
 	return strings.Join(out, " ")
+}
+
+func pdfContainerCompanionClass(container string, class string) bool {
+	switch container {
+	case pdfStyleSectionTitle:
+		return strings.HasPrefix(class, pdfStyleSectionTitle+"-h")
+	default:
+		return false
+	}
 }
 
 func pdfNextContentBlock(blocks []pdfTextBlock, resolved []pdfBlockResolvedStyle, start int) int {

@@ -28,6 +28,23 @@ func TestPDFCollapsedBlockStylesApplyContainerVerticalMarginsOnlyAtEdges(t *test
 	}
 }
 
+func TestPDFCollapsedBlockStylesKeepsSectionH2PageBreakOnlyAtWrapperStart(t *testing.T) {
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
+
+	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
+		{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses("image-vignette", "vignette", pdfStyleVignetteSectionTop, pdfStyleSectionTitle, pdfStyleSectionTitleH2), ImageID: "top"},
+		{Kind: pdfBlockHeading, StyleName: pdfStyleSectionTitleHeader, StyleClasses: joinStyleClasses(pdfStyleSectionTitle, pdfStyleSectionTitleH2, pdfStyleSectionTitleHeader+"-first"), Text: "Section"},
+		{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses("image-vignette", "vignette", pdfStyleVignetteSectionBot, pdfStyleSectionTitle, pdfStyleSectionTitleH2), ImageID: "bottom"},
+	})
+
+	if !styles[0].PageBreakBefore {
+		t.Fatalf("first section-title-h2 child page-break-before = false, want wrapper page break")
+	}
+	if styles[1].PageBreakBefore || styles[2].PageBreakBefore {
+		t.Fatalf("inner section-title-h2 page breaks = %t/%t, want false/false", styles[1].PageBreakBefore, styles[2].PageBreakBefore)
+	}
+}
+
 func TestPDFCollapsedBlockStylesKeepContainerThroughEmptyLine(t *testing.T) {
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}}
