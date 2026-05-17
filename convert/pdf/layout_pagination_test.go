@@ -27,13 +27,13 @@ func TestLayoutPDFPagesKeepsHeadingWithNextParagraph(t *testing.T) {
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if len(pages) != 3 {
-		t.Fatalf("layoutPDFPages() produced %d pages, want 3", len(pages))
+	if len(pages) != 2 {
+		t.Fatalf("layoutPDFPages() produced %d pages, want 2", len(pages))
 	}
-	if got := pageText(pages[1]); strings.Contains(got, "Heading") {
+	if got := pageText(pages[0]); strings.Contains(got, "Heading") {
 		t.Fatalf("heading stranded on previous page: %q", got)
 	}
-	if got := pageText(pages[2]); !strings.Contains(got, "Heading") || !strings.Contains(got, "Body text") {
+	if got := pageText(pages[1]); !strings.Contains(got, "Heading") || !strings.Contains(got, "Body text") {
 		t.Fatalf("heading page text = %q, want heading with following paragraph", got)
 	}
 }
@@ -61,14 +61,14 @@ func TestLayoutPDFPagesAvoidsParagraphWidowOrphanSplit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if len(pages) != 3 {
-		t.Fatalf("layoutPDFPages() produced %d pages, want 3", len(pages))
+	if len(pages) != 2 {
+		t.Fatalf("layoutPDFPages() produced %d pages, want 2", len(pages))
 	}
 	targetFirstWord := strings.Fields(target)[0]
-	if got := pageText(pages[1]); strings.Contains(got, targetFirstWord) {
+	if got := pageText(pages[0]); strings.Contains(got, targetFirstWord) {
 		t.Fatalf("paragraph orphan left on previous page: %q", got)
 	}
-	if got := pageText(pages[2]); !strings.Contains(got, targetFirstWord) {
+	if got := pageText(pages[1]); !strings.Contains(got, targetFirstWord) {
 		t.Fatalf("paragraph did not move to next page: %q", got)
 	}
 }
@@ -106,16 +106,16 @@ func TestLayoutPDFPagesHonorsCSSPageBreakAndHiddenStyles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if len(pages) != 4 {
-		t.Fatalf("layoutPDFPages() produced %d pages, want 4", len(pages))
+	if len(pages) != 3 {
+		t.Fatalf("layoutPDFPages() produced %d pages, want 3", len(pages))
 	}
-	if got := pageText(pages[1]); !strings.Contains(got, "first paragraph") || strings.Contains(got, "hidden paragraph") || strings.Contains(got, "second paragraph") {
+	if got := pageText(pages[0]); !strings.Contains(got, "first paragraph") || strings.Contains(got, "hidden paragraph") || strings.Contains(got, "second paragraph") {
 		t.Fatalf("first body page text = %q, want first visible paragraph only", got)
 	}
-	if got := pageText(pages[2]); !strings.Contains(got, "second paragraph") || !strings.Contains(got, "third paragraph") || strings.Contains(got, "fourth paragraph") {
+	if got := pageText(pages[1]); !strings.Contains(got, "second paragraph") || !strings.Contains(got, "third paragraph") || strings.Contains(got, "fourth paragraph") {
 		t.Fatalf("second body page text = %q, want second and third paragraphs before forced break-after", got)
 	}
-	if got := pageText(pages[3]); !strings.Contains(got, "fourth paragraph") {
+	if got := pageText(pages[2]); !strings.Contains(got, "fourth paragraph") {
 		t.Fatalf("third body page text = %q, want fourth paragraph", got)
 	}
 }
@@ -146,10 +146,10 @@ func TestLayoutPDFPagesAppliesRootPageMargins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if len(pages) != 2 || len(pages[1].Lines) != 1 {
+	if len(pages) != 1 || len(pages[0].Lines) != 1 {
 		t.Fatalf("layoutPDFPages() pages = %#v, want one body line", pages)
 	}
-	line := pages[1].Lines[0]
+	line := pages[0].Lines[0]
 	if line.X != 18 || line.Y != 140.5 {
 		t.Fatalf("line position = %v/%v, want 18/140.5", line.X, line.Y)
 	}
@@ -182,10 +182,10 @@ func TestLayoutPDFPagesAppliesFirstBlockTopMargin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if len(pages) != 2 || len(pages[1].Lines) != 1 {
+	if len(pages) != 1 || len(pages[0].Lines) != 1 {
 		t.Fatalf("layoutPDFPages() pages = %#v, want one body line", pages)
 	}
-	line := pages[1].Lines[0]
+	line := pages[0].Lines[0]
 	if line.X != 24 || line.Y != 138.5 {
 		t.Fatalf("line position = %v/%v, want 24/138.5", line.X, line.Y)
 	}
@@ -223,21 +223,21 @@ func TestLayoutPDFPagesAppliesPadding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if len(pages) != 2 || len(pages[1].Lines) != 1 || len(pages[1].Backgrounds) != 1 || len(pages[1].Borders) != 1 {
+	if len(pages) != 1 || len(pages[0].Lines) != 1 || len(pages[0].Backgrounds) != 1 || len(pages[0].Borders) != 1 {
 		t.Fatalf("layoutPDFPages() pages = %#v, want one body line and decorations", pages)
 	}
-	line := pages[1].Lines[0]
+	line := pages[0].Lines[0]
 	if line.X != 31 { // 24pt page margin + 7pt left padding.
 		t.Fatalf("line X = %v, want 31", line.X)
 	}
 	if line.Y != 140.5 { // 180pt page height - 24pt page margin - 5pt top padding - 10.5pt font size.
 		t.Fatalf("line Y = %v, want 140.5", line.Y)
 	}
-	background := pages[1].Backgrounds[0]
+	background := pages[0].Backgrounds[0]
 	if background.X != 24 || background.Y != 127.9 || background.Width != 172 || background.Height < 28.099 || background.Height > 28.101 || background.Color.String() != "#0000ff" {
 		t.Fatalf("background = %#v, want padded block background", background)
 	}
-	border := pages[1].Borders[0]
+	border := pages[0].Borders[0]
 	if border.X != background.X || border.Y != background.Y || border.Width != background.Width || border.Height != background.Height || border.LineWidth != 1 || border.Color.String() != "#ff0000" {
 		t.Fatalf("border = %#v, want matching padded block border", border)
 	}
@@ -274,14 +274,14 @@ func TestLayoutPDFPagesAppliesBlockWidth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if len(pages) != 2 || len(pages[1].Lines) != 1 || len(pages[1].Backgrounds) != 1 {
+	if len(pages) != 1 || len(pages[0].Lines) != 1 || len(pages[0].Backgrounds) != 1 {
 		t.Fatalf("layoutPDFPages() pages = %#v, want one body line and background", pages)
 	}
-	line := pages[1].Lines[0]
+	line := pages[0].Lines[0]
 	if line.X != 29 { // 24pt page margin + 5pt left padding.
 		t.Fatalf("line X = %v, want 29", line.X)
 	}
-	background := pages[1].Backgrounds[0]
+	background := pages[0].Backgrounds[0]
 	if background.X != 24 || background.Width != 72 { // 60pt content width + 12pt horizontal padding.
 		t.Fatalf("background = %#v, want 72pt fixed-width block", background)
 	}

@@ -82,16 +82,8 @@ func TestGenerateSkeletonPDF(t *testing.T) {
 		"/Type /Pages",
 		"/Type /Page",
 		"/MediaBox [0 0 303.36 403.2]",
-		"/Filter /FlateDecode",
-		"/Subtype /Type0",
-		"/Subtype /CIDFontType2",
-		"/Encoding /Identity-H",
-		"/CIDToGIDMap /Identity",
-		"/FontFile2 9 0 R",
-		"/ToUnicode 10 0 R",
 		"/Root 1 0 R",
 		"/Info 5 0 R",
-		"xref\n0 11",
 		"%%EOF",
 	} {
 		if !strings.Contains(pdfText, want) {
@@ -191,14 +183,14 @@ func TestGenerateTextBodyAddsPaginatedBodyPage(t *testing.T) {
 	}
 	pdfText := string(data)
 	for _, want := range []string{
-		"/Count 2",
-		"/Kids [3 0 R 6 0 R]",
+		"/Count 1",
+		"/Kids [3 0 R]",
 		"/FontFile2",
 		"/ToUnicode",
 		"/Outlines",
 		"/Type /Outlines",
-		"/Dest [6 0 R /Fit]",
-		"/Names [<636861707465722D31> [6 0 R /Fit]]",
+		"/Dest [3 0 R /Fit]",
+		"/Names [<636861707465722D31> [3 0 R /Fit]]",
 		"/BaseFont /NotoSerif-Regular",
 		"/BaseFont /NotoSerif-Bold",
 	} {

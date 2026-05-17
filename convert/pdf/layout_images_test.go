@@ -34,10 +34,10 @@ func TestLayoutPDFPagesUpscalesVignettesToContentWidth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if len(pages) != 2 || len(pages[1].Images) != 1 {
+	if len(pages) != 1 || len(pages[0].Images) != 1 {
 		t.Fatalf("layout pages images = %#v, want one vignette image", pages)
 	}
-	if got, want := pages[1].Images[0].Width, 520.0-48.0; math.Abs(got-want) > 0.001 {
+	if got, want := pages[0].Images[0].Width, 520.0-48.0; math.Abs(got-want) > 0.001 {
 		t.Fatalf("vignette width = %v, want content width %v", got, want)
 	}
 }
@@ -71,10 +71,10 @@ func TestLayoutPDFPagesDoesNotApplyTextIndentToImageOnlyParagraphs(t *testing.T)
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if len(pages) != 2 || len(pages[1].Images) != 1 {
+	if len(pages) != 1 || len(pages[0].Images) != 1 {
 		t.Fatalf("layout pages images = %#v, want one image-only paragraph", pages)
 	}
-	if got, want := pages[1].Images[0].X, 24.0; math.Abs(got-want) > 0.001 {
+	if got, want := pages[0].Images[0].X, 24.0; math.Abs(got-want) > 0.001 {
 		t.Fatalf("image-only paragraph x = %v, want left edge %v without text indent", got, want)
 	}
 }
@@ -110,10 +110,10 @@ func TestLayoutPDFPagesLeftAlignsImageOnlyParagraphsInsideCite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if len(pages) != 2 || len(pages[1].Images) != 1 {
+	if len(pages) != 1 || len(pages[0].Images) != 1 {
 		t.Fatalf("layout pages images = %#v, want one cite image", pages)
 	}
-	if got, want := pages[1].Images[0].X, 24.0+21.0; math.Abs(got-want) > 0.001 {
+	if got, want := pages[0].Images[0].X, 24.0+21.0; math.Abs(got-want) > 0.001 {
 		t.Fatalf("cite image x = %v, want left-aligned at %v", got, want)
 	}
 }
@@ -141,16 +141,16 @@ func TestLayoutPDFPagesSizesBlockImagesLikeKP3(t *testing.T) {
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if len(pages) != 2 || len(pages[1].Images) != 1 {
+	if len(pages) != 1 || len(pages[0].Images) != 1 {
 		t.Fatalf("layout pages images = %#v, want one block image", pages)
 	}
 	contentWidth := 520.0 - 48.0
 	wantWidth := contentWidth * 100.0 / pdfKP3ContentWidthPx
-	if got := pages[1].Images[0].Width; math.Abs(got-wantWidth) > 0.001 {
+	if got := pages[0].Images[0].Width; math.Abs(got-wantWidth) > 0.001 {
 		t.Fatalf("block image width = %v, want KP3-style width %v", got, wantWidth)
 	}
 	wantHeight := wantWidth / 2
-	if got := pages[1].Images[0].Height; math.Abs(got-wantHeight) > 0.001 {
+	if got := pages[0].Images[0].Height; math.Abs(got-wantHeight) > 0.001 {
 		t.Fatalf("block image height = %v, want aspect-preserving height %v", got, wantHeight)
 	}
 }
@@ -179,17 +179,17 @@ func TestLayoutPDFPagesAvoidsBlankPageBeforeTallImageAfterEmptyLine(t *testing.T
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if len(pages) != 3 {
-		t.Fatalf("layout pages = %#v, want title page + text page + image page", pages)
+	if len(pages) != 2 {
+		t.Fatalf("layout pages = %#v, want text page + image page", pages)
 	}
-	if len(pages[1].Lines) == 0 || len(pages[1].Images) != 0 {
-		t.Fatalf("text page = %#v, want only intro text", pages[1])
+	if len(pages[0].Lines) == 0 || len(pages[0].Images) != 0 {
+		t.Fatalf("text page = %#v, want only intro text", pages[0])
 	}
-	if len(pages[2].Images) != 1 || len(pages[2].Lines) != 0 {
-		t.Fatalf("image page = %#v, want only image", pages[2])
+	if len(pages[1].Images) != 1 || len(pages[1].Lines) != 0 {
+		t.Fatalf("image page = %#v, want only image", pages[1])
 	}
-	if len(pages[2].Anchors) != 1 || pages[2].Anchors[0] != "img" {
-		t.Fatalf("image anchors = %#v, want image anchor on rendered image page", pages[2].Anchors)
+	if len(pages[1].Anchors) != 1 || pages[1].Anchors[0] != "img" {
+		t.Fatalf("image anchors = %#v, want image anchor on rendered image page", pages[1].Anchors)
 	}
 }
 
@@ -220,13 +220,13 @@ func TestLayoutPDFPagesRendersImageOnlyHeadings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if len(pages) != 2 || len(pages[1].Images) != 1 {
+	if len(pages) != 1 || len(pages[0].Images) != 1 {
 		t.Fatalf("layout pages images = %#v, want image-only heading image", pages)
 	}
-	if len(pages[1].Lines) != 0 {
-		t.Fatalf("heading lines = %#v, want image-only heading rendered as block image", pages[1].Lines)
+	if len(pages[0].Lines) != 0 {
+		t.Fatalf("heading lines = %#v, want image-only heading rendered as block image", pages[0].Lines)
 	}
-	if got, want := pages[1].Images[0].Width, 520.0-48.0; math.Abs(got-want) > 0.001 {
+	if got, want := pages[0].Images[0].Width, 520.0-48.0; math.Abs(got-want) > 0.001 {
 		t.Fatalf("heading image width = %v, want content width %v", got, want)
 	}
 }
@@ -256,14 +256,14 @@ func TestLayoutPDFPagesKeepsGapAfterImageOnlySubtitle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if len(pages) != 2 || len(pages[1].Images) != 1 || len(pages[1].Lines) == 0 {
+	if len(pages) != 1 || len(pages[0].Images) != 1 || len(pages[0].Lines) == 0 {
 		t.Fatalf("layout pages = %#v, want image plus following text", pages)
 	}
 	wantWidth := (520.0 - 48.0) * 380.0 / pdfKP3ContentWidthPx
-	if got := pages[1].Images[0].Width; math.Abs(got-wantWidth) > 0.001 {
+	if got := pages[0].Images[0].Width; math.Abs(got-wantWidth) > 0.001 {
 		t.Fatalf("subtitle image width = %v, want KP3-style width %v", got, wantWidth)
 	}
-	gap := pages[1].Images[0].Y - pages[1].Lines[0].Y
+	gap := pages[0].Images[0].Y - pages[0].Lines[0].Y
 	if math.Abs(gap-(pdfSubtitleSpaceAfter+pdfBaseFontSize)) > 0.001 {
 		t.Fatalf("subtitle image gap = %v, want %v", gap, pdfSubtitleSpaceAfter+pdfBaseFontSize)
 	}

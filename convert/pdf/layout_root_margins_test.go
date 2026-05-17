@@ -40,10 +40,10 @@ func TestLayoutPDFPagesAnnotationWrapperParagraphCanStripRootHorizontalMargins(t
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if len(pages) != 2 || len(pages[1].Lines) != 1 {
+	if len(pages) != 1 || len(pages[0].Lines) != 1 {
 		t.Fatalf("layoutPDFPages() pages = %#v, want one annotation line", pages)
 	}
-	if got := pages[1].Lines[0].X; math.Abs(got-36) > 0.001 {
+	if got := pages[0].Lines[0].X; math.Abs(got-36) > 0.001 {
 		t.Fatalf("annotation line X = %v, want 36 (24 base margin + 12 annotation margin)", got)
 	}
 }
@@ -78,10 +78,10 @@ func TestLayoutPDFPagesAnnotationWrapperNestedCiteCanStripRootHorizontalMargins(
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if len(pages) != 2 || len(pages[1].Lines) != 1 {
+	if len(pages) != 1 || len(pages[0].Lines) != 1 {
 		t.Fatalf("layoutPDFPages() pages = %#v, want one cite line", pages)
 	}
-	if got := pages[1].Lines[0].X; math.Abs(got-45) > 0.001 {
+	if got := pages[0].Lines[0].X; math.Abs(got-45) > 0.001 {
 		t.Fatalf("cite line X = %v, want 45 (24 base margin + 21 cite margin)", got)
 	}
 }
@@ -118,11 +118,11 @@ func TestLayoutPDFPagesAnnotationWrapperNestedPoemCanStripRootHorizontalMargins(
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if len(pages) != 2 || len(pages[1].Lines) != 1 {
+	if len(pages) != 1 || len(pages[0].Lines) != 1 {
 		t.Fatalf("layoutPDFPages() pages = %#v, want one verse line", pages)
 	}
 	wantX := 24 + pdfPoemMarginLeft + 15
-	if got := pages[1].Lines[0].X; math.Abs(got-wantX) > 0.001 {
+	if got := pages[0].Lines[0].X; math.Abs(got-wantX) > 0.001 {
 		t.Fatalf("verse line X = %v, want %v (24 base margin + poem margin + 15 verse margin)", got, wantX)
 	}
 }

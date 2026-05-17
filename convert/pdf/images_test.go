@@ -44,8 +44,8 @@ func TestLayoutPDFPagesAddsCoverImagePage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if len(pages) != 2 {
-		t.Fatalf("pages = %d, want cover plus title", len(pages))
+	if len(pages) != 1 {
+		t.Fatalf("pages = %d, want cover only", len(pages))
 	}
 	if len(pages[0].Images) != 1 || pages[0].Images[0].ImageID != "cover" {
 		t.Fatalf("cover page images = %#v", pages[0].Images)

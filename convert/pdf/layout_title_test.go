@@ -36,10 +36,10 @@ func TestLayoutPDFPagesKeepsGapBetweenTitleVignetteAndHeadingImage(t *testing.T)
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if len(pages) != 2 || len(pages[1].Images) != 2 {
+	if len(pages) != 1 || len(pages[0].Images) != 2 {
 		t.Fatalf("layout pages images = %#v, want title vignette plus heading image", pages)
 	}
-	gap := pages[1].Images[0].Y - (pages[1].Images[1].Y + pages[1].Images[1].Height)
+	gap := pages[0].Images[0].Y - (pages[0].Images[1].Y + pages[0].Images[1].Height)
 	wantGap := headingPDFStyle(1).SpaceBefore
 	if math.Abs(gap-wantGap) > 0.001 {
 		t.Fatalf("title image gap = %v, want %v", gap, wantGap)
@@ -79,10 +79,10 @@ func TestLayoutPDFPagesTitleImageCanStripRootHorizontalMargins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if len(pages) != 2 || len(pages[1].Images) != 1 {
+	if len(pages) != 1 || len(pages[0].Images) != 1 {
 		t.Fatalf("layout pages images = %#v, want one title image", pages)
 	}
-	image := pages[1].Images[0]
+	image := pages[0].Images[0]
 	if math.Abs(image.X-24) > 0.001 {
 		t.Fatalf("title image x = %v, want base-margin x 24", image.X)
 	}
@@ -124,10 +124,10 @@ func TestLayoutPDFPagesTitleVignetteCanStripRootHorizontalMargins(t *testing.T) 
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if len(pages) != 2 || len(pages[1].Images) != 1 {
+	if len(pages) != 1 || len(pages[0].Images) != 1 {
 		t.Fatalf("layout pages images = %#v, want one vignette image", pages)
 	}
-	image := pages[1].Images[0]
+	image := pages[0].Images[0]
 	if math.Abs(image.X-24) > 0.001 {
 		t.Fatalf("title vignette x = %v, want base-margin x 24", image.X)
 	}

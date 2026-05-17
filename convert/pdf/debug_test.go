@@ -88,17 +88,14 @@ func TestGenerateDebugDumps(t *testing.T) {
 	if err := json.Unmarshal(pageData, &pages); err != nil {
 		t.Fatalf("unmarshal pdf-layout-pages.json: %v", err)
 	}
-	if len(pages) < 2 {
-		t.Fatalf("debug pages = %d, want at least 2", len(pages))
+	if len(pages) < 1 {
+		t.Fatalf("debug pages = %d, want at least 1", len(pages))
 	}
-	if got := pages[0].Lines[0].Text; got != "Debug Book" {
-		t.Fatalf("first debug line = %q, want Debug Book", got)
-	}
-	if len(pages[1].Anchors) == 0 || pages[1].Anchors[0] != "debug-section" {
-		t.Fatalf("body page anchors = %#v, want debug-section", pages[1].Anchors)
+	if len(pages[0].Anchors) == 0 || pages[0].Anchors[0] != "debug-section" {
+		t.Fatalf("body page anchors = %#v, want debug-section", pages[0].Anchors)
 	}
 	lineBreakFound := false
-	for _, page := range pages[1:] {
+	for _, page := range pages {
 		for _, line := range page.Lines {
 			if line.LineBreak == nil {
 				continue

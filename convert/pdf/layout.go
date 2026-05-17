@@ -1,13 +1,9 @@
 package pdf
 
-import (
-	"fmt"
-	"strings"
-)
+import "strings"
 
-func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage, map[pdfFontKey]map[uint16]shapedGlyph, error) {
+func layoutPDFPages(doc skeletonDocument, _ *builtinFontFace) ([]pdfPage, map[pdfFontKey]map[uint16]shapedGlyph, error) {
 	const margin = 24.0
-	titleContentWidth := max(doc.PageWidth-margin*2, 12)
 	used := make(map[pdfFontKey]map[uint16]shapedGlyph)
 	pages := make([]pdfPage, 0, 2)
 
@@ -120,47 +116,10 @@ func layoutPDFPages(doc skeletonDocument, titleFace *builtinFontFace) ([]pdfPage
 		}
 	}
 
-	titlePage := addPage()
-	titleText := strings.TrimSpace(doc.Title)
-	if titleText == "" {
-		titleText = "Untitled"
-	}
-	authorText := strings.TrimSpace(doc.Author)
-	if authorText == "" {
-		authorText = "fbc"
-	}
-	titleKey := pdfFontKey{Family: "sans-serif"}
-	title, err := shapeText(titleFace, titleText)
-	if err != nil {
-		return nil, nil, fmt.Errorf("shape title: %w", err)
-	}
-	addLine(titlePage, pdfPageLine{
-		X:        margin,
-		Y:        max(doc.PageHeight-54.0, margin),
-		FontSize: 14,
-		FontKey:  titleKey,
-		Text:     title,
-	})
-	authorLines, err := wrapText(titleFace, authorText, 9, titleContentWidth)
-	if err != nil {
-		return nil, nil, fmt.Errorf("shape author: %w", err)
-	}
-	authorY := max(doc.PageHeight-74.0, margin)
-	for i, line := range authorLines {
-		y := authorY - float64(i)*11.0
-		if y < margin {
-			break
-		}
-		addLine(titlePage, pdfPageLine{
-			X:        margin,
-			Y:        y,
-			FontSize: 9,
-			FontKey:  titleKey,
-			Text:     line,
-		})
-	}
-
 	if len(doc.Blocks) == 0 {
+		if len(pages) == 0 {
+			addPage()
+		}
 		return pages, used, nil
 	}
 
