@@ -32,12 +32,13 @@ func collectPDFContent(c *content.Content, cfg *config.DocumentConfig) (pdfConte
 	blocks := make([]pdfTextBlock, 0, 64)
 	splitSections := splitSectionIDs(plan)
 	splitBodies := splitBodyImageBodies(plan)
+	endVignettes := pdfSectionEndVignetteTransfersForPlan(c.Book, plan)
 	for i := range plan.Units {
 		unit := &plan.Units[i]
 		if unit.ForceNewPage && unit.Kind != structure.UnitCover {
 			blocks = append(blocks, pdfTextBlock{Kind: pdfBlockPageBreak, ID: unit.ID, Text: unit.Title})
 		}
-		appendUnitBlocks(&blocks, c.Book, unit, splitSections, splitBodies)
+		appendUnitBlocks(&blocks, c.Book, unit, splitSections, splitBodies, endVignettes)
 	}
 	toc := plan.TOC
 	blocks, toc = insertAnnotationPageBlocks(blocks, toc, c.Book.Description.TitleInfo.Annotation, cfg)
@@ -282,7 +283,7 @@ func splitBodyImageBodies(plan *structure.Plan) map[*fb2.Body]bool {
 	return bodies
 }
 
-func appendUnitBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, unit *structure.Unit, splitSections map[string]bool, splitBodies map[*fb2.Body]bool) {
+func appendUnitBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, unit *structure.Unit, splitSections map[string]bool, splitBodies map[*fb2.Body]bool, endVignettes pdfSectionEndVignetteTransfers) {
 	if unit == nil {
 		return
 	}
@@ -294,7 +295,7 @@ func appendUnitBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, unit *struc
 	case structure.UnitBodyIntro:
 		appendBodyIntroBlocks(blocks, book, unit.Body, !splitBodies[unit.Body])
 	case structure.UnitSection:
-		appendSectionBlocks(blocks, book, unit.Section, unit.TitleDepth, splitSections, "", false)
+		appendSectionBlocks(blocks, book, unit.Section, unit.TitleDepth, splitSections, "", false, endVignettes)
 	case structure.UnitFootnotesBody:
 		appendFootnoteBodyBlocks(blocks, book, unit.Body, splitSections)
 	}

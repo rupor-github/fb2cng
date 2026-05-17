@@ -529,6 +529,77 @@ func textBlocksOnly(blocks []pdfTextBlock) []pdfTextBlock {
 	return out
 }
 
+func TestCollectTextBlocksTransfersChapterEndVignetteToLastSplitDescendant(t *testing.T) {
+	title := func(text string) *fb2.Title {
+		return &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: text}}}}}}
+	}
+	paragraph := func(text string) fb2.FlowItem {
+		return fb2.FlowItem{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: text}}}}
+	}
+	sectionItem := func(section *fb2.Section) fb2.FlowItem {
+		return fb2.FlowItem{Kind: fb2.FlowSection, Section: section}
+	}
+
+	valid := &fb2.Section{
+		ID:      "valid",
+		Title:   title("Валидное вложение секций"),
+		Content: []fb2.FlowItem{paragraph("Valid body.")},
+	}
+	validWrapper := &fb2.Section{
+		ID:      "valid-wrapper",
+		Content: []fb2.FlowItem{sectionItem(valid)},
+	}
+	invalid := &fb2.Section{
+		ID:      "invalid",
+		Title:   title("Невалидное вложение секций"),
+		Content: []fb2.FlowItem{paragraph("Invalid body.")},
+	}
+	book := &fb2.FictionBook{
+		VignetteIDs: map[common.VignettePos]string{common.VignettePosChapterEnd: "chapter-end"},
+		Bodies: []fb2.Body{{
+			Kind: fb2.BodyMain,
+			Sections: []fb2.Section{{
+				ID:      "chapter",
+				Title:   title("Chapter"),
+				Content: []fb2.FlowItem{sectionItem(validWrapper), sectionItem(invalid)},
+			}},
+		}},
+	}
+	book.SetSectionPageBreaks(map[int]bool{2: true})
+
+	blocks, err := collectTextBlocks(&content.Content{Book: book})
+	if err != nil {
+		t.Fatalf("collectTextBlocks() error = %v", err)
+	}
+	indexOfText := func(text string) int {
+		for i, block := range blocks {
+			if block.Text == text {
+				return i
+			}
+		}
+		return -1
+	}
+	validIndex := indexOfText("Валидное вложение секций")
+	invalidIndex := indexOfText("Невалидное вложение секций")
+	chapterEnd := -1
+	chapterEndCount := 0
+	for i, block := range blocks {
+		if block.Kind == pdfBlockImage && block.ImageID == "chapter-end" {
+			chapterEnd = i
+			chapterEndCount++
+		}
+	}
+	if validIndex < 0 || invalidIndex < 0 || chapterEnd < 0 {
+		t.Fatalf("missing expected blocks valid=%d invalid=%d chapterEnd=%d: %#v", validIndex, invalidIndex, chapterEnd, blocks)
+	}
+	if chapterEndCount != 1 {
+		t.Fatalf("chapter-end count = %d, want 1", chapterEndCount)
+	}
+	if !(validIndex < invalidIndex && invalidIndex < chapterEnd) {
+		t.Fatalf("chapter-end order valid=%d invalid=%d chapterEnd=%d, want after invalid section", validIndex, invalidIndex, chapterEnd)
+	}
+}
+
 func TestCollectTextBlocksIncludesVignettes(t *testing.T) {
 	book := &fb2.FictionBook{
 		VignetteIDs: map[common.VignettePos]string{
