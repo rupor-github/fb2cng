@@ -9,6 +9,7 @@ import (
 
 	"go.uber.org/zap/zaptest"
 
+	"fbc/common"
 	"fbc/config"
 	"fbc/content"
 	"fbc/convert/pdf/docwriter"
@@ -51,6 +52,66 @@ func TestBookMetadataSubjectAndKeywords(t *testing.T) {
 	}
 	if got := bookKeywords(c); got != "one two three" {
 		t.Fatalf("bookKeywords() = %q, want normalized keywords", got)
+	}
+}
+
+func TestBookMetadataUsesMetainformationTemplates(t *testing.T) {
+	c := &content.Content{
+		SrcName:      "source.fb2",
+		OutputFormat: common.OutputFmtPdf,
+		Book: &fb2.FictionBook{Description: fb2.Description{TitleInfo: fb2.TitleInfo{
+			BookTitle: fb2.TextField{Value: "Книга"},
+			Authors:   []fb2.Author{{FirstName: "Иван", LastName: "Иванов"}},
+		}}},
+	}
+	cfg := &config.DocumentConfig{Metainformation: config.MetainformationConfig{
+		TitleTemplate:       "{{.Title}} - копия",
+		CreatorNameTemplate: "{{.LastName}}, {{.FirstName}}",
+		Transliterate:       true,
+	}}
+
+	if got := bookTitle(c, cfg, zaptest.NewLogger(t)); got != "Kniga - kopiia" {
+		t.Fatalf("bookTitle() = %q, want KFX-style template expansion then transliteration", got)
+	}
+	if got := bookAuthors(c, cfg, zaptest.NewLogger(t)); got != "Ivanov Ivan" {
+		t.Fatalf("bookAuthors() = %q, want KFX-style author template expansion then transliteration", got)
+	}
+}
+
+func TestGeneratePDFMetadataUsesMetainformationTemplates(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputName := filepath.Join(tmpDir, "book.pdf")
+	cfg := &config.DocumentConfig{
+		Images: config.ImagesConfig{Screen: config.ScreenConfig{Width: 1264, Height: 1680, DPI: 300}},
+		Metainformation: config.MetainformationConfig{
+			TitleTemplate:       "{{.Title}} (PDF)",
+			CreatorNameTemplate: "{{.LastName}}, {{.FirstName}}",
+		},
+	}
+	c := &content.Content{
+		SrcName:      "book.fb2",
+		OutputFormat: common.OutputFmtPdf,
+		Book: &fb2.FictionBook{Description: fb2.Description{TitleInfo: fb2.TitleInfo{
+			BookTitle: fb2.TextField{Value: "Metadata Book"},
+			Authors:   []fb2.Author{{FirstName: "Ada", LastName: "Lovelace"}},
+		}}},
+	}
+
+	if err := Generate(context.Background(), c, outputName, cfg, zaptest.NewLogger(t)); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	data, err := os.ReadFile(outputName)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	pdfText := string(data)
+	for _, want := range []string{
+		docwriter.Format(docwriter.UTF16TextString("Metadata Book (PDF)")),
+		docwriter.Format(docwriter.UTF16TextString("Lovelace, Ada")),
+	} {
+		if !strings.Contains(pdfText, want) {
+			t.Fatalf("generated PDF does not contain metadata %q", want)
+		}
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/text/language"
 
+	"fbc/config"
 	"fbc/content"
 	contenttext "fbc/content/text"
 	"fbc/convert/pdf/docwriter"
@@ -57,25 +58,72 @@ func flateStream(data []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func bookTitle(c *content.Content) string {
-	if c.Book == nil {
-		return strings.TrimSuffix(c.SrcName, ".fb2")
+func bookTitle(c *content.Content, cfg *config.DocumentConfig, log *zap.Logger) string {
+	if c == nil || c.Book == nil {
+		return fallbackBookTitle(c)
 	}
-	if title := strings.TrimSpace(c.Book.Description.TitleInfo.BookTitle.Value); title != "" {
+	if log == nil {
+		log = zap.NewNop()
+	}
+	title := c.Book.Description.TitleInfo.BookTitle.Value
+	if cfg != nil && cfg.Metainformation.TitleTemplate != "" {
+		expanded, err := c.Book.ExpandTemplateMetainfo(
+			config.MetaTitleTemplateFieldName,
+			cfg.Metainformation.TitleTemplate,
+			c.SrcName,
+			c.OutputFormat,
+		)
+		if err != nil {
+			log.Warn("Unable to expand title template for PDF metadata", zap.Error(err))
+		} else {
+			title = expanded
+		}
+	}
+	if cfg != nil && cfg.Metainformation.Transliterate {
+		title = fb2.Transliterate(title)
+	}
+	if title = strings.TrimSpace(title); title != "" {
 		return title
+	}
+	return fallbackBookTitle(c)
+}
+
+func fallbackBookTitle(c *content.Content) string {
+	if c == nil {
+		return ""
 	}
 	return strings.TrimSuffix(c.SrcName, ".fb2")
 }
 
-func bookAuthors(c *content.Content) string {
-	if c.Book == nil {
+func bookAuthors(c *content.Content, cfg *config.DocumentConfig, log *zap.Logger) string {
+	if c == nil || c.Book == nil {
 		return ""
+	}
+	if log == nil {
+		log = zap.NewNop()
 	}
 
 	authors := make([]string, 0, len(c.Book.Description.TitleInfo.Authors))
 	for i := range c.Book.Description.TitleInfo.Authors {
-		name := authorName(&c.Book.Description.TitleInfo.Authors[i])
-		if name != "" {
+		author := &c.Book.Description.TitleInfo.Authors[i]
+		name := authorName(author)
+		if cfg != nil && cfg.Metainformation.CreatorNameTemplate != "" {
+			expanded, err := c.Book.ExpandTemplateAuthorName(
+				config.MetaCreatorNameTemplateFieldName,
+				cfg.Metainformation.CreatorNameTemplate,
+				0,
+				author,
+			)
+			if err != nil {
+				log.Warn("Unable to expand author name template for PDF metadata", zap.Error(err))
+			} else {
+				name = expanded
+			}
+		}
+		if cfg != nil && cfg.Metainformation.Transliterate {
+			name = fb2.Transliterate(name)
+		}
+		if name = strings.TrimSpace(name); name != "" {
 			authors = append(authors, name)
 		}
 	}
