@@ -152,7 +152,7 @@ func (r *pdfStyleResolver) applyStylesheet(sheet *css.Stylesheet) {
 		case item.Rule != nil:
 			r.applyRule(*item.Rule)
 		case item.MediaBlock != nil:
-			matched := item.MediaBlock.Query.Evaluate(true, true)
+			matched := item.MediaBlock.Query.EvaluateContext(css.MediaContext{KF8: true, ET: true, FBCPDF: true})
 			r.tracer.traceMedia(item.MediaBlock.Query.Raw, matched, len(item.MediaBlock.Rules))
 			if !matched {
 				continue

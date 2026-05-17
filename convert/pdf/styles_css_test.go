@@ -462,6 +462,15 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 			@media amzn-et {
 				.verse { margin-left: 2em; text-indent: 0; }
 			}
+			@media fbc-pdf {
+				.pdf-only { margin-right: 4em; }
+			}
+			@media fbc-pdf and amzn-kf8 and amzn-et {
+				.pdf-combo { text-align: right; }
+			}
+			@media not fbc-pdf {
+				.not-pdf { margin-left: 5em; }
+			}
 			@media not amzn-et {
 				p { text-align: right; }
 			}
@@ -531,6 +540,19 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 	verse := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockPoem})
 	if verse.MarginLeft != 24 {
 		t.Fatalf("verse margin-left = %v, want 24", verse.MarginLeft)
+	}
+
+	pdfOnly := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "pdf-only"})
+	if pdfOnly.MarginRight != 48 {
+		t.Fatalf("fbc-pdf media margin-right = %v, want 48", pdfOnly.MarginRight)
+	}
+	pdfCombo := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "pdf-combo"})
+	if pdfCombo.Paragraph.Align != textAlignRight {
+		t.Fatalf("fbc-pdf/amzn media align = %v, want right", pdfCombo.Paragraph.Align)
+	}
+	notPDF := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "not-pdf"})
+	if notPDF.MarginLeft == 60 {
+		t.Fatalf("not fbc-pdf media rule applied in PDF context")
 	}
 }
 

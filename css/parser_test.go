@@ -909,6 +909,43 @@ func TestMediaQuery_Evaluate(t *testing.T) {
 	}
 }
 
+func TestMediaQuery_EvaluatePDFContext(t *testing.T) {
+	pdfContext := css.MediaContext{KF8: true, ET: true, FBCPDF: true}
+	kfxContext := css.MediaContext{KF8: true, ET: true}
+	tests := []struct {
+		name string
+		mq   css.MediaQuery
+		pdf  bool
+		kfx  bool
+	}{
+		{"fbc-pdf", css.MediaQuery{Type: "fbc-pdf"}, true, false},
+		{"not fbc-pdf", css.MediaQuery{Type: "fbc-pdf", Negated: true}, false, true},
+		{
+			"fbc-pdf and amzn-kf8 and amzn-et",
+			css.MediaQuery{Type: "fbc-pdf", Features: []css.MediaFeature{{Name: "amzn-kf8"}, {Name: "amzn-et"}}},
+			true,
+			false,
+		},
+		{
+			"amzn-kf8 and fbc-pdf",
+			css.MediaQuery{Type: "amzn-kf8", Features: []css.MediaFeature{{Name: "fbc-pdf"}}},
+			true,
+			false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.mq.EvaluateContext(pdfContext); got != tt.pdf {
+				t.Errorf("EvaluateContext(PDF) = %v, want %v", got, tt.pdf)
+			}
+			if got := tt.mq.EvaluateContext(kfxContext); got != tt.kfx {
+				t.Errorf("EvaluateContext(KFX) = %v, want %v", got, tt.kfx)
+			}
+		})
+	}
+}
+
 func TestMediaQuery_EvaluateKFXContext(t *testing.T) {
 	// Test using Evaluate(true, true) directly — the KFX context
 	tests := []struct {
