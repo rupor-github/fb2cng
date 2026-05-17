@@ -378,14 +378,18 @@ func inlineImageFragmentSize(doc skeletonDocument, imageID string, style paragra
 		lineHeight = pdfBaseLineHeight
 	}
 	lineAscent, lineDescent := inlineLineBoxMetrics(face, style, lineHeight)
+	fontSize := style.FontSize
+	if fontSize <= 0 {
+		fontSize = pdfBaseFontSize
+	}
 	targetHeight := lineHeight
 	width, height := targetHeight, targetHeight
 	if img := doc.Images[imageID]; img != nil {
-		naturalWidth, naturalHeight := naturalPDFImageSize(doc, img)
-		if naturalWidth > 0 && naturalHeight > 0 {
-			scale := targetHeight / naturalHeight
-			width = naturalWidth * scale
-			height = naturalHeight * scale
+		widthPx, heightPx := pdfImagePixelSize(img)
+		if widthPx > 0 && heightPx > 0 {
+			scale := fontSize / pdfKP3PixelsPerEm
+			width = float64(widthPx) * scale
+			height = float64(heightPx) * scale
 		}
 	}
 	if maxWidth > 0 && width > maxWidth {

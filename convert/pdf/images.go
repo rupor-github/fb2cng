@@ -51,7 +51,7 @@ func fitPDFImageSizeWithUpscale(doc skeletonDocument, img *fb2.BookImage, maxWid
 	return fitPDFImageDimensions(width, height, maxWidth, maxHeight, allowUpscale)
 }
 
-func fitPDFBlockImageSize(img *fb2.BookImage, maxWidth, maxHeight float64, forceContentWidth bool) (float64, float64, bool) {
+func fitPDFBlockImageSize(doc skeletonDocument, img *fb2.BookImage, maxWidth, maxHeight float64, forceContentWidth bool) (float64, float64, bool) {
 	widthPx, heightPx := pdfImagePixelSize(img)
 	if widthPx <= 0 || heightPx <= 0 || maxWidth <= 0 || maxHeight <= 0 {
 		return 0, 0, false
@@ -60,9 +60,30 @@ func fitPDFBlockImageSize(img *fb2.BookImage, maxWidth, maxHeight float64, force
 	width := maxWidth
 	if !forceContentWidth {
 		width = maxWidth * min(float64(widthPx)/pdfKP3ContentWidthPx, 1)
+		// KP3 expresses ordinary block-image widths against a 512px ideal column and
+		// clamps larger images to 100%. GIF block images in KP3 do not appear to grow
+		// past their configured screen-pixel size, while PNG/JPEG block images still
+		// follow the clamped percentage behavior.
+		if pdfBlockImageUsesScreenWidthCap(img, widthPx) {
+			if screenWidth, ok := pdfBlockImageScreenWidth(doc, widthPx); ok {
+				width = min(screenWidth, maxWidth)
+			}
+		}
 	}
 	height := width * float64(heightPx) / float64(widthPx)
 	return fitPDFImageDimensions(width, height, maxWidth, maxHeight, false)
+}
+
+func pdfBlockImageUsesScreenWidthCap(img *fb2.BookImage, widthPx int) bool {
+	return widthPx > int(pdfKP3ContentWidthPx) && img != nil && strings.Contains(strings.ToLower(img.MimeType), "gif")
+}
+
+func pdfBlockImageScreenWidth(doc skeletonDocument, widthPx int) (float64, bool) {
+	if widthPx <= 0 || doc.ScreenWidthPx <= 0 || doc.PageWidth <= 0 {
+		return 0, false
+	}
+	width := float64(widthPx) * doc.PageWidth / float64(doc.ScreenWidthPx)
+	return width, width > 0 && !math.IsNaN(width) && !math.IsInf(width, 0)
 }
 
 func fitPDFImageDimensions(width, height, maxWidth, maxHeight float64, allowUpscale bool) (float64, float64, bool) {

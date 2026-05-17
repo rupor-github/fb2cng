@@ -128,11 +128,13 @@ func TestLayoutPDFPagesSizesBlockImagesLikeKP3(t *testing.T) {
 	img.Dim.Height = 50
 
 	pages, _, err := layoutPDFPages(skeletonDocument{
-		PageWidth:  520,
-		PageHeight: 220,
-		Title:      "Title",
-		Author:     "Author",
-		Images:     fb2.BookImages{"block": img},
+		PageWidth:      520,
+		PageHeight:     220,
+		ScreenWidthPx:  1200,
+		ScreenHeightPx: 1600,
+		Title:          "Title",
+		Author:         "Author",
+		Images:         fb2.BookImages{"block": img},
 		Blocks: []pdfTextBlock{{
 			Kind:    pdfBlockImage,
 			ImageID: "block",
@@ -152,6 +154,78 @@ func TestLayoutPDFPagesSizesBlockImagesLikeKP3(t *testing.T) {
 	wantHeight := wantWidth / 2
 	if got := pages[0].Images[0].Height; math.Abs(got-wantHeight) > 0.001 {
 		t.Fatalf("block image height = %v, want aspect-preserving height %v", got, wantHeight)
+	}
+}
+
+func TestLayoutPDFPagesCapsLargeGIFBlockImagesByConfiguredScreen(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	img := &fb2.BookImage{MimeType: "image/gif"}
+	img.Dim.Width = 600
+	img.Dim.Height = 300
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:      520,
+		PageHeight:     220,
+		ScreenWidthPx:  1200,
+		ScreenHeightPx: 1600,
+		Title:          "Title",
+		Author:         "Author",
+		Images:         fb2.BookImages{"block": img},
+		Blocks: []pdfTextBlock{{
+			Kind:    pdfBlockImage,
+			ImageID: "block",
+		}},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 1 || len(pages[0].Images) != 1 {
+		t.Fatalf("layout pages images = %#v, want one block image", pages)
+	}
+	wantWidth := 520.0 * 600.0 / 1200.0
+	if got := pages[0].Images[0].Width; math.Abs(got-wantWidth) > 0.001 {
+		t.Fatalf("large block image width = %v, want screen-sized width %v", got, wantWidth)
+	}
+	wantHeight := wantWidth / 2
+	if got := pages[0].Images[0].Height; math.Abs(got-wantHeight) > 0.001 {
+		t.Fatalf("large GIF block image height = %v, want aspect-preserving height %v", got, wantHeight)
+	}
+}
+
+func TestLayoutPDFPagesClampsLargePNGBlockImagesLikeKP3(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	img := &fb2.BookImage{MimeType: "image/png"}
+	img.Dim.Width = 600
+	img.Dim.Height = 300
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:      520,
+		PageHeight:     400,
+		ScreenWidthPx:  1200,
+		ScreenHeightPx: 1600,
+		Title:          "Title",
+		Author:         "Author",
+		Images:         fb2.BookImages{"block": img},
+		Blocks: []pdfTextBlock{{
+			Kind:    pdfBlockImage,
+			ImageID: "block",
+		}},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 1 || len(pages[0].Images) != 1 {
+		t.Fatalf("layout pages images = %#v, want one block image", pages)
+	}
+	wantWidth := 520.0 - 48.0
+	if got := pages[0].Images[0].Width; math.Abs(got-wantWidth) > 0.001 {
+		t.Fatalf("large PNG block image width = %v, want KP3 clamped width %v", got, wantWidth)
 	}
 }
 

@@ -3,6 +3,7 @@ package pdf
 const (
 	pdfPointsPerInch     = 72.0
 	pdfCSSPixelsPerIn    = 96.0
+	pdfKP3PixelsPerEm    = 16.0
 	pdfKP3ContentWidthPx = 512.0
 	pdfMinBlockWidth     = 12.0
 

@@ -274,7 +274,7 @@ func layoutPDFPages(doc skeletonDocument, _ *builtinFontFace) ([]pdfPage, map[pd
 			if maxImageHeight <= 0 {
 				continue
 			}
-			width, height, ok := fitPDFBlockImageSize(img, blockWidth, maxImageHeight, isVignetteBlock(block) || isHeadingImageBlock(block))
+			width, height, ok := fitPDFBlockImageSize(doc, img, blockWidth, maxImageHeight, isVignetteBlock(block) || isHeadingImageBlock(block))
 			if !ok {
 				continue
 			}
@@ -655,7 +655,7 @@ func nextBlockKeepHeight(doc skeletonDocument, blockStyles []pdfBlockResolvedSty
 			if maxImageHeight <= 0 {
 				return 0, nil
 			}
-			_, height, ok := fitPDFBlockImageSize(img, blockContentWidth(availableWidth, style), maxImageHeight, isVignetteBlock(block) || isHeadingImageBlock(block))
+			_, height, ok := fitPDFBlockImageSize(doc, img, blockContentWidth(availableWidth, style), maxImageHeight, isVignetteBlock(block) || isHeadingImageBlock(block))
 			if !ok {
 				return 0, nil
 			}

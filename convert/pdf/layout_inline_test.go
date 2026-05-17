@@ -212,8 +212,10 @@ func TestLayoutPDFPagesRendersInlineImages(t *testing.T) {
 	if !imageFragment.Underline {
 		t.Fatalf("inline image fragment = %#v, want link underline decoration", *imageFragment)
 	}
-	if math.Abs(image.Height-pdfBaseLineHeight) > 0.001 || math.Abs(imageFragment.ImageHeight-pdfBaseLineHeight) > 0.001 {
-		t.Fatalf("inline image height = %v / fragment %v, want current line height %v", image.Height, imageFragment.ImageHeight, pdfBaseLineHeight)
+	wantImageWidth := float64(img.Dim.Width) * pdfBaseFontSize / pdfKP3PixelsPerEm
+	wantImageHeight := float64(img.Dim.Height) * pdfBaseFontSize / pdfKP3PixelsPerEm
+	if math.Abs(image.Width-wantImageWidth) > 0.001 || math.Abs(image.Height-wantImageHeight) > 0.001 || math.Abs(imageFragment.ImageHeight-wantImageHeight) > 0.001 {
+		t.Fatalf("inline image size = %vx%v / fragment height %v, want KP3 em size %vx%v", image.Width, image.Height, imageFragment.ImageHeight, wantImageWidth, wantImageHeight)
 	}
 	if math.Abs(image.Y-(line.Y+imageFragment.BaselineShift)) > 0.001 || image.Y >= line.Y || image.Y+image.Height <= line.Y {
 		t.Fatalf("inline image Y = %v, line Y = %v, fragment baseline shift = %v", image.Y, line.Y, imageFragment.BaselineShift)
