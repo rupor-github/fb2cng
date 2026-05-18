@@ -73,6 +73,29 @@ func TestPDFCollapsedBlockStylesTreatTitleHeaderFirstNextAsInlineFlow(t *testing
 	}
 }
 
+func TestPDFCollapsedBlockStylesUsesKP3MarginsForImageTitleStack(t *testing.T) {
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
+
+	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
+		{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses("image-vignette", "vignette", pdfStyleVignetteChapterTop, pdfStyleChapterTitle), ImageID: "top"},
+		{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses(pdfStyleChapterTitleHeader, pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-first", pdfStyleHeadingImage), ImageID: "title"},
+		{Kind: pdfBlockHeading, StyleName: pdfStyleChapterTitleHeader, StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next", pdfStyleTitleAfterImage), Text: "Illustrations"},
+		{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses("image-vignette", "vignette", pdfStyleVignetteChapterBot, pdfStyleChapterTitle), ImageID: "bottom"},
+		{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine},
+		{Kind: pdfBlockSubtitle, StyleName: pdfStyleSubtitle, Text: "Cross links"},
+	})
+
+	if styles[2].SpaceBefore != pdfTitleAfterImageSpaceBefore {
+		t.Fatalf("title text after image margin-top = %v, want KP3 title-after-image margin %v", styles[2].SpaceBefore, pdfTitleAfterImageSpaceBefore)
+	}
+	if styles[3].SpaceBefore != pdfTitleVignetteMarginTop {
+		t.Fatalf("bottom title vignette margin-top = %v, want KP3 vignette margin %v", styles[3].SpaceBefore, pdfTitleVignetteMarginTop)
+	}
+	if styles[5].SpaceBefore != pdfTitleFollowingSubtitleSpaceBefore {
+		t.Fatalf("subtitle after title vignette margin-top = %v, want KP3 subtitle margin %v", styles[5].SpaceBefore, pdfTitleFollowingSubtitleSpaceBefore)
+	}
+}
+
 func TestPDFCollapsedBlockStylesKeepContainerThroughEmptyLine(t *testing.T) {
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}}

@@ -22,7 +22,9 @@ const (
 	pdfHeadingNestedMarginFactor          = 0.83
 	pdfTitleFirstSpaceBefore              = pdfBaseFontSize * 2.0
 	pdfTitleEmptyLineSpace                = pdfBaseFontSize * 0.8
-	pdfTitleAfterImageSpaceBefore         = pdfBaseLineHeight * 1.5
+	pdfTitleAfterImageSpaceBefore         = pdfBaseLineHeight * 0.5999994
+	pdfTitleVignetteMarginTop             = pdfBaseLineHeight * 0.697917
+	pdfTitleFollowingSubtitleSpaceBefore  = pdfBaseLineHeight * 0.833333
 	pdfSubtitleFontSize                   = pdfBaseFontSize
 	pdfSubtitleLineHeight                 = pdfSubtitleFontSize * pdfNormalLineHeightFactor
 	pdfSubtitleSpaceBefore                = pdfBaseFontSize

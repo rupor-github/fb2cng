@@ -41,6 +41,8 @@ func (r *pdfStyleResolver) collapsedBlockStyles(blocks []pdfTextBlock) []pdfBloc
 		resolved[nextContent].SpaceBefore = max(resolved[nextContent].SpaceBefore, margin)
 	}
 
+	adjustKP3TitleBlockVerticalMargins(blocks, resolved)
+
 	previous := -1
 	for i, block := range blocks {
 		if resolved[i].Hidden {
@@ -157,6 +159,36 @@ func pdfInlineTitleTextBlock(block pdfTextBlock) bool {
 		}
 	}
 	return false
+}
+
+func adjustKP3TitleBlockVerticalMargins(blocks []pdfTextBlock, resolved []pdfBlockResolvedStyle) {
+	for i, block := range blocks {
+		if resolved[i].Hidden {
+			continue
+		}
+		if pdfContainerMarginClass(block) != "" && isTitleBottomVignetteBlock(block) {
+			resolved[i].SpaceBefore = max(resolved[i].SpaceBefore, pdfTitleVignetteMarginTop)
+		}
+		if block.Kind == pdfBlockSubtitle {
+			previous := pdfPreviousContentBlock(blocks, resolved, i-1)
+			if previous >= 0 && isTitleBottomVignetteBlock(blocks[previous]) {
+				resolved[i].SpaceBefore = max(resolved[i].SpaceBefore, pdfTitleFollowingSubtitleSpaceBefore)
+			}
+		}
+	}
+}
+
+func pdfPreviousContentBlock(blocks []pdfTextBlock, resolved []pdfBlockResolvedStyle, start int) int {
+	for i := start; i >= 0; i-- {
+		if resolved[i].Hidden || blocks[i].Kind == pdfBlockEmptyLine {
+			continue
+		}
+		if blocks[i].Kind == pdfBlockPageBreak {
+			return -1
+		}
+		return i
+	}
+	return -1
 }
 
 func pdfNextContentBlock(blocks []pdfTextBlock, resolved []pdfBlockResolvedStyle, start int) int {
