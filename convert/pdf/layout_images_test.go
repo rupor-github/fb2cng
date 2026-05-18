@@ -157,6 +157,52 @@ func TestLayoutPDFPagesSizesBlockImagesLikeKP3(t *testing.T) {
 	}
 }
 
+func TestLayoutPDFPagesSizesPartialWidthBlockImagesAgainstRootlessWidth(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	img := &fb2.BookImage{}
+	img.Dim.Width = 200
+	img.Dim.Height = 200
+	resolver := newPDFStyleResolver(&fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `html { margin: 0 -12pt 0 -12pt; }`,
+	}}}, nil)
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:      520,
+		PageHeight:     300,
+		ScreenWidthPx:  1200,
+		ScreenHeightPx: 1600,
+		Title:          "Title",
+		Author:         "Author",
+		Styles:         resolver,
+		Images:         fb2.BookImages{"block": img},
+		Blocks: []pdfTextBlock{{
+			Kind:    pdfBlockImage,
+			ImageID: "block",
+		}},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 1 || len(pages[0].Images) != 1 {
+		t.Fatalf("layout pages images = %#v, want one block image", pages)
+	}
+	rootlessContentWidth := 520.0 - 48.0
+	wantWidth := rootlessContentWidth * 200.0 / pdfKP3ContentWidthPx
+	if got := pages[0].Images[0].Width; math.Abs(got-wantWidth) > 0.001 {
+		t.Fatalf("partial block image width = %v, want KP3 rootless width %v", got, wantWidth)
+	}
+	contentLeft := 12.0
+	contentWidth := rootlessContentWidth + 24.0
+	wantX := contentLeft + max((contentWidth-wantWidth)/2, 0)
+	if got := pages[0].Images[0].X; math.Abs(got-wantX) > 0.001 {
+		t.Fatalf("partial block image x = %v, want centered in expanded content at %v", got, wantX)
+	}
+}
+
 func TestLayoutPDFPagesCapsLargeGIFBlockImagesByConfiguredScreen(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {
