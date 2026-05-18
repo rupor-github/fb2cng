@@ -286,7 +286,7 @@ func layoutPDFPages(doc skeletonDocument, _ *builtinFontFace) ([]pdfPage, map[pd
 				if err != nil {
 					return nil, nil, err
 				}
-				if keepWithNext > 0 && y-needed-keepWithNext < bottom {
+				if keepWithNext > 0 && y-needed-keepWithNext < bottom && needed+keepWithNext <= top-bottom {
 					newTextPage()
 				} else if y-needed < bottom {
 					newTextPage()
@@ -369,7 +369,7 @@ func layoutPDFPages(doc skeletonDocument, _ *builtinFontFace) ([]pdfPage, map[pd
 			if err != nil {
 				return nil, nil, err
 			}
-			if keepWithNext > 0 && y-needed-style.SpaceAfter-keepWithNext < bottom {
+			if keepWithNext > 0 && y-needed-style.SpaceAfter-keepWithNext < bottom && needed+style.SpaceAfter+keepWithNext <= top-bottom {
 				newTextPage()
 			}
 		}

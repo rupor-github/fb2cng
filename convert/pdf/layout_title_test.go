@@ -122,6 +122,49 @@ func TestLayoutPDFPagesCentersTitleContentBetweenVignettes(t *testing.T) {
 	}
 }
 
+func TestLayoutPDFPagesDoesNotMoveBottomTitleVignetteForTooTallFollowingImage(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	vignette := &fb2.BookImage{}
+	vignette.Dim.Width = 120
+	vignette.Dim.Height = 10
+	following := &fb2.BookImage{}
+	following.Dim.Width = 200
+	following.Dim.Height = 260
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:      520,
+		PageHeight:     300,
+		ScreenWidthPx:  1200,
+		ScreenHeightPx: 1600,
+		Title:          "Title",
+		Author:         "Author",
+		Styles:         newPDFStyleResolverWithDefaultCSS(t),
+		Images:         fb2.BookImages{"top": vignette, "bottom": vignette, "following": following},
+		Blocks: []pdfTextBlock{
+			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses("vignette", "vignette-chapter-title-top", pdfStyleChapterTitle), ImageID: "top"},
+			{Kind: pdfBlockHeading, Text: "Part One", Depth: 1, StyleName: pdfStyleChapterTitleHeader, StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-first")},
+			{Kind: pdfBlockHeading, Text: "In the Rear", Depth: 1, StyleName: pdfStyleChapterTitleHeader, StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next")},
+			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses("vignette", "vignette-chapter-title-bottom", pdfStyleChapterTitle), ImageID: "bottom"},
+			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: "image-block", ImageID: "following"},
+		},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 {
+		t.Fatalf("layout page count = %d, want title page plus following image page: %#v", len(pages), pages)
+	}
+	if len(pages[0].Images) != 2 || pages[0].Images[1].ImageID != "bottom" {
+		t.Fatalf("first page images = %#v, want top and bottom title vignettes together", pages[0].Images)
+	}
+	if len(pages[1].Images) != 1 || pages[1].Images[0].ImageID != "following" {
+		t.Fatalf("second page images = %#v, want following oversized image", pages[1].Images)
+	}
+}
+
 func TestLayoutPDFPagesTitleImageCanStripRootHorizontalMargins(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {
