@@ -83,7 +83,7 @@ func TestPDFStyleResolverCodeLineHeightPreservesKP3BaseRhythm(t *testing.T) {
 	}
 }
 
-func TestPDFStyleResolverHeadingLineHeightUsesKP3AdjustedRatio(t *testing.T) {
+func TestPDFStyleResolverHeadingLineHeightUsesKP3AdjustedLH(t *testing.T) {
 	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	for _, styleName := range []string{
 		pdfStyleBodyTitleHeader,
@@ -91,19 +91,23 @@ func TestPDFStyleResolverHeadingLineHeightUsesKP3AdjustedRatio(t *testing.T) {
 		pdfStyleTOCTitle,
 	} {
 		heading := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, StyleName: styleName})
-		wantLineHeight := heading.Paragraph.FontSize * pdfAdjustedLineHeightFactor
-		if math.Abs(heading.Paragraph.LineHeight-wantLineHeight) > 0.001 {
-			t.Fatalf("%s line height = %v, want KP3 adjusted ratio %v", styleName, heading.Paragraph.LineHeight, wantLineHeight)
+		if math.Abs(heading.Paragraph.LineHeight-pdfAdjustedLineHeight) > 0.001 {
+			t.Fatalf("%s line height = %v, want KP3 adjusted 1lh %v", styleName, heading.Paragraph.LineHeight, pdfAdjustedLineHeight)
+		}
+		if !heading.Paragraph.LineHeightExplicit {
+			t.Fatalf("%s line height should be explicit like KFX title text styles", styleName)
 		}
 	}
 }
 
-func TestPDFStyleResolverSectionTitleHeaderLineHeightUsesKP3SpecialRatio(t *testing.T) {
+func TestPDFStyleResolverSectionTitleHeaderLineHeightUsesKP3SpecialLH(t *testing.T) {
 	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	sectionTitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, Depth: 2})
-	wantLineHeight := sectionTitle.Paragraph.FontSize * pdfSectionTitleHeaderLineHeightFactor
-	if math.Abs(sectionTitle.Paragraph.LineHeight-wantLineHeight) > 0.001 {
-		t.Fatalf("section-title-header line height = %v, want KP3 special ratio %v", sectionTitle.Paragraph.LineHeight, wantLineHeight)
+	if math.Abs(sectionTitle.Paragraph.LineHeight-pdfSectionTitleHeaderLineHeight) > 0.001 {
+		t.Fatalf("section-title-header line height = %v, want KP3 special 1lh %v", sectionTitle.Paragraph.LineHeight, pdfSectionTitleHeaderLineHeight)
+	}
+	if !sectionTitle.Paragraph.LineHeightExplicit {
+		t.Fatalf("section-title-header line height should be explicit like KFX title text styles")
 	}
 }
 
@@ -200,8 +204,8 @@ func TestPDFStyleResolverRelativeFontSizeAndSpacingUseInheritedFont(t *testing.T
 	if math.Abs(heading.Paragraph.FontSize-wantHeadingFont) > 0.001 {
 		t.Fatalf("heading font size = %v, want inherited 140%% %v", heading.Paragraph.FontSize, wantHeadingFont)
 	}
-	if math.Abs(heading.Paragraph.LineHeight-wantHeadingFont*pdfAdjustedLineHeightFactor) > 0.001 {
-		t.Fatalf("heading line height = %v, want adjusted ratio from inherited font", heading.Paragraph.LineHeight)
+	if math.Abs(heading.Paragraph.LineHeight-pdfAdjustedLineHeight) > 0.001 {
+		t.Fatalf("heading line height = %v, want adjusted KP3 1lh %v", heading.Paragraph.LineHeight, pdfAdjustedLineHeight)
 	}
 
 	chapterHeading := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, Depth: 1, StyleClasses: pdfStyleChapterTitle, ContextClasses: pdfStyleChapterTitle})

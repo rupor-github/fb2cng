@@ -85,12 +85,18 @@ func (r *pdfStyleResolver) adjustContainerMargins(blocks []pdfTextBlock, resolve
 		})
 		if pdfAdjacentBlockHasContainerClass(blocks, resolved, i, -1, class) {
 			resolved[i].SpaceBefore = base.SpaceBefore
+			if pdfInlineTitleTextBlock(block) {
+				resolved[i].SpaceBefore = 0
+			}
 			resolved[i].PageBreakBefore = base.PageBreakBefore
 			resolved[i].PageBreakBeforeMode = base.PageBreakBeforeMode
 			resolved[i].HasPageBreakBefore = base.HasPageBreakBefore
 		}
 		if pdfAdjacentBlockHasContainerClass(blocks, resolved, i, 1, class) {
 			resolved[i].SpaceAfter = base.SpaceAfter
+			if pdfInlineTitleTextBlock(block) {
+				resolved[i].SpaceAfter = 0
+			}
 			resolved[i].KeepWithNextLines = base.KeepWithNextLines
 			resolved[i].PageBreakAfter = base.PageBreakAfter
 			resolved[i].PageBreakAfterMode = base.PageBreakAfterMode
@@ -139,6 +145,18 @@ func pdfContainerCompanionClass(container string, class string) bool {
 	default:
 		return false
 	}
+}
+
+func pdfInlineTitleTextBlock(block pdfTextBlock) bool {
+	if block.Kind != pdfBlockHeading || blockHasStyleClass(block, pdfStyleTitleAfterImage) {
+		return false
+	}
+	for _, base := range []string{pdfStyleBodyTitleHeader, pdfStyleChapterTitleHeader, pdfStyleSectionTitleHeader, pdfStyleTOCTitle} {
+		if blockHasStyleClass(block, base+"-first") || blockHasStyleClass(block, base+"-next") {
+			return true
+		}
+	}
+	return false
 }
 
 func pdfNextContentBlock(blocks []pdfTextBlock, resolved []pdfBlockResolvedStyle, start int) int {

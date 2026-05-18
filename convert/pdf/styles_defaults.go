@@ -81,16 +81,20 @@ func intrinsicParagraphPDFStyle() pdfBlockResolvedStyle {
 
 func intrinsicHeadingPDFStyle(depth int) pdfBlockResolvedStyle {
 	fontSize := pdfIntrinsicHeadingFontSize(depth)
-	return headingPDFStyleWithLineHeightFactor(fontSize, pdfHeadingLineHeightFactor, pdfHeadingMarginFactor(depth))
+	return headingPDFStyleWithLineHeight(fontSize, pdfAdjustedLineHeight, pdfHeadingMarginFactor(depth))
 }
 
 func intrinsicSectionTitleHeaderPDFStyle() pdfBlockResolvedStyle {
 	fontSize := pdfIntrinsicHeadingFontSize(2)
-	return headingPDFStyleWithLineHeightFactor(fontSize, pdfSectionTitleHeaderLineHeightFactor, pdfHeadingMarginFactor(2))
+	return headingPDFStyleWithLineHeight(fontSize, pdfSectionTitleHeaderLineHeight, pdfHeadingMarginFactor(2))
 }
 
 func headingPDFStyle(depth int) pdfBlockResolvedStyle {
-	return headingPDFStyleWithLineHeightFactor(pdfHeadingFontSize(depth), pdfHeadingLineHeightFactor, pdfHeadingMarginFactor(depth))
+	lineHeight := pdfAdjustedLineHeight
+	if depth > 1 {
+		lineHeight = pdfSectionTitleHeaderLineHeight
+	}
+	return headingPDFStyleWithLineHeight(pdfHeadingFontSize(depth), lineHeight, pdfHeadingMarginFactor(depth))
 }
 
 func pdfIntrinsicHeadingFontSize(depth int) float64 {
@@ -115,10 +119,10 @@ func pdfHeadingFontSize(depth int) float64 {
 	return pdfHeadingNestedFontSize
 }
 
-func headingPDFStyleWithLineHeightFactor(fontSize float64, lineHeightFactor float64, marginFactor float64) pdfBlockResolvedStyle {
+func headingPDFStyleWithLineHeight(fontSize float64, lineHeight float64, marginFactor float64) pdfBlockResolvedStyle {
 	space := fontSize * marginFactor
 	return pdfBlockResolvedStyle{
-		Paragraph:         paragraphStyle{FontFamily: "serif", Bold: true, FontSize: fontSize, LineHeight: fontSize * lineHeightFactor, HasFirstLineIndent: true, Align: textAlignCenter, Hyphenation: paragraphHyphenationAuto},
+		Paragraph:         paragraphStyle{FontFamily: "serif", Bold: true, FontSize: fontSize, LineHeight: lineHeight, LineHeightExplicit: true, HasFirstLineIndent: true, Align: textAlignCenter, Hyphenation: paragraphHyphenationAuto},
 		SpaceBefore:       space,
 		SpaceAfter:        space,
 		KeepTogether:      true,
@@ -245,11 +249,11 @@ func (r *pdfStyleResolver) applyPDFHeadingMarginAdjustments() {
 			continue
 		}
 		if !style.Paragraph.LineHeightExplicit {
-			lineHeightFactor := pdfHeadingLineHeightFactor
+			style.Paragraph.LineHeight = pdfAdjustedLineHeight
 			if tt.name == pdfStyleSectionTitleHeader {
-				lineHeightFactor = pdfSectionTitleHeaderLineHeightFactor
+				style.Paragraph.LineHeight = pdfSectionTitleHeaderLineHeight
 			}
-			style.Paragraph.LineHeight = style.Paragraph.FontSize * lineHeightFactor
+			style.Paragraph.LineHeightExplicit = true
 		}
 		if !style.HasSpaceBefore && !style.HasSpaceAfter {
 			space := style.Paragraph.FontSize * pdfHeadingMarginFactor(tt.depth)

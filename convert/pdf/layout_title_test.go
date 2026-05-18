@@ -46,6 +46,40 @@ func TestLayoutPDFPagesKeepsGapBetweenTitleVignetteAndHeadingImage(t *testing.T)
 	}
 }
 
+func TestLayoutPDFPagesUsesTightTitleHeaderLineFlow(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:      520,
+		PageHeight:     260,
+		ScreenWidthPx:  1200,
+		ScreenHeightPx: 1600,
+		Title:          "Title",
+		Author:         "Author",
+		Styles:         newPDFStyleResolverWithDefaultCSS(t),
+		Blocks: []pdfTextBlock{
+			{Kind: pdfBlockHeading, Text: "One", Depth: 1, StyleName: pdfStyleChapterTitleHeader, StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-first")},
+			{Kind: pdfBlockHeading, Text: "Two", Depth: 1, StyleName: pdfStyleChapterTitleHeader, StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next")},
+			{Kind: pdfBlockHeading, Text: "Three", Depth: 1, StyleName: pdfStyleChapterTitleHeader, StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next")},
+		},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 1 || len(pages[0].Lines) != 3 {
+		t.Fatalf("layout pages = %#v, want three title lines", pages)
+	}
+	for i := 1; i < len(pages[0].Lines); i++ {
+		gap := pages[0].Lines[i-1].Y - pages[0].Lines[i].Y
+		if math.Abs(gap-pdfAdjustedLineHeight) > 0.001 {
+			t.Fatalf("title baseline gap %d = %v, want one KP3 title line-height %v", i, gap, pdfAdjustedLineHeight)
+		}
+	}
+}
+
 func TestLayoutPDFPagesCentersTitleContentBetweenVignettes(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {

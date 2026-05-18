@@ -53,6 +53,26 @@ func TestPDFCollapsedBlockStylesKeepsSectionH2PageBreakOnlyAtWrapperStart(t *tes
 	}
 }
 
+func TestPDFCollapsedBlockStylesTreatTitleHeaderFirstNextAsInlineFlow(t *testing.T) {
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
+
+	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
+		{Kind: pdfBlockHeading, StyleName: pdfStyleChapterTitleHeader, StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-first"), Text: "One"},
+		{Kind: pdfBlockHeading, StyleName: pdfStyleChapterTitleHeader, StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next"), Text: "Two"},
+		{Kind: pdfBlockHeading, StyleName: pdfStyleChapterTitleHeader, StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next"), Text: "Three"},
+	})
+
+	if styles[0].SpaceBefore != pdfBaseFontSize*2 || styles[0].SpaceAfter != 0 {
+		t.Fatalf("first title margins = %v/%v, want wrapper top and no internal bottom", styles[0].SpaceBefore, styles[0].SpaceAfter)
+	}
+	if styles[1].SpaceBefore != 0 || styles[1].SpaceAfter != 0 {
+		t.Fatalf("middle title margins = %v/%v, want no internal margins", styles[1].SpaceBefore, styles[1].SpaceAfter)
+	}
+	if styles[2].SpaceBefore != 0 || styles[2].SpaceAfter != pdfBaseFontSize {
+		t.Fatalf("last title margins = %v/%v, want no internal top and wrapper bottom", styles[2].SpaceBefore, styles[2].SpaceAfter)
+	}
+}
+
 func TestPDFCollapsedBlockStylesKeepContainerThroughEmptyLine(t *testing.T) {
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}}

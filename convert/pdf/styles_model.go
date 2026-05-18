@@ -10,15 +10,14 @@ const (
 	pdfBaseFontSize                       = 8.4
 	pdfNormalLineHeightFactor             = 1.7
 	pdfAdjustedLineHeightLH               = 100.0 / 99.0
-	pdfAdjustedLineHeightFactor           = pdfNormalLineHeightFactor * pdfAdjustedLineHeightLH
 	pdfSectionTitleHeaderLineHeightLH     = 0.982323
-	pdfSectionTitleHeaderLineHeightFactor = pdfNormalLineHeightFactor * pdfSectionTitleHeaderLineHeightLH
 	pdfBaseLineHeight                     = pdfBaseFontSize * pdfNormalLineHeightFactor
+	pdfAdjustedLineHeight                 = pdfBaseLineHeight * pdfAdjustedLineHeightLH
+	pdfSectionTitleHeaderLineHeight       = pdfBaseLineHeight * pdfSectionTitleHeaderLineHeightLH
 	pdfBodyIndent                         = pdfBaseFontSize
 	pdfParagraphSpaceAfter                = 0.0
 	pdfHeadingH1FontSize                  = pdfBaseFontSize * 1.4
 	pdfHeadingNestedFontSize              = pdfBaseFontSize * 1.2
-	pdfHeadingLineHeightFactor            = pdfAdjustedLineHeightFactor
 	pdfHeadingH1MarginFactor              = 0.67
 	pdfHeadingNestedMarginFactor          = 0.83
 	pdfTitleFirstSpaceBefore              = pdfBaseFontSize * 2.0
