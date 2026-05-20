@@ -96,6 +96,53 @@ func TestPDFCollapsedBlockStylesUsesKP3MarginsForImageTitleStack(t *testing.T) {
 	}
 }
 
+func TestPDFCollapsedBlockStylesUsesKP3MarginsForFullWidthImageAfterEmptyLine(t *testing.T) {
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}}
+	resolver.styles[pdfStyleEmptyLine] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceBefore: 10}
+	resolver.styles[pdfStyleImage] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}}
+	img := &fb2.BookImage{}
+	img.Dim.Width = 580
+	img.Dim.Height = 458
+
+	styles := resolver.collapsedBlockStylesWithImages([]pdfTextBlock{
+		{Kind: pdfBlockParagraph, StyleName: pdfStyleParagraph, Text: "before"},
+		{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine},
+		{Kind: pdfBlockImage, StyleName: pdfStyleImage, ImageID: "full"},
+		{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine},
+		{Kind: pdfBlockParagraph, StyleName: pdfStyleParagraph, Text: "caption after empty-line"},
+	}, fb2.BookImages{"full": img})
+
+	want := 12.0 * pdfFullBlockImageMarginLH
+	if diff := styles[2].SpaceBefore - want; diff < -0.001 || diff > 0.001 {
+		t.Fatalf("full-width image margin-top = %v, want KP3 fixed margin %v", styles[2].SpaceBefore, want)
+	}
+	if diff := styles[4].SpaceBefore - want; diff < -0.001 || diff > 0.001 {
+		t.Fatalf("caption margin-top after full-width image = %v, want collapsed KP3 fixed image margin %v", styles[4].SpaceBefore, want)
+	}
+}
+
+func TestPDFCollapsedBlockStylesDoesNotUseFullWidthImageMarginsForDirectCaption(t *testing.T) {
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}}
+	resolver.styles[pdfStyleEmptyLine] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceBefore: 10}
+	resolver.styles[pdfStyleImage] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}}
+	img := &fb2.BookImage{}
+	img.Dim.Width = 580
+	img.Dim.Height = 458
+
+	styles := resolver.collapsedBlockStylesWithImages([]pdfTextBlock{
+		{Kind: pdfBlockParagraph, StyleName: pdfStyleParagraph, Text: "before"},
+		{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine},
+		{Kind: pdfBlockImage, StyleName: pdfStyleImage, ImageID: "full"},
+		{Kind: pdfBlockParagraph, StyleName: pdfStyleParagraph, Text: "direct caption"},
+	}, fb2.BookImages{"full": img})
+
+	if styles[2].SpaceBefore == 12.0*pdfFullBlockImageMarginLH {
+		t.Fatalf("direct-caption image margin-top = %v, want no KP3 fixed full-image margin", styles[2].SpaceBefore)
+	}
+}
+
 func TestPDFCollapsedBlockStylesKeepContainerThroughEmptyLine(t *testing.T) {
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}}
@@ -211,8 +258,8 @@ func TestPDFCollapsedBlockStylesAppliesEmptyLineBeforeImageToPreviousBlock(t *te
 		{Kind: pdfBlockEmptyLine, StyleName: "empty"},
 		{Kind: pdfBlockImage, ImageID: "image"},
 	})
-	if styles[0].SpaceAfter != 0 || styles[2].SpaceBefore != 6 {
-		t.Fatalf("empty line before image collapsed margins: before mb=%v image mt=%v, want 0/6", styles[0].SpaceAfter, styles[2].SpaceBefore)
+	if styles[0].SpaceAfter != 6 || styles[2].SpaceBefore != 0 {
+		t.Fatalf("empty line before image margins: before mb=%v image mt=%v, want 6/0", styles[0].SpaceAfter, styles[2].SpaceBefore)
 	}
 }
 

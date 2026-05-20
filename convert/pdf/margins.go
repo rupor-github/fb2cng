@@ -1,8 +1,16 @@
 package pdf
 
-import "strings"
+import (
+	"strings"
+
+	"fbc/fb2"
+)
 
 func (r *pdfStyleResolver) collapsedBlockStyles(blocks []pdfTextBlock) []pdfBlockResolvedStyle {
+	return r.collapsedBlockStylesWithImages(blocks, nil)
+}
+
+func (r *pdfStyleResolver) collapsedBlockStylesWithImages(blocks []pdfTextBlock, images fb2.BookImages) []pdfBlockResolvedStyle {
 	if r == nil {
 		r = newPDFStyleResolver(nil, nil)
 	}
@@ -41,6 +49,7 @@ func (r *pdfStyleResolver) collapsedBlockStyles(blocks []pdfTextBlock) []pdfBloc
 		resolved[nextContent].SpaceBefore = max(resolved[nextContent].SpaceBefore, margin)
 	}
 
+	adjustKP3FullBlockImageVerticalMargins(blocks, resolved, images)
 	adjustKP3TitleBlockVerticalMargins(blocks, resolved)
 
 	previous := -1
@@ -53,6 +62,10 @@ func (r *pdfStyleResolver) collapsedBlockStyles(blocks []pdfTextBlock) []pdfBloc
 			continue
 		}
 		if previous >= 0 {
+			if pdfPreservesPreviousMarginBeforeImage(blocks, resolved, previous, i) {
+				previous = i
+				continue
+			}
 			previousMargin := resolved[previous].SpaceAfter
 			currentMargin := resolved[i].SpaceBefore
 			collapsed := pdfCollapseVerticalMargins(previousMargin, currentMargin)
@@ -161,6 +174,53 @@ func pdfInlineTitleTextBlock(block pdfTextBlock) bool {
 	return false
 }
 
+func adjustKP3FullBlockImageVerticalMargins(blocks []pdfTextBlock, resolved []pdfBlockResolvedStyle, images fb2.BookImages) {
+	// KFX injects fixed 2.6lh margins for ordinary full-width block images
+	// preceded by an empty-line, unless the image is followed directly by a
+	// caption-like paragraph/subtitle. Mirror that KP3 quirk for native PDF.
+	for i := range blocks {
+		if resolved[i].Hidden || !pdfBlockImageNeedsKP3FullMargins(blocks, resolved, images, i) {
+			continue
+		}
+		margin := pdfKP3FullBlockImageMargin(resolved[i])
+		resolved[i].SpaceBefore = max(resolved[i].SpaceBefore, margin)
+		resolved[i].SpaceAfter = max(resolved[i].SpaceAfter, margin)
+	}
+}
+
+func pdfBlockImageNeedsKP3FullMargins(blocks []pdfTextBlock, resolved []pdfBlockResolvedStyle, images fb2.BookImages, index int) bool {
+	if index <= 0 || index >= len(blocks) || images == nil {
+		return false
+	}
+	block := blocks[index]
+	if block.Kind != pdfBlockImage || isVignetteBlock(block) || isHeadingImageBlock(block) {
+		return false
+	}
+	img := images[block.ImageID]
+	if img == nil || !pdfBlockImageUsesFullWidthPercent(img) {
+		return false
+	}
+	if blocks[index-1].Kind != pdfBlockEmptyLine {
+		return false
+	}
+	previous := pdfPreviousContentBlock(blocks, resolved, index-1)
+	if previous >= 0 && blocks[previous].Kind == pdfBlockImage {
+		return false
+	}
+	if index+1 < len(blocks) && (blocks[index+1].Kind == pdfBlockParagraph || blocks[index+1].Kind == pdfBlockSubtitle) {
+		return false
+	}
+	return true
+}
+
+func pdfKP3FullBlockImageMargin(style pdfBlockResolvedStyle) float64 {
+	lineHeight := style.Paragraph.LineHeight
+	if lineHeight <= 0 {
+		lineHeight = pdfBaseLineHeight
+	}
+	return lineHeight * pdfFullBlockImageMarginLH
+}
+
 func adjustKP3TitleBlockVerticalMargins(blocks []pdfTextBlock, resolved []pdfBlockResolvedStyle) {
 	for i, block := range blocks {
 		if resolved[i].Hidden {
@@ -218,6 +278,24 @@ func pdfEmptyLineMargin(style pdfBlockResolvedStyle) float64 {
 		space = fontSize
 	}
 	return max(space/fontSize, 0) * lineHeight / 2
+}
+
+func pdfPreservesPreviousMarginBeforeImage(blocks []pdfTextBlock, resolved []pdfBlockResolvedStyle, previous int, current int) bool {
+	if previous < 0 || current <= previous || current >= len(blocks) || blocks[current].Kind != pdfBlockImage {
+		return false
+	}
+	if blocks[previous].Kind == pdfBlockImage || resolved[previous].SpaceAfter <= 0 || resolved[current].SpaceBefore != 0 {
+		return false
+	}
+	for i := previous + 1; i < current; i++ {
+		if blocks[i].Kind == pdfBlockEmptyLine && resolved[i].Hidden {
+			return true
+		}
+		if !resolved[i].Hidden {
+			return false
+		}
+	}
+	return false
 }
 
 func pdfBlockParticipatesInMarginCollapse(block pdfTextBlock) bool {

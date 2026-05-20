@@ -127,7 +127,7 @@ func layoutPDFPages(doc skeletonDocument, _ *builtinFontFace) ([]pdfPage, map[pd
 	if styles == nil {
 		styles = newPDFStyleResolver(nil, nil)
 	}
-	blockStyles := styles.collapsedBlockStyles(doc.Blocks)
+	blockStyles := styles.collapsedBlockStylesWithImages(doc.Blocks, doc.Images)
 	contentLeft, contentRight, contentTop, contentBottom := pdfPageContentMargins(doc, styles, margin)
 	rootlessContentLeft, rootlessContentRight, _, _ := pdfPageContentMarginsWithoutRootHorizontal(doc, styles, margin)
 	contentWidth := max(doc.PageWidth-contentLeft-contentRight, 12)
@@ -288,13 +288,13 @@ func layoutPDFPages(doc skeletonDocument, _ *builtinFontFace) ([]pdfPage, map[pd
 				}
 				if keepWithNext > 0 && y-needed-keepWithNext < bottom && needed+keepWithNext <= top-bottom {
 					newTextPage()
-				} else if y-needed < bottom {
+				} else if pdfBlockImageOverflowsBottom(y-needed, bottom) {
 					newTextPage()
 				}
 			}
 			y -= style.SpaceBefore
 			y -= style.PaddingTop
-			if y-height < bottom {
+			if pdfBlockImageOverflowsBottom(y-height, bottom) {
 				newTextPage()
 				y -= style.SpaceBefore
 				y -= style.PaddingTop
@@ -627,7 +627,14 @@ func pdfPageContentMarginsWithOptions(doc skeletonDocument, styles *pdfStyleReso
 	return left, right, top, bottom
 }
 
+func pdfBlockImageOverflowsBottom(candidateBottom float64, pageBottom float64) bool {
+	return candidateBottom < pageBottom-pdfBlockImageBottomFitOverflow
+}
+
 func nextBlockKeepHeight(doc skeletonDocument, blockStyles []pdfBlockResolvedStyle, start int, contentWidth float64, rootlessContentWidth float64, contentHeight float64, minLines int) (float64, error) {
+	if minLines <= 0 {
+		return 0, nil
+	}
 	styles := doc.Styles
 	if styles == nil {
 		styles = newPDFStyleResolver(nil, nil)

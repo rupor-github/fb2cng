@@ -164,6 +164,25 @@ func TestPDFStyleResolverImplicitLineHeightUsesSemanticBlockDefault(t *testing.T
 	}
 }
 
+func TestPDFStyleResolverDefaultCSSRootRhythmKeepsPDFBaseText(t *testing.T) {
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `body { font-size: 80%; line-height: 150%; }`,
+	}}}
+
+	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
+	if math.Abs(paragraph.Paragraph.FontSize-pdfBaseFontSize) > 0.001 {
+		t.Fatalf("paragraph font size = %v, want PDF base %v for default.css reader rhythm", paragraph.Paragraph.FontSize, pdfBaseFontSize)
+	}
+	if math.Abs(paragraph.Paragraph.LineHeight-pdfBaseLineHeight) > 0.001 {
+		t.Fatalf("paragraph line height = %v, want PDF base line height %v for default.css reader rhythm", paragraph.Paragraph.LineHeight, pdfBaseLineHeight)
+	}
+	if paragraph.Paragraph.LineHeightExplicit {
+		t.Fatalf("default.css reader rhythm should not mark PDF base line height explicit")
+	}
+}
+
 func TestPDFStyleResolverImplicitLineHeightInjectedAfterRootFontSize(t *testing.T) {
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",

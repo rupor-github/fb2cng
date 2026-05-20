@@ -7,24 +7,38 @@ const (
 	pdfKP3ContentWidthPx = 512.0
 	pdfMinBlockWidth     = 12.0
 
-	pdfBaseFontSize                       = 8.4
-	pdfNormalLineHeightFactor             = 1.7
-	pdfAdjustedLineHeightLH               = 100.0 / 99.0
-	pdfSectionTitleHeaderLineHeightLH     = 0.982323
-	pdfBaseLineHeight                     = pdfBaseFontSize * pdfNormalLineHeightFactor
-	pdfAdjustedLineHeight                 = pdfBaseLineHeight * pdfAdjustedLineHeightLH
-	pdfSectionTitleHeaderLineHeight       = pdfBaseLineHeight * pdfSectionTitleHeaderLineHeightLH
-	pdfBodyIndent                         = pdfBaseFontSize
-	pdfParagraphSpaceAfter                = 0.0
-	pdfHeadingH1FontSize                  = pdfBaseFontSize * 1.4
-	pdfHeadingNestedFontSize              = pdfBaseFontSize * 1.2
-	pdfHeadingH1MarginFactor              = 0.67
-	pdfHeadingNestedMarginFactor          = 0.83
-	pdfTitleFirstSpaceBefore              = pdfBaseFontSize * 2.0
-	pdfTitleEmptyLineSpace                = pdfBaseFontSize * 0.8
-	pdfTitleAfterImageSpaceBefore         = pdfBaseLineHeight * 0.5999994
-	pdfTitleVignetteMarginTop             = pdfBaseLineHeight * 0.697917
-	pdfTitleFollowingSubtitleSpaceBefore  = pdfBaseLineHeight * 0.833333
+	// Native PDF defaults are chosen to match Kindle Previewer/KP3's default
+	// fixed-screen visual rhythm rather than a print-style 12pt baseline. In KFX,
+	// ordinary body text is emitted as 1rem/1lh and rendered by KP3 at roughly an
+	// 8.4pt text size with about 14.28pt between baselines on the configured
+	// 303.36x403.2pt test page. Keep these as the intrinsic PDF 1rem/1lh values;
+	// stylesheet rules may still override them explicitly, while the default.css
+	// Kindle reader hint body { font-size: 80%; line-height: 150%; } is normalized
+	// in styles_resolve.go so it does not shrink native fixed-layout PDF text.
+	pdfBaseFontSize                      = 8.4
+	pdfNormalLineHeightFactor            = 1.7
+	pdfAdjustedLineHeightLH              = 100.0 / 99.0
+	pdfSectionTitleHeaderLineHeightLH    = 0.982323
+	pdfBaseLineHeight                    = pdfBaseFontSize * pdfNormalLineHeightFactor
+	pdfAdjustedLineHeight                = pdfBaseLineHeight * pdfAdjustedLineHeightLH
+	pdfSectionTitleHeaderLineHeight      = pdfBaseLineHeight * pdfSectionTitleHeaderLineHeightLH
+	pdfBodyIndent                        = pdfBaseFontSize
+	pdfParagraphSpaceAfter               = 0.0
+	pdfHeadingH1FontSize                 = pdfBaseFontSize * 1.4
+	pdfHeadingNestedFontSize             = pdfBaseFontSize * 1.2
+	pdfHeadingH1MarginFactor             = 0.67
+	pdfHeadingNestedMarginFactor         = 0.83
+	pdfTitleFirstSpaceBefore             = pdfBaseFontSize * 2.0
+	pdfTitleEmptyLineSpace               = pdfBaseFontSize * 0.8
+	pdfTitleAfterImageSpaceBefore        = pdfBaseLineHeight * 0.5999994
+	pdfTitleVignetteMarginTop            = pdfBaseLineHeight * 0.697917
+	pdfTitleFollowingSubtitleSpaceBefore = pdfBaseLineHeight * 0.833333
+	pdfFullBlockImageMarginLH            = 2.6
+	// KP3 sometimes keeps block images on a page even when their bottom edge
+	// slightly crosses the nominal content bottom. Allow a small image-only
+	// pagination slack so near-fitting image blocks match KP3 without changing
+	// global page margins or text pagination.
+	pdfBlockImageBottomFitOverflow        = pdfBaseLineHeight * 0.30
 	pdfSubtitleFontSize                   = pdfBaseFontSize
 	pdfSubtitleLineHeight                 = pdfSubtitleFontSize * pdfNormalLineHeightFactor
 	pdfSubtitleSpaceBefore                = pdfBaseFontSize

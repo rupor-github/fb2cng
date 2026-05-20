@@ -281,7 +281,33 @@ func (r *pdfStyleResolver) rootParagraphStyle() paragraphStyle {
 	rootDefault := r.defaultStyle(pdfStyleBody).Paragraph
 	base = mergePDFInheritedParagraphStyle(base, r.namedStyle(pdfStyleHTML).Paragraph, r.defaultStyle(pdfStyleHTML).Paragraph)
 	base = mergePDFInheritedParagraphStyle(base, r.namedStyle(pdfStyleBody).Paragraph, rootDefault)
-	return base
+	return normalizePDFDefaultCSSRootRhythm(base)
+}
+
+func normalizePDFDefaultCSSRootRhythm(style paragraphStyle) paragraphStyle {
+	// convert/default.css uses body { font-size: 80%; line-height: 150%; } as a
+	// Kindle-oriented reader setting. KP3/KFX keeps ordinary body text at 1rem/1lh
+	// in that case, so native PDF should keep its intrinsic KP3-like base rhythm
+	// instead of shrinking fixed-layout text to 6.72pt/10.08pt. Other explicit
+	// root/body sizes remain honored, and users can still target PDF with
+	// @media fbc-pdf or element-level rules.
+	if !pdfCSSSpecPercent(style.FontSizeSpec, 80) || !pdfCSSSpecPercent(style.LineHeightSpec, 150) {
+		return style
+	}
+	style.FontSize = pdfBaseFontSize
+	style.FontSizeSpec = pdfCSSLengthSpec{}
+	style.LineHeight = pdfBaseLineHeight
+	style.LineHeightSpec = pdfCSSLengthSpec{}
+	style.LineHeightExplicit = false
+	return style
+}
+
+func pdfCSSSpecPercent(spec pdfCSSLengthSpec, value float64) bool {
+	if !spec.Set || spec.Unit != "%" {
+		return false
+	}
+	diff := spec.Value - value
+	return diff > -0.001 && diff < 0.001
 }
 
 func (r *pdfStyleResolver) tagStyleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {

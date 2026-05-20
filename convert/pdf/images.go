@@ -78,11 +78,20 @@ func fitPDFBlockImageSizeWithReference(doc skeletonDocument, img *fb2.BookImage,
 }
 
 func pdfBlockImageUsesRootlessWidthReference(img *fb2.BookImage, forceContentWidth bool) bool {
+	// KFX emits standalone block-image widths as percentages against KP3's
+	// 512px ideal column without inherited synthetic root horizontal margins.
 	if forceContentWidth {
 		return false
 	}
 	widthPx, heightPx := pdfImagePixelSize(img)
-	return widthPx > 0 && heightPx > 0 && float64(widthPx) < pdfKP3ContentWidthPx
+	return widthPx > 0 && heightPx > 0
+}
+
+func pdfBlockImageUsesFullWidthPercent(img *fb2.BookImage) bool {
+	// Mirrors KFX ImageWidthPercent: images at or above the 512px ideal column
+	// clamp to width: 100%.
+	widthPx, heightPx := pdfImagePixelSize(img)
+	return widthPx > 0 && heightPx > 0 && float64(widthPx) >= pdfKP3ContentWidthPx
 }
 
 func pdfBlockImageWidthReference(block pdfTextBlock, style pdfBlockResolvedStyle, availableWidth, rootlessContentWidth float64, img *fb2.BookImage, forceContentWidth bool) float64 {

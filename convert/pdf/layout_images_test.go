@@ -275,6 +275,207 @@ func TestLayoutPDFPagesClampsLargePNGBlockImagesLikeKP3(t *testing.T) {
 	}
 }
 
+func TestLayoutPDFPagesSizesFullWidthBlockImagesAgainstRootlessWidth(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	img := &fb2.BookImage{MimeType: "image/png"}
+	img.Dim.Width = 580
+	img.Dim.Height = 458
+	resolver := newPDFStyleResolver(&fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type: "text/css",
+		Data: `html { margin: 0 -12pt 0 -12pt; }`,
+	}}}, nil)
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:      520,
+		PageHeight:     500,
+		ScreenWidthPx:  1200,
+		ScreenHeightPx: 1600,
+		Title:          "Title",
+		Author:         "Author",
+		Styles:         resolver,
+		Images:         fb2.BookImages{"block": img},
+		Blocks: []pdfTextBlock{{
+			Kind:    pdfBlockImage,
+			ImageID: "block",
+		}},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 1 || len(pages[0].Images) != 1 {
+		t.Fatalf("layout pages images = %#v, want one block image", pages)
+	}
+	rootlessContentWidth := 520.0 - 48.0
+	if got := pages[0].Images[0].Width; math.Abs(got-rootlessContentWidth) > 0.001 {
+		t.Fatalf("full-width block image width = %v, want rootless KP3 width %v", got, rootlessContentWidth)
+	}
+	contentLeft := 12.0
+	contentWidth := rootlessContentWidth + 24.0
+	wantX := contentLeft + max((contentWidth-rootlessContentWidth)/2, 0)
+	if got := pages[0].Images[0].X; math.Abs(got-wantX) > 0.001 {
+		t.Fatalf("full-width block image x = %v, want centered in expanded content at %v", got, wantX)
+	}
+}
+
+func TestLayoutPDFPagesKeepsNearFittingImageWithSmallBottomOverflow(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	img := &fb2.BookImage{}
+	img.Dim.Width = 511
+	img.Dim.Height = 423
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignLeft}}
+	resolver.styles[pdfStyleImage] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignCenter}, KeepTogether: true}
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  220,
+		PageHeight: 220,
+		Title:      "Title",
+		Author:     "Author",
+		Styles:     resolver,
+		Images:     fb2.BookImages{"block": img},
+		Blocks: []pdfTextBlock{
+			{Kind: pdfBlockParagraph, StyleName: pdfStyleParagraph, Text: "one"},
+			{Kind: pdfBlockParagraph, StyleName: pdfStyleParagraph, Text: "two"},
+			{Kind: pdfBlockImage, StyleName: pdfStyleImage, ImageID: "block"},
+		},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 1 || len(pages[0].Images) != 1 {
+		t.Fatalf("layout pages = %#v, want text and near-fitting image on one page", pages)
+	}
+	if overflow := 24.0 - pages[0].Images[0].Y; overflow <= 0 || overflow > pdfBlockImageBottomFitOverflow {
+		t.Fatalf("image bottom overflow = %v, want small allowed overflow <= %v", overflow, pdfBlockImageBottomFitOverflow)
+	}
+}
+
+func TestLayoutPDFPagesBreaksImagePastBottomOverflowTolerance(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	img := &fb2.BookImage{}
+	img.Dim.Width = 511
+	img.Dim.Height = 440
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignLeft}}
+	resolver.styles[pdfStyleImage] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignCenter}, KeepTogether: true}
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  220,
+		PageHeight: 220,
+		Title:      "Title",
+		Author:     "Author",
+		Styles:     resolver,
+		Images:     fb2.BookImages{"block": img},
+		Blocks: []pdfTextBlock{
+			{Kind: pdfBlockParagraph, StyleName: pdfStyleParagraph, Text: "one"},
+			{Kind: pdfBlockParagraph, StyleName: pdfStyleParagraph, Text: "two"},
+			{Kind: pdfBlockImage, StyleName: pdfStyleImage, ImageID: "block"},
+		},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 || len(pages[0].Images) != 0 || len(pages[1].Images) != 1 {
+		t.Fatalf("layout pages = %#v, want image moved when overflow exceeds tolerance", pages)
+	}
+}
+
+func TestLayoutPDFPagesDoesNotKeepImageWithNextWhenAvoidIsAbsent(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	img := &fb2.BookImage{}
+	img.Dim.Width = 512
+	img.Dim.Height = 216
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignLeft}}
+	resolver.styles[pdfStyleImage] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignCenter}, SpaceBefore: 10, KeepTogether: true}
+	resolver.styles["after"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignLeft}, SpaceBefore: 30}
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  520,
+		PageHeight: 300,
+		Title:      "Title",
+		Author:     "Author",
+		Styles:     resolver,
+		Images:     fb2.BookImages{"block": img},
+		Blocks: []pdfTextBlock{
+			{Kind: pdfBlockParagraph, StyleName: pdfStyleParagraph, Text: "before"},
+			{Kind: pdfBlockImage, StyleName: pdfStyleImage, ImageID: "block"},
+			{Kind: pdfBlockParagraph, StyleName: "after", Text: "after"},
+		},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 {
+		t.Fatalf("layout pages = %#v, want image kept on first page and following paragraph on second", pages)
+	}
+	if len(pages[0].Images) != 1 || len(pages[0].Lines) != 1 {
+		t.Fatalf("first page = %#v, want before text plus image", pages[0])
+	}
+	if len(pages[1].Images) != 0 || len(pages[1].Lines) != 1 {
+		t.Fatalf("second page = %#v, want following paragraph only", pages[1])
+	}
+}
+
+func TestLayoutPDFPagesDoesNotCarryPreviousEmptyLineMarginToImagePage(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	img := &fb2.BookImage{}
+	img.Dim.Width = 511
+	img.Dim.Height = 350
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignLeft}}
+	resolver.styles[pdfStyleEmptyLine] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceBefore: 10}
+	resolver.styles[pdfStyleImage] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignCenter}, KeepTogether: true}
+	blocks := []pdfTextBlock{
+		{Kind: pdfBlockParagraph, StyleName: pdfStyleParagraph, Text: "one"},
+		{Kind: pdfBlockParagraph, StyleName: pdfStyleParagraph, Text: "two"},
+		{Kind: pdfBlockParagraph, StyleName: pdfStyleParagraph, Text: "three"},
+		{Kind: pdfBlockParagraph, StyleName: pdfStyleParagraph, Text: "four"},
+		{Kind: pdfBlockParagraph, StyleName: pdfStyleParagraph, Text: "five"},
+		{Kind: pdfBlockParagraph, StyleName: pdfStyleParagraph, Text: "six"},
+		{Kind: pdfBlockParagraph, StyleName: pdfStyleParagraph, Text: "seven"},
+		{Kind: pdfBlockParagraph, StyleName: pdfStyleParagraph, Text: "eight"},
+		{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine},
+		{Kind: pdfBlockImage, StyleName: pdfStyleImage, ImageID: "block"},
+	}
+
+	pages, _, err := layoutPDFPages(skeletonDocument{
+		PageWidth:  220,
+		PageHeight: 220,
+		Title:      "Title",
+		Author:     "Author",
+		Styles:     resolver,
+		Images:     fb2.BookImages{"block": img},
+		Blocks:     blocks,
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 || len(pages[1].Images) != 1 {
+		t.Fatalf("layout pages = %#v, want text page plus image page", pages)
+	}
+	wantHeight := (220.0 - 48.0) * 350.0 / pdfKP3ContentWidthPx
+	wantY := 220.0 - 24.0 - wantHeight
+	if got := pages[1].Images[0].Y; math.Abs(got-wantY) > 0.001 {
+		t.Fatalf("image y on fresh page = %v, want top without carried empty-line margin %v", got, wantY)
+	}
+}
+
 func TestLayoutPDFPagesAvoidsBlankPageBeforeTallImageAfterEmptyLine(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {
