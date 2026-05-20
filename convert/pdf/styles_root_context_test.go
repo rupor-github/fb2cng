@@ -55,8 +55,8 @@ func TestPDFStyleResolverAppliesBodyTypographyAsRootInheritance(t *testing.T) {
 func TestPDFStyleResolverDefaultIndentsOverrideRootInheritedIndent(t *testing.T) {
 	resolver := newPDFStyleResolverWithDefaultCSS(t, `body { text-indent: 2em; }`)
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
-	if paragraph.Paragraph.FirstLineIndent != pdfBodyIndent {
-		t.Fatalf("paragraph indent = %v, want default paragraph indent %v", paragraph.Paragraph.FirstLineIndent, pdfBodyIndent)
+	if paragraph.Paragraph.FirstLineIndent != pdfDefaultCSSRootFontSize {
+		t.Fatalf("paragraph indent = %v, want default.css paragraph indent %v", paragraph.Paragraph.FirstLineIndent, pdfDefaultCSSRootFontSize)
 	}
 	for _, block := range []pdfTextBlock{
 		{Kind: pdfBlockHeading, Depth: 1},

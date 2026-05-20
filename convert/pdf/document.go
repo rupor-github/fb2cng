@@ -10,9 +10,6 @@ import (
 
 func pageSizePoints(screen config.ScreenConfig) (float64, float64, error) {
 	dpi := screen.DPI
-	if dpi == 0 {
-		dpi = defaultDPI
-	}
 	if screen.Width <= 0 {
 		return 0, 0, fmt.Errorf("invalid pdf screen width: %d", screen.Width)
 	}
@@ -23,7 +20,7 @@ func pageSizePoints(screen config.ScreenConfig) (float64, float64, error) {
 		return 0, 0, fmt.Errorf("invalid pdf screen dpi: %d", screen.DPI)
 	}
 
-	return float64(screen.Width) * 72.0 / float64(dpi), float64(screen.Height) * 72.0 / float64(dpi), nil
+	return float64(screen.Width) * pdfPointsPerInch / float64(dpi), float64(screen.Height) * pdfPointsPerInch / float64(dpi), nil
 }
 
 func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {

@@ -343,6 +343,7 @@ func (r *pdfStyleResolver) inheritedFontSizeForBlock(block pdfTextBlock) float64
 
 func (r *pdfStyleResolver) contextInheritedBlockStyle(tagStyle pdfBlockResolvedStyle, block pdfTextBlock) pdfBlockResolvedStyle {
 	style := tagStyle
+	inheritedFontSize := r.inheritedFontSizeForBlock(block)
 	var (
 		left     float64
 		right    float64
@@ -360,11 +361,18 @@ func (r *pdfStyleResolver) contextInheritedBlockStyle(tagStyle pdfBlockResolvedS
 		fallback := r.namedStyle(pdfStyleParagraph)
 		style.Paragraph = mergePDFInheritedParagraphStyle(style.Paragraph, contextStyle.Paragraph, fallback.Paragraph)
 		marginFallback := fallback
-		if contextStyle.MarginLeft != marginFallback.MarginLeft {
+		relativeLengthFontSize := pdfContextRelativeLengthFontSize(contextStyle, marginFallback, inheritedFontSize)
+		if contextStyle.MarginLeftSpec.Set {
+			left += pdfResolveCSSLengthSpec(contextStyle.MarginLeftSpec, relativeLengthFontSize)
+			hasLeft = true
+		} else if contextStyle.MarginLeft != marginFallback.MarginLeft {
 			left += contextStyle.MarginLeft
 			hasLeft = true
 		}
-		if contextStyle.MarginRight != marginFallback.MarginRight {
+		if contextStyle.MarginRightSpec.Set {
+			right += pdfResolveCSSLengthSpec(contextStyle.MarginRightSpec, relativeLengthFontSize)
+			hasRight = true
+		} else if contextStyle.MarginRight != marginFallback.MarginRight {
 			right += contextStyle.MarginRight
 			hasRight = true
 		}

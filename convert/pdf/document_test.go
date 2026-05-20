@@ -29,16 +29,10 @@ func TestPageSizePoints(t *testing.T) {
 	}
 }
 
-func TestPageSizePoints_DefaultDPI(t *testing.T) {
-	width, height, err := pageSizePoints(config.ScreenConfig{Width: 300, Height: 600})
-	if err != nil {
-		t.Fatalf("pageSizePoints() error = %v", err)
-	}
-	if width != 72 {
-		t.Errorf("width = %v, want 72", width)
-	}
-	if height != 144 {
-		t.Errorf("height = %v, want 144", height)
+func TestPageSizePointsRequiresConfiguredDPI(t *testing.T) {
+	_, _, err := pageSizePoints(config.ScreenConfig{Width: 300, Height: 600})
+	if err == nil || !strings.Contains(err.Error(), "invalid pdf screen dpi") {
+		t.Fatalf("pageSizePoints() error = %v, want invalid dpi", err)
 	}
 }
 

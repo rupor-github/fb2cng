@@ -145,7 +145,14 @@ func naturalPDFImageSize(doc skeletonDocument, img *fb2.BookImage) (float64, flo
 		return float64(widthPx) * doc.PageWidth / float64(doc.ScreenWidthPx),
 			float64(heightPx) * doc.PageHeight / float64(doc.ScreenHeightPx)
 	}
-	return float64(widthPx) * 72 / defaultDPI, float64(heightPx) * 72 / defaultDPI
+	if doc.ScreenDPI > 0 {
+		// Use the configured screen density when page/screen geometry is not
+		// available (mostly unit tests or direct package use); do not assume a
+		// package-level default DPI.
+		return float64(widthPx) * pdfPointsPerInch / float64(doc.ScreenDPI),
+			float64(heightPx) * pdfPointsPerInch / float64(doc.ScreenDPI)
+	}
+	return 0, 0
 }
 
 func pdfImagePixelSize(img *fb2.BookImage) (int, int) {

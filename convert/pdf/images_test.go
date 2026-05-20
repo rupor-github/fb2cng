@@ -71,6 +71,22 @@ func TestMakePDFImageResourceEmbedsJPEGDirectly(t *testing.T) {
 	}
 }
 
+func TestNaturalPDFImageSizeUsesConfiguredDPIWithoutScreenPixels(t *testing.T) {
+	img := &fb2.BookImage{}
+	img.Dim.Width = 300
+	img.Dim.Height = 600
+
+	width, height := naturalPDFImageSize(skeletonDocument{ScreenDPI: 150}, img)
+	if width != 144 || height != 288 {
+		t.Fatalf("naturalPDFImageSize() = %v/%v, want dimensions from configured dpi", width, height)
+	}
+
+	width, height = naturalPDFImageSize(skeletonDocument{}, img)
+	if width != 0 || height != 0 {
+		t.Fatalf("naturalPDFImageSize() without screen geometry/dpi = %v/%v, want zero", width, height)
+	}
+}
+
 func TestGenerateEmbedsPDFImageXObject(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputName := filepath.Join(tmpDir, "book.pdf")

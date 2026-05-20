@@ -17,7 +17,7 @@ func TestPDFStyleResolverTitleVariantMarginsMatchFlattenedWrapperDefaults(t *tes
 		StyleName:    pdfStyleChapterTitleHeader,
 		StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-first"),
 	})
-	if first.SpaceBefore != pdfBaseFontSize*2 || first.SpaceAfter != pdfBaseFontSize {
+	if first.SpaceBefore != pdfDefaultCSSRootFontSize*2 || first.SpaceAfter != pdfDefaultCSSRootFontSize {
 		t.Fatalf("title-first margins = %v/%v, want default.css wrapper 2em/1em", first.SpaceBefore, first.SpaceAfter)
 	}
 
@@ -26,7 +26,7 @@ func TestPDFStyleResolverTitleVariantMarginsMatchFlattenedWrapperDefaults(t *tes
 		StyleName:    pdfStyleChapterTitleHeader,
 		StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next"),
 	})
-	if next.SpaceBefore != pdfBaseFontSize*2 || next.SpaceAfter != pdfBaseFontSize {
+	if next.SpaceBefore != pdfDefaultCSSRootFontSize*2 || next.SpaceAfter != pdfDefaultCSSRootFontSize {
 		t.Fatalf("title-next margins = %v/%v, want default.css wrapper 2em/1em", next.SpaceBefore, next.SpaceAfter)
 	}
 }
@@ -127,8 +127,8 @@ func TestPDFStyleResolverTitleAfterImageKeepsHeadingTextAlignment(t *testing.T) 
 	if style.Paragraph.Align != textAlignCenter {
 		t.Fatalf("title-after-image alignment = %v, want heading center alignment", style.Paragraph.Align)
 	}
-	if style.Paragraph.FontSize != resolver.styles[pdfStyleChapterTitleHeader].Paragraph.FontSize {
-		t.Fatalf("title-after-image font size = %v, want heading font size", style.Paragraph.FontSize)
+	if math.Abs(style.Paragraph.FontSize-pdfDefaultCSSRootFontSize*1.4) > 0.001 {
+		t.Fatalf("title-after-image font size = %v, want default.css heading font size", style.Paragraph.FontSize)
 	}
 	if style.SpaceBefore != pdfTitleAfterImageSpaceBefore || style.SpaceAfter != 0 {
 		t.Fatalf("title-after-image margins = %v/%v, want %v/0", style.SpaceBefore, style.SpaceAfter, pdfTitleAfterImageSpaceBefore)
@@ -139,19 +139,19 @@ func TestPDFStyleResolverHeadingDefaultsMatchCSSAndKFX(t *testing.T) {
 	resolver := newPDFStyleResolverWithDefaultCSS(t)
 
 	h1 := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, Depth: 1})
-	if h1.Paragraph.FontSize != pdfBaseFontSize*1.4 {
+	if math.Abs(h1.Paragraph.FontSize-pdfDefaultCSSRootFontSize*1.4) > 0.001 {
 		t.Fatalf("h1 font size = %v, want default.css 140%%", h1.Paragraph.FontSize)
 	}
-	wantH1Margin := h1.Paragraph.FontSize * pdfHeadingH1MarginFactor
+	wantH1Margin := pdfHeadingH1FontSize * pdfHeadingH1MarginFactor
 	if math.Abs(h1.SpaceBefore-wantH1Margin) > 0.001 || math.Abs(h1.SpaceAfter-wantH1Margin) > 0.001 {
 		t.Fatalf("h1 margins = %v/%v, want KFX/CSS heading margins %v/%v", h1.SpaceBefore, h1.SpaceAfter, wantH1Margin, wantH1Margin)
 	}
 
 	h2 := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, Depth: 2})
-	if h2.Paragraph.FontSize != pdfBaseFontSize*1.2 {
+	if math.Abs(h2.Paragraph.FontSize-pdfDefaultCSSRootFontSize*1.2) > 0.001 {
 		t.Fatalf("h2 font size = %v, want default.css 120%%", h2.Paragraph.FontSize)
 	}
-	wantH2Margin := h2.Paragraph.FontSize * pdfHeadingNestedMarginFactor
+	wantH2Margin := pdfHeadingNestedFontSize * pdfHeadingNestedMarginFactor
 	if math.Abs(h2.SpaceBefore-wantH2Margin) > 0.001 || math.Abs(h2.SpaceAfter-wantH2Margin) > 0.001 {
 		t.Fatalf("h2 margins = %v/%v, want KFX/CSS heading margins %v/%v", h2.SpaceBefore, h2.SpaceAfter, wantH2Margin, wantH2Margin)
 	}
@@ -193,7 +193,7 @@ func TestPDFStyleResolverMapsHeadingAndTOCStyles(t *testing.T) {
 func TestPDFStyleResolverSectionSubtitleMarginsMatchDefaultCSS(t *testing.T) {
 	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	sectionSubtitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockSubtitle})
-	if sectionSubtitle.SpaceBefore != pdfBaseFontSize || sectionSubtitle.SpaceAfter != pdfBaseFontSize {
+	if sectionSubtitle.SpaceBefore != pdfDefaultCSSRootFontSize || sectionSubtitle.SpaceAfter != pdfDefaultCSSRootFontSize {
 		t.Fatalf("section subtitle margins = %v/%v, want default.css 1em/1em", sectionSubtitle.SpaceBefore, sectionSubtitle.SpaceAfter)
 	}
 }
@@ -219,7 +219,7 @@ func TestPDFStyleResolverUsesContextSpecificSubtitleDefaults(t *testing.T) {
 	if sectionSubtitle.Paragraph.Align != textAlignCenter {
 		t.Fatalf("section subtitle align = %v, want center", sectionSubtitle.Paragraph.Align)
 	}
-	if sectionSubtitle.Paragraph.FontSize != pdfBaseFontSize {
-		t.Fatalf("section subtitle font size = %v, want base font size %v", sectionSubtitle.Paragraph.FontSize, pdfBaseFontSize)
+	if sectionSubtitle.Paragraph.FontSize != pdfDefaultCSSRootFontSize {
+		t.Fatalf("section subtitle font size = %v, want default.css root font size %v", sectionSubtitle.Paragraph.FontSize, pdfDefaultCSSRootFontSize)
 	}
 }

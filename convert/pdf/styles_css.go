@@ -356,7 +356,7 @@ func applyPDFTextDecoration(style *pdfBlockResolvedStyle, value css.Value) {
 }
 
 func applyPDFMarginShorthand(style *pdfBlockResolvedStyle, value css.Value) {
-	top, right, bottom, left, topSpec, rightSpec, bottomSpec, leftSpec, ok := pdfCSSBoxShorthand(value, style.Paragraph.FontSize)
+	top, right, bottom, left, topSpec, rightSpec, bottomSpec, leftSpec, ok := pdfCSSMarginShorthand(value, style.Paragraph.FontSize)
 	if !ok {
 		return
 	}
@@ -387,7 +387,15 @@ func applyPDFPaddingShorthand(style *pdfBlockResolvedStyle, value css.Value) {
 	style.PaddingLeftSpec = leftSpec
 }
 
+func pdfCSSMarginShorthand(value css.Value, fontSize float64) (float64, float64, float64, float64, pdfCSSLengthSpec, pdfCSSLengthSpec, pdfCSSLengthSpec, pdfCSSLengthSpec, bool) {
+	return pdfCSSBoxShorthandWithAuto(value, fontSize, true)
+}
+
 func pdfCSSBoxShorthand(value css.Value, fontSize float64) (float64, float64, float64, float64, pdfCSSLengthSpec, pdfCSSLengthSpec, pdfCSSLengthSpec, pdfCSSLengthSpec, bool) {
+	return pdfCSSBoxShorthandWithAuto(value, fontSize, false)
+}
+
+func pdfCSSBoxShorthandWithAuto(value css.Value, fontSize float64, allowAuto bool) (float64, float64, float64, float64, pdfCSSLengthSpec, pdfCSSLengthSpec, pdfCSSLengthSpec, pdfCSSLengthSpec, bool) {
 	tokens := strings.Fields(value.Raw)
 	if len(tokens) == 0 && value.Raw == "" {
 		tokens = []string{formatCSSValue(value)}
@@ -399,6 +407,11 @@ func pdfCSSBoxShorthand(value css.Value, fontSize float64) (float64, float64, fl
 	specs := make([]pdfCSSLengthSpec, 0, len(tokens))
 	for _, token := range tokens {
 		value := parsePDFCSSValueToken(token)
+		if allowAuto && cssKeyword(value) == "auto" {
+			values = append(values, 0)
+			specs = append(specs, pdfCSSLengthSpec{})
+			continue
+		}
 		points, ok := pdfCSSLengthPoints(value, fontSize)
 		if !ok {
 			return 0, 0, 0, 0, pdfCSSLengthSpec{}, pdfCSSLengthSpec{}, pdfCSSLengthSpec{}, pdfCSSLengthSpec{}, false

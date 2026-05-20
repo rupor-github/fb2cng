@@ -14,7 +14,6 @@ import (
 
 const (
 	pdfVersion              = "1.4"
-	defaultDPI              = 300
 	metadataExcerptMaxRunes = 500
 )
 
@@ -55,6 +54,7 @@ func Generate(ctx context.Context, c *content.Content, outputName string, cfg *c
 		PageHeight:     pageHeight,
 		ScreenWidthPx:  cfg.Images.Screen.Width,
 		ScreenHeightPx: cfg.Images.Screen.Height,
+		ScreenDPI:      cfg.Images.Screen.DPI,
 		Title:          bookTitle(c, cfg, log),
 		Author:         bookAuthors(c, cfg, log),
 		Subject:        bookSubject(c),

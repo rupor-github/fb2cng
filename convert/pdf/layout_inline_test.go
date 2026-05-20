@@ -212,8 +212,8 @@ func TestLayoutPDFPagesRendersInlineImages(t *testing.T) {
 	if !imageFragment.Underline {
 		t.Fatalf("inline image fragment = %#v, want link underline decoration", *imageFragment)
 	}
-	wantImageWidth := float64(img.Dim.Width) * pdfBaseFontSize / pdfKP3PixelsPerEm
-	wantImageHeight := float64(img.Dim.Height) * pdfBaseFontSize / pdfKP3PixelsPerEm
+	wantImageWidth := float64(img.Dim.Width) * pdfDefaultCSSRootFontSize / pdfKP3PixelsPerEm
+	wantImageHeight := float64(img.Dim.Height) * pdfDefaultCSSRootFontSize / pdfKP3PixelsPerEm
 	if math.Abs(image.Width-wantImageWidth) > 0.001 || math.Abs(image.Height-wantImageHeight) > 0.001 || math.Abs(imageFragment.ImageHeight-wantImageHeight) > 0.001 {
 		t.Fatalf("inline image size = %vx%v / fragment height %v, want KP3 em size %vx%v", image.Width, image.Height, imageFragment.ImageHeight, wantImageWidth, wantImageHeight)
 	}

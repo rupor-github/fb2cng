@@ -10,6 +10,11 @@ import (
 	"fbc/fb2"
 )
 
+const (
+	pdfDefaultCSSRootFontSize   = pdfBaseFontSize * 1.10
+	pdfDefaultCSSRootLineHeight = pdfDefaultCSSRootFontSize * 1.40
+)
+
 func newPDFStyleResolverWithDefaultCSS(t *testing.T, extraCSS ...string) *pdfStyleResolver {
 	t.Helper()
 	data, err := os.ReadFile("../default.css")

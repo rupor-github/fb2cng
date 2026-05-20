@@ -10,6 +10,7 @@ type skeletonDocument struct {
 	PageHeight     float64
 	ScreenWidthPx  int
 	ScreenHeightPx int
+	ScreenDPI      int
 	Title          string
 	Author         string
 	Subject        string

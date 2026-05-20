@@ -111,7 +111,7 @@ func TestPDFStyleResolverSectionTitleHeaderLineHeightUsesKP3SpecialLH(t *testing
 	}
 }
 
-func TestPDFStyleResolverSubtitleLineHeightUsesKP3NormalRatio(t *testing.T) {
+func TestPDFStyleResolverSubtitleLineHeightInheritsDefaultCSSRootRhythm(t *testing.T) {
 	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	for _, styleName := range []string{
 		pdfStyleSubtitle,
@@ -122,14 +122,13 @@ func TestPDFStyleResolverSubtitleLineHeightUsesKP3NormalRatio(t *testing.T) {
 		pdfStyleCiteSubtitle,
 	} {
 		subtitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockSubtitle, StyleName: styleName})
-		wantLineHeight := subtitle.Paragraph.FontSize * pdfNormalLineHeightFactor
-		if math.Abs(subtitle.Paragraph.LineHeight-wantLineHeight) > 0.001 {
-			t.Fatalf("%s line height = %v, want KP3 normal ratio %v", styleName, subtitle.Paragraph.LineHeight, wantLineHeight)
+		if math.Abs(subtitle.Paragraph.LineHeight-pdfDefaultCSSRootLineHeight) > 0.001 {
+			t.Fatalf("%s line height = %v, want default.css root line-height %v", styleName, subtitle.Paragraph.LineHeight, pdfDefaultCSSRootLineHeight)
 		}
 	}
 }
 
-func TestPDFStyleResolverVerseTextAuthorAndDateLineHeightUseKP3NormalRatio(t *testing.T) {
+func TestPDFStyleResolverVerseTextAuthorAndDateLineHeightInheritDefaultCSSRootRhythm(t *testing.T) {
 	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	for _, block := range []pdfTextBlock{
 		{Kind: pdfBlockPoem},
@@ -137,9 +136,8 @@ func TestPDFStyleResolverVerseTextAuthorAndDateLineHeightUseKP3NormalRatio(t *te
 		{Kind: pdfBlockParagraph, StyleClasses: pdfStyleDate},
 	} {
 		style := resolver.styleForBlock(block)
-		wantLineHeight := style.Paragraph.FontSize * pdfNormalLineHeightFactor
-		if math.Abs(style.Paragraph.LineHeight-wantLineHeight) > 0.001 {
-			t.Fatalf("%s line height = %v, want KP3 normal ratio %v", block.Kind, style.Paragraph.LineHeight, wantLineHeight)
+		if math.Abs(style.Paragraph.LineHeight-pdfDefaultCSSRootLineHeight) > 0.001 {
+			t.Fatalf("%s line height = %v, want default.css root line-height %v", block.Kind, style.Paragraph.LineHeight, pdfDefaultCSSRootLineHeight)
 		}
 	}
 }
