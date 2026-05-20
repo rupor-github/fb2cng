@@ -1,3 +1,13 @@
+@media fbc-pdf {
+    /* for PDFs defaults selected to closely match KP3 rendering with proper */
+    /* Amazon Bookerly fonts. Out built-in fonts are Noto so let's */
+    /* adjust basic measurements slightly */
+    body {
+        line-height: 140%;
+        font-size: 110%;
+    }
+}
+
 /* Base paragraph style */
 p {
     text-indent: 1em;
