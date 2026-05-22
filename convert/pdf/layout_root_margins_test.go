@@ -24,7 +24,7 @@ func TestLayoutPDFPagesAnnotationWrapperParagraphCanStripRootHorizontalMargins(t
 		`,
 	}}}, nil)
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 180,
 		Title:      "Title",
@@ -62,7 +62,7 @@ func TestLayoutPDFPagesAnnotationWrapperNestedCiteCanStripRootHorizontalMargins(
 		`,
 	}}}, nil)
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 180,
 		Title:      "Title",
@@ -101,7 +101,7 @@ func TestLayoutPDFPagesAnnotationWrapperNestedPoemCanStripRootHorizontalMargins(
 		`,
 	}}}, nil)
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 180,
 		Title:      "Title",
@@ -164,7 +164,7 @@ func TestLayoutPDFPagesAnnotationNestedSectionPreservesRootHorizontalMargins(t *
 		t.Fatalf("collectTextBlocks() error = %v", err)
 	}
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 220,
 		Title:      "Title",
@@ -239,7 +239,7 @@ func TestLayoutPDFPagesGeneratedHelperTitlesPreserveRootHorizontalMargins(t *tes
 		t.Fatalf("collectPDFContent() error = %v", err)
 	}
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 220,
 		Title:      "Title",

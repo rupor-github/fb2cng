@@ -23,7 +23,7 @@ func pageSizePoints(screen config.ScreenConfig) (float64, float64, error) {
 	return float64(screen.Width) * pdfPointsPerInch / float64(dpi), float64(screen.Height) * pdfPointsPerInch / float64(dpi), nil
 }
 
-func buildSkeletonPDF(doc skeletonDocument) ([]byte, error) {
+func buildPDFDocument(doc pdfDocumentSpec) ([]byte, error) {
 	writer := docwriter.NewWriter(pdfVersion)
 
 	const (

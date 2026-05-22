@@ -19,7 +19,7 @@ func TestLayoutPDFPagesKeepsGapBetweenTitleVignetteAndHeadingImage(t *testing.T)
 	heading.Dim.Width = 380
 	heading.Dim.Height = 30
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:      520,
 		PageHeight:     220,
 		ScreenWidthPx:  1200,
@@ -52,7 +52,7 @@ func TestLayoutPDFPagesUsesTightTitleHeaderLineFlow(t *testing.T) {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:      520,
 		PageHeight:     260,
 		ScreenWidthPx:  1200,
@@ -89,7 +89,7 @@ func TestLayoutPDFPagesCentersTitleContentBetweenVignettes(t *testing.T) {
 	vignette.Dim.Width = 120
 	vignette.Dim.Height = 10
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:      520,
 		PageHeight:     420,
 		ScreenWidthPx:  1200,
@@ -134,7 +134,7 @@ func TestLayoutPDFPagesDoesNotMoveBottomTitleVignetteForTooTallFollowingImage(t 
 	following.Dim.Width = 200
 	following.Dim.Height = 260
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:      520,
 		PageHeight:     300,
 		ScreenWidthPx:  1200,
@@ -178,7 +178,7 @@ func TestLayoutPDFPagesTitleImageCanStripRootHorizontalMargins(t *testing.T) {
 		Data: `html { margin: 0 -10pt 0 -10pt; }`,
 	}}}, nil)
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:      520,
 		PageHeight:     220,
 		ScreenWidthPx:  1200,
@@ -223,7 +223,7 @@ func TestLayoutPDFPagesTitleVignetteCanStripRootHorizontalMargins(t *testing.T) 
 		Data: `html { margin: 0 -10pt 0 -10pt; }`,
 	}}}, nil)
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:      520,
 		PageHeight:     220,
 		ScreenWidthPx:  1200,

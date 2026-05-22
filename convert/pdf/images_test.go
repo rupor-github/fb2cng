@@ -25,7 +25,7 @@ func TestLayoutPDFPagesAddsCoverImagePage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:      100,
 		PageHeight:     160,
 		ScreenWidthPx:  100,
@@ -76,12 +76,12 @@ func TestNaturalPDFImageSizeUsesConfiguredDPIWithoutScreenPixels(t *testing.T) {
 	img.Dim.Width = 300
 	img.Dim.Height = 600
 
-	width, height := naturalPDFImageSize(skeletonDocument{ScreenDPI: 150}, img)
+	width, height := naturalPDFImageSize(pdfDocumentSpec{ScreenDPI: 150}, img)
 	if width != 144 || height != 288 {
 		t.Fatalf("naturalPDFImageSize() = %v/%v, want dimensions from configured dpi", width, height)
 	}
 
-	width, height = naturalPDFImageSize(skeletonDocument{}, img)
+	width, height = naturalPDFImageSize(pdfDocumentSpec{}, img)
 	if width != 0 || height != 0 {
 		t.Fatalf("naturalPDFImageSize() without screen geometry/dpi = %v/%v, want zero", width, height)
 	}

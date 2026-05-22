@@ -40,7 +40,7 @@ type pdfTableCellLayout struct {
 	VAlign  string
 }
 
-func layoutPDFTable(doc skeletonDocument, resolver *pdfStyleResolver, block pdfTextBlock, style pdfBlockResolvedStyle, tableWidth float64) (pdfTableLayout, error) {
+func layoutPDFTable(doc pdfDocumentSpec, resolver *pdfStyleResolver, block pdfTextBlock, style pdfBlockResolvedStyle, tableWidth float64) (pdfTableLayout, error) {
 	if resolver == nil {
 		resolver = newPDFStyleResolver(nil, nil)
 	}
@@ -130,7 +130,7 @@ func layoutPDFTable(doc skeletonDocument, resolver *pdfStyleResolver, block pdfT
 	return layout, nil
 }
 
-func pdfTableColumnWidths(doc skeletonDocument, resolver *pdfStyleResolver, cells []pdfPlacedTableCell, colCount int, tableWidth float64) ([]float64, float64, error) {
+func pdfTableColumnWidths(doc pdfDocumentSpec, resolver *pdfStyleResolver, cells []pdfPlacedTableCell, colCount int, tableWidth float64) ([]float64, float64, error) {
 	minWidths := make([]float64, colCount)
 	for _, placed := range cells {
 		style := resolver.styleForTableCell(placed.RowStyle, placed.Cell)
@@ -174,7 +174,7 @@ func pdfTableColumnWidths(doc skeletonDocument, resolver *pdfStyleResolver, cell
 	return widths, 1, nil
 }
 
-func pdfTableCellMinWidth(doc skeletonDocument, style pdfBlockResolvedStyle, cell fb2.TableCell) (float64, error) {
+func pdfTableCellMinWidth(doc pdfDocumentSpec, style pdfBlockResolvedStyle, cell fb2.TableCell) (float64, error) {
 	paragraph := fb2.Paragraph{Text: cell.Content}
 	text, _ := paragraphTextAndLinks(&paragraph)
 	face, _, err := fontForStyle(doc.Fonts, style.Paragraph)

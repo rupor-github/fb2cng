@@ -16,7 +16,7 @@ func TestLayoutPDFPagesKeepsHeadingWithNextParagraph(t *testing.T) {
 	contentWidth := 220.0 - 48.0
 	filler := textWithParagraphLineCount(t, face, pdfStyleForBlock(pdfTextBlock{Kind: pdfBlockParagraph}).Paragraph, contentWidth, 2, "filler")
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 120,
 		Title:      "Title",
@@ -51,7 +51,7 @@ func TestLayoutPDFPagesAvoidsParagraphWidowOrphanSplit(t *testing.T) {
 	filler := textWithParagraphLineCount(t, face, style, contentWidth, 2, "filler")
 	target := textWithParagraphLineCount(t, face, style, contentWidth, 3, "target")
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 98,
 		Title:      "Title",
@@ -92,7 +92,7 @@ func TestLayoutPDFPagesHonorsCSSPageBreakAndHiddenStyles(t *testing.T) {
 	hidden.Hidden = true
 	resolver.styles["hidden"] = hidden
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 180,
 		Title:      "Title",
@@ -136,7 +136,7 @@ func TestLayoutPDFPagesHonorsPageBreakBeforeAvoidFromDefaultCSS(t *testing.T) {
 	style := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph}).Paragraph
 	filler := textWithParagraphLineCount(t, face, style, contentWidth, 2, "filler")
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 100,
 		Title:      "Title",
@@ -178,7 +178,7 @@ func TestLayoutPDFPagesHonorsPageBreakBeforeAvoidForDefaultVignettes(t *testing.
 	img.Dim.Width = 100
 	img.Dim.Height = 20
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 155,
 		Title:      "Title",
@@ -221,7 +221,7 @@ func TestLayoutPDFPagesHonorsPageBreakAfterAvoidForImages(t *testing.T) {
 	img.Dim.Width = 100
 	img.Dim.Height = 30
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 155,
 		Title:      "Title",
@@ -261,7 +261,7 @@ func TestLayoutPDFPagesAppliesRootPageMargins(t *testing.T) {
 	paragraph.SpaceAfter = 0
 	resolver.styles[pdfStyleParagraph] = paragraph
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 180,
 		Title:      "Title",
@@ -295,7 +295,7 @@ func TestLayoutPDFPagesAppliesFirstBlockTopMargin(t *testing.T) {
 	topGap.SpaceAfter = 0
 	resolver.styles["top-gap"] = topGap
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 180,
 		Title:      "Title",
@@ -338,7 +338,7 @@ func TestLayoutPDFPagesAppliesPadding(t *testing.T) {
 	padded.HasBorder = true
 	resolver.styles["padded"] = padded
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 180,
 		Title:      "Title",
@@ -389,7 +389,7 @@ func TestLayoutPDFPagesAppliesBlockWidth(t *testing.T) {
 	fixed.HasBackground = true
 	resolver.styles["fixed-width"] = fixed
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 180,
 		Title:      "Title",

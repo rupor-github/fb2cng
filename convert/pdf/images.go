@@ -29,7 +29,7 @@ type pdfImageResource struct {
 	Data     []byte
 }
 
-func fitPDFImageInBox(doc skeletonDocument, img *fb2.BookImage, x, y, maxWidth, maxHeight float64) (pdfRect, bool) {
+func fitPDFImageInBox(doc pdfDocumentSpec, img *fb2.BookImage, x, y, maxWidth, maxHeight float64) (pdfRect, bool) {
 	width, height, ok := fitPDFImageSize(doc, img, maxWidth, maxHeight)
 	if !ok {
 		return pdfRect{}, false
@@ -42,16 +42,16 @@ func fitPDFImageInBox(doc skeletonDocument, img *fb2.BookImage, x, y, maxWidth, 
 	}, true
 }
 
-func fitPDFImageSize(doc skeletonDocument, img *fb2.BookImage, maxWidth, maxHeight float64) (float64, float64, bool) {
+func fitPDFImageSize(doc pdfDocumentSpec, img *fb2.BookImage, maxWidth, maxHeight float64) (float64, float64, bool) {
 	return fitPDFImageSizeWithUpscale(doc, img, maxWidth, maxHeight, false)
 }
 
-func fitPDFImageSizeWithUpscale(doc skeletonDocument, img *fb2.BookImage, maxWidth, maxHeight float64, allowUpscale bool) (float64, float64, bool) {
+func fitPDFImageSizeWithUpscale(doc pdfDocumentSpec, img *fb2.BookImage, maxWidth, maxHeight float64, allowUpscale bool) (float64, float64, bool) {
 	width, height := naturalPDFImageSize(doc, img)
 	return fitPDFImageDimensions(width, height, maxWidth, maxHeight, allowUpscale)
 }
 
-func fitPDFBlockImageSizeWithReference(doc skeletonDocument, img *fb2.BookImage, maxWidth, maxHeight, widthReference float64, forceContentWidth bool) (float64, float64, bool) {
+func fitPDFBlockImageSizeWithReference(doc pdfDocumentSpec, img *fb2.BookImage, maxWidth, maxHeight, widthReference float64, forceContentWidth bool) (float64, float64, bool) {
 	widthPx, heightPx := pdfImagePixelSize(img)
 	if widthPx <= 0 || heightPx <= 0 || maxWidth <= 0 || maxHeight <= 0 {
 		return 0, 0, false
@@ -109,7 +109,7 @@ func pdfBlockImageUsesScreenWidthCap(img *fb2.BookImage, widthPx int) bool {
 	return widthPx > int(pdfKP3ContentWidthPx) && img != nil && strings.Contains(strings.ToLower(img.MimeType), "gif")
 }
 
-func pdfBlockImageScreenWidth(doc skeletonDocument, widthPx int) (float64, bool) {
+func pdfBlockImageScreenWidth(doc pdfDocumentSpec, widthPx int) (float64, bool) {
 	if widthPx <= 0 || doc.ScreenWidthPx <= 0 || doc.PageWidth <= 0 {
 		return 0, false
 	}
@@ -136,7 +136,7 @@ func fitPDFImageDimensions(width, height, maxWidth, maxHeight float64, allowUpsc
 	return width, height, true
 }
 
-func naturalPDFImageSize(doc skeletonDocument, img *fb2.BookImage) (float64, float64) {
+func naturalPDFImageSize(doc pdfDocumentSpec, img *fb2.BookImage) (float64, float64) {
 	widthPx, heightPx := pdfImagePixelSize(img)
 	if widthPx <= 0 || heightPx <= 0 {
 		return 0, 0

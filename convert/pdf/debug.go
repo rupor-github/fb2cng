@@ -159,7 +159,7 @@ type pdfDebugFont struct {
 	UsedGlyphIDs   []uint16 `json:"used_glyph_ids"`
 }
 
-func writePDFDebugDumps(doc skeletonDocument, pages []pdfPage, fontResources []pdfFontResource) error {
+func writePDFDebugDumps(doc pdfDocumentSpec, pages []pdfPage, fontResources []pdfFontResource) error {
 	if !doc.Debug || doc.WorkDir == "" {
 		return nil
 	}

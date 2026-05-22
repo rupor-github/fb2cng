@@ -49,7 +49,7 @@ func Generate(ctx context.Context, c *content.Content, outputName string, cfg *c
 		styleTracer = newPDFStyleTracer(c.WorkDir)
 	}
 
-	data, err := buildSkeletonPDF(skeletonDocument{
+	data, err := buildPDFDocument(pdfDocumentSpec{
 		PageWidth:      pageWidth,
 		PageHeight:     pageHeight,
 		ScreenWidthPx:  cfg.Images.Screen.Width,

@@ -36,7 +36,7 @@ func TestPageSizePointsRequiresConfiguredDPI(t *testing.T) {
 	}
 }
 
-func TestGenerateSkeletonPDF(t *testing.T) {
+func TestBuildPDFDocument(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputName := filepath.Join(tmpDir, "book.pdf")
 	cfg := &config.DocumentConfig{

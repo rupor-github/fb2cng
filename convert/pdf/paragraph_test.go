@@ -339,7 +339,7 @@ func TestLayoutInlineParagraphHyphenatesStyledRuns(t *testing.T) {
 		Hyphenation: paragraphHyphenationAuto,
 	}
 
-	lines, err := layoutInlineParagraph(skeletonDocument{}, nil, nil, baseFace, "hyphenation", []pdfInlineRun{{Text: "hyphenation", Bold: true}}, style, shapedWidthPoints(prefix, style.FontSize)+1)
+	lines, err := layoutInlineParagraph(pdfDocumentSpec{}, nil, nil, baseFace, "hyphenation", []pdfInlineRun{{Text: "hyphenation", Bold: true}}, style, shapedWidthPoints(prefix, style.FontSize)+1)
 	if err != nil {
 		t.Fatalf("layoutInlineParagraph() error = %v", err)
 	}

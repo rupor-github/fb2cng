@@ -2,7 +2,7 @@ package pdf
 
 import "strings"
 
-func layoutPDFPages(doc skeletonDocument, _ *builtinFontFace) ([]pdfPage, map[pdfFontKey]map[uint16]shapedGlyph, error) {
+func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdfFontKey]map[uint16]shapedGlyph, error) {
 	const margin = 24.0
 	used := make(map[pdfFontKey]map[uint16]shapedGlyph)
 	pages := make([]pdfPage, 0, 2)
@@ -585,15 +585,15 @@ func shiftPDFTitleContent(page *pdfPage, lineStart, lineEnd int, imageStart, ima
 	}
 }
 
-func pdfPageContentMargins(doc skeletonDocument, styles *pdfStyleResolver, baseMargin float64) (float64, float64, float64, float64) {
+func pdfPageContentMargins(doc pdfDocumentSpec, styles *pdfStyleResolver, baseMargin float64) (float64, float64, float64, float64) {
 	return pdfPageContentMarginsWithOptions(doc, styles, baseMargin, false)
 }
 
-func pdfPageContentMarginsWithoutRootHorizontal(doc skeletonDocument, styles *pdfStyleResolver, baseMargin float64) (float64, float64, float64, float64) {
+func pdfPageContentMarginsWithoutRootHorizontal(doc pdfDocumentSpec, styles *pdfStyleResolver, baseMargin float64) (float64, float64, float64, float64) {
 	return pdfPageContentMarginsWithOptions(doc, styles, baseMargin, true)
 }
 
-func pdfPageContentMarginsWithOptions(doc skeletonDocument, styles *pdfStyleResolver, baseMargin float64, stripRootHorizontal bool) (float64, float64, float64, float64) {
+func pdfPageContentMarginsWithOptions(doc pdfDocumentSpec, styles *pdfStyleResolver, baseMargin float64, stripRootHorizontal bool) (float64, float64, float64, float64) {
 	left := baseMargin
 	right := baseMargin
 	top := baseMargin
@@ -631,7 +631,7 @@ func pdfBlockImageOverflowsBottom(candidateBottom float64, pageBottom float64) b
 	return candidateBottom < pageBottom-pdfBlockImageBottomFitOverflow
 }
 
-func nextBlockKeepHeight(doc skeletonDocument, blockStyles []pdfBlockResolvedStyle, start int, contentWidth float64, rootlessContentWidth float64, contentHeight float64, minLines int) (float64, error) {
+func nextBlockKeepHeight(doc pdfDocumentSpec, blockStyles []pdfBlockResolvedStyle, start int, contentWidth float64, rootlessContentWidth float64, contentHeight float64, minLines int) (float64, error) {
 	if minLines <= 0 {
 		return 0, nil
 	}

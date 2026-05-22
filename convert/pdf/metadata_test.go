@@ -17,7 +17,7 @@ import (
 )
 
 func TestInfoDictionaryIncludesSubjectAndKeywords(t *testing.T) {
-	info := docwriter.Format(infoDictionary(skeletonDocument{
+	info := docwriter.Format(infoDictionary(pdfDocumentSpec{
 		Title:    "Title",
 		Author:   "Author",
 		Subject:  "Annotation excerpt",

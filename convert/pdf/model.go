@@ -6,7 +6,7 @@ import (
 	"fbc/fb2"
 )
 
-type skeletonDocument struct {
+type pdfDocumentSpec struct {
 	PageWidth      float64
 	PageHeight     float64
 	ScreenWidthPx  int

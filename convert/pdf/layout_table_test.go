@@ -59,7 +59,7 @@ func TestLayoutPDFPagesRendersTableCellsBordersAndSpans(t *testing.T) {
 		Cells: []fb2.TableCell{{ColSpan: 2, Align: "center", Content: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Spanned body"}}}},
 	}}}
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 180,
 		Title:      "Title",
@@ -99,7 +99,7 @@ func TestLayoutPDFTableHonorsHeaderHyphenationNoneAndNoWrap(t *testing.T) {
 	table := &fb2.Table{Rows: []fb2.TableRow{{Cells: []fb2.TableCell{{Header: true, Content: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Строка 1"}}}}}}}
 	block := pdfTextBlock{Kind: pdfBlockTable, StyleName: pdfStyleTable, Table: table}
 	style := resolver.styleForBlock(block)
-	layout, err := layoutPDFTable(skeletonDocument{PageWidth: 120, PageHeight: 120, Styles: resolver, Hyphenator: fakeHyphenator{"Строка": "Стро\u00adка"}}, resolver, block, style, 26)
+	layout, err := layoutPDFTable(pdfDocumentSpec{PageWidth: 120, PageHeight: 120, Styles: resolver, Hyphenator: fakeHyphenator{"Строка": "Стро\u00adка"}}, resolver, block, style, 26)
 	if err != nil {
 		t.Fatalf("layoutPDFTable() error = %v", err)
 	}
@@ -133,7 +133,7 @@ func TestLayoutPDFTableScalesFootnoteLinkStylesWithWideTables(t *testing.T) {
 	block := pdfTextBlock{Kind: pdfBlockTable, StyleName: pdfStyleTable, Table: table}
 	style := resolver.styleForBlock(block)
 
-	layout, err := layoutPDFTable(skeletonDocument{PageWidth: 180, PageHeight: 120, Content: c, Styles: resolver}, resolver, block, style, 120)
+	layout, err := layoutPDFTable(pdfDocumentSpec{PageWidth: 180, PageHeight: 120, Content: c, Styles: resolver}, resolver, block, style, 120)
 	if err != nil {
 		t.Fatalf("layoutPDFTable() error = %v", err)
 	}
@@ -174,7 +174,7 @@ func TestLayoutPDFPagesSplitsTablesBetweenRows(t *testing.T) {
 		table.Rows = append(table.Rows, fb2.TableRow{Cells: []fb2.TableCell{{Content: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: text}}}}})
 	}
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 120,
 		Title:      "Title",

@@ -26,7 +26,7 @@ func pdfHyphenator(c *content.Content, log *zap.Logger) paragraphHyphenator {
 	return contenttext.NewHyphenator(c.Book.Description.TitleInfo.Lang, log)
 }
 
-func infoDictionary(doc skeletonDocument) docwriter.Dict {
+func infoDictionary(doc pdfDocumentSpec) docwriter.Dict {
 	info := docwriter.Dict{
 		"Creator":  docwriter.UTF16TextString("fbc"),
 		"Producer": docwriter.UTF16TextString("fbc"),

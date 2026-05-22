@@ -14,7 +14,7 @@ func TestLayoutPDFPagesAppliesInlineStyles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
-	pages, used, err := layoutPDFPages(skeletonDocument{
+	pages, used, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  520,
 		PageHeight: 180,
 		Title:      "Title",
@@ -76,7 +76,7 @@ func TestLayoutPDFPagesPreservesCodeBlockWhitespace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  260,
 		PageHeight: 180,
 		Title:      "Title",
@@ -127,7 +127,7 @@ func TestLayoutPDFPagesKeepsBaseRhythmAfterCodeBlock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  320,
 		PageHeight: 240,
 		Title:      "Title",
@@ -169,7 +169,7 @@ func TestLayoutPDFPagesRendersInlineImages(t *testing.T) {
 	img.Dim.Width = 120
 	img.Dim.Height = 60
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:      520,
 		PageHeight:     180,
 		ScreenWidthPx:  1200,
@@ -248,7 +248,7 @@ func TestLayoutPDFPagesAppliesInlineNamedStyleClasses(t *testing.T) {
 	accent.Paragraph.VerticalAlign = textVerticalAlignSuper
 	resolver.styles["accent"] = accent
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  520,
 		PageHeight: 180,
 		Title:      "Title",
@@ -296,7 +296,7 @@ func TestLayoutPDFPagesAppliesInlineContextDescendantSelectors(t *testing.T) {
 	}}}
 	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  520,
 		PageHeight: 180,
 		Title:      "Title",
@@ -345,7 +345,7 @@ func TestLayoutPDFPagesAppliesInlineDescendantSelectorsFromBlockStyleName(t *tes
 	}}}
 	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  520,
 		PageHeight: 180,
 		Title:      "Title",

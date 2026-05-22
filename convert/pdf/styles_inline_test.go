@@ -63,7 +63,7 @@ func TestPDFInlineRunFootnoteSupFragmentDoesNotDoubleShrink(t *testing.T) {
 	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	base := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph}).Paragraph
 	fragment, err := inlineRunFragment(
-		skeletonDocument{},
+		pdfDocumentSpec{},
 		newPDFFontRegistry(nil, nil),
 		resolver,
 		base,

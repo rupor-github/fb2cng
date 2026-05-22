@@ -16,7 +16,7 @@ func TestLayoutPDFPagesUpscalesVignettesToContentWidth(t *testing.T) {
 	img.Dim.Width = 120
 	img.Dim.Height = 10
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:      520,
 		PageHeight:     220,
 		ScreenWidthPx:  1200,
@@ -55,7 +55,7 @@ func TestLayoutPDFPagesDoesNotApplyTextIndentToImageOnlyParagraphs(t *testing.T)
 		Paragraph: paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, FirstLineIndent: pdfBodyIndent, HasFirstLineIndent: true, Align: textAlignJustify, Hyphenation: paragraphHyphenationAuto},
 	}
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  520,
 		PageHeight: 220,
 		Title:      "Title",
@@ -93,7 +93,7 @@ func TestLayoutPDFPagesLeftAlignsImageOnlyParagraphsInsideCite(t *testing.T) {
 	}
 	resolver.styles[pdfStyleCite] = pdfBlockResolvedStyle{MarginLeft: 21, MarginRight: 21}
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  520,
 		PageHeight: 220,
 		Title:      "Title",
@@ -127,7 +127,7 @@ func TestLayoutPDFPagesSizesBlockImagesLikeKP3(t *testing.T) {
 	img.Dim.Width = 100
 	img.Dim.Height = 50
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:      520,
 		PageHeight:     220,
 		ScreenWidthPx:  1200,
@@ -170,7 +170,7 @@ func TestLayoutPDFPagesSizesPartialWidthBlockImagesAgainstRootlessWidth(t *testi
 		Data: `html { margin: 0 -12pt 0 -12pt; }`,
 	}}}, nil)
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:      520,
 		PageHeight:     300,
 		ScreenWidthPx:  1200,
@@ -212,7 +212,7 @@ func TestLayoutPDFPagesCapsLargeGIFBlockImagesByConfiguredScreen(t *testing.T) {
 	img.Dim.Width = 600
 	img.Dim.Height = 300
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:      520,
 		PageHeight:     220,
 		ScreenWidthPx:  1200,
@@ -250,7 +250,7 @@ func TestLayoutPDFPagesClampsLargePNGBlockImagesLikeKP3(t *testing.T) {
 	img.Dim.Width = 600
 	img.Dim.Height = 300
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:      520,
 		PageHeight:     400,
 		ScreenWidthPx:  1200,
@@ -288,7 +288,7 @@ func TestLayoutPDFPagesSizesFullWidthBlockImagesAgainstRootlessWidth(t *testing.
 		Data: `html { margin: 0 -12pt 0 -12pt; }`,
 	}}}, nil)
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:      520,
 		PageHeight:     500,
 		ScreenWidthPx:  1200,
@@ -332,7 +332,7 @@ func TestLayoutPDFPagesKeepsNearFittingImageWithSmallBottomOverflow(t *testing.T
 	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignLeft}}
 	resolver.styles[pdfStyleImage] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignCenter}, KeepTogether: true}
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 220,
 		Title:      "Title",
@@ -368,7 +368,7 @@ func TestLayoutPDFPagesBreaksImagePastBottomOverflowTolerance(t *testing.T) {
 	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignLeft}}
 	resolver.styles[pdfStyleImage] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignCenter}, KeepTogether: true}
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 220,
 		Title:      "Title",
@@ -402,7 +402,7 @@ func TestLayoutPDFPagesDoesNotKeepImageWithNextWhenAvoidIsAbsent(t *testing.T) {
 	resolver.styles[pdfStyleImage] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignCenter}, SpaceBefore: 10, KeepTogether: true}
 	resolver.styles["after"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignLeft}, SpaceBefore: 30}
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  520,
 		PageHeight: 300,
 		Title:      "Title",
@@ -454,7 +454,7 @@ func TestLayoutPDFPagesDoesNotCarryPreviousEmptyLineMarginToImagePage(t *testing
 		{Kind: pdfBlockImage, StyleName: pdfStyleImage, ImageID: "block"},
 	}
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 220,
 		Title:      "Title",
@@ -485,7 +485,7 @@ func TestLayoutPDFPagesAvoidsBlankPageBeforeTallImageAfterEmptyLine(t *testing.T
 	img.Dim.Width = 600
 	img.Dim.Height = 800
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  520,
 		PageHeight: 220,
 		Title:      "Title",
@@ -523,7 +523,7 @@ func TestLayoutPDFPagesRendersImageOnlyHeadings(t *testing.T) {
 	img.Dim.Width = 380
 	img.Dim.Height = 30
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:      520,
 		PageHeight:     180,
 		ScreenWidthPx:  1200,
@@ -561,7 +561,7 @@ func TestLayoutPDFPagesKeepsGapAfterImageOnlySubtitle(t *testing.T) {
 	img.Dim.Width = 380
 	img.Dim.Height = 30
 
-	pages, _, err := layoutPDFPages(skeletonDocument{
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:      520,
 		PageHeight:     180,
 		ScreenWidthPx:  1200,
