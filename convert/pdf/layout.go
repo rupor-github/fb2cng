@@ -148,6 +148,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 		}
 
 		if block.Kind == pdfBlockTable {
+			blockSpaceBefore := func() float64 { return pdfEffectiveBlockSpaceBefore(style, pageHasText, y, top) }
 			tableWidth := blockContentWidth(blockWidthLimit, style)
 			table, err := layoutPDFTable(doc, styles, block, style, tableWidth)
 			if err != nil {
@@ -156,12 +157,12 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 			if table.Width <= 0 || len(table.Groups) == 0 {
 				continue
 			}
-			needed := style.SpaceBefore + style.PaddingTop + table.Height + style.PaddingBottom + style.SpaceAfter
+			needed := blockSpaceBefore() + style.PaddingTop + table.Height + style.PaddingBottom + style.SpaceAfter
 			if style.KeepTogether && pageHasText && y-needed < bottom && needed <= top-bottom {
 				newTextPage()
 			}
 			addAnchor(page, block.ID)
-			y -= style.SpaceBefore + style.PaddingTop
+			y -= blockSpaceBefore() + style.PaddingTop
 			tableX := blockLeft + style.MarginLeft + style.PaddingLeft
 			for groupIndex, group := range table.Groups {
 				if pageHasText && y-group.Height < bottom && (!style.KeepTogether || groupIndex > 0 || needed > top-bottom) {
@@ -239,6 +240,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 		}
 
 		if block.Kind == pdfBlockImage {
+			blockSpaceBefore := func() float64 { return pdfEffectiveBlockSpaceBefore(style, pageHasText, y, top) }
 			backgroundX := blockLeft + style.MarginLeft
 			backgroundWidth := blockBoxWidth(blockWidthLimit, style)
 			blockWidth := blockContentWidth(blockWidthLimit, style)
@@ -246,7 +248,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 			if img == nil {
 				continue
 			}
-			maxImageHeight := top - bottom - style.SpaceBefore - style.PaddingTop - style.PaddingBottom - style.SpaceAfter
+			maxImageHeight := top - bottom - blockSpaceBefore() - style.PaddingTop - style.PaddingBottom - style.SpaceAfter
 			if maxImageHeight <= 0 {
 				continue
 			}
@@ -256,7 +258,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 			if !ok {
 				continue
 			}
-			needed := style.SpaceBefore + style.PaddingTop + height + style.PaddingBottom + style.SpaceAfter
+			needed := blockSpaceBefore() + style.PaddingTop + height + style.PaddingBottom + style.SpaceAfter
 			if pageHasText {
 				keepWithNext, err := nextBlockKeepHeight(doc, blockStyles, blockIndex+1, contentWidth, rootlessContentWidth, top-bottom, pdfKeepWithNextLines(doc.Blocks, blockStyles, blockIndex))
 				if err != nil {
@@ -268,11 +270,11 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 					newTextPage()
 				}
 			}
-			y -= style.SpaceBefore
+			y -= blockSpaceBefore()
 			y -= style.PaddingTop
 			if pdfBlockImageOverflowsBottom(y-height, bottom) {
 				newTextPage()
-				y -= style.SpaceBefore
+				y -= blockSpaceBefore()
 				y -= style.PaddingTop
 			}
 			addAnchor(page, block.ID)
@@ -337,7 +339,8 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 		}
 
 		lineHeight := pdfEffectiveParagraphLineHeight(style.Paragraph)
-		needed := style.SpaceBefore + style.PaddingTop + float64(len(lines))*lineHeight + style.PaddingBottom
+		blockSpaceBefore := func() float64 { return pdfEffectiveBlockSpaceBefore(style, pageHasText, y, top) }
+		needed := blockSpaceBefore() + style.PaddingTop + float64(len(lines))*lineHeight + style.PaddingBottom
 		if style.KeepTogether && pageHasText && y-needed < bottom {
 			newTextPage()
 		}
@@ -351,7 +354,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 			}
 		}
 		if !style.KeepTogether && pageHasText {
-			linesFit := countFittingLines(y-style.SpaceBefore-style.PaddingTop, bottom, style.Paragraph.FontSize, lineHeight)
+			linesFit := countFittingLines(y-blockSpaceBefore()-style.PaddingTop, bottom, style.Paragraph.FontSize, lineHeight)
 			if linesFit > 0 && linesFit < len(lines) {
 				firstFragmentLines := linesFit
 				if remaining := len(lines) - firstFragmentLines; remaining < style.Widows {
@@ -363,7 +366,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 			}
 		}
 		addAnchor(page, block.ID)
-		y -= style.SpaceBefore
+		y -= blockSpaceBefore()
 		backgroundX := blockLeft + style.MarginLeft
 		backgroundWidth := blockBoxWidth(blockWidthLimit, style)
 		y -= style.PaddingTop
@@ -445,6 +448,13 @@ func pdfEffectiveParagraphLineHeight(style paragraphStyle) float64 {
 		fontSize = pdfBaseFontSize
 	}
 	return max(lineHeight, fontSize)
+}
+
+func pdfEffectiveBlockSpaceBefore(style pdfBlockResolvedStyle, pageHasText bool, y float64, top float64) float64 {
+	if style.SpaceBefore < 0 && !pageHasText && y >= top-0.001 {
+		return 0
+	}
+	return style.SpaceBefore
 }
 
 func pdfPageLineWithFontFragments(line pdfPageLine) pdfPageLine {

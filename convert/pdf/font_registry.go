@@ -12,10 +12,12 @@ import (
 )
 
 type pdfFontRegistry struct {
-	families            map[string]pdfEmbeddedFontFamily
-	log                 *zap.Logger
-	missingGlyphLogSeen map[pdfMissingGlyphLogKey]bool
-	missingGlyphLogMu   sync.Mutex
+	families                map[string]pdfEmbeddedFontFamily
+	log                     *zap.Logger
+	missingGlyphLogSeen     map[pdfMissingGlyphLogKey]bool
+	missingGlyphLogMu       sync.Mutex
+	fontFallbackLogSeen     map[pdfFontFallbackLogKey]bool
+	fontFallbackLogSeenLock sync.Mutex
 }
 
 type pdfEmbeddedFontFamily struct {
@@ -35,6 +37,7 @@ func newPDFFontRegistry(book *fb2.FictionBook, log *zap.Logger) *pdfFontRegistry
 		families:            make(map[string]pdfEmbeddedFontFamily),
 		log:                 log.Named("pdf-fonts"),
 		missingGlyphLogSeen: make(map[pdfMissingGlyphLogKey]bool),
+		fontFallbackLogSeen: make(map[pdfFontFallbackLogKey]bool),
 	}
 	if book == nil {
 		return registry
@@ -102,13 +105,26 @@ func (r *pdfFontRegistry) fontForKey(key pdfFontKey) (*builtinFontFace, error) {
 			face, err := builtinFont(key.Family, key.Bold, key.Italic)
 			return r.fontFaceWithLogger(face, key), err
 		}
-		if face := r.embeddedFont(key); face != nil {
+		if face, selected, ok := r.embeddedFont(key); ok {
+			r.logPDFEmbeddedFontVariantFallback(key, selected, face)
 			return r.fontFaceWithLogger(face, key), nil
 		}
 		face, err := builtinFont(key.Family, key.Bold, key.Italic)
+		if err == nil {
+			r.logPDFBuiltinFontFamilyFallback(key, face)
+		}
 		return r.fontFaceWithLogger(face, key), err
 	}
 	return fontForKey(nil, key)
+}
+
+type pdfFontFallbackLogKey struct {
+	Kind            string
+	Family          string
+	RequestedBold   bool
+	RequestedItalic bool
+	SelectedBold    bool
+	SelectedItalic  bool
 }
 
 func (r *pdfFontRegistry) fontFaceWithLogger(face *builtinFontFace, key pdfFontKey) *builtinFontFace {
@@ -118,17 +134,89 @@ func (r *pdfFontRegistry) fontFaceWithLogger(face *builtinFontFace, key pdfFontK
 	return pdfFontFaceWithLogger(face, r.log, key, r.missingGlyphLogSeen, &r.missingGlyphLogMu)
 }
 
-func (r *pdfFontRegistry) embeddedFont(key pdfFontKey) *builtinFontFace {
+func (r *pdfFontRegistry) logPDFEmbeddedFontVariantFallback(key pdfFontKey, selected pdfFontVariant, face *builtinFontFace) {
+	requested := pdfFontVariant{Bold: key.Bold, Italic: key.Italic}
+	if r == nil || r.log == nil || requested == selected {
+		return
+	}
+	logKey := pdfFontFallbackLogKey{
+		Kind:            "variant",
+		Family:          normalizedPDFFontFamily(key.Family),
+		RequestedBold:   key.Bold,
+		RequestedItalic: key.Italic,
+		SelectedBold:    selected.Bold,
+		SelectedItalic:  selected.Italic,
+	}
+	if r.pdfFontFallbackAlreadyLogged(logKey) {
+		return
+	}
+	r.log.Warn("Using fallback PDF font face for missing variant",
+		zap.String("font_family", logKey.Family),
+		zap.Bool("requested_bold", key.Bold),
+		zap.Bool("requested_italic", key.Italic),
+		zap.Bool("selected_bold", selected.Bold),
+		zap.Bool("selected_italic", selected.Italic),
+		zap.String("font", face.PostScriptName))
+}
+
+func (r *pdfFontRegistry) logPDFBuiltinFontFamilyFallback(key pdfFontKey, face *builtinFontFace) {
+	if r == nil || r.log == nil || pdfFontFamilyIsBuiltinAlias(key.Family) {
+		return
+	}
+	logKey := pdfFontFallbackLogKey{
+		Kind:            "family",
+		Family:          normalizedPDFFontFamily(key.Family),
+		RequestedBold:   key.Bold,
+		RequestedItalic: key.Italic,
+	}
+	if r.pdfFontFallbackAlreadyLogged(logKey) {
+		return
+	}
+	r.log.Warn("Using fallback PDF font family for missing family",
+		zap.String("font_family", logKey.Family),
+		zap.Bool("requested_bold", key.Bold),
+		zap.Bool("requested_italic", key.Italic),
+		zap.String("font", face.PostScriptName))
+}
+
+func (r *pdfFontRegistry) pdfFontFallbackAlreadyLogged(key pdfFontFallbackLogKey) bool {
+	if r == nil || r.fontFallbackLogSeen == nil {
+		return false
+	}
+	r.fontFallbackLogSeenLock.Lock()
+	defer r.fontFallbackLogSeenLock.Unlock()
+	if r.fontFallbackLogSeen[key] {
+		return true
+	}
+	r.fontFallbackLogSeen[key] = true
+	return false
+}
+
+func pdfFontFamilyIsBuiltinAlias(family string) bool {
+	name := strings.ToLower(strings.TrimSpace(family))
+	switch {
+	case name == "", name == "serif", name == "sans-serif", name == "sans", name == "monospace", name == "mono", name == "courier":
+		return true
+	case name == strings.ToLower(pdfBuiltinFontFamilyMath), name == strings.ToLower(pdfBuiltinFontFamilySymbols), name == strings.ToLower(pdfBuiltinFontFamilySymbols2):
+		return true
+	case strings.Contains(name, "noto serif"), strings.Contains(name, "noto sans"), strings.Contains(name, "noto sans mono"):
+		return true
+	default:
+		return false
+	}
+}
+
+func (r *pdfFontRegistry) embeddedFont(key pdfFontKey) (*builtinFontFace, pdfFontVariant, bool) {
 	if r == nil || len(r.families) == 0 {
-		return nil
+		return nil, pdfFontVariant{}, false
 	}
 	family := r.families[strings.ToLower(strings.TrimSpace(key.Family))]
 	if len(family.faces) == 0 {
-		return nil
+		return nil, pdfFontVariant{}, false
 	}
 	variant := pdfFontVariant{Bold: key.Bold, Italic: key.Italic}
 	if face := family.faces[variant]; face != nil {
-		return face
+		return face, variant, true
 	}
 	fallbacks := []pdfFontVariant{
 		{Bold: key.Bold},
@@ -137,10 +225,10 @@ func (r *pdfFontRegistry) embeddedFont(key pdfFontKey) *builtinFontFace {
 	}
 	for _, fallback := range fallbacks {
 		if face := family.faces[fallback]; face != nil {
-			return face
+			return face, fallback, true
 		}
 	}
-	return nil
+	return nil, pdfFontVariant{}, false
 }
 
 func pdfFontFaceURL(src string) string {

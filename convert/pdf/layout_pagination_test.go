@@ -76,6 +76,42 @@ func TestLayoutPDFPagesAvoidsParagraphWidowOrphanSplit(t *testing.T) {
 	}
 }
 
+func TestLayoutPDFPagesClampsNegativeTopMarginAtPageTop(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	resolver := newPDFStyleResolverWithCSS(t, `
+		.pull-up {
+			font-size: 10pt;
+			margin-top: -2em;
+			page-break-before: always;
+		}
+	`)
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
+		PageWidth:  220,
+		PageHeight: 140,
+		Styles:     resolver,
+		Blocks: []pdfTextBlock{
+			{Kind: pdfBlockParagraph, Text: "first page"},
+			{Kind: pdfBlockParagraph, Text: "pulled heading", StyleClasses: "pull-up"},
+		},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 2 {
+		t.Fatalf("layoutPDFPages() produced %d pages, want 2", len(pages))
+	}
+	if len(pages[1].Lines) == 0 {
+		t.Fatal("second page has no text")
+	}
+	wantY := 140.0 - 24.0 - 10.0
+	if got := pages[1].Lines[0].Y; math.Abs(got-wantY) > 0.001 {
+		t.Fatalf("first line y = %v, want clamped top baseline %v", got, wantY)
+	}
+}
+
 func TestLayoutPDFPagesHonorsCSSPageBreakAndHiddenStyles(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {

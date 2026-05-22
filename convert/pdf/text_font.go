@@ -376,7 +376,7 @@ func logPDFMissingGlyph(face *builtinFontFace, glyph shapedGlyph) {
 	if pdfMissingGlyphAlreadyLogged(logger, key) {
 		return
 	}
-	logger.Log.Debug("Using synthetic PDF missing glyph",
+	logger.Log.Warn("Using synthetic PDF missing glyph",
 		zap.String("font_family", key.FontFamily),
 		zap.Bool("bold", key.Bold),
 		zap.Bool("italic", key.Italic),

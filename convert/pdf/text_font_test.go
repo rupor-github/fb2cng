@@ -224,6 +224,43 @@ func TestShapeTextClassifiesAndLogsMissingGlyphs(t *testing.T) {
 	}
 }
 
+func TestPDFFontRegistryLogsMissingFontVariantOnce(t *testing.T) {
+	fontData, err := gunzipFont(notoMonoRegularGZ)
+	if err != nil {
+		t.Fatalf("gunzipFont() error = %v", err)
+	}
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type:      "text/css",
+		Data:      `@font-face { font-family: CustomMono; src: url("#custom-mono"); }`,
+		Resources: []fb2.StylesheetResource{{OriginalURL: "#custom-mono", MimeType: "font/ttf", Data: fontData}},
+	}}}
+	core, logs := observer.New(zapcore.DebugLevel)
+	registry := newPDFFontRegistry(book, zap.New(core))
+	for range 2 {
+		if _, _, err := fontForStyle(registry, paragraphStyle{FontFamily: "CustomMono", Bold: true, Italic: true}); err != nil {
+			t.Fatalf("fontForStyle() error = %v", err)
+		}
+	}
+	entries := logs.FilterMessage("Using fallback PDF font face for missing variant").All()
+	if len(entries) != 1 {
+		t.Fatalf("font variant fallback log entries = %d, want deduplicated 1", len(entries))
+	}
+}
+
+func TestPDFFontRegistryLogsMissingFontFamilyOnce(t *testing.T) {
+	core, logs := observer.New(zapcore.DebugLevel)
+	registry := newPDFFontRegistry(nil, zap.New(core))
+	for range 2 {
+		if _, _, err := fontForStyle(registry, paragraphStyle{FontFamily: "MissingFamily"}); err != nil {
+			t.Fatalf("fontForStyle() error = %v", err)
+		}
+	}
+	entries := logs.FilterMessage("Using fallback PDF font family for missing family").All()
+	if len(entries) != 1 {
+		t.Fatalf("font family fallback log entries = %d, want deduplicated 1", len(entries))
+	}
+}
+
 func TestPDFFontRegistryLoadsStylesheetFontFace(t *testing.T) {
 	fontData, err := gunzipFont(notoMonoRegularGZ)
 	if err != nil {
