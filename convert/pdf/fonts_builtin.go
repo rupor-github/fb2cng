@@ -14,8 +14,14 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
+const (
+	pdfBuiltinFontFamilyMath     = "Noto Sans Math"
+	pdfBuiltinFontFamilySymbols  = "Noto Sans Symbols"
+	pdfBuiltinFontFamilySymbols2 = "Noto Sans Symbols 2"
+)
+
 // Embedded font data (gzip-compressed TTF).
-// Noto Serif — serif (SIL OFL, https://github.com/notofonts/latin-greek-cyrillic)
+// Noto Serif — serif (SIL OFL, https://github.com/notofonts/noto-fonts)
 //
 //go:embed fonts/NotoSerif-Regular.ttf.gz
 var notoSerifRegularGZ []byte
@@ -29,7 +35,7 @@ var notoSerifItalicGZ []byte
 //go:embed fonts/NotoSerif-BoldItalic.ttf.gz
 var notoSerifBoldItalicGZ []byte
 
-// Noto Sans — sans-serif (SIL OFL, https://github.com/notofonts/latin-greek-cyrillic)
+// Noto Sans — sans-serif (SIL OFL, https://github.com/notofonts/noto-fonts)
 //
 //go:embed fonts/NotoSans-Regular.ttf.gz
 var notoSansRegularGZ []byte
@@ -43,7 +49,7 @@ var notoSansItalicGZ []byte
 //go:embed fonts/NotoSans-BoldItalic.ttf.gz
 var notoSansBoldItalicGZ []byte
 
-// Noto Sans Mono — monospace (SIL OFL, https://github.com/notofonts/latin-greek-cyrillic)
+// Noto Sans Mono — monospace (SIL OFL, https://github.com/notofonts/noto-fonts)
 // No italic variants available; regular is reused for italic.
 //
 //go:embed fonts/NotoSansMono-Regular.ttf.gz
@@ -52,10 +58,24 @@ var notoMonoRegularGZ []byte
 //go:embed fonts/NotoSansMono-Bold.ttf.gz
 var notoMonoBoldGZ []byte
 
+// Noto Sans Math / Symbols — companion fonts for built-in symbol and math coverage
+// (SIL OFL, https://github.com/notofonts/noto-fonts).
+//
+//go:embed fonts/NotoSansMath-Regular.ttf.gz
+var notoSansMathRegularGZ []byte
+
+//go:embed fonts/NotoSansSymbols-Regular.ttf.gz
+var notoSansSymbolsRegularGZ []byte
+
+//go:embed fonts/NotoSansSymbols2-Regular.ttf.gz
+var notoSansSymbols2RegularGZ []byte
+
 type builtinFontFace struct {
 	PostScriptName  string
 	Data            []byte
 	Font            *sfnt.Font
+	Key             pdfFontKey
+	Builtin         bool
 	UnitsPerEm      int
 	Ascent          int
 	Descent         int
@@ -87,11 +107,14 @@ func (f *builtinFamily) match(bold, italic bool) *builtinFontFace {
 }
 
 var (
-	builtinOnce  sync.Once
-	builtinErr   error
-	builtinSerif builtinFamily
-	builtinSans  builtinFamily
-	builtinMono  builtinFamily
+	builtinOnce     sync.Once
+	builtinErr      error
+	builtinSerif    builtinFamily
+	builtinSans     builtinFamily
+	builtinMono     builtinFamily
+	builtinMath     builtinFamily
+	builtinSymbols  builtinFamily
+	builtinSymbols2 builtinFamily
 )
 
 func builtinFont(fontFamily string, bold, italic bool) (*builtinFontFace, error) {
@@ -128,8 +151,31 @@ func initBuiltinFonts() error {
 			Italic:  regular,
 			BoldIt:  bold,
 		}
+
+		math, err := loadBuiltinFont("NotoSansMath-Regular", notoSansMathRegularGZ, false, false)
+		if err != nil {
+			builtinErr = err
+			return
+		}
+		symbols, err := loadBuiltinFont("NotoSansSymbols-Regular", notoSansSymbolsRegularGZ, false, false)
+		if err != nil {
+			builtinErr = err
+			return
+		}
+		symbols2, err := loadBuiltinFont("NotoSansSymbols2-Regular", notoSansSymbols2RegularGZ, false, false)
+		if err != nil {
+			builtinErr = err
+			return
+		}
+		builtinMath = singleFaceBuiltinFamily(math)
+		builtinSymbols = singleFaceBuiltinFamily(symbols)
+		builtinSymbols2 = singleFaceBuiltinFamily(symbols2)
 	})
 	return builtinErr
+}
+
+func singleFaceBuiltinFamily(face *builtinFontFace) builtinFamily {
+	return builtinFamily{Regular: face, Bold: face, Italic: face, BoldIt: face}
 }
 
 func loadBuiltinFamily(name string, fixedPitch bool, regularGZ, boldGZ, italicGZ, boldItalicGZ []byte) (builtinFamily, error) {
@@ -161,6 +207,7 @@ func loadBuiltinFont(label string, gzData []byte, fixedPitch, italic bool) (*bui
 	if err != nil {
 		return nil, fmt.Errorf("load builtin font %s: %w", label, err)
 	}
+	face.Builtin = true
 	return face, nil
 }
 
@@ -228,6 +275,12 @@ func gunzipFont(data []byte) ([]byte, error) {
 func builtinFamilyFor(fontFamily string) *builtinFamily {
 	name := strings.ToLower(strings.TrimSpace(fontFamily))
 	switch {
+	case name == strings.ToLower(pdfBuiltinFontFamilyMath):
+		return &builtinMath
+	case name == strings.ToLower(pdfBuiltinFontFamilySymbols):
+		return &builtinSymbols
+	case name == strings.ToLower(pdfBuiltinFontFamilySymbols2):
+		return &builtinSymbols2
 	case strings.Contains(name, "monospace") || strings.Contains(name, "courier") || name == "mono":
 		return &builtinMono
 	case strings.Contains(name, "sans"):

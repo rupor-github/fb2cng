@@ -1,24 +1,40 @@
-To get PDF builtin fonts execute in this directory:
+To get PDF builtin fonts execute in this directory.
 
-Noto Serif (serif, SIL OFL, https://github.com/notofonts/latin-greek-cyrillic):
+All bundled Noto fonts are gzip-compressed TTF files from notofonts/noto-fonts
+(SIL OFL):
 
-	curl -sL -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" \
-	  "https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,700;1,400;1,700" \
-	  | awk '/font-style:/{gsub(/;/,"",$2);style=$2} /font-weight:/{gsub(/;/,"",$2);weight=$2} /url\(/{url=$0;gsub(/.*url\(/,"",url);gsub(/\).*/,"",url);if(style=="italic"&&weight=="400")s="Italic";else if(style=="italic"&&weight=="700")s="BoldItalic";else if(weight=="400")s="Regular";else if(weight=="700")s="Bold";else next;system("curl -sL \""url"\" -o \"NotoSerif-"s".ttf\"")}'
+	https://github.com/notofonts/noto-fonts
 
-Noto Sans (sans-serif, SIL OFL, https://github.com/notofonts/latin-greek-cyrillic):
+Text families:
 
-	curl -sL -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" \
-	  "https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,400;0,700;1,400;1,700" \
-	  | awk '/font-style:/{gsub(/;/,"",$2);style=$2} /font-weight:/{gsub(/;/,"",$2);weight=$2} /url\(/{url=$0;gsub(/.*url\(/,"",url);gsub(/\).*/,"",url);if(style=="italic"&&weight=="400")s="Italic";else if(style=="italic"&&weight=="700")s="BoldItalic";else if(weight=="400")s="Regular";else if(weight=="700")s="Bold";else next;system("curl -sL \""url"\" -o \"NotoSans-"s".ttf\"")}'
+	base=https://raw.githubusercontent.com/notofonts/noto-fonts/main/hinted/ttf
+	for f in \
+	  NotoSerif/NotoSerif-Regular.ttf \
+	  NotoSerif/NotoSerif-Bold.ttf \
+	  NotoSerif/NotoSerif-Italic.ttf \
+	  NotoSerif/NotoSerif-BoldItalic.ttf \
+	  NotoSans/NotoSans-Regular.ttf \
+	  NotoSans/NotoSans-Bold.ttf \
+	  NotoSans/NotoSans-Italic.ttf \
+	  NotoSans/NotoSans-BoldItalic.ttf \
+	  NotoSansMono/NotoSansMono-Regular.ttf \
+	  NotoSansMono/NotoSansMono-Bold.ttf; do \
+	    name=$(basename "$f"); \
+	    curl -L --fail -o "$name" "$base/$f"; \
+	    gzip -9 "$name"; \
+	done
 
-Noto Sans Mono (monospace, SIL OFL, https://github.com/notofonts/latin-greek-cyrillic):
-No italic variants available; Regular is reused for Italic, Bold for BoldItalic.
+Companion fonts for built-in math/symbol coverage:
 
-	curl -sL -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64)" \
-	  "https://fonts.googleapis.com/css2?family=Noto+Sans+Mono:wght@400;700" \
-	  | awk '/font-weight:/{gsub(/;/,"",$2);weight=$2} /url\(/{url=$0;gsub(/.*url\(/,"",url);gsub(/\).*/,"",url);if(weight=="400")s="Regular";else if(weight=="700")s="Bold";else next;system("curl -sL \""url"\" -o \"NotoSansMono-"s".ttf\"")}'
+	base=https://raw.githubusercontent.com/notofonts/noto-fonts/main/hinted/ttf
+	for f in \
+	  NotoSansMath/NotoSansMath-Regular.ttf \
+	  NotoSansSymbols/NotoSansSymbols-Regular.ttf \
+	  NotoSansSymbols2/NotoSansSymbols2-Regular.ttf; do \
+	    name=$(basename "$f"); \
+	    curl -L --fail -o "$name" "$base/$f"; \
+	    gzip -9 "$name"; \
+	done
 
-After downloading compress all fonts:
-
-	for a in $(ls *.ttf); do gzip $a; done
+Noto Sans Mono has no italic variants in this bundle; Regular is reused for Italic,
+and Bold is reused for BoldItalic.

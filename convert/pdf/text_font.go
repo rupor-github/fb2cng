@@ -58,6 +58,10 @@ type shapedGlyph struct {
 	GlyphID uint16
 	Rune    rune
 	Width   int
+	// FontKey overrides the surrounding line font for deliberate built-in companion
+	// glyphs. Keeping this per glyph lets resource usage stay exact and keeps the
+	// path to future font subsetting straightforward.
+	FontKey pdfFontKey
 	Missing pdfMissingGlyphKind
 }
 
@@ -91,7 +95,8 @@ func fontForKey(registry *pdfFontRegistry, key pdfFontKey) (*builtinFontFace, er
 	if registry != nil {
 		return registry.fontForKey(key)
 	}
-	return builtinFont(key.Family, key.Bold, key.Italic)
+	face, err := builtinFont(key.Family, key.Bold, key.Italic)
+	return pdfFontFaceWithLogger(face, nil, key, nil, nil), err
 }
 
 type pdfMissingGlyphLogKey struct {
@@ -117,10 +122,14 @@ func pdfFontFaceWithLogger(
 	seen map[pdfMissingGlyphLogKey]bool,
 	mu *sync.Mutex,
 ) *builtinFontFace {
-	if face == nil || log == nil {
+	if face == nil {
 		return face
 	}
 	clone := *face
+	clone.Key = key
+	if log == nil {
+		return &clone
+	}
 	clone.MissingGlyphLog = &pdfMissingGlyphLogger{
 		Log:     log,
 		FontKey: key,
@@ -154,9 +163,18 @@ func shapeText(face *builtinFontFace, text string) (shapedText, error) {
 			GlyphID: uint16(gid),
 			Rune:    r,
 			Width:   fontUnitsToPDFWidth(advance.Round(), face.UnitsPerEm),
+			FontKey: face.Key,
 		}
 		if glyph.GlyphID == 0 {
-			glyph = missingPDFGlyph(face, r, glyph.Width)
+			fallbackGlyph, ok, err := pdfBuiltinSymbolFallbackGlyph(face, r)
+			if err != nil {
+				return shapedText{}, err
+			}
+			if ok {
+				glyph = fallbackGlyph
+			} else {
+				glyph = missingPDFGlyph(face, r, glyph.Width)
+			}
 		}
 		shaped.Glyphs = append(shaped.Glyphs, glyph)
 		if glyph.GlyphID != 0 {
@@ -164,6 +182,123 @@ func shapeText(face *builtinFontFace, text string) (shapedText, error) {
 		}
 	}
 	return shaped, nil
+}
+
+func pdfBuiltinSymbolFallbackGlyph(face *builtinFontFace, r rune) (shapedGlyph, bool, error) {
+	if !pdfBuiltinSymbolFallbackEnabled(face) || !pdfRuneUsesBuiltinSymbolFallback(r) {
+		return shapedGlyph{}, false, nil
+	}
+	for _, key := range pdfBuiltinSymbolFallbackKeys(r) {
+		fallbackFace, err := builtinFont(key.Family, key.Bold, key.Italic)
+		if err != nil {
+			return shapedGlyph{}, false, err
+		}
+		glyph, ok, err := pdfFontGlyph(fallbackFace, key, r)
+		if err != nil || ok {
+			return glyph, ok, err
+		}
+	}
+	return shapedGlyph{}, false, nil
+}
+
+func pdfBuiltinSymbolFallbackEnabled(face *builtinFontFace) bool {
+	return face != nil && face.Builtin && !pdfFontKeyIsBuiltinSymbolFallback(face.Key)
+}
+
+func pdfFontKeyIsBuiltinSymbolFallback(key pdfFontKey) bool {
+	switch key.Family {
+	case pdfBuiltinFontFamilyMath, pdfBuiltinFontFamilySymbols, pdfBuiltinFontFamilySymbols2:
+		return true
+	default:
+		return false
+	}
+}
+
+func pdfRuneUsesBuiltinSymbolFallback(r rune) bool {
+	for _, rng := range pdfBuiltinSymbolFallbackRanges {
+		if r >= rng.lo && r <= rng.hi {
+			return true
+		}
+	}
+	return false
+}
+
+func pdfBuiltinSymbolFallbackKeys(r rune) []pdfFontKey {
+	math := pdfFontKey{Family: pdfBuiltinFontFamilyMath}
+	symbols := pdfFontKey{Family: pdfBuiltinFontFamilySymbols}
+	symbols2 := pdfFontKey{Family: pdfBuiltinFontFamilySymbols2}
+	if pdfRuneUsesMathFallbackFirst(r) {
+		return []pdfFontKey{math, symbols2, symbols}
+	}
+	return []pdfFontKey{symbols2, symbols, math}
+}
+
+func pdfRuneUsesMathFallbackFirst(r rune) bool {
+	for _, rng := range pdfBuiltinMathFallbackFirstRanges {
+		if r >= rng.lo && r <= rng.hi {
+			return true
+		}
+	}
+	return false
+}
+
+func pdfFontGlyph(face *builtinFontFace, key pdfFontKey, r rune) (shapedGlyph, bool, error) {
+	if face == nil || face.Font == nil {
+		return shapedGlyph{}, false, fmt.Errorf("font face is required")
+	}
+	var buf sfnt.Buffer
+	gid, err := face.Font.GlyphIndex(&buf, r)
+	if err != nil {
+		return shapedGlyph{}, false, fmt.Errorf("map rune %U to glyph: %w", r, err)
+	}
+	if gid == 0 {
+		return shapedGlyph{}, false, nil
+	}
+	advance, err := face.Font.GlyphAdvance(&buf, gid, fixed.I(face.UnitsPerEm), font.HintingNone)
+	if err != nil {
+		return shapedGlyph{}, false, fmt.Errorf("read glyph %d advance: %w", gid, err)
+	}
+	return shapedGlyph{
+		GlyphID: uint16(gid),
+		Rune:    r,
+		Width:   fontUnitsToPDFWidth(advance.Round(), face.UnitsPerEm),
+		FontKey: key,
+	}, true, nil
+}
+
+type pdfRuneRange struct {
+	lo rune
+	hi rune
+}
+
+var pdfBuiltinSymbolFallbackRanges = []pdfRuneRange{
+	{0x2190, 0x21FF},   // Arrows
+	{0x2200, 0x22FF},   // Mathematical Operators
+	{0x2300, 0x23FF},   // Miscellaneous Technical
+	{0x2400, 0x243F},   // Control Pictures
+	{0x2440, 0x245F},   // Optical Character Recognition
+	{0x2460, 0x24FF},   // Enclosed Alphanumerics
+	{0x2500, 0x257F},   // Box Drawing
+	{0x2580, 0x259F},   // Block Elements
+	{0x25A0, 0x25FF},   // Geometric Shapes
+	{0x2600, 0x26FF},   // Miscellaneous Symbols
+	{0x2700, 0x27BF},   // Dingbats
+	{0x27C0, 0x27EF},   // Miscellaneous Mathematical Symbols-A
+	{0x27F0, 0x27FF},   // Supplemental Arrows-A
+	{0x2800, 0x28FF},   // Braille Patterns
+	{0x2900, 0x297F},   // Supplemental Arrows-B
+	{0x2980, 0x29FF},   // Miscellaneous Mathematical Symbols-B
+	{0x2A00, 0x2AFF},   // Supplemental Mathematical Operators
+	{0x2B00, 0x2BFF},   // Miscellaneous Symbols and Arrows
+	{0x1D400, 0x1D7FF}, // Mathematical Alphanumeric Symbols
+	{0x1F000, 0x1FAFF}, // Supplemental symbol and pictographic blocks with monochrome Noto coverage
+}
+
+var pdfBuiltinMathFallbackFirstRanges = []pdfRuneRange{
+	{0x2190, 0x22FF},
+	{0x27C0, 0x27FF},
+	{0x2900, 0x2AFF},
+	{0x1D400, 0x1D7FF},
 }
 
 func wrapText(face *builtinFontFace, text string, fontSize, maxWidth float64) ([]shapedText, error) {

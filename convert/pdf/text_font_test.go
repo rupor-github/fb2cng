@@ -78,6 +78,90 @@ func TestShapeTextAndFontResourceObjects(t *testing.T) {
 	}
 }
 
+func TestShapeTextUsesBuiltInSymbolFallbackForGenericFonts(t *testing.T) {
+	registry := newPDFFontRegistry(nil, nil)
+	face, key, err := fontForStyle(registry, paragraphStyle{FontFamily: "serif"})
+	if err != nil {
+		t.Fatalf("fontForStyle() error = %v", err)
+	}
+	shaped, err := shapeText(face, "≤→●A")
+	if err != nil {
+		t.Fatalf("shapeText() error = %v", err)
+	}
+	if len(shaped.Glyphs) != 4 {
+		t.Fatalf("glyph count = %d, want 4", len(shaped.Glyphs))
+	}
+	wants := []pdfFontKey{
+		{Family: pdfBuiltinFontFamilyMath},
+		{Family: pdfBuiltinFontFamilyMath},
+		{Family: pdfBuiltinFontFamilySymbols2},
+		key,
+	}
+	for i, want := range wants {
+		glyph := shaped.Glyphs[i]
+		if glyph.GlyphID == 0 || glyph.Missing != pdfMissingGlyphNone {
+			t.Fatalf("glyph %d = %#v, want real glyph", i, glyph)
+		}
+		if glyph.FontKey != want {
+			t.Fatalf("glyph %d font key = %#v, want %#v", i, glyph.FontKey, want)
+		}
+	}
+}
+
+func TestShapeTextDoesNotUseSymbolFallbackForCustomFonts(t *testing.T) {
+	fontData, err := gunzipFont(notoSerifRegularGZ)
+	if err != nil {
+		t.Fatalf("gunzipFont() error = %v", err)
+	}
+	face, err := loadRawFont("CustomSerif", fontData, false, false)
+	if err != nil {
+		t.Fatalf("loadRawFont() error = %v", err)
+	}
+	shaped, err := shapeText(face, "≤")
+	if err != nil {
+		t.Fatalf("shapeText() error = %v", err)
+	}
+	if len(shaped.Glyphs) != 1 {
+		t.Fatalf("glyph count = %d, want 1", len(shaped.Glyphs))
+	}
+	if shaped.Glyphs[0].Missing != pdfMissingGlyphPrintable || shaped.Glyphs[0].GlyphID != 0 {
+		t.Fatalf("glyph = %#v, want synthetic missing glyph", shaped.Glyphs[0])
+	}
+}
+
+func TestPDFPageLineWithFontFragmentsSplitsBuiltInSymbolFallback(t *testing.T) {
+	registry := newPDFFontRegistry(nil, nil)
+	face, key, err := fontForStyle(registry, paragraphStyle{FontFamily: "serif"})
+	if err != nil {
+		t.Fatalf("fontForStyle() error = %v", err)
+	}
+	shaped, err := shapeText(face, "A≤→●B")
+	if err != nil {
+		t.Fatalf("shapeText() error = %v", err)
+	}
+	line := pdfPageLine{Text: shaped, FontKey: key, FontSize: 10, LetterSpacing: 1}
+	line = pdfPageLineWithFontFragments(line)
+	if len(line.Fragments) != 4 {
+		t.Fatalf("fragment count = %d, want 4: %#v", len(line.Fragments), line.Fragments)
+	}
+	wantKeys := []pdfFontKey{key, {Family: pdfBuiltinFontFamilyMath}, {Family: pdfBuiltinFontFamilySymbols2}, key}
+	for i, want := range wantKeys {
+		if line.Fragments[i].FontKey != want {
+			t.Fatalf("fragment %d font key = %#v, want %#v", i, line.Fragments[i].FontKey, want)
+		}
+	}
+	if got := string([]rune{line.Fragments[1].Text.Glyphs[0].Rune, line.Fragments[1].Text.Glyphs[1].Rune}); got != "≤→" {
+		t.Fatalf("math fragment text = %q, want ≤→", got)
+	}
+	width := 0.0
+	for _, fragment := range line.Fragments {
+		width += fragment.Width
+	}
+	if width != shapedWidthPointsWithSpacing(shaped, line.FontSize, line.LetterSpacing) {
+		t.Fatalf("fragment width sum = %v, want original width %v", width, shapedWidthPointsWithSpacing(shaped, line.FontSize, line.LetterSpacing))
+	}
+}
+
 func TestShapeTextClassifiesAndLogsMissingGlyphs(t *testing.T) {
 	fontData, err := os.ReadFile(filepath.Join("..", "..", "build", "fonts_compression", "bookerly-regular_9_5.ttf"))
 	if err != nil {

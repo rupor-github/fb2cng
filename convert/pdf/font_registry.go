@@ -98,13 +98,17 @@ func (r *pdfFontRegistry) addStylesheetFonts(stylesheet *fb2.Stylesheet, parsed 
 
 func (r *pdfFontRegistry) fontForKey(key pdfFontKey) (*builtinFontFace, error) {
 	if r != nil {
+		if pdfFontKeyIsBuiltinSymbolFallback(key) {
+			face, err := builtinFont(key.Family, key.Bold, key.Italic)
+			return r.fontFaceWithLogger(face, key), err
+		}
 		if face := r.embeddedFont(key); face != nil {
 			return r.fontFaceWithLogger(face, key), nil
 		}
 		face, err := builtinFont(key.Family, key.Bold, key.Italic)
 		return r.fontFaceWithLogger(face, key), err
 	}
-	return builtinFont(key.Family, key.Bold, key.Italic)
+	return fontForKey(nil, key)
 }
 
 func (r *pdfFontRegistry) fontFaceWithLogger(face *builtinFontFace, key pdfFontKey) *builtinFontFace {
