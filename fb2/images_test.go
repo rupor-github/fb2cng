@@ -406,6 +406,46 @@ func TestBinaryObject_PrepareImage_GIFToJPEGKindle(t *testing.T) {
 	}
 }
 
+func TestFictionBookPrepareImagesForPDFSkipsPNGOptimization(t *testing.T) {
+	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+	cfg := &config.ImagesConfig{
+		JPEGQuality:        80,
+		Optimize:           true,
+		UseBroken:          false,
+		RemoveTransparency: false,
+		ScaleFactor:        1.0,
+		Screen:             config.ScreenConfig{Width: 1600, Height: 2560},
+		Cover:              config.CoverConfig{Resize: common.ImageResizeModeNone},
+	}
+	pngData := createTestPNG(t, 96, 96, false)
+	book := &FictionBook{Binaries: []BinaryObject{{
+		ID:          "img.png",
+		ContentType: "image/png",
+		Data:        pngData,
+	}}}
+
+	pdfImages := book.PrepareImagesForOutput(common.OutputFmtPdf, cfg, log)
+	pdfImage := pdfImages["img.png"]
+	if pdfImage == nil {
+		t.Fatalf("missing prepared PDF image")
+	}
+	if !bytes.Equal(pdfImage.Data, pngData) {
+		t.Fatalf("PDF image data was re-encoded despite non-JPEG optimization shortcut")
+	}
+	if pdfImage.Dim.Width != 96 || pdfImage.Dim.Height != 96 || pdfImage.MimeType != "image/png" {
+		t.Fatalf("PDF image metadata = %s %dx%d, want image/png 96x96", pdfImage.MimeType, pdfImage.Dim.Width, pdfImage.Dim.Height)
+	}
+
+	optimizedImages := book.PrepareImages(false, cfg, log)
+	optimizedImage := optimizedImages["img.png"]
+	if optimizedImage == nil {
+		t.Fatalf("missing prepared optimized image")
+	}
+	if bytes.Equal(optimizedImage.Data, pngData) {
+		t.Fatalf("regular PNG optimization did not re-encode image")
+	}
+}
+
 func TestBinaryObject_PrepareImage_JPEGQualityOptimization(t *testing.T) {
 	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	cfg := &config.ImagesConfig{

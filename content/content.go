@@ -226,9 +226,9 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 	// Mark first paragraphs in sections with drop-cap style for rendering
 	book = book.MarkDropcaps(&env.Cfg.Document.Dropcaps)
 
-	// Process all binary objects creating actual images and reference index
-	// This happens after NormalizeLinks so the not-found image binary is included
-	allImages := book.PrepareImages(outputFormat.ForKindle(), &env.Cfg.Document.Images, log)
+	// Process all binary objects creating actual images and reference index.
+	// This happens after NormalizeLinks so the not-found image binary is included.
+	allImages := book.PrepareImagesForOutput(outputFormat, &env.Cfg.Document.Images, log)
 
 	// Filter images to only include those that are actually referenced
 	imagesIndex := book.FilterReferencedImages(allImages, links, coverID, log)
@@ -286,7 +286,10 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 
 // prepareVignettes creates a map of vignette binaries from configuration
 // Returns an initialized but empty map if no vignettes are defined
-func prepareVignettes(vigCfg *config.VignettesConfig, defaultVignettes map[common.VignettePos][]byte) (map[common.VignettePos]*fb2.BinaryObject, error) {
+func prepareVignettes(
+	vigCfg *config.VignettesConfig,
+	defaultVignettes map[common.VignettePos][]byte,
+) (map[common.VignettePos]*fb2.BinaryObject, error) {
 	vignettes := make(map[common.VignettePos]*fb2.BinaryObject)
 
 	vignetteChecks := []struct {
