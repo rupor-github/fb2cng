@@ -87,7 +87,7 @@ func TestAppendPoemBlocksPropagatesStanzaContextClasses(t *testing.T) {
 	}
 	var blocks []pdfTextBlock
 
-	appendPoemBlocks(&blocks, poem, 1, nil, "", false)
+	appendPoemBlocks(&blocks, nil, poem, 1, nil, "", false)
 
 	poemSeen := false
 	wantStanzaContext := joinStyleClasses(pdfStylePoem, pdfStyleStanza)
@@ -133,7 +133,7 @@ func TestAppendPoemBlocksEmitsDateWithPoemContext(t *testing.T) {
 	poem := &fb2.Poem{Date: &fb2.Date{Display: "December 2025"}}
 	var blocks []pdfTextBlock
 
-	appendPoemBlocks(&blocks, poem, 1, nil, "", false)
+	appendPoemBlocks(&blocks, nil, poem, 1, nil, "", false)
 
 	if len(blocks) != 1 {
 		t.Fatalf("blocks = %#v, want one poem date block", blocks)
@@ -147,7 +147,7 @@ func TestAppendPoemBlocksEmitsValueOnlyDate(t *testing.T) {
 	poem := &fb2.Poem{Date: &fb2.Date{Value: time.Date(2025, time.December, 31, 0, 0, 0, 0, time.UTC)}}
 	var blocks []pdfTextBlock
 
-	appendPoemBlocks(&blocks, poem, 1, nil, "", false)
+	appendPoemBlocks(&blocks, nil, poem, 1, nil, "", false)
 
 	if len(blocks) != 1 || blocks[0].Text != "2025-12-31" || blocks[0].StyleClasses != pdfStyleDate {
 		t.Fatalf("poem value date block = %#v, want ISO date paragraph", blocks)

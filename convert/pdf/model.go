@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"fbc/content"
 	"fbc/convert/structure"
 	"fbc/fb2"
 )
@@ -18,6 +19,7 @@ type skeletonDocument struct {
 	Blocks         []pdfTextBlock
 	TOC            []*structure.TOCEntry
 	DebugPlan      pdfDebugStructurePlan
+	Content        *content.Content
 	Styles         *pdfStyleResolver
 	Images         fb2.BookImages
 	CoverID        string

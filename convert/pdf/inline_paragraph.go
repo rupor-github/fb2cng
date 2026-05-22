@@ -427,6 +427,24 @@ func inlineLineBoxMetrics(face *builtinFontFace, style paragraphStyle, lineHeigh
 
 func inlineRunParagraphStyle(resolver *pdfStyleResolver, base paragraphStyle, run pdfInlineRun) paragraphStyle {
 	style := inlineClassParagraphStyle(resolver, base, run)
+	style = applyInlineRunDirectStyle(style, run, true)
+	if inlineRunIsFootnoteLink(run) {
+		if resolverHasDefaultFootnoteLinkStyle(resolver, run) {
+			contextStyle := inlineFootnoteContextParagraphStyle(resolver, base, run)
+			factor := inlineFootnoteLinkFontSizeFactor(run)
+			style.FontSize = contextStyle.FontSize * factor
+			style.LetterSpacing = contextStyle.LetterSpacing * factor
+		}
+		return style
+	}
+	if style.VerticalAlign == textVerticalAlignSub || style.VerticalAlign == textVerticalAlignSuper {
+		style.FontSize *= pdfInlineScriptScale
+		style.LetterSpacing *= pdfInlineScriptScale
+	}
+	return style
+}
+
+func applyInlineRunDirectStyle(style paragraphStyle, run pdfInlineRun, includeScript bool) paragraphStyle {
 	style.Bold = style.Bold || run.Bold
 	style.Italic = style.Italic || run.Italic
 	style.Underline = style.Underline || run.Underline
@@ -437,17 +455,130 @@ func inlineRunParagraphStyle(resolver *pdfStyleResolver, base paragraphStyle, ru
 			style.FontSize *= 0.70
 		}
 	}
-	if run.Subscript {
+	if includeScript && run.Subscript {
 		style.VerticalAlign = textVerticalAlignSub
 	}
-	if run.Superscript {
+	if includeScript && run.Superscript {
 		style.VerticalAlign = textVerticalAlignSuper
 	}
-	if style.VerticalAlign == textVerticalAlignSub || style.VerticalAlign == textVerticalAlignSuper {
-		style.FontSize *= pdfInlineScriptScale
-		style.LetterSpacing *= pdfInlineScriptScale
-	}
 	return style
+}
+
+func inlineFootnoteContextParagraphStyle(resolver *pdfStyleResolver, base paragraphStyle, run pdfInlineRun) paragraphStyle {
+	contextRun := run
+	contextRun.StyleClasses = removeInlineRunStyleClass(run.StyleClasses, pdfStyleLinkFootnote)
+	style := inlineClassParagraphStyle(resolver, base, contextRun)
+	return applyInlineRunDirectStyle(style, contextRun, false)
+}
+
+func inlineRunIsFootnoteLink(run pdfInlineRun) bool {
+	return inlineRunHasStyleClass(run, pdfStyleLinkFootnote)
+}
+
+func inlineRunHasSuperscriptContext(run pdfInlineRun) bool {
+	return run.Superscript
+}
+
+func inlineRunHeadingLevel(run pdfInlineRun) int {
+	for _, class := range strings.Fields(run.ContextClasses) {
+		switch class {
+		case "h1", pdfStyleBodyTitle, pdfStyleChapterTitle, pdfStyleBodyTitleHeader, pdfStyleChapterTitleHeader:
+			return 1
+		case "h2", pdfStyleSectionTitleH2, pdfStyleSectionTitleHeader:
+			return 2
+		case "h3":
+			return 3
+		case "h4":
+			return 4
+		case "h5":
+			return 5
+		case "h6":
+			return 6
+		}
+	}
+	return 0
+}
+
+func inlineFootnoteLinkFontSizeFactor(run pdfInlineRun) float64 {
+	if inlineRunHeadingLevel(run) > 0 {
+		if inlineRunHasSuperscriptContext(run) {
+			return 0.70
+		}
+		return 0.90
+	}
+	if inlineRunHasSuperscriptContext(run) {
+		return 0.75
+	}
+	return 0.80
+}
+
+func resolverHasDefaultFootnoteLinkStyle(resolver *pdfStyleResolver, run pdfInlineRun) bool {
+	if resolver == nil || resolver.styles == nil {
+		return false
+	}
+	style, ok := resolver.styles[pdfStyleLinkFootnote]
+	if !ok || !paragraphStyleLooksLikeDefaultFootnoteLink(style.Paragraph) {
+		return false
+	}
+	fallback := resolver.namedStyle(pdfStyleParagraph).Paragraph
+	for _, descStyleName := range inlineRunContextDescendantStyleNames(resolver, run) {
+		if !strings.Contains(descStyleName, pdfStyleLinkFootnote) {
+			continue
+		}
+		descStyle := resolver.styles[descStyleName]
+		if paragraphStyleOverridesFootnoteSizing(descStyle.Paragraph, fallback) {
+			return false
+		}
+	}
+	return true
+}
+
+func paragraphStyleLooksLikeDefaultFootnoteLink(style paragraphStyle) bool {
+	return style.VerticalAlign == textVerticalAlignSuper && pdfCSSSpecScale(style.FontSizeSpec, 0.8)
+}
+
+func paragraphStyleOverridesFootnoteSizing(style paragraphStyle, fallback paragraphStyle) bool {
+	if style.FontSizeSpec.Set && !pdfCSSSpecScale(style.FontSizeSpec, 0.8) {
+		return true
+	}
+	if !style.FontSizeSpec.Set && style.FontSize != fallback.FontSize {
+		return true
+	}
+	return (style.HasVerticalAlign || style.VerticalAlign != fallback.VerticalAlign) && style.VerticalAlign != textVerticalAlignSuper
+}
+
+func pdfCSSSpecScale(spec pdfCSSLengthSpec, scale float64) bool {
+	if !spec.Set {
+		return false
+	}
+	switch spec.Unit {
+	case "em":
+		return inlineFloatEqual(spec.Value, scale)
+	case "%":
+		return inlineFloatEqual(spec.Value, scale*100)
+	default:
+		return false
+	}
+}
+
+func inlineFloatEqual(a float64, b float64) bool {
+	if a > b {
+		return a-b < 0.0001
+	}
+	return b-a < 0.0001
+}
+
+func removeInlineRunStyleClass(classes string, remove string) string {
+	if strings.TrimSpace(classes) == "" {
+		return ""
+	}
+	kept := make([]string, 0, len(strings.Fields(classes)))
+	for _, class := range strings.Fields(classes) {
+		if class != remove {
+			kept = append(kept, class)
+		}
+	}
+	return strings.Join(kept, " ")
 }
 
 func inlineRunHasStyleClass(run pdfInlineRun, className string) bool {
@@ -466,6 +597,9 @@ func inlineClassParagraphStyle(resolver *pdfStyleResolver, base paragraphStyle, 
 	fallback := resolver.styles[pdfStyleParagraph].Paragraph
 	style := base
 	for _, class := range strings.Fields(run.StyleClasses) {
+		if inlineRunClassAlreadyAppliedByBlockContext(run, class) {
+			continue
+		}
 		classStyle, ok := resolver.styles[class]
 		if !ok {
 			continue
@@ -480,6 +614,19 @@ func inlineClassParagraphStyle(resolver *pdfStyleResolver, base paragraphStyle, 
 		style = mergeInlineParagraphStyle(style, descStyle.Paragraph, fallback)
 	}
 	return style
+}
+
+func inlineRunClassAlreadyAppliedByBlockContext(run pdfInlineRun, class string) bool {
+	return class == pdfStyleCode && run.Code && inlineRunHasContextClass(run, pdfStyleCode)
+}
+
+func inlineRunHasContextClass(run pdfInlineRun, className string) bool {
+	for _, class := range strings.Fields(run.ContextClasses) {
+		if class == className {
+			return true
+		}
+	}
+	return false
 }
 
 func inlineRunsWithContext(runs []pdfInlineRun, contextClasses string) []pdfInlineRun {
@@ -566,12 +713,34 @@ func mergeInlineParagraphStyle(base, override, fallback paragraphStyle) paragrap
 		base.Italic = override.Italic
 		base.HasItalic = override.HasItalic
 	}
-	if override.FontSize != fallback.FontSize {
+	if override.FontSizeSpec.Set {
+		base.FontSize = pdfResolveCSSFontSizeSpec(override.FontSizeSpec, base.FontSize)
+		base.FontSizeSpec = override.FontSizeSpec
+	} else if override.FontSize != fallback.FontSize {
 		base.FontSize = override.FontSize
+		base.FontSizeSpec = pdfCSSLengthSpec{}
 	}
-	base = mergePDFLineHeightOverride(base, override, fallback)
-	if override.LetterSpacing != fallback.LetterSpacing {
+	lineHeightOverride := override
+	if override.FontSizeSpec.Set && !override.LineHeightExplicit {
+		if override.LineHeight != fallback.LineHeight && override.FontSize > 0 {
+			base.LineHeight = override.LineHeight * base.FontSize / override.FontSize
+			lineHeightOverride.LineHeight = fallback.LineHeight
+		} else {
+			lineHeightOverride.LineHeight = fallback.LineHeight
+		}
+	}
+	base = mergePDFLineHeightOverride(base, lineHeightOverride, fallback)
+	if override.LineHeightSpec.Set {
+		base.LineHeight = pdfResolveCSSLineHeightSpec(override.LineHeightSpec, base.FontSize)
+		base.LineHeightSpec = override.LineHeightSpec
+		base.LineHeightExplicit = true
+	}
+	if override.LetterSpacingSpec.Set {
+		base.LetterSpacing = pdfResolveCSSLengthSpec(override.LetterSpacingSpec, base.FontSize)
+		base.LetterSpacingSpec = override.LetterSpacingSpec
+	} else if override.LetterSpacing != fallback.LetterSpacing {
 		base.LetterSpacing = override.LetterSpacing
+		base.LetterSpacingSpec = pdfCSSLengthSpec{}
 	}
 	if override.HasVerticalAlign || override.VerticalAlign != fallback.VerticalAlign {
 		base.VerticalAlign = override.VerticalAlign

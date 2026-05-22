@@ -50,7 +50,6 @@ const (
 	pdfCiteSubtitleSpace                  = pdfBaseFontSize * 0.5
 	pdfCodeFontSize                       = pdfBaseFontSize * 0.70
 	pdfCodeLineHeight                     = pdfBaseLineHeight
-	pdfFootnoteLinkFontSize               = pdfBaseFontSize * 0.80
 	pdfVerseLineHeight                    = pdfBaseFontSize * pdfNormalLineHeightFactor
 	pdfVerseSpaceBefore                   = pdfBaseFontSize * 0.25
 	pdfVerseSpaceAfter                    = pdfBaseFontSize * 0.25

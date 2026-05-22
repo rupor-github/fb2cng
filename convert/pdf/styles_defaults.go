@@ -173,10 +173,6 @@ func (r *pdfStyleResolver) applyPDFStyleAdjustments() {
 		style.Paragraph = pdfParagraphClassFallbackStyle(r.namedStyle(pdfStyleParagraph).Paragraph)
 		r.styles[pdfStyleTitleAfterImage] = style
 	}
-	if style, ok := r.styles[pdfStyleLinkFootnote]; ok && style.Paragraph.VerticalAlign == textVerticalAlignSuper {
-		style.Paragraph.FontSize /= pdfInlineScriptScale
-		r.styles[pdfStyleLinkFootnote] = style
-	}
 	paragraphAlign := r.namedStyle(pdfStyleParagraph).Paragraph.Align
 	for _, name := range []string{
 		pdfStyleFootnoteTitle,

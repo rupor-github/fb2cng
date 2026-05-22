@@ -111,9 +111,13 @@ func TestLayoutPDFPagesPreservesCodeBlockWhitespace(t *testing.T) {
 	if got := pdfPageLineText(pages[0].Lines[3]); got != "" {
 		t.Fatalf("trailing code line = %q, want preserved blank line", got)
 	}
+	codeStyle := newPDFStyleResolverWithDefaultCSS(t).styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleCode})
 	for _, line := range pages[0].Lines[1:3] {
 		if line.X != 24 || line.Fragments[0].FontKey.Family != "monospace" || line.Fragments[0].FontSize >= pdfBaseFontSize {
 			t.Fatalf("code line = %#v, want left-aligned smaller monospace", line)
+		}
+		if math.Abs(line.Fragments[0].FontSize-codeStyle.Paragraph.FontSize) > 0.001 {
+			t.Fatalf("code line font size = %v, want code block font size %v", line.Fragments[0].FontSize, codeStyle.Paragraph.FontSize)
 		}
 	}
 }

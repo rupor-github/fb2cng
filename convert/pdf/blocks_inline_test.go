@@ -9,6 +9,14 @@ import (
 	"fbc/fb2"
 )
 
+func testContentWithFootnotes(ids ...string) *content.Content {
+	refs := make(fb2.FootnoteRefs, len(ids))
+	for i, id := range ids {
+		refs[id] = fb2.FootnoteRef{BodyIdx: 1, SectionIdx: i}
+	}
+	return &content.Content{FootnotesIndex: refs}
+}
+
 func TestCollectTextBlocksIncludesLinkChildren(t *testing.T) {
 	c := &content.Content{Book: &fb2.FictionBook{Bodies: []fb2.Body{{
 		Kind: fb2.BodyMain,
@@ -64,10 +72,11 @@ func TestInlineSegmentsTextAndLinksNormalizesWhitespaceAndLinkRanges(t *testing.
 
 func TestTitleBlocksPreserveInlineLinkFormatting(t *testing.T) {
 	var blocks []pdfTextBlock
-	appendTitleBlocksWithID(&blocks, &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
+	c := testContentWithFootnotes("note")
+	appendTitleBlocksFull(&blocks, c, &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
 		{Text: "Heading"},
-		{Kind: fb2.InlineLink, Href: "#note", LinkType: "note", Children: []fb2.InlineSegment{{Text: "1.1"}}},
-	}}}}}, 1, "heading-id")
+		{Kind: fb2.InlineLink, Href: "#note", Children: []fb2.InlineSegment{{Text: "1.1"}}},
+	}}}}}, 1, "heading-id", pdfHeadingStyleName(1), "", "", false)
 
 	if len(blocks) != 1 {
 		t.Fatalf("title blocks = %#v, want one heading", blocks)
@@ -88,18 +97,138 @@ func TestParagraphInlineRunsClassifyLinks(t *testing.T) {
 		{Text: "See "},
 		{Kind: fb2.InlineLink, Href: "https://example.com", Children: []fb2.InlineSegment{{Text: "external"}}},
 		{Text: " and note"},
-		{Kind: fb2.InlineLink, Href: "#note", LinkType: "note", Children: []fb2.InlineSegment{{Text: "1.1"}}},
+		{Kind: fb2.InlineLink, Href: "#note", Children: []fb2.InlineSegment{{Text: "1.1"}}},
 	}}
 
-	runs := paragraphInlineRuns(paragraph)
+	runs := paragraphInlineRuns(paragraph, testContentWithFootnotes("note"))
 	if len(runs) != 4 {
 		t.Fatalf("inline runs = %#v, want 4 runs", runs)
 	}
 	if runs[1].Text != "external" || runs[1].StyleClasses != pdfStyleLinkExternal {
 		t.Fatalf("external link run = %#v, want external link class", runs[1])
 	}
-	if runs[3].Text != "1.1" || runs[3].StyleClasses != pdfStyleLinkFootnote {
+	if runs[3].Text != "1.1" || runs[3].StyleClasses != pdfStyleLinkFootnote || runs[3].LinkHref != "#note" {
 		t.Fatalf("note link run = %#v, want footnote link class", runs[3])
+	}
+}
+
+func TestParagraphInlineRunsClassifyFootnotesByContent(t *testing.T) {
+	c := testContentWithFootnotes("n1")
+	tests := []struct {
+		name      string
+		segments  []fb2.InlineSegment
+		wantText  string
+		wantClass string
+		wantSup   bool
+		wantCode  bool
+	}{
+		{
+			name:      "ordinary direct note ref",
+			segments:  []fb2.InlineSegment{{Kind: fb2.InlineLink, Href: "#n1", Children: []fb2.InlineSegment{{Text: "1"}}}},
+			wantText:  "1",
+			wantClass: pdfStyleLinkFootnote,
+		},
+		{
+			name: "ordinary sup note ref",
+			segments: []fb2.InlineSegment{{Kind: fb2.InlineSup, Children: []fb2.InlineSegment{
+				{Kind: fb2.InlineLink, Href: "#n1", Children: []fb2.InlineSegment{{Text: "1"}}},
+			}}},
+			wantText:  "1",
+			wantClass: pdfStyleLinkFootnote,
+			wantSup:   true,
+		},
+		{
+			name: "code note ref",
+			segments: []fb2.InlineSegment{{Kind: fb2.InlineCode, Children: []fb2.InlineSegment{
+				{Kind: fb2.InlineLink, Href: "#n1", Children: []fb2.InlineSegment{{Text: "1"}}},
+			}}},
+			wantText:  "1",
+			wantClass: joinStyleClasses(pdfStyleCode, pdfStyleLinkFootnote),
+			wantCode:  true,
+		},
+		{
+			name:      "note link type false positive",
+			segments:  []fb2.InlineSegment{{Kind: fb2.InlineLink, Href: "#ordinary", LinkType: "note", Children: []fb2.InlineSegment{{Text: "ordinary"}}}},
+			wantText:  "ordinary",
+			wantClass: pdfStyleLinkInternal,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runs := paragraphInlineRuns(&fb2.Paragraph{Text: tt.segments}, c)
+			if len(runs) != 1 {
+				t.Fatalf("inline runs = %#v, want one run", runs)
+			}
+			run := runs[0]
+			if run.Text != tt.wantText || run.StyleClasses != tt.wantClass || run.LinkHref == "" || run.Superscript != tt.wantSup || run.Code != tt.wantCode {
+				t.Fatalf("run = %#v, want text %q classes %q href superscript:%t code:%t", run, tt.wantText, tt.wantClass, tt.wantSup, tt.wantCode)
+			}
+		})
+	}
+}
+
+func TestTitleBlocksClassifyFootnotesByContent(t *testing.T) {
+	c := testContentWithFootnotes("n1")
+	for _, tt := range []struct {
+		name     string
+		depth    int
+		segments []fb2.InlineSegment
+		wantSup  bool
+	}{
+		{
+			name:     "h1 direct note ref",
+			depth:    1,
+			segments: []fb2.InlineSegment{{Text: "Heading"}, {Kind: fb2.InlineLink, Href: "#n1", Children: []fb2.InlineSegment{{Text: "1"}}}},
+		},
+		{
+			name:  "h1 sup note ref",
+			depth: 1,
+			segments: []fb2.InlineSegment{{Text: "Heading"}, {Kind: fb2.InlineSup, Children: []fb2.InlineSegment{
+				{Kind: fb2.InlineLink, Href: "#n1", Children: []fb2.InlineSegment{{Text: "1"}}},
+			}}},
+			wantSup: true,
+		},
+		{
+			name:     "h2 direct note ref",
+			depth:    2,
+			segments: []fb2.InlineSegment{{Text: "Heading"}, {Kind: fb2.InlineLink, Href: "#n1", Children: []fb2.InlineSegment{{Text: "1"}}}},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var blocks []pdfTextBlock
+			appendTitleBlocksFull(&blocks, c, &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: tt.segments}}}}, tt.depth, "", pdfHeadingStyleName(tt.depth), "", "", false)
+			if len(blocks) != 1 || len(blocks[0].Runs) != 2 {
+				t.Fatalf("title blocks = %#v, want one heading with two runs", blocks)
+			}
+			run := blocks[0].Runs[1]
+			if run.Text != "1" || run.StyleClasses != pdfStyleLinkFootnote || run.LinkHref != "#n1" || run.Superscript != tt.wantSup {
+				t.Fatalf("title note run = %#v, want footnote link superscript:%t", run, tt.wantSup)
+			}
+		})
+	}
+}
+
+func TestFootnoteBodyBlocksClassifyNoteRefsByContent(t *testing.T) {
+	c := testContentWithFootnotes("n1")
+	body := &fb2.Body{Sections: []fb2.Section{{Content: []fb2.FlowItem{{
+		Kind: fb2.FlowParagraph,
+		Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
+			{Text: "See "},
+			{Kind: fb2.InlineLink, Href: "#n1", Children: []fb2.InlineSegment{{Text: "1"}}},
+		}},
+	}}}}}
+
+	var blocks []pdfTextBlock
+	appendFootnoteBodyBlocks(&blocks, c, body, nil)
+	if len(blocks) != 1 {
+		t.Fatalf("footnote body blocks = %#v, want one paragraph", blocks)
+	}
+	block := blocks[0]
+	if block.StyleClasses != pdfStyleFootnote || block.ContextClasses != pdfStyleFootnote {
+		t.Fatalf("footnote block classes = %q / %q, want footnote context", block.StyleClasses, block.ContextClasses)
+	}
+	if len(block.Runs) != 2 || block.Runs[1].StyleClasses != pdfStyleLinkFootnote || block.Runs[1].LinkHref != "#n1" {
+		t.Fatalf("footnote body runs = %#v, want note ref as footnote link", block.Runs)
 	}
 }
 
@@ -125,7 +254,7 @@ func TestParagraphInlineRunsPreserveInlineImages(t *testing.T) {
 	if text != "before after" || len(links) != 0 {
 		t.Fatalf("paragraph text/links = %q %#v, want text without image alt and no links", text, links)
 	}
-	runs := paragraphInlineRuns(paragraph)
+	runs := paragraphInlineRuns(paragraph, nil)
 	if len(runs) != 3 {
 		t.Fatalf("inline runs = %#v, want text/image/text", runs)
 	}
@@ -141,7 +270,7 @@ func TestParagraphInlineRunsPreserveLinkedInlineImages(t *testing.T) {
 		{Text: " after"},
 	}}
 
-	runs := paragraphInlineRuns(paragraph)
+	runs := paragraphInlineRuns(paragraph, nil)
 	if len(runs) != 3 {
 		t.Fatalf("inline runs = %#v, want text/image/text", runs)
 	}
@@ -153,7 +282,7 @@ func TestParagraphInlineRunsPreserveLinkedInlineImages(t *testing.T) {
 func TestParagraphInlineRunsPreserveImageOnlyParagraphs(t *testing.T) {
 	paragraph := &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineImageSegment, Image: &fb2.InlineImage{Href: "#heading.png"}}}}
 
-	runs := paragraphInlineRuns(paragraph)
+	runs := paragraphInlineRuns(paragraph, nil)
 	if len(runs) != 1 || runs[0].ImageID != "heading.png" {
 		t.Fatalf("inline runs = %#v, want image-only run", runs)
 	}
@@ -166,7 +295,7 @@ func TestParagraphInlineRunsTrimScriptWhitespace(t *testing.T) {
 		{Text: " next"},
 	}}
 
-	runs := paragraphInlineRuns(paragraph)
+	runs := paragraphInlineRuns(paragraph, nil)
 	if len(runs) != 3 {
 		t.Fatalf("inline runs = %#v, want 3 runs", runs)
 	}
@@ -178,7 +307,7 @@ func TestParagraphInlineRunsTrimScriptWhitespace(t *testing.T) {
 func TestParagraphInlineRunsPreserveCodeBlockWhitespace(t *testing.T) {
 	paragraph := &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineCode, Text: "\n  alpha\n    beta\n  "}}}
 
-	runs := paragraphInlineRuns(paragraph)
+	runs := paragraphInlineRuns(paragraph, nil)
 	if len(runs) != 1 {
 		t.Fatalf("inline runs = %#v, want one code run", runs)
 	}
@@ -203,7 +332,7 @@ func TestParagraphInlineRunsPreserveFB2InlineStyles(t *testing.T) {
 		{Kind: fb2.InlineNamedStyle, Style: "accent", Children: []fb2.InlineSegment{{Text: "styled"}}},
 	}}
 
-	runs := paragraphInlineRuns(paragraph)
+	runs := paragraphInlineRuns(paragraph, nil)
 	if len(runs) != 12 {
 		t.Fatalf("inline runs = %#v, want 12 style-preserving runs", runs)
 	}

@@ -38,10 +38,10 @@ func collectPDFContent(c *content.Content, cfg *config.DocumentConfig) (pdfConte
 		if unit.ForceNewPage && unit.Kind != structure.UnitCover {
 			blocks = append(blocks, pdfTextBlock{Kind: pdfBlockPageBreak, ID: unit.ID, Text: unit.Title})
 		}
-		appendUnitBlocks(&blocks, c.Book, unit, splitSections, splitBodies, endVignettes)
+		appendUnitBlocks(&blocks, c, unit, splitSections, splitBodies, endVignettes)
 	}
 	toc := plan.TOC
-	blocks, toc = insertAnnotationPageBlocks(blocks, toc, c.Book.Description.TitleInfo.Annotation, cfg)
+	blocks, toc = insertAnnotationPageBlocks(blocks, toc, c, cfg)
 	blocks = insertTOCPageBlocks(blocks, c, toc, cfg)
 	debugPlan.TOC = pdfDebugStructureTOCEntries(toc)
 	return pdfContentPlan{Blocks: blocks, TOC: toc, DebugPlan: debugPlan}, nil
@@ -124,8 +124,8 @@ func pdfDebugStructureTOCEntries(entries []*structure.TOCEntry) []pdfDebugStruct
 	return out
 }
 
-func insertAnnotationPageBlocks(blocks []pdfTextBlock, toc []*structure.TOCEntry, annotation *fb2.Flow, cfg *config.DocumentConfig) ([]pdfTextBlock, []*structure.TOCEntry) {
-	if cfg == nil || !cfg.Annotation.Enable || annotation == nil || len(annotation.Items) == 0 {
+func insertAnnotationPageBlocks(blocks []pdfTextBlock, toc []*structure.TOCEntry, c *content.Content, cfg *config.DocumentConfig) ([]pdfTextBlock, []*structure.TOCEntry) {
+	if cfg == nil || !cfg.Annotation.Enable || c == nil || c.Book == nil || c.Book.Description.TitleInfo.Annotation == nil || len(c.Book.Description.TitleInfo.Annotation.Items) == 0 {
 		return blocks, toc
 	}
 	title := strings.TrimSpace(cfg.Annotation.Title)
@@ -133,8 +133,8 @@ func insertAnnotationPageBlocks(blocks []pdfTextBlock, toc []*structure.TOCEntry
 		title = "Annotation"
 	}
 	annotationBlocks := []pdfTextBlock{{Kind: pdfBlockPageBreak, ID: "annotation-page", Text: title}}
-	appendTitleBlocksFull(&annotationBlocks, pdfTitleFromStrings(title), 1, "annotation-page-title", pdfStyleAnnotationTitle, "", pdfStyleAnnotationTitle, false)
-	appendFlowBlocks(&annotationBlocks, nil, annotation.Items, 1, nil, pdfStyleAnnotation, pdfStyleAnnotation, false)
+	appendTitleBlocksFull(&annotationBlocks, c, pdfTitleFromStrings(title), 1, "annotation-page-title", pdfStyleAnnotationTitle, "", pdfStyleAnnotationTitle, false)
+	appendFlowBlocks(&annotationBlocks, c, c.Book.Description.TitleInfo.Annotation.Items, 1, nil, pdfStyleAnnotation, pdfStyleAnnotation, false)
 	out := make([]pdfTextBlock, 0, len(annotationBlocks)+len(blocks))
 	out = append(out, annotationBlocks...)
 	out = append(out, blocks...)
@@ -181,7 +181,7 @@ func buildTOCPageBlocksWithTitle(title *fb2.Title, entries []*structure.TOCEntry
 		return nil
 	}
 	blocks := []pdfTextBlock{{Kind: pdfBlockPageBreak, ID: "toc-page", Text: "Contents"}}
-	appendTitleBlocksFull(&blocks, title, 1, "toc-page-title", pdfStyleTOCTitle, "", pdfStyleTOCTitle, false)
+	appendTitleBlocksFull(&blocks, nil, title, 1, "toc-page-title", pdfStyleTOCTitle, "", pdfStyleTOCTitle, false)
 	var appendTOCNodeBlocks func(nodes []*tocnav.Node)
 	appendTOCNodeBlocks = func(nodes []*tocnav.Node) {
 		for _, node := range nodes {
@@ -283,7 +283,7 @@ func splitBodyImageBodies(plan *structure.Plan) map[*fb2.Body]bool {
 	return bodies
 }
 
-func appendUnitBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, unit *structure.Unit, splitSections map[string]bool, splitBodies map[*fb2.Body]bool, endVignettes pdfSectionEndVignetteTransfers) {
+func appendUnitBlocks(blocks *[]pdfTextBlock, c *content.Content, unit *structure.Unit, splitSections map[string]bool, splitBodies map[*fb2.Body]bool, endVignettes pdfSectionEndVignetteTransfers) {
 	if unit == nil {
 		return
 	}
@@ -293,10 +293,10 @@ func appendUnitBlocks(blocks *[]pdfTextBlock, book *fb2.FictionBook, unit *struc
 			appendImageBlock(blocks, unit.Body.Image, unit.ID)
 		}
 	case structure.UnitBodyIntro:
-		appendBodyIntroBlocks(blocks, book, unit.Body, !splitBodies[unit.Body])
+		appendBodyIntroBlocks(blocks, c, unit.Body, !splitBodies[unit.Body])
 	case structure.UnitSection:
-		appendSectionBlocks(blocks, book, unit.Section, unit.TitleDepth, splitSections, "", false, endVignettes)
+		appendSectionBlocks(blocks, c, unit.Section, unit.TitleDepth, splitSections, "", false, endVignettes)
 	case structure.UnitFootnotesBody:
-		appendFootnoteBodyBlocks(blocks, book, unit.Body, splitSections)
+		appendFootnoteBodyBlocks(blocks, c, unit.Body, splitSections)
 	}
 }

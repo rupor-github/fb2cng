@@ -3,6 +3,7 @@ package pdf
 import (
 	"strings"
 
+	"fbc/content"
 	"fbc/fb2"
 )
 
@@ -22,13 +23,13 @@ func inlineRunsRenderable(runs []pdfInlineRun) bool {
 	return false
 }
 
-func paragraphInlineRuns(paragraph *fb2.Paragraph) []pdfInlineRun {
+func paragraphInlineRuns(paragraph *fb2.Paragraph, c *content.Content) []pdfInlineRun {
 	if paragraph == nil {
 		return nil
 	}
 	var runs []pdfInlineRun
 	for i := range paragraph.Text {
-		appendInlineSegmentRun(&runs, &paragraph.Text[i], pdfInlineRun{})
+		appendInlineSegmentRun(&runs, &paragraph.Text[i], pdfInlineRun{}, c)
 	}
 	if paragraphIsCodeBlock(paragraph) {
 		return runs
@@ -200,13 +201,13 @@ func appendInlineSegmentText(b *strings.Builder, links *[]pdfTextLink, seg *fb2.
 	}
 }
 
-func appendInlineSegmentRun(runs *[]pdfInlineRun, seg *fb2.InlineSegment, inherited pdfInlineRun) {
+func appendInlineSegmentRun(runs *[]pdfInlineRun, seg *fb2.InlineSegment, inherited pdfInlineRun, c *content.Content) {
 	if seg == nil {
 		return
 	}
 	style := inherited
 	style.Text = ""
-	style = applyInlineSegmentStyle(style, seg)
+	style = applyInlineSegmentStyle(style, seg, c)
 	if seg.Kind == fb2.InlineImageSegment {
 		if seg.Image != nil {
 			style.ImageID = imageRefID(seg.Image.Href)
@@ -220,24 +221,37 @@ func appendInlineSegmentRun(runs *[]pdfInlineRun, seg *fb2.InlineSegment, inheri
 	}
 	style.Text = ""
 	for i := range seg.Children {
-		appendInlineSegmentRun(runs, &seg.Children[i], style)
+		appendInlineSegmentRun(runs, &seg.Children[i], style, c)
 	}
 }
 
-func pdfLinkStyleClass(seg *fb2.InlineSegment) string {
-	if seg == nil || strings.TrimSpace(seg.Href) == "" {
+func pdfLinkStyleClass(seg *fb2.InlineSegment, c *content.Content) string {
+	if seg == nil {
 		return ""
 	}
-	if strings.EqualFold(seg.LinkType, "note") {
-		return pdfStyleLinkFootnote
+	href := strings.TrimSpace(seg.Href)
+	if href == "" {
+		return ""
 	}
-	if strings.HasPrefix(strings.TrimSpace(seg.Href), "#") {
+	if strings.HasPrefix(href, "#") {
+		if c != nil {
+			if _, ok := c.FootnotesIndex[strings.TrimPrefix(href, "#")]; ok {
+				return pdfStyleLinkFootnote
+			}
+			return pdfStyleLinkInternal
+		}
+		if strings.EqualFold(seg.LinkType, "note") {
+			return pdfStyleLinkFootnote
+		}
 		return pdfStyleLinkInternal
+	}
+	if c == nil && strings.EqualFold(seg.LinkType, "note") {
+		return pdfStyleLinkFootnote
 	}
 	return pdfStyleLinkExternal
 }
 
-func applyInlineSegmentStyle(style pdfInlineRun, seg *fb2.InlineSegment) pdfInlineRun {
+func applyInlineSegmentStyle(style pdfInlineRun, seg *fb2.InlineSegment, c *content.Content) pdfInlineRun {
 	switch seg.Kind {
 	case fb2.InlineStrong:
 		style.Bold = true
@@ -257,7 +271,7 @@ func applyInlineSegmentStyle(style pdfInlineRun, seg *fb2.InlineSegment) pdfInli
 		style.Code = true
 		style.StyleClasses = joinStyleClasses(style.StyleClasses, pdfStyleCode)
 	case fb2.InlineLink:
-		style.StyleClasses = joinStyleClasses(style.StyleClasses, pdfLinkStyleClass(seg))
+		style.StyleClasses = joinStyleClasses(style.StyleClasses, pdfLinkStyleClass(seg, c))
 		style.LinkHref = strings.TrimSpace(seg.Href)
 	}
 	return style

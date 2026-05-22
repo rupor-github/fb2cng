@@ -67,7 +67,7 @@ func layoutPDFTable(doc skeletonDocument, resolver *pdfStyleResolver, block pdfT
 		innerWidth := max(cellWidth-cellStyle.PaddingLeft-cellStyle.PaddingRight-2*cellStyle.BorderWidth, pdfMinBlockWidth)
 		paragraph := fb2.Paragraph{Text: placed.Cell.Content}
 		text, links := paragraphTextAndLinks(&paragraph)
-		runs := paragraphInlineRuns(&paragraph)
+		runs := paragraphInlineRuns(&paragraph, doc.Content)
 		runs = inlineRunsWithContext(runs, pdfStyleTable)
 		cellDoc := doc
 		cellDoc.Styles = tableResolver

@@ -62,6 +62,7 @@ func Generate(ctx context.Context, c *content.Content, outputName string, cfg *c
 		Blocks:         contentPlan.Blocks,
 		TOC:            contentPlan.TOC,
 		DebugPlan:      contentPlan.DebugPlan,
+		Content:        c,
 		Styles:         newPDFStyleResolver(c.Book, log, styleTracer),
 		Images:         c.ImagesIndex,
 		CoverID:        c.CoverID,

@@ -17,14 +17,107 @@ func TestPDFInlineRunFootnoteLinkDefaultsMatchDefaultCSS(t *testing.T) {
 	if !footnote.Underline {
 		t.Fatalf("footnote link underline = false, want default link underline")
 	}
-	if math.Abs(footnote.FontSize-pdfFootnoteLinkFontSize) > 0.001 {
-		t.Fatalf("footnote link font size = %v, want default.css 80%% %v", footnote.FontSize, pdfFootnoteLinkFontSize)
-	}
+	assertInlineFloat(t, footnote.FontSize, base.FontSize*0.80, "footnote link font size")
 	if footnote.VerticalAlign != textVerticalAlignSuper {
 		t.Fatalf("footnote link vertical-align = %v, want super", footnote.VerticalAlign)
 	}
 	if footnote.LineHeight != base.LineHeight {
 		t.Fatalf("footnote link line-height = %v, want inherited base line-height %v", footnote.LineHeight, base.LineHeight)
+	}
+}
+
+func TestPDFInlineRunFootnoteLinkContextAwareSizing(t *testing.T) {
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
+	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph}).Paragraph
+	h1Block := pdfTextBlock{Kind: pdfBlockHeading, Depth: 1}
+	h1 := resolver.styleForBlock(h1Block).Paragraph
+	h2Block := pdfTextBlock{Kind: pdfBlockHeading, Depth: 2}
+	h2 := resolver.styleForBlock(h2Block).Paragraph
+	footnoteBlock := pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleFootnote, ContextClasses: pdfStyleFootnote}
+	footnoteBody := resolver.styleForBlock(footnoteBlock).Paragraph
+
+	ordinarySup := inlineRunParagraphStyle(resolver, paragraph, pdfInlineRun{StyleClasses: pdfStyleLinkFootnote, Superscript: true})
+	assertInlineFloat(t, ordinarySup.FontSize, paragraph.FontSize*0.75, "ordinary sup footnote font size")
+
+	h1Direct := inlineRunParagraphStyle(resolver, h1, pdfInlineRun{StyleClasses: pdfStyleLinkFootnote, ContextClasses: inlineRunContextClassesForBlock(h1Block)})
+	assertInlineFloat(t, h1Direct.FontSize, h1.FontSize*0.90, "h1 direct footnote font size")
+
+	h1Sup := inlineRunParagraphStyle(resolver, h1, pdfInlineRun{StyleClasses: pdfStyleLinkFootnote, ContextClasses: inlineRunContextClassesForBlock(h1Block), Superscript: true})
+	assertInlineFloat(t, h1Sup.FontSize, h1.FontSize*0.70, "h1 sup footnote font size")
+
+	h2Direct := inlineRunParagraphStyle(resolver, h2, pdfInlineRun{StyleClasses: pdfStyleLinkFootnote, ContextClasses: inlineRunContextClassesForBlock(h2Block)})
+	assertInlineFloat(t, h2Direct.FontSize, h2.FontSize*0.90, "h2 direct footnote font size")
+
+	codeRun := pdfInlineRun{StyleClasses: joinStyleClasses(pdfStyleCode, pdfStyleLinkFootnote), Code: true}
+	code := inlineRunParagraphStyle(resolver, paragraph, codeRun)
+	if code.FontFamily != "monospace" {
+		t.Fatalf("code footnote font family = %q, want monospace", code.FontFamily)
+	}
+	assertInlineFloat(t, code.FontSize, inlineFootnoteContextParagraphStyle(resolver, paragraph, codeRun).FontSize*0.80, "code footnote font size")
+
+	footnoteBodyLink := inlineRunParagraphStyle(resolver, footnoteBody, pdfInlineRun{StyleClasses: pdfStyleLinkFootnote, ContextClasses: inlineRunContextClassesForBlock(footnoteBlock)})
+	assertInlineFloat(t, footnoteBodyLink.FontSize, footnoteBody.FontSize*0.80, "footnote body link font size")
+}
+
+func TestPDFInlineRunFootnoteSupFragmentDoesNotDoubleShrink(t *testing.T) {
+	resolver := newPDFStyleResolverWithDefaultCSS(t)
+	base := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph}).Paragraph
+	fragment, err := inlineRunFragment(
+		skeletonDocument{},
+		newPDFFontRegistry(nil, nil),
+		resolver,
+		base,
+		pdfInlineRun{StyleClasses: pdfStyleLinkFootnote, Superscript: true},
+		"1",
+		100,
+	)
+	if err != nil {
+		t.Fatalf("inlineRunFragment() error = %v", err)
+	}
+	assertInlineFloat(t, fragment.FontSize, base.FontSize*0.75, "sup footnote fragment font size")
+	if fragment.BaselineShift <= 0 {
+		t.Fatalf("sup footnote baseline shift = %v, want positive", fragment.BaselineShift)
+	}
+}
+
+func TestPDFInlineRunFootnoteLinkCSSOverrides(t *testing.T) {
+	baselineResolver := newPDFStyleResolverWithDefaultCSS(t, `
+		.link-footnote {
+			vertical-align: baseline;
+			font-size: 100%;
+			text-decoration: none;
+		}
+	`)
+	baseline := baselineResolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph}).Paragraph
+	baselineLink := inlineRunParagraphStyle(baselineResolver, baseline, pdfInlineRun{StyleClasses: pdfStyleLinkFootnote})
+	if baselineLink.VerticalAlign != textVerticalAlignBaseline || baselineLink.Underline || baselineLink.FontSize != baseline.FontSize {
+		t.Fatalf("baseline override style = underline:%t valign:%v font:%v base:%v", baselineLink.Underline, baselineLink.VerticalAlign, baselineLink.FontSize, baseline.FontSize)
+	}
+
+	customSizeResolver := newPDFStyleResolverWithDefaultCSS(t, `
+		.link-footnote {
+			font-size: 60%;
+			vertical-align: super;
+		}
+	`)
+	customSizeBase := customSizeResolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph}).Paragraph
+	customSizeLink := inlineRunParagraphStyle(customSizeResolver, customSizeBase, pdfInlineRun{StyleClasses: pdfStyleLinkFootnote})
+	if customSizeLink.VerticalAlign != textVerticalAlignSuper {
+		t.Fatalf("custom-size footnote vertical-align = %v, want super", customSizeLink.VerticalAlign)
+	}
+	assertInlineFloat(t, customSizeLink.FontSize, customSizeBase.FontSize*0.60, "custom-size footnote font size")
+
+	decorationResolver := newPDFStyleResolverWithDefaultCSS(t, `
+		.link-footnote {
+			color: #ff0000;
+			text-decoration: none;
+		}
+	`)
+	decorationBase := decorationResolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph}).Paragraph
+	decorationLink := inlineRunParagraphStyle(decorationResolver, decorationBase, pdfInlineRun{StyleClasses: pdfStyleLinkFootnote})
+	assertInlineFloat(t, decorationLink.FontSize, decorationBase.FontSize*0.80, "decoration-only footnote font size")
+	if decorationLink.Color.String() != "#ff0000" || decorationLink.Underline {
+		t.Fatalf("decoration-only footnote = color:%s underline:%t, want red without underline", decorationLink.Color, decorationLink.Underline)
 	}
 }
 
@@ -67,6 +160,13 @@ func TestPDFInlineRunBacklinkDefaultsMatchDefaultCSS(t *testing.T) {
 	backlink := inlineRunParagraphStyle(resolver, base, pdfInlineRun{StyleClasses: pdfStyleLinkBacklink})
 	if !backlink.Underline || !backlink.Bold || backlink.Color.String() != "#808080" {
 		t.Fatalf("backlink style = underline:%t bold:%t color:%s, want default.css underline bold gray", backlink.Underline, backlink.Bold, backlink.Color)
+	}
+}
+
+func assertInlineFloat(t *testing.T, got float64, want float64, name string) {
+	t.Helper()
+	if math.Abs(got-want) > 0.001 {
+		t.Fatalf("%s = %v, want %v", name, got, want)
 	}
 }
 

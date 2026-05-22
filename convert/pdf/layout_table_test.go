@@ -123,8 +123,9 @@ func TestLayoutPDFTableHonorsHeaderHyphenationNoneAndNoWrap(t *testing.T) {
 
 func TestLayoutPDFTableScalesFootnoteLinkStylesWithWideTables(t *testing.T) {
 	resolver := newPDFStyleResolverWithDefaultCSS(t, `td { padding: 2pt; }`)
+	c := testContentWithFootnotes("n")
 	cells := make([]fb2.TableCell, 10)
-	cells[0] = fb2.TableCell{Content: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Cell"}, {Kind: fb2.InlineLink, Href: "#n", LinkType: "note", Children: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "1.12"}}}}}
+	cells[0] = fb2.TableCell{Content: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Cell"}, {Kind: fb2.InlineLink, Href: "#n", Children: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "1.12"}}}}}
 	for i := 1; i < len(cells); i++ {
 		cells[i] = fb2.TableCell{Content: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Column"}}}
 	}
@@ -132,7 +133,7 @@ func TestLayoutPDFTableScalesFootnoteLinkStylesWithWideTables(t *testing.T) {
 	block := pdfTextBlock{Kind: pdfBlockTable, StyleName: pdfStyleTable, Table: table}
 	style := resolver.styleForBlock(block)
 
-	layout, err := layoutPDFTable(skeletonDocument{PageWidth: 180, PageHeight: 120, Styles: resolver}, resolver, block, style, 120)
+	layout, err := layoutPDFTable(skeletonDocument{PageWidth: 180, PageHeight: 120, Content: c, Styles: resolver}, resolver, block, style, 120)
 	if err != nil {
 		t.Fatalf("layoutPDFTable() error = %v", err)
 	}
@@ -154,8 +155,8 @@ func TestLayoutPDFTableScalesFootnoteLinkStylesWithWideTables(t *testing.T) {
 	if linkFragment.FontSize >= wantMax {
 		t.Fatalf("scaled footnote link font = %v, want smaller than scaled base %v", linkFragment.FontSize, wantMax)
 	}
-	if linkFragment.FontSize > pdfFootnoteLinkFontSize*0.75 {
-		t.Fatalf("scaled footnote link font = %v, want table scale applied below unscaled link font %v", linkFragment.FontSize, pdfFootnoteLinkFontSize)
+	if linkFragment.FontSize > layout.Cells[0].Style.Paragraph.FontSize*0.80 {
+		t.Fatalf("scaled footnote link font = %v, want table scale applied below scaled base font %v", linkFragment.FontSize, layout.Cells[0].Style.Paragraph.FontSize)
 	}
 }
 
