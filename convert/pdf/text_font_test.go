@@ -2,8 +2,15 @@ package pdf
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
 	"fbc/convert/pdf/docwriter"
 	"fbc/fb2"
@@ -68,6 +75,68 @@ func TestShapeTextAndFontResourceObjects(t *testing.T) {
 	}
 	if !bytes.Contains(objects.ToUnicode, []byte("0416")) {
 		t.Error("ToUnicode CMap does not contain Cyrillic Ж mapping")
+	}
+}
+
+func TestShapeTextClassifiesAndLogsMissingGlyphs(t *testing.T) {
+	fontData, err := os.ReadFile(filepath.Join("..", "..", "build", "fonts_compression", "bookerly-regular_9_5.ttf"))
+	if err != nil {
+		t.Fatalf("read test font: %v", err)
+	}
+	face, err := loadRawFont("BookerlySubset", fontData, false, false)
+	if err != nil {
+		t.Fatalf("loadRawFont() error = %v", err)
+	}
+	core, logs := observer.New(zapcore.DebugLevel)
+	seen := make(map[pdfMissingGlyphLogKey]bool)
+	var mu sync.Mutex
+	face = pdfFontFaceWithLogger(
+		face,
+		zap.New(core),
+		pdfFontKey{Family: "Bookerly"},
+		seen,
+		&mu,
+	)
+
+	shaped, err := shapeText(face, "A ́á ́á")
+	if err != nil {
+		t.Fatalf("shapeText() error = %v", err)
+	}
+	if len(shaped.Glyphs) != 7 {
+		t.Fatalf("glyph count = %d, want 7", len(shaped.Glyphs))
+	}
+	if shaped.Glyphs[1].Missing != pdfMissingGlyphSpace || shaped.Glyphs[1].Width <= 0 {
+		t.Fatalf("space glyph = %#v, want missing space with positive width", shaped.Glyphs[1])
+	}
+	if shaped.Glyphs[2].Missing != pdfMissingGlyphCombining || shaped.Glyphs[2].Width != 0 {
+		t.Fatalf("combining glyph = %#v, want zero-width missing combining mark", shaped.Glyphs[2])
+	}
+	if shaped.Glyphs[3].Missing != pdfMissingGlyphPrintable || shaped.Glyphs[3].Width <= 0 {
+		t.Fatalf("printable glyph = %#v, want missing printable with positive width", shaped.Glyphs[3])
+	}
+	if _, ok := shaped.Used[0]; ok {
+		t.Fatalf("used glyph map contains CID 0: %#v", shaped.Used)
+	}
+
+	if _, err := shapeText(face, " ́á"); err != nil {
+		t.Fatalf("repeat shapeText() error = %v", err)
+	}
+	entries := logs.FilterMessage("Using synthetic PDF missing glyph").All()
+	if len(entries) != 3 {
+		t.Fatalf("missing glyph log entries = %d, want deduplicated 3", len(entries))
+	}
+	kinds := map[string]bool{}
+	for _, entry := range entries {
+		for _, field := range entry.Context {
+			if field.Key == "kind" && field.Type == zapcore.StringType {
+				kinds[field.String] = true
+			}
+		}
+	}
+	for _, want := range []string{"space", "combining-mark", "printable"} {
+		if !kinds[want] {
+			t.Fatalf("missing log kind %q in %#v", want, kinds)
+		}
 	}
 }
 

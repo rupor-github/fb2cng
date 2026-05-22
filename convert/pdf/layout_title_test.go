@@ -7,6 +7,17 @@ import (
 	"fbc/fb2"
 )
 
+func TestEffectiveParagraphLineHeightClampsToFontSize(t *testing.T) {
+	style := paragraphStyle{FontSize: 24, LineHeight: 10}
+	if got := pdfEffectiveParagraphLineHeight(style); got != 24 {
+		t.Fatalf("effective line height = %v, want font size 24", got)
+	}
+	style.LineHeight = 30
+	if got := pdfEffectiveParagraphLineHeight(style); got != 30 {
+		t.Fatalf("effective line height = %v, want explicit line height 30", got)
+	}
+}
+
 func TestLayoutPDFPagesKeepsGapBetweenTitleVignetteAndHeadingImage(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {

@@ -53,16 +53,17 @@ var notoMonoRegularGZ []byte
 var notoMonoBoldGZ []byte
 
 type builtinFontFace struct {
-	PostScriptName string
-	Data           []byte
-	Font           *sfnt.Font
-	UnitsPerEm     int
-	Ascent         int
-	Descent        int
-	CapHeight      int
-	BBox           [4]int
-	Flags          int
-	ItalicAngle    int
+	PostScriptName  string
+	Data            []byte
+	Font            *sfnt.Font
+	UnitsPerEm      int
+	Ascent          int
+	Descent         int
+	CapHeight       int
+	BBox            [4]int
+	Flags           int
+	ItalicAngle     int
+	MissingGlyphLog *pdfMissingGlyphLogger
 }
 
 type builtinFamily struct {

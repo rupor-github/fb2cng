@@ -3,6 +3,7 @@ package pdf
 import (
 	"strconv"
 	"strings"
+	"sync"
 
 	"go.uber.org/zap"
 
@@ -11,8 +12,10 @@ import (
 )
 
 type pdfFontRegistry struct {
-	families map[string]pdfEmbeddedFontFamily
-	log      *zap.Logger
+	families            map[string]pdfEmbeddedFontFamily
+	log                 *zap.Logger
+	missingGlyphLogSeen map[pdfMissingGlyphLogKey]bool
+	missingGlyphLogMu   sync.Mutex
 }
 
 type pdfEmbeddedFontFamily struct {
@@ -28,7 +31,11 @@ func newPDFFontRegistry(book *fb2.FictionBook, log *zap.Logger) *pdfFontRegistry
 	if log == nil {
 		log = zap.NewNop()
 	}
-	registry := &pdfFontRegistry{families: make(map[string]pdfEmbeddedFontFamily), log: log.Named("pdf-fonts")}
+	registry := &pdfFontRegistry{
+		families:            make(map[string]pdfEmbeddedFontFamily),
+		log:                 log.Named("pdf-fonts"),
+		missingGlyphLogSeen: make(map[pdfMissingGlyphLogKey]bool),
+	}
 	if book == nil {
 		return registry
 	}
@@ -92,10 +99,19 @@ func (r *pdfFontRegistry) addStylesheetFonts(stylesheet *fb2.Stylesheet, parsed 
 func (r *pdfFontRegistry) fontForKey(key pdfFontKey) (*builtinFontFace, error) {
 	if r != nil {
 		if face := r.embeddedFont(key); face != nil {
-			return face, nil
+			return r.fontFaceWithLogger(face, key), nil
 		}
+		face, err := builtinFont(key.Family, key.Bold, key.Italic)
+		return r.fontFaceWithLogger(face, key), err
 	}
 	return builtinFont(key.Family, key.Bold, key.Italic)
+}
+
+func (r *pdfFontRegistry) fontFaceWithLogger(face *builtinFontFace, key pdfFontKey) *builtinFontFace {
+	if r == nil {
+		return face
+	}
+	return pdfFontFaceWithLogger(face, r.log, key, r.missingGlyphLogSeen, &r.missingGlyphLogMu)
 }
 
 func (r *pdfFontRegistry) embeddedFont(key pdfFontKey) *builtinFontFace {

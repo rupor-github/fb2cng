@@ -7,8 +7,25 @@ import (
 	"fbc/convert/pdf/docwriter"
 )
 
+type pdfMissingGlyphBox struct {
+	X      float64
+	Y      float64
+	Width  float64
+	Height float64
+	Color  pdfColor
+}
+
+type pdfTextDrawingState struct {
+	FontName         string
+	FontSize         float64
+	LetterSpacing    float64
+	Color            pdfColor
+	ColorInitialized bool
+}
+
 func pageContent(page pdfPage) []byte {
 	var buf bytes.Buffer
+	missingGlyphBoxes := make([]pdfMissingGlyphBox, 0)
 	for _, background := range page.Backgrounds {
 		if background.Width <= 0 || background.Height <= 0 {
 			continue
@@ -44,17 +61,23 @@ func pageContent(page pdfPage) []byte {
 			img.Name)
 	}
 	buf.WriteString("q\nBT\n")
-	currentFontName := ""
-	currentFontSize := -1.0
-	currentLetterSpacing := 0.0
-	currentColor := pdfColor{}
-	colorInitialized := false
+	textState := pdfTextDrawingState{FontSize: -1}
 	for _, line := range page.Lines {
 		if len(line.Fragments) != 0 {
 			currentX := line.X
 			for i, fragment := range line.Fragments {
 				if len(fragment.Text.Glyphs) != 0 && fragment.FontName != "" {
-					writeTextFragment(&buf, fragment.FontName, fragment.FontSize, fragment.LetterSpacing+line.ExtraCharSpacing, fragment.Color, currentX, line.Y+fragment.BaselineShift, fragment.Text.Glyphs, &currentFontName, &currentFontSize, &currentLetterSpacing, &currentColor, &colorInitialized)
+					missingGlyphBoxes = append(missingGlyphBoxes, writeTextFragment(
+						&buf,
+						fragment.FontName,
+						fragment.FontSize,
+						fragment.LetterSpacing+line.ExtraCharSpacing,
+						fragment.Color,
+						currentX,
+						line.Y+fragment.BaselineShift,
+						fragment.Text.Glyphs,
+						&textState,
+					)...)
 				}
 				currentX += fragment.Width + line.ExtraCharSpacing*float64(max(len(fragment.Text.Glyphs)-1, 0))
 				if i != len(line.Fragments)-1 {
@@ -69,37 +92,205 @@ func pageContent(page pdfPage) []byte {
 		if len(line.Text.Glyphs) == 0 || line.FontName == "" {
 			continue
 		}
-		writeTextState(&buf, line.FontName, line.FontSize, line.LetterSpacing+line.ExtraCharSpacing, line.Color, line.X, line.Y, &currentFontName, &currentFontSize, &currentLetterSpacing, &currentColor, &colorInitialized)
-		if line.ExtraWordSpacing != 0 {
-			fmt.Fprintf(&buf, "%s TJ\n", justifiedGlyphArray(line.Text.Glyphs, line.ExtraWordSpacing, line.FontSize))
-			continue
-		}
-		fmt.Fprintf(&buf, "%s Tj\n", docwriter.Format(glyphHex(line.Text.Glyphs)))
+		missingGlyphBoxes = append(missingGlyphBoxes, writeTextGlyphs(
+			&buf,
+			line.FontName,
+			line.FontSize,
+			line.LetterSpacing+line.ExtraCharSpacing,
+			line.Color,
+			line.X,
+			line.Y,
+			line.Text.Glyphs,
+			line.ExtraWordSpacing,
+			&textState,
+		)...)
 	}
 	buf.WriteString("ET\nQ\n")
+	buf.Write(pageMissingGlyphBoxes(missingGlyphBoxes))
 	buf.Write(pageTextDecorations(page))
 	return buf.Bytes()
 }
 
-func writeTextFragment(buf *bytes.Buffer, fontName string, fontSize float64, letterSpacing float64, color pdfColor, x float64, y float64, glyphs []shapedGlyph, currentFontName *string, currentFontSize *float64, currentLetterSpacing *float64, currentColor *pdfColor, colorInitialized *bool) {
-	writeTextState(buf, fontName, fontSize, letterSpacing, color, x, y, currentFontName, currentFontSize, currentLetterSpacing, currentColor, colorInitialized)
-	fmt.Fprintf(buf, "%s Tj\n", docwriter.Format(glyphHex(glyphs)))
+func writeTextFragment(
+	buf *bytes.Buffer,
+	fontName string,
+	fontSize float64,
+	letterSpacing float64,
+	color pdfColor,
+	x float64,
+	y float64,
+	glyphs []shapedGlyph,
+	state *pdfTextDrawingState,
+) []pdfMissingGlyphBox {
+	return writeTextGlyphs(buf, fontName, fontSize, letterSpacing, color, x, y, glyphs, 0, state)
 }
 
-func writeTextState(buf *bytes.Buffer, fontName string, fontSize float64, letterSpacing float64, color pdfColor, x float64, y float64, currentFontName *string, currentFontSize *float64, currentLetterSpacing *float64, currentColor *pdfColor, colorInitialized *bool) {
-	if fontName != *currentFontName || fontSize != *currentFontSize {
+func writeTextGlyphs(
+	buf *bytes.Buffer,
+	fontName string,
+	fontSize float64,
+	letterSpacing float64,
+	color pdfColor,
+	x float64,
+	y float64,
+	glyphs []shapedGlyph,
+	extraWordSpacing float64,
+	state *pdfTextDrawingState,
+) []pdfMissingGlyphBox {
+	writeTextState(buf, fontName, fontSize, letterSpacing, color, x, y, state)
+	if !hasSyntheticPDFGlyphs(glyphs) {
+		if extraWordSpacing != 0 {
+			fmt.Fprintf(buf, "%s TJ\n", justifiedGlyphArray(glyphs, extraWordSpacing, fontSize))
+			return nil
+		}
+		fmt.Fprintf(buf, "%s Tj\n", docwriter.Format(glyphHex(glyphs)))
+		return nil
+	}
+	glyphArray, boxes := syntheticGlyphArray(glyphs, fontSize, letterSpacing, extraWordSpacing, x, y, color)
+	if glyphArray != "" {
+		fmt.Fprintf(buf, "%s TJ\n", glyphArray)
+	}
+	return boxes
+}
+
+func hasSyntheticPDFGlyphs(glyphs []shapedGlyph) bool {
+	for _, glyph := range glyphs {
+		if glyph.Missing != pdfMissingGlyphNone || glyph.GlyphID == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func syntheticGlyphArray(
+	glyphs []shapedGlyph,
+	fontSize float64,
+	letterSpacing float64,
+	extraWordSpacing float64,
+	startX float64,
+	baselineY float64,
+	color pdfColor,
+) (string, []pdfMissingGlyphBox) {
+	if fontSize <= 0 {
+		fontSize = pdfBaseFontSize
+	}
+	boxes := make([]pdfMissingGlyphBox, 0)
+	var buf bytes.Buffer
+	buf.WriteByte('[')
+	wroteItem := false
+	x := startX
+	for i, glyph := range glyphs {
+		if glyph.Missing == pdfMissingGlyphNone && glyph.GlyphID != 0 {
+			writePDFGlyphArrayItem(&buf, &wroteItem, docwriter.Format(glyphHex([]shapedGlyph{glyph})))
+			x += glyphAdvancePoints(glyph, fontSize)
+		} else {
+			if glyph.Missing == pdfMissingGlyphPrintable && glyph.Width > 0 {
+				boxes = append(boxes, missingPDFGlyphBox(glyph, fontSize, x, baselineY, color))
+			}
+			advance := glyphAdvancePoints(glyph, fontSize)
+			if advance != 0 {
+				writePDFGlyphArrayItem(&buf, &wroteItem, docwriter.FormatNumber(-advance*1000/fontSize))
+			}
+			x += advance
+		}
+		if i != len(glyphs)-1 && letterSpacing != 0 && (glyph.Missing != pdfMissingGlyphNone || glyph.GlyphID == 0) {
+			writePDFGlyphArrayItem(&buf, &wroteItem, docwriter.FormatNumber(-letterSpacing*1000/fontSize))
+			x += letterSpacing
+		}
+		if glyph.Rune == ' ' && i != len(glyphs)-1 && extraWordSpacing != 0 {
+			writePDFGlyphArrayItem(&buf, &wroteItem, docwriter.FormatNumber(-extraWordSpacing*1000/fontSize))
+			x += extraWordSpacing
+		}
+	}
+	buf.WriteByte(']')
+	if !wroteItem {
+		return "", boxes
+	}
+	return buf.String(), boxes
+}
+
+func writePDFGlyphArrayItem(buf *bytes.Buffer, wroteItem *bool, item string) {
+	if *wroteItem {
+		buf.WriteByte(' ')
+	}
+	buf.WriteString(item)
+	*wroteItem = true
+}
+
+func missingPDFGlyphBox(glyph shapedGlyph, fontSize float64, x float64, baselineY float64, color pdfColor) pdfMissingGlyphBox {
+	advance := glyphAdvancePoints(glyph, fontSize)
+	if advance <= 0 {
+		advance = fontSize * 0.5
+	}
+	return pdfMissingGlyphBox{
+		X:      x,
+		Y:      baselineY - fontSize*0.25,
+		Width:  advance,
+		Height: fontSize,
+		Color:  color,
+	}
+}
+
+func glyphAdvancePoints(glyph shapedGlyph, fontSize float64) float64 {
+	return float64(glyph.Width) * fontSize / 1000.0
+}
+
+func pageMissingGlyphBoxes(boxes []pdfMissingGlyphBox) []byte {
+	if len(boxes) == 0 {
+		return nil
+	}
+	var buf bytes.Buffer
+	for _, box := range boxes {
+		if box.Width <= 0 || box.Height <= 0 {
+			continue
+		}
+		thickness := max(min(box.Width, box.Height)/8, 0.35)
+		x1 := box.X
+		y1 := box.Y
+		x2 := box.X + box.Width
+		y2 := box.Y + box.Height
+		fmt.Fprintf(&buf, "q\n%s\n%s w\n%s %s %s %s re S\n%s %s m %s %s l S\n%s %s m %s %s l S\nQ\n",
+			box.Color.strokeOperator(),
+			docwriter.FormatNumber(thickness),
+			docwriter.FormatNumber(box.X),
+			docwriter.FormatNumber(box.Y),
+			docwriter.FormatNumber(box.Width),
+			docwriter.FormatNumber(box.Height),
+			docwriter.FormatNumber(x1),
+			docwriter.FormatNumber(y1),
+			docwriter.FormatNumber(x2),
+			docwriter.FormatNumber(y2),
+			docwriter.FormatNumber(x1),
+			docwriter.FormatNumber(y2),
+			docwriter.FormatNumber(x2),
+			docwriter.FormatNumber(y1))
+	}
+	return buf.Bytes()
+}
+
+func writeTextState(
+	buf *bytes.Buffer,
+	fontName string,
+	fontSize float64,
+	letterSpacing float64,
+	color pdfColor,
+	x float64,
+	y float64,
+	state *pdfTextDrawingState,
+) {
+	if fontName != state.FontName || fontSize != state.FontSize {
 		fmt.Fprintf(buf, "/%s %s Tf\n", fontName, docwriter.FormatNumber(fontSize))
-		*currentFontName = fontName
-		*currentFontSize = fontSize
+		state.FontName = fontName
+		state.FontSize = fontSize
 	}
-	if letterSpacing != *currentLetterSpacing {
+	if letterSpacing != state.LetterSpacing {
 		fmt.Fprintf(buf, "%s Tc\n", docwriter.FormatNumber(letterSpacing))
-		*currentLetterSpacing = letterSpacing
+		state.LetterSpacing = letterSpacing
 	}
-	if !*colorInitialized || color != *currentColor {
+	if !state.ColorInitialized || color != state.Color {
 		fmt.Fprintf(buf, "%s\n", color.contentOperator())
-		*currentColor = color
-		*colorInitialized = true
+		state.Color = color
+		state.ColorInitialized = true
 	}
 	fmt.Fprintf(buf, "1 0 0 1 %s %s Tm\n", docwriter.FormatNumber(x), docwriter.FormatNumber(y))
 }

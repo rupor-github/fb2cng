@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
+	"unicode"
 	"unicode/utf16"
 
+	"go.uber.org/zap"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/sfnt"
 	"golang.org/x/image/math/fixed"
@@ -29,10 +32,33 @@ type pdfFontResource struct {
 	IDs     fontObjectIDs
 }
 
+type pdfMissingGlyphKind int
+
+const (
+	pdfMissingGlyphNone pdfMissingGlyphKind = iota
+	pdfMissingGlyphSpace
+	pdfMissingGlyphCombining
+	pdfMissingGlyphPrintable
+)
+
+func (k pdfMissingGlyphKind) String() string {
+	switch k {
+	case pdfMissingGlyphSpace:
+		return "space"
+	case pdfMissingGlyphCombining:
+		return "combining-mark"
+	case pdfMissingGlyphPrintable:
+		return "printable"
+	default:
+		return "none"
+	}
+}
+
 type shapedGlyph struct {
 	GlyphID uint16
 	Rune    rune
 	Width   int
+	Missing pdfMissingGlyphKind
 }
 
 type shapedText struct {
@@ -68,6 +94,42 @@ func fontForKey(registry *pdfFontRegistry, key pdfFontKey) (*builtinFontFace, er
 	return builtinFont(key.Family, key.Bold, key.Italic)
 }
 
+type pdfMissingGlyphLogKey struct {
+	FontFamily     string
+	Bold           bool
+	Italic         bool
+	PostScriptName string
+	Rune           rune
+	Kind           pdfMissingGlyphKind
+}
+
+type pdfMissingGlyphLogger struct {
+	Log     *zap.Logger
+	FontKey pdfFontKey
+	Seen    map[pdfMissingGlyphLogKey]bool
+	Mu      *sync.Mutex
+}
+
+func pdfFontFaceWithLogger(
+	face *builtinFontFace,
+	log *zap.Logger,
+	key pdfFontKey,
+	seen map[pdfMissingGlyphLogKey]bool,
+	mu *sync.Mutex,
+) *builtinFontFace {
+	if face == nil || log == nil {
+		return face
+	}
+	clone := *face
+	clone.MissingGlyphLog = &pdfMissingGlyphLogger{
+		Log:     log,
+		FontKey: key,
+		Seen:    seen,
+		Mu:      mu,
+	}
+	return &clone
+}
+
 func shapeText(face *builtinFontFace, text string) (shapedText, error) {
 	if face == nil || face.Font == nil {
 		return shapedText{}, fmt.Errorf("font face is required")
@@ -92,6 +154,9 @@ func shapeText(face *builtinFontFace, text string) (shapedText, error) {
 			GlyphID: uint16(gid),
 			Rune:    r,
 			Width:   fontUnitsToPDFWidth(advance.Round(), face.UnitsPerEm),
+		}
+		if glyph.GlyphID == 0 {
+			glyph = missingPDFGlyph(face, r, glyph.Width)
 		}
 		shaped.Glyphs = append(shaped.Glyphs, glyph)
 		if glyph.GlyphID != 0 {
@@ -140,6 +205,68 @@ func wrapText(face *builtinFontFace, text string, fontSize, maxWidth float64) ([
 	return lines, nil
 }
 
+func missingPDFGlyph(face *builtinFontFace, r rune, advanceWidth int) shapedGlyph {
+	kind := pdfMissingGlyphPrintable
+	width := advanceWidth
+	if unicode.IsSpace(r) {
+		kind = pdfMissingGlyphSpace
+	} else if unicode.IsMark(r) {
+		kind = pdfMissingGlyphCombining
+		width = 0
+	}
+	if width < 0 {
+		width = 0
+	}
+	if width == 0 && kind != pdfMissingGlyphCombining {
+		width = 500
+	}
+	glyph := shapedGlyph{Rune: r, Width: width, Missing: kind}
+	logPDFMissingGlyph(face, glyph)
+	return glyph
+}
+
+func logPDFMissingGlyph(face *builtinFontFace, glyph shapedGlyph) {
+	if face == nil || face.MissingGlyphLog == nil || face.MissingGlyphLog.Log == nil {
+		return
+	}
+	logger := face.MissingGlyphLog
+	key := pdfMissingGlyphLogKey{
+		FontFamily:     normalizedPDFFontFamily(logger.FontKey.Family),
+		Bold:           logger.FontKey.Bold,
+		Italic:         logger.FontKey.Italic,
+		PostScriptName: face.PostScriptName,
+		Rune:           glyph.Rune,
+		Kind:           glyph.Missing,
+	}
+	if pdfMissingGlyphAlreadyLogged(logger, key) {
+		return
+	}
+	logger.Log.Debug("Using synthetic PDF missing glyph",
+		zap.String("font_family", key.FontFamily),
+		zap.Bool("bold", key.Bold),
+		zap.Bool("italic", key.Italic),
+		zap.String("font", key.PostScriptName),
+		zap.String("rune", fmt.Sprintf("%U", glyph.Rune)),
+		zap.String("char", string(glyph.Rune)),
+		zap.String("kind", glyph.Missing.String()),
+		zap.Int("advance_width", glyph.Width))
+}
+
+func pdfMissingGlyphAlreadyLogged(logger *pdfMissingGlyphLogger, key pdfMissingGlyphLogKey) bool {
+	if logger.Seen == nil {
+		return false
+	}
+	if logger.Mu != nil {
+		logger.Mu.Lock()
+		defer logger.Mu.Unlock()
+	}
+	if logger.Seen[key] {
+		return true
+	}
+	logger.Seen[key] = true
+	return false
+}
+
 func shapedWidthPoints(text shapedText, fontSize float64) float64 {
 	return shapedWidthPointsWithSpacing(text, fontSize, 0)
 }
@@ -166,6 +293,9 @@ func fontUnitsToPDFWidth(width, unitsPerEm int) int {
 func glyphHex(glyphs []shapedGlyph) docwriter.HexString {
 	data := make([]byte, 0, len(glyphs)*2)
 	for _, glyph := range glyphs {
+		if glyph.Missing != pdfMissingGlyphNone || glyph.GlyphID == 0 {
+			continue
+		}
 		data = append(data, byte(glyph.GlyphID>>8), byte(glyph.GlyphID))
 	}
 	return docwriter.HexString(data)

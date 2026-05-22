@@ -360,7 +360,8 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 			continue
 		}
 
-		needed := style.SpaceBefore + style.PaddingTop + float64(len(lines))*style.Paragraph.LineHeight + style.PaddingBottom
+		lineHeight := pdfEffectiveParagraphLineHeight(style.Paragraph)
+		needed := style.SpaceBefore + style.PaddingTop + float64(len(lines))*lineHeight + style.PaddingBottom
 		if style.KeepTogether && pageHasText && y-needed < bottom {
 			newTextPage()
 		}
@@ -374,7 +375,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 			}
 		}
 		if !style.KeepTogether && pageHasText {
-			linesFit := countFittingLines(y-style.SpaceBefore-style.PaddingTop, bottom, style.Paragraph.FontSize, style.Paragraph.LineHeight)
+			linesFit := countFittingLines(y-style.SpaceBefore-style.PaddingTop, bottom, style.Paragraph.FontSize, lineHeight)
 			if linesFit > 0 && linesFit < len(lines) {
 				firstFragmentLines := linesFit
 				if remaining := len(lines) - firstFragmentLines; remaining < style.Widows {
@@ -408,7 +409,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 				y -= style.Paragraph.FontSize
 			}
 			remainingAfterLine := len(lines) - lineIndex - 1
-			if remainingAfterLine > 0 && remainingAfterLine < style.Widows && y-style.Paragraph.LineHeight-style.Paragraph.FontSize < bottom {
+			if remainingAfterLine > 0 && remainingAfterLine < style.Widows && y-lineHeight-style.Paragraph.FontSize < bottom {
 				addBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, y)
 				newTextPage()
 				fragmentPage = page
@@ -440,7 +441,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 				ExtraCharSpacing: line.ExtraCharSpacing,
 				BreakStats:       line.BreakStats,
 			})
-			y -= style.Paragraph.LineHeight
+			y -= lineHeight
 			pageHasText = true
 			previousRenderedImage = false
 		}
@@ -456,6 +457,18 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 		pages = pages[:len(pages)-1]
 	}
 	return pages, used, nil
+}
+
+func pdfEffectiveParagraphLineHeight(style paragraphStyle) float64 {
+	lineHeight := style.LineHeight
+	if lineHeight <= 0 {
+		lineHeight = pdfBaseLineHeight
+	}
+	fontSize := style.FontSize
+	if fontSize <= 0 {
+		fontSize = pdfBaseFontSize
+	}
+	return max(lineHeight, fontSize)
 }
 
 type pdfTitleVignetteContentGroup struct {
@@ -699,7 +712,8 @@ func nextBlockKeepHeight(doc pdfDocumentSpec, blockStyles []pdfBlockResolvedStyl
 		if len(lines) == 0 {
 			continue
 		}
-		return style.SpaceBefore + style.PaddingTop + float64(min(minLines, len(lines)))*style.Paragraph.LineHeight + style.PaddingBottom, nil
+		lineHeight := pdfEffectiveParagraphLineHeight(style.Paragraph)
+		return style.SpaceBefore + style.PaddingTop + float64(min(minLines, len(lines)))*lineHeight + style.PaddingBottom, nil
 	}
 	return 0, nil
 }
