@@ -72,8 +72,10 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 
 			title := body.Title.AsTOCText("Untitled")
 
-			// Set current filename for footnote reference tracking
+			// Set current chapter location for footnote reference tracking
 			c.CurrentFilename = filename
+			c.CurrentChapterTitle = title
+			c.CurrentSectionTitle = title
 
 			// Register new page for this file in the page map
 			c.ForceNewPage(filename)
@@ -115,8 +117,10 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 				includeInTOC = true
 			}
 
-			// Set current filename for footnote reference tracking
+			// Set current chapter location for footnote reference tracking
 			c.CurrentFilename = filename
+			c.CurrentChapterTitle = title
+			c.CurrentSectionTitle = title
 
 			// Register new page for this file in the page map
 			c.ForceNewPage(filename)
@@ -147,8 +151,10 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 
 				splitTitle := split.section.AsTitleText("")
 
-				// Set current filename and register new page for the split section
+				// Set current chapter location and register new page for the split section
 				c.CurrentFilename = splitFilename
+				c.CurrentChapterTitle = splitTitle
+				c.CurrentSectionTitle = splitTitle
 				c.ForceNewPage(splitFilename)
 
 				splitDoc, innerSplits, err := renderSplitSection(c, body, split.section, split.depth, split.titleDepth, log)
@@ -211,8 +217,10 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, log *
 
 	doc, root := createXHTMLDocument(c, docTitle)
 
-	// Set current filename for footnote tracking
+	// Set current location for footnote tracking
 	c.CurrentFilename = filename
+	c.CurrentChapterTitle = docTitle
+	c.CurrentSectionTitle = docTitle
 
 	// Register new page for footnotes file in the page map
 	c.ForceNewPage(filename)
@@ -708,12 +716,7 @@ func appendFloatFootnoteSectionContentEpub2(parent *etree.Element, c *content.Co
 					span.CreateAttr("id", fmt.Sprintf("kobo.%d.%d", paragraph, sentence))
 					textParent = span
 				}
-				// Use title as link text if available, otherwise use ↩
-				if section.Title != nil && i == 0 {
-					appendPlainText(textParent, c, section.Title.AsTOCText(c.BacklinkStr))
-				} else {
-					appendPlainText(textParent, c, c.BacklinkStr)
-				}
+				appendPlainText(textParent, c, c.BacklinkText(ref))
 			}
 			appendPlainText(sectionElem, c, text.NBSP)
 		}
@@ -897,7 +900,7 @@ func appendFloatFootnoteSectionContentEpub3(parent *etree.Element, c *content.Co
 				backLink.CreateAttr("href", href)
 				backLink.CreateAttr("epub:type", "backlink")
 				backLink.CreateAttr("role", "doc-backlink")
-				appendPlainText(backLink, c, c.BacklinkStr)
+				appendPlainText(backLink, c, c.BacklinkText(ref))
 			}
 		}
 	}
@@ -973,6 +976,12 @@ func appendFootnoteSectionContent(parent *etree.Element, c *content.Content, sec
 }
 
 func appendSectionContent(parent *etree.Element, c *content.Content, section *fb2.Section, depth int, titleDepth int, log *zap.Logger) ([]splitResult, error) {
+	oldSectionTitle := c.CurrentSectionTitle
+	if title := section.AsTitleText(""); title != "" {
+		c.CurrentSectionTitle = title
+	}
+	defer func() { c.CurrentSectionTitle = oldSectionTitle }()
+
 	if section.Title != nil {
 		// Always create wrapper div for section title
 		titleWrapper := parent.CreateElement("div")
@@ -1299,31 +1308,37 @@ func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inl
 		}
 	case fb2.InlineStrong:
 		strong := parent.CreateElement("strong")
+		appendInlineText(strong, c, seg.Text, hyphenate)
 		for _, child := range seg.Children {
 			appendInlineSegment(strong, c, &child, hyphenate)
 		}
 	case fb2.InlineEmphasis:
 		em := parent.CreateElement("em")
+		appendInlineText(em, c, seg.Text, hyphenate)
 		for _, child := range seg.Children {
 			appendInlineSegment(em, c, &child, hyphenate)
 		}
 	case fb2.InlineStrikethrough:
 		del := parent.CreateElement("del")
+		appendInlineText(del, c, seg.Text, hyphenate)
 		for _, child := range seg.Children {
 			appendInlineSegment(del, c, &child, hyphenate)
 		}
 	case fb2.InlineSub:
 		sub := parent.CreateElement("sub")
+		appendInlineText(sub, c, seg.Text, hyphenate)
 		for _, child := range seg.Children {
 			appendInlineSegment(sub, c, &child, hyphenate)
 		}
 	case fb2.InlineSup:
 		sup := parent.CreateElement("sup")
+		appendInlineText(sup, c, seg.Text, hyphenate)
 		for _, child := range seg.Children {
 			appendInlineSegment(sup, c, &child, hyphenate)
 		}
 	case fb2.InlineCode:
 		code := parent.CreateElement("code")
+		appendInlineText(code, c, seg.Text, hyphenate)
 		for _, child := range seg.Children {
 			appendInlineSegment(code, c, &child, hyphenate)
 		}
@@ -1332,6 +1347,7 @@ func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inl
 		if seg.Style != "" {
 			span.CreateAttr("class", seg.Style)
 		}
+		appendInlineText(span, c, seg.Text, hyphenate)
 		for _, child := range seg.Children {
 			appendInlineSegment(span, c, &child, hyphenate)
 		}
@@ -1365,6 +1381,7 @@ func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inl
 			}
 			a.CreateAttr("class", linkClass)
 		}
+		appendInlineText(a, c, seg.Text, hyphenate)
 		for _, child := range seg.Children {
 			appendInlineSegment(a, c, &child, hyphenate)
 		}

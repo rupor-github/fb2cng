@@ -42,6 +42,15 @@ func buildPDFDocument(doc pdfDocumentSpec) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	for range 3 {
+		if !resolvePDFBacklinkPagesAndText(&doc, pages) {
+			break
+		}
+		pages, usedGlyphs, err = layoutPDFPages(doc, fontFace)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if len(pages) == 0 {
 		return nil, errors.New("pdf document must contain at least one page")
 	}

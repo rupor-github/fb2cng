@@ -665,8 +665,15 @@ document:
     # FB2 bodies to treat as footnotes
     bodies: ["notes", "comments", "примечания", "комментарии"]
     
-    # Backlink symbol
-    backlinks: "[<]"
+    # Backlink template
+    backlink_template: |
+      [{{- if eq .Format "pdf" -}}
+        {{- if .PageNumber -}}page {{ .PageNumber }}{{- else -}}<{{- end -}}
+      {{- else if or (eq .Format "kfx") (eq .Format "azw8") -}}
+        {{- if .LocationNumber -}}loc {{ .LocationNumber }}{{- else if .PageNumber -}}page {{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
+      {{- else -}}
+        {{- if .PageNumber -}}page {{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
+      {{- end -}}]
     
     # Multi-paragraph indicator
     more_paragraphs: "(~)\u00A0"

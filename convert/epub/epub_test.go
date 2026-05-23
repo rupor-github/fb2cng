@@ -3008,10 +3008,10 @@ func TestFloatModeFootnotes(t *testing.T) {
 
 			// Create test content with footnote
 			c := &content.Content{
-				OutputFormat:  tt.format,
-				FootnotesMode: tt.mode,
-				BackLinkIndex: make(map[string][]content.BackLinkRef),
-				BacklinkStr:   backlinkSym,
+				OutputFormat:     tt.format,
+				FootnotesMode:    tt.mode,
+				BackLinkIndex:    make(map[string][]content.BackLinkRef),
+				BacklinkTemplate: backlinkSym,
 				Book: &fb2.FictionBook{
 					Bodies: []fb2.Body{
 						{
@@ -3195,11 +3195,11 @@ func TestFloatModeFootnotesMultipleParagraphs(t *testing.T) {
 
 			// Create test content with multi-paragraph footnote
 			c := &content.Content{
-				OutputFormat:  tt.format,
-				FootnotesMode: tt.mode,
-				BackLinkIndex: make(map[string][]content.BackLinkRef),
-				BacklinkStr:   backlinkSym,
-				MoreParaStr:   moreParaSym,
+				OutputFormat:     tt.format,
+				FootnotesMode:    tt.mode,
+				BackLinkIndex:    make(map[string][]content.BackLinkRef),
+				BacklinkTemplate: backlinkSym,
+				MoreParaStr:      moreParaSym,
 				Book: &fb2.FictionBook{
 					Bodies: []fb2.Body{
 						{
@@ -3368,11 +3368,11 @@ func TestFloatModeFootnotesSingleParagraph(t *testing.T) {
 
 			// Create test content with SINGLE paragraph footnote
 			c := &content.Content{
-				OutputFormat:  tt.format,
-				FootnotesMode: common.FootnotesModeFloat,
-				BackLinkIndex: make(map[string][]content.BackLinkRef),
-				BacklinkStr:   backlinkSym,
-				MoreParaStr:   moreParaSym,
+				OutputFormat:     tt.format,
+				FootnotesMode:    common.FootnotesModeFloat,
+				BackLinkIndex:    make(map[string][]content.BackLinkRef),
+				BacklinkTemplate: backlinkSym,
+				MoreParaStr:      moreParaSym,
 				Book: &fb2.FictionBook{
 					Bodies: []fb2.Body{
 						{
@@ -3523,11 +3523,11 @@ func TestFloatModeFootnotesVisibleElements(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, _, log := setupTestContext(t)
 			c := &content.Content{
-				OutputFormat:  tt.format,
-				FootnotesMode: common.FootnotesModeFloat,
-				BackLinkIndex: make(map[string][]content.BackLinkRef),
-				BacklinkStr:   backlinkSym,
-				MoreParaStr:   moreParaSym,
+				OutputFormat:     tt.format,
+				FootnotesMode:    common.FootnotesModeFloat,
+				BackLinkIndex:    make(map[string][]content.BackLinkRef),
+				BacklinkTemplate: backlinkSym,
+				MoreParaStr:      moreParaSym,
 				ImagesIndex: fb2.BookImages{
 					"img1": {Filename: "images/img1.jpg"},
 				},
@@ -4270,6 +4270,46 @@ func TestAppendParagraphInlineRecoversNestedInlineTextChildren(t *testing.T) {
 	}
 	if got := strong.Text(); got != " bold" {
 		t.Fatalf("strong text = %q, want %q", got, " bold")
+	}
+}
+
+func TestAppendParagraphInlineRendersDirectTextInStyledLinkChild(t *testing.T) {
+	c := &content.Content{
+		OutputFormat:  common.OutputFmtEpub3,
+		FootnotesMode: common.FootnotesModeFloatRenumbered,
+		FootnotesIndex: fb2.FootnoteRefs{
+			"c_2": {},
+		},
+	}
+	parent := etree.NewElement("p")
+
+	appendParagraphInline(parent, c, &fb2.Paragraph{
+		Text: []fb2.InlineSegment{
+			{
+				Kind: fb2.InlineText,
+				Text: "Это простой текст с комментариями",
+			},
+			{
+				Kind: fb2.InlineLink,
+				Href: "#c_2",
+				Children: []fb2.InlineSegment{{
+					Kind: fb2.InlineSup,
+					Text: "2.2",
+				}},
+			},
+		},
+	})
+
+	link := parent.SelectElement("a")
+	if link == nil {
+		t.Fatal("expected footnote link")
+	}
+	sup := link.SelectElement("sup")
+	if sup == nil {
+		t.Fatal("expected superscript inside link")
+	}
+	if got := sup.Text(); got != "2.2" {
+		t.Fatalf("sup text = %q, want %q", got, "2.2")
 	}
 }
 

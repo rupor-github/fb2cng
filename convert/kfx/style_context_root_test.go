@@ -224,7 +224,7 @@ func TestAddBacklinkParagraph_InlineEventStyleDropsHorizontalMargins(t *testing.
 	`), nil, zap.NewNop())
 
 	sb := NewStorylineBuilder("l1", "c1", 1, registry)
-	c := &content.Content{BacklinkStr: "[<]"}
+	c := &content.Content{BacklinkTemplate: "[<]"}
 	refs := []content.BackLinkRef{
 		{RefID: "ref-note-1"},
 		{RefID: "ref-note-2"},

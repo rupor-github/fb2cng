@@ -231,9 +231,22 @@ document:
     # if required by mode specified
     bodies: ["notes", "comments", "примечания", "комментарии"]
 
-    # In floating note body backlinks to original content will be represented
-    # by this string
-    backlinks: "[<]"
+    # Template used to render backlinks from footnote bodies to original content.
+    # Available fields include:
+    # - .Format (string) - output format: epub2, epub3, kepub, kfx, azw8, pdf
+    # - .PageNumber (int) - exact for PDF, approximate for EPUB/KFX/AZW8 page maps
+    # - .LocationNumber (int) - generated KFX/AZW8 location number
+    # - .SectionTitle (string) - nearest titled section/body when known
+    # - .ChapterTitle (string) - spine/chapter title when known
+    # - .TargetID, .RefID (string) and .RefNumber (int)
+    backlink_template: |
+      [{{- if eq .Format "pdf" -}}
+        {{- if .PageNumber -}}page {{ .PageNumber }}{{- else -}}<{{- end -}}
+      {{- else if or (eq .Format "kfx") (eq .Format "azw8") -}}
+        {{- if .LocationNumber -}}loc {{ .LocationNumber }}{{- else if .PageNumber -}}page {{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
+      {{- else -}}
+        {{- if .PageNumber -}}page {{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
+      {{- end -}}]
 
     # If floating note body has more than one paragraph this string could be
     # shown at the beginning of the first paragraph (.css footnote-more

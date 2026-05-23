@@ -94,6 +94,7 @@ type pdfTextBlock struct {
 	Links                      []pdfTextLink
 	Table                      *fb2.Table
 	TableCellRuns              map[pdfTableCellKey][]pdfInlineRun
+	BacklinkRefIDs             []string
 }
 
 type pdfTableCellKey [2]int

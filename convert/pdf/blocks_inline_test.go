@@ -114,9 +114,9 @@ func TestParagraphInlineRunsClassifyLinks(t *testing.T) {
 
 func TestPDFDefaultModeFootnoteBacklinks(t *testing.T) {
 	c := &content.Content{
-		OutputFormat:  common.OutputFmtPdf,
-		FootnotesMode: common.FootnotesModeDefault,
-		BacklinkStr:   "↩",
+		OutputFormat:     common.OutputFmtPdf,
+		FootnotesMode:    common.FootnotesModeDefault,
+		BacklinkTemplate: "↩",
 		FootnotesIndex: fb2.FootnoteRefs{
 			"n1": {BodyIdx: 1, SectionIdx: 0},
 		},
@@ -175,11 +175,86 @@ func TestPDFDefaultModeFootnoteBacklinks(t *testing.T) {
 	}
 }
 
+func TestPDFDefaultModeFootnoteBacklinksFromFootnoteReferences(t *testing.T) {
+	c := &content.Content{
+		OutputFormat:     common.OutputFmtPdf,
+		FootnotesMode:    common.FootnotesModeDefault,
+		BacklinkTemplate: "↩",
+		FootnotesIndex: fb2.FootnoteRefs{
+			"n1": {BodyIdx: 1, SectionIdx: 0},
+			"n2": {BodyIdx: 1, SectionIdx: 1},
+		},
+		Book: &fb2.FictionBook{Bodies: []fb2.Body{{
+			Kind: fb2.BodyMain,
+			Sections: []fb2.Section{{Content: []fb2.FlowItem{{
+				Kind: fb2.FlowParagraph,
+				Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
+					{Text: "Body "},
+					{Kind: fb2.InlineLink, Href: "#n2", Children: []fb2.InlineSegment{{Text: "2"}}},
+				}},
+			}}}},
+		}, {
+			Kind: fb2.BodyFootnotes,
+			Sections: []fb2.Section{{
+				ID: "n1",
+				Content: []fb2.FlowItem{{
+					Kind:      fb2.FlowParagraph,
+					Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "First footnote."}}},
+				}},
+			}, {
+				ID: "n2",
+				Content: []fb2.FlowItem{{
+					Kind: fb2.FlowParagraph,
+					Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
+						{Text: "Second footnote refers to "},
+						{Kind: fb2.InlineLink, Href: "#n1", Children: []fb2.InlineSegment{{Text: "1"}}},
+					}},
+				}},
+			}},
+		}}},
+	}
+
+	blocks, err := collectTextBlocks(c)
+	if err != nil {
+		t.Fatalf("collectTextBlocks() error = %v", err)
+	}
+	if refs := c.BackLinkIndex["n1"]; len(refs) != 1 || refs[0].RefID != "ref-n1-1" {
+		t.Fatalf("BackLinkIndex[n1] = %#v, want ref-n1-1 from nested footnote reference", refs)
+	}
+	if refs := c.BackLinkIndex["n2"]; len(refs) != 1 || refs[0].RefID != "ref-n2-1" {
+		t.Fatalf("BackLinkIndex[n2] = %#v, want ref-n2-1 from main text reference", refs)
+	}
+
+	var nestedReferenceRun *pdfInlineRun
+	backlinks := map[string]bool{}
+	for i := range blocks {
+		block := &blocks[i]
+		for j := range block.Runs {
+			run := &block.Runs[j]
+			if run.StyleClasses == pdfStyleLinkFootnote && run.LinkHref == "#n1" {
+				nestedReferenceRun = run
+			}
+			if run.StyleClasses == pdfStyleLinkBacklink {
+				backlinks[run.LinkHref] = true
+			}
+		}
+	}
+	if nestedReferenceRun == nil || nestedReferenceRun.AnchorID != "ref-n1-1" {
+		t.Fatalf("nested footnote reference run = %#v, want backlink anchor ref-n1-1", nestedReferenceRun)
+	}
+	if !backlinks["#ref-n1-1"] {
+		t.Fatalf("blocks = %#v, want backlink paragraph to nested footnote reference #ref-n1-1", blocks)
+	}
+	if !backlinks["#ref-n2-1"] {
+		t.Fatalf("blocks = %#v, want backlink paragraph to main text reference #ref-n2-1", blocks)
+	}
+}
+
 func TestPDFDefaultModeFootnoteBacklinksAfterTableKeepsTableMargin(t *testing.T) {
 	c := &content.Content{
-		OutputFormat:  common.OutputFmtPdf,
-		FootnotesMode: common.FootnotesModeDefault,
-		BacklinkStr:   "↩",
+		OutputFormat:     common.OutputFmtPdf,
+		FootnotesMode:    common.FootnotesModeDefault,
+		BacklinkTemplate: "↩",
 		FootnotesIndex: fb2.FootnoteRefs{
 			"n1": {BodyIdx: 1, SectionIdx: 0},
 		},
@@ -225,9 +300,9 @@ func TestPDFDefaultModeFootnoteBacklinksAfterTableKeepsTableMargin(t *testing.T)
 
 func TestPDFDefaultModeFootnoteBacklinksFromTableCells(t *testing.T) {
 	c := &content.Content{
-		OutputFormat:  common.OutputFmtPdf,
-		FootnotesMode: common.FootnotesModeDefault,
-		BacklinkStr:   "↩",
+		OutputFormat:     common.OutputFmtPdf,
+		FootnotesMode:    common.FootnotesModeDefault,
+		BacklinkTemplate: "↩",
 		FootnotesIndex: fb2.FootnoteRefs{
 			"n1": {BodyIdx: 1, SectionIdx: 0},
 		},

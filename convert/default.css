@@ -434,6 +434,7 @@ td {
 }
 .link-backlink {
     text-decoration: underline;
+    text-align: left;
     font-weight: bold;
     color: gray;
 }

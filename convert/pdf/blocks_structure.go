@@ -37,12 +37,17 @@ func appendFootnoteBodyBlocks(blocks *[]pdfTextBlock, c *content.Content, body *
 		return
 	}
 	appendBodyIntroBlocks(blocks, c, body, true)
+	sectionBlocks := make([][]pdfTextBlock, len(body.Sections))
 	for i := range body.Sections {
-		appendFootnoteSectionBlocks(blocks, c, &body.Sections[i], splitSections)
+		appendFootnoteSectionContentBlocks(&sectionBlocks[i], c, &body.Sections[i], splitSections)
+	}
+	for i := range body.Sections {
+		*blocks = append(*blocks, sectionBlocks[i]...)
+		appendPDFDefaultFootnoteBacklinkBlock(blocks, c, body.Sections[i].ID)
 	}
 }
 
-func appendFootnoteSectionBlocks(blocks *[]pdfTextBlock, c *content.Content, section *fb2.Section, splitSections map[string]bool) {
+func appendFootnoteSectionContentBlocks(blocks *[]pdfTextBlock, c *content.Content, section *fb2.Section, splitSections map[string]bool) {
 	if section == nil {
 		return
 	}
@@ -55,7 +60,6 @@ func appendFootnoteSectionBlocks(blocks *[]pdfTextBlock, c *content.Content, sec
 		appendFlowBlocks(blocks, c, section.Annotation.Items, 1, splitSections, pdfStyleAnnotation, pdfStyleAnnotation, false)
 	}
 	appendFlowBlocks(blocks, c, section.Content, 1, splitSections, pdfStyleFootnote, pdfStyleFootnote, false)
-	appendPDFDefaultFootnoteBacklinkBlock(blocks, c, section.ID)
 }
 
 func appendPDFDefaultFootnoteBacklinkBlock(blocks *[]pdfTextBlock, c *content.Content, sectionID string) {
@@ -66,22 +70,40 @@ func appendPDFDefaultFootnoteBacklinkBlock(blocks *[]pdfTextBlock, c *content.Co
 	if len(refs) == 0 {
 		return
 	}
-	backlinkText := strings.TrimSpace(c.BacklinkStr)
-	if backlinkText == "" {
+	refIDs := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		refIDs = append(refIDs, ref.RefID)
+	}
+	text, runs := pdfBacklinkBlockContent(c, refIDs)
+	if text == "" || len(runs) == 0 {
 		return
 	}
+	*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockParagraph, Text: text, Runs: runs, StyleName: pdfStyleParagraph, BacklinkRefIDs: refIDs})
+}
 
-	runs := make([]pdfInlineRun, 0, len(refs)*2-1)
+func pdfBacklinkBlockContent(c *content.Content, refIDs []string) (string, []pdfInlineRun) {
+	if c == nil || len(refIDs) == 0 {
+		return "", nil
+	}
+	runs := make([]pdfInlineRun, 0, len(refIDs)*2-1)
 	var text strings.Builder
-	for i, ref := range refs {
-		if i > 0 {
+	for i, refID := range refIDs {
+		ref, ok := c.BackLinkRefByID(refID)
+		if !ok {
+			continue
+		}
+		backlinkText := c.BacklinkText(ref)
+		if backlinkText == "" {
+			continue
+		}
+		if text.Len() > 0 && i > 0 {
 			runs = append(runs, pdfInlineRun{Text: contentText.NBSP})
 			text.WriteString(contentText.NBSP)
 		}
 		runs = append(runs, pdfInlineRun{Text: backlinkText, StyleClasses: pdfStyleLinkBacklink, LinkHref: "#" + ref.RefID})
 		text.WriteString(backlinkText)
 	}
-	*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockParagraph, Text: text.String(), Runs: runs, StyleName: pdfStyleParagraph})
+	return text.String(), runs
 }
 
 func appendSectionBlocks(blocks *[]pdfTextBlock, c *content.Content, section *fb2.Section, depth int, splitSections map[string]bool, contextClasses string, stripRootHorizontalMargins bool, endVignettes pdfSectionEndVignetteTransfers) {
@@ -91,6 +113,11 @@ func appendSectionBlocks(blocks *[]pdfTextBlock, c *content.Content, section *fb
 	var book *fb2.FictionBook
 	if c != nil {
 		book = c.Book
+		oldSectionTitle := c.CurrentSectionTitle
+		if title := section.AsTitleText(""); title != "" {
+			c.CurrentSectionTitle = title
+		}
+		defer func() { c.CurrentSectionTitle = oldSectionTitle }()
 	}
 	titleClasses := sectionTitleContainerClasses(depth)
 	titleContextClasses := joinStyleClasses(contextClasses, titleClasses)

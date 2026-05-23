@@ -47,6 +47,11 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 	if section == nil {
 		return nil
 	}
+	oldSectionTitle := c.CurrentSectionTitle
+	if title := section.AsTitleText(""); title != "" {
+		c.CurrentSectionTitle = title
+	}
+	defer func() { c.CurrentSectionTitle = oldSectionTitle }()
 
 	// KP3 does not always materialize .section { margin: 1em 0 } onto the first/last element.
 	// In particular, for image-only sections (images + empty-lines), KP3 does not apply the

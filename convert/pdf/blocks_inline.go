@@ -286,16 +286,14 @@ func applyInlineSegmentStyle(style pdfInlineRun, seg *fb2.InlineSegment, c *cont
 }
 
 func pdfDefaultFootnoteBacklinksEnabled(c *content.Content) bool {
-	return c != nil && c.OutputFormat == common.OutputFmtPdf && c.FootnotesMode == common.FootnotesModeDefault && c.BacklinkStr != ""
+	return c != nil && c.OutputFormat == common.OutputFmtPdf && c.FootnotesMode == common.FootnotesModeDefault
 }
 
 func pdfRegisterDefaultFootnoteBacklinks(c *content.Content, styleClasses string, contextClasses string) bool {
 	if !pdfDefaultFootnoteBacklinksEnabled(c) {
 		return false
 	}
-	return !hasPDFStyleClass(styleClasses, pdfStyleFootnote) &&
-		!hasPDFStyleClass(styleClasses, pdfStyleFootnoteTitle) &&
-		!hasPDFStyleClass(contextClasses, pdfStyleFootnote) &&
+	return !hasPDFStyleClass(styleClasses, pdfStyleFootnoteTitle) &&
 		!hasPDFStyleClass(contextClasses, pdfStyleFootnoteTitle)
 }
 
