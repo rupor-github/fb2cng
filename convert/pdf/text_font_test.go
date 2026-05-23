@@ -84,17 +84,18 @@ func TestShapeTextUsesBuiltInSymbolFallbackForGenericFonts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fontForStyle() error = %v", err)
 	}
-	shaped, err := shapeText(face, "≤→●A")
+	shaped, err := shapeText(face, "≤→●█A")
 	if err != nil {
 		t.Fatalf("shapeText() error = %v", err)
 	}
-	if len(shaped.Glyphs) != 4 {
-		t.Fatalf("glyph count = %d, want 4", len(shaped.Glyphs))
+	if len(shaped.Glyphs) != 5 {
+		t.Fatalf("glyph count = %d, want 5", len(shaped.Glyphs))
 	}
 	wants := []pdfFontKey{
 		{Family: pdfBuiltinFontFamilyMath},
 		{Family: pdfBuiltinFontFamilyMath},
 		{Family: pdfBuiltinFontFamilySymbols2},
+		{Family: "monospace"},
 		key,
 	}
 	for i, want := range wants {

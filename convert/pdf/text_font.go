@@ -225,12 +225,25 @@ func pdfRuneUsesBuiltinSymbolFallback(r rune) bool {
 
 func pdfBuiltinSymbolFallbackKeys(r rune) []pdfFontKey {
 	math := pdfFontKey{Family: pdfBuiltinFontFamilyMath}
+	mono := pdfFontKey{Family: "monospace"}
 	symbols := pdfFontKey{Family: pdfBuiltinFontFamilySymbols}
 	symbols2 := pdfFontKey{Family: pdfBuiltinFontFamilySymbols2}
-	if pdfRuneUsesMathFallbackFirst(r) {
-		return []pdfFontKey{math, symbols2, symbols}
+	if pdfRuneUsesMonoFallbackFirst(r) {
+		return []pdfFontKey{mono, symbols2, symbols, math}
 	}
-	return []pdfFontKey{symbols2, symbols, math}
+	if pdfRuneUsesMathFallbackFirst(r) {
+		return []pdfFontKey{math, symbols2, symbols, mono}
+	}
+	return []pdfFontKey{symbols2, symbols, math, mono}
+}
+
+func pdfRuneUsesMonoFallbackFirst(r rune) bool {
+	for _, rng := range pdfBuiltinMonoFallbackFirstRanges {
+		if r >= rng.lo && r <= rng.hi {
+			return true
+		}
+	}
+	return false
 }
 
 func pdfRuneUsesMathFallbackFirst(r rune) bool {
@@ -299,6 +312,11 @@ var pdfBuiltinMathFallbackFirstRanges = []pdfRuneRange{
 	{0x27C0, 0x27FF},
 	{0x2900, 0x2AFF},
 	{0x1D400, 0x1D7FF},
+}
+
+var pdfBuiltinMonoFallbackFirstRanges = []pdfRuneRange{
+	{0x2500, 0x257F}, // Box Drawing
+	{0x2580, 0x259F}, // Block Elements
 }
 
 func wrapText(face *builtinFontFace, text string, fontSize, maxWidth float64) ([]shapedText, error) {
