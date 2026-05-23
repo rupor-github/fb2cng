@@ -87,6 +87,31 @@ func (t *pdfStyleTracer) traceStyleUpdate(name string, before, after pdfBlockRes
 	t.sections["style_update"]++
 }
 
+func (t *pdfStyleTracer) traceDropcapPattern(selector string, parent string, fontSize css.Value, chars int, lines int) {
+	if !t.isEnabled() {
+		return
+	}
+	details := fmt.Sprintf("parent=%s, font-size=%g%s, chars=%d, lines=%d", parent, fontSize.Value, fontSize.Unit, chars, lines)
+	t.append("DROPCAP CSS", selector, details)
+	t.sections["dropcap_css"]++
+}
+
+func (t *pdfStyleTracer) traceDropcapResolved(blockIndex int, block pdfTextBlock, layout pdfDropcapLayout, base paragraphStyle) {
+	if !t.isEnabled() {
+		return
+	}
+	details := fmt.Sprintf("block #%d %s", blockIndex, block.Kind.String())
+	if block.ID != "" {
+		details += fmt.Sprintf(", id=%q", block.ID)
+	}
+	details += fmt.Sprintf("\n  char=%q, classes=%q, context=%q, chars=%d, lines=%d", layout.Run.Text, layout.Run.StyleClasses, layout.Run.ContextClasses, pdfDropcapDefaultChars, layout.Lines)
+	details += fmt.Sprintf("\n  base: font-family=%s, font-size=%gpt, line-height=%gpt", base.FontFamily, base.FontSize, pdfEffectiveParagraphLineHeight(base))
+	details += fmt.Sprintf("\n  dropcap: font-family=%s, font-size=%gpt, line-height=%gpt, bold=%t, italic=%t, color=%s", layout.Style.FontFamily, layout.Style.FontSize, layout.Style.LineHeight, layout.Style.Bold, layout.Style.Italic, layout.Style.Color.String())
+	details += fmt.Sprintf("\n  geometry: padding-right=%gpt, glyph-width=%gpt, exclusion-width=%gpt, reserved-height=%gpt", layout.PaddingRight, layout.Fragment.Width, layout.ExclusionWidth, layout.ReservedHeight)
+	t.append("DROPCAP", fmt.Sprintf("#%d", blockIndex), details)
+	t.sections["dropcap_resolved"]++
+}
+
 func (t *pdfStyleTracer) traceMarginCollapse(previousIndex, currentIndex int, previousBlock, currentBlock pdfTextBlock, previousMargin, currentMargin, collapsed float64) {
 	if !t.isEnabled() {
 		return

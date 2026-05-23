@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 
+	"go.uber.org/zap"
+
 	"fbc/css"
 )
 
@@ -147,6 +149,7 @@ func (r *pdfStyleResolver) applyStylesheet(sheet *css.Stylesheet) {
 	if sheet == nil {
 		return
 	}
+	r.detectDropcapPatterns(sheet)
 	for _, item := range sheet.Items {
 		switch {
 		case item.Rule != nil:
@@ -162,6 +165,57 @@ func (r *pdfStyleResolver) applyStylesheet(sheet *css.Stylesheet) {
 			}
 		}
 	}
+}
+
+func (r *pdfStyleResolver) detectDropcapPatterns(sheet *css.Stylesheet) {
+	if r == nil || sheet == nil {
+		return
+	}
+	for _, rule := range pdfStylesheetRules(sheet) {
+		if rule.Selector.Ancestor == nil || rule.Selector.DescendantBaseName() != pdfStyleDropcap {
+			continue
+		}
+		parents := pdfSelectorStyleNames(*rule.Selector.Ancestor)
+		if len(parents) == 0 {
+			continue
+		}
+		chars := pdfDropcapDefaultChars
+		lines := pdfDropcapDefaultLines
+		fontSize := css.Value{}
+		if value, ok := rule.GetProperty("font-size"); ok {
+			fontSize = value
+			if value.Value > 0 {
+				lines = clampPDFDropcapLines(int(value.Value + 0.5))
+			}
+		}
+		for _, parent := range parents {
+			r.dropcaps[parent] = pdfDropcapCSSConfig{Chars: chars, Lines: lines}
+			if r.log != nil {
+				r.log.Debug("Detected drop cap pattern",
+					zap.String("parent", parent),
+					zap.Float64("font-size", fontSize.Value),
+					zap.String("unit", fontSize.Unit),
+					zap.Int("lines", lines))
+			}
+			r.tracer.traceDropcapPattern(rule.Selector.Raw, parent, fontSize, chars, lines)
+		}
+	}
+}
+
+func pdfStylesheetRules(sheet *css.Stylesheet) []css.Rule {
+	if sheet == nil {
+		return nil
+	}
+	var rules []css.Rule
+	for _, item := range sheet.Items {
+		switch {
+		case item.Rule != nil:
+			rules = append(rules, *item.Rule)
+		case item.MediaBlock != nil && item.MediaBlock.Query.EvaluateContext(css.MediaContext{KF8: true, ET: true, FBCPDF: true}):
+			rules = append(rules, item.MediaBlock.Rules...)
+		}
+	}
+	return rules
 }
 
 func (r *pdfStyleResolver) applyRule(rule css.Rule) {

@@ -1,5 +1,7 @@
 package pdf
 
+import "go.uber.org/zap"
+
 const (
 	pdfPointsPerInch     = 72.0
 	pdfCSSPixelsPerIn    = 96.0
@@ -139,6 +141,7 @@ const (
 	pdfStyleLinkFootnote       = "link-footnote"
 	pdfStyleLinkTOC            = "link-toc"
 	pdfStyleLinkBacklink       = "link-backlink"
+	pdfStyleDropcap            = "dropcap"
 	pdfStyleTitleAfterImage    = "title-after-image"
 	pdfStyleHTML               = "__html__"
 	pdfStyleBody               = "__body__"
@@ -214,6 +217,8 @@ type pdfBlockLength struct {
 type pdfStyleResolver struct {
 	styles   map[string]pdfBlockResolvedStyle
 	defaults map[string]pdfBlockResolvedStyle
+	dropcaps map[string]pdfDropcapCSSConfig
+	log      *zap.Logger
 	tracer   *pdfStyleTracer
 }
 

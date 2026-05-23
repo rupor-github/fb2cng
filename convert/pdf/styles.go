@@ -18,12 +18,14 @@ func newPDFStyleResolver(book *fb2.FictionBook, log *zap.Logger, tracers ...*pdf
 		tracer = tracers[0]
 	}
 	defaults := defaultPDFStyles()
-	resolver := &pdfStyleResolver{styles: clonePDFStyles(defaults), defaults: defaults, tracer: tracer}
+	resolver := &pdfStyleResolver{styles: clonePDFStyles(defaults), defaults: defaults, dropcaps: make(map[string]pdfDropcapCSSConfig), log: log, tracer: tracer}
 	resolver.traceDefaults()
 	if book == nil {
 		return resolver
 	}
 	parser := css.NewParser(log)
+	processed := 0
+	warnings := 0
 	for i := range book.Stylesheets {
 		stylesheet := &book.Stylesheets[i]
 		if stylesheet.Type != "" && !strings.EqualFold(stylesheet.Type, "text/css") {
@@ -32,8 +34,15 @@ func newPDFStyleResolver(book *fb2.FictionBook, log *zap.Logger, tracers ...*pdf
 		if strings.TrimSpace(stylesheet.Data) == "" {
 			continue
 		}
-		resolver.applyStylesheet(parser.Parse([]byte(stylesheet.Data), "pdf stylesheet"))
+		processed++
+		parsed := parser.Parse([]byte(stylesheet.Data), "pdf stylesheet")
+		warnings += len(parsed.Warnings)
+		for _, warning := range parsed.Warnings {
+			log.Debug("CSS conversion warning", zap.String("warning", warning))
+		}
+		resolver.applyStylesheet(parsed)
 	}
+	log.Info("CSS stylesheets processed", zap.Int("stylesheets", processed), zap.Int("warnings", warnings))
 	resolver.applyPDFStyleAdjustments()
 	return resolver
 }

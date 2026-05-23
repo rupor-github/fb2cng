@@ -80,6 +80,10 @@ type paragraphHyphenator interface {
 	Hyphenate(string) string
 }
 
+type paragraphLineShape struct {
+	InitialInsets []float64
+}
+
 type paragraphLine struct {
 	Text              shapedText
 	Width             float64
@@ -169,9 +173,14 @@ type paragraphBreakState struct {
 	Break      paragraphBreak
 	Fitness    paragraphFitness
 	Hyphenated bool
+	ShapeLine  int
 }
 
 func layoutParagraph(face *builtinFontFace, text string, style paragraphStyle, maxWidth float64) ([]paragraphLine, error) {
+	return layoutParagraphWithShape(face, text, style, maxWidth, paragraphLineShape{})
+}
+
+func layoutParagraphWithShape(face *builtinFontFace, text string, style paragraphStyle, maxWidth float64, shape paragraphLineShape) ([]paragraphLine, error) {
 	if style.FontSize <= 0 {
 		return nil, fmt.Errorf("paragraph font size must be positive: %g", style.FontSize)
 	}
@@ -192,7 +201,7 @@ func layoutParagraph(face *builtinFontFace, text string, style paragraphStyle, m
 	if err != nil {
 		return nil, err
 	}
-	return assembleParagraphLines(face, units, style, maxWidth)
+	return assembleParagraphLines(face, units, style, maxWidth, shape)
 }
 
 func paragraphWords(text string, noWrap bool) []paragraphWord {
@@ -373,12 +382,12 @@ func isHyphenLikeBreakRune(r rune) bool {
 	}
 }
 
-func assembleParagraphLines(face *builtinFontFace, units []paragraphUnit, style paragraphStyle, maxWidth float64) ([]paragraphLine, error) {
+func assembleParagraphLines(face *builtinFontFace, units []paragraphUnit, style paragraphStyle, maxWidth float64, shape paragraphLineShape) ([]paragraphLine, error) {
 	spaceWidth, err := plainSpaceWidth(face, style)
 	if err != nil {
 		return nil, err
 	}
-	breaks := chooseParagraphBreaks(units, spaceWidth, style, maxWidth)
+	breaks := chooseParagraphBreaksWithShape(units, spaceWidth, style, maxWidth, shape)
 	lines := make([]paragraphLine, 0, len(breaks))
 	start := 0
 	previousHyphenated := false
@@ -391,7 +400,7 @@ func assembleParagraphLines(face *builtinFontFace, units []paragraphUnit, style 
 		}
 
 		width := shapedWidthPointsWithSpacing(shaped, style.FontSize, style.LetterSpacing)
-		indent := paragraphLineIndent(start, style, maxWidth)
+		indent := paragraphLineIndentForLine(start, i, style, maxWidth, shape)
 		available := max(maxWidth-indent, 1)
 		line := paragraphLine{
 			Text:              shaped,
@@ -412,31 +421,38 @@ func assembleParagraphLines(face *builtinFontFace, units []paragraphUnit, style 
 }
 
 func chooseParagraphBreaks(units []paragraphUnit, spaceWidth float64, style paragraphStyle, maxWidth float64) []paragraphBreak {
+	return chooseParagraphBreaksWithShape(units, spaceWidth, style, maxWidth, paragraphLineShape{})
+}
+
+func chooseParagraphBreaksWithShape(units []paragraphUnit, spaceWidth float64, style paragraphStyle, maxWidth float64, shape paragraphLineShape) []paragraphBreak {
 	n := len(units)
 	if n == 0 {
 		return nil
 	}
 
-	const statesPerBreak = 8
-	states := make([][statesPerBreak]paragraphBreakState, n+1)
+	shapeStates := max(len(shape.InitialInsets)+1, 1)
+	statesPerBreak := shapeStates * 8
+	states := make([][]paragraphBreakState, n+1)
 	for i := range states {
+		states[i] = make([]paragraphBreakState, statesPerBreak)
 		for j := range states[i] {
 			states[i][j].Cost = math.Inf(1)
 			states[i][j].Prev = -1
 			states[i][j].PrevState = -1
 		}
 	}
-	states[0][stateIndex(paragraphFitnessDecent, false)] = paragraphBreakState{Cost: 0, Prev: -1, PrevState: -1, Fitness: paragraphFitnessDecent}
+	states[0][stateIndexWithShape(paragraphFitnessDecent, false, 0, shapeStates)] = paragraphBreakState{Cost: 0, Prev: -1, PrevState: -1, Fitness: paragraphFitnessDecent, ShapeLine: 0}
 
 	for start := 0; start < n; start++ {
 		for stateIdx, state := range states[start] {
 			if math.IsInf(state.Cost, 1) {
 				continue
 			}
-			for _, candidate := range paragraphBreakCandidates(units, start, spaceWidth, style, maxWidth, state.Fitness, state.Hyphenated) {
+			for _, candidate := range paragraphBreakCandidates(units, start, spaceWidth, style, maxWidth, shape, state.ShapeLine, state.Fitness, state.Hyphenated) {
 				end := candidate.Break.End
 				fitness := candidate.Fitness
-				nextStateIdx := stateIndex(fitness, candidate.Break.Hyphenated)
+				nextShapeLine := min(state.ShapeLine+1, shapeStates-1)
+				nextStateIdx := stateIndexWithShape(fitness, candidate.Break.Hyphenated, nextShapeLine, shapeStates)
 				cost := state.Cost + candidate.Cost
 				if cost < states[end][nextStateIdx].Cost {
 					states[end][nextStateIdx] = paragraphBreakState{
@@ -446,6 +462,7 @@ func chooseParagraphBreaks(units []paragraphUnit, spaceWidth float64, style para
 						Break:      candidate.Break,
 						Fitness:    fitness,
 						Hyphenated: candidate.Break.Hyphenated,
+						ShapeLine:  nextShapeLine,
 					}
 				}
 			}
@@ -463,10 +480,10 @@ func chooseParagraphBreaks(units []paragraphUnit, spaceWidth float64, style para
 	if bestState >= 0 && !math.IsInf(bestCost, 1) {
 		return paragraphBreaksFromStates(states, n, bestState)
 	}
-	return emergencyParagraphBreaks(units, spaceWidth, style, maxWidth)
+	return emergencyParagraphBreaks(units, spaceWidth, style, maxWidth, shape)
 }
 
-func paragraphBreakCandidates(units []paragraphUnit, start int, spaceWidth float64, style paragraphStyle, maxWidth float64, previousFitness paragraphFitness, previousHyphenated bool) []paragraphBreakCandidate {
+func paragraphBreakCandidates(units []paragraphUnit, start int, spaceWidth float64, style paragraphStyle, maxWidth float64, shape paragraphLineShape, lineIndex int, previousFitness paragraphFitness, previousHyphenated bool) []paragraphBreakCandidate {
 	candidates := make([]paragraphBreakCandidate, 0)
 	width := 0.0
 	for end := start; end < len(units); end++ {
@@ -482,7 +499,7 @@ func paragraphBreakCandidates(units []paragraphUnit, start int, spaceWidth float
 		if units[end].HyphenText != "" {
 			lineWidth += units[end].HyphenWidth
 		}
-		indent := paragraphLineIndent(start, style, maxWidth)
+		indent := paragraphLineIndentForLine(start, lineIndex, style, maxWidth, shape)
 		available := max(maxWidth-indent, 1)
 		gaps := countJustificationGaps(units[start : end+1])
 		last := end == len(units)-1
@@ -671,7 +688,12 @@ func stateIndex(fitness paragraphFitness, hyphenated bool) int {
 	return idx
 }
 
-func paragraphBreaksFromStates(states [][8]paragraphBreakState, end int, stateIdx int) []paragraphBreak {
+func stateIndexWithShape(fitness paragraphFitness, hyphenated bool, shapeLine int, shapeStates int) int {
+	shapeLine = min(max(shapeLine, 0), max(shapeStates-1, 0))
+	return shapeLine*8 + stateIndex(fitness, hyphenated)
+}
+
+func paragraphBreaksFromStates(states [][]paragraphBreakState, end int, stateIdx int) []paragraphBreak {
 	breaks := make([]paragraphBreak, 0)
 	for end > 0 && stateIdx >= 0 {
 		state := states[end][stateIdx]
@@ -690,9 +712,9 @@ func paragraphBreaksFromStates(states [][8]paragraphBreakState, end int, stateId
 	return breaks
 }
 
-func emergencyParagraphBreaks(units []paragraphUnit, spaceWidth float64, style paragraphStyle, maxWidth float64) []paragraphBreak {
+func emergencyParagraphBreaks(units []paragraphUnit, spaceWidth float64, style paragraphStyle, maxWidth float64, shape paragraphLineShape) []paragraphBreak {
 	breaks := make([]paragraphBreak, 0)
-	for start := 0; start < len(units); {
+	for start, lineIndex := 0, 0; start < len(units); lineIndex++ {
 		width := 0.0
 		best := start + 1
 		bestHyphen := false
@@ -709,7 +731,7 @@ func emergencyParagraphBreaks(units []paragraphUnit, spaceWidth float64, style p
 			if !units[end].EndWord && !units[end].BreakAfter {
 				continue
 			}
-			indent := paragraphLineIndent(start, style, maxWidth)
+			indent := paragraphLineIndentForLine(start, lineIndex, style, maxWidth, shape)
 			available := max(maxWidth-indent, 1)
 			if lineWidth <= available || best == start+1 {
 				best = end + 1
@@ -726,11 +748,15 @@ func emergencyParagraphBreaks(units []paragraphUnit, spaceWidth float64, style p
 	return breaks
 }
 
-func paragraphLineIndent(start int, style paragraphStyle, maxWidth float64) float64 {
-	if start != 0 {
-		return 0
+func paragraphLineIndentForLine(start int, lineIndex int, style paragraphStyle, maxWidth float64, shape paragraphLineShape) float64 {
+	indent := 0.0
+	if start == 0 {
+		indent += max(style.FirstLineIndent, 0)
 	}
-	return min(max(style.FirstLineIndent, 0), maxWidth)
+	if lineIndex >= 0 && lineIndex < len(shape.InitialInsets) {
+		indent += max(shape.InitialInsets[lineIndex], 0)
+	}
+	return min(indent, maxWidth)
 }
 
 func paragraphJustificationSpacing(style paragraphStyle, last bool, width, available float64, gaps int, glyphs int) (float64, float64) {

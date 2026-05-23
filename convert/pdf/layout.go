@@ -114,6 +114,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 	y := top
 	pageHasText := false
 	previousRenderedImage := false
+	var activeDropcap *pdfActiveDropcap
 	titleGroup := pdfTitleVignetteContentGroup{}
 	newTextPage := func() {
 		titleGroup.reset()
@@ -121,6 +122,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 		y = top
 		pageHasText = false
 		previousRenderedImage = false
+		activeDropcap = nil
 	}
 
 	for blockIndex, block := range doc.Blocks {
@@ -130,6 +132,13 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 			}
 			addAnchor(page, block.ID)
 			continue
+		}
+
+		if activeDropcap != nil && block.Kind != pdfBlockParagraph {
+			if !pdfDropcapExpired(activeDropcap, page, y) {
+				y = activeDropcap.BottomY
+			}
+			activeDropcap = nil
 		}
 
 		style := blockStyles[blockIndex]
@@ -330,17 +339,58 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 			return nil, nil, err
 		}
 		runs := inlineRunsWithContext(block.Runs, inlineRunContextClassesForBlock(block))
-		lines, err := layoutInlineParagraph(doc, doc.Fonts, styles, face, block.Text, runs, style.Paragraph, blockWidth)
+		lineHeight := pdfEffectiveParagraphLineHeight(style.Paragraph)
+		blockSpaceBefore := func() float64 { return pdfEffectiveBlockSpaceBefore(style, pageHasText, y, top) }
+		firstBaselineY := func() float64 {
+			baseline := y - blockSpaceBefore() - style.PaddingTop
+			if !pageHasText || previousRenderedImage {
+				baseline -= style.Paragraph.FontSize
+			}
+			return baseline
+		}
+		layoutTextBlock := func() ([]paragraphLine, pdfDropcapLayout, bool, error) {
+			if pdfDropcapExpired(activeDropcap, page, y-blockSpaceBefore()-style.PaddingTop) {
+				activeDropcap = nil
+			}
+			shape := pdfActiveDropcapShape(activeDropcap, page, block, firstBaselineY(), style.Paragraph)
+			layoutText := block.Text
+			layoutRuns := runs
+			var dropcap pdfDropcapLayout
+			dropcapOK := false
+			if pdfBlockStartsDropcap(block) {
+				var err error
+				dropcap, dropcapOK, err = buildPDFDropcapLayout(doc, styles, block, style.Paragraph, face, runs, blockWidth, firstBaselineY())
+				if err != nil {
+					return nil, pdfDropcapLayout{}, false, err
+				}
+				if dropcapOK {
+					shape = repeatPDFDropcapInset(dropcap.ExclusionWidth, dropcap.Lines)
+					layoutText = dropcap.BodyText
+					layoutRuns = dropcap.BodyRuns
+				}
+			}
+			lines, err := layoutInlineParagraphWithShape(doc, doc.Fonts, styles, face, layoutText, layoutRuns, style.Paragraph, blockWidth, shape)
+			return lines, dropcap, dropcapOK, err
+		}
+		lines, dropcap, dropcapOK, err := layoutTextBlock()
 		if err != nil {
 			return nil, nil, err
 		}
-		if len(lines) == 0 {
+		if len(lines) == 0 && !dropcapOK {
 			continue
 		}
 
-		lineHeight := pdfEffectiveParagraphLineHeight(style.Paragraph)
-		blockSpaceBefore := func() float64 { return pdfEffectiveBlockSpaceBefore(style, pageHasText, y, top) }
-		needed := blockSpaceBefore() + style.PaddingTop + float64(len(lines))*lineHeight + style.PaddingBottom
+		textHeight := float64(len(lines)) * lineHeight
+		if dropcapOK {
+			textHeight = max(textHeight, dropcap.ReservedHeight)
+		}
+		needed := blockSpaceBefore() + style.PaddingTop + textHeight + style.PaddingBottom
+		if dropcapOK && pageHasText {
+			requiredDropcapLines := max(min(dropcap.Lines, len(lines)), 1)
+			if countFittingLines(firstBaselineY(), bottom, style.Paragraph.FontSize, lineHeight) < requiredDropcapLines {
+				newTextPage()
+			}
+		}
 		if style.KeepTogether && pageHasText && y-needed < bottom {
 			newTextPage()
 		}
@@ -365,6 +415,16 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 				}
 			}
 		}
+		lines, dropcap, dropcapOK, err = layoutTextBlock()
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(lines) == 0 && !dropcapOK {
+			continue
+		}
+		if dropcapOK {
+			pdfTraceResolvedDropcap(styles, blockIndex, block, dropcap, style.Paragraph)
+		}
 		addAnchor(page, block.ID)
 		y -= blockSpaceBefore()
 		backgroundX := blockLeft + style.MarginLeft
@@ -373,6 +433,27 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 		fragmentPage := page
 		fragmentTop := y + style.PaddingTop
 		lineSearchStart := 0
+		if dropcapOK {
+			dropcapX := blockLeft + style.MarginLeft + style.PaddingLeft
+			dropLine := paragraphLine{Text: dropcap.Fragment.Text, Width: dropcap.Fragment.Width, Fragments: []paragraphLineFragment{dropcap.Fragment}}
+			if dropcap.Fragment.LinkHref != "" {
+				addFragmentLinkAnnotations(page, dropLine, dropcapX, dropcap.BaselineY)
+			}
+			addLine(page, pdfPageLine{
+				X:             dropcapX,
+				Y:             dropcap.BaselineY,
+				FontSize:      dropcap.Fragment.FontSize,
+				LetterSpacing: dropcap.Fragment.LetterSpacing,
+				FontKey:       dropcap.Fragment.FontKey,
+				Color:         dropcap.Fragment.Color,
+				Text:          dropcap.Fragment.Text,
+				Underline:     dropcap.Fragment.Underline,
+				Strikethrough: dropcap.Fragment.Strikethrough,
+				Fragments:     pageLineFragments([]paragraphLineFragment{dropcap.Fragment}),
+			})
+			activeDropcap = &pdfActiveDropcap{Page: page, X: dropcapX, TopY: dropcap.TopY, BottomY: dropcap.BottomY, ExclusionWidth: dropcap.ExclusionWidth, Lines: dropcap.Lines, Char: dropcap.Run.Text, BodySearchOffset: dropcap.BodySearchOffset}
+			lineSearchStart = dropcap.BodySearchOffset
+		}
 		for lineIndex, line := range lines {
 			if !pageHasText || previousRenderedImage {
 				y -= style.Paragraph.FontSize
@@ -424,9 +505,16 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 			pageHasText = true
 			previousRenderedImage = false
 		}
+		if dropcapOK && len(lines) == 0 {
+			pageHasText = true
+			previousRenderedImage = false
+		}
 		backgroundBottom := y - style.PaddingBottom
 		addBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, backgroundBottom)
 		y -= style.PaddingBottom + style.SpaceAfter
+		if pdfDropcapExpired(activeDropcap, page, y) {
+			activeDropcap = nil
+		}
 		if pdfStyleForcesPageBreakAfter(style) && pageHasText {
 			newTextPage()
 		}

@@ -275,6 +275,10 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 			if count, ok := pdfCSSPositiveInt(value); ok {
 				style.Widows = count
 			}
+		case "float", "clear":
+			// Native PDF does not implement generic CSS floats. The normalized
+			// dropcap pattern uses float:left, but that geometry is handled by
+			// dropcap-specific layout code instead of the generic CSS cascade.
 		}
 	}
 }

@@ -26,6 +26,10 @@ type inlineGlyphPiece struct {
 }
 
 func layoutInlineParagraph(doc pdfDocumentSpec, registry *pdfFontRegistry, resolver *pdfStyleResolver, baseFace *builtinFontFace, text string, runs []pdfInlineRun, style paragraphStyle, maxWidth float64) ([]paragraphLine, error) {
+	return layoutInlineParagraphWithShape(doc, registry, resolver, baseFace, text, runs, style, maxWidth, paragraphLineShape{})
+}
+
+func layoutInlineParagraphWithShape(doc pdfDocumentSpec, registry *pdfFontRegistry, resolver *pdfStyleResolver, baseFace *builtinFontFace, text string, runs []pdfInlineRun, style paragraphStyle, maxWidth float64, shape paragraphLineShape) ([]paragraphLine, error) {
 	if len(runs) == 0 {
 		runs = []pdfInlineRun{{Text: text}}
 	}
@@ -33,7 +37,7 @@ func layoutInlineParagraph(doc pdfDocumentSpec, registry *pdfFontRegistry, resol
 		return layoutPreformattedParagraph(doc, registry, resolver, runs, style, maxWidth)
 	}
 	if !hasInlineStyle(runs) {
-		return layoutParagraph(baseFace, plainInlineRunText(runs), style, maxWidth)
+		return layoutParagraphWithShape(baseFace, plainInlineRunText(runs), style, maxWidth, shape)
 	}
 	if style.FontSize <= 0 {
 		return nil, fmt.Errorf("paragraph font size must be positive: %g", style.FontSize)
@@ -57,7 +61,7 @@ func layoutInlineParagraph(doc pdfDocumentSpec, registry *pdfFontRegistry, resol
 	if err != nil {
 		return nil, err
 	}
-	breaks := chooseParagraphBreaks(units, spaceFragment.Width, style, maxWidth)
+	breaks := chooseParagraphBreaksWithShape(units, spaceFragment.Width, style, maxWidth, shape)
 	lines := make([]paragraphLine, 0, len(breaks))
 	start := 0
 	previousHyphenated := false
@@ -68,7 +72,7 @@ func layoutInlineParagraph(doc pdfDocumentSpec, registry *pdfFontRegistry, resol
 		if err != nil {
 			return nil, fmt.Errorf("shape inline line text: %w", err)
 		}
-		indent := paragraphLineIndent(start, style, maxWidth)
+		indent := paragraphLineIndentForLine(start, i, style, maxWidth, shape)
 		available := max(maxWidth-indent, 1)
 		line := paragraphLine{
 			Text:              shaped,

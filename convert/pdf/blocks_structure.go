@@ -393,8 +393,12 @@ func appendParagraphBlockFull(blocks *[]pdfTextBlock, c *content.Content, kind p
 	if paragraphIsCodeBlock(paragraph) {
 		styleClasses = joinStyleClasses(styleClasses, pdfStyleCode)
 	}
+	finalStyleClasses := joinStyleClasses(paragraph.Style, styleClasses)
+	if kind == pdfBlockParagraph && hasPDFStyleClass(finalStyleClasses, "has-dropcap") && !paragraphIsCodeBlock(paragraph) {
+		runs = addPDFDropcapInlineRun(runs)
+	}
 	if text != "" || inlineRunsRenderable(runs) {
-		*blocks = append(*blocks, pdfTextBlock{Kind: kind, ID: paragraph.ID, Text: text, Runs: runs, Depth: depth, StyleName: styleName, StyleClasses: joinStyleClasses(paragraph.Style, styleClasses), ContextClasses: strings.TrimSpace(contextClasses), StripRootHorizontalMargins: stripRootHorizontalMargins, Links: links})
+		*blocks = append(*blocks, pdfTextBlock{Kind: kind, ID: paragraph.ID, Text: text, Runs: runs, Depth: depth, StyleName: styleName, StyleClasses: finalStyleClasses, ContextClasses: strings.TrimSpace(contextClasses), StripRootHorizontalMargins: stripRootHorizontalMargins, Links: links})
 	}
 }
 
