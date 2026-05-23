@@ -23,7 +23,7 @@ const (
 // Unicode font resources, selectable title/author text, initial FB2 text body
 // pagination, and Info dictionary metadata. Later milestones will replace the
 // fixed default styles with the KFX-aligned CSS pipeline.
-func Generate(ctx context.Context, c *content.Content, outputName string, cfg *config.DocumentConfig, log *zap.Logger) error {
+func Generate(ctx context.Context, c *content.Content, outputName string, cfg *config.DocumentConfig, log *zap.Logger, finalOutputName ...string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -76,15 +76,27 @@ func Generate(ctx context.Context, c *content.Content, outputName string, cfg *c
 	}
 
 	if log != nil {
-		log.Debug("Writing PDF",
-			zap.String("file", outputName),
+		fields := []zap.Field{
+			zap.String("file", pdfFinalOutputName(outputName, finalOutputName...)),
 			zap.Float64("page_width_pt", pageWidth),
 			zap.Float64("page_height_pt", pageHeight),
-			zap.Int("bytes", len(data)))
+			zap.Int("bytes", len(data)),
+		}
+		if final := pdfFinalOutputName(outputName, finalOutputName...); final != outputName {
+			fields = append(fields, zap.String("temporary_file", outputName))
+		}
+		log.Debug("Writing PDF", fields...)
 	}
 
 	if err := os.WriteFile(outputName, data, 0644); err != nil {
 		return fmt.Errorf("write pdf: %w", err)
 	}
 	return nil
+}
+
+func pdfFinalOutputName(outputName string, finalOutputName ...string) string {
+	if len(finalOutputName) > 0 && finalOutputName[0] != "" {
+		return finalOutputName[0]
+	}
+	return outputName
 }

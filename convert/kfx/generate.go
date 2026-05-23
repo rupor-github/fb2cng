@@ -21,12 +21,12 @@ import (
 )
 
 // Generate creates the KFX output file.
-func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *config.DocumentConfig, log *zap.Logger) (err error) {
+func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *config.DocumentConfig, log *zap.Logger, finalOutputPath ...string) (err error) {
 	if err = ctx.Err(); err != nil {
 		return err
 	}
 
-	log.Info("KFX generation starting", zap.String("output", outputPath))
+	log.Info("KFX generation starting", kfxOutputLogFields(outputPath, finalOutputPath...)...)
 	defer func(start time.Time) {
 		if err == nil {
 			log.Info("KFX generation completed", zap.Duration("elapsed", time.Since(start)))
@@ -92,12 +92,29 @@ func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *c
 	}
 
 	log.Debug("KFX written",
-		zap.String("output", outputPath),
-		zap.Int("size", len(kfxData)),
-		zap.Int("fragments", container.Fragments.Len()),
+		append(kfxOutputLogFields(outputPath, finalOutputPath...),
+			zap.Int("size", len(kfxData)),
+			zap.Int("fragments", container.Fragments.Len()),
+		)...,
 	)
 
 	return nil
+}
+
+func kfxOutputLogFields(outputPath string, finalOutputPath ...string) []zap.Field {
+	final := kfxFinalOutputPath(outputPath, finalOutputPath...)
+	fields := []zap.Field{zap.String("output", final)}
+	if final != outputPath {
+		fields = append(fields, zap.String("temporary_file", outputPath))
+	}
+	return fields
+}
+
+func kfxFinalOutputPath(outputPath string, finalOutputPath ...string) string {
+	if len(finalOutputPath) > 0 && finalOutputPath[0] != "" {
+		return finalOutputPath[0]
+	}
+	return outputPath
 }
 
 // buildFragments creates KFX fragments from content.

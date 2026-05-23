@@ -8,7 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest"
+	"go.uber.org/zap/zaptest/observer"
 
 	"fbc/config"
 	"fbc/content"
@@ -33,6 +36,36 @@ func TestPageSizePointsRequiresConfiguredDPI(t *testing.T) {
 	_, _, err := pageSizePoints(config.ScreenConfig{Width: 300, Height: 600})
 	if err == nil || !strings.Contains(err.Error(), "invalid pdf screen dpi") {
 		t.Fatalf("pageSizePoints() error = %v, want invalid dpi", err)
+	}
+}
+
+func TestGenerateLogsTemporaryAndFinalOutputPaths(t *testing.T) {
+	tmpDir := t.TempDir()
+	temporaryName := filepath.Join(tmpDir, ".book.pdf.123.tmp")
+	finalName := filepath.Join(tmpDir, "book.pdf")
+	cfg := &config.DocumentConfig{Images: config.ImagesConfig{Screen: config.ScreenConfig{Width: 1264, Height: 1680, DPI: 300}}}
+	c := &content.Content{SrcName: "book.fb2", Book: &fb2.FictionBook{Description: fb2.Description{TitleInfo: fb2.TitleInfo{BookTitle: fb2.TextField{Value: "Test Book"}}}}}
+	core, logs := observer.New(zapcore.DebugLevel)
+
+	if err := Generate(context.Background(), c, temporaryName, cfg, zap.New(core), finalName); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	entries := logs.FilterMessage("Writing PDF").All()
+	if len(entries) != 1 {
+		t.Fatalf("Writing PDF log entries = %d, want 1", len(entries))
+	}
+	fields := map[string]string{}
+	for _, field := range entries[0].Context {
+		if field.Type == zapcore.StringType {
+			fields[field.Key] = field.String
+		}
+	}
+	if fields["file"] != finalName {
+		t.Fatalf("file log field = %q, want final output %q", fields["file"], finalName)
+	}
+	if fields["temporary_file"] != temporaryName {
+		t.Fatalf("temporary_file log field = %q, want %q", fields["temporary_file"], temporaryName)
 	}
 }
 

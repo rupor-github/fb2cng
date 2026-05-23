@@ -33,12 +33,12 @@ const (
 
 // Generate creates the EPUB output file.
 // It handles epub2, epub3, and kepub variants based on content.OutputFormat.
-func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *config.DocumentConfig, log *zap.Logger) (err error) {
+func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *config.DocumentConfig, log *zap.Logger, finalOutputPath ...string) (err error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 
-	log.Info("EPUB generation starting", zap.Stringer("format", c.OutputFormat), zap.String("output", outputPath))
+	log.Info("EPUB generation starting", append([]zap.Field{zap.Stringer("format", c.OutputFormat)}, epubOutputLogFields(outputPath, finalOutputPath...)...)...)
 	defer func(start time.Time) {
 		if err == nil {
 			log.Info("EPUB generation completed", zap.Duration("elapsed", time.Since(start)))
@@ -1283,6 +1283,22 @@ func getChapterAnchorSuffix(chapter chapterData) string {
 		return "#" + chapter.AnchorID
 	}
 	return ""
+}
+
+func epubOutputLogFields(outputPath string, finalOutputPath ...string) []zap.Field {
+	final := epubFinalOutputPath(outputPath, finalOutputPath...)
+	fields := []zap.Field{zap.String("output", final)}
+	if final != outputPath {
+		fields = append(fields, zap.String("temporary_file", outputPath))
+	}
+	return fields
+}
+
+func epubFinalOutputPath(outputPath string, finalOutputPath ...string) string {
+	if len(finalOutputPath) > 0 && finalOutputPath[0] != "" {
+		return finalOutputPath[0]
+	}
+	return outputPath
 }
 
 func copyZipWithoutDataDescriptors(from, to string) (err error) {
