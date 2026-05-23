@@ -1,7 +1,6 @@
 package pdf
 
 import (
-	"fmt"
 	"strings"
 
 	"fbc/common"
@@ -25,10 +24,16 @@ func buildPDFPrintedFootnoteBlocks(c *content.Content) map[string]pdfPrintedFoot
 			continue
 		}
 
+		titleBlocks := pdfPrintedFootnoteActualTitleBlocks(c, section, false)
+		continuationTitleBlocks := pdfPrintedFootnoteActualTitleBlocks(c, section, true)
+		bodyBlocks := pdfPrintedFootnoteBodyBlocks(c, section)
 		out[id] = pdfPrintedFootnote{
-			ID:                 id,
-			Blocks:             pdfPrintedFootnoteSectionBlocks(c, id, ref, section, false),
-			ContinuationBlocks: pdfPrintedFootnoteSectionBlocks(c, id, ref, section, true),
+			ID:                      id,
+			TitleBlocks:             titleBlocks,
+			BodyBlocks:              bodyBlocks,
+			ContinuationTitleBlocks: continuationTitleBlocks,
+			Blocks:                  append(clonePDFTextBlocks(titleBlocks), bodyBlocks...),
+			ContinuationBlocks:      append(clonePDFTextBlocks(continuationTitleBlocks), bodyBlocks...),
 		}
 	}
 	if len(out) == 0 {
@@ -48,62 +53,105 @@ func pdfFootnoteSectionByRef(book *fb2.FictionBook, ref fb2.FootnoteRef) *fb2.Se
 	return &body.Sections[ref.SectionIdx]
 }
 
-func pdfPrintedFootnoteSectionBlocks(
-	c *content.Content,
-	id string,
-	ref fb2.FootnoteRef,
-	section *fb2.Section,
-	continuation bool,
-) []pdfTextBlock {
+func pdfPrintedFootnoteActualTitleBlocks(c *content.Content, section *fb2.Section, continuation bool) []pdfTextBlock {
+	if section == nil || pdfTitleEmpty(section.Title) {
+		return nil
+	}
+	title := clonePDFTitle(section.Title)
+	if continuation {
+		appendPDFContinuationMarker(title, c)
+	}
+	var blocks []pdfTextBlock
+	appendTitleParagraphBlocks(&blocks, c, title, section.ID, pdfStyleFootnoteTitle, pdfStyleFootnoteTitle, false)
+	return blocks
+}
+
+func pdfPrintedFootnoteBodyBlocks(c *content.Content, section *fb2.Section) []pdfTextBlock {
 	if section == nil {
 		return nil
 	}
 	copySection := *section
-	copySection.Title = pdfPrintedFootnoteTitle(c, id, ref, section, continuation)
+	copySection.Title = nil
 	var blocks []pdfTextBlock
 	appendFootnoteSectionContentBlocks(&blocks, c, &copySection, nil)
 	return blocks
 }
 
-func pdfPrintedFootnoteTitle(
-	c *content.Content,
-	id string,
-	ref fb2.FootnoteRef,
-	section *fb2.Section,
-	continuation bool,
-) *fb2.Title {
-	var title *fb2.Title
-	if c != nil && c.FootnotesMode == common.FootnotesModeFloatRenumbered && strings.TrimSpace(ref.DisplayText) != "" {
-		title = pdfSyntheticFootnoteTitle(id, ref, section)
-	} else if section != nil && !pdfTitleEmpty(section.Title) {
-		title = clonePDFTitle(section.Title)
-	} else {
-		title = pdfSyntheticFootnoteTitle(id, ref, section)
+func pdfPrintedFootnotePageBlocks(c *content.Content, note pdfPrintedFootnote, pageLabel string, continuation bool) []pdfTextBlock {
+	label := strings.TrimSpace(pageLabel)
+	if label == "" {
+		label = "?"
 	}
+
+	titleBlocks := note.TitleBlocks
 	if continuation {
-		appendPDFContinuationMarker(title, c)
+		titleBlocks = note.ContinuationTitleBlocks
 	}
-	return title
+
+	var blocks []pdfTextBlock
+	if c != nil && c.FootnotesMode == common.FootnotesModeFloat && len(titleBlocks) > 0 {
+		blocks = append(blocks, pdfPrefixFootnoteTitleBlocks(label, titleBlocks)...)
+	} else {
+		labelBlock := pdfPageLabelFootnoteTitleBlock(note.ID, label, titleBlocks)
+		if continuation {
+			appendPDFContinuationMarkerToTitleBlock(&labelBlock, c)
+		}
+		blocks = append(blocks, labelBlock)
+	}
+	blocks = append(blocks, clonePDFTextBlocks(note.BodyBlocks)...)
+	return blocks
 }
 
-func pdfSyntheticFootnoteTitle(id string, ref fb2.FootnoteRef, section *fb2.Section) *fb2.Title {
-	label := strings.TrimSpace(ref.DisplayText)
-	if label == "" && ref.NoteNum > 0 {
-		label = fmt.Sprintf("%d", ref.NoteNum)
+func pdfPageLabelFootnoteTitleBlock(id string, label string, titleBlocks []pdfTextBlock) pdfTextBlock {
+	block := pdfTextBlock{
+		Kind:           pdfBlockParagraph,
+		ID:             strings.TrimSpace(id),
+		Text:           label,
+		StyleClasses:   joinStyleClasses(pdfStyleFootnoteTitle, pdfStyleFootnoteTitle+"-first"),
+		ContextClasses: pdfStyleFootnoteTitle,
 	}
-	if label == "" {
-		label = "~ " + strings.TrimSpace(id) + " ~"
+	if len(titleBlocks) > 0 {
+		block = clonePDFTextBlock(titleBlocks[0])
+		block.Text = label
+		block.Runs = []pdfInlineRun{{Text: label}}
 	}
-	lang := ""
-	if section != nil {
-		lang = section.Lang
+	return block
+}
+
+func appendPDFContinuationMarkerToTitleBlock(block *pdfTextBlock, c *content.Content) {
+	marker := ""
+	if c != nil {
+		marker = strings.TrimSpace(c.FootnoteContinuationStr)
 	}
-	return &fb2.Title{
-		Lang: lang,
-		Items: []fb2.TitleItem{{
-			Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: label}}},
-		}},
+	if block == nil || marker == "" {
+		return
 	}
+	text := " " + marker
+	block.Text += text
+	block.Runs = append(block.Runs, pdfInlineRun{
+		Text:         text,
+		StyleClasses: pdfStyleFootnoteContinuation,
+	})
+}
+
+func pdfPrefixFootnoteTitleBlocks(label string, titleBlocks []pdfTextBlock) []pdfTextBlock {
+	blocks := clonePDFTextBlocks(titleBlocks)
+	if len(blocks) == 0 {
+		return []pdfTextBlock{{
+			Kind:           pdfBlockParagraph,
+			Text:           label,
+			StyleClasses:   joinStyleClasses(pdfStyleFootnoteTitle, pdfStyleFootnoteTitle+"-first"),
+			ContextClasses: pdfStyleFootnoteTitle,
+		}}
+	}
+	prefix := label + " "
+	blocks[0].Text = prefix + blocks[0].Text
+	if len(blocks[0].Runs) == 0 {
+		blocks[0].Runs = []pdfInlineRun{{Text: blocks[0].Text}}
+	} else {
+		blocks[0].Runs = append([]pdfInlineRun{{Text: prefix}}, blocks[0].Runs...)
+	}
+	return blocks
 }
 
 func appendPDFContinuationMarker(title *fb2.Title, c *content.Content) {
@@ -155,6 +203,42 @@ func pdfTitleEmpty(title *fb2.Title) bool {
 		}
 	}
 	return true
+}
+
+func clonePDFTextBlocks(blocks []pdfTextBlock) []pdfTextBlock {
+	if len(blocks) == 0 {
+		return nil
+	}
+	out := make([]pdfTextBlock, len(blocks))
+	for i := range blocks {
+		out[i] = clonePDFTextBlock(blocks[i])
+	}
+	return out
+}
+
+func clonePDFTextBlock(block pdfTextBlock) pdfTextBlock {
+	clone := block
+	clone.Runs = clonePDFInlineRuns(block.Runs)
+	if len(block.Links) > 0 {
+		clone.Links = append([]pdfTextLink(nil), block.Links...)
+	}
+	if len(block.BacklinkRefIDs) > 0 {
+		clone.BacklinkRefIDs = append([]string(nil), block.BacklinkRefIDs...)
+	}
+	if len(block.TableCellRuns) > 0 {
+		clone.TableCellRuns = make(map[pdfTableCellKey][]pdfInlineRun, len(block.TableCellRuns))
+		for key, runs := range block.TableCellRuns {
+			clone.TableCellRuns[key] = clonePDFInlineRuns(runs)
+		}
+	}
+	return clone
+}
+
+func clonePDFInlineRuns(runs []pdfInlineRun) []pdfInlineRun {
+	if len(runs) == 0 {
+		return nil
+	}
+	return append([]pdfInlineRun(nil), runs...)
 }
 
 func clonePDFTitle(title *fb2.Title) *fb2.Title {

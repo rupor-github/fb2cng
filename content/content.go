@@ -98,6 +98,13 @@ type Content struct {
 	PageMapIndex        map[string][]PageMapEntry // filename -> page entries in that file
 }
 
+func shouldNormalizeFootnoteLabels(outputFormat common.OutputFmt, mode common.FootnotesMode) bool {
+	if mode != common.FootnotesModeFloatRenumbered {
+		return false
+	}
+	return outputFormat != common.OutputFmtPdf
+}
+
 // Prepare reads, parses, and prepares FB2 content for conversion.
 // It is used for all output formats.
 func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat common.OutputFmt, log *zap.Logger) (_ *Content, retErr error) {
@@ -220,8 +227,10 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 
 	// Normalize footnote bodies and build footnote index
 	book, footnotes := book.NormalizeFootnoteBodies(log)
-	// For floatRenumbered mode, renumber footnotes and update labels
-	if env.Cfg.Document.Footnotes.Mode == common.FootnotesModeFloatRenumbered {
+	// For floatRenumbered mode, renumber footnotes and update labels.
+	// Native PDF printed footnotes use page-local labels assigned during PDF layout,
+	// so label_template is intentionally ignored there.
+	if shouldNormalizeFootnoteLabels(outputFormat, env.Cfg.Document.Footnotes.Mode) {
 		book, footnotes = book.NormalizeFootnoteLabels(footnotes, env.Cfg.Document.Footnotes.LabelTemplate, log)
 	}
 	// Build id and link indexes replacing/removing broken links (may add not-found image binary and vignette binaries)

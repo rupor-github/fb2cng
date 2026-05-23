@@ -528,6 +528,12 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 		}
 	}
 
+	if len(doc.PrintedFootnotes) > 0 {
+		if err := applyPDFPageLocalFootnoteReferenceLabels(pages, doc.Fonts, used); err != nil {
+			return nil, nil, err
+		}
+	}
+
 	if len(pages[len(pages)-1].Lines) == 0 && len(pages[len(pages)-1].Images) == 0 {
 		pages = pages[:len(pages)-1]
 	}

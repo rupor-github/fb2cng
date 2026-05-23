@@ -111,6 +111,9 @@ func applyPDFPseudoContentToPrintedFootnotes(
 	}
 	out := make(map[string]pdfPrintedFootnote, len(footnotes))
 	for id, footnote := range footnotes {
+		footnote.TitleBlocks = applyPDFPseudoContentToBlocks(footnote.TitleBlocks, resolver)
+		footnote.BodyBlocks = applyPDFPseudoContentToBlocks(footnote.BodyBlocks, resolver)
+		footnote.ContinuationTitleBlocks = applyPDFPseudoContentToBlocks(footnote.ContinuationTitleBlocks, resolver)
 		footnote.Blocks = applyPDFPseudoContentToBlocks(footnote.Blocks, resolver)
 		footnote.ContinuationBlocks = applyPDFPseudoContentToBlocks(footnote.ContinuationBlocks, resolver)
 		out[id] = footnote

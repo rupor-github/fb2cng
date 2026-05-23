@@ -1280,6 +1280,18 @@ func TestContent_KoboSpanSet(t *testing.T) {
 	}
 }
 
+func TestShouldNormalizeFootnoteLabelsSkipsPDFPrintedFootnotes(t *testing.T) {
+	if shouldNormalizeFootnoteLabels(common.OutputFmtPdf, common.FootnotesModeFloatRenumbered) {
+		t.Fatal("PDF floatRenumbered should use page-local printed labels instead of label_template normalization")
+	}
+	if !shouldNormalizeFootnoteLabels(common.OutputFmtEpub3, common.FootnotesModeFloatRenumbered) {
+		t.Fatal("EPUB floatRenumbered should keep existing label_template normalization")
+	}
+	if shouldNormalizeFootnoteLabels(common.OutputFmtPdf, common.FootnotesModeFloat) {
+		t.Fatal("float mode should not run global renumbering")
+	}
+}
+
 func TestContent_AddFootnoteBackLinkRef(t *testing.T) {
 	c, _ := setupTestContent(t)
 	c.BackLinkIndex = make(map[string][]BackLinkRef)

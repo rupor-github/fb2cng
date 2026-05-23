@@ -83,9 +83,12 @@ type pdfContentPlan struct {
 }
 
 type pdfPrintedFootnote struct {
-	ID                 string
-	Blocks             []pdfTextBlock
-	ContinuationBlocks []pdfTextBlock
+	ID                      string
+	TitleBlocks             []pdfTextBlock
+	BodyBlocks              []pdfTextBlock
+	ContinuationTitleBlocks []pdfTextBlock
+	Blocks                  []pdfTextBlock
+	ContinuationBlocks      []pdfTextBlock
 }
 
 type pdfTextBlock struct {
