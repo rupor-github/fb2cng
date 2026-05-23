@@ -102,6 +102,22 @@ func applyPDFPseudoContentToBlocks(blocks []pdfTextBlock, resolver *pdfStyleReso
 	return out
 }
 
+func applyPDFPseudoContentToPrintedFootnotes(
+	footnotes map[string]pdfPrintedFootnote,
+	resolver *pdfStyleResolver,
+) map[string]pdfPrintedFootnote {
+	if resolver == nil || len(resolver.pseudoContent) == 0 || len(footnotes) == 0 {
+		return footnotes
+	}
+	out := make(map[string]pdfPrintedFootnote, len(footnotes))
+	for id, footnote := range footnotes {
+		footnote.Blocks = applyPDFPseudoContentToBlocks(footnote.Blocks, resolver)
+		footnote.ContinuationBlocks = applyPDFPseudoContentToBlocks(footnote.ContinuationBlocks, resolver)
+		out[id] = footnote
+	}
+	return out
+}
+
 func applyPDFPseudoContentToInlineRuns(runs []pdfInlineRun, resolver *pdfStyleResolver) []pdfInlineRun {
 	out, _ := applyPDFPseudoContentToInlineRunsChanged(runs, resolver)
 	return out

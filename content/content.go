@@ -68,13 +68,14 @@ type Content struct {
 	ScreenWidth             int                  // config: target screen width for image sizing
 	ScreenHeight            int                  // config: target screen height for image sizing
 
-	Book           *fb2.FictionBook
-	CoverID        string
-	FootnotesIndex fb2.FootnoteRefs
-	ImagesIndex    fb2.BookImages
-	UsedImageIDs   map[string]bool
-	IDsIndex       fb2.IDIndex
-	LinksRevIndex  fb2.ReverseLinkIndex
+	Book                   *fb2.FictionBook
+	CoverID                string
+	FootnotesIndex         fb2.FootnoteRefs
+	FootnoteOriginalTitles map[string]*fb2.Title
+	ImagesIndex            fb2.BookImages
+	UsedImageIDs           map[string]bool
+	IDsIndex               fb2.IDIndex
+	LinksRevIndex          fb2.ReverseLinkIndex
 
 	Splitter *text.Splitter
 	Hyphen   *text.Hyphenator
@@ -96,6 +97,48 @@ type Content struct {
 	pageRuneCounter     int                       // current rune count
 	TotalPages          int                       // current page number
 	PageMapIndex        map[string][]PageMapEntry // filename -> page entries in that file
+}
+
+func collectPDFPrintedFootnoteOriginalTitles(
+	outputFormat common.OutputFmt,
+	mode common.FootnotesMode,
+	book *fb2.FictionBook,
+	footnotes fb2.FootnoteRefs,
+) map[string]*fb2.Title {
+	if outputFormat != common.OutputFmtPdf || !mode.IsFloat() || book == nil || len(footnotes) == 0 {
+		return nil
+	}
+
+	titles := make(map[string]*fb2.Title)
+	for id, ref := range footnotes {
+		section := footnoteSectionByRef(book, ref)
+		if section == nil || section.Title == nil || footnoteTitleLooksGenerated(section.Title, id) {
+			continue
+		}
+		titles[id] = section.Title
+	}
+	if len(titles) == 0 {
+		return nil
+	}
+	return titles
+}
+
+func footnoteSectionByRef(book *fb2.FictionBook, ref fb2.FootnoteRef) *fb2.Section {
+	if book == nil || ref.BodyIdx < 0 || ref.BodyIdx >= len(book.Bodies) {
+		return nil
+	}
+	body := &book.Bodies[ref.BodyIdx]
+	if ref.SectionIdx < 0 || ref.SectionIdx >= len(body.Sections) {
+		return nil
+	}
+	return &body.Sections[ref.SectionIdx]
+}
+
+func footnoteTitleLooksGenerated(title *fb2.Title, id string) bool {
+	if title == nil {
+		return true
+	}
+	return strings.TrimSpace(title.AsTOCText("")) == "~ "+strings.TrimSpace(id)+" ~"
 }
 
 // Prepare reads, parses, and prepares FB2 content for conversion.
@@ -220,6 +263,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 
 	// Normalize footnote bodies and build footnote index
 	book, footnotes := book.NormalizeFootnoteBodies(log)
+	footnoteOriginalTitles := collectPDFPrintedFootnoteOriginalTitles(outputFormat, env.Cfg.Document.Footnotes.Mode, book, footnotes)
 	// For floatRenumbered mode, renumber footnotes and update labels
 	if env.Cfg.Document.Footnotes.Mode == common.FootnotesModeFloatRenumbered {
 		book, footnotes = book.NormalizeFootnoteLabels(footnotes, env.Cfg.Document.Footnotes.LabelTemplate, log)
@@ -260,6 +304,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 		Book:                    book,
 		CoverID:                 coverID,
 		FootnotesIndex:          footnotes,
+		FootnoteOriginalTitles:  footnoteOriginalTitles,
 		ImagesIndex:             imagesIndex,
 		UsedImageIDs:            make(map[string]bool),
 		IDsIndex:                ids,

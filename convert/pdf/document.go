@@ -25,6 +25,7 @@ func pageSizePoints(screen config.ScreenConfig) (float64, float64, error) {
 
 func buildPDFDocument(doc pdfDocumentSpec) ([]byte, error) {
 	doc.Blocks = applyPDFPseudoContentToBlocks(doc.Blocks, doc.Styles)
+	doc.PrintedFootnotes = applyPDFPseudoContentToPrintedFootnotes(doc.PrintedFootnotes, doc.Styles)
 
 	writer := docwriter.NewWriter(pdfVersion)
 

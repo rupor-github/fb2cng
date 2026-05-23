@@ -47,7 +47,12 @@ func collectPDFContent(c *content.Content, cfg *config.DocumentConfig) (pdfConte
 	blocks, toc = insertAnnotationPageBlocks(blocks, toc, c, cfg)
 	blocks = insertTOCPageBlocks(blocks, c, toc, cfg)
 	debugPlan.TOC = pdfDebugStructureTOCEntries(toc)
-	return pdfContentPlan{Blocks: blocks, TOC: toc, DebugPlan: debugPlan}, nil
+	return pdfContentPlan{
+		Blocks:           blocks,
+		TOC:              toc,
+		PrintedFootnotes: buildPDFPrintedFootnoteBlocks(c),
+		DebugPlan:        debugPlan,
+	}, nil
 }
 
 func pdfDebugStructurePlanFromPlan(plan *structure.Plan, cfg *config.DocumentConfig) pdfDebugStructurePlan {
