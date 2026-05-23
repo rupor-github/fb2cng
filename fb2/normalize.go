@@ -212,9 +212,6 @@ func (fb *FictionBook) NormalizeFootnoteLabels(footnotesIndex FootnoteRefs, temp
 			// Update footnote section title
 			section.Title = createFootnoteLabelTitle(displayText, section.Lang)
 
-			log.Debug("Renumbered footnote",
-				zap.String("id", section.ID),
-				zap.String("label", displayText))
 		}
 	}
 
@@ -365,7 +362,6 @@ func (fb *FictionBook) assignSectionIDs(section *Section, path []any, existingID
 					Type: "section-generated",
 					Path: path,
 				}
-				log.Debug("Generated section id", zap.String("ID", candidateID))
 				break
 			}
 		}
