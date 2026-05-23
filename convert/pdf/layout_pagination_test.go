@@ -41,6 +41,48 @@ func TestLayoutPDFPagesKeepsHeadingWithNextParagraph(t *testing.T) {
 	}
 }
 
+func TestLayoutPDFPagesAppliesPerPageBottomReserve(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	blocks := []pdfTextBlock{
+		{Kind: pdfBlockParagraph, Text: "One"},
+		{Kind: pdfBlockParagraph, Text: "Two"},
+		{Kind: pdfBlockParagraph, Text: "Three"},
+	}
+	withoutReserve, _, err := layoutPDFPages(pdfDocumentSpec{PageWidth: 220, PageHeight: 130, Blocks: blocks}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages(without reserve) error = %v", err)
+	}
+	if len(withoutReserve) != 1 || !strings.Contains(pageText(withoutReserve[0]), "Three") {
+		t.Fatalf("without reserve pages = %#v, want all text on first page", withoutReserve)
+	}
+
+	withReserve, _, err := layoutPDFPages(pdfDocumentSpec{PageWidth: 220, PageHeight: 130, Blocks: blocks, PageBottomReserves: []float64{28}}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages(with reserve) error = %v", err)
+	}
+	if len(withReserve) != 2 {
+		t.Fatalf("with reserve pages = %d, want 2", len(withReserve))
+	}
+	if got := pageText(withReserve[0]); !strings.Contains(got, "One") || !strings.Contains(got, "Two") || strings.Contains(got, "Three") {
+		t.Fatalf("reserved first page text = %q, want One/Two only", got)
+	}
+	if got := pageText(withReserve[1]); !strings.Contains(got, "Three") {
+		t.Fatalf("reserved second page text = %q, want Three", got)
+	}
+}
+
+func TestPDFReservedContentBottomClampsToLeaveTextArea(t *testing.T) {
+	if got := pdfReservedContentBottom(24, 86, 0); got != 24 {
+		t.Fatalf("bottom without reserve = %v, want 24", got)
+	}
+	if got := pdfReservedContentBottom(24, 86, 1000); got >= 86 {
+		t.Fatalf("bottom with huge reserve = %v, want below top", got)
+	}
+}
+
 func TestLayoutPDFPagesAvoidsParagraphWidowOrphanSplit(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {

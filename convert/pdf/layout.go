@@ -113,9 +113,16 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 	rootlessContentLeft, rootlessContentRight, _, _ := pdfPageContentMarginsWithoutRootHorizontal(doc, styles, margin)
 	contentWidth := max(doc.PageWidth-contentLeft-contentRight, 12)
 	rootlessContentWidth := max(doc.PageWidth-rootlessContentLeft-rootlessContentRight, 12)
+	pageBottom := func(pageIndex int) float64 {
+		reserve := 0.0
+		if pageIndex >= 0 && pageIndex < len(doc.PageBottomReserves) {
+			reserve = doc.PageBottomReserves[pageIndex]
+		}
+		return pdfReservedContentBottom(contentBottom, doc.PageHeight-contentTop, reserve)
+	}
 	page := addPage()
 	top := doc.PageHeight - contentTop
-	bottom := contentBottom
+	bottom := pageBottom(len(pages) - 1)
 	y := top
 	pageHasText := false
 	previousRenderedImage := false
@@ -124,6 +131,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 	newTextPage := func() {
 		titleGroup.reset()
 		page = addPage()
+		bottom = pageBottom(len(pages) - 1)
 		y = top
 		pageHasText = false
 		previousRenderedImage = false
@@ -538,6 +546,17 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 		pages = pages[:len(pages)-1]
 	}
 	return pages, used, nil
+}
+
+func pdfReservedContentBottom(contentBottom float64, top float64, reserve float64) float64 {
+	if reserve <= 0 {
+		return contentBottom
+	}
+	maxBottom := top - pdfBaseLineHeight
+	if maxBottom <= contentBottom {
+		return contentBottom
+	}
+	return min(contentBottom+reserve, maxBottom)
 }
 
 func pdfEffectiveParagraphLineHeight(style paragraphStyle) float64 {

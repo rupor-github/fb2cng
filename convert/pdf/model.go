@@ -7,27 +7,28 @@ import (
 )
 
 type pdfDocumentSpec struct {
-	PageWidth        float64
-	PageHeight       float64
-	ScreenWidthPx    int
-	ScreenHeightPx   int
-	ScreenDPI        int
-	Title            string
-	Author           string
-	Subject          string
-	Keywords         string
-	Blocks           []pdfTextBlock
-	TOC              []*structure.TOCEntry
-	PrintedFootnotes map[string]pdfPrintedFootnote
-	DebugPlan        pdfDebugStructurePlan
-	Content          *content.Content
-	Styles           *pdfStyleResolver
-	Images           fb2.BookImages
-	CoverID          string
-	Hyphenator       paragraphHyphenator
-	Fonts            *pdfFontRegistry
-	Debug            bool
-	WorkDir          string
+	PageWidth          float64
+	PageHeight         float64
+	ScreenWidthPx      int
+	ScreenHeightPx     int
+	ScreenDPI          int
+	Title              string
+	Author             string
+	Subject            string
+	Keywords           string
+	Blocks             []pdfTextBlock
+	TOC                []*structure.TOCEntry
+	PrintedFootnotes   map[string]pdfPrintedFootnote
+	PageBottomReserves []float64
+	DebugPlan          pdfDebugStructurePlan
+	Content            *content.Content
+	Styles             *pdfStyleResolver
+	Images             fb2.BookImages
+	CoverID            string
+	Hyphenator         paragraphHyphenator
+	Fonts              *pdfFontRegistry
+	Debug              bool
+	WorkDir            string
 }
 
 type pdfBlockKind int
