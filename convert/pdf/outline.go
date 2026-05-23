@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"fbc/convert/pdf/docwriter"
-	"fbc/convert/structure"
+	"fbc/convert/pdf/structure"
 )
 
 type pdfOutlines struct {

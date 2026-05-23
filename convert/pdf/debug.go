@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"fbc/convert/structure"
+	"fbc/convert/pdf/structure"
 )
 
 type pdfDebugStructurePlan struct {

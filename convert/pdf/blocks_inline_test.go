@@ -5,7 +5,7 @@ import (
 
 	"fbc/common"
 	"fbc/content"
-	"fbc/convert/structure"
+	"fbc/convert/pdf/structure"
 	"fbc/fb2"
 )
 

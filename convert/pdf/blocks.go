@@ -6,7 +6,7 @@ import (
 	"fbc/common"
 	"fbc/config"
 	"fbc/content"
-	"fbc/convert/structure"
+	"fbc/convert/pdf/structure"
 	"fbc/convert/tocnav"
 	"fbc/fb2"
 )

@@ -2,7 +2,7 @@ package pdf
 
 import (
 	"fbc/content"
-	"fbc/convert/structure"
+	"fbc/convert/pdf/structure"
 	"fbc/fb2"
 )
 
