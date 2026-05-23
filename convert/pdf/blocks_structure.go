@@ -214,6 +214,7 @@ func appendTitleBlocksFull(blocks *[]pdfTextBlock, c *content.Content, title *fb
 		text, links := paragraphTextAndLinks(item.Paragraph)
 		runs := paragraphInlineRunsWithBacklinks(item.Paragraph, c, pdfRegisterDefaultFootnoteBacklinks(c, styleClasses, contextClasses))
 		classes := joinStyleClasses(item.Paragraph.Style, styleClasses, positionClass)
+		runs, links = pdfDisablePrintedFootnoteLinks(c, classes, contextClasses, runs, links)
 		if prevWasImageOnlyHeadingParagraph {
 			classes = joinStyleClasses(classes, pdfStyleTitleAfterImage)
 		}
@@ -475,6 +476,7 @@ func appendParagraphBlockFull(blocks *[]pdfTextBlock, c *content.Content, kind p
 		styleClasses = joinStyleClasses(styleClasses, pdfStyleCode)
 	}
 	finalStyleClasses := joinStyleClasses(paragraph.Style, styleClasses)
+	runs, links = pdfDisablePrintedFootnoteLinks(c, finalStyleClasses, contextClasses, runs, links)
 	if kind == pdfBlockParagraph && hasPDFStyleClass(finalStyleClasses, "has-dropcap") && !paragraphIsCodeBlock(paragraph) {
 		runs = addPDFDropcapInlineRun(runs)
 	}

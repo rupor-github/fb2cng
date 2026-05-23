@@ -148,7 +148,10 @@ func pdfEndsPseudoContentGroup(runs []pdfInlineRun, index int, class string) boo
 }
 
 func pdfPseudoContentSameGroup(left pdfInlineRun, right pdfInlineRun, class string) bool {
-	return left.LinkHref == right.LinkHref && hasPDFStyleClass(left.StyleClasses, class) && hasPDFStyleClass(right.StyleClasses, class)
+	return left.LinkHref == right.LinkHref &&
+		left.FootnoteID == right.FootnoteID &&
+		hasPDFStyleClass(left.StyleClasses, class) &&
+		hasPDFStyleClass(right.StyleClasses, class)
 }
 
 func slicesClone[S ~[]E, E any](s S) S {

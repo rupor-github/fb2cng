@@ -58,6 +58,7 @@ type (
 		BodyNames        []string             `yaml:"bodies" validate:"dive,required"`
 		BacklinkTemplate string               `yaml:"backlink_template" validate:"gt=0"`
 		MoreParagraphs   DoubleQuoteString    `yaml:"more_paragraphs" validate:"gt=0"`
+		Continuation     DoubleQuoteString    `yaml:"continuation" validate:"gt=0"`
 		LabelTemplate    string               `yaml:"label_template" validate:"required_if=Mode 2"`
 	}
 

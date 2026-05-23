@@ -7,8 +7,24 @@ import (
 	"fbc/common"
 	"fbc/config"
 	"fbc/content"
+	"fbc/convert/pdf/structure"
 	"fbc/fb2"
 )
+
+func findPDFTOCEntry(entries []*structure.TOCEntry, title string) *structure.TOCEntry {
+	for _, entry := range entries {
+		if entry == nil {
+			continue
+		}
+		if entry.Title == title {
+			return entry
+		}
+		if found := findPDFTOCEntry(entry.Children, title); found != nil {
+			return found
+		}
+	}
+	return nil
+}
 
 func TestCollectPDFContentAddsAnnotationPage(t *testing.T) {
 	book := &fb2.FictionBook{
@@ -377,6 +393,48 @@ func TestCollectTextBlocksUsesFootnoteSectionSemantics(t *testing.T) {
 	}
 	if !foundTitle || !foundBody {
 		t.Fatalf("expected footnote title/body blocks, got %#v", blocks)
+	}
+}
+
+func TestCollectTextBlocksPDFPrintedFootnotesSkipNormalFlowBody(t *testing.T) {
+	book := &fb2.FictionBook{Bodies: []fb2.Body{
+		{
+			Kind: fb2.BodyMain,
+			Sections: []fb2.Section{{
+				ID:    "chapter-1",
+				Title: pdfTitleFromStrings("Chapter 1"),
+			}},
+		},
+		{
+			Kind:  fb2.BodyFootnotes,
+			Name:  "notes",
+			Title: pdfTitleFromStrings("Notes"),
+			Sections: []fb2.Section{{
+				ID:    "note-1",
+				Title: pdfTitleFromStrings("1"),
+				Content: []fb2.FlowItem{{
+					Kind:      fb2.FlowParagraph,
+					Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Footnote body."}}},
+				}},
+			}},
+		},
+	}}
+
+	plan, err := collectPDFContent(&content.Content{
+		Book:          book,
+		OutputFormat:  common.OutputFmtPdf,
+		FootnotesMode: common.FootnotesModeFloat,
+	}, nil)
+	if err != nil {
+		t.Fatalf("collectPDFContent() error = %v", err)
+	}
+	for _, block := range plan.Blocks {
+		if block.Text == "Notes" || block.Text == "1" || block.Text == "Footnote body." {
+			t.Fatalf("PDF printed footnotes should skip normal-flow footnote body block: %#v", block)
+		}
+	}
+	if findPDFTOCEntry(plan.TOC, "Notes") != nil {
+		t.Fatalf("PDF printed footnotes should skip footnote TOC entry: %#v", plan.TOC)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"fbc/common"
 	"fbc/content"
 	"fbc/fb2"
 )
@@ -221,6 +222,9 @@ func (b *builder) collectInlineSectionTOC(section *fb2.Section, depth int, title
 }
 
 func (b *builder) addFootnoteBodies() {
+	if printedFootnotesEnabled(b.c) {
+		return
+	}
 	for i, body := range b.footnoteBodies {
 		id := fmt.Sprintf("a-notes-%d", i)
 		title := body.AsTitleText(body.Name)
@@ -259,4 +263,8 @@ func (b *builder) addFootnoteBodies() {
 
 		b.plan.TOC = append(b.plan.TOC, entry)
 	}
+}
+
+func printedFootnotesEnabled(c *content.Content) bool {
+	return c != nil && c.OutputFormat == common.OutputFmtPdf && c.FootnotesMode.IsFloat()
 }

@@ -278,6 +278,9 @@ func applyInlineSegmentStyle(style pdfInlineRun, seg *fb2.InlineSegment, c *cont
 	case fb2.InlineLink:
 		style.StyleClasses = joinStyleClasses(style.StyleClasses, pdfLinkStyleClass(seg, c))
 		style.LinkHref = strings.TrimSpace(seg.Href)
+		if targetID, ok := pdfFootnoteTargetIDFromHref(c, style.LinkHref); ok {
+			style.FootnoteID = targetID
+		}
 		if registerBacklinks {
 			style.AnchorID = pdfFootnoteBacklinkAnchorID(seg, c)
 		}
@@ -331,6 +334,7 @@ func sameInlineStyle(a, b pdfInlineRun) bool {
 		a.ContextClasses == b.ContextClasses &&
 		a.LinkHref == b.LinkHref &&
 		a.AnchorID == b.AnchorID &&
+		a.FootnoteID == b.FootnoteID &&
 		a.ImageID == b.ImageID &&
 		a.Bold == b.Bold &&
 		a.Italic == b.Italic &&

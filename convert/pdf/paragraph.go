@@ -107,6 +107,7 @@ type paragraphLineFragment struct {
 	BaselineShift float64
 	LinkHref      string
 	AnchorID      string
+	FootnoteID    string
 	ImageID       string
 	ImageHeight   float64
 }

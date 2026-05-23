@@ -73,6 +73,7 @@ func layoutPDFTable(doc pdfDocumentSpec, resolver *pdfStyleResolver, block pdfTe
 				runs = cellRuns
 			}
 		}
+		runs, links = pdfDisablePrintedFootnoteLinks(doc.Content, block.StyleClasses, block.ContextClasses, runs, links)
 		runs = applyPDFPseudoContentToInlineRuns(runs, tableResolver)
 		runs = inlineRunsWithContext(runs, pdfStyleTable)
 		cellDoc := doc

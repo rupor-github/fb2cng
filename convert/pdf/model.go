@@ -105,6 +105,7 @@ type pdfInlineRun struct {
 	ContextClasses string
 	LinkHref       string
 	AnchorID       string
+	FootnoteID     string
 	ImageID        string
 	Bold           bool
 	Italic         bool
@@ -151,6 +152,7 @@ type pdfPageLineFragment struct {
 	BaselineShift float64
 	LinkHref      string
 	AnchorID      string
+	FootnoteID    string
 	ImageID       string
 	ImageHeight   float64
 }

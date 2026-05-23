@@ -315,6 +315,46 @@ func TestBuildPlan_FootnoteBodiesAppendedAfterMainContent(t *testing.T) {
 	}
 }
 
+func TestBuildPlan_PDFPrintedFootnoteBodiesOmitted(t *testing.T) {
+	book := &fb2.FictionBook{
+		Description: fb2.Description{
+			DocumentInfo: fb2.DocumentInfo{ID: "test-pdf-footnotes-float"},
+		},
+		Bodies: []fb2.Body{
+			{
+				Kind: fb2.BodyMain,
+				Name: "body",
+				Sections: []fb2.Section{{
+					ID:    "chap1",
+					Title: simpleTitle("Chapter 1"),
+				}},
+			}, {
+				Kind:  fb2.BodyFootnotes,
+				Name:  "notes",
+				Title: simpleTitle("Notes"),
+				Sections: []fb2.Section{{
+					ID:    "n1",
+					Title: simpleTitle("1"),
+				}},
+			},
+		},
+	}
+	c := &content.Content{Book: book, OutputFormat: common.OutputFmtPdf, FootnotesMode: common.FootnotesModeFloat}
+
+	plan, err := BuildPlan(c)
+	if err != nil {
+		t.Fatalf("BuildPlan() error = %v", err)
+	}
+
+	want := []unitSummary{{Kind: UnitSection, ID: "chap1", Depth: 1, TitleDepth: 1}}
+	if got := summarizeUnits(plan); !reflect.DeepEqual(got, want) {
+		t.Fatalf("units = %#v, want %#v", got, want)
+	}
+	if findTOCEntry(plan.TOC, "Notes") != nil {
+		t.Fatalf("PDF printed footnotes should omit notes TOC entry, got %#v", plan.TOC)
+	}
+}
+
 func TestBuildPlan_FootnoteBodyTOC_FloatModeOmitsChildren(t *testing.T) {
 	book := &fb2.FictionBook{
 		Description: fb2.Description{

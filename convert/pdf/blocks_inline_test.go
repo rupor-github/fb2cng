@@ -112,6 +112,63 @@ func TestParagraphInlineRunsClassifyLinks(t *testing.T) {
 	}
 }
 
+func TestPDFPrintedFootnoteReferencesAreStyledButNotClickable(t *testing.T) {
+	c := &content.Content{
+		OutputFormat:  common.OutputFmtPdf,
+		FootnotesMode: common.FootnotesModeFloat,
+		FootnotesIndex: fb2.FootnoteRefs{
+			"n1": {BodyIdx: 1, SectionIdx: 0},
+		},
+		Book: &fb2.FictionBook{Bodies: []fb2.Body{{
+			Kind: fb2.BodyMain,
+			Sections: []fb2.Section{{Content: []fb2.FlowItem{{
+				Kind: fb2.FlowParagraph,
+				Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
+					{Text: "Body "},
+					{Kind: fb2.InlineLink, Href: "#n1", Children: []fb2.InlineSegment{{Text: "1"}}},
+				}},
+			}}}},
+		}}},
+	}
+
+	blocks, err := collectTextBlocks(c)
+	if err != nil {
+		t.Fatalf("collectTextBlocks() error = %v", err)
+	}
+	blocks = textBlocksOnly(blocks)
+	if len(blocks) != 1 {
+		t.Fatalf("blocks = %#v, want one main-text paragraph", blocks)
+	}
+	block := blocks[0]
+	if len(block.Links) != 0 {
+		t.Fatalf("printed footnote main-text Links = %#v, want none", block.Links)
+	}
+	if len(block.Runs) != 2 || block.Runs[1].StyleClasses != pdfStyleLinkFootnote || block.Runs[1].LinkHref != "" || block.Runs[1].FootnoteID != "n1" {
+		t.Fatalf("printed footnote run = %#v, want styled non-clickable ref with metadata", block.Runs)
+	}
+	if len(c.BackLinkIndex) != 0 {
+		t.Fatalf("printed footnotes should not register backlinks, got %#v", c.BackLinkIndex)
+	}
+}
+
+func TestPDFPrintedFootnotePseudoContentDecoratesNonClickableRefs(t *testing.T) {
+	resolver := &pdfStyleResolver{pseudoContent: map[string]pdfPseudoElementContent{
+		pdfStyleLinkFootnote: {Before: "[", After: "]"},
+	}}
+	blocks := applyPDFPseudoContentToBlocks([]pdfTextBlock{{
+		Kind: pdfBlockParagraph,
+		Text: "Body 1",
+		Runs: []pdfInlineRun{
+			{Text: "Body "},
+			{Text: "1", StyleClasses: pdfStyleLinkFootnote, FootnoteID: "n1"},
+		},
+	}}, resolver)
+
+	if got := blocks[0].Runs[1]; got.Text != "[1]" || got.LinkHref != "" || got.FootnoteID != "n1" {
+		t.Fatalf("decorated run = %#v, want non-clickable footnote metadata preserved", got)
+	}
+}
+
 func TestPDFDefaultModeFootnoteBacklinks(t *testing.T) {
 	c := &content.Content{
 		OutputFormat:     common.OutputFmtPdf,
