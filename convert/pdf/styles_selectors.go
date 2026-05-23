@@ -145,15 +145,22 @@ func pdfHeadingStyleName(depth int) string {
 	return pdfStyleSectionTitleHeader
 }
 
-func (r *pdfStyleResolver) applyStylesheet(sheet *css.Stylesheet) {
+type pdfStylesheetStats struct {
+	Rules  int
+	Styles int
+}
+
+func (r *pdfStyleResolver) applyStylesheet(sheet *css.Stylesheet) pdfStylesheetStats {
 	if sheet == nil {
-		return
+		return pdfStylesheetStats{}
 	}
 	r.detectDropcapPatterns(sheet)
+	var stats pdfStylesheetStats
 	for _, item := range sheet.Items {
 		switch {
 		case item.Rule != nil:
-			r.applyRule(*item.Rule)
+			stats.Rules++
+			stats.Styles += r.applyRule(*item.Rule)
 		case item.MediaBlock != nil:
 			matched := item.MediaBlock.Query.EvaluateContext(css.MediaContext{KF8: true, ET: true, FBCPDF: true})
 			r.tracer.traceMedia(item.MediaBlock.Query.Raw, matched, len(item.MediaBlock.Rules))
@@ -161,10 +168,12 @@ func (r *pdfStyleResolver) applyStylesheet(sheet *css.Stylesheet) {
 				continue
 			}
 			for _, rule := range item.MediaBlock.Rules {
-				r.applyRule(rule)
+				stats.Rules++
+				stats.Styles += r.applyRule(rule)
 			}
 		}
 	}
+	return stats
 }
 
 func (r *pdfStyleResolver) detectDropcapPatterns(sheet *css.Stylesheet) {
@@ -218,11 +227,15 @@ func pdfStylesheetRules(sheet *css.Stylesheet) []css.Rule {
 	return rules
 }
 
-func (r *pdfStyleResolver) applyRule(rule css.Rule) {
+func (r *pdfStyleResolver) applyRule(rule css.Rule) int {
+	if rule.Selector.Pseudo != css.PseudoNone {
+		r.tracer.traceIgnoredRule(rule.Selector, rule.Properties)
+		return 0
+	}
 	mapped := pdfSelectorStyleNames(rule.Selector)
 	if len(mapped) == 0 {
 		r.tracer.traceIgnoredRule(rule.Selector, rule.Properties)
-		return
+		return 0
 	}
 	r.tracer.traceRule(rule.Selector, rule.Properties, mapped)
 	for _, name := range mapped {
@@ -235,6 +248,7 @@ func (r *pdfStyleResolver) applyRule(rule css.Rule) {
 		r.tracer.traceStyleUpdate(name, before, style)
 		r.styles[name] = style
 	}
+	return len(mapped)
 }
 
 func pdfStyleSeedWithoutExplicitFlags(style pdfBlockResolvedStyle) pdfBlockResolvedStyle {

@@ -25,7 +25,7 @@ func newPDFStyleResolver(book *fb2.FictionBook, log *zap.Logger, tracers ...*pdf
 	}
 	parser := css.NewParser(log)
 	processed := 0
-	warnings := 0
+	var combinedCSS strings.Builder
 	for i := range book.Stylesheets {
 		stylesheet := &book.Stylesheets[i]
 		if stylesheet.Type != "" && !strings.EqualFold(stylesheet.Type, "text/css") {
@@ -35,12 +35,27 @@ func newPDFStyleResolver(book *fb2.FictionBook, log *zap.Logger, tracers ...*pdf
 			continue
 		}
 		processed++
-		parsed := parser.Parse([]byte(stylesheet.Data), "pdf stylesheet")
+		combinedCSS.WriteString(stylesheet.Data)
+		combinedCSS.WriteByte('\n')
+	}
+	warnings := 0
+	if combinedCSS.Len() > 0 {
+		parsed := parser.Parse([]byte(combinedCSS.String()), "combined stylesheets")
 		warnings += len(parsed.Warnings)
+		pseudoWarnings := resolver.extractPseudoContent(parsed)
+		warnings += len(pseudoWarnings)
+		stats := resolver.applyStylesheet(parsed)
+		log.Debug("CSS styles loaded",
+			zap.Int("rules", stats.Rules),
+			zap.Int("styles", stats.Styles),
+			zap.Int("warnings", warnings),
+			zap.Int("pseudo_content", len(resolver.pseudoContent)))
 		for _, warning := range parsed.Warnings {
 			log.Debug("CSS conversion warning", zap.String("warning", warning))
 		}
-		resolver.applyStylesheet(parsed)
+		for _, warning := range pseudoWarnings {
+			log.Debug("CSS conversion warning", zap.String("warning", warning))
+		}
 	}
 	log.Info("CSS stylesheets processed", zap.Int("stylesheets", processed), zap.Int("warnings", warnings))
 	resolver.applyPDFStyleAdjustments()

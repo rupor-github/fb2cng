@@ -73,6 +73,7 @@ func layoutPDFTable(doc pdfDocumentSpec, resolver *pdfStyleResolver, block pdfTe
 				runs = cellRuns
 			}
 		}
+		runs = applyPDFPseudoContentToInlineRuns(runs, tableResolver)
 		runs = inlineRunsWithContext(runs, pdfStyleTable)
 		cellDoc := doc
 		cellDoc.Styles = tableResolver
@@ -219,9 +220,12 @@ func (r *pdfStyleResolver) scaled(scale float64) *pdfStyleResolver {
 		return r
 	}
 	out := &pdfStyleResolver{
-		styles:   make(map[string]pdfBlockResolvedStyle, len(r.styles)),
-		defaults: make(map[string]pdfBlockResolvedStyle, len(r.defaults)),
-		tracer:   r.tracer,
+		styles:        make(map[string]pdfBlockResolvedStyle, len(r.styles)),
+		defaults:      make(map[string]pdfBlockResolvedStyle, len(r.defaults)),
+		dropcaps:      r.dropcaps,
+		pseudoContent: r.pseudoContent,
+		log:           r.log,
+		tracer:        r.tracer,
 	}
 	for name, style := range r.styles {
 		out.styles[name] = pdfScaleResolvedStyle(style, scale)
