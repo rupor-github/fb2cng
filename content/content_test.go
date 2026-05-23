@@ -1280,32 +1280,6 @@ func TestContent_KoboSpanSet(t *testing.T) {
 	}
 }
 
-func TestCollectPDFPrintedFootnoteOriginalTitles(t *testing.T) {
-	originalTitle := &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Original note"}}}}}}
-	book := &fb2.FictionBook{Bodies: []fb2.Body{{
-		Kind: fb2.BodyFootnotes,
-		Sections: []fb2.Section{
-			{ID: "n1", Title: originalTitle},
-			{ID: "n2", Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "~ n2 ~"}}}}}}},
-		},
-	}}}
-	footnotes := fb2.FootnoteRefs{
-		"n1": {BodyIdx: 0, SectionIdx: 0},
-		"n2": {BodyIdx: 0, SectionIdx: 1},
-	}
-
-	titles := collectPDFPrintedFootnoteOriginalTitles(common.OutputFmtPdf, common.FootnotesModeFloatRenumbered, book, footnotes)
-	if len(titles) != 1 || titles["n1"] != originalTitle {
-		t.Fatalf("titles = %#v, want only original n1 title", titles)
-	}
-	if titles["n2"] != nil {
-		t.Fatalf("generated title should be omitted, got %#v", titles["n2"])
-	}
-	if got := collectPDFPrintedFootnoteOriginalTitles(common.OutputFmtEpub3, common.FootnotesModeFloatRenumbered, book, footnotes); got != nil {
-		t.Fatalf("non-PDF original titles = %#v, want nil", got)
-	}
-}
-
 func TestContent_AddFootnoteBackLinkRef(t *testing.T) {
 	c, _ := setupTestContent(t)
 	c.BackLinkIndex = make(map[string][]BackLinkRef)

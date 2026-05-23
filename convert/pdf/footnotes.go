@@ -73,8 +73,8 @@ func pdfPrintedFootnoteTitle(
 	continuation bool,
 ) *fb2.Title {
 	var title *fb2.Title
-	if c != nil && !pdfTitleEmpty(c.FootnoteOriginalTitles[id]) {
-		title = clonePDFTitle(c.FootnoteOriginalTitles[id])
+	if c != nil && c.FootnotesMode == common.FootnotesModeFloatRenumbered && strings.TrimSpace(ref.DisplayText) != "" {
+		title = pdfSyntheticFootnoteTitle(id, ref, section)
 	} else if section != nil && !pdfTitleEmpty(section.Title) {
 		title = clonePDFTitle(section.Title)
 	} else {

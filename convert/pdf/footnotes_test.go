@@ -52,10 +52,10 @@ func TestBuildPDFPrintedFootnoteBlocksPreservesExistingTitle(t *testing.T) {
 	}
 }
 
-func TestBuildPDFPrintedFootnoteBlocksUsesOriginalTitleBeforeRenumberedLabel(t *testing.T) {
+func TestBuildPDFPrintedFootnoteBlocksUsesRenumberedReferenceTextAsTitle(t *testing.T) {
 	c := testPDFPrintedFootnoteContent(fb2.Section{
 		ID:    "n1",
-		Title: pdfTitleFromStrings("1"),
+		Title: pdfTitleFromStrings("Примечание 17"),
 		Content: []fb2.FlowItem{{
 			Kind:      fb2.FlowParagraph,
 			Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Footnote body."}}},
@@ -63,12 +63,11 @@ func TestBuildPDFPrintedFootnoteBlocksUsesOriginalTitleBeforeRenumberedLabel(t *
 	})
 	c.FootnotesMode = common.FootnotesModeFloatRenumbered
 	c.FootnotesIndex["n1"] = fb2.FootnoteRef{BodyIdx: 0, SectionIdx: 0, NoteNum: 1, DisplayText: "1"}
-	c.FootnoteOriginalTitles = map[string]*fb2.Title{"n1": pdfTitleFromStrings("Translator note")}
 
 	footnotes := buildPDFPrintedFootnoteBlocks(c)
 	note := footnotes["n1"]
-	if len(note.Blocks) == 0 || note.Blocks[0].Text != "Translator note" {
-		t.Fatalf("title block = %#v, want original title instead of renumbered label", note.Blocks)
+	if len(note.Blocks) == 0 || note.Blocks[0].Text != "1" {
+		t.Fatalf("title block = %#v, want actual renumbered reference text", note.Blocks)
 	}
 }
 
