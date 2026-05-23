@@ -63,6 +63,37 @@ func TestAddLinkAnnotationsUsesInlineFragments(t *testing.T) {
 	}
 }
 
+func TestInlineRunAnchorCreatesPDFNamedDestination(t *testing.T) {
+	face, err := builtinFont("serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
+		PageWidth:  240,
+		PageHeight: 160,
+		Styles:     resolver,
+		Blocks: []pdfTextBlock{{
+			Kind:      pdfBlockParagraph,
+			Text:      "Body 1",
+			StyleName: pdfStyleParagraph,
+			Runs: []pdfInlineRun{
+				{Text: "Body "},
+				{Text: "1", StyleClasses: pdfStyleLinkFootnote, LinkHref: "#n1", AnchorID: "ref-n1-1"},
+			},
+		}},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 1 {
+		t.Fatalf("pages = %d, want 1", len(pages))
+	}
+	if len(pages[0].Anchors) != 1 || pages[0].Anchors[0] != "ref-n1-1" {
+		t.Fatalf("anchors = %#v, want ref-n1-1", pages[0].Anchors)
+	}
+}
+
 func TestNamedDestinations(t *testing.T) {
 	got := docwriter.Format(namedDestinations([]pdfPage{
 		{ObjectID: 4, Anchors: []string{"z", "a"}},

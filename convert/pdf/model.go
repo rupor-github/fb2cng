@@ -93,13 +93,17 @@ type pdfTextBlock struct {
 	ImageID                    string
 	Links                      []pdfTextLink
 	Table                      *fb2.Table
+	TableCellRuns              map[pdfTableCellKey][]pdfInlineRun
 }
+
+type pdfTableCellKey [2]int
 
 type pdfInlineRun struct {
 	Text           string
 	StyleClasses   string
 	ContextClasses string
 	LinkHref       string
+	AnchorID       string
 	ImageID        string
 	Bold           bool
 	Italic         bool
@@ -145,6 +149,7 @@ type pdfPageLineFragment struct {
 	Strikethrough bool
 	BaselineShift float64
 	LinkHref      string
+	AnchorID      string
 	ImageID       string
 	ImageHeight   float64
 }

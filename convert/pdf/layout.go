@@ -31,6 +31,11 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 		}
 		page.Anchors = append(page.Anchors, id)
 	}
+	addFragmentAnchors := func(page *pdfPage, line paragraphLine) {
+		for _, fragment := range line.Fragments {
+			addAnchor(page, fragment.AnchorID)
+		}
+	}
 	addInlineImages := func(page *pdfPage, line paragraphLine, x float64, y float64) {
 		currentX := x
 		for i, fragment := range line.Fragments {
@@ -218,6 +223,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 						}
 						addInlineImages(page, line, x, lineY)
 						addLinkAnnotations(page, linkBlock, line, lineSearchStart, x, lineY, cell.Style.Paragraph.FontSize)
+						addFragmentAnchors(page, line)
 						lineSearchStart = nextLineSearchStart(cell.Text, line, lineSearchStart)
 						addLine(page, pdfPageLine{
 							X:                x,
@@ -239,7 +245,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 				}
 				y -= group.Height
 				pageHasText = true
-				previousRenderedImage = false
+				previousRenderedImage = true
 			}
 			y -= style.PaddingBottom + style.SpaceAfter
 			if pdfStyleForcesPageBreakAfter(style) && pageHasText {
@@ -439,6 +445,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 			if dropcap.Fragment.LinkHref != "" {
 				addFragmentLinkAnnotations(page, dropLine, dropcapX, dropcap.BaselineY)
 			}
+			addFragmentAnchors(page, dropLine)
 			addLine(page, pdfPageLine{
 				X:             dropcapX,
 				Y:             dropcap.BaselineY,
@@ -485,6 +492,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 			}
 			addInlineImages(page, line, x, y)
 			addLinkAnnotations(page, block, line, lineSearchStart, x, y, style.Paragraph.FontSize)
+			addFragmentAnchors(page, line)
 			lineSearchStart = nextLineSearchStart(block.Text, line, lineSearchStart)
 			addLine(page, pdfPageLine{
 				X:                x,

@@ -5,6 +5,7 @@ import (
 
 	"fbc/common"
 	"fbc/content"
+	contentText "fbc/content/text"
 	"fbc/fb2"
 )
 
@@ -54,6 +55,33 @@ func appendFootnoteSectionBlocks(blocks *[]pdfTextBlock, c *content.Content, sec
 		appendFlowBlocks(blocks, c, section.Annotation.Items, 1, splitSections, pdfStyleAnnotation, pdfStyleAnnotation, false)
 	}
 	appendFlowBlocks(blocks, c, section.Content, 1, splitSections, pdfStyleFootnote, pdfStyleFootnote, false)
+	appendPDFDefaultFootnoteBacklinkBlock(blocks, c, section.ID)
+}
+
+func appendPDFDefaultFootnoteBacklinkBlock(blocks *[]pdfTextBlock, c *content.Content, sectionID string) {
+	if !pdfDefaultFootnoteBacklinksEnabled(c) || strings.TrimSpace(sectionID) == "" {
+		return
+	}
+	refs := c.BackLinkIndex[sectionID]
+	if len(refs) == 0 {
+		return
+	}
+	backlinkText := strings.TrimSpace(c.BacklinkStr)
+	if backlinkText == "" {
+		return
+	}
+
+	runs := make([]pdfInlineRun, 0, len(refs)*2-1)
+	var text strings.Builder
+	for i, ref := range refs {
+		if i > 0 {
+			runs = append(runs, pdfInlineRun{Text: contentText.NBSP})
+			text.WriteString(contentText.NBSP)
+		}
+		runs = append(runs, pdfInlineRun{Text: backlinkText, StyleClasses: pdfStyleLinkBacklink, LinkHref: "#" + ref.RefID})
+		text.WriteString(backlinkText)
+	}
+	*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockParagraph, Text: text.String(), Runs: runs, StyleName: pdfStyleParagraph})
 }
 
 func appendSectionBlocks(blocks *[]pdfTextBlock, c *content.Content, section *fb2.Section, depth int, splitSections map[string]bool, contextClasses string, stripRootHorizontalMargins bool, endVignettes pdfSectionEndVignetteTransfers) {
@@ -157,7 +185,7 @@ func appendTitleBlocksFull(blocks *[]pdfTextBlock, c *content.Content, title *fb
 			continue
 		}
 		text, links := paragraphTextAndLinks(item.Paragraph)
-		runs := paragraphInlineRuns(item.Paragraph, c)
+		runs := paragraphInlineRunsWithBacklinks(item.Paragraph, c, pdfRegisterDefaultFootnoteBacklinks(c, styleClasses, contextClasses))
 		classes := joinStyleClasses(item.Paragraph.Style, styleClasses, positionClass)
 		if prevWasImageOnlyHeadingParagraph {
 			classes = joinStyleClasses(classes, pdfStyleTitleAfterImage)
@@ -207,9 +235,35 @@ func appendFlowItem(blocks *[]pdfTextBlock, c *content.Content, item *fb2.FlowIt
 		appendCiteBlocks(blocks, c, item.Cite, depth, splitSections, contextClasses, stripRootHorizontalMargins)
 	case fb2.FlowTable:
 		if item.Table != nil && len(item.Table.Rows) > 0 {
-			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockTable, ID: item.Table.ID, Depth: depth, StyleName: pdfStyleTable, StyleClasses: joinStyleClasses(styleClasses, item.Table.Style), ContextClasses: strings.TrimSpace(contextClasses), StripRootHorizontalMargins: stripRootHorizontalMargins, Table: item.Table})
+			block := pdfTextBlock{
+				Kind:                       pdfBlockTable,
+				ID:                         item.Table.ID,
+				Depth:                      depth,
+				StyleName:                  pdfStyleTable,
+				StyleClasses:               joinStyleClasses(styleClasses, item.Table.Style),
+				ContextClasses:             strings.TrimSpace(contextClasses),
+				StripRootHorizontalMargins: stripRootHorizontalMargins,
+				Table:                      item.Table,
+			}
+			if pdfRegisterDefaultFootnoteBacklinks(c, styleClasses, contextClasses) {
+				block.TableCellRuns = pdfTableCellInlineRuns(item.Table, c, true)
+			}
+			*blocks = append(*blocks, block)
 		}
 	}
+}
+
+func pdfTableCellInlineRuns(table *fb2.Table, c *content.Content, registerBacklinks bool) map[pdfTableCellKey][]pdfInlineRun {
+	placedCells, _ := pdfPlacedTableCells(table)
+	if len(placedCells) == 0 {
+		return nil
+	}
+	runs := make(map[pdfTableCellKey][]pdfInlineRun, len(placedCells))
+	for _, placed := range placedCells {
+		paragraph := fb2.Paragraph{Text: placed.Cell.Content}
+		runs[pdfTableCellKey{placed.Row, placed.Col}] = paragraphInlineRunsWithBacklinks(&paragraph, c, registerBacklinks)
+	}
+	return runs
 }
 
 func appendImageBlock(blocks *[]pdfTextBlock, image *fb2.Image, fallbackID string) {
@@ -389,7 +443,7 @@ func appendParagraphBlockFull(blocks *[]pdfTextBlock, c *content.Content, kind p
 		return
 	}
 	text, links := paragraphTextAndLinks(paragraph)
-	runs := paragraphInlineRuns(paragraph, c)
+	runs := paragraphInlineRunsWithBacklinks(paragraph, c, pdfRegisterDefaultFootnoteBacklinks(c, styleClasses, contextClasses))
 	if paragraphIsCodeBlock(paragraph) {
 		styleClasses = joinStyleClasses(styleClasses, pdfStyleCode)
 	}

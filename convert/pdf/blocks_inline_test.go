@@ -112,6 +112,180 @@ func TestParagraphInlineRunsClassifyLinks(t *testing.T) {
 	}
 }
 
+func TestPDFDefaultModeFootnoteBacklinks(t *testing.T) {
+	c := &content.Content{
+		OutputFormat:  common.OutputFmtPdf,
+		FootnotesMode: common.FootnotesModeDefault,
+		BacklinkStr:   "↩",
+		FootnotesIndex: fb2.FootnoteRefs{
+			"n1": {BodyIdx: 1, SectionIdx: 0},
+		},
+		Book: &fb2.FictionBook{Bodies: []fb2.Body{{
+			Kind: fb2.BodyMain,
+			Sections: []fb2.Section{{Content: []fb2.FlowItem{{
+				Kind: fb2.FlowParagraph,
+				Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
+					{Text: "Body "},
+					{Kind: fb2.InlineLink, Href: "#n1", Children: []fb2.InlineSegment{{Text: "1"}}},
+				}},
+			}}}},
+		}, {
+			Kind: fb2.BodyFootnotes,
+			Sections: []fb2.Section{{
+				ID:    "n1",
+				Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "1"}}}}}},
+				Content: []fb2.FlowItem{{
+					Kind:      fb2.FlowParagraph,
+					Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Footnote."}}},
+				}},
+			}},
+		}}},
+	}
+
+	blocks, err := collectTextBlocks(c)
+	if err != nil {
+		t.Fatalf("collectTextBlocks() error = %v", err)
+	}
+	if refs := c.BackLinkIndex["n1"]; len(refs) != 1 || refs[0].RefID != "ref-n1-1" {
+		t.Fatalf("BackLinkIndex[n1] = %#v, want ref-n1-1", refs)
+	}
+
+	var referenceRun *pdfInlineRun
+	var backlinkBlock *pdfTextBlock
+	for i := range blocks {
+		block := &blocks[i]
+		for j := range block.Runs {
+			run := &block.Runs[j]
+			if run.StyleClasses == pdfStyleLinkFootnote && run.LinkHref == "#n1" {
+				referenceRun = run
+			}
+			if run.StyleClasses == pdfStyleLinkBacklink && run.LinkHref == "#ref-n1-1" {
+				backlinkBlock = block
+			}
+		}
+	}
+	if referenceRun == nil || referenceRun.AnchorID != "ref-n1-1" {
+		t.Fatalf("footnote reference run = %#v, want backlink anchor ref-n1-1", referenceRun)
+	}
+	if backlinkBlock == nil {
+		t.Fatalf("blocks = %#v, want backlink paragraph to #ref-n1-1", blocks)
+	}
+	if hasPDFStyleClass(backlinkBlock.StyleClasses, pdfStyleFootnote) {
+		t.Fatalf("backlink block classes = %q, want no footnote paragraph class", backlinkBlock.StyleClasses)
+	}
+}
+
+func TestPDFDefaultModeFootnoteBacklinksAfterTableKeepsTableMargin(t *testing.T) {
+	c := &content.Content{
+		OutputFormat:  common.OutputFmtPdf,
+		FootnotesMode: common.FootnotesModeDefault,
+		BacklinkStr:   "↩",
+		FootnotesIndex: fb2.FootnoteRefs{
+			"n1": {BodyIdx: 1, SectionIdx: 0},
+		},
+		Book: &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{Type: "text/css", Data: "table { margin: 1em auto; } p { margin: 0; }"}}, Bodies: []fb2.Body{{
+			Kind: fb2.BodyMain,
+			Sections: []fb2.Section{{Content: []fb2.FlowItem{{
+				Kind: fb2.FlowTable,
+				Table: &fb2.Table{Rows: []fb2.TableRow{{Cells: []fb2.TableCell{{Content: []fb2.InlineSegment{
+					{Text: "Cell "},
+					{Kind: fb2.InlineLink, Href: "#n1", Children: []fb2.InlineSegment{{Text: "1"}}},
+				}}}}}},
+			}}}},
+		}, {
+			Kind: fb2.BodyFootnotes,
+			Sections: []fb2.Section{{
+				ID: "n1",
+				Content: []fb2.FlowItem{{
+					Kind: fb2.FlowTable,
+					Table: &fb2.Table{Rows: []fb2.TableRow{{Cells: []fb2.TableCell{{Content: []fb2.InlineSegment{
+						{Text: "Footnote table"},
+					}}}}}},
+				}},
+			}},
+		}}},
+	}
+
+	blocks, err := collectTextBlocks(c)
+	if err != nil {
+		t.Fatalf("collectTextBlocks() error = %v", err)
+	}
+	resolver := newPDFStyleResolver(c.Book, nil, nil)
+	styles := resolver.collapsedBlockStyles(blocks)
+	for i := 1; i < len(blocks); i++ {
+		if blocks[i-1].Kind == pdfBlockTable && blocks[i].Kind == pdfBlockParagraph {
+			if styles[i-1].SpaceAfter <= 0 {
+				t.Fatalf("table before backlink SpaceAfter = %v, want positive table margin; block=%#v style=%#v", styles[i-1].SpaceAfter, blocks[i-1], styles[i-1])
+			}
+			return
+		}
+	}
+	t.Fatalf("blocks = %#v, want table followed by backlink paragraph", blocks)
+}
+
+func TestPDFDefaultModeFootnoteBacklinksFromTableCells(t *testing.T) {
+	c := &content.Content{
+		OutputFormat:  common.OutputFmtPdf,
+		FootnotesMode: common.FootnotesModeDefault,
+		BacklinkStr:   "↩",
+		FootnotesIndex: fb2.FootnoteRefs{
+			"n1": {BodyIdx: 1, SectionIdx: 0},
+		},
+		Book: &fb2.FictionBook{Bodies: []fb2.Body{{
+			Kind: fb2.BodyMain,
+			Sections: []fb2.Section{{Content: []fb2.FlowItem{{
+				Kind: fb2.FlowTable,
+				Table: &fb2.Table{Rows: []fb2.TableRow{{Cells: []fb2.TableCell{{Content: []fb2.InlineSegment{
+					{Text: "Cell "},
+					{Kind: fb2.InlineLink, Href: "#n1", Children: []fb2.InlineSegment{{Text: "1"}}},
+				}}}}}},
+			}}}},
+		}, {
+			Kind: fb2.BodyFootnotes,
+			Sections: []fb2.Section{{
+				ID:    "n1",
+				Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "1"}}}}}},
+				Content: []fb2.FlowItem{{
+					Kind:      fb2.FlowParagraph,
+					Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Footnote."}}},
+				}},
+			}},
+		}}},
+	}
+
+	blocks, err := collectTextBlocks(c)
+	if err != nil {
+		t.Fatalf("collectTextBlocks() error = %v", err)
+	}
+	if refs := c.BackLinkIndex["n1"]; len(refs) != 1 || refs[0].RefID != "ref-n1-1" {
+		t.Fatalf("BackLinkIndex[n1] = %#v, want ref-n1-1", refs)
+	}
+
+	var tableBlock *pdfTextBlock
+	var hasBacklink bool
+	for i := range blocks {
+		block := &blocks[i]
+		if block.Kind == pdfBlockTable {
+			tableBlock = block
+		}
+		for _, run := range block.Runs {
+			if run.StyleClasses == pdfStyleLinkBacklink && run.LinkHref == "#ref-n1-1" {
+				hasBacklink = true
+			}
+		}
+	}
+	if tableBlock == nil {
+		t.Fatalf("blocks = %#v, want table block", blocks)
+	}
+	cellRuns := tableBlock.TableCellRuns[pdfTableCellKey{0, 0}]
+	if len(cellRuns) != 2 || cellRuns[1].AnchorID != "ref-n1-1" {
+		t.Fatalf("table cell runs = %#v, want backlink anchor ref-n1-1", cellRuns)
+	}
+	if !hasBacklink {
+		t.Fatalf("blocks = %#v, want backlink paragraph to #ref-n1-1", blocks)
+	}
+}
+
 func TestParagraphInlineRunsClassifyFootnotesByContent(t *testing.T) {
 	c := testContentWithFootnotes("n1")
 	tests := []struct {

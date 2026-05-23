@@ -95,7 +95,8 @@ func layoutInlineParagraphWithShape(doc pdfDocumentSpec, registry *pdfFontRegist
 
 func hasInlineStyle(runs []pdfInlineRun) bool {
 	for _, run := range runs {
-		if run.StyleClasses != "" || run.LinkHref != "" || run.ImageID != "" || run.Bold || run.Italic || run.Underline || run.Strikethrough || run.Subscript || run.Superscript || run.Code {
+		if run.StyleClasses != "" || run.LinkHref != "" || run.AnchorID != "" || run.ImageID != "" ||
+			run.Bold || run.Italic || run.Underline || run.Strikethrough || run.Subscript || run.Superscript || run.Code {
 			return true
 		}
 	}
@@ -354,6 +355,7 @@ func inlineRunFragment(doc pdfDocumentSpec, registry *pdfFontRegistry, resolver 
 			Strikethrough: style.Strikethrough,
 			BaselineShift: baselineShift,
 			LinkHref:      run.LinkHref,
+			AnchorID:      run.AnchorID,
 			ImageID:       run.ImageID,
 			ImageHeight:   height,
 		}, nil
@@ -373,6 +375,7 @@ func inlineRunFragment(doc pdfDocumentSpec, registry *pdfFontRegistry, resolver 
 		Strikethrough: style.Strikethrough,
 		BaselineShift: inlineRunBaselineShift(base, style),
 		LinkHref:      run.LinkHref,
+		AnchorID:      run.AnchorID,
 	}, nil
 }
 
@@ -891,6 +894,7 @@ func sameInlineFragmentStyle(a, b paragraphLineFragment) bool {
 		a.Strikethrough == b.Strikethrough &&
 		a.BaselineShift == b.BaselineShift &&
 		a.LinkHref == b.LinkHref &&
+		a.AnchorID == b.AnchorID &&
 		a.ImageID == b.ImageID &&
 		a.ImageHeight == b.ImageHeight
 }
@@ -976,6 +980,7 @@ func pageLineFragments(fragments []paragraphLineFragment) []pdfPageLineFragment 
 			Strikethrough: fragment.Strikethrough,
 			BaselineShift: fragment.BaselineShift,
 			LinkHref:      fragment.LinkHref,
+			AnchorID:      fragment.AnchorID,
 			ImageID:       fragment.ImageID,
 			ImageHeight:   fragment.ImageHeight,
 		})

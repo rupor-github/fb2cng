@@ -264,6 +264,7 @@ func buildPDFDropcapLayout(doc pdfDocumentSpec, resolver *pdfStyleResolver, bloc
 		Underline:     dropcapStyle.Underline,
 		Strikethrough: dropcapStyle.Strikethrough,
 		LinkHref:      dropcapRun.LinkHref,
+		AnchorID:      dropcapRun.AnchorID,
 	}
 	topY := firstBaselineY + base.FontSize*pdfDropcapCapHeightFactor
 	dropcapAscent := dropcapStyle.FontSize * pdfDropcapCapHeightFactor

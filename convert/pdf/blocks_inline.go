@@ -3,6 +3,7 @@ package pdf
 import (
 	"strings"
 
+	"fbc/common"
 	"fbc/content"
 	"fbc/fb2"
 )
@@ -24,12 +25,16 @@ func inlineRunsRenderable(runs []pdfInlineRun) bool {
 }
 
 func paragraphInlineRuns(paragraph *fb2.Paragraph, c *content.Content) []pdfInlineRun {
+	return paragraphInlineRunsWithBacklinks(paragraph, c, false)
+}
+
+func paragraphInlineRunsWithBacklinks(paragraph *fb2.Paragraph, c *content.Content, registerBacklinks bool) []pdfInlineRun {
 	if paragraph == nil {
 		return nil
 	}
 	var runs []pdfInlineRun
 	for i := range paragraph.Text {
-		appendInlineSegmentRun(&runs, &paragraph.Text[i], pdfInlineRun{}, c)
+		appendInlineSegmentRun(&runs, &paragraph.Text[i], pdfInlineRun{}, c, registerBacklinks)
 	}
 	if paragraphIsCodeBlock(paragraph) {
 		return runs
@@ -201,13 +206,13 @@ func appendInlineSegmentText(b *strings.Builder, links *[]pdfTextLink, seg *fb2.
 	}
 }
 
-func appendInlineSegmentRun(runs *[]pdfInlineRun, seg *fb2.InlineSegment, inherited pdfInlineRun, c *content.Content) {
+func appendInlineSegmentRun(runs *[]pdfInlineRun, seg *fb2.InlineSegment, inherited pdfInlineRun, c *content.Content, registerBacklinks bool) {
 	if seg == nil {
 		return
 	}
 	style := inherited
 	style.Text = ""
-	style = applyInlineSegmentStyle(style, seg, c)
+	style = applyInlineSegmentStyle(style, seg, c, registerBacklinks)
 	if seg.Kind == fb2.InlineImageSegment {
 		if seg.Image != nil {
 			style.ImageID = imageRefID(seg.Image.Href)
@@ -221,7 +226,7 @@ func appendInlineSegmentRun(runs *[]pdfInlineRun, seg *fb2.InlineSegment, inheri
 	}
 	style.Text = ""
 	for i := range seg.Children {
-		appendInlineSegmentRun(runs, &seg.Children[i], style, c)
+		appendInlineSegmentRun(runs, &seg.Children[i], style, c, registerBacklinks)
 	}
 }
 
@@ -251,7 +256,7 @@ func pdfLinkStyleClass(seg *fb2.InlineSegment, c *content.Content) string {
 	return pdfStyleLinkExternal
 }
 
-func applyInlineSegmentStyle(style pdfInlineRun, seg *fb2.InlineSegment, c *content.Content) pdfInlineRun {
+func applyInlineSegmentStyle(style pdfInlineRun, seg *fb2.InlineSegment, c *content.Content, registerBacklinks bool) pdfInlineRun {
 	switch seg.Kind {
 	case fb2.InlineStrong:
 		style.Bold = true
@@ -273,8 +278,39 @@ func applyInlineSegmentStyle(style pdfInlineRun, seg *fb2.InlineSegment, c *cont
 	case fb2.InlineLink:
 		style.StyleClasses = joinStyleClasses(style.StyleClasses, pdfLinkStyleClass(seg, c))
 		style.LinkHref = strings.TrimSpace(seg.Href)
+		if registerBacklinks {
+			style.AnchorID = pdfFootnoteBacklinkAnchorID(seg, c)
+		}
 	}
 	return style
+}
+
+func pdfDefaultFootnoteBacklinksEnabled(c *content.Content) bool {
+	return c != nil && c.OutputFormat == common.OutputFmtPdf && c.FootnotesMode == common.FootnotesModeDefault && c.BacklinkStr != ""
+}
+
+func pdfRegisterDefaultFootnoteBacklinks(c *content.Content, styleClasses string, contextClasses string) bool {
+	if !pdfDefaultFootnoteBacklinksEnabled(c) {
+		return false
+	}
+	return !hasPDFStyleClass(styleClasses, pdfStyleFootnote) &&
+		!hasPDFStyleClass(styleClasses, pdfStyleFootnoteTitle) &&
+		!hasPDFStyleClass(contextClasses, pdfStyleFootnote) &&
+		!hasPDFStyleClass(contextClasses, pdfStyleFootnoteTitle)
+}
+
+func pdfFootnoteBacklinkAnchorID(seg *fb2.InlineSegment, c *content.Content) string {
+	if !pdfDefaultFootnoteBacklinksEnabled(c) || seg == nil {
+		return ""
+	}
+	targetID, ok := strings.CutPrefix(strings.TrimSpace(seg.Href), "#")
+	if !ok || targetID == "" {
+		return ""
+	}
+	if _, isFootnote := c.FootnotesIndex[targetID]; !isFootnote {
+		return ""
+	}
+	return c.AddFootnoteBackLinkRef(targetID).RefID
 }
 
 func appendInlineRun(runs *[]pdfInlineRun, run pdfInlineRun) {
@@ -293,7 +329,18 @@ func appendInlineRun(runs *[]pdfInlineRun, run pdfInlineRun) {
 }
 
 func sameInlineStyle(a, b pdfInlineRun) bool {
-	return a.StyleClasses == b.StyleClasses && a.ContextClasses == b.ContextClasses && a.LinkHref == b.LinkHref && a.ImageID == b.ImageID && a.Bold == b.Bold && a.Italic == b.Italic && a.Underline == b.Underline && a.Strikethrough == b.Strikethrough && a.Subscript == b.Subscript && a.Superscript == b.Superscript && a.Code == b.Code
+	return a.StyleClasses == b.StyleClasses &&
+		a.ContextClasses == b.ContextClasses &&
+		a.LinkHref == b.LinkHref &&
+		a.AnchorID == b.AnchorID &&
+		a.ImageID == b.ImageID &&
+		a.Bold == b.Bold &&
+		a.Italic == b.Italic &&
+		a.Underline == b.Underline &&
+		a.Strikethrough == b.Strikethrough &&
+		a.Subscript == b.Subscript &&
+		a.Superscript == b.Superscript &&
+		a.Code == b.Code
 }
 
 func trimInlineRuns(runs []pdfInlineRun) []pdfInlineRun {

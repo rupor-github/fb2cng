@@ -160,6 +160,64 @@ func TestLayoutPDFTableScalesFootnoteLinkStylesWithWideTables(t *testing.T) {
 	}
 }
 
+func TestLayoutPDFPagesKeepsTableMarginBeforeFollowingText(t *testing.T) {
+	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
+	paragraph := resolver.styles[pdfStyleParagraph]
+	paragraph.Paragraph.FontSize = 10
+	paragraph.Paragraph.LineHeight = 10
+	paragraph.SpaceBefore = 0
+	paragraph.SpaceAfter = 0
+	resolver.styles[pdfStyleParagraph] = paragraph
+	tableStyle := resolver.styles[pdfStyleTable]
+	tableStyle.Paragraph.FontSize = 10
+	tableStyle.Paragraph.LineHeight = 10
+	tableStyle.SpaceBefore = 0
+	tableStyle.SpaceAfter = 12
+	resolver.styles[pdfStyleTable] = tableStyle
+	cellStyle := resolver.styles[pdfStyleTableCell]
+	cellStyle.Paragraph.FontSize = 10
+	cellStyle.Paragraph.LineHeight = 10
+	cellStyle.PaddingTop = 0
+	cellStyle.PaddingRight = 0
+	cellStyle.PaddingBottom = 0
+	cellStyle.PaddingLeft = 0
+	cellStyle.BorderWidth = 0
+	cellStyle.HasBorder = false
+	resolver.styles[pdfStyleTableCell] = cellStyle
+
+	face, err := builtinFont("serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	table := &fb2.Table{Rows: []fb2.TableRow{{Cells: []fb2.TableCell{{Content: []fb2.InlineSegment{{Text: "Cell"}}}}}}}
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
+		PageWidth:  220,
+		PageHeight: 160,
+		Styles:     resolver,
+		Blocks: []pdfTextBlock{{
+			Kind:      pdfBlockTable,
+			StyleName: pdfStyleTable,
+			Table:     table,
+		}, {
+			Kind:      pdfBlockParagraph,
+			Text:      "Back",
+			Runs:      []pdfInlineRun{{Text: "Back"}},
+			StyleName: pdfStyleParagraph,
+		}},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 1 || len(pages[0].Lines) < 2 {
+		t.Fatalf("pages = %#v, want table cell line and following paragraph", pages)
+	}
+	cellY := pages[0].Lines[0].Y
+	backY := pages[0].Lines[1].Y
+	if got, wantMin := cellY-backY, tableStyle.SpaceAfter+paragraph.Paragraph.FontSize; got < wantMin-0.001 {
+		t.Fatalf("baseline gap after table = %v, want at least margin-bottom + following font size %v", got, wantMin)
+	}
+}
+
 func TestLayoutPDFPagesSplitsTablesBetweenRows(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {

@@ -27,6 +27,9 @@ func collectPDFContent(c *content.Content, cfg *config.DocumentConfig) (pdfConte
 	if err != nil {
 		return pdfContentPlan{}, err
 	}
+	if pdfDefaultFootnoteBacklinksEnabled(c) {
+		c.BackLinkIndex = make(map[string][]content.BackLinkRef)
+	}
 
 	debugPlan := pdfDebugStructurePlanFromPlan(plan, cfg)
 	blocks := make([]pdfTextBlock, 0, 64)

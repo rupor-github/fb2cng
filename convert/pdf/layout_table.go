@@ -68,6 +68,11 @@ func layoutPDFTable(doc pdfDocumentSpec, resolver *pdfStyleResolver, block pdfTe
 		paragraph := fb2.Paragraph{Text: placed.Cell.Content}
 		text, links := paragraphTextAndLinks(&paragraph)
 		runs := paragraphInlineRuns(&paragraph, doc.Content)
+		if block.TableCellRuns != nil {
+			if cellRuns, ok := block.TableCellRuns[pdfTableCellKey{placed.Row, placed.Col}]; ok {
+				runs = cellRuns
+			}
+		}
 		runs = inlineRunsWithContext(runs, pdfStyleTable)
 		cellDoc := doc
 		cellDoc.Styles = tableResolver

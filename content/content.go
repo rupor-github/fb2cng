@@ -533,6 +533,9 @@ func (c *Content) TrackImageUsage(id string) {
 
 // AddFootnoteBackLinkRef adds a footnote reference and returns the BackLinkRef for generating links
 func (c *Content) AddFootnoteBackLinkRef(targetID string) BackLinkRef {
+	if c.BackLinkIndex == nil {
+		c.BackLinkIndex = make(map[string][]BackLinkRef)
+	}
 	refs := c.BackLinkIndex[targetID]
 	refNum := len(refs) + 1
 	ref := BackLinkRef{
