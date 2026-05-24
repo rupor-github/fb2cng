@@ -11,8 +11,8 @@ import (
 
 const (
 	paragraphLinePenalty              = 10.0
-	paragraphHyphenPenalty            = 1200.0
-	paragraphConsecutiveHyphenPenalty = 4500.0
+	paragraphHyphenPenalty            = 350.0
+	paragraphConsecutiveHyphenPenalty = 1800.0
 	paragraphFitnessPenalty           = 900.0
 	paragraphEmergencyPenalty         = 1_000_000.0
 )

@@ -58,6 +58,14 @@ func (h fakeHyphenator) Hyphenate(s string) string {
 	return s
 }
 
+func TestParagraphDemeritsTreatHyphenationAsUsefulCorrection(t *testing.T) {
+	hyphenated := paragraphLineDemerits(49, 50, 2, false, false, false, true, false, paragraphFitnessDecent)
+	loose := paragraphLineDemerits(42, 50, 2, false, false, false, false, false, paragraphFitnessDecent)
+	if hyphenated >= loose {
+		t.Fatalf("hyphenated demerits = %v, loose demerits = %v, want hyphenation preferred over loose spacing", hyphenated, loose)
+	}
+}
+
 func TestLayoutParagraphUsesHyphenationPoints(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {
