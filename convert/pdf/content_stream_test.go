@@ -68,6 +68,41 @@ func TestMissingPDFGlyphBoxOccupiesFullCell(t *testing.T) {
 	}
 }
 
+func TestPageContentUsesTJForShapedAdvanceAdjustments(t *testing.T) {
+	content := string(pageContent(pdfPage{Lines: []pdfPageLine{{
+		X:        10,
+		Y:        20,
+		FontSize: 10,
+		FontName: "F1",
+		Color:    pdfColor{},
+		Text: shapedText{Glyphs: []shapedGlyph{
+			{GlyphID: 1, Rune: 'A', Width: 600, Advance: 550, HasAdvance: true},
+			{GlyphID: 2, Rune: 'V', Width: 600, Advance: 600, HasAdvance: true},
+		}},
+	}}}))
+	for _, want := range []string{"[<0001> 50 <0002>] TJ", "10 20 Tm"} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("page content = %q, missing %q", content, want)
+		}
+	}
+	if strings.Contains(content, "<00010002> Tj") {
+		t.Fatalf("page content used simple Tj despite shaped advance adjustment: %q", content)
+	}
+}
+
+func TestPositionedGlyphArrayCombinesKerningAndWordSpacing(t *testing.T) {
+	glyphs := []shapedGlyph{
+		{GlyphID: 1, Rune: 'A', Width: 600, Advance: 550, HasAdvance: true},
+		{GlyphID: 2, Rune: ' ', Width: 250, Advance: 250, HasAdvance: true},
+		{GlyphID: 3, Rune: 'B', Width: 500, Advance: 500, HasAdvance: true},
+	}
+	got := positionedGlyphArray(glyphs, 2, 10)
+	want := "[<0001> 50 <0002> -200 <0003>]"
+	if got != want {
+		t.Fatalf("positionedGlyphArray() = %q, want %q", got, want)
+	}
+}
+
 func TestPageContentUsesSyntheticMissingGlyphBoxes(t *testing.T) {
 	content := string(pageContent(pdfPage{Lines: []pdfPageLine{{
 		X:        10,

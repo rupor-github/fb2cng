@@ -151,8 +151,8 @@ func writeTextGlyphs(
 ) []pdfMissingGlyphBox {
 	writeTextState(buf, fontName, fontSize, letterSpacing, color, x, y, state)
 	if !hasSyntheticPDFGlyphs(glyphs) {
-		if extraWordSpacing != 0 {
-			fmt.Fprintf(buf, "%s TJ\n", justifiedGlyphArray(glyphs, extraWordSpacing, fontSize))
+		if needsPositionedGlyphArray(glyphs, extraWordSpacing) {
+			fmt.Fprintf(buf, "%s TJ\n", positionedGlyphArray(glyphs, extraWordSpacing, fontSize))
 			return nil
 		}
 		fmt.Fprintf(buf, "%s Tj\n", docwriter.Format(glyphHex(glyphs)))
@@ -194,6 +194,9 @@ func syntheticGlyphArray(
 	for i, glyph := range glyphs {
 		if glyph.Missing == pdfMissingGlyphNone && glyph.GlyphID != 0 {
 			writePDFGlyphArrayItem(&buf, &wroteItem, docwriter.Format(glyphHex([]shapedGlyph{glyph})))
+			if delta := shapedAdvanceAdjustment(glyph); delta != 0 && i != len(glyphs)-1 {
+				writePDFGlyphArrayItem(&buf, &wroteItem, docwriter.FormatNumber(float64(delta)))
+			}
 			x += glyphAdvancePoints(glyph, fontSize)
 		} else {
 			if glyph.Missing == pdfMissingGlyphPrintable && glyph.Width > 0 {
@@ -405,18 +408,38 @@ func justificationSpaceCount(glyphs []shapedGlyph) int {
 	return count
 }
 
-func justifiedGlyphArray(glyphs []shapedGlyph, extraWordSpacing, fontSize float64) string {
-	adjustment := -extraWordSpacing * 1000 / fontSize
+func needsPositionedGlyphArray(glyphs []shapedGlyph, extraWordSpacing float64) bool {
+	if extraWordSpacing != 0 {
+		return true
+	}
+	for _, glyph := range glyphs {
+		if shapedAdvanceAdjustment(glyph) != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func shapedAdvanceAdjustment(glyph shapedGlyph) int {
+	return glyph.Width - shapedGlyphAdvanceWidth(glyph)
+}
+
+func positionedGlyphArray(glyphs []shapedGlyph, extraWordSpacing, fontSize float64) string {
+	wordSpacingAdjustment := -extraWordSpacing * 1000 / fontSize
 	var buf bytes.Buffer
 	buf.WriteByte('[')
+	wroteItem := false
 	for i, glyph := range glyphs {
-		if i > 0 {
-			buf.WriteByte(' ')
+		writePDFGlyphArrayItem(&buf, &wroteItem, docwriter.Format(glyphHex([]shapedGlyph{glyph})))
+		if i == len(glyphs)-1 {
+			continue
 		}
-		buf.WriteString(docwriter.Format(glyphHex([]shapedGlyph{glyph})))
-		if glyph.Rune == ' ' && i != len(glyphs)-1 {
-			buf.WriteByte(' ')
-			buf.WriteString(docwriter.FormatNumber(adjustment))
+		adjustment := float64(shapedAdvanceAdjustment(glyph))
+		if glyph.Rune == ' ' {
+			adjustment += wordSpacingAdjustment
+		}
+		if adjustment != 0 {
+			writePDFGlyphArrayItem(&buf, &wroteItem, docwriter.FormatNumber(adjustment))
 		}
 	}
 	buf.WriteByte(']')

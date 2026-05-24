@@ -63,8 +63,9 @@ type shapedGlyph struct {
 	Source  string
 	// Width is the nominal PDF glyph width used in font dictionaries. Advance is
 	// the shaped advance used for layout; it can differ from Width after kerning.
-	Width   int
-	Advance int
+	Width      int
+	Advance    int
+	HasAdvance bool
 	// ClusterStart and ClusterEnd identify the source rune range represented by
 	// this glyph. They are equal to one rune for the current simple shaper, and
 	// will allow ligatures and multi-rune clusters once OpenType shaping lands.
@@ -202,6 +203,7 @@ func (s simplePDFTextShaper) Shape(text string, _ pdfShapeOptions) (shapedText, 
 			Source:       string(r),
 			Width:        width,
 			Advance:      width,
+			HasAdvance:   true,
 			ClusterStart: cluster,
 			ClusterEnd:   cluster + 1,
 			FontKey:      face.Key,
@@ -231,8 +233,9 @@ func pdfGlyphWithSource(glyph shapedGlyph, r rune, start, end int) shapedGlyph {
 	glyph.Source = string(r)
 	glyph.ClusterStart = start
 	glyph.ClusterEnd = end
-	if glyph.Advance == 0 && glyph.Width != 0 {
+	if !glyph.HasAdvance {
 		glyph.Advance = glyph.Width
+		glyph.HasAdvance = true
 	}
 	return glyph
 }
@@ -273,6 +276,7 @@ func (s *openTypePDFTextShaper) Shape(text string, _ pdfShapeOptions) (shapedTex
 			Source:       source,
 			Width:        floatFontUnitsToPDFWidth(face.TextFace.HorizontalAdvance(hbGlyph.GlyphID), face.UnitsPerEm),
 			Advance:      fixedFontUnitsToPDFWidth(hbGlyph.Advance, face.UnitsPerEm),
+			HasAdvance:   true,
 			ClusterStart: start,
 			ClusterEnd:   end,
 			XOffset:      fixedFontUnitsToPDFWidth(hbGlyph.XOffset, face.UnitsPerEm),
@@ -409,12 +413,13 @@ func pdfFontGlyph(face *builtinFontFace, key pdfFontKey, r rune) (shapedGlyph, b
 	}
 	width := fontUnitsToPDFWidth(advance.Round(), face.UnitsPerEm)
 	return shapedGlyph{
-		GlyphID: uint16(gid),
-		Rune:    r,
-		Source:  string(r),
-		Width:   width,
-		Advance: width,
-		FontKey: key,
+		GlyphID:    uint16(gid),
+		Rune:       r,
+		Source:     string(r),
+		Width:      width,
+		Advance:    width,
+		HasAdvance: true,
+		FontKey:    key,
 	}, true, nil
 }
 
@@ -512,7 +517,7 @@ func missingPDFGlyph(face *builtinFontFace, r rune, advanceWidth int) shapedGlyp
 	if width == 0 && kind != pdfMissingGlyphCombining {
 		width = 500
 	}
-	glyph := shapedGlyph{Rune: r, Source: string(r), Width: width, Advance: width, Missing: kind}
+	glyph := shapedGlyph{Rune: r, Source: string(r), Width: width, Advance: width, HasAdvance: true, Missing: kind}
 	logPDFMissingGlyph(face, glyph)
 	return glyph
 }
@@ -576,7 +581,7 @@ func shapedWidthPointsWithSpacing(text shapedText, fontSize float64, letterSpaci
 }
 
 func shapedGlyphAdvanceWidth(glyph shapedGlyph) int {
-	if glyph.Advance != 0 || glyph.Width == 0 {
+	if glyph.HasAdvance {
 		return glyph.Advance
 	}
 	return glyph.Width

@@ -367,14 +367,14 @@ func TestBreakableWordsKeepsNoBreakSpaceInsideWord(t *testing.T) {
 	}
 }
 
-func TestJustifiedGlyphArrayAddsNegativeAdjustmentsAfterSpaces(t *testing.T) {
-	got := justifiedGlyphArray([]shapedGlyph{
+func TestPositionedGlyphArrayAddsNegativeAdjustmentsAfterSpaces(t *testing.T) {
+	got := positionedGlyphArray([]shapedGlyph{
 		{GlyphID: 1, Rune: 'A'},
 		{GlyphID: 2, Rune: ' '},
 		{GlyphID: 3, Rune: 'B'},
 	}, 2, 10)
 	want := "[<0001> <0002> -200 <0003>]"
 	if got != want {
-		t.Fatalf("justifiedGlyphArray() = %q, want %q", got, want)
+		t.Fatalf("positionedGlyphArray() = %q, want %q", got, want)
 	}
 }
