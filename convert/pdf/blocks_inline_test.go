@@ -151,6 +151,29 @@ func TestPDFPrintedFootnoteReferencesAreStyledButNotClickable(t *testing.T) {
 	}
 }
 
+func TestPDFFootnoteReferenceDropsFormattingWhitespaceInsideLink(t *testing.T) {
+	c := testContentWithFootnotes("n1")
+	c.OutputFormat = common.OutputFmtPdf
+	c.FootnotesMode = common.FootnotesModeFloatRenumbered
+	paragraph := &fb2.Paragraph{Text: []fb2.InlineSegment{
+		{Text: "Body"},
+		{Kind: fb2.InlineLink, Href: "#n1", Children: []fb2.InlineSegment{
+			{Text: "\n          "},
+			{Kind: fb2.InlineSup, Children: []fb2.InlineSegment{{Text: "{II}"}}},
+			{Text: "\n        "},
+		}},
+		{Text: ", tail"},
+	}}
+
+	runs := paragraphInlineRuns(paragraph, c)
+	if len(runs) != 3 {
+		t.Fatalf("runs = %#v, want body, one footnote ref, tail", runs)
+	}
+	if runs[1].Text != "{II}" || runs[1].FootnoteID != "n1" || !runs[1].Superscript {
+		t.Fatalf("footnote run = %#v, want only visible superscript child with footnote metadata", runs[1])
+	}
+}
+
 func TestPDFPrintedFootnotePseudoContentDecoratesNonClickableRefs(t *testing.T) {
 	resolver := &pdfStyleResolver{pseudoContent: map[string]pdfPseudoElementContent{
 		pdfStyleLinkFootnote: {Before: "[", After: "]"},

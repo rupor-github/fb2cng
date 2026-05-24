@@ -117,11 +117,11 @@ func TestPDFStyleResolverTableDefaultsMatchDefaultCSS(t *testing.T) {
 	if table.Paragraph.FirstLineIndent != 0 {
 		t.Fatalf("table indent = %v, want 0", table.Paragraph.FirstLineIndent)
 	}
-	td := resolver.styleForTableCell(fb2.TableRow{}, fb2.TableCell{})
+	td := resolver.styleForTableCell(fb2.TableRow{}, fb2.TableCell{}, "")
 	if td.PaddingLeft != pdfDefaultCSSRootFontSize*0.5 || td.BorderWidth == 0 || !td.HasBorder {
 		t.Fatalf("td style padding/border = %v/%v/%t, want default.css cell padding and border", td.PaddingLeft, td.BorderWidth, td.HasBorder)
 	}
-	th := resolver.styleForTableCell(fb2.TableRow{}, fb2.TableCell{Header: true})
+	th := resolver.styleForTableCell(fb2.TableRow{}, fb2.TableCell{Header: true}, "")
 	if !th.HasBackground || th.PaddingLeft != pdfDefaultCSSRootFontSize*0.5 || th.BorderWidth == 0 || !th.Paragraph.Bold || th.Paragraph.Align != textAlignCenter {
 		t.Fatalf("th style bg/padding/border/bold/align = %t/%v/%v/%t/%v", th.HasBackground, th.PaddingLeft, th.BorderWidth, th.Paragraph.Bold, th.Paragraph.Align)
 	}

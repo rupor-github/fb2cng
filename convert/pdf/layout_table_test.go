@@ -40,6 +40,23 @@ func TestCollectTextBlocksKeepsTableAsNativeBlock(t *testing.T) {
 	}
 }
 
+func TestPDFTableCellsInheritFootnoteContext(t *testing.T) {
+	resolver := newPDFStyleResolverWithCSS(t, `
+		.footnote { font-size: 70%; }
+		.footnote td { line-height: 1.15; padding: 0.1em; }
+	`)
+
+	cellStyle := resolver.styleForTableCell(fb2.TableRow{}, fb2.TableCell{}, pdfStyleFootnote)
+	wantFontSize := pdfBaseFontSize * 0.7
+	if diff := cellStyle.Paragraph.FontSize - wantFontSize; diff < -0.001 || diff > 0.001 {
+		t.Fatalf("footnote table cell font size = %v, want %v", cellStyle.Paragraph.FontSize, wantFontSize)
+	}
+	wantLineHeight := wantFontSize * 1.15
+	if diff := cellStyle.Paragraph.LineHeight - wantLineHeight; diff < -0.001 || diff > 0.001 {
+		t.Fatalf("footnote table cell line height = %v, want %v", cellStyle.Paragraph.LineHeight, wantLineHeight)
+	}
+}
+
 func TestLayoutPDFPagesRendersTableCellsBordersAndSpans(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {
@@ -92,7 +109,7 @@ func TestLayoutPDFPagesRendersTableCellsBordersAndSpans(t *testing.T) {
 
 func TestLayoutPDFTableHonorsHeaderHyphenationNoneAndNoWrap(t *testing.T) {
 	resolver := newPDFStyleResolverWithDefaultCSS(t, `th { hyphens: none; white-space: nowrap; }`)
-	cellStyle := resolver.styleForTableCell(fb2.TableRow{}, fb2.TableCell{Header: true})
+	cellStyle := resolver.styleForTableCell(fb2.TableRow{}, fb2.TableCell{Header: true}, "")
 	if cellStyle.Paragraph.Hyphenation != paragraphHyphenationNone || !cellStyle.Paragraph.NoWrap {
 		t.Fatalf("th hyphenation/nowrap = %v/%t, want none/true", cellStyle.Paragraph.Hyphenation, cellStyle.Paragraph.NoWrap)
 	}

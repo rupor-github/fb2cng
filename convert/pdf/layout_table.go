@@ -52,7 +52,7 @@ func layoutPDFTable(doc pdfDocumentSpec, resolver *pdfStyleResolver, block pdfTe
 	if colCount == 0 {
 		return pdfTableLayout{}, nil
 	}
-	colWidths, tableScale, err := pdfTableColumnWidths(doc, resolver, cells, colCount, tableWidth)
+	colWidths, tableScale, err := pdfTableColumnWidths(doc, resolver, cells, colCount, tableWidth, block.ContextClasses)
 	if err != nil {
 		return pdfTableLayout{}, err
 	}
@@ -61,7 +61,7 @@ func layoutPDFTable(doc pdfDocumentSpec, resolver *pdfStyleResolver, block pdfTe
 	rows := make([]pdfTableRowLayout, len(block.Table.Rows))
 	layoutCells := make([]pdfTableCellLayout, 0, len(cells))
 	for _, placed := range cells {
-		cellStyle := tableResolver.styleForTableCell(placed.RowStyle, placed.Cell)
+		cellStyle := tableResolver.styleForTableCell(placed.RowStyle, placed.Cell, block.ContextClasses)
 		cellStyle.Paragraph.Hyphenator = doc.Hyphenator
 		cellWidth := pdfTableColumnsWidth(colWidths, placed.Col, placed.ColSpan)
 		innerWidth := max(cellWidth-cellStyle.PaddingLeft-cellStyle.PaddingRight-2*cellStyle.BorderWidth, pdfMinBlockWidth)
@@ -75,7 +75,7 @@ func layoutPDFTable(doc pdfDocumentSpec, resolver *pdfStyleResolver, block pdfTe
 		}
 		runs, links = pdfDisablePrintedFootnoteLinks(doc.Content, block.StyleClasses, block.ContextClasses, runs, links)
 		runs = applyPDFPseudoContentToInlineRuns(runs, tableResolver)
-		runs = inlineRunsWithContext(runs, pdfStyleTable)
+		runs = inlineRunsWithContext(runs, joinStyleClasses(block.ContextClasses, pdfStyleTable))
 		cellDoc := doc
 		cellDoc.Styles = tableResolver
 		face, _, err := fontForStyle(doc.Fonts, cellStyle.Paragraph)
@@ -137,10 +137,10 @@ func layoutPDFTable(doc pdfDocumentSpec, resolver *pdfStyleResolver, block pdfTe
 	return layout, nil
 }
 
-func pdfTableColumnWidths(doc pdfDocumentSpec, resolver *pdfStyleResolver, cells []pdfPlacedTableCell, colCount int, tableWidth float64) ([]float64, float64, error) {
+func pdfTableColumnWidths(doc pdfDocumentSpec, resolver *pdfStyleResolver, cells []pdfPlacedTableCell, colCount int, tableWidth float64, contextClasses string) ([]float64, float64, error) {
 	minWidths := make([]float64, colCount)
 	for _, placed := range cells {
-		style := resolver.styleForTableCell(placed.RowStyle, placed.Cell)
+		style := resolver.styleForTableCell(placed.RowStyle, placed.Cell, contextClasses)
 		needed, err := pdfTableCellMinWidth(doc, style, placed.Cell)
 		if err != nil {
 			return nil, 1, err
@@ -266,7 +266,7 @@ func pdfScaleResolvedStyle(style pdfBlockResolvedStyle, scale float64) pdfBlockR
 	return style
 }
 
-func (r *pdfStyleResolver) styleForTableCell(row fb2.TableRow, cell fb2.TableCell) pdfBlockResolvedStyle {
+func (r *pdfStyleResolver) styleForTableCell(row fb2.TableRow, cell fb2.TableCell, contextClasses string) pdfBlockResolvedStyle {
 	styleName := pdfStyleTableCell
 	if cell.Header {
 		styleName = pdfStyleTableHeaderCell
@@ -275,7 +275,7 @@ func (r *pdfStyleResolver) styleForTableCell(row fb2.TableRow, cell fb2.TableCel
 		Kind:           pdfBlockTableCell,
 		StyleName:      styleName,
 		StyleClasses:   joinStyleClasses(row.Style, cell.Style),
-		ContextClasses: pdfStyleTable,
+		ContextClasses: joinStyleClasses(contextClasses, pdfStyleTable),
 	})
 	if align := strings.TrimSpace(cell.Align); align != "" {
 		if textAlign, ok := pdfTextAlignKeyword(align); ok {

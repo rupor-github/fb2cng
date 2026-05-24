@@ -318,6 +318,9 @@ func appendInlineRun(runs *[]pdfInlineRun, run pdfInlineRun) {
 	if run.Superscript || run.Subscript {
 		run.Text = strings.TrimSpace(run.Text)
 	}
+	if run.FootnoteID != "" && strings.TrimSpace(run.Text) == "" && run.ImageID == "" {
+		return
+	}
 	if run.Text == "" && run.ImageID == "" {
 		return
 	}
