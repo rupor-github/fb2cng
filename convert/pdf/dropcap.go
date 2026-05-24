@@ -229,6 +229,19 @@ func pdfDropcapExpired(active *pdfActiveDropcap, page *pdfPage, y float64) bool 
 	return active == nil || active.Page != page || y <= active.BottomY+0.001
 }
 
+func pdfDropcapExpiredForLine(active *pdfActiveDropcap, page *pdfPage, lineY float64, lineHeight float64, fontSize float64) bool {
+	if active == nil || active.Page != page {
+		return true
+	}
+	if pdfLineOverlapsDropcap(lineY, lineHeight, fontSize, active) {
+		return false
+	}
+	if fontSize <= 0 {
+		fontSize = pdfBaseFontSize
+	}
+	return lineY+fontSize <= active.BottomY+0.001
+}
+
 func buildPDFDropcapLayout(doc pdfDocumentSpec, resolver *pdfStyleResolver, block pdfTextBlock, base paragraphStyle, baseFace *builtinFontFace, runs []pdfInlineRun, blockWidth float64, firstBaselineY float64) (pdfDropcapLayout, bool, error) {
 	dropcapRun, bodyRuns, ok := splitPDFDropcapRuns(runs)
 	if !ok || strings.TrimSpace(dropcapRun.Text) == "" {

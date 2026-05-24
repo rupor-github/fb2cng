@@ -178,6 +178,65 @@ func TestPDFDropcapFlowsFollowingParagraphAroundActiveExclusion(t *testing.T) {
 	}
 }
 
+func TestPDFDropcapFollowingParagraphStillExcludesWhenBaselinePassedVisualBottom(t *testing.T) {
+	resolver := newPDFStyleResolverWithCSS(t, `
+		p { font-size: 10pt; line-height: 10pt; margin: 0; text-indent: 0; }
+		p.has-dropcap { text-indent: 0; margin: 0; }
+		p.has-dropcap .dropcap { float: left; font-size: 3em; line-height: 1; font-weight: bold; padding-right: 1pt; }
+	`)
+	face, err := builtinFont("serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	first := "Lorem ipsum dolor sit amet."
+	second := "Second paragraph must still flow around the dropcap."
+
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
+		PageWidth:  190,
+		PageHeight: 180,
+		Styles:     resolver,
+		Blocks: []pdfTextBlock{{
+			Kind:         pdfBlockParagraph,
+			Text:         first,
+			Runs:         addPDFDropcapInlineRun([]pdfInlineRun{{Text: first}}),
+			StyleClasses: "has-dropcap",
+		}, {
+			Kind: pdfBlockParagraph,
+			Text: second,
+			Runs: []pdfInlineRun{{Text: second}},
+		}},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) != 1 {
+		t.Fatalf("pages = %d, want one page", len(pages))
+	}
+	var dropcapLine, secondParagraphLine *pdfPageLine
+	firstBodyLines := 0
+	for i := range pages[0].Lines {
+		line := &pages[0].Lines[i]
+		text := pdfPageLineText(*line)
+		switch {
+		case text == "L":
+			dropcapLine = line
+		case strings.HasPrefix(text, "orem") || strings.Contains(text, "amet"):
+			firstBodyLines++
+		case strings.HasPrefix(text, "Second"):
+			secondParagraphLine = line
+		}
+	}
+	if dropcapLine == nil || secondParagraphLine == nil {
+		t.Fatalf("lines = %#v, want dropcap and following paragraph", pages[0].Lines)
+	}
+	if firstBodyLines != 2 {
+		t.Fatalf("first body lines = %d, want two-line dropcap paragraph reproducer; lines = %#v", firstBodyLines, pages[0].Lines)
+	}
+	if secondParagraphLine.X <= dropcapLine.X+dropcapLine.WidthFromText() {
+		t.Fatalf("second paragraph X = %g, dropcap X/width = %g/%g, want line box to keep excluding active dropcap", secondParagraphLine.X, dropcapLine.X, dropcapLine.WidthFromText())
+	}
+}
+
 func TestPDFDropcapStartsNextPageWhenWrapLinesWouldSplit(t *testing.T) {
 	resolver := newPDFStyleResolverWithCSS(t, `
 		p { font-size: 10pt; line-height: 12pt; margin: 0; text-indent: 0; }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"go.uber.org/zap"
 
@@ -49,6 +50,9 @@ func Generate(ctx context.Context, c *content.Content, outputName string, cfg *c
 		styleTracer = newPDFStyleTracer(c.WorkDir)
 	}
 
+	styleResolver := newPDFStyleResolver(c.Book, log, styleTracer)
+	writePDFParsedStylesheetDebug(c, styleResolver, log)
+
 	data, err := buildPDFDocument(pdfDocumentSpec{
 		PageWidth:        pageWidth,
 		PageHeight:       pageHeight,
@@ -64,7 +68,7 @@ func Generate(ctx context.Context, c *content.Content, outputName string, cfg *c
 		PrintedFootnotes: contentPlan.PrintedFootnotes,
 		DebugPlan:        contentPlan.DebugPlan,
 		Content:          c,
-		Styles:           newPDFStyleResolver(c.Book, log, styleTracer),
+		Styles:           styleResolver,
 		Images:           c.ImagesIndex,
 		CoverID:          c.CoverID,
 		Hyphenator:       pdfHyphenator(c, log),
@@ -93,6 +97,15 @@ func Generate(ctx context.Context, c *content.Content, outputName string, cfg *c
 		return fmt.Errorf("write pdf: %w", err)
 	}
 	return nil
+}
+
+func writePDFParsedStylesheetDebug(c *content.Content, styles *pdfStyleResolver, log *zap.Logger) {
+	if c == nil || styles == nil || !c.Debug || c.WorkDir == "" || !styles.hasParsedStylesheet {
+		return
+	}
+	if err := os.WriteFile(filepath.Join(c.WorkDir, "parsed-stylesheet.css"), []byte(styles.parsedStylesheetCSS), 0644); err != nil && log != nil {
+		log.Warn("Failed to write parsed stylesheet for debug", zap.Error(err))
+	}
 }
 
 func pdfFinalOutputName(outputName string, finalOutputName ...string) string {

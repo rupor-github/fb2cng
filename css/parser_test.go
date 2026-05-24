@@ -820,6 +820,33 @@ func TestParser_Comments(t *testing.T) {
 	}
 }
 
+func TestParser_OrphanCommentClosersDoNotPoisonNextSelector(t *testing.T) {
+	log := zap.NewNop()
+	p := css.NewParser(log)
+
+	input := []byte(`
+		/* @media fbc-pdf { */
+		/*     /* nested-looking disabled comment */ */
+		/* } */
+		p { margin: 0; text-indent: 1em; }
+	`)
+	sheet := p.Parse(input)
+
+	rules := allRules(sheet)
+	if len(rules) != 1 {
+		t.Fatalf("expected 1 rule, got %d: %#v", len(rules), rules)
+	}
+	if rules[0].Selector.Element != "p" {
+		t.Fatalf("selector = %#v, want p", rules[0].Selector)
+	}
+	if _, ok := rules[0].GetProperty("margin"); !ok {
+		t.Fatal("expected margin property")
+	}
+	if _, ok := rules[0].GetProperty("text-indent"); !ok {
+		t.Fatal("expected text-indent property")
+	}
+}
+
 func TestMediaQuery_Evaluate(t *testing.T) {
 	tests := []struct {
 		name     string

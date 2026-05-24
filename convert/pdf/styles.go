@@ -41,6 +41,8 @@ func newPDFStyleResolver(book *fb2.FictionBook, log *zap.Logger, tracers ...*pdf
 	warnings := 0
 	if combinedCSS.Len() > 0 {
 		parsed := parser.Parse([]byte(combinedCSS.String()), "combined stylesheets")
+		resolver.parsedStylesheetCSS = parsed.String()
+		resolver.hasParsedStylesheet = true
 		warnings += len(parsed.Warnings)
 		pseudoWarnings := resolver.extractPseudoContent(parsed)
 		warnings += len(pseudoWarnings)

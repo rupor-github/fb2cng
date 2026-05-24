@@ -30,6 +30,7 @@ func TestGenerateDebugDumps(t *testing.T) {
 		Debug:   true,
 		WorkDir: tmpDir,
 		Book: &fb2.FictionBook{
+			Stylesheets: []fb2.Stylesheet{{Type: "text/css", Data: `p { margin: 0; }`}},
 			Description: fb2.Description{
 				TitleInfo: fb2.TitleInfo{BookTitle: fb2.TextField{Value: "Debug Book"}},
 			},
@@ -80,6 +81,13 @@ func TestGenerateDebugDumps(t *testing.T) {
 	}
 	if !bytes.Contains(traceData, []byte("=== PDF Style Trace ===")) || !bytes.Contains(traceData, []byte("ASSIGN")) || !bytes.Contains(traceData, []byte("COLLAPSE")) {
 		t.Fatalf("pdf-style-trace.txt missing expected content: %s", traceData)
+	}
+	parsedCSS, err := os.ReadFile(filepath.Join(tmpDir, "parsed-stylesheet.css"))
+	if err != nil {
+		t.Fatalf("read parsed-stylesheet.css: %v", err)
+	}
+	if !bytes.Contains(parsedCSS, []byte("p {")) || !bytes.Contains(parsedCSS, []byte("margin: 0")) {
+		t.Fatalf("parsed-stylesheet.css missing expected CSS: %s", parsedCSS)
 	}
 
 	pageData, err := os.ReadFile(filepath.Join(tmpDir, "pdf-layout-pages.json"))

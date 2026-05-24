@@ -365,10 +365,11 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 			return baseline
 		}
 		layoutTextBlock := func() ([]paragraphLine, pdfDropcapLayout, bool, error) {
-			if pdfDropcapExpired(activeDropcap, page, y-blockSpaceBefore()-style.PaddingTop) {
+			baseline := firstBaselineY()
+			if pdfDropcapExpiredForLine(activeDropcap, page, baseline, lineHeight, style.Paragraph.FontSize) {
 				activeDropcap = nil
 			}
-			shape := pdfActiveDropcapShape(activeDropcap, page, block, firstBaselineY(), style.Paragraph)
+			shape := pdfActiveDropcapShape(activeDropcap, page, block, baseline, style.Paragraph)
 			layoutText := block.Text
 			layoutRuns := runs
 			var dropcap pdfDropcapLayout
@@ -577,7 +578,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 		backgroundBottom := y - style.PaddingBottom
 		addBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, backgroundBottom)
 		y -= style.PaddingBottom + style.SpaceAfter
-		if pdfDropcapExpired(activeDropcap, page, y) {
+		if activeDropcap != nil && activeDropcap.Page != page {
 			activeDropcap = nil
 		}
 		if pdfStyleForcesPageBreakAfter(style) && pageHasText {

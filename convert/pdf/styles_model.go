@@ -216,12 +216,14 @@ type pdfBlockLength struct {
 }
 
 type pdfStyleResolver struct {
-	styles        map[string]pdfBlockResolvedStyle
-	defaults      map[string]pdfBlockResolvedStyle
-	dropcaps      map[string]pdfDropcapCSSConfig
-	pseudoContent map[string]pdfPseudoElementContent
-	log           *zap.Logger
-	tracer        *pdfStyleTracer
+	styles              map[string]pdfBlockResolvedStyle
+	defaults            map[string]pdfBlockResolvedStyle
+	dropcaps            map[string]pdfDropcapCSSConfig
+	pseudoContent       map[string]pdfPseudoElementContent
+	parsedStylesheetCSS string
+	hasParsedStylesheet bool
+	log                 *zap.Logger
+	tracer              *pdfStyleTracer
 }
 
 type pdfDebugResolvedStyle struct {
