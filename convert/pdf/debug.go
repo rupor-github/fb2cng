@@ -162,20 +162,23 @@ type pdfDebugRect struct {
 }
 
 type pdfDebugFont struct {
-	ResourceName   string   `json:"resource_name"`
-	Family         string   `json:"family"`
-	Bold           bool     `json:"bold,omitempty"`
-	Italic         bool     `json:"italic,omitempty"`
-	PostScriptName string   `json:"post_script_name"`
-	UnitsPerEm     int      `json:"units_per_em"`
-	Ascent         int      `json:"ascent"`
-	Descent        int      `json:"descent"`
-	CapHeight      int      `json:"cap_height"`
-	BBox           [4]int   `json:"bbox"`
-	Flags          int      `json:"flags"`
-	ItalicAngle    int      `json:"italic_angle"`
-	UsedGlyphCount int      `json:"used_glyph_count"`
-	UsedGlyphIDs   []uint16 `json:"used_glyph_ids"`
+	ResourceName         string   `json:"resource_name"`
+	Family               string   `json:"family"`
+	Bold                 bool     `json:"bold,omitempty"`
+	Italic               bool     `json:"italic,omitempty"`
+	PostScriptName       string   `json:"post_script_name"`
+	UnitsPerEm           int      `json:"units_per_em"`
+	Ascent               int      `json:"ascent"`
+	Descent              int      `json:"descent"`
+	CapHeight            int      `json:"cap_height"`
+	BBox                 [4]int   `json:"bbox"`
+	Flags                int      `json:"flags"`
+	ItalicAngle          int      `json:"italic_angle"`
+	OriginalFontFileSize int      `json:"original_font_file_size"`
+	EmbeddedFontFileSize int      `json:"embedded_font_file_size"`
+	Subset               bool     `json:"subset,omitempty"`
+	UsedGlyphCount       int      `json:"used_glyph_count"`
+	UsedGlyphIDs         []uint16 `json:"used_glyph_ids"`
 }
 
 type pdfDebugPrintedFootnotes struct {
@@ -459,21 +462,26 @@ func pdfDebugFonts(resources []pdfFontResource) []pdfDebugFont {
 			usedGlyphIDs = append(usedGlyphIDs, glyphID)
 		}
 		slices.Sort(usedGlyphIDs)
+		originalSize := len(resource.Face.Data)
+		embeddedSize := len(resource.Objects.FontFileData)
 		out = append(out, pdfDebugFont{
-			ResourceName:   resource.Name,
-			Family:         resource.Key.Family,
-			Bold:           resource.Key.Bold,
-			Italic:         resource.Key.Italic,
-			PostScriptName: resource.Face.PostScriptName,
-			UnitsPerEm:     resource.Face.UnitsPerEm,
-			Ascent:         resource.Face.Ascent,
-			Descent:        resource.Face.Descent,
-			CapHeight:      resource.Face.CapHeight,
-			BBox:           resource.Face.BBox,
-			Flags:          resource.Face.Flags,
-			ItalicAngle:    resource.Face.ItalicAngle,
-			UsedGlyphCount: len(usedGlyphIDs),
-			UsedGlyphIDs:   usedGlyphIDs,
+			ResourceName:         resource.Name,
+			Family:               resource.Key.Family,
+			Bold:                 resource.Key.Bold,
+			Italic:               resource.Key.Italic,
+			PostScriptName:       resource.Face.PostScriptName,
+			UnitsPerEm:           resource.Face.UnitsPerEm,
+			Ascent:               resource.Face.Ascent,
+			Descent:              resource.Face.Descent,
+			CapHeight:            resource.Face.CapHeight,
+			BBox:                 resource.Face.BBox,
+			Flags:                resource.Face.Flags,
+			ItalicAngle:          resource.Face.ItalicAngle,
+			OriginalFontFileSize: originalSize,
+			EmbeddedFontFileSize: embeddedSize,
+			Subset:               embeddedSize > 0 && embeddedSize < originalSize,
+			UsedGlyphCount:       len(usedGlyphIDs),
+			UsedGlyphIDs:         usedGlyphIDs,
 		})
 	}
 	return out

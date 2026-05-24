@@ -147,6 +147,9 @@ func TestGenerateDebugDumps(t *testing.T) {
 		if font.ResourceName == "" || font.PostScriptName == "" || font.UsedGlyphCount == 0 {
 			t.Fatalf("debug font = %#v, want resource name, PostScript name, and used glyphs", font)
 		}
+		if font.OriginalFontFileSize <= 0 || font.EmbeddedFontFileSize <= 0 || !font.Subset {
+			t.Fatalf("debug font = %#v, want original/subset font file sizes", font)
+		}
 	}
 
 	var printedFootnotes pdfDebugPrintedFootnotes
