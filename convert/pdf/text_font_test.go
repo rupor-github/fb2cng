@@ -394,6 +394,16 @@ func TestGlyphHex(t *testing.T) {
 	}
 }
 
+func TestShapedRunesUsesGlyphSourceText(t *testing.T) {
+	got := shapedRunes(shapedText{Glyphs: []shapedGlyph{
+		{GlyphID: 7, Rune: '\ufb01', Source: "fi"},
+		{GlyphID: 8, Rune: 'x', Source: "x"},
+	}})
+	if got != "fix" {
+		t.Fatalf("shapedRunes() = %q, want source text", got)
+	}
+}
+
 func TestToUnicodeCMapUsesGlyphSourceText(t *testing.T) {
 	cmap := toUnicodeCMap(map[uint16]shapedGlyph{
 		7: {GlyphID: 7, Rune: '\ufb01', Source: "fi"},

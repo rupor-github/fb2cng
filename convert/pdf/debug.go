@@ -605,9 +605,9 @@ func writeJSONDebugDump(path string, v any) error {
 }
 
 func shapedRunes(text shapedText) string {
-	runes := make([]rune, 0, len(text.Glyphs))
+	var b strings.Builder
 	for _, glyph := range text.Glyphs {
-		runes = append(runes, glyph.Rune)
+		b.WriteString(glyphUnicodeText(glyph))
 	}
-	return string(runes)
+	return b.String()
 }
