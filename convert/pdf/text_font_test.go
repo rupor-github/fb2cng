@@ -85,6 +85,20 @@ func TestShapeTextAndFontResourceObjects(t *testing.T) {
 	}
 }
 
+func TestShapeOpenTypeTextDoesNotDuplicateMultiGlyphClusterSource(t *testing.T) {
+	face, err := builtinFont("serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	shaped, err := shapeOpenTypeText(face, "a\u0301")
+	if err != nil {
+		t.Fatalf("shapeOpenTypeText(combining) error = %v", err)
+	}
+	if got := shapedRunes(shaped); got != "a\u0301" {
+		t.Fatalf("shapedRunes(combining) = %q (%#v), want source once", got, shaped.Glyphs)
+	}
+}
+
 func TestShapeTextUsesOpenTypeWhenFontCoversRun(t *testing.T) {
 	face, err := builtinFont("serif", false, false)
 	if err != nil {
@@ -421,9 +435,13 @@ func TestShapedRunesUsesGlyphSourceText(t *testing.T) {
 func TestToUnicodeCMapUsesGlyphSourceText(t *testing.T) {
 	cmap := toUnicodeCMap(map[uint16]shapedGlyph{
 		7: {GlyphID: 7, Rune: '\ufb01', Source: "fi"},
+		8: {GlyphID: 8},
 	})
 	if !bytes.Contains(cmap, []byte("<0007> <00660069>")) {
 		t.Fatalf("ToUnicode CMap = %s, want CID 7 mapped to source text fi", cmap)
+	}
+	if bytes.Contains(cmap, []byte("<0008>")) {
+		t.Fatalf("ToUnicode CMap = %s, want source-less glyph omitted", cmap)
 	}
 }
 

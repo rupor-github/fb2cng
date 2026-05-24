@@ -281,14 +281,22 @@ func (s *openTypePDFTextShaper) Shape(text string, _ pdfShapeOptions) (shapedTex
 		Glyphs: make([]shapedGlyph, 0, len(out.Glyphs)),
 		Used:   make(map[uint16]shapedGlyph),
 	}
+	seenClusters := make(map[int]bool)
 	for _, hbGlyph := range out.Glyphs {
 		if hbGlyph.GlyphID > math.MaxUint16 {
 			return shapedText{}, fmt.Errorf("glyph id %d exceeds PDF CID width", hbGlyph.GlyphID)
 		}
 		start, end, source := shapedGlyphSource(runes, hbGlyph.TextIndex(), hbGlyph.RunesCount())
+		r := firstRuneOrZero(source)
+		if seenClusters[start] {
+			source = ""
+			r = 0
+		} else {
+			seenClusters[start] = true
+		}
 		glyph := shapedGlyph{
 			GlyphID:      uint16(hbGlyph.GlyphID),
-			Rune:         firstRuneOrZero(source),
+			Rune:         r,
 			Source:       source,
 			Width:        floatFontUnitsToPDFWidth(face.TextFace.HorizontalAdvance(hbGlyph.GlyphID), face.UnitsPerEm),
 			Advance:      fixedFontUnitsToPDFWidth(hbGlyph.Advance, face.UnitsPerEm),
@@ -828,7 +836,10 @@ func intArray(values ...int) docwriter.Array {
 
 func toUnicodeCMap(used map[uint16]shapedGlyph) []byte {
 	ids := make([]int, 0, len(used))
-	for id := range used {
+	for id, glyph := range used {
+		if glyphUnicodeText(glyph) == "" {
+			continue
+		}
 		ids = append(ids, int(id))
 	}
 	slices.Sort(ids)
@@ -866,7 +877,7 @@ func glyphUnicodeText(glyph shapedGlyph) string {
 	if glyph.Rune != 0 {
 		return string(glyph.Rune)
 	}
-	return "\uFFFD"
+	return ""
 }
 
 func utf16BEHex(r rune) string {
