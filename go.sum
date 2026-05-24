@@ -185,6 +185,8 @@ github.com/go-task/task/v3 v3.50.0 h1:VO2moBcbUaVlCLmpQI9c7GT3vJ8JrIpylS+TJq53FM
 github.com/go-task/task/v3 v3.50.0/go.mod h1:PIiVErGy3MhZeajTU4TQ6K6mQ520fK1hNXZT7yAmFkc=
 github.com/go-task/template v0.2.0 h1:xW7ek0o65FUSTbKcSNeg2Vyf/I7wYXFgLUznptvviBE=
 github.com/go-task/template v0.2.0/go.mod h1:dbdoUb6qKnHQi1y6o+IdIrs0J4o/SEhSTA6bbzZmdtc=
+github.com/go-text/typesetting v0.3.4 h1:YYurUOtEb9kGSOz4uE3k4OpBGsp1dDL8+fjCeaFamAU=
+github.com/go-text/typesetting v0.3.4/go.mod h1:4qZCQphq4KSgGTAeI0uMEkVbROgfah8BuyF5LRYr7XY=
 github.com/golang/mock v1.7.0-rc.1 h1:YojYx61/OLFsiv6Rw1Z96LpldJIy31o+UHmwAUMJ6/U=
 github.com/golang/mock v1.7.0-rc.1/go.mod h1:s42URUywIqd+OcERslBJvOjepvNymP31m3q8d/GkuRs=
 github.com/golang/protobuf v1.5.4 h1:i7eJL8qZTpSEXOPTxNKhASYpMn+8e5Q6AdndVa1dWek=

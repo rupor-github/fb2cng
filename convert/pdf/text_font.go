@@ -3,12 +3,15 @@ package pdf
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"sync"
 	"unicode"
 	"unicode/utf16"
 
+	"github.com/go-text/typesetting/di"
+	"github.com/go-text/typesetting/shaping"
 	"go.uber.org/zap"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/sfnt"
@@ -157,6 +160,11 @@ type simplePDFTextShaper struct {
 	face *builtinFontFace
 }
 
+type openTypePDFTextShaper struct {
+	face   *builtinFontFace
+	shaper shaping.HarfbuzzShaper
+}
+
 func shapeText(face *builtinFontFace, text string) (shapedText, error) {
 	var shaper pdfTextShaper = simplePDFTextShaper{face: face}
 	return shaper.Shape(text, pdfShapeOptions{})
@@ -219,6 +227,84 @@ func pdfGlyphWithSource(glyph shapedGlyph, r rune, start, end int) shapedGlyph {
 	glyph.ClusterStart = start
 	glyph.ClusterEnd = end
 	return glyph
+}
+
+func shapeOpenTypeText(face *builtinFontFace, text string) (shapedText, error) {
+	shaper := openTypePDFTextShaper{face: face}
+	return shaper.Shape(text, pdfShapeOptions{})
+}
+
+func (s *openTypePDFTextShaper) Shape(text string, _ pdfShapeOptions) (shapedText, error) {
+	face := s.face
+	if face == nil || face.TextFace == nil {
+		return shapedText{}, fmt.Errorf("OpenType font face is required")
+	}
+
+	runes := []rune(text)
+	out := s.shaper.Shape(shaping.Input{
+		Text:      runes,
+		RunStart:  0,
+		RunEnd:    len(runes),
+		Direction: di.DirectionLTR,
+		Face:      face.TextFace,
+		Size:      fixed.I(face.UnitsPerEm),
+	})
+
+	shaped := shapedText{
+		Glyphs: make([]shapedGlyph, 0, len(out.Glyphs)),
+		Used:   make(map[uint16]shapedGlyph),
+	}
+	for _, hbGlyph := range out.Glyphs {
+		if hbGlyph.GlyphID > math.MaxUint16 {
+			return shapedText{}, fmt.Errorf("glyph id %d exceeds PDF CID width", hbGlyph.GlyphID)
+		}
+		start, end, source := shapedGlyphSource(runes, hbGlyph.TextIndex(), hbGlyph.RunesCount())
+		glyph := shapedGlyph{
+			GlyphID:      uint16(hbGlyph.GlyphID),
+			Rune:         firstRuneOrZero(source),
+			Source:       source,
+			Width:        fixedFontUnitsToPDFWidth(hbGlyph.Advance, face.UnitsPerEm),
+			ClusterStart: start,
+			ClusterEnd:   end,
+			XOffset:      fixedFontUnitsToPDFWidth(hbGlyph.XOffset, face.UnitsPerEm),
+			YOffset:      fixedFontUnitsToPDFWidth(hbGlyph.YOffset, face.UnitsPerEm),
+			FontKey:      face.Key,
+		}
+		if glyph.GlyphID == 0 {
+			glyph = missingPDFGlyph(face, glyph.Rune, glyph.Width)
+			glyph.Source = source
+			glyph.ClusterStart = start
+			glyph.ClusterEnd = end
+		}
+		shaped.Glyphs = append(shaped.Glyphs, glyph)
+		if glyph.GlyphID != 0 {
+			shaped.Used[glyph.GlyphID] = glyph
+		}
+	}
+	return shaped, nil
+}
+
+func shapedGlyphSource(runes []rune, start, count int) (int, int, string) {
+	start = min(max(start, 0), len(runes))
+	if count <= 0 {
+		count = 1
+	}
+	end := min(start+count, len(runes))
+	if end < start {
+		end = start
+	}
+	return start, end, string(runes[start:end])
+}
+
+func firstRuneOrZero(text string) rune {
+	for _, r := range text {
+		return r
+	}
+	return 0
+}
+
+func fixedFontUnitsToPDFWidth(value fixed.Int26_6, unitsPerEm int) int {
+	return fontUnitsToPDFWidth(value.Round(), unitsPerEm)
 }
 
 func pdfBuiltinSymbolFallbackGlyph(face *builtinFontFace, r rune) (shapedGlyph, bool, error) {

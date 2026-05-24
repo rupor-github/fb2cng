@@ -37,6 +37,9 @@ func TestBuiltinFontSelectionAndMetrics(t *testing.T) {
 			if face.Font == nil {
 				t.Error("parsed sfnt font is nil")
 			}
+			if face.TextFace == nil {
+				t.Error("parsed OpenType text face is nil")
+			}
 			if face.UnitsPerEm <= 0 {
 				t.Errorf("UnitsPerEm = %d, want positive", face.UnitsPerEm)
 			}

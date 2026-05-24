@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	textfont "github.com/go-text/typesetting/font"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/sfnt"
 	"golang.org/x/image/math/fixed"
@@ -74,6 +75,7 @@ type builtinFontFace struct {
 	PostScriptName  string
 	Data            []byte
 	Font            *sfnt.Font
+	TextFace        *textfont.Face
 	Key             pdfFontKey
 	Builtin         bool
 	UnitsPerEm      int
@@ -216,6 +218,10 @@ func loadRawFont(label string, data []byte, fixedPitch, italic bool) (*builtinFo
 	if err != nil {
 		return nil, fmt.Errorf("parse font: %w", err)
 	}
+	textFace, err := textfont.ParseTTF(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("parse OpenType font: %w", err)
+	}
 
 	units := int(parsed.UnitsPerEm())
 	ppem := fixed.I(units)
@@ -248,6 +254,7 @@ func loadRawFont(label string, data []byte, fixedPitch, italic bool) (*builtinFo
 		PostScriptName: sanitizePDFName(postScriptName),
 		Data:           data,
 		Font:           parsed,
+		TextFace:       textFace,
 		UnitsPerEm:     units,
 		Ascent:         metrics.Ascent.Round(),
 		Descent:        -metrics.Descent.Round(),

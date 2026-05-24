@@ -82,6 +82,35 @@ func TestShapeTextAndFontResourceObjects(t *testing.T) {
 	}
 }
 
+func TestShapeOpenTypeTextAppliesKerningAndLigatures(t *testing.T) {
+	face, err := builtinFont("serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	simpleAV, err := shapeText(face, "AV")
+	if err != nil {
+		t.Fatalf("shapeText(AV) error = %v", err)
+	}
+	openTypeAV, err := shapeOpenTypeText(face, "AV")
+	if err != nil {
+		t.Fatalf("shapeOpenTypeText(AV) error = %v", err)
+	}
+	if simpleWidth, openTypeWidth := shapedWidthPoints(simpleAV, 10), shapedWidthPoints(openTypeAV, 10); openTypeWidth >= simpleWidth {
+		t.Fatalf("OpenType AV width = %v, simple width = %v, want kerning to reduce width", openTypeWidth, simpleWidth)
+	}
+
+	ligature, err := shapeOpenTypeText(face, "fi")
+	if err != nil {
+		t.Fatalf("shapeOpenTypeText(fi) error = %v", err)
+	}
+	if len(ligature.Glyphs) != 1 {
+		t.Fatalf("fi glyph count = %d, want standard ligature", len(ligature.Glyphs))
+	}
+	if glyph := ligature.Glyphs[0]; glyph.Source != "fi" || glyph.ClusterStart != 0 || glyph.ClusterEnd != 2 {
+		t.Fatalf("fi glyph source = %q cluster %d:%d, want fi 0:2", glyph.Source, glyph.ClusterStart, glyph.ClusterEnd)
+	}
+}
+
 func TestShapeTextUsesBuiltInSymbolFallbackForGenericFonts(t *testing.T) {
 	registry := newPDFFontRegistry(nil, nil)
 	face, key, err := fontForStyle(registry, paragraphStyle{FontFamily: "serif"})

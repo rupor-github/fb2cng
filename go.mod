@@ -13,6 +13,7 @@ require (
 	github.com/beevik/etree v1.6.0
 	github.com/disintegration/imaging v1.6.2
 	github.com/go-task/slim-sprig/v3 v3.0.0
+	github.com/go-text/typesetting v0.3.4
 	github.com/google/uuid v1.6.0
 	github.com/gosimple/slug v1.15.0
 	github.com/h2non/filetype v1.1.3

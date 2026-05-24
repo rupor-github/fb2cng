@@ -442,6 +442,19 @@ github.com/go-task/task/v3/taskrc/ast
 ## explicit; go 1.23.0
 github.com/go-task/template
 github.com/go-task/template/internal/fmtsort
+# github.com/go-text/typesetting v0.3.4
+## explicit; go 1.19
+github.com/go-text/typesetting/di
+github.com/go-text/typesetting/font
+github.com/go-text/typesetting/font/cff
+github.com/go-text/typesetting/font/cff/interpreter
+github.com/go-text/typesetting/font/opentype
+github.com/go-text/typesetting/font/opentype/tables
+github.com/go-text/typesetting/harfbuzz
+github.com/go-text/typesetting/internal/unicodedata
+github.com/go-text/typesetting/language
+github.com/go-text/typesetting/segmenter
+github.com/go-text/typesetting/shaping
 # github.com/golang/mock v1.7.0-rc.1
 ## explicit; go 1.15
 github.com/golang/mock/mockgen
@@ -790,6 +803,7 @@ go.uber.org/zap/internal/stacktrace
 go.uber.org/zap/internal/ztest
 go.uber.org/zap/zapcore
 go.uber.org/zap/zaptest
+go.uber.org/zap/zaptest/observer
 # go.yaml.in/yaml/v3 v3.0.4
 ## explicit; go 1.16
 go.yaml.in/yaml/v3
@@ -817,6 +831,8 @@ golang.org/x/exp/typeparams
 golang.org/x/image/bmp
 golang.org/x/image/ccitt
 golang.org/x/image/colornames
+golang.org/x/image/font
+golang.org/x/image/font/sfnt
 golang.org/x/image/math/fixed
 golang.org/x/image/riff
 golang.org/x/image/tiff
