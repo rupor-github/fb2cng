@@ -393,14 +393,59 @@ td {
     text-indent: 0;
     margin: 0.2em 0;
 }
-.footnote-separator {
-    border-top: 0.5pt solid;
-    margin-top: 0.5em;
-    margin-bottom: 0.5em;
-    width: 100%;
-}
-.footnote-continuation {
-    /* continuation-title hook; inherits footnote title styling by default */
+@media fbc-pdf {
+    .footnote {
+        font-size: 70%;
+        line-height: 1.15;
+        margin: 0.15em 0;
+        text-indent: 0;
+    }
+    .footnote-title {
+        margin: 0.35em 0 0.15em 0;
+        text-align: left;
+        text-indent: 0;
+        font-weight: bold;
+        page-break-after: avoid;
+    }
+    .footnote p,
+    .footnote .annotation,
+    .footnote .annotation-title,
+    .footnote .annotation-subtitle,
+    .footnote .epigraph,
+    .footnote .epigraph-subtitle,
+    .footnote .poem,
+    .footnote .poem-title,
+    .footnote .poem-title-first,
+    .footnote .poem-title-next,
+    .footnote .poem-subtitle,
+    .footnote .stanza,
+    .footnote .stanza-title,
+    .footnote .stanza-title-first,
+    .footnote .stanza-title-next,
+    .footnote .stanza-subtitle,
+    .footnote .verse,
+    .footnote .cite,
+    .footnote .cite-subtitle,
+    .footnote .text-author,
+    .footnote .date,
+    .footnote table,
+    .footnote th,
+    .footnote td {
+        line-height: 1.15;
+    }
+    .footnote-title-first,
+    .footnote-title-next {
+        font-size: 70%;
+        line-height: 1.15;
+        margin: 0.1em 0;
+        text-indent: 0;
+    }
+    .footnote-separator {
+        border-top: 0.5pt solid;
+        margin-top: 0.25em;
+        margin-bottom: 0.25em;
+        width: 100%;
+    }
 }
 
 /* "More" indicator for floating footnotes */

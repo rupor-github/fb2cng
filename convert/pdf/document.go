@@ -23,6 +23,18 @@ func pageSizePoints(screen config.ScreenConfig) (float64, float64, error) {
 	return float64(screen.Width) * pdfPointsPerInch / float64(dpi), float64(screen.Height) * pdfPointsPerInch / float64(dpi), nil
 }
 
+func layoutPDFDocumentPages(doc pdfDocumentSpec, fontFace *builtinFontFace) ([]pdfPage, map[pdfFontKey]map[uint16]shapedGlyph, error) {
+	if !pdfPrintedFootnotesEnabled(doc.Content) || len(doc.PrintedFootnotes) == 0 {
+		return layoutPDFPages(doc, fontFace)
+	}
+	reserved, err := layoutPDFPagesWithPrintedFootnoteReserves(doc, fontFace)
+	if err != nil {
+		return nil, nil, err
+	}
+	pages := appendPDFPrintedFootnotePagePlans(doc, reserved.Pages, reserved.Plans, reserved.FootnoteTextHeight, reserved.UsedGlyphs)
+	return pages, reserved.UsedGlyphs, nil
+}
+
 func buildPDFDocument(doc pdfDocumentSpec) ([]byte, error) {
 	doc.Blocks = applyPDFPseudoContentToBlocks(doc.Blocks, doc.Styles)
 	doc.PrintedFootnotes = applyPDFPseudoContentToPrintedFootnotes(doc.PrintedFootnotes, doc.Styles)
@@ -41,7 +53,7 @@ func buildPDFDocument(doc pdfDocumentSpec) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	pages, usedGlyphs, err := layoutPDFPages(doc, fontFace)
+	pages, usedGlyphs, err := layoutPDFDocumentPages(doc, fontFace)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +61,7 @@ func buildPDFDocument(doc pdfDocumentSpec) ([]byte, error) {
 		if !resolvePDFBacklinkPagesAndText(&doc, pages) {
 			break
 		}
-		pages, usedGlyphs, err = layoutPDFPages(doc, fontFace)
+		pages, usedGlyphs, err = layoutPDFDocumentPages(doc, fontFace)
 		if err != nil {
 			return nil, err
 		}

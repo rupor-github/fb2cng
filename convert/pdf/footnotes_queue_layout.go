@@ -5,12 +5,14 @@ func pdfPrintedFootnoteQueueBlocks(doc pdfDocumentSpec, queue []pdfPrintedFootno
 		return nil
 	}
 	var blocks []pdfTextBlock
+	labels := pdfPrintedFootnoteQueueLabels(queue)
 	for _, entry := range queue {
 		note, ok := doc.PrintedFootnotes[entry.ID]
 		if !ok {
 			continue
 		}
-		blocks = append(blocks, pdfPrintedFootnoteBlocksForQueueEntry(doc.Content, note, entry, false)...)
+		entryBlocks := pdfPrintedFootnoteBlocksForQueueEntry(doc.Content, note, entry, false)
+		blocks = append(blocks, applyPDFPrintedFootnoteQueueReferenceLabels(entryBlocks, doc.Content, labels)...)
 	}
 	return blocks
 }

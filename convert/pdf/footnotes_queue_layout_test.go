@@ -56,19 +56,19 @@ func TestPDFPrintedFootnoteQueueBlocksUsesNestedActualTitle(t *testing.T) {
 				BodyBlocks:  []pdfTextBlock{{Kind: pdfBlockParagraph, Text: "Ordinary body", Runs: []pdfInlineRun{{Text: "Ordinary body"}}, StyleClasses: pdfStyleFootnote, ContextClasses: pdfStyleFootnote}},
 			},
 			"n2": {
-				ID:     "n2",
-				Blocks: []pdfTextBlock{{Kind: pdfBlockParagraph, Text: "Nested actual title", Runs: []pdfInlineRun{{Text: "Nested actual title"}}, StyleClasses: pdfStyleFootnoteTitle, ContextClasses: pdfStyleFootnoteTitle}},
+				ID:          "n2",
+				TitleBlocks: []pdfTextBlock{{Kind: pdfBlockParagraph, Text: "Nested actual title", Runs: []pdfInlineRun{{Text: "Nested actual title"}}, StyleClasses: pdfStyleFootnoteTitle, ContextClasses: pdfStyleFootnoteTitle}},
 			},
 		},
 	}
-	queue := []pdfPrintedFootnoteQueueEntry{{ID: "n1", PageLabel: "1"}, {ID: "n2", Nested: true}}
+	queue := []pdfPrintedFootnoteQueueEntry{{ID: "n1", PageLabel: "1"}, {ID: "n2", PageLabel: "2", Nested: true}}
 
 	blocks := pdfPrintedFootnoteQueueBlocks(doc, queue)
 	texts := make([]string, 0, len(blocks))
 	for _, block := range blocks {
 		texts = append(texts, block.Text)
 	}
-	want := []string{"1", "Ordinary body", "Nested actual title"}
+	want := []string{"1 Ordinary title", "Ordinary body", "2 Nested actual title"}
 	if strings.Join(texts, "|") != strings.Join(want, "|") {
 		t.Fatalf("queue block texts = %#v, want %#v", texts, want)
 	}

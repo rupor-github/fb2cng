@@ -34,7 +34,7 @@ func appendPDFPrintedFootnotePagePlans(
 	if styles == nil {
 		styles = newPDFStyleResolver(nil, nil)
 	}
-	contentLeft, contentRight, _, contentBottom := pdfPageContentMargins(doc, styles, margin)
+	contentLeft, contentRight, contentTop, contentBottom := pdfPageContentMargins(doc, styles, margin)
 	contentWidth := max(doc.PageWidth-contentLeft-contentRight, 12)
 	separator := pdfPrintedFootnoteSeparatorMetricsForArea(doc, styles, contentLeft, contentWidth, contentBottom, footnoteTextHeight)
 
@@ -48,11 +48,7 @@ func appendPDFPrintedFootnotePagePlans(
 		appendPDFPrintedFootnotePage(&page, plan.QueuePages[0], separator)
 		mergePDFUsedGlyphs(used, plan.UsedGlyphs)
 		out = append(out, page)
-		for i := 1; i < len(plan.QueuePages); i++ {
-			continuation := pdfPage{}
-			appendPDFPrintedFootnotePage(&continuation, plan.QueuePages[i], separator)
-			out = append(out, continuation)
-		}
+		out = appendPDFPrintedFootnoteContinuationPages(out, doc, plan.QueuePages[1:], contentTop, contentBottom)
 	}
 	return out
 }
@@ -76,6 +72,101 @@ func appendPDFPrintedFootnotePage(page *pdfPage, footnotePage pdfPage, separator
 	page.Images = append(page.Images, footnotePage.Images...)
 	page.Anchors = append(page.Anchors, footnotePage.Anchors...)
 	page.Annotations = append(page.Annotations, footnotePage.Annotations...)
+}
+
+func appendPDFPrintedFootnoteContinuationPages(out []pdfPage, doc pdfDocumentSpec, queuePages []pdfPage, contentTop float64, contentBottom float64) []pdfPage {
+	if len(queuePages) == 0 {
+		return out
+	}
+	pageTop := doc.PageHeight - contentTop
+	pageBottom := contentBottom
+	var continuation pdfPage
+	cursor := pageTop
+	hasContent := false
+	for _, queuePage := range queuePages {
+		chunkTop, chunkBottom, ok := pdfPageYBounds(queuePage)
+		if !ok {
+			continue
+		}
+		chunkHeight := chunkTop - chunkBottom
+		if hasContent && cursor-chunkHeight < pageBottom {
+			out = append(out, continuation)
+			continuation = pdfPage{}
+			cursor = pageTop
+			hasContent = false
+		}
+		shift := cursor - chunkTop
+		appendPDFPrintedFootnotePage(&continuation, shiftPDFPageY(queuePage, shift), pdfPrintedFootnoteSeparatorMetrics{})
+		cursor = chunkBottom + shift
+		hasContent = true
+	}
+	if hasContent {
+		out = append(out, continuation)
+	}
+	return out
+}
+
+func shiftPDFPageY(page pdfPage, dy float64) pdfPage {
+	if dy == 0 {
+		return page
+	}
+	shifted := page
+	shifted.Backgrounds = append([]pdfPageRect(nil), page.Backgrounds...)
+	for i := range shifted.Backgrounds {
+		shifted.Backgrounds[i].Y += dy
+	}
+	shifted.Borders = append([]pdfPageBorder(nil), page.Borders...)
+	for i := range shifted.Borders {
+		shifted.Borders[i].Y += dy
+	}
+	shifted.Lines = append([]pdfPageLine(nil), page.Lines...)
+	for i := range shifted.Lines {
+		shifted.Lines[i].Y += dy
+	}
+	shifted.Images = append([]pdfPageImage(nil), page.Images...)
+	for i := range shifted.Images {
+		shifted.Images[i].Y += dy
+	}
+	shifted.Annotations = append([]pdfLinkAnnotation(nil), page.Annotations...)
+	for i := range shifted.Annotations {
+		shifted.Annotations[i].Rect.Y1 += dy
+		shifted.Annotations[i].Rect.Y2 += dy
+	}
+	return shifted
+}
+
+func pdfPageYBounds(page pdfPage) (float64, float64, bool) {
+	top := 0.0
+	bottom := 0.0
+	ok := false
+	include := func(itemTop float64, itemBottom float64) {
+		if itemTop < itemBottom {
+			itemTop, itemBottom = itemBottom, itemTop
+		}
+		if !ok || itemTop > top {
+			top = itemTop
+		}
+		if !ok || itemBottom < bottom {
+			bottom = itemBottom
+		}
+		ok = true
+	}
+	for _, rect := range page.Backgrounds {
+		include(rect.Y+rect.Height, rect.Y)
+	}
+	for _, border := range page.Borders {
+		include(border.Y+border.Height, border.Y)
+	}
+	for _, line := range page.Lines {
+		include(line.Y+line.FontSize, line.Y-line.FontSize*0.2)
+	}
+	for _, image := range page.Images {
+		include(image.Y+image.Height, image.Y)
+	}
+	for _, annotation := range page.Annotations {
+		include(annotation.Rect.Y2, annotation.Rect.Y1)
+	}
+	return top, bottom, ok
 }
 
 func pdfPrintedFootnoteSeparatorMetricsForArea(

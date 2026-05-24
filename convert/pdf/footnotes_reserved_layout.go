@@ -86,7 +86,7 @@ func pdfPrintedFootnotePlansStable(left []pdfPrintedFootnotePagePlan, right []pd
 	}
 	for i := range left {
 		if left[i].PageIndex != right[i].PageIndex ||
-			!sameStringSlice(left[i].Refs, right[i].Refs) ||
+			!samePDFPrintedFootnoteRefs(left[i].Refs, right[i].Refs) ||
 			!samePDFPrintedFootnoteQueue(left[i].Queue, right[i].Queue) ||
 			left[i].ContinuationPages != right[i].ContinuationPages {
 			return false
@@ -115,7 +115,7 @@ func pdfFloatNearlyEqual(left float64, right float64) bool {
 	return right-left < epsilon
 }
 
-func sameStringSlice(left []string, right []string) bool {
+func samePDFPrintedFootnoteRefs(left []pdfPrintedFootnoteRef, right []pdfPrintedFootnoteRef) bool {
 	if len(left) != len(right) {
 		return false
 	}

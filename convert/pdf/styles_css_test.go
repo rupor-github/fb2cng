@@ -315,11 +315,29 @@ func TestPDFStyleResolverParagraphTitleDefaultsMatchDefaultCSS(t *testing.T) {
 	}
 }
 
-func TestPDFStyleResolverFootnoteTitleDefaultsMatchKFXDefaultCSS(t *testing.T) {
+func TestPDFStyleResolverFootnoteDefaultsAreCompactInPDF(t *testing.T) {
 	resolver := newPDFStyleResolverWithDefaultCSS(t, `p { text-align: right; }`)
+	footnoteBody := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleFootnote, ContextClasses: pdfStyleFootnote})
+	if math.Abs(footnoteBody.Paragraph.FontSize-pdfDefaultCSSRootFontSize*0.7) > 0.001 {
+		t.Fatalf("footnote body font size = %v, want 70%% of PDF root %v", footnoteBody.Paragraph.FontSize, pdfDefaultCSSRootFontSize*0.7)
+	}
+	if footnoteBody.Paragraph.LineHeight >= pdfDefaultCSSRootLineHeight {
+		t.Fatalf("footnote body line height = %v, want denser than main %v", footnoteBody.Paragraph.LineHeight, pdfDefaultCSSRootLineHeight)
+	}
+	footnoteEpigraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleEpigraph, ContextClasses: joinStyleClasses(pdfStyleFootnote, pdfStyleEpigraph)})
+	if math.Abs(footnoteEpigraph.Paragraph.FontSize-pdfDefaultCSSRootFontSize*0.7) > 0.001 {
+		t.Fatalf("footnote epigraph font size = %v, want 70%% of PDF root %v", footnoteEpigraph.Paragraph.FontSize, pdfDefaultCSSRootFontSize*0.7)
+	}
+	if footnoteEpigraph.Paragraph.LineHeight >= pdfDefaultCSSRootLineHeight {
+		t.Fatalf("footnote epigraph line height = %v, want denser than main %v", footnoteEpigraph.Paragraph.LineHeight, pdfDefaultCSSRootLineHeight)
+	}
+
 	footnoteTitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleFootnoteTitle + " " + pdfStyleFootnoteTitle + "-first", ContextClasses: pdfStyleFootnoteTitle})
-	if footnoteTitle.SpaceBefore != pdfDefaultCSSRootFontSize || footnoteTitle.SpaceAfter != pdfDefaultCSSRootFontSize*0.5 {
-		t.Fatalf("footnote title margins = %v/%v, want default.css base 1em/0.5em", footnoteTitle.SpaceBefore, footnoteTitle.SpaceAfter)
+	if math.Abs(footnoteTitle.Paragraph.FontSize-pdfDefaultCSSRootFontSize*0.7) > 0.001 {
+		t.Fatalf("footnote title font size = %v, want 70%% of PDF root %v", footnoteTitle.Paragraph.FontSize, pdfDefaultCSSRootFontSize*0.7)
+	}
+	if footnoteTitle.SpaceBefore >= pdfDefaultCSSRootFontSize || footnoteTitle.SpaceAfter >= pdfDefaultCSSRootFontSize*0.5 {
+		t.Fatalf("footnote title margins = %v/%v, want denser than default 1em/0.5em", footnoteTitle.SpaceBefore, footnoteTitle.SpaceAfter)
 	}
 	if !footnoteTitle.Paragraph.Bold {
 		t.Fatalf("footnote title bold = false, want default.css bold")

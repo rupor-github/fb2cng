@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"unicode"
 )
 
 func applyPDFPageLocalFootnoteReferenceLabels(
@@ -29,12 +28,14 @@ func applyPDFPageLocalFootnoteReferenceLabels(
 					nextLabel++
 					labels[fragment.FootnoteID] = label
 				}
-				visibleLabel := pdfPageLocalFootnoteReferenceText(shapedRunes(fragment.Text), label)
+				if strings.TrimSpace(fragment.ImageID) != "" {
+					continue
+				}
 				face, err := fontForKey(fonts, fragment.FontKey)
 				if err != nil {
 					return fmt.Errorf("shape page-local footnote label %q: %w", label, err)
 				}
-				shaped, err := shapeText(face, visibleLabel)
+				shaped, err := shapeText(face, label)
 				if err != nil {
 					return fmt.Errorf("shape page-local footnote label %q: %w", label, err)
 				}
@@ -49,30 +50,6 @@ func applyPDFPageLocalFootnoteReferenceLabels(
 		}
 	}
 	return nil
-}
-
-func pdfPageLocalFootnoteReferenceText(current string, label string) string {
-	label = strings.TrimSpace(label)
-	if label == "" {
-		return current
-	}
-	current = strings.TrimSpace(current)
-	if current == "" {
-		return label
-	}
-	runes := []rune(current)
-	firstCore := 0
-	for firstCore < len(runes) && !unicode.IsLetter(runes[firstCore]) && !unicode.IsDigit(runes[firstCore]) {
-		firstCore++
-	}
-	lastCore := len(runes) - 1
-	for lastCore >= firstCore && !unicode.IsLetter(runes[lastCore]) && !unicode.IsDigit(runes[lastCore]) {
-		lastCore--
-	}
-	if firstCore > lastCore {
-		return label
-	}
-	return string(runes[:firstCore]) + label + string(runes[lastCore+1:])
 }
 
 func shapedTextFromPageLineFragments(fragments []pdfPageLineFragment) shapedText {

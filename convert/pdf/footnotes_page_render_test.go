@@ -36,8 +36,46 @@ func TestAppendPDFPrintedFootnotePagePlansInsertsContinuationBeforeNextMainPage(
 	if got := pageText(out[2]); !strings.Contains(got, "Main page 2") {
 		t.Fatalf("third page text = %q, want next main page after footnote continuation", got)
 	}
-	if len(out[0].Backgrounds) == 0 || len(out[1].Backgrounds) == 0 {
-		t.Fatalf("backgrounds first=%#v continuation=%#v, want separator on rendered footnote pages", out[0].Backgrounds, out[1].Backgrounds)
+	if len(out[0].Backgrounds) == 0 {
+		t.Fatalf("first page backgrounds=%#v, want separator on source page", out[0].Backgrounds)
+	}
+	if len(out[1].Backgrounds) != 0 {
+		t.Fatalf("continuation backgrounds=%#v, want footnote-only continuation without bottom separator", out[1].Backgrounds)
+	}
+	if len(out[1].Lines) == 0 || out[1].Lines[0].Y <= plan.QueuePages[1].Lines[0].Y {
+		t.Fatalf("continuation line y = %#v, want shifted toward top of full page", out[1].Lines)
+	}
+}
+
+func TestAppendPDFPrintedFootnotePagePlansPacksContinuationChunksFromTop(t *testing.T) {
+	face, err := builtinFont("serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	plan := pdfPrintedFootnotePagePlan{
+		PageIndex: 0,
+		QueuePages: []pdfPage{
+			{Lines: []pdfPageLine{testPDFPageLine(t, face, "Footnote first part", 60)}},
+			{Lines: []pdfPageLine{testPDFPageLine(t, face, "Footnote continuation one", 60)}},
+			{Lines: []pdfPageLine{testPDFPageLine(t, face, "Footnote continuation two", 60)}},
+		},
+	}
+
+	out := appendPDFPrintedFootnotePagePlans(
+		pdfDocumentSpec{PageWidth: 260, PageHeight: 180},
+		[]pdfPage{{Lines: []pdfPageLine{testPDFPageLine(t, face, "Main page 1", 130)}}, {Lines: []pdfPageLine{testPDFPageLine(t, face, "Main page 2", 130)}}},
+		[]pdfPrintedFootnotePagePlan{plan},
+		80,
+		nil,
+	)
+	if len(out) != 3 {
+		t.Fatalf("pages = %d, want source page, packed continuation page, next main page", len(out))
+	}
+	if got := pageText(out[1]); !strings.Contains(got, "Footnote continuation one") || !strings.Contains(got, "Footnote continuation two") || strings.Contains(got, "Main page 2") {
+		t.Fatalf("packed continuation text = %q, want both continuation chunks before next main page", got)
+	}
+	if len(out[1].Lines) < 2 || out[1].Lines[0].Y <= out[1].Lines[1].Y {
+		t.Fatalf("packed continuation lines = %#v, want chunks stacked top-down", out[1].Lines)
 	}
 }
 

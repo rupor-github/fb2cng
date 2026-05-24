@@ -12,6 +12,10 @@ func pdfPrintedFootnotesEnabled(c *content.Content) bool {
 	return c != nil && c.OutputFormat == common.OutputFmtPdf && c.FootnotesMode.IsFloat()
 }
 
+func pdfPrintedFootnoteReferencesRenumbered(c *content.Content) bool {
+	return pdfPrintedFootnotesEnabled(c) && c.FootnotesMode == common.FootnotesModeFloatRenumbered
+}
+
 func buildPDFPrintedFootnoteBlocks(c *content.Content) map[string]pdfPrintedFootnote {
 	if !pdfPrintedFootnotesEnabled(c) || c.Book == nil || len(c.FootnotesIndex) == 0 {
 		return nil
@@ -74,6 +78,13 @@ func pdfPrintedFootnoteBodyBlocks(c *content.Content, section *fb2.Section) []pd
 	copySection.Title = nil
 	var blocks []pdfTextBlock
 	appendFootnoteSectionContentBlocks(&blocks, c, &copySection, nil)
+	return applyPDFFootnoteContextToBlocks(blocks)
+}
+
+func applyPDFFootnoteContextToBlocks(blocks []pdfTextBlock) []pdfTextBlock {
+	for i := range blocks {
+		blocks[i].ContextClasses = joinStyleClasses(blocks[i].ContextClasses, pdfStyleFootnote)
+	}
 	return blocks
 }
 
@@ -89,7 +100,7 @@ func pdfPrintedFootnotePageBlocks(c *content.Content, note pdfPrintedFootnote, p
 	}
 
 	var blocks []pdfTextBlock
-	if c != nil && c.FootnotesMode == common.FootnotesModeFloat && len(titleBlocks) > 0 {
+	if len(titleBlocks) > 0 {
 		blocks = append(blocks, pdfPrefixFootnoteTitleBlocks(label, titleBlocks)...)
 	} else {
 		labelBlock := pdfPageLabelFootnoteTitleBlock(note.ID, label, titleBlocks)
@@ -107,6 +118,7 @@ func pdfPageLabelFootnoteTitleBlock(id string, label string, titleBlocks []pdfTe
 		Kind:           pdfBlockParagraph,
 		ID:             strings.TrimSpace(id),
 		Text:           label,
+		Runs:           []pdfInlineRun{{Text: label}},
 		StyleClasses:   joinStyleClasses(pdfStyleFootnoteTitle, pdfStyleFootnoteTitle+"-first"),
 		ContextClasses: pdfStyleFootnoteTitle,
 	}
@@ -277,13 +289,7 @@ func clonePDFInlineSegments(segments []fb2.InlineSegment) []fb2.InlineSegment {
 }
 
 func pdfPrintedFootnoteRefsClickable(c *content.Content, styleClasses string, contextClasses string) bool {
-	if !pdfPrintedFootnotesEnabled(c) {
-		return true
-	}
-	return hasPDFStyleClass(styleClasses, pdfStyleFootnote) ||
-		hasPDFStyleClass(styleClasses, pdfStyleFootnoteTitle) ||
-		hasPDFStyleClass(contextClasses, pdfStyleFootnote) ||
-		hasPDFStyleClass(contextClasses, pdfStyleFootnoteTitle)
+	return !pdfPrintedFootnotesEnabled(c)
 }
 
 func pdfFootnoteTargetIDFromHref(c *content.Content, href string) (string, bool) {

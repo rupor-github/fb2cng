@@ -2,7 +2,7 @@ package pdf
 
 type pdfPrintedFootnotePagePlan struct {
 	PageIndex         int
-	Refs              []string
+	Refs              []pdfPrintedFootnoteRef
 	Queue             []pdfPrintedFootnoteQueueEntry
 	QueuePages        []pdfPage
 	UsedGlyphs        map[pdfFontKey]map[uint16]shapedGlyph
@@ -30,7 +30,7 @@ func buildPDFPrintedFootnotePagePlans(
 		}
 		plans = append(plans, pdfPrintedFootnotePagePlan{
 			PageIndex:         pageIndex,
-			Refs:              append([]string(nil), refs...),
+			Refs:              append([]pdfPrintedFootnoteRef(nil), refs...),
 			Queue:             append([]pdfPrintedFootnoteQueueEntry(nil), queue...),
 			QueuePages:        queuePages,
 			UsedGlyphs:        used,

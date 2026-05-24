@@ -88,7 +88,7 @@ func TestBuildPDFPrintedFootnotePagePlansQueuesNestedFootnotesWithActualTitle(t 
 	if len(plans) != 1 {
 		t.Fatalf("plans = %#v, want one page plan", plans)
 	}
-	wantQueue := []pdfPrintedFootnoteQueueEntry{{ID: "n1", PageLabel: "1"}, {ID: "n2", Nested: true}}
+	wantQueue := []pdfPrintedFootnoteQueueEntry{{ID: "n1", PageLabel: "1"}, {ID: "n2", PageLabel: "2", Nested: true}}
 	if !reflect.DeepEqual(plans[0].Queue, wantQueue) {
 		t.Fatalf("queue = %#v, want %#v", plans[0].Queue, wantQueue)
 	}
@@ -98,8 +98,8 @@ func TestBuildPDFPrintedFootnotePagePlansQueuesNestedFootnotesWithActualTitle(t 
 		text.WriteByte('\n')
 	}
 	got := text.String()
-	if !strings.Contains(got, "1") || !strings.Contains(got, "Nested actual title") || !strings.Contains(got, "Nested body.") {
-		t.Fatalf("queue pages text = %q, want main label plus nested actual title/body", got)
+	if !strings.Contains(got, "1") || !strings.Contains(got, "2 Nested actual title") || !strings.Contains(got, "Nested body.") {
+		t.Fatalf("queue pages text = %q, want main label plus nested label/title/body", got)
 	}
 }
 

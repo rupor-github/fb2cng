@@ -65,7 +65,7 @@ func TestPDFPrintedFootnotePageBlocksFloatPrependPageLocalLabelToActualTitle(t *
 	}
 }
 
-func TestPDFPrintedFootnotePageBlocksFloatRenumberedUsesOnlyPageLocalLabel(t *testing.T) {
+func TestPDFPrintedFootnotePageBlocksFloatRenumberedPrependsPageLocalLabelToActualTitle(t *testing.T) {
 	c := testPDFPrintedFootnoteContent(fb2.Section{
 		ID:    "n1",
 		Title: pdfTitleFromStrings("Примечание 17"),
@@ -78,8 +78,8 @@ func TestPDFPrintedFootnotePageBlocksFloatRenumberedUsesOnlyPageLocalLabel(t *te
 	c.FootnotesIndex["n1"] = fb2.FootnoteRef{BodyIdx: 0, SectionIdx: 0, NoteNum: 1, DisplayText: "1"}
 
 	blocks := pdfPrintedFootnotePageBlocks(c, buildPDFPrintedFootnoteBlocks(c)["n1"], "3", false)
-	if len(blocks) < 2 || blocks[0].Text != "3" || blocks[1].Text != "Footnote body." {
-		t.Fatalf("page footnote blocks = %#v, want page-local label only and body", blocks)
+	if len(blocks) < 2 || blocks[0].Text != "3 Примечание 17" || blocks[1].Text != "Footnote body." {
+		t.Fatalf("page footnote blocks = %#v, want page-local label, title, and body", blocks)
 	}
 }
 
@@ -140,7 +140,30 @@ func TestBuildPDFPrintedFootnoteBlocksContinuationTitleAppendsMarkerToLastParagr
 	}
 }
 
-func TestBuildPDFPrintedFootnoteBlocksKeepsNestedFootnoteRefsClickable(t *testing.T) {
+func TestBuildPDFPrintedFootnoteBlocksAppliesFootnoteContextToAllBodyBlocks(t *testing.T) {
+	c := testPDFPrintedFootnoteContent(fb2.Section{
+		ID: "n1",
+		Epigraphs: []fb2.Epigraph{{Flow: fb2.Flow{Items: []fb2.FlowItem{{
+			Kind:      fb2.FlowParagraph,
+			Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Epigraph."}}},
+		}}}}},
+		Content: []fb2.FlowItem{{
+			Kind: fb2.FlowCite,
+			Cite: &fb2.Cite{Items: []fb2.FlowItem{{
+				Kind:      fb2.FlowParagraph,
+				Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Quote."}}},
+			}}},
+		}},
+	})
+
+	for _, block := range buildPDFPrintedFootnoteBlocks(c)["n1"].BodyBlocks {
+		if !hasPDFStyleClass(block.ContextClasses, pdfStyleFootnote) {
+			t.Fatalf("body block context = %q for %#v, want footnote context", block.ContextClasses, block)
+		}
+	}
+}
+
+func TestBuildPDFPrintedFootnoteBlocksKeepsNestedFootnoteRefsNonClickable(t *testing.T) {
 	c := testPDFPrintedFootnoteContent(
 		fb2.Section{
 			ID:    "n1",
@@ -168,10 +191,10 @@ func TestBuildPDFPrintedFootnoteBlocksKeepsNestedFootnoteRefsClickable(t *testin
 	if body == nil {
 		t.Fatalf("nested-ref body block not found: %#v", footnotes["n1"].BodyBlocks)
 	}
-	if len(body.Runs) != 2 || body.Runs[1].LinkHref != "#n2" || body.Runs[1].FootnoteID != "n2" {
-		t.Fatalf("nested footnote ref run = %#v, want clickable target #n2", body.Runs)
+	if len(body.Runs) != 2 || body.Runs[1].LinkHref != "" || body.Runs[1].FootnoteID != "n2" {
+		t.Fatalf("nested footnote ref run = %#v, want non-clickable printed target n2", body.Runs)
 	}
-	if len(body.Links) != 1 || body.Links[0].Href != "#n2" {
-		t.Fatalf("nested footnote block links = %#v, want clickable link span", body.Links)
+	if len(body.Links) != 0 {
+		t.Fatalf("nested footnote block links = %#v, want footnote link span removed", body.Links)
 	}
 }
