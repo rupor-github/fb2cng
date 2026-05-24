@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	_ "embed"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"strings"
@@ -85,6 +86,7 @@ type builtinFontFace struct {
 	BBox            [4]int
 	Flags           int
 	ItalicAngle     int
+	EmbeddingFSType uint16
 	MissingGlyphLog *pdfMissingGlyphLogger
 }
 
@@ -251,14 +253,15 @@ func loadRawFont(label string, data []byte, fixedPitch, italic bool) (*builtinFo
 	}
 
 	return &builtinFontFace{
-		PostScriptName: sanitizePDFName(postScriptName),
-		Data:           data,
-		Font:           parsed,
-		TextFace:       textFace,
-		UnitsPerEm:     units,
-		Ascent:         metrics.Ascent.Round(),
-		Descent:        -metrics.Descent.Round(),
-		CapHeight:      metrics.CapHeight.Round(),
+		PostScriptName:  sanitizePDFName(postScriptName),
+		Data:            data,
+		Font:            parsed,
+		TextFace:        textFace,
+		UnitsPerEm:      units,
+		EmbeddingFSType: fontEmbeddingFSType(data),
+		Ascent:          metrics.Ascent.Round(),
+		Descent:         -metrics.Descent.Round(),
+		CapHeight:       metrics.CapHeight.Round(),
 		BBox: [4]int{
 			bounds.Min.X.Round(),
 			bounds.Min.Y.Round(),
@@ -268,6 +271,37 @@ func loadRawFont(label string, data []byte, fixedPitch, italic bool) (*builtinFo
 		Flags:       flags,
 		ItalicAngle: 0,
 	}, nil
+}
+
+func fontEmbeddingFSType(data []byte) uint16 {
+	os2Table, ok := rawTTFTable(data, "OS/2")
+	if !ok || len(os2Table) < 10 {
+		return 0
+	}
+	return binary.BigEndian.Uint16(os2Table[8:10])
+}
+
+func rawTTFTable(data []byte, tag string) ([]byte, bool) {
+	if len(tag) != 4 || len(data) < 12 {
+		return nil, false
+	}
+	numTables := int(binary.BigEndian.Uint16(data[4:6]))
+	for i := range numTables {
+		recordOffset := 12 + i*16
+		if recordOffset+16 > len(data) {
+			return nil, false
+		}
+		if string(data[recordOffset:recordOffset+4]) != tag {
+			continue
+		}
+		offset := int(binary.BigEndian.Uint32(data[recordOffset+8 : recordOffset+12]))
+		length := int(binary.BigEndian.Uint32(data[recordOffset+12 : recordOffset+16]))
+		if offset < 0 || length < 0 || offset+length > len(data) {
+			return nil, false
+		}
+		return data[offset : offset+length], true
+	}
+	return nil, false
 }
 
 func gunzipFont(data []byte) ([]byte, error) {

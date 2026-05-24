@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -94,9 +95,26 @@ func (r *pdfFontRegistry) addStylesheetFonts(stylesheet *fb2.Stylesheet, parsed 
 			r.log.Warn("Skipping unsupported PDF @font-face resource", zap.String("family", family), zap.String("url", url), zap.Error(err))
 			continue
 		}
+		r.logPDFFontEmbeddingRestrictions(family, url, face)
 		embeddedFamily.faces[variant] = face
 		r.families[familyKey] = embeddedFamily
 	}
+}
+
+func (r *pdfFontRegistry) logPDFFontEmbeddingRestrictions(family string, url string, face *builtinFontFace) {
+	if r == nil || r.log == nil || face == nil || face.EmbeddingFSType == 0 {
+		return
+	}
+	r.log.Warn("PDF font has embedding restrictions",
+		zap.String("family", family),
+		zap.String("url", url),
+		zap.String("font", face.PostScriptName),
+		zap.String("fs_type", fmt.Sprintf("0x%04X", face.EmbeddingFSType)),
+		zap.Bool("restricted_license_embedding", face.EmbeddingFSType&0x0002 != 0),
+		zap.Bool("preview_and_print_embedding", face.EmbeddingFSType&0x0004 != 0),
+		zap.Bool("editable_embedding", face.EmbeddingFSType&0x0008 != 0),
+		zap.Bool("no_subsetting", face.EmbeddingFSType&0x0100 != 0),
+		zap.Bool("bitmap_embedding_only", face.EmbeddingFSType&0x0200 != 0))
 }
 
 func (r *pdfFontRegistry) fontForKey(key pdfFontKey) (*builtinFontFace, error) {

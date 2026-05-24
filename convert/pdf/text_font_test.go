@@ -292,6 +292,40 @@ func TestShapeTextClassifiesAndLogsMissingGlyphs(t *testing.T) {
 	}
 }
 
+func TestPDFFontRegistryWarnsAboutEmbeddingRestrictions(t *testing.T) {
+	fontData, err := gunzipFont(notoMonoRegularGZ)
+	if err != nil {
+		t.Fatalf("gunzipFont() error = %v", err)
+	}
+	fontData = append([]byte(nil), fontData...)
+	if !patchFontEmbeddingFSType(fontData, 0x0102) {
+		t.Fatal("patchFontEmbeddingFSType() = false")
+	}
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type:      "text/css",
+		Data:      `@font-face { font-family: RestrictedMono; src: url("#restricted-mono"); }`,
+		Resources: []fb2.StylesheetResource{{OriginalURL: "#restricted-mono", MimeType: "font/ttf", Data: fontData}},
+	}}}
+	core, logs := observer.New(zapcore.DebugLevel)
+	registry := newPDFFontRegistry(book, zap.New(core))
+	if _, _, err := fontForStyle(registry, paragraphStyle{FontFamily: "RestrictedMono"}); err != nil {
+		t.Fatalf("fontForStyle() error = %v", err)
+	}
+	entries := logs.FilterMessage("PDF font has embedding restrictions").All()
+	if len(entries) != 1 {
+		t.Fatalf("embedding restriction log entries = %d, want 1", len(entries))
+	}
+	fields := map[string]bool{}
+	for _, field := range entries[0].Context {
+		if field.Type == zapcore.BoolType {
+			fields[field.Key] = field.Integer == 1
+		}
+	}
+	if !fields["restricted_license_embedding"] || !fields["no_subsetting"] {
+		t.Fatalf("embedding restriction fields = %#v, want restricted and no_subsetting", fields)
+	}
+}
+
 func TestPDFFontRegistryLogsMissingFontVariantOnce(t *testing.T) {
 	fontData, err := gunzipFont(notoMonoRegularGZ)
 	if err != nil {

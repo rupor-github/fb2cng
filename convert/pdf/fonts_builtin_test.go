@@ -56,6 +56,33 @@ func TestBuiltinFontSelectionAndMetrics(t *testing.T) {
 	}
 }
 
+func TestFontEmbeddingFSTypeReadsOS2EmbeddingFlags(t *testing.T) {
+	fontData, err := gunzipFont(notoSerifRegularGZ)
+	if err != nil {
+		t.Fatalf("gunzipFont() error = %v", err)
+	}
+	if got := fontEmbeddingFSType(fontData); got != 0 {
+		t.Fatalf("bundled font fsType = %#04x, want installable embedding", got)
+	}
+	patched := append([]byte(nil), fontData...)
+	if !patchFontEmbeddingFSType(patched, 0x0102) {
+		t.Fatal("patchFontEmbeddingFSType() = false")
+	}
+	if got := fontEmbeddingFSType(patched); got != 0x0102 {
+		t.Fatalf("patched fsType = %#04x, want 0x0102", got)
+	}
+}
+
+func patchFontEmbeddingFSType(data []byte, fsType uint16) bool {
+	os2Table, ok := rawTTFTable(data, "OS/2")
+	if !ok || len(os2Table) < 10 {
+		return false
+	}
+	os2Table[8] = byte(fsType >> 8)
+	os2Table[9] = byte(fsType)
+	return true
+}
+
 func TestBuiltinMonoItalicFallback(t *testing.T) {
 	regular, err := builtinFont("monospace", false, false)
 	if err != nil {
