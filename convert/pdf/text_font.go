@@ -794,11 +794,13 @@ func fontResourceObjects(face *builtinFontFace, used map[uint16]shapedGlyph, obj
 
 	fontNameString := face.PostScriptName
 	fontFileData := face.Data
-	if subsetData, ok, err := subsetTrueTypeFont(face.Data, used); err != nil {
-		return fontObjects{}, fmt.Errorf("subset TrueType font %s: %w", face.PostScriptName, err)
-	} else if ok {
-		fontFileData = subsetData
-		fontNameString = subsetPDFFontName(face.PostScriptName, used)
+	if allowPDFTrueTypeSubsetting(face) {
+		if subsetData, ok, err := subsetTrueTypeFont(face.Data, used); err != nil {
+			return fontObjects{}, fmt.Errorf("subset TrueType font %s: %w", face.PostScriptName, err)
+		} else if ok {
+			fontFileData = subsetData
+			fontNameString = subsetPDFFontName(face.PostScriptName, used)
+		}
 	}
 	fontName := docwriter.Name(fontNameString)
 	return fontObjects{
@@ -840,6 +842,11 @@ func fontResourceObjects(face *builtinFontFace, used map[uint16]shapedGlyph, obj
 		FontFileData: fontFileData,
 		ToUnicode:    toUnicodeCMap(used),
 	}, nil
+}
+
+func allowPDFTrueTypeSubsetting(face *builtinFontFace) bool {
+	const noSubsetting = 0x0100
+	return face.EmbeddingFSType&noSubsetting == 0
 }
 
 func subsetPDFFontName(postScriptName string, used map[uint16]shapedGlyph) string {

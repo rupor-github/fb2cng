@@ -67,3 +67,39 @@ func TestFontResourceObjectsEmbedsSubsetFontFile(t *testing.T) {
 		t.Fatalf("FontDescriptor FontName = %#v, want matching BaseFont %q", objects.FontDescriptor["FontName"], baseFont)
 	}
 }
+
+func TestFontResourceObjectsHonorsNoSubsettingFlag(t *testing.T) {
+	fontData, err := gunzipFont(notoSerifRegularGZ)
+	if err != nil {
+		t.Fatalf("gunzipFont() error = %v", err)
+	}
+	fontData = append([]byte(nil), fontData...)
+	if !patchFontEmbeddingFSType(fontData, 0x0100) {
+		t.Fatal("patchFontEmbeddingFSType() = false")
+	}
+	face, err := loadRawFont("NoSubsetSerif", fontData, false, false)
+	if err != nil {
+		t.Fatalf("loadRawFont() error = %v", err)
+	}
+	shaped, err := shapeText(face, "Tiny")
+	if err != nil {
+		t.Fatalf("shapeText() error = %v", err)
+	}
+	objects, err := fontResourceObjects(face, shaped.Used, fontObjectIDs{
+		Type0Font:      1,
+		CIDFont:        2,
+		FontDescriptor: 3,
+		FontFile:       4,
+		ToUnicode:      5,
+	})
+	if err != nil {
+		t.Fatalf("fontResourceObjects() error = %v", err)
+	}
+	if len(objects.FontFileData) != len(face.Data) {
+		t.Fatalf("font file size = %d, original size = %d, want full font for no-subsetting flag", len(objects.FontFileData), len(face.Data))
+	}
+	baseFont, ok := objects.Type0Font["BaseFont"].(docwriter.Name)
+	if !ok || strings.Contains(string(baseFont), "+") {
+		t.Fatalf("BaseFont = %#v, want unprefixed full-font name", objects.Type0Font["BaseFont"])
+	}
+}
