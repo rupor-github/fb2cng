@@ -249,6 +249,27 @@ func TestLayoutParagraphHonorsHyphenationModes(t *testing.T) {
 	}
 }
 
+func TestParagraphJustificationReservesTerminalVisualOverhang(t *testing.T) {
+	style := paragraphStyle{FontSize: 10, Align: textAlignJustify}
+	line := paragraphLine{
+		Text: shapedText{Glyphs: []shapedGlyph{
+			{GlyphID: 1, Rune: 'A', Source: "A", Width: 500, Advance: 500, HasAdvance: true, InkLeft: 0, InkRight: 500, HasInkBounds: true},
+			{GlyphID: 2, Rune: ' ', Source: " ", Width: 250, Advance: 250, HasAdvance: true},
+			{GlyphID: 3, Rune: 'T', Source: "T", Width: 500, Advance: 500, HasAdvance: true, InkLeft: 0, InkRight: 650, HasInkBounds: true},
+		}},
+		Width:             12.5,
+		JustificationGaps: 1,
+	}
+	available := paragraphLineJustificationAvailable(line, style.FontSize, 0, 14.5)
+	if available != 13 {
+		t.Fatalf("justification available = %v, want terminal overhang reserve", available)
+	}
+	word, char := paragraphJustificationSpacing(style, false, line.Width, available, line.JustificationGaps, len(line.Text.Glyphs))
+	if word != 0.5 || char != 0 {
+		t.Fatalf("justification spacing = %v/%v, want spacing reduced by visual reserve", word, char)
+	}
+}
+
 func TestParagraphJustificationUsesCharacterSpacingAfterWordSpacingCap(t *testing.T) {
 	word, char := paragraphJustificationSpacing(paragraphStyle{FontSize: 10, Align: textAlignJustify}, false, 70, 100, 2, 20)
 	if word != 4 {

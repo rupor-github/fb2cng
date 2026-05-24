@@ -414,7 +414,8 @@ func assembleParagraphLines(face *builtinFontFace, units []paragraphUnit, style 
 		last := i == len(breaks)-1
 		singleWord := units[start].WordIndex == units[br.End-1].WordIndex
 		line.BreakStats = paragraphLineBreakStatsFor(width, available, line.JustificationGaps, start == 0, last, singleWord, br.Hyphenated, previousHyphenated, previousFitness)
-		line.ExtraWordSpacing, line.ExtraCharSpacing = paragraphJustificationSpacing(style, last, width, available, line.JustificationGaps, len(shaped.Glyphs))
+		spacingAvailable := paragraphLineJustificationAvailable(line, style.FontSize, style.LetterSpacing, available)
+		line.ExtraWordSpacing, line.ExtraCharSpacing = paragraphJustificationSpacing(style, last, width, spacingAvailable, line.JustificationGaps, len(shaped.Glyphs))
 		lines = append(lines, line)
 		previousHyphenated = br.Hyphenated
 		previousFitness = line.BreakStats.Fitness
@@ -760,6 +761,42 @@ func paragraphLineIndentForLine(start int, lineIndex int, style paragraphStyle, 
 		indent += max(shape.InitialInsets[lineIndex], 0)
 	}
 	return min(indent, maxWidth)
+}
+
+func paragraphLineJustificationAvailable(line paragraphLine, fontSize float64, letterSpacing float64, available float64) float64 {
+	if available <= 1 {
+		return available
+	}
+	return max(available-paragraphLineVisualRightReserve(line, fontSize, letterSpacing), 1)
+}
+
+func paragraphLineVisualRightReserve(line paragraphLine, fontSize float64, letterSpacing float64) float64 {
+	var right float64
+	var ok bool
+	if len(line.Fragments) == 0 {
+		_, right, ok = shapedTextVisualBounds(line.Text, fontSize, letterSpacing, 0)
+	} else {
+		right, ok = paragraphFragmentLineVisualRight(line)
+	}
+	if !ok {
+		return 0
+	}
+	return max(right-line.Width, 0)
+}
+
+func paragraphFragmentLineVisualRight(line paragraphLine) (float64, bool) {
+	right := math.Inf(-1)
+	currentX := 0.0
+	ok := false
+	for _, fragment := range line.Fragments {
+		_, fragmentRight, fragmentOK := shapedTextVisualBounds(fragment.Text, fragment.FontSize, fragment.LetterSpacing, 0)
+		if fragmentOK {
+			right = max(right, currentX+fragmentRight)
+			ok = true
+		}
+		currentX += fragment.Width
+	}
+	return right, ok
 }
 
 func paragraphJustificationSpacing(style paragraphStyle, last bool, width, available float64, gaps int, glyphs int) (float64, float64) {
