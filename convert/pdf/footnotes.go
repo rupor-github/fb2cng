@@ -5,6 +5,7 @@ import (
 
 	"fbc/common"
 	"fbc/content"
+	contentText "fbc/content/text"
 	"fbc/fb2"
 )
 
@@ -133,7 +134,7 @@ func pdfPrefixFootnoteTitleBlocks(label string, titleBlocks []pdfTextBlock) []pd
 			ContextClasses: pdfStyleFootnoteTitle,
 		}}
 	}
-	prefix := label + " "
+	prefix := label + contentText.NBSP
 	blocks[0].Text = prefix + blocks[0].Text
 	if len(blocks[0].Runs) == 0 {
 		blocks[0].Runs = []pdfInlineRun{{Text: blocks[0].Text}}

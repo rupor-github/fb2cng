@@ -72,6 +72,14 @@ func (r *pdfStyleResolver) pseudoContentForClasses(classes string) (string, pdfP
 	return "", pdfPseudoElementContent{}, false
 }
 
+func pdfDecoratedFootnoteReferenceLabel(resolver *pdfStyleResolver, classes string, label string) string {
+	_, content, ok := resolver.pseudoContentForClasses(classes)
+	if !ok {
+		return label
+	}
+	return content.Before + label + content.After
+}
+
 func pdfParseCSSContent(value css.Value) string {
 	raw := strings.TrimSpace(value.Raw)
 	if raw == "" || raw == "none" || raw == "normal" {

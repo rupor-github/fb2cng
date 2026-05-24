@@ -70,7 +70,7 @@ func TestApplyPDFPageLocalFootnoteReferenceLabelsKeepsInlineImageFootnoteWidth(t
 	}}}}}
 	used := make(map[pdfFontKey]map[uint16]shapedGlyph)
 
-	if err := applyPDFPageLocalFootnoteReferenceLabels(pages, nil, used); err != nil {
+	if err := applyPDFPageLocalFootnoteReferenceLabels(pages, nil, used, nil); err != nil {
 		t.Fatalf("applyPDFPageLocalFootnoteReferenceLabels() error = %v", err)
 	}
 	imageFragment := pages[0].Lines[0].Fragments[1]
@@ -106,29 +106,36 @@ func TestLayoutPDFPagesKeepsFloatPrintedFootnoteReferenceLabels(t *testing.T) {
 	}
 }
 
-func TestLayoutPDFPagesFloatRenumberedUsesRawLabelsOverDecoratedText(t *testing.T) {
+func TestLayoutPDFPagesFloatRenumberedDecoratesPageLocalReferenceLabels(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
 
+	styles := newPDFStyleResolverWithCSS(t, `
+		.link-footnote::before { content: "["; }
+		.link-footnote::after { content: "]"; }
+	`)
+	blocks := applyPDFPseudoContentToBlocks([]pdfTextBlock{{
+		Kind: pdfBlockParagraph,
+		Text: "A 1.17",
+		Runs: []pdfInlineRun{{Text: "A "}, {Text: "1.17", StyleClasses: pdfStyleLinkFootnote, FootnoteID: "n17", Superscript: true}},
+	}}, styles)
+
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  260,
 		PageHeight: 160,
 		Content:    &content.Content{OutputFormat: common.OutputFmtPdf, FootnotesMode: common.FootnotesModeFloatRenumbered},
+		Styles:     styles,
 		PrintedFootnotes: map[string]pdfPrintedFootnote{
 			"n17": {ID: "n17"},
 		},
-		Blocks: []pdfTextBlock{{
-			Kind: pdfBlockParagraph,
-			Text: "A [1.17]",
-			Runs: []pdfInlineRun{{Text: "A "}, {Text: "[1.17]", StyleClasses: pdfStyleLinkFootnote, FootnoteID: "n17", Superscript: true}},
-		}},
+		Blocks: blocks,
 	}, face)
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	if got := pageText(pages[0]); !strings.Contains(got, "A 1") || strings.Contains(got, "[") || strings.Contains(got, "]") {
-		t.Fatalf("page text = %q, want raw floatRenumbered label without pseudo decoration", got)
+	if got := pageText(pages[0]); !strings.Contains(got, "A [1]") || strings.Contains(got, "1.17") {
+		t.Fatalf("page text = %q, want decorated page-local label", got)
 	}
 }

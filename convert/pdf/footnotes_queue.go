@@ -130,6 +130,19 @@ func appendPDFPrintedFootnoteNestedRefsFromRuns(refs *[]pdfPrintedFootnoteRef, s
 	}
 }
 
-func pdfPrintedFootnoteBlocksForQueueEntry(c *content.Content, note pdfPrintedFootnote, entry pdfPrintedFootnoteQueueEntry, continuation bool) []pdfTextBlock {
-	return pdfPrintedFootnotePageBlocks(c, note, entry.PageLabel, continuation)
+func pdfPrintedFootnoteBlocksForQueueEntry(
+	c *content.Content,
+	note pdfPrintedFootnote,
+	entry pdfPrintedFootnoteQueueEntry,
+	continuation bool,
+	resolver *pdfStyleResolver,
+) []pdfTextBlock {
+	return pdfPrintedFootnotePageBlocks(c, note, pdfPrintedFootnoteQueueEntryTitleLabel(c, resolver, entry.PageLabel), continuation)
+}
+
+func pdfPrintedFootnoteQueueEntryTitleLabel(c *content.Content, resolver *pdfStyleResolver, label string) string {
+	if !pdfPrintedFootnoteReferencesRenumbered(c) {
+		return label
+	}
+	return pdfDecoratedFootnoteReferenceLabel(resolver, pdfStyleLinkFootnote, label)
 }

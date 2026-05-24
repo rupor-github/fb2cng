@@ -586,7 +586,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 	}
 
 	if pdfPrintedFootnoteReferencesRenumbered(doc.Content) && len(doc.PrintedFootnotes) > 0 {
-		if err := applyPDFPageLocalFootnoteReferenceLabels(pages, doc.Fonts, used); err != nil {
+		if err := applyPDFPageLocalFootnoteReferenceLabels(pages, doc.Fonts, used, styles); err != nil {
 			return nil, nil, err
 		}
 	}

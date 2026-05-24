@@ -10,6 +10,7 @@ func applyPDFPrintedFootnoteQueueReferenceLabels(
 	blocks []pdfTextBlock,
 	c *content.Content,
 	labels map[string]string,
+	resolver *pdfStyleResolver,
 ) []pdfTextBlock {
 	if len(blocks) == 0 || len(labels) == 0 {
 		return blocks
@@ -17,18 +18,18 @@ func applyPDFPrintedFootnoteQueueReferenceLabels(
 	out := clonePDFTextBlocks(blocks)
 	for i := range out {
 		if len(out[i].Runs) > 0 {
-			out[i].Runs = pdfPrintedFootnoteQueueReferenceRuns(out[i].Runs, c, labels)
+			out[i].Runs = pdfPrintedFootnoteQueueReferenceRuns(out[i].Runs, c, labels, resolver)
 			out[i].Text = plainInlineRunText(out[i].Runs)
 		}
 		out[i].Links = pdfFilterPrintedFootnoteQueueReferenceLinks(out[i].Links, labels)
 		for key, runs := range out[i].TableCellRuns {
-			out[i].TableCellRuns[key] = pdfPrintedFootnoteQueueReferenceRuns(runs, c, labels)
+			out[i].TableCellRuns[key] = pdfPrintedFootnoteQueueReferenceRuns(runs, c, labels, resolver)
 		}
 	}
 	return out
 }
 
-func pdfPrintedFootnoteQueueReferenceRuns(runs []pdfInlineRun, c *content.Content, labels map[string]string) []pdfInlineRun {
+func pdfPrintedFootnoteQueueReferenceRuns(runs []pdfInlineRun, c *content.Content, labels map[string]string, resolver *pdfStyleResolver) []pdfInlineRun {
 	if len(runs) == 0 || len(labels) == 0 {
 		return runs
 	}
@@ -55,7 +56,7 @@ func pdfPrintedFootnoteQueueReferenceRuns(runs []pdfInlineRun, c *content.Conten
 			out[j].AnchorID = ""
 		}
 		if pdfPrintedFootnoteReferencesRenumbered(c) {
-			out[i].Text = label
+			out[i].Text = pdfDecoratedFootnoteReferenceLabel(resolver, out[i].StyleClasses, label)
 			for j := i + 1; j < end; j++ {
 				out[j].Text = ""
 			}

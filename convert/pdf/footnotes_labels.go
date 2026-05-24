@@ -10,6 +10,7 @@ func applyPDFPageLocalFootnoteReferenceLabels(
 	pages []pdfPage,
 	fonts *pdfFontRegistry,
 	used map[pdfFontKey]map[uint16]shapedGlyph,
+	resolver *pdfStyleResolver,
 ) error {
 	for pageIndex := range pages {
 		labels := make(map[string]string)
@@ -31,13 +32,14 @@ func applyPDFPageLocalFootnoteReferenceLabels(
 				if strings.TrimSpace(fragment.ImageID) != "" {
 					continue
 				}
+				labelText := pdfDecoratedFootnoteReferenceLabel(resolver, fragment.StyleClasses, label)
 				face, err := fontForKey(fonts, fragment.FontKey)
 				if err != nil {
-					return fmt.Errorf("shape page-local footnote label %q: %w", label, err)
+					return fmt.Errorf("shape page-local footnote label %q: %w", labelText, err)
 				}
-				shaped, err := shapeText(face, label)
+				shaped, err := shapeText(face, labelText)
 				if err != nil {
-					return fmt.Errorf("shape page-local footnote label %q: %w", label, err)
+					return fmt.Errorf("shape page-local footnote label %q: %w", labelText, err)
 				}
 				fragment.Text = shaped
 				fragment.Width = shapedWidthPointsWithSpacing(shaped, fragment.FontSize, fragment.LetterSpacing)

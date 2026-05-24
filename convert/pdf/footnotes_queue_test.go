@@ -67,12 +67,12 @@ func TestBuildPDFPrintedFootnoteQueueAddsNestedRefsAfterMainRefs(t *testing.T) {
 		t.Fatalf("queue = %#v, want %#v", queue, want)
 	}
 
-	mainBlocks := pdfPrintedFootnoteBlocksForQueueEntry(c, footnotes["n1"], queue[0], false)
-	if len(mainBlocks) == 0 || mainBlocks[0].Text != "1 Main actual title" {
+	mainBlocks := pdfPrintedFootnoteBlocksForQueueEntry(c, footnotes["n1"], queue[0], false, nil)
+	if len(mainBlocks) == 0 || mainBlocks[0].Text != "1\u00A0Main actual title" {
 		t.Fatalf("main queued blocks = %#v, want page-local label plus actual title", mainBlocks)
 	}
 	queueBlocks := pdfPrintedFootnoteQueueBlocks(doc, queue)
-	if got := plainPDFBlockTexts(queueBlocks); !reflect.DeepEqual(got, []string{"1 Main actual title", "See 2", "2 Nested actual title", "Nested body."}) {
+	if got := plainPDFBlockTexts(queueBlocks); !reflect.DeepEqual(got, []string{"1\u00A0Main actual title", "See 2", "2\u00A0Nested actual title", "Nested body."}) {
 		t.Fatalf("queue block texts = %#v, want relabeled non-clickable nested ref and nested body", got)
 	}
 }
@@ -109,7 +109,7 @@ func TestBuildPDFPrintedFootnoteQueueFloatRenumberedUsesRawNestedReferenceLabels
 		t.Fatalf("queue = %#v, want raw renumbered labels %#v", queue, want)
 	}
 	blocks := pdfPrintedFootnoteQueueBlocks(doc, queue)
-	if got := plainPDFBlockTexts(blocks); !reflect.DeepEqual(got, []string{"1", "See 2", "2 Nested actual title"}) {
+	if got := plainPDFBlockTexts(blocks); !reflect.DeepEqual(got, []string{"1", "See 2", "2\u00A0Nested actual title"}) {
 		t.Fatalf("queue block texts = %#v, want raw nested reference and title", got)
 	}
 }
@@ -145,7 +145,7 @@ func TestBuildPDFPrintedFootnoteQueueFloatUsesVisibleReferenceLabels(t *testing.
 		t.Fatalf("queue = %#v, want %#v", queue, want)
 	}
 	blocks := pdfPrintedFootnoteQueueBlocks(doc, queue)
-	if got := plainPDFBlockTexts(blocks); !reflect.DeepEqual(got, []string{"[17] Main actual title", "See [23]", "[23] Nested actual title", "Nested body."}) {
+	if got := plainPDFBlockTexts(blocks); !reflect.DeepEqual(got, []string{"[17]\u00A0Main actual title", "See [23]", "[23]\u00A0Nested actual title", "Nested body."}) {
 		t.Fatalf("queue block texts = %#v, want visible float reference labels", got)
 	}
 	for _, block := range blocks {

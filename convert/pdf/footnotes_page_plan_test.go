@@ -98,7 +98,7 @@ func TestBuildPDFPrintedFootnotePagePlansQueuesNestedFootnotesWithActualTitle(t 
 		text.WriteByte('\n')
 	}
 	got := text.String()
-	if !strings.Contains(got, "1") || !strings.Contains(got, "2 Nested actual title") || !strings.Contains(got, "Nested body.") {
+	if !strings.Contains(got, "1") || !strings.Contains(got, "2\u00A0Nested actual title") || !strings.Contains(got, "Nested body.") {
 		t.Fatalf("queue pages text = %q, want main label plus nested label/title/body", got)
 	}
 }

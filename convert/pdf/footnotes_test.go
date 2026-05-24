@@ -60,7 +60,7 @@ func TestPDFPrintedFootnotePageBlocksFloatPrependPageLocalLabelToActualTitle(t *
 	})
 
 	blocks := pdfPrintedFootnotePageBlocks(c, buildPDFPrintedFootnoteBlocks(c)["n1"], "2", false)
-	if len(blocks) < 2 || blocks[0].Text != "2 Translator note" || blocks[1].Text != "Footnote body." {
+	if len(blocks) < 2 || blocks[0].Text != "2\u00A0Translator note" || blocks[1].Text != "Footnote body." {
 		t.Fatalf("page footnote blocks = %#v, want page label, title, and body", blocks)
 	}
 }
@@ -78,7 +78,7 @@ func TestPDFPrintedFootnotePageBlocksFloatRenumberedPrependsPageLocalLabelToActu
 	c.FootnotesIndex["n1"] = fb2.FootnoteRef{BodyIdx: 0, SectionIdx: 0, NoteNum: 1, DisplayText: "1"}
 
 	blocks := pdfPrintedFootnotePageBlocks(c, buildPDFPrintedFootnoteBlocks(c)["n1"], "3", false)
-	if len(blocks) < 2 || blocks[0].Text != "3 Примечание 17" || blocks[1].Text != "Footnote body." {
+	if len(blocks) < 2 || blocks[0].Text != "3\u00A0Примечание 17" || blocks[1].Text != "Footnote body." {
 		t.Fatalf("page footnote blocks = %#v, want page-local label, title, and body", blocks)
 	}
 }
@@ -123,7 +123,7 @@ func TestBuildPDFPrintedFootnoteBlocksContinuationTitleDoesNotAppendMarker(t *te
 		t.Fatalf("continuation title blocks = %#v, want unmarked title paragraphs", note.ContinuationTitleBlocks)
 	}
 	pageBlocks := pdfPrintedFootnotePageBlocks(c, note, "1", true)
-	if pageBlocks[0].Text != "1 First" || pageBlocks[1].Text != "Second" {
+	if pageBlocks[0].Text != "1\u00A0First" || pageBlocks[1].Text != "Second" {
 		t.Fatalf("continuation page title blocks = %#v, want page label plus unmarked title", pageBlocks[:2])
 	}
 }

@@ -34,6 +34,27 @@ func TestPDFPseudoContentDecoratesFootnoteLinks(t *testing.T) {
 	}
 }
 
+func TestPDFPseudoContentDecoratesPrintedFootnoteRefs(t *testing.T) {
+	resolver := newPDFStyleResolver(&fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{Type: "text/css", Data: `
+		.link-footnote::before { content: "["; }
+		.link-footnote::after { content: "]"; }
+	`}}}, nil)
+	blocks := applyPDFPseudoContentToBlocks([]pdfTextBlock{{
+		Text: "Body 1.",
+		Runs: []pdfInlineRun{
+			{Text: "Body "},
+			{Text: "1", StyleClasses: pdfStyleLinkFootnote, FootnoteID: "n1"},
+			{Text: "."},
+		},
+	}}, resolver)
+	if got := blocks[0].Text; got != "Body [1]." {
+		t.Fatalf("block text = %q, want Body [1].", got)
+	}
+	if got := blocks[0].Runs[1]; got.Text != "[1]" || got.FootnoteID != "n1" || got.LinkHref != "" {
+		t.Fatalf("printed footnote run = %#v, want decorated non-clickable run", got)
+	}
+}
+
 func TestPDFPseudoContentLogsSummaryCount(t *testing.T) {
 	core, logs := observer.New(zapcore.DebugLevel)
 	newPDFStyleResolver(&fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{Type: "text/css", Data: `

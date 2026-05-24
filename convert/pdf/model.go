@@ -163,6 +163,7 @@ type pdfPageLineFragment struct {
 	Underline     bool
 	Strikethrough bool
 	BaselineShift float64
+	StyleClasses  string
 	LinkHref      string
 	AnchorID      string
 	FootnoteID    string

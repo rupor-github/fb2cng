@@ -46,9 +46,13 @@ func TestLayoutPDFPrintedFootnoteQueueDoesNotTruncateLongFootnote(t *testing.T) 
 	}
 }
 
-func TestPDFPrintedFootnoteQueueBlocksUsesNestedActualTitle(t *testing.T) {
+func TestPDFPrintedFootnoteQueueBlocksDecoratesRenumberedTitleLabels(t *testing.T) {
 	doc := pdfDocumentSpec{
 		Content: &content.Content{OutputFormat: common.OutputFmtPdf, FootnotesMode: common.FootnotesModeFloatRenumbered},
+		Styles: newPDFStyleResolverWithCSS(t, `
+			.link-footnote::before { content: "["; }
+			.link-footnote::after { content: "]"; }
+		`),
 		PrintedFootnotes: map[string]pdfPrintedFootnote{
 			"n1": {
 				ID:          "n1",
@@ -68,7 +72,7 @@ func TestPDFPrintedFootnoteQueueBlocksUsesNestedActualTitle(t *testing.T) {
 	for _, block := range blocks {
 		texts = append(texts, block.Text)
 	}
-	want := []string{"1 Ordinary title", "Ordinary body", "2 Nested actual title"}
+	want := []string{"[1]\u00A0Ordinary title", "Ordinary body", "[2]\u00A0Nested actual title"}
 	if strings.Join(texts, "|") != strings.Join(want, "|") {
 		t.Fatalf("queue block texts = %#v, want %#v", texts, want)
 	}
