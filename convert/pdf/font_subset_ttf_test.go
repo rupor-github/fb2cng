@@ -68,6 +68,66 @@ func TestFontResourceObjectsEmbedsSubsetFontFile(t *testing.T) {
 	}
 }
 
+func TestFontResourceObjectsEmbedsOpenTypeCFFFontFile(t *testing.T) {
+	fontData := fakeOpenTypeFontWithTable("CFF ")
+	face := &builtinFontFace{
+		PostScriptName: "CFFFont-Regular",
+		Data:           fontData,
+		Ascent:         900,
+		Descent:        -200,
+		CapHeight:      700,
+		BBox:           [4]int{-50, -200, 1000, 900},
+		Flags:          1 << 5,
+	}
+	objects, err := fontResourceObjects(face, map[uint16]shapedGlyph{
+		1: {GlyphID: 1, Source: "A", Width: 600, Advance: 600, HasAdvance: true},
+	}, fontObjectIDs{
+		Type0Font:      1,
+		CIDFont:        2,
+		FontDescriptor: 3,
+		FontFile:       4,
+		ToUnicode:      5,
+	})
+	if err != nil {
+		t.Fatalf("fontResourceObjects() error = %v", err)
+	}
+	if got := objects.CIDFont["Subtype"]; got != docwriter.Name("CIDFontType0") {
+		t.Fatalf("CIDFont Subtype = %#v, want CIDFontType0", got)
+	}
+	if _, ok := objects.CIDFont["CIDToGIDMap"]; ok {
+		t.Fatalf("CIDFont has CIDToGIDMap for CFF font: %#v", objects.CIDFont)
+	}
+	if _, ok := objects.FontDescriptor["FontFile2"]; ok {
+		t.Fatalf("FontDescriptor has FontFile2 for CFF font: %#v", objects.FontDescriptor)
+	}
+	if got := objects.FontDescriptor["FontFile3"]; got != (docwriter.Ref{ObjectNumber: 4}) {
+		t.Fatalf("FontDescriptor FontFile3 = %#v, want ref to font file", got)
+	}
+	if got := objects.FontFile["Subtype"]; got != docwriter.Name("OpenType") {
+		t.Fatalf("FontFile Subtype = %#v, want OpenType", got)
+	}
+	if _, ok := objects.FontFile["Length1"]; ok {
+		t.Fatalf("FontFile has Length1 for FontFile3 stream: %#v", objects.FontFile)
+	}
+	if string(objects.Type0Font["BaseFont"].(docwriter.Name)) != face.PostScriptName {
+		t.Fatalf("BaseFont = %#v, want unprefixed full-font name", objects.Type0Font["BaseFont"])
+	}
+	if len(objects.FontFileData) != len(fontData) {
+		t.Fatalf("FontFileData len = %d, want %d", len(objects.FontFileData), len(fontData))
+	}
+}
+
+func fakeOpenTypeFontWithTable(tag string) []byte {
+	data := make([]byte, 12+16+4)
+	copy(data[:4], "OTTO")
+	data[5] = 1
+	copy(data[12:16], tag)
+	data[12+11] = byte(12 + 16)
+	data[12+15] = 4
+	copy(data[12+16:], []byte{1, 2, 3, 4})
+	return data
+}
+
 func TestFontResourceObjectsHonorsNoSubsettingFlag(t *testing.T) {
 	fontData, err := gunzipFont(notoSerifRegularGZ)
 	if err != nil {

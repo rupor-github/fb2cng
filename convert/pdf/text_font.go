@@ -792,9 +792,13 @@ func fontResourceObjects(face *builtinFontFace, used map[uint16]shapedGlyph, obj
 		return fontObjects{}, fmt.Errorf("at least one used glyph is required")
 	}
 
+	program, err := pdfFontProgram(face.Data)
+	if err != nil {
+		return fontObjects{}, fmt.Errorf("classify font program %s: %w", face.PostScriptName, err)
+	}
 	fontNameString := face.PostScriptName
 	fontFileData := face.Data
-	if allowPDFTrueTypeSubsetting(face) {
+	if program.TrueTypeOutlines && allowPDFTrueTypeSubsetting(face) {
 		if subsetData, ok, err := subsetTrueTypeFont(face.Data, used); err != nil {
 			return fontObjects{}, fmt.Errorf("subset TrueType font %s: %w", face.PostScriptName, err)
 		} else if ok {
@@ -803,6 +807,39 @@ func fontResourceObjects(face *builtinFontFace, used map[uint16]shapedGlyph, obj
 		}
 	}
 	fontName := docwriter.Name(fontNameString)
+	cidFont := docwriter.Dict{
+		"BaseFont":      fontName,
+		"CIDSystemInfo": cidSystemInfo("Adobe", "Identity"),
+		"DW":            docwriter.Integer(1000),
+		"FontDescriptor": docwriter.Ref{
+			ObjectNumber: objectIDs.FontDescriptor,
+		},
+		"Subtype": program.CIDFontSubtype,
+		"Type":    docwriter.Name("Font"),
+		"W":       widthsArray(used),
+	}
+	if program.CIDToGIDMapIdentity {
+		cidFont["CIDToGIDMap"] = docwriter.Name("Identity")
+	}
+	fontDescriptor := docwriter.Dict{
+		"Ascent":      docwriter.Integer(face.Ascent),
+		"CapHeight":   docwriter.Integer(face.CapHeight),
+		"Descent":     docwriter.Integer(face.Descent),
+		"Flags":       docwriter.Integer(face.Flags),
+		"FontBBox":    intArray(face.BBox[:]...),
+		"FontName":    fontName,
+		"ItalicAngle": docwriter.Integer(face.ItalicAngle),
+		"StemV":       docwriter.Integer(80),
+		"Type":        docwriter.Name("FontDescriptor"),
+	}
+	fontDescriptor[program.FontFileKey] = docwriter.Ref{ObjectNumber: objectIDs.FontFile}
+	fontFile := docwriter.Dict{}
+	if program.FontFileLength1 {
+		fontFile["Length1"] = docwriter.Integer(len(fontFileData))
+	}
+	if program.FontFileSubtype != "" {
+		fontFile["Subtype"] = program.FontFileSubtype
+	}
 	return fontObjects{
 		Type0Font: docwriter.Dict{
 			"BaseFont":        fontName,
@@ -812,36 +849,48 @@ func fontResourceObjects(face *builtinFontFace, used map[uint16]shapedGlyph, obj
 			"ToUnicode":       docwriter.Ref{ObjectNumber: objectIDs.ToUnicode},
 			"Type":            docwriter.Name("Font"),
 		},
-		CIDFont: docwriter.Dict{
-			"BaseFont":      fontName,
-			"CIDSystemInfo": cidSystemInfo("Adobe", "Identity"),
-			"CIDToGIDMap":   docwriter.Name("Identity"),
-			"DW":            docwriter.Integer(1000),
-			"FontDescriptor": docwriter.Ref{
-				ObjectNumber: objectIDs.FontDescriptor,
-			},
-			"Subtype": docwriter.Name("CIDFontType2"),
-			"Type":    docwriter.Name("Font"),
-			"W":       widthsArray(used),
-		},
-		FontDescriptor: docwriter.Dict{
-			"Ascent":      docwriter.Integer(face.Ascent),
-			"CapHeight":   docwriter.Integer(face.CapHeight),
-			"Descent":     docwriter.Integer(face.Descent),
-			"Flags":       docwriter.Integer(face.Flags),
-			"FontBBox":    intArray(face.BBox[:]...),
-			"FontFile2":   docwriter.Ref{ObjectNumber: objectIDs.FontFile},
-			"FontName":    fontName,
-			"ItalicAngle": docwriter.Integer(face.ItalicAngle),
-			"StemV":       docwriter.Integer(80),
-			"Type":        docwriter.Name("FontDescriptor"),
-		},
-		FontFile: docwriter.Dict{
-			"Length1": docwriter.Integer(len(fontFileData)),
-		},
-		FontFileData: fontFileData,
-		ToUnicode:    toUnicodeCMap(used),
+		CIDFont:        cidFont,
+		FontDescriptor: fontDescriptor,
+		FontFile:       fontFile,
+		FontFileData:   fontFileData,
+		ToUnicode:      toUnicodeCMap(used),
 	}, nil
+}
+
+type pdfFontProgramInfo struct {
+	TrueTypeOutlines    bool
+	CIDFontSubtype      docwriter.Name
+	CIDToGIDMapIdentity bool
+	FontFileKey         string
+	FontFileSubtype     docwriter.Name
+	FontFileLength1     bool
+}
+
+func pdfFontProgram(data []byte) (pdfFontProgramInfo, error) {
+	if _, ok := rawTTFTable(data, "glyf"); ok {
+		return pdfFontProgramInfo{
+			TrueTypeOutlines:    true,
+			CIDFontSubtype:      docwriter.Name("CIDFontType2"),
+			CIDToGIDMapIdentity: true,
+			FontFileKey:         "FontFile2",
+			FontFileLength1:     true,
+		}, nil
+	}
+	if _, ok := rawTTFTable(data, "CFF "); ok {
+		return pdfOpenTypeCFFProgram(), nil
+	}
+	if _, ok := rawTTFTable(data, "CFF2"); ok {
+		return pdfOpenTypeCFFProgram(), nil
+	}
+	return pdfFontProgramInfo{}, fmt.Errorf("unsupported font outline tables")
+}
+
+func pdfOpenTypeCFFProgram() pdfFontProgramInfo {
+	return pdfFontProgramInfo{
+		CIDFontSubtype:  docwriter.Name("CIDFontType0"),
+		FontFileKey:     "FontFile3",
+		FontFileSubtype: docwriter.Name("OpenType"),
+	}
 }
 
 func allowPDFTrueTypeSubsetting(face *builtinFontFace) bool {
