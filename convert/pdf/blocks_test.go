@@ -396,6 +396,35 @@ func TestCollectTextBlocksUsesFootnoteSectionSemantics(t *testing.T) {
 	}
 }
 
+func TestCollectTextBlocksDefaultFootnoteEpigraphUsesFootnoteContext(t *testing.T) {
+	book := &fb2.FictionBook{Bodies: []fb2.Body{{
+		Kind: fb2.BodyFootnotes,
+		Name: "notes",
+		Sections: []fb2.Section{{
+			ID: "note-epigraph",
+			Epigraphs: []fb2.Epigraph{{Flow: fb2.Flow{Items: []fb2.FlowItem{{
+				Kind:      fb2.FlowParagraph,
+				Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Footnote epigraph."}}},
+			}}}}},
+		}},
+	}}}
+
+	blocks, err := collectTextBlocks(&content.Content{Book: book})
+	if err != nil {
+		t.Fatalf("collectTextBlocks() error = %v", err)
+	}
+	for _, block := range blocks {
+		if block.Text != "Footnote epigraph." {
+			continue
+		}
+		if !hasPDFStyleClass(block.ContextClasses, pdfStyleFootnote) || !hasPDFStyleClass(block.ContextClasses, pdfStyleEpigraph) {
+			t.Fatalf("epigraph context = %q, want footnote and epigraph contexts", block.ContextClasses)
+		}
+		return
+	}
+	t.Fatalf("blocks = %#v, want footnote epigraph block", blocks)
+}
+
 func TestCollectTextBlocksPDFPrintedFootnotesSkipNormalFlowBody(t *testing.T) {
 	book := &fb2.FictionBook{Bodies: []fb2.Body{
 		{

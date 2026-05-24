@@ -161,6 +161,15 @@ func TestPDFInlineRunBacklinkDefaultsMatchDefaultCSS(t *testing.T) {
 	if !backlink.Underline || !backlink.Bold || backlink.Color.String() != "#808080" {
 		t.Fatalf("backlink style = underline:%t bold:%t color:%s, want default.css underline bold gray", backlink.Underline, backlink.Bold, backlink.Color)
 	}
+
+	footnoteBase := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, ContextClasses: pdfStyleFootnote}).Paragraph
+	footnoteBacklink := inlineRunParagraphStyle(resolver, footnoteBase, pdfInlineRun{
+		StyleClasses:   pdfStyleLinkBacklink,
+		ContextClasses: joinStyleClasses(pdfStyleFootnote, "p"),
+	})
+	if footnoteBacklink.FontSize != footnoteBase.FontSize {
+		t.Fatalf("footnote backlink font size = %v, want inherited footnote size %v", footnoteBacklink.FontSize, footnoteBase.FontSize)
+	}
 }
 
 func assertInlineFloat(t *testing.T, got float64, want float64, name string) {

@@ -1338,22 +1338,22 @@ func TestContent_AddFootnoteBackLinkRef(t *testing.T) {
 
 func TestContent_BacklinkTextTemplate(t *testing.T) {
 	const defaultTemplate = `[{{- if eq .Format "pdf" -}}
-{{- if .PageNumber -}}page {{ .PageNumber }}{{- else -}}<{{- end -}}
+{{- if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber }}{{- else -}}<{{- end -}}
 {{- else if or (eq .Format "kfx") (eq .Format "azw8") -}}
-{{- if .LocationNumber -}}loc {{ .LocationNumber }}{{- else if .PageNumber -}}page {{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
+{{- if .LocationNumber -}}loc{{ "\u00A0" }}{{ .LocationNumber }}{{- else if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
 {{- else -}}
-{{- if .PageNumber -}}page {{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
+{{- if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
 {{- end -}}]`
 	tests := []struct {
 		name string
 		ref  BackLinkRef
 		want string
 	}{
-		{name: "pdf page", ref: BackLinkRef{Format: "pdf", PageNumber: 20}, want: "[page 20]"},
-		{name: "kfx location", ref: BackLinkRef{Format: "kfx", LocationNumber: 183, PageNumber: 20}, want: "[loc 183]"},
-		{name: "kfx page fallback", ref: BackLinkRef{Format: "kfx", PageNumber: 20}, want: "[page 20]"},
-		{name: "azw8 location", ref: BackLinkRef{Format: "azw8", LocationNumber: 183, PageNumber: 20}, want: "[loc 183]"},
-		{name: "epub page", ref: BackLinkRef{Format: "epub3", PageNumber: 20, SectionTitle: "Section"}, want: "[page 20]"},
+		{name: "pdf page", ref: BackLinkRef{Format: "pdf", PageNumber: 20}, want: "[page\u00A020]"},
+		{name: "kfx location", ref: BackLinkRef{Format: "kfx", LocationNumber: 183, PageNumber: 20}, want: "[loc\u00A0183]"},
+		{name: "kfx page fallback", ref: BackLinkRef{Format: "kfx", PageNumber: 20}, want: "[page\u00A020]"},
+		{name: "azw8 location", ref: BackLinkRef{Format: "azw8", LocationNumber: 183, PageNumber: 20}, want: "[loc\u00A0183]"},
+		{name: "epub page", ref: BackLinkRef{Format: "epub3", PageNumber: 20, SectionTitle: "Section"}, want: "[page\u00A020]"},
 		{name: "epub section fallback", ref: BackLinkRef{Format: "epub3", SectionTitle: "Section"}, want: "[Section]"},
 		{name: "fallback", ref: BackLinkRef{Format: "epub3"}, want: "[<]"},
 	}

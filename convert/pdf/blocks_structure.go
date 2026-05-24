@@ -52,6 +52,7 @@ func appendFootnoteSectionContentBlocks(blocks *[]pdfTextBlock, c *content.Conte
 		return
 	}
 	appendTitleParagraphBlocks(blocks, c, section.Title, section.ID, pdfStyleFootnoteTitle, pdfStyleFootnoteTitle, false)
+	bodyStart := len(*blocks)
 	for i := range section.Epigraphs {
 		appendEpigraphBlocksFull(blocks, c, &section.Epigraphs[i], "", false)
 	}
@@ -60,6 +61,9 @@ func appendFootnoteSectionContentBlocks(blocks *[]pdfTextBlock, c *content.Conte
 		appendFlowBlocks(blocks, c, section.Annotation.Items, 1, splitSections, pdfStyleAnnotation, pdfStyleAnnotation, false)
 	}
 	appendFlowBlocks(blocks, c, section.Content, 1, splitSections, pdfStyleFootnote, pdfStyleFootnote, false)
+	for i := bodyStart; i < len(*blocks); i++ {
+		(*blocks)[i].ContextClasses = joinStyleClasses((*blocks)[i].ContextClasses, pdfStyleFootnote)
+	}
 }
 
 func appendPDFDefaultFootnoteBacklinkBlock(blocks *[]pdfTextBlock, c *content.Content, sectionID string) {
@@ -78,7 +82,14 @@ func appendPDFDefaultFootnoteBacklinkBlock(blocks *[]pdfTextBlock, c *content.Co
 	if text == "" || len(runs) == 0 {
 		return
 	}
-	*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockParagraph, Text: text, Runs: runs, StyleName: pdfStyleParagraph, BacklinkRefIDs: refIDs})
+	*blocks = append(*blocks, pdfTextBlock{
+		Kind:           pdfBlockParagraph,
+		Text:           text,
+		Runs:           runs,
+		StyleName:      pdfStyleParagraph,
+		ContextClasses: pdfStyleFootnote,
+		BacklinkRefIDs: refIDs,
+	})
 }
 
 func pdfBacklinkBlockContent(c *content.Content, refIDs []string) (string, []pdfInlineRun) {
@@ -507,7 +518,9 @@ func appendPoemBlocks(blocks *[]pdfTextBlock, c *content.Content, poem *fb2.Poem
 			appendParagraphBlockFull(blocks, c, pdfBlockPoem, &stanza.Verses[j], depth, pdfStylePoem, stanzaContextClasses, stripRootHorizontalMargins)
 		}
 		applyStyleClassToBlocks((*blocks)[stanzaStart:], pdfStyleStanza)
-		*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine, ContextClasses: strings.TrimSpace(stanzaContextClasses), StripRootHorizontalMargins: stripRootHorizontalMargins})
+		if i < len(poem.Stanzas)-1 {
+			*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine, ContextClasses: strings.TrimSpace(stanzaContextClasses), StripRootHorizontalMargins: stripRootHorizontalMargins})
+		}
 	}
 	for i := range poem.TextAuthors {
 		appendParagraphBlockFull(blocks, c, pdfBlockTextAuthor, &poem.TextAuthors[i], depth, "", poemContextClasses, stripRootHorizontalMargins)

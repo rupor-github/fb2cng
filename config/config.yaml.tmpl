@@ -241,11 +241,11 @@ document:
     # - .TargetID, .RefID (string) and .RefNumber (int)
     backlink_template: |
       [{{- if eq .Format "pdf" -}}
-        {{- if .PageNumber -}}page {{ .PageNumber }}{{- else -}}<{{- end -}}
+        {{- if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber }}{{- else -}}<{{- end -}}
       {{- else if or (eq .Format "kfx") (eq .Format "azw8") -}}
-        {{- if .LocationNumber -}}loc {{ .LocationNumber }}{{- else if .PageNumber -}}page {{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
+        {{- if .LocationNumber -}}loc{{ "\u00A0" }}{{ .LocationNumber }}{{- else if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
       {{- else -}}
-        {{- if .PageNumber -}}page {{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
+        {{- if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
       {{- end -}}]
 
     # If floating note body has more than one paragraph this string could be

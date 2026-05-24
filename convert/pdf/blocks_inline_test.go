@@ -230,6 +230,9 @@ func TestPDFDefaultModeFootnoteBacklinks(t *testing.T) {
 	if hasPDFStyleClass(backlinkBlock.StyleClasses, pdfStyleFootnote) {
 		t.Fatalf("backlink block classes = %q, want no footnote paragraph class", backlinkBlock.StyleClasses)
 	}
+	if !hasPDFStyleClass(backlinkBlock.ContextClasses, pdfStyleFootnote) {
+		t.Fatalf("backlink block context = %q, want footnote context", backlinkBlock.ContextClasses)
+	}
 }
 
 func TestPDFDefaultModeFootnoteBacklinksFromFootnoteReferences(t *testing.T) {

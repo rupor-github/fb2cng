@@ -124,8 +124,30 @@ func TestAppendPoemBlocksPropagatesStanzaContextClasses(t *testing.T) {
 	if !poemSeen {
 		t.Fatalf("poem title not found in %#v", blocks)
 	}
-	if len(blocks) == 0 || blocks[len(blocks)-1].Kind != pdfBlockEmptyLine || blocks[len(blocks)-1].ContextClasses != wantStanzaContext {
-		t.Fatalf("stanza empty line = %#v, want stanza context %q", blocks, wantStanzaContext)
+	for _, block := range blocks {
+		if block.Kind == pdfBlockEmptyLine {
+			t.Fatalf("blocks = %#v, want no trailing empty line after final stanza", blocks)
+		}
+	}
+}
+
+func TestAppendPoemBlocksAddsEmptyLineOnlyBetweenStanzas(t *testing.T) {
+	poem := &fb2.Poem{Stanzas: []fb2.Stanza{
+		{Verses: []fb2.Paragraph{{Text: []fb2.InlineSegment{{Text: "First stanza"}}}}},
+		{Verses: []fb2.Paragraph{{Text: []fb2.InlineSegment{{Text: "Second stanza"}}}}},
+	}}
+	var blocks []pdfTextBlock
+
+	appendPoemBlocks(&blocks, nil, poem, 1, nil, "", false)
+
+	emptyLines := 0
+	for _, block := range blocks {
+		if block.Kind == pdfBlockEmptyLine {
+			emptyLines++
+		}
+	}
+	if emptyLines != 1 {
+		t.Fatalf("blocks = %#v, want one empty line between two stanzas", blocks)
 	}
 }
 
