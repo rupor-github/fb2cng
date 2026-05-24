@@ -799,11 +799,12 @@ func inlineParagraphUnits(registry *pdfFontRegistry, words []paragraphInlineWord
 	for wordIndex, word := range words {
 		if inlineWordHasImage(word) {
 			units = append(units, paragraphUnit{
-				Text:      word.Text,
-				Width:     paragraphFragmentsWidth(word.Fragments),
-				WordIndex: wordIndex,
-				EndWord:   true,
-				Fragments: word.Fragments,
+				Text:       word.Text,
+				Width:      paragraphFragmentsWidth(word.Fragments),
+				WordIndex:  wordIndex,
+				EndWord:    true,
+				GlyphCount: paragraphFragmentsGlyphCount(word.Fragments),
+				Fragments:  word.Fragments,
 			})
 			continue
 		}
@@ -814,6 +815,7 @@ func inlineParagraphUnits(registry *pdfFontRegistry, words []paragraphInlineWord
 				Width:         width,
 				WordIndex:     wordIndex,
 				EndWord:       true,
+				GlyphCount:    paragraphFragmentsGlyphCount(word.Fragments),
 				RightOverhang: paragraphFragmentsRightOverhang(word.Fragments, width),
 				Fragments:     word.Fragments,
 			})
@@ -853,6 +855,8 @@ func inlineParagraphUnits(registry *pdfFontRegistry, words []paragraphInlineWord
 				Hyphenated:          part.Hyphenated,
 				HyphenText:          part.HyphenText,
 				HyphenWidth:         hyphenWidth,
+				GlyphCount:          paragraphFragmentsGlyphCount(fragments),
+				HyphenGlyphCount:    paragraphFragmentsGlyphCount(hyphenFragments),
 				RightOverhang:       paragraphFragmentsRightOverhang(fragments, width),
 				HyphenRightOverhang: hyphenOverhang,
 				Fragments:           fragments,
@@ -967,6 +971,14 @@ func paragraphFragmentsWidth(fragments []paragraphLineFragment) float64 {
 		width += fragment.Width
 	}
 	return width
+}
+
+func paragraphFragmentsGlyphCount(fragments []paragraphLineFragment) int {
+	count := 0
+	for _, fragment := range fragments {
+		count += len(fragment.Text.Glyphs)
+	}
+	return count
 }
 
 func paragraphFragmentsRightOverhang(fragments []paragraphLineFragment, width float64) float64 {

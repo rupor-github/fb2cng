@@ -133,6 +133,8 @@ type paragraphUnit struct {
 	Hyphenated          bool
 	HyphenText          string
 	HyphenWidth         float64
+	GlyphCount          int
+	HyphenGlyphCount    int
 	RightOverhang       float64
 	HyphenRightOverhang float64
 	Fragments           []paragraphLineFragment
@@ -278,9 +280,15 @@ func paragraphUnits(face *builtinFontFace, words []paragraphWord, style paragrap
 			}
 			width := shapedWidthPointsWithSpacing(shaped, style.FontSize, style.LetterSpacing)
 			hyphenWidth := 0.0
+			hyphenGlyphCount := 0
 			hyphenOverhang := 0.0
 			if part.HyphenText != "" {
 				hyphenWidth = softHyphenWidth
+				hyphen, err := shapeText(face, part.HyphenText)
+				if err != nil {
+					return nil, fmt.Errorf("shape hyphen %q: %w", part.HyphenText, err)
+				}
+				hyphenGlyphCount = len(hyphen.Glyphs)
 				hyphenated, err := shapeText(face, part.Text+part.HyphenText)
 				if err != nil {
 					return nil, fmt.Errorf("shape hyphenated word segment %q: %w", part.Text+part.HyphenText, err)
@@ -296,6 +304,8 @@ func paragraphUnits(face *builtinFontFace, words []paragraphWord, style paragrap
 				Hyphenated:          part.Hyphenated,
 				HyphenText:          part.HyphenText,
 				HyphenWidth:         hyphenWidth,
+				GlyphCount:          len(shaped.Glyphs),
+				HyphenGlyphCount:    hyphenGlyphCount,
 				RightOverhang:       shapedTextRightOverhang(shaped, style.FontSize, style.LetterSpacing),
 				HyphenRightOverhang: hyphenOverhang,
 			})
@@ -513,14 +523,20 @@ func paragraphBreakCandidates(units []paragraphUnit, start int, spaceWidth float
 		}
 
 		lineWidth := width
+		glyphs := paragraphLineCandidateGlyphCount(units[start : end+1])
 		if units[end].HyphenText != "" {
 			lineWidth += units[end].HyphenWidth
+			glyphs += units[end].HyphenGlyphCount
 		}
 		indent := paragraphLineIndentForLine(start, lineIndex, style, maxWidth, shape)
 		available := max(maxWidth-indent, 1)
 		gaps := countJustificationGaps(units[start : end+1])
 		last := end == len(units)-1
-		metricWidth := lineWidth + paragraphBreakTerminalOverhang(units[end])
+		terminalOverhang := paragraphBreakTerminalOverhang(units[end])
+		if !last && !paragraphJustificationCanFill(style, lineWidth, paragraphJustificationAvailableForOverhang(available, terminalOverhang), gaps, glyphs) {
+			continue
+		}
+		metricWidth := lineWidth + terminalOverhang
 		lineCost := paragraphLineDemerits(metricWidth, available, gaps, start == 0, last, units[start].WordIndex == units[end].WordIndex, units[end].Hyphenated, previousHyphenated, previousFitness)
 		if math.IsInf(lineCost, 1) {
 			if metricWidth > available {
@@ -793,6 +809,17 @@ func paragraphBreakTerminalOverhang(unit paragraphUnit) float64 {
 	return unit.RightOverhang
 }
 
+func paragraphLineCandidateGlyphCount(units []paragraphUnit) int {
+	glyphs := 0
+	for i, unit := range units {
+		if i > 0 && unit.WordIndex != units[i-1].WordIndex {
+			glyphs++
+		}
+		glyphs += unit.GlyphCount
+	}
+	return glyphs
+}
+
 func paragraphJustificationAvailableForOverhang(available float64, terminalOverhang float64) float64 {
 	if available <= 1 {
 		return available
@@ -831,6 +858,26 @@ func paragraphFragmentLineVisualRight(line paragraphLine) (float64, bool) {
 		currentX += fragment.Width
 	}
 	return right, ok
+}
+
+func paragraphJustificationCanFill(style paragraphStyle, width, available float64, gaps int, glyphs int) bool {
+	if style.Align != textAlignJustify || gaps <= 0 || width >= available {
+		return true
+	}
+	return available-width <= paragraphJustificationMaxStretch(style, gaps, glyphs)+pdfLineWidthTolerance
+}
+
+func paragraphJustificationMaxStretch(style paragraphStyle, gaps int, glyphs int) float64 {
+	if gaps <= 0 {
+		return 0
+	}
+	wordCap := max(style.FontSize*0.40, 3.0)
+	stretch := wordCap * float64(gaps)
+	if glyphs > 1 {
+		charCap := min(max(style.FontSize*0.06, 0.25), 0.70)
+		stretch += charCap * float64(glyphs-1)
+	}
+	return stretch
 }
 
 func paragraphJustificationSpacing(style paragraphStyle, last bool, width, available float64, gaps int, glyphs int) (float64, float64) {

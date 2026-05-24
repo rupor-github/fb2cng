@@ -271,6 +271,22 @@ func TestParagraphBreaksReserveTerminalVisualOverhang(t *testing.T) {
 	}
 }
 
+func TestParagraphBreaksRejectUnfillableJustifiedLines(t *testing.T) {
+	units := []paragraphUnit{
+		{Text: "one", Width: 13, GlyphCount: 4, WordIndex: 0, EndWord: true},
+		{Text: "two", Width: 13, GlyphCount: 4, WordIndex: 1, EndWord: true},
+		{Text: "three", Width: 13, GlyphCount: 4, WordIndex: 2, EndWord: true},
+		{Text: "four", Width: 13, GlyphCount: 4, WordIndex: 3, EndWord: true},
+	}
+	breaks := chooseParagraphBreaks(units, 1, paragraphStyle{FontSize: 10, Align: textAlignJustify}, 44)
+	if len(breaks) != 2 {
+		t.Fatalf("breaks = %#v, want two lines", breaks)
+	}
+	if breaks[0].End != 3 {
+		t.Fatalf("first break = %#v, want fillable three-word justified line", breaks[0])
+	}
+}
+
 func TestParagraphJustificationIgnoresNonTerminalOverhangReserve(t *testing.T) {
 	style := paragraphStyle{FontSize: 10, Align: textAlignJustify}
 	available := paragraphJustificationAvailableForOverhang(14.5, 0)
