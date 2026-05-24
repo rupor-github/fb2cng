@@ -111,6 +111,12 @@ type pdfDebugLine struct {
 	Underline        bool               `json:"underline,omitempty"`
 	Strikethrough    bool               `json:"strikethrough,omitempty"`
 	Width            float64            `json:"width"`
+	AdvanceWidth     float64            `json:"advance_width"`
+	DrawnWidth       float64            `json:"drawn_width"`
+	AvailableWidth   float64            `json:"available_width,omitempty"`
+	RightEdge        float64            `json:"right_edge"`
+	Overflow         float64            `json:"overflow,omitempty"`
+	Justified        bool               `json:"justified,omitempty"`
 	ExtraWordSpacing float64            `json:"extra_word_spacing,omitempty"`
 	ExtraCharSpacing float64            `json:"extra_char_spacing,omitempty"`
 	LineBreak        *pdfDebugLineBreak `json:"line_break,omitempty"`
@@ -308,34 +314,6 @@ func pdfPageLineText(line pdfPageLine) string {
 	return b.String()
 }
 
-func pdfPageLineWidth(line pdfPageLine) float64 {
-	if len(line.Fragments) == 0 {
-		width := shapedWidthPointsWithSpacing(line.Text, line.FontSize, line.LetterSpacing)
-		width += line.ExtraCharSpacing * float64(max(len(line.Text.Glyphs)-1, 0))
-		width += line.ExtraWordSpacing * float64(justificationSpaceCount(line.Text.Glyphs))
-		return width
-	}
-	width := 0.0
-	glyphs := 0
-	for _, fragment := range line.Fragments {
-		width += fragment.Width
-		glyphs += len(fragment.Text.Glyphs)
-	}
-	width += line.ExtraCharSpacing * float64(max(glyphs-1, 0))
-	width += line.ExtraWordSpacing * float64(fragmentSpaceCount(line.Fragments))
-	return width
-}
-
-func fragmentSpaceCount(fragments []pdfPageLineFragment) int {
-	count := 0
-	for i, fragment := range fragments {
-		if i != len(fragments)-1 && fragmentEndsWithSpace(fragment) {
-			count++
-		}
-	}
-	return count
-}
-
 func pdfDebugLineBreakStats(stats paragraphLineBreakStats) *pdfDebugLineBreak {
 	if stats.AvailableWidth <= 0 || math.IsInf(stats.AdjustmentRatio, 0) || math.IsInf(stats.Badness, 0) || math.IsInf(stats.Demerits, 0) {
 		return nil
@@ -370,6 +348,8 @@ func pdfDebugPages(pages []pdfPage) ([]pdfDebugPage, []pdfDebugImage, []pdfDebug
 			Links:       make([]pdfDebugLink, 0, len(page.Annotations)),
 		}
 		for _, line := range page.Lines {
+			advanceWidth := pdfPageLineAdvanceWidth(line)
+			drawnWidth := pdfPageLineDrawnWidth(line)
 			debugPage.Lines = append(debugPage.Lines, pdfDebugLine{
 				Text:             pdfPageLineText(line),
 				X:                line.X,
@@ -383,7 +363,13 @@ func pdfDebugPages(pages []pdfPage) ([]pdfDebugPage, []pdfDebugImage, []pdfDebug
 				Color:            line.Color.String(),
 				Underline:        line.Underline,
 				Strikethrough:    line.Strikethrough,
-				Width:            pdfPageLineWidth(line),
+				Width:            drawnWidth,
+				AdvanceWidth:     advanceWidth,
+				DrawnWidth:       drawnWidth,
+				AvailableWidth:   pdfPageLineAvailableWidth(line),
+				RightEdge:        line.X + drawnWidth,
+				Overflow:         pdfPageLineOverflow(line),
+				Justified:        pdfPageLineIsJustified(line),
 				ExtraWordSpacing: line.ExtraWordSpacing,
 				ExtraCharSpacing: line.ExtraCharSpacing,
 				LineBreak:        pdfDebugLineBreakStats(line.BreakStats),

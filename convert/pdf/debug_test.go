@@ -107,12 +107,18 @@ func TestGenerateDebugDumps(t *testing.T) {
 	lineBreakFound := false
 	for _, page := range pages {
 		for _, line := range page.Lines {
+			if line.Width != line.DrawnWidth || line.AdvanceWidth <= 0 || line.RightEdge <= line.X {
+				t.Fatalf("debug line metrics = %#v, want populated width diagnostics", line)
+			}
 			if line.LineBreak == nil {
 				continue
 			}
 			lineBreakFound = true
 			if line.LineBreak.AvailableWidth <= 0 || line.LineBreak.Demerits <= 0 || line.LineBreak.Fitness == "" {
 				t.Fatalf("debug line break = %#v, want populated diagnostics", line.LineBreak)
+			}
+			if line.AvailableWidth != line.LineBreak.AvailableWidth {
+				t.Fatalf("debug line available width = %v, line_break available width = %v", line.AvailableWidth, line.LineBreak.AvailableWidth)
 			}
 		}
 	}
