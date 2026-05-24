@@ -237,6 +237,48 @@ func TestPDFDropcapFollowingParagraphStillExcludesWhenBaselinePassedVisualBottom
 	}
 }
 
+func TestPDFDropcapStartsNextPageWhenShortBodyWouldFitButDropcapWouldNot(t *testing.T) {
+	resolver := newPDFStyleResolverWithCSS(t, `
+		p { font-size: 10pt; line-height: 12pt; margin: 0; text-indent: 0; }
+		p.has-dropcap { text-indent: 0; margin: 0; }
+		p.has-dropcap .dropcap { float: left; font-size: 3.2em; line-height: 1; font-weight: bold; padding-right: 0.1em; }
+	`)
+	face, err := builtinFont("serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	lead := strings.Repeat("Previous paragraph consumes vertical space before the dropcap starts. ", 3)
+	dropcapText := "Test."
+
+	pages, _, err := layoutPDFPages(pdfDocumentSpec{
+		PageWidth:  220,
+		PageHeight: 150,
+		Styles:     resolver,
+		Blocks: []pdfTextBlock{{
+			Kind: pdfBlockParagraph,
+			Text: lead,
+			Runs: []pdfInlineRun{{Text: lead}},
+		}, {
+			Kind:         pdfBlockParagraph,
+			Text:         dropcapText,
+			Runs:         addPDFDropcapInlineRun([]pdfInlineRun{{Text: dropcapText}}),
+			StyleClasses: "has-dropcap",
+		}},
+	}, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPages() error = %v", err)
+	}
+	if len(pages) < 2 {
+		t.Fatalf("pages = %d, text=%q, want short dropcap paragraph moved to a following page", len(pages), pageText(pages[0]))
+	}
+	if strings.Contains(pageText(pages[0]), "T") {
+		t.Fatalf("first page text = %q, want no short dropcap paragraph at page bottom", pageText(pages[0]))
+	}
+	if !strings.Contains(pageText(pages[1]), "T") {
+		t.Fatalf("second page text = %q, want short dropcap paragraph", pageText(pages[1]))
+	}
+}
+
 func TestPDFDropcapStartsNextPageWhenWrapLinesWouldSplit(t *testing.T) {
 	resolver := newPDFStyleResolverWithCSS(t, `
 		p { font-size: 10pt; line-height: 12pt; margin: 0; text-indent: 0; }

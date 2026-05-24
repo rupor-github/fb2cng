@@ -406,7 +406,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 		}
 		needed := blockSpaceBefore() + style.PaddingTop + textHeight + style.PaddingBottom
 		if dropcapOK && pageHasText {
-			requiredDropcapLines := max(min(dropcap.Lines, len(lines)), 1)
+			requiredDropcapLines := max(dropcap.Lines, 1)
 			if countFittingLines(firstBaselineY(), bottom, style.Paragraph.FontSize, lineHeight) < requiredDropcapLines {
 				newTextPage()
 			}
