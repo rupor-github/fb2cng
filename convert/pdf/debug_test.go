@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"go.uber.org/zap/zaptest"
 
+	"fbc/common"
 	"fbc/config"
 	"fbc/content"
 	"fbc/fb2"
@@ -131,6 +133,62 @@ func TestGenerateDebugDumps(t *testing.T) {
 		if font.ResourceName == "" || font.PostScriptName == "" || font.UsedGlyphCount == 0 {
 			t.Fatalf("debug font = %#v, want resource name, PostScript name, and used glyphs", font)
 		}
+	}
+
+	var printedFootnotes pdfDebugPrintedFootnotes
+	readJSONDebugFile(t, filepath.Join(tmpDir, "pdf-printed-footnotes.json"), &printedFootnotes)
+	if printedFootnotes.Enabled || printedFootnotes.FinalPageCount != len(pages) {
+		t.Fatalf("debug printed footnotes = %#v, want disabled summary for non-printed document", printedFootnotes)
+	}
+}
+
+func TestPDFDebugPrintedFootnotesSummaryIncludesPlansReservesAndContinuationPacks(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	longBody := strings.Repeat("long footnote text ", 120) + "ENDMARK"
+	doc := pdfDocumentSpec{
+		PageWidth:  260,
+		PageHeight: 180,
+		Content:    &content.Content{OutputFormat: common.OutputFmtPdf, FootnotesMode: common.FootnotesModeFloatRenumbered},
+		PrintedFootnotes: map[string]pdfPrintedFootnote{
+			"n1": {
+				ID: "n1",
+				BodyBlocks: []pdfTextBlock{{
+					Kind:           pdfBlockParagraph,
+					Text:           longBody,
+					Runs:           []pdfInlineRun{{Text: longBody}},
+					StyleClasses:   pdfStyleFootnote,
+					ContextClasses: pdfStyleFootnote,
+				}},
+			},
+		},
+		Blocks: []pdfTextBlock{{
+			Kind: pdfBlockParagraph,
+			Text: "Body 1",
+			Runs: []pdfInlineRun{{Text: "Body "}, {Text: "1", StyleClasses: pdfStyleLinkFootnote, FootnoteID: "n1", Superscript: true}},
+		}},
+	}
+
+	pages, _, printedFootnotes, err := layoutPDFDocumentPages(doc, face)
+	if err != nil {
+		t.Fatalf("layoutPDFDocumentPages() error = %v", err)
+	}
+	if len(pages) < 2 {
+		t.Fatalf("pages = %d, want continuation pages for long footnote", len(pages))
+	}
+	if !printedFootnotes.Enabled || printedFootnotes.PlanCount != 1 || printedFootnotes.ReserveCount == 0 {
+		t.Fatalf("printed footnote summary = %#v, want enabled plan and reserve summaries", printedFootnotes)
+	}
+	if len(printedFootnotes.Plans) != 1 || len(printedFootnotes.Plans[0].Refs) != 1 || len(printedFootnotes.Plans[0].Queue) != 1 || printedFootnotes.Plans[0].ContinuationPages == 0 {
+		t.Fatalf("printed footnote plans = %#v, want refs, queue, and continuation count", printedFootnotes.Plans)
+	}
+	if len(printedFootnotes.PackedContinuationChunks) == 0 || printedFootnotes.ContinuationPageCount == 0 {
+		t.Fatalf("printed footnote continuation summary = %#v, want packed continuation chunks", printedFootnotes)
+	}
+	if printedFootnotes.SkippedCount != len(printedFootnotes.Skipped) || printedFootnotes.OverflowCount != len(printedFootnotes.Overflow) {
+		t.Fatalf("printed footnote case counts = skipped %d/%d overflow %d/%d", printedFootnotes.SkippedCount, len(printedFootnotes.Skipped), printedFootnotes.OverflowCount, len(printedFootnotes.Overflow))
 	}
 }
 

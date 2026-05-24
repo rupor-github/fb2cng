@@ -36,7 +36,7 @@ func TestLayoutPDFDocumentPagesAppendsPrintedFootnotesAndReservesMainFlow(t *tes
 		},
 	}
 
-	pages, used, err := layoutPDFDocumentPages(doc, face)
+	pages, used, _, err := layoutPDFDocumentPages(doc, face)
 	if err != nil {
 		t.Fatalf("layoutPDFDocumentPages() error = %v", err)
 	}
@@ -83,7 +83,7 @@ func TestLayoutPDFDocumentPagesSkipsPrintedFootnotePathWhenModeDisabled(t *testi
 		Blocks: []pdfTextBlock{{Kind: pdfBlockParagraph, Text: "Body"}},
 	}
 
-	pages, _, err := layoutPDFDocumentPages(doc, face)
+	pages, _, _, err := layoutPDFDocumentPages(doc, face)
 	if err != nil {
 		t.Fatalf("layoutPDFDocumentPages() error = %v", err)
 	}

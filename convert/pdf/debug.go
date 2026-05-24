@@ -169,7 +169,84 @@ type pdfDebugFont struct {
 	UsedGlyphIDs   []uint16 `json:"used_glyph_ids"`
 }
 
-func writePDFDebugDumps(doc pdfDocumentSpec, pages []pdfPage, fontResources []pdfFontResource) error {
+type pdfDebugPrintedFootnotes struct {
+	Enabled                  bool                                      `json:"enabled"`
+	SourcePageCount          int                                       `json:"source_page_count"`
+	FinalPageCount           int                                       `json:"final_page_count"`
+	FootnoteTextHeight       float64                                   `json:"footnote_text_height,omitempty"`
+	PlanCount                int                                       `json:"plan_count"`
+	ReserveCount             int                                       `json:"reserve_count"`
+	ContinuationPageCount    int                                       `json:"continuation_page_count"`
+	PagesWithoutPrintedRefs  int                                       `json:"pages_without_printed_refs,omitempty"`
+	SkippedCount             int                                       `json:"skipped_count"`
+	OverflowCount            int                                       `json:"overflow_count"`
+	Plans                    []pdfDebugPrintedFootnotePlan             `json:"plans,omitempty"`
+	Reserves                 []pdfDebugPrintedFootnoteReserve          `json:"reserves,omitempty"`
+	PackedContinuationChunks []pdfDebugPrintedFootnoteContinuationPack `json:"packed_continuation_chunks,omitempty"`
+	Skipped                  []pdfDebugPrintedFootnoteCase             `json:"skipped,omitempty"`
+	Overflow                 []pdfDebugPrintedFootnoteCase             `json:"overflow,omitempty"`
+}
+
+type pdfDebugPrintedFootnotePlan struct {
+	PageIndex         int                                 `json:"page_index"`
+	Refs              []pdfDebugPrintedFootnoteRef        `json:"refs"`
+	Queue             []pdfDebugPrintedFootnoteQueueEntry `json:"queue"`
+	QueuePageCount    int                                 `json:"queue_page_count"`
+	ContinuationPages int                                 `json:"continuation_pages"`
+	QueuePages        []pdfDebugPrintedFootnoteQueuePage  `json:"queue_pages,omitempty"`
+	Reserve           float64                             `json:"reserve,omitempty"`
+}
+
+type pdfDebugPrintedFootnoteRef struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
+type pdfDebugPrintedFootnoteQueueEntry struct {
+	ID        string `json:"id"`
+	PageLabel string `json:"page_label"`
+	Nested    bool   `json:"nested,omitempty"`
+}
+
+type pdfDebugPrintedFootnoteQueuePage struct {
+	Index     int              `json:"index"`
+	LineCount int              `json:"line_count"`
+	Bounds    *pdfDebugYBounds `json:"bounds,omitempty"`
+}
+
+type pdfDebugPrintedFootnoteReserve struct {
+	PageIndex int     `json:"page_index"`
+	Reserve   float64 `json:"reserve"`
+}
+
+type pdfDebugPrintedFootnoteContinuationPack struct {
+	SourcePageIndex       int     `json:"source_page_index"`
+	QueuePageIndex        int     `json:"queue_page_index"`
+	ContinuationPageIndex int     `json:"continuation_page_index"`
+	ChunkTop              float64 `json:"chunk_top"`
+	ChunkBottom           float64 `json:"chunk_bottom"`
+	ChunkHeight           float64 `json:"chunk_height"`
+	ShiftY                float64 `json:"shift_y"`
+	PlacedTop             float64 `json:"placed_top"`
+	PlacedBottom          float64 `json:"placed_bottom"`
+}
+
+type pdfDebugPrintedFootnoteCase struct {
+	Kind           string  `json:"kind"`
+	Reason         string  `json:"reason"`
+	PageIndex      int     `json:"page_index,omitempty"`
+	QueuePageIndex int     `json:"queue_page_index,omitempty"`
+	Value          float64 `json:"value,omitempty"`
+	Limit          float64 `json:"limit,omitempty"`
+}
+
+type pdfDebugYBounds struct {
+	Top    float64 `json:"top"`
+	Bottom float64 `json:"bottom"`
+	Height float64 `json:"height"`
+}
+
+func writePDFDebugDumps(doc pdfDocumentSpec, pages []pdfPage, fontResources []pdfFontResource, printedFootnotes pdfDebugPrintedFootnotes) error {
 	if !doc.Debug || doc.WorkDir == "" {
 		return nil
 	}
@@ -200,6 +277,9 @@ func writePDFDebugDumps(doc pdfDocumentSpec, pages []pdfPage, fontResources []pd
 		})
 	}
 	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-text-blocks.json"), blocks); err != nil {
+		return err
+	}
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-printed-footnotes.json"), printedFootnotes); err != nil {
 		return err
 	}
 	styles.tracer.flush()
@@ -401,6 +481,129 @@ func pdfDebugFonts(resources []pdfFontResource) []pdfDebugFont {
 		})
 	}
 	return out
+}
+
+func pdfDebugPrintedFootnotesFromReserved(doc pdfDocumentSpec, reserved pdfPrintedFootnoteReservedLayout) pdfDebugPrintedFootnotes {
+	summary := pdfDebugPrintedFootnotes{
+		Enabled:            pdfPrintedFootnotesEnabled(doc.Content) && len(doc.PrintedFootnotes) > 0,
+		SourcePageCount:    len(reserved.Pages),
+		FootnoteTextHeight: reserved.FootnoteTextHeight,
+	}
+	if !summary.Enabled {
+		return summary
+	}
+	summary.Plans = make([]pdfDebugPrintedFootnotePlan, 0, len(reserved.Plans))
+	plannedPages := make(map[int]bool, len(reserved.Plans))
+	for _, plan := range reserved.Plans {
+		debugPlan := pdfDebugPrintedFootnotePlan{
+			PageIndex:         plan.PageIndex,
+			Refs:              pdfDebugPrintedFootnoteRefs(plan.Refs),
+			Queue:             pdfDebugPrintedFootnoteQueue(plan.Queue),
+			QueuePageCount:    len(plan.QueuePages),
+			ContinuationPages: plan.ContinuationPages,
+			QueuePages:        pdfDebugPrintedFootnoteQueuePages(plan.QueuePages),
+		}
+		if plan.PageIndex >= 0 && plan.PageIndex < len(reserved.PageBottomReserves) {
+			debugPlan.Reserve = reserved.PageBottomReserves[plan.PageIndex]
+		}
+		summary.Plans = append(summary.Plans, debugPlan)
+		if plan.PageIndex >= 0 && plan.PageIndex < len(reserved.Pages) {
+			plannedPages[plan.PageIndex] = true
+		}
+		summary.ContinuationPageCount += plan.ContinuationPages
+	}
+	summary.PlanCount = len(summary.Plans)
+	summary.PagesWithoutPrintedRefs = max(len(reserved.Pages)-len(plannedPages), 0)
+	for pageIndex, reserve := range reserved.PageBottomReserves {
+		if reserve <= 0 {
+			continue
+		}
+		summary.Reserves = append(summary.Reserves, pdfDebugPrintedFootnoteReserve{PageIndex: pageIndex, Reserve: reserve})
+	}
+	summary.ReserveCount = len(summary.Reserves)
+	pdfDebugPrintedFootnotesReserveOverflow(doc, reserved, &summary)
+	pdfDebugPrintedFootnotesSyncCounts(&summary)
+	return summary
+}
+
+func pdfDebugPrintedFootnoteRefs(refs []pdfPrintedFootnoteRef) []pdfDebugPrintedFootnoteRef {
+	out := make([]pdfDebugPrintedFootnoteRef, 0, len(refs))
+	for _, ref := range refs {
+		out = append(out, pdfDebugPrintedFootnoteRef(ref))
+	}
+	return out
+}
+
+func pdfDebugPrintedFootnoteQueue(queue []pdfPrintedFootnoteQueueEntry) []pdfDebugPrintedFootnoteQueueEntry {
+	out := make([]pdfDebugPrintedFootnoteQueueEntry, 0, len(queue))
+	for _, entry := range queue {
+		out = append(out, pdfDebugPrintedFootnoteQueueEntry(entry))
+	}
+	return out
+}
+
+func pdfDebugPrintedFootnoteQueuePages(pages []pdfPage) []pdfDebugPrintedFootnoteQueuePage {
+	out := make([]pdfDebugPrintedFootnoteQueuePage, 0, len(pages))
+	for i, page := range pages {
+		out = append(out, pdfDebugPrintedFootnoteQueuePage{
+			Index:     i,
+			LineCount: len(page.Lines),
+			Bounds:    pdfDebugPageYBounds(page),
+		})
+	}
+	return out
+}
+
+func pdfDebugPageYBounds(page pdfPage) *pdfDebugYBounds {
+	top, bottom, ok := pdfPageYBounds(page)
+	if !ok {
+		return nil
+	}
+	return &pdfDebugYBounds{Top: top, Bottom: bottom, Height: max(top-bottom, 0)}
+}
+
+func pdfDebugPrintedFootnotesReserveOverflow(doc pdfDocumentSpec, reserved pdfPrintedFootnoteReservedLayout, summary *pdfDebugPrintedFootnotes) {
+	if summary == nil || len(reserved.Plans) == 0 || reserved.FootnoteTextHeight <= 0 {
+		return
+	}
+	styles := doc.Styles
+	if styles == nil {
+		styles = newPDFStyleResolver(nil, nil)
+	}
+	const margin = 24.0
+	contentLeft, contentRight, contentTop, contentBottom := pdfPageContentMargins(doc, styles, margin)
+	contentWidth := max(doc.PageWidth-contentLeft-contentRight, 12)
+	separator := pdfPrintedFootnoteSeparatorMetricsForArea(doc, styles, contentLeft, contentWidth, contentBottom, reserved.FootnoteTextHeight)
+	maxReserve := max(doc.PageHeight-contentTop-contentBottom-pdfBaseLineHeight, 0)
+	if maxReserve <= 0 {
+		return
+	}
+	for _, plan := range reserved.Plans {
+		if plan.PageIndex < 0 || plan.PageIndex >= len(reserved.PageBottomReserves) || len(plan.QueuePages) == 0 {
+			continue
+		}
+		requested := pdfPrintedFootnotePagePlanReserve(plan, reserved.FootnoteTextHeight, separator)
+		actual := reserved.PageBottomReserves[plan.PageIndex]
+		if requested > actual && actual == maxReserve {
+			summary.Overflow = append(summary.Overflow, pdfDebugPrintedFootnoteCase{
+				Kind:      "reserve",
+				Reason:    "clamped_to_main_text_minimum",
+				PageIndex: plan.PageIndex,
+				Value:     requested,
+				Limit:     actual,
+			})
+		}
+	}
+}
+
+func pdfDebugPrintedFootnotesSyncCounts(summary *pdfDebugPrintedFootnotes) {
+	if summary == nil {
+		return
+	}
+	summary.PlanCount = len(summary.Plans)
+	summary.ReserveCount = len(summary.Reserves)
+	summary.SkippedCount = len(summary.Skipped)
+	summary.OverflowCount = len(summary.Overflow)
 }
 
 func writeJSONDebugDump(path string, v any) error {

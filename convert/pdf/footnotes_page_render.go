@@ -13,21 +13,91 @@ type pdfPrintedFootnoteSeparatorMetrics struct {
 	Color       pdfColor
 }
 
+func pdfPrintedFootnoteRenderDebug(debugSummary ...*pdfDebugPrintedFootnotes) *pdfDebugPrintedFootnotes {
+	if len(debugSummary) == 0 {
+		return nil
+	}
+	return debugSummary[0]
+}
+
+func pdfDebugPrintedFootnoteSkipped(debug *pdfDebugPrintedFootnotes, kind string, reason string, pageIndex int, queuePageIndex int, value float64, limit float64) {
+	if debug == nil {
+		return
+	}
+	debug.Skipped = append(debug.Skipped, pdfDebugPrintedFootnoteCase{
+		Kind:           kind,
+		Reason:         reason,
+		PageIndex:      pageIndex,
+		QueuePageIndex: queuePageIndex,
+		Value:          value,
+		Limit:          limit,
+	})
+}
+
+func pdfDebugPrintedFootnoteOverflow(debug *pdfDebugPrintedFootnotes, kind string, reason string, pageIndex int, queuePageIndex int, value float64, limit float64) {
+	if debug == nil {
+		return
+	}
+	debug.Overflow = append(debug.Overflow, pdfDebugPrintedFootnoteCase{
+		Kind:           kind,
+		Reason:         reason,
+		PageIndex:      pageIndex,
+		QueuePageIndex: queuePageIndex,
+		Value:          value,
+		Limit:          limit,
+	})
+}
+
+func pdfDebugPrintedFootnotePackedChunk(
+	debug *pdfDebugPrintedFootnotes,
+	sourcePageIndex int,
+	queuePageIndex int,
+	continuationPageIndex int,
+	chunkTop float64,
+	chunkBottom float64,
+	shift float64,
+	placedTop float64,
+	placedBottom float64,
+) {
+	if debug == nil {
+		return
+	}
+	debug.PackedContinuationChunks = append(debug.PackedContinuationChunks, pdfDebugPrintedFootnoteContinuationPack{
+		SourcePageIndex:       sourcePageIndex,
+		QueuePageIndex:        queuePageIndex,
+		ContinuationPageIndex: continuationPageIndex,
+		ChunkTop:              chunkTop,
+		ChunkBottom:           chunkBottom,
+		ChunkHeight:           max(chunkTop-chunkBottom, 0),
+		ShiftY:                shift,
+		PlacedTop:             placedTop,
+		PlacedBottom:          placedBottom,
+	})
+}
+
 func appendPDFPrintedFootnotePagePlans(
 	doc pdfDocumentSpec,
 	pages []pdfPage,
 	plans []pdfPrintedFootnotePagePlan,
 	footnoteTextHeight float64,
 	used map[pdfFontKey]map[uint16]shapedGlyph,
+	debugSummary ...*pdfDebugPrintedFootnotes,
 ) []pdfPage {
 	if len(pages) == 0 || len(plans) == 0 {
 		return pages
 	}
+	debug := pdfPrintedFootnoteRenderDebug(debugSummary...)
 	plansByPage := make(map[int]pdfPrintedFootnotePagePlan, len(plans))
 	for _, plan := range plans {
-		if plan.PageIndex >= 0 && plan.PageIndex < len(pages) && len(plan.QueuePages) > 0 {
-			plansByPage[plan.PageIndex] = plan
+		if plan.PageIndex < 0 || plan.PageIndex >= len(pages) {
+			pdfDebugPrintedFootnoteSkipped(debug, "plan", "page_index_out_of_range", plan.PageIndex, 0, 0, float64(len(pages)))
+			continue
 		}
+		if len(plan.QueuePages) == 0 {
+			pdfDebugPrintedFootnoteSkipped(debug, "plan", "empty_queue_pages", plan.PageIndex, 0, 0, 0)
+			continue
+		}
+		plansByPage[plan.PageIndex] = plan
 	}
 	if len(plansByPage) == 0 {
 		return pages
@@ -53,7 +123,8 @@ func appendPDFPrintedFootnotePagePlans(
 		appendPDFPrintedFootnotePage(&page, footnotePage, pageSeparator)
 		mergePDFUsedGlyphs(used, plan.UsedGlyphs)
 		out = append(out, page)
-		out = appendPDFPrintedFootnoteContinuationPages(out, doc, plan.QueuePages[1:], contentTop, contentBottom, separator)
+		out = appendPDFPrintedFootnoteContinuationPages(out, doc, plan.PageIndex, plan.QueuePages[1:], contentTop, contentBottom, separator, debug)
+		pdfDebugPrintedFootnotesSyncCounts(debug)
 	}
 	return out
 }
@@ -97,10 +168,12 @@ func appendPDFPrintedFootnotePage(page *pdfPage, footnotePage pdfPage, separator
 func appendPDFPrintedFootnoteContinuationPages(
 	out []pdfPage,
 	doc pdfDocumentSpec,
+	sourcePageIndex int,
 	queuePages []pdfPage,
 	contentTop float64,
 	contentBottom float64,
 	separator pdfPrintedFootnoteSeparatorMetrics,
+	debug *pdfDebugPrintedFootnotes,
 ) []pdfPage {
 	if len(queuePages) == 0 {
 		return out
@@ -114,24 +187,37 @@ func appendPDFPrintedFootnoteContinuationPages(
 	var continuation pdfPage
 	cursor := startCursor
 	hasContent := false
-	for _, queuePage := range queuePages {
+	continuationPageIndex := len(out)
+	for queuePageIndex, queuePage := range queuePages {
 		chunkTop, chunkBottom, ok := pdfPageYBounds(queuePage)
 		if !ok {
+			pdfDebugPrintedFootnoteSkipped(debug, "continuation_chunk", "empty_bounds", sourcePageIndex, queuePageIndex+1, 0, 0)
 			continue
 		}
 		chunkHeight := chunkTop - chunkBottom
+		pageCapacity := startCursor - pageBottom
+		if chunkHeight > pageCapacity {
+			pdfDebugPrintedFootnoteOverflow(debug, "continuation_chunk", "chunk_taller_than_page_capacity", sourcePageIndex, queuePageIndex+1, chunkHeight, pageCapacity)
+		}
 		if hasContent && cursor-chunkHeight < pageBottom {
 			out = append(out, continuation)
 			continuation = pdfPage{}
 			cursor = startCursor
 			hasContent = false
+			continuationPageIndex = len(out)
 		}
 		if !hasContent {
 			appendPDFPrintedFootnoteContinuationSeparator(&continuation, separator, pageTop)
 		}
 		shift := cursor - chunkTop
+		placedTop := chunkTop + shift
+		placedBottom := chunkBottom + shift
+		if placedBottom < pageBottom {
+			pdfDebugPrintedFootnoteOverflow(debug, "continuation_chunk", "placed_below_content_bottom", sourcePageIndex, queuePageIndex+1, pageBottom-placedBottom, pageBottom)
+		}
+		pdfDebugPrintedFootnotePackedChunk(debug, sourcePageIndex, queuePageIndex+1, continuationPageIndex, chunkTop, chunkBottom, shift, placedTop, placedBottom)
 		appendPDFPrintedFootnotePage(&continuation, shiftPDFPageY(queuePage, shift), pdfPrintedFootnoteSeparatorMetrics{})
-		cursor = chunkBottom + shift
+		cursor = placedBottom
 		hasContent = true
 	}
 	if hasContent {
