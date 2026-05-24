@@ -102,7 +102,7 @@ func TestPDFPrintedFootnotePageBlocksMissingTitleUsesOnlyPageLocalLabel(t *testi
 	}
 }
 
-func TestBuildPDFPrintedFootnoteBlocksContinuationTitleAppendsMarkerToLastParagraph(t *testing.T) {
+func TestBuildPDFPrintedFootnoteBlocksContinuationTitleDoesNotAppendMarker(t *testing.T) {
 	c := testPDFPrintedFootnoteContent(fb2.Section{
 		ID: "n1",
 		Title: &fb2.Title{Items: []fb2.TitleItem{
@@ -114,29 +114,17 @@ func TestBuildPDFPrintedFootnoteBlocksContinuationTitleAppendsMarkerToLastParagr
 			Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Footnote body."}}},
 		}},
 	})
-	c.FootnoteContinuationStr = "(continued)"
-
 	footnotes := buildPDFPrintedFootnoteBlocks(c)
 	note := footnotes["n1"]
 	if len(note.ContinuationTitleBlocks) != 2 {
 		t.Fatalf("continuation title blocks = %#v, want two title paragraphs", note.ContinuationTitleBlocks)
 	}
-	if note.ContinuationTitleBlocks[0].Text != "First" {
-		t.Fatalf("first continuation title = %#v, want unchanged first title paragraph", note.ContinuationTitleBlocks[0])
-	}
-	lastTitle := note.ContinuationTitleBlocks[1]
-	if lastTitle.Text != "Second (continued)" {
-		t.Fatalf("last continuation title = %#v, want marker appended", lastTitle)
-	}
-	if len(lastTitle.Runs) != 2 || !hasPDFStyleClass(lastTitle.Runs[1].StyleClasses, pdfStyleFootnoteContinuation) {
-		t.Fatalf("last continuation title runs = %#v, want marker with continuation class", lastTitle.Runs)
-	}
-	if note.TitleBlocks[1].Text != "Second" {
-		t.Fatalf("base title mutated by continuation marker: %#v", note.TitleBlocks[1])
+	if note.ContinuationTitleBlocks[0].Text != "First" || note.ContinuationTitleBlocks[1].Text != "Second" {
+		t.Fatalf("continuation title blocks = %#v, want unmarked title paragraphs", note.ContinuationTitleBlocks)
 	}
 	pageBlocks := pdfPrintedFootnotePageBlocks(c, note, "1", true)
-	if pageBlocks[0].Text != "1 First" || pageBlocks[1].Text != "Second (continued)" {
-		t.Fatalf("continuation page title blocks = %#v, want page label plus continued title", pageBlocks[:2])
+	if pageBlocks[0].Text != "1 First" || pageBlocks[1].Text != "Second" {
+		t.Fatalf("continuation page title blocks = %#v, want page label plus unmarked title", pageBlocks[:2])
 	}
 }
 

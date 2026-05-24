@@ -54,19 +54,18 @@ type PageMapEntry struct {
 // normalized internal representation derived from the official FictionBook 2.0
 // schemas. https://github.com/gribuser/fb2.git commit 4d3740e319039911c30d291abb0c8b26ec99703b
 type Content struct {
-	SrcName                 string
-	Doc                     *etree.Document
-	OutputFormat            common.OutputFmt     // config: output format
-	KindleEbook             bool                 // cli: kindle ebook (EBOK) metadata
-	ASIN                    string               // cli: ASIN override for Kindle formats
-	FootnotesMode           common.FootnotesMode // config: footnotes handling mode
-	PageSize                int                  // config: runes per page, 0 if disabled
-	AdobeDE                 bool                 // config: Adobe DE page markers are being generated instead of NCX pageList
-	BacklinkTemplate        string               // config: backlink indicator template
-	MoreParaStr             string               // config: more paragraphs indicator
-	FootnoteContinuationStr string               // config: footnote continuation title marker
-	ScreenWidth             int                  // config: target screen width for image sizing
-	ScreenHeight            int                  // config: target screen height for image sizing
+	SrcName          string
+	Doc              *etree.Document
+	OutputFormat     common.OutputFmt     // config: output format
+	KindleEbook      bool                 // cli: kindle ebook (EBOK) metadata
+	ASIN             string               // cli: ASIN override for Kindle formats
+	FootnotesMode    common.FootnotesMode // config: footnotes handling mode
+	PageSize         int                  // config: runes per page, 0 if disabled
+	AdobeDE          bool                 // config: Adobe DE page markers are being generated instead of NCX pageList
+	BacklinkTemplate string               // config: backlink indicator template
+	MoreParaStr      string               // config: more paragraphs indicator
+	ScreenWidth      int                  // config: target screen width for image sizing
+	ScreenHeight     int                  // config: target screen height for image sizing
 
 	Book           *fb2.FictionBook
 	CoverID        string
@@ -255,28 +254,27 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 	imagesIndex := book.FilterReferencedImages(allImages, links, coverID, log)
 
 	c := &Content{
-		SrcName:                 srcName,
-		Doc:                     doc,
-		OutputFormat:            outputFormat,
-		KindleEbook:             env.KindleEbook && outputFormat.ForKindle(),
-		ASIN:                    env.KindleASIN,
-		FootnotesMode:           env.Cfg.Document.Footnotes.Mode,
-		BacklinkTemplate:        env.Cfg.Document.Footnotes.BacklinkTemplate,
-		MoreParaStr:             string(env.Cfg.Document.Footnotes.MoreParagraphs),
-		FootnoteContinuationStr: string(env.Cfg.Document.Footnotes.Continuation),
-		ScreenWidth:             env.Cfg.Document.Images.Screen.Width,
-		ScreenHeight:            env.Cfg.Document.Images.Screen.Height,
-		Book:                    book,
-		CoverID:                 coverID,
-		FootnotesIndex:          footnotes,
-		ImagesIndex:             imagesIndex,
-		UsedImageIDs:            make(map[string]bool),
-		IDsIndex:                ids,
-		LinksRevIndex:           links,
-		WorkDir:                 tmpDir,
-		Debug:                   env.Rpt != nil,
-		BackLinkIndex:           make(map[string][]BackLinkRef),
-		PageMapIndex:            make(map[string][]PageMapEntry),
+		SrcName:          srcName,
+		Doc:              doc,
+		OutputFormat:     outputFormat,
+		KindleEbook:      env.KindleEbook && outputFormat.ForKindle(),
+		ASIN:             env.KindleASIN,
+		FootnotesMode:    env.Cfg.Document.Footnotes.Mode,
+		BacklinkTemplate: env.Cfg.Document.Footnotes.BacklinkTemplate,
+		MoreParaStr:      string(env.Cfg.Document.Footnotes.MoreParagraphs),
+		ScreenWidth:      env.Cfg.Document.Images.Screen.Width,
+		ScreenHeight:     env.Cfg.Document.Images.Screen.Height,
+		Book:             book,
+		CoverID:          coverID,
+		FootnotesIndex:   footnotes,
+		ImagesIndex:      imagesIndex,
+		UsedImageIDs:     make(map[string]bool),
+		IDsIndex:         ids,
+		LinksRevIndex:    links,
+		WorkDir:          tmpDir,
+		Debug:            env.Rpt != nil,
+		BackLinkIndex:    make(map[string][]BackLinkRef),
+		PageMapIndex:     make(map[string][]PageMapEntry),
 	}
 
 	// Initialize page map settings

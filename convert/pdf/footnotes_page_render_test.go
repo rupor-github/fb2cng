@@ -39,11 +39,19 @@ func TestAppendPDFPrintedFootnotePagePlansInsertsContinuationBeforeNextMainPage(
 	if len(out[0].Backgrounds) == 0 {
 		t.Fatalf("first page backgrounds=%#v, want separator on source page", out[0].Backgrounds)
 	}
-	if len(out[1].Backgrounds) != 0 {
-		t.Fatalf("continuation backgrounds=%#v, want footnote-only continuation without bottom separator", out[1].Backgrounds)
+	if len(out[1].Backgrounds) == 0 {
+		t.Fatalf("continuation backgrounds=%#v, want top continuation separator", out[1].Backgrounds)
 	}
-	if len(out[1].Lines) == 0 || out[1].Lines[0].Y <= plan.QueuePages[1].Lines[0].Y {
-		t.Fatalf("continuation line y = %#v, want shifted toward top of full page", out[1].Lines)
+	if len(out[1].Strokes) != pdfPrintedFootnoteContinuationMarkerChevrons*2 {
+		t.Fatalf("continuation strokes=%#v, want vector chevron marker", out[1].Strokes)
+	}
+	markerTop, markerBottom, ok := pageStrokesYBounds(out[1].Strokes)
+	if !ok {
+		t.Fatalf("continuation strokes = %#v, want marker strokes", out[1].Strokes)
+	}
+	footnoteY, ok := pageLineYByText(out[1], "Footnote continuation")
+	if !ok || markerTop <= footnoteY || markerBottom <= footnoteY || footnoteY <= plan.QueuePages[1].Lines[0].Y {
+		t.Fatalf("continuation marker y=%v..%v footnote y=%v, want separator marker above footnote shifted toward top", markerBottom, markerTop, footnoteY)
 	}
 }
 
@@ -74,8 +82,37 @@ func TestAppendPDFPrintedFootnotePagePlansPacksContinuationChunksFromTop(t *test
 	if got := pageText(out[1]); !strings.Contains(got, "Footnote continuation one") || !strings.Contains(got, "Footnote continuation two") || strings.Contains(got, "Main page 2") {
 		t.Fatalf("packed continuation text = %q, want both continuation chunks before next main page", got)
 	}
-	if len(out[1].Lines) < 2 || out[1].Lines[0].Y <= out[1].Lines[1].Y {
+	firstY, firstOK := pageLineYByText(out[1], "Footnote continuation one")
+	secondY, secondOK := pageLineYByText(out[1], "Footnote continuation two")
+	if !firstOK || !secondOK || firstY <= secondY {
 		t.Fatalf("packed continuation lines = %#v, want chunks stacked top-down", out[1].Lines)
+	}
+}
+
+func TestAppendPDFPrintedFootnotePagePlansDrawsVectorContinuationMarkerWithoutGlyphs(t *testing.T) {
+	face, err := builtinFont("serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	used := make(map[pdfFontKey]map[uint16]shapedGlyph)
+	out := appendPDFPrintedFootnotePagePlans(
+		pdfDocumentSpec{PageWidth: 260, PageHeight: 180},
+		[]pdfPage{{Lines: []pdfPageLine{testPDFPageLine(t, face, "Main", 130)}}},
+		[]pdfPrintedFootnotePagePlan{{PageIndex: 0, QueuePages: []pdfPage{
+			{Lines: []pdfPageLine{testPDFPageLine(t, face, "Footnote first", 60)}},
+			{Lines: []pdfPageLine{testPDFPageLine(t, face, "Footnote continuation", 60)}},
+		}}},
+		80,
+		used,
+	)
+	if len(out) != 2 || len(out[1].Strokes) != pdfPrintedFootnoteContinuationMarkerChevrons*2 {
+		t.Fatalf("rendered pages = %#v, want vector continuation marker", out)
+	}
+	if strings.Contains(pageText(out[1]), ">") {
+		t.Fatalf("continuation page text = %q, want vector marker not text", pageText(out[1]))
+	}
+	if usedGlyphCount(used) != 0 {
+		t.Fatalf("used glyphs = %#v, want no marker glyph usage", used)
 	}
 }
 
@@ -116,6 +153,28 @@ func TestPDFPrintedFootnoteSeparatorMetricsUsesContentWidth(t *testing.T) {
 	if metrics.Y <= 24+80 {
 		t.Fatalf("separator y = %v, want above footnote text area", metrics.Y)
 	}
+}
+
+func pageLineYByText(page pdfPage, text string) (float64, bool) {
+	for _, line := range page.Lines {
+		if shapedRunes(line.Text) == text {
+			return line.Y, true
+		}
+	}
+	return 0, false
+}
+
+func pageStrokesYBounds(strokes []pdfPageStroke) (float64, float64, bool) {
+	if len(strokes) == 0 {
+		return 0, 0, false
+	}
+	top := max(strokes[0].Y1, strokes[0].Y2)
+	bottom := min(strokes[0].Y1, strokes[0].Y2)
+	for _, stroke := range strokes[1:] {
+		top = max(top, max(stroke.Y1, stroke.Y2))
+		bottom = min(bottom, min(stroke.Y1, stroke.Y2))
+	}
+	return top, bottom, true
 }
 
 func testPDFPageLine(t *testing.T, face *builtinFontFace, text string, y float64) pdfPageLine {

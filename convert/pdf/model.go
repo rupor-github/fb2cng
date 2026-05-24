@@ -7,28 +7,29 @@ import (
 )
 
 type pdfDocumentSpec struct {
-	PageWidth          float64
-	PageHeight         float64
-	ScreenWidthPx      int
-	ScreenHeightPx     int
-	ScreenDPI          int
-	Title              string
-	Author             string
-	Subject            string
-	Keywords           string
-	Blocks             []pdfTextBlock
-	TOC                []*structure.TOCEntry
-	PrintedFootnotes   map[string]pdfPrintedFootnote
-	PageBottomReserves []float64
-	DebugPlan          pdfDebugStructurePlan
-	Content            *content.Content
-	Styles             *pdfStyleResolver
-	Images             fb2.BookImages
-	CoverID            string
-	Hyphenator         paragraphHyphenator
-	Fonts              *pdfFontRegistry
-	Debug              bool
-	WorkDir            string
+	PageWidth                      float64
+	PageHeight                     float64
+	ScreenWidthPx                  int
+	ScreenHeightPx                 int
+	ScreenDPI                      int
+	Title                          string
+	Author                         string
+	Subject                        string
+	Keywords                       string
+	Blocks                         []pdfTextBlock
+	TOC                            []*structure.TOCEntry
+	PrintedFootnotes               map[string]pdfPrintedFootnote
+	PageBottomReserves             []float64
+	DynamicPrintedFootnoteReserves bool
+	DebugPlan                      pdfDebugStructurePlan
+	Content                        *content.Content
+	Styles                         *pdfStyleResolver
+	Images                         fb2.BookImages
+	CoverID                        string
+	Hyphenator                     paragraphHyphenator
+	Fonts                          *pdfFontRegistry
+	Debug                          bool
+	WorkDir                        string
 }
 
 type pdfBlockKind int
@@ -174,6 +175,7 @@ type pdfPage struct {
 	ContentID   int
 	Backgrounds []pdfPageRect
 	Borders     []pdfPageBorder
+	Strokes     []pdfPageStroke
 	Lines       []pdfPageLine
 	Images      []pdfPageImage
 	Anchors     []string
@@ -193,6 +195,15 @@ type pdfPageBorder struct {
 	Y         float64
 	Width     float64
 	Height    float64
+	LineWidth float64
+	Color     pdfColor
+}
+
+type pdfPageStroke struct {
+	X1        float64
+	Y1        float64
+	X2        float64
+	Y2        float64
 	LineWidth float64
 	Color     pdfColor
 }

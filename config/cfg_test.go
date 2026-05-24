@@ -319,10 +319,6 @@ func TestConfig_DefaultValues(t *testing.T) {
 	if cfg.Document.Footnotes.BodyNames == nil {
 		t.Error("BodyNames should not be nil")
 	}
-
-	if cfg.Document.Footnotes.Continuation != "(continued)" {
-		t.Errorf("Footnotes.Continuation = %q, want %q", cfg.Document.Footnotes.Continuation, "(continued)")
-	}
 }
 
 func TestImagesConfig(t *testing.T) {

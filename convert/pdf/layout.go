@@ -113,6 +113,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 	rootlessContentLeft, rootlessContentRight, _, _ := pdfPageContentMarginsWithoutRootHorizontal(doc, styles, margin)
 	contentWidth := max(doc.PageWidth-contentLeft-contentRight, 12)
 	rootlessContentWidth := max(doc.PageWidth-rootlessContentLeft-rootlessContentRight, 12)
+	printedFootnoteReserve := pdfDynamicPrintedFootnoteReserve(doc, styles, contentLeft, contentWidth, contentBottom)
 	pageBottom := func(pageIndex int) float64 {
 		reserve := 0.0
 		if pageIndex >= 0 && pageIndex < len(doc.PageBottomReserves) {
@@ -474,6 +475,17 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 				y -= style.Paragraph.FontSize
 				previousRenderedImage = false
 			}
+			if printedFootnoteReserve > 0 && pdfParagraphLineHasPrintedFootnoteRef(doc, line) {
+				reservedBottom := pdfReservedContentBottom(contentBottom, top, printedFootnoteReserve)
+				if pageHasText && y-style.Paragraph.FontSize < reservedBottom {
+					addBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, y)
+					newTextPage()
+					fragmentPage = page
+					fragmentTop = y + style.Paragraph.FontSize
+					y -= style.Paragraph.FontSize
+				}
+				bottom = max(bottom, reservedBottom)
+			}
 			if y-style.Paragraph.FontSize < bottom {
 				if pageHasText {
 					addBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, y)
@@ -546,6 +558,34 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 		pages = pages[:len(pages)-1]
 	}
 	return pages, used, nil
+}
+
+func pdfDynamicPrintedFootnoteReserve(doc pdfDocumentSpec, styles *pdfStyleResolver, contentLeft float64, contentWidth float64, contentBottom float64) float64 {
+	if !doc.DynamicPrintedFootnoteReserves || !pdfPrintedFootnotesEnabled(doc.Content) || len(doc.PrintedFootnotes) == 0 {
+		return 0
+	}
+	footnoteTextHeight := pdfPrintedFootnoteTextAreaHeight(doc, styles)
+	if footnoteTextHeight <= 0 {
+		return 0
+	}
+	separator := pdfPrintedFootnoteSeparatorMetricsForArea(doc, styles, contentLeft, contentWidth, contentBottom, footnoteTextHeight)
+	return footnoteTextHeight + separator.Reserve
+}
+
+func pdfParagraphLineHasPrintedFootnoteRef(doc pdfDocumentSpec, line paragraphLine) bool {
+	if len(doc.PrintedFootnotes) == 0 {
+		return false
+	}
+	for _, fragment := range line.Fragments {
+		id := strings.TrimSpace(fragment.FootnoteID)
+		if id == "" || strings.TrimSpace(fragment.LinkHref) != "" {
+			continue
+		}
+		if _, ok := doc.PrintedFootnotes[id]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func pdfReservedContentBottom(contentBottom float64, top float64, reserve float64) float64 {

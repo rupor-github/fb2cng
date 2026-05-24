@@ -1,12 +1,16 @@
 package pdf
 
+const pdfPrintedFootnoteContinuationMarkerChevrons = 3
+
 type pdfPrintedFootnoteSeparatorMetrics struct {
-	Reserve   float64
-	LineWidth float64
-	X         float64
-	Width     float64
-	Y         float64
-	Color     pdfColor
+	Reserve     float64
+	LineWidth   float64
+	SpaceBefore float64
+	SpaceAfter  float64
+	X           float64
+	Width       float64
+	Y           float64
+	Color       pdfColor
 }
 
 func appendPDFPrintedFootnotePagePlans(
@@ -48,7 +52,7 @@ func appendPDFPrintedFootnotePagePlans(
 		appendPDFPrintedFootnotePage(&page, plan.QueuePages[0], separator)
 		mergePDFUsedGlyphs(used, plan.UsedGlyphs)
 		out = append(out, page)
-		out = appendPDFPrintedFootnoteContinuationPages(out, doc, plan.QueuePages[1:], contentTop, contentBottom)
+		out = appendPDFPrintedFootnoteContinuationPages(out, doc, plan.QueuePages[1:], contentTop, contentBottom, separator)
 	}
 	return out
 }
@@ -68,20 +72,32 @@ func appendPDFPrintedFootnotePage(page *pdfPage, footnotePage pdfPage, separator
 	}
 	page.Backgrounds = append(page.Backgrounds, footnotePage.Backgrounds...)
 	page.Borders = append(page.Borders, footnotePage.Borders...)
+	page.Strokes = append(page.Strokes, footnotePage.Strokes...)
 	page.Lines = append(page.Lines, footnotePage.Lines...)
 	page.Images = append(page.Images, footnotePage.Images...)
 	page.Anchors = append(page.Anchors, footnotePage.Anchors...)
 	page.Annotations = append(page.Annotations, footnotePage.Annotations...)
 }
 
-func appendPDFPrintedFootnoteContinuationPages(out []pdfPage, doc pdfDocumentSpec, queuePages []pdfPage, contentTop float64, contentBottom float64) []pdfPage {
+func appendPDFPrintedFootnoteContinuationPages(
+	out []pdfPage,
+	doc pdfDocumentSpec,
+	queuePages []pdfPage,
+	contentTop float64,
+	contentBottom float64,
+	separator pdfPrintedFootnoteSeparatorMetrics,
+) []pdfPage {
 	if len(queuePages) == 0 {
 		return out
 	}
 	pageTop := doc.PageHeight - contentTop
 	pageBottom := contentBottom
+	startCursor := pageTop - max(separator.Reserve, 0)
+	if startCursor <= pageBottom {
+		startCursor = pageTop
+	}
 	var continuation pdfPage
-	cursor := pageTop
+	cursor := startCursor
 	hasContent := false
 	for _, queuePage := range queuePages {
 		chunkTop, chunkBottom, ok := pdfPageYBounds(queuePage)
@@ -92,8 +108,11 @@ func appendPDFPrintedFootnoteContinuationPages(out []pdfPage, doc pdfDocumentSpe
 		if hasContent && cursor-chunkHeight < pageBottom {
 			out = append(out, continuation)
 			continuation = pdfPage{}
-			cursor = pageTop
+			cursor = startCursor
 			hasContent = false
+		}
+		if !hasContent {
+			appendPDFPrintedFootnoteContinuationSeparator(&continuation, separator, pageTop)
 		}
 		shift := cursor - chunkTop
 		appendPDFPrintedFootnotePage(&continuation, shiftPDFPageY(queuePage, shift), pdfPrintedFootnoteSeparatorMetrics{})
@@ -104,6 +123,43 @@ func appendPDFPrintedFootnoteContinuationPages(out []pdfPage, doc pdfDocumentSpe
 		out = append(out, continuation)
 	}
 	return out
+}
+
+func appendPDFPrintedFootnoteContinuationSeparator(page *pdfPage, separator pdfPrintedFootnoteSeparatorMetrics, pageTop float64) {
+	if page == nil || separator.LineWidth <= 0 || separator.Width <= 0 {
+		return
+	}
+	lineY := pageTop - max(separator.SpaceBefore, 0) - separator.LineWidth
+	page.Backgrounds = append(page.Backgrounds, pdfPageRect{
+		X:      separator.X,
+		Y:      lineY,
+		Width:  separator.Width,
+		Height: separator.LineWidth,
+		Color:  separator.Color,
+	})
+	appendPDFPrintedFootnoteContinuationMarker(page, separator, lineY)
+}
+
+func appendPDFPrintedFootnoteContinuationMarker(page *pdfPage, separator pdfPrintedFootnoteSeparatorMetrics, separatorY float64) {
+	if page == nil || separator.LineWidth <= 0 || separator.Width <= 0 {
+		return
+	}
+	strokeWidth := max(separator.LineWidth, 0.5)
+	chevronHeight := max(strokeWidth*5, 3)
+	chevronWidth := chevronHeight * 0.55
+	gap := max(strokeWidth*2.5, 1.5)
+	markerWidth := float64(pdfPrintedFootnoteContinuationMarkerChevrons)*chevronWidth + float64(pdfPrintedFootnoteContinuationMarkerChevrons-1)*gap
+	inset := min(max(separator.Width-markerWidth, 0), max(strokeWidth*6, 4))
+	startX := separator.X + separator.Width - markerWidth - inset
+	centerY := separatorY + separator.LineWidth/2
+	for i := range pdfPrintedFootnoteContinuationMarkerChevrons {
+		x := startX + float64(i)*(chevronWidth+gap)
+		midX := x + chevronWidth
+		page.Strokes = append(page.Strokes,
+			pdfPageStroke{X1: x, Y1: centerY + chevronHeight/2, X2: midX, Y2: centerY, LineWidth: strokeWidth, Color: separator.Color},
+			pdfPageStroke{X1: x, Y1: centerY - chevronHeight/2, X2: midX, Y2: centerY, LineWidth: strokeWidth, Color: separator.Color},
+		)
+	}
 }
 
 func shiftPDFPageY(page pdfPage, dy float64) pdfPage {
@@ -118,6 +174,11 @@ func shiftPDFPageY(page pdfPage, dy float64) pdfPage {
 	shifted.Borders = append([]pdfPageBorder(nil), page.Borders...)
 	for i := range shifted.Borders {
 		shifted.Borders[i].Y += dy
+	}
+	shifted.Strokes = append([]pdfPageStroke(nil), page.Strokes...)
+	for i := range shifted.Strokes {
+		shifted.Strokes[i].Y1 += dy
+		shifted.Strokes[i].Y2 += dy
 	}
 	shifted.Lines = append([]pdfPageLine(nil), page.Lines...)
 	for i := range shifted.Lines {
@@ -157,6 +218,10 @@ func pdfPageYBounds(page pdfPage) (float64, float64, bool) {
 	for _, border := range page.Borders {
 		include(border.Y+border.Height, border.Y)
 	}
+	for _, stroke := range page.Strokes {
+		padding := max(stroke.LineWidth/2, 0)
+		include(max(stroke.Y1, stroke.Y2)+padding, min(stroke.Y1, stroke.Y2)-padding)
+	}
 	for _, line := range page.Lines {
 		include(line.Y+line.FontSize, line.Y-line.FontSize*0.2)
 	}
@@ -186,13 +251,17 @@ func pdfPrintedFootnoteSeparatorMetricsForArea(
 		lineWidth = 0.5
 	}
 	width := blockBoxWidth(contentWidth, style)
+	spaceBefore := max(style.SpaceBefore, 0)
+	spaceAfter := max(style.SpaceAfter, 0)
 	return pdfPrintedFootnoteSeparatorMetrics{
-		Reserve:   max(style.SpaceBefore, 0) + lineWidth + max(style.SpaceAfter, 0),
-		LineWidth: lineWidth,
-		X:         contentLeft + style.MarginLeft,
-		Width:     min(max(width, 1), contentWidth),
-		Y:         contentBottom + max(footnoteTextHeight, 0) + max(style.SpaceAfter, 0),
-		Color:     style.BorderColor,
+		Reserve:     spaceBefore + lineWidth + spaceAfter,
+		LineWidth:   lineWidth,
+		SpaceBefore: spaceBefore,
+		SpaceAfter:  spaceAfter,
+		X:           contentLeft + style.MarginLeft,
+		Width:       min(max(width, 1), contentWidth),
+		Y:           contentBottom + max(footnoteTextHeight, 0) + spaceAfter,
+		Color:       style.BorderColor,
 	}
 }
 

@@ -67,6 +67,7 @@ type pdfDebugPage struct {
 	Images      []pdfDebugImage      `json:"images,omitempty"`
 	Backgrounds []pdfDebugBackground `json:"backgrounds,omitempty"`
 	Borders     []pdfDebugBorder     `json:"borders,omitempty"`
+	Strokes     []pdfDebugStroke     `json:"strokes,omitempty"`
 	Links       []pdfDebugLink       `json:"links,omitempty"`
 }
 
@@ -83,6 +84,15 @@ type pdfDebugBorder struct {
 	Y         float64 `json:"y"`
 	Width     float64 `json:"width"`
 	Height    float64 `json:"height"`
+	LineWidth float64 `json:"line_width"`
+	Color     string  `json:"color"`
+}
+
+type pdfDebugStroke struct {
+	X1        float64 `json:"x1"`
+	Y1        float64 `json:"y1"`
+	X2        float64 `json:"x2"`
+	Y2        float64 `json:"y2"`
 	LineWidth float64 `json:"line_width"`
 	Color     string  `json:"color"`
 }
@@ -276,6 +286,7 @@ func pdfDebugPages(pages []pdfPage) ([]pdfDebugPage, []pdfDebugImage, []pdfDebug
 			Images:      make([]pdfDebugImage, 0, len(page.Images)),
 			Backgrounds: make([]pdfDebugBackground, 0, len(page.Backgrounds)),
 			Borders:     make([]pdfDebugBorder, 0, len(page.Borders)),
+			Strokes:     make([]pdfDebugStroke, 0, len(page.Strokes)),
 			Links:       make([]pdfDebugLink, 0, len(page.Annotations)),
 		}
 		for _, line := range page.Lines {
@@ -315,6 +326,16 @@ func pdfDebugPages(pages []pdfPage) ([]pdfDebugPage, []pdfDebugImage, []pdfDebug
 				Height:    border.Height,
 				LineWidth: border.LineWidth,
 				Color:     border.Color.String(),
+			})
+		}
+		for _, stroke := range page.Strokes {
+			debugPage.Strokes = append(debugPage.Strokes, pdfDebugStroke{
+				X1:        stroke.X1,
+				Y1:        stroke.Y1,
+				X2:        stroke.X2,
+				Y2:        stroke.Y2,
+				LineWidth: stroke.LineWidth,
+				Color:     stroke.Color.String(),
 			})
 		}
 		for _, image := range page.Images {

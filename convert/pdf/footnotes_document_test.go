@@ -54,8 +54,8 @@ func TestLayoutPDFDocumentPagesAppendsPrintedFootnotesAndReservesMainFlow(t *tes
 	if strings.Contains(firstPageText, "Three") {
 		t.Fatalf("first page text = %q, want trailing main text pushed away from footnote area", firstPageText)
 	}
-	if got := pageText(pages[1]); !strings.Contains(got, "Footnote body") || strings.Contains(got, "Three") {
-		t.Fatalf("second page text = %q, want footnote continuation before pushed main text", got)
+	if got := pageText(pages[1]); !strings.Contains(got, "Footnote body") || strings.Contains(got, "Three") || strings.Contains(got, ">") {
+		t.Fatalf("second page text = %q, want vector-marked footnote continuation before pushed main text", got)
 	}
 	if got := pageText(pages[2]); !strings.Contains(got, "Three") {
 		t.Fatalf("third page text = %q, want pushed trailing main text", got)
@@ -63,8 +63,11 @@ func TestLayoutPDFDocumentPagesAppendsPrintedFootnotesAndReservesMainFlow(t *tes
 	if len(pages[0].Backgrounds) == 0 {
 		t.Fatalf("first page backgrounds=%#v, want separator geometry", pages[0].Backgrounds)
 	}
-	if len(pages[1].Backgrounds) != 0 {
-		t.Fatalf("continuation backgrounds=%#v, want footnote continuation from top without bottom separator", pages[1].Backgrounds)
+	if len(pages[1].Backgrounds) == 0 {
+		t.Fatalf("continuation backgrounds=%#v, want top continuation separator", pages[1].Backgrounds)
+	}
+	if len(pages[1].Strokes) != pdfPrintedFootnoteContinuationMarkerChevrons*2 {
+		t.Fatalf("continuation strokes=%#v, want vector chevron marker", pages[1].Strokes)
 	}
 	if usedGlyphCount(used) == 0 {
 		t.Fatalf("used glyphs = %#v, want main and footnote glyph usage", used)
