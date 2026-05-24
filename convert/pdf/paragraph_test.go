@@ -249,6 +249,20 @@ func TestLayoutParagraphHonorsHyphenationModes(t *testing.T) {
 	}
 }
 
+func TestParagraphBreaksReserveTerminalVisualOverhang(t *testing.T) {
+	units := []paragraphUnit{
+		{Text: "left", Width: 5, WordIndex: 0, EndWord: true},
+		{Text: "right", Width: 5, WordIndex: 1, EndWord: true, RightOverhang: 5},
+	}
+	breaks := chooseParagraphBreaks(units, 1, paragraphStyle{FontSize: 10}, 11)
+	if len(breaks) != 2 {
+		t.Fatalf("breaks = %#v, want two lines because terminal overhang exceeds width", breaks)
+	}
+	if breaks[0].End != 1 {
+		t.Fatalf("first break = %#v, want before overhanging terminal word", breaks[0])
+	}
+}
+
 func TestParagraphJustificationReservesTerminalVisualOverhang(t *testing.T) {
 	style := paragraphStyle{FontSize: 10, Align: textAlignJustify}
 	line := paragraphLine{

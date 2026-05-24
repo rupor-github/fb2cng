@@ -2,6 +2,7 @@ package pdf
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	contentText "fbc/content/text"
@@ -83,7 +84,8 @@ func layoutInlineParagraphWithShape(doc pdfDocumentSpec, registry *pdfFontRegist
 		}
 		last := i == len(breaks)-1
 		singleWord := units[start].WordIndex == units[br.End-1].WordIndex
-		line.BreakStats = paragraphLineBreakStatsFor(width, available, line.JustificationGaps, start == 0, last, singleWord, br.Hyphenated, previousHyphenated, previousFitness)
+		visualMetricWidth := width + paragraphLineVisualRightReserve(line, style.FontSize, style.LetterSpacing)
+		line.BreakStats = paragraphLineBreakStatsFor(visualMetricWidth, available, line.JustificationGaps, start == 0, last, singleWord, br.Hyphenated, previousHyphenated, previousFitness)
 		spacingAvailable := paragraphLineJustificationAvailable(line, style.FontSize, style.LetterSpacing, available)
 		line.ExtraWordSpacing, line.ExtraCharSpacing = paragraphJustificationSpacing(style, last, width, spacingAvailable, line.JustificationGaps, len(shaped.Glyphs))
 		lines = append(lines, line)
@@ -805,12 +807,14 @@ func inlineParagraphUnits(registry *pdfFontRegistry, words []paragraphInlineWord
 			continue
 		}
 		if style.NoWrap || inlineWordHasMultiRuneGlyph(word) {
+			width := paragraphFragmentsWidth(word.Fragments)
 			units = append(units, paragraphUnit{
-				Text:      word.Text,
-				Width:     paragraphFragmentsWidth(word.Fragments),
-				WordIndex: wordIndex,
-				EndWord:   true,
-				Fragments: word.Fragments,
+				Text:          word.Text,
+				Width:         width,
+				WordIndex:     wordIndex,
+				EndWord:       true,
+				RightOverhang: paragraphFragmentsRightOverhang(word.Fragments, width),
+				Fragments:     word.Fragments,
 			})
 			continue
 		}
@@ -834,17 +838,24 @@ func inlineParagraphUnits(registry *pdfFontRegistry, words []paragraphInlineWord
 					return nil, err
 				}
 			}
+			hyphenOverhang := 0.0
+			if len(hyphenFragments) != 0 {
+				hyphenatedFragments := slices.Concat(fragments, hyphenFragments)
+				hyphenOverhang = paragraphFragmentsRightOverhang(hyphenatedFragments, width+hyphenWidth)
+			}
 			units = append(units, paragraphUnit{
-				Text:            part.Text,
-				Width:           width,
-				WordIndex:       wordIndex,
-				EndWord:         partIndex == len(parts)-1,
-				BreakAfter:      part.BreakAfter,
-				Hyphenated:      part.Hyphenated,
-				HyphenText:      part.HyphenText,
-				HyphenWidth:     hyphenWidth,
-				Fragments:       fragments,
-				HyphenFragments: hyphenFragments,
+				Text:                part.Text,
+				Width:               width,
+				WordIndex:           wordIndex,
+				EndWord:             partIndex == len(parts)-1,
+				BreakAfter:          part.BreakAfter,
+				Hyphenated:          part.Hyphenated,
+				HyphenText:          part.HyphenText,
+				HyphenWidth:         hyphenWidth,
+				RightOverhang:       paragraphFragmentsRightOverhang(fragments, width),
+				HyphenRightOverhang: hyphenOverhang,
+				Fragments:           fragments,
+				HyphenFragments:     hyphenFragments,
 			})
 		}
 	}
@@ -955,6 +966,14 @@ func paragraphFragmentsWidth(fragments []paragraphLineFragment) float64 {
 		width += fragment.Width
 	}
 	return width
+}
+
+func paragraphFragmentsRightOverhang(fragments []paragraphLineFragment, width float64) float64 {
+	right, ok := paragraphFragmentLineVisualRight(paragraphLine{Width: width, Fragments: fragments})
+	if !ok {
+		return 0
+	}
+	return max(right-width, 0)
 }
 
 func inlineParagraphLineFragments(units []paragraphUnit, space paragraphLineFragment, hyphenAfter bool) ([]paragraphLineFragment, string, float64) {
