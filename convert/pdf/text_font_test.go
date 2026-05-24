@@ -359,11 +359,23 @@ func TestGlyphHex(t *testing.T) {
 	}
 }
 
+func TestToUnicodeCMapUsesGlyphSourceText(t *testing.T) {
+	cmap := toUnicodeCMap(map[uint16]shapedGlyph{
+		7: {GlyphID: 7, Rune: '\ufb01', Source: "fi"},
+	})
+	if !bytes.Contains(cmap, []byte("<0007> <00660069>")) {
+		t.Fatalf("ToUnicode CMap = %s, want CID 7 mapped to source text fi", cmap)
+	}
+}
+
 func TestUTF16BEHex(t *testing.T) {
 	if got := utf16BEHex('Ж'); got != "0416" {
 		t.Errorf("utf16BEHex('Ж') = %q, want 0416", got)
 	}
 	if got := utf16BEHex('😀'); got != "D83DDE00" {
 		t.Errorf("utf16BEHex('😀') = %q, want D83DDE00", got)
+	}
+	if got := utf16BEHexString("fi"); got != "00660069" {
+		t.Errorf("utf16BEHexString(fi) = %q, want 00660069", got)
 	}
 }

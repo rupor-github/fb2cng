@@ -718,7 +718,7 @@ func toUnicodeCMap(used map[uint16]shapedGlyph) []byte {
 		fmt.Fprintf(&buf, "%d beginbfchar\n", end-start)
 		for _, id := range ids[start:end] {
 			glyph := used[uint16(id)]
-			fmt.Fprintf(&buf, "<%04X> <%s>\n", id, utf16BEHex(glyph.Rune))
+			fmt.Fprintf(&buf, "<%04X> <%s>\n", id, utf16BEHexString(glyphUnicodeText(glyph)))
 		}
 		buf.WriteString("endbfchar\n")
 	}
@@ -729,8 +729,22 @@ func toUnicodeCMap(used map[uint16]shapedGlyph) []byte {
 	return buf.Bytes()
 }
 
+func glyphUnicodeText(glyph shapedGlyph) string {
+	if glyph.Source != "" {
+		return glyph.Source
+	}
+	if glyph.Rune != 0 {
+		return string(glyph.Rune)
+	}
+	return "\uFFFD"
+}
+
 func utf16BEHex(r rune) string {
-	words := utf16.Encode([]rune{r})
+	return utf16BEHexString(string(r))
+}
+
+func utf16BEHexString(text string) string {
+	words := utf16.Encode([]rune(text))
 	var b strings.Builder
 	for _, word := range words {
 		fmt.Fprintf(&b, "%04X", word)
