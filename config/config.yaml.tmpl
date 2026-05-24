@@ -218,13 +218,14 @@ document:
   footnotes:
     # How to render footnotes in the book
     # "default"         - no special processing, footnotes are just regular links
-    # "float"           - pop up footnotes (result depends on reader support).
-    # "floatRenumbered" - same as float, but footnote links and titles use
-    #                     sequential numbering controlled by label_template.
-    # NOTE: actual generated content will follow output format requirements for
-    # example with floating footnotes for epub2 and kepub "bi-directional
-    # links" method (A -> B and B -> A) and for epub3 it will be <aside> and
-    # <epub> required elements
+    # "float"           - pop up footnotes / printed page footnotes (PDF).
+    # "floatRenumbered" - same as float, but footnote references use
+    #                     sequential numbering controlled by output rules.
+    # NOTE: actual generated content will follow output format requirements: for
+    # epub2 and kepub floating footnotes use "bi-directional links" method
+    # (A -> B and B -> A), for epub3 they use <aside> and required <epub>
+    # elements, and for PDF float modes footnotes are rendered as printed
+    # page-local footnotes at the bottom of the source page / continuation pages.
     mode: default
 
     # Names of the bodies in fb2 document to consider for footnotes processing
@@ -251,11 +252,19 @@ document:
     # If floating note body has more than one paragraph this string could be
     # shown at the beginning of the first paragraph (.css footnote-more
     # controls visibility)
-    more_paragraphs: "(~)\u00A0"
+    more_paragraphs: "(~) "
 
-
-    # If floatRenumbered is specified this template will be used to format text
-    # displayed in footnotes references. Following fields are available:
+    # Template used to format footnote labels.
+    # For EPUB/KFX/AZW8 floatRenumbered, this template formats footnote reference
+    # text and footnote titles during content normalization.
+    # For PDF float/floatRenumbered, printed page footnote references are
+    # page-local (original visible labels in float, sequential labels in
+    # floatRenumbered); this template formats the text appended after the visible
+    # page-local label in printed footnote titles. The label/title separator is a
+    # NBSP and is emitted only when this template renders non-empty text. To
+    # intentionally render no appended title text while still satisfying
+    # validation, use: {{- "" -}}
+    # Following fields are available:
     # - .BodyTitle (string) - can be empty
     # - .BodyNumber (int) - 1 based index
     # - .NoteTitle (string) - can be empty

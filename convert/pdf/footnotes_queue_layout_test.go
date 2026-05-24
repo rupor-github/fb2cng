@@ -56,11 +56,13 @@ func TestPDFPrintedFootnoteQueueBlocksDecoratesRenumberedTitleLabels(t *testing.
 		PrintedFootnotes: map[string]pdfPrintedFootnote{
 			"n1": {
 				ID:          "n1",
+				LabelText:   "17",
 				TitleBlocks: []pdfTextBlock{{Kind: pdfBlockParagraph, Text: "Ordinary title", Runs: []pdfInlineRun{{Text: "Ordinary title"}}, StyleClasses: pdfStyleFootnoteTitle, ContextClasses: pdfStyleFootnoteTitle}},
 				BodyBlocks:  []pdfTextBlock{{Kind: pdfBlockParagraph, Text: "Ordinary body", Runs: []pdfInlineRun{{Text: "Ordinary body"}}, StyleClasses: pdfStyleFootnote, ContextClasses: pdfStyleFootnote}},
 			},
 			"n2": {
 				ID:          "n2",
+				LabelText:   "23",
 				TitleBlocks: []pdfTextBlock{{Kind: pdfBlockParagraph, Text: "Nested actual title", Runs: []pdfInlineRun{{Text: "Nested actual title"}}, StyleClasses: pdfStyleFootnoteTitle, ContextClasses: pdfStyleFootnoteTitle}},
 			},
 		},
@@ -72,7 +74,7 @@ func TestPDFPrintedFootnoteQueueBlocksDecoratesRenumberedTitleLabels(t *testing.
 	for _, block := range blocks {
 		texts = append(texts, block.Text)
 	}
-	want := []string{"[1]\u00A0Ordinary title", "Ordinary body", "[2]\u00A0Nested actual title"}
+	want := []string{"[1]\u00A017", "Ordinary body", "[2]\u00A023"}
 	if strings.Join(texts, "|") != strings.Join(want, "|") {
 		t.Fatalf("queue block texts = %#v, want %#v", texts, want)
 	}

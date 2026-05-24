@@ -1,9 +1,11 @@
 package pdf
 
 import (
+	"fmt"
 	"strings"
 
 	"fbc/common"
+	"fbc/config"
 	"fbc/content"
 	contentText "fbc/content/text"
 	"fbc/fb2"
@@ -34,6 +36,7 @@ func buildPDFPrintedFootnoteBlocks(c *content.Content) map[string]pdfPrintedFoot
 		bodyBlocks := pdfPrintedFootnoteBodyBlocks(c, section)
 		out[id] = pdfPrintedFootnote{
 			ID:                      id,
+			LabelText:               pdfPrintedFootnoteTemplateLabel(c, ref, section),
 			TitleBlocks:             titleBlocks,
 			BodyBlocks:              bodyBlocks,
 			ContinuationTitleBlocks: continuationTitleBlocks,
@@ -97,11 +100,12 @@ func pdfPrintedFootnotePageBlocks(c *content.Content, note pdfPrintedFootnote, p
 		titleBlocks = note.ContinuationTitleBlocks
 	}
 
+	titleText := pdfPrintedFootnoteTitleText(label, note.LabelText)
 	var blocks []pdfTextBlock
 	if len(titleBlocks) > 0 {
-		blocks = append(blocks, pdfPrefixFootnoteTitleBlocks(label, titleBlocks)...)
+		blocks = append(blocks, pdfRenderedFootnoteTitleBlock(titleText, titleBlocks))
 	} else {
-		blocks = append(blocks, pdfPageLabelFootnoteTitleBlock(note.ID, label, titleBlocks))
+		blocks = append(blocks, pdfPageLabelFootnoteTitleBlock(note.ID, titleText, titleBlocks))
 	}
 	blocks = append(blocks, clonePDFTextBlocks(note.BodyBlocks)...)
 	return blocks
@@ -124,24 +128,94 @@ func pdfPageLabelFootnoteTitleBlock(id string, label string, titleBlocks []pdfTe
 	return block
 }
 
-func pdfPrefixFootnoteTitleBlocks(label string, titleBlocks []pdfTextBlock) []pdfTextBlock {
-	blocks := clonePDFTextBlocks(titleBlocks)
-	if len(blocks) == 0 {
-		return []pdfTextBlock{{
-			Kind:           pdfBlockParagraph,
-			Text:           label,
-			StyleClasses:   joinStyleClasses(pdfStyleFootnoteTitle, pdfStyleFootnoteTitle+"-first"),
-			ContextClasses: pdfStyleFootnoteTitle,
-		}}
+func pdfPrintedFootnoteTemplateLabel(c *content.Content, ref fb2.FootnoteRef, section *fb2.Section) string {
+	if c == nil || c.Book == nil || strings.TrimSpace(c.FootnoteLabelTemplate) == "" {
+		return ""
 	}
-	prefix := label + contentText.NBSP
-	blocks[0].Text = prefix + blocks[0].Text
-	if len(blocks[0].Runs) == 0 {
-		blocks[0].Runs = []pdfInlineRun{{Text: blocks[0].Text}}
-	} else {
-		blocks[0].Runs = append([]pdfInlineRun{{Text: prefix}}, blocks[0].Runs...)
+	body := pdfFootnoteBodyByRef(c.Book, ref)
+	templateBodyNum, noteNum := pdfPrintedFootnoteTemplateNumbers(c.Book, ref)
+	label, err := c.Book.ExpandTemplateFootnoteLabel(
+		config.LabelTemplateFieldName,
+		c.FootnoteLabelTemplate,
+		templateBodyNum,
+		noteNum,
+		body,
+		section,
+	)
+	if err != nil {
+		label = fmt.Sprintf("%d.%d", templateBodyNum, noteNum)
 	}
-	return blocks
+	return strings.TrimSpace(label)
+}
+
+func pdfFootnoteBodyByRef(book *fb2.FictionBook, ref fb2.FootnoteRef) *fb2.Body {
+	if book == nil || ref.BodyIdx < 0 || ref.BodyIdx >= len(book.Bodies) {
+		return nil
+	}
+	return &book.Bodies[ref.BodyIdx]
+}
+
+func pdfPrintedFootnoteTemplateNumbers(book *fb2.FictionBook, ref fb2.FootnoteRef) (int, int) {
+	bodyNum := ref.BodyNum
+	if bodyNum <= 0 {
+		bodyNum = pdfFootnoteBodyNumber(book, ref.BodyIdx)
+	}
+	if pdfFootnoteBodyCount(book) == 1 {
+		bodyNum = 0
+	}
+	noteNum := ref.NoteNum
+	if noteNum <= 0 {
+		noteNum = ref.SectionIdx + 1
+	}
+	return bodyNum, noteNum
+}
+
+func pdfFootnoteBodyNumber(book *fb2.FictionBook, bodyIndex int) int {
+	if book == nil || bodyIndex < 0 || bodyIndex >= len(book.Bodies) {
+		return 0
+	}
+	number := 0
+	for i := range book.Bodies {
+		if !book.Bodies[i].Footnotes() {
+			continue
+		}
+		number++
+		if i == bodyIndex {
+			return number
+		}
+	}
+	return 0
+}
+
+func pdfFootnoteBodyCount(book *fb2.FictionBook) int {
+	if book == nil {
+		return 0
+	}
+	count := 0
+	for i := range book.Bodies {
+		if book.Bodies[i].Footnotes() {
+			count++
+		}
+	}
+	return count
+}
+
+func pdfPrintedFootnoteTitleText(label string, suffix string) string {
+	suffix = strings.TrimSpace(suffix)
+	if suffix == "" {
+		return label
+	}
+	return label + contentText.NBSP + suffix
+}
+
+func pdfRenderedFootnoteTitleBlock(text string, titleBlocks []pdfTextBlock) pdfTextBlock {
+	if len(titleBlocks) == 0 {
+		return pdfPageLabelFootnoteTitleBlock("", text, nil)
+	}
+	block := clonePDFTextBlock(titleBlocks[0])
+	block.Text = text
+	block.Runs = []pdfInlineRun{{Text: text}}
+	return block
 }
 
 func pdfTitleEmpty(title *fb2.Title) bool {

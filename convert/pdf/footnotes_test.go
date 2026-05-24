@@ -14,9 +14,10 @@ func testPDFPrintedFootnoteContent(sections ...fb2.Section) *content.Content {
 		refs[sections[i].ID] = fb2.FootnoteRef{BodyIdx: 0, SectionIdx: i, NoteNum: i + 1}
 	}
 	return &content.Content{
-		OutputFormat:   common.OutputFmtPdf,
-		FootnotesMode:  common.FootnotesModeFloat,
-		FootnotesIndex: refs,
+		OutputFormat:          common.OutputFmtPdf,
+		FootnotesMode:         common.FootnotesModeFloat,
+		FootnoteLabelTemplate: "{{ .NoteNumber }}",
+		FootnotesIndex:        refs,
 		Book: &fb2.FictionBook{Bodies: []fb2.Body{{
 			Kind:     fb2.BodyFootnotes,
 			Name:     "notes",
@@ -49,7 +50,7 @@ func TestBuildPDFPrintedFootnoteBlocksSeparatesExistingTitleAndBody(t *testing.T
 	}
 }
 
-func TestPDFPrintedFootnotePageBlocksFloatPrependPageLocalLabelToActualTitle(t *testing.T) {
+func TestPDFPrintedFootnotePageBlocksFloatUsesTemplateLabelTitle(t *testing.T) {
 	c := testPDFPrintedFootnoteContent(fb2.Section{
 		ID:    "n1",
 		Title: pdfTitleFromStrings("Translator note"),
@@ -60,12 +61,12 @@ func TestPDFPrintedFootnotePageBlocksFloatPrependPageLocalLabelToActualTitle(t *
 	})
 
 	blocks := pdfPrintedFootnotePageBlocks(c, buildPDFPrintedFootnoteBlocks(c)["n1"], "2", false)
-	if len(blocks) < 2 || blocks[0].Text != "2\u00A0Translator note" || blocks[1].Text != "Footnote body." {
-		t.Fatalf("page footnote blocks = %#v, want page label, title, and body", blocks)
+	if len(blocks) < 2 || blocks[0].Text != "2\u00A01" || blocks[1].Text != "Footnote body." {
+		t.Fatalf("page footnote blocks = %#v, want page label, template label, and body", blocks)
 	}
 }
 
-func TestPDFPrintedFootnotePageBlocksFloatRenumberedPrependsPageLocalLabelToActualTitle(t *testing.T) {
+func TestPDFPrintedFootnotePageBlocksFloatRenumberedUsesTemplateLabelTitle(t *testing.T) {
 	c := testPDFPrintedFootnoteContent(fb2.Section{
 		ID:    "n1",
 		Title: pdfTitleFromStrings("Примечание 17"),
@@ -78,12 +79,12 @@ func TestPDFPrintedFootnotePageBlocksFloatRenumberedPrependsPageLocalLabelToActu
 	c.FootnotesIndex["n1"] = fb2.FootnoteRef{BodyIdx: 0, SectionIdx: 0, NoteNum: 1, DisplayText: "1"}
 
 	blocks := pdfPrintedFootnotePageBlocks(c, buildPDFPrintedFootnoteBlocks(c)["n1"], "3", false)
-	if len(blocks) < 2 || blocks[0].Text != "3\u00A0Примечание 17" || blocks[1].Text != "Footnote body." {
-		t.Fatalf("page footnote blocks = %#v, want page-local label, title, and body", blocks)
+	if len(blocks) < 2 || blocks[0].Text != "3\u00A01" || blocks[1].Text != "Footnote body." {
+		t.Fatalf("page footnote blocks = %#v, want page-local label, template label, and body", blocks)
 	}
 }
 
-func TestPDFPrintedFootnotePageBlocksMissingTitleUsesOnlyPageLocalLabel(t *testing.T) {
+func TestPDFPrintedFootnotePageBlocksMissingTitleUsesTemplateLabelTitle(t *testing.T) {
 	c := testPDFPrintedFootnoteContent(fb2.Section{
 		ID: "n1",
 		Content: []fb2.FlowItem{{
@@ -94,11 +95,28 @@ func TestPDFPrintedFootnotePageBlocksMissingTitleUsesOnlyPageLocalLabel(t *testi
 	c.FootnotesIndex["n1"] = fb2.FootnoteRef{BodyIdx: 0, SectionIdx: 0, NoteNum: 1, DisplayText: "7"}
 
 	blocks := pdfPrintedFootnotePageBlocks(c, buildPDFPrintedFootnoteBlocks(c)["n1"], "4", false)
-	if len(blocks) < 2 || blocks[0].Text != "4" || blocks[0].ID != "n1" {
-		t.Fatalf("page title block = %#v, want page-local label 4 anchored to n1", blocks)
+	if len(blocks) < 2 || blocks[0].Text != "4\u00A01" || blocks[0].ID != "n1" {
+		t.Fatalf("page title block = %#v, want page-local label and template label anchored to n1", blocks)
 	}
 	if !hasPDFStyleClass(blocks[0].StyleClasses, pdfStyleFootnoteTitle) {
 		t.Fatalf("page title classes = %q, want %q", blocks[0].StyleClasses, pdfStyleFootnoteTitle)
+	}
+}
+
+func TestPDFPrintedFootnotePageBlocksEmptyTemplateLabelOmitsNBSP(t *testing.T) {
+	c := testPDFPrintedFootnoteContent(fb2.Section{
+		ID:    "n1",
+		Title: pdfTitleFromStrings("Translator note"),
+		Content: []fb2.FlowItem{{
+			Kind:      fb2.FlowParagraph,
+			Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Footnote body."}}},
+		}},
+	})
+	c.FootnoteLabelTemplate = `{{ "" }}`
+
+	blocks := pdfPrintedFootnotePageBlocks(c, buildPDFPrintedFootnoteBlocks(c)["n1"], "4", false)
+	if len(blocks) < 2 || blocks[0].Text != "4" || blocks[1].Text != "Footnote body." {
+		t.Fatalf("page footnote blocks = %#v, want label-only title without NBSP", blocks)
 	}
 }
 
@@ -123,8 +141,8 @@ func TestBuildPDFPrintedFootnoteBlocksContinuationTitleDoesNotAppendMarker(t *te
 		t.Fatalf("continuation title blocks = %#v, want unmarked title paragraphs", note.ContinuationTitleBlocks)
 	}
 	pageBlocks := pdfPrintedFootnotePageBlocks(c, note, "1", true)
-	if pageBlocks[0].Text != "1\u00A0First" || pageBlocks[1].Text != "Second" {
-		t.Fatalf("continuation page title blocks = %#v, want page label plus unmarked title", pageBlocks[:2])
+	if pageBlocks[0].Text != "1\u00A01" || pageBlocks[1].Text != "Footnote body." {
+		t.Fatalf("continuation page blocks = %#v, want page label plus template label", pageBlocks[:2])
 	}
 }
 
