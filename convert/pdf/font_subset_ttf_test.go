@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"strings"
 	"testing"
 
 	"golang.org/x/image/font/sfnt"
@@ -56,5 +57,13 @@ func TestFontResourceObjectsEmbedsSubsetFontFile(t *testing.T) {
 	}
 	if got := int(objects.FontFile["Length1"].(docwriter.Integer)); got != len(objects.FontFileData) {
 		t.Fatalf("Length1 = %d, font data len = %d", got, len(objects.FontFileData))
+	}
+	baseFont, ok := objects.Type0Font["BaseFont"].(docwriter.Name)
+	if !ok || !strings.Contains(string(baseFont), "+"+face.PostScriptName) {
+		t.Fatalf("BaseFont = %#v, want subset prefix plus PostScript name", objects.Type0Font["BaseFont"])
+	}
+	descriptorFont, ok := objects.FontDescriptor["FontName"].(docwriter.Name)
+	if !ok || descriptorFont != baseFont {
+		t.Fatalf("FontDescriptor FontName = %#v, want matching BaseFont %q", objects.FontDescriptor["FontName"], baseFont)
 	}
 }

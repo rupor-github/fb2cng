@@ -3,6 +3,7 @@ package pdf
 import (
 	"bytes"
 	"fmt"
+	"hash/fnv"
 	"math"
 	"slices"
 	"strings"
@@ -791,13 +792,15 @@ func fontResourceObjects(face *builtinFontFace, used map[uint16]shapedGlyph, obj
 		return fontObjects{}, fmt.Errorf("at least one used glyph is required")
 	}
 
-	fontName := docwriter.Name(face.PostScriptName)
+	fontNameString := face.PostScriptName
 	fontFileData := face.Data
 	if subsetData, ok, err := subsetTrueTypeFont(face.Data, used); err != nil {
 		return fontObjects{}, fmt.Errorf("subset TrueType font %s: %w", face.PostScriptName, err)
 	} else if ok {
 		fontFileData = subsetData
+		fontNameString = subsetPDFFontName(face.PostScriptName, used)
 	}
+	fontName := docwriter.Name(fontNameString)
 	return fontObjects{
 		Type0Font: docwriter.Dict{
 			"BaseFont":        fontName,
@@ -837,6 +840,27 @@ func fontResourceObjects(face *builtinFontFace, used map[uint16]shapedGlyph, obj
 		FontFileData: fontFileData,
 		ToUnicode:    toUnicodeCMap(used),
 	}, nil
+}
+
+func subsetPDFFontName(postScriptName string, used map[uint16]shapedGlyph) string {
+	ids := make([]int, 0, len(used))
+	for id := range used {
+		ids = append(ids, int(id))
+	}
+	slices.Sort(ids)
+
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(postScriptName))
+	for _, id := range ids {
+		_, _ = fmt.Fprintf(h, ":%04X", id)
+	}
+	value := h.Sum32()
+	prefix := make([]byte, 6)
+	for i := range prefix {
+		prefix[i] = byte('A' + value%26)
+		value /= 26
+	}
+	return string(prefix) + "+" + postScriptName
 }
 
 type fontObjectIDs struct {

@@ -167,8 +167,8 @@ func TestGeneratePDFEmbedsStylesheetFontFace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read output: %v", err)
 	}
-	if !strings.Contains(string(data), "/BaseFont /NotoSansMono-Regular") {
-		t.Fatalf("generated PDF does not contain embedded CustomMono font")
+	if !strings.Contains(string(data), "+NotoSansMono-Regular") {
+		t.Fatalf("generated PDF does not contain embedded subset CustomMono font")
 	}
 }
 
@@ -218,8 +218,8 @@ func TestGenerateTextBodyAddsPaginatedBodyPage(t *testing.T) {
 		"/Type /Outlines",
 		"/Dest [3 0 R /Fit]",
 		"/Names [<636861707465722D31> [3 0 R /Fit]]",
-		"/BaseFont /NotoSerif-Regular",
-		"/BaseFont /NotoSerif-Bold",
+		"+NotoSerif-Regular",
+		"+NotoSerif-Bold",
 	} {
 		if !strings.Contains(pdfText, want) {
 			t.Errorf("generated PDF does not contain %q", want)

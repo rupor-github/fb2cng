@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"fbc/convert/pdf/docwriter"
 	"fbc/convert/pdf/structure"
 )
 
@@ -167,6 +168,7 @@ type pdfDebugFont struct {
 	Bold                 bool     `json:"bold,omitempty"`
 	Italic               bool     `json:"italic,omitempty"`
 	PostScriptName       string   `json:"post_script_name"`
+	PDFBaseFont          string   `json:"pdf_base_font,omitempty"`
 	UnitsPerEm           int      `json:"units_per_em"`
 	Ascent               int      `json:"ascent"`
 	Descent              int      `json:"descent"`
@@ -470,6 +472,7 @@ func pdfDebugFonts(resources []pdfFontResource) []pdfDebugFont {
 			Bold:                 resource.Key.Bold,
 			Italic:               resource.Key.Italic,
 			PostScriptName:       resource.Face.PostScriptName,
+			PDFBaseFont:          pdfDebugFontBaseName(resource),
 			UnitsPerEm:           resource.Face.UnitsPerEm,
 			Ascent:               resource.Face.Ascent,
 			Descent:              resource.Face.Descent,
@@ -485,6 +488,14 @@ func pdfDebugFonts(resources []pdfFontResource) []pdfDebugFont {
 		})
 	}
 	return out
+}
+
+func pdfDebugFontBaseName(resource pdfFontResource) string {
+	baseFont, ok := resource.Objects.Type0Font["BaseFont"].(docwriter.Name)
+	if !ok {
+		return ""
+	}
+	return string(baseFont)
 }
 
 func pdfDebugPrintedFootnotesFromReserved(doc pdfDocumentSpec, reserved pdfPrintedFootnoteReservedLayout) pdfDebugPrintedFootnotes {
