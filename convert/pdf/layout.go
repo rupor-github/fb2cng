@@ -113,7 +113,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 	rootlessContentLeft, rootlessContentRight, _, _ := pdfPageContentMarginsWithoutRootHorizontal(doc, styles, margin)
 	contentWidth := max(doc.PageWidth-contentLeft-contentRight, 12)
 	rootlessContentWidth := max(doc.PageWidth-rootlessContentLeft-rootlessContentRight, 12)
-	printedFootnoteReserve := pdfDynamicPrintedFootnoteReserve(doc, styles, contentLeft, contentWidth, contentBottom)
+	printedFootnoteReserve := newPDFDynamicPrintedFootnoteReserveTracker(doc, styles, contentLeft, contentWidth, contentBottom)
 	pageBottom := func(pageIndex int) float64 {
 		reserve := 0.0
 		if pageIndex >= 0 && pageIndex < len(doc.PageBottomReserves) {
@@ -137,6 +137,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 		pageHasText = false
 		previousRenderedImage = false
 		activeDropcap = nil
+		printedFootnoteReserve.ResetPage()
 	}
 
 	for blockIndex, block := range doc.Blocks {
@@ -437,6 +438,29 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 		if len(lines) == 0 && !dropcapOK {
 			continue
 		}
+		if dropcapOK && pageHasText && printedFootnoteReserve.Enabled() {
+			var dropcapFootnoteRefs []pdfPrintedFootnoteRef
+			for _, line := range lines {
+				dropcapFootnoteRefs = append(dropcapFootnoteRefs, printedFootnoteReserve.LineRefs(line)...)
+			}
+			if len(dropcapFootnoteRefs) > 0 {
+				reserve, err := printedFootnoteReserve.ReserveWithAdditionalRefs(dropcapFootnoteRefs)
+				if err != nil {
+					return nil, nil, err
+				}
+				reservedBottom := pdfReservedContentBottom(contentBottom, top, reserve)
+				if dropcap.BottomY < reservedBottom {
+					newTextPage()
+					lines, dropcap, dropcapOK, err = layoutTextBlock()
+					if err != nil {
+						return nil, nil, err
+					}
+					if len(lines) == 0 && !dropcapOK {
+						continue
+					}
+				}
+			}
+		}
 		if dropcapOK {
 			pdfTraceResolvedDropcap(styles, blockIndex, block, dropcap, style.Paragraph)
 		}
@@ -475,16 +499,29 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 				y -= style.Paragraph.FontSize
 				previousRenderedImage = false
 			}
-			if printedFootnoteReserve > 0 && pdfParagraphLineHasPrintedFootnoteRef(doc, line) {
-				reservedBottom := pdfReservedContentBottom(contentBottom, top, printedFootnoteReserve)
-				if pageHasText && y-style.Paragraph.FontSize < reservedBottom {
-					addBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, y)
-					newTextPage()
-					fragmentPage = page
-					fragmentTop = y + style.Paragraph.FontSize
-					y -= style.Paragraph.FontSize
+			if printedFootnoteReserve.Enabled() {
+				lineRefs := printedFootnoteReserve.LineRefs(line)
+				if len(lineRefs) > 0 {
+					reserve, err := printedFootnoteReserve.ReserveWithAdditionalRefs(lineRefs)
+					if err != nil {
+						return nil, nil, err
+					}
+					reservedBottom := pdfReservedContentBottom(contentBottom, top, reserve)
+					if pageHasText && y-style.Paragraph.FontSize < reservedBottom {
+						addBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, y)
+						newTextPage()
+						fragmentPage = page
+						fragmentTop = y + style.Paragraph.FontSize
+						y -= style.Paragraph.FontSize
+						reserve, err = printedFootnoteReserve.ReserveWithAdditionalRefs(lineRefs)
+						if err != nil {
+							return nil, nil, err
+						}
+						reservedBottom = pdfReservedContentBottom(contentBottom, top, reserve)
+					}
+					printedFootnoteReserve.CommitAdditionalRefs(lineRefs, reserve)
+					bottom = max(bottom, reservedBottom)
 				}
-				bottom = max(bottom, reservedBottom)
 			}
 			if y-style.Paragraph.FontSize < bottom {
 				if pageHasText {
@@ -558,34 +595,6 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 		pages = pages[:len(pages)-1]
 	}
 	return pages, used, nil
-}
-
-func pdfDynamicPrintedFootnoteReserve(doc pdfDocumentSpec, styles *pdfStyleResolver, contentLeft float64, contentWidth float64, contentBottom float64) float64 {
-	if !doc.DynamicPrintedFootnoteReserves || !pdfPrintedFootnotesEnabled(doc.Content) || len(doc.PrintedFootnotes) == 0 {
-		return 0
-	}
-	footnoteTextHeight := pdfPrintedFootnoteTextAreaHeight(doc, styles)
-	if footnoteTextHeight <= 0 {
-		return 0
-	}
-	separator := pdfPrintedFootnoteSeparatorMetricsForArea(doc, styles, contentLeft, contentWidth, contentBottom, footnoteTextHeight)
-	return footnoteTextHeight + separator.Reserve
-}
-
-func pdfParagraphLineHasPrintedFootnoteRef(doc pdfDocumentSpec, line paragraphLine) bool {
-	if len(doc.PrintedFootnotes) == 0 {
-		return false
-	}
-	for _, fragment := range line.Fragments {
-		id := strings.TrimSpace(fragment.FootnoteID)
-		if id == "" || strings.TrimSpace(fragment.LinkHref) != "" {
-			continue
-		}
-		if _, ok := doc.PrintedFootnotes[id]; ok {
-			return true
-		}
-	}
-	return false
 }
 
 func pdfReservedContentBottom(contentBottom float64, top float64, reserve float64) float64 {

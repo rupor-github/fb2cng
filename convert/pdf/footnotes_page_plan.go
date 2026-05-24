@@ -17,6 +17,10 @@ func buildPDFPrintedFootnotePagePlans(
 	if len(doc.PrintedFootnotes) == 0 || len(pages) == 0 {
 		return nil, nil
 	}
+	styles := doc.Styles
+	if styles == nil {
+		styles = newPDFStyleResolver(nil, nil)
+	}
 	plans := make([]pdfPrintedFootnotePagePlan, 0, len(pages))
 	for pageIndex := range pages {
 		refs := pdfPrintedFootnotePageRefs(doc, pages[pageIndex])
@@ -24,7 +28,8 @@ func buildPDFPrintedFootnotePagePlans(
 		if len(queue) == 0 {
 			continue
 		}
-		queuePages, used, err := layoutPDFPrintedFootnoteQueue(doc, queue, footnoteAreaHeight)
+		pageFootnoteAreaHeight := pdfPrintedFootnoteSourceTextAreaHeight(doc, styles, pages[pageIndex], footnoteAreaHeight)
+		queuePages, used, err := layoutPDFPrintedFootnoteQueue(doc, queue, pageFootnoteAreaHeight)
 		if err != nil {
 			return nil, err
 		}
@@ -38,4 +43,29 @@ func buildPDFPrintedFootnotePagePlans(
 		})
 	}
 	return plans, nil
+}
+
+func pdfPrintedFootnoteSourceTextAreaHeight(
+	doc pdfDocumentSpec,
+	styles *pdfStyleResolver,
+	page pdfPage,
+	defaultHeight float64,
+) float64 {
+	if defaultHeight <= 0 {
+		return defaultHeight
+	}
+	_, mainBottom, ok := pdfPageYBounds(page)
+	if !ok {
+		return defaultHeight
+	}
+	const margin = 24.0
+	contentLeft, contentRight, contentTop, contentBottom := pdfPageContentMargins(doc, styles, margin)
+	contentWidth := max(doc.PageWidth-contentLeft-contentRight, 12)
+	contentHeight := max(doc.PageHeight-contentTop-contentBottom, 0)
+	if contentHeight <= 0 {
+		return defaultHeight
+	}
+	separator := pdfPrintedFootnoteSeparatorMetricsForArea(doc, styles, contentLeft, contentWidth, contentBottom, defaultHeight)
+	availableTextHeight := min(max(mainBottom-contentBottom-separator.Reserve, 0), max(contentHeight-separator.Reserve, 0))
+	return max(defaultHeight, availableTextHeight)
 }

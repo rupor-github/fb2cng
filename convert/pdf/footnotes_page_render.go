@@ -49,12 +49,27 @@ func appendPDFPrintedFootnotePagePlans(
 			out = append(out, page)
 			continue
 		}
-		appendPDFPrintedFootnotePage(&page, plan.QueuePages[0], separator)
+		footnotePage, pageSeparator := bottomAlignPDFPrintedFootnotePage(plan.QueuePages[0], separator, contentBottom)
+		appendPDFPrintedFootnotePage(&page, footnotePage, pageSeparator)
 		mergePDFUsedGlyphs(used, plan.UsedGlyphs)
 		out = append(out, page)
 		out = appendPDFPrintedFootnoteContinuationPages(out, doc, plan.QueuePages[1:], contentTop, contentBottom, separator)
 	}
 	return out
+}
+
+func bottomAlignPDFPrintedFootnotePage(
+	footnotePage pdfPage,
+	separator pdfPrintedFootnoteSeparatorMetrics,
+	contentBottom float64,
+) (pdfPage, pdfPrintedFootnoteSeparatorMetrics) {
+	chunkTop, chunkBottom, ok := pdfPageYBounds(footnotePage)
+	if !ok {
+		return footnotePage, separator
+	}
+	shift := contentBottom - chunkBottom
+	separator.Y = chunkTop + shift + separator.SpaceAfter
+	return shiftPDFPageY(footnotePage, shift), separator
 }
 
 func appendPDFPrintedFootnotePage(page *pdfPage, footnotePage pdfPage, separator pdfPrintedFootnoteSeparatorMetrics) {

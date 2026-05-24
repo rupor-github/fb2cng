@@ -55,6 +55,33 @@ func TestAppendPDFPrintedFootnotePagePlansInsertsContinuationBeforeNextMainPage(
 	}
 }
 
+func TestAppendPDFPrintedFootnotePagePlansBottomAlignsSourceFootnote(t *testing.T) {
+	face, err := builtinFont("serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	doc := pdfDocumentSpec{PageWidth: 260, PageHeight: 180}
+	mainPages := []pdfPage{{Lines: []pdfPageLine{testPDFPageLine(t, face, "Main", 130)}}}
+	footnoteLine := testPDFPageLine(t, face, "Footnote", 60)
+	plan := pdfPrintedFootnotePagePlan{PageIndex: 0, QueuePages: []pdfPage{{Lines: []pdfPageLine{footnoteLine}}}}
+	separatorBefore := pdfPrintedFootnoteSeparatorMetricsForArea(doc, nil, 24, 212, 24, 80)
+
+	out := appendPDFPrintedFootnotePagePlans(doc, mainPages, []pdfPrintedFootnotePagePlan{plan}, 80, nil)
+	if len(out) != 1 {
+		t.Fatalf("pages = %d, want one source page", len(out))
+	}
+	footnoteY, ok := pageLineYByText(out[0], "Footnote")
+	if !ok {
+		t.Fatalf("page text = %q, want footnote line", pageText(out[0]))
+	}
+	if gotBottom := footnoteY - footnoteLine.FontSize*0.2; gotBottom < 23.999 || gotBottom > 24.001 {
+		t.Fatalf("footnote visual bottom = %v, want content bottom 24", gotBottom)
+	}
+	if len(out[0].Backgrounds) == 0 || out[0].Backgrounds[0].Y >= separatorBefore.Y {
+		t.Fatalf("separator y = %#v, want source separator shifted down from max reserved area %v", out[0].Backgrounds, separatorBefore.Y)
+	}
+}
+
 func TestAppendPDFPrintedFootnotePagePlansPacksContinuationChunksFromTop(t *testing.T) {
 	face, err := builtinFont("serif", false, false)
 	if err != nil {

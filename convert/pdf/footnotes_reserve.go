@@ -46,13 +46,17 @@ func pdfPrintedFootnotePlanReserves(
 	contentWidth := max(doc.PageWidth-contentLeft-contentRight, 12)
 	separator := pdfPrintedFootnoteSeparatorMetricsForArea(doc, styles, contentLeft, contentWidth, contentBottom, footnoteTextHeight)
 	top := doc.PageHeight - contentTop
-	reserve := min(footnoteTextHeight+separator.Reserve, max(top-contentBottom-pdfBaseLineHeight, 0))
-	if reserve <= 0 {
+	maxReserve := max(top-contentBottom-pdfBaseLineHeight, 0)
+	if maxReserve <= 0 {
 		return nil
 	}
 	reserves := make([]float64, pageCount)
 	for _, plan := range plans {
 		if plan.PageIndex < 0 || plan.PageIndex >= pageCount || len(plan.QueuePages) == 0 {
+			continue
+		}
+		reserve := min(pdfPrintedFootnotePagePlanReserve(plan, footnoteTextHeight, separator), maxReserve)
+		if reserve <= 0 {
 			continue
 		}
 		reserves[plan.PageIndex] = reserve
@@ -61,6 +65,25 @@ func pdfPrintedFootnotePlanReserves(
 		return nil
 	}
 	return reserves
+}
+
+func pdfPrintedFootnotePagePlanReserve(
+	plan pdfPrintedFootnotePagePlan,
+	footnoteTextHeight float64,
+	separator pdfPrintedFootnoteSeparatorMetrics,
+) float64 {
+	if len(plan.QueuePages) == 0 || footnoteTextHeight <= 0 {
+		return 0
+	}
+	chunkTop, chunkBottom, ok := pdfPageYBounds(plan.QueuePages[0])
+	if !ok {
+		return 0
+	}
+	chunkHeight := footnoteTextHeight
+	if len(plan.QueuePages) == 1 {
+		chunkHeight = min(max(chunkTop-chunkBottom, 0), footnoteTextHeight)
+	}
+	return chunkHeight + separator.Reserve
 }
 
 func pdfHasAnyPageBottomReserve(reserves []float64) bool {

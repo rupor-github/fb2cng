@@ -55,6 +55,58 @@ func TestLayoutPDFPagesWithPrintedFootnoteReservesPushesMainText(t *testing.T) {
 	}
 }
 
+func TestLayoutPDFPagesWithPrintedFootnoteReservesPacksTextAboveShortFootnote(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	doc := pdfDocumentSpec{
+		PageWidth:  220,
+		PageHeight: 260,
+		Content:    &content.Content{OutputFormat: common.OutputFmtPdf, FootnotesMode: common.FootnotesModeFloatRenumbered},
+		PrintedFootnotes: map[string]pdfPrintedFootnote{
+			"n1": {
+				ID: "n1",
+				BodyBlocks: []pdfTextBlock{{
+					Kind:           pdfBlockParagraph,
+					Text:           "Short note.",
+					Runs:           []pdfInlineRun{{Text: "Short note."}},
+					StyleClasses:   pdfStyleFootnote,
+					ContextClasses: pdfStyleFootnote,
+				}},
+			},
+		},
+		Blocks: []pdfTextBlock{
+			{
+				Kind: pdfBlockParagraph,
+				Text: "One 17",
+				Runs: []pdfInlineRun{
+					{Text: "One "},
+					{Text: "17", StyleClasses: pdfStyleLinkFootnote, FootnoteID: "n1", Superscript: true},
+				},
+			},
+			{Kind: pdfBlockParagraph, Text: "Two"},
+			{Kind: pdfBlockParagraph, Text: "Three"},
+			{Kind: pdfBlockParagraph, Text: "Four"},
+			{Kind: pdfBlockParagraph, Text: "Five"},
+		},
+	}
+
+	reserved, err := layoutPDFPagesWithPrintedFootnoteReserves(doc, face)
+	if err != nil {
+		t.Fatalf("layoutPDFPagesWithPrintedFootnoteReserves() error = %v", err)
+	}
+	if len(reserved.Plans) != 1 || reserved.Plans[0].ContinuationPages != 0 {
+		t.Fatalf("plans = %#v, want one fully fitting short footnote plan", reserved.Plans)
+	}
+	if len(reserved.Pages) == 0 {
+		t.Fatalf("reserved pages = %#v, want at least one page", reserved.Pages)
+	}
+	if got := pageText(reserved.Pages[0]); !strings.Contains(got, "Four") {
+		t.Fatalf("first page text = %q, want main text packed above short printed footnote", got)
+	}
+}
+
 func TestLayoutPDFPagesWithPrintedFootnoteReservesNoFootnotesMatchesNormalLayout(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {

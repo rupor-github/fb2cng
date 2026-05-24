@@ -21,8 +21,8 @@ func TestPDFPrintedFootnotePlanReservesOnlyPagesWithFootnotes(t *testing.T) {
 	if reserves[0] != 0 || reserves[2] != 0 {
 		t.Fatalf("reserves = %#v, want zero on pages without footnote plans", reserves)
 	}
-	if reserves[1] <= 50 || reserves[3] != reserves[1] {
-		t.Fatalf("reserves = %#v, want separator-inclusive equal reserves on planned pages", reserves)
+	if reserves[1] <= 0 || reserves[3] != reserves[1] {
+		t.Fatalf("reserves = %#v, want positive equal reserves on planned pages", reserves)
 	}
 }
 
