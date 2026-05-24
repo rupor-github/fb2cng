@@ -61,6 +61,21 @@ func pdfPageLineVisualOverflow(line pdfPageLine) float64 {
 	if available <= 0 {
 		return 0
 	}
+	return pdfPageLineVisualOverflowForAvailable(line, available)
+}
+
+func pdfPageLineXAdjustedForVisualRight(line pdfPageLine, available float64) float64 {
+	if available <= 0 {
+		return line.X
+	}
+	overflow := pdfPageLineVisualOverflowForAvailable(line, available)
+	if overflow <= 0 {
+		return line.X
+	}
+	return line.X - overflow
+}
+
+func pdfPageLineVisualOverflowForAvailable(line pdfPageLine, available float64) float64 {
 	_, visualRight, ok := pdfPageLineVisualBounds(line)
 	if !ok {
 		return 0

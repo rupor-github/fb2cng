@@ -93,6 +93,26 @@ func TestPDFPageLineVisualBoundsIgnoreSpaces(t *testing.T) {
 	}
 }
 
+func TestPDFPageLineXAdjustedForVisualRight(t *testing.T) {
+	line := pdfPageLine{
+		X:        10,
+		FontSize: 10,
+		Text: shapedText{Glyphs: []shapedGlyph{{
+			GlyphID:      1,
+			Rune:         'j',
+			Width:        500,
+			Advance:      500,
+			HasAdvance:   true,
+			InkLeft:      0,
+			InkRight:     550,
+			HasInkBounds: true,
+		}}},
+	}
+	if got, want := pdfPageLineXAdjustedForVisualRight(line, 5), 9.5; got != want {
+		t.Fatalf("adjusted x = %v, want %v", got, want)
+	}
+}
+
 func TestPDFPageLineVisualOverflowUsesVisualRight(t *testing.T) {
 	line := pdfPageLine{
 		X:        10,

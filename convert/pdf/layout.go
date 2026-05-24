@@ -231,11 +231,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 						case textAlignRight:
 							x += max(available-line.Width, 0)
 						}
-						addInlineImages(page, line, x, lineY)
-						addLinkAnnotations(page, linkBlock, line, lineSearchStart, x, lineY, cell.Style.Paragraph.FontSize)
-						addFragmentAnchors(page, line)
-						lineSearchStart = nextLineSearchStart(cell.Text, line, lineSearchStart)
-						addLine(page, pdfPageLine{
+						pageLine := pdfPageLine{
 							X:                x,
 							Y:                lineY,
 							FontSize:         cell.Style.Paragraph.FontSize,
@@ -249,7 +245,14 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 							ExtraWordSpacing: line.ExtraWordSpacing,
 							ExtraCharSpacing: line.ExtraCharSpacing,
 							BreakStats:       line.BreakStats,
-						})
+						}
+						pageLine.X = pdfPageLineXAdjustedForVisualRight(pageLine, available)
+						x = pageLine.X
+						addInlineImages(page, line, x, lineY)
+						addLinkAnnotations(page, linkBlock, line, lineSearchStart, x, lineY, cell.Style.Paragraph.FontSize)
+						addFragmentAnchors(page, line)
+						lineSearchStart = nextLineSearchStart(cell.Text, line, lineSearchStart)
+						addLine(page, pageLine)
 						lineY -= cell.Style.Paragraph.LineHeight
 					}
 				}
@@ -548,11 +551,7 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 			case textAlignRight:
 				x += max(available-line.Width, 0)
 			}
-			addInlineImages(page, line, x, y)
-			addLinkAnnotations(page, block, line, lineSearchStart, x, y, style.Paragraph.FontSize)
-			addFragmentAnchors(page, line)
-			lineSearchStart = nextLineSearchStart(block.Text, line, lineSearchStart)
-			addLine(page, pdfPageLine{
+			pageLine := pdfPageLine{
 				X:                x,
 				Y:                y,
 				FontSize:         style.Paragraph.FontSize,
@@ -566,7 +565,14 @@ func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdf
 				ExtraWordSpacing: line.ExtraWordSpacing,
 				ExtraCharSpacing: line.ExtraCharSpacing,
 				BreakStats:       line.BreakStats,
-			})
+			}
+			pageLine.X = pdfPageLineXAdjustedForVisualRight(pageLine, available)
+			x = pageLine.X
+			addInlineImages(page, line, x, y)
+			addLinkAnnotations(page, block, line, lineSearchStart, x, y, style.Paragraph.FontSize)
+			addFragmentAnchors(page, line)
+			lineSearchStart = nextLineSearchStart(block.Text, line, lineSearchStart)
+			addLine(page, pageLine)
 			y -= lineHeight
 			pageHasText = true
 			previousRenderedImage = false
