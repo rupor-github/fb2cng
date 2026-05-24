@@ -353,7 +353,10 @@ func pdfDebugPages(pages []pdfPage) ([]pdfDebugPage, []pdfDebugImage, []pdfDebug
 		for _, line := range page.Lines {
 			advanceWidth := pdfPageLineAdvanceWidth(line)
 			drawnWidth := pdfPageLineDrawnWidth(line)
-			visualLeft, visualRight, _ := pdfPageLineVisualBounds(line)
+			visualLeft, visualRight, visualOK := pdfPageLineVisualBounds(line)
+			if !visualOK {
+				visualLeft, visualRight = 0, 0
+			}
 			debugPage.Lines = append(debugPage.Lines, pdfDebugLine{
 				Text:             pdfPageLineText(line),
 				X:                line.X,

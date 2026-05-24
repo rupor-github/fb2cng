@@ -792,6 +792,12 @@ func fontResourceObjects(face *builtinFontFace, used map[uint16]shapedGlyph, obj
 	}
 
 	fontName := docwriter.Name(face.PostScriptName)
+	fontFileData := face.Data
+	if subsetData, ok, err := subsetTrueTypeFont(face.Data, used); err != nil {
+		return fontObjects{}, fmt.Errorf("subset TrueType font %s: %w", face.PostScriptName, err)
+	} else if ok {
+		fontFileData = subsetData
+	}
 	return fontObjects{
 		Type0Font: docwriter.Dict{
 			"BaseFont":        fontName,
@@ -826,9 +832,9 @@ func fontResourceObjects(face *builtinFontFace, used map[uint16]shapedGlyph, obj
 			"Type":        docwriter.Name("FontDescriptor"),
 		},
 		FontFile: docwriter.Dict{
-			"Length1": docwriter.Integer(len(face.Data)),
+			"Length1": docwriter.Integer(len(fontFileData)),
 		},
-		FontFileData: face.Data,
+		FontFileData: fontFileData,
 		ToUnicode:    toUnicodeCMap(used),
 	}, nil
 }
