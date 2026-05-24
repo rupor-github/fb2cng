@@ -151,6 +151,10 @@ func writeTextGlyphs(
 ) []pdfMissingGlyphBox {
 	writeTextState(buf, fontName, fontSize, letterSpacing, color, x, y, state)
 	if !hasSyntheticPDFGlyphs(glyphs) {
+		if hasGlyphOffsets(glyphs) {
+			writeOffsetGlyphs(buf, glyphs, fontSize, letterSpacing, extraWordSpacing, x, y)
+			return nil
+		}
 		if needsPositionedGlyphArray(glyphs, extraWordSpacing) {
 			fmt.Fprintf(buf, "%s TJ\n", positionedGlyphArray(glyphs, extraWordSpacing, fontSize))
 			return nil
@@ -172,6 +176,46 @@ func hasSyntheticPDFGlyphs(glyphs []shapedGlyph) bool {
 		}
 	}
 	return false
+}
+
+func hasGlyphOffsets(glyphs []shapedGlyph) bool {
+	for _, glyph := range glyphs {
+		if glyph.XOffset != 0 || glyph.YOffset != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func writeOffsetGlyphs(
+	buf *bytes.Buffer,
+	glyphs []shapedGlyph,
+	fontSize float64,
+	letterSpacing float64,
+	extraWordSpacing float64,
+	x float64,
+	y float64,
+) {
+	currentX := x
+	for i, glyph := range glyphs {
+		glyphX := currentX + glyphOffsetPoints(glyph.XOffset, fontSize)
+		glyphY := y + glyphOffsetPoints(glyph.YOffset, fontSize)
+		fmt.Fprintf(buf, "1 0 0 1 %s %s Tm\n%s Tj\n",
+			docwriter.FormatNumber(glyphX),
+			docwriter.FormatNumber(glyphY),
+			docwriter.Format(glyphHex([]shapedGlyph{glyph})))
+		currentX += glyphAdvancePoints(glyph, fontSize)
+		if i != len(glyphs)-1 {
+			currentX += letterSpacing
+		}
+		if glyph.Rune == ' ' && i != len(glyphs)-1 {
+			currentX += extraWordSpacing
+		}
+	}
+}
+
+func glyphOffsetPoints(offset int, fontSize float64) float64 {
+	return float64(offset) * fontSize / 1000.0
 }
 
 func syntheticGlyphArray(

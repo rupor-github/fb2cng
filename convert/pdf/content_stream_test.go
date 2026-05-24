@@ -90,6 +90,25 @@ func TestPageContentUsesTJForShapedAdvanceAdjustments(t *testing.T) {
 	}
 }
 
+func TestPageContentPositionsGlyphOffsets(t *testing.T) {
+	content := string(pageContent(pdfPage{Lines: []pdfPageLine{{
+		X:        10,
+		Y:        20,
+		FontSize: 10,
+		FontName: "F1",
+		Color:    pdfColor{},
+		Text: shapedText{Glyphs: []shapedGlyph{
+			{GlyphID: 1, Rune: 'a', Width: 500, Advance: 500, HasAdvance: true},
+			{GlyphID: 2, Rune: '\u0301', Width: 0, Advance: 0, HasAdvance: true, XOffset: -100, YOffset: 200},
+		}},
+	}}}))
+	for _, want := range []string{"1 0 0 1 10 20 Tm\n<0001> Tj", "1 0 0 1 14 22 Tm\n<0002> Tj"} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("page content = %q, missing %q", content, want)
+		}
+	}
+}
+
 func TestPositionedGlyphArrayCombinesKerningAndWordSpacing(t *testing.T) {
 	glyphs := []shapedGlyph{
 		{GlyphID: 1, Rune: 'A', Width: 600, Advance: 550, HasAdvance: true},
