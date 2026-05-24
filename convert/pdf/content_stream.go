@@ -244,7 +244,7 @@ func missingPDFGlyphBox(glyph shapedGlyph, fontSize float64, x float64, baseline
 }
 
 func glyphAdvancePoints(glyph shapedGlyph, fontSize float64) float64 {
-	return float64(glyph.Width) * fontSize / 1000.0
+	return float64(shapedGlyphAdvanceWidth(glyph)) * fontSize / 1000.0
 }
 
 func pageMissingGlyphBoxes(boxes []pdfMissingGlyphBox) []byte {

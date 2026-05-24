@@ -35,6 +35,9 @@ func TestShapeTextAndFontResourceObjects(t *testing.T) {
 		if glyph.Width <= 0 {
 			t.Fatalf("glyph %d width = %d, want positive", glyph.GlyphID, glyph.Width)
 		}
+		if glyph.Advance != glyph.Width {
+			t.Fatalf("glyph %d advance = %d, width = %d, want simple shaper to keep them equal", i, glyph.Advance, glyph.Width)
+		}
 		if glyph.Source != string(glyph.Rune) || glyph.ClusterStart != i || glyph.ClusterEnd != i+1 {
 			t.Fatalf("glyph %d source = %q cluster %d:%d, want %q %d:%d",
 				i, glyph.Source, glyph.ClusterStart, glyph.ClusterEnd, string(glyph.Rune), i, i+1)
@@ -97,6 +100,9 @@ func TestShapeOpenTypeTextAppliesKerningAndLigatures(t *testing.T) {
 	}
 	if simpleWidth, openTypeWidth := shapedWidthPoints(simpleAV, 10), shapedWidthPoints(openTypeAV, 10); openTypeWidth >= simpleWidth {
 		t.Fatalf("OpenType AV width = %v, simple width = %v, want kerning to reduce width", openTypeWidth, simpleWidth)
+	}
+	if openTypeAV.Glyphs[0].Advance >= openTypeAV.Glyphs[0].Width {
+		t.Fatalf("OpenType A advance = %d, nominal width = %d, want kerning to reduce shaped advance", openTypeAV.Glyphs[0].Advance, openTypeAV.Glyphs[0].Width)
 	}
 
 	ligature, err := shapeOpenTypeText(face, "fi")
