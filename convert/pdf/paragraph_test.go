@@ -354,6 +354,40 @@ func TestLayoutInlineParagraphHyphenatesStyledRuns(t *testing.T) {
 	}
 }
 
+func TestInlineParagraphUnitsKeepLigatureWordsIntact(t *testing.T) {
+	face, err := builtinFont("serif", true, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	shaped, err := shapeText(face, "fiend")
+	if err != nil {
+		t.Fatalf("shapeText() error = %v", err)
+	}
+	if len(shaped.Glyphs) >= len([]rune("fiend")) {
+		t.Fatalf("test font did not shape fi ligature: %#v", shaped.Glyphs)
+	}
+	word := paragraphInlineWord{
+		Text: "fiend",
+		Fragments: []paragraphLineFragment{{
+			Text:     shaped,
+			Width:    shapedWidthPoints(shaped, 10),
+			FontSize: 10,
+			FontKey:  face.Key,
+		}},
+	}
+	units, err := inlineParagraphUnits(nil, []paragraphInlineWord{word}, paragraphStyle{
+		FontSize:    10,
+		Hyphenation: paragraphHyphenationAuto,
+		Hyphenator:  fakeHyphenator{"fiend": "fi\u00adend"},
+	})
+	if err != nil {
+		t.Fatalf("inlineParagraphUnits() error = %v", err)
+	}
+	if len(units) != 1 || units[0].Text != "fiend" || !units[0].EndWord {
+		t.Fatalf("units = %#v, want ligature word kept as one unit", units)
+	}
+}
+
 func TestBreakableWordsKeepsNoBreakSpaceInsideWord(t *testing.T) {
 	got := breakableWords("one  two\u00a0three\tfour")
 	want := []string{"one", "two\u00a0three", "four"}

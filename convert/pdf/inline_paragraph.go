@@ -803,7 +803,7 @@ func inlineParagraphUnits(registry *pdfFontRegistry, words []paragraphInlineWord
 			})
 			continue
 		}
-		if style.NoWrap {
+		if style.NoWrap || inlineWordHasMultiRuneGlyph(word) {
 			units = append(units, paragraphUnit{
 				Text:      word.Text,
 				Width:     paragraphFragmentsWidth(word.Fragments),
@@ -854,6 +854,17 @@ func inlineWordHasImage(word paragraphInlineWord) bool {
 	for _, fragment := range word.Fragments {
 		if fragment.ImageID != "" {
 			return true
+		}
+	}
+	return false
+}
+
+func inlineWordHasMultiRuneGlyph(word paragraphInlineWord) bool {
+	for _, fragment := range word.Fragments {
+		for _, glyph := range fragment.Text.Glyphs {
+			if glyph.ClusterEnd-glyph.ClusterStart > 1 || len([]rune(glyphUnicodeText(glyph))) > 1 {
+				return true
+			}
 		}
 	}
 	return false
