@@ -32,6 +32,7 @@ type pdfFontResource struct {
 	Name    string
 	Face    *builtinFontFace
 	Used    map[uint16]shapedGlyph
+	CIDMap  map[uint16]uint16
 	Objects fontObjects
 	IDs     fontObjectIDs
 }
@@ -710,6 +711,7 @@ func preparePDFFontResources(registry *pdfFontRegistry, used map[pdfFontKey]map[
 			Name:    fmt.Sprintf("F%d", i+1),
 			Face:    face,
 			Used:    used[key],
+			CIDMap:  objects.CIDMap,
 			IDs:     ids,
 			Objects: objects,
 		})
@@ -738,15 +740,20 @@ func comparePDFFontKeys(a, b pdfFontKey) int {
 
 func assignPDFFontResourceNames(pages []pdfPage, resources []pdfFontResource) {
 	names := make(map[pdfFontKey]string, len(resources))
+	cidMaps := make(map[pdfFontKey]map[uint16]uint16, len(resources))
 	for _, resource := range resources {
 		names[resource.Key] = resource.Name
+		cidMaps[resource.Key] = resource.CIDMap
 	}
 	for pageIndex := range pages {
 		for lineIndex := range pages[pageIndex].Lines {
-			pages[pageIndex].Lines[lineIndex].FontName = names[pages[pageIndex].Lines[lineIndex].FontKey]
-			for fragmentIndex := range pages[pageIndex].Lines[lineIndex].Fragments {
-				fragment := &pages[pageIndex].Lines[lineIndex].Fragments[fragmentIndex]
+			line := &pages[pageIndex].Lines[lineIndex]
+			line.FontName = names[line.FontKey]
+			remapShapedTextGlyphIDs(&line.Text, cidMaps[line.FontKey])
+			for fragmentIndex := range line.Fragments {
+				fragment := &line.Fragments[fragmentIndex]
 				fragment.FontName = names[fragment.FontKey]
+				remapShapedTextGlyphIDs(&fragment.Text, cidMaps[fragment.FontKey])
 			}
 		}
 	}
@@ -798,12 +805,19 @@ func fontResourceObjects(face *builtinFontFace, used map[uint16]shapedGlyph, obj
 	}
 	fontNameString := face.PostScriptName
 	fontFileData := face.Data
+	encodedUsed := used
+	cidMap := identityCIDMap(used)
 	if program.TrueTypeOutlines && allowPDFTrueTypeSubsetting(face) {
-		if subsetData, ok, err := subsetTrueTypeFont(face.Data, used); err != nil {
+		if subset, ok, err := subsetTrueTypeFont(face.Data, used); err != nil {
 			return fontObjects{}, fmt.Errorf("subset TrueType font %s: %w", face.PostScriptName, err)
 		} else if ok {
-			fontFileData = subsetData
+			fontFileData = subset.Data
 			fontNameString = subsetPDFFontName(face.PostScriptName, used)
+			cidMap = subset.GlyphMap
+			encodedUsed, err = remapUsedGlyphsToCIDs(used, cidMap)
+			if err != nil {
+				return fontObjects{}, fmt.Errorf("remap TrueType subset glyphs for %s: %w", face.PostScriptName, err)
+			}
 		}
 	}
 	fontName := docwriter.Name(fontNameString)
@@ -816,7 +830,7 @@ func fontResourceObjects(face *builtinFontFace, used map[uint16]shapedGlyph, obj
 		},
 		"Subtype": program.CIDFontSubtype,
 		"Type":    docwriter.Name("Font"),
-		"W":       widthsArray(used),
+		"W":       widthsArray(encodedUsed),
 	}
 	if program.CIDToGIDMapIdentity {
 		cidFont["CIDToGIDMap"] = docwriter.Name("Identity")
@@ -853,7 +867,8 @@ func fontResourceObjects(face *builtinFontFace, used map[uint16]shapedGlyph, obj
 		FontDescriptor: fontDescriptor,
 		FontFile:       fontFile,
 		FontFileData:   fontFileData,
-		ToUnicode:      toUnicodeCMap(used),
+		ToUnicode:      toUnicodeCMap(encodedUsed),
+		CIDMap:         cidMap,
 	}, nil
 }
 
@@ -865,6 +880,55 @@ type pdfFontProgramInfo struct {
 	FontFileKey         string
 	FontFileSubtype     docwriter.Name
 	FontFileLength1     bool
+}
+
+func identityCIDMap(used map[uint16]shapedGlyph) map[uint16]uint16 {
+	mapping := make(map[uint16]uint16, len(used))
+	for glyphID := range used {
+		mapping[glyphID] = glyphID
+	}
+	return mapping
+}
+
+func remapUsedGlyphsToCIDs(used map[uint16]shapedGlyph, cidMap map[uint16]uint16) (map[uint16]shapedGlyph, error) {
+	remapped := make(map[uint16]shapedGlyph, len(used))
+	for originalID, glyph := range used {
+		cid, ok := cidMap[originalID]
+		if !ok {
+			return nil, fmt.Errorf("used glyph %d is missing from subset CID map", originalID)
+		}
+		glyph.GlyphID = cid
+		remapped[cid] = glyph
+	}
+	return remapped, nil
+}
+
+func remapShapedTextGlyphIDs(text *shapedText, cidMap map[uint16]uint16) {
+	if text == nil || len(cidMap) == 0 {
+		return
+	}
+	for i := range text.Glyphs {
+		glyph := &text.Glyphs[i]
+		if glyph.GlyphID == 0 || glyph.Missing != pdfMissingGlyphNone {
+			continue
+		}
+		if cid, ok := cidMap[glyph.GlyphID]; ok {
+			glyph.GlyphID = cid
+		}
+	}
+	if len(text.Used) == 0 {
+		return
+	}
+	used := make(map[uint16]shapedGlyph, len(text.Used))
+	for originalID, glyph := range text.Used {
+		if cid, ok := cidMap[originalID]; ok {
+			glyph.GlyphID = cid
+			used[cid] = glyph
+			continue
+		}
+		used[originalID] = glyph
+	}
+	text.Used = used
 }
 
 func pdfFontProgram(data []byte) (pdfFontProgramInfo, error) {
@@ -937,6 +1001,7 @@ type fontObjects struct {
 	FontFile       docwriter.Dict
 	FontFileData   []byte
 	ToUnicode      []byte
+	CIDMap         map[uint16]uint16
 }
 
 func cidSystemInfo(registry, ordering string) docwriter.Dict {

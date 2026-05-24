@@ -423,6 +423,46 @@ func TestPreparePDFFontResources(t *testing.T) {
 	}
 }
 
+func TestAssignPDFFontResourceNamesRemapsSubsetGlyphIDs(t *testing.T) {
+	face, err := builtinFont("serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	shaped, err := shapeText(face, "Ж")
+	if err != nil {
+		t.Fatalf("shapeText() error = %v", err)
+	}
+	if len(shaped.Glyphs) != 1 {
+		t.Fatalf("shaped glyphs = %d, want 1", len(shaped.Glyphs))
+	}
+	originalGlyphID := shaped.Glyphs[0].GlyphID
+	nextObjectID := 1
+	resources, err := preparePDFFontResources(nil, map[pdfFontKey]map[uint16]shapedGlyph{{Family: "serif"}: shaped.Used}, &nextObjectID)
+	if err != nil {
+		t.Fatalf("preparePDFFontResources() error = %v", err)
+	}
+	if len(resources) != 1 {
+		t.Fatalf("font resources = %d, want 1", len(resources))
+	}
+	mappedGlyphID, ok := resources[0].CIDMap[originalGlyphID]
+	if !ok {
+		t.Fatalf("original glyph %d missing from CID map", originalGlyphID)
+	}
+	if mappedGlyphID == originalGlyphID {
+		t.Fatalf("glyph ID was not compacted: original=%d mapped=%d", originalGlyphID, mappedGlyphID)
+	}
+	pages := []pdfPage{{Lines: []pdfPageLine{{FontKey: pdfFontKey{Family: "serif"}, Text: shaped}}}}
+
+	assignPDFFontResourceNames(pages, resources)
+
+	if got := pages[0].Lines[0].Text.Glyphs[0].GlyphID; got != mappedGlyphID {
+		t.Fatalf("page glyph ID = %d, want subset CID %d", got, mappedGlyphID)
+	}
+	if got := shapedRunes(pages[0].Lines[0].Text); got != "Ж" {
+		t.Fatalf("page text = %q, want source text preserved", got)
+	}
+}
+
 func TestWrapText(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {

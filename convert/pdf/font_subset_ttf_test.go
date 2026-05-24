@@ -25,11 +25,60 @@ func TestSubsetTrueTypeFontKeepsUsedGlyphsAndParses(t *testing.T) {
 	if !ok {
 		t.Fatal("subsetTrueTypeFont() ok = false, want true for bundled TTF")
 	}
-	if len(subset) >= len(face.Data) {
-		t.Fatalf("subset size = %d, original size = %d, want smaller subset", len(subset), len(face.Data))
+	if len(subset.Data) >= len(face.Data) {
+		t.Fatalf("subset size = %d, original size = %d, want smaller subset", len(subset.Data), len(face.Data))
 	}
-	if _, err := sfnt.Parse(subset); err != nil {
+	if _, ok := subset.GlyphMap[0]; !ok {
+		t.Fatal("subset glyph map does not include .notdef")
+	}
+	for glyphID := range shaped.Used {
+		if mapped, ok := subset.GlyphMap[glyphID]; !ok {
+			t.Fatalf("used glyph %d missing from subset glyph map", glyphID)
+		} else if mapped >= uint16(len(subset.GlyphMap)) {
+			t.Fatalf("used glyph %d maps to out-of-range subset glyph %d", glyphID, mapped)
+		}
+	}
+	if _, err := sfnt.Parse(subset.Data); err != nil {
 		t.Fatalf("sfnt.Parse(subset) error = %v", err)
+	}
+}
+
+func TestSubsetTrueTypeFontBuildsCompactGlyphProgram(t *testing.T) {
+	face, err := builtinFont("serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	shaped, err := shapeText(face, "Tiny")
+	if err != nil {
+		t.Fatalf("shapeText() error = %v", err)
+	}
+	subset, ok, err := subsetTrueTypeFont(face.Data, shaped.Used)
+	if err != nil {
+		t.Fatalf("subsetTrueTypeFont() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("subsetTrueTypeFont() ok = false, want true")
+	}
+	tables, err := parseTTFTables(subset.Data)
+	if err != nil {
+		t.Fatalf("parseTTFTables(subset) error = %v", err)
+	}
+	maxp := tables.Records["maxp"].Data
+	if len(maxp) < 6 {
+		t.Fatalf("subset maxp too short")
+	}
+	if got, want := int(maxp[4])<<8|int(maxp[5]), len(subset.GlyphMap); got != want {
+		t.Fatalf("subset maxp numGlyphs = %d, want compact glyph count %d", got, want)
+	}
+	head := tables.Records["head"].Data
+	locFormat := int(head[50])<<8 | int(head[51])
+	loca := tables.Records["loca"].Data
+	entrySize := 4
+	if locFormat == 0 {
+		entrySize = 2
+	}
+	if got, want := len(loca), (len(subset.GlyphMap)+1)*entrySize; got != want {
+		t.Fatalf("subset loca length = %d, want %d", got, want)
 	}
 }
 
@@ -54,6 +103,14 @@ func TestFontResourceObjectsEmbedsSubsetFontFile(t *testing.T) {
 	}
 	if len(objects.FontFileData) >= len(face.Data) {
 		t.Fatalf("font file size = %d, original size = %d, want subset embedded", len(objects.FontFileData), len(face.Data))
+	}
+	if len(objects.CIDMap) == 0 {
+		t.Fatal("font resource objects did not expose subset CID map")
+	}
+	for glyphID := range shaped.Used {
+		if _, ok := objects.CIDMap[glyphID]; !ok {
+			t.Fatalf("used glyph %d missing from font CID map", glyphID)
+		}
 	}
 	if got := int(objects.FontFile["Length1"].(docwriter.Integer)); got != len(objects.FontFileData) {
 		t.Fatalf("Length1 = %d, font data len = %d", got, len(objects.FontFileData))
