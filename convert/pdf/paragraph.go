@@ -424,9 +424,10 @@ func assembleParagraphLines(face *builtinFontFace, units []paragraphUnit, style 
 		}
 		last := i == len(breaks)-1
 		singleWord := units[start].WordIndex == units[br.End-1].WordIndex
-		visualMetricWidth := width + paragraphLineVisualRightReserve(line, style.FontSize, style.LetterSpacing)
+		terminalOverhang := paragraphBreakTerminalOverhang(units[br.End-1])
+		visualMetricWidth := width + terminalOverhang
 		line.BreakStats = paragraphLineBreakStatsFor(visualMetricWidth, available, line.JustificationGaps, start == 0, last, singleWord, br.Hyphenated, previousHyphenated, previousFitness)
-		spacingAvailable := paragraphLineJustificationAvailable(line, style.FontSize, style.LetterSpacing, available)
+		spacingAvailable := paragraphJustificationAvailableForOverhang(available, terminalOverhang)
 		line.ExtraWordSpacing, line.ExtraCharSpacing = paragraphJustificationSpacing(style, last, width, spacingAvailable, line.JustificationGaps, len(shaped.Glyphs))
 		lines = append(lines, line)
 		previousHyphenated = br.Hyphenated
@@ -792,11 +793,15 @@ func paragraphBreakTerminalOverhang(unit paragraphUnit) float64 {
 	return unit.RightOverhang
 }
 
-func paragraphLineJustificationAvailable(line paragraphLine, fontSize float64, letterSpacing float64, available float64) float64 {
+func paragraphJustificationAvailableForOverhang(available float64, terminalOverhang float64) float64 {
 	if available <= 1 {
 		return available
 	}
-	return max(available-paragraphLineVisualRightReserve(line, fontSize, letterSpacing), 1)
+	return max(available-max(terminalOverhang, 0), 1)
+}
+
+func paragraphLineJustificationAvailable(line paragraphLine, fontSize float64, letterSpacing float64, available float64) float64 {
+	return paragraphJustificationAvailableForOverhang(available, paragraphLineVisualRightReserve(line, fontSize, letterSpacing))
 }
 
 func paragraphLineVisualRightReserve(line paragraphLine, fontSize float64, letterSpacing float64) float64 {

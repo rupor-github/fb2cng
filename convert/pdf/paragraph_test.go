@@ -271,6 +271,15 @@ func TestParagraphBreaksReserveTerminalVisualOverhang(t *testing.T) {
 	}
 }
 
+func TestParagraphJustificationIgnoresNonTerminalOverhangReserve(t *testing.T) {
+	style := paragraphStyle{FontSize: 10, Align: textAlignJustify}
+	available := paragraphJustificationAvailableForOverhang(14.5, 0)
+	word, char := paragraphJustificationSpacing(style, false, 12.5, available, 1, 3)
+	if word != 2 || char != 0 {
+		t.Fatalf("justification spacing = %v/%v, want full right-edge fill without non-terminal reserve", word, char)
+	}
+}
+
 func TestParagraphJustificationReservesTerminalVisualOverhang(t *testing.T) {
 	style := paragraphStyle{FontSize: 10, Align: textAlignJustify}
 	line := paragraphLine{

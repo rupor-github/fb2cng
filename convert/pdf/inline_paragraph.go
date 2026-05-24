@@ -84,9 +84,10 @@ func layoutInlineParagraphWithShape(doc pdfDocumentSpec, registry *pdfFontRegist
 		}
 		last := i == len(breaks)-1
 		singleWord := units[start].WordIndex == units[br.End-1].WordIndex
-		visualMetricWidth := width + paragraphLineVisualRightReserve(line, style.FontSize, style.LetterSpacing)
+		terminalOverhang := paragraphBreakTerminalOverhang(units[br.End-1])
+		visualMetricWidth := width + terminalOverhang
 		line.BreakStats = paragraphLineBreakStatsFor(visualMetricWidth, available, line.JustificationGaps, start == 0, last, singleWord, br.Hyphenated, previousHyphenated, previousFitness)
-		spacingAvailable := paragraphLineJustificationAvailable(line, style.FontSize, style.LetterSpacing, available)
+		spacingAvailable := paragraphJustificationAvailableForOverhang(available, terminalOverhang)
 		line.ExtraWordSpacing, line.ExtraCharSpacing = paragraphJustificationSpacing(style, last, width, spacingAvailable, line.JustificationGaps, len(shaped.Glyphs))
 		lines = append(lines, line)
 		previousHyphenated = br.Hyphenated
