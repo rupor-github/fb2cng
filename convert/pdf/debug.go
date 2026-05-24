@@ -118,6 +118,7 @@ type pdfDebugLine struct {
 	VisualLeft       float64            `json:"visual_left,omitempty"`
 	VisualRight      float64            `json:"visual_right,omitempty"`
 	Overflow         float64            `json:"overflow,omitempty"`
+	VisualOverflow   float64            `json:"visual_overflow,omitempty"`
 	Justified        bool               `json:"justified,omitempty"`
 	ExtraWordSpacing float64            `json:"extra_word_spacing,omitempty"`
 	ExtraCharSpacing float64            `json:"extra_char_spacing,omitempty"`
@@ -374,6 +375,7 @@ func pdfDebugPages(pages []pdfPage) ([]pdfDebugPage, []pdfDebugImage, []pdfDebug
 				VisualLeft:       visualLeft,
 				VisualRight:      visualRight,
 				Overflow:         pdfPageLineOverflow(line),
+				VisualOverflow:   pdfPageLineVisualOverflow(line),
 				Justified:        pdfPageLineIsJustified(line),
 				ExtraWordSpacing: line.ExtraWordSpacing,
 				ExtraCharSpacing: line.ExtraCharSpacing,

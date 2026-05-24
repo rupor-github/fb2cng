@@ -93,6 +93,30 @@ func TestPDFPageLineVisualBoundsIgnoreSpaces(t *testing.T) {
 	}
 }
 
+func TestPDFPageLineVisualOverflowUsesVisualRight(t *testing.T) {
+	line := pdfPageLine{
+		X:        10,
+		FontSize: 10,
+		Text: shapedText{Glyphs: []shapedGlyph{{
+			GlyphID:      1,
+			Rune:         'j',
+			Width:        500,
+			Advance:      500,
+			HasAdvance:   true,
+			InkLeft:      0,
+			InkRight:     550,
+			HasInkBounds: true,
+		}}},
+		BreakStats: paragraphLineBreakStats{AvailableWidth: 5},
+	}
+	if got, want := pdfPageLineVisualOverflow(line), 0.5; got != want {
+		t.Fatalf("visual overflow = %v, want %v", got, want)
+	}
+	if got := pdfPageLineOverflow(line); got != 0 {
+		t.Fatalf("advance overflow = %v, want zero", got)
+	}
+}
+
 func TestPDFPageLineOverflowUsesTolerance(t *testing.T) {
 	line := pdfPageLine{
 		FontSize: 10,

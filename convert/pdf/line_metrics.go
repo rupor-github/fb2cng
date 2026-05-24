@@ -56,6 +56,22 @@ func pdfPageLineOverflow(line pdfPageLine) float64 {
 	return overflow
 }
 
+func pdfPageLineVisualOverflow(line pdfPageLine) float64 {
+	available := pdfPageLineAvailableWidth(line)
+	if available <= 0 {
+		return 0
+	}
+	_, visualRight, ok := pdfPageLineVisualBounds(line)
+	if !ok {
+		return 0
+	}
+	overflow := visualRight - (line.X + available)
+	if overflow <= pdfLineWidthTolerance {
+		return 0
+	}
+	return overflow
+}
+
 func pdfPageLineVisualBounds(line pdfPageLine) (float64, float64, bool) {
 	if len(line.Fragments) == 0 {
 		left, right, ok := shapedTextVisualBounds(
