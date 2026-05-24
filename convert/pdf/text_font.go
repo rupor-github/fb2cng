@@ -170,8 +170,24 @@ type openTypePDFTextShaper struct {
 }
 
 func shapeText(face *builtinFontFace, text string) (shapedText, error) {
+	if canShapeOpenTypeText(face, text) {
+		var shaper pdfTextShaper = &openTypePDFTextShaper{face: face}
+		return shaper.Shape(text, pdfShapeOptions{})
+	}
 	var shaper pdfTextShaper = simplePDFTextShaper{face: face}
 	return shaper.Shape(text, pdfShapeOptions{})
+}
+
+func canShapeOpenTypeText(face *builtinFontFace, text string) bool {
+	if face == nil || face.TextFace == nil {
+		return false
+	}
+	for _, r := range text {
+		if _, ok := face.TextFace.NominalGlyph(r); !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func (s simplePDFTextShaper) Shape(text string, _ pdfShapeOptions) (shapedText, error) {

@@ -35,8 +35,8 @@ func TestShapeTextAndFontResourceObjects(t *testing.T) {
 		if glyph.Width <= 0 {
 			t.Fatalf("glyph %d width = %d, want positive", glyph.GlyphID, glyph.Width)
 		}
-		if glyph.Advance != glyph.Width {
-			t.Fatalf("glyph %d advance = %d, width = %d, want simple shaper to keep them equal", i, glyph.Advance, glyph.Width)
+		if !glyph.HasAdvance {
+			t.Fatalf("glyph %d has no shaped advance", i)
 		}
 		if glyph.Source != string(glyph.Rune) || glyph.ClusterStart != i || glyph.ClusterEnd != i+1 {
 			t.Fatalf("glyph %d source = %q cluster %d:%d, want %q %d:%d",
@@ -85,12 +85,26 @@ func TestShapeTextAndFontResourceObjects(t *testing.T) {
 	}
 }
 
+func TestShapeTextUsesOpenTypeWhenFontCoversRun(t *testing.T) {
+	face, err := builtinFont("serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	shaped, err := shapeText(face, "fi")
+	if err != nil {
+		t.Fatalf("shapeText(fi) error = %v", err)
+	}
+	if len(shaped.Glyphs) != 1 || shaped.Glyphs[0].Source != "fi" {
+		t.Fatalf("shapeText(fi) = %#v, want OpenType ligature with source text", shaped.Glyphs)
+	}
+}
+
 func TestShapeOpenTypeTextAppliesKerningAndLigatures(t *testing.T) {
 	face, err := builtinFont("serif", false, false)
 	if err != nil {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
-	simpleAV, err := shapeText(face, "AV")
+	simpleAV, err := simplePDFTextShaper{face: face}.Shape("AV", pdfShapeOptions{})
 	if err != nil {
 		t.Fatalf("shapeText(AV) error = %v", err)
 	}
