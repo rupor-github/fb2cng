@@ -59,6 +59,40 @@ func TestPDFPageLineDrawnWidthAddsWordSpacingAfterFragmentSpace(t *testing.T) {
 	}
 }
 
+func TestPDFPageLineVisualBoundsUseGlyphInkBounds(t *testing.T) {
+	line := pdfPageLine{
+		X:        10,
+		FontSize: 10,
+		Text: shapedText{Glyphs: []shapedGlyph{
+			{GlyphID: 1, Rune: 'T', Width: 500, Advance: 500, HasAdvance: true, InkLeft: -50, InkRight: 480, HasInkBounds: true},
+			{GlyphID: 2, Rune: 'j', Width: 300, Advance: 300, HasAdvance: true, InkLeft: 20, InkRight: 360, HasInkBounds: true},
+		}},
+	}
+
+	left, right, ok := pdfPageLineVisualBounds(line)
+	if !ok {
+		t.Fatal("visual bounds ok = false, want true")
+	}
+	if left != 9.5 || right != 18.6 {
+		t.Fatalf("visual bounds = %v/%v, want 9.5/18.6", left, right)
+	}
+}
+
+func TestPDFPageLineVisualBoundsIgnoreSpaces(t *testing.T) {
+	line := pdfPageLine{
+		X:        10,
+		FontSize: 10,
+		Text: shapedText{Glyphs: []shapedGlyph{
+			{GlyphID: 1, Rune: ' ', Width: 500, Advance: 500, HasAdvance: true, InkLeft: 0, InkRight: 0, HasInkBounds: true},
+		}},
+	}
+
+	_, _, ok := pdfPageLineVisualBounds(line)
+	if ok {
+		t.Fatal("visual bounds ok = true for space-only line, want false")
+	}
+}
+
 func TestPDFPageLineOverflowUsesTolerance(t *testing.T) {
 	line := pdfPageLine{
 		FontSize: 10,

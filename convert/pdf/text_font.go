@@ -73,6 +73,9 @@ type shapedGlyph struct {
 	ClusterEnd   int
 	XOffset      int
 	YOffset      int
+	InkLeft      int
+	InkRight     int
+	HasInkBounds bool
 	// FontKey overrides the surrounding line font for deliberate built-in companion
 	// glyphs. Keeping this per glyph lets resource usage stay exact and keeps the
 	// path to future font subsetting straightforward.
@@ -222,6 +225,9 @@ func (s simplePDFTextShaper) Shape(text string, _ pdfShapeOptions) (shapedText, 
 			HasAdvance:   true,
 			ClusterStart: cluster,
 			ClusterEnd:   cluster + 1,
+			InkLeft:      0,
+			InkRight:     pdfSimpleGlyphInkRight(r, width),
+			HasInkBounds: true,
 			FontKey:      face.Key,
 		}
 		if glyph.GlyphID == 0 {
@@ -252,6 +258,11 @@ func pdfGlyphWithSource(glyph shapedGlyph, r rune, start, end int) shapedGlyph {
 	if !glyph.HasAdvance {
 		glyph.Advance = glyph.Width
 		glyph.HasAdvance = true
+	}
+	if !glyph.HasInkBounds {
+		glyph.InkLeft = 0
+		glyph.InkRight = pdfSimpleGlyphInkRight(r, shapedGlyphAdvanceWidth(glyph))
+		glyph.HasInkBounds = true
 	}
 	return glyph
 }
@@ -294,6 +305,12 @@ func (s *openTypePDFTextShaper) Shape(text string, _ pdfShapeOptions) (shapedTex
 		} else {
 			seenClusters[start] = true
 		}
+		xOffset := fixedFontUnitsToPDFWidth(hbGlyph.XOffset, face.UnitsPerEm)
+		inkLeft := xOffset + fixedFontUnitsToPDFWidth(hbGlyph.XBearing, face.UnitsPerEm)
+		inkRight := inkLeft + fixedFontUnitsToPDFWidth(hbGlyph.Width, face.UnitsPerEm)
+		if inkRight < inkLeft {
+			inkLeft, inkRight = inkRight, inkLeft
+		}
 		glyph := shapedGlyph{
 			GlyphID:      uint16(hbGlyph.GlyphID),
 			Rune:         r,
@@ -303,8 +320,11 @@ func (s *openTypePDFTextShaper) Shape(text string, _ pdfShapeOptions) (shapedTex
 			HasAdvance:   true,
 			ClusterStart: start,
 			ClusterEnd:   end,
-			XOffset:      fixedFontUnitsToPDFWidth(hbGlyph.XOffset, face.UnitsPerEm),
+			XOffset:      xOffset,
 			YOffset:      fixedFontUnitsToPDFWidth(hbGlyph.YOffset, face.UnitsPerEm),
+			InkLeft:      inkLeft,
+			InkRight:     inkRight,
+			HasInkBounds: true,
 			FontKey:      face.Key,
 		}
 		if glyph.GlyphID == 0 {
@@ -437,13 +457,16 @@ func pdfFontGlyph(face *builtinFontFace, key pdfFontKey, r rune) (shapedGlyph, b
 	}
 	width := fontUnitsToPDFWidth(advance.Round(), face.UnitsPerEm)
 	return shapedGlyph{
-		GlyphID:    uint16(gid),
-		Rune:       r,
-		Source:     string(r),
-		Width:      width,
-		Advance:    width,
-		HasAdvance: true,
-		FontKey:    key,
+		GlyphID:      uint16(gid),
+		Rune:         r,
+		Source:       string(r),
+		Width:        width,
+		Advance:      width,
+		HasAdvance:   true,
+		InkLeft:      0,
+		InkRight:     pdfSimpleGlyphInkRight(r, width),
+		HasInkBounds: true,
+		FontKey:      key,
 	}, true, nil
 }
 
@@ -541,7 +564,17 @@ func missingPDFGlyph(face *builtinFontFace, r rune, advanceWidth int) shapedGlyp
 	if width == 0 && kind != pdfMissingGlyphCombining {
 		width = 500
 	}
-	glyph := shapedGlyph{Rune: r, Source: string(r), Width: width, Advance: width, HasAdvance: true, Missing: kind}
+	glyph := shapedGlyph{
+		Rune:         r,
+		Source:       string(r),
+		Width:        width,
+		Advance:      width,
+		HasAdvance:   true,
+		InkLeft:      0,
+		InkRight:     pdfSimpleGlyphInkRight(r, width),
+		HasInkBounds: true,
+		Missing:      kind,
+	}
 	logPDFMissingGlyph(face, glyph)
 	return glyph
 }
@@ -609,6 +642,20 @@ func shapedGlyphAdvanceWidth(glyph shapedGlyph) int {
 		return glyph.Advance
 	}
 	return glyph.Width
+}
+
+func shapedGlyphInkBounds(glyph shapedGlyph) (int, int) {
+	if glyph.HasInkBounds {
+		return glyph.InkLeft, glyph.InkRight
+	}
+	return 0, pdfSimpleGlyphInkRight(glyph.Rune, shapedGlyphAdvanceWidth(glyph))
+}
+
+func pdfSimpleGlyphInkRight(r rune, width int) int {
+	if unicode.IsSpace(r) {
+		return 0
+	}
+	return width
 }
 
 func fontUnitsToPDFWidth(width, unitsPerEm int) int {

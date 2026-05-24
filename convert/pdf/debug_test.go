@@ -107,7 +107,7 @@ func TestGenerateDebugDumps(t *testing.T) {
 	lineBreakFound := false
 	for _, page := range pages {
 		for _, line := range page.Lines {
-			if line.Width != line.DrawnWidth || line.AdvanceWidth <= 0 || line.RightEdge <= line.X {
+			if line.Width != line.DrawnWidth || line.AdvanceWidth <= 0 || line.RightEdge <= line.X || line.VisualRight <= line.VisualLeft {
 				t.Fatalf("debug line metrics = %#v, want populated width diagnostics", line)
 			}
 			if line.LineBreak == nil {

@@ -115,6 +115,8 @@ type pdfDebugLine struct {
 	DrawnWidth       float64            `json:"drawn_width"`
 	AvailableWidth   float64            `json:"available_width,omitempty"`
 	RightEdge        float64            `json:"right_edge"`
+	VisualLeft       float64            `json:"visual_left,omitempty"`
+	VisualRight      float64            `json:"visual_right,omitempty"`
 	Overflow         float64            `json:"overflow,omitempty"`
 	Justified        bool               `json:"justified,omitempty"`
 	ExtraWordSpacing float64            `json:"extra_word_spacing,omitempty"`
@@ -350,6 +352,7 @@ func pdfDebugPages(pages []pdfPage) ([]pdfDebugPage, []pdfDebugImage, []pdfDebug
 		for _, line := range page.Lines {
 			advanceWidth := pdfPageLineAdvanceWidth(line)
 			drawnWidth := pdfPageLineDrawnWidth(line)
+			visualLeft, visualRight, _ := pdfPageLineVisualBounds(line)
 			debugPage.Lines = append(debugPage.Lines, pdfDebugLine{
 				Text:             pdfPageLineText(line),
 				X:                line.X,
@@ -368,6 +371,8 @@ func pdfDebugPages(pages []pdfPage) ([]pdfDebugPage, []pdfDebugImage, []pdfDebug
 				DrawnWidth:       drawnWidth,
 				AvailableWidth:   pdfPageLineAvailableWidth(line),
 				RightEdge:        line.X + drawnWidth,
+				VisualLeft:       visualLeft,
+				VisualRight:      visualRight,
 				Overflow:         pdfPageLineOverflow(line),
 				Justified:        pdfPageLineIsJustified(line),
 				ExtraWordSpacing: line.ExtraWordSpacing,
