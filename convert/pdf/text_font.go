@@ -858,6 +858,7 @@ func fontResourceObjects(face *builtinFontFace, used map[uint16]shapedGlyph, obj
 }
 
 type pdfFontProgramInfo struct {
+	OutlineKind         string
 	TrueTypeOutlines    bool
 	CIDFontSubtype      docwriter.Name
 	CIDToGIDMapIdentity bool
@@ -869,6 +870,7 @@ type pdfFontProgramInfo struct {
 func pdfFontProgram(data []byte) (pdfFontProgramInfo, error) {
 	if _, ok := rawTTFTable(data, "glyf"); ok {
 		return pdfFontProgramInfo{
+			OutlineKind:         "truetype",
 			TrueTypeOutlines:    true,
 			CIDFontSubtype:      docwriter.Name("CIDFontType2"),
 			CIDToGIDMapIdentity: true,
@@ -887,6 +889,7 @@ func pdfFontProgram(data []byte) (pdfFontProgramInfo, error) {
 
 func pdfOpenTypeCFFProgram() pdfFontProgramInfo {
 	return pdfFontProgramInfo{
+		OutlineKind:     "opentype_cff",
 		CIDFontSubtype:  docwriter.Name("CIDFontType0"),
 		FontFileKey:     "FontFile3",
 		FontFileSubtype: docwriter.Name("OpenType"),

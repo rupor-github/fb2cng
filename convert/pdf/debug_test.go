@@ -150,6 +150,9 @@ func TestGenerateDebugDumps(t *testing.T) {
 		if font.OriginalFontFileSize <= 0 || font.EmbeddedFontFileSize <= 0 || !font.Subset {
 			t.Fatalf("debug font = %#v, want original/subset font file sizes", font)
 		}
+		if font.OutlineKind != "truetype" || font.PDFCIDFontSubtype != "CIDFontType2" || font.PDFEmbeddedFontFile != "FontFile2" {
+			t.Fatalf("debug font = %#v, want TrueType PDF font program metadata", font)
+		}
 	}
 
 	var printedFootnotes pdfDebugPrintedFootnotes

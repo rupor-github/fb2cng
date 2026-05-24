@@ -169,6 +169,9 @@ type pdfDebugFont struct {
 	Italic               bool     `json:"italic,omitempty"`
 	PostScriptName       string   `json:"post_script_name"`
 	PDFBaseFont          string   `json:"pdf_base_font,omitempty"`
+	OutlineKind          string   `json:"outline_kind,omitempty"`
+	PDFCIDFontSubtype    string   `json:"pdf_cid_font_subtype,omitempty"`
+	PDFEmbeddedFontFile  string   `json:"pdf_embedded_font_file,omitempty"`
 	UnitsPerEm           int      `json:"units_per_em"`
 	Ascent               int      `json:"ascent"`
 	Descent              int      `json:"descent"`
@@ -466,6 +469,7 @@ func pdfDebugFonts(resources []pdfFontResource) []pdfDebugFont {
 		slices.Sort(usedGlyphIDs)
 		originalSize := len(resource.Face.Data)
 		embeddedSize := len(resource.Objects.FontFileData)
+		program := pdfDebugFontProgram(resource.Face)
 		out = append(out, pdfDebugFont{
 			ResourceName:         resource.Name,
 			Family:               resource.Key.Family,
@@ -473,6 +477,9 @@ func pdfDebugFonts(resources []pdfFontResource) []pdfDebugFont {
 			Italic:               resource.Key.Italic,
 			PostScriptName:       resource.Face.PostScriptName,
 			PDFBaseFont:          pdfDebugFontBaseName(resource),
+			OutlineKind:          program.OutlineKind,
+			PDFCIDFontSubtype:    string(program.CIDFontSubtype),
+			PDFEmbeddedFontFile:  program.FontFileKey,
 			UnitsPerEm:           resource.Face.UnitsPerEm,
 			Ascent:               resource.Face.Ascent,
 			Descent:              resource.Face.Descent,
@@ -488,6 +495,17 @@ func pdfDebugFonts(resources []pdfFontResource) []pdfDebugFont {
 		})
 	}
 	return out
+}
+
+func pdfDebugFontProgram(face *builtinFontFace) pdfFontProgramInfo {
+	if face == nil {
+		return pdfFontProgramInfo{}
+	}
+	program, err := pdfFontProgram(face.Data)
+	if err != nil {
+		return pdfFontProgramInfo{}
+	}
+	return program
 }
 
 func pdfDebugFontBaseName(resource pdfFontResource) string {
