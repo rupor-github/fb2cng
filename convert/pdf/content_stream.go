@@ -88,6 +88,7 @@ func pageContent(page pdfPage) []byte {
 						currentX,
 						line.Y+fragment.BaselineShift,
 						fragment.Text.Glyphs,
+						line.ExtraWordSpacing,
 						&textState,
 					)...)
 				}
@@ -95,9 +96,7 @@ func pageContent(page pdfPage) []byte {
 				if i != len(line.Fragments)-1 {
 					currentX += line.ExtraCharSpacing
 				}
-				if line.ExtraWordSpacing != 0 && i != len(line.Fragments)-1 && fragmentEndsWithSpace(fragment) {
-					currentX += line.ExtraWordSpacing
-				}
+				currentX += line.ExtraWordSpacing * float64(pdfPageFragmentJustificationSpaceCount(fragment, i != len(line.Fragments)-1))
 			}
 			continue
 		}
@@ -132,9 +131,10 @@ func writeTextFragment(
 	x float64,
 	y float64,
 	glyphs []shapedGlyph,
+	extraWordSpacing float64,
 	state *pdfTextDrawingState,
 ) []pdfMissingGlyphBox {
-	return writeTextGlyphs(buf, fontName, fontSize, letterSpacing, color, x, y, glyphs, 0, state)
+	return writeTextGlyphs(buf, fontName, fontSize, letterSpacing, color, x, y, glyphs, extraWordSpacing, state)
 }
 
 func writeTextGlyphs(
@@ -408,9 +408,7 @@ func writeFragmentDecorations(buf *bytes.Buffer, line pdfPageLine) {
 		if i != len(line.Fragments)-1 {
 			currentX += line.ExtraCharSpacing
 		}
-		if line.ExtraWordSpacing != 0 && i != len(line.Fragments)-1 && fragmentEndsWithSpace(fragment) {
-			currentX += line.ExtraWordSpacing
-		}
+		currentX += line.ExtraWordSpacing * float64(pdfPageFragmentJustificationSpaceCount(fragment, i != len(line.Fragments)-1))
 	}
 }
 

@@ -29,9 +29,7 @@ func pdfPageLineDrawnWidth(line pdfPageLine) float64 {
 		if i != len(line.Fragments)-1 {
 			width += line.ExtraCharSpacing
 		}
-		if line.ExtraWordSpacing != 0 && i != len(line.Fragments)-1 && fragmentEndsWithSpace(fragment) {
-			width += line.ExtraWordSpacing
-		}
+		width += line.ExtraWordSpacing * float64(pdfPageFragmentJustificationSpaceCount(fragment, i != len(line.Fragments)-1))
 	}
 	return width
 }
@@ -130,9 +128,7 @@ func pdfPageLineVisualBounds(line pdfPageLine) (float64, float64, bool) {
 		if i != len(line.Fragments)-1 {
 			currentX += line.ExtraCharSpacing
 		}
-		if line.ExtraWordSpacing != 0 && i != len(line.Fragments)-1 && fragmentEndsWithSpace(fragment) {
-			currentX += line.ExtraWordSpacing
-		}
+		currentX += line.ExtraWordSpacing * float64(pdfPageFragmentJustificationSpaceCount(fragment, i != len(line.Fragments)-1))
 	}
 	return left, right, ok
 }
@@ -162,4 +158,31 @@ func shapedTextVisualBounds(text shapedText, fontSize float64, letterSpacing flo
 
 func pdfPageLineIsJustified(line pdfPageLine) bool {
 	return line.ExtraWordSpacing != 0 || line.ExtraCharSpacing != 0
+}
+
+func pdfPageLineJustificationSpaceCount(line pdfPageLine) int {
+	if len(line.Fragments) == 0 {
+		return justificationSpaceCount(line.Text.Glyphs)
+	}
+	count := 0
+	for i, fragment := range line.Fragments {
+		count += pdfPageFragmentJustificationSpaceCount(fragment, i != len(line.Fragments)-1)
+	}
+	return count
+}
+
+func pdfPageFragmentJustificationSpaceCount(fragment pdfPageLineFragment, includeTrailing bool) int {
+	count := justificationSpaceCount(fragment.Text.Glyphs)
+	if includeTrailing && fragmentEndsWithSpace(fragment) {
+		count++
+	}
+	return count
+}
+
+func paragraphFragmentJustificationSpaceCount(fragment paragraphLineFragment, includeTrailing bool) int {
+	count := justificationSpaceCount(fragment.Text.Glyphs)
+	if includeTrailing && paragraphFragmentEndsWithSpace(fragment) {
+		count++
+	}
+	return count
 }

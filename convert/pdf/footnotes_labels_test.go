@@ -79,6 +79,55 @@ func TestApplyPDFPageLocalFootnoteReferenceLabelsKeepsInlineImageFootnoteWidth(t
 	}
 }
 
+func TestApplyPDFPageLocalFootnoteReferenceLabelsRejustifiesChangedLine(t *testing.T) {
+	face, err := builtinFont("serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	prefix, err := shapeText(face, "Alpha ")
+	if err != nil {
+		t.Fatalf("shape prefix: %v", err)
+	}
+	ref, err := shapeText(face, "17")
+	if err != nil {
+		t.Fatalf("shape ref: %v", err)
+	}
+	suffix, err := shapeText(face, " beta")
+	if err != nil {
+		t.Fatalf("shape suffix: %v", err)
+	}
+	newRef, err := shapeText(face, "1")
+	if err != nil {
+		t.Fatalf("shape new ref: %v", err)
+	}
+	fragments := []pdfPageLineFragment{
+		{Text: prefix, Width: shapedWidthPoints(prefix, pdfBaseFontSize), FontSize: pdfBaseFontSize, FontKey: face.Key},
+		{Text: ref, Width: shapedWidthPoints(ref, pdfBaseFontSize), FontSize: pdfBaseFontSize, FontKey: face.Key, FootnoteID: "n1"},
+		{Text: suffix, Width: shapedWidthPoints(suffix, pdfBaseFontSize), FontSize: pdfBaseFontSize, FontKey: face.Key},
+	}
+	line := pdfPageLine{
+		FontSize:         pdfBaseFontSize,
+		Fragments:        fragments,
+		Text:             shapedTextFromPageLineFragments(fragments),
+		ExtraWordSpacing: 0.5,
+	}
+	newNaturalWidth := shapedWidthPoints(prefix, pdfBaseFontSize) + shapedWidthPoints(newRef, pdfBaseFontSize) + shapedWidthPoints(suffix, pdfBaseFontSize)
+	line.BreakStats.AvailableWidth = newNaturalWidth + 1
+	pages := []pdfPage{{Lines: []pdfPageLine{line}}}
+	used := make(map[pdfFontKey]map[uint16]shapedGlyph)
+
+	if err := applyPDFPageLocalFootnoteReferenceLabels(pages, nil, used, nil); err != nil {
+		t.Fatalf("applyPDFPageLocalFootnoteReferenceLabels() error = %v", err)
+	}
+	updated := pages[0].Lines[0]
+	if got := shapedRunes(updated.Text); got != "Alpha 1 beta" {
+		t.Fatalf("line text = %q, want relabeled footnote", got)
+	}
+	if got, want := pdfPageLineDrawnWidth(updated), updated.BreakStats.AvailableWidth; got < want-pdfLineWidthTolerance || got > want+pdfLineWidthTolerance {
+		t.Fatalf("drawn width = %v, available = %v, want relabeled line rejustified", got, want)
+	}
+}
+
 func TestLayoutPDFPagesKeepsFloatPrintedFootnoteReferenceLabels(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {

@@ -75,9 +75,7 @@ func addFragmentLinkAnnotations(page *pdfPage, line paragraphLine, x float64, y 
 		if i != len(line.Fragments)-1 {
 			currentX += line.ExtraCharSpacing
 		}
-		if line.ExtraWordSpacing != 0 && i != len(line.Fragments)-1 && paragraphFragmentEndsWithSpace(fragment) {
-			currentX += line.ExtraWordSpacing
-		}
+		currentX += line.ExtraWordSpacing * float64(paragraphFragmentJustificationSpaceCount(fragment, i != len(line.Fragments)-1))
 	}
 	return added
 }

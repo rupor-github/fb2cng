@@ -48,10 +48,30 @@ func applyPDFPageLocalFootnoteReferenceLabels(
 			}
 			if changed {
 				line.Text = shapedTextFromPageLineFragments(line.Fragments)
+				rejustifyPDFPageLineAfterFragmentRelabel(line)
 			}
 		}
 	}
 	return nil
+}
+
+func rejustifyPDFPageLineAfterFragmentRelabel(line *pdfPageLine) {
+	if line == nil || !pdfPageLineIsJustified(*line) {
+		return
+	}
+	available := pdfPageLineAvailableWidth(*line)
+	if available <= 0 {
+		return
+	}
+	width := pdfPageLineAdvanceWidth(*line)
+	gaps := pdfPageLineJustificationSpaceCount(*line)
+	if gaps <= 0 {
+		line.ExtraWordSpacing = 0
+		line.ExtraCharSpacing = 0
+		return
+	}
+	style := paragraphStyle{FontSize: line.FontSize, Align: textAlignJustify}
+	line.ExtraWordSpacing, line.ExtraCharSpacing = paragraphJustificationSpacing(style, false, width, available, gaps, len(line.Text.Glyphs))
 }
 
 func shapedTextFromPageLineFragments(fragments []pdfPageLineFragment) shapedText {

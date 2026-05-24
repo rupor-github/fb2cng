@@ -41,6 +41,21 @@ func TestPDFPageLineDrawnWidthMatchesFragmentDrawingCursor(t *testing.T) {
 	}
 }
 
+func TestPDFPageLineDrawnWidthAddsWordSpacingInsideFragments(t *testing.T) {
+	line := pdfPageLine{
+		ExtraWordSpacing: 2,
+		Fragments: []pdfPageLineFragment{{Width: 10, Text: shapedText{Glyphs: []shapedGlyph{
+			{GlyphID: 1, Rune: 'A', Width: 500},
+			{GlyphID: 2, Rune: ' ', Width: 300},
+			{GlyphID: 3, Rune: 'B', Width: 500},
+		}}}},
+	}
+
+	if got, want := pdfPageLineDrawnWidth(line), 12.0; got != want {
+		t.Fatalf("drawn width = %v, want internal fragment word spacing %v", got, want)
+	}
+}
+
 func TestPDFPageLineDrawnWidthAddsWordSpacingAfterFragmentSpace(t *testing.T) {
 	line := pdfPageLine{
 		ExtraWordSpacing: 3,
