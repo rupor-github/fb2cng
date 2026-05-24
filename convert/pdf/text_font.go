@@ -57,7 +57,15 @@ func (k pdfMissingGlyphKind) String() string {
 type shapedGlyph struct {
 	GlyphID uint16
 	Rune    rune
+	Source  string
 	Width   int
+	// ClusterStart and ClusterEnd identify the source rune range represented by
+	// this glyph. They are equal to one rune for the current simple shaper, and
+	// will allow ligatures and multi-rune clusters once OpenType shaping lands.
+	ClusterStart int
+	ClusterEnd   int
+	XOffset      int
+	YOffset      int
 	// FontKey overrides the surrounding line font for deliberate built-in companion
 	// glyphs. Keeping this per glyph lets resource usage stay exact and keeps the
 	// path to future font subsetting straightforward.
@@ -139,18 +147,35 @@ func pdfFontFaceWithLogger(
 	return &clone
 }
 
+type pdfShapeOptions struct{}
+
+type pdfTextShaper interface {
+	Shape(text string, opts pdfShapeOptions) (shapedText, error)
+}
+
+type simplePDFTextShaper struct {
+	face *builtinFontFace
+}
+
 func shapeText(face *builtinFontFace, text string) (shapedText, error) {
+	var shaper pdfTextShaper = simplePDFTextShaper{face: face}
+	return shaper.Shape(text, pdfShapeOptions{})
+}
+
+func (s simplePDFTextShaper) Shape(text string, _ pdfShapeOptions) (shapedText, error) {
+	face := s.face
 	if face == nil || face.Font == nil {
 		return shapedText{}, fmt.Errorf("font face is required")
 	}
 
+	runes := []rune(text)
 	shaped := shapedText{
-		Glyphs: make([]shapedGlyph, 0, len(text)),
+		Glyphs: make([]shapedGlyph, 0, len(runes)),
 		Used:   make(map[uint16]shapedGlyph),
 	}
 	var buf sfnt.Buffer
 	ppem := fixed.I(face.UnitsPerEm)
-	for _, r := range text {
+	for cluster, r := range runes {
 		gid, err := face.Font.GlyphIndex(&buf, r)
 		if err != nil {
 			return shapedText{}, fmt.Errorf("map rune %U to glyph: %w", r, err)
@@ -160,10 +185,13 @@ func shapeText(face *builtinFontFace, text string) (shapedText, error) {
 			return shapedText{}, fmt.Errorf("read glyph %d advance: %w", gid, err)
 		}
 		glyph := shapedGlyph{
-			GlyphID: uint16(gid),
-			Rune:    r,
-			Width:   fontUnitsToPDFWidth(advance.Round(), face.UnitsPerEm),
-			FontKey: face.Key,
+			GlyphID:      uint16(gid),
+			Rune:         r,
+			Source:       string(r),
+			Width:        fontUnitsToPDFWidth(advance.Round(), face.UnitsPerEm),
+			ClusterStart: cluster,
+			ClusterEnd:   cluster + 1,
+			FontKey:      face.Key,
 		}
 		if glyph.GlyphID == 0 {
 			fallbackGlyph, ok, err := pdfBuiltinSymbolFallbackGlyph(face, r)
@@ -175,6 +203,7 @@ func shapeText(face *builtinFontFace, text string) (shapedText, error) {
 			} else {
 				glyph = missingPDFGlyph(face, r, glyph.Width)
 			}
+			glyph = pdfGlyphWithSource(glyph, r, cluster, cluster+1)
 		}
 		shaped.Glyphs = append(shaped.Glyphs, glyph)
 		if glyph.GlyphID != 0 {
@@ -182,6 +211,14 @@ func shapeText(face *builtinFontFace, text string) (shapedText, error) {
 		}
 	}
 	return shaped, nil
+}
+
+func pdfGlyphWithSource(glyph shapedGlyph, r rune, start, end int) shapedGlyph {
+	glyph.Rune = r
+	glyph.Source = string(r)
+	glyph.ClusterStart = start
+	glyph.ClusterEnd = end
+	return glyph
 }
 
 func pdfBuiltinSymbolFallbackGlyph(face *builtinFontFace, r rune) (shapedGlyph, bool, error) {

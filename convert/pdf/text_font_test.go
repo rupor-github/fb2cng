@@ -28,12 +28,16 @@ func TestShapeTextAndFontResourceObjects(t *testing.T) {
 	if len(shaped.Glyphs) != len([]rune("Test Ж")) {
 		t.Fatalf("glyph count = %d, want %d", len(shaped.Glyphs), len([]rune("Test Ж")))
 	}
-	for _, glyph := range shaped.Glyphs {
+	for i, glyph := range shaped.Glyphs {
 		if glyph.GlyphID == 0 {
 			t.Fatalf("rune %U mapped to .notdef", glyph.Rune)
 		}
 		if glyph.Width <= 0 {
 			t.Fatalf("glyph %d width = %d, want positive", glyph.GlyphID, glyph.Width)
+		}
+		if glyph.Source != string(glyph.Rune) || glyph.ClusterStart != i || glyph.ClusterEnd != i+1 {
+			t.Fatalf("glyph %d source = %q cluster %d:%d, want %q %d:%d",
+				i, glyph.Source, glyph.ClusterStart, glyph.ClusterEnd, string(glyph.Rune), i, i+1)
 		}
 	}
 
