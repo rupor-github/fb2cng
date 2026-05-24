@@ -25,8 +25,8 @@ func addLinkAnnotations(page *pdfPage, block pdfTextBlock, line paragraphLine, s
 		if start >= end || strings.TrimSpace(link.Href) == "" {
 			continue
 		}
-		x1 := x + glyphAdvanceRange(line.Text.Glyphs, 0, start-lineStart, fontSize)
-		x2 := x + glyphAdvanceRange(line.Text.Glyphs, 0, end-lineStart, fontSize)
+		x1 := x + glyphSourceOffsetX(line.Text.Glyphs, start-lineStart, fontSize, false)
+		x2 := x + glyphSourceOffsetX(line.Text.Glyphs, end-lineStart, fontSize, true)
 		if x2 <= x1 {
 			continue
 		}
@@ -112,14 +112,33 @@ func lineRuneRange(text string, lineText string, searchStart int) (int, int, boo
 	return searchStart, searchStart, false
 }
 
-func glyphAdvanceRange(glyphs []shapedGlyph, start int, end int, fontSize float64) float64 {
-	start = max(start, 0)
-	end = min(max(end, start), len(glyphs))
-	width := 0
-	for _, glyph := range glyphs[start:end] {
-		width += glyph.Width
+func glyphSourceOffsetX(glyphs []shapedGlyph, sourceOffset int, fontSize float64, trailing bool) float64 {
+	if sourceOffset <= 0 {
+		return 0
 	}
-	return float64(width) * fontSize / 1000.0
+	x := 0.0
+	for _, glyph := range glyphs {
+		advance := glyphAdvancePoints(glyph, fontSize)
+		if glyph.ClusterEnd <= glyph.ClusterStart {
+			if sourceOffset <= 0 {
+				return x
+			}
+			x += advance
+			sourceOffset--
+			continue
+		}
+		if sourceOffset <= glyph.ClusterStart {
+			return x
+		}
+		if sourceOffset < glyph.ClusterEnd {
+			if trailing {
+				return x + advance
+			}
+			return x
+		}
+		x += advance
+	}
+	return x
 }
 
 func assignAnnotationObjectIDs(pages []pdfPage, nextObjectID *int) {

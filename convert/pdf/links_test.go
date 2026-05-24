@@ -63,6 +63,29 @@ func TestAddLinkAnnotationsUsesInlineFragments(t *testing.T) {
 	}
 }
 
+func TestAddLinkAnnotationsUsesSourceClustersForLigatures(t *testing.T) {
+	page := &pdfPage{}
+	line := paragraphLine{Text: shapedText{Glyphs: []shapedGlyph{
+		{GlyphID: 7, Rune: '\ufb01', Source: "fi", Width: 500, Advance: 500, HasAdvance: true, ClusterStart: 0, ClusterEnd: 2},
+		{GlyphID: 8, Rune: 'l', Source: "l", Width: 250, Advance: 250, HasAdvance: true, ClusterStart: 2, ClusterEnd: 3},
+		{GlyphID: 9, Rune: 'e', Source: "e", Width: 250, Advance: 250, HasAdvance: true, ClusterStart: 3, ClusterEnd: 4},
+	}}}
+	block := pdfTextBlock{
+		Text:  "file",
+		Links: []pdfTextLink{{Start: 1, End: 2, Href: "#inside-ligature"}},
+	}
+
+	addLinkAnnotations(page, block, line, 0, 100, 200, 10)
+
+	if len(page.Annotations) != 1 {
+		t.Fatalf("annotations = %#v, want one annotation", page.Annotations)
+	}
+	annotation := page.Annotations[0]
+	if annotation.Rect.X1 != 100 || annotation.Rect.X2 != 105 {
+		t.Fatalf("annotation rect = %#v, want whole ligature covered", annotation.Rect)
+	}
+}
+
 func TestInlineRunAnchorCreatesPDFNamedDestination(t *testing.T) {
 	face, err := builtinFont("serif", false, false)
 	if err != nil {
