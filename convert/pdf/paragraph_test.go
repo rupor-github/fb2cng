@@ -292,6 +292,14 @@ func TestParagraphJustificationReservesTerminalVisualOverhang(t *testing.T) {
 	}
 }
 
+func TestParagraphJustificationShrinksOverfullLines(t *testing.T) {
+	style := paragraphStyle{FontSize: 10, Align: textAlignJustify}
+	word, char := paragraphJustificationSpacing(style, false, 104, 100, 4, 20)
+	if word != -1 || char != 0 {
+		t.Fatalf("justification shrink = %v/%v, want negative word spacing", word, char)
+	}
+}
+
 func TestParagraphJustificationUsesCharacterSpacingAfterWordSpacingCap(t *testing.T) {
 	word, char := paragraphJustificationSpacing(paragraphStyle{FontSize: 10, Align: textAlignJustify}, false, 70, 100, 2, 20)
 	if word != 4 {

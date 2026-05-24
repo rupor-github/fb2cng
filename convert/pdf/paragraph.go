@@ -829,10 +829,13 @@ func paragraphFragmentLineVisualRight(line paragraphLine) (float64, bool) {
 }
 
 func paragraphJustificationSpacing(style paragraphStyle, last bool, width, available float64, gaps int, glyphs int) (float64, float64) {
-	if style.Align != textAlignJustify || last || gaps <= 0 || width >= available {
+	if style.Align != textAlignJustify || last || gaps <= 0 || width == available {
 		return 0, 0
 	}
 	remaining := available - width
+	if remaining < 0 {
+		return paragraphJustificationShrink(style, -remaining, gaps, glyphs)
+	}
 	wordCap := max(style.FontSize*0.40, 3.0)
 	wordSpacing := min(remaining/float64(gaps), wordCap)
 	remaining -= wordSpacing * float64(gaps)
@@ -847,6 +850,21 @@ func paragraphJustificationSpacing(style paragraphStyle, last bool, width, avail
 	charCap := min(max(style.FontSize*0.06, 0.25), 0.70)
 	charSpacing := min(remaining/float64(glyphs-1), charCap)
 	return wordSpacing, charSpacing
+}
+
+func paragraphJustificationShrink(style paragraphStyle, overflow float64, gaps int, glyphs int) (float64, float64) {
+	wordCap := max(style.FontSize*0.18, 1.0)
+	wordShrink := min(overflow/float64(gaps), wordCap)
+	overflow -= wordShrink * float64(gaps)
+	if overflow <= 0 || glyphs < 2 {
+		return -wordShrink, 0
+	}
+
+	// Keep negative tracking conservative: it is a last small correction after
+	// spaces have absorbed most of the shrink, not a substitute for better breaks.
+	charCap := min(max(style.FontSize*0.025, 0.12), 0.35)
+	charShrink := min(overflow/float64(glyphs-1), charCap)
+	return -wordShrink, -charShrink
 }
 
 func joinUnits(units []paragraphUnit, hyphenAfter bool) string {
