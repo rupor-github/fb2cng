@@ -93,7 +93,7 @@ func TestPDFPageLineVisualBoundsIgnoreSpaces(t *testing.T) {
 	}
 }
 
-func TestPDFPageLineXAdjustedForVisualRight(t *testing.T) {
+func TestPDFPageLineXAdjustedForVisualRightPreservesLeftEdge(t *testing.T) {
 	line := pdfPageLine{
 		X:        10,
 		FontSize: 10,
@@ -108,8 +108,28 @@ func TestPDFPageLineXAdjustedForVisualRight(t *testing.T) {
 			HasInkBounds: true,
 		}}},
 	}
+	if got, want := pdfPageLineXAdjustedForVisualRight(line, 5), 10.0; got != want {
+		t.Fatalf("adjusted x = %v, want visible left edge preserved at %v", got, want)
+	}
+}
+
+func TestPDFPageLineXAdjustedForVisualRightConsumesLeftSlack(t *testing.T) {
+	line := pdfPageLine{
+		X:        10,
+		FontSize: 10,
+		Text: shapedText{Glyphs: []shapedGlyph{{
+			GlyphID:      1,
+			Rune:         'j',
+			Width:        500,
+			Advance:      500,
+			HasAdvance:   true,
+			InkLeft:      50,
+			InkRight:     550,
+			HasInkBounds: true,
+		}}},
+	}
 	if got, want := pdfPageLineXAdjustedForVisualRight(line, 5), 9.5; got != want {
-		t.Fatalf("adjusted x = %v, want %v", got, want)
+		t.Fatalf("adjusted x = %v, want shift consuming left ink slack %v", got, want)
 	}
 }
 

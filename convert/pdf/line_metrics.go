@@ -72,7 +72,19 @@ func pdfPageLineXAdjustedForVisualRight(line pdfPageLine, available float64) flo
 	if overflow <= 0 {
 		return line.X
 	}
-	return line.X - overflow
+	visualLeft, _, ok := pdfPageLineVisualBounds(line)
+	if !ok {
+		return line.X
+	}
+	// Preserve the intended left edge. A right-edge safety correction may consume
+	// blank left-side ink slack (for example after leading whitespace), but it must
+	// not move visible text to the left of the line origin; justified text needs
+	// both edges to remain stable.
+	leftSlack := max(visualLeft-line.X, 0)
+	if leftSlack <= 0 {
+		return line.X
+	}
+	return line.X - min(overflow, leftSlack)
 }
 
 func pdfPageLineVisualOverflowForAvailable(line pdfPageLine, available float64) float64 {
