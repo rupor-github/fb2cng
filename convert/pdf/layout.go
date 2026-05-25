@@ -34,21 +34,25 @@ type pdfPageLayout struct {
 }
 
 type pdfTextBlockRender struct {
-	block pdfTextBlock
-	style pdfBlockResolvedStyle
-	lines []paragraphLine
+	block   pdfTextBlock
+	style   pdfBlockResolvedStyle
+	lines   []paragraphLine
+	dropcap pdfDropcapLayout
 
-	fontKey pdfFontKey
+	fontKey   pdfFontKey
+	dropcapOK bool
 
 	lineHeight      float64
 	blockLeft       float64
 	blockWidth      float64
+	blockWidthLimit float64
 	backgroundX     float64
 	backgroundWidth float64
 
-	fragmentPage    *pdfPage
-	fragmentTop     float64
-	lineSearchStart int
+	blockSpaceBefore func() float64
+	fragmentPage     *pdfPage
+	fragmentTop      float64
+	lineSearchStart  int
 }
 
 func layoutPDFPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]shapedGlyph, error) {
@@ -280,47 +284,47 @@ func (l *pdfPageLayout) layoutTextBlock(blockIndex int, block pdfTextBlock, styl
 	if dropcapOK {
 		pdfTraceResolvedDropcap(l.styles, blockIndex, block, dropcap, style.Paragraph)
 	}
-	addPDFPageAnchor(l.page, block.ID)
-	l.y -= blockSpaceBefore()
-	backgroundX := blockLeft + style.MarginLeft
-	backgroundWidth := blockBoxWidth(blockWidthLimit, style)
-	l.y -= style.PaddingTop
-	fragmentPage := l.page
-	fragmentTop := l.y + style.PaddingTop
-	lineSearchStart := 0
-	if dropcapOK {
-		lineSearchStart = l.renderTextDropcap(block, style, blockLeft, dropcap)
-	}
 	render := pdfTextBlockRender{
-		block:           block,
-		style:           style,
-		lines:           lines,
-		fontKey:         fontKey,
-		lineHeight:      lineHeight,
-		blockLeft:       blockLeft,
-		blockWidth:      blockWidth,
-		backgroundX:     backgroundX,
-		backgroundWidth: backgroundWidth,
-		fragmentPage:    fragmentPage,
-		fragmentTop:     fragmentTop,
-		lineSearchStart: lineSearchStart,
+		block:            block,
+		style:            style,
+		lines:            lines,
+		dropcap:          dropcap,
+		fontKey:          fontKey,
+		dropcapOK:        dropcapOK,
+		lineHeight:       lineHeight,
+		blockLeft:        blockLeft,
+		blockWidth:       blockWidth,
+		blockWidthLimit:  blockWidthLimit,
+		blockSpaceBefore: blockSpaceBefore,
 	}
-	if err := l.renderTextLines(&render); err != nil {
+	return l.renderTextBlock(&render)
+}
+
+func (l *pdfPageLayout) renderTextBlock(r *pdfTextBlockRender) error {
+	addPDFPageAnchor(l.page, r.block.ID)
+	l.y -= r.blockSpaceBefore()
+	r.backgroundX = r.blockLeft + r.style.MarginLeft
+	r.backgroundWidth = blockBoxWidth(r.blockWidthLimit, r.style)
+	l.y -= r.style.PaddingTop
+	r.fragmentPage = l.page
+	r.fragmentTop = l.y + r.style.PaddingTop
+	if r.dropcapOK {
+		r.lineSearchStart = l.renderTextDropcap(r.block, r.style, r.blockLeft, r.dropcap)
+	}
+	if err := l.renderTextLines(r); err != nil {
 		return err
 	}
-	fragmentPage = render.fragmentPage
-	fragmentTop = render.fragmentTop
-	if dropcapOK && len(lines) == 0 {
+	if r.dropcapOK && len(r.lines) == 0 {
 		l.pageHasText = true
 		l.previousRenderedImage = false
 	}
-	backgroundBottom := l.y - style.PaddingBottom
-	addPDFBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, backgroundBottom)
-	l.y -= style.PaddingBottom + style.SpaceAfter
+	backgroundBottom := l.y - r.style.PaddingBottom
+	addPDFBlockDecoration(r.fragmentPage, r.style, r.backgroundX, r.fragmentTop, r.backgroundWidth, backgroundBottom)
+	l.y -= r.style.PaddingBottom + r.style.SpaceAfter
 	if l.activeDropcap != nil && l.activeDropcap.Page != l.page {
 		l.activeDropcap = nil
 	}
-	if pdfStyleForcesPageBreakAfter(style) && l.pageHasText {
+	if pdfStyleForcesPageBreakAfter(r.style) && l.pageHasText {
 		l.newTextPage()
 	}
 	return nil
