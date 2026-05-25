@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	pdfDefaultCSSRootFontSize   = pdfBaseFontSize * 1.10
-	pdfDefaultCSSRootLineHeight = pdfDefaultCSSRootFontSize * 1.40
+	pdfDefaultCSSRootFontSize   = pdfBaseFontSize * 1.20
+	pdfDefaultCSSRootLineHeight = pdfDefaultCSSRootFontSize * 1.30
 )
 
 func newPDFStyleResolverWithDefaultCSS(t *testing.T, extraCSS ...string) *pdfStyleResolver {

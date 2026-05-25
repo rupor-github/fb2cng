@@ -1,10 +1,10 @@
+/* for PDFs defaults selected to closely match KP3 rendering with proper Amazon */
+/* Bookerly fonts. Our built-in fonts are Noto so let's adjust basic measurements */
+/* slightly by default */
 @media fbc-pdf {
-    /* for PDFs defaults selected to closely match KP3 rendering with proper */
-    /* Amazon Bookerly fonts. Out built-in fonts are Noto so let's */
-    /* adjust basic measurements slightly by default */
     body {
-        line-height: 140%;
-        font-size: 110%;
+        line-height: 130%;
+        font-size: 120%;
     }
 }
 
@@ -395,12 +395,13 @@ td {
     text-indent: 0;
     margin: 0.2em 0;
 }
+
+/* For PDF printed-like footnotes */
 @media fbc-pdf {
     .footnote {
         font-size: 70%;
-        line-height: 1.15;
+        line-height: 115%;
         margin: 0.15em 0;
-        text-indent: 0;
     }
     .footnote-title {
         margin: 0.35em 0 0.15em 0;
@@ -433,18 +434,18 @@ td {
     .footnote table,
     .footnote th,
     .footnote td {
-        line-height: 1.15;
+        line-height: 115%;
     }
     .footnote-title-first,
     .footnote-title-next {
         font-size: 70%;
-        line-height: 1.15;
+        line-height: 115%;
         margin: 0.1em 0;
         text-indent: 0;
     }
     .footnote .link-backlink {
         font-size: 1em;
-        line-height: 1.15;
+        line-height: 115%;
     }
     .footnote-separator {
         border-top: 0.5pt solid;
@@ -482,7 +483,7 @@ td {
     font-size: 0.8em;
     vertical-align: super;
 }
-/* Footnote link decorations, only "content" is supported for Kindle devices */
+/* Footnote link decorations, only "content" is supported for KFX/PDF */
 /* .link-footnote::before { */
 /*     content: "[" */
 /* } */

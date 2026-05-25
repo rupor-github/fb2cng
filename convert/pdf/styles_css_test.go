@@ -165,7 +165,7 @@ func TestPDFStyleResolverVignetteDefaultsMatchDefaultCSS(t *testing.T) {
 func TestPDFStyleResolverPoemDefaultsMatchDefaultCSS(t *testing.T) {
 	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	verse := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockPoem, StyleClasses: pdfStylePoem, ContextClasses: pdfStylePoem})
-	if verse.MarginLeft != pdfDefaultCSSRootFontSize*5 {
+	if math.Abs(verse.MarginLeft-pdfDefaultCSSRootFontSize*5) > 0.001 {
 		t.Fatalf("poem verse margin-left = %v, want default.css poem 3em + verse 2em", verse.MarginLeft)
 	}
 	if !verse.Paragraph.Italic {
