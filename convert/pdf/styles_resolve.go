@@ -65,6 +65,10 @@ func mergePDFStyleOverridesWithFont(base, override, fallback pdfBlockResolvedSty
 	relativeLengthFontSize := pdfRelativeLengthFontSize(base, override, fallback, inheritedFontSize)
 	base.Paragraph = mergePDFParagraphOverridesWithFont(base.Paragraph, override.Paragraph, fallback.Paragraph, inheritedFontSize)
 	base = mergePDFBoxOverrides(base, override, fallback, relativeLengthFontSize)
+	return mergePDFBlockBehaviorOverrides(base, override, fallback)
+}
+
+func mergePDFBlockBehaviorOverrides(base, override, fallback pdfBlockResolvedStyle) pdfBlockResolvedStyle {
 	if override.HasKeepTogether || override.KeepTogether != fallback.KeepTogether {
 		base.KeepTogether = override.KeepTogether
 		base.HasKeepTogether = override.HasKeepTogether
