@@ -33,6 +33,8 @@ type pdfPageLayout struct {
 	titleGroup            pdfTitleVignetteContentGroup
 }
 
+type pdfShapeTextBlockFunc func() ([]paragraphLine, pdfDropcapLayout, bool, error)
+
 type pdfTextBlockRender struct {
 	block   pdfTextBlock
 	style   pdfBlockResolvedStyle
@@ -258,28 +260,12 @@ func (l *pdfPageLayout) layoutTextBlock(blockIndex int, block pdfTextBlock, styl
 	if len(lines) == 0 && !dropcapOK {
 		return nil
 	}
-	if dropcapOK && l.pageHasText && l.printedFootnoteReserve.Enabled() {
-		var dropcapFootnoteRefs []pdfPrintedFootnoteRef
-		for _, line := range lines {
-			dropcapFootnoteRefs = append(dropcapFootnoteRefs, l.printedFootnoteReserve.LineRefs(line)...)
-		}
-		if len(dropcapFootnoteRefs) > 0 {
-			reserve, err := l.printedFootnoteReserve.ReserveWithAdditionalRefs(dropcapFootnoteRefs)
-			if err != nil {
-				return err
-			}
-			reservedBottom := pdfReservedContentBottom(l.contentBottom, l.top, reserve)
-			if dropcap.BottomY < reservedBottom {
-				l.newTextPage()
-				lines, dropcap, dropcapOK, err = shapeTextBlock()
-				if err != nil {
-					return err
-				}
-				if len(lines) == 0 && !dropcapOK {
-					return nil
-				}
-			}
-		}
+	lines, dropcap, dropcapOK, err = l.reserveTextDropcapFootnotes(lines, dropcap, dropcapOK, shapeTextBlock)
+	if err != nil {
+		return err
+	}
+	if len(lines) == 0 && !dropcapOK {
+		return nil
 	}
 	if dropcapOK {
 		pdfTraceResolvedDropcap(l.styles, blockIndex, block, dropcap, style.Paragraph)
@@ -298,6 +284,29 @@ func (l *pdfPageLayout) layoutTextBlock(blockIndex int, block pdfTextBlock, styl
 		blockSpaceBefore: blockSpaceBefore,
 	}
 	return l.renderTextBlock(&render)
+}
+
+func (l *pdfPageLayout) reserveTextDropcapFootnotes(lines []paragraphLine, dropcap pdfDropcapLayout, dropcapOK bool, shapeTextBlock pdfShapeTextBlockFunc) ([]paragraphLine, pdfDropcapLayout, bool, error) {
+	if !dropcapOK || !l.pageHasText || !l.printedFootnoteReserve.Enabled() {
+		return lines, dropcap, dropcapOK, nil
+	}
+	var dropcapFootnoteRefs []pdfPrintedFootnoteRef
+	for _, line := range lines {
+		dropcapFootnoteRefs = append(dropcapFootnoteRefs, l.printedFootnoteReserve.LineRefs(line)...)
+	}
+	if len(dropcapFootnoteRefs) == 0 {
+		return lines, dropcap, dropcapOK, nil
+	}
+	reserve, err := l.printedFootnoteReserve.ReserveWithAdditionalRefs(dropcapFootnoteRefs)
+	if err != nil {
+		return nil, pdfDropcapLayout{}, false, err
+	}
+	reservedBottom := pdfReservedContentBottom(l.contentBottom, l.top, reserve)
+	if dropcap.BottomY >= reservedBottom {
+		return lines, dropcap, dropcapOK, nil
+	}
+	l.newTextPage()
+	return shapeTextBlock()
 }
 
 func (l *pdfPageLayout) renderTextBlock(r *pdfTextBlockRender) error {
