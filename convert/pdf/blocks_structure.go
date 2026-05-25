@@ -21,7 +21,13 @@ func appendBodyIntroBlocks(blocks *[]pdfTextBlock, c *content.Content, body *fb2
 		appendImageBlock(blocks, body.Image, "")
 	}
 	if body.Title != nil && body.Main() {
-		appendVignette(blocks, book, common.VignettePosBookTitleTop, pdfStyleBodyTitle, pdfStyleBodyTitle, true)
+		appendVignetteWithOptions(blocks, pdfVignetteBlockOptions{
+			Book:                       book,
+			Position:                   common.VignettePosBookTitleTop,
+			StyleClasses:               pdfStyleBodyTitle,
+			ContextClasses:             pdfStyleBodyTitle,
+			StripRootHorizontalMargins: true,
+		})
 	}
 	appendTitleBlocksWithOptions(blocks, pdfTitleBlockOptions{
 		Content:         c,
@@ -32,7 +38,13 @@ func appendBodyIntroBlocks(blocks *[]pdfTextBlock, c *content.Content, body *fb2
 		ContextClasses:  strings.TrimSpace(pdfStyleBodyTitle),
 	})
 	if body.Title != nil && body.Main() {
-		appendVignette(blocks, book, common.VignettePosBookTitleBottom, pdfStyleBodyTitle, pdfStyleBodyTitle, true)
+		appendVignetteWithOptions(blocks, pdfVignetteBlockOptions{
+			Book:                       book,
+			Position:                   common.VignettePosBookTitleBottom,
+			StyleClasses:               pdfStyleBodyTitle,
+			ContextClasses:             pdfStyleBodyTitle,
+			StripRootHorizontalMargins: true,
+		})
 	}
 	for i := range body.Epigraphs {
 		appendEpigraphBlocksFull(blocks, c, &body.Epigraphs[i], "", false)
@@ -176,7 +188,12 @@ func appendSectionBlocks(blocks *[]pdfTextBlock, c *content.Content, section *fb
 		appendEndVignette(blocks, book, depth, contextClasses, stripRootHorizontalMargins)
 	}
 	for _, position := range endVignettes.inherited[section] {
-		appendVignette(blocks, book, position, "", contextClasses, stripRootHorizontalMargins)
+		appendVignetteWithOptions(blocks, pdfVignetteBlockOptions{
+			Book:                       book,
+			Position:                   position,
+			ContextClasses:             contextClasses,
+			StripRootHorizontalMargins: stripRootHorizontalMargins,
+		})
 	}
 }
 
@@ -420,25 +437,59 @@ func appendStyledImageWithOptions(blocks *[]pdfTextBlock, opts pdfStyledImageBlo
 func appendTitleVignetteBlock(blocks *[]pdfTextBlock, book *fb2.FictionBook, depth int, top bool, styleClasses string, contextClasses string) {
 	if depth == 1 {
 		if top {
-			appendVignette(blocks, book, common.VignettePosChapterTitleTop, styleClasses, contextClasses, true)
+			appendVignetteWithOptions(blocks, pdfVignetteBlockOptions{
+				Book:                       book,
+				Position:                   common.VignettePosChapterTitleTop,
+				StyleClasses:               styleClasses,
+				ContextClasses:             contextClasses,
+				StripRootHorizontalMargins: true,
+			})
 			return
 		}
-		appendVignette(blocks, book, common.VignettePosChapterTitleBottom, styleClasses, contextClasses, true)
+		appendVignetteWithOptions(blocks, pdfVignetteBlockOptions{
+			Book:                       book,
+			Position:                   common.VignettePosChapterTitleBottom,
+			StyleClasses:               styleClasses,
+			ContextClasses:             contextClasses,
+			StripRootHorizontalMargins: true,
+		})
 		return
 	}
 	if top {
-		appendVignette(blocks, book, common.VignettePosSectionTitleTop, styleClasses, contextClasses, true)
+		appendVignetteWithOptions(blocks, pdfVignetteBlockOptions{
+			Book:                       book,
+			Position:                   common.VignettePosSectionTitleTop,
+			StyleClasses:               styleClasses,
+			ContextClasses:             contextClasses,
+			StripRootHorizontalMargins: true,
+		})
 		return
 	}
-	appendVignette(blocks, book, common.VignettePosSectionTitleBottom, styleClasses, contextClasses, true)
+	appendVignetteWithOptions(blocks, pdfVignetteBlockOptions{
+		Book:                       book,
+		Position:                   common.VignettePosSectionTitleBottom,
+		StyleClasses:               styleClasses,
+		ContextClasses:             contextClasses,
+		StripRootHorizontalMargins: true,
+	})
 }
 
 func appendEndVignette(blocks *[]pdfTextBlock, book *fb2.FictionBook, depth int, contextClasses string, stripRootHorizontalMargins bool) {
 	if depth == 1 {
-		appendVignette(blocks, book, common.VignettePosChapterEnd, "", contextClasses, stripRootHorizontalMargins)
+		appendVignetteWithOptions(blocks, pdfVignetteBlockOptions{
+			Book:                       book,
+			Position:                   common.VignettePosChapterEnd,
+			ContextClasses:             contextClasses,
+			StripRootHorizontalMargins: stripRootHorizontalMargins,
+		})
 		return
 	}
-	appendVignette(blocks, book, common.VignettePosSectionEnd, "", contextClasses, stripRootHorizontalMargins)
+	appendVignetteWithOptions(blocks, pdfVignetteBlockOptions{
+		Book:                       book,
+		Position:                   common.VignettePosSectionEnd,
+		ContextClasses:             contextClasses,
+		StripRootHorizontalMargins: stripRootHorizontalMargins,
+	})
 }
 
 func sectionTitleContainerClasses(depth int) string {
@@ -465,20 +516,28 @@ func titleParagraphPositionStyleClass(headerStyleName string, first bool) string
 	return headerStyleName + "-next"
 }
 
-func appendVignette(blocks *[]pdfTextBlock, book *fb2.FictionBook, position common.VignettePos, styleClasses string, contextClasses string, stripRootHorizontalMargins bool) {
-	if book == nil || !book.IsVignetteEnabled(position) {
+type pdfVignetteBlockOptions struct {
+	Book                       *fb2.FictionBook
+	Position                   common.VignettePos
+	StyleClasses               string
+	ContextClasses             string
+	StripRootHorizontalMargins bool
+}
+
+func appendVignetteWithOptions(blocks *[]pdfTextBlock, opts pdfVignetteBlockOptions) {
+	if opts.Book == nil || !opts.Book.IsVignetteEnabled(opts.Position) {
 		return
 	}
-	imageID := strings.TrimSpace(book.VignetteIDs[position])
+	imageID := strings.TrimSpace(opts.Book.VignetteIDs[opts.Position])
 	if imageID == "" {
 		return
 	}
 	appendStyledImageWithOptions(blocks, pdfStyledImageBlockOptions{
 		ImageID:                    imageID,
 		StyleName:                  pdfStyleImage,
-		StyleClasses:               joinStyleClasses("image-vignette", "vignette", "vignette-"+position.String(), styleClasses),
-		ContextClasses:             contextClasses,
-		StripRootHorizontalMargins: stripRootHorizontalMargins,
+		StyleClasses:               joinStyleClasses("image-vignette", "vignette", "vignette-"+opts.Position.String(), opts.StyleClasses),
+		ContextClasses:             opts.ContextClasses,
+		StripRootHorizontalMargins: opts.StripRootHorizontalMargins,
 	})
 }
 
