@@ -50,7 +50,8 @@ func Generate(ctx context.Context, c *content.Content, outputName string, cfg *c
 		styleTracer = newPDFStyleTracer(c.WorkDir)
 	}
 
-	styleResolver := newPDFStyleResolver(c.Book, log, styleTracer)
+	parsedStylesheets := parsePDFStylesheets(c.Book, log)
+	styleResolver := newPDFStyleResolverFromParsed(parsedStylesheets, log, styleTracer)
 	writePDFParsedStylesheetDebug(c, styleResolver, log)
 
 	data, err := buildPDFDocument(pdfDocumentSpec{
@@ -72,7 +73,7 @@ func Generate(ctx context.Context, c *content.Content, outputName string, cfg *c
 		Images:           c.ImagesIndex,
 		CoverID:          c.CoverID,
 		Hyphenator:       pdfHyphenator(c, log),
-		Fonts:            newPDFFontRegistry(c.Book, log),
+		Fonts:            newPDFFontRegistryFromParsed(parsedStylesheets, log),
 		Debug:            c.Debug,
 		WorkDir:          c.WorkDir,
 	})

@@ -44,18 +44,28 @@ func newPDFFontRegistry(book *fb2.FictionBook, log *zap.Logger) *pdfFontRegistry
 		return registry
 	}
 
-	parser := css.NewParser(log)
-	for i := range book.Stylesheets {
-		stylesheet := &book.Stylesheets[i]
-		if stylesheet.Type != "" && !strings.EqualFold(stylesheet.Type, "text/css") {
-			continue
-		}
-		if strings.TrimSpace(stylesheet.Data) == "" {
-			continue
-		}
-		registry.addStylesheetFonts(stylesheet, parser.Parse([]byte(stylesheet.Data), "pdf font stylesheet"))
-	}
+	registry.addParsedStylesheetFonts(parsePDFStylesheets(book, log))
 	return registry
+}
+
+func newPDFFontRegistryFromParsed(stylesheets []pdfParsedStylesheet, log *zap.Logger) *pdfFontRegistry {
+	if log == nil {
+		log = zap.NewNop()
+	}
+	registry := &pdfFontRegistry{
+		families:            make(map[string]pdfEmbeddedFontFamily),
+		log:                 log.Named("pdf-fonts"),
+		missingGlyphLogSeen: make(map[pdfMissingGlyphLogKey]bool),
+		fontFallbackLogSeen: make(map[pdfFontFallbackLogKey]bool),
+	}
+	registry.addParsedStylesheetFonts(stylesheets)
+	return registry
+}
+
+func (r *pdfFontRegistry) addParsedStylesheetFonts(stylesheets []pdfParsedStylesheet) {
+	for _, stylesheet := range stylesheets {
+		r.addStylesheetFonts(stylesheet.stylesheet, stylesheet.parsed)
+	}
 }
 
 func (r *pdfFontRegistry) addStylesheetFonts(stylesheet *fb2.Stylesheet, parsed *css.Stylesheet) {
