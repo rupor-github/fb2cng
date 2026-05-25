@@ -1,6 +1,16 @@
 package pdf
 
-const pdfPrintedFootnoteContinuationMarkerChevrons = 3
+const (
+	pdfPrintedFootnoteContinuationMarkerChevrons       = 3
+	pdfPrintedFootnoteContinuationMarkerMinStrokeWidth = 0.5
+	pdfPrintedFootnoteContinuationMarkerHeightFactor   = 5.0
+	pdfPrintedFootnoteContinuationMarkerMinHeight      = 3.0
+	pdfPrintedFootnoteContinuationMarkerWidthFactor    = 0.55
+	pdfPrintedFootnoteContinuationMarkerGapFactor      = 2.5
+	pdfPrintedFootnoteContinuationMarkerMinGap         = 1.5
+	pdfPrintedFootnoteContinuationMarkerInsetFactor    = 6.0
+	pdfPrintedFootnoteContinuationMarkerMinInset       = 4.0
+)
 
 type pdfPrintedFootnoteSeparatorMetrics struct {
 	Reserve     float64
@@ -281,12 +291,12 @@ func appendPDFPrintedFootnoteContinuationMarker(page *pdfPage, separator pdfPrin
 	if page == nil || separator.LineWidth <= 0 || separator.Width <= 0 {
 		return
 	}
-	strokeWidth := max(separator.LineWidth, 0.5)
-	chevronHeight := max(strokeWidth*5, 3)
-	chevronWidth := chevronHeight * 0.55
-	gap := max(strokeWidth*2.5, 1.5)
+	strokeWidth := max(separator.LineWidth, pdfPrintedFootnoteContinuationMarkerMinStrokeWidth)
+	chevronHeight := max(strokeWidth*pdfPrintedFootnoteContinuationMarkerHeightFactor, pdfPrintedFootnoteContinuationMarkerMinHeight)
+	chevronWidth := chevronHeight * pdfPrintedFootnoteContinuationMarkerWidthFactor
+	gap := max(strokeWidth*pdfPrintedFootnoteContinuationMarkerGapFactor, pdfPrintedFootnoteContinuationMarkerMinGap)
 	markerWidth := float64(pdfPrintedFootnoteContinuationMarkerChevrons)*chevronWidth + float64(pdfPrintedFootnoteContinuationMarkerChevrons-1)*gap
-	inset := min(max(separator.Width-markerWidth, 0), max(strokeWidth*6, 4))
+	inset := min(max(separator.Width-markerWidth, 0), max(strokeWidth*pdfPrintedFootnoteContinuationMarkerInsetFactor, pdfPrintedFootnoteContinuationMarkerMinInset))
 	startX := separator.X + separator.Width - markerWidth - inset
 	centerY := separatorY + separator.LineWidth/2
 	for i := range pdfPrintedFootnoteContinuationMarkerChevrons {
