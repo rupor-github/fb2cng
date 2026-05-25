@@ -159,166 +159,194 @@ func applyPDFDeferredStyleProperties(style *pdfBlockResolvedStyle, props map[str
 	slices.Sort(names)
 	for _, name := range names {
 		value := props[name]
-		switch strings.ToLower(name) {
-		case "text-indent":
-			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
-				style.Paragraph.FirstLineIndent = points
-				style.Paragraph.FirstLineIndentSpec = pdfCSSRelativeLengthSpec(value)
-				style.Paragraph.HasFirstLineIndent = true
-			}
-		case "text-align":
-			if align, ok := pdfCSSTextAlign(value); ok {
-				style.Paragraph.Align = align
-				style.Paragraph.HasAlign = true
-			}
-		case "margin":
-			applyPDFMarginShorthand(style, value)
-		case "margin-top":
-			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
-				style.SpaceBefore = points
-				style.SpaceBeforeSpec = pdfCSSRelativeLengthSpec(value)
-				style.HasSpaceBefore = true
-			}
-		case "margin-bottom":
-			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
-				style.SpaceAfter = points
-				style.SpaceAfterSpec = pdfCSSRelativeLengthSpec(value)
-				style.HasSpaceAfter = true
-			}
-		case "margin-left":
-			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
-				style.MarginLeft = points
-				style.MarginLeftSpec = pdfCSSRelativeLengthSpec(value)
-			}
-		case "margin-right":
-			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
-				style.MarginRight = points
-				style.MarginRightSpec = pdfCSSRelativeLengthSpec(value)
-			}
-		case "padding":
-			applyPDFPaddingShorthand(style, value)
-		case "padding-top":
-			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
-				style.PaddingTop = points
-				style.PaddingTopSpec = pdfCSSRelativeLengthSpec(value)
-			}
-		case "padding-right":
-			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
-				style.PaddingRight = points
-				style.PaddingRightSpec = pdfCSSRelativeLengthSpec(value)
-			}
-		case "padding-bottom":
-			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
-				style.PaddingBottom = points
-				style.PaddingBottomSpec = pdfCSSRelativeLengthSpec(value)
-			}
-		case "padding-left":
-			if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
-				style.PaddingLeft = points
-				style.PaddingLeftSpec = pdfCSSRelativeLengthSpec(value)
-			}
-		case "width":
-			if cssKeyword(value) == "auto" {
-				style.Width = pdfBlockLength{}
-				style.HasWidth = false
-				continue
-			}
-			if length, ok := pdfCSSBlockLength(value, style.Paragraph.FontSize); ok {
-				style.Width = length
-				style.HasWidth = true
-			}
-		case "min-width":
-			if cssKeyword(value) == "auto" {
-				style.MinWidth = pdfBlockLength{}
-				style.HasMinWidth = false
-				continue
-			}
-			if length, ok := pdfCSSBlockLength(value, style.Paragraph.FontSize); ok {
-				style.MinWidth = length
-				style.HasMinWidth = true
-			}
-		case "max-width":
-			if cssKeyword(value) == "none" {
-				style.MaxWidth = pdfBlockLength{}
-				style.HasMaxWidth = false
-				continue
-			}
-			if length, ok := pdfCSSBlockLength(value, style.Paragraph.FontSize); ok {
-				style.MaxWidth = length
-				style.HasMaxWidth = true
-			}
-		case "page-break-inside", "break-inside":
-			switch {
-			case pdfCSSAvoidPageBreakKeyword(value):
-				style.KeepTogether = true
-				style.HasKeepTogether = true
-			case pdfCSSAutoPageBreakKeyword(value):
-				style.KeepTogether = false
-				style.HasKeepTogether = true
-			}
-		case "page-break-before", "break-before":
-			switch {
-			case pdfCSSForcedPageBreakKeyword(value):
-				style.PageBreakBefore = true
-				style.PageBreakBeforeMode = pdfPageBreakAlways
-				style.HasPageBreakBefore = true
-			case pdfCSSAvoidPageBreakKeyword(value):
-				style.PageBreakBefore = false
-				style.PageBreakBeforeMode = pdfPageBreakAvoid
-				style.HasPageBreakBefore = true
-			case pdfCSSAutoPageBreakKeyword(value):
-				style.PageBreakBefore = false
-				style.PageBreakBeforeMode = pdfPageBreakAuto
-				style.HasPageBreakBefore = true
-			}
-		case "page-break-after", "break-after":
-			switch {
-			case pdfCSSForcedPageBreakKeyword(value):
-				pdfClearPageBreakAfterAvoidKeep(style)
-				style.PageBreakAfter = true
-				style.PageBreakAfterMode = pdfPageBreakAlways
-				style.HasPageBreakAfter = true
-			case pdfCSSAutoPageBreakKeyword(value):
-				pdfClearPageBreakAfterAvoidKeep(style)
-				style.PageBreakAfter = false
-				style.PageBreakAfterMode = pdfPageBreakAuto
-				style.HasPageBreakAfter = true
-			case pdfCSSAvoidPageBreakKeyword(value):
-				style.PageBreakAfter = false
-				style.PageBreakAfterMode = pdfPageBreakAvoid
-				style.HasPageBreakAfter = true
-				if style.KeepWithNextLines == 0 {
-					style.KeepWithNextLines = pdfSingleKeepLine
-				}
-			}
-		case "hyphens", "-webkit-hyphens":
-			if hyphenation, ok := pdfCSSHyphenation(value); ok {
-				style.Paragraph.Hyphenation = hyphenation
-				style.Paragraph.HasHyphenation = true
-			}
-		case "display":
-			switch cssKeyword(value) {
-			case "none":
-				style.Hidden = true
-				style.HasHidden = true
-			case "block", "inline", "inline-block", "list-item", "table", "table-row", "table-cell":
-				style.Hidden = false
-				style.HasHidden = true
-			}
-		case "orphans":
-			if count, ok := pdfCSSPositiveInt(value); ok {
-				style.Orphans = count
-			}
-		case "widows":
-			if count, ok := pdfCSSPositiveInt(value); ok {
-				style.Widows = count
-			}
-		case "float", "clear":
-			// Native PDF does not implement generic CSS floats. The normalized
-			// dropcap pattern uses float:left, but that geometry is handled by
-			// dropcap-specific layout code instead of the generic CSS cascade.
+		property := strings.ToLower(name)
+		switch {
+		case applyPDFDeferredTextStyleProperty(style, property, value):
+		case applyPDFBoxStyleProperty(style, property, value):
+		case applyPDFPaginationStyleProperty(style, property, value):
 		}
 	}
+}
+
+func applyPDFDeferredTextStyleProperty(style *pdfBlockResolvedStyle, property string, value css.Value) bool {
+	switch property {
+	case "text-indent":
+		if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
+			style.Paragraph.FirstLineIndent = points
+			style.Paragraph.FirstLineIndentSpec = pdfCSSRelativeLengthSpec(value)
+			style.Paragraph.HasFirstLineIndent = true
+		}
+	case "text-align":
+		if align, ok := pdfCSSTextAlign(value); ok {
+			style.Paragraph.Align = align
+			style.Paragraph.HasAlign = true
+		}
+	case "hyphens", "-webkit-hyphens":
+		if hyphenation, ok := pdfCSSHyphenation(value); ok {
+			style.Paragraph.Hyphenation = hyphenation
+			style.Paragraph.HasHyphenation = true
+		}
+	case "display":
+		switch cssKeyword(value) {
+		case "none":
+			style.Hidden = true
+			style.HasHidden = true
+		case "block", "inline", "inline-block", "list-item", "table", "table-row", "table-cell":
+			style.Hidden = false
+			style.HasHidden = true
+		}
+	case "orphans":
+		if count, ok := pdfCSSPositiveInt(value); ok {
+			style.Orphans = count
+		}
+	case "widows":
+		if count, ok := pdfCSSPositiveInt(value); ok {
+			style.Widows = count
+		}
+	case "float", "clear":
+		// Native PDF does not implement generic CSS floats. The normalized
+		// dropcap pattern uses float:left, but that geometry is handled by
+		// dropcap-specific layout code instead of the generic CSS cascade.
+	default:
+		return false
+	}
+	return true
+}
+
+func applyPDFBoxStyleProperty(style *pdfBlockResolvedStyle, property string, value css.Value) bool {
+	switch property {
+	case "margin":
+		applyPDFMarginShorthand(style, value)
+	case "margin-top":
+		if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
+			style.SpaceBefore = points
+			style.SpaceBeforeSpec = pdfCSSRelativeLengthSpec(value)
+			style.HasSpaceBefore = true
+		}
+	case "margin-bottom":
+		if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
+			style.SpaceAfter = points
+			style.SpaceAfterSpec = pdfCSSRelativeLengthSpec(value)
+			style.HasSpaceAfter = true
+		}
+	case "margin-left":
+		if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
+			style.MarginLeft = points
+			style.MarginLeftSpec = pdfCSSRelativeLengthSpec(value)
+		}
+	case "margin-right":
+		if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
+			style.MarginRight = points
+			style.MarginRightSpec = pdfCSSRelativeLengthSpec(value)
+		}
+	case "padding":
+		applyPDFPaddingShorthand(style, value)
+	case "padding-top":
+		if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
+			style.PaddingTop = points
+			style.PaddingTopSpec = pdfCSSRelativeLengthSpec(value)
+		}
+	case "padding-right":
+		if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
+			style.PaddingRight = points
+			style.PaddingRightSpec = pdfCSSRelativeLengthSpec(value)
+		}
+	case "padding-bottom":
+		if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
+			style.PaddingBottom = points
+			style.PaddingBottomSpec = pdfCSSRelativeLengthSpec(value)
+		}
+	case "padding-left":
+		if points, ok := pdfCSSLengthPoints(value, style.Paragraph.FontSize); ok {
+			style.PaddingLeft = points
+			style.PaddingLeftSpec = pdfCSSRelativeLengthSpec(value)
+		}
+	case "width":
+		if cssKeyword(value) == "auto" {
+			style.Width = pdfBlockLength{}
+			style.HasWidth = false
+			return true
+		}
+		if length, ok := pdfCSSBlockLength(value, style.Paragraph.FontSize); ok {
+			style.Width = length
+			style.HasWidth = true
+		}
+	case "min-width":
+		if cssKeyword(value) == "auto" {
+			style.MinWidth = pdfBlockLength{}
+			style.HasMinWidth = false
+			return true
+		}
+		if length, ok := pdfCSSBlockLength(value, style.Paragraph.FontSize); ok {
+			style.MinWidth = length
+			style.HasMinWidth = true
+		}
+	case "max-width":
+		if cssKeyword(value) == "none" {
+			style.MaxWidth = pdfBlockLength{}
+			style.HasMaxWidth = false
+			return true
+		}
+		if length, ok := pdfCSSBlockLength(value, style.Paragraph.FontSize); ok {
+			style.MaxWidth = length
+			style.HasMaxWidth = true
+		}
+	default:
+		return false
+	}
+	return true
+}
+
+func applyPDFPaginationStyleProperty(style *pdfBlockResolvedStyle, property string, value css.Value) bool {
+	switch property {
+	case "page-break-inside", "break-inside":
+		switch {
+		case pdfCSSAvoidPageBreakKeyword(value):
+			style.KeepTogether = true
+			style.HasKeepTogether = true
+		case pdfCSSAutoPageBreakKeyword(value):
+			style.KeepTogether = false
+			style.HasKeepTogether = true
+		}
+	case "page-break-before", "break-before":
+		switch {
+		case pdfCSSForcedPageBreakKeyword(value):
+			style.PageBreakBefore = true
+			style.PageBreakBeforeMode = pdfPageBreakAlways
+			style.HasPageBreakBefore = true
+		case pdfCSSAvoidPageBreakKeyword(value):
+			style.PageBreakBefore = false
+			style.PageBreakBeforeMode = pdfPageBreakAvoid
+			style.HasPageBreakBefore = true
+		case pdfCSSAutoPageBreakKeyword(value):
+			style.PageBreakBefore = false
+			style.PageBreakBeforeMode = pdfPageBreakAuto
+			style.HasPageBreakBefore = true
+		}
+	case "page-break-after", "break-after":
+		switch {
+		case pdfCSSForcedPageBreakKeyword(value):
+			pdfClearPageBreakAfterAvoidKeep(style)
+			style.PageBreakAfter = true
+			style.PageBreakAfterMode = pdfPageBreakAlways
+			style.HasPageBreakAfter = true
+		case pdfCSSAutoPageBreakKeyword(value):
+			pdfClearPageBreakAfterAvoidKeep(style)
+			style.PageBreakAfter = false
+			style.PageBreakAfterMode = pdfPageBreakAuto
+			style.HasPageBreakAfter = true
+		case pdfCSSAvoidPageBreakKeyword(value):
+			style.PageBreakAfter = false
+			style.PageBreakAfterMode = pdfPageBreakAvoid
+			style.HasPageBreakAfter = true
+			if style.KeepWithNextLines == 0 {
+				style.KeepWithNextLines = pdfSingleKeepLine
+			}
+		}
+	default:
+		return false
+	}
+	return true
 }
 
 func applyPDFBorderShorthand(style *pdfBlockResolvedStyle, value css.Value) {
