@@ -214,37 +214,9 @@ func (l *pdfPageLayout) layoutTextBlock(blockIndex int, block pdfTextBlock, styl
 	runs := inlineRunsWithContext(block.Runs, inlineRunContextClassesForBlock(block))
 	lineHeight := pdfEffectiveParagraphLineHeight(style.Paragraph)
 	blockSpaceBefore := func() float64 { return pdfEffectiveBlockSpaceBefore(style, l.pageHasText, l.y, l.top) }
-	firstBaselineY := func() float64 {
-		baseline := l.y - blockSpaceBefore() - style.PaddingTop
-		if !l.pageHasText || l.previousRenderedImage {
-			baseline -= style.Paragraph.FontSize
-		}
-		return baseline
-	}
+	firstBaselineY := func() float64 { return l.textBlockFirstBaselineY(style, blockSpaceBefore) }
 	shapeTextBlock := func() ([]paragraphLine, pdfDropcapLayout, bool, error) {
-		baseline := firstBaselineY()
-		if pdfDropcapExpiredForLine(l.activeDropcap, l.page, baseline, lineHeight, style.Paragraph.FontSize) {
-			l.activeDropcap = nil
-		}
-		shape := pdfActiveDropcapShape(l.activeDropcap, l.page, block, baseline, style.Paragraph)
-		layoutText := block.Text
-		layoutRuns := runs
-		var dropcap pdfDropcapLayout
-		dropcapOK := false
-		if pdfBlockStartsDropcap(block) {
-			var err error
-			dropcap, dropcapOK, err = buildPDFDropcapLayout(l.doc, l.styles, block, style.Paragraph, face, runs, blockWidth, firstBaselineY())
-			if err != nil {
-				return nil, pdfDropcapLayout{}, false, err
-			}
-			if dropcapOK {
-				shape = repeatPDFDropcapInset(dropcap.ExclusionWidth, dropcap.Lines)
-				layoutText = dropcap.BodyText
-				layoutRuns = dropcap.BodyRuns
-			}
-		}
-		lines, err := layoutInlineWithShape(l.doc, l.doc.Fonts, l.styles, face, layoutText, layoutRuns, style.Paragraph, blockWidth, shape)
-		return lines, dropcap, dropcapOK, err
+		return l.shapeTextBlock(block, style, face, runs, blockWidth, lineHeight, firstBaselineY)
 	}
 	lines, dropcap, dropcapOK, err := shapeTextBlock()
 	if err != nil {
@@ -445,6 +417,48 @@ func (l *pdfPageLayout) layoutTextBlock(blockIndex int, block pdfTextBlock, styl
 		l.newTextPage()
 	}
 	return nil
+}
+
+func (l *pdfPageLayout) textBlockFirstBaselineY(style pdfBlockResolvedStyle, blockSpaceBefore func() float64) float64 {
+	baseline := l.y - blockSpaceBefore() - style.PaddingTop
+	if !l.pageHasText || l.previousRenderedImage {
+		baseline -= style.Paragraph.FontSize
+	}
+	return baseline
+}
+
+func (l *pdfPageLayout) shapeTextBlock(
+	block pdfTextBlock,
+	style pdfBlockResolvedStyle,
+	face *builtinFontFace,
+	runs []pdfInlineRun,
+	blockWidth float64,
+	lineHeight float64,
+	firstBaselineY func() float64,
+) ([]paragraphLine, pdfDropcapLayout, bool, error) {
+	baseline := firstBaselineY()
+	if pdfDropcapExpiredForLine(l.activeDropcap, l.page, baseline, lineHeight, style.Paragraph.FontSize) {
+		l.activeDropcap = nil
+	}
+	shape := pdfActiveDropcapShape(l.activeDropcap, l.page, block, baseline, style.Paragraph)
+	layoutText := block.Text
+	layoutRuns := runs
+	var dropcap pdfDropcapLayout
+	dropcapOK := false
+	if pdfBlockStartsDropcap(block) {
+		var err error
+		dropcap, dropcapOK, err = buildPDFDropcapLayout(l.doc, l.styles, block, style.Paragraph, face, runs, blockWidth, firstBaselineY())
+		if err != nil {
+			return nil, pdfDropcapLayout{}, false, err
+		}
+		if dropcapOK {
+			shape = repeatPDFDropcapInset(dropcap.ExclusionWidth, dropcap.Lines)
+			layoutText = dropcap.BodyText
+			layoutRuns = dropcap.BodyRuns
+		}
+	}
+	lines, err := layoutInlineWithShape(l.doc, l.doc.Fonts, l.styles, face, layoutText, layoutRuns, style.Paragraph, blockWidth, shape)
+	return lines, dropcap, dropcapOK, err
 }
 
 func (l *pdfPageLayout) layoutTableBlock(block pdfTextBlock, style pdfBlockResolvedStyle, blockLeft, blockWidthLimit float64) error {
