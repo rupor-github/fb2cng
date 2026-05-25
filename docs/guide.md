@@ -24,6 +24,7 @@
   - [Custom Stylesheets](#custom-stylesheets)
   - [Image Processing](#image-processing)
   - [Cover Image Configuration](#cover-image-configuration)
+  - [PDF Generation](#pdf-generation)
   - [Footnotes Processing](#footnotes-processing)
   - [Device Table of Contents](#device-table-of-contents)
   - [Table of Contents Page](#table-of-contents-page)
@@ -53,7 +54,7 @@
 
 ## Introduction
 
-**fb2cng** (FictionBook converter - Next Generation) is a complete rewrite of [fb2converter](https://github.com/rupor-github/fb2converter), designed to convert FB2 (FictionBook) files to various e-book formats including EPUB2, EPUB3, KEPUB, and KFX.
+**fb2cng** (FictionBook converter - Next Generation) is a complete rewrite of [fb2converter](https://github.com/rupor-github/fb2converter), designed to convert FB2 (FictionBook) files to various e-book formats including EPUB2, EPUB3, KEPUB, KFX/AZW8, and PDF.
 
 ### Supported Output Formats
 
@@ -62,6 +63,7 @@
 - **KEPUB** - EPUB2 optimized for Kobo devices
 - **KFX** - Kindle format X (with `.kfx` extension)
 - **AZW8** - Kindle format X with `.azw8` extension (same as KFX, different extension, added for convenience - Kindle Previewer 3 can open azw8 files directly and Kindle devices handle them just fine)
+- **PDF** - Native fixed-page PDF 1.4 output with embedded fonts, outlines, links, images, and printed page footnotes
 
 ### Key Features
 
@@ -70,7 +72,8 @@
 - Template-based file naming and metadata formatting
 - Custom CSS stylesheet support with font embedding
 - Image optimization and cover generation
-- Footnotes processing with floating/popup support
+- Footnotes processing with floating/popup support and PDF printed footnotes
+- Native PDF generation with embedded fonts and fixed-page layout
 - Automatic vignettes and dropcaps styling
 - Automatic hyphenation support
 - Debug reporting for troubleshooting
@@ -100,7 +103,7 @@ This converts `book.fb2` to EPUB2 format in the current directory.
 fbc convert --to epub3 book.fb2
 ```
 
-Supported formats: `epub2`, `epub3`, `kepub`, `kfx`, `azw8`
+Supported formats: `epub2`, `epub3`, `kepub`, `kfx`, `azw8`, `pdf`
 
 ### Convert with output directory
 
@@ -137,7 +140,7 @@ fbc convert [options] SOURCE [DESTINATION]
 
 #### Convert Options
 
-- `--to TYPE` - Output format: `epub2` (default), `epub3`, `kepub`, `kfx`, `azw8`
+- `--to TYPE` - Output format: `epub2` (default), `epub3`, `kepub`, `kfx`, `azw8`, `pdf`
 - `--ebook, --eb` - For Kindle formats, mark output as ebook (EBOK) instead of personal document (PDOC)
 - `--asin ASIN` - For Kindle formats (`kfx`, `azw8`), set ASIN used in metadata (10 chars, `A-Z0-9`; for books it's often the ISBN-10)
 - `--nodirs, --nd` - Don't preserve input directory structure in output
@@ -194,6 +197,16 @@ fbc convert --ow --to kepub books.zip ~/Kobo/
 **Convert to Kindle with explicit ASIN:**
 ```bash
 fbc convert --to kfx --asin B012345678 book.fb2
+```
+
+**Convert to PDF:**
+```bash
+fbc convert --to pdf book.fb2
+```
+
+**Convert to PDF with a custom configuration:**
+```bash
+fbc -c pdf.yaml convert --to pdf book.fb2
 ```
 
 **Convert with custom configuration:**
@@ -264,7 +277,7 @@ document:
 - `.Series` - Array with `.Name` and `.Number`
 - `.Language` - Language code
 - `.Date` - Publication date
-- `.Format` - Output format (epub2, epub3, etc.)
+- `.Format` - Output format (`epub2`, `epub3`, `kepub`, `kfx`, `azw8`, `pdf`)
 - `.SourceFile` - Original filename (no path/extension)
 - `.BookID` - Book UUID
 - `.Genres` - Array of genre names
@@ -351,7 +364,10 @@ The built-in stylesheet ([`convert/default.css`](../convert/default.css)) provid
 - `.date` - Date elements
 
 **Footnotes:**
-- `.footnote`, `.footnote-title` - Footnote styling
+- `.footnote` - Footnote body/content styling
+- `.footnote-title` - Footnote title styling
+- `.footnote-title-first`, `.footnote-title-next` - Split/generated footnote title paragraph parts
+- `.footnote-separator` - Separator line before PDF printed page footnotes
 - `.footnote-more` - Multi-paragraph indicator
 - `.link-footnote` - Superscript footnote references
 - `.link-backlink` - Return links from footnotes
@@ -368,7 +384,31 @@ The built-in stylesheet ([`convert/default.css`](../convert/default.css)) provid
 **Media Queries:**
 - `@media amzn-mobi` - Kindle MOBI-specific styles
 - `@media amzn-kf8` - Kindle KF8-specific styles
-- `@media amzn-et` - Kindle KFX-specific styles
+- `@media amzn-et` - Kindle KFX / Enhanced Typesetting-specific styles
+- `@media fbc-pdf` - fb2cng native PDF-specific styles
+
+Media query conditions can be combined with `and`, `not`, and the generic `all` / `screen` media types. Examples:
+
+```css
+@media fbc-pdf {
+    body {
+        font-size: 120%;
+        line-height: 130%;
+    }
+}
+
+@media not fbc-pdf {
+    .screen-only-tweak {
+        margin-left: -8pt;
+    }
+}
+
+@media amzn-kf8 and not amzn-et {
+    p {
+        margin: 0 -8pt 0.3em -8pt;
+    }
+}
+```
 
 #### Section Splitting via CSS
 
@@ -490,9 +530,9 @@ body {
 }
 ```
 
-**Font Files:** Place fonts in the same directory as the CSS file. They will be automatically embedded in the EPUB.
+**Font Files:** Place fonts in the same directory as the CSS file. They will be automatically embedded in output formats that support font embedding, including EPUB/KFX and PDF.
 
-**Supported Formats:** TTF, OTF, WOFF, WOFF2
+**Supported Font Files:** Use regular TrueType/OpenType font files (`.ttf`, `.otf`) for best cross-format behavior. PDF output requires raw font files that the native PDF renderer can parse; see [PDF Font Embedding Limits](#pdf-font-embedding-limits) for details.
 
 #### Body Font-Family (KFX special handling)
 
@@ -538,14 +578,14 @@ src: url("/usr/share/fonts/x.ttf");  /* REJECTED — absolute path */
 ```
 A warning is logged and the `url()` reference is dropped from the output.
 
-**Data URLs** - Kept as-is (already embedded):
+**Data URLs** - Kept as-is for formats/readers that can consume them directly:
 ```css
-src: url("data:font/woff2;base64,...");  /* No processing needed */
+src: url("data:font/ttf;base64,...");  /* Already embedded in CSS */
 ```
 
 **HTTP(S) URLs** - Not supported (warning logged):
 ```css
-src: url("https://example.com/font.woff");  /* Cannot be embedded */
+src: url("https://example.com/font.ttf");  /* Cannot be embedded */
 ```
 
 **Note:** Resources are organized in EPUB by type:
@@ -574,10 +614,11 @@ document:
     # JPEG quality 40-100%
     jpeg_quality_level: 75
     
-    # Reader screen size so images could be adjusted properly
+    # Reader screen profile used for image sizing and PDF page size
     screen:
       width: 1264
       height: 1680
+      dpi: 300
 ```
 
 **Image Options:**
@@ -612,10 +653,14 @@ document:
   - For Kindle output this also affects PNG/GIF-to-JPEG conversion and SVG rasterization, not just optimized source JPEGs.
   - A practical range is usually `70-85`; use higher values for image-heavy books, comics, or covers where artifacts are more noticeable.
 
-- **`screen.width` / `screen.height`** - Target device screen size used for image-related decisions.
-  - Affects cover resizing.
+- **`screen.width` / `screen.height` / `screen.dpi`** - Target device screen profile.
+  - `width` and `height` are device pixels.
+  - `dpi` is dots per inch; the default is `300`.
+  - The screen profile is available to all output formats and is used anywhere the converter needs to translate between device pixels, physical size, and output layout.
+  - Affects cover resizing and image sizing decisions.
   - Used when rasterizing SVG images for Kindle output.
-  - Set these to your main target device if you care about Kindle sizing behavior; otherwise the defaults are a reasonable general-purpose baseline.
+  - Especially important for PDF: `width`, `height`, and `dpi` define the fixed PDF page size using `points = pixels * 72 / dpi`.
+  - Set these values to your main target device/profile when you care about exact sizing; otherwise the defaults are a reasonable general-purpose baseline.
 
 **Format Notes:**
 
@@ -654,52 +699,292 @@ document:
   - **`keepAR`** - Resize only when the cover is shorter than the target height, preserving aspect ratio. Use this when you want to avoid distortion but still prevent undersized covers.
   - **`stretch`** - Force the cover to exactly match the configured width and height. Use this when you need a predictable full-screen cover and do not mind possible distortion.
 
+### PDF Generation
+
+fb2cng can generate native PDF directly:
+
+```bash
+fbc convert --to pdf book.fb2
+```
+
+PDF output is a fixed-page format. Unlike EPUB/KFX, the converter performs pagination itself, embeds font resources, writes PDF outlines/navigation, creates internal links, and lays out images and printed footnotes before writing the final file.
+
+**Main PDF characteristics:**
+
+- Writes PDF 1.4 for broad reader/device compatibility.
+- Page size is derived from `document.images.screen.width`, `height`, and `dpi`.
+- Text is selectable/searchable and rendered with embedded Unicode fonts.
+- Built-in fonts cover common Latin/Cyrillic/European text plus symbol/math fallback fonts.
+- Custom `@font-face` fonts from the stylesheet can be embedded.
+- TrueType fonts are subset when allowed by the font embedding flags; restricted fonts or CFF/CFF2 fonts may be embedded whole instead.
+- Internal links, table of contents outlines, cover images, block images, tables, poems, epigraphs, drop caps, and vignettes are supported.
+- Complex Arabic/Indic shaping, CJK typography, and bidi layout are not currently supported.
+
+#### PDF Page Size
+
+PDF page size is calculated from the configured screen size:
+
+```yaml
+document:
+  images:
+    screen:
+      width: 1264
+      height: 1680
+      dpi: 300
+```
+
+The formula is:
+
+```text
+PDF points = pixels * 72 / dpi
+```
+
+With the default values this gives approximately `303.36 × 403.2` PDF points. Increase `width`/`height` or lower `dpi` for larger pages; decrease them or raise `dpi` for smaller pages. The same `screen` block is also used by image processing, so keep it aligned with the device/profile you are targeting.
+
+#### PDF Styling
+
+PDF uses the same `stylesheet_path` mechanism as other formats. A custom stylesheet replaces the default stylesheet entirely, so if you customize PDF output, start by copying [`convert/default.css`](../convert/default.css) and editing it.
+
+Use `@media fbc-pdf` for PDF-only stylesheet rules. In the PDF renderer, `fbc-pdf` matches; the renderer also evaluates styles in an Enhanced Typesetting-like context, so `amzn-kf8` and `amzn-et` media queries match as well, while `amzn-mobi` does not. Put PDF-specific overrides in `@media fbc-pdf` (or combine it with other conditions) when you need rules that must apply only to native PDF output.
+
+Commonly useful CSS properties for PDF include:
+
+- `font-family`, `font-size`, `font-style`, `font-weight`, `line-height`, `letter-spacing`
+- `color`, `background-color`, `text-decoration`
+- `text-align`, `text-indent`, `white-space`, `hyphens`
+- `margin`, `padding`, `width`, `min-width`, `max-width`
+- `border`, `border-width`, `border-style`, `border-color`
+- `page-break-before`, `page-break-after`, `page-break-inside`
+- `orphans`, `widows`
+
+PDF also understands generated pseudo-content used by the default stylesheet, such as footnote reference decorations on `.link-footnote::before` / `.link-footnote::after`.
+
+The default stylesheet also contains PDF-specific selectors inside `@media fbc-pdf`. These are useful when customizing printed footnotes:
+
+- `.footnote` - printed footnote text size, line-height, and compact spacing.
+- `.footnote-title` - printed footnote title/label style; the default keeps it with following content using `page-break-after: avoid`.
+- `.footnote-title-first`, `.footnote-title-next` - title fragments used when an FB2 footnote title contains several title paragraphs.
+- `.footnote .link-backlink` - return-link styling when generated return links are present in default-mode PDF footnote bodies.
+- `.footnote-separator` - separator rule inserted above the printed footnote area in PDF `float` / `floatRenumbered` modes. The default uses a thin top border and small vertical margins.
+
+Example override:
+
+```css
+@media fbc-pdf {
+    .footnote-separator {
+        border-top: 0.75pt solid #666;
+        margin-top: 0.3em;
+        margin-bottom: 0.2em;
+        width: 35%;
+    }
+}
+```
+
+Example PDF-focused configuration:
+
+```yaml
+document:
+  stylesheet_path: "pdf.css"
+  images:
+    screen:
+      width: 1264
+      height: 1680
+      dpi: 300
+  footnotes:
+    mode: float
+```
+
+Example `pdf.css` fragment:
+
+```css
+body {
+    font-family: "PT Serif", serif;
+}
+
+@media fbc-pdf {
+    body {
+        font-size: 10.5pt;
+        line-height: 1.2;
+    }
+
+    p {
+        text-align: justify;
+        text-indent: 1.2em;
+        hyphens: auto;
+    }
+}
+
+@font-face {
+    font-family: "PT Serif";
+    src: url("PTSerif-Regular.ttf");
+}
+```
+
+#### PDF Font Embedding Limits
+
+PDF font handling is stricter than EPUB/KFX because fb2cng must parse the font, shape the text, build PDF font dictionaries, and write the embedded font program itself.
+
+**How PDF fonts are selected:**
+
+- PDF reads `@font-face` declarations from the parsed stylesheet and matches them by `font-family`, `font-style`, and `font-weight`.
+- Keep `@font-face` declarations at the top stylesheet level for predictable PDF embedding. Use `@media fbc-pdf` for rules that apply the font, not for hiding the font declaration itself.
+- `src: url(...)` must resolve to an FB2 binary object (`url("#font-id")`) or to a file relative to the stylesheet.
+- `local(...)` sources are ignored.
+- If `src` contains several `url(...)` entries, the PDF loader uses the first resolvable URL.
+- `format(...)` hints are not used; the actual font data is parsed and classified.
+- The PDF renderer uses only family + bold + italic. Numeric weight is folded to regular/bold (`600` and above is bold), and variable font axes or optical-size settings are not applied.
+
+**Supported PDF font programs:**
+
+- **TrueType outlines** (`glyf` table, usually `.ttf`) are embedded as PDF Type0 / CIDFontType2 fonts with `Identity-H` encoding.
+- TrueType fonts are subset to the used glyphs when the font permits subsetting.
+- If the font has the OpenType `fsType` no-subsetting flag, fb2cng embeds the whole font instead of a subset.
+- **OpenType CFF/CFF2 outlines** (usually `.otf`) can be embedded as PDF Type0 / CIDFontType0 fonts with `FontFile3` / `OpenType` data.
+- CFF/CFF2 subsetting is not implemented, so these fonts are embedded whole. This can significantly increase PDF size.
+- CFF2 embedding is supported by the writer, but compatibility has not been validated across every old PDF reader/device.
+
+**Unsupported or limited cases:**
+
+- Compressed browser font container formats are not decoded by the native PDF font loader. Use raw `.ttf` or `.otf` files for PDF.
+- Type 1 fonts, bitmap-only fonts, and fonts without TrueType/CFF/CFF2 outlines are skipped for PDF and the renderer falls back to built-in fonts.
+- Color emoji/color font tables are not rendered as color glyphs. Use monochrome outline fonts for reliable PDF output.
+- Synthetic bold or synthetic italic is not generated. Provide separate `@font-face` entries for regular, bold, italic, and bold-italic if you need exact variants.
+- If a requested family or variant is missing, fb2cng logs a warning and falls back to the closest embedded variant or to a built-in font.
+- Built-in fallback covers many symbols/math characters, but it is not a full CJK/emoji fallback system. If your book needs a script outside the built-in coverage, provide a font that covers that script.
+- Complex Arabic/Indic shaping, bidirectional layout, vertical writing, and CJK typography are outside the current PDF renderer's scope.
+- OpenType shaping is used for supported left-to-right runs in a font that covers the whole run. Advanced CSS font feature controls are not exposed.
+
+**Embedding rights and diagnostics:**
+
+fb2cng reads the font `OS/2 fsType` embedding flags and reports them in debug/log output. The no-subsetting flag changes behavior as described above; other restrictive flags are reported so you can verify that you are allowed to embed the font. The converter cannot grant font embedding rights — use fonts whose license permits your intended output.
+
+When troubleshooting PDF fonts, run with `--debug`. The report can include parsed stylesheet information, font fallback warnings, missing glyph diagnostics, and PDF font resource details.
+
+#### PDF Footnotes
+
+PDF has special behavior for `document.footnotes.mode`:
+
+- `default` keeps footnotes as ordinary linked document sections. The footnote body can contain generated return links formatted by `backlink_template`.
+- `float` and `floatRenumbered` render source footnotes as printed page footnotes at the bottom of the page where they are referenced. If a note does not fit, it is continued on later pages with continuation markers.
+- In PDF `float` mode, visible reference labels from the source are preserved; the printed footnote title uses that source label, falling back to page-order numbering only when the reference has no visible label.
+- In PDF `floatRenumbered` mode, references on each page are relabeled with page-local numeric labels (`1`, `2`, `3`, ... for that page). `label_template` does not choose that page-local number; it formats additional text appended to the printed footnote title after it.
+
+See [Footnotes Processing](#footnotes-processing) for details and examples.
+
 ### Footnotes Processing
+
+Footnotes are detected from FB2 bodies whose names match `document.footnotes.bodies`. By default this covers common English and Russian body names:
 
 ```yaml
 document:
   footnotes:
-    # Mode: default, float, floatRenumbered
-    mode: float
-    
-    # FB2 bodies to treat as footnotes
+    mode: default
     bodies: ["notes", "comments", "примечания", "комментарии"]
-    
-    # Backlink template
-    backlink_template: |
-      [{{- if eq .Format "pdf" -}}
-        {{- if .PageNumber -}}page {{ .PageNumber }}{{- else -}}<{{- end -}}
-      {{- else if or (eq .Format "kfx") (eq .Format "azw8") -}}
-        {{- if .LocationNumber -}}loc {{ .LocationNumber }}{{- else if .PageNumber -}}page {{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
-      {{- else -}}
-        {{- if .PageNumber -}}page {{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
-      {{- end -}}]
-    
-    # Multi-paragraph indicator
-    more_paragraphs: "(~)\u00A0"
-    
-    # Label template (only used with floatRenumbered mode)
-    label_template: |
-      {{- if gt .BodyNumber 0 -}}
-      {{-   printf "%d" .BodyNumber -}}.
-      {{- end -}}
-      {{- printf "%d" .NoteNumber -}}
 ```
 
-**Footnote Modes:**
+The conversion behavior is controlled by `document.footnotes.mode`:
 
-- **`default`** - Regular hyperlinks to footnotes with no special processing
-- **`float`** - Popup/floating footnotes (requires reader support). Preserves original footnote reference text from FB2 file
-- **`floatRenumbered`** - Same as `float`, but automatically renumbers all footnotes sequentially and replaces their reference text with formatted labels
+```yaml
+document:
+  footnotes:
+    # default, float, floatRenumbered
+    mode: float
+```
 
-**Floating footnote indicator (`more_paragraphs`):**
+#### Footnote Modes
 
-When a floating footnote contains more than one visible content element, reading systems that display popup footnotes may show only the first one. The `more_paragraphs` setting prepends a visual indicator to the first visible footnote content so the reader knows there is additional content. Paragraphs, images, and tables are treated as visible content elements. The default value is `"(~)\u00A0"` (the string `(~)` followed by a non-breaking space).
+- **`default`** - Do not convert notes to popup/printed notes. References remain ordinary internal links to footnote sections.
+  - EPUB/KFX: footnotes are normal book content/navigation entries.
+  - PDF: footnote bodies are normal PDF pages/sections; return links can be generated in the footnote body using `backlink_template`.
 
-The indicator visibility is controlled via CSS using the `.footnote-more` class. The default stylesheet hides it in KFX output and shows it in EPUB:
+- **`float`** - Convert detected notes to floating/popup-style notes where the target format supports that concept.
+  - EPUB2/KEPUB: uses bidirectional links (`A -> B` and generated `B -> A`) for reader compatibility.
+  - EPUB3: uses EPUB footnote/aside markup.
+  - KFX/AZW8: marks footnote content for Kindle popup rendering and appends generated return-link paragraphs to footnote sections.
+  - PDF: renders notes as printed page footnotes at the bottom of the page where the reference appears. Visible reference labels from the source are preserved; if a reference has no visible label, the printed note title falls back to page-order numbering.
+
+- **`floatRenumbered`** - Same target-format behavior as `float`, but normalizes footnote numbering.
+  - EPUB/KFX/AZW8: reference text and footnote titles are rewritten with `label_template` during content preparation.
+  - PDF: main references are still assigned page-local numbers during PDF layout; `label_template` is used as extra title text in the printed footnote area, not as the visible page-local reference number.
+
+Use `floatRenumbered` when the source FB2 has missing, inconsistent, duplicated, or non-sequential note labels.
+
+#### `backlink_template`
+
+`backlink_template` formats generated return links from footnote bodies back to the place where the note was referenced.
+
+Current configuration uses the key **`backlink_template`**. Earlier configurations used **`backlink`** as a plain literal string; that field is now fully replaced by `backlink_template`, and unknown fields are rejected by the configuration loader. To keep exact old behavior, put the old literal string directly into the template value:
+
+```yaml
+# old:
+# backlink: "↩"
+
+# new equivalent:
+backlink_template: "↩"
+```
+
+```yaml
+document:
+  footnotes:
+    backlink_template: |
+      [{{- if eq .Format "pdf" -}}
+        {{- if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber }}{{- else -}}<{{- end -}}
+      {{- else if or (eq .Format "kfx") (eq .Format "azw8") -}}
+        {{- if .LocationNumber -}}loc{{ "\u00A0" }}{{ .LocationNumber }}{{- else if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
+      {{- else -}}
+        {{- if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
+      {{- end -}}]
+```
+
+Available fields:
+
+- `.Format` (string) - output format: `epub2`, `epub3`, `kepub`, `kfx`, `azw8`, `pdf`
+- `.PageNumber` (int) - exact page number for PDF; approximate/generated page-map number for EPUB/KFX when available
+- `.LocationNumber` (int) - generated Kindle/KFX location number for KFX/AZW8 when available
+- `.SectionTitle` (string) - nearest titled section/body containing the original reference, when known
+- `.ChapterTitle` (string) - spine/chapter title containing the original reference, when known
+- `.TargetID` (string) - ID of the footnote section being referenced
+- `.RefID` (string) - unique generated ID of this reference occurrence
+- `.RefNumber` (int) - 1-based occurrence number for this target footnote
+- `.Href` (string) - generated return href where applicable
+- `.Filename` (string) - generated content file containing the original reference where applicable
+
+If the template is empty, invalid, or renders an empty string, fb2cng falls back to `[<]`.
+
+Examples:
+
+```yaml
+# Compact universal marker
+backlink_template: "[<]"
+```
+
+```yaml
+# Prefer exact PDF page numbers, Kindle locations, then section titles
+backlink_template: |
+  {{- if and (eq .Format "pdf") .PageNumber -}}
+  [page {{ .PageNumber }}]
+  {{- else if .LocationNumber -}}
+  [loc {{ .LocationNumber }}]
+  {{- else if .SectionTitle -}}
+  [{{ .SectionTitle }}]
+  {{- else -}}
+  [<]
+  {{- end -}}
+```
+
+#### `more_paragraphs`
+
+When a floating footnote contains more than one visible content element, some readers may show only the first one in the popup. The `more_paragraphs` setting prepends a visual indicator to the first visible footnote content so the reader knows there is additional content. Paragraphs, images, and tables are treated as visible content elements.
+
+```yaml
+document:
+  footnotes:
+    more_paragraphs: "(~) "
+```
+
+The default value is the string `(~)` followed by a non-breaking space. The indicator is styled with `.footnote-more`. The default stylesheet shows it for EPUB and hides it for KFX:
 
 ```css
-/* Show indicator in EPUB (non-Kindle) */
 @media not amzn-et {
     .footnote-more {
         text-decoration: none;
@@ -708,7 +993,6 @@ The indicator visibility is controlled via CSS using the `.footnote-more` class.
     }
 }
 
-/* Hide indicator in KFX (Kindle) */
 @media amzn-et {
     .footnote-more {
         display: none;
@@ -716,74 +1000,103 @@ The indicator visibility is controlled via CSS using the `.footnote-more` class.
 }
 ```
 
-When `.footnote-more` has `display: none`, the indicator text is suppressed and the first paragraph is rendered identically to single-paragraph footnotes. To show the indicator in KFX output, override the style in your custom stylesheet:
+To show or hide it differently, override `.footnote-more` in your custom stylesheet.
 
-```css
-@media amzn-et {
-    .footnote-more {
-        font-weight: bold;
-        color: gray;
-    }
-}
+#### `label_template`
+
+`label_template` formats logical footnote labels. It uses Go template syntax plus slim-sprig helpers.
+
+```yaml
+document:
+  footnotes:
+    label_template: |
+      {{- if gt .BodyNumber 0 -}}
+      {{-   printf "%d" .BodyNumber -}}.
+      {{- end -}}
+      {{- printf "%d" .NoteNumber -}}
 ```
 
-To hide the indicator in EPUB output, add to your custom stylesheet:
+Available fields:
 
-```css
-@media not amzn-et {
-    .footnote-more {
-        display: none;
-    }
-}
-```
-
-**floatRenumbered Mode:**
-
-When using `floatRenumbered` mode, the converter:
-1. Assigns sequential numbers to each footnote within each footnote body
-2. Updates footnote reference text in the main content to use the formatted label
-3. Updates footnote section titles to match the new numbering
-
-This is useful when the original FB2 has inconsistent or non-sequential footnote numbering.
-
-**label_template:**
-
-The `label_template` uses Go template syntax to format how footnote references appear. Available fields:
-
-- `.BodyTitle` (string) - Title of the footnote body (can be empty)
-- `.BodyNumber` (int) - 1-based index of the footnote body (0 if only one body)
-- `.NoteTitle` (string) - Original footnote title (can be empty)
+- `.BodyTitle` (string) - title of the footnote body, can be empty
+- `.BodyNumber` (int) - 1-based index of the footnote body; set to `0` when the book has only one footnote body
+- `.NoteTitle` (string) - original footnote section title, can be empty
 - `.NoteNumber` (int) - 1-based sequential number of the footnote within its body
 
-**Examples:**
+How `label_template` is used depends on output format and footnote mode:
 
-Simple sequential numbering (default):
-```yaml
-label_template: |
-  {{- printf "%d" .NoteNumber -}}
+| Output / mode | How `label_template` is used |
+|---|---|
+| EPUB/KFX/AZW8 `float` | Not used for renumbering; original source labels remain. |
+| EPUB/KFX/AZW8 `floatRenumbered` | Rewrites main reference text and footnote titles during content preparation. |
+| PDF `default` | Not used for printed page labels because footnotes are ordinary linked sections. |
+| PDF `float` | Does not relabel visible references. It formats the suffix appended to each printed footnote title after the source reference label (or fallback page-order label if the source label is empty). |
+| PDF `floatRenumbered` | References are relabeled with page-local numbers during PDF layout; this template formats the title suffix appended after that page-local label. |
+
+For PDF printed footnotes, think of the rendered footnote title as:
+
+```text
+<printed-note-label><NBSP><label_template result>
 ```
-Result: `1`, `2`, `3`, ...
 
-Body prefix when multiple footnote bodies exist:
-```yaml
-label_template: |
-  {{- if gt .BodyNumber 0 -}}
-  {{-   printf "%d" .BodyNumber -}}.
-  {{- end -}}
-  {{- printf "%d" .NoteNumber -}}
+In `float`, `<printed-note-label>` is the source reference label when present. In `floatRenumbered`, it is the page-local number assigned during PDF layout.
+
+For example, with the default template and `floatRenumbered`, the second footnote on a PDF page whose logical note number is `17` may be printed as:
+
+```text
+2 17
 ```
-Result: `1.1`, `1.2`, `2.1`, `2.2`, ... (or just `1`, `2`, ... if single body)
 
-Custom format with body title:
+Here `2` is the page-local printed-footnote label and `17` is the `label_template` result. If you want PDF printed footnote titles to contain only the printed-note label, keep the field present but render an empty string:
+
+```yaml
+document:
+  footnotes:
+    label_template: '{{- "" -}}'
+```
+
+If you want multiple footnote bodies to be visible in printed footnote titles:
+
 ```yaml
 label_template: |
   {{- if .BodyTitle -}}
-  {{-   printf "[%s-%d]" .BodyTitle .NoteNumber -}}
+  {{-   printf "%s-%d" .BodyTitle .NoteNumber -}}
+  {{- else if gt .BodyNumber 0 -}}
+  {{-   printf "%d.%d" .BodyNumber .NoteNumber -}}
   {{- else -}}
-  {{-   printf "[%d]" .NoteNumber -}}
+  {{-   printf "%d" .NoteNumber -}}
   {{- end -}}
 ```
-Result: `[Notes-1]`, `[Notes-2]`, ... (or `[1]`, `[2]`, ... if no title)
+
+Result examples:
+
+- single body: `1`, `2`, `3`
+- multiple bodies without titles: `1.1`, `1.2`, `2.1`
+- titled body: `Comments-1`, `Comments-2`
+
+PDF printed footnote example: prefer a non-numeric source note title when present, otherwise fall back to body title plus generated number. This is useful when note titles sometimes contain meaningful text (`Translator note`) and sometimes contain only original numbering (`17`).
+
+```yaml
+document:
+  footnotes:
+    label_template: |
+      {{- $bodyTitle := default "Notes" .BodyTitle -}}
+      {{- $noteTitle := trim .NoteTitle -}}
+      {{- $noteNumber := printf "%d" .NoteNumber -}}
+      {{- $label := "" -}}
+      {{- if gt .BodyNumber 0 -}}
+      {{-   $label = printf "%d.%s" .BodyNumber $noteNumber -}}
+      {{- else -}}
+      {{-   $label = $noteNumber -}}
+      {{- end -}}
+      {{- if and $noteTitle (regexMatch "[^0-9[:space:]]" $noteTitle) -}}
+      {{-   printf "%s: %s" $bodyTitle $noteTitle -}}
+      {{- else -}}
+      {{-   printf "%s: %s" $bodyTitle $label -}}
+      {{- end -}}
+```
+
+In PDF `floatRenumbered`, this would be appended after the page-local printed label. For example, the second printed footnote on a page could become `2 Notes: 17` or `2 Notes: Translator note` depending on the source note title.
 
 ### Device Table of Contents
 
@@ -792,6 +1105,7 @@ fb2cng always creates machine-readable navigation from the book's section struct
 - EPUB2: `toc.ncx`
 - EPUB3: `nav.xhtml`
 - KFX/AZW8: KFX book navigation
+- PDF: PDF document outline/bookmarks
 
 Use `document.toc_type` to control how deeply nested this device navigation should be:
 
@@ -807,7 +1121,7 @@ Available values:
 - `old_kindle` - keep a shallow hierarchy compatible with old Kindle/kindlegen navigation behavior.
 - `flat` - make all navigation entries top-level siblings.
 
-This setting affects only machine/device navigation. Generated visible TOC pages inside the book content keep their normal/full structure regardless of `toc_type`.
+This setting affects only machine/device navigation, including PDF outlines/bookmarks. Generated visible TOC pages inside the book content keep their normal/full structure regardless of `toc_type`.
 
 ### Table of Contents Page
 
@@ -999,17 +1313,61 @@ This breaks strict EPUB compliance — EpubCheck will report `ERROR(RSC-005)` be
 
 ### Hyphenation
 
-When enabled, fb2cng inserts **soft hyphens** (Unicode character `U+00AD`) into words throughout the book text. A soft hyphen is an invisible character that marks a position where a word *may* be broken across lines with a hyphen. If the reading system does not need to break the word at that point, the soft hyphen remains invisible and has no effect. This allows reading systems that lack built-in hyphenation to still display properly hyphenated text.
+When enabled, `document.insert_soft_hyphen` inserts **soft hyphens** (Unicode character `U+00AD`) into words throughout the book text before it is written to reflowable output formats. A soft hyphen is an invisible character that marks a position where a word *may* be broken across lines with a hyphen. If the reading system does not need to break the word at that point, the soft hyphen remains invisible and has no effect. This allows reading systems that lack built-in hyphenation to still display properly hyphenated text.
 
 fb2cng uses the Liang/Knuth hyphenation algorithm (the same algorithm used by TeX) with a set of built-in language-specific pattern dictionaries sourced from the [hyph-utf8](http://ctan.math.utah.edu/ctan/tex-archive/language/hyph-utf8/tex/patterns/txt) project. The appropriate dictionary is selected automatically based on the book's language metadata.
 
-**In most cases this feature should not be used.** Modern e-readers (Kindle, Kobo, Apple Books, etc.) include their own built-in hyphenation engines. Enabling soft hyphen insertion on these devices can cause conflicts — the reader's hyphenator may produce double hyphens, incorrect line breaks, or other visual artifacts. This option exists primarily for older devices that have no hyphenation support of their own.
+**In most cases this feature should not be used for EPUB/KFX.** Modern e-readers (Kindle, Kobo, Apple Books, etc.) include their own built-in hyphenation engines. Enabling soft hyphen insertion on these devices can cause conflicts — the reader's hyphenator may produce double hyphens, incorrect line breaks, or other visual artifacts. This option exists primarily for older devices that have no hyphenation support of their own.
 
 ```yaml
 document:
   # Insert soft hyphens for devices without hyphenation
   insert_soft_hyphen: false
 ```
+
+#### PDF line breaking and hyphenation
+
+PDF is different from reflowable formats: fb2cng must decide all line breaks while creating the fixed PDF pages. For PDF layout, the internal hyphenator is always available to the paragraph breaker so it can find better word break points when CSS allows automatic hyphenation. This does **not** depend on `document.insert_soft_hyphen`; PDF does not need to insert soft hyphen characters into the source text for a reader to process later.
+
+You can control PDF hyphenation with CSS:
+
+```css
+@media fbc-pdf {
+    p {
+        hyphens: auto;   /* allow dictionary hyphenation */
+    }
+}
+```
+
+Supported values for PDF are:
+
+- `hyphens: auto` - allow dictionary hyphenation and explicit soft hyphen break points.
+- `hyphens: manual` - use only explicit soft hyphens already present in the source text.
+- `hyphens: none` - disable dictionary and explicit soft-hyphen breaks for that element.
+
+To disable normal PDF word hyphenation for body paragraphs:
+
+```css
+@media fbc-pdf {
+    p {
+        hyphens: none;
+    }
+}
+```
+
+For short labels, code-like text, table headers, or other content that should not wrap at spaces either, also use `white-space: nowrap`:
+
+```css
+@media fbc-pdf {
+    th,
+    .no-wrap {
+        hyphens: none;
+        white-space: nowrap;
+    }
+}
+```
+
+Important limitation: PDF has an emergency wrapping path for text that still cannot fit into the available line width. Very long unbreakable words, oversized inline content, or narrow table cells may still be split to keep the PDF layout finite and avoid impossible lines. `hyphens: none` disables hyphenation opportunities; it is not an absolute guarantee that arbitrarily long text can never be emergency-wrapped.
 
 ### Logging Configuration
 
@@ -1062,6 +1420,7 @@ document:
     screen:
       width: 1264
       height: 1680
+      dpi: 300
     cover:
       generate: true
       resize: stretch
@@ -1126,20 +1485,28 @@ MyHomeLib Installation Directory
     │       fb2epub.yaml (optional fbc.exe configuration)
     │       connector.yaml (optional connector configuration)
     │
-    └───fb2mobi
-            fb2mobi.exe  (copy or symlink to mhl-connector.exe)
-            fb2mobi.yaml (optional fbc.exe configuration)
+    ├───fb2mobi
+    │       fb2mobi.exe  (copy or symlink to mhl-connector.exe)
+    │       fb2mobi.yaml (optional fbc.exe configuration)
+    │       connector.yaml (optional connector configuration)
+    │
+    └───fb2pdf
+            fb2pdf.cmd  (required by MyHomeLib for PDF; wrapper that starts fb2pdf.exe)
+            fb2pdf.exe  (copy or symlink to mhl-connector.exe)
+            fb2pdf.yaml (optional fbc.exe configuration)
             connector.yaml (optional connector configuration)
 ```
 
 ### Setup Options
 
 **Option 1: Copy executable**
-- Copy `mhl-connector.exe` as `fb2epub.exe` and/or `fb2mobi.exe`
+- Copy `mhl-connector.exe` as `fb2epub.exe`, `fb2mobi.exe`, and/or `fb2pdf.exe`
+- For PDF, also create `fb2pdf.cmd` next to `fb2pdf.exe`; MyHomeLib starts the `.cmd` file for PDF conversion
 - Place `fbc.exe` in system PATH or in `converter` directory
 
 **Option 2: Symlinks (recommended)**
 - Create symlinks next to `fbc.exe`
+- For PDF, also create `fb2pdf.cmd` next to the `fb2pdf.exe` symlink; MyHomeLib starts the `.cmd` file for PDF conversion
 - No PATH modification needed
 - Both executables can be anywhere
 
@@ -1149,6 +1516,25 @@ cd converters\fb2epub
 mklink fb2epub.exe ..\converter\mhl-connector.exe
 cd ..\fb2mobi
 mklink fb2mobi.exe ..\converter\mhl-connector.exe
+cd ..\fb2pdf
+mklink fb2pdf.exe ..\converter\mhl-connector.exe
+```
+
+For PDF conversion, MyHomeLib expects `fb2pdf.cmd` rather than `fb2pdf.exe`. Create `fb2pdf.cmd` in the same directory as `fb2pdf.exe`:
+
+```cmd
+@echo off
+setlocal
+
+set "EXE=%~dpn0.exe"
+
+if not exist "%EXE%" (
+    echo Executable not found: "%EXE%" 1>&2
+    exit /b 1
+)
+
+"%EXE%" %*
+exit /b %ERRORLEVEL%
 ```
 
 ### Configuration
@@ -1159,12 +1545,13 @@ Place format-specific fbc configuration files in the same directory as the conne
 
 - `fb2epub.yaml` - Settings for EPUB conversion (passed to fbc.exe)
 - `fb2mobi.yaml` - Settings for MOBI/KFX conversion (passed to fbc.exe)
+- `fb2pdf.yaml` - Settings for PDF conversion (passed to fbc.exe)
 
 These files use the same format as the main fbc configuration file documented above.
 
 #### Connector Configuration (Optional)
 
-Since passing additional arguments via MyHomeLib is inconvenient, the connector supports an optional `connector.yaml` configuration file. This file should be located in the same directory as the connector executable (next to `fb2epub.exe` or `fb2mobi.exe`).
+Since passing additional arguments via MyHomeLib is inconvenient, the connector supports an optional `connector.yaml` configuration file. This file should be located in the same directory as the connector executable (next to `fb2epub.exe`, `fb2mobi.exe`, or `fb2pdf.exe`).
 
 **Configuration structure:**
 
@@ -1193,6 +1580,7 @@ kindle_ebook: false
 - `output_format` (string, optional) - Override default output format. Allowed values:
   - For `fb2epub.exe`: `epub2`, `epub3`, `kepub`
   - For `fb2mobi.exe`: `kfx`, `azw8`
+  - For `fb2pdf.exe`: `pdf`
   - If incompatible format is specified, default is used with warning in logs
 - `kindle_ebook` (boolean, default: false) - For Kindle outputs (`kfx`, `azw8`) pass `--ebook` to mark as EBOK; this is only relevant for `fb2mobi.exe`
 
@@ -1207,11 +1595,13 @@ In most cases, the connector works fine without configuration. You only need `co
 
 - `fb2epub.exe` → Converts to EPUB2 by default (or format specified in `connector.yaml`)
 - `fb2mobi.exe` → Converts to KFX by default
+- `fb2pdf.exe` → Converts to PDF by default
 - `kindle_ebook` is only meaningful for Kindle output formats (`kfx`, `azw8`), so it is only used by `fb2mobi.exe`
 - When `kindle_ebook: true` is set for `fb2mobi.exe`, the connector adds `--ebook` so Kindle output is marked as EBOK instead of PDOC
 - If `output_format` is not supported by the current connector target, the connector falls back to that target's default format and writes a warning to the logs
 - Example: `output_format: epub3` with `fb2mobi.exe` falls back to `kfx`
 - Example: `output_format: azw8` with `fb2epub.exe` falls back to `epub2`
+- Example: `output_format: epub3` with `fb2pdf.exe` falls back to `pdf`
 - Automatically uses `--overwrite` flag
 - Expects exactly 2 arguments: source and destination files
 - Logs to console by default (or to file if specified in `connector.yaml`)

@@ -22,6 +22,7 @@ import (
 
 	"github.com/rupor-github/gencfg"
 
+	mhltarget "fbc/cmd/mhl/internal/target"
 	"fbc/common"
 	"fbc/misc"
 )
@@ -34,7 +35,7 @@ const usageMsg = `
 	MyHomeLib wrapper for fb2 (ng) converter
 	Version %s (%s) : %s
 
-	Expected usage (MyHomeLib invocation): [fb2epub|fb2mobi] <from fb2> <to target file>
+	Expected usage (MyHomeLib invocation): [fb2epub|fb2mobi|fb2pdf] <from fb2> <to target file>
 
 	MyHomeLib expect converters to be located in the installation directory with following structure:
 
@@ -50,19 +51,37 @@ const usageMsg = `
 		|		fb2epub.exe  (copy of mhl-connector.exe or symlink to it)
 		|		fb2epub.yaml (fbc.exe configuration file if needed)
 		|
-		\---fb2mobi
-				fb2mobi.exe  (copy of mhl-connector.exe or symlink to it)
-				fb2mobi.yaml (fbc.exe configuration file if needed)
+		+---fb2mobi
+		|		fb2mobi.exe  (copy of mhl-connector.exe or symlink to it)
+		|		fb2mobi.yaml (fbc.exe configuration file if needed)
+		|
+		\---fb2pdf
+				fb2pdf.cmd  (required by MyHomeLib for PDF; wrapper that starts fb2pdf.exe)
+				fb2pdf.exe  (copy of mhl-connector.exe or symlink to it)
+				fb2pdf.yaml (fbc.exe configuration file if needed)
 
 	If you are copying mhl-connector.exe you could either follow above structure or have fbc.exe in a OS PATH.
 
 	If you are using symlinks, mhl-connector.exe should be located next to fbc.exe and they could be anywhere,
 	no converter directory or OS PATH modification is necessary.
 
+	For PDF conversion MyHomeLib expects fb2pdf.cmd rather than fb2pdf.exe. Create fb2pdf.cmd
+	next to fb2pdf.exe with the following content:
+
+		@echo off
+		setlocal
+		set "EXE=%%~dpn0.exe"
+		if not exist "%%EXE%%" (
+		    echo Executable not found: "%%EXE%%" 1>&2
+		    exit /b 1
+		)
+		"%%EXE%%" %%*
+		exit /b %%ERRORLEVEL%%
+
 	Since passing additional arguments via MyHomeLib is inconvinient -
 	additional configuration file "connector.yaml" is supported. If required it
 	should be located next to either connector copy or symlink (the same place
-	where fb2epub.exe or fb2mobi.exe is). In most cases it is unnecessary.
+	where fb2epub.exe, fb2mobi.exe or fb2pdf.exe is). In most cases it is unnecessary.
 	Today it supports mhl and fbc integration debugging and additional format
 	specifications if necessary.
 `
@@ -200,8 +219,8 @@ func main() {
 		log.Fatalf("MHL connector must be a .exe executable, current name is: %s", target)
 	}
 	target = strings.ToLower(strings.TrimSuffix(target, filepath.Ext(target)))
-	if target != "fb2mobi" && target != "fb2epub" {
-		log.Fatalf("MHL connector could be named either fb2mobi.exe or fb2epub.exe (or started via appropriate symlinks), current name is: %s.exe. It should be invoked by MyHomeLib, never directly", target)
+	if !mhltarget.Supported(target) {
+		log.Fatalf("MHL connector could be named fb2mobi.exe, fb2epub.exe or fb2pdf.exe (or started via appropriate symlinks), current name is: %s.exe. It should be invoked by MyHomeLib, never directly", target)
 	}
 
 	from, err := filepath.Abs(os.Args[1])
@@ -237,35 +256,19 @@ func main() {
 	args = append(args, "convert")
 	args = append(args, "--ow")
 
-	if cfg.KindleEbook && target == "fb2mobi" {
+	if cfg.KindleEbook && target == mhltarget.MOBI {
 		args = append(args, "--ebook")
 	}
 
+	outputFormat := mhltarget.DefaultOutputFormat(target)
 	if cfg.OutputFormat != nil {
-		switch target {
-		case "fb2mobi":
-			if cfg.OutputFormat.ForKindle() {
-				args = append(args, "--to", cfg.OutputFormat.String())
-			} else {
-				log.Printf("Output format %s is not supported for target %s, using kfx instead", cfg.OutputFormat.String(), target)
-				args = append(args, "--to", "kfx")
-			}
-		case "fb2epub":
-			if !cfg.OutputFormat.ForKindle() {
-				args = append(args, "--to", cfg.OutputFormat.String())
-			} else {
-				log.Printf("Output format %s is not supported for target %s, using epub2 instead", cfg.OutputFormat.String(), target)
-				args = append(args, "--to", "epub2")
-			}
-		}
-	} else {
-		switch target {
-		case "fb2mobi":
-			args = append(args, "--to", "kfx")
-		case "fb2epub":
-			args = append(args, "--to", "epub2")
+		if mhltarget.SupportsOutputFormat(target, *cfg.OutputFormat) {
+			outputFormat = *cfg.OutputFormat
+		} else {
+			log.Printf("Output format %s is not supported for target %s, using %s instead", cfg.OutputFormat.String(), target, outputFormat.String())
 		}
 	}
+	args = append(args, "--to", outputFormat.String())
 
 	args = append(args, from)
 	args = append(args, to)
