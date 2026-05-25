@@ -49,9 +49,15 @@ func TestAppendPDFPrintedFootnotePagePlansInsertsContinuationBeforeNextMainPage(
 	if !ok {
 		t.Fatalf("continuation strokes = %#v, want marker strokes", out[1].Strokes)
 	}
-	footnoteY, ok := pageLineYByText(out[1], "Footnote continuation")
-	if !ok || markerTop <= footnoteY || markerBottom <= footnoteY || footnoteY <= plan.QueuePages[1].Lines[0].Y {
-		t.Fatalf("continuation marker y=%v..%v footnote y=%v, want separator marker above footnote shifted toward top", markerBottom, markerTop, footnoteY)
+	footnoteLine, ok := pageLineByText(out[1], "Footnote continuation")
+	if !ok {
+		t.Fatalf("continuation page text = %q, want footnote line", pageText(out[1]))
+	}
+	if markerTop <= footnoteLine.Y || markerBottom <= footnoteLine.Y {
+		t.Fatalf("continuation marker y=%v..%v footnote y=%v, want separator marker above footnote", markerBottom, markerTop, footnoteLine.Y)
+	}
+	if gotBottom := footnoteLine.Y - footnoteLine.FontSize*0.2; gotBottom < 23.999 || gotBottom > 24.001 {
+		t.Fatalf("continuation footnote visual bottom = %v, want content bottom 24", gotBottom)
 	}
 }
 
@@ -82,7 +88,7 @@ func TestAppendPDFPrintedFootnotePagePlansBottomAlignsSourceFootnote(t *testing.
 	}
 }
 
-func TestAppendPDFPrintedFootnotePagePlansPacksContinuationChunksFromTop(t *testing.T) {
+func TestAppendPDFPrintedFootnotePagePlansBottomAlignsPackedContinuationChunks(t *testing.T) {
 	face, err := builtinFont("serif", false, false)
 	if err != nil {
 		t.Fatalf("builtinFont() error = %v", err)
@@ -109,10 +115,47 @@ func TestAppendPDFPrintedFootnotePagePlansPacksContinuationChunksFromTop(t *test
 	if got := pageText(out[1]); !strings.Contains(got, "Footnote continuation one") || !strings.Contains(got, "Footnote continuation two") || strings.Contains(got, "Main page 2") {
 		t.Fatalf("packed continuation text = %q, want both continuation chunks before next main page", got)
 	}
-	firstY, firstOK := pageLineYByText(out[1], "Footnote continuation one")
-	secondY, secondOK := pageLineYByText(out[1], "Footnote continuation two")
-	if !firstOK || !secondOK || firstY <= secondY {
+	firstLine, firstOK := pageLineByText(out[1], "Footnote continuation one")
+	secondLine, secondOK := pageLineByText(out[1], "Footnote continuation two")
+	if !firstOK || !secondOK || firstLine.Y <= secondLine.Y {
 		t.Fatalf("packed continuation lines = %#v, want chunks stacked top-down", out[1].Lines)
+	}
+	if gotBottom := secondLine.Y - secondLine.FontSize*0.2; gotBottom < 23.999 || gotBottom > 24.001 {
+		t.Fatalf("packed continuation visual bottom = %v, want content bottom 24", gotBottom)
+	}
+	if len(out[1].Backgrounds) == 0 || out[1].Backgrounds[0].Y <= firstLine.Y {
+		t.Fatalf("packed continuation separator = %#v first line y=%v, want separator above bottom-anchored group", out[1].Backgrounds, firstLine.Y)
+	}
+}
+
+func TestAppendPDFPrintedFootnotePagePlansBottomAlignsTallContinuationChunk(t *testing.T) {
+	face, err := builtinFont("serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	tallContinuation := pdfPage{Lines: []pdfPageLine{
+		testPDFPageLine(t, face, "Tall continuation top", 140),
+		testPDFPageLine(t, face, "Tall continuation bottom", 40),
+	}}
+	out := appendPDFPrintedFootnotePagePlans(
+		pdfDocumentSpec{PageWidth: 260, PageHeight: 180},
+		[]pdfPage{{Lines: []pdfPageLine{testPDFPageLine(t, face, "Main", 130)}}},
+		[]pdfPrintedFootnotePagePlan{{PageIndex: 0, QueuePages: []pdfPage{
+			{Lines: []pdfPageLine{testPDFPageLine(t, face, "Footnote first", 60)}},
+			tallContinuation,
+		}}},
+		80,
+		nil,
+	)
+	if len(out) != 2 {
+		t.Fatalf("pages = %d, want source and tall continuation page", len(out))
+	}
+	bottomLine, ok := pageLineByText(out[1], "Tall continuation bottom")
+	if !ok {
+		t.Fatalf("continuation page text = %q, want tall continuation", pageText(out[1]))
+	}
+	if gotBottom := bottomLine.Y - bottomLine.FontSize*0.2; gotBottom < 23.999 || gotBottom > 24.001 {
+		t.Fatalf("tall continuation visual bottom = %v, want content bottom 24 despite top overflow", gotBottom)
 	}
 }
 
@@ -183,12 +226,20 @@ func TestPDFPrintedFootnoteSeparatorMetricsUsesContentWidth(t *testing.T) {
 }
 
 func pageLineYByText(page pdfPage, text string) (float64, bool) {
+	line, ok := pageLineByText(page, text)
+	if !ok {
+		return 0, false
+	}
+	return line.Y, true
+}
+
+func pageLineByText(page pdfPage, text string) (pdfPageLine, bool) {
 	for _, line := range page.Lines {
 		if shapedRunes(line.Text) == text {
-			return line.Y, true
+			return line, true
 		}
 	}
-	return 0, false
+	return pdfPageLine{}, false
 }
 
 func pageStrokesYBounds(strokes []pdfPageStroke) (float64, float64, bool) {
