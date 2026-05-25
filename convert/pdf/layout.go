@@ -316,7 +316,7 @@ func layoutPDFPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]s
 					layoutRuns = dropcap.BodyRuns
 				}
 			}
-			lines, err := layoutInlineParagraphWithShape(doc, doc.Fonts, styles, face, layoutText, layoutRuns, style.Paragraph, blockWidth, shape)
+			lines, err := layoutInlineWithShape(doc, doc.Fonts, styles, face, layoutText, layoutRuns, style.Paragraph, blockWidth, shape)
 			return lines, dropcap, dropcapOK, err
 		}
 		lines, dropcap, dropcapOK, err := layoutTextBlock()

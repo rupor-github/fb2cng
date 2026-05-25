@@ -581,7 +581,7 @@ func assembleParagraphLines(face *builtinFontFace, units []paragraphUnit, style 
 	if err != nil {
 		return nil, err
 	}
-	breaks := chooseParagraphBreaksWithShape(units, spaceWidth, style, maxWidth, shape)
+	breaks := chooseBreaksWithShape(units, spaceWidth, style, maxWidth, shape)
 	lines := make([]paragraphLine, 0, len(breaks))
 	start := 0
 	previousHyphenated := false
@@ -606,7 +606,7 @@ func assembleParagraphLines(face *builtinFontFace, units []paragraphUnit, style 
 		singleWord := units[start].WordIndex == units[br.End-1].WordIndex
 		terminalOverhang := paragraphBreakTerminalOverhangFor(units[br.End-1], br.HyphenAfter)
 		visualMetricWidth := width + terminalOverhang
-		line.BreakStats = paragraphLineBreakStatsFor(
+		line.BreakStats = lineBreakStats(
 			visualMetricWidth,
 			available,
 			line.JustificationGaps,
@@ -638,7 +638,7 @@ func assembleParagraphLines(face *builtinFontFace, units []paragraphUnit, style 
 	return lines, nil
 }
 
-func chooseParagraphBreaksWithShape(units []paragraphUnit, spaceWidth float64, style paragraphStyle, maxWidth float64, shape paragraphLineShape) []paragraphBreak {
+func chooseBreaksWithShape(units []paragraphUnit, spaceWidth float64, style paragraphStyle, maxWidth float64, shape paragraphLineShape) []paragraphBreak {
 	n := len(units)
 	if n == 0 {
 		return nil
@@ -823,10 +823,10 @@ func paragraphRangeHasEmergencyBreak(units []paragraphUnit) bool {
 }
 
 func paragraphLineDemerits(width, available float64, gaps int, firstLine bool, last bool, singleWord bool, hyphenated bool, previousHyphenated bool, previousFitness paragraphFitness) float64 {
-	return paragraphLineBreakStatsFor(width, available, gaps, firstLine, last, singleWord, hyphenated, previousHyphenated, previousFitness).Demerits
+	return lineBreakStats(width, available, gaps, firstLine, last, singleWord, hyphenated, previousHyphenated, previousFitness).Demerits
 }
 
-func paragraphLineBreakStatsFor(width, available float64, gaps int, firstLine bool, last bool, singleWord bool, hyphenated bool, previousHyphenated bool, previousFitness paragraphFitness) paragraphLineBreakStats {
+func lineBreakStats(width, available float64, gaps int, firstLine bool, last bool, singleWord bool, hyphenated bool, previousHyphenated bool, previousFitness paragraphFitness) paragraphLineBreakStats {
 	ratio, emergency := paragraphAdjustmentRatio(width, available, gaps, last, singleWord)
 	if math.IsInf(ratio, 1) {
 		return paragraphLineBreakStats{

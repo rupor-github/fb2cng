@@ -27,10 +27,10 @@ type inlineGlyphPiece struct {
 }
 
 func layoutInlineParagraph(doc pdfDocumentSpec, registry *pdfFontRegistry, resolver *pdfStyleResolver, baseFace *builtinFontFace, text string, runs []pdfInlineRun, style paragraphStyle, maxWidth float64) ([]paragraphLine, error) {
-	return layoutInlineParagraphWithShape(doc, registry, resolver, baseFace, text, runs, style, maxWidth, paragraphLineShape{})
+	return layoutInlineWithShape(doc, registry, resolver, baseFace, text, runs, style, maxWidth, paragraphLineShape{})
 }
 
-func layoutInlineParagraphWithShape(doc pdfDocumentSpec, registry *pdfFontRegistry, resolver *pdfStyleResolver, baseFace *builtinFontFace, text string, runs []pdfInlineRun, style paragraphStyle, maxWidth float64, shape paragraphLineShape) ([]paragraphLine, error) {
+func layoutInlineWithShape(doc pdfDocumentSpec, registry *pdfFontRegistry, resolver *pdfStyleResolver, baseFace *builtinFontFace, text string, runs []pdfInlineRun, style paragraphStyle, maxWidth float64, shape paragraphLineShape) ([]paragraphLine, error) {
 	if len(runs) == 0 {
 		runs = []pdfInlineRun{{Text: text}}
 	}
@@ -63,7 +63,7 @@ func layoutInlineParagraphWithShape(doc pdfDocumentSpec, registry *pdfFontRegist
 		return nil, err
 	}
 	units = splitInlineEmergencyParagraphUnits(units, style, maxWidth, shape)
-	breaks := chooseParagraphBreaksWithShape(units, spaceFragment.Width, style, maxWidth, shape)
+	breaks := chooseBreaksWithShape(units, spaceFragment.Width, style, maxWidth, shape)
 	lines := make([]paragraphLine, 0, len(breaks))
 	start := 0
 	previousHyphenated := false
@@ -87,7 +87,7 @@ func layoutInlineParagraphWithShape(doc pdfDocumentSpec, registry *pdfFontRegist
 		singleWord := units[start].WordIndex == units[br.End-1].WordIndex
 		terminalOverhang := paragraphBreakTerminalOverhangFor(units[br.End-1], br.HyphenAfter)
 		visualMetricWidth := width + terminalOverhang
-		line.BreakStats = paragraphLineBreakStatsFor(
+		line.BreakStats = lineBreakStats(
 			visualMetricWidth,
 			available,
 			line.JustificationGaps,
@@ -160,12 +160,12 @@ func layoutPreformattedParagraph(doc pdfDocumentSpec, registry *pdfFontRegistry,
 			Width:     paragraphFragmentsWidth(fragments),
 		}
 		line.Text = shapedTextFromFragments(fragments)
-		line.BreakStats = paragraphLineBreakStatsFor(line.Width, maxWidth, 0, len(lines) == 0, false, false, false, false, paragraphFitnessDecent)
+		line.BreakStats = lineBreakStats(line.Width, maxWidth, 0, len(lines) == 0, false, false, false, false, paragraphFitnessDecent)
 		lines = append(lines, line)
 	}
 	if len(lines) > 0 {
 		last := len(lines) - 1
-		lines[last].BreakStats = paragraphLineBreakStatsFor(lines[last].Width, maxWidth, 0, last == 0, true, false, false, false, paragraphFitnessDecent)
+		lines[last].BreakStats = lineBreakStats(lines[last].Width, maxWidth, 0, last == 0, true, false, false, false, paragraphFitnessDecent)
 	}
 	return lines, nil
 }
