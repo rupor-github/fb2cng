@@ -63,86 +63,7 @@ func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfB
 
 func mergePDFStyleOverridesWithFont(base, override, fallback pdfBlockResolvedStyle, inheritedFontSize float64) pdfBlockResolvedStyle {
 	relativeLengthFontSize := pdfRelativeLengthFontSize(base, override, fallback, inheritedFontSize)
-	if override.Paragraph.FontFamily != fallback.Paragraph.FontFamily {
-		base.Paragraph.FontFamily = override.Paragraph.FontFamily
-	}
-	if override.Paragraph.HasBold || override.Paragraph.Bold != fallback.Paragraph.Bold {
-		base.Paragraph.Bold = override.Paragraph.Bold
-		base.Paragraph.HasBold = override.Paragraph.HasBold
-	}
-	if override.Paragraph.HasItalic || override.Paragraph.Italic != fallback.Paragraph.Italic {
-		base.Paragraph.Italic = override.Paragraph.Italic
-		base.Paragraph.HasItalic = override.Paragraph.HasItalic
-	}
-	if override.Paragraph.FontSizeSpec.Set {
-		base.Paragraph.FontSize = pdfResolveCSSFontSizeSpec(override.Paragraph.FontSizeSpec, inheritedFontSize)
-		base.Paragraph.FontSizeSpec = override.Paragraph.FontSizeSpec
-	} else if override.Paragraph.FontSize != fallback.Paragraph.FontSize {
-		base.Paragraph.FontSize = override.Paragraph.FontSize
-		base.Paragraph.FontSizeSpec = pdfCSSLengthSpec{}
-	}
-	lineHeightOverride := override.Paragraph
-	if override.Paragraph.FontSizeSpec.Set && !override.Paragraph.LineHeightExplicit {
-		if override.Paragraph.LineHeight != fallback.Paragraph.LineHeight && override.Paragraph.FontSize > 0 {
-			base.Paragraph.LineHeight = override.Paragraph.LineHeight * base.Paragraph.FontSize / override.Paragraph.FontSize
-			lineHeightOverride.LineHeight = fallback.Paragraph.LineHeight
-		} else {
-			lineHeightOverride.LineHeight = fallback.Paragraph.LineHeight
-		}
-	}
-	base.Paragraph = mergePDFLineHeightOverride(base.Paragraph, lineHeightOverride, fallback.Paragraph)
-	if override.Paragraph.LineHeightSpec.Set {
-		base.Paragraph.LineHeight = pdfResolveCSSLineHeightSpec(override.Paragraph.LineHeightSpec, base.Paragraph.FontSize)
-		base.Paragraph.LineHeightSpec = override.Paragraph.LineHeightSpec
-		base.Paragraph.LineHeightExplicit = true
-	}
-	if override.Paragraph.LetterSpacingSpec.Set {
-		base.Paragraph.LetterSpacing = pdfResolveCSSLengthSpec(override.Paragraph.LetterSpacingSpec, base.Paragraph.FontSize)
-		base.Paragraph.LetterSpacingSpec = override.Paragraph.LetterSpacingSpec
-	} else if override.Paragraph.LetterSpacing != fallback.Paragraph.LetterSpacing {
-		base.Paragraph.LetterSpacing = override.Paragraph.LetterSpacing
-		base.Paragraph.LetterSpacingSpec = pdfCSSLengthSpec{}
-	}
-	if override.Paragraph.FirstLineIndentSpec.Set {
-		base.Paragraph.FirstLineIndent = pdfResolveCSSLengthSpec(override.Paragraph.FirstLineIndentSpec, base.Paragraph.FontSize)
-		base.Paragraph.FirstLineIndentSpec = override.Paragraph.FirstLineIndentSpec
-		base.Paragraph.HasFirstLineIndent = override.Paragraph.HasFirstLineIndent
-	} else if override.Paragraph.HasFirstLineIndent || override.Paragraph.FirstLineIndent != fallback.Paragraph.FirstLineIndent {
-		base.Paragraph.FirstLineIndent = override.Paragraph.FirstLineIndent
-		base.Paragraph.FirstLineIndentSpec = pdfCSSLengthSpec{}
-		base.Paragraph.HasFirstLineIndent = override.Paragraph.HasFirstLineIndent
-	}
-	if override.Paragraph.HasAlign || override.Paragraph.Align != fallback.Paragraph.Align {
-		base.Paragraph.Align = override.Paragraph.Align
-		base.Paragraph.HasAlign = override.Paragraph.HasAlign
-	}
-	if override.Paragraph.HasVerticalAlign || override.Paragraph.VerticalAlign != fallback.Paragraph.VerticalAlign {
-		base.Paragraph.VerticalAlign = override.Paragraph.VerticalAlign
-		base.Paragraph.HasVerticalAlign = override.Paragraph.HasVerticalAlign
-	}
-	if override.Paragraph.Color != fallback.Paragraph.Color {
-		base.Paragraph.Color = override.Paragraph.Color
-	}
-	if override.Paragraph.HasUnderline || override.Paragraph.Underline != fallback.Paragraph.Underline {
-		base.Paragraph.Underline = override.Paragraph.Underline
-		base.Paragraph.HasUnderline = override.Paragraph.HasUnderline
-	}
-	if override.Paragraph.HasStrikethrough || override.Paragraph.Strikethrough != fallback.Paragraph.Strikethrough {
-		base.Paragraph.Strikethrough = override.Paragraph.Strikethrough
-		base.Paragraph.HasStrikethrough = override.Paragraph.HasStrikethrough
-	}
-	if override.Paragraph.HasPreserveSpace || override.Paragraph.PreserveSpace != fallback.Paragraph.PreserveSpace {
-		base.Paragraph.PreserveSpace = override.Paragraph.PreserveSpace
-		base.Paragraph.HasPreserveSpace = override.Paragraph.HasPreserveSpace
-	}
-	if override.Paragraph.HasNoWrap || override.Paragraph.NoWrap != fallback.Paragraph.NoWrap {
-		base.Paragraph.NoWrap = override.Paragraph.NoWrap
-		base.Paragraph.HasNoWrap = override.Paragraph.HasNoWrap
-	}
-	if override.Paragraph.HasHyphenation || override.Paragraph.Hyphenation != fallback.Paragraph.Hyphenation {
-		base.Paragraph.Hyphenation = override.Paragraph.Hyphenation
-		base.Paragraph.HasHyphenation = override.Paragraph.HasHyphenation
-	}
+	base.Paragraph = mergePDFParagraphOverridesWithFont(base.Paragraph, override.Paragraph, fallback.Paragraph, inheritedFontSize)
 	if override.SpaceBeforeSpec.Set {
 		base.SpaceBefore = pdfResolveCSSLengthSpec(override.SpaceBeforeSpec, relativeLengthFontSize)
 		base.SpaceBeforeSpec = override.SpaceBeforeSpec
@@ -246,6 +167,90 @@ func mergePDFStyleOverridesWithFont(base, override, fallback pdfBlockResolvedSty
 	}
 	if override.Widows != fallback.Widows {
 		base.Widows = override.Widows
+	}
+	return base
+}
+
+func mergePDFParagraphOverridesWithFont(base, override, fallback paragraphStyle, inheritedFontSize float64) paragraphStyle {
+	if override.FontFamily != fallback.FontFamily {
+		base.FontFamily = override.FontFamily
+	}
+	if override.HasBold || override.Bold != fallback.Bold {
+		base.Bold = override.Bold
+		base.HasBold = override.HasBold
+	}
+	if override.HasItalic || override.Italic != fallback.Italic {
+		base.Italic = override.Italic
+		base.HasItalic = override.HasItalic
+	}
+	if override.FontSizeSpec.Set {
+		base.FontSize = pdfResolveCSSFontSizeSpec(override.FontSizeSpec, inheritedFontSize)
+		base.FontSizeSpec = override.FontSizeSpec
+	} else if override.FontSize != fallback.FontSize {
+		base.FontSize = override.FontSize
+		base.FontSizeSpec = pdfCSSLengthSpec{}
+	}
+	lineHeightOverride := override
+	if override.FontSizeSpec.Set && !override.LineHeightExplicit {
+		if override.LineHeight != fallback.LineHeight && override.FontSize > 0 {
+			base.LineHeight = override.LineHeight * base.FontSize / override.FontSize
+			lineHeightOverride.LineHeight = fallback.LineHeight
+		} else {
+			lineHeightOverride.LineHeight = fallback.LineHeight
+		}
+	}
+	base = mergePDFLineHeightOverride(base, lineHeightOverride, fallback)
+	if override.LineHeightSpec.Set {
+		base.LineHeight = pdfResolveCSSLineHeightSpec(override.LineHeightSpec, base.FontSize)
+		base.LineHeightSpec = override.LineHeightSpec
+		base.LineHeightExplicit = true
+	}
+	if override.LetterSpacingSpec.Set {
+		base.LetterSpacing = pdfResolveCSSLengthSpec(override.LetterSpacingSpec, base.FontSize)
+		base.LetterSpacingSpec = override.LetterSpacingSpec
+	} else if override.LetterSpacing != fallback.LetterSpacing {
+		base.LetterSpacing = override.LetterSpacing
+		base.LetterSpacingSpec = pdfCSSLengthSpec{}
+	}
+	if override.FirstLineIndentSpec.Set {
+		base.FirstLineIndent = pdfResolveCSSLengthSpec(override.FirstLineIndentSpec, base.FontSize)
+		base.FirstLineIndentSpec = override.FirstLineIndentSpec
+		base.HasFirstLineIndent = override.HasFirstLineIndent
+	} else if override.HasFirstLineIndent || override.FirstLineIndent != fallback.FirstLineIndent {
+		base.FirstLineIndent = override.FirstLineIndent
+		base.FirstLineIndentSpec = pdfCSSLengthSpec{}
+		base.HasFirstLineIndent = override.HasFirstLineIndent
+	}
+	if override.HasAlign || override.Align != fallback.Align {
+		base.Align = override.Align
+		base.HasAlign = override.HasAlign
+	}
+	if override.HasVerticalAlign || override.VerticalAlign != fallback.VerticalAlign {
+		base.VerticalAlign = override.VerticalAlign
+		base.HasVerticalAlign = override.HasVerticalAlign
+	}
+	if override.Color != fallback.Color {
+		base.Color = override.Color
+	}
+	if override.HasUnderline || override.Underline != fallback.Underline {
+		base.Underline = override.Underline
+		base.HasUnderline = override.HasUnderline
+	}
+	if override.HasStrikethrough || override.Strikethrough != fallback.Strikethrough {
+		base.Strikethrough = override.Strikethrough
+		base.HasStrikethrough = override.HasStrikethrough
+	}
+	if override.HasPreserveSpace || override.PreserveSpace != fallback.PreserveSpace {
+		base.PreserveSpace = override.PreserveSpace
+		base.HasPreserveSpace = override.HasPreserveSpace
+	}
+	if override.HasNoWrap || override.NoWrap != fallback.NoWrap {
+		base.NoWrap = override.NoWrap
+		base.HasNoWrap = override.HasNoWrap
+	}
+	if override.HasHyphenation || override.Hyphenation != fallback.Hyphenation {
+		base.Hyphenation = override.Hyphenation
+		base.HasHyphenation = override.HasHyphenation
 	}
 	return base
 }
