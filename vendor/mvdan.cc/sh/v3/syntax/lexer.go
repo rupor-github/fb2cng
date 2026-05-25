@@ -294,7 +294,8 @@ skipSpace:
 		case '#':
 			// If we're parsing $foo#bar, ${foo}#bar, 'foo'#bar, or "foo"#bar,
 			// #bar is a continuation of the same word, not a comment.
-			if p.quote == unquotedWordCont && !p.spaced {
+			// The same applies inside [[ ]] tests, where '#' has no comment meaning.
+			if !p.spaced && (p.quote == unquotedWordCont || p.quote == testExpr) {
 				p.advanceLitNone(r)
 				return
 			}
@@ -325,7 +326,9 @@ skipSpace:
 			}
 			p.next()
 		case '[':
-			if p.quote == arrayElems {
+			// `[` only starts an `[idx]=val` element when it begins a new word;
+			// otherwise it continues a glob like `foo[0-9]`.
+			if p.quote == arrayElems && (p.spaced || p.tok == leftParen || p.tok == _Newl) {
 				p.rune()
 				p.tok = leftBrack
 			} else {
@@ -573,7 +576,7 @@ func (p *Parser) regToken(r rune) token {
 			p.rune()
 			return semiAnd
 		case '|':
-			if !p.lang.in(LangMirBSDKorn) {
+			if !p.lang.in(LangMirBSDKorn | LangZsh) {
 				break
 			}
 			p.rune()

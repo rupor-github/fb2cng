@@ -140,7 +140,7 @@ func (l *LangVariant) Set(s string) error {
 	switch s {
 	case "bash":
 		*l = LangBash
-	case "posix", "sh":
+	case "posix", "sh", "dash":
 		*l = LangPOSIX
 	case "mksh":
 		*l = LangMirBSDKorn
@@ -1453,6 +1453,44 @@ func (p *Parser) paramExp() *ParamExp {
 		pe.Flags = p.lit(p.pos, p.val)
 		p.rune()
 	}
+	// Zsh-only prefixes that change how the parameter is expanded.
+	// They may appear in any combination, like ${=^name}.
+	// Doubling the rune (${==a}, ${~~a}, ${^^a}) forces the option off.
+zshPrefixLoop:
+	for p.lang.in(LangZsh) {
+		var field *OptState
+		switch p.r {
+		case '=':
+			field = &pe.Split
+		case '~':
+			field = &pe.GlobSubst
+		case '^':
+			field = &pe.RcExpand
+		default:
+			break zshPrefixLoop
+		}
+		next, after := p.peekTwo()
+		state := OptOn
+		check := next
+		if rune(next) == p.r {
+			state = OptOff
+			check = after
+		}
+		if check == utf8.RuneSelf || check == '}' {
+			break zshPrefixLoop
+		}
+		// For the short form, only treat as a prefix if followed by something
+		// that could start a parameter name or another zsh prefix.
+		if pe.Short && check != '=' && check != '~' && check != '^' &&
+			!singleRuneParam(check) && !paramNameRune(check) && check != '"' {
+			break zshPrefixLoop
+		}
+		if state == OptOff {
+			p.rune() // consume the first of the doubled pair
+		}
+		p.rune()
+		*field = state
+	}
 	if !pe.Short || p.lang.in(LangZsh) {
 		// Prefixes, like ${#name} to get the length of a variable.
 		// Note that in Zsh, the short form like $#name is allowed too.
@@ -1789,13 +1827,16 @@ func (p *Parser) zshSubFlags() *FlagsArithm {
 	}
 	zf.Flags = p.lit(p.pos, p.val)
 	p.rune()
-	p.quote = old
-	// Parse the expression; use arithmExprAssign so commas are left for ranges.
-	p.next()
-	if p.tok == star || p.tok == at {
-		p.tok, p.val = _LitWord, p.tok.String()
+	// Lex the argument as a raw pattern, stopping at ',' or ']',
+	// since zsh treats it as a pattern rather than an arithmetic expression.
+	argPos := p.nextPos()
+	for p.newLit(p.r); p.r != utf8.RuneSelf && p.r != ',' && p.r != ']'; p.rune() {
 	}
-	zf.X = p.arithmExprAssign(false)
+	if val := p.endLit(); val != "" {
+		zf.X = p.wordOne(p.lit(argPos, val))
+	}
+	p.quote = old
+	p.next()
 	return zf
 }
 
@@ -2821,6 +2862,16 @@ func (p *Parser) testDecl(s *Stmt) {
 	s.Cmd = td
 }
 
+func (p *Parser) unexpectedInCallExpr(ce *CallExpr) {
+	// Note that we'll only keep the first error that happens.
+	if len(ce.Args) > 0 {
+		if cmd := ce.Args[0].Lit(); isBashCompoundCommand(_LitWord, cmd) {
+			p.checkLang(p.pos, langBashLike, "the %#q builtin", cmd)
+		}
+	}
+	p.curErr("a command can only contain words and redirects; encountered %#q", p.tok)
+}
+
 func (p *Parser) callExpr(s *Stmt, w *Word, assign bool) {
 	ce := p.call(w)
 	if w == nil {
@@ -2871,23 +2922,23 @@ loop:
 			ce.Args = append(ce.Args, p.wordAnyNumber())
 		case dblLeftParen:
 			p.curErr("%#q can only be used to open an arithmetic cmd", p.tok)
+		case leftParen:
+			if p.lang.in(LangZsh) && p.r != ')' {
+				ce.Args = append(ce.Args, p.wordAnyNumber())
+				break
+			}
+			p.unexpectedInCallExpr(ce)
 		case rightParen:
 			if p.quote == subCmd {
 				break loop
 			}
-			fallthrough
+			p.unexpectedInCallExpr(ce)
 		default:
 			if p.peekRedir() {
 				p.doRedirect(s)
 				continue
 			}
-			// Note that we'll only keep the first error that happens.
-			if len(ce.Args) > 0 {
-				if cmd := ce.Args[0].Lit(); isBashCompoundCommand(_LitWord, cmd) {
-					p.checkLang(p.pos, langBashLike, "the %#q builtin", cmd)
-				}
-			}
-			p.curErr("a command can only contain words and redirects; encountered %#q", p.tok)
+			p.unexpectedInCallExpr(ce)
 		}
 	}
 	if len(ce.Args) == 0 {
