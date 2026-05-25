@@ -658,12 +658,25 @@ func chooseBreaksWithShape(units []paragraphUnit, spaceWidth float64, style para
 	}
 	states[0][stateIndexWithShape(paragraphFitnessDecent, false, 0, shapeStates)] = paragraphBreakState{Cost: 0, Prev: -1, PrevState: -1, Fitness: paragraphFitnessDecent, ShapeLine: 0}
 
+	var candidates []paragraphBreakCandidate
 	for start := 0; start < n; start++ {
 		for stateIdx, state := range states[start] {
 			if math.IsInf(state.Cost, 1) {
 				continue
 			}
-			for _, candidate := range paragraphBreakCandidates(units, start, spaceWidth, style, maxWidth, shape, state.ShapeLine, state.Fitness, state.Hyphenated) {
+			candidates = paragraphBreakCandidatesInto(
+				candidates,
+				units,
+				start,
+				spaceWidth,
+				style,
+				maxWidth,
+				shape,
+				state.ShapeLine,
+				state.Fitness,
+				state.Hyphenated,
+			)
+			for _, candidate := range candidates {
 				end := candidate.Break.End
 				fitness := candidate.Fitness
 				nextShapeLine := min(state.ShapeLine+1, shapeStates-1)
@@ -698,7 +711,8 @@ func chooseBreaksWithShape(units []paragraphUnit, spaceWidth float64, style para
 	return emergencyParagraphBreaks(units, spaceWidth, style, maxWidth, shape)
 }
 
-func paragraphBreakCandidates(
+func paragraphBreakCandidatesInto(
+	candidates []paragraphBreakCandidate,
 	units []paragraphUnit,
 	start int,
 	spaceWidth float64,
@@ -709,7 +723,7 @@ func paragraphBreakCandidates(
 	previousFitness paragraphFitness,
 	previousHyphenated bool,
 ) []paragraphBreakCandidate {
-	candidates := make([]paragraphBreakCandidate, 0)
+	candidates = candidates[:0]
 	width := 0.0
 	for end := start; end < len(units); end++ {
 		if end > start && units[end].WordIndex != units[end-1].WordIndex {
@@ -845,7 +859,8 @@ func lineBreakStats(width, available float64, gaps int, firstLine bool, last boo
 		badness = paragraphFinalLineBadness(width, available, firstLine)
 	}
 	fitness := paragraphFitnessClass(ratio)
-	demerits := math.Pow(paragraphLinePenalty+badness, 2)
+	penalty := paragraphLinePenalty + badness
+	demerits := penalty * penalty
 	if emergency {
 		demerits += paragraphEmergencyPenalty
 		if firstLine {
