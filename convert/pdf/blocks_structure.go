@@ -136,18 +136,35 @@ func pdfBacklinkBlockContent(c *content.Content, refIDs []string) (string, []pdf
 	return text.String(), runs
 }
 
-func appendSectionBlocks(blocks *[]pdfTextBlock, c *content.Content, section *fb2.Section, depth int, splitSections map[string]bool, contextClasses string, stripRootHorizontalMargins bool, endVignettes pdfSectionEndVignetteTransfers) {
+type pdfSectionBlockOptions struct {
+	Content                    *content.Content
+	Section                    *fb2.Section
+	Depth                      int
+	SplitSections              map[string]bool
+	ContextClasses             string
+	StripRootHorizontalMargins bool
+	EndVignettes               pdfSectionEndVignetteTransfers
+}
+
+func appendSectionBlocksWithOptions(blocks *[]pdfTextBlock, opts pdfSectionBlockOptions) {
+	section := opts.Section
 	if section == nil {
 		return
 	}
+	content := opts.Content
+	depth := opts.Depth
+	splitSections := opts.SplitSections
+	contextClasses := opts.ContextClasses
+	stripRootHorizontalMargins := opts.StripRootHorizontalMargins
+	endVignettes := opts.EndVignettes
 	var book *fb2.FictionBook
-	if c != nil {
-		book = c.Book
-		oldSectionTitle := c.CurrentSectionTitle
+	if content != nil {
+		book = content.Book
+		oldSectionTitle := content.CurrentSectionTitle
 		if title := section.AsTitleText(""); title != "" {
-			c.CurrentSectionTitle = title
+			content.CurrentSectionTitle = title
 		}
-		defer func() { c.CurrentSectionTitle = oldSectionTitle }()
+		defer func() { content.CurrentSectionTitle = oldSectionTitle }()
 	}
 	titleClasses := sectionTitleContainerClasses(depth)
 	titleContextClasses := joinStyleClasses(contextClasses, titleClasses)
@@ -156,7 +173,7 @@ func appendSectionBlocks(blocks *[]pdfTextBlock, c *content.Content, section *fb
 		appendTitleVignetteBlock(blocks, book, depth, true, titleClasses, titleContextClasses)
 	}
 	appendTitleBlocksWithOptions(blocks, pdfTitleBlockOptions{
-		Content:                    c,
+		Content:                    content,
 		Title:                      section.Title,
 		Depth:                      depth,
 		ID:                         section.ID,
@@ -169,7 +186,7 @@ func appendSectionBlocks(blocks *[]pdfTextBlock, c *content.Content, section *fb
 		appendTitleVignetteBlock(blocks, book, depth, false, titleClasses, titleContextClasses)
 	}
 	for i := range section.Epigraphs {
-		appendEpigraphBlocksFull(blocks, c, &section.Epigraphs[i], contextClasses, stripRootHorizontalMargins)
+		appendEpigraphBlocksFull(blocks, content, &section.Epigraphs[i], contextClasses, stripRootHorizontalMargins)
 	}
 	appendImageBlockWithOptions(blocks, pdfImageBlockOptions{
 		Image:                      section.Image,
@@ -179,11 +196,11 @@ func appendSectionBlocks(blocks *[]pdfTextBlock, c *content.Content, section *fb
 	})
 	if section.Annotation != nil {
 		annotationContextClasses := joinStyleClasses(contextClasses, pdfStyleAnnotation)
-		appendFlowBlocks(blocks, c, section.Annotation.Items, depth, splitSections, pdfStyleAnnotation, annotationContextClasses, stripRootHorizontalMargins)
+		appendFlowBlocks(blocks, content, section.Annotation.Items, depth, splitSections, pdfStyleAnnotation, annotationContextClasses, stripRootHorizontalMargins)
 	}
 	for i := range section.Content {
 		appendFlowItemWithContext(blocks, &section.Content[i], pdfBlockBuildContext{
-			Content:                    c,
+			Content:                    content,
 			Depth:                      depth,
 			SplitSections:              splitSections,
 			ContextClasses:             contextClasses,
@@ -372,7 +389,14 @@ func appendFlowItemWithContext(blocks *[]pdfTextBlock, item *fb2.FlowItem, ctx p
 		if item.Section != nil && splitSections[item.Section.ID] {
 			return
 		}
-		appendSectionBlocks(blocks, content, item.Section, depth+1, splitSections, "", stripRootHorizontalMargins, ctx.EndVignettes)
+		appendSectionBlocksWithOptions(blocks, pdfSectionBlockOptions{
+			Content:                    content,
+			Section:                    item.Section,
+			Depth:                      depth + 1,
+			SplitSections:              splitSections,
+			StripRootHorizontalMargins: stripRootHorizontalMargins,
+			EndVignettes:               ctx.EndVignettes,
+		})
 	case fb2.FlowPoem:
 		appendPoemBlocks(blocks, content, item.Poem, depth, splitSections, contextClasses, stripRootHorizontalMargins)
 	case fb2.FlowCite:

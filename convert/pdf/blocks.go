@@ -312,7 +312,13 @@ func appendUnitBlocks(blocks *[]pdfTextBlock, c *content.Content, unit *structur
 	case structure.UnitBodyIntro:
 		appendBodyIntroBlocks(blocks, c, unit.Body, !splitBodies[unit.Body])
 	case structure.UnitSection:
-		appendSectionBlocks(blocks, c, unit.Section, unit.TitleDepth, splitSections, "", false, endVignettes)
+		appendSectionBlocksWithOptions(blocks, pdfSectionBlockOptions{
+			Content:       c,
+			Section:       unit.Section,
+			Depth:         unit.TitleDepth,
+			SplitSections: splitSections,
+			EndVignettes:  endVignettes,
+		})
 	case structure.UnitFootnotesBody:
 		appendFootnoteBodyBlocks(blocks, c, unit.Body, splitSections)
 	}
