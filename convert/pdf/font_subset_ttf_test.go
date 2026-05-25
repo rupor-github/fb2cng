@@ -80,6 +80,13 @@ func TestSubsetTrueTypeFontBuildsCompactGlyphProgram(t *testing.T) {
 	if got, want := len(loca), (len(subset.GlyphMap)+1)*entrySize; got != want {
 		t.Fatalf("subset loca length = %d, want %d", got, want)
 	}
+	post := tables.Records["post"].Data
+	if len(post) != 32 {
+		t.Fatalf("subset post length = %d, want compact format 3.0 length 32", len(post))
+	}
+	if got := uint32(post[0])<<24 | uint32(post[1])<<16 | uint32(post[2])<<8 | uint32(post[3]); got != 0x00030000 {
+		t.Fatalf("subset post format = 0x%08X, want 0x00030000", got)
+	}
 	for _, tag := range []string{"GDEF", "GPOS", "GSUB", "DSIG"} {
 		if _, ok := tables.Records[tag]; ok {
 			t.Fatalf("subset retained unused layout/signature table %q", tag)

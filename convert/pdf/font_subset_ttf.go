@@ -105,6 +105,8 @@ func subsetTrueTypeFont(data []byte, used map[uint16]shapedGlyph) (trueTypeFontS
 			updated.Data = newHmtx
 		case "cmap":
 			updated.Data = newCmap
+		case "post":
+			updated.Data = buildSubsetPostTable(record.Data)
 		}
 		records = append(records, updated)
 	}
@@ -381,6 +383,15 @@ func hmtxMetric(hmtx []byte, gid int, numberOfHMetrics int) (uint16, int16, erro
 		return 0, 0, fmt.Errorf("hmtx left side bearing for glyph %d truncated", gid)
 	}
 	return binary.BigEndian.Uint16(hmtx[advanceOffset:]), int16(binary.BigEndian.Uint16(hmtx[lsbOffset:])), nil
+}
+
+func buildSubsetPostTable(post []byte) []byte {
+	out := make([]byte, 32)
+	if len(post) >= len(out) {
+		copy(out, post[:len(out)])
+	}
+	binary.BigEndian.PutUint32(out[:4], 0x00030000)
+	return out
 }
 
 func buildCompactSubsetCmap(used map[uint16]shapedGlyph, glyphMap map[uint16]uint16) []byte {
