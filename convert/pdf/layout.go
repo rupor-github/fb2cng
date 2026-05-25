@@ -209,8 +209,8 @@ func (l *pdfPageLayout) layoutBlocks() error {
 					availableHeight := max(cellTop-cellBottom-cell.Style.PaddingTop-cell.Style.PaddingBottom-2*cell.Style.BorderWidth, 0)
 					verticalOffset := 0.0
 					switch strings.ToLower(strings.TrimSpace(cell.VAlign)) {
-					case "l.top":
-					case "l.bottom":
+					case "top":
+					case "bottom":
 						verticalOffset = max(availableHeight-textHeight, 0)
 					default:
 						verticalOffset = max((availableHeight-textHeight)/2, 0)
