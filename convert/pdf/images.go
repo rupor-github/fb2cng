@@ -51,7 +51,7 @@ func fitPDFImageSizeWithUpscale(doc pdfDocumentSpec, img *fb2.BookImage, maxWidt
 	return fitPDFImageDimensions(width, height, maxWidth, maxHeight, allowUpscale)
 }
 
-func fitPDFBlockImageSizeWithReference(doc pdfDocumentSpec, img *fb2.BookImage, maxWidth, maxHeight, widthReference float64, forceContentWidth bool) (float64, float64, bool) {
+func fitPDFBlockImageSize(doc pdfDocumentSpec, img *fb2.BookImage, maxWidth, maxHeight, widthReference float64, forceContentWidth bool) (float64, float64, bool) {
 	widthPx, heightPx := pdfImagePixelSize(img)
 	if widthPx <= 0 || heightPx <= 0 || maxWidth <= 0 || maxHeight <= 0 {
 		return 0, 0, false
@@ -94,7 +94,7 @@ func pdfBlockImageUsesFullWidthPercent(img *fb2.BookImage) bool {
 	return widthPx > 0 && heightPx > 0 && float64(widthPx) >= pdfKP3ContentWidthPx
 }
 
-func pdfBlockImageWidthReference(block pdfTextBlock, style pdfBlockResolvedStyle, availableWidth, rootlessContentWidth float64, img *fb2.BookImage, forceContentWidth bool) float64 {
+func pdfBlockImageReferenceWidth(block pdfTextBlock, style pdfBlockResolvedStyle, availableWidth, rootlessContentWidth float64, img *fb2.BookImage, forceContentWidth bool) float64 {
 	widthLimit := availableWidth
 	if pdfBlockImageUsesRootlessWidthReference(img, forceContentWidth) {
 		widthLimit = rootlessContentWidth

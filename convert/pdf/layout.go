@@ -208,8 +208,8 @@ func layoutPDFPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]s
 				continue
 			}
 			forceContentWidth := isVignetteBlock(block) || isHeadingImageBlock(block)
-			widthReference := pdfBlockImageWidthReference(block, style, blockWidthLimit, rootlessContentWidth, img, forceContentWidth)
-			width, height, ok := fitPDFBlockImageSizeWithReference(doc, img, blockWidth, maxImageHeight, widthReference, forceContentWidth)
+			widthReference := pdfBlockImageReferenceWidth(block, style, blockWidthLimit, rootlessContentWidth, img, forceContentWidth)
+			width, height, ok := fitPDFBlockImageSize(doc, img, blockWidth, maxImageHeight, widthReference, forceContentWidth)
 			if !ok {
 				continue
 			}
@@ -953,8 +953,8 @@ func nextBlockKeepHeight(doc pdfDocumentSpec, blockStyles []pdfBlockResolvedStyl
 				return 0, nil
 			}
 			forceContentWidth := isVignetteBlock(block) || isHeadingImageBlock(block)
-			widthReference := pdfBlockImageWidthReference(block, style, availableWidth, rootlessContentWidth, img, forceContentWidth)
-			_, height, ok := fitPDFBlockImageSizeWithReference(doc, img, blockContentWidth(availableWidth, style), maxImageHeight, widthReference, forceContentWidth)
+			widthReference := pdfBlockImageReferenceWidth(block, style, availableWidth, rootlessContentWidth, img, forceContentWidth)
+			_, height, ok := fitPDFBlockImageSize(doc, img, blockContentWidth(availableWidth, style), maxImageHeight, widthReference, forceContentWidth)
 			if !ok {
 				return 0, nil
 			}
