@@ -159,10 +159,6 @@ func appendSectionBlocks(blocks *[]pdfTextBlock, c *content.Content, section *fb
 	}
 }
 
-func appendTitleBlocks(blocks *[]pdfTextBlock, title *fb2.Title, depth int) {
-	appendTitleBlocksFull(blocks, nil, title, depth, "", pdfHeadingStyleName(depth), "", "", false)
-}
-
 func appendTitleParagraphBlocks(blocks *[]pdfTextBlock, c *content.Content, title *fb2.Title, id string, styleClass string, contextClasses string, stripRootHorizontalMargins bool) {
 	if title == nil {
 		return
@@ -186,14 +182,6 @@ func appendTitleParagraphBlocks(blocks *[]pdfTextBlock, c *content.Content, titl
 			anchorID = ""
 		}
 	}
-}
-
-func appendTitleBlocksWithIDAndClasses(blocks *[]pdfTextBlock, title *fb2.Title, depth int, id string, styleClasses string) {
-	appendTitleBlocksFull(blocks, nil, title, depth, id, pdfHeadingStyleName(depth), styleClasses, strings.TrimSpace(styleClasses), false)
-}
-
-func appendTitleBlocksWithIDHeaderAndClasses(blocks *[]pdfTextBlock, title *fb2.Title, depth int, id string, headerStyleName string, styleClasses string) {
-	appendTitleBlocksFull(blocks, nil, title, depth, id, headerStyleName, styleClasses, strings.TrimSpace(styleClasses), false)
 }
 
 func appendTitleBlocksFull(blocks *[]pdfTextBlock, c *content.Content, title *fb2.Title, depth int, id string, headerStyleName string, styleClasses string, contextClasses string, stripRootHorizontalMargins bool) {
@@ -454,10 +442,6 @@ func blockHasStyleClass(block pdfTextBlock, className string) bool {
 	return false
 }
 
-func appendParagraphBlockWithClasses(blocks *[]pdfTextBlock, kind pdfBlockKind, paragraph *fb2.Paragraph, depth int, styleClasses string) {
-	appendParagraphBlockFull(blocks, nil, kind, paragraph, depth, styleClasses, strings.TrimSpace(styleClasses), false)
-}
-
 func appendParagraphBlockFull(blocks *[]pdfTextBlock, c *content.Content, kind pdfBlockKind, paragraph *fb2.Paragraph, depth int, styleClasses string, contextClasses string, stripRootHorizontalMargins bool) {
 	if paragraph == nil {
 		return
@@ -558,10 +542,6 @@ func appendCiteBlocks(blocks *[]pdfTextBlock, c *content.Content, cite *fb2.Cite
 	for i := range cite.TextAuthors {
 		appendParagraphBlockFull(blocks, c, pdfBlockTextAuthor, &cite.TextAuthors[i], depth, "", citeContextClasses, stripRootHorizontalMargins)
 	}
-}
-
-func appendEpigraphBlocks(blocks *[]pdfTextBlock, epigraph *fb2.Epigraph) {
-	appendEpigraphBlocksFull(blocks, nil, epigraph, "", false)
 }
 
 func appendEpigraphBlocksFull(blocks *[]pdfTextBlock, c *content.Content, epigraph *fb2.Epigraph, contextClasses string, stripRootHorizontalMargins bool) {

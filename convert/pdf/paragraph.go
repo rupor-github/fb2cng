@@ -638,10 +638,6 @@ func assembleParagraphLines(face *builtinFontFace, units []paragraphUnit, style 
 	return lines, nil
 }
 
-func chooseParagraphBreaks(units []paragraphUnit, spaceWidth float64, style paragraphStyle, maxWidth float64) []paragraphBreak {
-	return chooseParagraphBreaksWithShape(units, spaceWidth, style, maxWidth, paragraphLineShape{})
-}
-
 func chooseParagraphBreaksWithShape(units []paragraphUnit, spaceWidth float64, style paragraphStyle, maxWidth float64, shape paragraphLineShape) []paragraphBreak {
 	n := len(units)
 	if n == 0 {
@@ -1080,10 +1076,6 @@ func paragraphJustificationAvailableForOverhang(available float64, terminalOverh
 		return available
 	}
 	return max(available-max(terminalOverhang, 0), 1)
-}
-
-func paragraphLineJustificationAvailable(line paragraphLine, fontSize float64, letterSpacing float64, available float64) float64 {
-	return paragraphJustificationAvailableForOverhang(available, paragraphLineVisualRightReserve(line, fontSize, letterSpacing))
 }
 
 func paragraphLineVisualRightReserve(line paragraphLine, fontSize float64, letterSpacing float64) float64 {

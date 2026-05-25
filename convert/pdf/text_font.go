@@ -269,11 +269,6 @@ func pdfGlyphWithSource(glyph shapedGlyph, r rune, start, end int) shapedGlyph {
 	return glyph
 }
 
-func shapeOpenTypeText(face *builtinFontFace, text string) (shapedText, error) {
-	shaper := openTypePDFTextShaper{face: face}
-	return shaper.Shape(text, pdfShapeOptions{})
-}
-
 func (s *openTypePDFTextShaper) Shape(text string, _ pdfShapeOptions) (shapedText, error) {
 	face := s.face
 	if face == nil || face.TextFace == nil {
@@ -1116,10 +1111,6 @@ func glyphUnicodeText(glyph shapedGlyph) string {
 		return string(glyph.Rune)
 	}
 	return ""
-}
-
-func utf16BEHex(r rune) string {
-	return utf16BEHexString(string(r))
 }
 
 func utf16BEHexString(text string) string {

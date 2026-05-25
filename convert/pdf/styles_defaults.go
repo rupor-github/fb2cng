@@ -89,14 +89,6 @@ func intrinsicSectionTitleHeaderPDFStyle() pdfBlockResolvedStyle {
 	return headingPDFStyleWithLineHeight(fontSize, pdfSectionTitleHeaderLineHeight, pdfHeadingMarginFactor(2))
 }
 
-func headingPDFStyle(depth int) pdfBlockResolvedStyle {
-	lineHeight := pdfAdjustedLineHeight
-	if depth > 1 {
-		lineHeight = pdfSectionTitleHeaderLineHeight
-	}
-	return headingPDFStyleWithLineHeight(pdfHeadingFontSize(depth), lineHeight, pdfHeadingMarginFactor(depth))
-}
-
 func pdfIntrinsicHeadingFontSize(depth int) float64 {
 	switch {
 	case depth <= 2:

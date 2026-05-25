@@ -179,10 +179,6 @@ func insertTOCPageBlocks(blocks []pdfTextBlock, c *content.Content, entries []*s
 	}
 }
 
-func buildTOCPageBlocks(entries []*structure.TOCEntry, includeUntitled bool, tocType common.TOCType) []pdfTextBlock {
-	return buildTOCPageBlocksWithTitle(pdfTitleFromStrings("Contents"), entries, includeUntitled, tocType)
-}
-
 func buildTOCPageBlocksWithTitle(title *fb2.Title, entries []*structure.TOCEntry, includeUntitled bool, tocType common.TOCType) []pdfTextBlock {
 	items := flattenPDFTOCEntries(entries, includeUntitled, 1)
 	if len(items) == 0 {
