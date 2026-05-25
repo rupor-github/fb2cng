@@ -80,6 +80,11 @@ func TestSubsetTrueTypeFontBuildsCompactGlyphProgram(t *testing.T) {
 	if got, want := len(loca), (len(subset.GlyphMap)+1)*entrySize; got != want {
 		t.Fatalf("subset loca length = %d, want %d", got, want)
 	}
+	for _, tag := range []string{"GDEF", "GPOS", "GSUB", "DSIG"} {
+		if _, ok := tables.Records[tag]; ok {
+			t.Fatalf("subset retained unused layout/signature table %q", tag)
+		}
+	}
 }
 
 func TestFontResourceObjectsEmbedsSubsetFontFile(t *testing.T) {

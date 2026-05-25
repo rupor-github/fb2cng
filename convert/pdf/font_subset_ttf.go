@@ -82,6 +82,9 @@ func subsetTrueTypeFont(data []byte, used map[uint16]shapedGlyph) (trueTypeFontS
 
 	records := make([]ttfTableRecord, 0, len(tables.Records))
 	for tag, record := range tables.Records {
+		if dropTrueTypeSubsetTable(tag) {
+			continue
+		}
 		updated := record
 		updated.Data = slices.Clone(record.Data)
 		switch tag {
@@ -111,6 +114,15 @@ func subsetTrueTypeFont(data []byte, used map[uint16]shapedGlyph) (trueTypeFontS
 		return trueTypeFontSubset{}, ok, err
 	}
 	return trueTypeFontSubset{Data: fontData, GlyphMap: glyphMap}, true, nil
+}
+
+func dropTrueTypeSubsetTable(tag string) bool {
+	switch tag {
+	case "BASE", "DSIG", "FFTM", "GDEF", "GPOS", "GSUB", "JSTF", "MATH", "VORG", "kern", "meta", "vhea", "vmtx":
+		return true
+	default:
+		return false
+	}
 }
 
 func parseTTFTables(data []byte) (ttfSubsetTables, error) {
