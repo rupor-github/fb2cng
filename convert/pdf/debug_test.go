@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -163,6 +164,75 @@ func TestGenerateDebugDumps(t *testing.T) {
 	if printedFootnotes.Enabled || printedFootnotes.FinalPageCount != len(pages) {
 		t.Fatalf("debug printed footnotes = %#v, want disabled summary for non-printed document", printedFootnotes)
 	}
+}
+
+func TestPDFDebugFontsReportsOriginalCIDsAndSubsetGlyphIDs(t *testing.T) {
+	face, err := builtinFont("serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	shaped, err := shapeText(face, "Tiny")
+	if err != nil {
+		t.Fatalf("shapeText() error = %v", err)
+	}
+	objects, err := fontResourceObjects(face, shaped.Used, fontObjectIDs{
+		Type0Font:      1,
+		CIDFont:        2,
+		FontDescriptor: 3,
+		FontFile:       4,
+		ToUnicode:      5,
+	})
+	if err != nil {
+		t.Fatalf("fontResourceObjects() error = %v", err)
+	}
+
+	fonts := pdfDebugFonts([]pdfFontResource{{
+		Key:     pdfFontKey{Family: "serif"},
+		Name:    "F1",
+		Face:    face,
+		Used:    shaped.Used,
+		CIDMap:  objects.CIDMap,
+		Objects: objects,
+	}})
+	if len(fonts) != 1 {
+		t.Fatalf("debug fonts = %#v, want one font", fonts)
+	}
+	font := fonts[0]
+	if !font.Subset ||
+		len(font.OriginalGlyphIDs) != font.UsedGlyphCount ||
+		len(font.PDFCIDs) != font.UsedGlyphCount ||
+		len(font.SubsetGlyphIDs) < font.UsedGlyphCount {
+		t.Fatalf("debug font glyph summary = %#v, want original glyphs, PDF CIDs, and subset GIDs", font)
+	}
+	if !slices.Equal(font.UsedGlyphIDs, font.OriginalGlyphIDs) {
+		t.Fatalf("used glyph IDs = %v, original glyph IDs = %v, want legacy field to report original IDs", font.UsedGlyphIDs, font.OriginalGlyphIDs)
+	}
+
+	for _, originalGlyphID := range font.OriginalGlyphIDs {
+		mappedCID, ok := objects.CIDMap[originalGlyphID]
+		if !ok {
+			t.Fatalf("original glyph %d missing from CID map %#v", originalGlyphID, objects.CIDMap)
+		}
+		if !slices.Contains(font.PDFCIDs, mappedCID) {
+			t.Fatalf("PDF CIDs = %v, want mapped CID %d for original glyph %d", font.PDFCIDs, mappedCID, originalGlyphID)
+		}
+		if !slices.Contains(font.SubsetGlyphIDs, mappedCID) {
+			t.Fatalf("subset glyph IDs = %v, want subset GID %d", font.SubsetGlyphIDs, mappedCID)
+		}
+		entry, ok := pdfDebugFontGlyphIDMapEntry(font.GlyphIDMap, originalGlyphID)
+		if !ok || !entry.Used || entry.PDFCID != mappedCID || entry.SubsetGlyphID != mappedCID {
+			t.Fatalf("glyph ID map entry for original glyph %d = %#v/%t, want used PDF CID/subset GID %d", originalGlyphID, entry, ok, mappedCID)
+		}
+	}
+}
+
+func pdfDebugFontGlyphIDMapEntry(entries []pdfDebugFontGlyphIDMap, originalGlyphID uint16) (pdfDebugFontGlyphIDMap, bool) {
+	for _, entry := range entries {
+		if entry.OriginalGlyphID == originalGlyphID {
+			return entry, true
+		}
+	}
+	return pdfDebugFontGlyphIDMap{}, false
 }
 
 func TestPDFDebugPrintedFootnotesSummaryIncludesPlansReservesAndContinuationPacks(t *testing.T) {

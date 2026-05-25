@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -92,6 +93,85 @@ func TestSubsetTrueTypeFontBuildsCompactGlyphProgram(t *testing.T) {
 			t.Fatalf("subset retained unused layout/signature table %q", tag)
 		}
 	}
+}
+
+func TestSubsetTrueTypeFontIncludesAndRemapsCompositeGlyphComponents(t *testing.T) {
+	face, err := builtinFont("serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	shaped, err := shapeText(face, "é")
+	if err != nil {
+		t.Fatalf("shapeText() error = %v", err)
+	}
+	if len(shaped.Glyphs) != 1 {
+		t.Fatalf("shaped glyphs = %#v, want one precomposed glyph", shaped.Glyphs)
+	}
+	originalCompositeGID := shaped.Glyphs[0].GlyphID
+	originalTables, originalLoca := parseTTFSubsetTablesAndLoca(t, face.Data)
+	originalDeps, err := compositeGlyphDependencies(originalTables.Records["glyf"].Data, originalLoca, int(originalCompositeGID))
+	if err != nil {
+		t.Fatalf("compositeGlyphDependencies(original) error = %v", err)
+	}
+	if len(originalDeps) == 0 {
+		t.Fatalf("glyph %d has no composite dependencies; choose a composite regression sample", originalCompositeGID)
+	}
+
+	subset, ok, err := subsetTrueTypeFont(face.Data, shaped.Used)
+	if err != nil {
+		t.Fatalf("subsetTrueTypeFont() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("subsetTrueTypeFont() ok = false, want true")
+	}
+	if _, err := sfnt.Parse(subset.Data); err != nil {
+		t.Fatalf("sfnt.Parse(subset) error = %v", err)
+	}
+
+	mappedCompositeGID, ok := subset.GlyphMap[originalCompositeGID]
+	if !ok {
+		t.Fatalf("composite glyph %d missing from subset glyph map %#v", originalCompositeGID, subset.GlyphMap)
+	}
+	wantMappedDeps := make([]int, 0, len(originalDeps))
+	for _, originalDep := range originalDeps {
+		mappedDep, ok := subset.GlyphMap[uint16(originalDep)]
+		if !ok {
+			t.Fatalf("composite dependency %d missing from subset glyph map %#v", originalDep, subset.GlyphMap)
+		}
+		wantMappedDeps = append(wantMappedDeps, int(mappedDep))
+	}
+	if slices.Equal(wantMappedDeps, originalDeps) {
+		t.Fatalf("mapped dependencies = %v, original dependencies = %v, want remapped component IDs", wantMappedDeps, originalDeps)
+	}
+
+	subsetTables, subsetLoca := parseTTFSubsetTablesAndLoca(t, subset.Data)
+	gotMappedDeps, err := compositeGlyphDependencies(subsetTables.Records["glyf"].Data, subsetLoca, int(mappedCompositeGID))
+	if err != nil {
+		t.Fatalf("compositeGlyphDependencies(subset) error = %v", err)
+	}
+	if !slices.Equal(gotMappedDeps, wantMappedDeps) {
+		t.Fatalf("subset composite deps = %v, want remapped deps %v from original deps %v", gotMappedDeps, wantMappedDeps, originalDeps)
+	}
+}
+
+func parseTTFSubsetTablesAndLoca(t *testing.T, data []byte) (ttfSubsetTables, []uint32) {
+	t.Helper()
+	tables, err := parseTTFTables(data)
+	if err != nil {
+		t.Fatalf("parseTTFTables() error = %v", err)
+	}
+	head := tables.Records["head"].Data
+	maxp := tables.Records["maxp"].Data
+	if len(head) < 52 || len(maxp) < 6 {
+		t.Fatalf("head/maxp too short")
+	}
+	locFormat := int16(uint16(head[50])<<8 | uint16(head[51]))
+	numGlyphs := int(uint16(maxp[4])<<8 | uint16(maxp[5]))
+	loca, err := parseLocaOffsets(tables.Records["loca"].Data, numGlyphs, locFormat)
+	if err != nil {
+		t.Fatalf("parseLocaOffsets() error = %v", err)
+	}
+	return tables, loca
 }
 
 func TestFontResourceObjectsEmbedsSubsetFontFile(t *testing.T) {

@@ -163,29 +163,40 @@ type pdfDebugRect struct {
 }
 
 type pdfDebugFont struct {
-	ResourceName               string   `json:"resource_name"`
-	Family                     string   `json:"family"`
-	Bold                       bool     `json:"bold,omitempty"`
-	Italic                     bool     `json:"italic,omitempty"`
-	PostScriptName             string   `json:"post_script_name"`
-	PDFBaseFont                string   `json:"pdf_base_font,omitempty"`
-	OutlineKind                string   `json:"outline_kind,omitempty"`
-	PDFCIDFontSubtype          string   `json:"pdf_cid_font_subtype,omitempty"`
-	PDFEmbeddedFontFile        string   `json:"pdf_embedded_font_file,omitempty"`
-	UnitsPerEm                 int      `json:"units_per_em"`
-	Ascent                     int      `json:"ascent"`
-	Descent                    int      `json:"descent"`
-	CapHeight                  int      `json:"cap_height"`
-	BBox                       [4]int   `json:"bbox"`
-	Flags                      int      `json:"flags"`
-	ItalicAngle                int      `json:"italic_angle"`
-	OriginalFontFileSize       int      `json:"original_font_file_size"`
-	EmbeddedFontFileSize       int      `json:"embedded_font_file_size"`
-	EmbeddedFontFileStreamSize int      `json:"embedded_font_file_stream_size,omitempty"`
-	ToUnicodeStreamSize        int      `json:"to_unicode_stream_size,omitempty"`
-	Subset                     bool     `json:"subset,omitempty"`
-	UsedGlyphCount             int      `json:"used_glyph_count"`
-	UsedGlyphIDs               []uint16 `json:"used_glyph_ids"`
+	ResourceName               string                   `json:"resource_name"`
+	Family                     string                   `json:"family"`
+	Bold                       bool                     `json:"bold,omitempty"`
+	Italic                     bool                     `json:"italic,omitempty"`
+	PostScriptName             string                   `json:"post_script_name"`
+	PDFBaseFont                string                   `json:"pdf_base_font,omitempty"`
+	OutlineKind                string                   `json:"outline_kind,omitempty"`
+	PDFCIDFontSubtype          string                   `json:"pdf_cid_font_subtype,omitempty"`
+	PDFEmbeddedFontFile        string                   `json:"pdf_embedded_font_file,omitempty"`
+	UnitsPerEm                 int                      `json:"units_per_em"`
+	Ascent                     int                      `json:"ascent"`
+	Descent                    int                      `json:"descent"`
+	CapHeight                  int                      `json:"cap_height"`
+	BBox                       [4]int                   `json:"bbox"`
+	Flags                      int                      `json:"flags"`
+	ItalicAngle                int                      `json:"italic_angle"`
+	OriginalFontFileSize       int                      `json:"original_font_file_size"`
+	EmbeddedFontFileSize       int                      `json:"embedded_font_file_size"`
+	EmbeddedFontFileStreamSize int                      `json:"embedded_font_file_stream_size,omitempty"`
+	ToUnicodeStreamSize        int                      `json:"to_unicode_stream_size,omitempty"`
+	Subset                     bool                     `json:"subset,omitempty"`
+	UsedGlyphCount             int                      `json:"used_glyph_count"`
+	UsedGlyphIDs               []uint16                 `json:"used_glyph_ids"`
+	OriginalGlyphIDs           []uint16                 `json:"original_glyph_ids,omitempty"`
+	PDFCIDs                    []uint16                 `json:"pdf_cids,omitempty"`
+	SubsetGlyphIDs             []uint16                 `json:"subset_glyph_ids,omitempty"`
+	GlyphIDMap                 []pdfDebugFontGlyphIDMap `json:"glyph_id_map,omitempty"`
+}
+
+type pdfDebugFontGlyphIDMap struct {
+	OriginalGlyphID uint16 `json:"original_glyph_id"`
+	PDFCID          uint16 `json:"pdf_cid"`
+	SubsetGlyphID   uint16 `json:"subset_glyph_id,omitempty"`
+	Used            bool   `json:"used,omitempty"`
 }
 
 type pdfDebugPrintedFootnotes struct {
@@ -471,7 +482,9 @@ func pdfDebugFonts(resources []pdfFontResource) []pdfDebugFont {
 		slices.Sort(usedGlyphIDs)
 		originalSize := len(resource.Face.Data)
 		embeddedSize := len(resource.Objects.FontFileData)
+		subset := embeddedSize > 0 && embeddedSize < originalSize
 		program := pdfDebugFontProgram(resource.Face)
+		pdfCIDs, subsetGlyphIDs, glyphIDMap := pdfDebugFontGlyphIDMapping(resource, usedGlyphIDs, subset && program.TrueTypeOutlines)
 		out = append(out, pdfDebugFont{
 			ResourceName:               resource.Name,
 			Family:                     resource.Key.Family,
@@ -493,10 +506,73 @@ func pdfDebugFonts(resources []pdfFontResource) []pdfDebugFont {
 			EmbeddedFontFileSize:       embeddedSize,
 			EmbeddedFontFileStreamSize: compressedPDFStreamSize(resource.Objects.FontFileData),
 			ToUnicodeStreamSize:        compressedPDFStreamSize(resource.Objects.ToUnicode),
-			Subset:                     embeddedSize > 0 && embeddedSize < originalSize,
+			Subset:                     subset,
 			UsedGlyphCount:             len(usedGlyphIDs),
 			UsedGlyphIDs:               usedGlyphIDs,
+			OriginalGlyphIDs:           usedGlyphIDs,
+			PDFCIDs:                    pdfCIDs,
+			SubsetGlyphIDs:             subsetGlyphIDs,
+			GlyphIDMap:                 glyphIDMap,
 		})
+	}
+	return out
+}
+
+func pdfDebugFontGlyphIDMapping(
+	resource pdfFontResource,
+	usedGlyphIDs []uint16,
+	includeSubsetGIDs bool,
+) ([]uint16, []uint16, []pdfDebugFontGlyphIDMap) {
+	used := make(map[uint16]bool, len(usedGlyphIDs))
+	pdfCIDs := make([]uint16, 0, len(usedGlyphIDs))
+	for _, originalGlyphID := range usedGlyphIDs {
+		used[originalGlyphID] = true
+		if cid, ok := resource.CIDMap[originalGlyphID]; ok {
+			pdfCIDs = append(pdfCIDs, cid)
+		}
+	}
+	slices.Sort(pdfCIDs)
+	pdfCIDs = compactSortedUint16s(pdfCIDs)
+
+	originalIDs := make([]int, 0, len(resource.CIDMap))
+	for originalGlyphID := range resource.CIDMap {
+		originalIDs = append(originalIDs, int(originalGlyphID))
+	}
+	slices.Sort(originalIDs)
+
+	glyphIDMap := make([]pdfDebugFontGlyphIDMap, 0, len(originalIDs))
+	subsetGlyphIDs := make([]uint16, 0, len(originalIDs))
+	for _, originalGlyphIDInt := range originalIDs {
+		originalGlyphID := uint16(originalGlyphIDInt)
+		cid := resource.CIDMap[originalGlyphID]
+		entry := pdfDebugFontGlyphIDMap{
+			OriginalGlyphID: originalGlyphID,
+			PDFCID:          cid,
+			Used:            used[originalGlyphID],
+		}
+		if includeSubsetGIDs {
+			entry.SubsetGlyphID = cid
+			subsetGlyphIDs = append(subsetGlyphIDs, cid)
+		}
+		glyphIDMap = append(glyphIDMap, entry)
+	}
+	slices.Sort(subsetGlyphIDs)
+	subsetGlyphIDs = compactSortedUint16s(subsetGlyphIDs)
+	return pdfCIDs, subsetGlyphIDs, glyphIDMap
+}
+
+func compactSortedUint16s(values []uint16) []uint16 {
+	if len(values) < 2 {
+		return values
+	}
+	out := values[:0]
+	var previous uint16
+	for i, value := range values {
+		if i > 0 && value == previous {
+			continue
+		}
+		out = append(out, value)
+		previous = value
 	}
 	return out
 }
