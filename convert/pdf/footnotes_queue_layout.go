@@ -41,5 +41,5 @@ func layoutPDFPrintedFootnoteQueue(
 	subDoc.TOC = nil
 	subDoc.PrintedFootnotes = nil
 	subDoc.CoverID = ""
-	return layoutPDFPages(subDoc, nil)
+	return layoutPDFPages(subDoc)
 }

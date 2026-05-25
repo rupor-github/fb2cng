@@ -23,12 +23,12 @@ func pageSizePoints(screen config.ScreenConfig) (float64, float64, error) {
 	return float64(screen.Width) * pdfPointsPerInch / float64(dpi), float64(screen.Height) * pdfPointsPerInch / float64(dpi), nil
 }
 
-func layoutPDFDocumentPages(doc pdfDocumentSpec, fontFace *builtinFontFace) ([]pdfPage, map[pdfFontKey]map[uint16]shapedGlyph, pdfDebugPrintedFootnotes, error) {
+func layoutPDFDocumentPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]shapedGlyph, pdfDebugPrintedFootnotes, error) {
 	if !pdfPrintedFootnotesEnabled(doc.Content) || len(doc.PrintedFootnotes) == 0 {
-		pages, used, err := layoutPDFPages(doc, fontFace)
+		pages, used, err := layoutPDFPages(doc)
 		return pages, used, pdfDebugPrintedFootnotes{SourcePageCount: len(pages), FinalPageCount: len(pages)}, err
 	}
-	reserved, err := layoutPDFPagesWithPrintedFootnoteReserves(doc, fontFace)
+	reserved, err := layoutPDFPagesWithPrintedFootnoteReserves(doc)
 	if err != nil {
 		return nil, nil, pdfDebugPrintedFootnotes{}, err
 	}
@@ -53,11 +53,7 @@ func buildPDFDocument(doc pdfDocumentSpec) ([]byte, error) {
 		infoID         = 5
 	)
 
-	fontFace, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		return nil, err
-	}
-	pages, usedGlyphs, printedFootnotes, err := layoutPDFDocumentPages(doc, fontFace)
+	pages, usedGlyphs, printedFootnotes, err := layoutPDFDocumentPages(doc)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +61,7 @@ func buildPDFDocument(doc pdfDocumentSpec) ([]byte, error) {
 		if !resolvePDFBacklinkPagesAndText(&doc, pages) {
 			break
 		}
-		pages, usedGlyphs, printedFootnotes, err = layoutPDFDocumentPages(doc, fontFace)
+		pages, usedGlyphs, printedFootnotes, err = layoutPDFDocumentPages(doc)
 		if err != nil {
 			return nil, err
 		}

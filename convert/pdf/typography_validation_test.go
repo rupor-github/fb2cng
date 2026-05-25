@@ -114,10 +114,6 @@ func TestPDFTypographyValidationFixtureLayoutsScriptsAndJustification(t *testing
 }
 
 func TestPDFLayoutValidationFixtureCoversInlineDecorationsFallbackAndImages(t *testing.T) {
-	face, err := builtinFont("serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	img := &fb2.BookImage{}
 	img.Dim.Width = 80
 	img.Dim.Height = 40
@@ -141,7 +137,7 @@ func TestPDFLayoutValidationFixtureCoversInlineDecorationsFallbackAndImages(t *t
 				{ImageID: "inline", LinkHref: "#image-target", StyleClasses: pdfStyleLinkInternal},
 			},
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}

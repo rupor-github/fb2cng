@@ -8,9 +8,9 @@ type pdfPrintedFootnoteReservedLayout struct {
 	FootnoteTextHeight float64
 }
 
-func layoutPDFPagesWithPrintedFootnoteReserves(doc pdfDocumentSpec, fontFace *builtinFontFace) (pdfPrintedFootnoteReservedLayout, error) {
+func layoutPDFPagesWithPrintedFootnoteReserves(doc pdfDocumentSpec) (pdfPrintedFootnoteReservedLayout, error) {
 	doc.DynamicPrintedFootnoteReserves = true
-	pages, used, err := layoutPDFPages(doc, fontFace)
+	pages, used, err := layoutPDFPages(doc)
 	if err != nil {
 		return pdfPrintedFootnoteReservedLayout{}, err
 	}

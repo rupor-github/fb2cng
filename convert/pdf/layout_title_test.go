@@ -19,10 +19,6 @@ func TestEffectiveParagraphLineHeightClampsToFontSize(t *testing.T) {
 }
 
 func TestLayoutPDFPagesKeepsGapBetweenTitleVignetteAndHeadingImage(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	vignette := &fb2.BookImage{}
 	vignette.Dim.Width = 120
 	vignette.Dim.Height = 10
@@ -43,7 +39,7 @@ func TestLayoutPDFPagesKeepsGapBetweenTitleVignetteAndHeadingImage(t *testing.T)
 			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses("vignette", "vignette-chapter-title-top", pdfStyleChapterTitle), ImageID: "vignette"},
 			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses(pdfStyleChapterTitleHeader, pdfStyleChapterTitle, pdfStyleHeadingImage), ImageID: "heading"},
 		},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -58,10 +54,6 @@ func TestLayoutPDFPagesKeepsGapBetweenTitleVignetteAndHeadingImage(t *testing.T)
 }
 
 func TestLayoutPDFPagesUsesTightTitleHeaderLineFlow(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:      520,
@@ -76,7 +68,7 @@ func TestLayoutPDFPagesUsesTightTitleHeaderLineFlow(t *testing.T) {
 			{Kind: pdfBlockHeading, Text: "Two", Depth: 1, StyleName: pdfStyleChapterTitleHeader, StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next")},
 			{Kind: pdfBlockHeading, Text: "Three", Depth: 1, StyleName: pdfStyleChapterTitleHeader, StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next")},
 		},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -92,10 +84,6 @@ func TestLayoutPDFPagesUsesTightTitleHeaderLineFlow(t *testing.T) {
 }
 
 func TestLayoutPDFPagesCentersTitleContentBetweenVignettes(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	vignette := &fb2.BookImage{}
 	vignette.Dim.Width = 120
 	vignette.Dim.Height = 10
@@ -115,7 +103,7 @@ func TestLayoutPDFPagesCentersTitleContentBetweenVignettes(t *testing.T) {
 			{Kind: pdfBlockHeading, Text: "Book", Depth: 1, StyleName: pdfStyleBodyTitleHeader, StyleClasses: joinStyleClasses(pdfStyleBodyTitle, pdfStyleBodyTitleHeader+"-next")},
 			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses("vignette", "vignette-book-title-bottom", pdfStyleBodyTitle), ImageID: "bottom"},
 		},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -134,10 +122,6 @@ func TestLayoutPDFPagesCentersTitleContentBetweenVignettes(t *testing.T) {
 }
 
 func TestLayoutPDFPagesDoesNotMoveBottomTitleVignetteForTooTallFollowingImage(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	vignette := &fb2.BookImage{}
 	vignette.Dim.Width = 120
 	vignette.Dim.Height = 10
@@ -161,7 +145,7 @@ func TestLayoutPDFPagesDoesNotMoveBottomTitleVignetteForTooTallFollowingImage(t 
 			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses("vignette", "vignette-chapter-title-bottom", pdfStyleChapterTitle), ImageID: "bottom"},
 			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: "image-block", ImageID: "following"},
 		},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -177,10 +161,6 @@ func TestLayoutPDFPagesDoesNotMoveBottomTitleVignetteForTooTallFollowingImage(t 
 }
 
 func TestLayoutPDFPagesTitleImageCanStripRootHorizontalMargins(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	heading := &fb2.BookImage{}
 	heading.Dim.Width = 380
 	heading.Dim.Height = 30
@@ -205,7 +185,7 @@ func TestLayoutPDFPagesTitleImageCanStripRootHorizontalMargins(t *testing.T) {
 			StripRootHorizontalMargins: true,
 			ImageID:                    "heading",
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -222,10 +202,6 @@ func TestLayoutPDFPagesTitleImageCanStripRootHorizontalMargins(t *testing.T) {
 }
 
 func TestLayoutPDFPagesTitleVignetteCanStripRootHorizontalMargins(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	vignette := &fb2.BookImage{}
 	vignette.Dim.Width = 120
 	vignette.Dim.Height = 10
@@ -250,7 +226,7 @@ func TestLayoutPDFPagesTitleVignetteCanStripRootHorizontalMargins(t *testing.T) 
 			StripRootHorizontalMargins: true,
 			ImageID:                    "vignette",
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}

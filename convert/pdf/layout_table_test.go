@@ -58,10 +58,6 @@ func TestPDFTableCellsInheritFootnoteContext(t *testing.T) {
 }
 
 func TestLayoutPDFPagesRendersTableCellsBordersAndSpans(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	resolver := newPDFStyleResolverWithCSS(t, `
 		table { margin: 0; width: 100%; }
 		th { padding: 2pt; border: 1pt solid black; background-color: #ccc; }
@@ -83,7 +79,7 @@ func TestLayoutPDFPagesRendersTableCellsBordersAndSpans(t *testing.T) {
 		Author:     "Author",
 		Styles:     resolver,
 		Blocks:     []pdfTextBlock{{Kind: pdfBlockTable, StyleName: pdfStyleTable, Table: table}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -202,10 +198,6 @@ func TestLayoutPDFPagesKeepsTableMarginBeforeFollowingText(t *testing.T) {
 	cellStyle.HasBorder = false
 	resolver.styles[pdfStyleTableCell] = cellStyle
 
-	face, err := builtinFont("serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	table := &fb2.Table{Rows: []fb2.TableRow{{Cells: []fb2.TableCell{{Content: []fb2.InlineSegment{{Text: "Cell"}}}}}}}
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
@@ -221,7 +213,7 @@ func TestLayoutPDFPagesKeepsTableMarginBeforeFollowingText(t *testing.T) {
 			Runs:      []pdfInlineRun{{Text: "Back"}},
 			StyleName: pdfStyleParagraph,
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -236,10 +228,6 @@ func TestLayoutPDFPagesKeepsTableMarginBeforeFollowingText(t *testing.T) {
 }
 
 func TestLayoutPDFPagesSplitsTablesBetweenRows(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	resolver := newPDFStyleResolverWithCSS(t, `
 		table { margin: 0; page-break-inside: auto; }
 		td { padding: 2pt; border: 1pt solid black; }
@@ -256,7 +244,7 @@ func TestLayoutPDFPagesSplitsTablesBetweenRows(t *testing.T) {
 		Author:     "Author",
 		Styles:     resolver,
 		Blocks:     []pdfTextBlock{{Kind: pdfBlockTable, StyleName: pdfStyleTable, Table: table}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}

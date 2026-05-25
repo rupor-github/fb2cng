@@ -21,10 +21,6 @@ import (
 )
 
 func TestLayoutPDFPagesAddsCoverImagePage(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:      100,
 		PageHeight:     160,
@@ -40,7 +36,7 @@ func TestLayoutPDFPagesAddsCoverImagePage(t *testing.T) {
 				Height int
 			}{Width: 50, Height: 80},
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}

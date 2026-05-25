@@ -2,7 +2,7 @@ package pdf
 
 import "strings"
 
-func layoutPDFPages(doc pdfDocumentSpec, _ *builtinFontFace) ([]pdfPage, map[pdfFontKey]map[uint16]shapedGlyph, error) {
+func layoutPDFPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]shapedGlyph, error) {
 	const margin = 24.0
 	used := make(map[pdfFontKey]map[uint16]shapedGlyph)
 	pages := make([]pdfPage, 0, 2)

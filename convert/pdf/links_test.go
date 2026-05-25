@@ -87,10 +87,6 @@ func TestAddLinkAnnotationsUsesSourceClustersForLigatures(t *testing.T) {
 }
 
 func TestInlineRunAnchorCreatesPDFNamedDestination(t *testing.T) {
-	face, err := builtinFont("serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  240,
@@ -105,7 +101,7 @@ func TestInlineRunAnchorCreatesPDFNamedDestination(t *testing.T) {
 				{Text: "1", StyleClasses: pdfStyleLinkFootnote, LinkHref: "#n1", AnchorID: "ref-n1-1"},
 			},
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}

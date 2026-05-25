@@ -10,10 +10,6 @@ import (
 )
 
 func TestLayoutPDFPagesAppliesInlineStyles(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	pages, used, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  520,
 		PageHeight: 180,
@@ -35,7 +31,7 @@ func TestLayoutPDFPagesAppliesInlineStyles(t *testing.T) {
 				{Text: "code", Code: true},
 			},
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -72,10 +68,6 @@ func TestLayoutPDFPagesAppliesInlineStyles(t *testing.T) {
 }
 
 func TestLayoutPDFPagesPreservesCodeBlockWhitespace(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  260,
 		PageHeight: 180,
@@ -92,7 +84,7 @@ func TestLayoutPDFPagesPreservesCodeBlockWhitespace(t *testing.T) {
 				Code:         true,
 			}},
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -123,10 +115,6 @@ func TestLayoutPDFPagesPreservesCodeBlockWhitespace(t *testing.T) {
 }
 
 func TestLayoutPDFPagesKeepsBaseRhythmAfterCodeBlock(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  320,
 		PageHeight: 240,
@@ -146,7 +134,7 @@ func TestLayoutPDFPagesKeepsBaseRhythmAfterCodeBlock(t *testing.T) {
 			},
 			{Kind: pdfBlockParagraph, Text: "normal paragraph"},
 		},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -161,10 +149,6 @@ func TestLayoutPDFPagesKeepsBaseRhythmAfterCodeBlock(t *testing.T) {
 }
 
 func TestLayoutPDFPagesRendersInlineImages(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	img := &fb2.BookImage{}
 	img.Dim.Width = 120
 	img.Dim.Height = 60
@@ -187,7 +171,7 @@ func TestLayoutPDFPagesRendersInlineImages(t *testing.T) {
 				{Text: " after"},
 			},
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -234,10 +218,6 @@ func TestLayoutPDFPagesRendersInlineImages(t *testing.T) {
 }
 
 func TestLayoutPDFPagesAppliesInlineNamedStyleClasses(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 	accent := resolver.styles[pdfStyleParagraph]
 	accent.Paragraph.FontFamily = "sans-serif"
@@ -262,7 +242,7 @@ func TestLayoutPDFPagesAppliesInlineNamedStyleClasses(t *testing.T) {
 				{Text: "styled", StyleClasses: "accent"},
 			},
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -286,10 +266,6 @@ func TestLayoutPDFPagesAppliesInlineNamedStyleClasses(t *testing.T) {
 }
 
 func TestLayoutPDFPagesAppliesInlineContextDescendantSelectors(t *testing.T) {
-	face, err := builtinFont("serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",
 		Data: `.footnote .accent { color: #ff0000; font-weight: bold; }`,
@@ -311,7 +287,7 @@ func TestLayoutPDFPagesAppliesInlineContextDescendantSelectors(t *testing.T) {
 				{Text: "styled", StyleClasses: "accent"},
 			},
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -335,10 +311,6 @@ func TestLayoutPDFPagesAppliesInlineContextDescendantSelectors(t *testing.T) {
 }
 
 func TestLayoutPDFPagesAppliesInlineDescendantSelectorsFromBlockStyleName(t *testing.T) {
-	face, err := builtinFont("serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",
 		Data: `.toc-item .link-toc { color: #ff0000; font-weight: bold; }`,
@@ -357,7 +329,7 @@ func TestLayoutPDFPagesAppliesInlineDescendantSelectorsFromBlockStyleName(t *tes
 			StyleName: pdfStyleTOCItem,
 			Runs:      []pdfInlineRun{{Text: "Chapter", StyleClasses: pdfStyleLinkTOC}},
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}

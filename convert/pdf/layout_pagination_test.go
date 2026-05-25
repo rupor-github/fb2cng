@@ -26,7 +26,7 @@ func TestLayoutPDFPagesKeepsHeadingWithNextParagraph(t *testing.T) {
 			{Kind: pdfBlockHeading, Text: "Heading", Depth: 1},
 			{Kind: pdfBlockParagraph, Text: "Body text after heading."},
 		},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -42,16 +42,12 @@ func TestLayoutPDFPagesKeepsHeadingWithNextParagraph(t *testing.T) {
 }
 
 func TestLayoutPDFPagesAppliesPerPageBottomReserve(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	blocks := []pdfTextBlock{
 		{Kind: pdfBlockParagraph, Text: "One"},
 		{Kind: pdfBlockParagraph, Text: "Two"},
 		{Kind: pdfBlockParagraph, Text: "Three"},
 	}
-	withoutReserve, _, err := layoutPDFPages(pdfDocumentSpec{PageWidth: 220, PageHeight: 130, Blocks: blocks}, face)
+	withoutReserve, _, err := layoutPDFPages(pdfDocumentSpec{PageWidth: 220, PageHeight: 130, Blocks: blocks})
 	if err != nil {
 		t.Fatalf("layoutPDFPages(without reserve) error = %v", err)
 	}
@@ -59,7 +55,7 @@ func TestLayoutPDFPagesAppliesPerPageBottomReserve(t *testing.T) {
 		t.Fatalf("without reserve pages = %#v, want all text on first page", withoutReserve)
 	}
 
-	withReserve, _, err := layoutPDFPages(pdfDocumentSpec{PageWidth: 220, PageHeight: 130, Blocks: blocks, PageBottomReserves: []float64{28}}, face)
+	withReserve, _, err := layoutPDFPages(pdfDocumentSpec{PageWidth: 220, PageHeight: 130, Blocks: blocks, PageBottomReserves: []float64{28}})
 	if err != nil {
 		t.Fatalf("layoutPDFPages(with reserve) error = %v", err)
 	}
@@ -102,7 +98,7 @@ func TestLayoutPDFPagesAvoidsParagraphWidowOrphanSplit(t *testing.T) {
 			{Kind: pdfBlockParagraph, Text: filler},
 			{Kind: pdfBlockParagraph, Text: target},
 		},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -119,10 +115,6 @@ func TestLayoutPDFPagesAvoidsParagraphWidowOrphanSplit(t *testing.T) {
 }
 
 func TestLayoutPDFPagesClampsNegativeTopMarginAtPageTop(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	resolver := newPDFStyleResolverWithCSS(t, `
 		.pull-up {
 			font-size: 10pt;
@@ -138,7 +130,7 @@ func TestLayoutPDFPagesClampsNegativeTopMarginAtPageTop(t *testing.T) {
 			{Kind: pdfBlockParagraph, Text: "first page"},
 			{Kind: pdfBlockParagraph, Text: "pulled heading", StyleClasses: "pull-up"},
 		},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -155,10 +147,6 @@ func TestLayoutPDFPagesClampsNegativeTopMarginAtPageTop(t *testing.T) {
 }
 
 func TestLayoutPDFPagesHonorsCSSPageBreakAndHiddenStyles(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 	before := resolver.styles[pdfStyleParagraph]
 	before.PageBreakBefore = true
@@ -183,7 +171,7 @@ func TestLayoutPDFPagesHonorsCSSPageBreakAndHiddenStyles(t *testing.T) {
 			{Kind: pdfBlockParagraph, Text: "third paragraph", StyleClasses: "forced-after"},
 			{Kind: pdfBlockParagraph, Text: "fourth paragraph"},
 		},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -225,7 +213,7 @@ func TestLayoutPDFPagesHonorsPageBreakBeforeAvoidFromDefaultCSS(t *testing.T) {
 			{Kind: pdfBlockParagraph, Text: "kept paragraph"},
 			{Kind: pdfBlockParagraph, Text: "Author", StyleClasses: pdfStyleTextAuthor},
 		},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -268,7 +256,7 @@ func TestLayoutPDFPagesHonorsPageBreakBeforeAvoidForDefaultVignettes(t *testing.
 			{Kind: pdfBlockParagraph, Text: "before vignette"},
 			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses(pdfStyleImageVignette, pdfStyleVignette, pdfStyleVignetteSectionEnd), ImageID: "vignette"},
 		},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -311,7 +299,7 @@ func TestLayoutPDFPagesHonorsPageBreakAfterAvoidForImages(t *testing.T) {
 			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: "keep-image", ImageID: "img"},
 			{Kind: pdfBlockParagraph, Text: "after image"},
 		},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -327,10 +315,6 @@ func TestLayoutPDFPagesHonorsPageBreakAfterAvoidForImages(t *testing.T) {
 }
 
 func TestLayoutPDFPagesAppliesRootPageMargins(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 	resolver.styles[pdfStylePage] = pdfBlockResolvedStyle{MarginLeft: -6, MarginRight: -4, SpaceBefore: 5, SpaceAfter: -3}
 	paragraph := resolver.styles[pdfStyleParagraph]
@@ -348,7 +332,7 @@ func TestLayoutPDFPagesAppliesRootPageMargins(t *testing.T) {
 		Blocks: []pdfTextBlock{
 			{Kind: pdfBlockParagraph, Text: "root margins"},
 		},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -362,10 +346,6 @@ func TestLayoutPDFPagesAppliesRootPageMargins(t *testing.T) {
 }
 
 func TestLayoutPDFPagesAppliesFirstBlockTopMargin(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 	topGap := resolver.styles[pdfStyleParagraph]
 	topGap.Paragraph.FirstLineIndent = 0
@@ -384,7 +364,7 @@ func TestLayoutPDFPagesAppliesFirstBlockTopMargin(t *testing.T) {
 			Text:         "top margin",
 			StyleClasses: "top-gap",
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -398,10 +378,6 @@ func TestLayoutPDFPagesAppliesFirstBlockTopMargin(t *testing.T) {
 }
 
 func TestLayoutPDFPagesAppliesPadding(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 	padded := resolver.styles[pdfStyleParagraph]
 	padded.Paragraph.FirstLineIndent = 0
@@ -425,7 +401,7 @@ func TestLayoutPDFPagesAppliesPadding(t *testing.T) {
 		Blocks: []pdfTextBlock{
 			{Kind: pdfBlockParagraph, Text: "padded text", StyleClasses: "padded"},
 		},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -450,10 +426,6 @@ func TestLayoutPDFPagesAppliesPadding(t *testing.T) {
 }
 
 func TestLayoutPDFPagesAppliesBlockWidth(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 	fixed := resolver.styles[pdfStyleParagraph]
 	fixed.Paragraph.FirstLineIndent = 0
@@ -476,7 +448,7 @@ func TestLayoutPDFPagesAppliesBlockWidth(t *testing.T) {
 		Blocks: []pdfTextBlock{
 			{Kind: pdfBlockParagraph, Text: "fixed", StyleClasses: "fixed-width"},
 		},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}

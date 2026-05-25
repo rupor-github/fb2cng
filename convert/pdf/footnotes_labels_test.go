@@ -9,10 +9,6 @@ import (
 )
 
 func TestLayoutPDFPagesAppliesPageLocalPrintedFootnoteReferenceLabels(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  260,
@@ -34,7 +30,7 @@ func TestLayoutPDFPagesAppliesPageLocalPrintedFootnoteReferenceLabels(t *testing
 				{Text: "1.17", StyleClasses: pdfStyleLinkFootnote, FootnoteID: "n17", Superscript: true},
 			},
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -129,10 +125,6 @@ func TestApplyPDFPageLocalFootnoteReferenceLabelsRejustifiesChangedLine(t *testi
 }
 
 func TestLayoutPDFPagesKeepsFloatPrintedFootnoteReferenceLabels(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  260,
@@ -146,7 +138,7 @@ func TestLayoutPDFPagesKeepsFloatPrintedFootnoteReferenceLabels(t *testing.T) {
 			Text: "A 1.17",
 			Runs: []pdfInlineRun{{Text: "A "}, {Text: "1.17", StyleClasses: pdfStyleLinkFootnote, FootnoteID: "n17", Superscript: true}},
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -156,10 +148,6 @@ func TestLayoutPDFPagesKeepsFloatPrintedFootnoteReferenceLabels(t *testing.T) {
 }
 
 func TestLayoutPDFPagesFloatRenumberedDecoratesPageLocalReferenceLabels(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 
 	styles := newPDFStyleResolverWithCSS(t, `
 		.link-footnote::before { content: "["; }
@@ -180,7 +168,7 @@ func TestLayoutPDFPagesFloatRenumberedDecoratesPageLocalReferenceLabels(t *testi
 			"n17": {ID: "n17"},
 		},
 		Blocks: blocks,
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}

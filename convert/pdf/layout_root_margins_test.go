@@ -11,10 +11,6 @@ import (
 )
 
 func TestLayoutPDFPagesAnnotationWrapperParagraphCanStripRootHorizontalMargins(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	resolver := newPDFStyleResolver(&fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",
 		Data: `
@@ -36,7 +32,7 @@ func TestLayoutPDFPagesAnnotationWrapperParagraphCanStripRootHorizontalMargins(t
 			StyleClasses:               pdfStyleAnnotation,
 			StripRootHorizontalMargins: true,
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -49,10 +45,6 @@ func TestLayoutPDFPagesAnnotationWrapperParagraphCanStripRootHorizontalMargins(t
 }
 
 func TestLayoutPDFPagesAnnotationWrapperNestedCiteCanStripRootHorizontalMargins(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	resolver := newPDFStyleResolver(&fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",
 		Data: `
@@ -74,7 +66,7 @@ func TestLayoutPDFPagesAnnotationWrapperNestedCiteCanStripRootHorizontalMargins(
 			StyleClasses:               pdfStyleCite,
 			StripRootHorizontalMargins: true,
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -87,10 +79,6 @@ func TestLayoutPDFPagesAnnotationWrapperNestedCiteCanStripRootHorizontalMargins(
 }
 
 func TestLayoutPDFPagesAnnotationWrapperNestedPoemCanStripRootHorizontalMargins(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	resolver := newPDFStyleResolver(&fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",
 		Data: `
@@ -114,7 +102,7 @@ func TestLayoutPDFPagesAnnotationWrapperNestedPoemCanStripRootHorizontalMargins(
 			ContextClasses:             pdfStylePoem,
 			StripRootHorizontalMargins: true,
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -128,10 +116,6 @@ func TestLayoutPDFPagesAnnotationWrapperNestedPoemCanStripRootHorizontalMargins(
 }
 
 func TestLayoutPDFPagesAnnotationNestedSectionPreservesRootHorizontalMargins(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",
 		Data: `
@@ -171,7 +155,7 @@ func TestLayoutPDFPagesAnnotationNestedSectionPreservesRootHorizontalMargins(t *
 		Author:     "Author",
 		Styles:     newPDFStyleResolver(book, nil),
 		Blocks:     blocks,
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -203,10 +187,6 @@ func TestLayoutPDFPagesAnnotationNestedSectionPreservesRootHorizontalMargins(t *
 }
 
 func TestLayoutPDFPagesGeneratedHelperTitlesPreserveRootHorizontalMargins(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	book := &fb2.FictionBook{
 		Stylesheets: []fb2.Stylesheet{{
 			Type: "text/css",
@@ -246,7 +226,7 @@ func TestLayoutPDFPagesGeneratedHelperTitlesPreserveRootHorizontalMargins(t *tes
 		Author:     "Author",
 		Styles:     newPDFStyleResolver(book, nil),
 		Blocks:     plan.Blocks,
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}

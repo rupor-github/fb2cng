@@ -299,10 +299,6 @@ func pdfDebugFontGlyphIDMapEntry(entries []pdfDebugFontGlyphIDMap, originalGlyph
 }
 
 func TestPDFDebugPrintedFootnotesSummaryIncludesPlansReservesAndContinuationPacks(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	longBody := strings.Repeat("long footnote text ", 120) + "ENDMARK"
 	doc := pdfDocumentSpec{
 		PageWidth:  260,
@@ -327,7 +323,7 @@ func TestPDFDebugPrintedFootnotesSummaryIncludesPlansReservesAndContinuationPack
 		}},
 	}
 
-	pages, _, printedFootnotes, err := layoutPDFDocumentPages(doc, face)
+	pages, _, printedFootnotes, err := layoutPDFDocumentPages(doc)
 	if err != nil {
 		t.Fatalf("layoutPDFDocumentPages() error = %v", err)
 	}

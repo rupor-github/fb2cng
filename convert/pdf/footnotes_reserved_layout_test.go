@@ -9,10 +9,6 @@ import (
 )
 
 func TestLayoutPDFPagesWithPrintedFootnoteReservesPushesMainText(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	doc := pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 130,
@@ -26,7 +22,7 @@ func TestLayoutPDFPagesWithPrintedFootnoteReservesPushesMainText(t *testing.T) {
 			{Kind: pdfBlockParagraph, Text: "Three"},
 		},
 	}
-	unreserved, _, err := layoutPDFPages(doc, face)
+	unreserved, _, err := layoutPDFPages(doc)
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -34,7 +30,7 @@ func TestLayoutPDFPagesWithPrintedFootnoteReservesPushesMainText(t *testing.T) {
 		t.Fatalf("unreserved pages = %#v, want all main text on first page", unreserved)
 	}
 
-	reserved, err := layoutPDFPagesWithPrintedFootnoteReserves(doc, face)
+	reserved, err := layoutPDFPagesWithPrintedFootnoteReserves(doc)
 	if err != nil {
 		t.Fatalf("layoutPDFPagesWithPrintedFootnoteReserves() error = %v", err)
 	}
@@ -56,10 +52,6 @@ func TestLayoutPDFPagesWithPrintedFootnoteReservesPushesMainText(t *testing.T) {
 }
 
 func TestLayoutPDFPagesWithPrintedFootnoteReservesPacksTextAboveShortFootnote(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	doc := pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 260,
@@ -92,7 +84,7 @@ func TestLayoutPDFPagesWithPrintedFootnoteReservesPacksTextAboveShortFootnote(t 
 		},
 	}
 
-	reserved, err := layoutPDFPagesWithPrintedFootnoteReserves(doc, face)
+	reserved, err := layoutPDFPagesWithPrintedFootnoteReserves(doc)
 	if err != nil {
 		t.Fatalf("layoutPDFPagesWithPrintedFootnoteReserves() error = %v", err)
 	}
@@ -108,10 +100,6 @@ func TestLayoutPDFPagesWithPrintedFootnoteReservesPacksTextAboveShortFootnote(t 
 }
 
 func TestLayoutPDFPagesWithPrintedFootnoteReservesResetsAcrossPageBreaks(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	doc := pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 180,
@@ -142,7 +130,7 @@ func TestLayoutPDFPagesWithPrintedFootnoteReservesResetsAcrossPageBreaks(t *test
 		},
 	}
 
-	reserved, err := layoutPDFPagesWithPrintedFootnoteReserves(doc, face)
+	reserved, err := layoutPDFPagesWithPrintedFootnoteReserves(doc)
 	if err != nil {
 		t.Fatalf("layoutPDFPagesWithPrintedFootnoteReserves() error = %v", err)
 	}
@@ -169,10 +157,6 @@ func TestLayoutPDFPagesWithPrintedFootnoteReservesMovesDropcapAboveReservedFootn
 		p.has-dropcap { text-indent: 0; margin: 0; }
 		p.has-dropcap .dropcap { float: left; font-size: 3.2em; line-height: 1; font-weight: bold; padding-right: 0.1em; }
 	`)
-	face, err := builtinFont("serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	lead := strings.Repeat("Previous paragraph consumes vertical space before the dropcap starts. ", 2)
 	dropcapText := "Lorem ipsum dolor sit amet 17."
 	doc := pdfDocumentSpec{
@@ -207,7 +191,7 @@ func TestLayoutPDFPagesWithPrintedFootnoteReservesMovesDropcapAboveReservedFootn
 		},
 	}
 
-	unreserved, _, err := layoutPDFPages(doc, face)
+	unreserved, _, err := layoutPDFPages(doc)
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -215,7 +199,7 @@ func TestLayoutPDFPagesWithPrintedFootnoteReservesMovesDropcapAboveReservedFootn
 		t.Fatalf("unreserved pages = %#v, want dropcap paragraph to fit without printed-footnote reserve", unreserved)
 	}
 
-	reserved, err := layoutPDFPagesWithPrintedFootnoteReserves(doc, face)
+	reserved, err := layoutPDFPagesWithPrintedFootnoteReserves(doc)
 	if err != nil {
 		t.Fatalf("layoutPDFPagesWithPrintedFootnoteReserves() error = %v", err)
 	}
@@ -237,16 +221,12 @@ func TestLayoutPDFPagesWithPrintedFootnoteReservesMovesDropcapAboveReservedFootn
 }
 
 func TestLayoutPDFPagesWithPrintedFootnoteReservesNoFootnotesMatchesNormalLayout(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	doc := pdfDocumentSpec{PageWidth: 220, PageHeight: 130, Blocks: []pdfTextBlock{{Kind: pdfBlockParagraph, Text: "Only body."}}}
-	normal, _, err := layoutPDFPages(doc, face)
+	normal, _, err := layoutPDFPages(doc)
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
-	reserved, err := layoutPDFPagesWithPrintedFootnoteReserves(doc, face)
+	reserved, err := layoutPDFPagesWithPrintedFootnoteReserves(doc)
 	if err != nil {
 		t.Fatalf("layoutPDFPagesWithPrintedFootnoteReserves() error = %v", err)
 	}

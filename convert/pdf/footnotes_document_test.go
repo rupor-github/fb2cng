@@ -9,10 +9,6 @@ import (
 )
 
 func TestLayoutPDFDocumentPagesAppendsPrintedFootnotesAndReservesMainFlow(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	doc := pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 180,
@@ -36,7 +32,7 @@ func TestLayoutPDFDocumentPagesAppendsPrintedFootnotesAndReservesMainFlow(t *tes
 		},
 	}
 
-	pages, used, _, err := layoutPDFDocumentPages(doc, face)
+	pages, used, _, err := layoutPDFDocumentPages(doc)
 	if err != nil {
 		t.Fatalf("layoutPDFDocumentPages() error = %v", err)
 	}
@@ -69,10 +65,6 @@ func TestLayoutPDFDocumentPagesAppendsPrintedFootnotesAndReservesMainFlow(t *tes
 }
 
 func TestLayoutPDFDocumentPagesSkipsPrintedFootnotePathWhenModeDisabled(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	doc := pdfDocumentSpec{
 		PageWidth:  220,
 		PageHeight: 130,
@@ -83,7 +75,7 @@ func TestLayoutPDFDocumentPagesSkipsPrintedFootnotePathWhenModeDisabled(t *testi
 		Blocks: []pdfTextBlock{{Kind: pdfBlockParagraph, Text: "Body"}},
 	}
 
-	pages, _, _, err := layoutPDFDocumentPages(doc, face)
+	pages, _, _, err := layoutPDFDocumentPages(doc)
 	if err != nil {
 		t.Fatalf("layoutPDFDocumentPages() error = %v", err)
 	}

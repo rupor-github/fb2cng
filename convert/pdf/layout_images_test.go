@@ -8,10 +8,6 @@ import (
 )
 
 func TestLayoutPDFPagesUpscalesVignettesToContentWidth(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	img := &fb2.BookImage{}
 	img.Dim.Width = 120
 	img.Dim.Height = 10
@@ -30,7 +26,7 @@ func TestLayoutPDFPagesUpscalesVignettesToContentWidth(t *testing.T) {
 			StyleClasses: "vignette vignette-chapter-title-top",
 			ImageID:      "vignette",
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -43,10 +39,6 @@ func TestLayoutPDFPagesUpscalesVignettesToContentWidth(t *testing.T) {
 }
 
 func TestLayoutPDFPagesDoesNotApplyTextIndentToImageOnlyParagraphs(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	img := &fb2.BookImage{}
 	img.Dim.Width = 100
 	img.Dim.Height = 80
@@ -67,7 +59,7 @@ func TestLayoutPDFPagesDoesNotApplyTextIndentToImageOnlyParagraphs(t *testing.T)
 			StyleName: pdfStyleParagraph,
 			ImageID:   "block",
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -80,10 +72,6 @@ func TestLayoutPDFPagesDoesNotApplyTextIndentToImageOnlyParagraphs(t *testing.T)
 }
 
 func TestLayoutPDFPagesLeftAlignsImageOnlyParagraphsInsideCite(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	img := &fb2.BookImage{}
 	img.Dim.Width = 100
 	img.Dim.Height = 80
@@ -106,7 +94,7 @@ func TestLayoutPDFPagesLeftAlignsImageOnlyParagraphsInsideCite(t *testing.T) {
 			StyleClasses: pdfStyleCite,
 			ImageID:      "block",
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -119,10 +107,6 @@ func TestLayoutPDFPagesLeftAlignsImageOnlyParagraphsInsideCite(t *testing.T) {
 }
 
 func TestLayoutPDFPagesSizesBlockImagesLikeKP3(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	img := &fb2.BookImage{}
 	img.Dim.Width = 100
 	img.Dim.Height = 50
@@ -139,7 +123,7 @@ func TestLayoutPDFPagesSizesBlockImagesLikeKP3(t *testing.T) {
 			Kind:    pdfBlockImage,
 			ImageID: "block",
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -158,10 +142,6 @@ func TestLayoutPDFPagesSizesBlockImagesLikeKP3(t *testing.T) {
 }
 
 func TestLayoutPDFPagesSizesPartialWidthBlockImagesAgainstRootlessWidth(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	img := &fb2.BookImage{}
 	img.Dim.Width = 200
 	img.Dim.Height = 200
@@ -183,7 +163,7 @@ func TestLayoutPDFPagesSizesPartialWidthBlockImagesAgainstRootlessWidth(t *testi
 			Kind:    pdfBlockImage,
 			ImageID: "block",
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -204,10 +184,6 @@ func TestLayoutPDFPagesSizesPartialWidthBlockImagesAgainstRootlessWidth(t *testi
 }
 
 func TestLayoutPDFPagesCapsLargeGIFBlockImagesByConfiguredScreen(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	img := &fb2.BookImage{MimeType: "image/gif"}
 	img.Dim.Width = 600
 	img.Dim.Height = 300
@@ -224,7 +200,7 @@ func TestLayoutPDFPagesCapsLargeGIFBlockImagesByConfiguredScreen(t *testing.T) {
 			Kind:    pdfBlockImage,
 			ImageID: "block",
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -242,10 +218,6 @@ func TestLayoutPDFPagesCapsLargeGIFBlockImagesByConfiguredScreen(t *testing.T) {
 }
 
 func TestLayoutPDFPagesClampsLargePNGBlockImagesLikeKP3(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	img := &fb2.BookImage{MimeType: "image/png"}
 	img.Dim.Width = 600
 	img.Dim.Height = 300
@@ -262,7 +234,7 @@ func TestLayoutPDFPagesClampsLargePNGBlockImagesLikeKP3(t *testing.T) {
 			Kind:    pdfBlockImage,
 			ImageID: "block",
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -276,10 +248,6 @@ func TestLayoutPDFPagesClampsLargePNGBlockImagesLikeKP3(t *testing.T) {
 }
 
 func TestLayoutPDFPagesSizesFullWidthBlockImagesAgainstRootlessWidth(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	img := &fb2.BookImage{MimeType: "image/png"}
 	img.Dim.Width = 580
 	img.Dim.Height = 458
@@ -301,7 +269,7 @@ func TestLayoutPDFPagesSizesFullWidthBlockImagesAgainstRootlessWidth(t *testing.
 			Kind:    pdfBlockImage,
 			ImageID: "block",
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -321,10 +289,6 @@ func TestLayoutPDFPagesSizesFullWidthBlockImagesAgainstRootlessWidth(t *testing.
 }
 
 func TestLayoutPDFPagesKeepsNearFittingImageWithSmallBottomOverflow(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	img := &fb2.BookImage{}
 	img.Dim.Width = 511
 	img.Dim.Height = 423
@@ -344,7 +308,7 @@ func TestLayoutPDFPagesKeepsNearFittingImageWithSmallBottomOverflow(t *testing.T
 			{Kind: pdfBlockParagraph, StyleName: pdfStyleParagraph, Text: "two"},
 			{Kind: pdfBlockImage, StyleName: pdfStyleImage, ImageID: "block"},
 		},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -357,10 +321,6 @@ func TestLayoutPDFPagesKeepsNearFittingImageWithSmallBottomOverflow(t *testing.T
 }
 
 func TestLayoutPDFPagesBreaksImagePastBottomOverflowTolerance(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	img := &fb2.BookImage{}
 	img.Dim.Width = 511
 	img.Dim.Height = 440
@@ -380,7 +340,7 @@ func TestLayoutPDFPagesBreaksImagePastBottomOverflowTolerance(t *testing.T) {
 			{Kind: pdfBlockParagraph, StyleName: pdfStyleParagraph, Text: "two"},
 			{Kind: pdfBlockImage, StyleName: pdfStyleImage, ImageID: "block"},
 		},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -390,10 +350,6 @@ func TestLayoutPDFPagesBreaksImagePastBottomOverflowTolerance(t *testing.T) {
 }
 
 func TestLayoutPDFPagesDoesNotKeepImageWithNextWhenAvoidIsAbsent(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	img := &fb2.BookImage{}
 	img.Dim.Width = 512
 	img.Dim.Height = 216
@@ -414,7 +370,7 @@ func TestLayoutPDFPagesDoesNotKeepImageWithNextWhenAvoidIsAbsent(t *testing.T) {
 			{Kind: pdfBlockImage, StyleName: pdfStyleImage, ImageID: "block"},
 			{Kind: pdfBlockParagraph, StyleName: "after", Text: "after"},
 		},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -430,10 +386,6 @@ func TestLayoutPDFPagesDoesNotKeepImageWithNextWhenAvoidIsAbsent(t *testing.T) {
 }
 
 func TestLayoutPDFPagesDoesNotCarryPreviousEmptyLineMarginToImagePage(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	img := &fb2.BookImage{}
 	img.Dim.Width = 511
 	img.Dim.Height = 350
@@ -462,7 +414,7 @@ func TestLayoutPDFPagesDoesNotCarryPreviousEmptyLineMarginToImagePage(t *testing
 		Styles:     resolver,
 		Images:     fb2.BookImages{"block": img},
 		Blocks:     blocks,
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -477,10 +429,6 @@ func TestLayoutPDFPagesDoesNotCarryPreviousEmptyLineMarginToImagePage(t *testing
 }
 
 func TestLayoutPDFPagesAvoidsBlankPageBeforeTallImageAfterEmptyLine(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	img := &fb2.BookImage{}
 	img.Dim.Width = 600
 	img.Dim.Height = 800
@@ -496,7 +444,7 @@ func TestLayoutPDFPagesAvoidsBlankPageBeforeTallImageAfterEmptyLine(t *testing.T
 			{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine},
 			{Kind: pdfBlockImage, ID: "img", ImageID: "block"},
 		},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -515,10 +463,6 @@ func TestLayoutPDFPagesAvoidsBlankPageBeforeTallImageAfterEmptyLine(t *testing.T
 }
 
 func TestLayoutPDFPagesRendersImageOnlyHeadings(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	img := &fb2.BookImage{}
 	img.Dim.Width = 380
 	img.Dim.Height = 30
@@ -537,7 +481,7 @@ func TestLayoutPDFPagesRendersImageOnlyHeadings(t *testing.T) {
 			StyleClasses: pdfStyleHeadingImage,
 			ImageID:      "heading",
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -553,10 +497,6 @@ func TestLayoutPDFPagesRendersImageOnlyHeadings(t *testing.T) {
 }
 
 func TestLayoutPDFPagesKeepsGapAfterImageOnlySubtitle(t *testing.T) {
-	face, err := builtinFont("sans-serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	img := &fb2.BookImage{}
 	img.Dim.Width = 380
 	img.Dim.Height = 30
@@ -573,7 +513,7 @@ func TestLayoutPDFPagesKeepsGapAfterImageOnlySubtitle(t *testing.T) {
 			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: pdfStyleSubtitle, ImageID: "subtitle"},
 			{Kind: pdfBlockParagraph, Text: "Body after subtitle image."},
 		},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}

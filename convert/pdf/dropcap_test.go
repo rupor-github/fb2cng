@@ -82,11 +82,7 @@ func TestPDFDropcapDetectionAndLayoutTracing(t *testing.T) {
 		t.Fatalf("dropcap CSS trace details = %q", cssEntries[0].Details)
 	}
 
-	face, err := builtinFont("serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
-	_, _, err = layoutPDFPages(pdfDocumentSpec{
+	_, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  260,
 		PageHeight: 220,
 		Styles:     resolver,
@@ -96,7 +92,7 @@ func TestPDFDropcapDetectionAndLayoutTracing(t *testing.T) {
 			Runs:         addPDFDropcapInlineRun([]pdfInlineRun{{Text: "Lorem ipsum dolor sit amet consectetur"}}),
 			StyleClasses: "has-dropcap",
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -115,10 +111,6 @@ func TestPDFDropcapFlowsFollowingParagraphAroundActiveExclusion(t *testing.T) {
 		p.has-dropcap { text-indent: 0; margin: 0; }
 		p.has-dropcap .dropcap { float: left; font-size: 3.2em; line-height: 1; font-weight: bold; padding-right: 1pt; }
 	`)
-	face, err := builtinFont("serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	first := "Lorem."
 	second := "Second paragraph keeps flowing beside the active dropcap before normal text resumes."
 
@@ -136,7 +128,7 @@ func TestPDFDropcapFlowsFollowingParagraphAroundActiveExclusion(t *testing.T) {
 			Text: second,
 			Runs: []pdfInlineRun{{Text: second}},
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -184,10 +176,6 @@ func TestPDFDropcapFollowingParagraphStillExcludesWhenBaselinePassedVisualBottom
 		p.has-dropcap { text-indent: 0; margin: 0; }
 		p.has-dropcap .dropcap { float: left; font-size: 3em; line-height: 1; font-weight: bold; padding-right: 1pt; }
 	`)
-	face, err := builtinFont("serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	first := "Lorem ipsum dolor sit amet."
 	second := "Second paragraph must still flow around the dropcap."
 
@@ -205,7 +193,7 @@ func TestPDFDropcapFollowingParagraphStillExcludesWhenBaselinePassedVisualBottom
 			Text: second,
 			Runs: []pdfInlineRun{{Text: second}},
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -243,10 +231,6 @@ func TestPDFDropcapStartsNextPageWhenShortBodyWouldFitButDropcapWouldNot(t *test
 		p.has-dropcap { text-indent: 0; margin: 0; }
 		p.has-dropcap .dropcap { float: left; font-size: 3.2em; line-height: 1; font-weight: bold; padding-right: 0.1em; }
 	`)
-	face, err := builtinFont("serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	lead := strings.Repeat("Previous paragraph consumes vertical space before the dropcap starts. ", 3)
 	dropcapText := "Test."
 
@@ -264,7 +248,7 @@ func TestPDFDropcapStartsNextPageWhenShortBodyWouldFitButDropcapWouldNot(t *test
 			Runs:         addPDFDropcapInlineRun([]pdfInlineRun{{Text: dropcapText}}),
 			StyleClasses: "has-dropcap",
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
@@ -285,10 +269,6 @@ func TestPDFDropcapStartsNextPageWhenWrapLinesWouldSplit(t *testing.T) {
 		p.has-dropcap { text-indent: 0; margin: 0; }
 		p.has-dropcap .dropcap { float: left; font-size: 3.2em; line-height: 1; font-weight: bold; padding-right: 0.1em; }
 	`)
-	face, err := builtinFont("serif", false, false)
-	if err != nil {
-		t.Fatalf("builtinFont() error = %v", err)
-	}
 	lead := strings.Repeat("Previous paragraph consumes vertical space before the dropcap starts. ", 3)
 	dropcapText := "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore."
 
@@ -306,7 +286,7 @@ func TestPDFDropcapStartsNextPageWhenWrapLinesWouldSplit(t *testing.T) {
 			Runs:         addPDFDropcapInlineRun([]pdfInlineRun{{Text: dropcapText}}),
 			StyleClasses: "has-dropcap",
 		}},
-	}, face)
+	})
 	if err != nil {
 		t.Fatalf("layoutPDFPages() error = %v", err)
 	}
