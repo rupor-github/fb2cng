@@ -1,6 +1,10 @@
 package kfx
 
-import "fbc/content"
+import (
+	"sort"
+
+	"fbc/content"
+)
 
 func resolveKFXBacklinkLocations(c *content.Content, fragments *FragmentList, contentSnapshot map[string][]string, sectionNames sectionNameList, chapterStartSections map[string]bool, idToEID eidByFB2ID, pending *StorylineBuilder) {
 	if c == nil || len(c.BackLinkIndex) == 0 || fragments == nil {
@@ -14,23 +18,34 @@ func resolveKFXBacklinkLocations(c *content.Content, fragments *FragmentList, co
 	if len(posItems) == 0 {
 		return
 	}
-	pages := CalculateApproximatePages(posItems, c.PageSize)
-	for _, refs := range c.BackLinkIndex {
-		for _, ref := range refs {
-			target, ok := idToEID[ref.RefID]
+	positionLookup := newKFXPositionLookup(posItems)
+	pageLookup := newKFXPageLookup(CalculateApproximatePages(posItems, c.PageSize), positionLookup)
+	for targetID, refs := range c.BackLinkIndex {
+		for i := range refs {
+			target, ok := idToEID[refs[i].RefID]
 			if !ok || target.EID <= 0 {
 				continue
 			}
-			pid, ok := kfxPIDForEIDOffset(posItems, target.EID, target.Offset)
+			pid, ok := positionLookup.pidForEIDOffset(target.EID, target.Offset)
 			if !ok {
 				continue
 			}
-			c.SetBackLinkRefLocation(ref.RefID, pid/40+1)
-			if page := kfxPageForPID(pages, posItems, pid); page > 0 {
-				c.SetBackLinkRefPage(ref.RefID, page)
+			refs[i].LocationNumber = pid/40 + 1
+			if page := pageLookup.pageForPID(pid); page > 0 {
+				refs[i].PageNumber = page
 			}
 		}
+		c.BackLinkIndex[targetID] = refs
 	}
+}
+
+func kfxBacklinkRefsNeedLocation(refs []content.BackLinkRef) bool {
+	for _, ref := range refs {
+		if ref.LocationNumber == 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func positionSnapshotFragments(fragments *FragmentList, contentSnapshot map[string][]string, pending *StorylineBuilder) *FragmentList {
@@ -67,54 +82,79 @@ func storylineSnapshotFragments(sb *StorylineBuilder) (*Fragment, *Fragment) {
 	return storylineFrag, sectionFrag
 }
 
-func kfxPIDForEIDOffset(items []PositionItem, eid int, offset int) (int, bool) {
+type kfxPositionLookup struct {
+	startPIDByEID map[int]int
+	lengthByEID   map[int]int
+}
+
+type kfxPageLookup struct {
+	starts []kfxPageStart
+}
+
+type kfxPageStart struct {
+	pid  int
+	page int
+}
+
+func newKFXPositionLookup(items []PositionItem) kfxPositionLookup {
+	lookup := kfxPositionLookup{
+		startPIDByEID: make(map[int]int, len(items)),
+		lengthByEID:   make(map[int]int, len(items)),
+	}
 	pid := 0
 	for _, item := range items {
 		length := item.Length
 		if length <= 0 {
 			length = 1
 		}
-		if item.EID == eid {
-			return pid + min(max(offset, 0), length-1), true
+		if _, exists := lookup.startPIDByEID[item.EID]; !exists {
+			lookup.startPIDByEID[item.EID] = pid
+			lookup.lengthByEID[item.EID] = length
 		}
 		pid += length
 	}
-	return 0, false
+	return lookup
 }
 
-func kfxPageForPID(pages []PageEntry, items []PositionItem, pid int) int {
-	if len(pages) == 0 || len(items) == 0 || pid < 0 {
-		return 0
+func (l kfxPositionLookup) pidForEIDOffset(eid int, offset int) (int, bool) {
+	startPID, ok := l.startPIDByEID[eid]
+	if !ok {
+		return 0, false
 	}
-	itemStarts := kfxItemStartPIDs(items)
-	bestPage := 0
-	bestPID := -1
+	length := l.lengthByEID[eid]
+	if length <= 0 {
+		length = 1
+	}
+	return startPID + min(max(offset, 0), length-1), true
+}
+
+func newKFXPageLookup(pages []PageEntry, positions kfxPositionLookup) kfxPageLookup {
+	lookup := kfxPageLookup{starts: make([]kfxPageStart, 0, len(pages))}
 	for _, page := range pages {
-		startPID, ok := itemStarts[page.EID]
+		startPID, ok := positions.startPIDByEID[page.EID]
 		if !ok {
 			continue
 		}
-		pagePID := startPID + int(page.Offset)
-		if pagePID <= pid && pagePID >= bestPID {
-			bestPID = pagePID
-			bestPage = page.PageNumber
-		}
+		lookup.starts = append(lookup.starts, kfxPageStart{
+			pid:  startPID + int(page.Offset),
+			page: page.PageNumber,
+		})
 	}
-	return bestPage
+	sort.SliceStable(lookup.starts, func(i, j int) bool {
+		return lookup.starts[i].pid < lookup.starts[j].pid
+	})
+	return lookup
 }
 
-func kfxItemStartPIDs(items []PositionItem) map[int]int {
-	out := make(map[int]int, len(items))
-	pid := 0
-	for _, item := range items {
-		if _, exists := out[item.EID]; !exists {
-			out[item.EID] = pid
-		}
-		length := item.Length
-		if length <= 0 {
-			length = 1
-		}
-		pid += length
+func (l kfxPageLookup) pageForPID(pid int) int {
+	if len(l.starts) == 0 || pid < 0 {
+		return 0
 	}
-	return out
+	idx := sort.Search(len(l.starts), func(i int) bool {
+		return l.starts[i].pid > pid
+	}) - 1
+	if idx < 0 {
+		return 0
+	}
+	return l.starts[idx].page
 }

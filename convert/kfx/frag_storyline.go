@@ -411,10 +411,15 @@ func generateStoryline(ctx context.Context, c *content.Content, styles *StyleReg
 			var addBacklinks func(c *content.Content, sectionID string, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, idToEID eidByFB2ID)
 			if isFloatMode {
 				addBacklinks = func(c *content.Content, sectionID string, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, idToEID eidByFB2ID) {
-					resolveKFXBacklinkLocations(c, fragments, ca.Snapshot(), sectionNames, chapterStartSections, idToEID, sb)
-					if refs, ok := c.BackLinkIndex[sectionID]; ok && len(refs) > 0 {
-						addBacklinkParagraph(c, refs, sb, styles, ca, idToEID)
+					refs, ok := c.BackLinkIndex[sectionID]
+					if !ok || len(refs) == 0 {
+						return
 					}
+					if kfxBacklinkRefsNeedLocation(refs) {
+						resolveKFXBacklinkLocations(c, fragments, ca.Snapshot(), sectionNames, chapterStartSections, idToEID, sb)
+						refs = c.BackLinkIndex[sectionID]
+					}
+					addBacklinkParagraph(c, refs, sb, styles, ca, idToEID)
 				}
 			}
 
