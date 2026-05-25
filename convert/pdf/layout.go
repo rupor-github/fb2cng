@@ -33,6 +33,24 @@ type pdfPageLayout struct {
 	titleGroup            pdfTitleVignetteContentGroup
 }
 
+type pdfTextBlockRender struct {
+	block pdfTextBlock
+	style pdfBlockResolvedStyle
+	lines []paragraphLine
+
+	fontKey pdfFontKey
+
+	lineHeight      float64
+	blockLeft       float64
+	blockWidth      float64
+	backgroundX     float64
+	backgroundWidth float64
+
+	fragmentPage    *pdfPage
+	fragmentTop     float64
+	lineSearchStart int
+}
+
 func layoutPDFPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]shapedGlyph, error) {
 	layout := newPDFPageLayout(doc)
 	if err := layout.layout(); err != nil {
@@ -273,85 +291,25 @@ func (l *pdfPageLayout) layoutTextBlock(blockIndex int, block pdfTextBlock, styl
 	if dropcapOK {
 		lineSearchStart = l.renderTextDropcap(block, style, blockLeft, dropcap)
 	}
-	for lineIndex, line := range lines {
-		if !l.pageHasText || l.previousRenderedImage {
-			l.y -= style.Paragraph.FontSize
-			l.previousRenderedImage = false
-		}
-		if l.printedFootnoteReserve.Enabled() {
-			lineRefs := l.printedFootnoteReserve.LineRefs(line)
-			if len(lineRefs) > 0 {
-				reserve, err := l.printedFootnoteReserve.ReserveWithAdditionalRefs(lineRefs)
-				if err != nil {
-					return err
-				}
-				reservedBottom := pdfReservedContentBottom(l.contentBottom, l.top, reserve)
-				if l.pageHasText && l.y-style.Paragraph.FontSize < reservedBottom {
-					addPDFBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, l.y)
-					l.newTextPage()
-					fragmentPage = l.page
-					fragmentTop = l.y + style.Paragraph.FontSize
-					l.y -= style.Paragraph.FontSize
-					reserve, err = l.printedFootnoteReserve.ReserveWithAdditionalRefs(lineRefs)
-					if err != nil {
-						return err
-					}
-					reservedBottom = pdfReservedContentBottom(l.contentBottom, l.top, reserve)
-				}
-				l.printedFootnoteReserve.CommitAdditionalRefs(lineRefs, reserve)
-				l.bottom = max(l.bottom, reservedBottom)
-			}
-		}
-		if l.y-style.Paragraph.FontSize < l.bottom {
-			if l.pageHasText {
-				addPDFBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, l.y)
-			}
-			l.newTextPage()
-			fragmentPage = l.page
-			fragmentTop = l.y + style.Paragraph.FontSize
-			l.y -= style.Paragraph.FontSize
-		}
-		remainingAfterLine := len(lines) - lineIndex - 1
-		if remainingAfterLine > 0 && remainingAfterLine < style.Widows && l.y-lineHeight-style.Paragraph.FontSize < l.bottom {
-			addPDFBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, l.y)
-			l.newTextPage()
-			fragmentPage = l.page
-			fragmentTop = l.y
-		}
-		x := blockLeft + style.MarginLeft + style.PaddingLeft + line.Indent
-		available := blockWidth - line.Indent
-		switch style.Paragraph.Align {
-		case textAlignCenter:
-			x += max((available-line.Width)/2, 0)
-		case textAlignRight:
-			x += max(available-line.Width, 0)
-		}
-		pageLine := pdfPageLine{
-			X:                x,
-			Y:                l.y,
-			FontSize:         style.Paragraph.FontSize,
-			LetterSpacing:    style.Paragraph.LetterSpacing,
-			FontKey:          fontKey,
-			Color:            style.Paragraph.Color,
-			Underline:        style.Paragraph.Underline,
-			Strikethrough:    style.Paragraph.Strikethrough,
-			Text:             line.Text,
-			Fragments:        pageLineFragments(line.Fragments),
-			ExtraWordSpacing: line.ExtraWordSpacing,
-			ExtraCharSpacing: line.ExtraCharSpacing,
-			BreakStats:       line.BreakStats,
-		}
-		pageLine.X = pdfPageLineXAdjustedForVisualRight(pageLine, available)
-		x = pageLine.X
-		addPDFInlineImages(l.page, line, x, l.y)
-		addLinkAnnotations(l.page, block, line, lineSearchStart, x, l.y, style.Paragraph.FontSize)
-		addPDFParagraphFragmentAnchors(l.page, line)
-		lineSearchStart = nextLineSearchStart(block.Text, line, lineSearchStart)
-		addPDFPageLine(l.page, l.used, pageLine)
-		l.y -= lineHeight
-		l.pageHasText = true
-		l.previousRenderedImage = false
+	render := pdfTextBlockRender{
+		block:           block,
+		style:           style,
+		lines:           lines,
+		fontKey:         fontKey,
+		lineHeight:      lineHeight,
+		blockLeft:       blockLeft,
+		blockWidth:      blockWidth,
+		backgroundX:     backgroundX,
+		backgroundWidth: backgroundWidth,
+		fragmentPage:    fragmentPage,
+		fragmentTop:     fragmentTop,
+		lineSearchStart: lineSearchStart,
 	}
+	if err := l.renderTextLines(&render); err != nil {
+		return err
+	}
+	fragmentPage = render.fragmentPage
+	fragmentTop = render.fragmentTop
 	if dropcapOK && len(lines) == 0 {
 		l.pageHasText = true
 		l.previousRenderedImage = false
@@ -364,6 +322,89 @@ func (l *pdfPageLayout) layoutTextBlock(blockIndex int, block pdfTextBlock, styl
 	}
 	if pdfStyleForcesPageBreakAfter(style) && l.pageHasText {
 		l.newTextPage()
+	}
+	return nil
+}
+
+func (l *pdfPageLayout) renderTextLines(r *pdfTextBlockRender) error {
+	for lineIndex, line := range r.lines {
+		if !l.pageHasText || l.previousRenderedImage {
+			l.y -= r.style.Paragraph.FontSize
+			l.previousRenderedImage = false
+		}
+		if l.printedFootnoteReserve.Enabled() {
+			lineRefs := l.printedFootnoteReserve.LineRefs(line)
+			if len(lineRefs) > 0 {
+				reserve, err := l.printedFootnoteReserve.ReserveWithAdditionalRefs(lineRefs)
+				if err != nil {
+					return err
+				}
+				reservedBottom := pdfReservedContentBottom(l.contentBottom, l.top, reserve)
+				if l.pageHasText && l.y-r.style.Paragraph.FontSize < reservedBottom {
+					addPDFBlockDecoration(r.fragmentPage, r.style, r.backgroundX, r.fragmentTop, r.backgroundWidth, l.y)
+					l.newTextPage()
+					r.fragmentPage = l.page
+					r.fragmentTop = l.y + r.style.Paragraph.FontSize
+					l.y -= r.style.Paragraph.FontSize
+					reserve, err = l.printedFootnoteReserve.ReserveWithAdditionalRefs(lineRefs)
+					if err != nil {
+						return err
+					}
+					reservedBottom = pdfReservedContentBottom(l.contentBottom, l.top, reserve)
+				}
+				l.printedFootnoteReserve.CommitAdditionalRefs(lineRefs, reserve)
+				l.bottom = max(l.bottom, reservedBottom)
+			}
+		}
+		if l.y-r.style.Paragraph.FontSize < l.bottom {
+			if l.pageHasText {
+				addPDFBlockDecoration(r.fragmentPage, r.style, r.backgroundX, r.fragmentTop, r.backgroundWidth, l.y)
+			}
+			l.newTextPage()
+			r.fragmentPage = l.page
+			r.fragmentTop = l.y + r.style.Paragraph.FontSize
+			l.y -= r.style.Paragraph.FontSize
+		}
+		remainingAfterLine := len(r.lines) - lineIndex - 1
+		if remainingAfterLine > 0 && remainingAfterLine < r.style.Widows && l.y-r.lineHeight-r.style.Paragraph.FontSize < l.bottom {
+			addPDFBlockDecoration(r.fragmentPage, r.style, r.backgroundX, r.fragmentTop, r.backgroundWidth, l.y)
+			l.newTextPage()
+			r.fragmentPage = l.page
+			r.fragmentTop = l.y
+		}
+		x := r.blockLeft + r.style.MarginLeft + r.style.PaddingLeft + line.Indent
+		available := r.blockWidth - line.Indent
+		switch r.style.Paragraph.Align {
+		case textAlignCenter:
+			x += max((available-line.Width)/2, 0)
+		case textAlignRight:
+			x += max(available-line.Width, 0)
+		}
+		pageLine := pdfPageLine{
+			X:                x,
+			Y:                l.y,
+			FontSize:         r.style.Paragraph.FontSize,
+			LetterSpacing:    r.style.Paragraph.LetterSpacing,
+			FontKey:          r.fontKey,
+			Color:            r.style.Paragraph.Color,
+			Underline:        r.style.Paragraph.Underline,
+			Strikethrough:    r.style.Paragraph.Strikethrough,
+			Text:             line.Text,
+			Fragments:        pageLineFragments(line.Fragments),
+			ExtraWordSpacing: line.ExtraWordSpacing,
+			ExtraCharSpacing: line.ExtraCharSpacing,
+			BreakStats:       line.BreakStats,
+		}
+		pageLine.X = pdfPageLineXAdjustedForVisualRight(pageLine, available)
+		x = pageLine.X
+		addPDFInlineImages(l.page, line, x, l.y)
+		addLinkAnnotations(l.page, r.block, line, r.lineSearchStart, x, l.y, r.style.Paragraph.FontSize)
+		addPDFParagraphFragmentAnchors(l.page, line)
+		r.lineSearchStart = nextLineSearchStart(r.block.Text, line, r.lineSearchStart)
+		addPDFPageLine(l.page, l.used, pageLine)
+		l.y -= r.lineHeight
+		l.pageHasText = true
+		l.previousRenderedImage = false
 	}
 	return nil
 }
