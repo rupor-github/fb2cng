@@ -163,27 +163,29 @@ type pdfDebugRect struct {
 }
 
 type pdfDebugFont struct {
-	ResourceName         string   `json:"resource_name"`
-	Family               string   `json:"family"`
-	Bold                 bool     `json:"bold,omitempty"`
-	Italic               bool     `json:"italic,omitempty"`
-	PostScriptName       string   `json:"post_script_name"`
-	PDFBaseFont          string   `json:"pdf_base_font,omitempty"`
-	OutlineKind          string   `json:"outline_kind,omitempty"`
-	PDFCIDFontSubtype    string   `json:"pdf_cid_font_subtype,omitempty"`
-	PDFEmbeddedFontFile  string   `json:"pdf_embedded_font_file,omitempty"`
-	UnitsPerEm           int      `json:"units_per_em"`
-	Ascent               int      `json:"ascent"`
-	Descent              int      `json:"descent"`
-	CapHeight            int      `json:"cap_height"`
-	BBox                 [4]int   `json:"bbox"`
-	Flags                int      `json:"flags"`
-	ItalicAngle          int      `json:"italic_angle"`
-	OriginalFontFileSize int      `json:"original_font_file_size"`
-	EmbeddedFontFileSize int      `json:"embedded_font_file_size"`
-	Subset               bool     `json:"subset,omitempty"`
-	UsedGlyphCount       int      `json:"used_glyph_count"`
-	UsedGlyphIDs         []uint16 `json:"used_glyph_ids"`
+	ResourceName               string   `json:"resource_name"`
+	Family                     string   `json:"family"`
+	Bold                       bool     `json:"bold,omitempty"`
+	Italic                     bool     `json:"italic,omitempty"`
+	PostScriptName             string   `json:"post_script_name"`
+	PDFBaseFont                string   `json:"pdf_base_font,omitempty"`
+	OutlineKind                string   `json:"outline_kind,omitempty"`
+	PDFCIDFontSubtype          string   `json:"pdf_cid_font_subtype,omitempty"`
+	PDFEmbeddedFontFile        string   `json:"pdf_embedded_font_file,omitempty"`
+	UnitsPerEm                 int      `json:"units_per_em"`
+	Ascent                     int      `json:"ascent"`
+	Descent                    int      `json:"descent"`
+	CapHeight                  int      `json:"cap_height"`
+	BBox                       [4]int   `json:"bbox"`
+	Flags                      int      `json:"flags"`
+	ItalicAngle                int      `json:"italic_angle"`
+	OriginalFontFileSize       int      `json:"original_font_file_size"`
+	EmbeddedFontFileSize       int      `json:"embedded_font_file_size"`
+	EmbeddedFontFileStreamSize int      `json:"embedded_font_file_stream_size,omitempty"`
+	ToUnicodeStreamSize        int      `json:"to_unicode_stream_size,omitempty"`
+	Subset                     bool     `json:"subset,omitempty"`
+	UsedGlyphCount             int      `json:"used_glyph_count"`
+	UsedGlyphIDs               []uint16 `json:"used_glyph_ids"`
 }
 
 type pdfDebugPrintedFootnotes struct {
@@ -471,27 +473,29 @@ func pdfDebugFonts(resources []pdfFontResource) []pdfDebugFont {
 		embeddedSize := len(resource.Objects.FontFileData)
 		program := pdfDebugFontProgram(resource.Face)
 		out = append(out, pdfDebugFont{
-			ResourceName:         resource.Name,
-			Family:               resource.Key.Family,
-			Bold:                 resource.Key.Bold,
-			Italic:               resource.Key.Italic,
-			PostScriptName:       resource.Face.PostScriptName,
-			PDFBaseFont:          pdfDebugFontBaseName(resource),
-			OutlineKind:          program.OutlineKind,
-			PDFCIDFontSubtype:    string(program.CIDFontSubtype),
-			PDFEmbeddedFontFile:  program.FontFileKey,
-			UnitsPerEm:           resource.Face.UnitsPerEm,
-			Ascent:               resource.Face.Ascent,
-			Descent:              resource.Face.Descent,
-			CapHeight:            resource.Face.CapHeight,
-			BBox:                 resource.Face.BBox,
-			Flags:                resource.Face.Flags,
-			ItalicAngle:          resource.Face.ItalicAngle,
-			OriginalFontFileSize: originalSize,
-			EmbeddedFontFileSize: embeddedSize,
-			Subset:               embeddedSize > 0 && embeddedSize < originalSize,
-			UsedGlyphCount:       len(usedGlyphIDs),
-			UsedGlyphIDs:         usedGlyphIDs,
+			ResourceName:               resource.Name,
+			Family:                     resource.Key.Family,
+			Bold:                       resource.Key.Bold,
+			Italic:                     resource.Key.Italic,
+			PostScriptName:             resource.Face.PostScriptName,
+			PDFBaseFont:                pdfDebugFontBaseName(resource),
+			OutlineKind:                program.OutlineKind,
+			PDFCIDFontSubtype:          string(program.CIDFontSubtype),
+			PDFEmbeddedFontFile:        program.FontFileKey,
+			UnitsPerEm:                 resource.Face.UnitsPerEm,
+			Ascent:                     resource.Face.Ascent,
+			Descent:                    resource.Face.Descent,
+			CapHeight:                  resource.Face.CapHeight,
+			BBox:                       resource.Face.BBox,
+			Flags:                      resource.Face.Flags,
+			ItalicAngle:                resource.Face.ItalicAngle,
+			OriginalFontFileSize:       originalSize,
+			EmbeddedFontFileSize:       embeddedSize,
+			EmbeddedFontFileStreamSize: compressedPDFStreamSize(resource.Objects.FontFileData),
+			ToUnicodeStreamSize:        compressedPDFStreamSize(resource.Objects.ToUnicode),
+			Subset:                     embeddedSize > 0 && embeddedSize < originalSize,
+			UsedGlyphCount:             len(usedGlyphIDs),
+			UsedGlyphIDs:               usedGlyphIDs,
 		})
 	}
 	return out

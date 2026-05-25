@@ -812,6 +812,14 @@ func compressedPDFStream(dict docwriter.Dict, data []byte) (docwriter.Dict, []by
 	return out, compressed, nil
 }
 
+func compressedPDFStreamSize(data []byte) int {
+	compressed, err := flateStream(data)
+	if err != nil {
+		return 0
+	}
+	return len(compressed)
+}
+
 func fontResourceObjects(face *builtinFontFace, used map[uint16]shapedGlyph, objectIDs fontObjectIDs) (fontObjects, error) {
 	if face == nil {
 		return fontObjects{}, fmt.Errorf("font face is required")
