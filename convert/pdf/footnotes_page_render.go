@@ -13,13 +13,6 @@ type pdfPrintedFootnoteSeparatorMetrics struct {
 	Color       pdfColor
 }
 
-func pdfPrintedFootnoteRenderDebug(debugSummary ...*pdfDebugPrintedFootnotes) *pdfDebugPrintedFootnotes {
-	if len(debugSummary) == 0 {
-		return nil
-	}
-	return debugSummary[0]
-}
-
 func pdfDebugPrintedFootnoteSkipped(debug *pdfDebugPrintedFootnotes, kind string, reason string, pageIndex int, queuePageIndex int, value float64, limit float64) {
 	if debug == nil {
 		return
@@ -81,12 +74,11 @@ func appendPDFPrintedFootnotePagePlans(
 	plans []pdfPrintedFootnotePagePlan,
 	footnoteTextHeight float64,
 	used map[pdfFontKey]map[uint16]shapedGlyph,
-	debugSummary ...*pdfDebugPrintedFootnotes,
+	debug *pdfDebugPrintedFootnotes,
 ) []pdfPage {
 	if len(pages) == 0 || len(plans) == 0 {
 		return pages
 	}
-	debug := pdfPrintedFootnoteRenderDebug(debugSummary...)
 	plansByPage := make(map[int]pdfPrintedFootnotePagePlan, len(plans))
 	for _, plan := range plans {
 		if plan.PageIndex < 0 || plan.PageIndex >= len(pages) {

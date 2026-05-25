@@ -23,7 +23,7 @@ func TestAppendPDFPrintedFootnotePagePlansInsertsContinuationBeforeNextMainPage(
 		},
 	}
 
-	out := appendPDFPrintedFootnotePagePlans(doc, mainPages, []pdfPrintedFootnotePagePlan{plan}, 80, nil)
+	out := appendPDFPrintedFootnotePagePlans(doc, mainPages, []pdfPrintedFootnotePagePlan{plan}, 80, nil, nil)
 	if len(out) != 3 {
 		t.Fatalf("pages = %d, want main page, continuation page, next main page", len(out))
 	}
@@ -72,7 +72,7 @@ func TestAppendPDFPrintedFootnotePagePlansBottomAlignsSourceFootnote(t *testing.
 	plan := pdfPrintedFootnotePagePlan{PageIndex: 0, QueuePages: []pdfPage{{Lines: []pdfPageLine{footnoteLine}}}}
 	separatorBefore := pdfPrintedFootnoteSeparatorMetricsForArea(doc, nil, 24, 212, 24, 80)
 
-	out := appendPDFPrintedFootnotePagePlans(doc, mainPages, []pdfPrintedFootnotePagePlan{plan}, 80, nil)
+	out := appendPDFPrintedFootnotePagePlans(doc, mainPages, []pdfPrintedFootnotePagePlan{plan}, 80, nil, nil)
 	if len(out) != 1 {
 		t.Fatalf("pages = %d, want one source page", len(out))
 	}
@@ -107,6 +107,7 @@ func TestAppendPDFPrintedFootnotePagePlansBottomAlignsPackedContinuationChunks(t
 		[]pdfPage{{Lines: []pdfPageLine{testPDFPageLine(t, face, "Main page 1", 130)}}, {Lines: []pdfPageLine{testPDFPageLine(t, face, "Main page 2", 130)}}},
 		[]pdfPrintedFootnotePagePlan{plan},
 		80,
+		nil,
 		nil,
 	)
 	if len(out) != 3 {
@@ -146,6 +147,7 @@ func TestAppendPDFPrintedFootnotePagePlansBottomAlignsTallContinuationChunk(t *t
 		}}},
 		80,
 		nil,
+		nil,
 	)
 	if len(out) != 2 {
 		t.Fatalf("pages = %d, want source and tall continuation page", len(out))
@@ -174,6 +176,7 @@ func TestAppendPDFPrintedFootnotePagePlansDrawsVectorContinuationMarkerWithoutGl
 		}}},
 		80,
 		used,
+		nil,
 	)
 	if len(out) != 2 || len(out[1].Strokes) != pdfPrintedFootnoteContinuationMarkerChevrons*2 {
 		t.Fatalf("rendered pages = %#v, want vector continuation marker", out)
@@ -201,6 +204,7 @@ func TestAppendPDFPrintedFootnotePagePlansMergesUsedGlyphs(t *testing.T) {
 		[]pdfPrintedFootnotePagePlan{{PageIndex: 0, QueuePages: []pdfPage{{Lines: []pdfPageLine{line}}}, UsedGlyphs: planUsed}},
 		80,
 		used,
+		nil,
 	)
 	if len(out) != 1 || !strings.Contains(pageText(out[0]), "Z") {
 		t.Fatalf("rendered pages = %#v, want footnote text appended", out)
