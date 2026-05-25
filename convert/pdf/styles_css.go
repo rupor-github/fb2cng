@@ -214,6 +214,12 @@ func applyPDFDeferredTextStyleProperty(style *pdfBlockResolvedStyle, property st
 }
 
 func applyPDFBoxStyleProperty(style *pdfBlockResolvedStyle, property string, value css.Value) bool {
+	return applyPDFMarginStyleProperty(style, property, value) ||
+		applyPDFPaddingStyleProperty(style, property, value) ||
+		applyPDFWidthStyleProperty(style, property, value)
+}
+
+func applyPDFMarginStyleProperty(style *pdfBlockResolvedStyle, property string, value css.Value) bool {
 	switch property {
 	case "margin":
 		applyPDFMarginShorthand(style, value)
@@ -239,6 +245,14 @@ func applyPDFBoxStyleProperty(style *pdfBlockResolvedStyle, property string, val
 			style.MarginRight = points
 			style.MarginRightSpec = pdfCSSRelativeLengthSpec(value)
 		}
+	default:
+		return false
+	}
+	return true
+}
+
+func applyPDFPaddingStyleProperty(style *pdfBlockResolvedStyle, property string, value css.Value) bool {
+	switch property {
 	case "padding":
 		applyPDFPaddingShorthand(style, value)
 	case "padding-top":
@@ -261,6 +275,14 @@ func applyPDFBoxStyleProperty(style *pdfBlockResolvedStyle, property string, val
 			style.PaddingLeft = points
 			style.PaddingLeftSpec = pdfCSSRelativeLengthSpec(value)
 		}
+	default:
+		return false
+	}
+	return true
+}
+
+func applyPDFWidthStyleProperty(style *pdfBlockResolvedStyle, property string, value css.Value) bool {
+	switch property {
 	case "width":
 		if cssKeyword(value) == "auto" {
 			style.Width = pdfBlockLength{}
