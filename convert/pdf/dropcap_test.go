@@ -25,7 +25,7 @@ func TestPDFDropcapInlineRunSplitPreservesFirstRuneStyle(t *testing.T) {
 		}, {Text: " ipsum"}},
 	}
 
-	appendParagraphBlockFull(&blocks, nil, pdfBlockParagraph, paragraph, 0, "", "", false)
+	appendParagraphBlockWithOptions(&blocks, pdfParagraphBlockOptions{Kind: pdfBlockParagraph, Paragraph: paragraph})
 
 	if len(blocks) != 1 {
 		t.Fatalf("blocks = %#v, want one paragraph", blocks)

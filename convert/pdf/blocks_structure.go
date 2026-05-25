@@ -193,7 +193,7 @@ func appendTitleParagraphBlocks(blocks *[]pdfTextBlock, c *content.Content, titl
 		positionClass := titleParagraphPositionStyleClass(styleClass, firstParagraph)
 		firstParagraph = false
 		before := len(*blocks)
-		appendParagraphBlockFull(blocks, c, pdfBlockParagraph, &paragraph, 1, joinStyleClasses(styleClass, positionClass), contextClasses, stripRootHorizontalMargins)
+		appendParagraphBlockWithOptions(blocks, pdfParagraphBlockOptions{Content: c, Kind: pdfBlockParagraph, Paragraph: &paragraph, Depth: 1, StyleClasses: joinStyleClasses(styleClass, positionClass), ContextClasses: contextClasses, StripRootHorizontalMargins: stripRootHorizontalMargins})
 		if len(*blocks) > before {
 			anchorID = ""
 		}
@@ -280,9 +280,9 @@ func appendFlowItem(blocks *[]pdfTextBlock, c *content.Content, item *fb2.FlowIt
 	}
 	switch item.Kind {
 	case fb2.FlowParagraph:
-		appendParagraphBlockFull(blocks, c, pdfBlockParagraph, item.Paragraph, depth, styleClasses, contextClasses, stripRootHorizontalMargins)
+		appendParagraphBlockWithOptions(blocks, pdfParagraphBlockOptions{Content: c, Kind: pdfBlockParagraph, Paragraph: item.Paragraph, Depth: depth, StyleClasses: styleClasses, ContextClasses: contextClasses, StripRootHorizontalMargins: stripRootHorizontalMargins})
 	case fb2.FlowSubtitle:
-		appendParagraphBlockFull(blocks, c, pdfBlockSubtitle, item.Subtitle, depth, subtitleStyleClasses(styleClasses), contextClasses, stripRootHorizontalMargins)
+		appendParagraphBlockWithOptions(blocks, pdfParagraphBlockOptions{Content: c, Kind: pdfBlockSubtitle, Paragraph: item.Subtitle, Depth: depth, StyleClasses: subtitleStyleClasses(styleClasses), ContextClasses: contextClasses, StripRootHorizontalMargins: stripRootHorizontalMargins})
 	case fb2.FlowEmptyLine:
 		*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine, StyleClasses: strings.TrimSpace(styleClasses), ContextClasses: strings.TrimSpace(contextClasses), StripRootHorizontalMargins: stripRootHorizontalMargins})
 	case fb2.FlowImage:
@@ -478,10 +478,27 @@ func blockHasStyleClass(block pdfTextBlock, className string) bool {
 	return false
 }
 
-func appendParagraphBlockFull(blocks *[]pdfTextBlock, c *content.Content, kind pdfBlockKind, paragraph *fb2.Paragraph, depth int, styleClasses string, contextClasses string, stripRootHorizontalMargins bool) {
+type pdfParagraphBlockOptions struct {
+	Content                    *content.Content
+	Kind                       pdfBlockKind
+	Paragraph                  *fb2.Paragraph
+	Depth                      int
+	StyleClasses               string
+	ContextClasses             string
+	StripRootHorizontalMargins bool
+}
+
+func appendParagraphBlockWithOptions(blocks *[]pdfTextBlock, opts pdfParagraphBlockOptions) {
+	paragraph := opts.Paragraph
 	if paragraph == nil {
 		return
 	}
+	content := opts.Content
+	kind := opts.Kind
+	depth := opts.Depth
+	styleClasses := opts.StyleClasses
+	contextClasses := opts.ContextClasses
+	stripRootHorizontalMargins := opts.StripRootHorizontalMargins
 	styleName := pdfStyleNameForKind(kind)
 	if kind == pdfBlockSubtitle {
 		styleName = subtitleStyleName(joinStyleClasses(paragraph.Style, styleClasses))
@@ -502,12 +519,12 @@ func appendParagraphBlockFull(blocks *[]pdfTextBlock, c *content.Content, kind p
 		return
 	}
 	text, links := paragraphTextAndLinks(paragraph)
-	runs := paragraphInlineRunsWithBacklinks(paragraph, c, pdfRegisterDefaultFootnoteBacklinks(c, styleClasses, contextClasses))
+	runs := paragraphInlineRunsWithBacklinks(paragraph, content, pdfRegisterDefaultFootnoteBacklinks(content, styleClasses, contextClasses))
 	if paragraphIsCodeBlock(paragraph) {
 		styleClasses = joinStyleClasses(styleClasses, pdfStyleCode)
 	}
 	finalStyleClasses := joinStyleClasses(paragraph.Style, styleClasses)
-	runs, links = pdfDisablePrintedFootnoteLinks(c, finalStyleClasses, contextClasses, runs, links)
+	runs, links = pdfDisablePrintedFootnoteLinks(content, finalStyleClasses, contextClasses, runs, links)
 	if kind == pdfBlockParagraph && hasPDFStyleClass(finalStyleClasses, "has-dropcap") && !paragraphIsCodeBlock(paragraph) {
 		runs = addPDFDropcapInlineRun(runs)
 	}
@@ -526,16 +543,16 @@ func appendPoemBlocks(blocks *[]pdfTextBlock, c *content.Content, poem *fb2.Poem
 		appendEpigraphBlocksFull(blocks, c, &poem.Epigraphs[i], poemContextClasses, stripRootHorizontalMargins)
 	}
 	for i := range poem.Subtitles {
-		appendParagraphBlockFull(blocks, c, pdfBlockSubtitle, &poem.Subtitles[i], depth, pdfStylePoemSubtitle, poemContextClasses, stripRootHorizontalMargins)
+		appendParagraphBlockWithOptions(blocks, pdfParagraphBlockOptions{Content: c, Kind: pdfBlockSubtitle, Paragraph: &poem.Subtitles[i], Depth: depth, StyleClasses: pdfStylePoemSubtitle, ContextClasses: poemContextClasses, StripRootHorizontalMargins: stripRootHorizontalMargins})
 	}
 	for i := range poem.Stanzas {
 		stanza := &poem.Stanzas[i]
 		stanzaContextClasses := joinStyleClasses(poemContextClasses, pdfStyleStanza)
 		stanzaStart := len(*blocks)
 		appendTitleParagraphBlocks(blocks, c, stanza.Title, "", pdfStyleStanzaTitle, stanzaContextClasses, stripRootHorizontalMargins)
-		appendParagraphBlockFull(blocks, c, pdfBlockSubtitle, stanza.Subtitle, depth, pdfStyleStanzaSubtitle, stanzaContextClasses, stripRootHorizontalMargins)
+		appendParagraphBlockWithOptions(blocks, pdfParagraphBlockOptions{Content: c, Kind: pdfBlockSubtitle, Paragraph: stanza.Subtitle, Depth: depth, StyleClasses: pdfStyleStanzaSubtitle, ContextClasses: stanzaContextClasses, StripRootHorizontalMargins: stripRootHorizontalMargins})
 		for j := range stanza.Verses {
-			appendParagraphBlockFull(blocks, c, pdfBlockPoem, &stanza.Verses[j], depth, pdfStylePoem, stanzaContextClasses, stripRootHorizontalMargins)
+			appendParagraphBlockWithOptions(blocks, pdfParagraphBlockOptions{Content: c, Kind: pdfBlockPoem, Paragraph: &stanza.Verses[j], Depth: depth, StyleClasses: pdfStylePoem, ContextClasses: stanzaContextClasses, StripRootHorizontalMargins: stripRootHorizontalMargins})
 		}
 		applyStyleClassToBlocks((*blocks)[stanzaStart:], pdfStyleStanza)
 		if i < len(poem.Stanzas)-1 {
@@ -543,10 +560,10 @@ func appendPoemBlocks(blocks *[]pdfTextBlock, c *content.Content, poem *fb2.Poem
 		}
 	}
 	for i := range poem.TextAuthors {
-		appendParagraphBlockFull(blocks, c, pdfBlockTextAuthor, &poem.TextAuthors[i], depth, "", poemContextClasses, stripRootHorizontalMargins)
+		appendParagraphBlockWithOptions(blocks, pdfParagraphBlockOptions{Content: c, Kind: pdfBlockTextAuthor, Paragraph: &poem.TextAuthors[i], Depth: depth, ContextClasses: poemContextClasses, StripRootHorizontalMargins: stripRootHorizontalMargins})
 	}
 	if dateText := poemDateText(poem.Date); dateText != "" {
-		appendParagraphBlockFull(blocks, c, pdfBlockParagraph, &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: dateText}}}, depth, pdfStyleDate, poemContextClasses, stripRootHorizontalMargins)
+		appendParagraphBlockWithOptions(blocks, pdfParagraphBlockOptions{Content: c, Kind: pdfBlockParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: dateText}}}, Depth: depth, StyleClasses: pdfStyleDate, ContextClasses: poemContextClasses, StripRootHorizontalMargins: stripRootHorizontalMargins})
 	}
 }
 
@@ -576,7 +593,7 @@ func appendCiteBlocks(blocks *[]pdfTextBlock, c *content.Content, cite *fb2.Cite
 	citeContextClasses := joinStyleClasses(contextClasses, pdfStyleCite)
 	appendFlowBlocks(blocks, c, cite.Items, depth, splitSections, pdfStyleCite, citeContextClasses, stripRootHorizontalMargins)
 	for i := range cite.TextAuthors {
-		appendParagraphBlockFull(blocks, c, pdfBlockTextAuthor, &cite.TextAuthors[i], depth, "", citeContextClasses, stripRootHorizontalMargins)
+		appendParagraphBlockWithOptions(blocks, pdfParagraphBlockOptions{Content: c, Kind: pdfBlockTextAuthor, Paragraph: &cite.TextAuthors[i], Depth: depth, ContextClasses: citeContextClasses, StripRootHorizontalMargins: stripRootHorizontalMargins})
 	}
 }
 
@@ -587,7 +604,7 @@ func appendEpigraphBlocksFull(blocks *[]pdfTextBlock, c *content.Content, epigra
 	epigraphContextClasses := joinStyleClasses(contextClasses, pdfStyleEpigraph)
 	appendFlowBlocks(blocks, c, epigraph.Flow.Items, 1, nil, pdfStyleEpigraph, epigraphContextClasses, stripRootHorizontalMargins)
 	for i := range epigraph.TextAuthors {
-		appendParagraphBlockFull(blocks, c, pdfBlockTextAuthor, &epigraph.TextAuthors[i], 1, "", epigraphContextClasses, stripRootHorizontalMargins)
+		appendParagraphBlockWithOptions(blocks, pdfParagraphBlockOptions{Content: c, Kind: pdfBlockTextAuthor, Paragraph: &epigraph.TextAuthors[i], Depth: 1, ContextClasses: epigraphContextClasses, StripRootHorizontalMargins: stripRootHorizontalMargins})
 	}
 }
 

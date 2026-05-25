@@ -33,7 +33,7 @@ func appendTitleBlocksWithIDHeaderAndClasses(blocks *[]pdfTextBlock, title *fb2.
 }
 
 func appendParagraphBlockWithClasses(blocks *[]pdfTextBlock, kind pdfBlockKind, paragraph *fb2.Paragraph, depth int, styleClasses string) {
-	appendParagraphBlockFull(blocks, nil, kind, paragraph, depth, styleClasses, strings.TrimSpace(styleClasses), false)
+	appendParagraphBlockWithOptions(blocks, pdfParagraphBlockOptions{Kind: kind, Paragraph: paragraph, Depth: depth, StyleClasses: styleClasses, ContextClasses: strings.TrimSpace(styleClasses)})
 }
 
 func appendEpigraphBlocks(blocks *[]pdfTextBlock, epigraph *fb2.Epigraph) {
