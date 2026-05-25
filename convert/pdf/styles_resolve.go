@@ -190,6 +190,11 @@ func mergePDFDimensionOverrides(base, override, fallback pdfBlockResolvedStyle) 
 }
 
 func mergePDFParagraphOverridesWithFont(base, override, fallback paragraphStyle, inheritedFontSize float64) paragraphStyle {
+	base = mergePDFParagraphFontOverrides(base, override, fallback, inheritedFontSize)
+	return mergePDFParagraphBehaviorOverrides(base, override, fallback)
+}
+
+func mergePDFParagraphFontOverrides(base, override, fallback paragraphStyle, inheritedFontSize float64) paragraphStyle {
 	if override.FontFamily != fallback.FontFamily {
 		base.FontFamily = override.FontFamily
 	}
@@ -239,6 +244,10 @@ func mergePDFParagraphOverridesWithFont(base, override, fallback paragraphStyle,
 		base.FirstLineIndentSpec = pdfCSSLengthSpec{}
 		base.HasFirstLineIndent = override.HasFirstLineIndent
 	}
+	return base
+}
+
+func mergePDFParagraphBehaviorOverrides(base, override, fallback paragraphStyle) paragraphStyle {
 	if override.HasAlign || override.Align != fallback.Align {
 		base.Align = override.Align
 		base.HasAlign = override.HasAlign
