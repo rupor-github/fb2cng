@@ -226,40 +226,8 @@ func (l *pdfPageLayout) layoutTextBlock(blockIndex int, block pdfTextBlock, styl
 		return nil
 	}
 
-	textHeight := float64(len(lines)) * lineHeight
-	if dropcapOK {
-		textHeight = max(textHeight, dropcap.ReservedHeight)
-	}
-	needed := blockSpaceBefore() + style.PaddingTop + textHeight + style.PaddingBottom
-	if dropcapOK && l.pageHasText {
-		requiredDropcapLines := max(dropcap.Lines, 1)
-		if countFittingLines(firstBaselineY(), l.bottom, style.Paragraph.FontSize, lineHeight) < requiredDropcapLines {
-			l.newTextPage()
-		}
-	}
-	if style.KeepTogether && l.pageHasText && l.y-needed < l.bottom {
-		l.newTextPage()
-	}
-	if keepLines := pdfKeepWithNextLines(l.doc.Blocks, l.blockStyles, blockIndex); keepLines > 0 && l.pageHasText {
-		keepWithNext, err := nextBlockKeepHeight(l.doc, l.blockStyles, blockIndex+1, l.contentWidth, l.rootlessContentWidth, l.top-l.bottom, keepLines)
-		if err != nil {
-			return err
-		}
-		if keepWithNext > 0 && l.y-needed-style.SpaceAfter-keepWithNext < l.bottom && needed+style.SpaceAfter+keepWithNext <= l.top-l.bottom {
-			l.newTextPage()
-		}
-	}
-	if !style.KeepTogether && l.pageHasText {
-		linesFit := countFittingLines(l.y-blockSpaceBefore()-style.PaddingTop, l.bottom, style.Paragraph.FontSize, lineHeight)
-		if linesFit > 0 && linesFit < len(lines) {
-			firstFragmentLines := linesFit
-			if remaining := len(lines) - firstFragmentLines; remaining < style.Widows {
-				firstFragmentLines = len(lines) - style.Widows
-			}
-			if firstFragmentLines < min(style.Orphans, len(lines)) {
-				l.newTextPage()
-			}
-		}
+	if err := l.paginateTextBlock(blockIndex, style, lines, dropcap, dropcapOK, lineHeight, blockSpaceBefore, firstBaselineY); err != nil {
+		return err
 	}
 	lines, dropcap, dropcapOK, err = shapeTextBlock()
 	if err != nil {
@@ -415,6 +383,54 @@ func (l *pdfPageLayout) layoutTextBlock(blockIndex int, block pdfTextBlock, styl
 	}
 	if pdfStyleForcesPageBreakAfter(style) && l.pageHasText {
 		l.newTextPage()
+	}
+	return nil
+}
+
+func (l *pdfPageLayout) paginateTextBlock(
+	blockIndex int,
+	style pdfBlockResolvedStyle,
+	lines []paragraphLine,
+	dropcap pdfDropcapLayout,
+	dropcapOK bool,
+	lineHeight float64,
+	blockSpaceBefore func() float64,
+	firstBaselineY func() float64,
+) error {
+	textHeight := float64(len(lines)) * lineHeight
+	if dropcapOK {
+		textHeight = max(textHeight, dropcap.ReservedHeight)
+	}
+	needed := blockSpaceBefore() + style.PaddingTop + textHeight + style.PaddingBottom
+	if dropcapOK && l.pageHasText {
+		requiredDropcapLines := max(dropcap.Lines, 1)
+		if countFittingLines(firstBaselineY(), l.bottom, style.Paragraph.FontSize, lineHeight) < requiredDropcapLines {
+			l.newTextPage()
+		}
+	}
+	if style.KeepTogether && l.pageHasText && l.y-needed < l.bottom {
+		l.newTextPage()
+	}
+	if keepLines := pdfKeepWithNextLines(l.doc.Blocks, l.blockStyles, blockIndex); keepLines > 0 && l.pageHasText {
+		keepWithNext, err := nextBlockKeepHeight(l.doc, l.blockStyles, blockIndex+1, l.contentWidth, l.rootlessContentWidth, l.top-l.bottom, keepLines)
+		if err != nil {
+			return err
+		}
+		if keepWithNext > 0 && l.y-needed-style.SpaceAfter-keepWithNext < l.bottom && needed+style.SpaceAfter+keepWithNext <= l.top-l.bottom {
+			l.newTextPage()
+		}
+	}
+	if !style.KeepTogether && l.pageHasText {
+		linesFit := countFittingLines(l.y-blockSpaceBefore()-style.PaddingTop, l.bottom, style.Paragraph.FontSize, lineHeight)
+		if linesFit > 0 && linesFit < len(lines) {
+			firstFragmentLines := linesFit
+			if remaining := len(lines) - firstFragmentLines; remaining < style.Widows {
+				firstFragmentLines = len(lines) - style.Widows
+			}
+			if firstFragmentLines < min(style.Orphans, len(lines)) {
+				l.newTextPage()
+			}
+		}
 	}
 	return nil
 }
