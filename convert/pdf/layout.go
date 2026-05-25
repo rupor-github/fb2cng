@@ -816,7 +816,7 @@ func pdfPageTitleContentVisualBounds(page *pdfPage, lineStart, lineEnd int, imag
 
 func includePDFLineVisualBounds(include func(float64, float64), line pdfPageLine, fonts *pdfFontRegistry) {
 	if len(line.Fragments) == 0 {
-		face, err := fontForKey(fonts, line.FontKey)
+		face, err := resolvePDFFontFace(fonts, line.FontKey)
 		if err != nil {
 			face = nil
 		}
@@ -830,7 +830,7 @@ func includePDFLineVisualBounds(include func(float64, float64), line pdfPageLine
 			include(baseline+fragment.ImageHeight, baseline)
 			continue
 		}
-		face, err := fontForKey(fonts, fragment.FontKey)
+		face, err := resolvePDFFontFace(fonts, fragment.FontKey)
 		if err != nil {
 			face = nil
 		}

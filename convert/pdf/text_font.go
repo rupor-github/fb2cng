@@ -104,14 +104,14 @@ func pdfFontKeyForStyle(style paragraphStyle) pdfFontKey {
 
 func fontForStyle(registry *pdfFontRegistry, style paragraphStyle) (*builtinFontFace, pdfFontKey, error) {
 	key := pdfFontKeyForStyle(style)
-	face, err := fontForKey(registry, key)
+	face, err := resolvePDFFontFace(registry, key)
 	if err != nil {
 		return nil, pdfFontKey{}, err
 	}
 	return face, key, nil
 }
 
-func fontForKey(registry *pdfFontRegistry, key pdfFontKey) (*builtinFontFace, error) {
+func resolvePDFFontFace(registry *pdfFontRegistry, key pdfFontKey) (*builtinFontFace, error) {
 	if registry != nil {
 		return registry.fontForKey(key)
 	}
@@ -685,7 +685,7 @@ func preparePDFFontResources(registry *pdfFontRegistry, used map[pdfFontKey]map[
 
 	resources := make([]pdfFontResource, 0, len(keys))
 	for i, key := range keys {
-		face, err := fontForKey(registry, key)
+		face, err := resolvePDFFontFace(registry, key)
 		if err != nil {
 			return nil, err
 		}

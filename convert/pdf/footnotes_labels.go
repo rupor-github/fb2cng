@@ -33,7 +33,7 @@ func applyPDFPageLocalFootnoteReferenceLabels(
 					continue
 				}
 				labelText := pdfDecoratedFootnoteReferenceLabel(resolver, fragment.StyleClasses, label)
-				face, err := fontForKey(fonts, fragment.FontKey)
+				face, err := resolvePDFFontFace(fonts, fragment.FontKey)
 				if err != nil {
 					return fmt.Errorf("shape page-local footnote label %q: %w", labelText, err)
 				}

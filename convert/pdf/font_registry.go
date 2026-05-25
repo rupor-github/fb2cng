@@ -207,7 +207,7 @@ func (r *pdfFontRegistry) fontForKey(key pdfFontKey) (*builtinFontFace, error) {
 		}
 		return r.fontFaceWithLogger(face, key), err
 	}
-	return fontForKey(nil, key)
+	return resolvePDFFontFace(nil, key)
 }
 
 type pdfFontFallbackLogKey struct {
