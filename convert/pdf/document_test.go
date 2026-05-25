@@ -172,6 +172,116 @@ func TestGeneratePDFEmbedsStylesheetFontFace(t *testing.T) {
 	}
 }
 
+func TestGeneratePDFWithThirdPartyCSSFontHonorsNoSubsettingRestriction(t *testing.T) {
+	fontData, err := gunzipFont(notoMonoRegularGZ)
+	if err != nil {
+		t.Fatalf("gunzipFont() error = %v", err)
+	}
+	fontData = append([]byte(nil), fontData...)
+	if !patchFontEmbeddingFSType(fontData, 0x0102) {
+		t.Fatal("patchFontEmbeddingFSType() = false")
+	}
+	tmpDir := t.TempDir()
+	outputName := filepath.Join(tmpDir, "book.pdf")
+	cfg := &config.DocumentConfig{
+		Images: config.ImagesConfig{
+			Screen: config.ScreenConfig{Width: 1264, Height: 1680, DPI: 300},
+		},
+	}
+	c := &content.Content{
+		SrcName: "book.fb2",
+		Debug:   true,
+		WorkDir: tmpDir,
+		Book: &fb2.FictionBook{
+			Stylesheets: []fb2.Stylesheet{{
+				Type: "text/css",
+				Data: `
+					@font-face { font-family: ThirdPartyMono; src: url("#third-party-mono"); font-weight: 400; font-style: normal; }
+					p.third-party { font-family: ThirdPartyMono; }
+				`,
+				Resources: []fb2.StylesheetResource{{OriginalURL: "#third-party-mono", MimeType: "font/ttf", Data: fontData}},
+			}},
+			Description: fb2.Description{TitleInfo: fb2.TitleInfo{BookTitle: fb2.TextField{Value: "Restricted Font Book"}}},
+			Bodies: []fb2.Body{{
+				Kind: fb2.BodyMain,
+				Sections: []fb2.Section{{Content: []fb2.FlowItem{{
+					Kind:      fb2.FlowParagraph,
+					Paragraph: &fb2.Paragraph{Style: "third-party", Text: []fb2.InlineSegment{{Text: "Third-party embedded TTF."}}},
+				}}}},
+			}},
+		},
+	}
+	core, logs := observer.New(zapcore.DebugLevel)
+
+	if err := Generate(context.Background(), c, outputName, cfg, zap.New(core)); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	limitationEntries := logs.FilterMessage("Loaded PDF @font-face resource with limitations").All()
+	if len(limitationEntries) != 1 {
+		t.Fatalf("stylesheet font limitation log entries = %d, want 1", len(limitationEntries))
+	}
+	fields := pdfZapStringFields(limitationEntries[0])
+	if fields["family"] != "ThirdPartyMono" || fields["pdf_subsetting_status"] != "disabled_by_font_fs_type" {
+		t.Fatalf("stylesheet font limitation fields = %#v, want disabled-by-fsType ThirdPartyMono", fields)
+	}
+	if !pdfZapStringSliceFieldContains(limitationEntries[0], "limitations", "font_disallows_subsetting_full_font_will_be_embedded") {
+		t.Fatalf("stylesheet font limitations missing no-subsetting note: %#v", limitationEntries[0].Context)
+	}
+
+	restrictionEntries := logs.FilterMessage("PDF font has embedding restrictions").All()
+	if len(restrictionEntries) != 1 {
+		t.Fatalf("embedding restriction log entries = %d, want 1", len(restrictionEntries))
+	}
+	boolFields := pdfZapBoolFields(restrictionEntries[0])
+	if !boolFields["restricted_license_embedding"] || !boolFields["no_subsetting"] {
+		t.Fatalf("embedding restriction fields = %#v, want restricted and no_subsetting", boolFields)
+	}
+
+	data, err := os.ReadFile(outputName)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	if strings.Contains(string(data), "+NotoSansMono-Regular") {
+		t.Fatalf("generated PDF contains subset-prefixed restricted font")
+	}
+	if !strings.Contains(string(data), "/BaseFont /NotoSansMono-Regular") {
+		t.Fatalf("generated PDF does not contain full embedded restricted font base name")
+	}
+
+	var fonts []pdfDebugFont
+	readJSONDebugFile(t, filepath.Join(tmpDir, "pdf-fonts.json"), &fonts)
+	var restrictedFont *pdfDebugFont
+	for i := range fonts {
+		if fonts[i].Family == "ThirdPartyMono" {
+			restrictedFont = &fonts[i]
+			break
+		}
+	}
+	if restrictedFont == nil {
+		t.Fatalf("debug fonts = %#v, want ThirdPartyMono entry", fonts)
+	}
+	if restrictedFont.Subset || restrictedFont.PDFBaseFont != "NotoSansMono-Regular" {
+		t.Fatalf("debug restricted font = %#v, want full unprefixed font", *restrictedFont)
+	}
+	if restrictedFont.OriginalFontFileSize != len(fontData) || restrictedFont.EmbeddedFontFileSize != len(fontData) {
+		t.Fatalf("debug restricted font sizes = %#v, want original and embedded size %d", *restrictedFont, len(fontData))
+	}
+	if len(restrictedFont.PDFCIDs) == 0 || len(restrictedFont.SubsetGlyphIDs) != 0 {
+		t.Fatalf("debug restricted font glyph ids = %#v, want PDF CIDs but no subset GIDs", *restrictedFont)
+	}
+}
+
+func pdfZapBoolFields(entry observer.LoggedEntry) map[string]bool {
+	fields := map[string]bool{}
+	for _, field := range entry.Context {
+		if field.Type == zapcore.BoolType {
+			fields[field.Key] = field.Integer == 1
+		}
+	}
+	return fields
+}
+
 func TestGenerateTextBodyAddsPaginatedBodyPage(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputName := filepath.Join(tmpDir, "book.pdf")
