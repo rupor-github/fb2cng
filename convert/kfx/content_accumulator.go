@@ -68,6 +68,21 @@ func (ca *ContentAccumulator) finishCurrentChunk() {
 	ca.currentSize = 0
 }
 
+// Snapshot returns a copy of all completed fragments plus the current open fragment.
+// It does not mutate the accumulator, so callers can inspect pending content before
+// the final Finish() call (for example, to build position maps before generated
+// footnote backlink paragraphs are appended).
+func (ca *ContentAccumulator) Snapshot() map[string][]string {
+	out := make(map[string][]string, len(ca.fragments)+1)
+	for name, list := range ca.fragments {
+		out[name] = append([]string(nil), list...)
+	}
+	if len(ca.currentList) > 0 {
+		out[ca.currentName] = append([]string(nil), ca.currentList...)
+	}
+	return out
+}
+
 // Finish completes accumulation and returns all content fragments.
 func (ca *ContentAccumulator) Finish() map[string][]string {
 	// Save current chunk if it has content

@@ -1,9 +1,21 @@
+/* for PDFs defaults selected to closely match KP3 rendering with proper Amazon */
+/* Bookerly fonts. Our built-in fonts are Noto so let's adjust basic measurements */
+/* slightly by default */
+@media fbc-pdf {
+    body {
+        line-height: 130%;
+        font-size: 120%;
+    }
+}
+
 /* Base paragraph style */
+/* default Amazon style defines margin: 1em, 0; */
 p {
     text-indent: 1em;
     text-align: justify;
-    /* default Amazon style defines margin: 1em, 0; */
     margin: 0;
+    orphans: 1;
+    widows: 1;
 }
 @media amzn-mobi {
     p {
@@ -33,19 +45,19 @@ p code {
 }
 
 /* Paragraphs with drop caps should have no text indent */
+/* default Amazon style defines margin: 1em, 0; */
 p.has-dropcap {
     text-indent: 0;
-    /* default Amazon style defines margin: 1em, 0; */
     margin: 0;
 }
 
 /* Drop caps - decorative large first letter */
 p.has-dropcap .dropcap {
-  float: left;
-  font-size: 3.2em;
-  line-height: 1;
-  font-weight: bold;
-  padding-right: 0.1em;
+    float: left;
+    font-size: 3.2em;
+    line-height: 1;
+    font-weight: bold;
+    padding-right: 0.1em;
 }
 
 /* Heading sizes */
@@ -384,6 +396,65 @@ td {
     margin: 0.2em 0;
 }
 
+/* For PDF printed-like footnotes */
+@media fbc-pdf {
+    .footnote {
+        font-size: 70%;
+        line-height: 115%;
+        margin: 0.15em 0;
+    }
+    .footnote-title {
+        margin: 0.35em 0 0.15em 0;
+        text-align: left;
+        text-indent: 0;
+        font-weight: bold;
+        page-break-after: avoid;
+    }
+    .footnote p,
+    .footnote .annotation,
+    .footnote .annotation-title,
+    .footnote .annotation-subtitle,
+    .footnote .epigraph,
+    .footnote .epigraph-subtitle,
+    .footnote .poem,
+    .footnote .poem-title,
+    .footnote .poem-title-first,
+    .footnote .poem-title-next,
+    .footnote .poem-subtitle,
+    .footnote .stanza,
+    .footnote .stanza-title,
+    .footnote .stanza-title-first,
+    .footnote .stanza-title-next,
+    .footnote .stanza-subtitle,
+    .footnote .verse,
+    .footnote .cite,
+    .footnote .cite-subtitle,
+    .footnote .text-author,
+    .footnote .date,
+    .footnote table,
+    .footnote th,
+    .footnote td {
+        line-height: 115%;
+    }
+    .footnote-title-first,
+    .footnote-title-next {
+        font-size: 70%;
+        line-height: 115%;
+        margin: 0.1em 0;
+        text-indent: 0;
+    }
+    .footnote .link-backlink {
+        font-size: 1em;
+        line-height: 115%;
+    }
+    .footnote-separator {
+        border-top: 0.5pt solid;
+        margin-top: 0.25em;
+        margin-bottom: 0.25em;
+        width: 100%;
+    }
+}
+
 /* "More" indicator for floating footnotes */
 @media not amzn-et {
     .footnote-more {
@@ -412,7 +483,7 @@ td {
     font-size: 0.8em;
     vertical-align: super;
 }
-/* Footnote link decorations, only "content" is supported for Kindle devices */
+/* Footnote link decorations, only "content" is supported for KFX/PDF */
 /* .link-footnote::before { */
 /*     content: "[" */
 /* } */
@@ -424,6 +495,7 @@ td {
 }
 .link-backlink {
     text-decoration: underline;
+    text-align: left;
     font-weight: bold;
     color: gray;
 }

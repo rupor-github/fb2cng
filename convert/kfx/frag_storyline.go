@@ -350,6 +350,8 @@ func generateStoryline(ctx context.Context, c *content.Content, styles *StyleReg
 	// - Individual footnote sections appear as nested TOC entries under the footnote body
 	isFloatMode := c.FootnotesMode.IsFloat()
 
+	resolveKFXBacklinkLocations(c, fragments, ca.Snapshot(), sectionNames, chapterStartSections, idToEID, nil)
+
 	for _, body := range footnoteBodies {
 		if err := ctx.Err(); err != nil {
 			return nil, 0, nil, nil, nil, nil, landmarks, nil, err
@@ -409,12 +411,15 @@ func generateStoryline(ctx context.Context, c *content.Content, styles *StyleReg
 			var addBacklinks func(c *content.Content, sectionID string, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, idToEID eidByFB2ID)
 			if isFloatMode {
 				addBacklinks = func(c *content.Content, sectionID string, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, idToEID eidByFB2ID) {
-					if c.BacklinkStr == "" {
+					refs, ok := c.BackLinkIndex[sectionID]
+					if !ok || len(refs) == 0 {
 						return
 					}
-					if refs, ok := c.BackLinkIndex[sectionID]; ok && len(refs) > 0 {
-						addBacklinkParagraph(c, refs, sb, styles, ca, idToEID)
+					if kfxBacklinkRefsNeedLocation(refs) {
+						resolveKFXBacklinkLocations(c, fragments, ca.Snapshot(), sectionNames, chapterStartSections, idToEID, sb)
+						refs = c.BackLinkIndex[sectionID]
 					}
+					addBacklinkParagraph(c, refs, sb, styles, ca, idToEID)
 				}
 			}
 
@@ -623,7 +628,7 @@ func processBodyIntroContent(c *content.Content, body *fb2.Body, sb *StorylineBu
 // All references to the footnote are combined into one paragraph with NBSP separators,
 // matching the EPUB implementation.
 func addBacklinkParagraph(c *content.Content, refs []content.BackLinkRef, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, _ eidByFB2ID) {
-	if len(refs) == 0 || c.BacklinkStr == "" {
+	if len(refs) == 0 {
 		return
 	}
 
@@ -643,23 +648,24 @@ func addBacklinkParagraph(c *content.Content, refs []content.BackLinkRef, sb *St
 	}
 	// Don't pre-resolve paraStyle - will be done in Build() with position filtering
 
-	// Build the combined text with NBSP separators between backlinks
-	// e.g., "[<]\u00A0[<]\u00A0[<]" for 3 references
+	// Build the combined text with NBSP separators between backlinks.
 	const nbsp = "\u00A0"
-	backlinkRunes := []rune(c.BacklinkStr)
-	backlinkLen := len(backlinkRunes)
-
 	var textBuilder strings.Builder
 	var events []StyleEventRef
 	offset := 0
 
-	for i, ref := range refs {
-		if i > 0 {
+	for _, ref := range refs {
+		backlinkText := c.BacklinkText(ref)
+		backlinkLen := len([]rune(backlinkText))
+		if backlinkLen == 0 {
+			continue
+		}
+		if textBuilder.Len() > 0 {
 			textBuilder.WriteString(nbsp)
 			offset++ // NBSP is 1 rune
 		}
 
-		textBuilder.WriteString(c.BacklinkStr)
+		textBuilder.WriteString(backlinkText)
 
 		// Create style event for this backlink with link to the reference location
 		events = append(events, StyleEventRef{
@@ -671,6 +677,9 @@ func addBacklinkParagraph(c *content.Content, refs []content.BackLinkRef, sb *St
 		})
 
 		offset += backlinkLen
+	}
+	if textBuilder.Len() == 0 {
+		return
 	}
 
 	// Add content text

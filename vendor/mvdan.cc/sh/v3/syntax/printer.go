@@ -359,7 +359,7 @@ func (p *Printer) spacedToken(s string, pos Pos) {
 }
 
 func (p *Printer) semiOrNewl(s string, pos Pos) {
-	if p.wantsNewline(Pos{}, false) {
+	if p.wantsNewline(Pos{}, false) || len(p.pendingHdocs) > 0 {
 		p.newline(pos)
 		p.indent()
 	} else {
@@ -750,6 +750,22 @@ func (p *Printer) paramExp(pe *ParamExp) {
 		p.w.WriteByte('+')
 	case pe.Excl:
 		p.w.WriteByte('!')
+	}
+	for _, pre := range [...]struct {
+		c     byte
+		state OptState
+	}{
+		{'=', pe.Split},
+		{'~', pe.GlobSubst},
+		{'^', pe.RcExpand},
+	} {
+		if pre.state == OptUnset {
+			continue
+		}
+		p.w.WriteByte(pre.c)
+		if pre.state == OptOff {
+			p.w.WriteByte(pre.c)
+		}
 	}
 	switch {
 	case pe.Param != nil:

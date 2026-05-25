@@ -22,6 +22,7 @@ import (
 	"fbc/content"
 	"fbc/convert/epub"
 	"fbc/convert/kfx"
+	"fbc/convert/pdf"
 	"fbc/state"
 	imgutil "fbc/utils/images"
 )
@@ -82,7 +83,8 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 		if err != nil {
 			return fmt.Errorf("unable to rasterize embedded default cover svg: %w", err)
 		}
-		jpegData, err := imgutil.EncodeJPEGWithDPI(img, env.Cfg.Document.Images.JPEGQuality, imgutil.DpiPxPerInch, 300, 300)
+		density := imgutil.JPEGDensityFromDPI(env.Cfg.Document.Images.Screen.DPI)
+		jpegData, err := imgutil.EncodeJPEGWithDPI(img, env.Cfg.Document.Images.JPEGQuality, imgutil.DpiPxPerInch, density, density)
 		if err != nil {
 			return fmt.Errorf("unable to encode embedded default cover jpeg: %w", err)
 		}
@@ -448,11 +450,15 @@ func processBook(ctx context.Context, r io.Reader, src string, dst string, forma
 	// Generate output in the requested format
 	switch c.OutputFormat {
 	case common.OutputFmtEpub2, common.OutputFmtEpub3, common.OutputFmtKepub:
-		if err := epub.Generate(ctx, c, tmpOutputName, &env.Cfg.Document, log); err != nil {
+		if err := epub.Generate(ctx, c, tmpOutputName, &env.Cfg.Document, log, outputName); err != nil {
 			return fmt.Errorf("unable to generate output: %w", err)
 		}
 	case common.OutputFmtKfx, common.OutputFmtAzw8:
-		if err := kfx.Generate(ctx, c, tmpOutputName, &env.Cfg.Document, log); err != nil {
+		if err := kfx.Generate(ctx, c, tmpOutputName, &env.Cfg.Document, log, outputName); err != nil {
+			return fmt.Errorf("unable to generate output: %w", err)
+		}
+	case common.OutputFmtPdf:
+		if err := pdf.Generate(ctx, c, tmpOutputName, &env.Cfg.Document, log, outputName); err != nil {
 			return fmt.Errorf("unable to generate output: %w", err)
 		}
 	default:

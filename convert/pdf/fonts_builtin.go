@@ -1,0 +1,352 @@
+package pdf
+
+import (
+	"bytes"
+	"compress/gzip"
+	_ "embed"
+	"encoding/binary"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
+
+	textfont "github.com/go-text/typesetting/font"
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/sfnt"
+	"golang.org/x/image/math/fixed"
+)
+
+const (
+	pdfBuiltinFontFamilyMath     = "Noto Sans Math"
+	pdfBuiltinFontFamilySymbols  = "Noto Sans Symbols"
+	pdfBuiltinFontFamilySymbols2 = "Noto Sans Symbols 2"
+)
+
+// Embedded font data (gzip-compressed TTF).
+// Noto Serif — serif (SIL OFL, https://github.com/notofonts/noto-fonts)
+//
+//go:embed fonts/NotoSerif-Regular.ttf.gz
+var notoSerifRegularGZ []byte
+
+//go:embed fonts/NotoSerif-Bold.ttf.gz
+var notoSerifBoldGZ []byte
+
+//go:embed fonts/NotoSerif-Italic.ttf.gz
+var notoSerifItalicGZ []byte
+
+//go:embed fonts/NotoSerif-BoldItalic.ttf.gz
+var notoSerifBoldItalicGZ []byte
+
+// Noto Sans — sans-serif (SIL OFL, https://github.com/notofonts/noto-fonts)
+//
+//go:embed fonts/NotoSans-Regular.ttf.gz
+var notoSansRegularGZ []byte
+
+//go:embed fonts/NotoSans-Bold.ttf.gz
+var notoSansBoldGZ []byte
+
+//go:embed fonts/NotoSans-Italic.ttf.gz
+var notoSansItalicGZ []byte
+
+//go:embed fonts/NotoSans-BoldItalic.ttf.gz
+var notoSansBoldItalicGZ []byte
+
+// Noto Sans Mono — monospace (SIL OFL, https://github.com/notofonts/noto-fonts)
+// No italic variants available; regular is reused for italic.
+//
+//go:embed fonts/NotoSansMono-Regular.ttf.gz
+var notoMonoRegularGZ []byte
+
+//go:embed fonts/NotoSansMono-Bold.ttf.gz
+var notoMonoBoldGZ []byte
+
+// Noto Sans Math / Symbols — companion fonts for built-in symbol and math coverage
+// (SIL OFL, https://github.com/notofonts/noto-fonts).
+//
+//go:embed fonts/NotoSansMath-Regular.ttf.gz
+var notoSansMathRegularGZ []byte
+
+//go:embed fonts/NotoSansSymbols-Regular.ttf.gz
+var notoSansSymbolsRegularGZ []byte
+
+//go:embed fonts/NotoSansSymbols2-Regular.ttf.gz
+var notoSansSymbols2RegularGZ []byte
+
+type builtinFontFace struct {
+	PostScriptName  string
+	Data            []byte
+	Font            *sfnt.Font
+	TextFace        *textfont.Face
+	Key             pdfFontKey
+	Builtin         bool
+	UnitsPerEm      int
+	Ascent          int
+	Descent         int
+	CapHeight       int
+	BBox            [4]int
+	Flags           int
+	ItalicAngle     int
+	EmbeddingFSType uint16
+	MissingGlyphLog *pdfMissingGlyphLogger
+}
+
+type builtinFamily struct {
+	Regular *builtinFontFace
+	Bold    *builtinFontFace
+	Italic  *builtinFontFace
+	BoldIt  *builtinFontFace
+}
+
+func (f *builtinFamily) match(bold, italic bool) *builtinFontFace {
+	switch {
+	case bold && italic:
+		return f.BoldIt
+	case bold:
+		return f.Bold
+	case italic:
+		return f.Italic
+	default:
+		return f.Regular
+	}
+}
+
+var (
+	builtinOnce     sync.Once
+	builtinErr      error
+	builtinSerif    builtinFamily
+	builtinSans     builtinFamily
+	builtinMono     builtinFamily
+	builtinMath     builtinFamily
+	builtinSymbols  builtinFamily
+	builtinSymbols2 builtinFamily
+)
+
+func builtinFont(fontFamily string, bold, italic bool) (*builtinFontFace, error) {
+	if err := initBuiltinFonts(); err != nil {
+		return nil, err
+	}
+	return builtinFamilyFor(fontFamily).match(bold, italic), nil
+}
+
+func initBuiltinFonts() error {
+	builtinOnce.Do(func() {
+		builtinSerif, builtinErr = loadBuiltinFamily("NotoSerif", false, notoSerifRegularGZ, notoSerifBoldGZ, notoSerifItalicGZ, notoSerifBoldItalicGZ)
+		if builtinErr != nil {
+			return
+		}
+		builtinSans, builtinErr = loadBuiltinFamily("NotoSans", false, notoSansRegularGZ, notoSansBoldGZ, notoSansItalicGZ, notoSansBoldItalicGZ)
+		if builtinErr != nil {
+			return
+		}
+
+		regular, err := loadBuiltinFont("NotoSansMono-Regular", notoMonoRegularGZ, true, false)
+		if err != nil {
+			builtinErr = err
+			return
+		}
+		bold, err := loadBuiltinFont("NotoSansMono-Bold", notoMonoBoldGZ, true, false)
+		if err != nil {
+			builtinErr = err
+			return
+		}
+		builtinMono = builtinFamily{
+			Regular: regular,
+			Bold:    bold,
+			Italic:  regular,
+			BoldIt:  bold,
+		}
+
+		math, err := loadBuiltinFont("NotoSansMath-Regular", notoSansMathRegularGZ, false, false)
+		if err != nil {
+			builtinErr = err
+			return
+		}
+		symbols, err := loadBuiltinFont("NotoSansSymbols-Regular", notoSansSymbolsRegularGZ, false, false)
+		if err != nil {
+			builtinErr = err
+			return
+		}
+		symbols2, err := loadBuiltinFont("NotoSansSymbols2-Regular", notoSansSymbols2RegularGZ, false, false)
+		if err != nil {
+			builtinErr = err
+			return
+		}
+		builtinMath = singleFaceBuiltinFamily(math)
+		builtinSymbols = singleFaceBuiltinFamily(symbols)
+		builtinSymbols2 = singleFaceBuiltinFamily(symbols2)
+	})
+	return builtinErr
+}
+
+func singleFaceBuiltinFamily(face *builtinFontFace) builtinFamily {
+	return builtinFamily{Regular: face, Bold: face, Italic: face, BoldIt: face}
+}
+
+func loadBuiltinFamily(name string, fixedPitch bool, regularGZ, boldGZ, italicGZ, boldItalicGZ []byte) (builtinFamily, error) {
+	regular, err := loadBuiltinFont(name+"-Regular", regularGZ, fixedPitch, false)
+	if err != nil {
+		return builtinFamily{}, err
+	}
+	bold, err := loadBuiltinFont(name+"-Bold", boldGZ, fixedPitch, false)
+	if err != nil {
+		return builtinFamily{}, err
+	}
+	italic, err := loadBuiltinFont(name+"-Italic", italicGZ, fixedPitch, true)
+	if err != nil {
+		return builtinFamily{}, err
+	}
+	boldItalic, err := loadBuiltinFont(name+"-BoldItalic", boldItalicGZ, fixedPitch, true)
+	if err != nil {
+		return builtinFamily{}, err
+	}
+	return builtinFamily{Regular: regular, Bold: bold, Italic: italic, BoldIt: boldItalic}, nil
+}
+
+func loadBuiltinFont(label string, gzData []byte, fixedPitch, italic bool) (*builtinFontFace, error) {
+	data, err := gunzipFont(gzData)
+	if err != nil {
+		return nil, fmt.Errorf("load builtin font %s: %w", label, err)
+	}
+	face, err := loadRawFont(label, data, fixedPitch, italic)
+	if err != nil {
+		return nil, fmt.Errorf("load builtin font %s: %w", label, err)
+	}
+	face.Builtin = true
+	return face, nil
+}
+
+func loadRawFont(label string, data []byte, fixedPitch, italic bool) (*builtinFontFace, error) {
+	parsed, err := sfnt.Parse(data)
+	if err != nil {
+		return nil, fmt.Errorf("parse font: %w", err)
+	}
+	textFace, err := textfont.ParseTTF(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("parse OpenType font: %w", err)
+	}
+
+	units := int(parsed.UnitsPerEm())
+	ppem := fixed.I(units)
+	metrics, err := parsed.Metrics(nil, ppem, font.HintingNone)
+	if err != nil {
+		return nil, fmt.Errorf("read metrics: %w", err)
+	}
+	bounds, err := parsed.Bounds(nil, ppem, font.HintingNone)
+	if err != nil {
+		return nil, fmt.Errorf("read bounds: %w", err)
+	}
+
+	postScriptName, err := parsed.Name(nil, sfnt.NameIDPostScript)
+	if err != nil || postScriptName == "" {
+		postScriptName = label
+	}
+
+	flags := 1 << 5 // Nonsymbolic.
+	if fixedPitch {
+		flags |= 1
+	}
+	if strings.Contains(strings.ToLower(postScriptName), "serif") {
+		flags |= 1 << 1 // Serif.
+	}
+	if italic {
+		flags |= 1 << 6
+	}
+
+	return &builtinFontFace{
+		PostScriptName:  sanitizePDFName(postScriptName),
+		Data:            data,
+		Font:            parsed,
+		TextFace:        textFace,
+		UnitsPerEm:      units,
+		EmbeddingFSType: fontEmbeddingFSType(data),
+		Ascent:          metrics.Ascent.Round(),
+		Descent:         -metrics.Descent.Round(),
+		CapHeight:       metrics.CapHeight.Round(),
+		BBox: [4]int{
+			bounds.Min.X.Round(),
+			bounds.Min.Y.Round(),
+			bounds.Max.X.Round(),
+			bounds.Max.Y.Round(),
+		},
+		Flags:       flags,
+		ItalicAngle: 0,
+	}, nil
+}
+
+func fontEmbeddingFSType(data []byte) uint16 {
+	os2Table, ok := rawTTFTable(data, "OS/2")
+	if !ok || len(os2Table) < 10 {
+		return 0
+	}
+	return binary.BigEndian.Uint16(os2Table[8:10])
+}
+
+func rawTTFTable(data []byte, tag string) ([]byte, bool) {
+	if len(tag) != 4 || len(data) < 12 {
+		return nil, false
+	}
+	numTables := int(binary.BigEndian.Uint16(data[4:6]))
+	for i := range numTables {
+		recordOffset := 12 + i*16
+		if recordOffset+16 > len(data) {
+			return nil, false
+		}
+		if string(data[recordOffset:recordOffset+4]) != tag {
+			continue
+		}
+		offset := int(binary.BigEndian.Uint32(data[recordOffset+8 : recordOffset+12]))
+		length := int(binary.BigEndian.Uint32(data[recordOffset+12 : recordOffset+16]))
+		if offset < 0 || length < 0 || offset+length > len(data) {
+			return nil, false
+		}
+		return data[offset : offset+length], true
+	}
+	return nil, false
+}
+
+func gunzipFont(data []byte) ([]byte, error) {
+	r, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	return io.ReadAll(r)
+}
+
+func builtinFamilyFor(fontFamily string) *builtinFamily {
+	name := strings.ToLower(strings.TrimSpace(fontFamily))
+	switch {
+	case name == strings.ToLower(pdfBuiltinFontFamilyMath):
+		return &builtinMath
+	case name == strings.ToLower(pdfBuiltinFontFamilySymbols):
+		return &builtinSymbols
+	case name == strings.ToLower(pdfBuiltinFontFamilySymbols2):
+		return &builtinSymbols2
+	case strings.Contains(name, "monospace") || strings.Contains(name, "courier") || name == "mono":
+		return &builtinMono
+	case strings.Contains(name, "sans"):
+		return &builtinSans
+	default:
+		return &builtinSerif
+	}
+}
+
+func sanitizePDFName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "FBCFont"
+	}
+	var b strings.Builder
+	for _, r := range name {
+		switch {
+		case r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_':
+			b.WriteRune(r)
+		case r == ' ':
+			b.WriteByte('-')
+		}
+	}
+	if b.Len() == 0 {
+		return "FBCFont"
+	}
+	return b.String()
+}

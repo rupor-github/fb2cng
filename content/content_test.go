@@ -1280,6 +1280,18 @@ func TestContent_KoboSpanSet(t *testing.T) {
 	}
 }
 
+func TestShouldNormalizeFootnoteLabelsSkipsPDFPrintedFootnotes(t *testing.T) {
+	if shouldNormalizeFootnoteLabels(common.OutputFmtPdf, common.FootnotesModeFloatRenumbered) {
+		t.Fatal("PDF floatRenumbered should use page-local printed labels instead of label_template normalization")
+	}
+	if !shouldNormalizeFootnoteLabels(common.OutputFmtEpub3, common.FootnotesModeFloatRenumbered) {
+		t.Fatal("EPUB floatRenumbered should keep existing label_template normalization")
+	}
+	if shouldNormalizeFootnoteLabels(common.OutputFmtPdf, common.FootnotesModeFloat) {
+		t.Fatal("float mode should not run global renumbering")
+	}
+}
+
 func TestContent_AddFootnoteBackLinkRef(t *testing.T) {
 	c, _ := setupTestContent(t)
 	c.BackLinkIndex = make(map[string][]BackLinkRef)
@@ -1321,6 +1333,46 @@ func TestContent_AddFootnoteBackLinkRef(t *testing.T) {
 
 	if len(c.BackLinkIndex) != 2 {
 		t.Errorf("BackLinkIndex size = %d, want 2", len(c.BackLinkIndex))
+	}
+}
+
+func TestContent_BacklinkTextTemplate(t *testing.T) {
+	const defaultTemplate = `[{{- if eq .Format "pdf" -}}
+{{- if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber }}{{- else -}}<{{- end -}}
+{{- else if or (eq .Format "kfx") (eq .Format "azw8") -}}
+{{- if .LocationNumber -}}loc{{ "\u00A0" }}{{ .LocationNumber }}{{- else if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
+{{- else -}}
+{{- if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
+{{- end -}}]`
+	tests := []struct {
+		name string
+		ref  BackLinkRef
+		want string
+	}{
+		{name: "pdf page", ref: BackLinkRef{Format: "pdf", PageNumber: 20}, want: "[page\u00A020]"},
+		{name: "kfx location", ref: BackLinkRef{Format: "kfx", LocationNumber: 183, PageNumber: 20}, want: "[loc\u00A0183]"},
+		{name: "kfx page fallback", ref: BackLinkRef{Format: "kfx", PageNumber: 20}, want: "[page\u00A020]"},
+		{name: "azw8 location", ref: BackLinkRef{Format: "azw8", LocationNumber: 183, PageNumber: 20}, want: "[loc\u00A0183]"},
+		{name: "epub page", ref: BackLinkRef{Format: "epub3", PageNumber: 20, SectionTitle: "Section"}, want: "[page\u00A020]"},
+		{name: "epub section fallback", ref: BackLinkRef{Format: "epub3", SectionTitle: "Section"}, want: "[Section]"},
+		{name: "fallback", ref: BackLinkRef{Format: "epub3"}, want: "[<]"},
+	}
+	c := &Content{BacklinkTemplate: defaultTemplate}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := c.BacklinkText(tt.ref); got != tt.want {
+				t.Fatalf("BacklinkText() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestContent_BacklinkTextFallback(t *testing.T) {
+	if got := (&Content{}).BacklinkText(BackLinkRef{Format: "pdf", PageNumber: 20}); got != defaultBacklinkText {
+		t.Fatalf("empty template BacklinkText() = %q, want %q", got, defaultBacklinkText)
+	}
+	if got := (&Content{BacklinkTemplate: "{{"}).BacklinkText(BackLinkRef{Format: "pdf", PageNumber: 20}); got != defaultBacklinkText {
+		t.Fatalf("invalid template BacklinkText() = %q, want %q", got, defaultBacklinkText)
 	}
 }
 

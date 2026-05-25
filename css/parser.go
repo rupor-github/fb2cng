@@ -37,6 +37,7 @@ func (p *Parser) Parse(data []byte, source ...string) *Stylesheet {
 		p.log.Debug("Parsing CSS", zap.String("source", source[0]), zap.Int("bytes", len(data)))
 	}
 
+	data = stripCSSCommentsAndOrphanClosers(data)
 	input := parse.NewInput(bytes.NewReader(data))
 	parser := css.NewParser(input, false)
 
@@ -123,6 +124,57 @@ func (p *Parser) Parse(data []byte, source ...string) *Stylesheet {
 			currentSelectors = nil
 		}
 	}
+}
+
+func stripCSSCommentsAndOrphanClosers(data []byte) []byte {
+	if len(data) == 0 {
+		return data
+	}
+	out := make([]byte, 0, len(data))
+	inComment := false
+	var quote byte
+	escaped := false
+	for i := 0; i < len(data); i++ {
+		ch := data[i]
+		if inComment {
+			if ch == '*' && i+1 < len(data) && data[i+1] == '/' {
+				inComment = false
+				i++
+			}
+			continue
+		}
+		if quote != 0 {
+			out = append(out, ch)
+			if escaped {
+				escaped = false
+				continue
+			}
+			if ch == '\\' {
+				escaped = true
+				continue
+			}
+			if ch == quote {
+				quote = 0
+			}
+			continue
+		}
+		if ch == '\'' || ch == '"' {
+			quote = ch
+			out = append(out, ch)
+			continue
+		}
+		if ch == '/' && i+1 < len(data) && data[i+1] == '*' {
+			inComment = true
+			i++
+			continue
+		}
+		if ch == '*' && i+1 < len(data) && data[i+1] == '/' {
+			i++
+			continue
+		}
+		out = append(out, ch)
+	}
+	return out
 }
 
 // extractImportURL extracts the URL from @import tokens.

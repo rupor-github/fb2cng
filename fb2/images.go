@@ -31,6 +31,21 @@ import (
 // actual image and building image index. Never returns an error - uses placeholder for broken images.
 // Non-image binaries (e.g., fonts) are skipped.
 func (fb *FictionBook) PrepareImages(kindle bool, cfg *config.ImagesConfig, log *zap.Logger) BookImages {
+	return fb.prepareImages(kindle, cfg, log, imagePrepareOptions{})
+}
+
+// PrepareImagesForOutput processes images with output-format-specific shortcuts.
+func (fb *FictionBook) PrepareImagesForOutput(outputFormat common.OutputFmt, cfg *config.ImagesConfig, log *zap.Logger) BookImages {
+	return fb.prepareImages(outputFormat.ForKindle(), cfg, log, imagePrepareOptions{
+		skipNonJPEGOptimization: outputFormat == common.OutputFmtPdf,
+	})
+}
+
+type imagePrepareOptions struct {
+	skipNonJPEGOptimization bool
+}
+
+func (fb *FictionBook) prepareImages(kindle bool, cfg *config.ImagesConfig, log *zap.Logger, opts imagePrepareOptions) BookImages {
 	index := make(BookImages)
 
 	imgNum := 1
@@ -48,7 +63,7 @@ func (fb *FictionBook) PrepareImages(kindle bool, cfg *config.ImagesConfig, log 
 			continue
 		}
 		cover := len(fb.Description.TitleInfo.Coverpage) > 0 && strings.HasSuffix(fb.Description.TitleInfo.Coverpage[0].Href, fb.Binaries[i].ID)
-		bi := fb.Binaries[i].PrepareImage(kindle, cover, cfg, log)
+		bi := fb.Binaries[i].prepareImage(kindle, cover, cfg, log, opts)
 		ext := mimeToExt(bi.MimeType)
 		bi.Filename = path.Join(ImagesDir, fmt.Sprintf("img%05d.%s", imgNum, ext))
 		imgNum++
@@ -59,7 +74,14 @@ func (fb *FictionBook) PrepareImages(kindle bool, cfg *config.ImagesConfig, log 
 
 // handleImageError is a unified error handler for all image processing failures.
 // It logs the error and optionally substitutes the image with a placeholder.
-func (bo *BinaryObject) handleImageError(bi *BookImage, operation string, err error, kindle bool, cfg *config.ImagesConfig, log *zap.Logger) *BookImage {
+func (bo *BinaryObject) handleImageError(
+	bi *BookImage,
+	operation string,
+	err error,
+	kindle bool,
+	cfg *config.ImagesConfig,
+	log *zap.Logger,
+) *BookImage {
 	// Log warning with appropriate context
 	if err != nil {
 		log.Warn("Unable to "+operation+" image", zap.String("id", bo.ID), zap.String("content-type", bo.ContentType), zap.Error(err))
@@ -124,7 +146,8 @@ func (bo *BinaryObject) encodeImage(img image.Image, imgType string, cfg *config
 		if err != nil {
 			return nil, fmt.Errorf("unable to encode processed JPEG, ID - %s: %w", bo.ID, err)
 		}
-		data, added, err := imgutil.EnsureJFIFAPP0(buf.Bytes(), imgutil.DpiPxPerInch, 300, 300)
+		density := imgutil.JPEGDensityFromDPI(cfg.Screen.DPI)
+		data, added, err := imgutil.EnsureJFIFAPP0(buf.Bytes(), imgutil.DpiPxPerInch, density, density)
 		if err != nil {
 			return nil, fmt.Errorf("unable to insert jpeg JFIF APP0 marker segment, ID - %s: %w", bo.ID, err)
 		}
@@ -144,7 +167,10 @@ func (bo *BinaryObject) encodeImage(img image.Image, imgType string, cfg *config
 // NOTE: today KP3 always seems to scale images to 2048 width and height, we do
 // not do it
 func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfig, log *zap.Logger) *BookImage {
+	return bo.prepareImage(kindle, cover, cfg, log, imagePrepareOptions{})
+}
 
+func (bo *BinaryObject) prepareImage(kindle, cover bool, cfg *config.ImagesConfig, log *zap.Logger, opts imagePrepareOptions) *BookImage {
 	bi := &BookImage{
 		MimeType: bo.ContentType,
 		Data:     bo.Data,
@@ -328,6 +354,12 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 
 			imageChanged = true
 		case "png":
+			if opts.skipNonJPEGOptimization {
+				log.Debug("Skipping non-JPEG source image optimization for output format",
+					zap.String("id", bo.ID),
+					zap.String("type", imgType))
+				break
+			}
 			imageChanged = true
 		}
 	}

@@ -40,6 +40,7 @@ type (
 	ScreenConfig struct {
 		Width  int `yaml:"width" validate:"min=400"`
 		Height int `yaml:"height" validate:"min=600"`
+		DPI    int `yaml:"dpi" validate:"min=72,max=1200"`
 	}
 
 	ImagesConfig struct {
@@ -53,11 +54,11 @@ type (
 	}
 
 	FootnotesConfig struct {
-		Mode           common.FootnotesMode `yaml:"mode" validate:"gte=0"`
-		BodyNames      []string             `yaml:"bodies" validate:"dive,required"`
-		Backlinks      DoubleQuoteString    `yaml:"backlinks" validate:"gt=0"`
-		MoreParagraphs DoubleQuoteString    `yaml:"more_paragraphs" validate:"gt=0"`
-		LabelTemplate  string               `yaml:"label_template" validate:"required_if=Mode 2"`
+		Mode             common.FootnotesMode `yaml:"mode" validate:"gte=0"`
+		BodyNames        []string             `yaml:"bodies" validate:"dive,required"`
+		BacklinkTemplate string               `yaml:"backlink_template" validate:"gt=0"`
+		MoreParagraphs   DoubleQuoteString    `yaml:"more_paragraphs" validate:"gt=0"`
+		LabelTemplate    string               `yaml:"label_template" validate:"required_if=Mode 2"`
 	}
 
 	AnnotationConfig struct {
@@ -148,6 +149,7 @@ const (
 	MetaTitleTemplateFieldName       TemplateFieldName = "title_template"
 	MetaCreatorNameTemplateFieldName TemplateFieldName = "creator_name_template"
 	AuthorsTemplateFieldName         TemplateFieldName = "authors_template"
+	BacklinkTemplateFieldName        TemplateFieldName = "backlink_template"
 	LabelTemplateFieldName           TemplateFieldName = "label_template"
 )
 
@@ -156,6 +158,7 @@ var requiredOptions = append([]func(*gencfg.ProcessingOptions){},
 	gencfg.WithDoNotExpandField(string(MetaTitleTemplateFieldName)),
 	gencfg.WithDoNotExpandField(string(MetaCreatorNameTemplateFieldName)),
 	gencfg.WithDoNotExpandField(string(AuthorsTemplateFieldName)),
+	gencfg.WithDoNotExpandField(string(BacklinkTemplateFieldName)),
 	gencfg.WithDoNotExpandField(string(LabelTemplateFieldName)),
 )
 

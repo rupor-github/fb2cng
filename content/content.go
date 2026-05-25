@@ -11,10 +11,12 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"text/template"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/beevik/etree"
+	sprig "github.com/go-task/slim-sprig/v3"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"golang.org/x/net/html/charset"
@@ -29,9 +31,16 @@ import (
 
 // BackLinkRef tracks a single reference to a footnote for generating back-links
 type BackLinkRef struct {
-	RefID    string // unique ID for this reference occurrence (e.g., "ref-note1-1")
-	TargetID string // ID of the footnote being referenced
-	Filename string // filename containing the reference
+	RefID          string // unique ID for this reference occurrence (e.g., "ref-note1-1")
+	TargetID       string // ID of the footnote being referenced
+	RefNumber      int    // 1-based reference occurrence number for this footnote
+	Filename       string // filename containing the reference
+	Href           string // href back to the reference
+	Format         string // output format
+	PageNumber     int    // exact for PDF, approximate for generated page maps
+	LocationNumber int    // generated KFX location number
+	ChapterTitle   string // human-readable spine/chapter title containing the reference
+	SectionTitle   string // nearest titled section/body containing the reference when known
 }
 
 // PageMapEntry represents a page marker in the document
@@ -45,18 +54,19 @@ type PageMapEntry struct {
 // normalized internal representation derived from the official FictionBook 2.0
 // schemas. https://github.com/gribuser/fb2.git commit 4d3740e319039911c30d291abb0c8b26ec99703b
 type Content struct {
-	SrcName       string
-	Doc           *etree.Document
-	OutputFormat  common.OutputFmt     // config: output format
-	KindleEbook   bool                 // cli: kindle ebook (EBOK) metadata
-	ASIN          string               // cli: ASIN override for Kindle formats
-	FootnotesMode common.FootnotesMode // config: footnotes handling mode
-	PageSize      int                  // config: runes per page, 0 if disabled
-	AdobeDE       bool                 // config: Adobe DE page markers are being generated instead of NCX pageList
-	BacklinkStr   string               // config: backlink indicator
-	MoreParaStr   string               // config: more paragraphs indicator
-	ScreenWidth   int                  // config: target screen width for image sizing
-	ScreenHeight  int                  // config: target screen height for image sizing
+	SrcName               string
+	Doc                   *etree.Document
+	OutputFormat          common.OutputFmt     // config: output format
+	KindleEbook           bool                 // cli: kindle ebook (EBOK) metadata
+	ASIN                  string               // cli: ASIN override for Kindle formats
+	FootnotesMode         common.FootnotesMode // config: footnotes handling mode
+	FootnoteLabelTemplate string               // config: footnote label template
+	PageSize              int                  // config: runes per page, 0 if disabled
+	AdobeDE               bool                 // config: Adobe DE page markers are being generated instead of NCX pageList
+	BacklinkTemplate      string               // config: backlink indicator template
+	MoreParaStr           string               // config: more paragraphs indicator
+	ScreenWidth           int                  // config: target screen width for image sizing
+	ScreenHeight          int                  // config: target screen height for image sizing
 
 	Book           *fb2.FictionBook
 	CoverID        string
@@ -72,8 +82,10 @@ type Content struct {
 	Debug    bool
 
 	// Footnote back-link tracking
-	BackLinkIndex   map[string][]BackLinkRef // targetID -> list of references to it
-	CurrentFilename string                   // current file being processed
+	BackLinkIndex       map[string][]BackLinkRef // targetID -> list of references to it
+	CurrentFilename     string                   // current file being processed
+	CurrentChapterTitle string                   // current human-readable spine/chapter title
+	CurrentSectionTitle string                   // nearest titled section/body title
 
 	// Kobo span tracking
 	koboSpanParagraphs int
@@ -84,6 +96,13 @@ type Content struct {
 	pageRuneCounter     int                       // current rune count
 	TotalPages          int                       // current page number
 	PageMapIndex        map[string][]PageMapEntry // filename -> page entries in that file
+}
+
+func shouldNormalizeFootnoteLabels(outputFormat common.OutputFmt, mode common.FootnotesMode) bool {
+	if mode != common.FootnotesModeFloatRenumbered {
+		return false
+	}
+	return outputFormat != common.OutputFmtPdf
 }
 
 // Prepare reads, parses, and prepares FB2 content for conversion.
@@ -97,7 +116,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 	doc := etree.NewDocument()
 
 	// Respect as many HTML named character references as possible, old FB2s
-	// offten do not properly follow XML standard
+	// often do not properly follow XML standard
 	entities, err := prepareHTMLNamedEntities()
 	if err != nil {
 		return nil, fmt.Errorf("unable to write prepare HTML named entities: %w", err)
@@ -208,8 +227,10 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 
 	// Normalize footnote bodies and build footnote index
 	book, footnotes := book.NormalizeFootnoteBodies(log)
-	// For floatRenumbered mode, renumber footnotes and update labels
-	if env.Cfg.Document.Footnotes.Mode == common.FootnotesModeFloatRenumbered {
+	// For floatRenumbered mode, renumber footnotes and update labels.
+	// Native PDF printed footnotes use page-local labels assigned during PDF layout,
+	// so label_template is intentionally ignored there.
+	if shouldNormalizeFootnoteLabels(outputFormat, env.Cfg.Document.Footnotes.Mode) {
 		book, footnotes = book.NormalizeFootnoteLabels(footnotes, env.Cfg.Document.Footnotes.LabelTemplate, log)
 	}
 	// Build id and link indexes replacing/removing broken links (may add not-found image binary and vignette binaries)
@@ -226,35 +247,36 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 	// Mark first paragraphs in sections with drop-cap style for rendering
 	book = book.MarkDropcaps(&env.Cfg.Document.Dropcaps)
 
-	// Process all binary objects creating actual images and reference index
-	// This happens after NormalizeLinks so the not-found image binary is included
-	allImages := book.PrepareImages(outputFormat.ForKindle(), &env.Cfg.Document.Images, log)
+	// Process all binary objects creating actual images and reference index.
+	// This happens after NormalizeLinks so the not-found image binary is included.
+	allImages := book.PrepareImagesForOutput(outputFormat, &env.Cfg.Document.Images, log)
 
 	// Filter images to only include those that are actually referenced
 	imagesIndex := book.FilterReferencedImages(allImages, links, coverID, log)
 
 	c := &Content{
-		SrcName:        srcName,
-		Doc:            doc,
-		OutputFormat:   outputFormat,
-		KindleEbook:    env.KindleEbook && outputFormat.ForKindle(),
-		ASIN:           env.KindleASIN,
-		FootnotesMode:  env.Cfg.Document.Footnotes.Mode,
-		BacklinkStr:    string(env.Cfg.Document.Footnotes.Backlinks),
-		MoreParaStr:    string(env.Cfg.Document.Footnotes.MoreParagraphs),
-		ScreenWidth:    env.Cfg.Document.Images.Screen.Width,
-		ScreenHeight:   env.Cfg.Document.Images.Screen.Height,
-		Book:           book,
-		CoverID:        coverID,
-		FootnotesIndex: footnotes,
-		ImagesIndex:    imagesIndex,
-		UsedImageIDs:   make(map[string]bool),
-		IDsIndex:       ids,
-		LinksRevIndex:  links,
-		WorkDir:        tmpDir,
-		Debug:          env.Rpt != nil,
-		BackLinkIndex:  make(map[string][]BackLinkRef),
-		PageMapIndex:   make(map[string][]PageMapEntry),
+		SrcName:               srcName,
+		Doc:                   doc,
+		OutputFormat:          outputFormat,
+		KindleEbook:           env.KindleEbook && outputFormat.ForKindle(),
+		ASIN:                  env.KindleASIN,
+		FootnotesMode:         env.Cfg.Document.Footnotes.Mode,
+		FootnoteLabelTemplate: env.Cfg.Document.Footnotes.LabelTemplate,
+		BacklinkTemplate:      env.Cfg.Document.Footnotes.BacklinkTemplate,
+		MoreParaStr:           string(env.Cfg.Document.Footnotes.MoreParagraphs),
+		ScreenWidth:           env.Cfg.Document.Images.Screen.Width,
+		ScreenHeight:          env.Cfg.Document.Images.Screen.Height,
+		Book:                  book,
+		CoverID:               coverID,
+		FootnotesIndex:        footnotes,
+		ImagesIndex:           imagesIndex,
+		UsedImageIDs:          make(map[string]bool),
+		IDsIndex:              ids,
+		LinksRevIndex:         links,
+		WorkDir:               tmpDir,
+		Debug:                 env.Rpt != nil,
+		BackLinkIndex:         make(map[string][]BackLinkRef),
+		PageMapIndex:          make(map[string][]PageMapEntry),
 	}
 
 	// Initialize page map settings
@@ -286,7 +308,10 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 
 // prepareVignettes creates a map of vignette binaries from configuration
 // Returns an initialized but empty map if no vignettes are defined
-func prepareVignettes(vigCfg *config.VignettesConfig, defaultVignettes map[common.VignettePos][]byte) (map[common.VignettePos]*fb2.BinaryObject, error) {
+func prepareVignettes(
+	vigCfg *config.VignettesConfig,
+	defaultVignettes map[common.VignettePos][]byte,
+) (map[common.VignettePos]*fb2.BinaryObject, error) {
 	vignettes := make(map[common.VignettePos]*fb2.BinaryObject)
 
 	vignetteChecks := []struct {
@@ -528,17 +553,113 @@ func (c *Content) TrackImageUsage(id string) {
 	c.UsedImageIDs[id] = true
 }
 
-// AddFootnoteBackLinkRef adds a footnote reference and returns the BackLinkRef for generating links
+// AddFootnoteBackLinkRef adds a footnote reference and returns the BackLinkRef for generating links.
 func (c *Content) AddFootnoteBackLinkRef(targetID string) BackLinkRef {
+	if c.BackLinkIndex == nil {
+		c.BackLinkIndex = make(map[string][]BackLinkRef)
+	}
 	refs := c.BackLinkIndex[targetID]
 	refNum := len(refs) + 1
 	ref := BackLinkRef{
-		RefID:    fmt.Sprintf("ref-%s-%d", targetID, refNum),
-		TargetID: targetID,
-		Filename: c.CurrentFilename,
+		RefID:        fmt.Sprintf("ref-%s-%d", targetID, refNum),
+		TargetID:     targetID,
+		RefNumber:    refNum,
+		Filename:     c.CurrentFilename,
+		Format:       c.OutputFormat.String(),
+		PageNumber:   c.currentBacklinkPageNumber(),
+		ChapterTitle: c.CurrentChapterTitle,
+		SectionTitle: c.CurrentSectionTitle,
+	}
+	if c.CurrentFilename != "" {
+		ref.Href = c.CurrentFilename + "#" + ref.RefID
+	} else {
+		ref.Href = "#" + ref.RefID
 	}
 	c.BackLinkIndex[targetID] = append(refs, ref)
 	return ref
+}
+
+func (c *Content) currentBacklinkPageNumber() int {
+	if c.PageSize <= 0 || !c.PageTrackingEnabled {
+		return 0
+	}
+	if c.TotalPages <= 0 {
+		return 1
+	}
+	return c.TotalPages
+}
+
+func (c *Content) SetBackLinkRefPage(refID string, pageNumber int) bool {
+	if pageNumber <= 0 {
+		return false
+	}
+	return c.updateBackLinkRef(refID, func(ref *BackLinkRef) bool {
+		if ref.PageNumber == pageNumber {
+			return false
+		}
+		ref.PageNumber = pageNumber
+		return true
+	})
+}
+
+func (c *Content) SetBackLinkRefLocation(refID string, locationNumber int) bool {
+	if locationNumber <= 0 {
+		return false
+	}
+	return c.updateBackLinkRef(refID, func(ref *BackLinkRef) bool {
+		if ref.LocationNumber == locationNumber {
+			return false
+		}
+		ref.LocationNumber = locationNumber
+		return true
+	})
+}
+
+func (c *Content) updateBackLinkRef(refID string, update func(*BackLinkRef) bool) bool {
+	for targetID, refs := range c.BackLinkIndex {
+		for i := range refs {
+			if refs[i].RefID != refID {
+				continue
+			}
+			changed := update(&refs[i])
+			c.BackLinkIndex[targetID] = refs
+			return changed
+		}
+	}
+	return false
+}
+
+func (c *Content) BackLinkRefByID(refID string) (BackLinkRef, bool) {
+	for _, refs := range c.BackLinkIndex {
+		for _, ref := range refs {
+			if ref.RefID == refID {
+				return ref, true
+			}
+		}
+	}
+	return BackLinkRef{}, false
+}
+
+const defaultBacklinkText = "[<]"
+
+func (c *Content) BacklinkText(ref BackLinkRef) string {
+	templateText := strings.TrimSpace(c.BacklinkTemplate)
+	if templateText == "" {
+		return defaultBacklinkText
+	}
+	tmpl, err := template.New("backlink_template").Funcs(sprig.FuncMap()).Parse(templateText)
+	if err != nil {
+		return defaultBacklinkText
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, ref); err != nil {
+		return defaultBacklinkText
+	}
+	text := strings.TrimSpace(buf.String())
+	if text == "" {
+		return defaultBacklinkText
+	}
+	return text
 }
 
 // makeCharsetReader returns a CharsetReader function that detects when an XML

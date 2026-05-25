@@ -1,0 +1,40 @@
+To get PDF builtin fonts execute in this directory.
+
+All bundled Noto fonts are gzip-compressed TTF files from notofonts/noto-fonts
+(SIL OFL):
+
+	https://github.com/notofonts/noto-fonts
+
+Text families:
+
+	base=https://raw.githubusercontent.com/notofonts/noto-fonts/main/hinted/ttf
+	for f in \
+	  NotoSerif/NotoSerif-Regular.ttf \
+	  NotoSerif/NotoSerif-Bold.ttf \
+	  NotoSerif/NotoSerif-Italic.ttf \
+	  NotoSerif/NotoSerif-BoldItalic.ttf \
+	  NotoSans/NotoSans-Regular.ttf \
+	  NotoSans/NotoSans-Bold.ttf \
+	  NotoSans/NotoSans-Italic.ttf \
+	  NotoSans/NotoSans-BoldItalic.ttf \
+	  NotoSansMono/NotoSansMono-Regular.ttf \
+	  NotoSansMono/NotoSansMono-Bold.ttf; do \
+	    name=$(basename "$f"); \
+	    curl -L --fail -o "$name" "$base/$f"; \
+	    gzip -9 "$name"; \
+	done
+
+Companion fonts for built-in math/symbol coverage:
+
+	base=https://raw.githubusercontent.com/notofonts/noto-fonts/main/hinted/ttf
+	for f in \
+	  NotoSansMath/NotoSansMath-Regular.ttf \
+	  NotoSansSymbols/NotoSansSymbols-Regular.ttf \
+	  NotoSansSymbols2/NotoSansSymbols2-Regular.ttf; do \
+	    name=$(basename "$f"); \
+	    curl -L --fail -o "$name" "$base/$f"; \
+	    gzip -9 "$name"; \
+	done
+
+Noto Sans Mono has no italic variants in this bundle; Regular is reused for Italic,
+and Bold is reused for BoldItalic.

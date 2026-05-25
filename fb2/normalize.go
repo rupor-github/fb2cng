@@ -212,9 +212,6 @@ func (fb *FictionBook) NormalizeFootnoteLabels(footnotesIndex FootnoteRefs, temp
 			// Update footnote section title
 			section.Title = createFootnoteLabelTitle(displayText, section.Lang)
 
-			log.Debug("Renumbered footnote",
-				zap.String("id", section.ID),
-				zap.String("label", displayText))
 		}
 	}
 
@@ -365,7 +362,6 @@ func (fb *FictionBook) assignSectionIDs(section *Section, path []any, existingID
 					Type: "section-generated",
 					Path: path,
 				}
-				log.Debug("Generated section id", zap.String("ID", candidateID))
 				break
 			}
 		}
@@ -682,11 +678,8 @@ func updateFootnoteLinksSegments(segments []InlineSegment, index FootnoteRefs) {
 			// Check if this is a footnote link
 			if targetID, ok := strings.CutPrefix(seg.Href, "#"); ok {
 				if ref, isFootnote := index[targetID]; isFootnote && ref.DisplayText != "" {
-					// Replace link children with the formatted label
-					seg.Children = []InlineSegment{{
-						Kind: InlineText,
-						Text: ref.DisplayText,
-					}}
+					seg.Text = ""
+					seg.Children = footnoteLabelChildren(seg.Children, ref.DisplayText)
 				}
 			}
 		}
@@ -695,6 +688,53 @@ func updateFootnoteLinksSegments(segments []InlineSegment, index FootnoteRefs) {
 		if len(seg.Children) > 0 {
 			updateFootnoteLinksSegments(seg.Children, index)
 		}
+	}
+}
+
+func footnoteLabelChildren(children []InlineSegment, label string) []InlineSegment {
+	if child, ok := footnoteLabelStyleChild(children); ok {
+		child.Text = label
+		child.Children = nil
+		child.Image = nil
+		return []InlineSegment{child}
+	}
+	return []InlineSegment{{Kind: InlineText, Text: label}}
+}
+
+func footnoteLabelStyleChild(children []InlineSegment) (InlineSegment, bool) {
+	var candidate InlineSegment
+	found := false
+	for _, child := range children {
+		if inlineSegmentWhitespaceOnly(child) {
+			continue
+		}
+		if found || !canPreserveFootnoteLabelStyle(child) {
+			return InlineSegment{}, false
+		}
+		candidate = child
+		found = true
+	}
+	return candidate, found
+}
+
+func inlineSegmentWhitespaceOnly(seg InlineSegment) bool {
+	if strings.TrimSpace(seg.Text) != "" || seg.Image != nil {
+		return false
+	}
+	for _, child := range seg.Children {
+		if !inlineSegmentWhitespaceOnly(child) {
+			return false
+		}
+	}
+	return true
+}
+
+func canPreserveFootnoteLabelStyle(seg InlineSegment) bool {
+	switch seg.Kind {
+	case InlineStrong, InlineEmphasis, InlineNamedStyle, InlineStrikethrough, InlineSub, InlineSup, InlineCode:
+		return true
+	default:
+		return false
 	}
 }
 

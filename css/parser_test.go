@@ -820,6 +820,33 @@ func TestParser_Comments(t *testing.T) {
 	}
 }
 
+func TestParser_OrphanCommentClosersDoNotPoisonNextSelector(t *testing.T) {
+	log := zap.NewNop()
+	p := css.NewParser(log)
+
+	input := []byte(`
+		/* @media fbc-pdf { */
+		/*     /* nested-looking disabled comment */ */
+		/* } */
+		p { margin: 0; text-indent: 1em; }
+	`)
+	sheet := p.Parse(input)
+
+	rules := allRules(sheet)
+	if len(rules) != 1 {
+		t.Fatalf("expected 1 rule, got %d: %#v", len(rules), rules)
+	}
+	if rules[0].Selector.Element != "p" {
+		t.Fatalf("selector = %#v, want p", rules[0].Selector)
+	}
+	if _, ok := rules[0].GetProperty("margin"); !ok {
+		t.Fatal("expected margin property")
+	}
+	if _, ok := rules[0].GetProperty("text-indent"); !ok {
+		t.Fatal("expected text-indent property")
+	}
+}
+
 func TestMediaQuery_Evaluate(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -904,6 +931,43 @@ func TestMediaQuery_Evaluate(t *testing.T) {
 			got := tt.mq.Evaluate(tt.kf8, tt.et)
 			if got != tt.expected {
 				t.Errorf("MediaQuery.Evaluate(%v, %v) = %v, want %v", tt.kf8, tt.et, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestMediaQuery_EvaluatePDFContext(t *testing.T) {
+	pdfContext := css.MediaContext{KF8: true, ET: true, FBCPDF: true}
+	kfxContext := css.MediaContext{KF8: true, ET: true}
+	tests := []struct {
+		name string
+		mq   css.MediaQuery
+		pdf  bool
+		kfx  bool
+	}{
+		{"fbc-pdf", css.MediaQuery{Type: "fbc-pdf"}, true, false},
+		{"not fbc-pdf", css.MediaQuery{Type: "fbc-pdf", Negated: true}, false, true},
+		{
+			"fbc-pdf and amzn-kf8 and amzn-et",
+			css.MediaQuery{Type: "fbc-pdf", Features: []css.MediaFeature{{Name: "amzn-kf8"}, {Name: "amzn-et"}}},
+			true,
+			false,
+		},
+		{
+			"amzn-kf8 and fbc-pdf",
+			css.MediaQuery{Type: "amzn-kf8", Features: []css.MediaFeature{{Name: "fbc-pdf"}}},
+			true,
+			false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.mq.EvaluateContext(pdfContext); got != tt.pdf {
+				t.Errorf("EvaluateContext(PDF) = %v, want %v", got, tt.pdf)
+			}
+			if got := tt.mq.EvaluateContext(kfxContext); got != tt.kfx {
+				t.Errorf("EvaluateContext(KFX) = %v, want %v", got, tt.kfx)
 			}
 		})
 	}

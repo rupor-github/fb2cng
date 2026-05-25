@@ -42,3 +42,23 @@ func TestEnsureJFIFAPP0_AlreadyPresent(t *testing.T) {
 		t.Fatal("expected same bytes")
 	}
 }
+
+func TestJPEGDensityFromDPI(t *testing.T) {
+	tests := []struct {
+		name string
+		dpi  int
+		want int16
+	}{
+		{name: "default", dpi: 0, want: 300},
+		{name: "configured", dpi: 144, want: 144},
+		{name: "negative default", dpi: -1, want: 300},
+		{name: "clamped", dpi: 40000, want: 32767},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := JPEGDensityFromDPI(tt.dpi); got != tt.want {
+				t.Fatalf("JPEGDensityFromDPI(%d) = %d, want %d", tt.dpi, got, tt.want)
+			}
+		})
+	}
+}
