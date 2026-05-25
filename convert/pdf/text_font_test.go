@@ -3,6 +3,7 @@ package pdf
 import (
 	"bytes"
 	"compress/zlib"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	textfont "github.com/go-text/typesetting/font"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -292,6 +294,61 @@ func TestShapeTextClassifiesAndLogsMissingGlyphs(t *testing.T) {
 			t.Fatalf("missing log kind %q in %#v", want, kinds)
 		}
 	}
+}
+
+func TestPDFFontRegistryLogsStylesheetFontSupport(t *testing.T) {
+	fontData, err := gunzipFont(notoMonoRegularGZ)
+	if err != nil {
+		t.Fatalf("gunzipFont() error = %v", err)
+	}
+	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
+		Type:      "text/css",
+		Data:      `@font-face { font-family: CustomMono; src: url("#custom-mono"); }`,
+		Resources: []fb2.StylesheetResource{{OriginalURL: "#custom-mono", MimeType: "font/ttf", Data: fontData}},
+	}}}
+	core, logs := observer.New(zapcore.DebugLevel)
+	registry := newPDFFontRegistry(book, zap.New(core))
+	if _, _, err := fontForStyle(registry, paragraphStyle{FontFamily: "CustomMono"}); err != nil {
+		t.Fatalf("fontForStyle() error = %v", err)
+	}
+	entries := logs.FilterMessage("Loaded PDF @font-face resource").All()
+	if len(entries) != 1 {
+		t.Fatalf("stylesheet font support log entries = %d, want 1", len(entries))
+	}
+	fields := pdfZapStringFields(entries[0])
+	if fields["outline_kind"] != "truetype" || fields["pdf_subsetting_status"] != "compact_truetype" || fields["pdf_embedded_font_file"] != "FontFile2" {
+		t.Fatalf("stylesheet font support fields = %#v, want TrueType compact subsetting support", fields)
+	}
+}
+
+func TestPDFFontRegistryLogsCFFStylesheetFontLimitations(t *testing.T) {
+	core, logs := observer.New(zapcore.DebugLevel)
+	registry := newPDFFontRegistry(nil, zap.New(core))
+	registry.logPDFStylesheetFontSupport("CFFFamily", "#cff", pdfFontVariant{}, &builtinFontFace{PostScriptName: "CFF-Regular", TextFace: &textfont.Face{}}, pdfOpenTypeCFFProgram())
+
+	entries := logs.FilterMessage("Loaded PDF @font-face resource with limitations").All()
+	if len(entries) != 1 {
+		t.Fatalf("stylesheet font limitation log entries = %d, want 1", len(entries))
+	}
+	fields := pdfZapStringFields(entries[0])
+	if fields["outline_kind"] != "opentype_cff" || fields["pdf_subsetting_status"] != "not_supported_for_cff" || fields["pdf_embedded_font_file"] != "FontFile3" {
+		t.Fatalf("stylesheet CFF support fields = %#v, want CFF full-embed limitation", fields)
+	}
+	if !pdfZapStringSliceFieldContains(entries[0], "limitations", "cff_subsetting_not_implemented_full_font_will_be_embedded") {
+		t.Fatalf("stylesheet CFF support limitations missing CFF subsetting note: %#v", entries[0].Context)
+	}
+}
+
+func pdfZapStringSliceFieldContains(entry observer.LoggedEntry, key string, value string) bool {
+	for _, field := range entry.Context {
+		if field.Key != key {
+			continue
+		}
+		if strings.Contains(fmt.Sprint(field.Interface), value) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestPDFFontRegistryWarnsAboutEmbeddingRestrictions(t *testing.T) {

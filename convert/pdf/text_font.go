@@ -975,14 +975,22 @@ func pdfFontProgram(data []byte) (pdfFontProgramInfo, error) {
 		return pdfOpenTypeCFFProgram(), nil
 	}
 	if _, ok := rawTTFTable(data, "CFF2"); ok {
-		return pdfOpenTypeCFFProgram(), nil
+		return pdfOpenTypeCFF2Program(), nil
 	}
 	return pdfFontProgramInfo{}, fmt.Errorf("unsupported font outline tables")
 }
 
 func pdfOpenTypeCFFProgram() pdfFontProgramInfo {
+	return pdfOpenTypeCFFProgramWithKind("opentype_cff")
+}
+
+func pdfOpenTypeCFF2Program() pdfFontProgramInfo {
+	return pdfOpenTypeCFFProgramWithKind("opentype_cff2")
+}
+
+func pdfOpenTypeCFFProgramWithKind(kind string) pdfFontProgramInfo {
 	return pdfFontProgramInfo{
-		OutlineKind:     "opentype_cff",
+		OutlineKind:     kind,
 		CIDFontSubtype:  docwriter.Name("CIDFontType0"),
 		FontFileKey:     "FontFile3",
 		FontFileSubtype: docwriter.Name("OpenType"),

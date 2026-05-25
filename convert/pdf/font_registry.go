@@ -92,13 +92,87 @@ func (r *pdfFontRegistry) addStylesheetFonts(stylesheet *fb2.Stylesheet, parsed 
 		}
 		face, err := loadRawFont(family+"-embedded", resource.Data, false, variant.Italic)
 		if err != nil {
-			r.log.Warn("Skipping unsupported PDF @font-face resource", zap.String("family", family), zap.String("url", url), zap.Error(err))
+			r.log.Warn("Skipping unsupported PDF @font-face resource",
+				zap.String("family", family),
+				zap.String("url", url),
+				zap.String("reason", "font_parse_failed"),
+				zap.Error(err))
 			continue
 		}
+		program, err := pdfFontProgram(face.Data)
+		if err != nil {
+			r.log.Warn("Skipping unsupported PDF @font-face resource",
+				zap.String("family", family),
+				zap.String("url", url),
+				zap.String("font", face.PostScriptName),
+				zap.String("reason", "unsupported_outline_tables"),
+				zap.Error(err))
+			continue
+		}
+		r.logPDFStylesheetFontSupport(family, url, variant, face, program)
 		r.logPDFFontEmbeddingRestrictions(family, url, face)
 		embeddedFamily.faces[variant] = face
 		r.families[familyKey] = embeddedFamily
 	}
+}
+
+func (r *pdfFontRegistry) logPDFStylesheetFontSupport(family string, url string, variant pdfFontVariant, face *builtinFontFace, program pdfFontProgramInfo) {
+	if r == nil || r.log == nil || face == nil {
+		return
+	}
+	subsettingStatus := pdfFontSubsettingStatus(face, program)
+	fields := []zap.Field{
+		zap.String("family", family),
+		zap.String("url", url),
+		zap.Bool("bold", variant.Bold),
+		zap.Bool("italic", variant.Italic),
+		zap.String("font", face.PostScriptName),
+		zap.String("outline_kind", program.OutlineKind),
+		zap.String("pdf_cid_font_subtype", string(program.CIDFontSubtype)),
+		zap.String("pdf_embedded_font_file", program.FontFileKey),
+		zap.Bool("opentype_shaping_supported", face.TextFace != nil),
+		zap.Bool("pdf_embedding_supported", true),
+		zap.Bool("pdf_subsetting_supported", subsettingStatus == "compact_truetype"),
+		zap.String("pdf_subsetting_status", subsettingStatus),
+	}
+	limitations := pdfFontSupportLimitations(face, program)
+	if len(limitations) != 0 {
+		fields = append(fields, zap.Strings("limitations", limitations))
+		r.log.Warn("Loaded PDF @font-face resource with limitations", fields...)
+		return
+	}
+	r.log.Info("Loaded PDF @font-face resource", fields...)
+}
+
+func pdfFontSubsettingStatus(face *builtinFontFace, program pdfFontProgramInfo) string {
+	switch {
+	case face == nil:
+		return "unknown"
+	case program.TrueTypeOutlines && allowPDFTrueTypeSubsetting(face):
+		return "compact_truetype"
+	case program.TrueTypeOutlines:
+		return "disabled_by_font_fs_type"
+	case program.OutlineKind == "opentype_cff", program.OutlineKind == "opentype_cff2":
+		return "not_supported_for_cff"
+	default:
+		return "not_supported"
+	}
+}
+
+func pdfFontSupportLimitations(face *builtinFontFace, program pdfFontProgramInfo) []string {
+	limitations := make([]string, 0, 3)
+	if face != nil && !allowPDFTrueTypeSubsetting(face) && program.TrueTypeOutlines {
+		limitations = append(limitations, "font_disallows_subsetting_full_font_will_be_embedded")
+	}
+	if program.OutlineKind == "opentype_cff" {
+		limitations = append(limitations, "cff_subsetting_not_implemented_full_font_will_be_embedded")
+	}
+	if program.OutlineKind == "opentype_cff2" {
+		limitations = append(limitations,
+			"cff2_subsetting_not_implemented_full_font_will_be_embedded",
+			"cff2_pdf_viewer_compatibility_not_fully_validated")
+	}
+	return limitations
 }
 
 func (r *pdfFontRegistry) logPDFFontEmbeddingRestrictions(family string, url string, face *builtinFontFace) {
