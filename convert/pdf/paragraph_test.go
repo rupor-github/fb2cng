@@ -33,10 +33,7 @@ func TestLayoutParagraphBalancesLinesAndJustifies(t *testing.T) {
 		}
 	}
 	sawJustifiedLine := false
-	for i, line := range lines[:len(lines)-1] {
-		if line.ExtraWordSpacing > max(style.FontSize*0.40, 3.0) {
-			t.Fatalf("line %d extra word spacing = %v, want capped", i, line.ExtraWordSpacing)
-		}
+	for _, line := range lines[:len(lines)-1] {
 		if line.ExtraWordSpacing > 0 {
 			sawJustifiedLine = true
 		}
@@ -56,6 +53,15 @@ func (h fakeHyphenator) Hyphenate(s string) string {
 		return v
 	}
 	return s
+}
+
+func containsHyphen(text string) bool {
+	for _, r := range text {
+		if isHyphenLikeBreakRune(r) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestParagraphDemeritsTreatHyphenationAsUsefulCorrection(t *testing.T) {
@@ -81,11 +87,15 @@ func TestLayoutParagraphUsesHyphenationPoints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("shapeText() error = %v", err)
 	}
+	suffix, err := shapeText(face, "phenation")
+	if err != nil {
+		t.Fatalf("shapeText() suffix error = %v", err)
+	}
 	full, err := shapeText(face, "hyphenation")
 	if err != nil {
 		t.Fatalf("shapeText() error = %v", err)
 	}
-	maxWidth := shapedWidthPoints(prefix, style.FontSize) + 1
+	maxWidth := max(shapedWidthPoints(prefix, style.FontSize), shapedWidthPoints(suffix, style.FontSize)) + 1
 	if maxWidth >= shapedWidthPoints(full, style.FontSize) {
 		t.Fatal("test width is not narrow enough to require hyphenation")
 	}
@@ -194,30 +204,44 @@ func TestLayoutParagraphHonorsHyphenationModes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("shapeText() error = %v", err)
 	}
-	maxWidth := shapedWidthPoints(prefix, 10) + 1
+	suffix, err := shapeText(face, "phenation")
+	if err != nil {
+		t.Fatalf("shapeText() suffix error = %v", err)
+	}
+	maxWidth := max(shapedWidthPoints(prefix, 10), shapedWidthPoints(suffix, 10)) + 1
 
 	tests := []struct {
-		name       string
-		text       string
-		style      paragraphStyle
-		wantLines  int
-		wantFirst  string
-		wantSecond string
+		name                  string
+		text                  string
+		style                 paragraphStyle
+		wantLines             int
+		wantFirst             string
+		wantSecond            string
+		wantEmergencyNoHyphen bool
 	}{
 		{
-			name:       "auto uses dictionary hyphenation",
-			text:       "hyphenation",
-			style:      paragraphStyle{FontSize: 10, LineHeight: 12, Hyphenation: paragraphHyphenationAuto, Hyphenator: fakeHyphenator{"hyphenation": "hy\u00adphenation"}},
+			name: "auto uses dictionary hyphenation",
+			text: "hyphenation",
+			style: paragraphStyle{
+				FontSize:    10,
+				LineHeight:  12,
+				Hyphenation: paragraphHyphenationAuto,
+				Hyphenator:  fakeHyphenator{"hyphenation": "hy\u00adphenation"},
+			},
 			wantLines:  2,
 			wantFirst:  "hy-",
 			wantSecond: "phenation",
 		},
 		{
-			name:      "none disables dictionary and manual hyphenation",
-			text:      "hy\u00adphenation",
-			style:     paragraphStyle{FontSize: 10, LineHeight: 12, Hyphenation: paragraphHyphenationNone, Hyphenator: fakeHyphenator{"hyphenation": "hy\u00adphenation"}},
-			wantLines: 1,
-			wantFirst: "hyphenation",
+			name: "none disables dictionary and manual hyphenation",
+			text: "hy\u00adphenation",
+			style: paragraphStyle{
+				FontSize:    10,
+				LineHeight:  12,
+				Hyphenation: paragraphHyphenationNone,
+				Hyphenator:  fakeHyphenator{"hyphenation": "hy\u00adphenation"},
+			},
+			wantEmergencyNoHyphen: true,
 		},
 		{
 			name:       "manual honors source soft hyphen only",
@@ -228,11 +252,15 @@ func TestLayoutParagraphHonorsHyphenationModes(t *testing.T) {
 			wantSecond: "phenation",
 		},
 		{
-			name:      "manual ignores dictionary hyphenation",
-			text:      "hyphenation",
-			style:     paragraphStyle{FontSize: 10, LineHeight: 12, Hyphenation: paragraphHyphenationManual, Hyphenator: fakeHyphenator{"hyphenation": "hy\u00adphenation"}},
-			wantLines: 1,
-			wantFirst: "hyphenation",
+			name: "manual ignores dictionary hyphenation",
+			text: "hyphenation",
+			style: paragraphStyle{
+				FontSize:    10,
+				LineHeight:  12,
+				Hyphenation: paragraphHyphenationManual,
+				Hyphenator:  fakeHyphenator{"hyphenation": "hy\u00adphenation"},
+			},
+			wantEmergencyNoHyphen: true,
 		},
 	}
 
@@ -241,6 +269,28 @@ func TestLayoutParagraphHonorsHyphenationModes(t *testing.T) {
 			lines, err := layoutParagraph(face, tt.text, tt.style, maxWidth)
 			if err != nil {
 				t.Fatalf("layoutParagraph() error = %v", err)
+			}
+			if tt.wantEmergencyNoHyphen {
+				if len(lines) < 2 {
+					t.Fatalf("layoutParagraph() produced %d lines, want emergency wrapping", len(lines))
+				}
+				var joined string
+				sawEmergency := false
+				for _, line := range lines {
+					lineText := shapedRunes(line.Text)
+					joined += lineText
+					if line.BreakStats.Hyphenated || containsHyphen(lineText) {
+						t.Fatalf("line %q was hyphenated despite hyphens disabled/manual-only", lineText)
+					}
+					sawEmergency = sawEmergency || line.BreakStats.Emergency
+				}
+				if joined != "hyphenation" {
+					t.Fatalf("joined emergency lines = %q, want hyphenation", joined)
+				}
+				if !sawEmergency {
+					t.Fatalf("line break stats = %#v, want emergency diagnostic", lines)
+				}
+				return
 			}
 			if len(lines) != tt.wantLines {
 				t.Fatalf("layoutParagraph() produced %d lines, want %d", len(lines), tt.wantLines)
@@ -254,6 +304,99 @@ func TestLayoutParagraphHonorsHyphenationModes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestLayoutParagraphEmergencyWrapsLongUnbreakableWord(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	style := paragraphStyle{FontSize: 10, LineHeight: 12, Hyphenation: paragraphHyphenationNone}
+	text := "supercalifragilistic"
+	prefix, err := shapeText(face, "super")
+	if err != nil {
+		t.Fatalf("shapeText() error = %v", err)
+	}
+	maxWidth := shapedWidthPoints(prefix, style.FontSize) + 0.5
+
+	lines, err := layoutParagraph(face, text, style, maxWidth)
+	if err != nil {
+		t.Fatalf("layoutParagraph() error = %v", err)
+	}
+	if len(lines) < 2 {
+		t.Fatalf("layoutParagraph() produced %d lines, want emergency wrapping", len(lines))
+	}
+	var joined string
+	for i, line := range lines {
+		joined += shapedRunes(line.Text)
+		if line.Width > maxWidth+pdfLineWidthTolerance {
+			t.Fatalf("line %d %q width = %v, max = %v", i, shapedRunes(line.Text), line.Width, maxWidth)
+		}
+	}
+	if joined != text {
+		t.Fatalf("joined emergency lines = %q, want %q", joined, text)
+	}
+	if !lines[0].BreakStats.Emergency {
+		t.Fatalf("first line break stats = %#v, want emergency diagnostic", lines[0].BreakStats)
+	}
+}
+
+func TestLayoutParagraphEmergencyDoesNotSplitLigatureCluster(t *testing.T) {
+	face, err := builtinFont("serif", true, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	shapedLigature, err := shapeText(face, "fi")
+	if err != nil {
+		t.Fatalf("shapeText(fi) error = %v", err)
+	}
+	if len(shapedLigature.Glyphs) != 1 || shapedLigature.Glyphs[0].Source != "fi" {
+		t.Fatalf("test font did not shape fi as a ligature: %#v", shapedLigature.Glyphs)
+	}
+	style := paragraphStyle{FontSize: 10, LineHeight: 12, Hyphenation: paragraphHyphenationNone}
+	lines, err := layoutParagraph(face, "fifi", style, shapedWidthPoints(shapedLigature, style.FontSize)+0.1)
+	if err != nil {
+		t.Fatalf("layoutParagraph() error = %v", err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("layoutParagraph() produced %d lines, want two ligature clusters", len(lines))
+	}
+	for i, line := range lines {
+		if got := shapedRunes(line.Text); got != "fi" {
+			t.Fatalf("line %d = %q, want whole fi ligature cluster", i, got)
+		}
+	}
+}
+
+func TestLayoutParagraphEmergencyKeepsCombiningMarksWithBase(t *testing.T) {
+	face, err := builtinFont("sans-serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	style := paragraphStyle{FontSize: 10, LineHeight: 12, Hyphenation: paragraphHyphenationNone}
+	cluster, err := shapeText(face, "a\u0301")
+	if err != nil {
+		t.Fatalf("shapeText(combining) error = %v", err)
+	}
+	text := "a\u0301a\u0301a\u0301"
+	lines, err := layoutParagraph(face, text, style, shapedWidthPoints(cluster, style.FontSize)+0.1)
+	if err != nil {
+		t.Fatalf("layoutParagraph() error = %v", err)
+	}
+	if len(lines) < 2 {
+		t.Fatalf("layoutParagraph() produced %d lines, want emergency wrapping", len(lines))
+	}
+	var joined string
+	for i, line := range lines {
+		lineText := shapedRunes(line.Text)
+		joined += lineText
+		if startsWithCombiningMark(lineText) {
+			t.Fatalf("line %d starts with a combining mark: %q", i, lineText)
+		}
+	}
+	if joined != text {
+		t.Fatalf("joined emergency lines = %q, want %q", joined, text)
 	}
 }
 
@@ -271,7 +414,27 @@ func TestParagraphBreaksReserveTerminalVisualOverhang(t *testing.T) {
 	}
 }
 
-func TestParagraphBreaksRejectUnfillableJustifiedLines(t *testing.T) {
+func TestLayoutParagraphAvoidsIsolatedSingleWordWhenLooseJustifiedLineFits(t *testing.T) {
+	face, err := builtinFont("serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	style := paragraphStyle{FontSize: 10.08, LineHeight: 12, Align: textAlignJustify, Hyphenation: paragraphHyphenationNone}
+	text := "Настоя́щая должностнáя инстру́кция определя́ет обя́занности " +
+		"(постоя́нные рабóты), правá и отве́тственность ли́ц, занима́ющих или " +
+		"назнача́емых на дóлжность инженéра."
+	lines, err := layoutParagraph(face, text, style, 279.36)
+	if err != nil {
+		t.Fatalf("layoutParagraph() error = %v", err)
+	}
+	for i, line := range lines {
+		if got := shapedRunes(line.Text); got == "обя́занности" {
+			t.Fatalf("line %d isolated %q in %#v", i, got, line.BreakStats)
+		}
+	}
+}
+
+func TestParagraphBreaksPreferFillableJustifiedLines(t *testing.T) {
 	units := []paragraphUnit{
 		{Text: "one", Width: 13, GlyphCount: 4, WordIndex: 0, EndWord: true},
 		{Text: "two", Width: 13, GlyphCount: 4, WordIndex: 1, EndWord: true},
@@ -325,13 +488,26 @@ func TestParagraphJustificationShrinksOverfullLines(t *testing.T) {
 	}
 }
 
-func TestParagraphJustificationUsesCharacterSpacingAfterWordSpacingCap(t *testing.T) {
-	word, char := paragraphJustificationSpacing(paragraphStyle{FontSize: 10, Align: textAlignJustify}, false, 70, 100, 2, 20)
+func TestParagraphJustificationUsesCharacterSpacingAndFillsRightEdge(t *testing.T) {
+	word, char := paragraphJustificationSpacing(paragraphStyle{FontSize: 10, Align: textAlignJustify}, false, 90, 100, 2, 20)
 	if word != 4 {
-		t.Fatalf("word spacing = %v, want capped 4", word)
+		t.Fatalf("word spacing = %v, want soft-capped word spacing", word)
 	}
-	if char <= 0 || char > 0.7 {
+	if char <= 0 || char > 0.25 {
 		t.Fatalf("char spacing = %v, want positive capped spacing", char)
+	}
+	if got := 90 + word*2 + char*19; got < 100-pdfLineWidthTolerance || got > 100+pdfLineWidthTolerance {
+		t.Fatalf("justified width = %v, want 100 (word=%v char=%v)", got, word, char)
+	}
+}
+
+func TestParagraphJustificationFallsBackToWordSpacingForLargeResidualStretch(t *testing.T) {
+	word, char := paragraphJustificationSpacing(paragraphStyle{FontSize: 10, Align: textAlignJustify}, false, 70, 100, 2, 20)
+	if char != 0.25 {
+		t.Fatalf("char spacing = %v, want capped tracking", char)
+	}
+	if got := 70 + word*2 + char*19; got < 100-pdfLineWidthTolerance || got > 100+pdfLineWidthTolerance {
+		t.Fatalf("justified width = %v, want 100 (word=%v char=%v)", got, word, char)
 	}
 }
 
@@ -350,7 +526,12 @@ func TestLayoutParagraphRecordsLineBreakStats(t *testing.T) {
 	if err != nil {
 		t.Fatalf("shapeText() error = %v", err)
 	}
-	lines, err := layoutParagraph(face, "hyphenation", style, shapedWidthPoints(prefix, style.FontSize)+1)
+	suffix, err := shapeText(face, "phenation")
+	if err != nil {
+		t.Fatalf("shapeText() suffix error = %v", err)
+	}
+	maxWidth := max(shapedWidthPoints(prefix, style.FontSize), shapedWidthPoints(suffix, style.FontSize)) + 1
+	lines, err := layoutParagraph(face, "hyphenation", style, maxWidth)
 	if err != nil {
 		t.Fatalf("layoutParagraph() error = %v", err)
 	}
@@ -408,6 +589,10 @@ func TestLayoutInlineParagraphHyphenatesStyledRuns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("shapeText() error = %v", err)
 	}
+	suffix, err := shapeText(boldFace, "phenation")
+	if err != nil {
+		t.Fatalf("shapeText() suffix error = %v", err)
+	}
 	style := paragraphStyle{
 		FontSize:    10,
 		LineHeight:  12,
@@ -415,7 +600,17 @@ func TestLayoutInlineParagraphHyphenatesStyledRuns(t *testing.T) {
 		Hyphenation: paragraphHyphenationAuto,
 	}
 
-	lines, err := layoutInlineParagraph(pdfDocumentSpec{}, nil, nil, baseFace, "hyphenation", []pdfInlineRun{{Text: "hyphenation", Bold: true}}, style, shapedWidthPoints(prefix, style.FontSize)+1)
+	maxWidth := max(shapedWidthPoints(prefix, style.FontSize), shapedWidthPoints(suffix, style.FontSize)) + 1
+	lines, err := layoutInlineParagraph(
+		pdfDocumentSpec{},
+		nil,
+		nil,
+		baseFace,
+		"hyphenation",
+		[]pdfInlineRun{{Text: "hyphenation", Bold: true}},
+		style,
+		maxWidth,
+	)
 	if err != nil {
 		t.Fatalf("layoutInlineParagraph() error = %v", err)
 	}
@@ -427,6 +622,54 @@ func TestLayoutInlineParagraphHyphenatesStyledRuns(t *testing.T) {
 	}
 	if len(lines[0].Fragments) == 0 || !lines[0].Fragments[0].FontKey.Bold {
 		t.Fatalf("first line fragments = %#v, want bold fragment preserved", lines[0].Fragments)
+	}
+}
+
+func TestLayoutInlineParagraphEmergencyWrapsStyledLongWord(t *testing.T) {
+	baseFace, err := builtinFont("serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	boldFace, err := builtinFont("serif", true, false)
+	if err != nil {
+		t.Fatalf("builtinFont() bold error = %v", err)
+	}
+	style := paragraphStyle{FontSize: 10, LineHeight: 12, Hyphenation: paragraphHyphenationNone}
+	prefix, err := shapeText(boldFace, "super")
+	if err != nil {
+		t.Fatalf("shapeText() error = %v", err)
+	}
+	text := "supercalifragilistic"
+	maxWidth := shapedWidthPoints(prefix, style.FontSize) + 0.5
+
+	lines, err := layoutInlineParagraph(
+		pdfDocumentSpec{},
+		nil,
+		nil,
+		baseFace,
+		text,
+		[]pdfInlineRun{{Text: text, Bold: true}},
+		style,
+		maxWidth,
+	)
+	if err != nil {
+		t.Fatalf("layoutInlineParagraph() error = %v", err)
+	}
+	if len(lines) < 2 {
+		t.Fatalf("layoutInlineParagraph() produced %d lines, want emergency wrapping", len(lines))
+	}
+	var joined string
+	for i, line := range lines {
+		joined += shapedRunes(line.Text)
+		if len(line.Fragments) == 0 || !line.Fragments[0].FontKey.Bold {
+			t.Fatalf("line %d fragments = %#v, want bold fragments preserved", i, line.Fragments)
+		}
+		if line.Width > maxWidth+pdfLineWidthTolerance {
+			t.Fatalf("line %d %q width = %v, max = %v", i, shapedRunes(line.Text), line.Width, maxWidth)
+		}
+	}
+	if joined != text {
+		t.Fatalf("joined emergency lines = %q, want %q", joined, text)
 	}
 }
 

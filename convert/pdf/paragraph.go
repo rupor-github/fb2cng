@@ -137,6 +137,7 @@ type paragraphUnit struct {
 	HyphenGlyphCount    int
 	RightOverhang       float64
 	HyphenRightOverhang float64
+	EmergencyBreakAfter bool
 	Fragments           []paragraphLineFragment
 	HyphenFragments     []paragraphLineFragment
 }
@@ -145,6 +146,7 @@ type paragraphBreak struct {
 	End         int
 	HyphenAfter bool
 	Hyphenated  bool
+	Emergency   bool
 }
 
 type paragraphBreakCandidate struct {
@@ -205,6 +207,10 @@ func layoutParagraphWithShape(face *builtinFontFace, text string, style paragrap
 		return nil, err
 	}
 	units, err := paragraphUnits(face, words, style, hyphenWidth)
+	if err != nil {
+		return nil, err
+	}
+	units, err = splitPlainEmergencyParagraphUnits(face, units, style, maxWidth, shape)
 	if err != nil {
 		return nil, err
 	}
@@ -312,6 +318,170 @@ func paragraphUnits(face *builtinFontFace, words []paragraphWord, style paragrap
 		}
 	}
 	return units, nil
+}
+
+func splitPlainEmergencyParagraphUnits(
+	face *builtinFontFace,
+	units []paragraphUnit,
+	style paragraphStyle,
+	maxWidth float64,
+	shape paragraphLineShape,
+) ([]paragraphUnit, error) {
+	if style.NoWrap || len(units) == 0 {
+		return units, nil
+	}
+
+	splitWidth := paragraphEmergencySplitWidth(style, maxWidth, shape)
+	out := make([]paragraphUnit, 0, len(units))
+	for _, unit := range units {
+		if !paragraphUnitNeedsEmergencySplit(unit, splitWidth) {
+			out = append(out, unit)
+			continue
+		}
+		pieces, err := splitPlainEmergencyParagraphUnit(face, unit, style)
+		if err != nil {
+			return nil, err
+		}
+		if len(pieces) <= 1 {
+			out = append(out, unit)
+			continue
+		}
+		out = append(out, pieces...)
+	}
+	return out, nil
+}
+
+func paragraphEmergencySplitWidth(style paragraphStyle, maxWidth float64, shape paragraphLineShape) float64 {
+	minAvailable := max(maxWidth, 1)
+	consider := func(indent float64) {
+		minAvailable = min(minAvailable, max(maxWidth-max(indent, 0), 1))
+	}
+	consider(style.FirstLineIndent)
+	for i, inset := range shape.InitialInsets {
+		indent := inset
+		if i == 0 {
+			indent += style.FirstLineIndent
+		}
+		consider(indent)
+	}
+	return minAvailable
+}
+
+func paragraphUnitNeedsEmergencySplit(unit paragraphUnit, splitWidth float64) bool {
+	if unit.Text == "" || len([]rune(unit.Text)) < 2 {
+		return false
+	}
+	return unit.Width+unit.HyphenWidth > splitWidth+pdfLineWidthTolerance
+}
+
+func splitPlainEmergencyParagraphUnit(face *builtinFontFace, unit paragraphUnit, style paragraphStyle) ([]paragraphUnit, error) {
+	shaped, err := shapeText(face, unit.Text)
+	if err != nil {
+		return nil, fmt.Errorf("shape emergency word segment %q: %w", unit.Text, err)
+	}
+	clusters := shapedTextEmergencyClusters(shaped, unit.Text)
+	if len(clusters) <= 1 {
+		return nil, nil
+	}
+
+	pieces := make([]paragraphUnit, 0, len(clusters))
+	for i, cluster := range clusters {
+		piece := paragraphUnit{
+			Text:                cluster.Text,
+			Width:               shapedWidthPointsWithSpacing(cluster.TextShape, style.FontSize, style.LetterSpacing),
+			WordIndex:           unit.WordIndex,
+			GlyphCount:          len(cluster.TextShape.Glyphs),
+			RightOverhang:       shapedTextRightOverhang(cluster.TextShape, style.FontSize, style.LetterSpacing),
+			EmergencyBreakAfter: i != len(clusters)-1,
+		}
+		if i == len(clusters)-1 {
+			piece.EndWord = unit.EndWord
+			piece.BreakAfter = unit.BreakAfter
+			piece.Hyphenated = unit.Hyphenated
+			piece.HyphenText = unit.HyphenText
+			piece.HyphenWidth = unit.HyphenWidth
+			piece.HyphenGlyphCount = unit.HyphenGlyphCount
+			piece.HyphenRightOverhang = unit.HyphenRightOverhang
+		}
+		pieces = append(pieces, piece)
+	}
+	return pieces, nil
+}
+
+type paragraphEmergencyCluster struct {
+	Text      string
+	TextShape shapedText
+}
+
+func shapedTextEmergencyClusters(shaped shapedText, text string) []paragraphEmergencyCluster {
+	if len(shaped.Glyphs) == 0 {
+		return nil
+	}
+
+	runes := []rune(text)
+	clusters := make([]paragraphEmergencyCluster, 0, len(shaped.Glyphs))
+	for _, glyph := range shaped.Glyphs {
+		start := min(max(glyph.ClusterStart, 0), len(runes))
+		end := min(max(glyph.ClusterEnd, start), len(runes))
+		if end == start {
+			end = min(start+1, len(runes))
+		}
+		glyphText := string(runes[start:end])
+		last := len(clusters) - 1
+		if last >= 0 && sameShapedGlyphCluster(clusters[last].TextShape.Glyphs[0], glyph) {
+			clusters[last].TextShape.Glyphs = append(clusters[last].TextShape.Glyphs, glyph)
+			if glyph.GlyphID != 0 {
+				clusters[last].TextShape.Used[glyph.GlyphID] = glyph
+			}
+			continue
+		}
+		clusters = append(clusters, paragraphEmergencyCluster{
+			Text: glyphText,
+			TextShape: shapedText{
+				Glyphs: []shapedGlyph{glyph},
+				Used:   shapedGlyphUsedMap([]shapedGlyph{glyph}),
+			},
+		})
+	}
+	return mergeLeadingCombiningEmergencyClusters(clusters)
+}
+
+func sameShapedGlyphCluster(a, b shapedGlyph) bool {
+	return a.ClusterStart == b.ClusterStart && a.ClusterEnd == b.ClusterEnd
+}
+
+func shapedGlyphUsedMap(glyphs []shapedGlyph) map[uint16]shapedGlyph {
+	used := make(map[uint16]shapedGlyph)
+	for _, glyph := range glyphs {
+		if glyph.GlyphID != 0 {
+			used[glyph.GlyphID] = glyph
+		}
+	}
+	return used
+}
+
+func mergeLeadingCombiningEmergencyClusters(clusters []paragraphEmergencyCluster) []paragraphEmergencyCluster {
+	merged := make([]paragraphEmergencyCluster, 0, len(clusters))
+	for _, cluster := range clusters {
+		if len(merged) > 0 && startsWithCombiningMark(cluster.Text) {
+			last := &merged[len(merged)-1]
+			last.Text += cluster.Text
+			last.TextShape.Glyphs = append(last.TextShape.Glyphs, cluster.TextShape.Glyphs...)
+			for id, glyph := range cluster.TextShape.Used {
+				last.TextShape.Used[id] = glyph
+			}
+			continue
+		}
+		merged = append(merged, cluster)
+	}
+	return merged
+}
+
+func startsWithCombiningMark(text string) bool {
+	for _, r := range text {
+		return unicode.Is(unicode.Mn, r) || unicode.Is(unicode.Mc, r) || unicode.Is(unicode.Me, r)
+	}
+	return false
 }
 
 func pdfEffectiveHyphenation(style paragraphStyle) paragraphHyphenation {
@@ -434,11 +604,32 @@ func assembleParagraphLines(face *builtinFontFace, units []paragraphUnit, style 
 		}
 		last := i == len(breaks)-1
 		singleWord := units[start].WordIndex == units[br.End-1].WordIndex
-		terminalOverhang := paragraphBreakTerminalOverhang(units[br.End-1])
+		terminalOverhang := paragraphBreakTerminalOverhangFor(units[br.End-1], br.HyphenAfter)
 		visualMetricWidth := width + terminalOverhang
-		line.BreakStats = paragraphLineBreakStatsFor(visualMetricWidth, available, line.JustificationGaps, start == 0, last, singleWord, br.Hyphenated, previousHyphenated, previousFitness)
+		line.BreakStats = paragraphLineBreakStatsFor(
+			visualMetricWidth,
+			available,
+			line.JustificationGaps,
+			start == 0,
+			last,
+			singleWord,
+			br.Hyphenated,
+			previousHyphenated,
+			previousFitness,
+		)
+		if br.Emergency {
+			line.BreakStats.Emergency = true
+			line.BreakStats.Demerits += paragraphEmergencyPenalty
+		}
 		spacingAvailable := paragraphJustificationAvailableForOverhang(available, terminalOverhang)
-		line.ExtraWordSpacing, line.ExtraCharSpacing = paragraphJustificationSpacing(style, last, width, spacingAvailable, line.JustificationGaps, len(shaped.Glyphs))
+		line.ExtraWordSpacing, line.ExtraCharSpacing = paragraphJustificationSpacing(
+			style,
+			last,
+			width,
+			spacingAvailable,
+			line.JustificationGaps,
+			len(shaped.Glyphs),
+		)
 		lines = append(lines, line)
 		previousHyphenated = br.Hyphenated
 		previousFitness = line.BreakStats.Fitness
@@ -510,7 +701,17 @@ func chooseParagraphBreaksWithShape(units []paragraphUnit, spaceWidth float64, s
 	return emergencyParagraphBreaks(units, spaceWidth, style, maxWidth, shape)
 }
 
-func paragraphBreakCandidates(units []paragraphUnit, start int, spaceWidth float64, style paragraphStyle, maxWidth float64, shape paragraphLineShape, lineIndex int, previousFitness paragraphFitness, previousHyphenated bool) []paragraphBreakCandidate {
+func paragraphBreakCandidates(
+	units []paragraphUnit,
+	start int,
+	spaceWidth float64,
+	style paragraphStyle,
+	maxWidth float64,
+	shape paragraphLineShape,
+	lineIndex int,
+	previousFitness paragraphFitness,
+	previousHyphenated bool,
+) []paragraphBreakCandidate {
 	candidates := make([]paragraphBreakCandidate, 0)
 	width := 0.0
 	for end := start; end < len(units); end++ {
@@ -518,28 +719,25 @@ func paragraphBreakCandidates(units []paragraphUnit, start int, spaceWidth float
 			width += spaceWidth
 		}
 		width += units[end].Width
+
+		if units[end].EmergencyBreakAfter {
+			if candidate, ok := paragraphBreakCandidateFor(
+				units, start, end, width, style, maxWidth, shape, lineIndex, previousFitness, previousHyphenated, true,
+			); ok {
+				candidates = append(candidates, candidate)
+			}
+		}
 		if !units[end].EndWord && !units[end].BreakAfter {
 			continue
 		}
 
-		lineWidth := width
-		glyphs := paragraphLineCandidateGlyphCount(units[start : end+1])
-		if units[end].HyphenText != "" {
-			lineWidth += units[end].HyphenWidth
-			glyphs += units[end].HyphenGlyphCount
-		}
-		indent := paragraphLineIndentForLine(start, lineIndex, style, maxWidth, shape)
-		available := max(maxWidth-indent, 1)
-		gaps := countJustificationGaps(units[start : end+1])
-		last := end == len(units)-1
-		terminalOverhang := paragraphBreakTerminalOverhang(units[end])
-		if !last && !paragraphJustificationCanFill(style, lineWidth, paragraphJustificationAvailableForOverhang(available, terminalOverhang), gaps, glyphs) {
-			continue
-		}
-		metricWidth := lineWidth + terminalOverhang
-		lineCost := paragraphLineDemerits(metricWidth, available, gaps, start == 0, last, units[start].WordIndex == units[end].WordIndex, units[end].Hyphenated, previousHyphenated, previousFitness)
-		if math.IsInf(lineCost, 1) {
-			if metricWidth > available {
+		candidate, ok := paragraphBreakCandidateFor(
+			units, start, end, width, style, maxWidth, shape, lineIndex, previousFitness, previousHyphenated, false,
+		)
+		if !ok {
+			indent := paragraphLineIndentForLine(start, lineIndex, style, maxWidth, shape)
+			available := max(maxWidth-indent, 1)
+			if width+paragraphBreakTerminalOverhang(units[end]) > available {
 				// Later candidates only get wider until the next line start, so there is no
 				// useful non-emergency continuation from this start.
 				break
@@ -548,25 +746,84 @@ func paragraphBreakCandidates(units []paragraphUnit, start int, spaceWidth float
 			// produce a well-balanced line.
 			continue
 		}
-		candidates = append(candidates, paragraphBreakCandidate{
-			Break: paragraphBreak{
-				End:         end + 1,
-				HyphenAfter: units[end].HyphenText != "",
-				Hyphenated:  units[end].Hyphenated,
-			},
-			Cost:    lineCost,
-			Fitness: paragraphLineFitness(metricWidth, available, gaps, last, units[start].WordIndex == units[end].WordIndex),
-		})
+		candidates = append(candidates, candidate)
 	}
 	if len(candidates) == 0 {
 		end := min(start+1, len(units))
 		candidates = append(candidates, paragraphBreakCandidate{
-			Break:   paragraphBreak{End: end},
+			Break:   paragraphBreak{End: end, Emergency: true},
 			Cost:    paragraphEmergencyPenalty,
 			Fitness: paragraphFitnessVeryLoose,
 		})
 	}
 	return candidates
+}
+
+func paragraphBreakCandidateFor(
+	units []paragraphUnit,
+	start int,
+	end int,
+	width float64,
+	style paragraphStyle,
+	maxWidth float64,
+	shape paragraphLineShape,
+	lineIndex int,
+	previousFitness paragraphFitness,
+	previousHyphenated bool,
+	emergency bool,
+) (paragraphBreakCandidate, bool) {
+	lineWidth := width
+	hyphenAfter := !emergency && units[end].HyphenText != ""
+	if hyphenAfter {
+		lineWidth += units[end].HyphenWidth
+	}
+	indent := paragraphLineIndentForLine(start, lineIndex, style, maxWidth, shape)
+	available := max(maxWidth-indent, 1)
+	gaps := countJustificationGaps(units[start : end+1])
+	last := end == len(units)-1
+	terminalOverhang := paragraphBreakTerminalOverhangFor(units[end], hyphenAfter)
+	metricWidth := lineWidth + terminalOverhang
+	singleWord := units[start].WordIndex == units[end].WordIndex
+	if !emergency && singleWord && metricWidth > available && paragraphRangeHasEmergencyBreak(units[start:end]) {
+		return paragraphBreakCandidate{}, false
+	}
+	hyphenated := !emergency && units[end].Hyphenated
+	lineCost := paragraphLineDemerits(
+		metricWidth,
+		available,
+		gaps,
+		start == 0,
+		last,
+		singleWord,
+		hyphenated,
+		previousHyphenated,
+		previousFitness,
+	)
+	if math.IsInf(lineCost, 1) {
+		return paragraphBreakCandidate{}, false
+	}
+	if emergency {
+		lineCost += paragraphEmergencyPenalty
+	}
+	return paragraphBreakCandidate{
+		Break: paragraphBreak{
+			End:         end + 1,
+			HyphenAfter: hyphenAfter,
+			Hyphenated:  hyphenated,
+			Emergency:   emergency,
+		},
+		Cost:    lineCost,
+		Fitness: paragraphLineFitness(metricWidth, available, gaps, last, singleWord),
+	}, true
+}
+
+func paragraphRangeHasEmergencyBreak(units []paragraphUnit) bool {
+	for _, unit := range units {
+		if unit.EmergencyBreakAfter {
+			return true
+		}
+	}
+	return false
 }
 
 func paragraphLineDemerits(width, available float64, gaps int, firstLine bool, last bool, singleWord bool, hyphenated bool, previousHyphenated bool, previousFitness paragraphFitness) float64 {
@@ -753,30 +1010,35 @@ func emergencyParagraphBreaks(units []paragraphUnit, spaceWidth float64, style p
 		best := start + 1
 		bestHyphen := false
 		bestHyphenated := false
+		bestEmergency := true
 		for end := start; end < len(units); end++ {
 			if end > start && units[end].WordIndex != units[end-1].WordIndex {
 				width += spaceWidth
 			}
 			width += units[end].Width
-			lineWidth := width
-			if units[end].HyphenText != "" {
-				lineWidth += units[end].HyphenWidth
-			}
-			if !units[end].EndWord && !units[end].BreakAfter {
+			canNormalBreak := units[end].EndWord || units[end].BreakAfter
+			canEmergencyBreak := units[end].EmergencyBreakAfter
+			if !canNormalBreak && !canEmergencyBreak {
 				continue
+			}
+			hyphenAfter := canNormalBreak && !canEmergencyBreak && units[end].HyphenText != ""
+			lineWidth := width
+			if hyphenAfter {
+				lineWidth += units[end].HyphenWidth
 			}
 			indent := paragraphLineIndentForLine(start, lineIndex, style, maxWidth, shape)
 			available := max(maxWidth-indent, 1)
 			if lineWidth <= available || best == start+1 {
 				best = end + 1
-				bestHyphen = units[end].HyphenText != ""
-				bestHyphenated = units[end].Hyphenated
+				bestHyphen = hyphenAfter
+				bestHyphenated = hyphenAfter && units[end].Hyphenated
+				bestEmergency = canEmergencyBreak
 			}
 			if lineWidth > available && best != start+1 {
 				break
 			}
 		}
-		breaks = append(breaks, paragraphBreak{End: best, HyphenAfter: bestHyphen, Hyphenated: bestHyphenated})
+		breaks = append(breaks, paragraphBreak{End: best, HyphenAfter: bestHyphen, Hyphenated: bestHyphenated, Emergency: bestEmergency})
 		start = best
 	}
 	return breaks
@@ -803,21 +1065,14 @@ func shapedTextRightOverhang(text shapedText, fontSize float64, letterSpacing fl
 }
 
 func paragraphBreakTerminalOverhang(unit paragraphUnit) float64 {
-	if unit.HyphenText != "" {
+	return paragraphBreakTerminalOverhangFor(unit, unit.HyphenText != "")
+}
+
+func paragraphBreakTerminalOverhangFor(unit paragraphUnit, hyphenAfter bool) float64 {
+	if hyphenAfter {
 		return unit.HyphenRightOverhang
 	}
 	return unit.RightOverhang
-}
-
-func paragraphLineCandidateGlyphCount(units []paragraphUnit) int {
-	glyphs := 0
-	for i, unit := range units {
-		if i > 0 && unit.WordIndex != units[i-1].WordIndex {
-			glyphs++
-		}
-		glyphs += unit.GlyphCount
-	}
-	return glyphs
 }
 
 func paragraphJustificationAvailableForOverhang(available float64, terminalOverhang float64) float64 {
@@ -860,26 +1115,6 @@ func paragraphFragmentLineVisualRight(line paragraphLine) (float64, bool) {
 	return right, ok
 }
 
-func paragraphJustificationCanFill(style paragraphStyle, width, available float64, gaps int, glyphs int) bool {
-	if style.Align != textAlignJustify || gaps <= 0 || width >= available {
-		return true
-	}
-	return available-width <= paragraphJustificationMaxStretch(style, gaps, glyphs)+pdfLineWidthTolerance
-}
-
-func paragraphJustificationMaxStretch(style paragraphStyle, gaps int, glyphs int) float64 {
-	if gaps <= 0 {
-		return 0
-	}
-	wordCap := max(style.FontSize*0.40, 3.0)
-	stretch := wordCap * float64(gaps)
-	if glyphs > 1 {
-		charCap := min(max(style.FontSize*0.06, 0.25), 0.70)
-		stretch += charCap * float64(glyphs-1)
-	}
-	return stretch
-}
-
 func paragraphJustificationSpacing(style paragraphStyle, last bool, width, available float64, gaps int, glyphs int) (float64, float64) {
 	if style.Align != textAlignJustify || last || gaps <= 0 || width == available {
 		return 0, 0
@@ -898,9 +1133,15 @@ func paragraphJustificationSpacing(style paragraphStyle, last bool, width, avail
 	// When word spacing alone would create rivers, distribute the remaining
 	// adjustment as small character spacing. This is closer to book composition:
 	// spaces carry most of the stretch, but tiny tracking changes can make the
-	// margin even without obvious holes between words.
-	charCap := min(max(style.FontSize*0.06, 0.25), 0.70)
+	// margin even without obvious holes between words. The caps are soft: if the
+	// paragraph breaker selected this line, keep text-align: justify semantics and
+	// put any residual stretch back into word spaces so the right edge remains flush.
+	charCap := 0.25
 	charSpacing := min(remaining/float64(glyphs-1), charCap)
+	remaining -= charSpacing * float64(glyphs-1)
+	if remaining > pdfLineWidthTolerance {
+		wordSpacing += remaining / float64(gaps)
+	}
 	return wordSpacing, charSpacing
 }
 

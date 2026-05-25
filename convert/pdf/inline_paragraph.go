@@ -62,6 +62,7 @@ func layoutInlineParagraphWithShape(doc pdfDocumentSpec, registry *pdfFontRegist
 	if err != nil {
 		return nil, err
 	}
+	units = splitInlineEmergencyParagraphUnits(units, style, maxWidth, shape)
 	breaks := chooseParagraphBreaksWithShape(units, spaceFragment.Width, style, maxWidth, shape)
 	lines := make([]paragraphLine, 0, len(breaks))
 	start := 0
@@ -84,11 +85,32 @@ func layoutInlineParagraphWithShape(doc pdfDocumentSpec, registry *pdfFontRegist
 		}
 		last := i == len(breaks)-1
 		singleWord := units[start].WordIndex == units[br.End-1].WordIndex
-		terminalOverhang := paragraphBreakTerminalOverhang(units[br.End-1])
+		terminalOverhang := paragraphBreakTerminalOverhangFor(units[br.End-1], br.HyphenAfter)
 		visualMetricWidth := width + terminalOverhang
-		line.BreakStats = paragraphLineBreakStatsFor(visualMetricWidth, available, line.JustificationGaps, start == 0, last, singleWord, br.Hyphenated, previousHyphenated, previousFitness)
+		line.BreakStats = paragraphLineBreakStatsFor(
+			visualMetricWidth,
+			available,
+			line.JustificationGaps,
+			start == 0,
+			last,
+			singleWord,
+			br.Hyphenated,
+			previousHyphenated,
+			previousFitness,
+		)
+		if br.Emergency {
+			line.BreakStats.Emergency = true
+			line.BreakStats.Demerits += paragraphEmergencyPenalty
+		}
 		spacingAvailable := paragraphJustificationAvailableForOverhang(available, terminalOverhang)
-		line.ExtraWordSpacing, line.ExtraCharSpacing = paragraphJustificationSpacing(style, last, width, spacingAvailable, line.JustificationGaps, len(shaped.Glyphs))
+		line.ExtraWordSpacing, line.ExtraCharSpacing = paragraphJustificationSpacing(
+			style,
+			last,
+			width,
+			spacingAvailable,
+			line.JustificationGaps,
+			len(shaped.Glyphs),
+		)
 		lines = append(lines, line)
 		previousHyphenated = br.Hyphenated
 		previousFitness = line.BreakStats.Fitness
@@ -865,6 +887,124 @@ func inlineParagraphUnits(registry *pdfFontRegistry, words []paragraphInlineWord
 		}
 	}
 	return units, nil
+}
+
+func splitInlineEmergencyParagraphUnits(units []paragraphUnit, style paragraphStyle, maxWidth float64, shape paragraphLineShape) []paragraphUnit {
+	if style.NoWrap || len(units) == 0 {
+		return units
+	}
+
+	splitWidth := paragraphEmergencySplitWidth(style, maxWidth, shape)
+	out := make([]paragraphUnit, 0, len(units))
+	for _, unit := range units {
+		if !paragraphUnitNeedsEmergencySplit(unit, splitWidth) || len(unit.Fragments) == 0 || inlineUnitHasImage(unit) {
+			out = append(out, unit)
+			continue
+		}
+		pieces := splitInlineEmergencyParagraphUnit(unit)
+		if len(pieces) <= 1 {
+			out = append(out, unit)
+			continue
+		}
+		out = append(out, pieces...)
+	}
+	return out
+}
+
+func inlineUnitHasImage(unit paragraphUnit) bool {
+	for _, fragment := range unit.Fragments {
+		if fragment.ImageID != "" {
+			return true
+		}
+	}
+	return false
+}
+
+type inlineEmergencyCluster struct {
+	Text   string
+	Pieces []inlineGlyphPiece
+}
+
+func splitInlineEmergencyParagraphUnit(unit paragraphUnit) []paragraphUnit {
+	clusters := inlineEmergencyClusters(unit)
+	if len(clusters) <= 1 {
+		return nil
+	}
+
+	pieces := make([]paragraphUnit, 0, len(clusters))
+	for i, cluster := range clusters {
+		fragments := inlinePiecesToFragments(cluster.Pieces)
+		width := paragraphFragmentsWidth(fragments)
+		piece := paragraphUnit{
+			Text:                cluster.Text,
+			Width:               width,
+			WordIndex:           unit.WordIndex,
+			GlyphCount:          paragraphFragmentsGlyphCount(fragments),
+			RightOverhang:       paragraphFragmentsRightOverhang(fragments, width),
+			EmergencyBreakAfter: i != len(clusters)-1,
+			Fragments:           fragments,
+		}
+		if i == len(clusters)-1 {
+			piece.EndWord = unit.EndWord
+			piece.BreakAfter = unit.BreakAfter
+			piece.Hyphenated = unit.Hyphenated
+			piece.HyphenText = unit.HyphenText
+			piece.HyphenWidth = unit.HyphenWidth
+			piece.HyphenGlyphCount = unit.HyphenGlyphCount
+			piece.HyphenRightOverhang = unit.HyphenRightOverhang
+			piece.HyphenFragments = unit.HyphenFragments
+		}
+		pieces = append(pieces, piece)
+	}
+	return pieces
+}
+
+func inlineEmergencyClusters(unit paragraphUnit) []inlineEmergencyCluster {
+	clusters := make([]inlineEmergencyCluster, 0, paragraphFragmentsGlyphCount(unit.Fragments))
+	for _, fragment := range unit.Fragments {
+		fragmentClusters := inlineFragmentEmergencyClusters(fragment)
+		clusters = append(clusters, fragmentClusters...)
+	}
+	return mergeLeadingCombiningInlineEmergencyClusters(clusters)
+}
+
+func inlineFragmentEmergencyClusters(fragment paragraphLineFragment) []inlineEmergencyCluster {
+	clusters := make([]inlineEmergencyCluster, 0, len(fragment.Text.Glyphs))
+	for _, glyph := range fragment.Text.Glyphs {
+		text := glyphUnicodeText(glyph)
+		piece := inlineGlyphPiece{Glyph: glyph, Template: fragment}
+		last := len(clusters) - 1
+		if last >= 0 && len(clusters[last].Pieces) > 0 && sameShapedGlyphCluster(clusters[last].Pieces[0].Glyph, glyph) {
+			clusters[last].Pieces = append(clusters[last].Pieces, piece)
+			if text != "" && clusters[last].Text == "" {
+				clusters[last].Text = text
+			}
+			continue
+		}
+		clusters = append(clusters, inlineEmergencyCluster{Text: text, Pieces: []inlineGlyphPiece{piece}})
+	}
+	return clusters
+}
+
+func mergeLeadingCombiningInlineEmergencyClusters(clusters []inlineEmergencyCluster) []inlineEmergencyCluster {
+	merged := make([]inlineEmergencyCluster, 0, len(clusters))
+	for _, cluster := range clusters {
+		if len(merged) > 0 && startsWithCombiningMark(cluster.Text) {
+			last := &merged[len(merged)-1]
+			last.Text += cluster.Text
+			last.Pieces = append(last.Pieces, cluster.Pieces...)
+			continue
+		}
+		if cluster.Text == "" {
+			if len(merged) > 0 {
+				last := &merged[len(merged)-1]
+				last.Pieces = append(last.Pieces, cluster.Pieces...)
+			}
+			continue
+		}
+		merged = append(merged, cluster)
+	}
+	return merged
 }
 
 func inlineWordHasImage(word paragraphInlineWord) bool {
