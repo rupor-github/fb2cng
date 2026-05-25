@@ -271,26 +271,7 @@ func (l *pdfPageLayout) layoutTextBlock(blockIndex int, block pdfTextBlock, styl
 	fragmentTop := l.y + style.PaddingTop
 	lineSearchStart := 0
 	if dropcapOK {
-		dropcapX := blockLeft + style.MarginLeft + style.PaddingLeft
-		dropLine := paragraphLine{Text: dropcap.Fragment.Text, Width: dropcap.Fragment.Width, Fragments: []paragraphLineFragment{dropcap.Fragment}}
-		if dropcap.Fragment.LinkHref != "" {
-			addFragmentLinkAnnotations(l.page, dropLine, dropcapX, dropcap.BaselineY)
-		}
-		addPDFParagraphFragmentAnchors(l.page, dropLine)
-		addPDFPageLine(l.page, l.used, pdfPageLine{
-			X:             dropcapX,
-			Y:             dropcap.BaselineY,
-			FontSize:      dropcap.Fragment.FontSize,
-			LetterSpacing: dropcap.Fragment.LetterSpacing,
-			FontKey:       dropcap.Fragment.FontKey,
-			Color:         dropcap.Fragment.Color,
-			Text:          dropcap.Fragment.Text,
-			Underline:     dropcap.Fragment.Underline,
-			Strikethrough: dropcap.Fragment.Strikethrough,
-			Fragments:     pageLineFragments([]paragraphLineFragment{dropcap.Fragment}),
-		})
-		l.activeDropcap = &pdfActiveDropcap{Page: l.page, X: dropcapX, TopY: dropcap.TopY, BottomY: dropcap.BottomY, ExclusionWidth: dropcap.ExclusionWidth, Lines: dropcap.Lines, Char: dropcap.Run.Text, BodySearchOffset: dropcap.BodySearchOffset}
-		lineSearchStart = dropcap.BodySearchOffset
+		lineSearchStart = l.renderTextDropcap(block, style, blockLeft, dropcap)
 	}
 	for lineIndex, line := range lines {
 		if !l.pageHasText || l.previousRenderedImage {
@@ -385,6 +366,29 @@ func (l *pdfPageLayout) layoutTextBlock(blockIndex int, block pdfTextBlock, styl
 		l.newTextPage()
 	}
 	return nil
+}
+
+func (l *pdfPageLayout) renderTextDropcap(block pdfTextBlock, style pdfBlockResolvedStyle, blockLeft float64, dropcap pdfDropcapLayout) int {
+	dropcapX := blockLeft + style.MarginLeft + style.PaddingLeft
+	dropLine := paragraphLine{Text: dropcap.Fragment.Text, Width: dropcap.Fragment.Width, Fragments: []paragraphLineFragment{dropcap.Fragment}}
+	if dropcap.Fragment.LinkHref != "" {
+		addFragmentLinkAnnotations(l.page, dropLine, dropcapX, dropcap.BaselineY)
+	}
+	addPDFParagraphFragmentAnchors(l.page, dropLine)
+	addPDFPageLine(l.page, l.used, pdfPageLine{
+		X:             dropcapX,
+		Y:             dropcap.BaselineY,
+		FontSize:      dropcap.Fragment.FontSize,
+		LetterSpacing: dropcap.Fragment.LetterSpacing,
+		FontKey:       dropcap.Fragment.FontKey,
+		Color:         dropcap.Fragment.Color,
+		Text:          dropcap.Fragment.Text,
+		Underline:     dropcap.Fragment.Underline,
+		Strikethrough: dropcap.Fragment.Strikethrough,
+		Fragments:     pageLineFragments([]paragraphLineFragment{dropcap.Fragment}),
+	})
+	l.activeDropcap = &pdfActiveDropcap{Page: l.page, X: dropcapX, TopY: dropcap.TopY, BottomY: dropcap.BottomY, ExclusionWidth: dropcap.ExclusionWidth, Lines: dropcap.Lines, Char: dropcap.Run.Text, BodySearchOffset: dropcap.BodySearchOffset}
+	return dropcap.BodySearchOffset
 }
 
 func (l *pdfPageLayout) paginateTextBlock(
