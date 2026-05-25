@@ -127,6 +127,18 @@ func TestGenerateDebugDumps(t *testing.T) {
 		t.Fatal("pdf-layout-pages.json missing line_break diagnostics")
 	}
 
+	var lineGlyphs []pdfDebugGlyphLine
+	readJSONDebugFile(t, filepath.Join(tmpDir, "pdf-line-glyphs.json"), &lineGlyphs)
+	if len(lineGlyphs) == 0 || len(lineGlyphs[0].Glyphs) == 0 || lineGlyphs[0].Glyphs[0].PDFCID == 0 {
+		t.Fatalf("debug line glyphs = %#v, want compact positioned glyph diagnostics", lineGlyphs)
+	}
+
+	var justification []pdfDebugJustificationLine
+	readJSONDebugFile(t, filepath.Join(tmpDir, "pdf-justification.json"), &justification)
+	if justification == nil {
+		t.Fatalf("debug justification should unmarshal to an empty array, got nil")
+	}
+
 	var links []pdfDebugLink
 	readJSONDebugFile(t, filepath.Join(tmpDir, "pdf-links.json"), &links)
 	if len(links) != 1 || links[0].Href != "https://example.com" || links[0].ObjectID == 0 {
@@ -163,6 +175,57 @@ func TestGenerateDebugDumps(t *testing.T) {
 	readJSONDebugFile(t, filepath.Join(tmpDir, "pdf-printed-footnotes.json"), &printedFootnotes)
 	if printedFootnotes.Enabled || printedFootnotes.FinalPageCount != len(pages) {
 		t.Fatalf("debug printed footnotes = %#v, want disabled summary for non-printed document", printedFootnotes)
+	}
+}
+
+func TestPDFDebugLineGlyphsAndJustificationSummaries(t *testing.T) {
+	line := pdfPageLine{
+		X:             10,
+		Y:             100,
+		FontSize:      10,
+		LetterSpacing: 0,
+		FontName:      "F1",
+		Text: shapedText{Glyphs: []shapedGlyph{
+			{GlyphID: 1, Rune: 'A', Source: "A", Width: 600, Advance: 600, HasAdvance: true},
+			{GlyphID: 2, Rune: ' ', Source: " ", Width: 250, Advance: 250, HasAdvance: true},
+			{GlyphID: 3, Rune: 'B', Source: "B", Width: 600, Advance: 600, HasAdvance: true},
+		}},
+		ExtraWordSpacing: 5,
+		ExtraCharSpacing: 0.25,
+		BreakStats: paragraphLineBreakStats{
+			AvailableWidth:  20,
+			AdjustmentRatio: 1,
+			Badness:         100,
+			Demerits:        10_000,
+			Fitness:         paragraphFitnessLoose,
+		},
+	}
+	pages := []pdfPage{{Lines: []pdfPageLine{line}}}
+
+	glyphLines := pdfDebugLineGlyphs(pages)
+	if len(glyphLines) != 1 || len(glyphLines[0].Glyphs) != 3 {
+		t.Fatalf("glyph lines = %#v, want one compact three-glyph line", glyphLines)
+	}
+	if glyphLines[0].Glyphs[0].X != 10 || glyphLines[0].Glyphs[1].X != 16.25 || glyphLines[0].Glyphs[2].X != 24 {
+		t.Fatalf("glyph positions = %#v, want advances with character and word spacing", glyphLines[0].Glyphs)
+	}
+	if glyphLines[0].Glyphs[0].PDFCID != 1 || glyphLines[0].Glyphs[0].Rune != "U+0041" || glyphLines[0].Glyphs[0].Source != "A" {
+		t.Fatalf("first glyph debug = %#v, want PDF CID, source, and rune", glyphLines[0].Glyphs[0])
+	}
+
+	justification := pdfDebugJustificationLines(pages)
+	if len(justification) != 1 {
+		t.Fatalf("justification = %#v, want one justified line summary", justification)
+	}
+	summary := justification[0]
+	if summary.Decision != "stretch_word_and_char_spacing_capped" || !summary.WordSpacingCapped || !summary.CharSpacingCapped {
+		t.Fatalf("justification summary = %#v, want capped word/char spacing decision", summary)
+	}
+	if summary.JustificationGaps != 1 || summary.GlyphCount != 3 || summary.LineBreak == nil || summary.LineBreak.Fitness != "loose" {
+		t.Fatalf("justification summary = %#v, want line-break and gap diagnostics", summary)
+	}
+	if summary.RejectedCandidatesRecorded || !strings.Contains(summary.BreakCandidateSummary, "rejected_candidates_not_retained") {
+		t.Fatalf("justification summary = %#v, rejected candidate retention should be explicit", summary)
 	}
 }
 

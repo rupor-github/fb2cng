@@ -137,6 +137,55 @@ type pdfDebugLineBreak struct {
 	SingleWord      bool    `json:"single_word,omitempty"`
 }
 
+type pdfDebugGlyphLine struct {
+	Page         int             `json:"page"`
+	Line         int             `json:"line"`
+	Text         string          `json:"text"`
+	X            float64         `json:"x"`
+	Y            float64         `json:"y"`
+	FontSize     float64         `json:"font_size"`
+	FontResource string          `json:"font_resource,omitempty"`
+	Glyphs       []pdfDebugGlyph `json:"glyphs"`
+}
+
+type pdfDebugGlyph struct {
+	Index        int     `json:"index"`
+	Fragment     int     `json:"fragment,omitempty"`
+	PDFCID       uint16  `json:"pdf_cid,omitempty"`
+	Source       string  `json:"source,omitempty"`
+	Rune         string  `json:"rune,omitempty"`
+	X            float64 `json:"x"`
+	Y            float64 `json:"y"`
+	Advance      float64 `json:"advance"`
+	XOffset      float64 `json:"x_offset,omitempty"`
+	YOffset      float64 `json:"y_offset,omitempty"`
+	MissingGlyph string  `json:"missing_glyph,omitempty"`
+}
+
+type pdfDebugJustificationLine struct {
+	Page                       int                `json:"page"`
+	Line                       int                `json:"line"`
+	Text                       string             `json:"text"`
+	Decision                   string             `json:"decision"`
+	NaturalWidth               float64            `json:"natural_width"`
+	DrawnWidth                 float64            `json:"drawn_width"`
+	AvailableWidth             float64            `json:"available_width"`
+	Residual                   float64            `json:"residual"`
+	JustificationGaps          int                `json:"justification_gaps"`
+	GlyphCount                 int                `json:"glyph_count"`
+	ExtraWordSpacing           float64            `json:"extra_word_spacing,omitempty"`
+	ExtraCharSpacing           float64            `json:"extra_char_spacing,omitempty"`
+	WordSpacingCap             float64            `json:"word_spacing_cap,omitempty"`
+	CharSpacingCap             float64            `json:"char_spacing_cap,omitempty"`
+	WordSpacingCapped          bool               `json:"word_spacing_capped,omitempty"`
+	CharSpacingCapped          bool               `json:"char_spacing_capped,omitempty"`
+	ResidualAfterWordSpacing   float64            `json:"residual_after_word_spacing,omitempty"`
+	ResidualAfterCharSpacing   float64            `json:"residual_after_char_spacing,omitempty"`
+	BreakCandidateSummary      string             `json:"break_candidate_summary"`
+	RejectedCandidatesRecorded bool               `json:"rejected_candidates_recorded"`
+	LineBreak                  *pdfDebugLineBreak `json:"line_break,omitempty"`
+}
+
 type pdfDebugImage struct {
 	Page         int     `json:"page,omitempty"`
 	ImageID      string  `json:"image_id"`
@@ -318,6 +367,12 @@ func writePDFDebugDumps(doc pdfDocumentSpec, pages []pdfPage, fontResources []pd
 	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-layout-pages.json"), debugPages); err != nil {
 		return err
 	}
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-line-glyphs.json"), pdfDebugLineGlyphs(pages)); err != nil {
+		return err
+	}
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-justification.json"), pdfDebugJustificationLines(pages)); err != nil {
+		return err
+	}
 	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-images.json"), debugImages); err != nil {
 		return err
 	}
@@ -351,6 +406,254 @@ func pdfDebugLineBreakStats(stats paragraphLineBreakStats) *pdfDebugLineBreak {
 		Hyphenated:      stats.Hyphenated,
 		Emergency:       stats.Emergency,
 		SingleWord:      stats.SingleWord,
+	}
+}
+
+func pdfDebugLineGlyphs(pages []pdfPage) []pdfDebugGlyphLine {
+	out := make([]pdfDebugGlyphLine, 0)
+	for pageIndex, page := range pages {
+		for lineIndex, line := range page.Lines {
+			glyphs := pdfDebugGlyphsForLine(line)
+			if len(glyphs) == 0 {
+				continue
+			}
+			out = append(out, pdfDebugGlyphLine{
+				Page:         pageIndex + 1,
+				Line:         lineIndex + 1,
+				Text:         pdfPageLineText(line),
+				X:            line.X,
+				Y:            line.Y,
+				FontSize:     line.FontSize,
+				FontResource: line.FontName,
+				Glyphs:       glyphs,
+			})
+		}
+	}
+	return out
+}
+
+func pdfDebugGlyphsForLine(line pdfPageLine) []pdfDebugGlyph {
+	if len(line.Fragments) == 0 {
+		return pdfDebugGlyphs(line.Text.Glyphs, 0, line.X, line.Y, line.FontSize, line.LetterSpacing+line.ExtraCharSpacing, line.ExtraWordSpacing)
+	}
+
+	glyphs := make([]pdfDebugGlyph, 0)
+	currentX := line.X
+	for fragmentIndex, fragment := range line.Fragments {
+		fragmentGlyphs := pdfDebugGlyphs(
+			fragment.Text.Glyphs,
+			fragmentIndex+1,
+			currentX,
+			line.Y+fragment.BaselineShift,
+			fragment.FontSize,
+			fragment.LetterSpacing+line.ExtraCharSpacing,
+			line.ExtraWordSpacing,
+		)
+		glyphs = append(glyphs, fragmentGlyphs...)
+		currentX += fragment.Width + line.ExtraCharSpacing*float64(max(len(fragment.Text.Glyphs)-1, 0))
+		if fragmentIndex != len(line.Fragments)-1 {
+			currentX += line.ExtraCharSpacing
+		}
+		currentX += line.ExtraWordSpacing * float64(pdfPageFragmentJustificationSpaceCount(fragment, fragmentIndex != len(line.Fragments)-1))
+	}
+	return glyphs
+}
+
+func pdfDebugGlyphs(glyphs []shapedGlyph, fragment int, x float64, y float64, fontSize float64, letterSpacing float64, extraWordSpacing float64) []pdfDebugGlyph {
+	out := make([]pdfDebugGlyph, 0, len(glyphs))
+	currentX := x
+	for i, glyph := range glyphs {
+		glyphXOffset := glyphOffsetPoints(glyph.XOffset, fontSize)
+		glyphYOffset := glyphOffsetPoints(glyph.YOffset, fontSize)
+		entry := pdfDebugGlyph{
+			Index:    i,
+			Fragment: fragment,
+			PDFCID:   glyph.GlyphID,
+			Source:   glyphUnicodeText(glyph),
+			Rune:     pdfDebugRune(glyph.Rune),
+			X:        currentX + glyphXOffset,
+			Y:        y + glyphYOffset,
+			Advance:  glyphAdvancePoints(glyph, fontSize),
+			XOffset:  glyphXOffset,
+			YOffset:  glyphYOffset,
+		}
+		if glyph.Missing != pdfMissingGlyphNone {
+			entry.MissingGlyph = glyph.Missing.String()
+		}
+		out = append(out, entry)
+		currentX += glyphAdvancePoints(glyph, fontSize)
+		if i != len(glyphs)-1 {
+			currentX += letterSpacing
+		}
+		if glyph.Rune == ' ' && i != len(glyphs)-1 {
+			currentX += extraWordSpacing
+		}
+	}
+	return out
+}
+
+func pdfDebugRune(r rune) string {
+	if r == 0 {
+		return ""
+	}
+	return fmt.Sprintf("U+%04X", r)
+}
+
+func pdfDebugJustificationLines(pages []pdfPage) []pdfDebugJustificationLine {
+	out := make([]pdfDebugJustificationLine, 0)
+	for pageIndex, page := range pages {
+		for lineIndex, line := range page.Lines {
+			debugLine, ok := pdfDebugJustificationLineFor(pageIndex+1, lineIndex+1, line)
+			if ok {
+				out = append(out, debugLine)
+			}
+		}
+	}
+	return out
+}
+
+func pdfDebugJustificationLineFor(pageNumber int, lineNumber int, line pdfPageLine) (pdfDebugJustificationLine, bool) {
+	justified := pdfPageLineIsJustified(line)
+	if !justified && !line.BreakStats.Emergency && !line.BreakStats.Hyphenated && pdfPageLineOverflow(line) == 0 && pdfPageLineVisualOverflow(line) == 0 {
+		return pdfDebugJustificationLine{}, false
+	}
+	naturalWidth := pdfPageLineAdvanceWidth(line)
+	drawnWidth := pdfPageLineDrawnWidth(line)
+	available := pdfPageLineAvailableWidth(line)
+	glyphCount := pdfDebugLineGlyphCount(line)
+	gaps := pdfPageLineJustificationSpaceCount(line)
+	debugLine := pdfDebugJustificationLine{
+		Page:                       pageNumber,
+		Line:                       lineNumber,
+		Text:                       pdfPageLineText(line),
+		Decision:                   pdfDebugJustificationDecision(line, naturalWidth, available, glyphCount, gaps),
+		NaturalWidth:               naturalWidth,
+		DrawnWidth:                 drawnWidth,
+		AvailableWidth:             available,
+		Residual:                   available - naturalWidth,
+		JustificationGaps:          gaps,
+		GlyphCount:                 glyphCount,
+		ExtraWordSpacing:           line.ExtraWordSpacing,
+		ExtraCharSpacing:           line.ExtraCharSpacing,
+		BreakCandidateSummary:      "selected_break_recorded; rejected_candidates_not_retained",
+		RejectedCandidatesRecorded: false,
+		LineBreak:                  pdfDebugLineBreakStats(line.BreakStats),
+	}
+	pdfDebugPopulateJustificationCaps(&debugLine, line.FontSize)
+	return debugLine, true
+}
+
+func pdfDebugLineGlyphCount(line pdfPageLine) int {
+	if len(line.Fragments) == 0 {
+		return len(line.Text.Glyphs)
+	}
+	count := 0
+	for _, fragment := range line.Fragments {
+		count += len(fragment.Text.Glyphs)
+	}
+	return count
+}
+
+func pdfDebugJustificationDecision(line pdfPageLine, naturalWidth float64, available float64, glyphCount int, gaps int) string {
+	if !pdfPageLineIsJustified(line) {
+		switch {
+		case line.BreakStats.Emergency:
+			return "emergency_break_unjustified"
+		case line.BreakStats.Hyphenated:
+			return "hyphenated_break_unjustified"
+		case pdfPageLineOverflow(line) > 0 || pdfPageLineVisualOverflow(line) > 0:
+			return "overflow_unjustified"
+		default:
+			return "not_justified"
+		}
+	}
+	if naturalWidth > available+pdfLineWidthTolerance {
+		return pdfDebugJustificationShrinkDecision(line, naturalWidth-available, glyphCount, gaps)
+	}
+	return pdfDebugJustificationStretchDecision(line, available-naturalWidth, glyphCount, gaps)
+}
+
+func pdfDebugJustificationStretchDecision(line pdfPageLine, residual float64, glyphCount int, gaps int) string {
+	if gaps <= 0 || residual <= pdfLineWidthTolerance {
+		return "justified_no_adjustment"
+	}
+	wordCap := max(line.FontSize*0.40, 3.0)
+	wordCapped := residual/float64(gaps) > wordCap
+	remaining := residual - min(residual/float64(gaps), wordCap)*float64(gaps)
+	if remaining <= pdfLineWidthTolerance || glyphCount < 2 {
+		if wordCapped {
+			return "stretch_word_spacing_capped"
+		}
+		return "stretch_word_spacing"
+	}
+	charCap := 0.25
+	charCapped := remaining/float64(glyphCount-1) > charCap
+	if wordCapped && charCapped {
+		return "stretch_word_and_char_spacing_capped"
+	}
+	if wordCapped {
+		return "stretch_word_spacing_capped_with_tracking"
+	}
+	if charCapped {
+		return "stretch_char_spacing_capped"
+	}
+	return "stretch_word_and_char_spacing"
+}
+
+func pdfDebugJustificationShrinkDecision(line pdfPageLine, overflow float64, glyphCount int, gaps int) string {
+	if gaps <= 0 || overflow <= pdfLineWidthTolerance {
+		return "justified_no_adjustment"
+	}
+	wordCap := max(line.FontSize*0.18, 1.0)
+	wordCapped := overflow/float64(gaps) > wordCap
+	remaining := overflow - min(overflow/float64(gaps), wordCap)*float64(gaps)
+	if remaining <= pdfLineWidthTolerance || glyphCount < 2 {
+		if wordCapped {
+			return "shrink_word_spacing_capped"
+		}
+		return "shrink_word_spacing"
+	}
+	charCap := min(max(line.FontSize*0.025, 0.12), 0.35)
+	charCapped := remaining/float64(glyphCount-1) > charCap
+	if wordCapped && charCapped {
+		return "shrink_word_and_char_spacing_capped"
+	}
+	if wordCapped {
+		return "shrink_word_spacing_capped_with_tracking"
+	}
+	if charCapped {
+		return "shrink_char_spacing_capped"
+	}
+	return "shrink_word_and_char_spacing"
+}
+
+func pdfDebugPopulateJustificationCaps(line *pdfDebugJustificationLine, fontSize float64) {
+	if line == nil || line.JustificationGaps <= 0 {
+		return
+	}
+	if line.Residual >= 0 {
+		line.WordSpacingCap = max(fontSize*0.40, 3.0)
+		wordSpacing := min(line.Residual/float64(line.JustificationGaps), line.WordSpacingCap)
+		line.WordSpacingCapped = line.Residual/float64(line.JustificationGaps) > line.WordSpacingCap
+		line.ResidualAfterWordSpacing = line.Residual - wordSpacing*float64(line.JustificationGaps)
+		if line.ResidualAfterWordSpacing > pdfLineWidthTolerance && line.GlyphCount > 1 {
+			line.CharSpacingCap = 0.25
+			charSpacing := min(line.ResidualAfterWordSpacing/float64(line.GlyphCount-1), line.CharSpacingCap)
+			line.CharSpacingCapped = line.ResidualAfterWordSpacing/float64(line.GlyphCount-1) > line.CharSpacingCap
+			line.ResidualAfterCharSpacing = line.ResidualAfterWordSpacing - charSpacing*float64(line.GlyphCount-1)
+		}
+		return
+	}
+	overflow := -line.Residual
+	line.WordSpacingCap = max(fontSize*0.18, 1.0)
+	wordShrink := min(overflow/float64(line.JustificationGaps), line.WordSpacingCap)
+	line.WordSpacingCapped = overflow/float64(line.JustificationGaps) > line.WordSpacingCap
+	line.ResidualAfterWordSpacing = -(overflow - wordShrink*float64(line.JustificationGaps))
+	if -line.ResidualAfterWordSpacing > pdfLineWidthTolerance && line.GlyphCount > 1 {
+		line.CharSpacingCap = min(max(fontSize*0.025, 0.12), 0.35)
+		charShrink := min((-line.ResidualAfterWordSpacing)/float64(line.GlyphCount-1), line.CharSpacingCap)
+		line.CharSpacingCapped = (-line.ResidualAfterWordSpacing)/float64(line.GlyphCount-1) > line.CharSpacingCap
+		line.ResidualAfterCharSpacing = line.ResidualAfterWordSpacing + charShrink*float64(line.GlyphCount-1)
 	}
 }
 
