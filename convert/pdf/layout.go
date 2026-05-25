@@ -10,80 +10,10 @@ func layoutPDFPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]s
 		pages = append(pages, pdfPage{})
 		return &pages[len(pages)-1]
 	}
-	addLine := func(page *pdfPage, line pdfPageLine) {
-		if line.FontKey.Family == "" {
-			line.FontKey = pdfFontKey{Family: "serif"}
-		}
-		line = pdfPageLineWithFontFragments(line)
-		page.Lines = append(page.Lines, line)
-		collectPDFLineUsedGlyphs(used, line)
-	}
-	addAnchor := func(page *pdfPage, id string) {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			return
-		}
-		for _, existing := range page.Anchors {
-			if existing == id {
-				return
-			}
-		}
-		page.Anchors = append(page.Anchors, id)
-	}
-	addFragmentAnchors := func(page *pdfPage, line paragraphLine) {
-		for _, fragment := range line.Fragments {
-			addAnchor(page, fragment.AnchorID)
-		}
-	}
-	addInlineImages := func(page *pdfPage, line paragraphLine, x float64, y float64) {
-		currentX := x
-		for i, fragment := range line.Fragments {
-			if fragment.ImageID != "" && fragment.Width > 0 && fragment.ImageHeight > 0 {
-				page.Images = append(page.Images, pdfPageImage{
-					ImageID: fragment.ImageID,
-					X:       currentX,
-					Y:       y + fragment.BaselineShift,
-					Width:   fragment.Width,
-					Height:  fragment.ImageHeight,
-				})
-			}
-			currentX += fragment.Width + line.ExtraCharSpacing*float64(max(len(fragment.Text.Glyphs)-1, 0))
-			if i != len(line.Fragments)-1 {
-				currentX += line.ExtraCharSpacing
-			}
-			currentX += line.ExtraWordSpacing * float64(paragraphFragmentJustificationSpaceCount(fragment, i != len(line.Fragments)-1))
-		}
-	}
-	addBlockDecoration := func(page *pdfPage, style pdfBlockResolvedStyle, x, topY, width, bottomY float64) {
-		if page == nil || width <= 0 || topY <= bottomY {
-			return
-		}
-		height := topY - bottomY
-		if style.HasBackground {
-			page.Backgrounds = append(page.Backgrounds, pdfPageRect{
-				X:      x,
-				Y:      bottomY,
-				Width:  width,
-				Height: height,
-				Color:  style.BackgroundColor,
-			})
-		}
-		if style.HasBorder && style.BorderWidth > 0 {
-			page.Borders = append(page.Borders, pdfPageBorder{
-				X:         x,
-				Y:         bottomY,
-				Width:     width,
-				Height:    height,
-				LineWidth: style.BorderWidth,
-				Color:     style.BorderColor,
-			})
-		}
-	}
-
 	if cover := doc.Images[doc.CoverID]; cover != nil {
 		if rect, ok := fitPDFImageInBox(doc, cover, 0, 0, doc.PageWidth, doc.PageHeight); ok {
 			coverPage := addPage()
-			addAnchor(coverPage, doc.CoverID)
+			addPDFPageAnchor(coverPage, doc.CoverID)
 			coverPage.Images = append(coverPage.Images, pdfPageImage{
 				ImageID: doc.CoverID,
 				X:       rect.X1,
@@ -142,7 +72,7 @@ func layoutPDFPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]s
 			if pageHasText {
 				newTextPage()
 			}
-			addAnchor(page, block.ID)
+			addPDFPageAnchor(page, block.ID)
 			continue
 		}
 
@@ -182,7 +112,7 @@ func layoutPDFPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]s
 			if style.KeepTogether && pageHasText && y-needed < bottom && needed <= top-bottom {
 				newTextPage()
 			}
-			addAnchor(page, block.ID)
+			addPDFPageAnchor(page, block.ID)
 			y -= blockSpaceBefore() + style.PaddingTop
 			tableX := blockLeft + style.MarginLeft + style.PaddingLeft
 			for groupIndex, group := range table.Groups {
@@ -197,7 +127,7 @@ func layoutPDFPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]s
 					cellTop := groupTop - pdfTableRowsHeight(table.Rows, group.Start, cell.Row-1)
 					cellBottom := cellTop - pdfTableRowsHeight(table.Rows, cell.Row, min(cell.Row+cell.RowSpan-1, group.End))
 					cellX := tableX + cell.X
-					addBlockDecoration(page, cell.Style, cellX, cellTop, cell.Width, cellBottom)
+					addPDFBlockDecoration(page, cell.Style, cellX, cellTop, cell.Width, cellBottom)
 					if len(cell.Lines) == 0 {
 						continue
 					}
@@ -245,11 +175,11 @@ func layoutPDFPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]s
 						}
 						pageLine.X = pdfPageLineXAdjustedForVisualRight(pageLine, available)
 						x = pageLine.X
-						addInlineImages(page, line, x, lineY)
+						addPDFInlineImages(page, line, x, lineY)
 						addLinkAnnotations(page, linkBlock, line, lineSearchStart, x, lineY, cell.Style.Paragraph.FontSize)
-						addFragmentAnchors(page, line)
+						addPDFParagraphFragmentAnchors(page, line)
 						lineSearchStart = nextLineSearchStart(cell.Text, line, lineSearchStart)
-						addLine(page, pageLine)
+						addPDFPageLine(page, used, pageLine)
 						lineY -= cell.Style.Paragraph.LineHeight
 					}
 				}
@@ -302,7 +232,7 @@ func layoutPDFPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]s
 				y -= blockSpaceBefore()
 				y -= style.PaddingTop
 			}
-			addAnchor(page, block.ID)
+			addPDFPageAnchor(page, block.ID)
 			backgroundTop := y + style.PaddingTop
 			y -= height
 			imageX := blockLeft + style.MarginLeft + style.PaddingLeft
@@ -330,7 +260,7 @@ func layoutPDFPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]s
 			pageHasText = true
 			previousRenderedImage = true
 			backgroundBottom := y - style.PaddingBottom
-			addBlockDecoration(page, style, backgroundX, backgroundTop, backgroundWidth, backgroundBottom)
+			addPDFBlockDecoration(page, style, backgroundX, backgroundTop, backgroundWidth, backgroundBottom)
 			y -= style.PaddingBottom + style.SpaceAfter
 			if pdfStyleForcesPageBreakAfter(style) && pageHasText {
 				newTextPage()
@@ -465,7 +395,7 @@ func layoutPDFPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]s
 		if dropcapOK {
 			pdfTraceResolvedDropcap(styles, blockIndex, block, dropcap, style.Paragraph)
 		}
-		addAnchor(page, block.ID)
+		addPDFPageAnchor(page, block.ID)
 		y -= blockSpaceBefore()
 		backgroundX := blockLeft + style.MarginLeft
 		backgroundWidth := blockBoxWidth(blockWidthLimit, style)
@@ -479,8 +409,8 @@ func layoutPDFPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]s
 			if dropcap.Fragment.LinkHref != "" {
 				addFragmentLinkAnnotations(page, dropLine, dropcapX, dropcap.BaselineY)
 			}
-			addFragmentAnchors(page, dropLine)
-			addLine(page, pdfPageLine{
+			addPDFParagraphFragmentAnchors(page, dropLine)
+			addPDFPageLine(page, used, pdfPageLine{
 				X:             dropcapX,
 				Y:             dropcap.BaselineY,
 				FontSize:      dropcap.Fragment.FontSize,
@@ -509,7 +439,7 @@ func layoutPDFPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]s
 					}
 					reservedBottom := pdfReservedContentBottom(contentBottom, top, reserve)
 					if pageHasText && y-style.Paragraph.FontSize < reservedBottom {
-						addBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, y)
+						addPDFBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, y)
 						newTextPage()
 						fragmentPage = page
 						fragmentTop = y + style.Paragraph.FontSize
@@ -526,7 +456,7 @@ func layoutPDFPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]s
 			}
 			if y-style.Paragraph.FontSize < bottom {
 				if pageHasText {
-					addBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, y)
+					addPDFBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, y)
 				}
 				newTextPage()
 				fragmentPage = page
@@ -535,7 +465,7 @@ func layoutPDFPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]s
 			}
 			remainingAfterLine := len(lines) - lineIndex - 1
 			if remainingAfterLine > 0 && remainingAfterLine < style.Widows && y-lineHeight-style.Paragraph.FontSize < bottom {
-				addBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, y)
+				addPDFBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, y)
 				newTextPage()
 				fragmentPage = page
 				fragmentTop = y
@@ -565,11 +495,11 @@ func layoutPDFPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]s
 			}
 			pageLine.X = pdfPageLineXAdjustedForVisualRight(pageLine, available)
 			x = pageLine.X
-			addInlineImages(page, line, x, y)
+			addPDFInlineImages(page, line, x, y)
 			addLinkAnnotations(page, block, line, lineSearchStart, x, y, style.Paragraph.FontSize)
-			addFragmentAnchors(page, line)
+			addPDFParagraphFragmentAnchors(page, line)
 			lineSearchStart = nextLineSearchStart(block.Text, line, lineSearchStart)
-			addLine(page, pageLine)
+			addPDFPageLine(page, used, pageLine)
 			y -= lineHeight
 			pageHasText = true
 			previousRenderedImage = false
@@ -579,7 +509,7 @@ func layoutPDFPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]s
 			previousRenderedImage = false
 		}
 		backgroundBottom := y - style.PaddingBottom
-		addBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, backgroundBottom)
+		addPDFBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, backgroundBottom)
 		y -= style.PaddingBottom + style.SpaceAfter
 		if activeDropcap != nil && activeDropcap.Page != page {
 			activeDropcap = nil
@@ -599,6 +529,80 @@ func layoutPDFPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]s
 		pages = pages[:len(pages)-1]
 	}
 	return pages, used, nil
+}
+
+func addPDFPageLine(page *pdfPage, used map[pdfFontKey]map[uint16]shapedGlyph, line pdfPageLine) {
+	if line.FontKey.Family == "" {
+		line.FontKey = pdfFontKey{Family: "serif"}
+	}
+	line = pdfPageLineWithFontFragments(line)
+	page.Lines = append(page.Lines, line)
+	collectPDFLineUsedGlyphs(used, line)
+}
+
+func addPDFPageAnchor(page *pdfPage, id string) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return
+	}
+	for _, existing := range page.Anchors {
+		if existing == id {
+			return
+		}
+	}
+	page.Anchors = append(page.Anchors, id)
+}
+
+func addPDFParagraphFragmentAnchors(page *pdfPage, line paragraphLine) {
+	for _, fragment := range line.Fragments {
+		addPDFPageAnchor(page, fragment.AnchorID)
+	}
+}
+
+func addPDFInlineImages(page *pdfPage, line paragraphLine, x float64, y float64) {
+	currentX := x
+	for i, fragment := range line.Fragments {
+		if fragment.ImageID != "" && fragment.Width > 0 && fragment.ImageHeight > 0 {
+			page.Images = append(page.Images, pdfPageImage{
+				ImageID: fragment.ImageID,
+				X:       currentX,
+				Y:       y + fragment.BaselineShift,
+				Width:   fragment.Width,
+				Height:  fragment.ImageHeight,
+			})
+		}
+		currentX += fragment.Width + line.ExtraCharSpacing*float64(max(len(fragment.Text.Glyphs)-1, 0))
+		if i != len(line.Fragments)-1 {
+			currentX += line.ExtraCharSpacing
+		}
+		currentX += line.ExtraWordSpacing * float64(paragraphFragmentJustificationSpaceCount(fragment, i != len(line.Fragments)-1))
+	}
+}
+
+func addPDFBlockDecoration(page *pdfPage, style pdfBlockResolvedStyle, x, topY, width, bottomY float64) {
+	if page == nil || width <= 0 || topY <= bottomY {
+		return
+	}
+	height := topY - bottomY
+	if style.HasBackground {
+		page.Backgrounds = append(page.Backgrounds, pdfPageRect{
+			X:      x,
+			Y:      bottomY,
+			Width:  width,
+			Height: height,
+			Color:  style.BackgroundColor,
+		})
+	}
+	if style.HasBorder && style.BorderWidth > 0 {
+		page.Borders = append(page.Borders, pdfPageBorder{
+			X:         x,
+			Y:         bottomY,
+			Width:     width,
+			Height:    height,
+			LineWidth: style.BorderWidth,
+			Color:     style.BorderColor,
+		})
+	}
 }
 
 func pdfReservedContentBottom(contentBottom float64, top float64, reserve float64) float64 {
