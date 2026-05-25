@@ -36,6 +36,12 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 }
 
 func applyPDFInitialStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.Value) {
+	applyPDFFontStyleProperties(style, props)
+	applyPDFPaintStyleProperties(style, props)
+	applyPDFTextMetricStyleProperties(style, props)
+}
+
+func applyPDFFontStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.Value) {
 	if value, ok := props["font-family"]; ok {
 		if family, ok := pdfCSSFontFamily(value); ok {
 			style.Paragraph.FontFamily = family
@@ -58,6 +64,9 @@ func applyPDFInitialStyleProperties(style *pdfBlockResolvedStyle, props map[stri
 			style.Paragraph.Color = color
 		}
 	}
+}
+
+func applyPDFPaintStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.Value) {
 	if value, ok := props["background-color"]; ok {
 		if color, ok := pdfCSSColor(value); ok {
 			style.BackgroundColor = color
@@ -91,6 +100,9 @@ func applyPDFInitialStyleProperties(style *pdfBlockResolvedStyle, props map[stri
 	if value, ok := props["text-decoration"]; ok {
 		applyPDFTextDecoration(style, value)
 	}
+}
+
+func applyPDFTextMetricStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.Value) {
 	if value, ok := props["font-size"]; ok {
 		if points, ok := pdfCSSFontSizePoints(value, style.Paragraph.FontSize); ok {
 			style.Paragraph.FontSize = points
