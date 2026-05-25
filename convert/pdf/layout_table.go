@@ -192,7 +192,7 @@ func pdfTableCellMinWidth(doc pdfDocumentSpec, style pdfBlockResolvedStyle, cell
 	if style.Paragraph.NoWrap {
 		text = strings.Join(strings.Fields(text), " ")
 		if text != "" {
-			shaped, err := shapeText(face, text)
+			shaped, err := shapeTextWithCache(doc.TextShapers, face, text)
 			if err != nil {
 				return 0, err
 			}
@@ -200,7 +200,7 @@ func pdfTableCellMinWidth(doc pdfDocumentSpec, style pdfBlockResolvedStyle, cell
 		}
 	} else {
 		for _, word := range strings.Fields(text) {
-			shaped, err := shapeText(face, word)
+			shaped, err := shapeTextWithCache(doc.TextShapers, face, word)
 			if err != nil {
 				return 0, err
 			}

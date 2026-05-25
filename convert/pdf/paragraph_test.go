@@ -694,7 +694,7 @@ func TestInlineParagraphUnitsKeepLigatureWordsIntact(t *testing.T) {
 			FontKey:  face.Key,
 		}},
 	}
-	units, err := inlineParagraphUnits(nil, []paragraphInlineWord{word}, paragraphStyle{
+	units, err := inlineParagraphUnits(nil, nil, []paragraphInlineWord{word}, paragraphStyle{
 		FontSize:    10,
 		Hyphenation: paragraphHyphenationAuto,
 		Hyphenator:  fakeHyphenator{"fiend": "fi\u00adend"},

@@ -66,7 +66,7 @@ func TestApplyPDFPageLocalFootnoteReferenceLabelsKeepsInlineImageFootnoteWidth(t
 	}}}}}
 	used := make(map[pdfFontKey]map[uint16]shapedGlyph)
 
-	if err := applyPDFPageLocalFootnoteReferenceLabels(pages, nil, used, nil); err != nil {
+	if err := applyPDFPageLocalFootnoteReferenceLabels(pages, nil, used, nil, nil); err != nil {
 		t.Fatalf("applyPDFPageLocalFootnoteReferenceLabels() error = %v", err)
 	}
 	imageFragment := pages[0].Lines[0].Fragments[1]
@@ -112,7 +112,7 @@ func TestApplyPDFPageLocalFootnoteReferenceLabelsRejustifiesChangedLine(t *testi
 	pages := []pdfPage{{Lines: []pdfPageLine{line}}}
 	used := make(map[pdfFontKey]map[uint16]shapedGlyph)
 
-	if err := applyPDFPageLocalFootnoteReferenceLabels(pages, nil, used, nil); err != nil {
+	if err := applyPDFPageLocalFootnoteReferenceLabels(pages, nil, used, nil, nil); err != nil {
 		t.Fatalf("applyPDFPageLocalFootnoteReferenceLabels() error = %v", err)
 	}
 	updated := pages[0].Lines[0]

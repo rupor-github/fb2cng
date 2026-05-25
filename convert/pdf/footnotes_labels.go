@@ -11,6 +11,7 @@ func applyPDFPageLocalFootnoteReferenceLabels(
 	fonts *pdfFontRegistry,
 	used map[pdfFontKey]map[uint16]shapedGlyph,
 	resolver *pdfStyleResolver,
+	shapers *pdfTextShaperCache,
 ) error {
 	for pageIndex := range pages {
 		labels := make(map[string]string)
@@ -37,7 +38,7 @@ func applyPDFPageLocalFootnoteReferenceLabels(
 				if err != nil {
 					return fmt.Errorf("shape page-local footnote label %q: %w", labelText, err)
 				}
-				shaped, err := shapeText(face, labelText)
+				shaped, err := shapeTextWithCache(shapers, face, labelText)
 				if err != nil {
 					return fmt.Errorf("shape page-local footnote label %q: %w", labelText, err)
 				}

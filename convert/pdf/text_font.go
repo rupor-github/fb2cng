@@ -12,6 +12,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/go-text/typesetting/di"
+	textfont "github.com/go-text/typesetting/font"
 	"github.com/go-text/typesetting/shaping"
 	"go.uber.org/zap"
 	"golang.org/x/image/font"
@@ -174,8 +175,30 @@ type openTypePDFTextShaper struct {
 	shaper shaping.HarfbuzzShaper
 }
 
+type pdfTextShaperCache struct {
+	openType map[*textfont.Face]*openTypePDFTextShaper
+}
+
+func newPDFTextShaperCache() *pdfTextShaperCache {
+	return &pdfTextShaperCache{openType: make(map[*textfont.Face]*openTypePDFTextShaper)}
+}
+
 func shapeText(face *builtinFontFace, text string) (shapedText, error) {
+	return shapeTextWithCache(nil, face, text)
+}
+
+func shapeTextWithCache(cache *pdfTextShaperCache, face *builtinFontFace, text string) (shapedText, error) {
 	if canShapeOpenTypeText(face, text) {
+		if cache != nil && face.TextFace != nil {
+			shaper := cache.openType[face.TextFace]
+			if shaper == nil {
+				shaper = &openTypePDFTextShaper{face: face}
+				cache.openType[face.TextFace] = shaper
+			} else {
+				shaper.face = face
+			}
+			return shaper.Shape(text, pdfShapeOptions{})
+		}
 		var shaper pdfTextShaper = &openTypePDFTextShaper{face: face}
 		return shaper.Shape(text, pdfShapeOptions{})
 	}

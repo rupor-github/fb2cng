@@ -26,13 +26,22 @@ const pdfProfileMemRate = 512 * 1024
 // content before starting profiles so debug reporting and shared conversion
 // setup do not pollute PDF-path measurements.
 //
-// Example:
+// Example, profile all PDF stages for a larger fixture:
 //
-//	PDF_PROFILE_BOOK=/mnt/d/test/_Test.fb2 \
-//	PDF_PROFILE_TARGET=generate \
-//	PDF_PROFILE_OUT=/tmp/fb2cng-pdf-profile \
-//	GOFLAGS=-mod=mod go test ./convert/pdf -run '^TestPDFProfilePath$' -count=1 -timeout=10m -v
+//	rm -rf /tmp/fb2cng-pdf-profile && mkdir -p /tmp/fb2cng-pdf-profile
+//	for target in collect styles layout builddoc generate; do
+//	  echo "=== $target ==="
+//	  PDF_PROFILE_BOOK=/mnt/d/test/1.fb2 \
+//	    PDF_PROFILE_TARGET=$target \
+//	    PDF_PROFILE_OUT=/tmp/fb2cng-pdf-profile \
+//	    GOFLAGS=-mod=mod go test ./convert/pdf \
+//	      -run '^TestPDFProfilePath$' \
+//	      -count=1 \
+//	      -timeout=30m \
+//	      -v || exit 1
+//	done
 //
+// For a quicker smoke profile, use PDF_PROFILE_BOOK=/mnt/d/test/_Test.fb2.
 // Supported PDF_PROFILE_TARGET values are: collect, styles, layout, builddoc,
 // and generate. PDF_PROFILE_CONFIG defaults to build/test.yaml when present.
 func TestPDFProfilePath(t *testing.T) {

@@ -126,7 +126,7 @@ func (l *pdfPageLayout) newTextPage() {
 
 func (l *pdfPageLayout) finish() error {
 	if pdfPrintedFootnoteReferencesRenumbered(l.doc.Content) && len(l.doc.PrintedFootnotes) > 0 {
-		if err := applyPDFPageLocalFootnoteReferenceLabels(l.pages, l.doc.Fonts, l.used, l.styles); err != nil {
+		if err := applyPDFPageLocalFootnoteReferenceLabels(l.pages, l.doc.Fonts, l.used, l.styles, l.doc.TextShapers); err != nil {
 			return err
 		}
 	}

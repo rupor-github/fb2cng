@@ -263,7 +263,7 @@ func buildPDFDropcapLayout(doc pdfDocumentSpec, resolver *pdfStyleResolver, bloc
 	if err != nil {
 		return pdfDropcapLayout{}, false, err
 	}
-	shaped, err := shapeText(dropcapFace, dropcapRun.Text)
+	shaped, err := shapeTextWithCache(doc.TextShapers, dropcapFace, dropcapRun.Text)
 	if err != nil {
 		return pdfDropcapLayout{}, false, err
 	}

@@ -82,6 +82,7 @@ type paragraphHyphenator interface {
 
 type paragraphLineShape struct {
 	InitialInsets []float64
+	TextShapers   *pdfTextShaperCache
 }
 
 type paragraphLine struct {
@@ -202,11 +203,11 @@ func layoutParagraphWithShape(face *builtinFontFace, text string, style paragrap
 		return nil, nil
 	}
 
-	hyphenWidth, err := plainHyphenWidth(face, style)
+	hyphenWidth, err := plainHyphenWidth(shape.TextShapers, face, style)
 	if err != nil {
 		return nil, err
 	}
-	units, err := paragraphUnits(face, words, style, hyphenWidth)
+	units, err := paragraphUnits(shape.TextShapers, face, words, style, hyphenWidth)
 	if err != nil {
 		return nil, err
 	}
@@ -259,28 +260,28 @@ func isBreakableSpace(r rune) bool {
 	return unicode.IsSpace(r) && r != '\u00a0'
 }
 
-func plainHyphenWidth(face *builtinFontFace, style paragraphStyle) (float64, error) {
-	hyphen, err := shapeText(face, "-")
+func plainHyphenWidth(shapers *pdfTextShaperCache, face *builtinFontFace, style paragraphStyle) (float64, error) {
+	hyphen, err := shapeTextWithCache(shapers, face, "-")
 	if err != nil {
 		return 0, fmt.Errorf("shape hyphen: %w", err)
 	}
 	return shapedWidthPointsWithSpacing(hyphen, style.FontSize, style.LetterSpacing) + max(style.LetterSpacing, 0), nil
 }
 
-func plainSpaceWidth(face *builtinFontFace, style paragraphStyle) (float64, error) {
-	space, err := shapeText(face, " ")
+func plainSpaceWidth(shapers *pdfTextShaperCache, face *builtinFontFace, style paragraphStyle) (float64, error) {
+	space, err := shapeTextWithCache(shapers, face, " ")
 	if err != nil {
 		return 0, fmt.Errorf("shape space: %w", err)
 	}
 	return shapedWidthPointsWithSpacing(space, style.FontSize, style.LetterSpacing), nil
 }
 
-func paragraphUnits(face *builtinFontFace, words []paragraphWord, style paragraphStyle, softHyphenWidth float64) ([]paragraphUnit, error) {
+func paragraphUnits(shapers *pdfTextShaperCache, face *builtinFontFace, words []paragraphWord, style paragraphStyle, softHyphenWidth float64) ([]paragraphUnit, error) {
 	units := make([]paragraphUnit, 0, len(words))
 	for i, word := range words {
 		parts := hyphenatedWordParts(word.Text, style.Hyphenator, pdfEffectiveHyphenation(style))
 		for j, part := range parts {
-			shaped, err := shapeText(face, part.Text)
+			shaped, err := shapeTextWithCache(shapers, face, part.Text)
 			if err != nil {
 				return nil, fmt.Errorf("shape word segment %q: %w", part.Text, err)
 			}
@@ -290,12 +291,12 @@ func paragraphUnits(face *builtinFontFace, words []paragraphWord, style paragrap
 			hyphenOverhang := 0.0
 			if part.HyphenText != "" {
 				hyphenWidth = softHyphenWidth
-				hyphen, err := shapeText(face, part.HyphenText)
+				hyphen, err := shapeTextWithCache(shapers, face, part.HyphenText)
 				if err != nil {
 					return nil, fmt.Errorf("shape hyphen %q: %w", part.HyphenText, err)
 				}
 				hyphenGlyphCount = len(hyphen.Glyphs)
-				hyphenated, err := shapeText(face, part.Text+part.HyphenText)
+				hyphenated, err := shapeTextWithCache(shapers, face, part.Text+part.HyphenText)
 				if err != nil {
 					return nil, fmt.Errorf("shape hyphenated word segment %q: %w", part.Text+part.HyphenText, err)
 				}
@@ -338,7 +339,7 @@ func splitPlainEmergencyParagraphUnits(
 			out = append(out, unit)
 			continue
 		}
-		pieces, err := splitPlainEmergencyParagraphUnit(face, unit, style)
+		pieces, err := splitPlainEmergencyParagraphUnit(shape.TextShapers, face, unit, style)
 		if err != nil {
 			return nil, err
 		}
@@ -374,8 +375,8 @@ func paragraphUnitNeedsEmergencySplit(unit paragraphUnit, splitWidth float64) bo
 	return unit.Width+unit.HyphenWidth > splitWidth+pdfLineWidthTolerance
 }
 
-func splitPlainEmergencyParagraphUnit(face *builtinFontFace, unit paragraphUnit, style paragraphStyle) ([]paragraphUnit, error) {
-	shaped, err := shapeText(face, unit.Text)
+func splitPlainEmergencyParagraphUnit(shapers *pdfTextShaperCache, face *builtinFontFace, unit paragraphUnit, style paragraphStyle) ([]paragraphUnit, error) {
+	shaped, err := shapeTextWithCache(shapers, face, unit.Text)
 	if err != nil {
 		return nil, fmt.Errorf("shape emergency word segment %q: %w", unit.Text, err)
 	}
@@ -577,7 +578,7 @@ func isHyphenLikeBreakRune(r rune) bool {
 }
 
 func assembleParagraphLines(face *builtinFontFace, units []paragraphUnit, style paragraphStyle, maxWidth float64, shape paragraphLineShape) ([]paragraphLine, error) {
-	spaceWidth, err := plainSpaceWidth(face, style)
+	spaceWidth, err := plainSpaceWidth(shape.TextShapers, face, style)
 	if err != nil {
 		return nil, err
 	}
@@ -588,7 +589,7 @@ func assembleParagraphLines(face *builtinFontFace, units []paragraphUnit, style 
 	previousFitness := paragraphFitnessDecent
 	for i, br := range breaks {
 		lineText := joinUnits(units[start:br.End], br.HyphenAfter)
-		shaped, err := shapeText(face, lineText)
+		shaped, err := shapeTextWithCache(shape.TextShapers, face, lineText)
 		if err != nil {
 			return nil, fmt.Errorf("shape line: %w", err)
 		}

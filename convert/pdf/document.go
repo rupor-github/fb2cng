@@ -24,6 +24,9 @@ func pageSizePoints(screen config.ScreenConfig) (float64, float64, error) {
 }
 
 func layoutPDFDocumentPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]shapedGlyph, pdfDebugPrintedFootnotes, error) {
+	if doc.TextShapers == nil {
+		doc.TextShapers = newPDFTextShaperCache()
+	}
 	if !pdfPrintedFootnotesEnabled(doc.Content) || len(doc.PrintedFootnotes) == 0 {
 		pages, used, err := layoutPDFPages(doc)
 		return pages, used, pdfDebugPrintedFootnotes{SourcePageCount: len(pages), FinalPageCount: len(pages)}, err
@@ -40,6 +43,9 @@ func layoutPDFDocumentPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[
 }
 
 func buildPDFDocument(doc pdfDocumentSpec) ([]byte, error) {
+	if doc.TextShapers == nil {
+		doc.TextShapers = newPDFTextShaperCache()
+	}
 	doc.Blocks = applyPDFPseudoContentToBlocks(doc.Blocks, doc.Styles)
 	doc.PrintedFootnotes = applyPDFPseudoContentToPrintedFootnotes(doc.PrintedFootnotes, doc.Styles)
 

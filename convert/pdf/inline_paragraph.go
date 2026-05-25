@@ -31,6 +31,9 @@ func layoutInlineParagraph(doc pdfDocumentSpec, registry *pdfFontRegistry, resol
 }
 
 func layoutInlineWithShape(doc pdfDocumentSpec, registry *pdfFontRegistry, resolver *pdfStyleResolver, baseFace *builtinFontFace, text string, runs []pdfInlineRun, style paragraphStyle, maxWidth float64, shape paragraphLineShape) ([]paragraphLine, error) {
+	if shape.TextShapers == nil {
+		shape.TextShapers = doc.TextShapers
+	}
 	if len(runs) == 0 {
 		runs = []pdfInlineRun{{Text: text}}
 	}
@@ -58,7 +61,7 @@ func layoutInlineWithShape(doc pdfDocumentSpec, registry *pdfFontRegistry, resol
 	if err != nil {
 		return nil, err
 	}
-	units, err := inlineParagraphUnits(registry, words, style)
+	units, err := inlineParagraphUnits(shape.TextShapers, registry, words, style)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +73,7 @@ func layoutInlineWithShape(doc pdfDocumentSpec, registry *pdfFontRegistry, resol
 	previousFitness := paragraphFitnessDecent
 	for i, br := range breaks {
 		fragments, lineText, width := inlineParagraphLineFragments(units[start:br.End], spaceFragment, br.HyphenAfter)
-		shaped, err := shapeText(baseFace, lineText)
+		shaped, err := shapeTextWithCache(shape.TextShapers, baseFace, lineText)
 		if err != nil {
 			return nil, fmt.Errorf("shape inline line text: %w", err)
 		}
@@ -388,7 +391,7 @@ func inlineRunFragment(doc pdfDocumentSpec, registry *pdfFontRegistry, resolver 
 			ImageHeight:   height,
 		}, nil
 	}
-	shaped, err := shapeText(face, text)
+	shaped, err := shapeTextWithCache(doc.TextShapers, face, text)
 	if err != nil {
 		return paragraphLineFragment{}, fmt.Errorf("shape inline text %q: %w", text, err)
 	}
@@ -816,7 +819,7 @@ func inlineRunBaselineShift(base paragraphStyle, style paragraphStyle) float64 {
 	}
 }
 
-func inlineParagraphUnits(registry *pdfFontRegistry, words []paragraphInlineWord, style paragraphStyle) ([]paragraphUnit, error) {
+func inlineParagraphUnits(shapers *pdfTextShaperCache, registry *pdfFontRegistry, words []paragraphInlineWord, style paragraphStyle) ([]paragraphUnit, error) {
 	units := make([]paragraphUnit, 0, len(words))
 	for wordIndex, word := range words {
 		if inlineWordHasImage(word) {
@@ -858,7 +861,7 @@ func inlineParagraphUnits(registry *pdfFontRegistry, words []paragraphInlineWord
 			hyphenWidth := 0.0
 			if part.HyphenText != "" {
 				var err error
-				hyphenFragments, hyphenWidth, err = inlineHyphenFragments(registry, fragments)
+				hyphenFragments, hyphenWidth, err = inlineHyphenFragments(shapers, registry, fragments)
 				if err != nil {
 					return nil, err
 				}
@@ -1087,7 +1090,7 @@ func inlinePiecesFragment(pieces []inlineGlyphPiece, template paragraphLineFragm
 	return fragment
 }
 
-func inlineHyphenFragments(registry *pdfFontRegistry, fragments []paragraphLineFragment) ([]paragraphLineFragment, float64, error) {
+func inlineHyphenFragments(shapers *pdfTextShaperCache, registry *pdfFontRegistry, fragments []paragraphLineFragment) ([]paragraphLineFragment, float64, error) {
 	if len(fragments) == 0 {
 		return nil, 0, nil
 	}
@@ -1096,7 +1099,7 @@ func inlineHyphenFragments(registry *pdfFontRegistry, fragments []paragraphLineF
 	if err != nil {
 		return nil, 0, err
 	}
-	shaped, err := shapeText(face, "-")
+	shaped, err := shapeTextWithCache(shapers, face, "-")
 	if err != nil {
 		return nil, 0, fmt.Errorf("shape inline hyphen: %w", err)
 	}

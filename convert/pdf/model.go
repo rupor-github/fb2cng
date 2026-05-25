@@ -28,6 +28,7 @@ type pdfDocumentSpec struct {
 	CoverID                        string
 	Hyphenator                     paragraphHyphenator
 	Fonts                          *pdfFontRegistry
+	TextShapers                    *pdfTextShaperCache
 	Debug                          bool
 	WorkDir                        string
 }

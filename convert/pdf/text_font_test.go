@@ -117,6 +117,23 @@ func TestShapeTextUsesOpenTypeWhenFontCoversRun(t *testing.T) {
 	}
 }
 
+func TestShapeTextWithCacheReusesOpenTypeShaper(t *testing.T) {
+	face, err := builtinFont("serif", false, false)
+	if err != nil {
+		t.Fatalf("builtinFont() error = %v", err)
+	}
+	cache := newPDFTextShaperCache()
+	if _, err := shapeTextWithCache(cache, face, "office"); err != nil {
+		t.Fatalf("shapeTextWithCache() error = %v", err)
+	}
+	if _, err := shapeTextWithCache(cache, face, "affinity"); err != nil {
+		t.Fatalf("repeat shapeTextWithCache() error = %v", err)
+	}
+	if len(cache.openType) != 1 {
+		t.Fatalf("cached OpenType shapers = %d, want 1", len(cache.openType))
+	}
+}
+
 func TestShapeOpenTypeTextAppliesKerningAndLigatures(t *testing.T) {
 	face, err := builtinFont("serif", false, false)
 	if err != nil {
