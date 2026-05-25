@@ -8,6 +8,25 @@ import (
 	"fbc/css"
 )
 
+var pdfCSSInitialStyleProperties = map[string]struct{}{
+	"font-family":      {},
+	"font-weight":      {},
+	"font-style":       {},
+	"color":            {},
+	"background-color": {},
+	"background":       {},
+	"border":           {},
+	"border-width":     {},
+	"border-color":     {},
+	"border-style":     {},
+	"text-decoration":  {},
+	"font-size":        {},
+	"line-height":      {},
+	"letter-spacing":   {},
+	"vertical-align":   {},
+	"white-space":      {},
+}
+
 func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.Value) {
 	if style == nil {
 		return
@@ -113,8 +132,7 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 	}
 	names := make([]string, 0, len(props))
 	for name := range props {
-		lower := strings.ToLower(name)
-		if lower != "font-family" && lower != "font-weight" && lower != "font-style" && lower != "color" && lower != "background-color" && lower != "background" && lower != "border" && lower != "border-width" && lower != "border-color" && lower != "border-style" && lower != "text-decoration" && lower != "font-size" && lower != "line-height" && lower != "letter-spacing" && lower != "vertical-align" && lower != "white-space" {
+		if _, initial := pdfCSSInitialStyleProperties[strings.ToLower(name)]; !initial {
 			names = append(names, name)
 		}
 	}
