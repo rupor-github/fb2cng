@@ -2,6 +2,8 @@ package pdf
 
 import (
 	"bytes"
+	"compress/zlib"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -460,6 +462,34 @@ func TestAssignPDFFontResourceNamesRemapsSubsetGlyphIDs(t *testing.T) {
 	}
 	if got := shapedRunes(pages[0].Lines[0].Text); got != "Ж" {
 		t.Fatalf("page text = %q, want source text preserved", got)
+	}
+}
+
+func TestCompressedPDFStreamAddsFlateFilterAndPreservesDict(t *testing.T) {
+	original := bytes.Repeat([]byte("font data "), 32)
+	dict, compressed, err := compressedPDFStream(docwriter.Dict{"Length1": docwriter.Integer(len(original))}, original)
+	if err != nil {
+		t.Fatalf("compressedPDFStream() error = %v", err)
+	}
+	if got := dict["Filter"]; got != docwriter.Name("FlateDecode") {
+		t.Fatalf("Filter = %#v, want FlateDecode", got)
+	}
+	if got := dict["Length1"]; got != docwriter.Integer(len(original)) {
+		t.Fatalf("Length1 = %#v, want original stream length", got)
+	}
+	zr, err := zlib.NewReader(bytes.NewReader(compressed))
+	if err != nil {
+		t.Fatalf("zlib.NewReader() error = %v", err)
+	}
+	decompressed, err := io.ReadAll(zr)
+	if closeErr := zr.Close(); closeErr != nil && err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		t.Fatalf("decompress stream: %v", err)
+	}
+	if !bytes.Equal(decompressed, original) {
+		t.Fatalf("decompressed stream differs from original")
 	}
 }
 

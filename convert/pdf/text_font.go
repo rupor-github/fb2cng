@@ -781,14 +781,35 @@ func writePDFFontObjects(writer *docwriter.Writer, resources []pdfFontResource) 
 		if err := writer.Object(resource.IDs.FontDescriptor, resource.Objects.FontDescriptor); err != nil {
 			return err
 		}
-		if err := writer.StreamObject(resource.IDs.FontFile, resource.Objects.FontFile, resource.Objects.FontFileData); err != nil {
+		fontFileDict, fontFileData, err := compressedPDFStream(resource.Objects.FontFile, resource.Objects.FontFileData)
+		if err != nil {
+			return fmt.Errorf("compress font file stream %s: %w", resource.Face.PostScriptName, err)
+		}
+		if err := writer.StreamObject(resource.IDs.FontFile, fontFileDict, fontFileData); err != nil {
 			return err
 		}
-		if err := writer.StreamObject(resource.IDs.ToUnicode, docwriter.Dict{}, resource.Objects.ToUnicode); err != nil {
+		toUnicodeDict, toUnicodeData, err := compressedPDFStream(docwriter.Dict{}, resource.Objects.ToUnicode)
+		if err != nil {
+			return fmt.Errorf("compress ToUnicode stream %s: %w", resource.Face.PostScriptName, err)
+		}
+		if err := writer.StreamObject(resource.IDs.ToUnicode, toUnicodeDict, toUnicodeData); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func compressedPDFStream(dict docwriter.Dict, data []byte) (docwriter.Dict, []byte, error) {
+	compressed, err := flateStream(data)
+	if err != nil {
+		return nil, nil, err
+	}
+	out := make(docwriter.Dict, len(dict)+1)
+	for key, value := range dict {
+		out[key] = value
+	}
+	out["Filter"] = docwriter.Name("FlateDecode")
+	return out, compressed, nil
 }
 
 func fontResourceObjects(face *builtinFontFace, used map[uint16]shapedGlyph, objectIDs fontObjectIDs) (fontObjects, error) {
