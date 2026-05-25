@@ -7,15 +7,29 @@ import (
 )
 
 func appendTitleBlocks(blocks *[]pdfTextBlock, title *fb2.Title, depth int) {
-	appendTitleBlocksFull(blocks, nil, title, depth, "", pdfHeadingStyleName(depth), "", "", false)
+	appendTitleBlocksWithOptions(blocks, pdfTitleBlockOptions{Title: title, Depth: depth, HeaderStyleName: pdfHeadingStyleName(depth)})
 }
 
 func appendTitleBlocksWithIDAndClasses(blocks *[]pdfTextBlock, title *fb2.Title, depth int, id string, styleClasses string) {
-	appendTitleBlocksFull(blocks, nil, title, depth, id, pdfHeadingStyleName(depth), styleClasses, strings.TrimSpace(styleClasses), false)
+	appendTitleBlocksWithOptions(blocks, pdfTitleBlockOptions{
+		Title:           title,
+		Depth:           depth,
+		ID:              id,
+		HeaderStyleName: pdfHeadingStyleName(depth),
+		StyleClasses:    styleClasses,
+		ContextClasses:  strings.TrimSpace(styleClasses),
+	})
 }
 
 func appendTitleBlocksWithIDHeaderAndClasses(blocks *[]pdfTextBlock, title *fb2.Title, depth int, id string, headerStyleName string, styleClasses string) {
-	appendTitleBlocksFull(blocks, nil, title, depth, id, headerStyleName, styleClasses, strings.TrimSpace(styleClasses), false)
+	appendTitleBlocksWithOptions(blocks, pdfTitleBlockOptions{
+		Title:           title,
+		Depth:           depth,
+		ID:              id,
+		HeaderStyleName: headerStyleName,
+		StyleClasses:    styleClasses,
+		ContextClasses:  strings.TrimSpace(styleClasses),
+	})
 }
 
 func appendParagraphBlockWithClasses(blocks *[]pdfTextBlock, kind pdfBlockKind, paragraph *fb2.Paragraph, depth int, styleClasses string) {

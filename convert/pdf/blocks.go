@@ -141,7 +141,14 @@ func insertAnnotationPageBlocks(blocks []pdfTextBlock, toc []*structure.TOCEntry
 		title = "Annotation"
 	}
 	annotationBlocks := []pdfTextBlock{{Kind: pdfBlockPageBreak, ID: "annotation-page", Text: title}}
-	appendTitleBlocksFull(&annotationBlocks, c, pdfTitleFromStrings(title), 1, "annotation-page-title", pdfStyleAnnotationTitle, "", pdfStyleAnnotationTitle, false)
+	appendTitleBlocksWithOptions(&annotationBlocks, pdfTitleBlockOptions{
+		Content:         c,
+		Title:           pdfTitleFromStrings(title),
+		Depth:           1,
+		ID:              "annotation-page-title",
+		HeaderStyleName: pdfStyleAnnotationTitle,
+		ContextClasses:  pdfStyleAnnotationTitle,
+	})
 	appendFlowBlocks(&annotationBlocks, c, c.Book.Description.TitleInfo.Annotation.Items, 1, nil, pdfStyleAnnotation, pdfStyleAnnotation, false)
 	out := make([]pdfTextBlock, 0, len(annotationBlocks)+len(blocks))
 	out = append(out, annotationBlocks...)
@@ -185,7 +192,13 @@ func buildTOCPageBlocksWithTitle(title *fb2.Title, entries []*structure.TOCEntry
 		return nil
 	}
 	blocks := []pdfTextBlock{{Kind: pdfBlockPageBreak, ID: "toc-page", Text: "Contents"}}
-	appendTitleBlocksFull(&blocks, nil, title, 1, "toc-page-title", pdfStyleTOCTitle, "", pdfStyleTOCTitle, false)
+	appendTitleBlocksWithOptions(&blocks, pdfTitleBlockOptions{
+		Title:           title,
+		Depth:           1,
+		ID:              "toc-page-title",
+		HeaderStyleName: pdfStyleTOCTitle,
+		ContextClasses:  pdfStyleTOCTitle,
+	})
 	var appendTOCNodeBlocks func(nodes []*tocnav.Node)
 	appendTOCNodeBlocks = func(nodes []*tocnav.Node) {
 		for _, node := range nodes {

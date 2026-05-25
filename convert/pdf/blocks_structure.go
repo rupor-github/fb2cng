@@ -23,7 +23,14 @@ func appendBodyIntroBlocks(blocks *[]pdfTextBlock, c *content.Content, body *fb2
 	if body.Title != nil && body.Main() {
 		appendVignette(blocks, book, common.VignettePosBookTitleTop, pdfStyleBodyTitle, pdfStyleBodyTitle, true)
 	}
-	appendTitleBlocksFull(blocks, c, body.Title, 1, "", pdfStyleBodyTitleHeader, pdfStyleBodyTitle, strings.TrimSpace(pdfStyleBodyTitle), false)
+	appendTitleBlocksWithOptions(blocks, pdfTitleBlockOptions{
+		Content:         c,
+		Title:           body.Title,
+		Depth:           1,
+		HeaderStyleName: pdfStyleBodyTitleHeader,
+		StyleClasses:    pdfStyleBodyTitle,
+		ContextClasses:  strings.TrimSpace(pdfStyleBodyTitle),
+	})
 	if body.Title != nil && body.Main() {
 		appendVignette(blocks, book, common.VignettePosBookTitleBottom, pdfStyleBodyTitle, pdfStyleBodyTitle, true)
 	}
@@ -136,7 +143,16 @@ func appendSectionBlocks(blocks *[]pdfTextBlock, c *content.Content, section *fb
 	if section.Title != nil {
 		appendTitleVignetteBlock(blocks, book, depth, true, titleClasses, titleContextClasses)
 	}
-	appendTitleBlocksFull(blocks, c, section.Title, depth, section.ID, headerStyle, titleClasses, titleContextClasses, stripRootHorizontalMargins)
+	appendTitleBlocksWithOptions(blocks, pdfTitleBlockOptions{
+		Content:                    c,
+		Title:                      section.Title,
+		Depth:                      depth,
+		ID:                         section.ID,
+		HeaderStyleName:            headerStyle,
+		StyleClasses:               titleClasses,
+		ContextClasses:             titleContextClasses,
+		StripRootHorizontalMargins: stripRootHorizontalMargins,
+	})
 	if section.Title != nil {
 		appendTitleVignetteBlock(blocks, book, depth, false, titleClasses, titleContextClasses)
 	}
@@ -184,12 +200,32 @@ func appendTitleParagraphBlocks(blocks *[]pdfTextBlock, c *content.Content, titl
 	}
 }
 
-func appendTitleBlocksFull(blocks *[]pdfTextBlock, c *content.Content, title *fb2.Title, depth int, id string, headerStyleName string, styleClasses string, contextClasses string, stripRootHorizontalMargins bool) {
+type pdfTitleBlockOptions struct {
+	Content                    *content.Content
+	Title                      *fb2.Title
+	Depth                      int
+	ID                         string
+	HeaderStyleName            string
+	StyleClasses               string
+	ContextClasses             string
+	StripRootHorizontalMargins bool
+}
+
+func appendTitleBlocksWithOptions(blocks *[]pdfTextBlock, opts pdfTitleBlockOptions) {
+	title := opts.Title
 	if title == nil {
 		return
 	}
-	blockStripRootHorizontalMargins := stripRootHorizontalMargins || titleWrapperStripRootHorizontalMargins(styleClasses)
-	anchorID := id
+	content := opts.Content
+	depth := opts.Depth
+	styleClasses := opts.StyleClasses
+	contextClasses := opts.ContextClasses
+	headerStyleName := opts.HeaderStyleName
+	if headerStyleName == "" {
+		headerStyleName = pdfHeadingStyleName(depth)
+	}
+	blockStripRootHorizontalMargins := opts.StripRootHorizontalMargins || titleWrapperStripRootHorizontalMargins(styleClasses)
+	anchorID := opts.ID
 	firstParagraph := true
 	prevWasImageOnlyHeadingParagraph := false
 	for i := range title.Items {
@@ -211,9 +247,9 @@ func appendTitleBlocksFull(blocks *[]pdfTextBlock, c *content.Content, title *fb
 			continue
 		}
 		text, links := paragraphTextAndLinks(item.Paragraph)
-		runs := paragraphInlineRunsWithBacklinks(item.Paragraph, c, pdfRegisterDefaultFootnoteBacklinks(c, styleClasses, contextClasses))
+		runs := paragraphInlineRunsWithBacklinks(item.Paragraph, content, pdfRegisterDefaultFootnoteBacklinks(content, styleClasses, contextClasses))
 		classes := joinStyleClasses(item.Paragraph.Style, styleClasses, positionClass)
-		runs, links = pdfDisablePrintedFootnoteLinks(c, classes, contextClasses, runs, links)
+		runs, links = pdfDisablePrintedFootnoteLinks(content, classes, contextClasses, runs, links)
 		if prevWasImageOnlyHeadingParagraph {
 			classes = joinStyleClasses(classes, pdfStyleTitleAfterImage)
 		}

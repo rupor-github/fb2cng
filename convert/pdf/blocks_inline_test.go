@@ -73,10 +73,16 @@ func TestInlineSegmentsTextAndLinksNormalizesWhitespaceAndLinkRanges(t *testing.
 func TestTitleBlocksPreserveInlineLinkFormatting(t *testing.T) {
 	var blocks []pdfTextBlock
 	c := testContentWithFootnotes("note")
-	appendTitleBlocksFull(&blocks, c, &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
-		{Text: "Heading"},
-		{Kind: fb2.InlineLink, Href: "#note", Children: []fb2.InlineSegment{{Text: "1.1"}}},
-	}}}}}, 1, "heading-id", pdfHeadingStyleName(1), "", "", false)
+	appendTitleBlocksWithOptions(&blocks, pdfTitleBlockOptions{
+		Content: c,
+		Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
+			{Text: "Heading"},
+			{Kind: fb2.InlineLink, Href: "#note", Children: []fb2.InlineSegment{{Text: "1.1"}}},
+		}}}}},
+		Depth:           1,
+		ID:              "heading-id",
+		HeaderStyleName: pdfHeadingStyleName(1),
+	})
 
 	if len(blocks) != 1 {
 		t.Fatalf("title blocks = %#v, want one heading", blocks)
@@ -528,7 +534,12 @@ func TestTitleBlocksClassifyFootnotesByContent(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var blocks []pdfTextBlock
-			appendTitleBlocksFull(&blocks, c, &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: tt.segments}}}}, tt.depth, "", pdfHeadingStyleName(tt.depth), "", "", false)
+			appendTitleBlocksWithOptions(&blocks, pdfTitleBlockOptions{
+				Content:         c,
+				Title:           &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: tt.segments}}}},
+				Depth:           tt.depth,
+				HeaderStyleName: pdfHeadingStyleName(tt.depth),
+			})
 			if len(blocks) != 1 || len(blocks[0].Runs) != 2 {
 				t.Fatalf("title blocks = %#v, want one heading with two runs", blocks)
 			}
