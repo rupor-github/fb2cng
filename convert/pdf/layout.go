@@ -339,51 +339,58 @@ func (l *pdfPageLayout) renderTextBlock(r *pdfTextBlockRender) error {
 	return nil
 }
 
-func (l *pdfPageLayout) renderTextLines(r *pdfTextBlockRender) error {
-	for lineIndex, line := range r.lines {
-		if !l.pageHasText || l.previousRenderedImage {
-			l.y -= r.style.Paragraph.FontSize
-			l.previousRenderedImage = false
-		}
-		if l.printedFootnoteReserve.Enabled() {
-			lineRefs := l.printedFootnoteReserve.LineRefs(line)
-			if len(lineRefs) > 0 {
-				reserve, err := l.printedFootnoteReserve.ReserveWithAdditionalRefs(lineRefs)
+func (l *pdfPageLayout) prepareTextLinePage(r *pdfTextBlockRender, line paragraphLine, lineIndex int) error {
+	if !l.pageHasText || l.previousRenderedImage {
+		l.y -= r.style.Paragraph.FontSize
+		l.previousRenderedImage = false
+	}
+	if l.printedFootnoteReserve.Enabled() {
+		lineRefs := l.printedFootnoteReserve.LineRefs(line)
+		if len(lineRefs) > 0 {
+			reserve, err := l.printedFootnoteReserve.ReserveWithAdditionalRefs(lineRefs)
+			if err != nil {
+				return err
+			}
+			reservedBottom := pdfReservedContentBottom(l.contentBottom, l.top, reserve)
+			if l.pageHasText && l.y-r.style.Paragraph.FontSize < reservedBottom {
+				addPDFBlockDecoration(r.fragmentPage, r.style, r.backgroundX, r.fragmentTop, r.backgroundWidth, l.y)
+				l.newTextPage()
+				r.fragmentPage = l.page
+				r.fragmentTop = l.y + r.style.Paragraph.FontSize
+				l.y -= r.style.Paragraph.FontSize
+				reserve, err = l.printedFootnoteReserve.ReserveWithAdditionalRefs(lineRefs)
 				if err != nil {
 					return err
 				}
-				reservedBottom := pdfReservedContentBottom(l.contentBottom, l.top, reserve)
-				if l.pageHasText && l.y-r.style.Paragraph.FontSize < reservedBottom {
-					addPDFBlockDecoration(r.fragmentPage, r.style, r.backgroundX, r.fragmentTop, r.backgroundWidth, l.y)
-					l.newTextPage()
-					r.fragmentPage = l.page
-					r.fragmentTop = l.y + r.style.Paragraph.FontSize
-					l.y -= r.style.Paragraph.FontSize
-					reserve, err = l.printedFootnoteReserve.ReserveWithAdditionalRefs(lineRefs)
-					if err != nil {
-						return err
-					}
-					reservedBottom = pdfReservedContentBottom(l.contentBottom, l.top, reserve)
-				}
-				l.printedFootnoteReserve.CommitAdditionalRefs(lineRefs, reserve)
-				l.bottom = max(l.bottom, reservedBottom)
+				reservedBottom = pdfReservedContentBottom(l.contentBottom, l.top, reserve)
 			}
+			l.printedFootnoteReserve.CommitAdditionalRefs(lineRefs, reserve)
+			l.bottom = max(l.bottom, reservedBottom)
 		}
-		if l.y-r.style.Paragraph.FontSize < l.bottom {
-			if l.pageHasText {
-				addPDFBlockDecoration(r.fragmentPage, r.style, r.backgroundX, r.fragmentTop, r.backgroundWidth, l.y)
-			}
-			l.newTextPage()
-			r.fragmentPage = l.page
-			r.fragmentTop = l.y + r.style.Paragraph.FontSize
-			l.y -= r.style.Paragraph.FontSize
-		}
-		remainingAfterLine := len(r.lines) - lineIndex - 1
-		if remainingAfterLine > 0 && remainingAfterLine < r.style.Widows && l.y-r.lineHeight-r.style.Paragraph.FontSize < l.bottom {
+	}
+	if l.y-r.style.Paragraph.FontSize < l.bottom {
+		if l.pageHasText {
 			addPDFBlockDecoration(r.fragmentPage, r.style, r.backgroundX, r.fragmentTop, r.backgroundWidth, l.y)
-			l.newTextPage()
-			r.fragmentPage = l.page
-			r.fragmentTop = l.y
+		}
+		l.newTextPage()
+		r.fragmentPage = l.page
+		r.fragmentTop = l.y + r.style.Paragraph.FontSize
+		l.y -= r.style.Paragraph.FontSize
+	}
+	remainingAfterLine := len(r.lines) - lineIndex - 1
+	if remainingAfterLine > 0 && remainingAfterLine < r.style.Widows && l.y-r.lineHeight-r.style.Paragraph.FontSize < l.bottom {
+		addPDFBlockDecoration(r.fragmentPage, r.style, r.backgroundX, r.fragmentTop, r.backgroundWidth, l.y)
+		l.newTextPage()
+		r.fragmentPage = l.page
+		r.fragmentTop = l.y
+	}
+	return nil
+}
+
+func (l *pdfPageLayout) renderTextLines(r *pdfTextBlockRender) error {
+	for lineIndex, line := range r.lines {
+		if err := l.prepareTextLinePage(r, line, lineIndex); err != nil {
+			return err
 		}
 		x := r.blockLeft + r.style.MarginLeft + r.style.PaddingLeft + line.Indent
 		available := r.blockWidth - line.Indent
