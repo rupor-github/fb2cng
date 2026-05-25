@@ -3,7 +3,6 @@ package pdf
 import "strings"
 
 func layoutPDFPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]shapedGlyph, error) {
-	const margin = 24.0
 	used := make(map[pdfFontKey]map[uint16]shapedGlyph)
 	pages := make([]pdfPage, 0, 2)
 
@@ -107,8 +106,8 @@ func layoutPDFPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]s
 		styles = newPDFStyleResolver(nil, nil)
 	}
 	blockStyles := styles.collapsedBlockStylesWithImages(doc.Blocks, doc.Images)
-	contentLeft, contentRight, contentTop, contentBottom := pdfPageContentMargins(doc, styles, margin)
-	rootlessContentLeft, rootlessContentRight, _, _ := pdfPageContentMarginsWithoutRootHorizontal(doc, styles, margin)
+	contentLeft, contentRight, contentTop, contentBottom := pdfPageContentMargins(doc, styles, pdfDefaultPageMargin)
+	rootlessContentLeft, rootlessContentRight, _, _ := pdfPageContentMarginsWithoutRootHorizontal(doc, styles, pdfDefaultPageMargin)
 	contentWidth := max(doc.PageWidth-contentLeft-contentRight, 12)
 	rootlessContentWidth := max(doc.PageWidth-rootlessContentLeft-rootlessContentRight, 12)
 	printedFootnoteReserve := newPDFDynamicPrintedFootnoteReserveTracker(doc, styles, contentLeft, contentWidth, contentBottom)

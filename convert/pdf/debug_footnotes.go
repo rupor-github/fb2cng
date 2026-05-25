@@ -87,8 +87,7 @@ func pdfDebugPrintedFootnotesReserveOverflow(doc pdfDocumentSpec, reserved pdfPr
 	if styles == nil {
 		styles = newPDFStyleResolver(nil, nil)
 	}
-	const margin = 24.0
-	contentLeft, contentRight, contentTop, contentBottom := pdfPageContentMargins(doc, styles, margin)
+	contentLeft, contentRight, contentTop, contentBottom := pdfPageContentMargins(doc, styles, pdfDefaultPageMargin)
 	contentWidth := max(doc.PageWidth-contentLeft-contentRight, 12)
 	separator := pdfPrintedFootnoteSeparatorMetricsForArea(doc, styles, contentLeft, contentWidth, contentBottom, reserved.FootnoteTextHeight)
 	maxReserve := max(doc.PageHeight-contentTop-contentBottom-pdfBaseLineHeight, 0)

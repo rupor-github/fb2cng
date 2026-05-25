@@ -29,12 +29,11 @@ func layoutPDFPrintedFootnoteQueue(
 	if areaHeight <= 0 {
 		areaHeight = 1
 	}
-	const margin = 24.0
 	styles := doc.Styles
 	if styles == nil {
 		styles = newPDFStyleResolver(nil, nil)
 	}
-	_, _, contentTop, contentBottom := pdfPageContentMargins(doc, styles, margin)
+	_, _, contentTop, contentBottom := pdfPageContentMargins(doc, styles, pdfDefaultPageMargin)
 	subDoc := doc
 	subDoc.PageHeight = contentTop + contentBottom + areaHeight
 	subDoc.Blocks = blocks

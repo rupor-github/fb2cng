@@ -8,6 +8,7 @@ const (
 	pdfKP3PixelsPerEm    = 16.0
 	pdfKP3ContentWidthPx = 512.0
 	pdfMinBlockWidth     = 12.0
+	pdfDefaultPageMargin = 24.0
 
 	// Native PDF defaults are chosen to match Kindle Previewer/KP3's default
 	// fixed-screen visual rhythm rather than a print-style 12pt baseline. In KFX,

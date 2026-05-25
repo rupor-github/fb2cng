@@ -58,8 +58,7 @@ func pdfPrintedFootnoteSourceTextAreaHeight(
 	if !ok {
 		return defaultHeight
 	}
-	const margin = 24.0
-	contentLeft, contentRight, contentTop, contentBottom := pdfPageContentMargins(doc, styles, margin)
+	contentLeft, contentRight, contentTop, contentBottom := pdfPageContentMargins(doc, styles, pdfDefaultPageMargin)
 	contentWidth := max(doc.PageWidth-contentLeft-contentRight, 12)
 	contentHeight := max(doc.PageHeight-contentTop-contentBottom, 0)
 	if contentHeight <= 0 {

@@ -95,12 +95,11 @@ func appendPDFPrintedFootnotePagePlans(
 		return pages
 	}
 
-	const margin = 24.0
 	styles := doc.Styles
 	if styles == nil {
 		styles = newPDFStyleResolver(nil, nil)
 	}
-	contentLeft, contentRight, contentTop, contentBottom := pdfPageContentMargins(doc, styles, margin)
+	contentLeft, contentRight, contentTop, contentBottom := pdfPageContentMargins(doc, styles, pdfDefaultPageMargin)
 	contentWidth := max(doc.PageWidth-contentLeft-contentRight, 12)
 	separator := pdfPrintedFootnoteSeparatorMetricsForArea(doc, styles, contentLeft, contentWidth, contentBottom, footnoteTextHeight)
 
