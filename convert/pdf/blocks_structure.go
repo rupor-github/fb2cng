@@ -159,7 +159,12 @@ func appendSectionBlocks(blocks *[]pdfTextBlock, c *content.Content, section *fb
 	for i := range section.Epigraphs {
 		appendEpigraphBlocksFull(blocks, c, &section.Epigraphs[i], contextClasses, stripRootHorizontalMargins)
 	}
-	appendImageBlockFull(blocks, section.Image, section.ID, "", contextClasses, stripRootHorizontalMargins)
+	appendImageBlockWithOptions(blocks, pdfImageBlockOptions{
+		Image:                      section.Image,
+		FallbackID:                 section.ID,
+		ContextClasses:             contextClasses,
+		StripRootHorizontalMargins: stripRootHorizontalMargins,
+	})
 	if section.Annotation != nil {
 		annotationContextClasses := joinStyleClasses(contextClasses, pdfStyleAnnotation)
 		appendFlowBlocks(blocks, c, section.Annotation.Items, depth, splitSections, pdfStyleAnnotation, annotationContextClasses, stripRootHorizontalMargins)
@@ -241,7 +246,15 @@ func appendTitleBlocksWithOptions(blocks *[]pdfTextBlock, opts pdfTitleBlockOpti
 		positionClass := titleParagraphPositionStyleClass(headerStyleName, firstParagraph)
 		firstParagraph = false
 		if imageID, alt, ok := paragraphImageOnly(item.Paragraph); ok {
-			appendStyledImage(blocks, imageID, anchorID, alt, pdfStyleImage, joinStyleClasses(headerStyleName, item.Paragraph.Style, styleClasses, positionClass, pdfStyleHeadingImage), contextClasses, blockStripRootHorizontalMargins)
+			appendStyledImageWithOptions(blocks, pdfStyledImageBlockOptions{
+				ImageID:                    imageID,
+				AnchorID:                   anchorID,
+				Alt:                        alt,
+				StyleName:                  pdfStyleImage,
+				StyleClasses:               joinStyleClasses(headerStyleName, item.Paragraph.Style, styleClasses, positionClass, pdfStyleHeadingImage),
+				ContextClasses:             contextClasses,
+				StripRootHorizontalMargins: blockStripRootHorizontalMargins,
+			})
 			anchorID = ""
 			prevWasImageOnlyHeadingParagraph = true
 			continue
@@ -286,7 +299,12 @@ func appendFlowItem(blocks *[]pdfTextBlock, c *content.Content, item *fb2.FlowIt
 	case fb2.FlowEmptyLine:
 		*blocks = append(*blocks, pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine, StyleClasses: strings.TrimSpace(styleClasses), ContextClasses: strings.TrimSpace(contextClasses), StripRootHorizontalMargins: stripRootHorizontalMargins})
 	case fb2.FlowImage:
-		appendImageBlockFull(blocks, item.Image, "", styleClasses, contextClasses, stripRootHorizontalMargins)
+		appendImageBlockWithOptions(blocks, pdfImageBlockOptions{
+			Image:                      item.Image,
+			StyleClasses:               styleClasses,
+			ContextClasses:             contextClasses,
+			StripRootHorizontalMargins: stripRootHorizontalMargins,
+		})
 	case fb2.FlowSection:
 		if item.Section != nil && splitSections[item.Section.ID] {
 			return
@@ -334,10 +352,19 @@ func appendImageBlock(blocks *[]pdfTextBlock, image *fb2.Image, fallbackID strin
 }
 
 func appendImageBlockWithClasses(blocks *[]pdfTextBlock, image *fb2.Image, fallbackID string, styleClasses string) {
-	appendImageBlockFull(blocks, image, fallbackID, styleClasses, "", false)
+	appendImageBlockWithOptions(blocks, pdfImageBlockOptions{Image: image, FallbackID: fallbackID, StyleClasses: styleClasses})
 }
 
-func appendImageBlockFull(blocks *[]pdfTextBlock, image *fb2.Image, fallbackID string, styleClasses string, contextClasses string, stripRootHorizontalMargins bool) {
+type pdfImageBlockOptions struct {
+	Image                      *fb2.Image
+	FallbackID                 string
+	StyleClasses               string
+	ContextClasses             string
+	StripRootHorizontalMargins bool
+}
+
+func appendImageBlockWithOptions(blocks *[]pdfTextBlock, opts pdfImageBlockOptions) {
+	image := opts.Image
 	if image == nil {
 		return
 	}
@@ -347,27 +374,46 @@ func appendImageBlockFull(blocks *[]pdfTextBlock, image *fb2.Image, fallbackID s
 	}
 	anchorID := image.ID
 	if anchorID == "" {
-		anchorID = fallbackID
+		anchorID = opts.FallbackID
 	}
-	appendStyledImage(blocks, imageID, anchorID, strings.TrimSpace(image.Alt), pdfStyleImage, joinStyleClasses("image-block", strings.TrimSpace(styleClasses)), contextClasses, stripRootHorizontalMargins)
+	appendStyledImageWithOptions(blocks, pdfStyledImageBlockOptions{
+		ImageID:                    imageID,
+		AnchorID:                   anchorID,
+		Alt:                        strings.TrimSpace(image.Alt),
+		StyleName:                  pdfStyleImage,
+		StyleClasses:               joinStyleClasses("image-block", strings.TrimSpace(opts.StyleClasses)),
+		ContextClasses:             opts.ContextClasses,
+		StripRootHorizontalMargins: opts.StripRootHorizontalMargins,
+	})
 }
 
-func appendStyledImage(blocks *[]pdfTextBlock, imageID string, anchorID string, alt string, styleName string, styleClasses string, contextClasses string, stripRootHorizontalMargins bool) {
-	if strings.TrimSpace(imageID) == "" {
+type pdfStyledImageBlockOptions struct {
+	ImageID                    string
+	AnchorID                   string
+	Alt                        string
+	StyleName                  string
+	StyleClasses               string
+	ContextClasses             string
+	StripRootHorizontalMargins bool
+}
+
+func appendStyledImageWithOptions(blocks *[]pdfTextBlock, opts pdfStyledImageBlockOptions) {
+	if strings.TrimSpace(opts.ImageID) == "" {
 		return
 	}
+	styleName := opts.StyleName
 	if strings.TrimSpace(styleName) == "" {
 		styleName = pdfStyleImage
 	}
 	*blocks = append(*blocks, pdfTextBlock{
 		Kind:                       pdfBlockImage,
-		ID:                         anchorID,
-		Text:                       strings.TrimSpace(alt),
+		ID:                         opts.AnchorID,
+		Text:                       strings.TrimSpace(opts.Alt),
 		StyleName:                  styleName,
-		StyleClasses:               strings.TrimSpace(styleClasses),
-		ContextClasses:             strings.TrimSpace(contextClasses),
-		StripRootHorizontalMargins: stripRootHorizontalMargins,
-		ImageID:                    imageID,
+		StyleClasses:               strings.TrimSpace(opts.StyleClasses),
+		ContextClasses:             strings.TrimSpace(opts.ContextClasses),
+		StripRootHorizontalMargins: opts.StripRootHorizontalMargins,
+		ImageID:                    opts.ImageID,
 	})
 }
 
@@ -427,7 +473,13 @@ func appendVignette(blocks *[]pdfTextBlock, book *fb2.FictionBook, position comm
 	if imageID == "" {
 		return
 	}
-	appendStyledImage(blocks, imageID, "", "", pdfStyleImage, joinStyleClasses("image-vignette", "vignette", "vignette-"+position.String(), styleClasses), contextClasses, stripRootHorizontalMargins)
+	appendStyledImageWithOptions(blocks, pdfStyledImageBlockOptions{
+		ImageID:                    imageID,
+		StyleName:                  pdfStyleImage,
+		StyleClasses:               joinStyleClasses("image-vignette", "vignette", "vignette-"+position.String(), styleClasses),
+		ContextClasses:             contextClasses,
+		StripRootHorizontalMargins: stripRootHorizontalMargins,
+	})
 }
 
 func isVignetteBlock(block pdfTextBlock) bool {
@@ -515,7 +567,15 @@ func appendParagraphBlockWithOptions(blocks *[]pdfTextBlock, opts pdfParagraphBl
 			imageStyleName = styleName
 			imageStyleClasses = joinStyleClasses(imageStyleClasses, styleClasses)
 		}
-		appendStyledImage(blocks, imageID, paragraph.ID, alt, imageStyleName, imageStyleClasses, contextClasses, stripRootHorizontalMargins)
+		appendStyledImageWithOptions(blocks, pdfStyledImageBlockOptions{
+			ImageID:                    imageID,
+			AnchorID:                   paragraph.ID,
+			Alt:                        alt,
+			StyleName:                  imageStyleName,
+			StyleClasses:               imageStyleClasses,
+			ContextClasses:             contextClasses,
+			StripRootHorizontalMargins: stripRootHorizontalMargins,
+		})
 		return
 	}
 	text, links := paragraphTextAndLinks(paragraph)
