@@ -31,6 +31,11 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 	if style == nil {
 		return
 	}
+	applyPDFInitialStyleProperties(style, props)
+	applyPDFDeferredStyleProperties(style, props)
+}
+
+func applyPDFInitialStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.Value) {
 	if value, ok := props["font-family"]; ok {
 		if family, ok := pdfCSSFontFamily(value); ok {
 			style.Paragraph.FontFamily = family
@@ -130,6 +135,9 @@ func applyPDFStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.
 			style.Paragraph.HasNoWrap = true
 		}
 	}
+}
+
+func applyPDFDeferredStyleProperties(style *pdfBlockResolvedStyle, props map[string]css.Value) {
 	names := make([]string, 0, len(props))
 	for name := range props {
 		if _, initial := pdfCSSInitialStyleProperties[strings.ToLower(name)]; !initial {
