@@ -1115,7 +1115,7 @@ func paragraphJustificationSpacing(style paragraphStyle, last bool, width, avail
 	if remaining < 0 {
 		return paragraphJustificationShrink(style, -remaining, gaps, glyphs)
 	}
-	wordCap := max(style.FontSize*0.40, 3.0)
+	wordCap, charCap := paragraphJustificationStretchCaps(style.FontSize)
 	wordSpacing := min(remaining/float64(gaps), wordCap)
 	remaining -= wordSpacing * float64(gaps)
 	if remaining <= 0 || glyphs < 2 {
@@ -1128,7 +1128,6 @@ func paragraphJustificationSpacing(style paragraphStyle, last bool, width, avail
 	// margin even without obvious holes between words. The caps are soft: if the
 	// paragraph breaker selected this line, keep text-align: justify semantics and
 	// put any residual stretch back into word spaces so the right edge remains flush.
-	charCap := 0.25
 	charSpacing := min(remaining/float64(glyphs-1), charCap)
 	remaining -= charSpacing * float64(glyphs-1)
 	if remaining > pdfLineWidthTolerance {
@@ -1138,7 +1137,7 @@ func paragraphJustificationSpacing(style paragraphStyle, last bool, width, avail
 }
 
 func paragraphJustificationShrink(style paragraphStyle, overflow float64, gaps int, glyphs int) (float64, float64) {
-	wordCap := max(style.FontSize*0.18, 1.0)
+	wordCap, charCap := paragraphJustificationShrinkCaps(style.FontSize)
 	wordShrink := min(overflow/float64(gaps), wordCap)
 	overflow -= wordShrink * float64(gaps)
 	if overflow <= 0 || glyphs < 2 {
@@ -1147,9 +1146,16 @@ func paragraphJustificationShrink(style paragraphStyle, overflow float64, gaps i
 
 	// Keep negative tracking conservative: it is a last small correction after
 	// spaces have absorbed most of the shrink, not a substitute for better breaks.
-	charCap := min(max(style.FontSize*0.025, 0.12), 0.35)
 	charShrink := min(overflow/float64(glyphs-1), charCap)
 	return -wordShrink, -charShrink
+}
+
+func paragraphJustificationStretchCaps(fontSize float64) (float64, float64) {
+	return max(fontSize*0.40, 3.0), 0.25
+}
+
+func paragraphJustificationShrinkCaps(fontSize float64) (float64, float64) {
+	return max(fontSize*0.18, 1.0), min(max(fontSize*0.025, 0.12), 0.35)
 }
 
 func joinUnits(units []paragraphUnit, hyphenAfter bool) string {

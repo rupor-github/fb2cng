@@ -202,7 +202,7 @@ func pdfDebugJustificationStretchDecision(line pdfPageLine, residual float64, gl
 	if gaps <= 0 || residual <= pdfLineWidthTolerance {
 		return "justified_no_adjustment"
 	}
-	wordCap := max(line.FontSize*0.40, 3.0)
+	wordCap, charCap := paragraphJustificationStretchCaps(line.FontSize)
 	wordCapped := residual/float64(gaps) > wordCap
 	remaining := residual - min(residual/float64(gaps), wordCap)*float64(gaps)
 	if remaining <= pdfLineWidthTolerance || glyphCount < 2 {
@@ -211,7 +211,6 @@ func pdfDebugJustificationStretchDecision(line pdfPageLine, residual float64, gl
 		}
 		return "stretch_word_spacing"
 	}
-	charCap := 0.25
 	charCapped := remaining/float64(glyphCount-1) > charCap
 	if wordCapped && charCapped {
 		return "stretch_word_and_char_spacing_capped"
@@ -229,7 +228,7 @@ func pdfDebugJustificationShrinkDecision(line pdfPageLine, overflow float64, gly
 	if gaps <= 0 || overflow <= pdfLineWidthTolerance {
 		return "justified_no_adjustment"
 	}
-	wordCap := max(line.FontSize*0.18, 1.0)
+	wordCap, charCap := paragraphJustificationShrinkCaps(line.FontSize)
 	wordCapped := overflow/float64(gaps) > wordCap
 	remaining := overflow - min(overflow/float64(gaps), wordCap)*float64(gaps)
 	if remaining <= pdfLineWidthTolerance || glyphCount < 2 {
@@ -238,7 +237,6 @@ func pdfDebugJustificationShrinkDecision(line pdfPageLine, overflow float64, gly
 		}
 		return "shrink_word_spacing"
 	}
-	charCap := min(max(line.FontSize*0.025, 0.12), 0.35)
 	charCapped := remaining/float64(glyphCount-1) > charCap
 	if wordCapped && charCapped {
 		return "shrink_word_and_char_spacing_capped"
@@ -257,12 +255,13 @@ func pdfDebugPopulateJustificationCaps(line *pdfDebugJustificationLine, fontSize
 		return
 	}
 	if line.Residual >= 0 {
-		line.WordSpacingCap = max(fontSize*0.40, 3.0)
+		wordCap, charCap := paragraphJustificationStretchCaps(fontSize)
+		line.WordSpacingCap = wordCap
 		wordSpacing := min(line.Residual/float64(line.JustificationGaps), line.WordSpacingCap)
 		line.WordSpacingCapped = line.Residual/float64(line.JustificationGaps) > line.WordSpacingCap
 		line.ResidualAfterWordSpacing = line.Residual - wordSpacing*float64(line.JustificationGaps)
 		if line.ResidualAfterWordSpacing > pdfLineWidthTolerance && line.GlyphCount > 1 {
-			line.CharSpacingCap = 0.25
+			line.CharSpacingCap = charCap
 			charSpacing := min(line.ResidualAfterWordSpacing/float64(line.GlyphCount-1), line.CharSpacingCap)
 			line.CharSpacingCapped = line.ResidualAfterWordSpacing/float64(line.GlyphCount-1) > line.CharSpacingCap
 			line.ResidualAfterCharSpacing = line.ResidualAfterWordSpacing - charSpacing*float64(line.GlyphCount-1)
@@ -270,12 +269,13 @@ func pdfDebugPopulateJustificationCaps(line *pdfDebugJustificationLine, fontSize
 		return
 	}
 	overflow := -line.Residual
-	line.WordSpacingCap = max(fontSize*0.18, 1.0)
+	wordCap, charCap := paragraphJustificationShrinkCaps(fontSize)
+	line.WordSpacingCap = wordCap
 	wordShrink := min(overflow/float64(line.JustificationGaps), line.WordSpacingCap)
 	line.WordSpacingCapped = overflow/float64(line.JustificationGaps) > line.WordSpacingCap
 	line.ResidualAfterWordSpacing = -(overflow - wordShrink*float64(line.JustificationGaps))
 	if -line.ResidualAfterWordSpacing > pdfLineWidthTolerance && line.GlyphCount > 1 {
-		line.CharSpacingCap = min(max(fontSize*0.025, 0.12), 0.35)
+		line.CharSpacingCap = charCap
 		charShrink := min((-line.ResidualAfterWordSpacing)/float64(line.GlyphCount-1), line.CharSpacingCap)
 		line.CharSpacingCapped = (-line.ResidualAfterWordSpacing)/float64(line.GlyphCount-1) > line.CharSpacingCap
 		line.ResidualAfterCharSpacing = line.ResidualAfterWordSpacing + charShrink*float64(line.GlyphCount-1)
