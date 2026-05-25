@@ -185,257 +185,265 @@ func (l *pdfPageLayout) layoutBlocks() error {
 			continue
 		}
 
-		if l.titleGroup.active && !isTitleHeaderBlock(block) {
-			l.titleGroup.reset()
-		}
-		style.Paragraph.Hyphenator = l.doc.Hyphenator
-		blockWidth := blockContentWidth(blockWidthLimit, style)
-		if block.Kind == pdfBlockEmptyLine {
-			continue
-		}
-		text := strings.TrimSpace(block.Text)
-		if text == "" && !inlineRunsRenderable(block.Runs) {
-			continue
-		}
-		face, fontKey, err := fontForStyle(l.doc.Fonts, style.Paragraph)
-		if err != nil {
+		if err := l.layoutTextBlock(blockIndex, block, style, blockLeft, blockWidthLimit); err != nil {
 			return err
-		}
-		runs := inlineRunsWithContext(block.Runs, inlineRunContextClassesForBlock(block))
-		lineHeight := pdfEffectiveParagraphLineHeight(style.Paragraph)
-		blockSpaceBefore := func() float64 { return pdfEffectiveBlockSpaceBefore(style, l.pageHasText, l.y, l.top) }
-		firstBaselineY := func() float64 {
-			baseline := l.y - blockSpaceBefore() - style.PaddingTop
-			if !l.pageHasText || l.previousRenderedImage {
-				baseline -= style.Paragraph.FontSize
-			}
-			return baseline
-		}
-		layoutTextBlock := func() ([]paragraphLine, pdfDropcapLayout, bool, error) {
-			baseline := firstBaselineY()
-			if pdfDropcapExpiredForLine(l.activeDropcap, l.page, baseline, lineHeight, style.Paragraph.FontSize) {
-				l.activeDropcap = nil
-			}
-			shape := pdfActiveDropcapShape(l.activeDropcap, l.page, block, baseline, style.Paragraph)
-			layoutText := block.Text
-			layoutRuns := runs
-			var dropcap pdfDropcapLayout
-			dropcapOK := false
-			if pdfBlockStartsDropcap(block) {
-				var err error
-				dropcap, dropcapOK, err = buildPDFDropcapLayout(l.doc, l.styles, block, style.Paragraph, face, runs, blockWidth, firstBaselineY())
-				if err != nil {
-					return nil, pdfDropcapLayout{}, false, err
-				}
-				if dropcapOK {
-					shape = repeatPDFDropcapInset(dropcap.ExclusionWidth, dropcap.Lines)
-					layoutText = dropcap.BodyText
-					layoutRuns = dropcap.BodyRuns
-				}
-			}
-			lines, err := layoutInlineWithShape(l.doc, l.doc.Fonts, l.styles, face, layoutText, layoutRuns, style.Paragraph, blockWidth, shape)
-			return lines, dropcap, dropcapOK, err
-		}
-		lines, dropcap, dropcapOK, err := layoutTextBlock()
-		if err != nil {
-			return err
-		}
-		if len(lines) == 0 && !dropcapOK {
-			continue
 		}
 
-		textHeight := float64(len(lines)) * lineHeight
-		if dropcapOK {
-			textHeight = max(textHeight, dropcap.ReservedHeight)
+	}
+
+	return nil
+}
+
+func (l *pdfPageLayout) layoutTextBlock(blockIndex int, block pdfTextBlock, style pdfBlockResolvedStyle, blockLeft, blockWidthLimit float64) error {
+	if l.titleGroup.active && !isTitleHeaderBlock(block) {
+		l.titleGroup.reset()
+	}
+	style.Paragraph.Hyphenator = l.doc.Hyphenator
+	blockWidth := blockContentWidth(blockWidthLimit, style)
+	if block.Kind == pdfBlockEmptyLine {
+		return nil
+	}
+	text := strings.TrimSpace(block.Text)
+	if text == "" && !inlineRunsRenderable(block.Runs) {
+		return nil
+	}
+	face, fontKey, err := fontForStyle(l.doc.Fonts, style.Paragraph)
+	if err != nil {
+		return err
+	}
+	runs := inlineRunsWithContext(block.Runs, inlineRunContextClassesForBlock(block))
+	lineHeight := pdfEffectiveParagraphLineHeight(style.Paragraph)
+	blockSpaceBefore := func() float64 { return pdfEffectiveBlockSpaceBefore(style, l.pageHasText, l.y, l.top) }
+	firstBaselineY := func() float64 {
+		baseline := l.y - blockSpaceBefore() - style.PaddingTop
+		if !l.pageHasText || l.previousRenderedImage {
+			baseline -= style.Paragraph.FontSize
 		}
-		needed := blockSpaceBefore() + style.PaddingTop + textHeight + style.PaddingBottom
-		if dropcapOK && l.pageHasText {
-			requiredDropcapLines := max(dropcap.Lines, 1)
-			if countFittingLines(firstBaselineY(), l.bottom, style.Paragraph.FontSize, lineHeight) < requiredDropcapLines {
+		return baseline
+	}
+	shapeTextBlock := func() ([]paragraphLine, pdfDropcapLayout, bool, error) {
+		baseline := firstBaselineY()
+		if pdfDropcapExpiredForLine(l.activeDropcap, l.page, baseline, lineHeight, style.Paragraph.FontSize) {
+			l.activeDropcap = nil
+		}
+		shape := pdfActiveDropcapShape(l.activeDropcap, l.page, block, baseline, style.Paragraph)
+		layoutText := block.Text
+		layoutRuns := runs
+		var dropcap pdfDropcapLayout
+		dropcapOK := false
+		if pdfBlockStartsDropcap(block) {
+			var err error
+			dropcap, dropcapOK, err = buildPDFDropcapLayout(l.doc, l.styles, block, style.Paragraph, face, runs, blockWidth, firstBaselineY())
+			if err != nil {
+				return nil, pdfDropcapLayout{}, false, err
+			}
+			if dropcapOK {
+				shape = repeatPDFDropcapInset(dropcap.ExclusionWidth, dropcap.Lines)
+				layoutText = dropcap.BodyText
+				layoutRuns = dropcap.BodyRuns
+			}
+		}
+		lines, err := layoutInlineWithShape(l.doc, l.doc.Fonts, l.styles, face, layoutText, layoutRuns, style.Paragraph, blockWidth, shape)
+		return lines, dropcap, dropcapOK, err
+	}
+	lines, dropcap, dropcapOK, err := shapeTextBlock()
+	if err != nil {
+		return err
+	}
+	if len(lines) == 0 && !dropcapOK {
+		return nil
+	}
+
+	textHeight := float64(len(lines)) * lineHeight
+	if dropcapOK {
+		textHeight = max(textHeight, dropcap.ReservedHeight)
+	}
+	needed := blockSpaceBefore() + style.PaddingTop + textHeight + style.PaddingBottom
+	if dropcapOK && l.pageHasText {
+		requiredDropcapLines := max(dropcap.Lines, 1)
+		if countFittingLines(firstBaselineY(), l.bottom, style.Paragraph.FontSize, lineHeight) < requiredDropcapLines {
+			l.newTextPage()
+		}
+	}
+	if style.KeepTogether && l.pageHasText && l.y-needed < l.bottom {
+		l.newTextPage()
+	}
+	if keepLines := pdfKeepWithNextLines(l.doc.Blocks, l.blockStyles, blockIndex); keepLines > 0 && l.pageHasText {
+		keepWithNext, err := nextBlockKeepHeight(l.doc, l.blockStyles, blockIndex+1, l.contentWidth, l.rootlessContentWidth, l.top-l.bottom, keepLines)
+		if err != nil {
+			return err
+		}
+		if keepWithNext > 0 && l.y-needed-style.SpaceAfter-keepWithNext < l.bottom && needed+style.SpaceAfter+keepWithNext <= l.top-l.bottom {
+			l.newTextPage()
+		}
+	}
+	if !style.KeepTogether && l.pageHasText {
+		linesFit := countFittingLines(l.y-blockSpaceBefore()-style.PaddingTop, l.bottom, style.Paragraph.FontSize, lineHeight)
+		if linesFit > 0 && linesFit < len(lines) {
+			firstFragmentLines := linesFit
+			if remaining := len(lines) - firstFragmentLines; remaining < style.Widows {
+				firstFragmentLines = len(lines) - style.Widows
+			}
+			if firstFragmentLines < min(style.Orphans, len(lines)) {
 				l.newTextPage()
 			}
 		}
-		if style.KeepTogether && l.pageHasText && l.y-needed < l.bottom {
-			l.newTextPage()
+	}
+	lines, dropcap, dropcapOK, err = shapeTextBlock()
+	if err != nil {
+		return err
+	}
+	if len(lines) == 0 && !dropcapOK {
+		return nil
+	}
+	if dropcapOK && l.pageHasText && l.printedFootnoteReserve.Enabled() {
+		var dropcapFootnoteRefs []pdfPrintedFootnoteRef
+		for _, line := range lines {
+			dropcapFootnoteRefs = append(dropcapFootnoteRefs, l.printedFootnoteReserve.LineRefs(line)...)
 		}
-		if keepLines := pdfKeepWithNextLines(l.doc.Blocks, l.blockStyles, blockIndex); keepLines > 0 && l.pageHasText {
-			keepWithNext, err := nextBlockKeepHeight(l.doc, l.blockStyles, blockIndex+1, l.contentWidth, l.rootlessContentWidth, l.top-l.bottom, keepLines)
+		if len(dropcapFootnoteRefs) > 0 {
+			reserve, err := l.printedFootnoteReserve.ReserveWithAdditionalRefs(dropcapFootnoteRefs)
 			if err != nil {
 				return err
 			}
-			if keepWithNext > 0 && l.y-needed-style.SpaceAfter-keepWithNext < l.bottom && needed+style.SpaceAfter+keepWithNext <= l.top-l.bottom {
+			reservedBottom := pdfReservedContentBottom(l.contentBottom, l.top, reserve)
+			if dropcap.BottomY < reservedBottom {
 				l.newTextPage()
-			}
-		}
-		if !style.KeepTogether && l.pageHasText {
-			linesFit := countFittingLines(l.y-blockSpaceBefore()-style.PaddingTop, l.bottom, style.Paragraph.FontSize, lineHeight)
-			if linesFit > 0 && linesFit < len(lines) {
-				firstFragmentLines := linesFit
-				if remaining := len(lines) - firstFragmentLines; remaining < style.Widows {
-					firstFragmentLines = len(lines) - style.Widows
+				lines, dropcap, dropcapOK, err = shapeTextBlock()
+				if err != nil {
+					return err
 				}
-				if firstFragmentLines < min(style.Orphans, len(lines)) {
-					l.newTextPage()
+				if len(lines) == 0 && !dropcapOK {
+					return nil
 				}
 			}
 		}
-		lines, dropcap, dropcapOK, err = layoutTextBlock()
-		if err != nil {
-			return err
+	}
+	if dropcapOK {
+		pdfTraceResolvedDropcap(l.styles, blockIndex, block, dropcap, style.Paragraph)
+	}
+	addPDFPageAnchor(l.page, block.ID)
+	l.y -= blockSpaceBefore()
+	backgroundX := blockLeft + style.MarginLeft
+	backgroundWidth := blockBoxWidth(blockWidthLimit, style)
+	l.y -= style.PaddingTop
+	fragmentPage := l.page
+	fragmentTop := l.y + style.PaddingTop
+	lineSearchStart := 0
+	if dropcapOK {
+		dropcapX := blockLeft + style.MarginLeft + style.PaddingLeft
+		dropLine := paragraphLine{Text: dropcap.Fragment.Text, Width: dropcap.Fragment.Width, Fragments: []paragraphLineFragment{dropcap.Fragment}}
+		if dropcap.Fragment.LinkHref != "" {
+			addFragmentLinkAnnotations(l.page, dropLine, dropcapX, dropcap.BaselineY)
 		}
-		if len(lines) == 0 && !dropcapOK {
-			continue
+		addPDFParagraphFragmentAnchors(l.page, dropLine)
+		addPDFPageLine(l.page, l.used, pdfPageLine{
+			X:             dropcapX,
+			Y:             dropcap.BaselineY,
+			FontSize:      dropcap.Fragment.FontSize,
+			LetterSpacing: dropcap.Fragment.LetterSpacing,
+			FontKey:       dropcap.Fragment.FontKey,
+			Color:         dropcap.Fragment.Color,
+			Text:          dropcap.Fragment.Text,
+			Underline:     dropcap.Fragment.Underline,
+			Strikethrough: dropcap.Fragment.Strikethrough,
+			Fragments:     pageLineFragments([]paragraphLineFragment{dropcap.Fragment}),
+		})
+		l.activeDropcap = &pdfActiveDropcap{Page: l.page, X: dropcapX, TopY: dropcap.TopY, BottomY: dropcap.BottomY, ExclusionWidth: dropcap.ExclusionWidth, Lines: dropcap.Lines, Char: dropcap.Run.Text, BodySearchOffset: dropcap.BodySearchOffset}
+		lineSearchStart = dropcap.BodySearchOffset
+	}
+	for lineIndex, line := range lines {
+		if !l.pageHasText || l.previousRenderedImage {
+			l.y -= style.Paragraph.FontSize
+			l.previousRenderedImage = false
 		}
-		if dropcapOK && l.pageHasText && l.printedFootnoteReserve.Enabled() {
-			var dropcapFootnoteRefs []pdfPrintedFootnoteRef
-			for _, line := range lines {
-				dropcapFootnoteRefs = append(dropcapFootnoteRefs, l.printedFootnoteReserve.LineRefs(line)...)
-			}
-			if len(dropcapFootnoteRefs) > 0 {
-				reserve, err := l.printedFootnoteReserve.ReserveWithAdditionalRefs(dropcapFootnoteRefs)
+		if l.printedFootnoteReserve.Enabled() {
+			lineRefs := l.printedFootnoteReserve.LineRefs(line)
+			if len(lineRefs) > 0 {
+				reserve, err := l.printedFootnoteReserve.ReserveWithAdditionalRefs(lineRefs)
 				if err != nil {
 					return err
 				}
 				reservedBottom := pdfReservedContentBottom(l.contentBottom, l.top, reserve)
-				if dropcap.BottomY < reservedBottom {
-					l.newTextPage()
-					lines, dropcap, dropcapOK, err = layoutTextBlock()
-					if err != nil {
-						return err
-					}
-					if len(lines) == 0 && !dropcapOK {
-						continue
-					}
-				}
-			}
-		}
-		if dropcapOK {
-			pdfTraceResolvedDropcap(l.styles, blockIndex, block, dropcap, style.Paragraph)
-		}
-		addPDFPageAnchor(l.page, block.ID)
-		l.y -= blockSpaceBefore()
-		backgroundX := blockLeft + style.MarginLeft
-		backgroundWidth := blockBoxWidth(blockWidthLimit, style)
-		l.y -= style.PaddingTop
-		fragmentPage := l.page
-		fragmentTop := l.y + style.PaddingTop
-		lineSearchStart := 0
-		if dropcapOK {
-			dropcapX := blockLeft + style.MarginLeft + style.PaddingLeft
-			dropLine := paragraphLine{Text: dropcap.Fragment.Text, Width: dropcap.Fragment.Width, Fragments: []paragraphLineFragment{dropcap.Fragment}}
-			if dropcap.Fragment.LinkHref != "" {
-				addFragmentLinkAnnotations(l.page, dropLine, dropcapX, dropcap.BaselineY)
-			}
-			addPDFParagraphFragmentAnchors(l.page, dropLine)
-			addPDFPageLine(l.page, l.used, pdfPageLine{
-				X:             dropcapX,
-				Y:             dropcap.BaselineY,
-				FontSize:      dropcap.Fragment.FontSize,
-				LetterSpacing: dropcap.Fragment.LetterSpacing,
-				FontKey:       dropcap.Fragment.FontKey,
-				Color:         dropcap.Fragment.Color,
-				Text:          dropcap.Fragment.Text,
-				Underline:     dropcap.Fragment.Underline,
-				Strikethrough: dropcap.Fragment.Strikethrough,
-				Fragments:     pageLineFragments([]paragraphLineFragment{dropcap.Fragment}),
-			})
-			l.activeDropcap = &pdfActiveDropcap{Page: l.page, X: dropcapX, TopY: dropcap.TopY, BottomY: dropcap.BottomY, ExclusionWidth: dropcap.ExclusionWidth, Lines: dropcap.Lines, Char: dropcap.Run.Text, BodySearchOffset: dropcap.BodySearchOffset}
-			lineSearchStart = dropcap.BodySearchOffset
-		}
-		for lineIndex, line := range lines {
-			if !l.pageHasText || l.previousRenderedImage {
-				l.y -= style.Paragraph.FontSize
-				l.previousRenderedImage = false
-			}
-			if l.printedFootnoteReserve.Enabled() {
-				lineRefs := l.printedFootnoteReserve.LineRefs(line)
-				if len(lineRefs) > 0 {
-					reserve, err := l.printedFootnoteReserve.ReserveWithAdditionalRefs(lineRefs)
-					if err != nil {
-						return err
-					}
-					reservedBottom := pdfReservedContentBottom(l.contentBottom, l.top, reserve)
-					if l.pageHasText && l.y-style.Paragraph.FontSize < reservedBottom {
-						addPDFBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, l.y)
-						l.newTextPage()
-						fragmentPage = l.page
-						fragmentTop = l.y + style.Paragraph.FontSize
-						l.y -= style.Paragraph.FontSize
-						reserve, err = l.printedFootnoteReserve.ReserveWithAdditionalRefs(lineRefs)
-						if err != nil {
-							return err
-						}
-						reservedBottom = pdfReservedContentBottom(l.contentBottom, l.top, reserve)
-					}
-					l.printedFootnoteReserve.CommitAdditionalRefs(lineRefs, reserve)
-					l.bottom = max(l.bottom, reservedBottom)
-				}
-			}
-			if l.y-style.Paragraph.FontSize < l.bottom {
-				if l.pageHasText {
+				if l.pageHasText && l.y-style.Paragraph.FontSize < reservedBottom {
 					addPDFBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, l.y)
+					l.newTextPage()
+					fragmentPage = l.page
+					fragmentTop = l.y + style.Paragraph.FontSize
+					l.y -= style.Paragraph.FontSize
+					reserve, err = l.printedFootnoteReserve.ReserveWithAdditionalRefs(lineRefs)
+					if err != nil {
+						return err
+					}
+					reservedBottom = pdfReservedContentBottom(l.contentBottom, l.top, reserve)
 				}
-				l.newTextPage()
-				fragmentPage = l.page
-				fragmentTop = l.y + style.Paragraph.FontSize
-				l.y -= style.Paragraph.FontSize
+				l.printedFootnoteReserve.CommitAdditionalRefs(lineRefs, reserve)
+				l.bottom = max(l.bottom, reservedBottom)
 			}
-			remainingAfterLine := len(lines) - lineIndex - 1
-			if remainingAfterLine > 0 && remainingAfterLine < style.Widows && l.y-lineHeight-style.Paragraph.FontSize < l.bottom {
+		}
+		if l.y-style.Paragraph.FontSize < l.bottom {
+			if l.pageHasText {
 				addPDFBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, l.y)
-				l.newTextPage()
-				fragmentPage = l.page
-				fragmentTop = l.y
 			}
-			x := blockLeft + style.MarginLeft + style.PaddingLeft + line.Indent
-			available := blockWidth - line.Indent
-			switch style.Paragraph.Align {
-			case textAlignCenter:
-				x += max((available-line.Width)/2, 0)
-			case textAlignRight:
-				x += max(available-line.Width, 0)
-			}
-			pageLine := pdfPageLine{
-				X:                x,
-				Y:                l.y,
-				FontSize:         style.Paragraph.FontSize,
-				LetterSpacing:    style.Paragraph.LetterSpacing,
-				FontKey:          fontKey,
-				Color:            style.Paragraph.Color,
-				Underline:        style.Paragraph.Underline,
-				Strikethrough:    style.Paragraph.Strikethrough,
-				Text:             line.Text,
-				Fragments:        pageLineFragments(line.Fragments),
-				ExtraWordSpacing: line.ExtraWordSpacing,
-				ExtraCharSpacing: line.ExtraCharSpacing,
-				BreakStats:       line.BreakStats,
-			}
-			pageLine.X = pdfPageLineXAdjustedForVisualRight(pageLine, available)
-			x = pageLine.X
-			addPDFInlineImages(l.page, line, x, l.y)
-			addLinkAnnotations(l.page, block, line, lineSearchStart, x, l.y, style.Paragraph.FontSize)
-			addPDFParagraphFragmentAnchors(l.page, line)
-			lineSearchStart = nextLineSearchStart(block.Text, line, lineSearchStart)
-			addPDFPageLine(l.page, l.used, pageLine)
-			l.y -= lineHeight
-			l.pageHasText = true
-			l.previousRenderedImage = false
-		}
-		if dropcapOK && len(lines) == 0 {
-			l.pageHasText = true
-			l.previousRenderedImage = false
-		}
-		backgroundBottom := l.y - style.PaddingBottom
-		addPDFBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, backgroundBottom)
-		l.y -= style.PaddingBottom + style.SpaceAfter
-		if l.activeDropcap != nil && l.activeDropcap.Page != l.page {
-			l.activeDropcap = nil
-		}
-		if pdfStyleForcesPageBreakAfter(style) && l.pageHasText {
 			l.newTextPage()
+			fragmentPage = l.page
+			fragmentTop = l.y + style.Paragraph.FontSize
+			l.y -= style.Paragraph.FontSize
 		}
+		remainingAfterLine := len(lines) - lineIndex - 1
+		if remainingAfterLine > 0 && remainingAfterLine < style.Widows && l.y-lineHeight-style.Paragraph.FontSize < l.bottom {
+			addPDFBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, l.y)
+			l.newTextPage()
+			fragmentPage = l.page
+			fragmentTop = l.y
+		}
+		x := blockLeft + style.MarginLeft + style.PaddingLeft + line.Indent
+		available := blockWidth - line.Indent
+		switch style.Paragraph.Align {
+		case textAlignCenter:
+			x += max((available-line.Width)/2, 0)
+		case textAlignRight:
+			x += max(available-line.Width, 0)
+		}
+		pageLine := pdfPageLine{
+			X:                x,
+			Y:                l.y,
+			FontSize:         style.Paragraph.FontSize,
+			LetterSpacing:    style.Paragraph.LetterSpacing,
+			FontKey:          fontKey,
+			Color:            style.Paragraph.Color,
+			Underline:        style.Paragraph.Underline,
+			Strikethrough:    style.Paragraph.Strikethrough,
+			Text:             line.Text,
+			Fragments:        pageLineFragments(line.Fragments),
+			ExtraWordSpacing: line.ExtraWordSpacing,
+			ExtraCharSpacing: line.ExtraCharSpacing,
+			BreakStats:       line.BreakStats,
+		}
+		pageLine.X = pdfPageLineXAdjustedForVisualRight(pageLine, available)
+		x = pageLine.X
+		addPDFInlineImages(l.page, line, x, l.y)
+		addLinkAnnotations(l.page, block, line, lineSearchStart, x, l.y, style.Paragraph.FontSize)
+		addPDFParagraphFragmentAnchors(l.page, line)
+		lineSearchStart = nextLineSearchStart(block.Text, line, lineSearchStart)
+		addPDFPageLine(l.page, l.used, pageLine)
+		l.y -= lineHeight
+		l.pageHasText = true
+		l.previousRenderedImage = false
 	}
-
+	if dropcapOK && len(lines) == 0 {
+		l.pageHasText = true
+		l.previousRenderedImage = false
+	}
+	backgroundBottom := l.y - style.PaddingBottom
+	addPDFBlockDecoration(fragmentPage, style, backgroundX, fragmentTop, backgroundWidth, backgroundBottom)
+	l.y -= style.PaddingBottom + style.SpaceAfter
+	if l.activeDropcap != nil && l.activeDropcap.Page != l.page {
+		l.activeDropcap = nil
+	}
+	if pdfStyleForcesPageBreakAfter(style) && l.pageHasText {
+		l.newTextPage()
+	}
 	return nil
 }
 
