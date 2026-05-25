@@ -571,34 +571,7 @@ func mergePDFContextStyleOverrides(base, override, fallback pdfBlockResolvedStyl
 		base.BorderWidth = override.BorderWidth
 		base.BorderColor = override.BorderColor
 	}
-	if override.HasKeepTogether || override.KeepTogether != fallback.KeepTogether {
-		base.KeepTogether = override.KeepTogether
-		base.HasKeepTogether = override.HasKeepTogether
-	}
-	if override.KeepWithNextLines != fallback.KeepWithNextLines {
-		base.KeepWithNextLines = override.KeepWithNextLines
-	}
-	if override.HasPageBreakBefore || override.PageBreakBefore != fallback.PageBreakBefore || override.PageBreakBeforeMode != fallback.PageBreakBeforeMode {
-		base.PageBreakBefore = override.PageBreakBefore
-		base.PageBreakBeforeMode = override.PageBreakBeforeMode
-		base.HasPageBreakBefore = override.HasPageBreakBefore
-	}
-	if override.HasPageBreakAfter || override.PageBreakAfter != fallback.PageBreakAfter || override.PageBreakAfterMode != fallback.PageBreakAfterMode {
-		base.PageBreakAfter = override.PageBreakAfter
-		base.PageBreakAfterMode = override.PageBreakAfterMode
-		base.HasPageBreakAfter = override.HasPageBreakAfter
-	}
-	if override.HasHidden || override.Hidden != fallback.Hidden {
-		base.Hidden = override.Hidden
-		base.HasHidden = override.HasHidden
-	}
-	if override.Orphans != fallback.Orphans {
-		base.Orphans = override.Orphans
-	}
-	if override.Widows != fallback.Widows {
-		base.Widows = override.Widows
-	}
-	return base
+	return mergePDFBlockBehaviorOverrides(base, override, fallback)
 }
 
 func pdfRelativeLengthFontSize(base, override, fallback pdfBlockResolvedStyle, inheritedFontSize float64) float64 {
