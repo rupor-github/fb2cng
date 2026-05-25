@@ -100,6 +100,11 @@ func mergePDFBlockBehaviorOverrides(base, override, fallback pdfBlockResolvedSty
 }
 
 func mergePDFBoxOverrides(base, override, fallback pdfBlockResolvedStyle, relativeLengthFontSize float64) pdfBlockResolvedStyle {
+	base = mergePDFSpacingOverrides(base, override, fallback, relativeLengthFontSize)
+	return mergePDFDimensionOverrides(base, override, fallback)
+}
+
+func mergePDFSpacingOverrides(base, override, fallback pdfBlockResolvedStyle, relativeLengthFontSize float64) pdfBlockResolvedStyle {
 	if override.SpaceBeforeSpec.Set {
 		base.SpaceBefore = pdfResolveCSSLengthSpec(override.SpaceBeforeSpec, relativeLengthFontSize)
 		base.SpaceBeforeSpec = override.SpaceBeforeSpec
@@ -156,6 +161,10 @@ func mergePDFBoxOverrides(base, override, fallback pdfBlockResolvedStyle, relati
 		base.PaddingLeft = override.PaddingLeft
 		base.PaddingLeftSpec = pdfCSSLengthSpec{}
 	}
+	return base
+}
+
+func mergePDFDimensionOverrides(base, override, fallback pdfBlockResolvedStyle) pdfBlockResolvedStyle {
 	if override.HasWidth != fallback.HasWidth || override.Width != fallback.Width {
 		base.HasWidth = override.HasWidth
 		base.Width = override.Width
