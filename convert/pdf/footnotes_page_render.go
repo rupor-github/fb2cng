@@ -51,7 +51,7 @@ func pdfDebugPrintedFootnoteOverflow(debug *pdfDebugPrintedFootnotes, kind strin
 	})
 }
 
-func pdfDebugPrintedFootnotePackedChunk(
+func recordFootnoteChunkDebug(
 	debug *pdfDebugPrintedFootnotes,
 	sourcePageIndex int,
 	queuePageIndex int,
@@ -202,7 +202,7 @@ func appendPDFPrintedFootnoteContinuationPages(
 			return
 		}
 		continuationPageIndex := len(out)
-		continuation := bottomAlignPDFPrintedFootnoteContinuationChunks(
+		continuation := bottomAlignFootnoteContinuations(
 			chunks,
 			separator,
 			pageBottom,
@@ -244,7 +244,7 @@ func appendPDFPrintedFootnoteContinuationPages(
 	return out
 }
 
-func bottomAlignPDFPrintedFootnoteContinuationChunks(
+func bottomAlignFootnoteContinuations(
 	chunks []pdfPrintedFootnoteContinuationChunk,
 	separator pdfPrintedFootnoteSeparatorMetrics,
 	contentBottom float64,
@@ -261,19 +261,19 @@ func bottomAlignPDFPrintedFootnoteContinuationChunks(
 		groupHeight += chunk.Height
 	}
 	cursor := contentBottom + groupHeight
-	appendPDFPrintedFootnoteContinuationSeparatorAt(&continuation, separator, cursor+max(separator.SpaceAfter, 0))
+	addFootnoteContinuationSeparator(&continuation, separator, cursor+max(separator.SpaceAfter, 0))
 	for _, chunk := range chunks {
 		shift := cursor - chunk.Top
 		placedTop := chunk.Top + shift
 		placedBottom := chunk.Bottom + shift
-		pdfDebugPrintedFootnotePackedChunk(debug, sourcePageIndex, chunk.QueuePageIndex, continuationPageIndex, chunk.Top, chunk.Bottom, shift, placedTop, placedBottom)
+		recordFootnoteChunkDebug(debug, sourcePageIndex, chunk.QueuePageIndex, continuationPageIndex, chunk.Top, chunk.Bottom, shift, placedTop, placedBottom)
 		appendPDFPrintedFootnotePage(&continuation, shiftPDFPageY(chunk.Page, shift), pdfPrintedFootnoteSeparatorMetrics{})
 		cursor = placedBottom
 	}
 	return continuation
 }
 
-func appendPDFPrintedFootnoteContinuationSeparatorAt(page *pdfPage, separator pdfPrintedFootnoteSeparatorMetrics, lineY float64) {
+func addFootnoteContinuationSeparator(page *pdfPage, separator pdfPrintedFootnoteSeparatorMetrics, lineY float64) {
 	if page == nil || separator.LineWidth <= 0 || separator.Width <= 0 {
 		return
 	}
