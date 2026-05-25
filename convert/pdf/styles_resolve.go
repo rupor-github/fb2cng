@@ -8,7 +8,7 @@ func (r *pdfStyleResolver) styleForBlock(block pdfTextBlock) pdfBlockResolvedSty
 	inheritedFontSize := r.inheritedFontSizeForBlock(block)
 	tagStyle := r.tagStyleForBlock(block)
 	style := r.applyRootInheritedParagraphDefaults(defaultStyle)
-	style = mergePDFStyleOverridesWithInheritedFont(style, r.namedStyle(name), defaultStyle, inheritedFontSize)
+	style = mergePDFStyleOverridesWithFont(style, r.namedStyle(name), defaultStyle, inheritedFontSize)
 	style = r.applyContextInheritedBlockDefaults(style, tagStyle, block)
 	classFallback := r.namedStyle(pdfStyleParagraph)
 	for _, class := range strings.Fields(block.StyleClasses) {
@@ -16,29 +16,29 @@ func (r *pdfStyleResolver) styleForBlock(block pdfTextBlock) pdfBlockResolvedSty
 		if !ok {
 			continue
 		}
-		if contextStyleClassShouldSkipInheritedAndHorizontalMargins(block, class) {
-			style = mergePDFContextClassStyleOverridesWithInheritedFont(style, classStyle, classFallback, inheritedFontSize)
+		if shouldSkipContextInheritedMargins(block, class) {
+			style = mergePDFContextStyleOverrides(style, classStyle, classFallback, inheritedFontSize)
 			continue
 		}
 		if pdfContainerStyleClass(class) {
-			style = mergePDFContainerClassStyleOverridesWithInheritedFont(style, classStyle, classFallback, inheritedFontSize)
+			style = mergePDFContainerStyleOverrides(style, classStyle, classFallback, inheritedFontSize)
 			continue
 		}
-		style = mergePDFStyleOverridesWithInheritedFont(style, classStyle, classFallback, inheritedFontSize)
+		style = mergePDFStyleOverridesWithFont(style, classStyle, classFallback, inheritedFontSize)
 	}
 	for _, selectorStyleName := range pdfElementClassStyleNames(block) {
 		selectorStyle, ok := r.styles[selectorStyleName]
 		if !ok {
 			continue
 		}
-		style = mergePDFStyleOverridesWithInheritedFont(style, selectorStyle, classFallback, inheritedFontSize)
+		style = mergePDFStyleOverridesWithFont(style, selectorStyle, classFallback, inheritedFontSize)
 	}
 	for _, descStyleName := range r.contextDescendantStyleNames(block) {
 		descStyle, ok := r.styles[descStyleName]
 		if !ok {
 			continue
 		}
-		style = mergePDFStyleOverridesWithInheritedFont(style, descStyle, classFallback, inheritedFontSize)
+		style = mergePDFStyleOverridesWithFont(style, descStyle, classFallback, inheritedFontSize)
 	}
 	if block.Kind == pdfBlockTOCEntry {
 		style.Paragraph.FirstLineIndent = max(float64(block.Depth-1)*pdfTOCNestedListIndent, 0)
@@ -58,10 +58,10 @@ func injectPDFImplicitLineHeight(style, fallback pdfBlockResolvedStyle) pdfBlock
 }
 
 func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfBlockResolvedStyle {
-	return mergePDFStyleOverridesWithInheritedFont(base, override, fallback, base.Paragraph.FontSize)
+	return mergePDFStyleOverridesWithFont(base, override, fallback, base.Paragraph.FontSize)
 }
 
-func mergePDFStyleOverridesWithInheritedFont(base, override, fallback pdfBlockResolvedStyle, inheritedFontSize float64) pdfBlockResolvedStyle {
+func mergePDFStyleOverridesWithFont(base, override, fallback pdfBlockResolvedStyle, inheritedFontSize float64) pdfBlockResolvedStyle {
 	relativeLengthFontSize := pdfRelativeLengthFontSize(base, override, fallback, inheritedFontSize)
 	if override.Paragraph.FontFamily != fallback.Paragraph.FontFamily {
 		base.Paragraph.FontFamily = override.Paragraph.FontFamily
@@ -313,7 +313,7 @@ func pdfCSSSpecPercent(spec pdfCSSLengthSpec, value float64) bool {
 func (r *pdfStyleResolver) tagStyleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
 	name := pdfTagStyleNameForBlock(block)
 	style := r.applyRootInheritedParagraphDefaults(r.defaultStyle(name))
-	return mergePDFStyleOverridesWithInheritedFont(style, r.namedStyle(name), r.defaultStyle(name), r.inheritedFontSizeForBlock(block))
+	return mergePDFStyleOverridesWithFont(style, r.namedStyle(name), r.defaultStyle(name), r.inheritedFontSizeForBlock(block))
 }
 
 func (r *pdfStyleResolver) inheritedFontSizeForBlock(block pdfTextBlock) float64 {
@@ -445,7 +445,7 @@ func (r *pdfStyleResolver) applyContextInheritedBlockDefaults(style, tagStyle pd
 	return style
 }
 
-func contextStyleClassShouldSkipInheritedAndHorizontalMargins(block pdfTextBlock, class string) bool {
+func shouldSkipContextInheritedMargins(block pdfTextBlock, class string) bool {
 	if class == "" || !pdfContainerStyleClass(class) {
 		return false
 	}
@@ -466,8 +466,8 @@ func pdfContainerStyleClass(class string) bool {
 	}
 }
 
-func mergePDFContainerClassStyleOverridesWithInheritedFont(base, override, fallback pdfBlockResolvedStyle, inheritedFontSize float64) pdfBlockResolvedStyle {
-	base = mergePDFContextClassStyleOverridesWithInheritedFont(base, override, fallback, inheritedFontSize)
+func mergePDFContainerStyleOverrides(base, override, fallback pdfBlockResolvedStyle, inheritedFontSize float64) pdfBlockResolvedStyle {
+	base = mergePDFContextStyleOverrides(base, override, fallback, inheritedFontSize)
 	relativeLengthFontSize := pdfContextRelativeLengthFontSize(override, fallback, inheritedFontSize)
 	if override.MarginLeftSpec.Set {
 		base.MarginLeft = pdfResolveCSSLengthSpec(override.MarginLeftSpec, relativeLengthFontSize)
@@ -486,7 +486,7 @@ func mergePDFContainerClassStyleOverridesWithInheritedFont(base, override, fallb
 	return base
 }
 
-func mergePDFContextClassStyleOverridesWithInheritedFont(base, override, fallback pdfBlockResolvedStyle, inheritedFontSize float64) pdfBlockResolvedStyle {
+func mergePDFContextStyleOverrides(base, override, fallback pdfBlockResolvedStyle, inheritedFontSize float64) pdfBlockResolvedStyle {
 	relativeLengthFontSize := pdfContextRelativeLengthFontSize(override, fallback, inheritedFontSize)
 	if override.SpaceBeforeSpec.Set {
 		spaceBefore := pdfResolveCSSLengthSpec(override.SpaceBeforeSpec, relativeLengthFontSize)
