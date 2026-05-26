@@ -82,7 +82,17 @@ func layoutPDFTable(doc pdfDocumentSpec, resolver *pdfStyleResolver, block pdfTe
 		if err != nil {
 			return pdfTableLayout{}, err
 		}
-		lines, err := layoutInlineParagraph(cellDoc, doc.Fonts, tableResolver, face, text, runs, cellStyle.Paragraph, innerWidth)
+		lines, err := layoutInlineWithShape(
+			cellDoc,
+			doc.Fonts,
+			tableResolver,
+			face,
+			text,
+			runs,
+			cellStyle.Paragraph,
+			innerWidth,
+			paragraphLineShape{},
+		)
 		if err != nil {
 			return pdfTableLayout{}, err
 		}

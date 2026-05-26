@@ -26,10 +26,6 @@ type inlineGlyphPiece struct {
 	Newline  bool
 }
 
-func layoutInlineParagraph(doc pdfDocumentSpec, registry *pdfFontRegistry, resolver *pdfStyleResolver, baseFace *builtinFontFace, text string, runs []pdfInlineRun, style paragraphStyle, maxWidth float64) ([]paragraphLine, error) {
-	return layoutInlineWithShape(doc, registry, resolver, baseFace, text, runs, style, maxWidth, paragraphLineShape{})
-}
-
 func layoutInlineWithShape(doc pdfDocumentSpec, registry *pdfFontRegistry, resolver *pdfStyleResolver, baseFace *builtinFontFace, text string, runs []pdfInlineRun, style paragraphStyle, maxWidth float64, shape paragraphLineShape) ([]paragraphLine, error) {
 	if shape.TextShapers == nil {
 		shape.TextShapers = doc.TextShapers

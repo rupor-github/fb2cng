@@ -183,10 +183,6 @@ func newPDFTextShaperCache() *pdfTextShaperCache {
 	return &pdfTextShaperCache{openType: make(map[*textfont.Face]*openTypePDFTextShaper)}
 }
 
-func shapeText(face *builtinFontFace, text string) (shapedText, error) {
-	return shapeTextWithCache(nil, face, text)
-}
-
 func shapeTextWithCache(cache *pdfTextShaperCache, face *builtinFontFace, text string) (shapedText, error) {
 	if canShapeOpenTypeText(face, text) {
 		if cache != nil && face.TextFace != nil {

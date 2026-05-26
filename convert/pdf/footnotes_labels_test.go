@@ -47,15 +47,15 @@ func TestApplyPDFPageLocalFootnoteReferenceLabelsKeepsInlineImageFootnoteWidth(t
 	if err != nil {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
-	prefix, err := shapeText(face, "A ")
+	prefix, err := shapeTextWithCache(nil, face, "A ")
 	if err != nil {
 		t.Fatalf("shape prefix: %v", err)
 	}
-	suffix, err := shapeText(face, " B")
+	suffix, err := shapeTextWithCache(nil, face, " B")
 	if err != nil {
 		t.Fatalf("shape suffix: %v", err)
 	}
-	ref, err := shapeText(face, "10")
+	ref, err := shapeTextWithCache(nil, face, "10")
 	if err != nil {
 		t.Fatalf("shape ref: %v", err)
 	}
@@ -80,19 +80,19 @@ func TestApplyPDFPageLocalFootnoteReferenceLabelsRejustifiesChangedLine(t *testi
 	if err != nil {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
-	prefix, err := shapeText(face, "Alpha ")
+	prefix, err := shapeTextWithCache(nil, face, "Alpha ")
 	if err != nil {
 		t.Fatalf("shape prefix: %v", err)
 	}
-	ref, err := shapeText(face, "17")
+	ref, err := shapeTextWithCache(nil, face, "17")
 	if err != nil {
 		t.Fatalf("shape ref: %v", err)
 	}
-	suffix, err := shapeText(face, " beta")
+	suffix, err := shapeTextWithCache(nil, face, " beta")
 	if err != nil {
 		t.Fatalf("shape suffix: %v", err)
 	}
-	newRef, err := shapeText(face, "1")
+	newRef, err := shapeTextWithCache(nil, face, "1")
 	if err != nil {
 		t.Fatalf("shape new ref: %v", err)
 	}

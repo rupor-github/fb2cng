@@ -261,9 +261,9 @@ func pageStrokesYBounds(strokes []pdfPageStroke) (float64, float64, bool) {
 
 func testPDFPageLine(t *testing.T, face *builtinFontFace, text string, y float64) pdfPageLine {
 	t.Helper()
-	shaped, err := shapeText(face, text)
+	shaped, err := shapeTextWithCache(nil, face, text)
 	if err != nil {
-		t.Fatalf("shapeText(%q) error = %v", text, err)
+		t.Fatalf("shape text %q error = %v", text, err)
 	}
 	return pdfPageLine{
 		X:        24,

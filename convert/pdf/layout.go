@@ -89,8 +89,8 @@ func (l *pdfPageLayout) initTextLayout() {
 		l.styles = newPDFStyleResolver(nil, nil)
 	}
 	l.blockStyles = l.styles.collapsedBlockStylesWithImages(l.doc.Blocks, l.doc.Images)
-	l.contentLeft, l.contentRight, l.contentTop, l.contentBottom = pdfPageContentMargins(l.doc, l.styles, pdfDefaultPageMargin)
-	l.rootlessContentLeft, l.rootlessContentRight, _, _ = pdfPageContentMarginsWithoutRootHorizontal(l.doc, l.styles, pdfDefaultPageMargin)
+	l.contentLeft, l.contentRight, l.contentTop, l.contentBottom = pdfContentMargins(l.doc, l.styles, pdfDefaultPageMargin, false)
+	l.rootlessContentLeft, l.rootlessContentRight, _, _ = pdfContentMargins(l.doc, l.styles, pdfDefaultPageMargin, true)
 	l.contentWidth = max(l.doc.PageWidth-l.contentLeft-l.contentRight, 12)
 	l.rootlessContentWidth = max(l.doc.PageWidth-l.rootlessContentLeft-l.rootlessContentRight, 12)
 	l.printedFootnoteReserve = newPDFDynamicPrintedFootnoteReserveTracker(l.doc, l.styles, l.contentLeft, l.contentWidth, l.contentBottom)

@@ -95,17 +95,17 @@ func TestLayoutParagraphUsesHyphenationPoints(t *testing.T) {
 		LineHeight: 12,
 		Hyphenator: fakeHyphenator{"hyphenation": "hy\u00adphenation"},
 	}
-	prefix, err := shapeText(face, "hy-")
+	prefix, err := shapeTextWithCache(nil, face, "hy-")
 	if err != nil {
-		t.Fatalf("shapeText() error = %v", err)
+		t.Fatalf("shape text error = %v", err)
 	}
-	suffix, err := shapeText(face, "phenation")
+	suffix, err := shapeTextWithCache(nil, face, "phenation")
 	if err != nil {
-		t.Fatalf("shapeText() suffix error = %v", err)
+		t.Fatalf("shape suffix error = %v", err)
 	}
-	full, err := shapeText(face, "hyphenation")
+	full, err := shapeTextWithCache(nil, face, "hyphenation")
 	if err != nil {
-		t.Fatalf("shapeText() error = %v", err)
+		t.Fatalf("shape text error = %v", err)
 	}
 	maxWidth := max(shapedWidthPoints(prefix, style.FontSize), shapedWidthPoints(suffix, style.FontSize)) + 1
 	if maxWidth >= shapedWidthPoints(full, style.FontSize) {
@@ -150,13 +150,13 @@ func TestLayoutParagraphBreaksAfterHardHyphenWithoutExtraHyphen(t *testing.T) {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
 	style := paragraphStyle{FontSize: 10, LineHeight: 12, Hyphenation: paragraphHyphenationNone}
-	prefix, err := shapeText(face, "alpha-")
+	prefix, err := shapeTextWithCache(nil, face, "alpha-")
 	if err != nil {
-		t.Fatalf("shapeText() error = %v", err)
+		t.Fatalf("shape text error = %v", err)
 	}
-	full, err := shapeText(face, "alpha-beta")
+	full, err := shapeTextWithCache(nil, face, "alpha-beta")
 	if err != nil {
-		t.Fatalf("shapeText() error = %v", err)
+		t.Fatalf("shape text error = %v", err)
 	}
 	maxWidth := shapedWidthPoints(prefix, style.FontSize) + 0.1
 	if maxWidth >= shapedWidthPoints(full, style.FontSize) {
@@ -187,9 +187,9 @@ func TestLayoutParagraphBreaksAfterPunctuationWithoutHyphenPenalty(t *testing.T)
 		t.Fatalf("builtinFont() error = %v", err)
 	}
 	style := paragraphStyle{FontSize: 10, LineHeight: 12, Hyphenation: paragraphHyphenationNone}
-	prefix, err := shapeText(face, "alpha/")
+	prefix, err := shapeTextWithCache(nil, face, "alpha/")
 	if err != nil {
-		t.Fatalf("shapeText() error = %v", err)
+		t.Fatalf("shape text error = %v", err)
 	}
 
 	lines, err := layoutParagraph(face, "alpha/beta", style, shapedWidthPoints(prefix, style.FontSize)+0.1)
@@ -212,13 +212,13 @@ func TestLayoutParagraphHonorsHyphenationModes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
-	prefix, err := shapeText(face, "hy-")
+	prefix, err := shapeTextWithCache(nil, face, "hy-")
 	if err != nil {
-		t.Fatalf("shapeText() error = %v", err)
+		t.Fatalf("shape text error = %v", err)
 	}
-	suffix, err := shapeText(face, "phenation")
+	suffix, err := shapeTextWithCache(nil, face, "phenation")
 	if err != nil {
-		t.Fatalf("shapeText() suffix error = %v", err)
+		t.Fatalf("shape suffix error = %v", err)
 	}
 	maxWidth := max(shapedWidthPoints(prefix, 10), shapedWidthPoints(suffix, 10)) + 1
 
@@ -326,9 +326,9 @@ func TestLayoutParagraphEmergencyWrapsLongUnbreakableWord(t *testing.T) {
 	}
 	style := paragraphStyle{FontSize: 10, LineHeight: 12, Hyphenation: paragraphHyphenationNone}
 	text := "supercalifragilistic"
-	prefix, err := shapeText(face, "super")
+	prefix, err := shapeTextWithCache(nil, face, "super")
 	if err != nil {
-		t.Fatalf("shapeText() error = %v", err)
+		t.Fatalf("shape text error = %v", err)
 	}
 	maxWidth := shapedWidthPoints(prefix, style.FontSize) + 0.5
 
@@ -359,9 +359,9 @@ func TestLayoutParagraphEmergencyDoesNotSplitLigatureCluster(t *testing.T) {
 	if err != nil {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
-	shapedLigature, err := shapeText(face, "fi")
+	shapedLigature, err := shapeTextWithCache(nil, face, "fi")
 	if err != nil {
-		t.Fatalf("shapeText(fi) error = %v", err)
+		t.Fatalf("shape fi error = %v", err)
 	}
 	if len(shapedLigature.Glyphs) != 1 || shapedLigature.Glyphs[0].Source != "fi" {
 		t.Fatalf("test font did not shape fi as a ligature: %#v", shapedLigature.Glyphs)
@@ -387,9 +387,9 @@ func TestLayoutParagraphEmergencyKeepsCombiningMarksWithBase(t *testing.T) {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
 	style := paragraphStyle{FontSize: 10, LineHeight: 12, Hyphenation: paragraphHyphenationNone}
-	cluster, err := shapeText(face, "a\u0301")
+	cluster, err := shapeTextWithCache(nil, face, "a\u0301")
 	if err != nil {
-		t.Fatalf("shapeText(combining) error = %v", err)
+		t.Fatalf("shape combining error = %v", err)
 	}
 	text := "a\u0301a\u0301a\u0301"
 	lines, err := layoutParagraph(face, text, style, shapedWidthPoints(cluster, style.FontSize)+0.1)
@@ -534,13 +534,13 @@ func TestLayoutParagraphRecordsLineBreakStats(t *testing.T) {
 		Hyphenator:  fakeHyphenator{"hyphenation": "hy\u00adphenation"},
 		Hyphenation: paragraphHyphenationAuto,
 	}
-	prefix, err := shapeText(face, "hy-")
+	prefix, err := shapeTextWithCache(nil, face, "hy-")
 	if err != nil {
-		t.Fatalf("shapeText() error = %v", err)
+		t.Fatalf("shape text error = %v", err)
 	}
-	suffix, err := shapeText(face, "phenation")
+	suffix, err := shapeTextWithCache(nil, face, "phenation")
 	if err != nil {
-		t.Fatalf("shapeText() suffix error = %v", err)
+		t.Fatalf("shape suffix error = %v", err)
 	}
 	maxWidth := max(shapedWidthPoints(prefix, style.FontSize), shapedWidthPoints(suffix, style.FontSize)) + 1
 	lines, err := layoutParagraph(face, "hyphenation", style, maxWidth)
@@ -597,13 +597,13 @@ func TestLayoutInlineParagraphHyphenatesStyledRuns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("builtinFont() bold error = %v", err)
 	}
-	prefix, err := shapeText(boldFace, "hy-")
+	prefix, err := shapeTextWithCache(nil, boldFace, "hy-")
 	if err != nil {
-		t.Fatalf("shapeText() error = %v", err)
+		t.Fatalf("shape text error = %v", err)
 	}
-	suffix, err := shapeText(boldFace, "phenation")
+	suffix, err := shapeTextWithCache(nil, boldFace, "phenation")
 	if err != nil {
-		t.Fatalf("shapeText() suffix error = %v", err)
+		t.Fatalf("shape suffix error = %v", err)
 	}
 	style := paragraphStyle{
 		FontSize:    10,
@@ -613,7 +613,7 @@ func TestLayoutInlineParagraphHyphenatesStyledRuns(t *testing.T) {
 	}
 
 	maxWidth := max(shapedWidthPoints(prefix, style.FontSize), shapedWidthPoints(suffix, style.FontSize)) + 1
-	lines, err := layoutInlineParagraph(
+	lines, err := layoutInlineWithShape(
 		pdfDocumentSpec{},
 		nil,
 		nil,
@@ -622,12 +622,13 @@ func TestLayoutInlineParagraphHyphenatesStyledRuns(t *testing.T) {
 		[]pdfInlineRun{{Text: "hyphenation", Bold: true}},
 		style,
 		maxWidth,
+		paragraphLineShape{},
 	)
 	if err != nil {
-		t.Fatalf("layoutInlineParagraph() error = %v", err)
+		t.Fatalf("layoutInlineWithShape() error = %v", err)
 	}
 	if len(lines) != 2 {
-		t.Fatalf("layoutInlineParagraph() produced %d lines, want 2", len(lines))
+		t.Fatalf("layoutInlineWithShape() produced %d lines, want 2", len(lines))
 	}
 	if got := shapedRunes(lines[0].Text); got != "hy-" {
 		t.Fatalf("first line = %q, want hyphenated prefix", got)
@@ -647,14 +648,14 @@ func TestLayoutInlineParagraphEmergencyWrapsStyledLongWord(t *testing.T) {
 		t.Fatalf("builtinFont() bold error = %v", err)
 	}
 	style := paragraphStyle{FontSize: 10, LineHeight: 12, Hyphenation: paragraphHyphenationNone}
-	prefix, err := shapeText(boldFace, "super")
+	prefix, err := shapeTextWithCache(nil, boldFace, "super")
 	if err != nil {
-		t.Fatalf("shapeText() error = %v", err)
+		t.Fatalf("shape text error = %v", err)
 	}
 	text := "supercalifragilistic"
 	maxWidth := shapedWidthPoints(prefix, style.FontSize) + 0.5
 
-	lines, err := layoutInlineParagraph(
+	lines, err := layoutInlineWithShape(
 		pdfDocumentSpec{},
 		nil,
 		nil,
@@ -663,12 +664,13 @@ func TestLayoutInlineParagraphEmergencyWrapsStyledLongWord(t *testing.T) {
 		[]pdfInlineRun{{Text: text, Bold: true}},
 		style,
 		maxWidth,
+		paragraphLineShape{},
 	)
 	if err != nil {
-		t.Fatalf("layoutInlineParagraph() error = %v", err)
+		t.Fatalf("layoutInlineWithShape() error = %v", err)
 	}
 	if len(lines) < 2 {
-		t.Fatalf("layoutInlineParagraph() produced %d lines, want emergency wrapping", len(lines))
+		t.Fatalf("layoutInlineWithShape() produced %d lines, want emergency wrapping", len(lines))
 	}
 	var joined string
 	for i, line := range lines {
@@ -690,9 +692,9 @@ func TestInlineParagraphUnitsKeepLigatureWordsIntact(t *testing.T) {
 	if err != nil {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
-	shaped, err := shapeText(face, "fiend")
+	shaped, err := shapeTextWithCache(nil, face, "fiend")
 	if err != nil {
-		t.Fatalf("shapeText() error = %v", err)
+		t.Fatalf("shape text error = %v", err)
 	}
 	if len(shaped.Glyphs) >= len([]rune("fiend")) {
 		t.Fatalf("test font did not shape fi ligature: %#v", shaped.Glyphs)

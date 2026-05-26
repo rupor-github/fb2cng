@@ -97,7 +97,17 @@ func nextBlockKeepHeight(doc pdfDocumentSpec, blockStyles []pdfBlockResolvedStyl
 			return 0, err
 		}
 		runs := inlineRunsWithContext(block.Runs, inlineRunContextClassesForBlock(block))
-		lines, err := layoutInlineParagraph(doc, doc.Fonts, styles, face, block.Text, runs, style.Paragraph, blockContentWidth(availableWidth, style))
+		lines, err := layoutInlineWithShape(
+			doc,
+			doc.Fonts,
+			styles,
+			face,
+			block.Text,
+			runs,
+			style.Paragraph,
+			blockContentWidth(availableWidth, style),
+			paragraphLineShape{},
+		)
 		if err != nil {
 			return 0, err
 		}

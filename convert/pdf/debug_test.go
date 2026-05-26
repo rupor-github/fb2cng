@@ -234,9 +234,9 @@ func TestPDFDebugFontsReportsOriginalCIDsAndSubsetGlyphIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
-	shaped, err := shapeText(face, "Tiny")
+	shaped, err := shapeTextWithCache(nil, face, "Tiny")
 	if err != nil {
-		t.Fatalf("shapeText() error = %v", err)
+		t.Fatalf("shape text error = %v", err)
 	}
 	objects, err := fontResourceObjects(face, shaped.Used, fontObjectIDs{
 		Type0Font:      1,

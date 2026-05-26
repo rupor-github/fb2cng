@@ -20,7 +20,7 @@ func TestPDFTypographyValidationFixtureShapesKerningLigaturesAndCombiningMarks(t
 			if err != nil {
 				t.Fatalf("simple shape %q: %v", sample, err)
 			}
-			openType, err := shapeText(face, sample)
+			openType, err := shapeTextWithCache(nil, face, sample)
 			if err != nil {
 				t.Fatalf("OpenType shape %q: %v", sample, err)
 			}
@@ -35,9 +35,9 @@ func TestPDFTypographyValidationFixtureShapesKerningLigaturesAndCombiningMarks(t
 
 	for _, sample := range []string{"office", "afflict", "file"} {
 		t.Run("ligature "+sample, func(t *testing.T) {
-			shaped, err := shapeText(face, sample)
+			shaped, err := shapeTextWithCache(nil, face, sample)
 			if err != nil {
-				t.Fatalf("shapeText(%q): %v", sample, err)
+				t.Fatalf("shape text %q: %v", sample, err)
 			}
 			if got, want := shapedRunes(shaped), sample; got != want {
 				t.Fatalf("shaped text = %q, want %q", got, want)
@@ -53,9 +53,9 @@ func TestPDFTypographyValidationFixtureShapesKerningLigaturesAndCombiningMarks(t
 
 	for _, sample := range []string{"áéó", "a\u0301e\u0301o\u0301"} {
 		t.Run("combining "+sample, func(t *testing.T) {
-			shaped, err := shapeText(face, sample)
+			shaped, err := shapeTextWithCache(nil, face, sample)
 			if err != nil {
-				t.Fatalf("shapeText(%q): %v", sample, err)
+				t.Fatalf("shape text %q: %v", sample, err)
 			}
 			if got := shapedRunes(shaped); got != sample {
 				t.Fatalf("shaped text = %q, want %q; glyphs=%#v", got, sample, shaped.Glyphs)

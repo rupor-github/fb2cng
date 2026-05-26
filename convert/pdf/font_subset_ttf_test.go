@@ -15,9 +15,9 @@ func TestSubsetTrueTypeFontKeepsUsedGlyphsAndParses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
-	shaped, err := shapeText(face, "Subset")
+	shaped, err := shapeTextWithCache(nil, face, "Subset")
 	if err != nil {
-		t.Fatalf("shapeText() error = %v", err)
+		t.Fatalf("shape text error = %v", err)
 	}
 	subset, ok, err := subsetTrueTypeFont(face.Data, shaped.Used)
 	if err != nil {
@@ -49,9 +49,9 @@ func TestSubsetTrueTypeFontBuildsCompactGlyphProgram(t *testing.T) {
 	if err != nil {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
-	shaped, err := shapeText(face, "Tiny")
+	shaped, err := shapeTextWithCache(nil, face, "Tiny")
 	if err != nil {
-		t.Fatalf("shapeText() error = %v", err)
+		t.Fatalf("shape text error = %v", err)
 	}
 	subset, ok, err := subsetTrueTypeFont(face.Data, shaped.Used)
 	if err != nil {
@@ -100,9 +100,9 @@ func TestSubsetTrueTypeFontIncludesAndRemapsCompositeGlyphComponents(t *testing.
 	if err != nil {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
-	shaped, err := shapeText(face, "é")
+	shaped, err := shapeTextWithCache(nil, face, "é")
 	if err != nil {
-		t.Fatalf("shapeText() error = %v", err)
+		t.Fatalf("shape text error = %v", err)
 	}
 	if len(shaped.Glyphs) != 1 {
 		t.Fatalf("shaped glyphs = %#v, want one precomposed glyph", shaped.Glyphs)
@@ -179,9 +179,9 @@ func TestFontResourceObjectsEmbedsSubsetFontFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
-	shaped, err := shapeText(face, "Tiny")
+	shaped, err := shapeTextWithCache(nil, face, "Tiny")
 	if err != nil {
-		t.Fatalf("shapeText() error = %v", err)
+		t.Fatalf("shape text error = %v", err)
 	}
 	objects, err := fontResourceObjects(face, shaped.Used, fontObjectIDs{
 		Type0Font:      1,
@@ -290,9 +290,9 @@ func TestFontResourceObjectsHonorsNoSubsettingFlag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadRawFont() error = %v", err)
 	}
-	shaped, err := shapeText(face, "Tiny")
+	shaped, err := shapeTextWithCache(nil, face, "Tiny")
 	if err != nil {
-		t.Fatalf("shapeText() error = %v", err)
+		t.Fatalf("shape text error = %v", err)
 	}
 	objects, err := fontResourceObjects(face, shaped.Used, fontObjectIDs{
 		Type0Font:      1,

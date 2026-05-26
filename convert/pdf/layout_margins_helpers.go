@@ -1,14 +1,11 @@
 package pdf
 
-func pdfPageContentMargins(doc pdfDocumentSpec, styles *pdfStyleResolver, baseMargin float64) (float64, float64, float64, float64) {
-	return pdfPageContentMarginsWithOptions(doc, styles, baseMargin, false)
-}
-
-func pdfPageContentMarginsWithoutRootHorizontal(doc pdfDocumentSpec, styles *pdfStyleResolver, baseMargin float64) (float64, float64, float64, float64) {
-	return pdfPageContentMarginsWithOptions(doc, styles, baseMargin, true)
-}
-
-func pdfPageContentMarginsWithOptions(doc pdfDocumentSpec, styles *pdfStyleResolver, baseMargin float64, stripRootHorizontal bool) (float64, float64, float64, float64) {
+func pdfContentMargins(
+	doc pdfDocumentSpec,
+	styles *pdfStyleResolver,
+	baseMargin float64,
+	stripRootHorizontal bool,
+) (float64, float64, float64, float64) {
 	left := baseMargin
 	right := baseMargin
 	top := baseMargin

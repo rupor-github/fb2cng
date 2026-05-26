@@ -25,9 +25,9 @@ func TestShapeTextAndFontResourceObjects(t *testing.T) {
 	if err != nil {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
-	shaped, err := shapeText(face, "Test Ж")
+	shaped, err := shapeTextWithCache(nil, face, "Test Ж")
 	if err != nil {
-		t.Fatalf("shapeText() error = %v", err)
+		t.Fatalf("shape text error = %v", err)
 	}
 	if len(shaped.Glyphs) != len([]rune("Test Ж")) {
 		t.Fatalf("glyph count = %d, want %d", len(shaped.Glyphs), len([]rune("Test Ж")))
@@ -108,12 +108,12 @@ func TestShapeTextUsesOpenTypeWhenFontCoversRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
-	shaped, err := shapeText(face, "fi")
+	shaped, err := shapeTextWithCache(nil, face, "fi")
 	if err != nil {
-		t.Fatalf("shapeText(fi) error = %v", err)
+		t.Fatalf("shape fi error = %v", err)
 	}
 	if len(shaped.Glyphs) != 1 || shaped.Glyphs[0].Source != "fi" {
-		t.Fatalf("shapeText(fi) = %#v, want OpenType ligature with source text", shaped.Glyphs)
+		t.Fatalf("shape fi = %#v, want OpenType ligature with source text", shaped.Glyphs)
 	}
 }
 
@@ -141,7 +141,7 @@ func TestShapeOpenTypeTextAppliesKerningAndLigatures(t *testing.T) {
 	}
 	simpleAV, err := simplePDFTextShaper{face: face}.Shape("AV", pdfShapeOptions{})
 	if err != nil {
-		t.Fatalf("shapeText(AV) error = %v", err)
+		t.Fatalf("shape AV error = %v", err)
 	}
 	openTypeAV, err := shapeOpenTypeText(face, "AV")
 	if err != nil {
@@ -172,9 +172,9 @@ func TestShapeTextUsesBuiltInSymbolFallbackForGenericFonts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fontForStyle() error = %v", err)
 	}
-	shaped, err := shapeText(face, "≤→●█A")
+	shaped, err := shapeTextWithCache(nil, face, "≤→●█A")
 	if err != nil {
-		t.Fatalf("shapeText() error = %v", err)
+		t.Fatalf("shape text error = %v", err)
 	}
 	if len(shaped.Glyphs) != 5 {
 		t.Fatalf("glyph count = %d, want 5", len(shaped.Glyphs))
@@ -206,9 +206,9 @@ func TestShapeTextDoesNotUseSymbolFallbackForCustomFonts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadRawFont() error = %v", err)
 	}
-	shaped, err := shapeText(face, "≤")
+	shaped, err := shapeTextWithCache(nil, face, "≤")
 	if err != nil {
-		t.Fatalf("shapeText() error = %v", err)
+		t.Fatalf("shape text error = %v", err)
 	}
 	if len(shaped.Glyphs) != 1 {
 		t.Fatalf("glyph count = %d, want 1", len(shaped.Glyphs))
@@ -224,9 +224,9 @@ func TestPDFPageLineWithFontFragmentsSplitsBuiltInSymbolFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fontForStyle() error = %v", err)
 	}
-	shaped, err := shapeText(face, "A≤→●B")
+	shaped, err := shapeTextWithCache(nil, face, "A≤→●B")
 	if err != nil {
-		t.Fatalf("shapeText() error = %v", err)
+		t.Fatalf("shape text error = %v", err)
 	}
 	line := pdfPageLine{Text: shaped, FontKey: key, FontSize: 10, LetterSpacing: 1}
 	line = pdfPageLineWithFontFragments(line)
@@ -271,9 +271,9 @@ func TestShapeTextClassifiesAndLogsMissingGlyphs(t *testing.T) {
 		&mu,
 	)
 
-	shaped, err := shapeText(face, "A ́á ́á")
+	shaped, err := shapeTextWithCache(nil, face, "A ́á ́á")
 	if err != nil {
-		t.Fatalf("shapeText() error = %v", err)
+		t.Fatalf("shape text error = %v", err)
 	}
 	if len(shaped.Glyphs) != 7 {
 		t.Fatalf("glyph count = %d, want 7", len(shaped.Glyphs))
@@ -291,8 +291,8 @@ func TestShapeTextClassifiesAndLogsMissingGlyphs(t *testing.T) {
 		t.Fatalf("used glyph map contains CID 0: %#v", shaped.Used)
 	}
 
-	if _, err := shapeText(face, " ́á"); err != nil {
-		t.Fatalf("repeat shapeText() error = %v", err)
+	if _, err := shapeTextWithCache(nil, face, " ́á"); err != nil {
+		t.Fatalf("repeat shape text error = %v", err)
 	}
 	entries := logs.FilterMessage("Using synthetic PDF missing glyph").All()
 	if len(entries) != 3 {
@@ -475,13 +475,13 @@ func TestPreparePDFFontResources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("builtinFont(serif bold) error = %v", err)
 	}
-	sansText, err := shapeText(sans, "Sans")
+	sansText, err := shapeTextWithCache(nil, sans, "Sans")
 	if err != nil {
-		t.Fatalf("shapeText(sans) error = %v", err)
+		t.Fatalf("shape sans error = %v", err)
 	}
-	serifText, err := shapeText(serifBold, "Serif")
+	serifText, err := shapeTextWithCache(nil, serifBold, "Serif")
 	if err != nil {
-		t.Fatalf("shapeText(serif) error = %v", err)
+		t.Fatalf("shape serif error = %v", err)
 	}
 	nextObjectID := 20
 	resources, err := preparePDFFontResources(nil, map[pdfFontKey]map[uint16]shapedGlyph{
@@ -531,9 +531,9 @@ func TestAssignPDFFontResourceNamesRemapsSubsetGlyphIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
-	shaped, err := shapeText(face, "Ж")
+	shaped, err := shapeTextWithCache(nil, face, "Ж")
 	if err != nil {
-		t.Fatalf("shapeText() error = %v", err)
+		t.Fatalf("shape text error = %v", err)
 	}
 	if len(shaped.Glyphs) != 1 {
 		t.Fatalf("shaped glyphs = %d, want 1", len(shaped.Glyphs))
@@ -680,7 +680,7 @@ func wrapText(face *builtinFontFace, text string, fontSize, maxWidth float64) ([
 		if line != "" {
 			candidate = line + " " + word
 		}
-		shapedCandidate, err := shapeText(face, candidate)
+		shapedCandidate, err := shapeTextWithCache(nil, face, candidate)
 		if err != nil {
 			return nil, err
 		}
@@ -689,7 +689,7 @@ func wrapText(face *builtinFontFace, text string, fontSize, maxWidth float64) ([
 			continue
 		}
 
-		shapedLine, err := shapeText(face, line)
+		shapedLine, err := shapeTextWithCache(nil, face, line)
 		if err != nil {
 			return nil, err
 		}
@@ -697,7 +697,7 @@ func wrapText(face *builtinFontFace, text string, fontSize, maxWidth float64) ([
 		line = word
 	}
 	if line != "" {
-		shapedLine, err := shapeText(face, line)
+		shapedLine, err := shapeTextWithCache(nil, face, line)
 		if err != nil {
 			return nil, err
 		}
