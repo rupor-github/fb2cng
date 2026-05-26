@@ -31,34 +31,24 @@ type pdfFontVariant struct {
 }
 
 func newPDFFontRegistry(book *fb2.FictionBook, log *zap.Logger) *pdfFontRegistry {
-	if log == nil {
-		log = zap.NewNop()
+	registry := &pdfFontRegistry{
+		families:            make(map[string]pdfEmbeddedFontFamily),
+		missingGlyphLogSeen: make(map[pdfMissingGlyphLogKey]bool),
+		fontFallbackLogSeen: make(map[pdfFontFallbackLogKey]bool),
 	}
-	registry := newEmptyPDFFontRegistry(log)
-	if book == nil {
-		return registry
+	if log != nil {
+		registry.log = log.Named("pdf-fonts")
 	}
-
-	registry.addParsedStylesheetFonts(parsePDFStylesheets(book, log))
+	if book != nil {
+		registry.addParsedStylesheetFonts(parsePDFStylesheets(book, log))
+	}
 	return registry
 }
 
 func newPDFFontRegistryFromParsed(stylesheets []pdfParsedStylesheet, log *zap.Logger) *pdfFontRegistry {
-	registry := newEmptyPDFFontRegistry(log)
+	registry := newPDFFontRegistry(nil, log)
 	registry.addParsedStylesheetFonts(stylesheets)
 	return registry
-}
-
-func newEmptyPDFFontRegistry(log *zap.Logger) *pdfFontRegistry {
-	if log == nil {
-		log = zap.NewNop()
-	}
-	return &pdfFontRegistry{
-		families:            make(map[string]pdfEmbeddedFontFamily),
-		log:                 log.Named("pdf-fonts"),
-		missingGlyphLogSeen: make(map[pdfMissingGlyphLogKey]bool),
-		fontFallbackLogSeen: make(map[pdfFontFallbackLogKey]bool),
-	}
 }
 
 func (r *pdfFontRegistry) addParsedStylesheetFonts(stylesheets []pdfParsedStylesheet) {
@@ -101,18 +91,14 @@ func (r *pdfFontRegistry) addStylesheetFonts(stylesheet *fb2.Stylesheet, parsed 
 		}
 		face, err := loadRawFont(family+"-embedded", resource.Data, false, variant.Italic)
 		if err != nil {
-			r.log.Warn("Skipping unsupported PDF @font-face resource",
-				zap.String("family", family),
-				zap.String("url", url),
+			r.logSkippingUnsupportedPDFStylesheetFontResource(family, url,
 				zap.String("reason", "font_parse_failed"),
 				zap.Error(err))
 			continue
 		}
 		program, err := pdfFontProgram(face.Data)
 		if err != nil {
-			r.log.Warn("Skipping unsupported PDF @font-face resource",
-				zap.String("family", family),
-				zap.String("url", url),
+			r.logSkippingUnsupportedPDFStylesheetFontResource(family, url,
 				zap.String("font", face.PostScriptName),
 				zap.String("reason", "unsupported_outline_tables"),
 				zap.Error(err))
@@ -123,6 +109,14 @@ func (r *pdfFontRegistry) addStylesheetFonts(stylesheet *fb2.Stylesheet, parsed 
 		embeddedFamily.faces[variant] = face
 		r.families[familyKey] = embeddedFamily
 	}
+}
+
+func (r *pdfFontRegistry) logSkippingUnsupportedPDFStylesheetFontResource(family string, url string, fields ...zap.Field) {
+	if r == nil || r.log == nil {
+		return
+	}
+	fields = append([]zap.Field{zap.String("family", family), zap.String("url", url)}, fields...)
+	r.log.Warn("Skipping unsupported PDF @font-face resource", fields...)
 }
 
 func (r *pdfFontRegistry) logPDFStylesheetFontSupport(family string, url string, variant pdfFontVariant, face *builtinFontFace, program pdfFontProgramInfo) {

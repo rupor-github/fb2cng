@@ -216,6 +216,16 @@ func mergePDFParagraphFontOverrideFields(base, override, fallback paragraphStyle
 		base.Italic = override.Italic
 		base.HasItalic = override.HasItalic
 	}
+	return mergePDFParagraphLengthOverrides(base, override, fallback, inheritedFontSize, true)
+}
+
+func mergePDFParagraphLengthOverrides(
+	base paragraphStyle,
+	override paragraphStyle,
+	fallback paragraphStyle,
+	inheritedFontSize float64,
+	scaleImplicitLineHeight bool,
+) paragraphStyle {
 	if override.FontSizeSpec.Set {
 		base.FontSize = pdfResolveCSSFontSizeSpec(override.FontSizeSpec, inheritedFontSize)
 		base.FontSizeSpec = override.FontSizeSpec
@@ -224,7 +234,7 @@ func mergePDFParagraphFontOverrideFields(base, override, fallback paragraphStyle
 		base.FontSizeSpec = pdfCSSLengthSpec{}
 	}
 	lineHeightOverride := override
-	if override.FontSizeSpec.Set && !override.LineHeightExplicit {
+	if scaleImplicitLineHeight && override.FontSizeSpec.Set && !override.LineHeightExplicit {
 		if override.LineHeight != fallback.LineHeight && override.FontSize > 0 {
 			base.LineHeight = override.LineHeight * base.FontSize / override.FontSize
 			lineHeightOverride.LineHeight = fallback.LineHeight
@@ -727,26 +737,7 @@ func mergePDFInheritedParagraphStyle(base, override, fallback paragraphStyle) pa
 		base.Italic = override.Italic
 		base.HasItalic = true
 	}
-	if override.FontSizeSpec.Set {
-		base.FontSize = pdfResolveCSSFontSizeSpec(override.FontSizeSpec, base.FontSize)
-		base.FontSizeSpec = override.FontSizeSpec
-	} else if override.FontSize != fallback.FontSize {
-		base.FontSize = override.FontSize
-		base.FontSizeSpec = pdfCSSLengthSpec{}
-	}
-	base = mergePDFLineHeightOverride(base, override, fallback)
-	if override.LineHeightSpec.Set {
-		base.LineHeight = pdfResolveCSSLineHeightSpec(override.LineHeightSpec, base.FontSize)
-		base.LineHeightSpec = override.LineHeightSpec
-		base.LineHeightExplicit = true
-	}
-	if override.LetterSpacingSpec.Set {
-		base.LetterSpacing = pdfResolveCSSLengthSpec(override.LetterSpacingSpec, base.FontSize)
-		base.LetterSpacingSpec = override.LetterSpacingSpec
-	} else if override.LetterSpacing != fallback.LetterSpacing {
-		base.LetterSpacing = override.LetterSpacing
-		base.LetterSpacingSpec = pdfCSSLengthSpec{}
-	}
+	base = mergePDFParagraphLengthOverrides(base, override, fallback, base.FontSize, false)
 	if override.FirstLineIndentSpec.Set {
 		base.FirstLineIndent = pdfResolveCSSLengthSpec(override.FirstLineIndentSpec, base.FontSize)
 		base.FirstLineIndentSpec = override.FirstLineIndentSpec
