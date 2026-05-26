@@ -580,9 +580,8 @@ func assembleParagraphLines(face *builtinFontFace, units []paragraphUnit, style 
 	}
 	breaks := chooseBreaksWithShape(units, spaceWidth, style, maxWidth, shape)
 	lines := make([]paragraphLine, 0, len(breaks))
+	finalizer := newParagraphLineFinalizer(style, maxWidth, shape)
 	start := 0
-	previousHyphenated := false
-	previousFitness := paragraphFitnessDecent
 	for i, br := range breaks {
 		lineText := joinUnits(units[start:br.End], br.HyphenAfter)
 		shaped, err := shapeTextWithCache(shape.TextShapers, face, lineText)
@@ -591,48 +590,79 @@ func assembleParagraphLines(face *builtinFontFace, units []paragraphUnit, style 
 		}
 
 		width := shapedWidthPointsWithSpacing(shaped, style.FontSize, style.LetterSpacing)
-		indent := paragraphLineIndentForLine(start, i, style, maxWidth, shape)
-		available := max(maxWidth-indent, 1)
-		line := paragraphLine{
-			Text:              shaped,
-			Width:             width,
-			Indent:            indent,
-			JustificationGaps: countJustificationGaps(units[start:br.End]),
-		}
-		last := i == len(breaks)-1
-		singleWord := units[start].WordIndex == units[br.End-1].WordIndex
-		terminalOverhang := paragraphBreakTerminalOverhangFor(units[br.End-1], br.HyphenAfter)
-		visualMetricWidth := width + terminalOverhang
-		line.BreakStats = lineBreakStats(
-			visualMetricWidth,
-			available,
-			line.JustificationGaps,
-			start == 0,
-			last,
-			singleWord,
-			br.Hyphenated,
-			previousHyphenated,
-			previousFitness,
-		)
-		if br.Emergency {
-			line.BreakStats.Emergency = true
-			line.BreakStats.Demerits += paragraphEmergencyPenalty
-		}
-		spacingAvailable := paragraphJustificationAvailableForOverhang(available, terminalOverhang)
-		line.ExtraWordSpacing, line.ExtraCharSpacing = paragraphJustificationSpacing(
-			style,
-			last,
-			width,
-			spacingAvailable,
-			line.JustificationGaps,
-			len(shaped.Glyphs),
-		)
+		line := finalizer.finalize(i, start, br, units, shaped, width, nil, i == len(breaks)-1)
 		lines = append(lines, line)
-		previousHyphenated = br.Hyphenated
-		previousFitness = line.BreakStats.Fitness
 		start = br.End
 	}
 	return lines, nil
+}
+
+func newParagraphLineFinalizer(style paragraphStyle, maxWidth float64, shape paragraphLineShape) paragraphLineFinalizer {
+	return paragraphLineFinalizer{
+		style:           style,
+		maxWidth:        maxWidth,
+		shape:           shape,
+		previousFitness: paragraphFitnessDecent,
+	}
+}
+
+type paragraphLineFinalizer struct {
+	style              paragraphStyle
+	maxWidth           float64
+	shape              paragraphLineShape
+	previousHyphenated bool
+	previousFitness    paragraphFitness
+}
+
+func (f *paragraphLineFinalizer) finalize(
+	lineIndex int,
+	start int,
+	br paragraphBreak,
+	units []paragraphUnit,
+	text shapedText,
+	width float64,
+	fragments []paragraphLineFragment,
+	last bool,
+) paragraphLine {
+	indent := paragraphLineIndentForLine(start, lineIndex, f.style, f.maxWidth, f.shape)
+	available := max(f.maxWidth-indent, 1)
+	line := paragraphLine{
+		Text:              text,
+		Width:             width,
+		Indent:            indent,
+		JustificationGaps: countJustificationGaps(units[start:br.End]),
+		Fragments:         fragments,
+	}
+	singleWord := units[start].WordIndex == units[br.End-1].WordIndex
+	terminalOverhang := paragraphBreakTerminalOverhangFor(units[br.End-1], br.HyphenAfter)
+	visualMetricWidth := width + terminalOverhang
+	line.BreakStats = lineBreakStats(
+		visualMetricWidth,
+		available,
+		line.JustificationGaps,
+		start == 0,
+		last,
+		singleWord,
+		br.Hyphenated,
+		f.previousHyphenated,
+		f.previousFitness,
+	)
+	if br.Emergency {
+		line.BreakStats.Emergency = true
+		line.BreakStats.Demerits += paragraphEmergencyPenalty
+	}
+	spacingAvailable := paragraphJustificationAvailableForOverhang(available, terminalOverhang)
+	line.ExtraWordSpacing, line.ExtraCharSpacing = paragraphJustificationSpacing(
+		f.style,
+		last,
+		width,
+		spacingAvailable,
+		line.JustificationGaps,
+		len(text.Glyphs),
+	)
+	f.previousHyphenated = br.Hyphenated
+	f.previousFitness = line.BreakStats.Fitness
+	return line
 }
 
 func chooseBreaksWithShape(units []paragraphUnit, spaceWidth float64, style paragraphStyle, maxWidth float64, shape paragraphLineShape) []paragraphBreak {

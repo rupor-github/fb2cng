@@ -11,14 +11,6 @@ import (
 	"fbc/fb2"
 )
 
-func collectTextBlocks(c *content.Content) ([]pdfTextBlock, error) {
-	plan, err := collectPDFContent(c, nil)
-	if err != nil {
-		return nil, err
-	}
-	return plan.Blocks, nil
-}
-
 func collectPDFContent(c *content.Content, cfg *config.DocumentConfig) (pdfContentPlan, error) {
 	if c == nil || c.Book == nil {
 		return pdfContentPlan{}, nil

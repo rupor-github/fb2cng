@@ -191,6 +191,20 @@ func mergePDFParagraphOverridesWithFont(base, override, fallback paragraphStyle,
 }
 
 func mergePDFParagraphFontOverrides(base, override, fallback paragraphStyle, inheritedFontSize float64) paragraphStyle {
+	base = mergePDFParagraphFontOverrideFields(base, override, fallback, inheritedFontSize)
+	if override.FirstLineIndentSpec.Set {
+		base.FirstLineIndent = pdfResolveCSSLengthSpec(override.FirstLineIndentSpec, base.FontSize)
+		base.FirstLineIndentSpec = override.FirstLineIndentSpec
+		base.HasFirstLineIndent = override.HasFirstLineIndent
+	} else if override.HasFirstLineIndent || override.FirstLineIndent != fallback.FirstLineIndent {
+		base.FirstLineIndent = override.FirstLineIndent
+		base.FirstLineIndentSpec = pdfCSSLengthSpec{}
+		base.HasFirstLineIndent = override.HasFirstLineIndent
+	}
+	return base
+}
+
+func mergePDFParagraphFontOverrideFields(base, override, fallback paragraphStyle, inheritedFontSize float64) paragraphStyle {
 	if override.FontFamily != fallback.FontFamily {
 		base.FontFamily = override.FontFamily
 	}
@@ -230,15 +244,6 @@ func mergePDFParagraphFontOverrides(base, override, fallback paragraphStyle, inh
 	} else if override.LetterSpacing != fallback.LetterSpacing {
 		base.LetterSpacing = override.LetterSpacing
 		base.LetterSpacingSpec = pdfCSSLengthSpec{}
-	}
-	if override.FirstLineIndentSpec.Set {
-		base.FirstLineIndent = pdfResolveCSSLengthSpec(override.FirstLineIndentSpec, base.FontSize)
-		base.FirstLineIndentSpec = override.FirstLineIndentSpec
-		base.HasFirstLineIndent = override.HasFirstLineIndent
-	} else if override.HasFirstLineIndent || override.FirstLineIndent != fallback.FirstLineIndent {
-		base.FirstLineIndent = override.FirstLineIndent
-		base.FirstLineIndentSpec = pdfCSSLengthSpec{}
-		base.HasFirstLineIndent = override.HasFirstLineIndent
 	}
 	return base
 }

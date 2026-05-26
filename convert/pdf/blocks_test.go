@@ -11,6 +11,14 @@ import (
 	"fbc/fb2"
 )
 
+func collectTextBlocks(c *content.Content) ([]pdfTextBlock, error) {
+	plan, err := collectPDFContent(c, nil)
+	if err != nil {
+		return nil, err
+	}
+	return plan.Blocks, nil
+}
+
 func findPDFTOCEntry(entries []*structure.TOCEntry, title string) *structure.TOCEntry {
 	for _, entry := range entries {
 		if entry == nil {

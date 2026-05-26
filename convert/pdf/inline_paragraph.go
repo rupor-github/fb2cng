@@ -68,55 +68,16 @@ func layoutInlineWithShape(doc pdfDocumentSpec, registry *pdfFontRegistry, resol
 	units = splitInlineEmergencyParagraphUnits(units, style, maxWidth, shape)
 	breaks := chooseBreaksWithShape(units, spaceFragment.Width, style, maxWidth, shape)
 	lines := make([]paragraphLine, 0, len(breaks))
+	finalizer := newParagraphLineFinalizer(style, maxWidth, shape)
 	start := 0
-	previousHyphenated := false
-	previousFitness := paragraphFitnessDecent
 	for i, br := range breaks {
 		fragments, lineText, width := inlineParagraphLineFragments(units[start:br.End], spaceFragment, br.HyphenAfter)
 		shaped, err := shapeTextWithCache(shape.TextShapers, baseFace, lineText)
 		if err != nil {
 			return nil, fmt.Errorf("shape inline line text: %w", err)
 		}
-		indent := paragraphLineIndentForLine(start, i, style, maxWidth, shape)
-		available := max(maxWidth-indent, 1)
-		line := paragraphLine{
-			Text:              shaped,
-			Width:             width,
-			Indent:            indent,
-			JustificationGaps: countJustificationGaps(units[start:br.End]),
-			Fragments:         fragments,
-		}
-		last := i == len(breaks)-1
-		singleWord := units[start].WordIndex == units[br.End-1].WordIndex
-		terminalOverhang := paragraphBreakTerminalOverhangFor(units[br.End-1], br.HyphenAfter)
-		visualMetricWidth := width + terminalOverhang
-		line.BreakStats = lineBreakStats(
-			visualMetricWidth,
-			available,
-			line.JustificationGaps,
-			start == 0,
-			last,
-			singleWord,
-			br.Hyphenated,
-			previousHyphenated,
-			previousFitness,
-		)
-		if br.Emergency {
-			line.BreakStats.Emergency = true
-			line.BreakStats.Demerits += paragraphEmergencyPenalty
-		}
-		spacingAvailable := paragraphJustificationAvailableForOverhang(available, terminalOverhang)
-		line.ExtraWordSpacing, line.ExtraCharSpacing = paragraphJustificationSpacing(
-			style,
-			last,
-			width,
-			spacingAvailable,
-			line.JustificationGaps,
-			len(shaped.Glyphs),
-		)
+		line := finalizer.finalize(i, start, br, units, shaped, width, fragments, i == len(breaks)-1)
 		lines = append(lines, line)
-		previousHyphenated = br.Hyphenated
-		previousFitness = line.BreakStats.Fitness
 		start = br.End
 	}
 	return lines, nil
@@ -742,46 +703,7 @@ func stringListContains(values []string, value string) bool {
 }
 
 func mergeInlineParagraphStyle(base, override, fallback paragraphStyle) paragraphStyle {
-	if override.FontFamily != fallback.FontFamily {
-		base.FontFamily = override.FontFamily
-	}
-	if override.HasBold || override.Bold != fallback.Bold {
-		base.Bold = override.Bold
-		base.HasBold = override.HasBold
-	}
-	if override.HasItalic || override.Italic != fallback.Italic {
-		base.Italic = override.Italic
-		base.HasItalic = override.HasItalic
-	}
-	if override.FontSizeSpec.Set {
-		base.FontSize = pdfResolveCSSFontSizeSpec(override.FontSizeSpec, base.FontSize)
-		base.FontSizeSpec = override.FontSizeSpec
-	} else if override.FontSize != fallback.FontSize {
-		base.FontSize = override.FontSize
-		base.FontSizeSpec = pdfCSSLengthSpec{}
-	}
-	lineHeightOverride := override
-	if override.FontSizeSpec.Set && !override.LineHeightExplicit {
-		if override.LineHeight != fallback.LineHeight && override.FontSize > 0 {
-			base.LineHeight = override.LineHeight * base.FontSize / override.FontSize
-			lineHeightOverride.LineHeight = fallback.LineHeight
-		} else {
-			lineHeightOverride.LineHeight = fallback.LineHeight
-		}
-	}
-	base = mergePDFLineHeightOverride(base, lineHeightOverride, fallback)
-	if override.LineHeightSpec.Set {
-		base.LineHeight = pdfResolveCSSLineHeightSpec(override.LineHeightSpec, base.FontSize)
-		base.LineHeightSpec = override.LineHeightSpec
-		base.LineHeightExplicit = true
-	}
-	if override.LetterSpacingSpec.Set {
-		base.LetterSpacing = pdfResolveCSSLengthSpec(override.LetterSpacingSpec, base.FontSize)
-		base.LetterSpacingSpec = override.LetterSpacingSpec
-	} else if override.LetterSpacing != fallback.LetterSpacing {
-		base.LetterSpacing = override.LetterSpacing
-		base.LetterSpacingSpec = pdfCSSLengthSpec{}
-	}
+	base = mergePDFParagraphFontOverrideFields(base, override, fallback, base.FontSize)
 	if override.HasVerticalAlign || override.VerticalAlign != fallback.VerticalAlign {
 		base.VerticalAlign = override.VerticalAlign
 		base.HasVerticalAlign = override.HasVerticalAlign
