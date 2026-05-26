@@ -75,11 +75,7 @@ func pdfDebugGlyphsForLine(line pdfPageLine) []pdfDebugGlyph {
 			line.ExtraWordSpacing,
 		)
 		glyphs = append(glyphs, fragmentGlyphs...)
-		currentX += fragment.Width + line.ExtraCharSpacing*float64(max(len(fragment.Text.Glyphs)-1, 0))
-		if fragmentIndex != len(line.Fragments)-1 {
-			currentX += line.ExtraCharSpacing
-		}
-		currentX += line.ExtraWordSpacing * float64(pdfPageFragmentJustificationSpaceCount(fragment, fragmentIndex != len(line.Fragments)-1))
+		currentX += pdfPageFragmentAdvance(line, fragment, fragmentIndex != len(line.Fragments)-1)
 	}
 	return glyphs
 }

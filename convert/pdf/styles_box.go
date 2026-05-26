@@ -2,7 +2,7 @@ package pdf
 
 func (r *pdfStyleResolver) pageStyle() pdfBlockResolvedStyle {
 	page := r.defaultStyle(pdfStylePage)
-	page = mergePDFStyleOverrides(page, r.namedStyle(pdfStylePage), r.defaultStyle(pdfStylePage))
+	page = mergePDFStyleOverridesWithFont(page, r.namedStyle(pdfStylePage), r.defaultStyle(pdfStylePage), page.Paragraph.FontSize)
 	rootLeft, rootRight := r.rootHorizontalMargins()
 	page.MarginLeft += rootLeft
 	page.MarginRight += rootRight

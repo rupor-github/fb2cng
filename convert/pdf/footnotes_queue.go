@@ -12,6 +12,25 @@ type pdfPrintedFootnoteRef struct {
 	Label string
 }
 
+func appendPDFPrintedFootnoteFragmentRef(
+	refs *[]pdfPrintedFootnoteRef,
+	seen map[string]bool,
+	footnotes map[string]pdfPrintedFootnote,
+	id string,
+	href string,
+	label string,
+) {
+	id = strings.TrimSpace(id)
+	if id == "" || strings.TrimSpace(href) != "" || seen[id] {
+		return
+	}
+	if _, ok := footnotes[id]; !ok {
+		return
+	}
+	seen[id] = true
+	*refs = append(*refs, pdfPrintedFootnoteRef{ID: id, Label: strings.TrimSpace(label)})
+}
+
 type pdfPrintedFootnoteQueueEntry struct {
 	ID        string
 	PageLabel string
@@ -70,15 +89,14 @@ func pdfPrintedFootnotePageRefs(doc pdfDocumentSpec, page pdfPage) []pdfPrintedF
 	var refs []pdfPrintedFootnoteRef
 	for _, line := range page.Lines {
 		for _, fragment := range line.Fragments {
-			id := strings.TrimSpace(fragment.FootnoteID)
-			if id == "" || strings.TrimSpace(fragment.LinkHref) != "" || seen[id] {
-				continue
-			}
-			if _, ok := doc.PrintedFootnotes[id]; !ok {
-				continue
-			}
-			seen[id] = true
-			refs = append(refs, pdfPrintedFootnoteRef{ID: id, Label: strings.TrimSpace(shapedRunes(fragment.Text))})
+			appendPDFPrintedFootnoteFragmentRef(
+				&refs,
+				seen,
+				doc.PrintedFootnotes,
+				fragment.FootnoteID,
+				fragment.LinkHref,
+				shapedRunes(fragment.Text),
+			)
 		}
 	}
 	return refs

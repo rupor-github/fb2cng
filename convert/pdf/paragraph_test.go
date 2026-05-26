@@ -2,6 +2,18 @@ package pdf
 
 import "testing"
 
+func layoutParagraph(face *builtinFontFace, text string, style paragraphStyle, maxWidth float64) ([]paragraphLine, error) {
+	return layoutParagraphWithShape(face, text, style, maxWidth, paragraphLineShape{})
+}
+
+func chooseParagraphBreaks(units []paragraphUnit, spaceWidth float64, style paragraphStyle, maxWidth float64) []paragraphBreak {
+	return chooseBreaksWithShape(units, spaceWidth, style, maxWidth, paragraphLineShape{})
+}
+
+func paragraphLineJustificationAvailable(line paragraphLine, fontSize float64, letterSpacing float64, available float64) float64 {
+	return paragraphJustificationAvailableForOverhang(available, paragraphLineVisualRightReserve(line, fontSize, letterSpacing))
+}
+
 func TestLayoutParagraphBalancesLinesAndJustifies(t *testing.T) {
 	face, err := builtinFont("sans-serif", false, false)
 	if err != nil {

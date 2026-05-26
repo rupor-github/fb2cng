@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -23,7 +24,7 @@ func TestAppendParagraphBlockWithClassesConvertsImageOnlyParagraphsToContextStyl
 
 func TestAppendImageBlockAddsImageBlockClass(t *testing.T) {
 	var blocks []pdfTextBlock
-	appendImageBlock(&blocks, &fb2.Image{Href: "#block.png", Alt: "Block"}, "anchor")
+	appendImageBlockWithOptions(&blocks, pdfImageBlockOptions{Image: &fb2.Image{Href: "#block.png", Alt: "Block"}, FallbackID: "anchor"})
 	if len(blocks) != 1 || blocks[0].Kind != pdfBlockImage {
 		t.Fatalf("blocks = %#v, want one image block", blocks)
 	}
@@ -266,4 +267,38 @@ func TestAppendTitleBlocksWithIDHeaderAndClassesMarksTextAfterImage(t *testing.T
 	if !blocks[1].StripRootHorizontalMargins {
 		t.Fatalf("title text after image should strip root horizontal margins as wrapper child")
 	}
+}
+
+func appendTitleBlocks(blocks *[]pdfTextBlock, title *fb2.Title, depth int) {
+	appendTitleBlocksWithOptions(blocks, pdfTitleBlockOptions{Title: title, Depth: depth, HeaderStyleName: pdfHeadingStyleName(depth)})
+}
+
+func appendTitleBlocksWithIDAndClasses(blocks *[]pdfTextBlock, title *fb2.Title, depth int, id string, styleClasses string) {
+	appendTitleBlocksWithOptions(blocks, pdfTitleBlockOptions{
+		Title:           title,
+		Depth:           depth,
+		ID:              id,
+		HeaderStyleName: pdfHeadingStyleName(depth),
+		StyleClasses:    styleClasses,
+		ContextClasses:  strings.TrimSpace(styleClasses),
+	})
+}
+
+func appendTitleBlocksWithIDHeaderAndClasses(blocks *[]pdfTextBlock, title *fb2.Title, depth int, id string, headerStyleName string, styleClasses string) {
+	appendTitleBlocksWithOptions(blocks, pdfTitleBlockOptions{
+		Title:           title,
+		Depth:           depth,
+		ID:              id,
+		HeaderStyleName: headerStyleName,
+		StyleClasses:    styleClasses,
+		ContextClasses:  strings.TrimSpace(styleClasses),
+	})
+}
+
+func appendParagraphBlockWithClasses(blocks *[]pdfTextBlock, kind pdfBlockKind, paragraph *fb2.Paragraph, depth int, styleClasses string) {
+	appendParagraphBlockWithOptions(blocks, pdfParagraphBlockOptions{Kind: kind, Paragraph: paragraph, Depth: depth, StyleClasses: styleClasses, ContextClasses: strings.TrimSpace(styleClasses)})
+}
+
+func appendEpigraphBlocks(blocks *[]pdfTextBlock, epigraph *fb2.Epigraph) {
+	appendEpigraphBlocksFull(blocks, nil, epigraph, "", false)
 }

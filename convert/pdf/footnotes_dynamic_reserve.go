@@ -148,15 +148,14 @@ func pdfPrintedFootnoteParagraphLineRefs(doc pdfDocumentSpec, line paragraphLine
 	seen := make(map[string]bool)
 	var refs []pdfPrintedFootnoteRef
 	for _, fragment := range line.Fragments {
-		id := strings.TrimSpace(fragment.FootnoteID)
-		if id == "" || strings.TrimSpace(fragment.LinkHref) != "" || seen[id] {
-			continue
-		}
-		if _, ok := doc.PrintedFootnotes[id]; !ok {
-			continue
-		}
-		seen[id] = true
-		refs = append(refs, pdfPrintedFootnoteRef{ID: id, Label: strings.TrimSpace(shapedRunes(fragment.Text))})
+		appendPDFPrintedFootnoteFragmentRef(
+			&refs,
+			seen,
+			doc.PrintedFootnotes,
+			fragment.FootnoteID,
+			fragment.LinkHref,
+			shapedRunes(fragment.Text),
+		)
 	}
 	return refs
 }

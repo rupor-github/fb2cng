@@ -34,12 +34,7 @@ func newPDFFontRegistry(book *fb2.FictionBook, log *zap.Logger) *pdfFontRegistry
 	if log == nil {
 		log = zap.NewNop()
 	}
-	registry := &pdfFontRegistry{
-		families:            make(map[string]pdfEmbeddedFontFamily),
-		log:                 log.Named("pdf-fonts"),
-		missingGlyphLogSeen: make(map[pdfMissingGlyphLogKey]bool),
-		fontFallbackLogSeen: make(map[pdfFontFallbackLogKey]bool),
-	}
+	registry := newEmptyPDFFontRegistry(log)
 	if book == nil {
 		return registry
 	}
@@ -49,17 +44,21 @@ func newPDFFontRegistry(book *fb2.FictionBook, log *zap.Logger) *pdfFontRegistry
 }
 
 func newPDFFontRegistryFromParsed(stylesheets []pdfParsedStylesheet, log *zap.Logger) *pdfFontRegistry {
+	registry := newEmptyPDFFontRegistry(log)
+	registry.addParsedStylesheetFonts(stylesheets)
+	return registry
+}
+
+func newEmptyPDFFontRegistry(log *zap.Logger) *pdfFontRegistry {
 	if log == nil {
 		log = zap.NewNop()
 	}
-	registry := &pdfFontRegistry{
+	return &pdfFontRegistry{
 		families:            make(map[string]pdfEmbeddedFontFamily),
 		log:                 log.Named("pdf-fonts"),
 		missingGlyphLogSeen: make(map[pdfMissingGlyphLogKey]bool),
 		fontFallbackLogSeen: make(map[pdfFontFallbackLogKey]bool),
 	}
-	registry.addParsedStylesheetFonts(stylesheets)
-	return registry
 }
 
 func (r *pdfFontRegistry) addParsedStylesheetFonts(stylesheets []pdfParsedStylesheet) {

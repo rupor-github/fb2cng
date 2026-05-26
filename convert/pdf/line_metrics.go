@@ -25,11 +25,7 @@ func pdfPageLineDrawnWidth(line pdfPageLine) float64 {
 
 	width := 0.0
 	for i, fragment := range line.Fragments {
-		width += fragment.Width + line.ExtraCharSpacing*float64(max(len(fragment.Text.Glyphs)-1, 0))
-		if i != len(line.Fragments)-1 {
-			width += line.ExtraCharSpacing
-		}
-		width += line.ExtraWordSpacing * float64(pdfPageFragmentJustificationSpaceCount(fragment, i != len(line.Fragments)-1))
+		width += pdfPageFragmentAdvance(line, fragment, i != len(line.Fragments)-1)
 	}
 	return width
 }
@@ -124,11 +120,7 @@ func pdfPageLineVisualBounds(line pdfPageLine) (float64, float64, bool) {
 			right = max(right, currentX+fragmentRight)
 			ok = true
 		}
-		currentX += fragment.Width + line.ExtraCharSpacing*float64(max(len(fragment.Text.Glyphs)-1, 0))
-		if i != len(line.Fragments)-1 {
-			currentX += line.ExtraCharSpacing
-		}
-		currentX += line.ExtraWordSpacing * float64(pdfPageFragmentJustificationSpaceCount(fragment, i != len(line.Fragments)-1))
+		currentX += pdfPageFragmentAdvance(line, fragment, i != len(line.Fragments)-1)
 	}
 	return left, right, ok
 }
@@ -169,6 +161,24 @@ func pdfPageLineJustificationSpaceCount(line pdfPageLine) int {
 		count += pdfPageFragmentJustificationSpaceCount(fragment, i != len(line.Fragments)-1)
 	}
 	return count
+}
+
+func pdfPageFragmentAdvance(line pdfPageLine, fragment pdfPageLineFragment, includeTrailing bool) float64 {
+	advance := fragment.Width + line.ExtraCharSpacing*float64(max(len(fragment.Text.Glyphs)-1, 0))
+	if includeTrailing {
+		advance += line.ExtraCharSpacing
+	}
+	advance += line.ExtraWordSpacing * float64(pdfPageFragmentJustificationSpaceCount(fragment, includeTrailing))
+	return advance
+}
+
+func paragraphFragmentAdvance(line paragraphLine, fragment paragraphLineFragment, includeTrailing bool) float64 {
+	advance := fragment.Width + line.ExtraCharSpacing*float64(max(len(fragment.Text.Glyphs)-1, 0))
+	if includeTrailing {
+		advance += line.ExtraCharSpacing
+	}
+	advance += line.ExtraWordSpacing * float64(paragraphFragmentJustificationSpaceCount(fragment, includeTrailing))
+	return advance
 }
 
 func pdfPageFragmentJustificationSpaceCount(fragment pdfPageLineFragment, includeTrailing bool) int {

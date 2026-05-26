@@ -651,13 +651,57 @@ func TestToUnicodeCMapUsesGlyphSourceText(t *testing.T) {
 }
 
 func TestUTF16BEHex(t *testing.T) {
-	if got := utf16BEHex('Ж'); got != "0416" {
-		t.Errorf("utf16BEHex('Ж') = %q, want 0416", got)
+	if got := utf16BEHexString("Ж"); got != "0416" {
+		t.Errorf("utf16BEHexString(Ж) = %q, want 0416", got)
 	}
-	if got := utf16BEHex('😀'); got != "D83DDE00" {
-		t.Errorf("utf16BEHex('😀') = %q, want D83DDE00", got)
+	if got := utf16BEHexString("😀"); got != "D83DDE00" {
+		t.Errorf("utf16BEHexString(😀) = %q, want D83DDE00", got)
 	}
 	if got := utf16BEHexString("fi"); got != "00660069" {
 		t.Errorf("utf16BEHexString(fi) = %q, want 00660069", got)
 	}
+}
+
+func shapeOpenTypeText(face *builtinFontFace, text string) (shapedText, error) {
+	shaper := openTypePDFTextShaper{face: face}
+	return shaper.Shape(text, pdfShapeOptions{})
+}
+
+func wrapText(face *builtinFontFace, text string, fontSize, maxWidth float64) ([]shapedText, error) {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return []shapedText{{Used: make(map[uint16]shapedGlyph)}}, nil
+	}
+
+	lines := make([]shapedText, 0, 2)
+	line := ""
+	for _, word := range words {
+		candidate := word
+		if line != "" {
+			candidate = line + " " + word
+		}
+		shapedCandidate, err := shapeText(face, candidate)
+		if err != nil {
+			return nil, err
+		}
+		if line == "" || shapedWidthPoints(shapedCandidate, fontSize) <= maxWidth {
+			line = candidate
+			continue
+		}
+
+		shapedLine, err := shapeText(face, line)
+		if err != nil {
+			return nil, err
+		}
+		lines = append(lines, shapedLine)
+		line = word
+	}
+	if line != "" {
+		shapedLine, err := shapeText(face, line)
+		if err != nil {
+			return nil, err
+		}
+		lines = append(lines, shapedLine)
+	}
+	return lines, nil
 }

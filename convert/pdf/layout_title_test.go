@@ -241,3 +241,11 @@ func TestLayoutPDFPagesTitleVignetteCanStripRootHorizontalMargins(t *testing.T) 
 		t.Fatalf("title vignette width = %v, want rootless content width %v", image.Width, 520.0-48.0)
 	}
 }
+
+func headingPDFStyle(depth int) pdfBlockResolvedStyle {
+	lineHeight := pdfAdjustedLineHeight
+	if depth > 1 {
+		lineHeight = pdfSectionTitleHeaderLineHeight
+	}
+	return headingPDFStyleWithLineHeight(pdfHeadingFontSize(depth), lineHeight, pdfHeadingMarginFactor(depth))
+}

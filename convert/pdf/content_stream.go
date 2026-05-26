@@ -79,7 +79,7 @@ func pageContent(page pdfPage) []byte {
 			currentX := line.X
 			for i, fragment := range line.Fragments {
 				if len(fragment.Text.Glyphs) != 0 && fragment.FontName != "" {
-					missingGlyphBoxes = append(missingGlyphBoxes, writeTextFragment(
+					missingGlyphBoxes = append(missingGlyphBoxes, writeTextGlyphs(
 						&buf,
 						fragment.FontName,
 						fragment.FontSize,
@@ -92,11 +92,7 @@ func pageContent(page pdfPage) []byte {
 						&textState,
 					)...)
 				}
-				currentX += fragment.Width + line.ExtraCharSpacing*float64(max(len(fragment.Text.Glyphs)-1, 0))
-				if i != len(line.Fragments)-1 {
-					currentX += line.ExtraCharSpacing
-				}
-				currentX += line.ExtraWordSpacing * float64(pdfPageFragmentJustificationSpaceCount(fragment, i != len(line.Fragments)-1))
+				currentX += pdfPageFragmentAdvance(line, fragment, i != len(line.Fragments)-1)
 			}
 			continue
 		}
@@ -120,21 +116,6 @@ func pageContent(page pdfPage) []byte {
 	buf.Write(pageMissingGlyphBoxes(missingGlyphBoxes))
 	buf.Write(pageTextDecorations(page))
 	return buf.Bytes()
-}
-
-func writeTextFragment(
-	buf *bytes.Buffer,
-	fontName string,
-	fontSize float64,
-	letterSpacing float64,
-	color pdfColor,
-	x float64,
-	y float64,
-	glyphs []shapedGlyph,
-	extraWordSpacing float64,
-	state *pdfTextDrawingState,
-) []pdfMissingGlyphBox {
-	return writeTextGlyphs(buf, fontName, fontSize, letterSpacing, color, x, y, glyphs, extraWordSpacing, state)
 }
 
 func writeTextGlyphs(
@@ -404,11 +385,7 @@ func writeFragmentDecorations(buf *bytes.Buffer, line pdfPageLine) {
 			}
 			buf.WriteString("Q\n")
 		}
-		currentX += fragment.Width + line.ExtraCharSpacing*float64(max(len(fragment.Text.Glyphs)-1, 0))
-		if i != len(line.Fragments)-1 {
-			currentX += line.ExtraCharSpacing
-		}
-		currentX += line.ExtraWordSpacing * float64(pdfPageFragmentJustificationSpaceCount(fragment, i != len(line.Fragments)-1))
+		currentX += pdfPageFragmentAdvance(line, fragment, i != len(line.Fragments)-1)
 	}
 }
 

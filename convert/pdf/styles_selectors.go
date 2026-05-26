@@ -52,10 +52,6 @@ func pdfElementClassStyleNames(block pdfTextBlock) []string {
 	return nil
 }
 
-func pdfStyleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
-	return newPDFStyleResolver(nil, nil).styleForBlock(block)
-}
-
 func pdfTagStyleNameForBlock(block pdfTextBlock) string {
 	switch pdfElementTagForBlock(block) {
 	case "p":

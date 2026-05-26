@@ -307,7 +307,7 @@ func appendUnitBlocks(blocks *[]pdfTextBlock, c *content.Content, unit *structur
 	switch unit.Kind {
 	case structure.UnitBodyImage:
 		if unit.Body != nil {
-			appendImageBlock(blocks, unit.Body.Image, unit.ID)
+			appendImageBlockWithOptions(blocks, pdfImageBlockOptions{Image: unit.Body.Image, FallbackID: unit.ID})
 		}
 	case structure.UnitBodyIntro:
 		appendBodyIntroBlocks(blocks, c, unit.Body, !splitBodies[unit.Body])

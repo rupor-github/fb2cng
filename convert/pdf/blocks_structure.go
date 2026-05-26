@@ -18,7 +18,7 @@ func appendBodyIntroBlocks(blocks *[]pdfTextBlock, c *content.Content, body *fb2
 		book = c.Book
 	}
 	if includeImage {
-		appendImageBlock(blocks, body.Image, "")
+		appendImageBlockWithOptions(blocks, pdfImageBlockOptions{Image: body.Image})
 	}
 	if body.Title != nil && body.Main() {
 		appendVignetteWithOptions(blocks, pdfVignetteBlockOptions{
@@ -75,7 +75,7 @@ func appendFootnoteSectionContentBlocks(blocks *[]pdfTextBlock, c *content.Conte
 	for i := range section.Epigraphs {
 		appendEpigraphBlocksFull(blocks, c, &section.Epigraphs[i], "", false)
 	}
-	appendImageBlock(blocks, section.Image, section.ID)
+	appendImageBlockWithOptions(blocks, pdfImageBlockOptions{Image: section.Image, FallbackID: section.ID})
 	if section.Annotation != nil {
 		appendFlowBlocks(blocks, c, section.Annotation.Items, 1, splitSections, pdfStyleAnnotation, pdfStyleAnnotation, false)
 	}
@@ -432,14 +432,6 @@ func pdfTableCellInlineRuns(table *fb2.Table, c *content.Content, registerBackli
 		runs[pdfTableCellKey{placed.Row, placed.Col}] = paragraphInlineRunsWithBacklinks(&paragraph, c, registerBacklinks)
 	}
 	return runs
-}
-
-func appendImageBlock(blocks *[]pdfTextBlock, image *fb2.Image, fallbackID string) {
-	appendImageBlockWithClasses(blocks, image, fallbackID, "")
-}
-
-func appendImageBlockWithClasses(blocks *[]pdfTextBlock, image *fb2.Image, fallbackID string, styleClasses string) {
-	appendImageBlockWithOptions(blocks, pdfImageBlockOptions{Image: image, FallbackID: fallbackID, StyleClasses: styleClasses})
 }
 
 type pdfImageBlockOptions struct {

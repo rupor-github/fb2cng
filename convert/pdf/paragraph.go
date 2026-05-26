@@ -186,10 +186,6 @@ type paragraphBreakState struct {
 	ShapeLine  int
 }
 
-func layoutParagraph(face *builtinFontFace, text string, style paragraphStyle, maxWidth float64) ([]paragraphLine, error) {
-	return layoutParagraphWithShape(face, text, style, maxWidth, paragraphLineShape{})
-}
-
 func layoutParagraphWithShape(face *builtinFontFace, text string, style paragraphStyle, maxWidth float64, shape paragraphLineShape) ([]paragraphLine, error) {
 	if style.FontSize <= 0 {
 		return nil, fmt.Errorf("paragraph font size must be positive: %g", style.FontSize)

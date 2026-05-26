@@ -448,7 +448,7 @@ func applyPDFTextDecoration(style *pdfBlockResolvedStyle, value css.Value) {
 }
 
 func applyPDFMarginShorthand(style *pdfBlockResolvedStyle, value css.Value) {
-	top, right, bottom, left, topSpec, rightSpec, bottomSpec, leftSpec, ok := pdfCSSMarginShorthand(value, style.Paragraph.FontSize)
+	top, right, bottom, left, topSpec, rightSpec, bottomSpec, leftSpec, ok := pdfCSSBoxShorthand(value, style.Paragraph.FontSize, true)
 	if !ok {
 		return
 	}
@@ -465,7 +465,7 @@ func applyPDFMarginShorthand(style *pdfBlockResolvedStyle, value css.Value) {
 }
 
 func applyPDFPaddingShorthand(style *pdfBlockResolvedStyle, value css.Value) {
-	top, right, bottom, left, topSpec, rightSpec, bottomSpec, leftSpec, ok := pdfCSSBoxShorthand(value, style.Paragraph.FontSize)
+	top, right, bottom, left, topSpec, rightSpec, bottomSpec, leftSpec, ok := pdfCSSBoxShorthand(value, style.Paragraph.FontSize, false)
 	if !ok {
 		return
 	}
@@ -479,15 +479,21 @@ func applyPDFPaddingShorthand(style *pdfBlockResolvedStyle, value css.Value) {
 	style.PaddingLeftSpec = leftSpec
 }
 
-func pdfCSSMarginShorthand(value css.Value, fontSize float64) (float64, float64, float64, float64, pdfCSSLengthSpec, pdfCSSLengthSpec, pdfCSSLengthSpec, pdfCSSLengthSpec, bool) {
-	return pdfCSSBoxShorthandWithAuto(value, fontSize, true)
-}
-
-func pdfCSSBoxShorthand(value css.Value, fontSize float64) (float64, float64, float64, float64, pdfCSSLengthSpec, pdfCSSLengthSpec, pdfCSSLengthSpec, pdfCSSLengthSpec, bool) {
-	return pdfCSSBoxShorthandWithAuto(value, fontSize, false)
-}
-
-func pdfCSSBoxShorthandWithAuto(value css.Value, fontSize float64, allowAuto bool) (float64, float64, float64, float64, pdfCSSLengthSpec, pdfCSSLengthSpec, pdfCSSLengthSpec, pdfCSSLengthSpec, bool) {
+func pdfCSSBoxShorthand(
+	value css.Value,
+	fontSize float64,
+	allowAuto bool,
+) (
+	top float64,
+	right float64,
+	bottom float64,
+	left float64,
+	topSpec pdfCSSLengthSpec,
+	rightSpec pdfCSSLengthSpec,
+	bottomSpec pdfCSSLengthSpec,
+	leftSpec pdfCSSLengthSpec,
+	ok bool,
+) {
 	tokens := strings.Fields(value.Raw)
 	if len(tokens) == 0 && value.Raw == "" {
 		tokens = []string{formatCSSValue(value)}

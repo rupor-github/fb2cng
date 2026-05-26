@@ -530,45 +530,6 @@ var pdfBuiltinMonoFallbackFirstRanges = []pdfRuneRange{
 	{0x2580, 0x259F}, // Block Elements
 }
 
-func wrapText(face *builtinFontFace, text string, fontSize, maxWidth float64) ([]shapedText, error) {
-	words := strings.Fields(text)
-	if len(words) == 0 {
-		return []shapedText{{Used: make(map[uint16]shapedGlyph)}}, nil
-	}
-
-	lines := make([]shapedText, 0, 2)
-	line := ""
-	for _, word := range words {
-		candidate := word
-		if line != "" {
-			candidate = line + " " + word
-		}
-		shapedCandidate, err := shapeText(face, candidate)
-		if err != nil {
-			return nil, err
-		}
-		if line == "" || shapedWidthPoints(shapedCandidate, fontSize) <= maxWidth {
-			line = candidate
-			continue
-		}
-
-		shapedLine, err := shapeText(face, line)
-		if err != nil {
-			return nil, err
-		}
-		lines = append(lines, shapedLine)
-		line = word
-	}
-	if line != "" {
-		shapedLine, err := shapeText(face, line)
-		if err != nil {
-			return nil, err
-		}
-		lines = append(lines, shapedLine)
-	}
-	return lines, nil
-}
-
 func missingPDFGlyph(face *builtinFontFace, r rune, advanceWidth int) shapedGlyph {
 	kind := pdfMissingGlyphPrintable
 	width := advanceWidth

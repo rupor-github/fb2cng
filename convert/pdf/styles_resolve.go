@@ -57,10 +57,6 @@ func injectPDFImplicitLineHeight(style, fallback pdfBlockResolvedStyle) pdfBlock
 	return style
 }
 
-func mergePDFStyleOverrides(base, override, fallback pdfBlockResolvedStyle) pdfBlockResolvedStyle {
-	return mergePDFStyleOverridesWithFont(base, override, fallback, base.Paragraph.FontSize)
-}
-
 func mergePDFStyleOverridesWithFont(base, override, fallback pdfBlockResolvedStyle, inheritedFontSize float64) pdfBlockResolvedStyle {
 	relativeLengthFontSize := pdfRelativeLengthFontSize(base, override, fallback, inheritedFontSize)
 	base.Paragraph = mergePDFParagraphOverridesWithFont(base.Paragraph, override.Paragraph, fallback.Paragraph, inheritedFontSize)

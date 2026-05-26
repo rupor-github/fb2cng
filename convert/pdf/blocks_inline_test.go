@@ -692,3 +692,7 @@ func TestParagraphInlineRunsPreserveFB2InlineStyles(t *testing.T) {
 	assertRun(9, "code", func(run pdfInlineRun) bool { return run.Code && run.StyleClasses == pdfStyleCode })
 	assertRun(11, "styled", func(run pdfInlineRun) bool { return run.StyleClasses == "accent" })
 }
+
+func buildTOCPageBlocks(entries []*structure.TOCEntry, includeUntitled bool, tocType common.TOCType) []pdfTextBlock {
+	return buildTOCPageBlocksWithTitle(pdfTitleFromStrings("Contents"), entries, includeUntitled, tocType)
+}

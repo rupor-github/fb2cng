@@ -6,10 +6,6 @@ import (
 	"fbc/fb2"
 )
 
-func (r *pdfStyleResolver) collapsedBlockStyles(blocks []pdfTextBlock) []pdfBlockResolvedStyle {
-	return r.collapsedBlockStylesWithImages(blocks, nil)
-}
-
 func (r *pdfStyleResolver) collapsedBlockStylesWithImages(blocks []pdfTextBlock, images fb2.BookImages) []pdfBlockResolvedStyle {
 	if r == nil {
 		r = newPDFStyleResolver(nil, nil)
