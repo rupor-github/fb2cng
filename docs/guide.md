@@ -1707,7 +1707,7 @@ Visit the [GitHub repository](https://github.com/rupor-github/fb2cng) to:
 - Contribute code
 - View source code
 
-Russian language discussions available on [4PDA forum](https://4pda.ru/forum/index.php?showtopic=942250).
+Russian language discussions available on [4PDA forum](https://4pda.to/forum/index.php?showtopic=942250).
 
 ### Log Files
 
