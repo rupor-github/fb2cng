@@ -767,7 +767,11 @@ func assignPDFFontResourceNames(pages []pdfPage, resources []pdfFontResource) {
 		for lineIndex := range pages[pageIndex].Lines {
 			line := &pages[pageIndex].Lines[lineIndex]
 			line.FontName = names[line.FontKey]
-			remapShapedTextGlyphIDs(&line.Text, cidMaps[line.FontKey])
+			// Fragmented lines render their fragments, and line.Text can share the same glyph slice with a fragment.
+			// Remap only the rendered storage to avoid applying compact subset CIDs twice.
+			if len(line.Fragments) == 0 {
+				remapShapedTextGlyphIDs(&line.Text, cidMaps[line.FontKey])
+			}
 			for fragmentIndex := range line.Fragments {
 				fragment := &line.Fragments[fragmentIndex]
 				fragment.FontName = names[fragment.FontKey]

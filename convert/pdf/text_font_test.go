@@ -499,6 +499,33 @@ func TestPreparePDFFontResources(t *testing.T) {
 	}
 }
 
+func TestAssignPDFFontResourceNamesRemapsFragmentGlyphIDsOnlyOnce(t *testing.T) {
+	glyphs := []shapedGlyph{{GlyphID: 42, Rune: 'У', Source: "У"}}
+	shared := shapedText{Glyphs: glyphs, Used: map[uint16]shapedGlyph{42: glyphs[0]}}
+	pages := []pdfPage{{Lines: []pdfPageLine{{
+		FontKey: pdfFontKey{Family: "serif"},
+		Text:    shared,
+		Fragments: []pdfPageLineFragment{{
+			FontKey: pdfFontKey{Family: "serif"},
+			Text:    shared,
+		}},
+	}}}}
+	resources := []pdfFontResource{{
+		Key:    pdfFontKey{Family: "serif"},
+		Name:   "F1",
+		CIDMap: map[uint16]uint16{42: 7, 7: 3},
+	}}
+
+	assignPDFFontResourceNames(pages, resources)
+
+	if got := pages[0].Lines[0].Fragments[0].Text.Glyphs[0].GlyphID; got != 7 {
+		t.Fatalf("fragment glyph ID = %d, want one remap to CID 7", got)
+	}
+	if got := pages[0].Lines[0].Fragments[0].FontName; got != "F1" {
+		t.Fatalf("fragment font name = %q, want F1", got)
+	}
+}
+
 func TestAssignPDFFontResourceNamesRemapsSubsetGlyphIDs(t *testing.T) {
 	face, err := builtinFont("serif", false, false)
 	if err != nil {
