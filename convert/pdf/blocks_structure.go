@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"slices"
 	"strings"
 
 	"fbc/common"
@@ -673,7 +674,7 @@ func isVignetteBlock(block pdfTextBlock) bool {
 }
 
 func titleWrapperStripRootHorizontalMargins(styleClasses string) bool {
-	for _, class := range strings.Fields(styleClasses) {
+	for class := range strings.FieldsSeq(styleClasses) {
 		switch class {
 		case pdfStyleBodyTitle, pdfStyleChapterTitle, pdfStyleSectionTitle:
 			return true
@@ -710,12 +711,7 @@ func isTitleHeaderImageBlock(block pdfTextBlock) bool {
 }
 
 func blockHasStyleClass(block pdfTextBlock, className string) bool {
-	for _, class := range strings.Fields(block.StyleClasses) {
-		if class == className {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings.Fields(block.StyleClasses), className)
 }
 
 type pdfParagraphBlockOptions struct {
@@ -746,12 +742,13 @@ func appendParagraphBlock(blocks *[]pdfTextBlock, opts pdfParagraphBlockOptions)
 	if imageID, alt, ok := paragraphImageOnly(paragraph); ok {
 		imageStyleName := pdfStyleImage
 		imageStyleClasses := strings.TrimSpace(paragraph.Style)
-		if kind == pdfBlockHeading {
+		switch kind {
+		case pdfBlockHeading:
 			imageStyleClasses = joinStyleClasses(pdfHeadingStyleName(depth), imageStyleClasses, styleClasses, pdfStyleHeadingImage)
-		} else if kind == pdfBlockSubtitle {
+		case pdfBlockSubtitle:
 			imageStyleName = styleName
 			imageStyleClasses = joinStyleClasses(styleName, imageStyleClasses, styleClasses)
-		} else if kind == pdfBlockParagraph {
+		case pdfBlockParagraph:
 			imageStyleName = styleName
 			imageStyleClasses = joinStyleClasses(imageStyleClasses, styleClasses)
 		}
@@ -800,7 +797,7 @@ func appendPoemBlocks(
 	c *content.Content,
 	poem *fb2.Poem,
 	depth int,
-	splitSections map[string]bool,
+	_ map[string]bool,
 	contextClasses string,
 	stripRootHorizontalMargins bool,
 ) {
@@ -1005,7 +1002,7 @@ func subtitleStyleClasses(containerClasses string) string {
 }
 
 func subtitleStyleName(classes string) string {
-	for _, class := range strings.Fields(classes) {
+	for class := range strings.FieldsSeq(classes) {
 		switch class {
 		case pdfStyleAnnotationSubtitle, pdfStylePoemSubtitle, pdfStyleStanzaSubtitle, pdfStyleEpigraphSubtitle, pdfStyleCiteSubtitle:
 			return class
@@ -1018,7 +1015,7 @@ func joinStyleClasses(values ...string) string {
 	seen := make(map[string]bool)
 	classes := make([]string, 0, len(values))
 	for _, value := range values {
-		for _, class := range strings.Fields(value) {
+		for class := range strings.FieldsSeq(value) {
 			if seen[class] {
 				continue
 			}

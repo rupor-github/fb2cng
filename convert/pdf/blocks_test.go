@@ -389,8 +389,8 @@ func TestCollectTextBlocksUsesFootnoteSectionSemantics(t *testing.T) {
 	foundTitle := false
 	foundBody := false
 	for _, block := range blocks {
-		switch {
-		case block.Text == "1":
+		switch block.Text {
+		case "1":
 			foundTitle = true
 			if block.Kind != pdfBlockParagraph {
 				t.Fatalf("footnote title kind = %v, want paragraph: %#v", block.Kind, block)
@@ -404,7 +404,7 @@ func TestCollectTextBlocksUsesFootnoteSectionSemantics(t *testing.T) {
 			if block.ContextClasses != pdfStyleFootnoteTitle {
 				t.Fatalf("footnote title context = %q, want %q", block.ContextClasses, pdfStyleFootnoteTitle)
 			}
-		case block.Text == "Footnote body.":
+		case "Footnote body.":
 			foundBody = true
 			if block.Kind != pdfBlockParagraph {
 				t.Fatalf("footnote body kind = %v, want paragraph: %#v", block.Kind, block)

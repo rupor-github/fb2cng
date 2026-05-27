@@ -163,21 +163,21 @@ func (t *pdfStyleTracer) traceAssign(block pdfTextBlock, styleName string, style
 		return
 	}
 	var details strings.Builder
-	details.WriteString(fmt.Sprintf("block kind=%s", block.Kind.String()))
+	fmt.Fprintf(&details, "block kind=%s", block.Kind.String())
 	if block.ID != "" {
-		details.WriteString(fmt.Sprintf(", id=%q", block.ID))
+		fmt.Fprintf(&details, ", id=%q", block.ID)
 	}
 	if block.Depth != 0 {
-		details.WriteString(fmt.Sprintf(", depth=%d", block.Depth))
+		fmt.Fprintf(&details, ", depth=%d", block.Depth)
 	}
 	if strings.TrimSpace(block.StyleClasses) != "" {
-		details.WriteString(fmt.Sprintf(", classes=%q", strings.TrimSpace(block.StyleClasses)))
+		fmt.Fprintf(&details, ", classes=%q", strings.TrimSpace(block.StyleClasses))
 	}
 	if block.ImageID != "" {
-		details.WriteString(fmt.Sprintf(", image_id=%q", block.ImageID))
+		fmt.Fprintf(&details, ", image_id=%q", block.ImageID)
 	}
 	if block.Text != "" {
-		details.WriteString(fmt.Sprintf("\n  text: %q", pdfTraceExcerpt(block.Text)))
+		fmt.Fprintf(&details, "\n  text: %q", pdfTraceExcerpt(block.Text))
 	}
 	details.WriteString("\n  resolved: ")
 	details.WriteString(pdfTraceFormatResolvedStyle(style))
@@ -198,15 +198,16 @@ func (t *pdfStyleTracer) flush() string {
 	}
 	slices.Sort(sections)
 	for _, section := range sections {
-		sb.WriteString(fmt.Sprintf("  %s: %d\n", section, t.sections[section]))
+		fmt.Fprintf(&sb, "  %s: %d\n", section, t.sections[section])
 	}
 	sb.WriteString("\nDetailed Trace:\n")
-	sb.WriteString(strings.Repeat("-", 80) + "\n")
+	sb.WriteString(strings.Repeat("-", 80))
+	sb.WriteByte('\n')
 	for i, entry := range t.entries {
-		sb.WriteString(fmt.Sprintf("[%04d] %s: %s\n", i+1, entry.Operation, entry.StyleName))
+		fmt.Fprintf(&sb, "[%04d] %s: %s\n", i+1, entry.Operation, entry.StyleName)
 		if entry.Details != "" {
 			for line := range strings.SplitSeq(entry.Details, "\n") {
-				sb.WriteString("       " + line + "\n")
+				fmt.Fprintf(&sb, "       %s\n", line)
 			}
 		}
 		sb.WriteByte('\n')

@@ -1,6 +1,9 @@
 package pdf
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 func (r *pdfStyleResolver) styleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
 	name := pdfStyleNameForBlock(block)
@@ -11,7 +14,7 @@ func (r *pdfStyleResolver) styleForBlock(block pdfTextBlock) pdfBlockResolvedSty
 	style = mergePDFStyleOverridesWithFont(style, r.namedStyle(name), defaultStyle, inheritedFontSize)
 	style = r.applyContextInheritedBlockDefaults(style, tagStyle, block)
 	classFallback := r.namedStyle(pdfStyleParagraph)
-	for _, class := range strings.Fields(block.StyleClasses) {
+	for class := range strings.FieldsSeq(block.StyleClasses) {
 		classStyle, ok := r.styles[class]
 		if !ok {
 			continue
@@ -364,7 +367,7 @@ func (r *pdfStyleResolver) tagStyleForBlock(block pdfTextBlock) pdfBlockResolved
 func (r *pdfStyleResolver) inheritedFontSizeForBlock(block pdfTextBlock) float64 {
 	fontSize := r.rootParagraphStyle().FontSize
 	fallback := r.defaultStyle(pdfStyleParagraph).Paragraph
-	for _, class := range strings.Fields(block.ContextClasses) {
+	for class := range strings.FieldsSeq(block.ContextClasses) {
 		if class == pdfStyleNameForBlock(block) {
 			continue
 		}
@@ -395,7 +398,7 @@ func (r *pdfStyleResolver) contextInheritedBlockStyle(tagStyle pdfBlockResolvedS
 		hasLeft  bool
 		hasRight bool
 	)
-	for _, class := range strings.Fields(block.ContextClasses) {
+	for class := range strings.FieldsSeq(block.ContextClasses) {
 		if class == pdfStyleNameForBlock(block) {
 			continue
 		}
@@ -494,12 +497,7 @@ func shouldSkipContextInheritedMargins(block pdfTextBlock, class string) bool {
 	if class == "" || !pdfContainerStyleClass(class) {
 		return false
 	}
-	for _, contextClass := range strings.Fields(block.ContextClasses) {
-		if contextClass == class {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings.Fields(block.ContextClasses), class)
 }
 
 func pdfContainerStyleClass(class string) bool {

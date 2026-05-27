@@ -2,6 +2,7 @@ package pdf
 
 import (
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 )
@@ -79,9 +80,7 @@ func shapedTextFromPageLineFragments(fragments []pdfPageLineFragment) shapedText
 	shaped := shapedText{Used: make(map[uint16]shapedGlyph)}
 	for _, fragment := range fragments {
 		shaped.Glyphs = append(shaped.Glyphs, fragment.Text.Glyphs...)
-		for glyphID, glyph := range fragment.Text.Used {
-			shaped.Used[glyphID] = glyph
-		}
+		maps.Copy(shaped.Used, fragment.Text.Used)
 	}
 	return shaped
 }

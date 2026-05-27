@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"hash/fnv"
+	"maps"
 	"math"
 	"slices"
 	"strings"
@@ -362,10 +363,7 @@ func shapedGlyphSource(runes []rune, start, count int) (int, int, string) {
 	if count <= 0 {
 		count = 1
 	}
-	end := min(start+count, len(runes))
-	if end < start {
-		end = start
-	}
+	end := max(min(start+count, len(runes)), start)
 	return start, end, string(runes[start:end])
 }
 
@@ -772,9 +770,7 @@ func compressedPDFStream(dict docwriter.Dict, data []byte) (docwriter.Dict, []by
 		return nil, nil, err
 	}
 	out := make(docwriter.Dict, len(dict)+1)
-	for key, value := range dict {
-		out[key] = value
-	}
+	maps.Copy(out, dict)
 	out["Filter"] = docwriter.Name("FlateDecode")
 	return out, compressed, nil
 }

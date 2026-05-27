@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -276,9 +277,7 @@ func writeObject(buf *bytes.Buffer, obj Object) {
 
 func cloneDict(dict Dict) Dict {
 	result := make(Dict, len(dict)+1)
-	for key, value := range dict {
-		result[key] = value
-	}
+	maps.Copy(result, dict)
 	return result
 }
 

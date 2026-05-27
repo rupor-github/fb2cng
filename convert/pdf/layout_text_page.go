@@ -242,7 +242,7 @@ func (l *pdfPageLayout) renderTextLines(r *pdfTextBlockRender) error {
 	return nil
 }
 
-func (l *pdfPageLayout) renderTextDropcap(block pdfTextBlock, style pdfBlockResolvedStyle, blockLeft float64, dropcap pdfDropcapLayout) int {
+func (l *pdfPageLayout) renderTextDropcap(_ pdfTextBlock, style pdfBlockResolvedStyle, blockLeft float64, dropcap pdfDropcapLayout) int {
 	dropcapX := blockLeft + style.MarginLeft + style.PaddingLeft
 	dropLine := paragraphLine{Text: dropcap.Fragment.Text, Width: dropcap.Fragment.Width, Fragments: []paragraphLineFragment{dropcap.Fragment}}
 	if dropcap.Fragment.LinkHref != "" {

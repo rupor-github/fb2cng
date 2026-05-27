@@ -235,9 +235,9 @@ func pdfLinkStyleClass(seg *fb2.InlineSegment, c *content.Content) string {
 	if href == "" {
 		return ""
 	}
-	if strings.HasPrefix(href, "#") {
+	if after, ok := strings.CutPrefix(href, "#"); ok {
 		if c != nil {
-			if _, ok := c.FootnotesIndex[strings.TrimPrefix(href, "#")]; ok {
+			if _, ok := c.FootnotesIndex[after]; ok {
 				return pdfStyleLinkFootnote
 			}
 			return pdfStyleLinkInternal

@@ -137,10 +137,11 @@ func appendPDFPrintedFootnoteNestedRefsFromRuns(
 		if id == "" {
 			continue
 		}
-		label := runs[i].Text
+		var label strings.Builder
+		label.WriteString(runs[i].Text)
 		for i+1 < len(runs) && strings.TrimSpace(runs[i+1].FootnoteID) == id {
 			i++
-			label += runs[i].Text
+			label.WriteString(runs[i].Text)
 		}
 		if seen[id] {
 			continue
@@ -149,7 +150,7 @@ func appendPDFPrintedFootnoteNestedRefsFromRuns(
 			continue
 		}
 		seen[id] = true
-		*refs = append(*refs, pdfPrintedFootnoteRef{ID: id, Label: strings.TrimSpace(label)})
+		*refs = append(*refs, pdfPrintedFootnoteRef{ID: id, Label: strings.TrimSpace(label.String())})
 	}
 }
 

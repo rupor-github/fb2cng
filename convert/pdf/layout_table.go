@@ -222,7 +222,7 @@ func pdfTableCellMinWidth(doc pdfDocumentSpec, style pdfBlockResolvedStyle, cell
 			maxWord = shapedWidthPoints(shaped, style.Paragraph.FontSize, style.Paragraph.LetterSpacing)
 		}
 	} else {
-		for _, word := range strings.Fields(text) {
+		for word := range strings.FieldsSeq(text) {
 			shaped, err := shapeTextWithCache(doc.TextShapers, face, word)
 			if err != nil {
 				return 0, err

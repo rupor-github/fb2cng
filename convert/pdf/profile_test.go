@@ -105,8 +105,8 @@ func BenchmarkPDFProfileCollectContent(b *testing.B) {
 	fixture := newPDFProfileFixture(b, pdfProfileBookPath(b))
 	defer fixture.cleanup()
 	b.ReportAllocs()
-	b.ResetTimer()
-	for range b.N {
+
+	for b.Loop() {
 		if _, err := collectPDFContent(fixture.c, fixture.cfg); err != nil {
 			b.Fatalf("collect PDF content: %v", err)
 		}
@@ -117,8 +117,8 @@ func BenchmarkPDFProfileStyles(b *testing.B) {
 	fixture := newPDFProfileFixture(b, pdfProfileBookPath(b))
 	defer fixture.cleanup()
 	b.ReportAllocs()
-	b.ResetTimer()
-	for range b.N {
+
+	for b.Loop() {
 		parsed := parsePDFStylesheets(fixture.c.Book, zap.NewNop())
 		_ = newPDFStyleResolverFromParsed(parsed, zap.NewNop(), newPDFStyleTracer(""))
 		_ = newPDFFontRegistryFromParsed(parsed, zap.NewNop())
@@ -132,8 +132,8 @@ func BenchmarkPDFProfileLayout(b *testing.B) {
 	doc.Blocks = applyPDFPseudoContentToBlocks(doc.Blocks, doc.Styles)
 	doc.PrintedFootnotes = applyPDFPseudoContentToPrintedFootnotes(doc.PrintedFootnotes, doc.Styles)
 	b.ReportAllocs()
-	b.ResetTimer()
-	for range b.N {
+
+	for b.Loop() {
 		if _, _, _, err := layoutPDFDocumentPages(doc); err != nil {
 			b.Fatalf("layout PDF pages: %v", err)
 		}
@@ -145,8 +145,8 @@ func BenchmarkPDFProfileBuildDocument(b *testing.B) {
 	defer fixture.cleanup()
 	doc := newPDFProfileDocument(b, fixture)
 	b.ReportAllocs()
-	b.ResetTimer()
-	for range b.N {
+
+	for b.Loop() {
 		if _, err := buildPDFDocument(doc); err != nil {
 			b.Fatalf("build PDF document: %v", err)
 		}
@@ -158,8 +158,8 @@ func BenchmarkPDFProfileGenerate(b *testing.B) {
 	defer fixture.cleanup()
 	outputName := filepath.Join(b.TempDir(), "profile-output.pdf")
 	b.ReportAllocs()
-	b.ResetTimer()
-	for range b.N {
+
+	for b.Loop() {
 		if err := Generate(context.Background(), fixture.c, outputName, fixture.cfg, zap.NewNop()); err != nil {
 			b.Fatalf("generate PDF: %v", err)
 		}

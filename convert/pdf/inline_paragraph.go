@@ -2,6 +2,7 @@ package pdf
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -278,9 +279,7 @@ func shapedTextFromFragments(fragments []paragraphLineFragment) shapedText {
 	shaped := shapedText{Used: make(map[uint16]shapedGlyph)}
 	for _, fragment := range fragments {
 		shaped.Glyphs = append(shaped.Glyphs, fragment.Text.Glyphs...)
-		for id, glyph := range fragment.Text.Used {
-			shaped.Used[id] = glyph
-		}
+		maps.Copy(shaped.Used, fragment.Text.Used)
 	}
 	return shaped
 }
@@ -514,7 +513,7 @@ func inlineRunHasSuperscriptContext(run pdfInlineRun) bool {
 }
 
 func inlineRunHeadingLevel(run pdfInlineRun) int {
-	for _, class := range strings.Fields(run.ContextClasses) {
+	for class := range strings.FieldsSeq(run.ContextClasses) {
 		switch class {
 		case "h1", pdfStyleBodyTitle, pdfStyleChapterTitle, pdfStyleBodyTitleHeader, pdfStyleChapterTitleHeader:
 			return 1
@@ -607,7 +606,7 @@ func removeInlineRunStyleClass(classes string, remove string) string {
 		return ""
 	}
 	kept := make([]string, 0, len(strings.Fields(classes)))
-	for _, class := range strings.Fields(classes) {
+	for class := range strings.FieldsSeq(classes) {
 		if class != remove {
 			kept = append(kept, class)
 		}
@@ -616,12 +615,7 @@ func removeInlineRunStyleClass(classes string, remove string) string {
 }
 
 func inlineRunHasStyleClass(run pdfInlineRun, className string) bool {
-	for _, class := range strings.Fields(run.StyleClasses) {
-		if class == className {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings.Fields(run.StyleClasses), className)
 }
 
 func inlineClassParagraphStyle(resolver *pdfStyleResolver, base paragraphStyle, run pdfInlineRun) paragraphStyle {
@@ -630,7 +624,7 @@ func inlineClassParagraphStyle(resolver *pdfStyleResolver, base paragraphStyle, 
 	}
 	fallback := resolver.styles[pdfStyleParagraph].Paragraph
 	style := base
-	for _, class := range strings.Fields(run.StyleClasses) {
+	for class := range strings.FieldsSeq(run.StyleClasses) {
 		if inlineRunClassAlreadyAppliedByBlockContext(run, class) {
 			continue
 		}
@@ -655,12 +649,7 @@ func inlineRunClassAlreadyAppliedByBlockContext(run pdfInlineRun, class string) 
 }
 
 func inlineRunHasContextClass(run pdfInlineRun, className string) bool {
-	for _, class := range strings.Fields(run.ContextClasses) {
-		if class == className {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings.Fields(run.ContextClasses), className)
 }
 
 func contextInlineRuns(runs []pdfInlineRun, contextClasses string) []pdfInlineRun {
@@ -718,21 +707,14 @@ func appendUniqueString(values []string, value string) []string {
 	if strings.TrimSpace(value) == "" {
 		return values
 	}
-	for _, existing := range values {
-		if existing == value {
-			return values
-		}
+	if slices.Contains(values, value) {
+		return values
 	}
 	return append(values, value)
 }
 
 func stringListContains(values []string, value string) bool {
-	for _, existing := range values {
-		if existing == value {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(values, value)
 }
 
 func mergeInlineParagraphStyle(base, override, fallback paragraphStyle) paragraphStyle {

@@ -1,6 +1,9 @@
 package pdf
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 const (
 	// Match KFX/KP3 semantics: normalized dropcaps always use one initial
@@ -57,12 +60,7 @@ type pdfDropcapLayout struct {
 }
 
 func hasPDFStyleClass(classes string, className string) bool {
-	for _, class := range strings.Fields(classes) {
-		if class == className {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings.Fields(classes), className)
 }
 
 func addPDFDropcapInlineRun(runs []pdfInlineRun) []pdfInlineRun {
@@ -135,7 +133,7 @@ func pdfDropcapLineCount(resolver *pdfStyleResolver, block pdfTextBlock, style p
 		return clampPDFDropcapLines(int(style.FontSizeSpec.Value + 0.5))
 	}
 	if resolver != nil {
-		for _, class := range strings.Fields(block.StyleClasses) {
+		for class := range strings.FieldsSeq(block.StyleClasses) {
 			if cfg, ok := resolver.dropcaps[class]; ok && cfg.Lines > 0 {
 				return clampPDFDropcapLines(cfg.Lines)
 			}
@@ -163,7 +161,7 @@ func pdfDropcapPaddingRight(resolver *pdfStyleResolver, run pdfInlineRun, fontSi
 			paddingRight = style.PaddingRight
 		}
 	}
-	for _, class := range strings.Fields(run.StyleClasses) {
+	for class := range strings.FieldsSeq(run.StyleClasses) {
 		if style, ok := resolver.styles[class]; ok {
 			apply(style)
 		}
@@ -202,7 +200,7 @@ func pdfActiveDropcapShape(
 		return paragraphLineShape{}
 	}
 	insets := make([]float64, 0, active.Lines)
-	for i := 0; i < pdfDropcapMaxLines*2; i++ {
+	for i := range pdfDropcapMaxLines * 2 {
 		lineY := firstBaselineY - float64(i)*lineHeight
 		if !pdfLineOverlapsDropcap(lineY, lineHeight, style.FontSize, active) {
 			if lineY+style.FontSize < active.BottomY {
@@ -253,9 +251,9 @@ func buildPDFDropcapLayout(
 	resolver *pdfStyleResolver,
 	block pdfTextBlock,
 	base paragraphStyle,
-	baseFace *builtinFontFace,
+	_ *builtinFontFace,
 	runs []pdfInlineRun,
-	blockWidth float64,
+	_ float64,
 	firstBaselineY float64,
 ) (pdfDropcapLayout, bool, error) {
 	dropcapRun, bodyRuns, ok := splitPDFDropcapRuns(runs)

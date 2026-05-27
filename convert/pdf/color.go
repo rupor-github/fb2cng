@@ -121,8 +121,8 @@ func pdfRGBFunctionColor(value string) (pdfColor, bool) {
 }
 
 func pdfRGBComponent(value string) (float64, bool) {
-	if strings.HasSuffix(value, "%") {
-		parsed, err := strconv.ParseFloat(strings.TrimSuffix(value, "%"), 64)
+	if before, ok := strings.CutSuffix(value, "%"); ok {
+		parsed, err := strconv.ParseFloat(before, 64)
 		if err != nil {
 			return 0, false
 		}

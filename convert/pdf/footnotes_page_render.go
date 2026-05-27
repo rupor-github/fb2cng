@@ -1,5 +1,7 @@
 package pdf
 
+import "maps"
+
 const (
 	pdfPrintedFootnoteContinuationMarkerChevrons       = 3
 	pdfPrintedFootnoteContinuationMarkerMinStrokeWidth = 0.5
@@ -419,7 +421,7 @@ func pdfPageYBounds(page pdfPage) (float64, float64, bool) {
 }
 
 func pdfPrintedFootnoteSeparatorMetricsForArea(
-	doc pdfDocumentSpec,
+	_ pdfDocumentSpec,
 	styles *pdfStyleResolver,
 	contentLeft float64,
 	contentWidth float64,
@@ -459,8 +461,6 @@ func mergePDFUsedGlyphs(dst map[pdfFontKey]map[uint16]shapedGlyph, src map[pdfFo
 		if dst[key] == nil {
 			dst[key] = make(map[uint16]shapedGlyph, len(glyphs))
 		}
-		for id, glyph := range glyphs {
-			dst[key][id] = glyph
-		}
+		maps.Copy(dst[key], glyphs)
 	}
 }

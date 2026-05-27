@@ -1,5 +1,7 @@
 package pdf
 
+import "maps"
+
 func defaultPDFStyles() map[string]pdfBlockResolvedStyle {
 	styles := map[string]pdfBlockResolvedStyle{
 		pdfStyleHTML:      basePDFStyle(textAlignLeft),
@@ -316,8 +318,6 @@ func (r *pdfStyleResolver) applyPDFHeadingMarginAdjustments() {
 
 func clonePDFStyles(src map[string]pdfBlockResolvedStyle) map[string]pdfBlockResolvedStyle {
 	cloned := make(map[string]pdfBlockResolvedStyle, len(src))
-	for name, style := range src {
-		cloned[name] = style
-	}
+	maps.Copy(cloned, src)
 	return cloned
 }

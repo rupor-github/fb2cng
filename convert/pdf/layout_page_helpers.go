@@ -1,6 +1,9 @@
 package pdf
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 func addPDFPageLine(page *pdfPage, used map[pdfFontKey]map[uint16]shapedGlyph, line pdfPageLine) {
 	if line.FontKey.Family == "" {
@@ -16,10 +19,8 @@ func addPDFPageAnchor(page *pdfPage, id string) {
 	if id == "" {
 		return
 	}
-	for _, existing := range page.Anchors {
-		if existing == id {
-			return
-		}
+	if slices.Contains(page.Anchors, id) {
+		return
 	}
 	page.Anchors = append(page.Anchors, id)
 }

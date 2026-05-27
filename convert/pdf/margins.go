@@ -148,7 +148,7 @@ func pdfContainerMarginClass(block pdfTextBlock) string {
 
 func pdfRemoveContainerControlClasses(classes string, container string) string {
 	out := make([]string, 0, len(classes))
-	for _, class := range strings.Fields(classes) {
+	for class := range strings.FieldsSeq(classes) {
 		if class == container || pdfContainerCompanionClass(container, class) {
 			continue
 		}

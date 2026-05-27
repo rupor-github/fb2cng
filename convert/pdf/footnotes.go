@@ -90,7 +90,7 @@ func applyPDFFootnoteContextToBlocks(blocks []pdfTextBlock) []pdfTextBlock {
 	return blocks
 }
 
-func pdfPrintedFootnotePageBlocks(c *content.Content, note pdfPrintedFootnote, pageLabel string, continuation bool) []pdfTextBlock {
+func pdfPrintedFootnotePageBlocks(_ *content.Content, note pdfPrintedFootnote, pageLabel string, continuation bool) []pdfTextBlock {
 	label := strings.TrimSpace(pageLabel)
 	if label == "" {
 		label = "?"
@@ -299,7 +299,7 @@ func clonePDFInlineSegments(segments []fb2.InlineSegment) []fb2.InlineSegment {
 	return clone
 }
 
-func pdfPrintedFootnoteRefsClickable(c *content.Content, styleClasses string, contextClasses string) bool {
+func pdfPrintedFootnoteRefsClickable(c *content.Content, _ string, _ string) bool {
 	return !pdfPrintedFootnotesEnabled(c)
 }
 

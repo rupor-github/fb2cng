@@ -31,7 +31,7 @@ func pdfSelectorCandidatesForBlock(block pdfTextBlock) []string {
 	var candidates []string
 	if tag := pdfElementTagForBlock(block); tag != "" {
 		candidates = append(candidates, tag)
-		for _, class := range strings.Fields(block.StyleClasses) {
+		for class := range strings.FieldsSeq(block.StyleClasses) {
 			candidates = append(candidates, class)
 			candidates = append(candidates, tag+"."+class)
 		}
@@ -44,7 +44,7 @@ func pdfSelectorCandidatesForBlock(block pdfTextBlock) []string {
 func pdfElementClassStyleNames(block pdfTextBlock) []string {
 	if tag := pdfElementTagForBlock(block); tag != "" {
 		names := make([]string, 0, len(strings.Fields(block.StyleClasses)))
-		for _, class := range strings.Fields(block.StyleClasses) {
+		for class := range strings.FieldsSeq(block.StyleClasses) {
 			names = append(names, tag+"."+class)
 		}
 		return slices.Compact(names)

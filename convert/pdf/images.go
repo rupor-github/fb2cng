@@ -301,9 +301,10 @@ func makeDirectJPEGImageResource(img *fb2.BookImage) (pdfImageResource, bool) {
 		return pdfImageResource{}, false
 	}
 	colorSpace := docwriter.Name("DeviceRGB")
-	if cfg.ColorModel == color.GrayModel {
+	switch cfg.ColorModel {
+	case color.GrayModel:
 		colorSpace = docwriter.Name("DeviceGray")
-	} else if cfg.ColorModel == color.CMYKModel {
+	case color.CMYKModel:
 		return pdfImageResource{}, false
 	}
 	return pdfImageResource{

@@ -2,6 +2,7 @@ package pdf
 
 import (
 	"fmt"
+	"maps"
 	"math"
 	"strings"
 	"unicode"
@@ -481,9 +482,7 @@ func mergeLeadingCombiningEmergencyClusters(clusters []paragraphEmergencyCluster
 			last := &merged[len(merged)-1]
 			last.Text += cluster.Text
 			last.TextShape.Glyphs = append(last.TextShape.Glyphs, cluster.TextShape.Glyphs...)
-			for id, glyph := range cluster.TextShape.Used {
-				last.TextShape.Used[id] = glyph
-			}
+			maps.Copy(last.TextShape.Used, cluster.TextShape.Used)
 			continue
 		}
 		merged = append(merged, cluster)
@@ -720,7 +719,7 @@ func chooseBreaks(
 	}
 
 	var candidates []paragraphBreakCandidate
-	for start := 0; start < n; start++ {
+	for start := range n {
 		for stateIdx, state := range states[start] {
 			if math.IsInf(state.Cost, 1) {
 				continue

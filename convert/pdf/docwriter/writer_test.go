@@ -118,7 +118,7 @@ func assertXrefOffsets(t *testing.T, data []byte, maxObject int) {
 		if err != nil {
 			t.Fatalf("parse xref offset for object %d from %q: %v", id, line, err)
 		}
-		wantPrefix := []byte(fmt.Sprintf("%d 0 obj\n", id))
+		wantPrefix := fmt.Appendf(nil, "%d 0 obj\n", id)
 		if !bytes.HasPrefix(data[offset:], wantPrefix) {
 			t.Fatalf("xref offset for object %d = %d, bytes at offset start %q", id, offset, data[offset:min(len(data), offset+20)])
 		}
