@@ -122,9 +122,11 @@ func TestGeneratePDFMetadataSubjectAndKeywords(t *testing.T) {
 	c := &content.Content{
 		SrcName: "book.fb2",
 		Book: &fb2.FictionBook{Description: fb2.Description{TitleInfo: fb2.TitleInfo{
-			BookTitle:  fb2.TextField{Value: "Metadata Book"},
-			Annotation: &fb2.Flow{Items: []fb2.FlowItem{{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Annotation text."}}}}}},
-			Keywords:   &fb2.TextField{Value: "alpha, beta"},
+			BookTitle: fb2.TextField{Value: "Metadata Book"},
+			Annotation: &fb2.Flow{
+				Items: []fb2.FlowItem{{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Annotation text."}}}}},
+			},
+			Keywords: &fb2.TextField{Value: "alpha, beta"},
 		}}},
 	}
 

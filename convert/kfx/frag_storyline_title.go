@@ -14,7 +14,18 @@ import (
 // The heading level ($790) is applied only to this combined entry.
 // ctx provides the style context (wrapper class like "body-title") for descendant rules and inheritance.
 // Position-based style filtering is deferred to build time when the title is inside a wrapper block.
-func addTitleAsHeading(c *content.Content, title *fb2.Title, ctx StyleContext, headerStyleBase string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
+func addTitleAsHeading(
+	c *content.Content,
+	title *fb2.Title,
+	ctx StyleContext,
+	headerStyleBase string,
+	headingLevel int,
+	sb *StorylineBuilder,
+	styles *StyleRegistry,
+	imageResources imageResourceInfoByID,
+	ca *ContentAccumulator,
+	idToEID eidByFB2ID,
+) {
 	if title == nil || len(title.Items) == 0 {
 		return
 	}
@@ -436,7 +447,18 @@ func styleToHeadingLevel(styleName string) int {
 //   - idToEID: Map for ID to EID tracking
 //
 // Note: EmptyLine items are ignored as spacing is handled via block margins.
-func addTitleAsParagraphs(c *content.Content, title *fb2.Title, ctx StyleContext, styleBase string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
+func addTitleAsParagraphs(
+	c *content.Content,
+	title *fb2.Title,
+	ctx StyleContext,
+	styleBase string,
+	headingLevel int,
+	sb *StorylineBuilder,
+	styles *StyleRegistry,
+	imageResources imageResourceInfoByID,
+	ca *ContentAccumulator,
+	idToEID eidByFB2ID,
+) {
 	if title == nil || len(title.Items) == 0 {
 		return
 	}

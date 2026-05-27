@@ -26,7 +26,17 @@ type inlineGlyphPiece struct {
 	Newline  bool
 }
 
-func layoutInlineWithShape(doc pdfDocumentSpec, registry *pdfFontRegistry, resolver *pdfStyleResolver, baseFace *builtinFontFace, text string, runs []pdfInlineRun, style paragraphStyle, maxWidth float64, shape paragraphLineShape) ([]paragraphLine, error) {
+func layoutInlineWithShape(
+	doc pdfDocumentSpec,
+	registry *pdfFontRegistry,
+	resolver *pdfStyleResolver,
+	baseFace *builtinFontFace,
+	text string,
+	runs []pdfInlineRun,
+	style paragraphStyle,
+	maxWidth float64,
+	shape paragraphLineShape,
+) ([]paragraphLine, error) {
 	if shape.TextShapers == nil {
 		shape.TextShapers = doc.TextShapers
 	}
@@ -97,7 +107,14 @@ func plainInlineRunText(runs []pdfInlineRun) string {
 	return strings.TrimSpace(b.String())
 }
 
-func layoutPreformattedParagraph(doc pdfDocumentSpec, registry *pdfFontRegistry, resolver *pdfStyleResolver, runs []pdfInlineRun, style paragraphStyle, maxWidth float64) ([]paragraphLine, error) {
+func layoutPreformattedParagraph(
+	doc pdfDocumentSpec,
+	registry *pdfFontRegistry,
+	resolver *pdfStyleResolver,
+	runs []pdfInlineRun,
+	style paragraphStyle,
+	maxWidth float64,
+) ([]paragraphLine, error) {
 	if style.FontSize <= 0 {
 		return nil, fmt.Errorf("paragraph font size must be positive: %g", style.FontSize)
 	}
@@ -130,7 +147,14 @@ func layoutPreformattedParagraph(doc pdfDocumentSpec, registry *pdfFontRegistry,
 	return lines, nil
 }
 
-func preformattedPieces(doc pdfDocumentSpec, registry *pdfFontRegistry, resolver *pdfStyleResolver, runs []pdfInlineRun, base paragraphStyle, maxWidth float64) ([]inlineGlyphPiece, error) {
+func preformattedPieces(
+	doc pdfDocumentSpec,
+	registry *pdfFontRegistry,
+	resolver *pdfStyleResolver,
+	runs []pdfInlineRun,
+	base paragraphStyle,
+	maxWidth float64,
+) ([]inlineGlyphPiece, error) {
 	pieces := make([]inlineGlyphPiece, 0)
 	for _, run := range runs {
 		text := strings.ReplaceAll(run.Text, "\r\n", "\n")
@@ -261,7 +285,14 @@ func shapedTextFromFragments(fragments []paragraphLineFragment) shapedText {
 	return shaped
 }
 
-func inlineParagraphWords(doc pdfDocumentSpec, registry *pdfFontRegistry, resolver *pdfStyleResolver, runs []pdfInlineRun, base paragraphStyle, maxWidth float64) ([]paragraphInlineWord, error) {
+func inlineParagraphWords(
+	doc pdfDocumentSpec,
+	registry *pdfFontRegistry,
+	resolver *pdfStyleResolver,
+	runs []pdfInlineRun,
+	base paragraphStyle,
+	maxWidth float64,
+) ([]paragraphInlineWord, error) {
 	words := make([]paragraphInlineWord, 0)
 	current := paragraphInlineWord{}
 	flushCurrent := func() {
@@ -324,7 +355,15 @@ func inlineParagraphSpace(registry *pdfFontRegistry, base paragraphStyle) (parag
 	return inlineRunFragment(pdfDocumentSpec{}, registry, nil, base, pdfInlineRun{}, " ", 0)
 }
 
-func inlineRunFragment(doc pdfDocumentSpec, registry *pdfFontRegistry, resolver *pdfStyleResolver, base paragraphStyle, run pdfInlineRun, text string, maxWidth float64) (paragraphLineFragment, error) {
+func inlineRunFragment(
+	doc pdfDocumentSpec,
+	registry *pdfFontRegistry,
+	resolver *pdfStyleResolver,
+	base paragraphStyle,
+	run pdfInlineRun,
+	text string,
+	maxWidth float64,
+) (paragraphLineFragment, error) {
 	style := inlineRunParagraphStyle(resolver, base, run)
 	face, key, err := fontForStyle(registry, style)
 	if err != nil {
@@ -369,7 +408,13 @@ func inlineRunFragment(doc pdfDocumentSpec, registry *pdfFontRegistry, resolver 
 	}, nil
 }
 
-func inlineImageFragmentSize(doc pdfDocumentSpec, imageID string, style paragraphStyle, face *builtinFontFace, maxWidth float64) (float64, float64, float64) {
+func inlineImageFragmentSize(
+	doc pdfDocumentSpec,
+	imageID string,
+	style paragraphStyle,
+	face *builtinFontFace,
+	maxWidth float64,
+) (float64, float64, float64) {
 	lineHeight := max(style.LineHeight, style.FontSize)
 	if lineHeight <= 0 {
 		lineHeight = pdfBaseLineHeight
@@ -737,7 +782,12 @@ func inlineRunBaselineShift(base paragraphStyle, style paragraphStyle) float64 {
 	}
 }
 
-func inlineParagraphUnits(shapers *pdfTextShaperCache, registry *pdfFontRegistry, words []paragraphInlineWord, style paragraphStyle) ([]paragraphUnit, error) {
+func inlineParagraphUnits(
+	shapers *pdfTextShaperCache,
+	registry *pdfFontRegistry,
+	words []paragraphInlineWord,
+	style paragraphStyle,
+) ([]paragraphUnit, error) {
 	units := make([]paragraphUnit, 0, len(words))
 	for wordIndex, word := range words {
 		if inlineWordHasImage(word) {
@@ -1008,7 +1058,11 @@ func inlinePiecesFragment(pieces []inlineGlyphPiece, template paragraphLineFragm
 	return fragment
 }
 
-func inlineHyphenFragments(shapers *pdfTextShaperCache, registry *pdfFontRegistry, fragments []paragraphLineFragment) ([]paragraphLineFragment, float64, error) {
+func inlineHyphenFragments(
+	shapers *pdfTextShaperCache,
+	registry *pdfFontRegistry,
+	fragments []paragraphLineFragment,
+) ([]paragraphLineFragment, float64, error) {
 	if len(fragments) == 0 {
 		return nil, 0, nil
 	}

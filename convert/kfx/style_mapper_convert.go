@@ -62,7 +62,15 @@ func convertStyleMapDimension(sym KFXSymbol, cssVal css.Value) (StructValue, boo
 	return DimensionValue(value, unit), true
 }
 
-func convertStyleMapProp(prop string, cssVal css.Value, rawVal string, unit string, valType string, sourceAttr string, log *zap.Logger) (map[KFXSymbol]any, bool) {
+func convertStyleMapProp(
+	prop string,
+	cssVal css.Value,
+	rawVal string,
+	unit string,
+	valType string,
+	sourceAttr string,
+	log *zap.Logger,
+) (map[KFXSymbol]any, bool) {
 	out := make(map[KFXSymbol]any)
 
 	// Skip yj.semantics.heading_level - it should only be in storyline entries, not styles.

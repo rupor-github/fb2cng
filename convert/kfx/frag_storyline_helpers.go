@@ -366,7 +366,13 @@ type TextOnlyResult struct {
 //   - inlineCtx: StyleContext with the container element already pushed
 //
 // Returns the accumulated style events and backlink RefIDs for EID registration.
-func processInlineSegments(c *content.Content, segments []fb2.InlineSegment, nw *normalizingWriter, styles *StyleRegistry, inlineCtx StyleContext) TextOnlyResult {
+func processInlineSegments(
+	c *content.Content,
+	segments []fb2.InlineSegment,
+	nw *normalizingWriter,
+	styles *StyleRegistry,
+	inlineCtx StyleContext,
+) TextOnlyResult {
 	// Use the shared implementation with nil imageResources (images become alt text)
 	result := processMixedInlineSegments(segments, styles, c, inlineCtx, nil)
 

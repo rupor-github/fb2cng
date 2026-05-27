@@ -121,7 +121,12 @@ func pdfPrintedFootnoteNestedRefs(note pdfPrintedFootnote, footnotes map[string]
 	return refs
 }
 
-func appendPDFPrintedFootnoteNestedRefsFromRuns(refs *[]pdfPrintedFootnoteRef, seen map[string]bool, footnotes map[string]pdfPrintedFootnote, runs []pdfInlineRun) {
+func appendPDFPrintedFootnoteNestedRefsFromRuns(
+	refs *[]pdfPrintedFootnoteRef,
+	seen map[string]bool,
+	footnotes map[string]pdfPrintedFootnote,
+	runs []pdfInlineRun,
+) {
 	for i := 0; i < len(runs); i++ {
 		id := strings.TrimSpace(runs[i].FootnoteID)
 		if id == "" {

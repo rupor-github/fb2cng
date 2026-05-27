@@ -178,10 +178,12 @@ func TestLayoutPDFPagesHonorsCSSPageBreakAndHiddenStyles(t *testing.T) {
 	if len(pages) != 3 {
 		t.Fatalf("layoutPDFPages() produced %d pages, want 3", len(pages))
 	}
-	if got := pageText(pages[0]); !strings.Contains(got, "first paragraph") || strings.Contains(got, "hidden paragraph") || strings.Contains(got, "second paragraph") {
+	if got := pageText(pages[0]); !strings.Contains(got, "first paragraph") || strings.Contains(got, "hidden paragraph") ||
+		strings.Contains(got, "second paragraph") {
 		t.Fatalf("first body page text = %q, want first visible paragraph only", got)
 	}
-	if got := pageText(pages[1]); !strings.Contains(got, "second paragraph") || !strings.Contains(got, "third paragraph") || strings.Contains(got, "fourth paragraph") {
+	if got := pageText(pages[1]); !strings.Contains(got, "second paragraph") || !strings.Contains(got, "third paragraph") ||
+		strings.Contains(got, "fourth paragraph") {
 		t.Fatalf("second body page text = %q, want second and third paragraphs before forced break-after", got)
 	}
 	if got := pageText(pages[2]); !strings.Contains(got, "fourth paragraph") {
@@ -254,7 +256,12 @@ func TestLayoutPDFPagesHonorsPageBreakBeforeAvoidForDefaultVignettes(t *testing.
 		Blocks: []pdfTextBlock{
 			{Kind: pdfBlockParagraph, Text: filler},
 			{Kind: pdfBlockParagraph, Text: "before vignette"},
-			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses(pdfStyleImageVignette, pdfStyleVignette, pdfStyleVignetteSectionEnd), ImageID: "vignette"},
+			{
+				Kind:         pdfBlockImage,
+				StyleName:    pdfStyleImage,
+				StyleClasses: joinStyleClasses(pdfStyleImageVignette, pdfStyleVignette, pdfStyleVignetteSectionEnd),
+				ImageID:      "vignette",
+			},
 		},
 	})
 	if err != nil {
@@ -416,11 +423,15 @@ func TestLayoutPDFPagesAppliesPadding(t *testing.T) {
 		t.Fatalf("line Y = %v, want 142.6", line.Y)
 	}
 	background := pages[0].Backgrounds[0]
-	if background.X != 24 || math.Abs(background.Y-128.32) > 0.001 || background.Width != 172 || background.Height < 27.679 || background.Height > 27.681 || background.Color.String() != "#0000ff" {
+	if background.X != 24 || math.Abs(background.Y-128.32) > 0.001 || background.Width != 172 || background.Height < 27.679 ||
+		background.Height > 27.681 ||
+		background.Color.String() != "#0000ff" {
 		t.Fatalf("background = %#v, want padded block background", background)
 	}
 	border := pages[0].Borders[0]
-	if border.X != background.X || border.Y != background.Y || border.Width != background.Width || border.Height != background.Height || border.LineWidth != 1 || border.Color.String() != "#ff0000" {
+	if border.X != background.X || border.Y != background.Y || border.Width != background.Width || border.Height != background.Height ||
+		border.LineWidth != 1 ||
+		border.Color.String() != "#ff0000" {
 		t.Fatalf("border = %#v, want matching padded block border", border)
 	}
 }

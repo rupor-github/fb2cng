@@ -43,7 +43,12 @@ func TestPDFTypographyValidationFixtureShapesKerningLigaturesAndCombiningMarks(t
 				t.Fatalf("shaped text = %q, want %q", got, want)
 			}
 			if len(shaped.Glyphs) >= len([]rune(sample)) {
-				t.Fatalf("glyph count = %d, rune count = %d, want at least one standard ligature: %#v", len(shaped.Glyphs), len([]rune(sample)), shaped.Glyphs)
+				t.Fatalf(
+					"glyph count = %d, rune count = %d, want at least one standard ligature: %#v",
+					len(shaped.Glyphs),
+					len([]rune(sample)),
+					shaped.Glyphs,
+				)
 			}
 			if !shapedTextHasMultiRuneCluster(shaped) {
 				t.Fatalf("shaped glyphs = %#v, want a multi-rune ligature cluster", shaped.Glyphs)

@@ -202,8 +202,16 @@ func TestLayoutPDFPagesRendersInlineImages(t *testing.T) {
 	}
 	wantImageWidth := float64(img.Dim.Width) * pdfDefaultCSSRootFontSize / pdfKP3PixelsPerEm
 	wantImageHeight := float64(img.Dim.Height) * pdfDefaultCSSRootFontSize / pdfKP3PixelsPerEm
-	if math.Abs(image.Width-wantImageWidth) > 0.001 || math.Abs(image.Height-wantImageHeight) > 0.001 || math.Abs(imageFragment.ImageHeight-wantImageHeight) > 0.001 {
-		t.Fatalf("inline image size = %vx%v / fragment height %v, want KP3 em size %vx%v", image.Width, image.Height, imageFragment.ImageHeight, wantImageWidth, wantImageHeight)
+	if math.Abs(image.Width-wantImageWidth) > 0.001 || math.Abs(image.Height-wantImageHeight) > 0.001 ||
+		math.Abs(imageFragment.ImageHeight-wantImageHeight) > 0.001 {
+		t.Fatalf(
+			"inline image size = %vx%v / fragment height %v, want KP3 em size %vx%v",
+			image.Width,
+			image.Height,
+			imageFragment.ImageHeight,
+			wantImageWidth,
+			wantImageHeight,
+		)
 	}
 	if math.Abs(image.Y-(line.Y+imageFragment.BaselineShift)) > 0.001 || image.Y >= line.Y || image.Y+image.Height <= line.Y {
 		t.Fatalf("inline image Y = %v, line Y = %v, fragment baseline shift = %v", image.Y, line.Y, imageFragment.BaselineShift)
@@ -212,7 +220,9 @@ func TestLayoutPDFPagesRendersInlineImages(t *testing.T) {
 		t.Fatalf("annotations = %#v, want inline image link annotation", pages[0].Annotations)
 	}
 	annotation := pages[0].Annotations[0]
-	if annotation.Href != "#target" || math.Abs(annotation.Rect.X1-image.X) > 0.001 || math.Abs(annotation.Rect.Y1-image.Y) > 0.001 || math.Abs(annotation.Rect.X2-(image.X+image.Width)) > 0.001 || math.Abs(annotation.Rect.Y2-(image.Y+image.Height)) > 0.001 {
+	if annotation.Href != "#target" || math.Abs(annotation.Rect.X1-image.X) > 0.001 || math.Abs(annotation.Rect.Y1-image.Y) > 0.001 ||
+		math.Abs(annotation.Rect.X2-(image.X+image.Width)) > 0.001 ||
+		math.Abs(annotation.Rect.Y2-(image.Y+image.Height)) > 0.001 {
 		t.Fatalf("annotation = %#v, image = %#v, want image rectangle link", annotation, image)
 	}
 }
@@ -260,7 +270,10 @@ func TestLayoutPDFPagesAppliesInlineNamedStyleClasses(t *testing.T) {
 	if styled == nil {
 		t.Fatalf("styled fragment missing: %#v", pages[0].Lines[0].Fragments)
 	}
-	if styled.FontKey.Family != "sans-serif" || !styled.FontKey.Bold || !styled.FontKey.Italic || !styled.Underline || styled.Color.String() != "#ff0000" || styled.BaselineShift <= 0 || styled.FontSize >= pages[0].Lines[0].FontSize {
+	if styled.FontKey.Family != "sans-serif" || !styled.FontKey.Bold || !styled.FontKey.Italic || !styled.Underline ||
+		styled.Color.String() != "#ff0000" ||
+		styled.BaselineShift <= 0 ||
+		styled.FontSize >= pages[0].Lines[0].FontSize {
 		t.Fatalf("styled fragment = %#v, want accent class styling", *styled)
 	}
 }

@@ -44,7 +44,10 @@ func TestGenerateLogsTemporaryAndFinalOutputPaths(t *testing.T) {
 	temporaryName := filepath.Join(tmpDir, ".book.pdf.123.tmp")
 	finalName := filepath.Join(tmpDir, "book.pdf")
 	cfg := &config.DocumentConfig{Images: config.ImagesConfig{Screen: config.ScreenConfig{Width: 1264, Height: 1680, DPI: 300}}}
-	c := &content.Content{SrcName: "book.fb2", Book: &fb2.FictionBook{Description: fb2.Description{TitleInfo: fb2.TitleInfo{BookTitle: fb2.TextField{Value: "Test Book"}}}}}
+	c := &content.Content{
+		SrcName: "book.fb2",
+		Book:    &fb2.FictionBook{Description: fb2.Description{TitleInfo: fb2.TitleInfo{BookTitle: fb2.TextField{Value: "Test Book"}}}},
+	}
 	core, logs := observer.New(zapcore.DebugLevel)
 
 	if err := Generate(context.Background(), c, temporaryName, cfg, zap.New(core), finalName); err != nil {
@@ -302,8 +305,10 @@ func TestGenerateTextBodyAddsPaginatedBodyPage(t *testing.T) {
 					ID:    "chapter-1",
 					Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 1"}}}}}},
 					Content: []fb2.FlowItem{{
-						Kind:      fb2.FlowParagraph,
-						Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "This is the first native PDF body paragraph with selectable text."}}},
+						Kind: fb2.FlowParagraph,
+						Paragraph: &fb2.Paragraph{
+							Text: []fb2.InlineSegment{{Text: "This is the first native PDF body paragraph with selectable text."}},
+						},
 					}},
 				}},
 			}},

@@ -36,7 +36,14 @@ func (sb *StorylineBuilder) AddContent(contentType KFXSymbol, contentName string
 // An optional StyleContext can be passed to preserve ancestor scopes for deferred resolution.
 // When provided, descendant selectors (e.g., ".footnote p") will match correctly during
 // deferred style resolution in Build(). Without it, a fresh context with no scopes is used.
-func (sb *StorylineBuilder) AddContentAndEvents(contentType KFXSymbol, contentName string, contentOffset int, styleSpec, style string, events []StyleEventRef, ctx ...StyleContext) int {
+func (sb *StorylineBuilder) AddContentAndEvents(
+	contentType KFXSymbol,
+	contentName string,
+	contentOffset int,
+	styleSpec, style string,
+	events []StyleEventRef,
+	ctx ...StyleContext,
+) int {
 	eid := sb.eidCounter
 	sb.eidCounter++
 
@@ -68,7 +75,14 @@ func (sb *StorylineBuilder) AddContentAndEvents(contentType KFXSymbol, contentNa
 }
 
 // AddContentWithHeading adds content with style events and heading level (to storyline or current block).
-func (sb *StorylineBuilder) AddContentWithHeading(contentType KFXSymbol, contentName string, contentOffset int, styleSpec, style string, events []StyleEventRef, headingLevel int) int {
+func (sb *StorylineBuilder) AddContentWithHeading(
+	contentType KFXSymbol,
+	contentName string,
+	contentOffset int,
+	styleSpec, style string,
+	events []StyleEventRef,
+	headingLevel int,
+) int {
 	eid := sb.eidCounter
 	sb.eidCounter++
 
@@ -146,7 +160,13 @@ func (sb *StorylineBuilder) AddMixedContent(styleSpec, style string, items []Inl
 			sb.eidCounter++
 
 			if item.Style != "" && sb.styles != nil {
-				sb.styles.tracer.TraceAssign(traceSymbolName(SymImage)+" (inline/mixed)", fmt.Sprintf("%d", imgEid), item.Style, sb.sectionName+"/"+sb.name, "")
+				sb.styles.tracer.TraceAssign(
+					traceSymbolName(SymImage)+" (inline/mixed)",
+					fmt.Sprintf("%d", imgEid),
+					item.Style,
+					sb.sectionName+"/"+sb.name,
+					"",
+				)
 				sb.styles.ResolveStyle(item.Style, styleUsageImage)
 			}
 
@@ -240,7 +260,13 @@ func (sb *StorylineBuilder) AddContentDeferred(contentType KFXSymbol, contentNam
 
 // AddContentAndEventsDeferred adds content with style events and deferred style resolution.
 // The styleSpec will be resolved with position filtering in EndBlock().
-func (sb *StorylineBuilder) AddContentAndEventsDeferred(contentType KFXSymbol, contentName string, contentOffset int, styleSpec string, events []StyleEventRef) int {
+func (sb *StorylineBuilder) AddContentAndEventsDeferred(
+	contentType KFXSymbol,
+	contentName string,
+	contentOffset int,
+	styleSpec string,
+	events []StyleEventRef,
+) int {
 	eid := sb.eidCounter
 	sb.eidCounter++
 
@@ -256,7 +282,14 @@ func (sb *StorylineBuilder) AddContentAndEventsDeferred(contentType KFXSymbol, c
 
 // AddContentWithHeadingDeferred adds content with heading level and deferred style resolution.
 // The styleSpec will be resolved with position filtering in EndBlock().
-func (sb *StorylineBuilder) AddContentWithHeadingDeferred(contentType KFXSymbol, contentName string, contentOffset int, styleSpec string, events []StyleEventRef, headingLevel int) int {
+func (sb *StorylineBuilder) AddContentWithHeadingDeferred(
+	contentType KFXSymbol,
+	contentName string,
+	contentOffset int,
+	styleSpec string,
+	events []StyleEventRef,
+	headingLevel int,
+) int {
 	eid := sb.eidCounter
 	sb.eidCounter++
 

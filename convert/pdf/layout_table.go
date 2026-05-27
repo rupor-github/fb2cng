@@ -40,7 +40,13 @@ type pdfTableCellLayout struct {
 	VAlign  string
 }
 
-func layoutPDFTable(doc pdfDocumentSpec, resolver *pdfStyleResolver, block pdfTextBlock, style pdfBlockResolvedStyle, tableWidth float64) (pdfTableLayout, error) {
+func layoutPDFTable(
+	doc pdfDocumentSpec,
+	resolver *pdfStyleResolver,
+	block pdfTextBlock,
+	style pdfBlockResolvedStyle,
+	tableWidth float64,
+) (pdfTableLayout, error) {
 	if resolver == nil {
 		resolver = newPDFStyleResolver(nil, nil)
 	}
@@ -147,7 +153,14 @@ func layoutPDFTable(doc pdfDocumentSpec, resolver *pdfStyleResolver, block pdfTe
 	return layout, nil
 }
 
-func pdfTableColumnWidths(doc pdfDocumentSpec, resolver *pdfStyleResolver, cells []pdfPlacedTableCell, colCount int, tableWidth float64, contextClasses string) ([]float64, float64, error) {
+func pdfTableColumnWidths(
+	doc pdfDocumentSpec,
+	resolver *pdfStyleResolver,
+	cells []pdfPlacedTableCell,
+	colCount int,
+	tableWidth float64,
+	contextClasses string,
+) ([]float64, float64, error) {
 	minWidths := make([]float64, colCount)
 	for _, placed := range cells {
 		style := resolver.styleForTableCell(placed.RowStyle, placed.Cell, contextClasses)

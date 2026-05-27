@@ -33,7 +33,18 @@ func TestPageContentDrawsBackgroundsBordersStrokesAndImages(t *testing.T) {
 		Width:  30,
 		Height: 40,
 	}}}))
-	for _, want := range []string{"0 1 0 rg", "1 2 3 4 re f", "1 0 0 RG", "1.5 w", "5 6 7 8 re S", "0 0 1 RG", "0.75 w", "8 9 m 10 11 l S", "30 0 0 40 10 20 cm", "/Im1 Do"} {
+	for _, want := range []string{
+		"0 1 0 rg",
+		"1 2 3 4 re f",
+		"1 0 0 RG",
+		"1.5 w",
+		"5 6 7 8 re S",
+		"0 0 1 RG",
+		"0.75 w",
+		"8 9 m 10 11 l S",
+		"30 0 0 40 10 20 cm",
+		"/Im1 Do",
+	} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("page content = %q, missing %q", content, want)
 		}

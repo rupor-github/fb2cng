@@ -62,7 +62,9 @@ func TestCollectPDFContentAddsAnnotationPage(t *testing.T) {
 	if got := plan.Blocks[0]; got.Kind != pdfBlockPageBreak || got.ID != "annotation-page" {
 		t.Fatalf("first block = %#v, want annotation page break", got)
 	}
-	if got := plan.Blocks[1]; got.Kind != pdfBlockHeading || got.Text != "About" || got.StyleName != pdfStyleAnnotationTitle || got.StyleClasses != pdfStyleAnnotationTitle+"-first" || got.ContextClasses != pdfStyleAnnotationTitle {
+	if got := plan.Blocks[1]; got.Kind != pdfBlockHeading || got.Text != "About" || got.StyleName != pdfStyleAnnotationTitle ||
+		got.StyleClasses != pdfStyleAnnotationTitle+"-first" ||
+		got.ContextClasses != pdfStyleAnnotationTitle {
 		t.Fatalf("second block = %#v, want annotation heading via title helper", got)
 	}
 	if got := plan.Blocks[2]; got.Kind != pdfBlockParagraph || got.Text != "Book annotation." || got.StyleClasses != pdfStyleAnnotation {
@@ -306,7 +308,8 @@ func TestCollectPDFContentAddsTOCPageBeforeContent(t *testing.T) {
 	if got := plan.Blocks[0]; got.Kind != pdfBlockPageBreak || got.ID != "toc-page" {
 		t.Fatalf("first block = %#v, want TOC page break", got)
 	}
-	if got := plan.Blocks[1]; got.Kind != pdfBlockHeading || got.Text != "Contents" || got.StyleName != pdfStyleTOCTitle || got.StyleClasses != pdfStyleTOCTitle+"-first" {
+	if got := plan.Blocks[1]; got.Kind != pdfBlockHeading || got.Text != "Contents" || got.StyleName != pdfStyleTOCTitle ||
+		got.StyleClasses != pdfStyleTOCTitle+"-first" {
 		t.Fatalf("second block = %#v, want TOC heading via title helper", got)
 	}
 	if got := plan.Blocks[2]; got.Kind != pdfBlockTOCEntry || got.Text != "Chapter 1" || len(got.Links) != 1 || got.Links[0].Href != "#chapter-1" {
@@ -340,10 +343,12 @@ func TestCollectPDFContentTOCPageUsesBookTitleAndAuthorsTemplate(t *testing.T) {
 	if len(plan.Blocks) < 5 {
 		t.Fatalf("blocks = %#v, want TOC title lines, entry, and chapter", plan.Blocks)
 	}
-	if got := plan.Blocks[1]; got.Kind != pdfBlockHeading || got.Text != "My Great Book" || got.StyleName != pdfStyleTOCTitle || got.StyleClasses != pdfStyleTOCTitle+"-first" {
+	if got := plan.Blocks[1]; got.Kind != pdfBlockHeading || got.Text != "My Great Book" || got.StyleName != pdfStyleTOCTitle ||
+		got.StyleClasses != pdfStyleTOCTitle+"-first" {
 		t.Fatalf("first TOC title block = %#v, want book-title first line", got)
 	}
-	if got := plan.Blocks[2]; got.Kind != pdfBlockHeading || got.Text != "Ada Lovelace" || got.StyleName != pdfStyleTOCTitle || got.StyleClasses != pdfStyleTOCTitle+"-next" {
+	if got := plan.Blocks[2]; got.Kind != pdfBlockHeading || got.Text != "Ada Lovelace" || got.StyleName != pdfStyleTOCTitle ||
+		got.StyleClasses != pdfStyleTOCTitle+"-next" {
 		t.Fatalf("second TOC title block = %#v, want author next line", got)
 	}
 	if got := plan.Blocks[3]; got.Kind != pdfBlockTOCEntry || got.Text != "Chapter 1" {
@@ -353,15 +358,28 @@ func TestCollectPDFContentTOCPageUsesBookTitleAndAuthorsTemplate(t *testing.T) {
 
 func TestCollectTextBlocksUsesFootnoteSectionSemantics(t *testing.T) {
 	book := &fb2.FictionBook{Bodies: []fb2.Body{
-		{Kind: fb2.BodyMain, Sections: []fb2.Section{{ID: "chapter-1", Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 1"}}}}}}}}},
-		{Kind: fb2.BodyFootnotes, Name: "notes", Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Notes"}}}}}}, Sections: []fb2.Section{{
-			ID:    "note-1",
-			Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "1"}}}}}},
-			Content: []fb2.FlowItem{{
-				Kind:      fb2.FlowParagraph,
-				Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Footnote body."}}},
+		{
+			Kind: fb2.BodyMain,
+			Sections: []fb2.Section{
+				{
+					ID:    "chapter-1",
+					Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 1"}}}}}},
+				},
+			},
+		},
+		{
+			Kind:  fb2.BodyFootnotes,
+			Name:  "notes",
+			Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Notes"}}}}}},
+			Sections: []fb2.Section{{
+				ID:    "note-1",
+				Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "1"}}}}}},
+				Content: []fb2.FlowItem{{
+					Kind:      fb2.FlowParagraph,
+					Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Footnote body."}}},
+				}},
 			}},
-		}}},
+		},
 	}}
 
 	blocks, err := collectTextBlocks(&content.Content{Book: book})

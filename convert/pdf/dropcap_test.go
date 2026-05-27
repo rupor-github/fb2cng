@@ -160,13 +160,21 @@ func TestPDFDropcapFlowsFollowingParagraphAroundActiveExclusion(t *testing.T) {
 		t.Fatalf("first body X = %g, dropcap X/width = %g/%g, want body beside dropcap", firstBodyLine.X, dropcapLine.X, dropcapLine.WidthFromText())
 	}
 	if secondParagraphLine.X <= firstBodyLine.X {
-		t.Fatalf("second paragraph X = %g, first body X = %g, want following paragraph to preserve its indent while avoiding dropcap", secondParagraphLine.X, firstBodyLine.X)
+		t.Fatalf(
+			"second paragraph X = %g, first body X = %g, want following paragraph to preserve its indent while avoiding dropcap",
+			secondParagraphLine.X,
+			firstBodyLine.X,
+		)
 	}
 	if secondParagraphContinuation == nil {
 		t.Fatalf("lines = %#v, want second paragraph continuation line", pages[0].Lines)
 	}
 	if secondParagraphContinuation.X >= secondParagraphLine.X {
-		t.Fatalf("second paragraph continuation X = %g, first line X = %g, want line-by-line dropcap exclusion to expire", secondParagraphContinuation.X, secondParagraphLine.X)
+		t.Fatalf(
+			"second paragraph continuation X = %g, first line X = %g, want line-by-line dropcap exclusion to expire",
+			secondParagraphContinuation.X,
+			secondParagraphLine.X,
+		)
 	}
 }
 
@@ -221,7 +229,12 @@ func TestPDFDropcapFollowingParagraphStillExcludesWhenBaselinePassedVisualBottom
 		t.Fatalf("first body lines = %d, want two-line dropcap paragraph reproducer; lines = %#v", firstBodyLines, pages[0].Lines)
 	}
 	if secondParagraphLine.X <= dropcapLine.X+dropcapLine.WidthFromText() {
-		t.Fatalf("second paragraph X = %g, dropcap X/width = %g/%g, want line box to keep excluding active dropcap", secondParagraphLine.X, dropcapLine.X, dropcapLine.WidthFromText())
+		t.Fatalf(
+			"second paragraph X = %g, dropcap X/width = %g/%g, want line box to keep excluding active dropcap",
+			secondParagraphLine.X,
+			dropcapLine.X,
+			dropcapLine.WidthFromText(),
+		)
 	}
 }
 

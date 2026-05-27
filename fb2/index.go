@@ -56,12 +56,20 @@ func (fb *FictionBook) buildIDIndex(_ *zap.Logger) IDIndex {
 
 	// Index title-info annotation
 	if fb.Description.TitleInfo.Annotation != nil {
-		fb.indexFlowIDs(index, fb.Description.TitleInfo.Annotation, []any{&fb.Description, &fb.Description.TitleInfo, fb.Description.TitleInfo.Annotation})
+		fb.indexFlowIDs(
+			index,
+			fb.Description.TitleInfo.Annotation,
+			[]any{&fb.Description, &fb.Description.TitleInfo, fb.Description.TitleInfo.Annotation},
+		)
 	}
 
 	// Index description history
 	if fb.Description.DocumentInfo.History != nil {
-		fb.indexFlowIDs(index, fb.Description.DocumentInfo.History, []any{&fb.Description, &fb.Description.DocumentInfo, fb.Description.DocumentInfo.History})
+		fb.indexFlowIDs(
+			index,
+			fb.Description.DocumentInfo.History,
+			[]any{&fb.Description, &fb.Description.DocumentInfo, fb.Description.DocumentInfo.History},
+		)
 	}
 
 	// Index authors
@@ -165,12 +173,22 @@ func (fb *FictionBook) buildReverseLinkIndex(log *zap.Logger) ReverseLinkIndex {
 
 	// Index title-info annotation
 	if fb.Description.TitleInfo.Annotation != nil {
-		fb.indexFlowLinks(index, fb.Description.TitleInfo.Annotation, []any{&fb.Description, &fb.Description.TitleInfo, fb.Description.TitleInfo.Annotation}, log)
+		fb.indexFlowLinks(
+			index,
+			fb.Description.TitleInfo.Annotation,
+			[]any{&fb.Description, &fb.Description.TitleInfo, fb.Description.TitleInfo.Annotation},
+			log,
+		)
 	}
 
 	// Index description history
 	if fb.Description.DocumentInfo.History != nil {
-		fb.indexFlowLinks(index, fb.Description.DocumentInfo.History, []any{&fb.Description, &fb.Description.DocumentInfo, fb.Description.DocumentInfo.History}, log)
+		fb.indexFlowLinks(
+			index,
+			fb.Description.DocumentInfo.History,
+			[]any{&fb.Description, &fb.Description.DocumentInfo, fb.Description.DocumentInfo.History},
+			log,
+		)
 	}
 
 	// Index bodies
@@ -189,7 +207,12 @@ func (fb *FictionBook) buildReverseLinkIndex(log *zap.Logger) ReverseLinkIndex {
 			titlePath := append(append([]any{}, bodyPath...), fb.Bodies[i].Title)
 			for j := range fb.Bodies[i].Title.Items {
 				if fb.Bodies[i].Title.Items[j].Paragraph != nil {
-					fb.indexInlineLinks(index, fb.Bodies[i].Title.Items[j].Paragraph.Text, append(append([]any{}, titlePath...), &fb.Bodies[i].Title.Items[j], fb.Bodies[i].Title.Items[j].Paragraph), log)
+					fb.indexInlineLinks(
+						index,
+						fb.Bodies[i].Title.Items[j].Paragraph.Text,
+						append(append([]any{}, titlePath...), &fb.Bodies[i].Title.Items[j], fb.Bodies[i].Title.Items[j].Paragraph),
+						log,
+					)
 				}
 			}
 		}
@@ -308,7 +331,12 @@ func (fb *FictionBook) indexSectionLinks(index ReverseLinkIndex, s *Section, pat
 		titlePath := append(append([]any{}, path...), s.Title)
 		for i := range s.Title.Items {
 			if s.Title.Items[i].Paragraph != nil {
-				fb.indexInlineLinks(index, s.Title.Items[i].Paragraph.Text, append(append([]any{}, titlePath...), &s.Title.Items[i], s.Title.Items[i].Paragraph), log)
+				fb.indexInlineLinks(
+					index,
+					s.Title.Items[i].Paragraph.Text,
+					append(append([]any{}, titlePath...), &s.Title.Items[i], s.Title.Items[i].Paragraph),
+					log,
+				)
 			}
 		}
 	}

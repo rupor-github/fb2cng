@@ -9,7 +9,13 @@ import (
 func TestPDFCollapsedBlockStylesApplyContainerVerticalMarginsOnlyAtEdges(t *testing.T) {
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceAfter: 1}
-	resolver.styles[pdfStyleAnnotation] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceBefore: 20, SpaceAfter: 10, MarginLeft: 5, MarginRight: 7}
+	resolver.styles[pdfStyleAnnotation] = pdfBlockResolvedStyle{
+		Paragraph:   paragraphStyle{FontSize: 10, LineHeight: 12},
+		SpaceBefore: 20,
+		SpaceAfter:  10,
+		MarginLeft:  5,
+		MarginRight: 7,
+	}
 
 	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
 		{Kind: pdfBlockParagraph, Text: "one", StyleClasses: pdfStyleAnnotation},
@@ -20,7 +26,11 @@ func TestPDFCollapsedBlockStylesApplyContainerVerticalMarginsOnlyAtEdges(t *test
 		t.Fatalf("first annotation margins = %v/%v, want 20/0 after collapse", styles[0].SpaceBefore, styles[0].SpaceAfter)
 	}
 	if styles[1].SpaceBefore != 1 || styles[1].SpaceAfter != 0 {
-		t.Fatalf("last annotation margins = %v/%v, want collapsed base paragraph gap/top and zero after collapse", styles[1].SpaceBefore, styles[1].SpaceAfter)
+		t.Fatalf(
+			"last annotation margins = %v/%v, want collapsed base paragraph gap/top and zero after collapse",
+			styles[1].SpaceBefore,
+			styles[1].SpaceAfter,
+		)
 	}
 	if styles[2].SpaceBefore != 10 {
 		t.Fatalf("following block margin-top = %v, want collapsed annotation bottom", styles[2].SpaceBefore)
@@ -34,19 +44,43 @@ func TestPDFCollapsedBlockStylesKeepsSectionH2PageBreakOnlyAtWrapperStart(t *tes
 	resolver := newPDFStyleResolverWithDefaultCSS(t)
 
 	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
-		{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses("image-vignette", "vignette", pdfStyleVignetteSectionTop, pdfStyleSectionTitle, pdfStyleSectionTitleH2), ImageID: "top"},
-		{Kind: pdfBlockHeading, StyleName: pdfStyleSectionTitleHeader, StyleClasses: joinStyleClasses(pdfStyleSectionTitle, pdfStyleSectionTitleH2, pdfStyleSectionTitleHeader+"-first"), Text: "Section"},
-		{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses("image-vignette", "vignette", pdfStyleVignetteSectionBot, pdfStyleSectionTitle, pdfStyleSectionTitleH2), ImageID: "bottom"},
+		{
+			Kind:         pdfBlockImage,
+			StyleName:    pdfStyleImage,
+			StyleClasses: joinStyleClasses("image-vignette", "vignette", pdfStyleVignetteSectionTop, pdfStyleSectionTitle, pdfStyleSectionTitleH2),
+			ImageID:      "top",
+		},
+		{
+			Kind:         pdfBlockHeading,
+			StyleName:    pdfStyleSectionTitleHeader,
+			StyleClasses: joinStyleClasses(pdfStyleSectionTitle, pdfStyleSectionTitleH2, pdfStyleSectionTitleHeader+"-first"),
+			Text:         "Section",
+		},
+		{
+			Kind:         pdfBlockImage,
+			StyleName:    pdfStyleImage,
+			StyleClasses: joinStyleClasses("image-vignette", "vignette", pdfStyleVignetteSectionBot, pdfStyleSectionTitle, pdfStyleSectionTitleH2),
+			ImageID:      "bottom",
+		},
 	})
 
 	if !styles[0].PageBreakBefore || styles[0].PageBreakBeforeMode != pdfPageBreakAlways {
-		t.Fatalf("first section-title-h2 child page-break-before = %t/%v, want wrapper page break", styles[0].PageBreakBefore, styles[0].PageBreakBeforeMode)
+		t.Fatalf(
+			"first section-title-h2 child page-break-before = %t/%v, want wrapper page break",
+			styles[0].PageBreakBefore,
+			styles[0].PageBreakBeforeMode,
+		)
 	}
 	if styles[1].PageBreakBefore || styles[2].PageBreakBefore {
 		t.Fatalf("inner section-title-h2 page breaks = %t/%t, want false/false", styles[1].PageBreakBefore, styles[2].PageBreakBefore)
 	}
 	if styles[0].PageBreakAfterMode == pdfPageBreakAvoid || styles[1].PageBreakAfterMode == pdfPageBreakAvoid || styles[0].KeepWithNextLines != 0 {
-		t.Fatalf("inner section-title page-break-after avoid survived on top/heading children: %v/%v keep:%d", styles[0].PageBreakAfterMode, styles[1].PageBreakAfterMode, styles[0].KeepWithNextLines)
+		t.Fatalf(
+			"inner section-title page-break-after avoid survived on top/heading children: %v/%v keep:%d",
+			styles[0].PageBreakAfterMode,
+			styles[1].PageBreakAfterMode,
+			styles[0].KeepWithNextLines,
+		)
 	}
 	if styles[2].PageBreakAfterMode != pdfPageBreakAvoid {
 		t.Fatalf("last section-title child page-break-after mode = %v, want avoid at wrapper edge", styles[2].PageBreakAfterMode)
@@ -57,9 +91,24 @@ func TestPDFCollapsedBlockStylesTreatTitleHeaderFirstNextAsInlineFlow(t *testing
 	resolver := newPDFStyleResolverWithDefaultCSS(t)
 
 	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
-		{Kind: pdfBlockHeading, StyleName: pdfStyleChapterTitleHeader, StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-first"), Text: "One"},
-		{Kind: pdfBlockHeading, StyleName: pdfStyleChapterTitleHeader, StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next"), Text: "Two"},
-		{Kind: pdfBlockHeading, StyleName: pdfStyleChapterTitleHeader, StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next"), Text: "Three"},
+		{
+			Kind:         pdfBlockHeading,
+			StyleName:    pdfStyleChapterTitleHeader,
+			StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-first"),
+			Text:         "One",
+		},
+		{
+			Kind:         pdfBlockHeading,
+			StyleName:    pdfStyleChapterTitleHeader,
+			StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next"),
+			Text:         "Two",
+		},
+		{
+			Kind:         pdfBlockHeading,
+			StyleName:    pdfStyleChapterTitleHeader,
+			StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next"),
+			Text:         "Three",
+		},
 	})
 
 	if styles[0].SpaceBefore != pdfDefaultCSSRootFontSize*2 || styles[0].SpaceAfter != 0 {
@@ -77,10 +126,35 @@ func TestPDFCollapsedBlockStylesUsesKP3MarginsForImageTitleStack(t *testing.T) {
 	resolver := newPDFStyleResolverWithDefaultCSS(t)
 
 	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
-		{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses("image-vignette", "vignette", pdfStyleVignetteChapterTop, pdfStyleChapterTitle), ImageID: "top"},
-		{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses(pdfStyleChapterTitleHeader, pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-first", pdfStyleHeadingImage), ImageID: "title"},
-		{Kind: pdfBlockHeading, StyleName: pdfStyleChapterTitleHeader, StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next", pdfStyleTitleAfterImage), Text: "Illustrations"},
-		{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses("image-vignette", "vignette", pdfStyleVignetteChapterBot, pdfStyleChapterTitle), ImageID: "bottom"},
+		{
+			Kind:         pdfBlockImage,
+			StyleName:    pdfStyleImage,
+			StyleClasses: joinStyleClasses("image-vignette", "vignette", pdfStyleVignetteChapterTop, pdfStyleChapterTitle),
+			ImageID:      "top",
+		},
+		{
+			Kind:      pdfBlockImage,
+			StyleName: pdfStyleImage,
+			StyleClasses: joinStyleClasses(
+				pdfStyleChapterTitleHeader,
+				pdfStyleChapterTitle,
+				pdfStyleChapterTitleHeader+"-first",
+				pdfStyleHeadingImage,
+			),
+			ImageID: "title",
+		},
+		{
+			Kind:         pdfBlockHeading,
+			StyleName:    pdfStyleChapterTitleHeader,
+			StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next", pdfStyleTitleAfterImage),
+			Text:         "Illustrations",
+		},
+		{
+			Kind:         pdfBlockImage,
+			StyleName:    pdfStyleImage,
+			StyleClasses: joinStyleClasses("image-vignette", "vignette", pdfStyleVignetteChapterBot, pdfStyleChapterTitle),
+			ImageID:      "bottom",
+		},
 		{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine},
 		{Kind: pdfBlockSubtitle, StyleName: pdfStyleSubtitle, Text: "Cross links"},
 	})
@@ -92,7 +166,11 @@ func TestPDFCollapsedBlockStylesUsesKP3MarginsForImageTitleStack(t *testing.T) {
 		t.Fatalf("bottom title vignette margin-top = %v, want KP3 vignette margin %v", styles[3].SpaceBefore, pdfTitleVignetteMarginTop)
 	}
 	if styles[5].SpaceBefore != pdfTitleFollowingSubtitleSpaceBefore {
-		t.Fatalf("subtitle after title vignette margin-top = %v, want KP3 subtitle margin %v", styles[5].SpaceBefore, pdfTitleFollowingSubtitleSpaceBefore)
+		t.Fatalf(
+			"subtitle after title vignette margin-top = %v, want KP3 subtitle margin %v",
+			styles[5].SpaceBefore,
+			pdfTitleFollowingSubtitleSpaceBefore,
+		)
 	}
 }
 
@@ -146,8 +224,17 @@ func TestPDFCollapsedBlockStylesDoesNotUseFullWidthImageMarginsForDirectCaption(
 func TestPDFCollapsedBlockStylesKeepContainerThroughEmptyLine(t *testing.T) {
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}}
-	resolver.styles[pdfStyleEmptyLine] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceBefore: 10, SpaceAfter: 10}
-	resolver.styles[pdfStyleAnnotation] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceBefore: 20, SpaceAfter: 10, MarginLeft: 5}
+	resolver.styles[pdfStyleEmptyLine] = pdfBlockResolvedStyle{
+		Paragraph:   paragraphStyle{FontSize: 10, LineHeight: 12},
+		SpaceBefore: 10,
+		SpaceAfter:  10,
+	}
+	resolver.styles[pdfStyleAnnotation] = pdfBlockResolvedStyle{
+		Paragraph:   paragraphStyle{FontSize: 10, LineHeight: 12},
+		SpaceBefore: 20,
+		SpaceAfter:  10,
+		MarginLeft:  5,
+	}
 
 	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
 		{Kind: pdfBlockParagraph, Text: "one", StyleClasses: pdfStyleAnnotation},
@@ -158,7 +245,13 @@ func TestPDFCollapsedBlockStylesKeepContainerThroughEmptyLine(t *testing.T) {
 		t.Fatalf("empty line hidden = false, want hidden")
 	}
 	if styles[0].SpaceBefore != 20 || styles[0].SpaceAfter != 0 || styles[2].SpaceBefore != 6 || styles[2].SpaceAfter != 10 {
-		t.Fatalf("container empty-line margins = first %v/%v second %v/%v, want 20/0 6/10", styles[0].SpaceBefore, styles[0].SpaceAfter, styles[2].SpaceBefore, styles[2].SpaceAfter)
+		t.Fatalf(
+			"container empty-line margins = first %v/%v second %v/%v, want 20/0 6/10",
+			styles[0].SpaceBefore,
+			styles[0].SpaceAfter,
+			styles[2].SpaceBefore,
+			styles[2].SpaceAfter,
+		)
 	}
 }
 
@@ -266,7 +359,12 @@ func TestPDFCollapsedBlockStylesAppliesEmptyLineBeforeImageToPreviousBlock(t *te
 func TestPDFCollapsedBlockStylesSkipsHiddenBlocks(t *testing.T) {
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 	resolver.styles["before"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceAfter: 4}
-	resolver.styles["hidden"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceBefore: 100, SpaceAfter: 100, Hidden: true}
+	resolver.styles["hidden"] = pdfBlockResolvedStyle{
+		Paragraph:   paragraphStyle{FontSize: 10, LineHeight: 12},
+		SpaceBefore: 100,
+		SpaceAfter:  100,
+		Hidden:      true,
+	}
 	resolver.styles["after"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceBefore: 6}
 
 	styles := resolver.collapsedBlockStyles([]pdfTextBlock{

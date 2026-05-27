@@ -191,7 +191,14 @@ func (fb *FictionBook) NormalizeFootnoteLabels(footnotesIndex FootnoteRefs, temp
 				templateBodyNum = 0
 			}
 
-			displayText, err := fb.ExpandTemplateFootnoteLabel(config.LabelTemplateFieldName, template, templateBodyNum, noteNum, &fb.Bodies[i], section)
+			displayText, err := fb.ExpandTemplateFootnoteLabel(
+				config.LabelTemplateFieldName,
+				template,
+				templateBodyNum,
+				noteNum,
+				&fb.Bodies[i],
+				section,
+			)
 			if err != nil {
 				log.Warn("Failed to expand footnote label template, using default formatter",
 					zap.Int("body", templateBodyNum),
@@ -348,7 +355,13 @@ func (fb *FictionBook) FilterReferencedImages(allImages BookImages, links Revers
 }
 
 // assignSectionIDs recursively assigns IDs to a section and its child sections
-func (fb *FictionBook) assignSectionIDs(section *Section, path []any, existingIDs, updatedIDs IDIndex, sectionCounter, subtitleCounter *int, log *zap.Logger) {
+func (fb *FictionBook) assignSectionIDs(
+	section *Section,
+	path []any,
+	existingIDs, updatedIDs IDIndex,
+	sectionCounter, subtitleCounter *int,
+	log *zap.Logger,
+) {
 	// Assign ID to section if it doesn't have one
 	if section.ID == "" {
 		// Find a unique ID that doesn't collide

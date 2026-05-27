@@ -186,7 +186,13 @@ type paragraphBreakState struct {
 	ShapeLine  int
 }
 
-func layoutParagraphWithShape(face *builtinFontFace, text string, style paragraphStyle, maxWidth float64, shape paragraphLineShape) ([]paragraphLine, error) {
+func layoutParagraphWithShape(
+	face *builtinFontFace,
+	text string,
+	style paragraphStyle,
+	maxWidth float64,
+	shape paragraphLineShape,
+) ([]paragraphLine, error) {
 	if style.FontSize <= 0 {
 		return nil, fmt.Errorf("paragraph font size must be positive: %g", style.FontSize)
 	}
@@ -272,7 +278,13 @@ func plainSpaceWidth(shapers *pdfTextShaperCache, face *builtinFontFace, style p
 	return shapedWidthPointsWithSpacing(space, style.FontSize, style.LetterSpacing), nil
 }
 
-func paragraphUnits(shapers *pdfTextShaperCache, face *builtinFontFace, words []paragraphWord, style paragraphStyle, softHyphenWidth float64) ([]paragraphUnit, error) {
+func paragraphUnits(
+	shapers *pdfTextShaperCache,
+	face *builtinFontFace,
+	words []paragraphWord,
+	style paragraphStyle,
+	softHyphenWidth float64,
+) ([]paragraphUnit, error) {
 	units := make([]paragraphUnit, 0, len(words))
 	for i, word := range words {
 		parts := hyphenatedWordParts(word.Text, style.Hyphenator, pdfEffectiveHyphenation(style))
@@ -371,7 +383,12 @@ func paragraphUnitNeedsEmergencySplit(unit paragraphUnit, splitWidth float64) bo
 	return unit.Width+unit.HyphenWidth > splitWidth+pdfLineWidthTolerance
 }
 
-func splitPlainEmergencyParagraphUnit(shapers *pdfTextShaperCache, face *builtinFontFace, unit paragraphUnit, style paragraphStyle) ([]paragraphUnit, error) {
+func splitPlainEmergencyParagraphUnit(
+	shapers *pdfTextShaperCache,
+	face *builtinFontFace,
+	unit paragraphUnit,
+	style paragraphStyle,
+) ([]paragraphUnit, error) {
 	shaped, err := shapeTextWithCache(shapers, face, unit.Text)
 	if err != nil {
 		return nil, fmt.Errorf("shape emergency word segment %q: %w", unit.Text, err)
@@ -573,7 +590,13 @@ func isHyphenLikeBreakRune(r rune) bool {
 	}
 }
 
-func assembleParagraphLines(face *builtinFontFace, units []paragraphUnit, style paragraphStyle, maxWidth float64, shape paragraphLineShape) ([]paragraphLine, error) {
+func assembleParagraphLines(
+	face *builtinFontFace,
+	units []paragraphUnit,
+	style paragraphStyle,
+	maxWidth float64,
+	shape paragraphLineShape,
+) ([]paragraphLine, error) {
 	spaceWidth, err := plainSpaceWidth(shape.TextShapers, face, style)
 	if err != nil {
 		return nil, err
@@ -665,7 +688,13 @@ func (f *paragraphLineFinalizer) finalize(
 	return line
 }
 
-func chooseBreaksWithShape(units []paragraphUnit, spaceWidth float64, style paragraphStyle, maxWidth float64, shape paragraphLineShape) []paragraphBreak {
+func chooseBreaksWithShape(
+	units []paragraphUnit,
+	spaceWidth float64,
+	style paragraphStyle,
+	maxWidth float64,
+	shape paragraphLineShape,
+) []paragraphBreak {
 	n := len(units)
 	if n == 0 {
 		return nil
@@ -682,7 +711,13 @@ func chooseBreaksWithShape(units []paragraphUnit, spaceWidth float64, style para
 			states[i][j].PrevState = -1
 		}
 	}
-	states[0][stateIndexWithShape(paragraphFitnessDecent, false, 0, shapeStates)] = paragraphBreakState{Cost: 0, Prev: -1, PrevState: -1, Fitness: paragraphFitnessDecent, ShapeLine: 0}
+	states[0][stateIndexWithShape(paragraphFitnessDecent, false, 0, shapeStates)] = paragraphBreakState{
+		Cost:      0,
+		Prev:      -1,
+		PrevState: -1,
+		Fitness:   paragraphFitnessDecent,
+		ShapeLine: 0,
+	}
 
 	var candidates []paragraphBreakCandidate
 	for start := 0; start < n; start++ {
@@ -863,11 +898,29 @@ func paragraphRangeHasEmergencyBreak(units []paragraphUnit) bool {
 	return false
 }
 
-func paragraphLineDemerits(width, available float64, gaps int, firstLine bool, last bool, singleWord bool, hyphenated bool, previousHyphenated bool, previousFitness paragraphFitness) float64 {
+func paragraphLineDemerits(
+	width, available float64,
+	gaps int,
+	firstLine bool,
+	last bool,
+	singleWord bool,
+	hyphenated bool,
+	previousHyphenated bool,
+	previousFitness paragraphFitness,
+) float64 {
 	return lineBreakStats(width, available, gaps, firstLine, last, singleWord, hyphenated, previousHyphenated, previousFitness).Demerits
 }
 
-func lineBreakStats(width, available float64, gaps int, firstLine bool, last bool, singleWord bool, hyphenated bool, previousHyphenated bool, previousFitness paragraphFitness) paragraphLineBreakStats {
+func lineBreakStats(
+	width, available float64,
+	gaps int,
+	firstLine bool,
+	last bool,
+	singleWord bool,
+	hyphenated bool,
+	previousHyphenated bool,
+	previousFitness paragraphFitness,
+) paragraphLineBreakStats {
 	ratio, emergency := paragraphAdjustmentRatio(width, available, gaps, last, singleWord)
 	if math.IsInf(ratio, 1) {
 		return paragraphLineBreakStats{
@@ -1041,7 +1094,13 @@ func paragraphBreaksFromStates(states [][]paragraphBreakState, end int, stateIdx
 	return breaks
 }
 
-func emergencyParagraphBreaks(units []paragraphUnit, spaceWidth float64, style paragraphStyle, maxWidth float64, shape paragraphLineShape) []paragraphBreak {
+func emergencyParagraphBreaks(
+	units []paragraphUnit,
+	spaceWidth float64,
+	style paragraphStyle,
+	maxWidth float64,
+	shape paragraphLineShape,
+) []paragraphBreak {
 	breaks := make([]paragraphBreak, 0)
 	for start, lineIndex := 0, 0; start < len(units); lineIndex++ {
 		width := 0.0

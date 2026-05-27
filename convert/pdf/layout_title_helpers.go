@@ -42,7 +42,12 @@ func (g *pdfTitleVignetteContentGroup) reset() {
 	*g = pdfTitleVignetteContentGroup{}
 }
 
-func pdfPageTitleContentVisualBounds(page *pdfPage, lineStart, lineEnd int, imageStart, imageEnd int, fonts *pdfFontRegistry) (float64, float64, bool) {
+func pdfPageTitleContentVisualBounds(
+	page *pdfPage,
+	lineStart, lineEnd int,
+	imageStart, imageEnd int,
+	fonts *pdfFontRegistry,
+) (float64, float64, bool) {
 	if page == nil {
 		return 0, 0, false
 	}

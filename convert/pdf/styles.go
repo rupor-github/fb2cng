@@ -24,7 +24,13 @@ func newPDFBaseStyleResolver(log *zap.Logger, tracers ...*pdfStyleTracer) *pdfSt
 		tracer = tracers[0]
 	}
 	defaults := defaultPDFStyles()
-	resolver := &pdfStyleResolver{styles: clonePDFStyles(defaults), defaults: defaults, dropcaps: make(map[string]pdfDropcapCSSConfig), log: log, tracer: tracer}
+	resolver := &pdfStyleResolver{
+		styles:   clonePDFStyles(defaults),
+		defaults: defaults,
+		dropcaps: make(map[string]pdfDropcapCSSConfig),
+		log:      log,
+		tracer:   tracer,
+	}
 	resolver.traceDefaults()
 	return resolver
 }

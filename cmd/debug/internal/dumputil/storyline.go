@@ -261,7 +261,13 @@ func collectStructureDefinitions(c *kfx.Container) map[string]any {
 	return defs
 }
 
-func dumpStorylineFragmentsExpanded(c *kfx.Container, styleDefs map[string]string, contentDefs map[string]*ContentInfo, resourceDefs map[string]*ResourceInfo, structureDefs map[string]any) (string, int) {
+func dumpStorylineFragmentsExpanded(
+	c *kfx.Container,
+	styleDefs map[string]string,
+	contentDefs map[string]*ContentInfo,
+	resourceDefs map[string]*ResourceInfo,
+	structureDefs map[string]any,
+) (string, int) {
 	tw := debug.NewTreeWriter()
 
 	ctx := &expandCtx{

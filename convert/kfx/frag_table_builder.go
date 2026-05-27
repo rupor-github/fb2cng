@@ -14,7 +14,14 @@ import (
 // Text inside cells has text-align style and style_events for inline formatting.
 // Image-only cells contain image elements directly.
 // The idToEID map is used to register backlink RefIDs for footnote references in cells.
-func (sb *StorylineBuilder) AddTable(c *content.Content, table *fb2.Table, styles *StyleRegistry, ca *ContentAccumulator, imageResources imageResourceInfoByID, idToEID eidByFB2ID) int {
+func (sb *StorylineBuilder) AddTable(
+	c *content.Content,
+	table *fb2.Table,
+	styles *StyleRegistry,
+	ca *ContentAccumulator,
+	imageResources imageResourceInfoByID,
+	idToEID eidByFB2ID,
+) int {
 	tableEID := sb.eidCounter
 	sb.eidCounter++
 
@@ -168,7 +175,13 @@ func (sb *StorylineBuilder) AddTable(c *content.Content, table *fb2.Table, style
 }
 
 // buildImageOnlyCellContent creates content entries for a cell containing only images.
-func (sb *StorylineBuilder) buildImageOnlyCellContent(cell fb2.TableCell, cellImages []string, imageResources imageResourceInfoByID, styles *StyleRegistry, tableCellCtx StyleContext) []any {
+func (sb *StorylineBuilder) buildImageOnlyCellContent(
+	cell fb2.TableCell,
+	cellImages []string,
+	imageResources imageResourceInfoByID,
+	styles *StyleRegistry,
+	tableCellCtx StyleContext,
+) []any {
 	var contentList []any
 
 	for _, imgID := range cellImages {
@@ -228,7 +241,14 @@ func (sb *StorylineBuilder) buildImageOnlyCellContent(cell fb2.TableCell, cellIm
 }
 
 // buildTextOnlyCellContent creates a text entry for a cell containing only text.
-func (sb *StorylineBuilder) buildTextOnlyCellContent(c *content.Content, cell fb2.TableCell, ca *ContentAccumulator, styles *StyleRegistry, ancestorTag, resolvedTextStyle string, idToEID eidByFB2ID) []any {
+func (sb *StorylineBuilder) buildTextOnlyCellContent(
+	c *content.Content,
+	cell fb2.TableCell,
+	ca *ContentAccumulator,
+	styles *StyleRegistry,
+	ancestorTag, resolvedTextStyle string,
+	idToEID eidByFB2ID,
+) []any {
 	// Create inline style context for table cell content.
 	// This ensures inline styles inherit properties from the cell context without
 	// reapplying synthetic html/body root margins inside every table cell.
@@ -296,7 +316,14 @@ func (sb *StorylineBuilder) buildTextOnlyCellContent(c *content.Content, cell fb
 
 // buildMixedCellContent creates a text entry with content_list for mixed content cells.
 // This uses the same structure as AddMixedContent: interleaved text strings and inline images.
-func (sb *StorylineBuilder) buildMixedCellContent(c *content.Content, cell fb2.TableCell, imageResources imageResourceInfoByID, styles *StyleRegistry, ancestorTag, resolvedTextStyle string, idToEID eidByFB2ID) []any {
+func (sb *StorylineBuilder) buildMixedCellContent(
+	c *content.Content,
+	cell fb2.TableCell,
+	imageResources imageResourceInfoByID,
+	styles *StyleRegistry,
+	ancestorTag, resolvedTextStyle string,
+	idToEID eidByFB2ID,
+) []any {
 	// Create inline style context for table cell content.
 	// This ensures inline styles inherit properties from the cell context without
 	// reapplying synthetic html/body root margins inside every table cell.
@@ -333,7 +360,13 @@ func (sb *StorylineBuilder) buildMixedCellContent(c *content.Content, cell fb2.T
 			sb.eidCounter++
 
 			if item.Style != "" {
-				styles.tracer.TraceAssign(traceSymbolName(SymImage)+" (inline/table)", fmt.Sprintf("%d", imgEid), item.Style, sb.sectionName+"/"+sb.name, "")
+				styles.tracer.TraceAssign(
+					traceSymbolName(SymImage)+" (inline/table)",
+					fmt.Sprintf("%d", imgEid),
+					item.Style,
+					sb.sectionName+"/"+sb.name,
+					"",
+				)
 				styles.ResolveStyle(item.Style, styleUsageImage)
 			}
 

@@ -35,7 +35,20 @@ import (
 // Parameters:
 //   - nestedTitledSections: receives titled nested sections that should become separate storylines
 //   - directChildTOC: receives TOC entries for sections processed inline
-func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, depth int, titleDepth int, storylineRootDepth int, directChildTOC *[]*TOCEntry, nestedTitledSections *[]sectionWorkItem, idToEID eidByFB2ID) error {
+func processStorylineSectionContent(
+	c *content.Content,
+	section *fb2.Section,
+	sb *StorylineBuilder,
+	styles *StyleRegistry,
+	imageResources imageResourceInfoByID,
+	ca *ContentAccumulator,
+	depth int,
+	titleDepth int,
+	storylineRootDepth int,
+	directChildTOC *[]*TOCEntry,
+	nestedTitledSections *[]sectionWorkItem,
+	idToEID eidByFB2ID,
+) error {
 	// Enter section container for margin collapsing tracking.
 	// Section content is a standard container (no title-block mode).
 	//
@@ -298,7 +311,20 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 				// Process nested section content recursively (same storyline)
 				var childTOC []*TOCEntry
 				var childTitledSections []sectionWorkItem
-				if err := processStorylineSectionContent(c, nestedSection, sb, styles, imageResources, ca, nextDepth, nextTitleDepth, storylineRootDepth, &childTOC, &childTitledSections, idToEID); err != nil {
+				if err := processStorylineSectionContent(
+					c,
+					nestedSection,
+					sb,
+					styles,
+					imageResources,
+					ca,
+					nextDepth,
+					nextTitleDepth,
+					storylineRootDepth,
+					&childTOC,
+					&childTitledSections,
+					idToEID,
+				); err != nil {
 					return err
 				}
 
@@ -349,8 +375,18 @@ func processStorylineSectionContent(c *content.Content, section *fb2.Section, sb
 	return nil
 }
 
-func processDropcapParagraphPair(c *content.Content, item, next *fb2.FlowItem, ctx StyleContext, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) bool {
-	if item == nil || next == nil || item.Kind != fb2.FlowParagraph || next.Kind != fb2.FlowParagraph || item.Paragraph == nil || next.Paragraph == nil {
+func processDropcapParagraphPair(
+	c *content.Content,
+	item, next *fb2.FlowItem,
+	ctx StyleContext,
+	sb *StorylineBuilder,
+	styles *StyleRegistry,
+	imageResources imageResourceInfoByID,
+	ca *ContentAccumulator,
+	idToEID eidByFB2ID,
+) bool {
+	if item == nil || next == nil || item.Kind != fb2.FlowParagraph || next.Kind != fb2.FlowParagraph || item.Paragraph == nil ||
+		next.Paragraph == nil {
 		return false
 	}
 	if sb == nil || styles == nil || !paragraphHasTextContent(item.Paragraph) || !paragraphHasTextContent(next.Paragraph) {
@@ -453,7 +489,18 @@ func sectionHasNonTrivialContent(section *fb2.Section) bool {
 // processFlowItem processes a flow item using ContentAccumulator.
 // ctx tracks the full ancestor context chain for CSS cascade emulation.
 // contextName is the immediate context name (e.g., "section", "cite") used for subtitle naming.
-func processFlowItem(c *content.Content, item *fb2.FlowItem, next *fb2.FlowItem, ctx StyleContext, contextName string, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
+func processFlowItem(
+	c *content.Content,
+	item *fb2.FlowItem,
+	next *fb2.FlowItem,
+	ctx StyleContext,
+	contextName string,
+	sb *StorylineBuilder,
+	styles *StyleRegistry,
+	imageResources imageResourceInfoByID,
+	ca *ContentAccumulator,
+	idToEID eidByFB2ID,
+) {
 	switch item.Kind {
 	case fb2.FlowParagraph:
 		if item.Paragraph != nil {
@@ -616,7 +663,16 @@ func processFlowItem(c *content.Content, item *fb2.FlowItem, next *fb2.FlowItem,
 // processPoem processes poem content using ContentAccumulator.
 // Matches EPUB's appendPoemElement handling: title, epigraphs, subtitles, stanzas, text-authors, date.
 // ctx contains the ancestor context chain (e.g., may already include "cite" if poem is inside cite).
-func processPoem(c *content.Content, poem *fb2.Poem, ctx StyleContext, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
+func processPoem(
+	c *content.Content,
+	poem *fb2.Poem,
+	ctx StyleContext,
+	sb *StorylineBuilder,
+	styles *StyleRegistry,
+	imageResources imageResourceInfoByID,
+	ca *ContentAccumulator,
+	idToEID eidByFB2ID,
+) {
 	// Enter poem container for margin collapsing tracking.
 	// Poem is a standard container (no title-block mode).
 	sb.EnterContainer(ContainerPoem, 0)
@@ -728,7 +784,16 @@ func processPoem(c *content.Content, poem *fb2.Poem, ctx StyleContext, sb *Story
 // Matches EPUB's appendCiteElement handling: processes all flow items with "cite" context,
 // followed by text-authors.
 // ctx contains the ancestor context chain (already includes "cite" pushed by caller).
-func processCite(c *content.Content, cite *fb2.Cite, ctx StyleContext, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
+func processCite(
+	c *content.Content,
+	cite *fb2.Cite,
+	ctx StyleContext,
+	sb *StorylineBuilder,
+	styles *StyleRegistry,
+	imageResources imageResourceInfoByID,
+	ca *ContentAccumulator,
+	idToEID eidByFB2ID,
+) {
 	// Enter cite container for margin collapsing tracking.
 	// Use FlagTransferMBToLastChild so that the cite's margin-bottom goes to its last child
 	// (text-author if present) rather than bubbling up to sibling collapsing. This matches

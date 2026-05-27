@@ -171,7 +171,12 @@ func (sb *StorylineBuilder) buildContentTree() *ContentTree {
 
 // addContentNodeToTree creates a content node for a ContentRef and adds it to the tree.
 // parentIndex is the index in contentEntries, childIndex is the index in childRefs (-1 for direct entries).
-func (sb *StorylineBuilder) addContentNodeToTree(tree *ContentTree, containerNodes map[int]*ContentNode, ref *ContentRef, parentIndex, childIndex int) {
+func (sb *StorylineBuilder) addContentNodeToTree(
+	tree *ContentTree,
+	containerNodes map[int]*ContentNode,
+	ref *ContentRef,
+	parentIndex, childIndex int,
+) {
 	// Determine content type string for the node
 	contentType := "text"
 	if ref.Type == SymImage {

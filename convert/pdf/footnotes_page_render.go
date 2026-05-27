@@ -23,7 +23,15 @@ type pdfPrintedFootnoteSeparatorMetrics struct {
 	Color       pdfColor
 }
 
-func pdfDebugPrintedFootnoteSkipped(debug *pdfDebugPrintedFootnotes, kind string, reason string, pageIndex int, queuePageIndex int, value float64, limit float64) {
+func pdfDebugPrintedFootnoteSkipped(
+	debug *pdfDebugPrintedFootnotes,
+	kind string,
+	reason string,
+	pageIndex int,
+	queuePageIndex int,
+	value float64,
+	limit float64,
+) {
 	if debug == nil {
 		return
 	}
@@ -37,7 +45,15 @@ func pdfDebugPrintedFootnoteSkipped(debug *pdfDebugPrintedFootnotes, kind string
 	})
 }
 
-func pdfDebugPrintedFootnoteOverflow(debug *pdfDebugPrintedFootnotes, kind string, reason string, pageIndex int, queuePageIndex int, value float64, limit float64) {
+func pdfDebugPrintedFootnoteOverflow(
+	debug *pdfDebugPrintedFootnotes,
+	kind string,
+	reason string,
+	pageIndex int,
+	queuePageIndex int,
+	value float64,
+	limit float64,
+) {
 	if debug == nil {
 		return
 	}
@@ -223,7 +239,15 @@ func appendPDFPrintedFootnoteContinuationPages(
 		}
 		chunkHeight := chunkTop - chunkBottom
 		if chunkHeight > pageCapacity {
-			pdfDebugPrintedFootnoteOverflow(debug, "continuation_chunk", "chunk_taller_than_page_capacity", sourcePageIndex, queuePageIndex+1, chunkHeight, pageCapacity)
+			pdfDebugPrintedFootnoteOverflow(
+				debug,
+				"continuation_chunk",
+				"chunk_taller_than_page_capacity",
+				sourcePageIndex,
+				queuePageIndex+1,
+				chunkHeight,
+				pageCapacity,
+			)
 		}
 		if len(chunks) > 0 && chunkGroupHeight+chunkHeight > pageCapacity {
 			flushChunks()
@@ -266,7 +290,17 @@ func bottomAlignFootnoteContinuations(
 		shift := cursor - chunk.Top
 		placedTop := chunk.Top + shift
 		placedBottom := chunk.Bottom + shift
-		recordFootnoteChunkDebug(debug, sourcePageIndex, chunk.QueuePageIndex, continuationPageIndex, chunk.Top, chunk.Bottom, shift, placedTop, placedBottom)
+		recordFootnoteChunkDebug(
+			debug,
+			sourcePageIndex,
+			chunk.QueuePageIndex,
+			continuationPageIndex,
+			chunk.Top,
+			chunk.Bottom,
+			shift,
+			placedTop,
+			placedBottom,
+		)
 		appendPDFPrintedFootnotePage(&continuation, shiftPDFPageY(chunk.Page, shift), pdfPrintedFootnoteSeparatorMetrics{})
 		cursor = placedBottom
 	}
@@ -296,7 +330,10 @@ func appendPDFPrintedFootnoteContinuationMarker(page *pdfPage, separator pdfPrin
 	chevronWidth := chevronHeight * pdfPrintedFootnoteContinuationMarkerWidthFactor
 	gap := max(strokeWidth*pdfPrintedFootnoteContinuationMarkerGapFactor, pdfPrintedFootnoteContinuationMarkerMinGap)
 	markerWidth := float64(pdfPrintedFootnoteContinuationMarkerChevrons)*chevronWidth + float64(pdfPrintedFootnoteContinuationMarkerChevrons-1)*gap
-	inset := min(max(separator.Width-markerWidth, 0), max(strokeWidth*pdfPrintedFootnoteContinuationMarkerInsetFactor, pdfPrintedFootnoteContinuationMarkerMinInset))
+	inset := min(
+		max(separator.Width-markerWidth, 0),
+		max(strokeWidth*pdfPrintedFootnoteContinuationMarkerInsetFactor, pdfPrintedFootnoteContinuationMarkerMinInset),
+	)
 	startX := separator.X + separator.Width - markerWidth - inset
 	centerY := separatorY + separator.LineWidth/2
 	for i := range pdfPrintedFootnoteContinuationMarkerChevrons {
@@ -392,7 +429,9 @@ func pdfPrintedFootnoteSeparatorMetricsForArea(
 	if styles == nil {
 		styles = newPDFStyleResolver(nil, nil)
 	}
-	style := styles.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleFootnoteSeparator, ContextClasses: pdfStyleFootnoteSeparator})
+	style := styles.styleForBlock(
+		pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleFootnoteSeparator, ContextClasses: pdfStyleFootnoteSeparator},
+	)
 	lineWidth := style.BorderWidth
 	if lineWidth <= 0 {
 		lineWidth = 0.5

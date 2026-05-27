@@ -775,7 +775,11 @@ func TestFixInternalLinks_UsesRenderedIDsFromEpigraphs(t *testing.T) {
 						Content: []fb2.FlowItem{
 							{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
 								{Kind: fb2.InlineText, Text: "See "},
-								{Kind: fb2.InlineLink, Href: "#epigraph-target", Children: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "target"}}},
+								{
+									Kind:     fb2.InlineLink,
+									Href:     "#epigraph-target",
+									Children: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "target"}},
+								},
 							}}},
 						},
 					},
@@ -2199,7 +2203,9 @@ func TestWriteNCX_TOCTypeNesting(t *testing.T) {
 		{
 			name:    "normal",
 			tocType: common.TOCTypeNormal,
-			want:    []tocSnapshot{{Title: "A", Children: []tocSnapshot{{Title: "B", Children: []tocSnapshot{{Title: "C", Children: []tocSnapshot{{Title: "D"}}}}}}}},
+			want: []tocSnapshot{
+				{Title: "A", Children: []tocSnapshot{{Title: "B", Children: []tocSnapshot{{Title: "C", Children: []tocSnapshot{{Title: "D"}}}}}}},
+			},
 		},
 		{
 			name:    "old kindle",
@@ -2426,7 +2432,9 @@ func TestWriteNav_TOCTypeNesting(t *testing.T) {
 		{
 			name:    "normal",
 			tocType: common.TOCTypeNormal,
-			want:    []tocSnapshot{{Title: "A", Children: []tocSnapshot{{Title: "B", Children: []tocSnapshot{{Title: "C", Children: []tocSnapshot{{Title: "D"}}}}}}}},
+			want: []tocSnapshot{
+				{Title: "A", Children: []tocSnapshot{{Title: "B", Children: []tocSnapshot{{Title: "C", Children: []tocSnapshot{{Title: "D"}}}}}}},
+			},
 		},
 		{
 			name:    "old kindle",
@@ -3535,8 +3543,13 @@ func TestFloatModeFootnotesVisibleElements(t *testing.T) {
 					{Sections: []fb2.Section{{
 						ID: "chapter1",
 						Content: []fb2.FlowItem{{
-							Kind:      fb2.FlowParagraph,
-							Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Text with footnote"}, {Kind: fb2.InlineLink, Href: "#note1", Children: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "1"}}}}},
+							Kind: fb2.FlowParagraph,
+							Paragraph: &fb2.Paragraph{
+								Text: []fb2.InlineSegment{
+									{Kind: fb2.InlineText, Text: "Text with footnote"},
+									{Kind: fb2.InlineLink, Href: "#note1", Children: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "1"}}},
+								},
+							},
 						}},
 					}}},
 					{Name: "notes", Kind: fb2.BodyFootnotes, Sections: []fb2.Section{tt.section}},
@@ -3573,7 +3586,12 @@ func TestFloatModeFootnotesVisibleElements(t *testing.T) {
 					firstElem := aside.ChildElements()[0]
 					if tt.expectMarkerBefore == "img" || tt.expectMarkerBefore == "table" {
 						if firstElem.Tag != "span" || firstElem.SelectAttrValue("class", "") != "footnote-more" {
-							t.Fatalf("expected standalone marker before first %s, got <%s class=%q>", tt.expectMarkerBefore, firstElem.Tag, firstElem.SelectAttrValue("class", ""))
+							t.Fatalf(
+								"expected standalone marker before first %s, got <%s class=%q>",
+								tt.expectMarkerBefore,
+								firstElem.Tag,
+								firstElem.SelectAttrValue("class", ""),
+							)
 						}
 					}
 				}

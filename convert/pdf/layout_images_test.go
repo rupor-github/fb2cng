@@ -44,7 +44,15 @@ func TestLayoutPDFPagesDoesNotApplyTextIndentToImageOnlyParagraphs(t *testing.T)
 	img.Dim.Height = 80
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{
-		Paragraph: paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, FirstLineIndent: pdfBodyIndent, HasFirstLineIndent: true, Align: textAlignJustify, Hyphenation: paragraphHyphenationAuto},
+		Paragraph: paragraphStyle{
+			FontFamily:         "serif",
+			FontSize:           pdfBaseFontSize,
+			LineHeight:         pdfBaseLineHeight,
+			FirstLineIndent:    pdfBodyIndent,
+			HasFirstLineIndent: true,
+			Align:              textAlignJustify,
+			Hyphenation:        paragraphHyphenationAuto,
+		},
 	}
 
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{
@@ -77,7 +85,14 @@ func TestLayoutPDFPagesLeftAlignsImageOnlyParagraphsInsideCite(t *testing.T) {
 	img.Dim.Height = 80
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{
-		Paragraph: paragraphStyle{FontFamily: "serif", FontSize: pdfBaseFontSize, LineHeight: pdfBaseLineHeight, FirstLineIndent: pdfBodyIndent, Align: textAlignJustify, Hyphenation: paragraphHyphenationAuto},
+		Paragraph: paragraphStyle{
+			FontFamily:      "serif",
+			FontSize:        pdfBaseFontSize,
+			LineHeight:      pdfBaseLineHeight,
+			FirstLineIndent: pdfBodyIndent,
+			Align:           textAlignJustify,
+			Hyphenation:     paragraphHyphenationAuto,
+		},
 	}
 	resolver.styles[pdfStyleCite] = pdfBlockResolvedStyle{MarginLeft: 21, MarginRight: 21}
 
@@ -294,7 +309,10 @@ func TestLayoutPDFPagesKeepsNearFittingImageWithSmallBottomOverflow(t *testing.T
 	img.Dim.Height = 423
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignLeft}}
-	resolver.styles[pdfStyleImage] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignCenter}, KeepTogether: true}
+	resolver.styles[pdfStyleImage] = pdfBlockResolvedStyle{
+		Paragraph:    paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignCenter},
+		KeepTogether: true,
+	}
 
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
@@ -326,7 +344,10 @@ func TestLayoutPDFPagesBreaksImagePastBottomOverflowTolerance(t *testing.T) {
 	img.Dim.Height = 440
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignLeft}}
-	resolver.styles[pdfStyleImage] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignCenter}, KeepTogether: true}
+	resolver.styles[pdfStyleImage] = pdfBlockResolvedStyle{
+		Paragraph:    paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignCenter},
+		KeepTogether: true,
+	}
 
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
@@ -355,7 +376,11 @@ func TestLayoutPDFPagesDoesNotKeepImageWithNextWhenAvoidIsAbsent(t *testing.T) {
 	img.Dim.Height = 216
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignLeft}}
-	resolver.styles[pdfStyleImage] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignCenter}, SpaceBefore: 10, KeepTogether: true}
+	resolver.styles[pdfStyleImage] = pdfBlockResolvedStyle{
+		Paragraph:    paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignCenter},
+		SpaceBefore:  10,
+		KeepTogether: true,
+	}
 	resolver.styles["after"] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignLeft}, SpaceBefore: 30}
 
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{
@@ -392,7 +417,10 @@ func TestLayoutPDFPagesDoesNotCarryPreviousEmptyLineMarginToImagePage(t *testing
 	resolver := &pdfStyleResolver{styles: defaultPDFStyles()}
 	resolver.styles[pdfStyleParagraph] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignLeft}}
 	resolver.styles[pdfStyleEmptyLine] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 12}, SpaceBefore: 10}
-	resolver.styles[pdfStyleImage] = pdfBlockResolvedStyle{Paragraph: paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignCenter}, KeepTogether: true}
+	resolver.styles[pdfStyleImage] = pdfBlockResolvedStyle{
+		Paragraph:    paragraphStyle{FontSize: 10, LineHeight: 10, Align: textAlignCenter},
+		KeepTogether: true,
+	}
 	blocks := []pdfTextBlock{
 		{Kind: pdfBlockParagraph, StyleName: pdfStyleParagraph, Text: "one"},
 		{Kind: pdfBlockParagraph, StyleName: pdfStyleParagraph, Text: "two"},

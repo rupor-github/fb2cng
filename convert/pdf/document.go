@@ -36,7 +36,14 @@ func layoutPDFDocumentPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[
 		return nil, nil, pdfDebugPrintedFootnotes{}, err
 	}
 	printedFootnotes := pdfDebugPrintedFootnotesFromReserved(doc, reserved)
-	pages := appendPDFPrintedFootnotePagePlans(doc, reserved.Pages, reserved.Plans, reserved.FootnoteTextHeight, reserved.UsedGlyphs, &printedFootnotes)
+	pages := appendPDFPrintedFootnotePagePlans(
+		doc,
+		reserved.Pages,
+		reserved.Plans,
+		reserved.FootnoteTextHeight,
+		reserved.UsedGlyphs,
+		&printedFootnotes,
+	)
 	printedFootnotes.FinalPageCount = len(pages)
 	pdfDebugPrintedFootnotesSyncCounts(&printedFootnotes)
 	return pages, reserved.UsedGlyphs, printedFootnotes, nil

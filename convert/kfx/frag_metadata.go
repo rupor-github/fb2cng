@@ -33,7 +33,13 @@ func BuildMetadata(sectionNames sectionNameList) *Fragment {
 // BuildBookMetadata creates the $490 book_metadata fragment.
 // This contains categorised metadata: title, author, language, etc.
 // If fontInfo has a body font, override_kindle_font is set to true.
-func BuildBookMetadata(c *content.Content, cfg *config.DocumentConfig, containerID, coverResourceName string, fontInfo *FontInfo, log *zap.Logger) *Fragment {
+func BuildBookMetadata(
+	c *content.Content,
+	cfg *config.DocumentConfig,
+	containerID, coverResourceName string,
+	fontInfo *FontInfo,
+	log *zap.Logger,
+) *Fragment {
 	// Kindle title metadata
 	titleMetadata := make([]any, 0)
 

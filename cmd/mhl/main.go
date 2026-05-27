@@ -220,7 +220,12 @@ func main() {
 	}
 	target = strings.ToLower(strings.TrimSuffix(target, filepath.Ext(target)))
 	if !mhltarget.Supported(target) {
-		log.Fatalf("MHL connector could be named fb2mobi.exe, fb2epub.exe or fb2pdf.exe (or started via appropriate symlinks), current name is: %s.exe. It should be invoked by MyHomeLib, never directly", target)
+		log.Fatalf(
+			"MHL connector could be named fb2mobi.exe, fb2epub.exe or fb2pdf.exe "+
+				"(or started via appropriate symlinks), current name is: %s.exe. "+
+				"It should be invoked by MyHomeLib, never directly",
+			target,
+		)
 	}
 
 	from, err := filepath.Abs(os.Args[1])

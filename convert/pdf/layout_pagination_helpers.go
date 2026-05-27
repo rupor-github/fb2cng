@@ -36,7 +36,15 @@ func pdfBlockImageOverflowsBottom(candidateBottom float64, pageBottom float64) b
 	return candidateBottom < pageBottom-pdfBlockImageBottomFitOverflow
 }
 
-func nextBlockKeepHeight(doc pdfDocumentSpec, blockStyles []pdfBlockResolvedStyle, start int, contentWidth float64, rootlessContentWidth float64, contentHeight float64, minLines int) (float64, error) {
+func nextBlockKeepHeight(
+	doc pdfDocumentSpec,
+	blockStyles []pdfBlockResolvedStyle,
+	start int,
+	contentWidth float64,
+	rootlessContentWidth float64,
+	contentHeight float64,
+	minLines int,
+) (float64, error) {
 	if minLines <= 0 {
 		return 0, nil
 	}
@@ -71,7 +79,14 @@ func nextBlockKeepHeight(doc pdfDocumentSpec, blockStyles []pdfBlockResolvedStyl
 			}
 			forceContentWidth := isVignetteBlock(block) || isHeadingImageBlock(block)
 			widthReference := pdfBlockImageReferenceWidth(block, style, availableWidth, rootlessContentWidth, img, forceContentWidth)
-			_, height, ok := fitPDFBlockImageSize(doc, img, blockContentWidth(availableWidth, style), maxImageHeight, widthReference, forceContentWidth)
+			_, height, ok := fitPDFBlockImageSize(
+				doc,
+				img,
+				blockContentWidth(availableWidth, style),
+				maxImageHeight,
+				widthReference,
+				forceContentWidth,
+			)
 			if !ok {
 				return 0, nil
 			}

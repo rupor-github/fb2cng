@@ -80,7 +80,8 @@ func TestGenerateDebugDumps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read pdf-style-trace.txt: %v", err)
 	}
-	if !bytes.Contains(traceData, []byte("=== PDF Style Trace ===")) || !bytes.Contains(traceData, []byte("ASSIGN")) || !bytes.Contains(traceData, []byte("COLLAPSE")) {
+	if !bytes.Contains(traceData, []byte("=== PDF Style Trace ===")) || !bytes.Contains(traceData, []byte("ASSIGN")) ||
+		!bytes.Contains(traceData, []byte("COLLAPSE")) {
 		t.Fatalf("pdf-style-trace.txt missing expected content: %s", traceData)
 	}
 	parsedCSS, err := os.ReadFile(filepath.Join(tmpDir, "parsed-stylesheet.css"))
@@ -333,14 +334,21 @@ func TestPDFDebugPrintedFootnotesSummaryIncludesPlansReservesAndContinuationPack
 	if !printedFootnotes.Enabled || printedFootnotes.PlanCount != 1 || printedFootnotes.ReserveCount == 0 {
 		t.Fatalf("printed footnote summary = %#v, want enabled plan and reserve summaries", printedFootnotes)
 	}
-	if len(printedFootnotes.Plans) != 1 || len(printedFootnotes.Plans[0].Refs) != 1 || len(printedFootnotes.Plans[0].Queue) != 1 || printedFootnotes.Plans[0].ContinuationPages == 0 {
+	if len(printedFootnotes.Plans) != 1 || len(printedFootnotes.Plans[0].Refs) != 1 || len(printedFootnotes.Plans[0].Queue) != 1 ||
+		printedFootnotes.Plans[0].ContinuationPages == 0 {
 		t.Fatalf("printed footnote plans = %#v, want refs, queue, and continuation count", printedFootnotes.Plans)
 	}
 	if len(printedFootnotes.PackedContinuationChunks) == 0 || printedFootnotes.ContinuationPageCount == 0 {
 		t.Fatalf("printed footnote continuation summary = %#v, want packed continuation chunks", printedFootnotes)
 	}
 	if printedFootnotes.SkippedCount != len(printedFootnotes.Skipped) || printedFootnotes.OverflowCount != len(printedFootnotes.Overflow) {
-		t.Fatalf("printed footnote case counts = skipped %d/%d overflow %d/%d", printedFootnotes.SkippedCount, len(printedFootnotes.Skipped), printedFootnotes.OverflowCount, len(printedFootnotes.Overflow))
+		t.Fatalf(
+			"printed footnote case counts = skipped %d/%d overflow %d/%d",
+			printedFootnotes.SkippedCount,
+			len(printedFootnotes.Skipped),
+			printedFootnotes.OverflowCount,
+			len(printedFootnotes.Overflow),
+		)
 	}
 }
 

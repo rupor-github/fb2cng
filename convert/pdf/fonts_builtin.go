@@ -130,7 +130,14 @@ func builtinFont(fontFamily string, bold, italic bool) (*builtinFontFace, error)
 
 func initBuiltinFonts() error {
 	builtinOnce.Do(func() {
-		builtinSerif, builtinErr = loadBuiltinFamily("NotoSerif", false, notoSerifRegularGZ, notoSerifBoldGZ, notoSerifItalicGZ, notoSerifBoldItalicGZ)
+		builtinSerif, builtinErr = loadBuiltinFamily(
+			"NotoSerif",
+			false,
+			notoSerifRegularGZ,
+			notoSerifBoldGZ,
+			notoSerifItalicGZ,
+			notoSerifBoldItalicGZ,
+		)
 		if builtinErr != nil {
 			return
 		}

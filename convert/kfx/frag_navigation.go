@@ -16,7 +16,15 @@ import (
 // is also included in the navigation.
 // If landmarks has non-zero EIDs, a landmarks container is added.
 
-func BuildNavigation(tocEntries []*TOCEntry, startEID int, posItems []PositionItem, pageSize int, includeUntitled bool, tocType common.TOCType, landmarks LandmarkInfo) *Fragment {
+func BuildNavigation(
+	tocEntries []*TOCEntry,
+	startEID int,
+	posItems []PositionItem,
+	pageSize int,
+	includeUntitled bool,
+	tocType common.TOCType,
+	landmarks LandmarkInfo,
+) *Fragment {
 	// Build TOC entries recursively
 	entries := buildNavEntries(tocEntries, startEID, includeUntitled, tocType)
 

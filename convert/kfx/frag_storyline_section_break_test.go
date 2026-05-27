@@ -167,9 +167,13 @@ func createSectionBreakTestBook() *fb2.FictionBook {
 								{
 									Kind: fb2.FlowSection,
 									Section: &fb2.Section{
-										ID:      "deep",
-										Title:   &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Deep Section"}}}}}},
-										Content: []fb2.FlowItem{{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Deep content"}}}}},
+										ID: "deep",
+										Title: &fb2.Title{
+											Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Deep Section"}}}}},
+										},
+										Content: []fb2.FlowItem{
+											{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Deep content"}}}},
+										},
 									},
 								},
 							},
@@ -178,9 +182,13 @@ func createSectionBreakTestBook() *fb2.FictionBook {
 					{
 						Kind: fb2.FlowSection,
 						Section: &fb2.Section{
-							ID:      "sibling",
-							Title:   &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Sibling Section"}}}}}},
-							Content: []fb2.FlowItem{{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Sibling content"}}}}},
+							ID: "sibling",
+							Title: &fb2.Title{
+								Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Sibling Section"}}}}},
+							},
+							Content: []fb2.FlowItem{
+								{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Sibling content"}}}},
+							},
 						},
 					},
 				},

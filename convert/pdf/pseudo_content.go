@@ -31,7 +31,10 @@ func (r *pdfStyleResolver) extractPseudoContent(sheet *css.Stylesheet) []string 
 		}
 		for property := range rule.Properties {
 			if property != "content" {
-				warnings = append(warnings, fmt.Sprintf("pseudo-element %q has property %q which will be ignored (only 'content' is supported)", rule.Selector.Raw, property))
+				warnings = append(
+					warnings,
+					fmt.Sprintf("pseudo-element %q has property %q which will be ignored (only 'content' is supported)", rule.Selector.Raw, property),
+				)
 			}
 		}
 		for _, name := range pdfSelectorStyleNames(rule.Selector) {

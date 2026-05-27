@@ -26,7 +26,11 @@ func TestLayoutPDFDocumentPagesAppendsPrintedFootnotesAndReservesMainFlow(t *tes
 			},
 		},
 		Blocks: []pdfTextBlock{
-			{Kind: pdfBlockParagraph, Text: "One 17", Runs: []pdfInlineRun{{Text: "One "}, {Text: "17", StyleClasses: pdfStyleLinkFootnote, FootnoteID: "n1", Superscript: true}}},
+			{
+				Kind: pdfBlockParagraph,
+				Text: "One 17",
+				Runs: []pdfInlineRun{{Text: "One "}, {Text: "17", StyleClasses: pdfStyleLinkFootnote, FootnoteID: "n1", Superscript: true}},
+			},
 			{Kind: pdfBlockParagraph, Text: "Two"},
 			{Kind: pdfBlockParagraph, Text: "Three"},
 		},
@@ -70,7 +74,10 @@ func TestLayoutPDFDocumentPagesSkipsPrintedFootnotePathWhenModeDisabled(t *testi
 		PageHeight: 130,
 		Content:    &content.Content{OutputFormat: common.OutputFmtPdf, FootnotesMode: common.FootnotesModeDefault},
 		PrintedFootnotes: map[string]pdfPrintedFootnote{
-			"n1": {ID: "n1", BodyBlocks: []pdfTextBlock{{Kind: pdfBlockParagraph, Text: "Footnote body.", Runs: []pdfInlineRun{{Text: "Footnote body."}}}}},
+			"n1": {
+				ID:         "n1",
+				BodyBlocks: []pdfTextBlock{{Kind: pdfBlockParagraph, Text: "Footnote body.", Runs: []pdfInlineRun{{Text: "Footnote body."}}}},
+			},
 		},
 		Blocks: []pdfTextBlock{{Kind: pdfBlockParagraph, Text: "Body"}},
 	}

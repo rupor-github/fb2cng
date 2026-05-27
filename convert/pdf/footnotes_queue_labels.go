@@ -29,7 +29,12 @@ func applyPDFPrintedFootnoteQueueReferenceLabels(
 	return out
 }
 
-func pdfPrintedFootnoteQueueReferenceRuns(runs []pdfInlineRun, c *content.Content, labels map[string]string, resolver *pdfStyleResolver) []pdfInlineRun {
+func pdfPrintedFootnoteQueueReferenceRuns(
+	runs []pdfInlineRun,
+	c *content.Content,
+	labels map[string]string,
+	resolver *pdfStyleResolver,
+) []pdfInlineRun {
 	if len(runs) == 0 || len(labels) == 0 {
 		return runs
 	}

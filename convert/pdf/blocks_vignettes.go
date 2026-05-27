@@ -42,7 +42,13 @@ func pdfSectionEndVignetteTransfersForPlan(book *fb2.FictionBook, plan *structur
 	return transfers
 }
 
-func pdfCollectSectionEndVignetteTransfers(section *fb2.Section, titleDepth int, unitIndexBySection map[*fb2.Section]int, plan *structure.Plan, transfers pdfSectionEndVignetteTransfers) int {
+func pdfCollectSectionEndVignetteTransfers(
+	section *fb2.Section,
+	titleDepth int,
+	unitIndexBySection map[*fb2.Section]int,
+	plan *structure.Plan,
+	transfers pdfSectionEndVignetteTransfers,
+) int {
 	if section == nil {
 		return -1
 	}
@@ -57,7 +63,10 @@ func pdfCollectSectionEndVignetteTransfers(section *fb2.Section, titleDepth int,
 		if item.Kind != fb2.FlowSection || item.Section == nil {
 			continue
 		}
-		lastDescendantUnit = max(lastDescendantUnit, pdfCollectSectionEndVignetteTransfers(item.Section, childTitleDepth, unitIndexBySection, plan, transfers))
+		lastDescendantUnit = max(
+			lastDescendantUnit,
+			pdfCollectSectionEndVignetteTransfers(item.Section, childTitleDepth, unitIndexBySection, plan, transfers),
+		)
 	}
 
 	if section.HasTitle() && lastDescendantUnit >= 0 {

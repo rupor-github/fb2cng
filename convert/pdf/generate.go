@@ -24,7 +24,14 @@ const (
 // Unicode font resources, selectable title/author text, initial FB2 text body
 // pagination, and Info dictionary metadata. Later milestones will replace the
 // fixed default styles with the KFX-aligned CSS pipeline.
-func Generate(ctx context.Context, c *content.Content, outputName string, cfg *config.DocumentConfig, log *zap.Logger, finalOutputName ...string) error {
+func Generate(
+	ctx context.Context,
+	c *content.Content,
+	outputName string,
+	cfg *config.DocumentConfig,
+	log *zap.Logger,
+	finalOutputName ...string,
+) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}

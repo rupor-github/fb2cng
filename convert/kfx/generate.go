@@ -21,7 +21,14 @@ import (
 )
 
 // Generate creates the KFX output file.
-func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *config.DocumentConfig, log *zap.Logger, finalOutputPath ...string) (err error) {
+func Generate(
+	ctx context.Context,
+	c *content.Content,
+	outputPath string,
+	cfg *config.DocumentConfig,
+	log *zap.Logger,
+	finalOutputPath ...string,
+) (err error) {
 	if err = ctx.Err(); err != nil {
 		return err
 	}
@@ -171,7 +178,13 @@ func buildFragments(ctx context.Context, container *Container, c *content.Conten
 	// Generate storyline and section fragments from book content
 	// EIDs start at 1000 - this is arbitrary but leaves room for future system IDs
 	startEID := 1000
-	contentFragments, nextEID, sectionNames, tocEntries, sectionEIDs, idToEID, landmarks, chapterStartSections, err := generateStoryline(ctx, c, styles, imageResourceInfo, startEID)
+	contentFragments, nextEID, sectionNames, tocEntries, sectionEIDs, idToEID, landmarks, chapterStartSections, err := generateStoryline(
+		ctx,
+		c,
+		styles,
+		imageResourceInfo,
+		startEID,
+	)
 	if err != nil {
 		return err
 	}
@@ -179,7 +192,21 @@ func buildFragments(ctx context.Context, container *Container, c *content.Conten
 	annotationEnabled := cfg.Annotation.Enable && c.Book.Description.TitleInfo.Annotation != nil
 	tocPageEnabled := cfg.TOCPage.Placement != common.TOCPagePlacementNone
 	if annotationEnabled || tocPageEnabled {
-		sectionNames, tocEntries, sectionEIDs, nextEID, landmarks, idToEID, err = addGeneratedSections(ctx, c, cfg, styles, contentFragments, sectionNames, tocEntries, sectionEIDs, nextEID, landmarks, idToEID, imageResourceInfo, log)
+		sectionNames, tocEntries, sectionEIDs, nextEID, landmarks, idToEID, err = addGeneratedSections(
+			ctx,
+			c,
+			cfg,
+			styles,
+			contentFragments,
+			sectionNames,
+			tocEntries,
+			sectionEIDs,
+			nextEID,
+			landmarks,
+			idToEID,
+			imageResourceInfo,
+			log,
+		)
 		if err != nil {
 			return err
 		}

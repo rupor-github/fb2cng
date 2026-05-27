@@ -35,9 +35,18 @@ func TestNormalizeFootnotes(t *testing.T) {
 		body := &Body{
 			Kind: BodyFootnotes,
 			Sections: []Section{
-				{ID: "note1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "First"}}}}}},
-				{ID: "", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Invalid"}}}}}},
-				{ID: "note2", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Second"}}}}}},
+				{
+					ID:      "note1",
+					Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "First"}}}}},
+				},
+				{
+					ID:      "",
+					Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Invalid"}}}}},
+				},
+				{
+					ID:      "note2",
+					Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Second"}}}}},
+				},
 			},
 		}
 
@@ -287,7 +296,10 @@ func TestFictionBookNormalizeFootnoteBodies(t *testing.T) {
 	}
 
 	// Build nested footnote section structure to exercise flattening.
-	deepNested := Section{ID: "deep", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Deep"}}}}}}
+	deepNested := Section{
+		ID:      "deep",
+		Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Deep"}}}}},
+	}
 	midNested := Section{ID: "mid", Content: []FlowItem{
 		{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Middle"}}}},
 		{Kind: FlowSection, Section: &deepNested},
@@ -704,8 +716,18 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 				{
 					Kind: BodyFootnotes,
 					Sections: []Section{
-						{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note 1"}}}}}},
-						{ID: "n2", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note 2"}}}}}},
+						{
+							ID: "n1",
+							Content: []FlowItem{
+								{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note 1"}}}},
+							},
+						},
+						{
+							ID: "n2",
+							Content: []FlowItem{
+								{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note 2"}}}},
+							},
+						},
 					},
 				},
 			},
@@ -783,7 +805,12 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 				{
 					Kind: BodyFootnotes,
 					Sections: []Section{
-						{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}}}},
+						{
+							ID: "n1",
+							Content: []FlowItem{
+								{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}},
+							},
+						},
 					},
 				},
 			},
@@ -832,8 +859,15 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 					}},
 				},
 				{
-					Kind:     BodyFootnotes,
-					Sections: []Section{{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}}}}},
+					Kind: BodyFootnotes,
+					Sections: []Section{
+						{
+							ID: "n1",
+							Content: []FlowItem{
+								{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}},
+							},
+						},
+					},
 				},
 			},
 		}
@@ -877,14 +911,24 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 					Kind: BodyFootnotes,
 					Name: "notes",
 					Sections: []Section{
-						{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note 1"}}}}}},
+						{
+							ID: "n1",
+							Content: []FlowItem{
+								{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note 1"}}}},
+							},
+						},
 					},
 				},
 				{
 					Kind: BodyFootnotes,
 					Name: "comments",
 					Sections: []Section{
-						{ID: "c1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Comment 1"}}}}}},
+						{
+							ID: "c1",
+							Content: []FlowItem{
+								{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Comment 1"}}}},
+							},
+						},
 					},
 				},
 			},
@@ -939,8 +983,15 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 					Sections: []Section{{ID: "s1"}},
 				},
 				{
-					Kind:     BodyFootnotes,
-					Sections: []Section{{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}}}}},
+					Kind: BodyFootnotes,
+					Sections: []Section{
+						{
+							ID: "n1",
+							Content: []FlowItem{
+								{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}},
+							},
+						},
+					},
 				},
 			},
 		}
@@ -978,8 +1029,15 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 					},
 				},
 				{
-					Kind:     BodyFootnotes,
-					Sections: []Section{{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}}}}},
+					Kind: BodyFootnotes,
+					Sections: []Section{
+						{
+							ID: "n1",
+							Content: []FlowItem{
+								{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}},
+							},
+						},
+					},
 				},
 			},
 		}
@@ -1012,7 +1070,11 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 													{
 														Text: []InlineSegment{
 															{Kind: InlineText, Text: "Verse with "},
-															{Kind: InlineLink, Href: "#n1", Children: []InlineSegment{{Kind: InlineText, Text: "[1]"}}},
+															{
+																Kind:     InlineLink,
+																Href:     "#n1",
+																Children: []InlineSegment{{Kind: InlineText, Text: "[1]"}},
+															},
 														},
 													},
 												},
@@ -1025,8 +1087,15 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 					},
 				},
 				{
-					Kind:     BodyFootnotes,
-					Sections: []Section{{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}}}}},
+					Kind: BodyFootnotes,
+					Sections: []Section{
+						{
+							ID: "n1",
+							Content: []FlowItem{
+								{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}},
+							},
+						},
+					},
 				},
 			},
 		}
@@ -1121,7 +1190,11 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 													{
 														Content: []InlineSegment{
 															{Kind: InlineText, Text: "Cell with "},
-															{Kind: InlineLink, Href: "#n1", Children: []InlineSegment{{Kind: InlineText, Text: "[1]"}}},
+															{
+																Kind:     InlineLink,
+																Href:     "#n1",
+																Children: []InlineSegment{{Kind: InlineText, Text: "[1]"}},
+															},
 														},
 													},
 												},
@@ -1134,8 +1207,15 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 					},
 				},
 				{
-					Kind:     BodyFootnotes,
-					Sections: []Section{{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}}}}},
+					Kind: BodyFootnotes,
+					Sections: []Section{
+						{
+							ID: "n1",
+							Content: []FlowItem{
+								{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}},
+							},
+						},
+					},
 				},
 			},
 		}
@@ -1179,8 +1259,15 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 					},
 				},
 				{
-					Kind:     BodyFootnotes,
-					Sections: []Section{{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}}}}},
+					Kind: BodyFootnotes,
+					Sections: []Section{
+						{
+							ID: "n1",
+							Content: []FlowItem{
+								{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}},
+							},
+						},
+					},
 				},
 			},
 		}
@@ -1213,7 +1300,11 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 													Paragraph: &Paragraph{
 														Text: []InlineSegment{
 															{Kind: InlineText, Text: "Poem title"},
-															{Kind: InlineLink, Href: "#n1", Children: []InlineSegment{{Kind: InlineText, Text: "[1]"}}},
+															{
+																Kind:     InlineLink,
+																Href:     "#n1",
+																Children: []InlineSegment{{Kind: InlineText, Text: "[1]"}},
+															},
 														},
 													},
 												},
@@ -1226,8 +1317,15 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 					},
 				},
 				{
-					Kind:     BodyFootnotes,
-					Sections: []Section{{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}}}}},
+					Kind: BodyFootnotes,
+					Sections: []Section{
+						{
+							ID: "n1",
+							Content: []FlowItem{
+								{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}},
+							},
+						},
+					},
 				},
 			},
 		}
@@ -1262,7 +1360,11 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 															Paragraph: &Paragraph{
 																Text: []InlineSegment{
 																	{Kind: InlineText, Text: "Stanza title"},
-																	{Kind: InlineLink, Href: "#n1", Children: []InlineSegment{{Kind: InlineText, Text: "[1]"}}},
+																	{
+																		Kind:     InlineLink,
+																		Href:     "#n1",
+																		Children: []InlineSegment{{Kind: InlineText, Text: "[1]"}},
+																	},
 																},
 															},
 														},
@@ -1286,8 +1388,18 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 				{
 					Kind: BodyFootnotes,
 					Sections: []Section{
-						{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note 1"}}}}}},
-						{ID: "n2", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note 2"}}}}}},
+						{
+							ID: "n1",
+							Content: []FlowItem{
+								{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note 1"}}}},
+							},
+						},
+						{
+							ID: "n2",
+							Content: []FlowItem{
+								{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note 2"}}}},
+							},
+						},
 					},
 				},
 			},
@@ -1337,8 +1449,15 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 					Sections: []Section{{ID: "s1"}},
 				},
 				{
-					Kind:     BodyFootnotes,
-					Sections: []Section{{ID: "n1", Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}}}}},
+					Kind: BodyFootnotes,
+					Sections: []Section{
+						{
+							ID: "n1",
+							Content: []FlowItem{
+								{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}},
+							},
+						},
+					},
 				},
 			},
 		}

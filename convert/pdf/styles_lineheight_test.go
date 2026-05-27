@@ -123,7 +123,12 @@ func TestPDFStyleResolverSubtitleLineHeightInheritsDefaultCSSRootRhythm(t *testi
 	} {
 		subtitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockSubtitle, StyleName: styleName})
 		if math.Abs(subtitle.Paragraph.LineHeight-pdfDefaultCSSRootLineHeight) > 0.001 {
-			t.Fatalf("%s line height = %v, want default.css root line-height %v", styleName, subtitle.Paragraph.LineHeight, pdfDefaultCSSRootLineHeight)
+			t.Fatalf(
+				"%s line height = %v, want default.css root line-height %v",
+				styleName,
+				subtitle.Paragraph.LineHeight,
+				pdfDefaultCSSRootLineHeight,
+			)
 		}
 	}
 }
@@ -174,7 +179,11 @@ func TestPDFStyleResolverDefaultCSSRootRhythmKeepsPDFBaseText(t *testing.T) {
 		t.Fatalf("paragraph font size = %v, want PDF base %v for default.css reader rhythm", paragraph.Paragraph.FontSize, pdfBaseFontSize)
 	}
 	if math.Abs(paragraph.Paragraph.LineHeight-pdfBaseLineHeight) > 0.001 {
-		t.Fatalf("paragraph line height = %v, want PDF base line height %v for default.css reader rhythm", paragraph.Paragraph.LineHeight, pdfBaseLineHeight)
+		t.Fatalf(
+			"paragraph line height = %v, want PDF base line height %v for default.css reader rhythm",
+			paragraph.Paragraph.LineHeight,
+			pdfBaseLineHeight,
+		)
 	}
 	if paragraph.Paragraph.LineHeightExplicit {
 		t.Fatalf("default.css reader rhythm should not mark PDF base line height explicit")
@@ -225,13 +234,16 @@ func TestPDFStyleResolverRelativeFontSizeAndSpacingUseInheritedFont(t *testing.T
 		t.Fatalf("heading line height = %v, want adjusted KP3 1lh %v", heading.Paragraph.LineHeight, pdfAdjustedLineHeight)
 	}
 
-	chapterHeading := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, Depth: 1, StyleClasses: pdfStyleChapterTitle, ContextClasses: pdfStyleChapterTitle})
+	chapterHeading := resolver.styleForBlock(
+		pdfTextBlock{Kind: pdfBlockHeading, Depth: 1, StyleClasses: pdfStyleChapterTitle, ContextClasses: pdfStyleChapterTitle},
+	)
 	if math.Abs(chapterHeading.SpaceBefore-rootFont*2) > 0.001 || math.Abs(chapterHeading.SpaceAfter-rootFont) > 0.001 {
 		t.Fatalf("chapter title wrapper margins = %v/%v, want %v/%v", chapterHeading.SpaceBefore, chapterHeading.SpaceAfter, rootFont*2, rootFont)
 	}
 
 	subtitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockSubtitle, StyleName: pdfStyleSubtitle})
-	if math.Abs(subtitle.Paragraph.FontSize-rootFont) > 0.001 || math.Abs(subtitle.SpaceBefore-rootFont) > 0.001 || math.Abs(subtitle.SpaceAfter-rootFont) > 0.001 {
+	if math.Abs(subtitle.Paragraph.FontSize-rootFont) > 0.001 || math.Abs(subtitle.SpaceBefore-rootFont) > 0.001 ||
+		math.Abs(subtitle.SpaceAfter-rootFont) > 0.001 {
 		t.Fatalf("subtitle font/margins = %v %v/%v, want root %v", subtitle.Paragraph.FontSize, subtitle.SpaceBefore, subtitle.SpaceAfter, rootFont)
 	}
 	if math.Abs(subtitle.Paragraph.LineHeight-rootFont*1.7) > 0.001 {
@@ -244,7 +256,13 @@ func TestPDFStyleResolverRelativeFontSizeAndSpacingUseInheritedFont(t *testing.T
 		t.Fatalf("paragraph font size = %v, want inherited 120%% %v", paragraph.Paragraph.FontSize, wantParagraphFont)
 	}
 	if math.Abs(paragraph.MarginLeft-wantParagraphFont*2) > 0.001 || math.Abs(paragraph.PaddingLeft-wantParagraphFont*0.5) > 0.001 {
-		t.Fatalf("paragraph relative spacing = margin %v padding %v, want %v/%v", paragraph.MarginLeft, paragraph.PaddingLeft, wantParagraphFont*2, wantParagraphFont*0.5)
+		t.Fatalf(
+			"paragraph relative spacing = margin %v padding %v, want %v/%v",
+			paragraph.MarginLeft,
+			paragraph.PaddingLeft,
+			wantParagraphFont*2,
+			wantParagraphFont*0.5,
+		)
 	}
 }
 

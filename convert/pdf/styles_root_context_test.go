@@ -18,7 +18,13 @@ func TestPDFStyleResolverAppliesRootPageMargins(t *testing.T) {
 	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
 	page := resolver.pageStyle()
 	if page.MarginLeft != -4 || page.MarginRight != -8 || page.SpaceBefore != 1 || page.SpaceAfter != 3 {
-		t.Fatalf("page margins = top %v right %v bottom %v left %v, want 1/-8/3/-4", page.SpaceBefore, page.MarginRight, page.SpaceAfter, page.MarginLeft)
+		t.Fatalf(
+			"page margins = top %v right %v bottom %v left %v, want 1/-8/3/-4",
+			page.SpaceBefore,
+			page.MarginRight,
+			page.SpaceAfter,
+			page.MarginLeft,
+		)
 	}
 }
 
@@ -321,7 +327,9 @@ func TestPDFStyleResolverAccumulatesNestedContainerMarginsAcrossContextChain(t *
 	}}}
 
 	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
-	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleCite, ContextClasses: joinStyleClasses(pdfStyleAnnotation, pdfStyleCite)})
+	paragraph := resolver.styleForBlock(
+		pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleCite, ContextClasses: joinStyleClasses(pdfStyleAnnotation, pdfStyleCite)},
+	)
 	if math.Abs(paragraph.MarginLeft-pdfBaseFontSize*3) > 0.001 {
 		t.Fatalf("nested cite margin-left = %v, want accumulated %v", paragraph.MarginLeft, pdfBaseFontSize*3)
 	}
@@ -344,7 +352,9 @@ func TestPDFStyleResolverAppliesNestedStanzaContextInheritance(t *testing.T) {
 	}}}
 
 	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
-	verse := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockPoem, StyleClasses: pdfStylePoem, ContextClasses: joinStyleClasses(pdfStylePoem, pdfStyleStanza)})
+	verse := resolver.styleForBlock(
+		pdfTextBlock{Kind: pdfBlockPoem, StyleClasses: pdfStylePoem, ContextClasses: joinStyleClasses(pdfStylePoem, pdfStyleStanza)},
+	)
 	if math.Abs(verse.MarginLeft-pdfBaseFontSize*6) > 0.001 {
 		t.Fatalf("stanza verse margin-left = %v, want accumulated %v", verse.MarginLeft, pdfBaseFontSize*6)
 	}

@@ -104,15 +104,45 @@ func (t *pdfStyleTracer) traceDropcapResolved(blockIndex int, block pdfTextBlock
 	if block.ID != "" {
 		details += fmt.Sprintf(", id=%q", block.ID)
 	}
-	details += fmt.Sprintf("\n  char=%q, classes=%q, context=%q, chars=%d, lines=%d", layout.Run.Text, layout.Run.StyleClasses, layout.Run.ContextClasses, pdfDropcapDefaultChars, layout.Lines)
-	details += fmt.Sprintf("\n  base: font-family=%s, font-size=%gpt, line-height=%gpt", base.FontFamily, base.FontSize, pdfEffectiveParagraphLineHeight(base))
-	details += fmt.Sprintf("\n  dropcap: font-family=%s, font-size=%gpt, line-height=%gpt, bold=%t, italic=%t, color=%s", layout.Style.FontFamily, layout.Style.FontSize, layout.Style.LineHeight, layout.Style.Bold, layout.Style.Italic, layout.Style.Color.String())
-	details += fmt.Sprintf("\n  geometry: padding-right=%gpt, glyph-width=%gpt, exclusion-width=%gpt, reserved-height=%gpt", layout.PaddingRight, layout.Fragment.Width, layout.ExclusionWidth, layout.ReservedHeight)
+	details += fmt.Sprintf(
+		"\n  char=%q, classes=%q, context=%q, chars=%d, lines=%d",
+		layout.Run.Text,
+		layout.Run.StyleClasses,
+		layout.Run.ContextClasses,
+		pdfDropcapDefaultChars,
+		layout.Lines,
+	)
+	details += fmt.Sprintf(
+		"\n  base: font-family=%s, font-size=%gpt, line-height=%gpt",
+		base.FontFamily,
+		base.FontSize,
+		pdfEffectiveParagraphLineHeight(base),
+	)
+	details += fmt.Sprintf(
+		"\n  dropcap: font-family=%s, font-size=%gpt, line-height=%gpt, bold=%t, italic=%t, color=%s",
+		layout.Style.FontFamily,
+		layout.Style.FontSize,
+		layout.Style.LineHeight,
+		layout.Style.Bold,
+		layout.Style.Italic,
+		layout.Style.Color.String(),
+	)
+	details += fmt.Sprintf(
+		"\n  geometry: padding-right=%gpt, glyph-width=%gpt, exclusion-width=%gpt, reserved-height=%gpt",
+		layout.PaddingRight,
+		layout.Fragment.Width,
+		layout.ExclusionWidth,
+		layout.ReservedHeight,
+	)
 	t.append("DROPCAP", fmt.Sprintf("#%d", blockIndex), details)
 	t.sections["dropcap_resolved"]++
 }
 
-func (t *pdfStyleTracer) traceMarginCollapse(previousIndex, currentIndex int, previousBlock, currentBlock pdfTextBlock, previousMargin, currentMargin, collapsed float64) {
+func (t *pdfStyleTracer) traceMarginCollapse(
+	previousIndex, currentIndex int,
+	previousBlock, currentBlock pdfTextBlock,
+	previousMargin, currentMargin, collapsed float64,
+) {
 	if !t.isEnabled() {
 		return
 	}
@@ -212,7 +242,13 @@ func pdfTraceFormatCSSProperties(props map[string]css.Value) string {
 }
 
 func pdfTraceFormatResolvedStyle(style pdfBlockResolvedStyle) string {
-	return fmt.Sprintf("font-family=%s, font-weight=%s, font-style=%s, color=%s, background=%s, border=%gpt %s, underline=%t, strikethrough=%t, font-size=%gpt, line-height=%gpt, letter-spacing=%gpt, text-indent=%gpt, align=%s, vertical-align=%s, hyphens=%s, margins=%g/%g/%g/%g, padding=%g/%g/%g/%g, width=%s, min-width=%s, max-width=%s, keep-together=%t, keep-next=%d, page-break-before=%t, page-break-after=%t, hidden=%t, orphans=%d, widows=%d",
+	return fmt.Sprintf(
+		"font-family=%s, font-weight=%s, font-style=%s, color=%s, background=%s, "+
+			"border=%gpt %s, underline=%t, strikethrough=%t, font-size=%gpt, line-height=%gpt, "+
+			"letter-spacing=%gpt, text-indent=%gpt, align=%s, vertical-align=%s, hyphens=%s, "+
+			"margins=%g/%g/%g/%g, padding=%g/%g/%g/%g, width=%s, min-width=%s, max-width=%s, "+
+			"keep-together=%t, keep-next=%d, page-break-before=%t, page-break-after=%t, hidden=%t, "+
+			"orphans=%d, widows=%d",
 		normalizedPDFFontFamily(style.Paragraph.FontFamily),
 		pdfCSSFontWeightString(style.Paragraph.Bold),
 		pdfCSSFontStyleString(style.Paragraph.Italic),
@@ -246,7 +282,8 @@ func pdfTraceFormatResolvedStyle(style pdfBlockResolvedStyle) string {
 		style.PageBreakAfter,
 		style.Hidden,
 		style.Orphans,
-		style.Widows)
+		style.Widows,
+	)
 }
 
 func pdfTraceBlockLength(length pdfBlockLength, ok bool) string {
@@ -288,13 +325,26 @@ func pdfTraceStyleDiff(before, after pdfBlockResolvedStyle) string {
 		}
 	}
 	if before.Paragraph.FontFamily != after.Paragraph.FontFamily {
-		changes = append(changes, fmt.Sprintf("font-family: %s -> %s", normalizedPDFFontFamily(before.Paragraph.FontFamily), normalizedPDFFontFamily(after.Paragraph.FontFamily)))
+		changes = append(
+			changes,
+			fmt.Sprintf(
+				"font-family: %s -> %s",
+				normalizedPDFFontFamily(before.Paragraph.FontFamily),
+				normalizedPDFFontFamily(after.Paragraph.FontFamily),
+			),
+		)
 	}
 	if before.Paragraph.Bold != after.Paragraph.Bold {
-		changes = append(changes, fmt.Sprintf("font-weight: %s -> %s", pdfCSSFontWeightString(before.Paragraph.Bold), pdfCSSFontWeightString(after.Paragraph.Bold)))
+		changes = append(
+			changes,
+			fmt.Sprintf("font-weight: %s -> %s", pdfCSSFontWeightString(before.Paragraph.Bold), pdfCSSFontWeightString(after.Paragraph.Bold)),
+		)
 	}
 	if before.Paragraph.Italic != after.Paragraph.Italic {
-		changes = append(changes, fmt.Sprintf("font-style: %s -> %s", pdfCSSFontStyleString(before.Paragraph.Italic), pdfCSSFontStyleString(after.Paragraph.Italic)))
+		changes = append(
+			changes,
+			fmt.Sprintf("font-style: %s -> %s", pdfCSSFontStyleString(before.Paragraph.Italic), pdfCSSFontStyleString(after.Paragraph.Italic)),
+		)
 	}
 	if before.Paragraph.Align != after.Paragraph.Align {
 		changes = append(changes, fmt.Sprintf("text-align: %s -> %s", before.Paragraph.Align, after.Paragraph.Align))
@@ -308,7 +358,10 @@ func pdfTraceStyleDiff(before, after pdfBlockResolvedStyle) string {
 	appendBoolChange("underline", before.Paragraph.Underline, after.Paragraph.Underline)
 	appendBoolChange("strikethrough", before.Paragraph.Strikethrough, after.Paragraph.Strikethrough)
 	if before.Paragraph.Hyphenation != after.Paragraph.Hyphenation {
-		changes = append(changes, fmt.Sprintf("hyphens: %s -> %s", pdfHyphenationString(before.Paragraph.Hyphenation), pdfHyphenationString(after.Paragraph.Hyphenation)))
+		changes = append(
+			changes,
+			fmt.Sprintf("hyphens: %s -> %s", pdfHyphenationString(before.Paragraph.Hyphenation), pdfHyphenationString(after.Paragraph.Hyphenation)),
+		)
 	}
 	appendFloatChange("font-size", before.Paragraph.FontSize, after.Paragraph.FontSize)
 	appendFloatChange("line-height", before.Paragraph.LineHeight, after.Paragraph.LineHeight)
@@ -324,7 +377,10 @@ func pdfTraceStyleDiff(before, after pdfBlockResolvedStyle) string {
 	appendFloatChange("padding-left", before.PaddingLeft, after.PaddingLeft)
 	appendBlockLengthChange := func(name string, beforeLength pdfBlockLength, beforeOK bool, afterLength pdfBlockLength, afterOK bool) {
 		if beforeOK != afterOK || beforeLength != afterLength {
-			changes = append(changes, fmt.Sprintf("%s: %s -> %s", name, pdfTraceBlockLength(beforeLength, beforeOK), pdfTraceBlockLength(afterLength, afterOK)))
+			changes = append(
+				changes,
+				fmt.Sprintf("%s: %s -> %s", name, pdfTraceBlockLength(beforeLength, beforeOK), pdfTraceBlockLength(afterLength, afterOK)),
+			)
 		}
 	}
 	appendBlockLengthChange("width", before.Width, before.HasWidth, after.Width, after.HasWidth)
@@ -334,7 +390,10 @@ func pdfTraceStyleDiff(before, after pdfBlockResolvedStyle) string {
 		changes = append(changes, fmt.Sprintf("background-color: %s -> %s", pdfTraceBackgroundColor(before), pdfTraceBackgroundColor(after)))
 	}
 	if before.HasBorder != after.HasBorder || before.BorderWidth != after.BorderWidth || before.BorderColor != after.BorderColor {
-		changes = append(changes, fmt.Sprintf("border: %gpt %s -> %gpt %s", before.BorderWidth, pdfTraceBorderColor(before), after.BorderWidth, pdfTraceBorderColor(after)))
+		changes = append(
+			changes,
+			fmt.Sprintf("border: %gpt %s -> %gpt %s", before.BorderWidth, pdfTraceBorderColor(before), after.BorderWidth, pdfTraceBorderColor(after)),
+		)
 	}
 	appendBoolChange("keep-together", before.KeepTogether, after.KeepTogether)
 	appendIntChange("keep-next", before.KeepWithNextLines, after.KeepWithNextLines)

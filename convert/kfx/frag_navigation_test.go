@@ -159,7 +159,9 @@ func TestBuildNavEntries_TOCTypeNesting(t *testing.T) {
 		{
 			name:    "normal",
 			tocType: common.TOCTypeNormal,
-			want:    []navSnapshot{{Title: "A", Children: []navSnapshot{{Title: "B", Children: []navSnapshot{{Title: "C", Children: []navSnapshot{{Title: "D"}}}}}}}},
+			want: []navSnapshot{
+				{Title: "A", Children: []navSnapshot{{Title: "B", Children: []navSnapshot{{Title: "C", Children: []navSnapshot{{Title: "D"}}}}}}},
+			},
 		},
 		{
 			name:    "old kindle",

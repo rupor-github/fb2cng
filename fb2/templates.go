@@ -44,7 +44,13 @@ func (fb *FictionBook) ExpandTemplateAuthorName(name config.TemplateFieldName, f
 }
 
 // ExpandTemplateFootnoteLabel expands a template string for footnote labels with body and note numbers
-func (fb *FictionBook) ExpandTemplateFootnoteLabel(name config.TemplateFieldName, field string, bodyNum, noteNum int, body *Body, section *Section) (string, error) {
+func (fb *FictionBook) ExpandTemplateFootnoteLabel(
+	name config.TemplateFieldName,
+	field string,
+	bodyNum, noteNum int,
+	body *Body,
+	section *Section,
+) (string, error) {
 	funcMap := sprig.FuncMap()
 
 	tmpl, err := template.New(string(name)).Funcs(funcMap).Parse(field)

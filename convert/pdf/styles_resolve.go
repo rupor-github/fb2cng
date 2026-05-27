@@ -72,12 +72,14 @@ func mergePDFBlockBehaviorOverrides(base, override, fallback pdfBlockResolvedSty
 	if override.KeepWithNextLines != fallback.KeepWithNextLines {
 		base.KeepWithNextLines = override.KeepWithNextLines
 	}
-	if override.HasPageBreakBefore || override.PageBreakBefore != fallback.PageBreakBefore || override.PageBreakBeforeMode != fallback.PageBreakBeforeMode {
+	if override.HasPageBreakBefore || override.PageBreakBefore != fallback.PageBreakBefore ||
+		override.PageBreakBeforeMode != fallback.PageBreakBeforeMode {
 		base.PageBreakBefore = override.PageBreakBefore
 		base.PageBreakBeforeMode = override.PageBreakBeforeMode
 		base.HasPageBreakBefore = override.HasPageBreakBefore
 	}
-	if override.HasPageBreakAfter || override.PageBreakAfter != fallback.PageBreakAfter || override.PageBreakAfterMode != fallback.PageBreakAfterMode {
+	if override.HasPageBreakAfter || override.PageBreakAfter != fallback.PageBreakAfter ||
+		override.PageBreakAfterMode != fallback.PageBreakAfterMode {
 		base.PageBreakAfter = override.PageBreakAfter
 		base.PageBreakAfterMode = override.PageBreakAfterMode
 		base.HasPageBreakAfter = override.HasPageBreakAfter
@@ -502,7 +504,15 @@ func shouldSkipContextInheritedMargins(block pdfTextBlock, class string) bool {
 
 func pdfContainerStyleClass(class string) bool {
 	switch class {
-	case pdfStyleBodyTitle, pdfStyleChapterTitle, pdfStyleSectionTitle, pdfStyleAnnotation, pdfStyleFootnote, pdfStylePoem, pdfStyleStanza, pdfStyleEpigraph, pdfStyleCite:
+	case pdfStyleBodyTitle,
+		pdfStyleChapterTitle,
+		pdfStyleSectionTitle,
+		pdfStyleAnnotation,
+		pdfStyleFootnote,
+		pdfStylePoem,
+		pdfStyleStanza,
+		pdfStyleEpigraph,
+		pdfStyleCite:
 		return true
 	default:
 		return false

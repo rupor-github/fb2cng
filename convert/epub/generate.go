@@ -33,12 +33,21 @@ const (
 
 // Generate creates the EPUB output file.
 // It handles epub2, epub3, and kepub variants based on content.OutputFormat.
-func Generate(ctx context.Context, c *content.Content, outputPath string, cfg *config.DocumentConfig, log *zap.Logger, finalOutputPath ...string) (err error) {
+func Generate(
+	ctx context.Context,
+	c *content.Content,
+	outputPath string,
+	cfg *config.DocumentConfig,
+	log *zap.Logger,
+	finalOutputPath ...string,
+) (err error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 
-	log.Info("EPUB generation starting", append([]zap.Field{zap.Stringer("format", c.OutputFormat)}, epubOutputLogFields(outputPath, finalOutputPath...)...)...)
+	log.Info(
+		"EPUB generation starting",
+		append([]zap.Field{zap.Stringer("format", c.OutputFormat)}, epubOutputLogFields(outputPath, finalOutputPath...)...)...)
 	defer func(start time.Time) {
 		if err == nil {
 			log.Info("EPUB generation completed", zap.Duration("elapsed", time.Since(start)))
@@ -384,7 +393,9 @@ func generateCoverPageDoc(c *content.Content, cfg *config.DocumentConfig, log *z
 	case common.ImageResizeModeKeepAR:
 		fallthrough
 	default:
-		style.SetText("html, body { margin: 0; padding: 0; width: 100%; height: 100%; } svg { display: block; width: auto; height: 100%; margin: 0 auto }")
+		style.SetText(
+			"html, body { margin: 0; padding: 0; width: 100%; height: 100%; } svg { display: block; width: auto; height: 100%; margin: 0 auto }",
+		)
 	}
 
 	title := head.CreateElement("title")
@@ -511,7 +522,12 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	dcTitle := metadata.CreateElement("dc:title")
 	title := c.Book.Description.TitleInfo.BookTitle.Value
 	if cfg.Metainformation.TitleTemplate != "" {
-		expanded, err := c.Book.ExpandTemplateMetainfo(config.MetaTitleTemplateFieldName, cfg.Metainformation.TitleTemplate, c.SrcName, c.OutputFormat)
+		expanded, err := c.Book.ExpandTemplateMetainfo(
+			config.MetaTitleTemplateFieldName,
+			cfg.Metainformation.TitleTemplate,
+			c.SrcName,
+			c.OutputFormat,
+		)
 		if err != nil {
 			log.Warn("Unable to prepare title for generated OPF", zap.Error(err))
 		} else {
@@ -534,7 +550,12 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		dcCreator := metadata.CreateElement("dc:creator")
 		authorName := strings.TrimSpace(fmt.Sprintf("%s %s %s", author.FirstName, author.MiddleName, author.LastName))
 		if cfg.Metainformation.CreatorNameTemplate != "" {
-			expanded, err := c.Book.ExpandTemplateAuthorName(config.MetaCreatorNameTemplateFieldName, cfg.Metainformation.CreatorNameTemplate, idx, &author)
+			expanded, err := c.Book.ExpandTemplateAuthorName(
+				config.MetaCreatorNameTemplateFieldName,
+				cfg.Metainformation.CreatorNameTemplate,
+				idx,
+				&author,
+			)
 			if err != nil {
 				log.Warn("Unable to prepare author name for generated OPF", zap.Error(err))
 			} else {
@@ -1122,7 +1143,14 @@ func emitNavTOCNodes(parentOL *etree.Element, nodes []*tocnav.Node) {
 // buildTOCContent creates the TOC title, authors, and list structure
 // parentContainer is the element to add content to (e.g., nav element or div)
 // cfg is the TOC configuration
-func buildTOCContent(parentContainer *etree.Element, c *content.Content, chapters []chapterData, cfg *config.TOCPageConfig, idToFile idToFileMap, log *zap.Logger) {
+func buildTOCContent(
+	parentContainer *etree.Element,
+	c *content.Content,
+	chapters []chapterData,
+	cfg *config.TOCPageConfig,
+	idToFile idToFileMap,
+	log *zap.Logger,
+) {
 	// Add book title
 	c.KoboSpanNextParagraph()
 	h1 := parentContainer.CreateElement("h1")
@@ -1199,7 +1227,15 @@ func buildTOCPageOL(parent *etree.Element, section *fb2.Section, filename string
 }
 
 // buildTOCPageOLItems adds TOC entries for subsections to the ordered list
-func buildTOCPageOLItems(parentOL *etree.Element, section *fb2.Section, filename string, c *content.Content, includeUntitled bool, lastLI *etree.Element, idToFile idToFileMap) {
+func buildTOCPageOLItems(
+	parentOL *etree.Element,
+	section *fb2.Section,
+	filename string,
+	c *content.Content,
+	includeUntitled bool,
+	lastLI *etree.Element,
+	idToFile idToFileMap,
+) {
 	for _, item := range section.Content {
 		if item.Kind == fb2.FlowSection && item.Section != nil {
 			// IMPORTANT: for nested TOC nodes we only consider explicit, non-empty titles.

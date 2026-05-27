@@ -14,11 +14,35 @@ const dropcapMarginWrapperStyle = "dropcap-margin-wrapper"
 // addParagraphWithImages processes a paragraph with potential inline images.
 // ctx provides the style context with optional position for margin filtering.
 // extraClasses are additional CSS classes to append to the style (e.g., paragraph's custom style).
-func addParagraphWithImages(c *content.Content, para *fb2.Paragraph, ctx StyleContext, extraClasses string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID) {
+func addParagraphWithImages(
+	c *content.Content,
+	para *fb2.Paragraph,
+	ctx StyleContext,
+	extraClasses string,
+	headingLevel int,
+	sb *StorylineBuilder,
+	styles *StyleRegistry,
+	imageResources imageResourceInfoByID,
+	ca *ContentAccumulator,
+	idToEID eidByFB2ID,
+) {
 	addParagraphWithImagesInternal(c, para, ctx, extraClasses, headingLevel, sb, styles, imageResources, ca, idToEID, true, false)
 }
 
-func addParagraphWithImagesInternal(c *content.Content, para *fb2.Paragraph, ctx StyleContext, extraClasses string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, allowDropcapWrapper bool, wrappedDropcap bool) {
+func addParagraphWithImagesInternal(
+	c *content.Content,
+	para *fb2.Paragraph,
+	ctx StyleContext,
+	extraClasses string,
+	headingLevel int,
+	sb *StorylineBuilder,
+	styles *StyleRegistry,
+	imageResources imageResourceInfoByID,
+	ca *ContentAccumulator,
+	idToEID eidByFB2ID,
+	allowDropcapWrapper bool,
+	wrappedDropcap bool,
+) {
 	if sb != nil && sb.consumePendingFootnoteMore() && c != nil && c.MoreParaStr != "" {
 		para = paragraphWithMoreIndicator(para, c.MoreParaStr)
 	}
@@ -71,7 +95,20 @@ func addParagraphWithImagesInternal(c *content.Content, para *fb2.Paragraph, ctx
 			styles.EnsureBaseStyle(dropcapMarginWrapperStyle)
 			wrapperStyle := resolveDropcapMarginWrapperStyle(ctx, paragraphProps)
 			sb.StartBlock(dropcapMarginWrapperStyle, styles, &BlockOptions{Kind: ContainerSection})
-			addParagraphWithImagesInternal(c, para, ctx.WithoutRootHorizontalMargins(), extraClasses, headingLevel, sb, styles, imageResources, ca, idToEID, false, true)
+			addParagraphWithImagesInternal(
+				c,
+				para,
+				ctx.WithoutRootHorizontalMargins(),
+				extraClasses,
+				headingLevel,
+				sb,
+				styles,
+				imageResources,
+				ca,
+				idToEID,
+				false,
+				true,
+			)
 			sb.EndBlock()
 			applyResolvedStyleToLastDropcapWrapper(sb, wrapperStyle)
 			return
@@ -428,7 +465,17 @@ func paragraphWithMoreIndicator(para *fb2.Paragraph, moreText string) *fb2.Parag
 // For heading contexts, this wraps images in a text-type entry so they render as "inline within title".
 // ctx provides the style context with optional position for margin filtering.
 // spanningClasses are CSS classes from spanning styles (already detected by caller).
-func addParagraphWithMixedContent(c *content.Content, para *fb2.Paragraph, ctx StyleContext, spanningClasses string, headingLevel int, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, idToEID eidByFB2ID) {
+func addParagraphWithMixedContent(
+	c *content.Content,
+	para *fb2.Paragraph,
+	ctx StyleContext,
+	spanningClasses string,
+	headingLevel int,
+	sb *StorylineBuilder,
+	styles *StyleRegistry,
+	imageResources imageResourceInfoByID,
+	idToEID eidByFB2ID,
+) {
 	// Determine whether to insert soft hyphens into text, matching EPUB behavior.
 	// Hyphenation is skipped for "special" paragraphs (code/preformatted blocks).
 	hyphenate := !para.Special && c.Hyphen != nil

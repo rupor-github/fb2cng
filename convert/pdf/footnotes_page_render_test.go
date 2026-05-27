@@ -104,7 +104,10 @@ func TestAppendPDFPrintedFootnotePagePlansBottomAlignsPackedContinuationChunks(t
 
 	out := appendPDFPrintedFootnotePagePlans(
 		pdfDocumentSpec{PageWidth: 260, PageHeight: 180},
-		[]pdfPage{{Lines: []pdfPageLine{testPDFPageLine(t, face, "Main page 1", 130)}}, {Lines: []pdfPageLine{testPDFPageLine(t, face, "Main page 2", 130)}}},
+		[]pdfPage{
+			{Lines: []pdfPageLine{testPDFPageLine(t, face, "Main page 1", 130)}},
+			{Lines: []pdfPageLine{testPDFPageLine(t, face, "Main page 2", 130)}},
+		},
 		[]pdfPrintedFootnotePagePlan{plan},
 		80,
 		nil,
@@ -113,7 +116,8 @@ func TestAppendPDFPrintedFootnotePagePlansBottomAlignsPackedContinuationChunks(t
 	if len(out) != 3 {
 		t.Fatalf("pages = %d, want source page, packed continuation page, next main page", len(out))
 	}
-	if got := pageText(out[1]); !strings.Contains(got, "Footnote continuation one") || !strings.Contains(got, "Footnote continuation two") || strings.Contains(got, "Main page 2") {
+	if got := pageText(out[1]); !strings.Contains(got, "Footnote continuation one") || !strings.Contains(got, "Footnote continuation two") ||
+		strings.Contains(got, "Main page 2") {
 		t.Fatalf("packed continuation text = %q, want both continuation chunks before next main page", got)
 	}
 	firstLine, firstOK := pageLineByText(out[1], "Footnote continuation one")

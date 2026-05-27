@@ -79,7 +79,12 @@ func TestExpandTemplate_Authors(t *testing.T) {
 	}
 	book = setupTestBook(t, book)
 
-	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ (index .Authors 0).LastName }}", "testbook.fb2", common.OutputFmtEpub3)
+	result, err := book.ExpandTemplateMetainfo(
+		config.OutputNameTemplateFieldName,
+		"{{ (index .Authors 0).LastName }}",
+		"testbook.fb2",
+		common.OutputFmtEpub3,
+	)
 	if err != nil {
 		t.Fatalf("ExpandTemplate() error = %v", err)
 	}
@@ -105,7 +110,12 @@ func TestExpandTemplate_Series(t *testing.T) {
 	}
 	book = setupTestBook(t, book)
 
-	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ (index .Series 0).Name }}", "testbook.fb2", common.OutputFmtEpub3)
+	result, err := book.ExpandTemplateMetainfo(
+		config.OutputNameTemplateFieldName,
+		"{{ (index .Series 0).Name }}",
+		"testbook.fb2",
+		common.OutputFmtEpub3,
+	)
 	if err != nil {
 		t.Fatalf("ExpandTemplate() error = %v", err)
 	}
@@ -131,7 +141,12 @@ func TestExpandTemplate_SeriesNumber(t *testing.T) {
 	}
 	book = setupTestBook(t, book)
 
-	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ (index .Series 0).Number }}", "testbook.fb2", common.OutputFmtEpub3)
+	result, err := book.ExpandTemplateMetainfo(
+		config.OutputNameTemplateFieldName,
+		"{{ (index .Series 0).Number }}",
+		"testbook.fb2",
+		common.OutputFmtEpub3,
+	)
 	if err != nil {
 		t.Fatalf("ExpandTemplate() error = %v", err)
 	}
@@ -434,7 +449,12 @@ func TestExpandTemplate_PathSeparators(t *testing.T) {
 	}
 	book = setupTestBook(t, book)
 
-	result, err := book.ExpandTemplateMetainfo(config.OutputNameTemplateFieldName, "{{ (index .Authors 0).LastName }}/{{ .Title }}", "testbook.fb2", common.OutputFmtEpub3)
+	result, err := book.ExpandTemplateMetainfo(
+		config.OutputNameTemplateFieldName,
+		"{{ (index .Authors 0).LastName }}/{{ .Title }}",
+		"testbook.fb2",
+		common.OutputFmtEpub3,
+	)
 	if err != nil {
 		t.Fatalf("ExpandTemplate() error = %v", err)
 	}

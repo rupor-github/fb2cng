@@ -14,10 +14,25 @@ func TestLayoutPDFPagesWithPrintedFootnoteReservesPushesMainText(t *testing.T) {
 		PageHeight: 130,
 		Content:    &content.Content{OutputFormat: common.OutputFmtPdf, FootnotesMode: common.FootnotesModeFloatRenumbered},
 		PrintedFootnotes: map[string]pdfPrintedFootnote{
-			"n1": {ID: "n1", BodyBlocks: []pdfTextBlock{{Kind: pdfBlockParagraph, Text: "Footnote body.", Runs: []pdfInlineRun{{Text: "Footnote body."}}, StyleClasses: pdfStyleFootnote, ContextClasses: pdfStyleFootnote}}},
+			"n1": {
+				ID: "n1",
+				BodyBlocks: []pdfTextBlock{
+					{
+						Kind:           pdfBlockParagraph,
+						Text:           "Footnote body.",
+						Runs:           []pdfInlineRun{{Text: "Footnote body."}},
+						StyleClasses:   pdfStyleFootnote,
+						ContextClasses: pdfStyleFootnote,
+					},
+				},
+			},
 		},
 		Blocks: []pdfTextBlock{
-			{Kind: pdfBlockParagraph, Text: "One 17", Runs: []pdfInlineRun{{Text: "One "}, {Text: "17", StyleClasses: pdfStyleLinkFootnote, FootnoteID: "n1", Superscript: true}}},
+			{
+				Kind: pdfBlockParagraph,
+				Text: "One 17",
+				Runs: []pdfInlineRun{{Text: "One "}, {Text: "17", StyleClasses: pdfStyleLinkFootnote, FootnoteID: "n1", Superscript: true}},
+			},
 			{Kind: pdfBlockParagraph, Text: "Two"},
 			{Kind: pdfBlockParagraph, Text: "Three"},
 		},

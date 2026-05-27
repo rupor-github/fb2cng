@@ -151,7 +151,11 @@ func TestShapeOpenTypeTextAppliesKerningAndLigatures(t *testing.T) {
 		t.Fatalf("OpenType AV width = %v, simple width = %v, want kerning to reduce width", openTypeWidth, simpleWidth)
 	}
 	if openTypeAV.Glyphs[0].Advance >= openTypeAV.Glyphs[0].Width {
-		t.Fatalf("OpenType A advance = %d, nominal width = %d, want kerning to reduce shaped advance", openTypeAV.Glyphs[0].Advance, openTypeAV.Glyphs[0].Width)
+		t.Fatalf(
+			"OpenType A advance = %d, nominal width = %d, want kerning to reduce shaped advance",
+			openTypeAV.Glyphs[0].Advance,
+			openTypeAV.Glyphs[0].Width,
+		)
 	}
 
 	ligature, err := shapeOpenTypeText(face, "fi")
@@ -333,7 +337,8 @@ func TestPDFFontRegistryLogsStylesheetFontSupport(t *testing.T) {
 		t.Fatalf("stylesheet font support log entries = %d, want 1", len(entries))
 	}
 	fields := pdfZapStringFields(entries[0])
-	if fields["outline_kind"] != "truetype" || fields["pdf_subsetting_status"] != "compact_truetype" || fields["pdf_embedded_font_file"] != "FontFile2" {
+	if fields["outline_kind"] != "truetype" || fields["pdf_subsetting_status"] != "compact_truetype" ||
+		fields["pdf_embedded_font_file"] != "FontFile2" {
 		t.Fatalf("stylesheet font support fields = %#v, want TrueType compact subsetting support", fields)
 	}
 }
@@ -341,14 +346,21 @@ func TestPDFFontRegistryLogsStylesheetFontSupport(t *testing.T) {
 func TestPDFFontRegistryLogsCFFStylesheetFontLimitations(t *testing.T) {
 	core, logs := observer.New(zapcore.DebugLevel)
 	registry := newPDFFontRegistry(nil, zap.New(core))
-	registry.logPDFStylesheetFontSupport("CFFFamily", "#cff", pdfFontVariant{}, &builtinFontFace{PostScriptName: "CFF-Regular", TextFace: &textfont.Face{}}, pdfOpenTypeCFFProgram())
+	registry.logPDFStylesheetFontSupport(
+		"CFFFamily",
+		"#cff",
+		pdfFontVariant{},
+		&builtinFontFace{PostScriptName: "CFF-Regular", TextFace: &textfont.Face{}},
+		pdfOpenTypeCFFProgram(),
+	)
 
 	entries := logs.FilterMessage("Loaded PDF @font-face resource with limitations").All()
 	if len(entries) != 1 {
 		t.Fatalf("stylesheet font limitation log entries = %d, want 1", len(entries))
 	}
 	fields := pdfZapStringFields(entries[0])
-	if fields["outline_kind"] != "opentype_cff" || fields["pdf_subsetting_status"] != "not_supported_for_cff" || fields["pdf_embedded_font_file"] != "FontFile3" {
+	if fields["outline_kind"] != "opentype_cff" || fields["pdf_subsetting_status"] != "not_supported_for_cff" ||
+		fields["pdf_embedded_font_file"] != "FontFile3" {
 		t.Fatalf("stylesheet CFF support fields = %#v, want CFF full-embed limitation", fields)
 	}
 	if !pdfZapStringSliceFieldContains(entries[0], "limitations", "cff_subsetting_not_implemented_full_font_will_be_embedded") {

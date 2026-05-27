@@ -124,8 +124,14 @@ func pdfDebugStructureTOCEntries(entries []*structure.TOCEntry) []pdfDebugStruct
 	return out
 }
 
-func insertAnnotationPageBlocks(blocks []pdfTextBlock, toc []*structure.TOCEntry, c *content.Content, cfg *config.DocumentConfig) ([]pdfTextBlock, []*structure.TOCEntry) {
-	if cfg == nil || !cfg.Annotation.Enable || c == nil || c.Book == nil || c.Book.Description.TitleInfo.Annotation == nil || len(c.Book.Description.TitleInfo.Annotation.Items) == 0 {
+func insertAnnotationPageBlocks(
+	blocks []pdfTextBlock,
+	toc []*structure.TOCEntry,
+	c *content.Content,
+	cfg *config.DocumentConfig,
+) ([]pdfTextBlock, []*structure.TOCEntry) {
+	if cfg == nil || !cfg.Annotation.Enable || c == nil || c.Book == nil || c.Book.Description.TitleInfo.Annotation == nil ||
+		len(c.Book.Description.TitleInfo.Annotation.Items) == 0 {
 		return blocks, toc
 	}
 	title := strings.TrimSpace(cfg.Annotation.Title)
@@ -225,7 +231,12 @@ func pdfTOCPageTitle(c *content.Content, cfg *config.DocumentConfig) *fb2.Title 
 	}
 	var authors string
 	if c != nil && c.Book != nil && cfg != nil && strings.TrimSpace(cfg.TOCPage.AuthorsTemplate) != "" {
-		if expanded, err := c.Book.ExpandTemplateMetainfo(config.AuthorsTemplateFieldName, cfg.TOCPage.AuthorsTemplate, c.SrcName, c.OutputFormat); err == nil {
+		if expanded, err := c.Book.ExpandTemplateMetainfo(
+			config.AuthorsTemplateFieldName,
+			cfg.TOCPage.AuthorsTemplate,
+			c.SrcName,
+			c.OutputFormat,
+		); err == nil {
 			authors = strings.TrimSpace(expanded)
 		}
 	}
@@ -292,7 +303,14 @@ func splitBodyImageBodies(plan *structure.Plan) map[*fb2.Body]bool {
 	return bodies
 }
 
-func appendUnitBlocks(blocks *[]pdfTextBlock, c *content.Content, unit *structure.Unit, splitSections map[string]bool, splitBodies map[*fb2.Body]bool, endVignettes pdfSectionEndVignetteTransfers) {
+func appendUnitBlocks(
+	blocks *[]pdfTextBlock,
+	c *content.Content,
+	unit *structure.Unit,
+	splitSections map[string]bool,
+	splitBodies map[*fb2.Body]bool,
+	endVignettes pdfSectionEndVignetteTransfers,
+) {
 	if unit == nil {
 		return
 	}

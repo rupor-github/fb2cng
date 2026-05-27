@@ -187,7 +187,13 @@ func repeatPDFDropcapInset(inset float64, lines int) paragraphLineShape {
 	return shape
 }
 
-func pdfActiveDropcapShape(active *pdfActiveDropcap, page *pdfPage, block pdfTextBlock, firstBaselineY float64, style paragraphStyle) paragraphLineShape {
+func pdfActiveDropcapShape(
+	active *pdfActiveDropcap,
+	page *pdfPage,
+	block pdfTextBlock,
+	firstBaselineY float64,
+	style paragraphStyle,
+) paragraphLineShape {
 	if active == nil || active.Page != page || block.Kind != pdfBlockParagraph || active.ExclusionWidth <= 0 {
 		return paragraphLineShape{}
 	}
@@ -242,7 +248,16 @@ func pdfDropcapExpiredForLine(active *pdfActiveDropcap, page *pdfPage, lineY flo
 	return lineY+fontSize <= active.BottomY+0.001
 }
 
-func buildPDFDropcapLayout(doc pdfDocumentSpec, resolver *pdfStyleResolver, block pdfTextBlock, base paragraphStyle, baseFace *builtinFontFace, runs []pdfInlineRun, blockWidth float64, firstBaselineY float64) (pdfDropcapLayout, bool, error) {
+func buildPDFDropcapLayout(
+	doc pdfDocumentSpec,
+	resolver *pdfStyleResolver,
+	block pdfTextBlock,
+	base paragraphStyle,
+	baseFace *builtinFontFace,
+	runs []pdfInlineRun,
+	blockWidth float64,
+	firstBaselineY float64,
+) (pdfDropcapLayout, bool, error) {
 	dropcapRun, bodyRuns, ok := splitPDFDropcapRuns(runs)
 	if !ok || strings.TrimSpace(dropcapRun.Text) == "" {
 		return pdfDropcapLayout{}, false, nil

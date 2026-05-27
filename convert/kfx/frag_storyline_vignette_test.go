@@ -105,7 +105,10 @@ func TestVignettePlacement_ValidNesting(t *testing.T) {
 													},
 												},
 												Content: []fb2.FlowItem{
-													{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Valid 1 content."}}}},
+													{
+														Kind:      fb2.FlowParagraph,
+														Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Valid 1 content."}}},
+													},
 												},
 											},
 										},
@@ -177,7 +180,13 @@ func TestVignettePlacement_ValidNesting(t *testing.T) {
 			name: "l4",
 			// Chapter 2 + Valid1 inline: chapter title vignettes + section title vignettes + section-end
 			// NO chapter-end because nested2 follows as separate storyline
-			expected: []string{"rsrc-vig-chapter-top", "rsrc-vig-chapter-bottom", "rsrc-vig-section-top", "rsrc-vig-section-bottom", "rsrc-vig-section-end"},
+			expected: []string{
+				"rsrc-vig-chapter-top",
+				"rsrc-vig-chapter-bottom",
+				"rsrc-vig-section-top",
+				"rsrc-vig-section-bottom",
+				"rsrc-vig-section-end",
+			},
 			excluded: []string{"rsrc-vig-chapter-end"}, // chapter-end transferred to l5
 		},
 		{
@@ -296,7 +305,10 @@ func TestVignettePlacement_InvalidNesting(t *testing.T) {
 													},
 												},
 												Content: []fb2.FlowItem{
-													{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Invalid 2 content."}}}},
+													{
+														Kind:      fb2.FlowParagraph,
+														Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Invalid 2 content."}}},
+													},
 												},
 											},
 										},
@@ -817,7 +829,14 @@ func TestVignettePlacement_UntitledTopLevelWrapper(t *testing.T) {
 		{
 			name:     "l1",
 			expected: []string{}, // Untitled wrapper — no vignettes
-			excluded: []string{"rsrc-vig-chapter-top", "rsrc-vig-chapter-bottom", "rsrc-vig-chapter-end", "rsrc-vig-section-top", "rsrc-vig-section-bottom", "rsrc-vig-section-end"},
+			excluded: []string{
+				"rsrc-vig-chapter-top",
+				"rsrc-vig-chapter-bottom",
+				"rsrc-vig-chapter-end",
+				"rsrc-vig-section-top",
+				"rsrc-vig-section-bottom",
+				"rsrc-vig-section-end",
+			},
 		},
 		{
 			name: "l2",
@@ -942,7 +961,10 @@ func TestVignettePlacement_DoubleUntitledWrapper(t *testing.T) {
 													},
 												},
 												Content: []fb2.FlowItem{
-													{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 1 content."}}}},
+													{
+														Kind:      fb2.FlowParagraph,
+														Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 1 content."}}},
+													},
 												},
 											},
 										},
@@ -956,7 +978,10 @@ func TestVignettePlacement_DoubleUntitledWrapper(t *testing.T) {
 													},
 												},
 												Content: []fb2.FlowItem{
-													{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 2 content."}}}},
+													{
+														Kind:      fb2.FlowParagraph,
+														Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Chapter 2 content."}}},
+													},
 												},
 											},
 										},
@@ -1186,7 +1211,11 @@ func TestChapterEndVignetteTransfer_UntitledWrapper(t *testing.T) {
 	// ALL three children should have chapter-end (not just the last)
 	for _, name := range []string{"l2", "l3", "l4"} {
 		if !containsVignette(storylineVignettes[name], "rsrc-vig-chapter-end") {
-			t.Errorf("storyline %s should have chapter-end vignette (untitled parent gives ALL children chapter-end), got %v", name, storylineVignettes[name])
+			t.Errorf(
+				"storyline %s should have chapter-end vignette (untitled parent gives ALL children chapter-end), got %v",
+				name,
+				storylineVignettes[name],
+			)
 		}
 	}
 

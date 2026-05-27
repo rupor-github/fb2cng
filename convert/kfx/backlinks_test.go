@@ -169,8 +169,13 @@ func TestKFXNestedFootnoteBacklinkChainUsesResolvedLocations(t *testing.T) {
 						}}}},
 					},
 					{
-						ID:      "n3",
-						Content: []fb2.FlowItem{{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "note three"}}}}},
+						ID: "n3",
+						Content: []fb2.FlowItem{
+							{
+								Kind:      fb2.FlowParagraph,
+								Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "note three"}}},
+							},
+						},
 					},
 				},
 			},

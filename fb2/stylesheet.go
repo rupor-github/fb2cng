@@ -145,7 +145,12 @@ func (fb *FictionBook) NormalizeStylesheets(srcPath string, defaultCSS []byte, l
 // resolveStylesheetResource attempts to resolve a CSS resource reference
 // First tries to find it in binaries, then attempts to load from filesystem
 // basePath is the directory to use for resolving relative URLs (either source directory or current directory)
-func (fb *FictionBook) resolveStylesheetResource(ref cssExternalRef, binaryIndex map[string]*BinaryObject, basePath string, log *zap.Logger) *StylesheetResource {
+func (fb *FictionBook) resolveStylesheetResource(
+	ref cssExternalRef,
+	binaryIndex map[string]*BinaryObject,
+	basePath string,
+	log *zap.Logger,
+) *StylesheetResource {
 	// Case 1: Fragment reference (#id) - look in binaries
 	if resourceID, isFragment := strings.CutPrefix(ref.URL, "#"); isFragment {
 		binary, found := binaryIndex[resourceID]

@@ -109,10 +109,18 @@ func TestLayoutPDFTableHonorsHeaderHyphenationNoneAndNoWrap(t *testing.T) {
 	if cellStyle.Paragraph.Hyphenation != paragraphHyphenationNone || !cellStyle.Paragraph.NoWrap {
 		t.Fatalf("th hyphenation/nowrap = %v/%t, want none/true", cellStyle.Paragraph.Hyphenation, cellStyle.Paragraph.NoWrap)
 	}
-	table := &fb2.Table{Rows: []fb2.TableRow{{Cells: []fb2.TableCell{{Header: true, Content: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Строка 1"}}}}}}}
+	table := &fb2.Table{
+		Rows: []fb2.TableRow{{Cells: []fb2.TableCell{{Header: true, Content: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Строка 1"}}}}}},
+	}
 	block := pdfTextBlock{Kind: pdfBlockTable, StyleName: pdfStyleTable, Table: table}
 	style := resolver.styleForBlock(block)
-	layout, err := layoutPDFTable(pdfDocumentSpec{PageWidth: 120, PageHeight: 120, Styles: resolver, Hyphenator: fakeHyphenator{"Строка": "Стро\u00adка"}}, resolver, block, style, 26)
+	layout, err := layoutPDFTable(
+		pdfDocumentSpec{PageWidth: 120, PageHeight: 120, Styles: resolver, Hyphenator: fakeHyphenator{"Строка": "Стро\u00adка"}},
+		resolver,
+		block,
+		style,
+		26,
+	)
 	if err != nil {
 		t.Fatalf("layoutPDFTable() error = %v", err)
 	}
@@ -138,7 +146,12 @@ func TestLayoutPDFTableScalesFootnoteLinkStylesWithWideTables(t *testing.T) {
 	resolver := newPDFStyleResolverWithDefaultCSS(t, `td { padding: 2pt; }`)
 	c := testContentWithFootnotes("n")
 	cells := make([]fb2.TableCell, 10)
-	cells[0] = fb2.TableCell{Content: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Cell"}, {Kind: fb2.InlineLink, Href: "#n", Children: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "1.12"}}}}}
+	cells[0] = fb2.TableCell{
+		Content: []fb2.InlineSegment{
+			{Kind: fb2.InlineText, Text: "Cell"},
+			{Kind: fb2.InlineLink, Href: "#n", Children: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "1.12"}}},
+		},
+	}
 	for i := 1; i < len(cells); i++ {
 		cells[i] = fb2.TableCell{Content: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Column"}}}
 	}
@@ -169,7 +182,11 @@ func TestLayoutPDFTableScalesFootnoteLinkStylesWithWideTables(t *testing.T) {
 		t.Fatalf("scaled footnote link font = %v, want smaller than scaled base %v", linkFragment.FontSize, wantMax)
 	}
 	if linkFragment.FontSize > layout.Cells[0].Style.Paragraph.FontSize*0.80 {
-		t.Fatalf("scaled footnote link font = %v, want table scale applied below scaled base font %v", linkFragment.FontSize, layout.Cells[0].Style.Paragraph.FontSize)
+		t.Fatalf(
+			"scaled footnote link font = %v, want table scale applied below scaled base font %v",
+			linkFragment.FontSize,
+			layout.Cells[0].Style.Paragraph.FontSize,
+		)
 	}
 }
 

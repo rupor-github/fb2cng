@@ -387,7 +387,14 @@ func bodyIntroToXHTML(c *content.Content, body *fb2.Body, title string, chapterI
 	return doc, nil
 }
 
-func bodyToXHTML(c *content.Content, body *fb2.Body, section *fb2.Section, title string, addHiddenNav bool, log *zap.Logger) (*etree.Document, []splitResult, error) {
+func bodyToXHTML(
+	c *content.Content,
+	body *fb2.Body,
+	section *fb2.Section,
+	title string,
+	addHiddenNav bool,
+	log *zap.Logger,
+) (*etree.Document, []splitResult, error) {
 	doc, root := createXHTMLDocument(c, title)
 
 	// Create wrapper div with class based on body type
@@ -427,7 +434,14 @@ func bodyToXHTML(c *content.Content, body *fb2.Body, section *fb2.Section, title
 // renderSplitSection creates a new XHTML document for a section that was split out
 // of its parent due to CSS page-break-before rules. It renders the section content
 // and returns any further nested splits.
-func renderSplitSection(c *content.Content, body *fb2.Body, section *fb2.Section, depth int, titleDepth int, log *zap.Logger) (*etree.Document, []splitResult, error) {
+func renderSplitSection(
+	c *content.Content,
+	body *fb2.Body,
+	section *fb2.Section,
+	depth int,
+	titleDepth int,
+	log *zap.Logger,
+) (*etree.Document, []splitResult, error) {
 	title := section.AsTitleText("")
 	doc, root := createXHTMLDocument(c, title)
 
@@ -975,7 +989,14 @@ func appendFootnoteSectionContent(parent *etree.Element, c *content.Content, sec
 	return nil
 }
 
-func appendSectionContent(parent *etree.Element, c *content.Content, section *fb2.Section, depth int, titleDepth int, log *zap.Logger) ([]splitResult, error) {
+func appendSectionContent(
+	parent *etree.Element,
+	c *content.Content,
+	section *fb2.Section,
+	depth int,
+	titleDepth int,
+	log *zap.Logger,
+) ([]splitResult, error) {
 	oldSectionTitle := c.CurrentSectionTitle
 	if title := section.AsTitleText(""); title != "" {
 		c.CurrentSectionTitle = title
@@ -1068,7 +1089,15 @@ func appendSectionContent(parent *etree.Element, c *content.Content, section *fb
 	return nil, nil
 }
 
-func appendFlowItems(parent *etree.Element, c *content.Content, items []fb2.FlowItem, depth int, titleDepth int, context string, log *zap.Logger) ([]splitResult, error) {
+func appendFlowItems(
+	parent *etree.Element,
+	c *content.Content,
+	items []fb2.FlowItem,
+	depth int,
+	titleDepth int,
+	context string,
+	log *zap.Logger,
+) ([]splitResult, error) {
 	for i, item := range items {
 		switch item.Kind {
 		case fb2.FlowParagraph:
@@ -1706,7 +1735,12 @@ func collectRenderedIDs(chapters []chapterData, log *zap.Logger) idToFileMap {
 func collectRenderedIDsFromElement(elem *etree.Element, filename string, idToFile idToFileMap, log *zap.Logger) {
 	if id := elem.SelectAttrValue("id", ""); id != "" {
 		if previous, exists := idToFile[id]; exists && previous != filename {
-			log.Debug("Duplicate XHTML id rendered in multiple files", zap.String("id", id), zap.String("first_file", previous), zap.String("duplicate_file", filename))
+			log.Debug(
+				"Duplicate XHTML id rendered in multiple files",
+				zap.String("id", id),
+				zap.String("first_file", previous),
+				zap.String("duplicate_file", filename),
+			)
 		} else {
 			idToFile[id] = filename
 		}

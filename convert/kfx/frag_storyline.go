@@ -246,7 +246,20 @@ func generateStoryline(ctx context.Context, c *content.Content, styles *StyleReg
 			var nestedTitledSections []sectionWorkItem
 			var directChildTOC []*TOCEntry
 
-			if err := processStorylineSectionContent(c, section, sb, styles, imageResources, ca, work.depth, work.titleDepth, work.depth, &directChildTOC, &nestedTitledSections, idToEID); err != nil {
+			if err := processStorylineSectionContent(
+				c,
+				section,
+				sb,
+				styles,
+				imageResources,
+				ca,
+				work.depth,
+				work.titleDepth,
+				work.depth,
+				&directChildTOC,
+				&nestedTitledSections,
+				idToEID,
+			); err != nil {
 				return nil, 0, nil, nil, nil, nil, landmarks, nil, err
 			}
 
@@ -408,9 +421,23 @@ func generateStoryline(ctx context.Context, c *content.Content, styles *StyleReg
 
 			// Create backlinks callback - only used in float mode
 			// In default mode, footnotes behave like regular sections (no backlinks)
-			var addBacklinks func(c *content.Content, sectionID string, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, idToEID eidByFB2ID)
+			var addBacklinks func(
+				c *content.Content,
+				sectionID string,
+				sb *StorylineBuilder,
+				styles *StyleRegistry,
+				ca *ContentAccumulator,
+				idToEID eidByFB2ID,
+			)
 			if isFloatMode {
-				addBacklinks = func(c *content.Content, sectionID string, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, idToEID eidByFB2ID) {
+				addBacklinks = func(
+					c *content.Content,
+					sectionID string,
+					sb *StorylineBuilder,
+					styles *StyleRegistry,
+					ca *ContentAccumulator,
+					idToEID eidByFB2ID,
+				) {
 					refs, ok := c.BackLinkIndex[sectionID]
 					if !ok || len(refs) == 0 {
 						return
@@ -511,7 +538,13 @@ func addVignetteImage(book *fb2.FictionBook, sb *StorylineBuilder, imageResource
 // addEndVignette adds an end-of-section vignette image directly to the storyline.
 // Unlike title vignettes, end vignettes are not in a wrapper block and use explicit
 // position filtering to remove margin-top (spacing comes from preceding element).
-func addEndVignette(book *fb2.FictionBook, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, vigPos common.VignettePos) {
+func addEndVignette(
+	book *fb2.FictionBook,
+	sb *StorylineBuilder,
+	styles *StyleRegistry,
+	imageResources imageResourceInfoByID,
+	vigPos common.VignettePos,
+) {
 	if book == nil || !book.IsVignetteEnabled(vigPos) {
 		return
 	}
@@ -557,7 +590,16 @@ func processBodyImageOnly(body *fb2.Body, sb *StorylineBuilder, styles *StyleReg
 // processBodyIntroContent processes body intro content (title, epigraphs, image).
 // When skipImage is true, the body image is not added (it was already placed in
 // a separate storyline via processBodyImageOnly).
-func processBodyIntroContent(c *content.Content, body *fb2.Body, sb *StorylineBuilder, styles *StyleRegistry, imageResources imageResourceInfoByID, ca *ContentAccumulator, idToEID eidByFB2ID, skipImage bool) error {
+func processBodyIntroContent(
+	c *content.Content,
+	body *fb2.Body,
+	sb *StorylineBuilder,
+	styles *StyleRegistry,
+	imageResources imageResourceInfoByID,
+	ca *ContentAccumulator,
+	idToEID eidByFB2ID,
+	skipImage bool,
+) error {
 	if !skipImage && body.Image != nil {
 		imgID := strings.TrimPrefix(body.Image.Href, "#")
 		if imgInfo, ok := imageResources[imgID]; ok {
@@ -627,7 +669,14 @@ func processBodyIntroContent(c *content.Content, body *fb2.Body, sb *StorylineBu
 // addBacklinkParagraph adds a single backlink paragraph at the end of a footnote section.
 // All references to the footnote are combined into one paragraph with NBSP separators,
 // matching the EPUB implementation.
-func addBacklinkParagraph(c *content.Content, refs []content.BackLinkRef, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, _ eidByFB2ID) {
+func addBacklinkParagraph(
+	c *content.Content,
+	refs []content.BackLinkRef,
+	sb *StorylineBuilder,
+	styles *StyleRegistry,
+	ca *ContentAccumulator,
+	_ eidByFB2ID,
+) {
 	if len(refs) == 0 {
 		return
 	}

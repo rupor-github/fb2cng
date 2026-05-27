@@ -63,7 +63,9 @@ func TestPDFStyleResolverFootnoteTitleVariantKeepsBaseVerticalMargins(t *testing
 	}}}
 
 	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
-	title := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleFootnoteTitle + " " + pdfStyleFootnoteTitle + "-first"})
+	title := resolver.styleForBlock(
+		pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleFootnoteTitle + " " + pdfStyleFootnoteTitle + "-first"},
+	)
 	if title.SpaceBefore != 12 || title.SpaceAfter != 6 {
 		t.Fatalf("footnote title margins = %v/%v, want base 12/6 preserved", title.SpaceBefore, title.SpaceAfter)
 	}
@@ -83,7 +85,13 @@ func TestPDFStyleResolverFootnoteTitleInheritsParagraphAlignment(t *testing.T) {
 	}}}
 
 	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
-	title := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleFootnoteTitle + " " + pdfStyleFootnoteTitle + "-first", ContextClasses: pdfStyleFootnoteTitle})
+	title := resolver.styleForBlock(
+		pdfTextBlock{
+			Kind:           pdfBlockParagraph,
+			StyleClasses:   pdfStyleFootnoteTitle + " " + pdfStyleFootnoteTitle + "-first",
+			ContextClasses: pdfStyleFootnoteTitle,
+		},
+	)
 	if title.Paragraph.Align != textAlignRight {
 		t.Fatalf("footnote title align = %v, want right from paragraph inheritance", title.Paragraph.Align)
 	}
@@ -105,7 +113,13 @@ func TestPDFStyleResolverAppliesFootnoteTitleContextDescendantSelectors(t *testi
 	}}}
 
 	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
-	title := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleFootnoteTitle + " " + pdfStyleFootnoteTitle + "-first", ContextClasses: pdfStyleFootnoteTitle})
+	title := resolver.styleForBlock(
+		pdfTextBlock{
+			Kind:           pdfBlockParagraph,
+			StyleClasses:   pdfStyleFootnoteTitle + " " + pdfStyleFootnoteTitle + "-first",
+			ContextClasses: pdfStyleFootnoteTitle,
+		},
+	)
 	if title.Paragraph.FirstLineIndent != pdfBaseFontSize*0.5 {
 		t.Fatalf("footnote title indent = %v, want %v from .footnote-title p", title.Paragraph.FirstLineIndent, pdfBaseFontSize*0.5)
 	}

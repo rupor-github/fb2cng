@@ -36,8 +36,18 @@ func TestLayoutPDFPagesKeepsGapBetweenTitleVignetteAndHeadingImage(t *testing.T)
 		Styles:         newPDFStyleResolverWithDefaultCSS(t),
 		Images:         fb2.BookImages{"vignette": vignette, "heading": heading},
 		Blocks: []pdfTextBlock{
-			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses("vignette", "vignette-chapter-title-top", pdfStyleChapterTitle), ImageID: "vignette"},
-			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses(pdfStyleChapterTitleHeader, pdfStyleChapterTitle, pdfStyleHeadingImage), ImageID: "heading"},
+			{
+				Kind:         pdfBlockImage,
+				StyleName:    pdfStyleImage,
+				StyleClasses: joinStyleClasses("vignette", "vignette-chapter-title-top", pdfStyleChapterTitle),
+				ImageID:      "vignette",
+			},
+			{
+				Kind:         pdfBlockImage,
+				StyleName:    pdfStyleImage,
+				StyleClasses: joinStyleClasses(pdfStyleChapterTitleHeader, pdfStyleChapterTitle, pdfStyleHeadingImage),
+				ImageID:      "heading",
+			},
 		},
 	})
 	if err != nil {
@@ -64,9 +74,27 @@ func TestLayoutPDFPagesUsesTightTitleHeaderLineFlow(t *testing.T) {
 		Author:         "Author",
 		Styles:         newPDFStyleResolverWithDefaultCSS(t),
 		Blocks: []pdfTextBlock{
-			{Kind: pdfBlockHeading, Text: "One", Depth: 1, StyleName: pdfStyleChapterTitleHeader, StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-first")},
-			{Kind: pdfBlockHeading, Text: "Two", Depth: 1, StyleName: pdfStyleChapterTitleHeader, StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next")},
-			{Kind: pdfBlockHeading, Text: "Three", Depth: 1, StyleName: pdfStyleChapterTitleHeader, StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next")},
+			{
+				Kind:         pdfBlockHeading,
+				Text:         "One",
+				Depth:        1,
+				StyleName:    pdfStyleChapterTitleHeader,
+				StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-first"),
+			},
+			{
+				Kind:         pdfBlockHeading,
+				Text:         "Two",
+				Depth:        1,
+				StyleName:    pdfStyleChapterTitleHeader,
+				StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next"),
+			},
+			{
+				Kind:         pdfBlockHeading,
+				Text:         "Three",
+				Depth:        1,
+				StyleName:    pdfStyleChapterTitleHeader,
+				StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next"),
+			},
 		},
 	})
 	if err != nil {
@@ -98,10 +126,32 @@ func TestLayoutPDFPagesCentersTitleContentBetweenVignettes(t *testing.T) {
 		Styles:         newPDFStyleResolverWithDefaultCSS(t),
 		Images:         fb2.BookImages{"top": vignette, "bottom": vignette},
 		Blocks: []pdfTextBlock{
-			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses("vignette", "vignette-book-title-top", pdfStyleBodyTitle), ImageID: "top"},
-			{Kind: pdfBlockHeading, Text: "Author", Depth: 1, StyleName: pdfStyleBodyTitleHeader, StyleClasses: joinStyleClasses(pdfStyleBodyTitle, pdfStyleBodyTitleHeader+"-first")},
-			{Kind: pdfBlockHeading, Text: "Book", Depth: 1, StyleName: pdfStyleBodyTitleHeader, StyleClasses: joinStyleClasses(pdfStyleBodyTitle, pdfStyleBodyTitleHeader+"-next")},
-			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses("vignette", "vignette-book-title-bottom", pdfStyleBodyTitle), ImageID: "bottom"},
+			{
+				Kind:         pdfBlockImage,
+				StyleName:    pdfStyleImage,
+				StyleClasses: joinStyleClasses("vignette", "vignette-book-title-top", pdfStyleBodyTitle),
+				ImageID:      "top",
+			},
+			{
+				Kind:         pdfBlockHeading,
+				Text:         "Author",
+				Depth:        1,
+				StyleName:    pdfStyleBodyTitleHeader,
+				StyleClasses: joinStyleClasses(pdfStyleBodyTitle, pdfStyleBodyTitleHeader+"-first"),
+			},
+			{
+				Kind:         pdfBlockHeading,
+				Text:         "Book",
+				Depth:        1,
+				StyleName:    pdfStyleBodyTitleHeader,
+				StyleClasses: joinStyleClasses(pdfStyleBodyTitle, pdfStyleBodyTitleHeader+"-next"),
+			},
+			{
+				Kind:         pdfBlockImage,
+				StyleName:    pdfStyleImage,
+				StyleClasses: joinStyleClasses("vignette", "vignette-book-title-bottom", pdfStyleBodyTitle),
+				ImageID:      "bottom",
+			},
 		},
 	})
 	if err != nil {
@@ -139,10 +189,32 @@ func TestLayoutPDFPagesDoesNotMoveBottomTitleVignetteForTooTallFollowingImage(t 
 		Styles:         newPDFStyleResolverWithDefaultCSS(t),
 		Images:         fb2.BookImages{"top": vignette, "bottom": vignette, "following": following},
 		Blocks: []pdfTextBlock{
-			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses("vignette", "vignette-chapter-title-top", pdfStyleChapterTitle), ImageID: "top"},
-			{Kind: pdfBlockHeading, Text: "Part One", Depth: 1, StyleName: pdfStyleChapterTitleHeader, StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-first")},
-			{Kind: pdfBlockHeading, Text: "In the Rear", Depth: 1, StyleName: pdfStyleChapterTitleHeader, StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next")},
-			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: joinStyleClasses("vignette", "vignette-chapter-title-bottom", pdfStyleChapterTitle), ImageID: "bottom"},
+			{
+				Kind:         pdfBlockImage,
+				StyleName:    pdfStyleImage,
+				StyleClasses: joinStyleClasses("vignette", "vignette-chapter-title-top", pdfStyleChapterTitle),
+				ImageID:      "top",
+			},
+			{
+				Kind:         pdfBlockHeading,
+				Text:         "Part One",
+				Depth:        1,
+				StyleName:    pdfStyleChapterTitleHeader,
+				StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-first"),
+			},
+			{
+				Kind:         pdfBlockHeading,
+				Text:         "In the Rear",
+				Depth:        1,
+				StyleName:    pdfStyleChapterTitleHeader,
+				StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next"),
+			},
+			{
+				Kind:         pdfBlockImage,
+				StyleName:    pdfStyleImage,
+				StyleClasses: joinStyleClasses("vignette", "vignette-chapter-title-bottom", pdfStyleChapterTitle),
+				ImageID:      "bottom",
+			},
 			{Kind: pdfBlockImage, StyleName: pdfStyleImage, StyleClasses: "image-block", ImageID: "following"},
 		},
 	})

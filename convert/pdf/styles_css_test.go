@@ -122,8 +122,16 @@ func TestPDFStyleResolverTableDefaultsMatchDefaultCSS(t *testing.T) {
 		t.Fatalf("td style padding/border = %v/%v/%t, want default.css cell padding and border", td.PaddingLeft, td.BorderWidth, td.HasBorder)
 	}
 	th := resolver.styleForTableCell(fb2.TableRow{}, fb2.TableCell{Header: true}, "")
-	if !th.HasBackground || th.PaddingLeft != pdfDefaultCSSRootFontSize*0.5 || th.BorderWidth == 0 || !th.Paragraph.Bold || th.Paragraph.Align != textAlignCenter {
-		t.Fatalf("th style bg/padding/border/bold/align = %t/%v/%v/%t/%v", th.HasBackground, th.PaddingLeft, th.BorderWidth, th.Paragraph.Bold, th.Paragraph.Align)
+	if !th.HasBackground || th.PaddingLeft != pdfDefaultCSSRootFontSize*0.5 || th.BorderWidth == 0 || !th.Paragraph.Bold ||
+		th.Paragraph.Align != textAlignCenter {
+		t.Fatalf(
+			"th style bg/padding/border/bold/align = %t/%v/%v/%t/%v",
+			th.HasBackground,
+			th.PaddingLeft,
+			th.BorderWidth,
+			th.Paragraph.Bold,
+			th.Paragraph.Align,
+		)
 	}
 }
 
@@ -146,18 +154,26 @@ func TestPDFStyleResolverVignetteDefaultsMatchDefaultCSS(t *testing.T) {
 		t.Fatalf("vignette text style = align:%v indent:%v, want center/0", generic.Paragraph.Align, generic.Paragraph.FirstLineIndent)
 	}
 
-	chapterTop := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockImage, StyleClasses: joinStyleClasses(pdfStyleImageVignette, pdfStyleVignette, pdfStyleVignetteChapterTop)})
+	chapterTop := resolver.styleForBlock(
+		pdfTextBlock{Kind: pdfBlockImage, StyleClasses: joinStyleClasses(pdfStyleImageVignette, pdfStyleVignette, pdfStyleVignetteChapterTop)},
+	)
 	if chapterTop.SpaceBefore != pdfDefaultCSSRootFontSize || chapterTop.SpaceAfter != pdfDefaultCSSRootFontSize*0.5 {
 		t.Fatalf("chapter top vignette margins = %v/%v, want default.css 1em/0.5em", chapterTop.SpaceBefore, chapterTop.SpaceAfter)
 	}
 
-	sectionBottom := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockImage, StyleClasses: joinStyleClasses(pdfStyleImageVignette, pdfStyleVignette, pdfStyleVignetteSectionBot)})
-	if math.Abs(sectionBottom.SpaceBefore-pdfDefaultCSSRootFontSize*0.4) > 0.001 || math.Abs(sectionBottom.SpaceAfter-pdfDefaultCSSRootFontSize*0.8) > 0.001 {
+	sectionBottom := resolver.styleForBlock(
+		pdfTextBlock{Kind: pdfBlockImage, StyleClasses: joinStyleClasses(pdfStyleImageVignette, pdfStyleVignette, pdfStyleVignetteSectionBot)},
+	)
+	if math.Abs(sectionBottom.SpaceBefore-pdfDefaultCSSRootFontSize*0.4) > 0.001 ||
+		math.Abs(sectionBottom.SpaceAfter-pdfDefaultCSSRootFontSize*0.8) > 0.001 {
 		t.Fatalf("section bottom vignette margins = %v/%v, want default.css 0.4em/0.8em", sectionBottom.SpaceBefore, sectionBottom.SpaceAfter)
 	}
 
-	chapterEnd := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockImage, StyleClasses: joinStyleClasses(pdfStyleImageVignette, pdfStyleVignette, pdfStyleVignetteChapterEnd)})
-	if math.Abs(chapterEnd.SpaceBefore-pdfDefaultCSSRootFontSize*1.5) > 0.001 || math.Abs(chapterEnd.SpaceAfter-pdfDefaultCSSRootFontSize*1.5) > 0.001 {
+	chapterEnd := resolver.styleForBlock(
+		pdfTextBlock{Kind: pdfBlockImage, StyleClasses: joinStyleClasses(pdfStyleImageVignette, pdfStyleVignette, pdfStyleVignetteChapterEnd)},
+	)
+	if math.Abs(chapterEnd.SpaceBefore-pdfDefaultCSSRootFontSize*1.5) > 0.001 ||
+		math.Abs(chapterEnd.SpaceAfter-pdfDefaultCSSRootFontSize*1.5) > 0.001 {
 		t.Fatalf("chapter end vignette margins = %v/%v, want default.css 1.5em/1.5em", chapterEnd.SpaceBefore, chapterEnd.SpaceAfter)
 	}
 }
@@ -187,7 +203,12 @@ func TestPDFStyleResolverTitleWrapperControlsMatchDefaultCSS(t *testing.T) {
 		ContextClasses: pdfStyleChapterTitle,
 	})
 	if !chapter.PageBreakBefore || !chapter.KeepTogether || chapter.KeepWithNextLines != pdfSingleKeepLine {
-		t.Fatalf("chapter title controls = page-before:%t keep:%t keep-next:%d, want default.css title wrapper controls", chapter.PageBreakBefore, chapter.KeepTogether, chapter.KeepWithNextLines)
+		t.Fatalf(
+			"chapter title controls = page-before:%t keep:%t keep-next:%d, want default.css title wrapper controls",
+			chapter.PageBreakBefore,
+			chapter.KeepTogether,
+			chapter.KeepWithNextLines,
+		)
 	}
 	if chapter.SpaceBefore != pdfDefaultCSSRootFontSize*2 || chapter.SpaceAfter != pdfDefaultCSSRootFontSize {
 		t.Fatalf("chapter title margins = %v/%v, want default.css 2em/1em", chapter.SpaceBefore, chapter.SpaceAfter)
@@ -201,7 +222,12 @@ func TestPDFStyleResolverTitleWrapperControlsMatchDefaultCSS(t *testing.T) {
 		ContextClasses: joinStyleClasses(pdfStyleSectionTitle, pdfStyleSectionTitleH2),
 	})
 	if !sectionH2.PageBreakBefore || !sectionH2.KeepTogether || sectionH2.KeepWithNextLines != pdfSingleKeepLine {
-		t.Fatalf("section h2 controls = page-before:%t keep:%t keep-next:%d, want default.css section-title-h2/title wrapper controls", sectionH2.PageBreakBefore, sectionH2.KeepTogether, sectionH2.KeepWithNextLines)
+		t.Fatalf(
+			"section h2 controls = page-before:%t keep:%t keep-next:%d, want default.css section-title-h2/title wrapper controls",
+			sectionH2.PageBreakBefore,
+			sectionH2.KeepTogether,
+			sectionH2.KeepWithNextLines,
+		)
 	}
 
 	sectionH3 := resolver.styleForBlock(pdfTextBlock{
@@ -212,7 +238,12 @@ func TestPDFStyleResolverTitleWrapperControlsMatchDefaultCSS(t *testing.T) {
 		ContextClasses: pdfStyleSectionTitle,
 	})
 	if sectionH3.PageBreakBefore || !sectionH3.KeepTogether || sectionH3.KeepWithNextLines != pdfSingleKeepLine {
-		t.Fatalf("section h3 controls = page-before:%t keep:%t keep-next:%d, want default.css section-title without h2 page break", sectionH3.PageBreakBefore, sectionH3.KeepTogether, sectionH3.KeepWithNextLines)
+		t.Fatalf(
+			"section h3 controls = page-before:%t keep:%t keep-next:%d, want default.css section-title without h2 page break",
+			sectionH3.PageBreakBefore,
+			sectionH3.KeepTogether,
+			sectionH3.KeepWithNextLines,
+		)
 	}
 }
 
@@ -229,7 +260,14 @@ func TestPDFStyleResolverTitleHeaderBreakDefaultsMatchDefaultCSS(t *testing.T) {
 	} {
 		br := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: tt.class})
 		if br.Paragraph.Align != textAlignCenter || br.Paragraph.Bold != tt.bold || br.SpaceBefore != 0 || br.SpaceAfter != 0 {
-			t.Fatalf("%s style = align:%v bold:%t margins:%v/%v, want default.css block break semantics", tt.class, br.Paragraph.Align, br.Paragraph.Bold, br.SpaceBefore, br.SpaceAfter)
+			t.Fatalf(
+				"%s style = align:%v bold:%t margins:%v/%v, want default.css block break semantics",
+				tt.class,
+				br.Paragraph.Align,
+				br.Paragraph.Bold,
+				br.SpaceBefore,
+				br.SpaceAfter,
+			)
 		}
 	}
 }
@@ -254,7 +292,8 @@ func TestPDFStyleResolverTitleHeaderEmptyLineDefaultsMatchDefaultCSS(t *testing.
 		pdfStyleTOCTitle + "-emptyline",
 	} {
 		emptyLine := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine, StyleClasses: class})
-		if math.Abs(emptyLine.SpaceBefore-pdfDefaultCSSRootFontSize*0.8) > 0.001 || math.Abs(emptyLine.SpaceAfter-pdfDefaultCSSRootFontSize*0.8) > 0.001 {
+		if math.Abs(emptyLine.SpaceBefore-pdfDefaultCSSRootFontSize*0.8) > 0.001 ||
+			math.Abs(emptyLine.SpaceAfter-pdfDefaultCSSRootFontSize*0.8) > 0.001 {
 			t.Fatalf("%s margins = %v/%v, want default.css 0.8em/0.8em", class, emptyLine.SpaceBefore, emptyLine.SpaceAfter)
 		}
 		if margin := pdfEmptyLineMargin(emptyLine); math.Abs(margin-pdfDefaultCSSRootLineHeight*0.4) > 0.001 {
@@ -267,35 +306,68 @@ func TestPDFStyleResolverStanzaWrapperMarginsMatchDefaultCSS(t *testing.T) {
 	resolver := newPDFStyleResolverWithDefaultCSS(t)
 	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
 		{Kind: pdfBlockTextAuthor, Text: "Князь Вяземский", ContextClasses: pdfStyleEpigraph},
-		{Kind: pdfBlockPoem, Text: "«Мой дядя...", StyleClasses: joinStyleClasses(pdfStylePoem, pdfStyleStanza), ContextClasses: joinStyleClasses(pdfStylePoem, pdfStyleStanza)},
-		{Kind: pdfBlockPoem, Text: "Когда не в шутку занемог,", StyleClasses: joinStyleClasses(pdfStylePoem, pdfStyleStanza), ContextClasses: joinStyleClasses(pdfStylePoem, pdfStyleStanza)},
+		{
+			Kind:           pdfBlockPoem,
+			Text:           "«Мой дядя...",
+			StyleClasses:   joinStyleClasses(pdfStylePoem, pdfStyleStanza),
+			ContextClasses: joinStyleClasses(pdfStylePoem, pdfStyleStanza),
+		},
+		{
+			Kind:           pdfBlockPoem,
+			Text:           "Когда не в шутку занемог,",
+			StyleClasses:   joinStyleClasses(pdfStylePoem, pdfStyleStanza),
+			ContextClasses: joinStyleClasses(pdfStylePoem, pdfStyleStanza),
+		},
 	})
 	if styles[1].SpaceBefore != pdfDefaultCSSRootFontSize*0.5 {
 		t.Fatalf("first stanza line margin-top = %v, want default.css stanza top %v", styles[1].SpaceBefore, pdfDefaultCSSRootFontSize*0.5)
 	}
 	if styles[2].SpaceBefore != pdfDefaultCSSRootFontSize*0.25 {
-		t.Fatalf("next stanza line margin-top = %v, want verse margin %v after wrapper edge adjustment", styles[2].SpaceBefore, pdfDefaultCSSRootFontSize*0.25)
+		t.Fatalf(
+			"next stanza line margin-top = %v, want verse margin %v after wrapper edge adjustment",
+			styles[2].SpaceBefore,
+			pdfDefaultCSSRootFontSize*0.25,
+		)
 	}
 }
 
 func TestPDFStyleResolverAnnotationTitleDefaultsMatchDefaultCSS(t *testing.T) {
 	resolver := newPDFStyleResolverWithDefaultCSS(t)
-	annotationTitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, StyleName: pdfStyleAnnotationTitle, StyleClasses: pdfStyleAnnotationTitle + "-first", ContextClasses: pdfStyleAnnotationTitle})
+	annotationTitle := resolver.styleForBlock(
+		pdfTextBlock{
+			Kind:           pdfBlockHeading,
+			StyleName:      pdfStyleAnnotationTitle,
+			StyleClasses:   pdfStyleAnnotationTitle + "-first",
+			ContextClasses: pdfStyleAnnotationTitle,
+		},
+	)
 	if annotationTitle.SpaceBefore != pdfDefaultCSSRootFontSize || annotationTitle.SpaceAfter != pdfDefaultCSSRootFontSize {
 		t.Fatalf("annotation title margins = %v/%v, want default.css 1em/1em", annotationTitle.SpaceBefore, annotationTitle.SpaceAfter)
 	}
-	if math.Abs(annotationTitle.Paragraph.FontSize-pdfDefaultCSSRootFontSize) > 0.001 || math.Abs(annotationTitle.Paragraph.LineHeight-pdfDefaultCSSRootLineHeight) > 0.001 {
-		t.Fatalf("annotation title font/line = %v/%v, want default.css root font and line-height", annotationTitle.Paragraph.FontSize, annotationTitle.Paragraph.LineHeight)
+	if math.Abs(annotationTitle.Paragraph.FontSize-pdfDefaultCSSRootFontSize) > 0.001 ||
+		math.Abs(annotationTitle.Paragraph.LineHeight-pdfDefaultCSSRootLineHeight) > 0.001 {
+		t.Fatalf(
+			"annotation title font/line = %v/%v, want default.css root font and line-height",
+			annotationTitle.Paragraph.FontSize,
+			annotationTitle.Paragraph.LineHeight,
+		)
 	}
 	if !annotationTitle.Paragraph.Bold || annotationTitle.Paragraph.Align != textAlignCenter || annotationTitle.Paragraph.FirstLineIndent != 0 {
-		t.Fatalf("annotation title style = bold:%t align:%v indent:%v, want bold centered zero-indent", annotationTitle.Paragraph.Bold, annotationTitle.Paragraph.Align, annotationTitle.Paragraph.FirstLineIndent)
+		t.Fatalf(
+			"annotation title style = bold:%t align:%v indent:%v, want bold centered zero-indent",
+			annotationTitle.Paragraph.Bold,
+			annotationTitle.Paragraph.Align,
+			annotationTitle.Paragraph.FirstLineIndent,
+		)
 	}
 }
 
 func TestPDFStyleResolverParagraphTitleDefaultsMatchDefaultCSS(t *testing.T) {
 	resolver := newPDFStyleResolverWithDefaultCSS(t)
 
-	poemTitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStylePoemTitle + " " + pdfStylePoemTitle + "-first", ContextClasses: pdfStylePoem})
+	poemTitle := resolver.styleForBlock(
+		pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStylePoemTitle + " " + pdfStylePoemTitle + "-first", ContextClasses: pdfStylePoem},
+	)
 	if poemTitle.SpaceBefore != pdfDefaultCSSRootFontSize || poemTitle.SpaceAfter != pdfDefaultCSSRootFontSize {
 		t.Fatalf("poem title margins = %v/%v, want default.css 1em/1em", poemTitle.SpaceBefore, poemTitle.SpaceAfter)
 	}
@@ -306,12 +378,22 @@ func TestPDFStyleResolverParagraphTitleDefaultsMatchDefaultCSS(t *testing.T) {
 		t.Fatalf("poem title italic = false, want inherited from poem context")
 	}
 
-	stanzaTitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleStanzaTitle + " " + pdfStyleStanzaTitle + "-first", ContextClasses: joinStyleClasses(pdfStylePoem, pdfStyleStanza)})
+	stanzaTitle := resolver.styleForBlock(
+		pdfTextBlock{
+			Kind:           pdfBlockParagraph,
+			StyleClasses:   pdfStyleStanzaTitle + " " + pdfStyleStanzaTitle + "-first",
+			ContextClasses: joinStyleClasses(pdfStylePoem, pdfStyleStanza),
+		},
+	)
 	if stanzaTitle.SpaceBefore != pdfDefaultCSSRootFontSize*0.5 || stanzaTitle.SpaceAfter != pdfDefaultCSSRootFontSize*0.5 {
 		t.Fatalf("stanza title margins = %v/%v, want default.css 0.5em/0.5em", stanzaTitle.SpaceBefore, stanzaTitle.SpaceAfter)
 	}
 	if stanzaTitle.Paragraph.Align != textAlignCenter || stanzaTitle.Paragraph.FirstLineIndent != 0 {
-		t.Fatalf("stanza title align/indent = %v/%v, want centered zero-indent variant", stanzaTitle.Paragraph.Align, stanzaTitle.Paragraph.FirstLineIndent)
+		t.Fatalf(
+			"stanza title align/indent = %v/%v, want centered zero-indent variant",
+			stanzaTitle.Paragraph.Align,
+			stanzaTitle.Paragraph.FirstLineIndent,
+		)
 	}
 }
 
@@ -324,7 +406,9 @@ func TestPDFStyleResolverFootnoteDefaultsAreCompactInPDF(t *testing.T) {
 	if footnoteBody.Paragraph.LineHeight >= pdfDefaultCSSRootLineHeight {
 		t.Fatalf("footnote body line height = %v, want denser than main %v", footnoteBody.Paragraph.LineHeight, pdfDefaultCSSRootLineHeight)
 	}
-	footnoteEpigraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleEpigraph, ContextClasses: joinStyleClasses(pdfStyleFootnote, pdfStyleEpigraph)})
+	footnoteEpigraph := resolver.styleForBlock(
+		pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleEpigraph, ContextClasses: joinStyleClasses(pdfStyleFootnote, pdfStyleEpigraph)},
+	)
 	if math.Abs(footnoteEpigraph.Paragraph.FontSize-pdfDefaultCSSRootFontSize*0.7) > 0.001 {
 		t.Fatalf("footnote epigraph font size = %v, want 70%% of PDF root %v", footnoteEpigraph.Paragraph.FontSize, pdfDefaultCSSRootFontSize*0.7)
 	}
@@ -332,7 +416,13 @@ func TestPDFStyleResolverFootnoteDefaultsAreCompactInPDF(t *testing.T) {
 		t.Fatalf("footnote epigraph line height = %v, want denser than main %v", footnoteEpigraph.Paragraph.LineHeight, pdfDefaultCSSRootLineHeight)
 	}
 
-	footnoteTitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleFootnoteTitle + " " + pdfStyleFootnoteTitle + "-first", ContextClasses: pdfStyleFootnoteTitle})
+	footnoteTitle := resolver.styleForBlock(
+		pdfTextBlock{
+			Kind:           pdfBlockParagraph,
+			StyleClasses:   pdfStyleFootnoteTitle + " " + pdfStyleFootnoteTitle + "-first",
+			ContextClasses: pdfStyleFootnoteTitle,
+		},
+	)
 	if math.Abs(footnoteTitle.Paragraph.FontSize-pdfDefaultCSSRootFontSize*0.7) > 0.001 {
 		t.Fatalf("footnote title font size = %v, want 70%% of PDF root %v", footnoteTitle.Paragraph.FontSize, pdfDefaultCSSRootFontSize*0.7)
 	}
@@ -386,8 +476,19 @@ func TestPDFStyleResolverContextSubtitleDefaultsMatchDefaultCSS(t *testing.T) {
 		if subtitle.SpaceBefore != tt.space || subtitle.SpaceAfter != tt.space {
 			t.Fatalf("%s subtitle margins = %v/%v, want default.css %v/%v", tt.name, subtitle.SpaceBefore, subtitle.SpaceAfter, tt.space, tt.space)
 		}
-		if subtitle.Paragraph.Align != tt.align || subtitle.Paragraph.Bold != tt.bold || subtitle.Paragraph.Italic != tt.italic || subtitle.Paragraph.FirstLineIndent != 0 {
-			t.Fatalf("%s subtitle style = align:%v bold:%t italic:%t indent:%v, want align:%v bold:%t italic:%t indent:0", tt.name, subtitle.Paragraph.Align, subtitle.Paragraph.Bold, subtitle.Paragraph.Italic, subtitle.Paragraph.FirstLineIndent, tt.align, tt.bold, tt.italic)
+		if subtitle.Paragraph.Align != tt.align || subtitle.Paragraph.Bold != tt.bold || subtitle.Paragraph.Italic != tt.italic ||
+			subtitle.Paragraph.FirstLineIndent != 0 {
+			t.Fatalf(
+				"%s subtitle style = align:%v bold:%t italic:%t indent:%v, want align:%v bold:%t italic:%t indent:0",
+				tt.name,
+				subtitle.Paragraph.Align,
+				subtitle.Paragraph.Bold,
+				subtitle.Paragraph.Italic,
+				subtitle.Paragraph.FirstLineIndent,
+				tt.align,
+				tt.bold,
+				tt.italic,
+			)
 		}
 		if subtitle.KeepWithNextLines != tt.keepWith {
 			t.Fatalf("%s subtitle keep-with-next = %d, want %d", tt.name, subtitle.KeepWithNextLines, tt.keepWith)
@@ -508,7 +609,11 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 		t.Fatalf("paragraph color = %s, want #336699", paragraph.Paragraph.Color)
 	}
 	if !paragraph.Paragraph.Underline || !paragraph.Paragraph.Strikethrough {
-		t.Fatalf("paragraph decorations = underline:%t strikethrough:%t, want both true", paragraph.Paragraph.Underline, paragraph.Paragraph.Strikethrough)
+		t.Fatalf(
+			"paragraph decorations = underline:%t strikethrough:%t, want both true",
+			paragraph.Paragraph.Underline,
+			paragraph.Paragraph.Strikethrough,
+		)
 	}
 	if paragraph.Paragraph.VerticalAlign != textVerticalAlignSuper {
 		t.Fatalf("paragraph vertical align = %s, want super", paragraph.Paragraph.VerticalAlign)
@@ -535,9 +640,17 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 		t.Fatalf("paragraph horizontal margins = %v/%v, want 36/24", paragraph.MarginLeft, paragraph.MarginRight)
 	}
 	if paragraph.PaddingTop != 3 || paragraph.PaddingRight != 6 || paragraph.PaddingBottom != 9 || paragraph.PaddingLeft != 12 {
-		t.Fatalf("paragraph padding = %v/%v/%v/%v, want 3/6/9/12", paragraph.PaddingTop, paragraph.PaddingRight, paragraph.PaddingBottom, paragraph.PaddingLeft)
+		t.Fatalf(
+			"paragraph padding = %v/%v/%v/%v, want 3/6/9/12",
+			paragraph.PaddingTop,
+			paragraph.PaddingRight,
+			paragraph.PaddingBottom,
+			paragraph.PaddingLeft,
+		)
 	}
-	if !paragraph.HasWidth || !paragraph.Width.Percent || paragraph.Width.Value != 80 || !paragraph.HasMinWidth || paragraph.MinWidth.Value != 30 || !paragraph.HasMaxWidth || paragraph.MaxWidth.Value != 72 {
+	if !paragraph.HasWidth || !paragraph.Width.Percent || paragraph.Width.Value != 80 || !paragraph.HasMinWidth || paragraph.MinWidth.Value != 30 ||
+		!paragraph.HasMaxWidth ||
+		paragraph.MaxWidth.Value != 72 {
 		t.Fatalf("paragraph width constraints = %#v/%#v/%#v", paragraph.Width, paragraph.MinWidth, paragraph.MaxWidth)
 	}
 	if width := blockContentWidth(220, paragraph); width != 72 {
@@ -610,13 +723,31 @@ func TestPDFStyleResolverPageBreakDisplayAndAbsoluteUnits(t *testing.T) {
 
 	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
 	forced := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "forced"})
-	if !forced.PageBreakBefore || forced.PageBreakBeforeMode != pdfPageBreakAlways || !forced.PageBreakAfter || forced.PageBreakAfterMode != pdfPageBreakAlways || !forced.Hidden {
-		t.Fatalf("forced style page/visibility flags = before:%t/%v after:%t/%v hidden:%t, want forced breaks and hidden", forced.PageBreakBefore, forced.PageBreakBeforeMode, forced.PageBreakAfter, forced.PageBreakAfterMode, forced.Hidden)
+	if !forced.PageBreakBefore || forced.PageBreakBeforeMode != pdfPageBreakAlways || !forced.PageBreakAfter ||
+		forced.PageBreakAfterMode != pdfPageBreakAlways ||
+		!forced.Hidden {
+		t.Fatalf(
+			"forced style page/visibility flags = before:%t/%v after:%t/%v hidden:%t, want forced breaks and hidden",
+			forced.PageBreakBefore,
+			forced.PageBreakBeforeMode,
+			forced.PageBreakAfter,
+			forced.PageBreakAfterMode,
+			forced.Hidden,
+		)
 	}
 
 	avoid := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "avoid"})
-	if avoid.PageBreakBefore || avoid.PageBreakBeforeMode != pdfPageBreakAvoid || avoid.PageBreakAfter || avoid.PageBreakAfterMode != pdfPageBreakAvoid || avoid.KeepWithNextLines != pdfSingleKeepLine {
-		t.Fatalf("avoid style page-breaks = before:%t/%v after:%t/%v keep:%d, want avoid/avoid keep-next", avoid.PageBreakBefore, avoid.PageBreakBeforeMode, avoid.PageBreakAfter, avoid.PageBreakAfterMode, avoid.KeepWithNextLines)
+	if avoid.PageBreakBefore || avoid.PageBreakBeforeMode != pdfPageBreakAvoid || avoid.PageBreakAfter ||
+		avoid.PageBreakAfterMode != pdfPageBreakAvoid ||
+		avoid.KeepWithNextLines != pdfSingleKeepLine {
+		t.Fatalf(
+			"avoid style page-breaks = before:%t/%v after:%t/%v keep:%d, want avoid/avoid keep-next",
+			avoid.PageBreakBefore,
+			avoid.PageBreakBeforeMode,
+			avoid.PageBreakAfter,
+			avoid.PageBreakAfterMode,
+			avoid.KeepWithNextLines,
+		)
 	}
 
 	metric := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "metric"})
@@ -630,8 +761,17 @@ func TestPDFStyleResolverReplacementStylesheetDoesNotKeepDefaultCSSClasses(t *te
 
 	annotation := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleAnnotation, ContextClasses: pdfStyleAnnotation})
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
-	if annotation.SpaceBefore != paragraph.SpaceBefore || annotation.SpaceAfter != paragraph.SpaceAfter || annotation.MarginLeft != 0 || annotation.MarginRight != 0 {
-		t.Fatalf("annotation style survived replacement stylesheet: margins=%v/%v horizontal=%v/%v paragraph=%v/%v", annotation.SpaceBefore, annotation.SpaceAfter, annotation.MarginLeft, annotation.MarginRight, paragraph.SpaceBefore, paragraph.SpaceAfter)
+	if annotation.SpaceBefore != paragraph.SpaceBefore || annotation.SpaceAfter != paragraph.SpaceAfter || annotation.MarginLeft != 0 ||
+		annotation.MarginRight != 0 {
+		t.Fatalf(
+			"annotation style survived replacement stylesheet: margins=%v/%v horizontal=%v/%v paragraph=%v/%v",
+			annotation.SpaceBefore,
+			annotation.SpaceAfter,
+			annotation.MarginLeft,
+			annotation.MarginRight,
+			paragraph.SpaceBefore,
+			paragraph.SpaceAfter,
+		)
 	}
 
 	chapterTitle := resolver.styleForBlock(pdfTextBlock{
@@ -658,7 +798,13 @@ func TestPDFStyleResolverReplacementStylesheetDoesNotKeepDefaultCSSClasses(t *te
 
 	footnote := inlineRunParagraphStyle(resolver, paragraph.Paragraph, pdfInlineRun{StyleClasses: pdfStyleLinkFootnote})
 	if footnote.Underline || footnote.VerticalAlign != textVerticalAlignBaseline || footnote.FontSize != paragraph.Paragraph.FontSize {
-		t.Fatalf("link-footnote defaults survived replacement stylesheet: underline:%t valign:%v font:%v paragraph font:%v", footnote.Underline, footnote.VerticalAlign, footnote.FontSize, paragraph.Paragraph.FontSize)
+		t.Fatalf(
+			"link-footnote defaults survived replacement stylesheet: underline:%t valign:%v font:%v paragraph font:%v",
+			footnote.Underline,
+			footnote.VerticalAlign,
+			footnote.FontSize,
+			paragraph.Paragraph.FontSize,
+		)
 	}
 }
 
@@ -692,7 +838,12 @@ func TestPDFStyleResolverExplicitCSSResetsOverrideEarlierRules(t *testing.T) {
 
 	sectionSubtitle := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleSubtitle})
 	if sectionSubtitle.PageBreakAfter || sectionSubtitle.PageBreakAfterMode != pdfPageBreakAuto || sectionSubtitle.KeepWithNextLines != 0 {
-		t.Fatalf("section-subtitle page-break-after avoid survived explicit auto reset: %t/%v keep:%d", sectionSubtitle.PageBreakAfter, sectionSubtitle.PageBreakAfterMode, sectionSubtitle.KeepWithNextLines)
+		t.Fatalf(
+			"section-subtitle page-break-after avoid survived explicit auto reset: %t/%v keep:%d",
+			sectionSubtitle.PageBreakAfter,
+			sectionSubtitle.PageBreakAfterMode,
+			sectionSubtitle.KeepWithNextLines,
+		)
 	}
 
 	hidden := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "hidden"})

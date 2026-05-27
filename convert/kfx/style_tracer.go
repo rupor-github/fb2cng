@@ -162,7 +162,13 @@ func (t *StyleTracer) TraceMerge(prop string, rule string, existing any, incomin
 	t.entries = append(t.entries, traceEntry{
 		operation: "MERGE",
 		styleName: prop,
-		details:   fmt.Sprintf("rule=%s existing=%v incoming=%v result=%v", rule, traceFormatValue(existing), traceFormatValue(incoming), traceFormatValue(result)),
+		details: fmt.Sprintf(
+			"rule=%s existing=%v incoming=%v result=%v",
+			rule,
+			traceFormatValue(existing),
+			traceFormatValue(incoming),
+			traceFormatValue(result),
+		),
 	})
 	t.sections["merged"]++
 }

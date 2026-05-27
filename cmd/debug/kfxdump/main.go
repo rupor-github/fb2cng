@@ -19,7 +19,10 @@ func main() {
 	margins := flag.Bool("margins", false, "dump vertical margin tree into <file>-margins.txt for easy comparison")
 	overwrite := flag.Bool("overwrite", false, "overwrite existing output")
 	flag.Usage = func() {
-		_, _ = fmt.Fprintf(os.Stderr, "usage: kfxdump [-all] [-dump] [-resources] [-styles] [-storyline] [-margins] [-overwrite] <file.kfx> [outdir]\n")
+		_, _ = fmt.Fprintf(
+			os.Stderr,
+			"usage: kfxdump [-all] [-dump] [-resources] [-styles] [-storyline] [-margins] [-overwrite] <file.kfx> [outdir]\n",
+		)
 		flag.PrintDefaults()
 	}
 	flag.Parse()

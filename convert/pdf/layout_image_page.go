@@ -21,7 +21,15 @@ func (l *pdfPageLayout) layoutImageBlock(blockIndex int, block pdfTextBlock, sty
 	}
 	needed := blockSpaceBefore() + style.PaddingTop + height + style.PaddingBottom + style.SpaceAfter
 	if l.pageHasText {
-		keepWithNext, err := nextBlockKeepHeight(l.doc, l.blockStyles, blockIndex+1, l.contentWidth, l.rootlessContentWidth, l.top-l.bottom, pdfKeepWithNextLines(l.doc.Blocks, l.blockStyles, blockIndex))
+		keepWithNext, err := nextBlockKeepHeight(
+			l.doc,
+			l.blockStyles,
+			blockIndex+1,
+			l.contentWidth,
+			l.rootlessContentWidth,
+			l.top-l.bottom,
+			pdfKeepWithNextLines(l.doc.Blocks, l.blockStyles, blockIndex),
+		)
 		if err != nil {
 			return err
 		}

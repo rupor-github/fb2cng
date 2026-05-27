@@ -403,12 +403,22 @@ func processBook(ctx context.Context, r io.Reader, src string, dst string, forma
 		// enough if multiple books are being processed we do not want to stop.
 		if r := recover(); r != nil {
 			log.Error("Conversion ended with panic",
-				zap.Any("panic", r), zap.Duration("elapsed", time.Since(start)), zap.String("to", outputName), zap.ByteString("stack", debug.Stack()))
+				zap.Any("panic", r),
+				zap.Duration("elapsed", time.Since(start)),
+				zap.String("to", outputName),
+				zap.ByteString("stack", debug.Stack()))
 			rerr = fmt.Errorf("conversion panic: %v", r)
 		} else if rerr != nil {
-			log.Error("Conversion failed", zap.Duration("elapsed", time.Since(start)), zap.String("to", outputName), zap.String("ref_id", refID), zap.Error(rerr))
+			log.Error("Conversion failed",
+				zap.Duration("elapsed", time.Since(start)),
+				zap.String("to", outputName),
+				zap.String("ref_id", refID),
+				zap.Error(rerr))
 		} else {
-			log.Info("Conversion completed", zap.Duration("elapsed", time.Since(start)), zap.String("to", outputName), zap.String("ref_id", refID))
+			log.Info("Conversion completed",
+				zap.Duration("elapsed", time.Since(start)),
+				zap.String("to", outputName),
+				zap.String("ref_id", refID))
 		}
 	}(time.Now())
 

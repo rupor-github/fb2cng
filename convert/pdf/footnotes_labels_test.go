@@ -71,7 +71,11 @@ func TestApplyPDFPageLocalFootnoteReferenceLabelsKeepsInlineImageFootnoteWidth(t
 	}
 	imageFragment := pages[0].Lines[0].Fragments[1]
 	if imageFragment.Width != 40 || shapedRunes(imageFragment.Text) != "10" {
-		t.Fatalf("image footnote fragment = width %v text %q, want original image width/text preserved", imageFragment.Width, shapedRunes(imageFragment.Text))
+		t.Fatalf(
+			"image footnote fragment = width %v text %q, want original image width/text preserved",
+			imageFragment.Width,
+			shapedRunes(imageFragment.Text),
+		)
 	}
 }
 
@@ -107,7 +111,16 @@ func TestApplyPDFPageLocalFootnoteReferenceLabelsRejustifiesChangedLine(t *testi
 		Text:             shapedTextFromPageLineFragments(fragments),
 		ExtraWordSpacing: 0.5,
 	}
-	newNaturalWidth := shapedWidthPoints(prefix, pdfBaseFontSize) + shapedWidthPoints(newRef, pdfBaseFontSize) + shapedWidthPoints(suffix, pdfBaseFontSize)
+	newNaturalWidth := shapedWidthPoints(
+		prefix,
+		pdfBaseFontSize,
+	) + shapedWidthPoints(
+		newRef,
+		pdfBaseFontSize,
+	) + shapedWidthPoints(
+		suffix,
+		pdfBaseFontSize,
+	)
 	line.BreakStats.AvailableWidth = newNaturalWidth + 1
 	pages := []pdfPage{{Lines: []pdfPageLine{line}}}
 	used := make(map[pdfFontKey]map[uint16]shapedGlyph)
@@ -119,7 +132,8 @@ func TestApplyPDFPageLocalFootnoteReferenceLabelsRejustifiesChangedLine(t *testi
 	if got := shapedRunes(updated.Text); got != "Alpha 1 beta" {
 		t.Fatalf("line text = %q, want relabeled footnote", got)
 	}
-	if got, want := pdfPageLineDrawnWidth(updated), updated.BreakStats.AvailableWidth; got < want-pdfLineWidthTolerance || got > want+pdfLineWidthTolerance {
+	if got, want := pdfPageLineDrawnWidth(updated), updated.BreakStats.AvailableWidth; got < want-pdfLineWidthTolerance ||
+		got > want+pdfLineWidthTolerance {
 		t.Fatalf("drawn width = %v, available = %v, want relabeled line rejustified", got, want)
 	}
 }

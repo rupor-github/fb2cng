@@ -135,7 +135,17 @@ func (tw treeWriter) author(depth int, label string, author *Author, index int) 
 	if author == nil {
 		return
 	}
-	tw.Line(depth, "%s[%d] first=%q middle=%q last=%q nickname=%q id=%q", label, index, author.FirstName, author.MiddleName, author.LastName, author.Nickname, author.ID)
+	tw.Line(
+		depth,
+		"%s[%d] first=%q middle=%q last=%q nickname=%q id=%q",
+		label,
+		index,
+		author.FirstName,
+		author.MiddleName,
+		author.LastName,
+		author.Nickname,
+		author.ID,
+	)
 	for i := range author.HomePages {
 		tw.Line(depth+1, "HomePage[%d]=%q", i, author.HomePages[i])
 	}
@@ -468,7 +478,18 @@ func (tw treeWriter) table(depth int, table *Table, index int) {
 		tw.Line(depth+1, "Row[%d] align=%q", i, row.Align)
 		for j := range row.Cells {
 			cell := row.Cells[j]
-			tw.Line(depth+2, "Cell[%d] header=%t id=%q style=%q colspan=%d rowspan=%d align=%q valign=%q", j, cell.Header, cell.ID, cell.Style, cell.ColSpan, cell.RowSpan, cell.Align, cell.VAlign)
+			tw.Line(
+				depth+2,
+				"Cell[%d] header=%t id=%q style=%q colspan=%d rowspan=%d align=%q valign=%q",
+				j,
+				cell.Header,
+				cell.ID,
+				cell.Style,
+				cell.ColSpan,
+				cell.RowSpan,
+				cell.Align,
+				cell.VAlign,
+			)
 			for k := range cell.Content {
 				tw.inlineSegment(depth+3, &cell.Content[k], k)
 			}

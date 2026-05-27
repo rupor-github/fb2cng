@@ -55,15 +55,39 @@ func TestPDFPrintedFootnoteQueueBlocksDecoratesRenumberedTitleLabels(t *testing.
 		`),
 		PrintedFootnotes: map[string]pdfPrintedFootnote{
 			"n1": {
-				ID:          "n1",
-				LabelText:   "17",
-				TitleBlocks: []pdfTextBlock{{Kind: pdfBlockParagraph, Text: "Ordinary title", Runs: []pdfInlineRun{{Text: "Ordinary title"}}, StyleClasses: pdfStyleFootnoteTitle, ContextClasses: pdfStyleFootnoteTitle}},
-				BodyBlocks:  []pdfTextBlock{{Kind: pdfBlockParagraph, Text: "Ordinary body", Runs: []pdfInlineRun{{Text: "Ordinary body"}}, StyleClasses: pdfStyleFootnote, ContextClasses: pdfStyleFootnote}},
+				ID:        "n1",
+				LabelText: "17",
+				TitleBlocks: []pdfTextBlock{
+					{
+						Kind:           pdfBlockParagraph,
+						Text:           "Ordinary title",
+						Runs:           []pdfInlineRun{{Text: "Ordinary title"}},
+						StyleClasses:   pdfStyleFootnoteTitle,
+						ContextClasses: pdfStyleFootnoteTitle,
+					},
+				},
+				BodyBlocks: []pdfTextBlock{
+					{
+						Kind:           pdfBlockParagraph,
+						Text:           "Ordinary body",
+						Runs:           []pdfInlineRun{{Text: "Ordinary body"}},
+						StyleClasses:   pdfStyleFootnote,
+						ContextClasses: pdfStyleFootnote,
+					},
+				},
 			},
 			"n2": {
-				ID:          "n2",
-				LabelText:   "23",
-				TitleBlocks: []pdfTextBlock{{Kind: pdfBlockParagraph, Text: "Nested actual title", Runs: []pdfInlineRun{{Text: "Nested actual title"}}, StyleClasses: pdfStyleFootnoteTitle, ContextClasses: pdfStyleFootnoteTitle}},
+				ID:        "n2",
+				LabelText: "23",
+				TitleBlocks: []pdfTextBlock{
+					{
+						Kind:           pdfBlockParagraph,
+						Text:           "Nested actual title",
+						Runs:           []pdfInlineRun{{Text: "Nested actual title"}},
+						StyleClasses:   pdfStyleFootnoteTitle,
+						ContextClasses: pdfStyleFootnoteTitle,
+					},
+				},
 			},
 		},
 	}

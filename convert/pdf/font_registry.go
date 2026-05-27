@@ -119,7 +119,13 @@ func (r *pdfFontRegistry) logSkippingUnsupportedPDFStylesheetFontResource(family
 	r.log.Warn("Skipping unsupported PDF @font-face resource", fields...)
 }
 
-func (r *pdfFontRegistry) logPDFStylesheetFontSupport(family string, url string, variant pdfFontVariant, face *builtinFontFace, program pdfFontProgramInfo) {
+func (r *pdfFontRegistry) logPDFStylesheetFontSupport(
+	family string,
+	url string,
+	variant pdfFontVariant,
+	face *builtinFontFace,
+	program pdfFontProgramInfo,
+) {
 	if r == nil || r.log == nil || face == nil {
 		return
 	}
@@ -292,7 +298,9 @@ func pdfFontFamilyIsBuiltinAlias(family string) bool {
 	switch {
 	case name == "", name == "serif", name == "sans-serif", name == "sans", name == "monospace", name == "mono", name == "courier":
 		return true
-	case name == strings.ToLower(pdfBuiltinFontFamilyMath), name == strings.ToLower(pdfBuiltinFontFamilySymbols), name == strings.ToLower(pdfBuiltinFontFamilySymbols2):
+	case name == strings.ToLower(pdfBuiltinFontFamilyMath),
+		name == strings.ToLower(pdfBuiltinFontFamilySymbols),
+		name == strings.ToLower(pdfBuiltinFontFamilySymbols2):
 		return true
 	case strings.Contains(name, "noto serif"), strings.Contains(name, "noto sans"), strings.Contains(name, "noto sans mono"):
 		return true

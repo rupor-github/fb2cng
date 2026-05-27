@@ -49,7 +49,10 @@ func main() {
 	writeSqlite := flag.Bool("sqlite", false, "write clean SQLite database to <file>.sqlite")
 	overwrite := flag.Bool("overwrite", false, "overwrite existing output")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: kpfdump [-all] [-dump] [-resources] [-styles] [-storyline] [-margins] [-sqlite] [-overwrite] <file.kdf|file.kpf> [outdir]\n\n")
+		fmt.Fprintf(
+			os.Stderr,
+			"usage: kpfdump [-all] [-dump] [-resources] [-styles] [-storyline] [-margins] [-sqlite] [-overwrite] <file.kdf|file.kpf> [outdir]\n\n",
+		)
 		fmt.Fprintf(os.Stderr, "Reads KDF/KPF files and produces output similar to kfxdump.\n")
 		fmt.Fprintf(os.Stderr, "Fingerprint records are stripped automatically before parsing.\n\n")
 		flag.PrintDefaults()
@@ -303,7 +306,14 @@ func readKDFContainer(data []byte, resolver resourceResolverFunc) (*kfx.Containe
 }
 
 // processFragment parses a single KDF fragment row and adds it to the Container.
-func processFragment(c *kfx.Container, id, payloadType string, payload []byte, lstProlog []byte, elementTypes map[string]string, resolver resourceResolverFunc) error {
+func processFragment(
+	c *kfx.Container,
+	id, payloadType string,
+	payload []byte,
+	lstProlog []byte,
+	elementTypes map[string]string,
+	resolver resourceResolverFunc,
+) error {
 	switch payloadType {
 	case "blob":
 		return processBlobFragment(c, id, payload, lstProlog, elementTypes)

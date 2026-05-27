@@ -94,7 +94,12 @@ func (l *pdfPageLayout) layoutTextBlock(blockIndex int, block pdfTextBlock, styl
 	return l.renderTextBlock(&render)
 }
 
-func (l *pdfPageLayout) reserveTextDropcapFootnotes(lines []paragraphLine, dropcap pdfDropcapLayout, dropcapOK bool, shapeTextBlock pdfShapeTextBlockFunc) ([]paragraphLine, pdfDropcapLayout, bool, error) {
+func (l *pdfPageLayout) reserveTextDropcapFootnotes(
+	lines []paragraphLine,
+	dropcap pdfDropcapLayout,
+	dropcapOK bool,
+	shapeTextBlock pdfShapeTextBlockFunc,
+) ([]paragraphLine, pdfDropcapLayout, bool, error) {
 	if !dropcapOK || !l.pageHasText || !l.printedFootnoteReserve.Enabled() {
 		return lines, dropcap, dropcapOK, nil
 	}
@@ -256,7 +261,16 @@ func (l *pdfPageLayout) renderTextDropcap(block pdfTextBlock, style pdfBlockReso
 		Strikethrough: dropcap.Fragment.Strikethrough,
 		Fragments:     pageLineFragments([]paragraphLineFragment{dropcap.Fragment}),
 	})
-	l.activeDropcap = &pdfActiveDropcap{Page: l.page, X: dropcapX, TopY: dropcap.TopY, BottomY: dropcap.BottomY, ExclusionWidth: dropcap.ExclusionWidth, Lines: dropcap.Lines, Char: dropcap.Run.Text, BodySearchOffset: dropcap.BodySearchOffset}
+	l.activeDropcap = &pdfActiveDropcap{
+		Page:             l.page,
+		X:                dropcapX,
+		TopY:             dropcap.TopY,
+		BottomY:          dropcap.BottomY,
+		ExclusionWidth:   dropcap.ExclusionWidth,
+		Lines:            dropcap.Lines,
+		Char:             dropcap.Run.Text,
+		BodySearchOffset: dropcap.BodySearchOffset,
+	}
 	return dropcap.BodySearchOffset
 }
 
@@ -285,7 +299,15 @@ func (l *pdfPageLayout) paginateTextBlock(
 		l.newTextPage()
 	}
 	if keepLines := pdfKeepWithNextLines(l.doc.Blocks, l.blockStyles, blockIndex); keepLines > 0 && l.pageHasText {
-		keepWithNext, err := nextBlockKeepHeight(l.doc, l.blockStyles, blockIndex+1, l.contentWidth, l.rootlessContentWidth, l.top-l.bottom, keepLines)
+		keepWithNext, err := nextBlockKeepHeight(
+			l.doc,
+			l.blockStyles,
+			blockIndex+1,
+			l.contentWidth,
+			l.rootlessContentWidth,
+			l.top-l.bottom,
+			keepLines,
+		)
 		if err != nil {
 			return err
 		}

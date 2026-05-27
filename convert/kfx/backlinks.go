@@ -6,7 +6,15 @@ import (
 	"fbc/content"
 )
 
-func resolveKFXBacklinkLocations(c *content.Content, fragments *FragmentList, contentSnapshot map[string][]string, sectionNames sectionNameList, chapterStartSections map[string]bool, idToEID eidByFB2ID, pending *StorylineBuilder) {
+func resolveKFXBacklinkLocations(
+	c *content.Content,
+	fragments *FragmentList,
+	contentSnapshot map[string][]string,
+	sectionNames sectionNameList,
+	chapterStartSections map[string]bool,
+	idToEID eidByFB2ID,
+	pending *StorylineBuilder,
+) {
 	if c == nil || len(c.BackLinkIndex) == 0 || fragments == nil {
 		return
 	}

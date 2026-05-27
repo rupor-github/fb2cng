@@ -58,7 +58,18 @@ func TestBuildPDFPrintedFootnotePagePlansAndReserves(t *testing.T) {
 		PageHeight: 180,
 		Content:    &content.Content{OutputFormat: common.OutputFmtPdf, FootnotesMode: common.FootnotesModeFloatRenumbered},
 		PrintedFootnotes: map[string]pdfPrintedFootnote{
-			"n1": {ID: "n1", BodyBlocks: []pdfTextBlock{{Kind: pdfBlockParagraph, Text: "Footnote body.", Runs: []pdfInlineRun{{Text: "Footnote body."}}, StyleClasses: pdfStyleFootnote, ContextClasses: pdfStyleFootnote}}},
+			"n1": {
+				ID: "n1",
+				BodyBlocks: []pdfTextBlock{
+					{
+						Kind:           pdfBlockParagraph,
+						Text:           "Footnote body.",
+						Runs:           []pdfInlineRun{{Text: "Footnote body."}},
+						StyleClasses:   pdfStyleFootnote,
+						ContextClasses: pdfStyleFootnote,
+					},
+				},
+			},
 		},
 	}
 	pages := []pdfPage{{Lines: []pdfPageLine{{Fragments: []pdfPageLineFragment{{FootnoteID: "n1"}}}}}, {Lines: []pdfPageLine{{}}}}

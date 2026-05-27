@@ -149,7 +149,8 @@ func TestPDFPrintedFootnoteReferencesAreStyledButNotClickable(t *testing.T) {
 	if len(block.Links) != 0 {
 		t.Fatalf("printed footnote main-text Links = %#v, want none", block.Links)
 	}
-	if len(block.Runs) != 2 || block.Runs[1].StyleClasses != pdfStyleLinkFootnote || block.Runs[1].LinkHref != "" || block.Runs[1].FootnoteID != "n1" {
+	if len(block.Runs) != 2 || block.Runs[1].StyleClasses != pdfStyleLinkFootnote || block.Runs[1].LinkHref != "" ||
+		block.Runs[1].FootnoteID != "n1" {
 		t.Fatalf("printed footnote run = %#v, want styled non-clickable ref with metadata", block.Runs)
 	}
 	if len(c.BackLinkIndex) != 0 {
@@ -347,27 +348,30 @@ func TestPDFDefaultModeFootnoteBacklinksAfterTableKeepsTableMargin(t *testing.T)
 		FootnotesIndex: fb2.FootnoteRefs{
 			"n1": {BodyIdx: 1, SectionIdx: 0},
 		},
-		Book: &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{Type: "text/css", Data: "table { margin: 1em auto; } p { margin: 0; }"}}, Bodies: []fb2.Body{{
-			Kind: fb2.BodyMain,
-			Sections: []fb2.Section{{Content: []fb2.FlowItem{{
-				Kind: fb2.FlowTable,
-				Table: &fb2.Table{Rows: []fb2.TableRow{{Cells: []fb2.TableCell{{Content: []fb2.InlineSegment{
-					{Text: "Cell "},
-					{Kind: fb2.InlineLink, Href: "#n1", Children: []fb2.InlineSegment{{Text: "1"}}},
-				}}}}}},
-			}}}},
-		}, {
-			Kind: fb2.BodyFootnotes,
-			Sections: []fb2.Section{{
-				ID: "n1",
-				Content: []fb2.FlowItem{{
+		Book: &fb2.FictionBook{
+			Stylesheets: []fb2.Stylesheet{{Type: "text/css", Data: "table { margin: 1em auto; } p { margin: 0; }"}},
+			Bodies: []fb2.Body{{
+				Kind: fb2.BodyMain,
+				Sections: []fb2.Section{{Content: []fb2.FlowItem{{
 					Kind: fb2.FlowTable,
 					Table: &fb2.Table{Rows: []fb2.TableRow{{Cells: []fb2.TableCell{{Content: []fb2.InlineSegment{
-						{Text: "Footnote table"},
+						{Text: "Cell "},
+						{Kind: fb2.InlineLink, Href: "#n1", Children: []fb2.InlineSegment{{Text: "1"}}},
 					}}}}}},
+				}}}},
+			}, {
+				Kind: fb2.BodyFootnotes,
+				Sections: []fb2.Section{{
+					ID: "n1",
+					Content: []fb2.FlowItem{{
+						Kind: fb2.FlowTable,
+						Table: &fb2.Table{Rows: []fb2.TableRow{{Cells: []fb2.TableCell{{Content: []fb2.InlineSegment{
+							{Text: "Footnote table"},
+						}}}}}},
+					}},
 				}},
 			}},
-		}}},
+		},
 	}
 
 	blocks, err := collectTextBlocks(c)
@@ -379,7 +383,12 @@ func TestPDFDefaultModeFootnoteBacklinksAfterTableKeepsTableMargin(t *testing.T)
 	for i := 1; i < len(blocks); i++ {
 		if blocks[i-1].Kind == pdfBlockTable && blocks[i].Kind == pdfBlockParagraph {
 			if styles[i-1].SpaceAfter <= 0 {
-				t.Fatalf("table before backlink SpaceAfter = %v, want positive table margin; block=%#v style=%#v", styles[i-1].SpaceAfter, blocks[i-1], styles[i-1])
+				t.Fatalf(
+					"table before backlink SpaceAfter = %v, want positive table margin; block=%#v style=%#v",
+					styles[i-1].SpaceAfter,
+					blocks[i-1],
+					styles[i-1],
+				)
 			}
 			return
 		}
@@ -485,8 +494,10 @@ func TestParagraphInlineRunsClassifyFootnotesByContent(t *testing.T) {
 			wantCode:  true,
 		},
 		{
-			name:      "note link type false positive",
-			segments:  []fb2.InlineSegment{{Kind: fb2.InlineLink, Href: "#ordinary", LinkType: "note", Children: []fb2.InlineSegment{{Text: "ordinary"}}}},
+			name: "note link type false positive",
+			segments: []fb2.InlineSegment{
+				{Kind: fb2.InlineLink, Href: "#ordinary", LinkType: "note", Children: []fb2.InlineSegment{{Text: "ordinary"}}},
+			},
 			wantText:  "ordinary",
 			wantClass: pdfStyleLinkInternal,
 		},
@@ -498,7 +509,8 @@ func TestParagraphInlineRunsClassifyFootnotesByContent(t *testing.T) {
 				t.Fatalf("inline runs = %#v, want one run", runs)
 			}
 			run := runs[0]
-			if run.Text != tt.wantText || run.StyleClasses != tt.wantClass || run.LinkHref == "" || run.Superscript != tt.wantSup || run.Code != tt.wantCode {
+			if run.Text != tt.wantText || run.StyleClasses != tt.wantClass || run.LinkHref == "" || run.Superscript != tt.wantSup ||
+				run.Code != tt.wantCode {
 				t.Fatalf("run = %#v, want text %q classes %q href superscript:%t code:%t", run, tt.wantText, tt.wantClass, tt.wantSup, tt.wantCode)
 			}
 		})
@@ -609,7 +621,11 @@ func TestParagraphInlineRunsPreserveInlineImages(t *testing.T) {
 func TestParagraphInlineRunsPreserveLinkedInlineImages(t *testing.T) {
 	paragraph := &fb2.Paragraph{Text: []fb2.InlineSegment{
 		{Text: "before "},
-		{Kind: fb2.InlineLink, Href: "#target", Children: []fb2.InlineSegment{{Kind: fb2.InlineImageSegment, Image: &fb2.InlineImage{Href: "#inline.png"}}}},
+		{
+			Kind:     fb2.InlineLink,
+			Href:     "#target",
+			Children: []fb2.InlineSegment{{Kind: fb2.InlineImageSegment, Image: &fb2.InlineImage{Href: "#inline.png"}}},
+		},
 		{Text: " after"},
 	}}
 

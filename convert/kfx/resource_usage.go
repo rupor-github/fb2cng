@@ -65,7 +65,11 @@ func collectReferencedResourceNames(fragments *FragmentList) map[string]bool {
 }
 
 // filterImageResources removes external resources and raw media that are not referenced.
-func filterImageResources(externalRes, rawMedia []*Fragment, imageResources imageResourceInfoByID, usedResourceNames map[string]bool) ([]*Fragment, []*Fragment, imageResourceInfoByID) {
+func filterImageResources(
+	externalRes, rawMedia []*Fragment,
+	imageResources imageResourceInfoByID,
+	usedResourceNames map[string]bool,
+) ([]*Fragment, []*Fragment, imageResourceInfoByID) {
 	if len(usedResourceNames) == 0 {
 		return nil, nil, nil
 	}

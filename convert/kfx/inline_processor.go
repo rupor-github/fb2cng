@@ -9,7 +9,11 @@ import (
 
 // SegmentStyle determines the style name for an inline segment.
 // Returns the style name, link info, and whether a backlink ref was created.
-func SegmentStyle(seg *fb2.InlineSegment, c *content.Content, styles *StyleRegistry) (segStyle string, isLink bool, linkTo string, isFootnoteLink bool, backlinkRefID string) {
+func SegmentStyle(
+	seg *fb2.InlineSegment,
+	c *content.Content,
+	styles *StyleRegistry,
+) (segStyle string, isLink bool, linkTo string, isFootnoteLink bool, backlinkRefID string) {
 	switch seg.Kind {
 	case fb2.InlineStrong:
 		segStyle = "strong"

@@ -80,7 +80,15 @@ func pdfDebugGlyphsForLine(line pdfPageLine) []pdfDebugGlyph {
 	return glyphs
 }
 
-func pdfDebugGlyphs(glyphs []shapedGlyph, fragment int, x float64, y float64, fontSize float64, letterSpacing float64, extraWordSpacing float64) []pdfDebugGlyph {
+func pdfDebugGlyphs(
+	glyphs []shapedGlyph,
+	fragment int,
+	x float64,
+	y float64,
+	fontSize float64,
+	letterSpacing float64,
+	extraWordSpacing float64,
+) []pdfDebugGlyph {
 	out := make([]pdfDebugGlyph, 0, len(glyphs))
 	currentX := x
 	for i, glyph := range glyphs {
@@ -135,7 +143,8 @@ func pdfDebugJustificationLines(pages []pdfPage) []pdfDebugJustificationLine {
 
 func pdfDebugJustificationLineFor(pageNumber int, lineNumber int, line pdfPageLine) (pdfDebugJustificationLine, bool) {
 	justified := pdfPageLineIsJustified(line)
-	if !justified && !line.BreakStats.Emergency && !line.BreakStats.Hyphenated && pdfPageLineOverflow(line) == 0 && pdfPageLineVisualOverflow(line) == 0 {
+	if !justified && !line.BreakStats.Emergency && !line.BreakStats.Hyphenated && pdfPageLineOverflow(line) == 0 &&
+		pdfPageLineVisualOverflow(line) == 0 {
 		return pdfDebugJustificationLine{}, false
 	}
 	naturalWidth := pdfPageLineAdvanceWidth(line)
