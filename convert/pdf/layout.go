@@ -1,5 +1,8 @@
 package pdf
 
+// pdfPageLayout is the mutable state for one pagination pass. The pass walks the
+// flat block list, appends logical drawing operations to pages, and records the
+// glyphs required by the resulting text.
 type pdfPageLayout struct {
 	doc pdfDocumentSpec
 
@@ -9,6 +12,9 @@ type pdfPageLayout struct {
 	pages       []pdfPage
 	page        *pdfPage
 
+	// Content margins are physical page margins. The rootless variants are used by
+	// generated full-width blocks that should ignore body horizontal margins but
+	// still live inside the same top/bottom text area.
 	contentLeft   float64
 	contentRight  float64
 	contentTop    float64
@@ -21,6 +27,8 @@ type pdfPageLayout struct {
 
 	printedFootnoteReserve pdfDynamicPrintedFootnoteReserveTracker
 
+	// top and bottom bound the current text area; y is the next baseline to draw.
+	// bottom may be raised by page-specific printed-footnote reserves.
 	top    float64
 	bottom float64
 	y      float64
@@ -48,6 +56,9 @@ func newPDFPageLayout(doc pdfDocumentSpec) *pdfPageLayout {
 }
 
 func (l *pdfPageLayout) layout() error {
+	// A cover is represented as an image-only page before the main text stream. It
+	// is intentionally independent from the block list so books without body text
+	// can still produce a valid cover-only PDF.
 	l.addCoverPage()
 	if len(l.doc.Blocks) == 0 {
 		if len(l.pages) == 0 {
@@ -84,6 +95,8 @@ func (l *pdfPageLayout) addCoverPage() {
 }
 
 func (l *pdfPageLayout) initTextLayout() {
+	// Resolve all block styles up front so pagination can cheaply look at current
+	// and following blocks for keep-with-next/orphan/widow decisions.
 	l.styles = l.doc.Styles
 	if l.styles == nil {
 		l.styles = newPDFStyleResolver(nil, nil)
@@ -106,6 +119,8 @@ func (l *pdfPageLayout) addPage() *pdfPage {
 }
 
 func (l *pdfPageLayout) pageBottom(pageIndex int) float64 {
+	// PageBottomReserves is produced by the printed-footnote prepass. Raising the
+	// bottom edge here makes the ordinary text paginator leave room for notes.
 	reserve := 0.0
 	if pageIndex >= 0 && pageIndex < len(l.doc.PageBottomReserves) {
 		reserve = l.doc.PageBottomReserves[pageIndex]
@@ -125,6 +140,8 @@ func (l *pdfPageLayout) newTextPage() {
 }
 
 func (l *pdfPageLayout) finish() error {
+	// Page-local footnote numbering needs the final source pages. Apply it after
+	// pagination, then rejustify affected lines because label widths may change.
 	if pdfPrintedFootnoteReferencesRenumbered(l.doc.Content) && len(l.doc.PrintedFootnotes) > 0 {
 		if err := applyPDFPageLocalFootnoteReferenceLabels(l.pages, l.doc.Fonts, l.used, l.styles, l.doc.TextShapers); err != nil {
 			return err
@@ -147,6 +164,9 @@ func (l *pdfPageLayout) layoutBlocks() error {
 			continue
 		}
 
+		// Dropcaps create an exclusion shape only for immediately following paragraph
+		// lines. Any non-paragraph block closes the exclusion and moves below the cap
+		// if it is still occupying vertical space on the current page.
 		if l.activeDropcap != nil && block.Kind != pdfBlockParagraph {
 			if !pdfDropcapExpired(l.activeDropcap, l.page, l.y) {
 				l.y = l.activeDropcap.BottomY
@@ -162,6 +182,9 @@ func (l *pdfPageLayout) layoutBlocks() error {
 			l.newTextPage()
 		}
 
+		// Most blocks live inside the normal content box. Some generated title and
+		// vignette blocks opt into the rootless width to match full-width Kindle-style
+		// decorations while preserving the same vertical pagination model.
 		blockLeft := l.contentLeft
 		blockWidthLimit := l.contentWidth
 		if block.StripRootHorizontalMargins {

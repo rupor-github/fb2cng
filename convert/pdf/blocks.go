@@ -13,6 +13,10 @@ import (
 )
 
 func collectPDFContent(c *content.Content, cfg *config.DocumentConfig) (pdfContentPlan, error) {
+	// The structure package decides high-level reading order. This function lowers
+	// each structure unit to renderer blocks and inserts PDF-only generated content
+	// such as annotation pages, TOC pages, backlinks, section-end vignettes, and
+	// printed-footnote queues.
 	if c == nil || c.Book == nil {
 		return pdfContentPlan{}, nil
 	}
@@ -131,6 +135,8 @@ func insertAnnotationPageBlocks(
 	c *content.Content,
 	cfg *config.DocumentConfig,
 ) ([]pdfTextBlock, []*structure.TOCEntry) {
+	// The PDF annotation page is generated from book metadata, not from the normal
+	// body structure plan, so it is inserted here after source blocks are collected.
 	if cfg == nil || !cfg.Annotation.Enable || c == nil || c.Book == nil || c.Book.Description.TitleInfo.Annotation == nil ||
 		len(c.Book.Description.TitleInfo.Annotation.Items) == 0 {
 		return blocks, toc
@@ -191,6 +197,8 @@ func insertTOCPageBlocks(blocks []pdfTextBlock, c *content.Content, entries []*s
 }
 
 func buildTOCPageBlocks(title *fb2.Title, entries []*structure.TOCEntry, includeUntitled bool, tocType common.TOCType) []pdfTextBlock {
+	// The generated TOC page is just ordinary linked blocks. Later outline building
+	// uses the same TOC tree to create PDF viewer navigation bookmarks.
 	items := flattenPDFTOCEntries(entries, includeUntitled, 1)
 	if len(items) == 0 {
 		return nil

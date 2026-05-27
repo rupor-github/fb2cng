@@ -31,6 +31,11 @@ func layoutPDFDocumentPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[
 		pages, used, err := layoutPDFPages(doc)
 		return pages, used, pdfDebugPrintedFootnotes{SourcePageCount: len(pages), FinalPageCount: len(pages)}, err
 	}
+
+	// Printed footnotes need a two-stage layout. First lay out the main text and
+	// discover which page references each note. Then reserve bottom space on those
+	// source pages and lay out again so body text does not collide with the note
+	// chunks that appendPDFPrintedFootnotePagePlans will render later.
 	reserved, err := layoutPDFPagesWithPrintedFootnoteReserves(doc)
 	if err != nil {
 		return nil, nil, pdfDebugPrintedFootnotes{}, err
@@ -53,6 +58,10 @@ func buildPDFDocument(doc pdfDocumentSpec) ([]byte, error) {
 	if doc.TextShapers == nil {
 		doc.TextShapers = newPDFTextShaperCache()
 	}
+
+	// CSS pseudo-elements become real text before pagination so generated labels,
+	// brackets, and backlink markers participate in shaping, wrapping, and link
+	// rectangle calculation just like source text.
 	doc.Blocks = applyPDFPseudoContentToBlocks(doc.Blocks, doc.Styles)
 	doc.PrintedFootnotes = applyPDFPseudoContentToPrintedFootnotes(doc.PrintedFootnotes, doc.Styles)
 
@@ -70,6 +79,20 @@ func buildPDFDocument(doc pdfDocumentSpec) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Some generated backlink text includes the page number of the original
+	// reference. Changing that text can affect wrapping and therefore page numbers,
+	// so iterate a few times toward a fixed point. In practice one or two passes are
+	// enough; the cap prevents pathological oscillation from hanging conversion.
+	//
+	// Backlink convergence follow-ups from code review, kept here deliberately close
+	// to the current loop:
+	//   - replace the literal 3 with a named max-iteration constant;
+	//   - track whether the loop actually converged;
+	//   - after the cap, perform a final non-mutating check against the final pages,
+	//     or continue to a larger cap and warn/error if still unstable;
+	//   - add a regression test with a contrived backlink template/layout that needs
+	//     several passes or demonstrates non-convergence.
 	for range 3 {
 		if !resolvePDFBacklinkPagesAndText(&doc, pages) {
 			break
@@ -83,6 +106,10 @@ func buildPDFDocument(doc pdfDocumentSpec) ([]byte, error) {
 		return nil, errors.New("pdf document must contain at least one page")
 	}
 
+	// Object numbers are assigned only after pagination because outlines,
+	// annotations, font subsets, and image resources all depend on the final page
+	// list. Reserve stable IDs for the catalog/pages/first page/info objects, then
+	// hand out monotonically increasing IDs to every remaining object.
 	pages[0].ObjectID = firstPageID
 	pages[0].ContentID = firstContentID
 	nextObjectID := infoID + 1
@@ -99,6 +126,9 @@ func buildPDFDocument(doc pdfDocumentSpec) ([]byte, error) {
 	assignPDFImageResourceNames(pages, imageResources)
 	outlines := buildOutlines(doc.TOC, pages, &nextObjectID)
 	assignAnnotationObjectIDs(pages, &nextObjectID)
+
+	// Font subsetting happens after layout so each embedded font contains exactly
+	// the shaped glyphs referenced by page content streams.
 	fontResources, err := preparePDFFontResources(doc.Fonts, usedGlyphs, &nextObjectID)
 	if err != nil {
 		return nil, err
@@ -164,6 +194,8 @@ func buildPDFDocument(doc pdfDocumentSpec) ([]byte, error) {
 	}
 
 	for _, page := range pages {
+		// pageContent lowers the logical display list to PDF graphics/text operators;
+		// the writer then compresses it into the page's Contents stream object.
 		stream, err := flateStream(pageContent(page))
 		if err != nil {
 			return nil, err

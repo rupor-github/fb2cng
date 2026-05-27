@@ -2,6 +2,10 @@ package pdf
 
 import "strings"
 
+// pdfDynamicPrintedFootnoteReserveTracker is used during a layout pass that is
+// already reserving printed footnote space. It previews the reserve needed if a
+// line stays on the current page and commits those note references only after the
+// line is actually accepted there.
 type pdfDynamicPrintedFootnoteReserveTracker struct {
 	doc                pdfDocumentSpec
 	styles             *pdfStyleResolver
@@ -61,6 +65,8 @@ func (t *pdfDynamicPrintedFootnoteReserveTracker) LineRefs(line paragraphLine) [
 }
 
 func (t *pdfDynamicPrintedFootnoteReserveTracker) ReserveWithAdditionalRefs(additional []pdfPrintedFootnoteRef) (float64, error) {
+	// Build a candidate page-local reference list without mutating tracker state.
+	// The caller may still decide the line no longer fits and move it to a new page.
 	if !t.Enabled() || len(additional) == 0 {
 		return t.reserve, nil
 	}
@@ -96,6 +102,8 @@ func (t *pdfDynamicPrintedFootnoteReserveTracker) ReserveWithAdditionalRefs(addi
 }
 
 func (t *pdfDynamicPrintedFootnoteReserveTracker) CommitAdditionalRefs(additional []pdfPrintedFootnoteRef, reserve float64) {
+	// Commit only after the reference line has been rendered on this page. This is
+	// what keeps a footnote attached to the source page where the marker appears.
 	if !t.Enabled() || len(additional) == 0 {
 		return
 	}
@@ -114,6 +122,9 @@ func (t *pdfDynamicPrintedFootnoteReserveTracker) CommitAdditionalRefs(additiona
 }
 
 func (t *pdfDynamicPrintedFootnoteReserveTracker) computeReserve(refs []pdfPrintedFootnoteRef) (float64, error) {
+	// Lay out the page's current footnote queue in the constrained footnote text
+	// area. The first queue page tells us how much of the source page bottom must be
+	// reserved; overflow queue pages are appended later as continuation pages.
 	queue := buildPDFPrintedFootnoteQueue(t.doc, refs)
 	if len(queue) == 0 {
 		return 0, nil

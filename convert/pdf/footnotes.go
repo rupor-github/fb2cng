@@ -21,6 +21,9 @@ func pdfPrintedFootnoteReferencesRenumbered(c *content.Content) bool {
 }
 
 func buildPDFPrintedFootnoteBlocks(c *content.Content) map[string]pdfPrintedFootnote {
+	// Pre-render footnote sections into normal PDF blocks so the footnote paginator
+	// can reuse the same style resolution, inline shaping, tables, and image logic
+	// as the main body. Hyperlink-style footnotes skip this path entirely.
 	if !pdfPrintedFootnotesEnabled(c) || c.Book == nil || len(c.FootnotesIndex) == 0 {
 		return nil
 	}
@@ -91,6 +94,9 @@ func applyPDFFootnoteContextToBlocks(blocks []pdfTextBlock) []pdfTextBlock {
 }
 
 func pdfPrintedFootnotePageBlocks(_ *content.Content, note pdfPrintedFootnote, pageLabel string, continuation bool) []pdfTextBlock {
+	// Each rendered chunk starts with a visible page-local label. Continuation pages
+	// can use a different title block so repeated labels remain clear without
+	// rewriting the original footnote body.
 	label := strings.TrimSpace(pageLabel)
 	if label == "" {
 		label = "?"

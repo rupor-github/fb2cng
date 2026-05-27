@@ -11,6 +11,10 @@ import (
 )
 
 const (
+	// These penalties drive the paragraph-wide line breaking search. They are not
+	// CSS values; they are relative weights that prefer balanced lines, avoid
+	// consecutive hyphenation, and make emergency glyph-cluster breaks a last
+	// resort.
 	paragraphLinePenalty              = 10.0
 	paragraphHyphenPenalty            = 350.0
 	paragraphConsecutiveHyphenPenalty = 1800.0
@@ -81,6 +85,9 @@ type paragraphHyphenator interface {
 	Hyphenate(string) string
 }
 
+// paragraphLineShape describes per-line exclusions before text is wrapped. It is
+// currently used for dropcaps: the first N lines get an initial inset so body text
+// flows around the large initial letter.
 type paragraphLineShape struct {
 	InitialInsets []float64
 	TextShapers   *pdfTextShaperCache
@@ -126,6 +133,9 @@ type paragraphWordPart struct {
 	HyphenText string
 }
 
+// paragraphUnit is the smallest piece considered by the line breaker. A word may
+// become several units when it contains soft hyphens, punctuation break points, or
+// emergency glyph-cluster break points.
 type paragraphUnit struct {
 	Text                string
 	Width               float64
@@ -194,6 +204,9 @@ func layoutParagraph(
 	maxWidth float64,
 	shape paragraphLineShape,
 ) ([]paragraphLine, error) {
+	// Plain paragraphs use a Knuth-Plass-inspired global search: split text into
+	// words/units, assign widths and legal break points, then choose the least-cost
+	// sequence of breaks for the whole paragraph instead of greedily filling lines.
 	if style.FontSize <= 0 {
 		return nil, fmt.Errorf("paragraph font size must be positive: %g", style.FontSize)
 	}
@@ -286,6 +299,9 @@ func paragraphUnits(
 	style paragraphStyle,
 	softHyphenWidth float64,
 ) ([]paragraphUnit, error) {
+	// Shape each potential break segment independently. The final line is reshaped
+	// after breaks are chosen so ligatures/kerning are correct across unit
+	// boundaries; these per-unit widths are only for evaluating candidate breaks.
 	units := make([]paragraphUnit, 0, len(words))
 	for i, word := range words {
 		parts := hyphenatedWordParts(word.Text, style.Hyphenator, pdfEffectiveHyphenation(style))
@@ -337,6 +353,9 @@ func splitPlainEmergencyParagraphUnits(
 	maxWidth float64,
 	shape paragraphLineShape,
 ) ([]paragraphUnit, error) {
+	// If a single unbreakable unit cannot fit the narrowest shaped line, split it at
+	// HarfBuzz cluster boundaries. That keeps combining marks and multi-glyph
+	// clusters together while still allowing pathological long tokens to render.
 	if style.NoWrap || len(units) == 0 {
 		return units, nil
 	}
@@ -505,6 +524,9 @@ func pdfEffectiveHyphenation(style paragraphStyle) paragraphHyphenation {
 }
 
 func hyphenatedWordParts(word string, hyphenator paragraphHyphenator, mode paragraphHyphenation) []paragraphWordPart {
+	// Hyphenation mode controls where extra break points come from. Manual mode
+	// honors only soft hyphens already in the book; auto mode asks the configured
+	// language hyphenator to insert soft hyphens before punctuation splitting.
 	if word == "" {
 		return nil
 	}
@@ -596,6 +618,9 @@ func assembleParagraphLines(
 	maxWidth float64,
 	shape paragraphLineShape,
 ) ([]paragraphLine, error) {
+	// Break selection uses per-unit metrics; final assembly reshapes every chosen
+	// line as continuous text so final glyph IDs, ligatures, kerning, and right
+	// overhangs match what will be written to the PDF content stream.
 	spaceWidth, err := plainSpaceWidth(shape.TextShapers, face, style)
 	if err != nil {
 		return nil, err
@@ -636,6 +661,8 @@ type paragraphLineFinalizer struct {
 	previousFitness    paragraphFitness
 }
 
+// finalize applies indentation, justification, visual-overhang accounting, and
+// debug break statistics to a shaped line after the break point is known.
 func (f *paragraphLineFinalizer) finalize(
 	lineIndex int,
 	start int,
@@ -694,6 +721,10 @@ func chooseBreaks(
 	maxWidth float64,
 	shape paragraphLineShape,
 ) []paragraphBreak {
+	// Dynamic programming state is keyed by break position, line-shape index,
+	// fitness class, and whether the previous line was hyphenated. That lets the
+	// search penalize visually abrupt tight/loose transitions and consecutive
+	// hyphenated lines while still handling dropcap-dependent line widths.
 	n := len(units)
 	if n == 0 {
 		return nil
@@ -771,6 +802,9 @@ func chooseBreaks(
 	return emergencyParagraphBreaks(units, spaceWidth, style, maxWidth, shape)
 }
 
+// paragraphBreakCandidatesInto enumerates legal next breaks from one start
+// position. The caller reuses the candidates slice to avoid allocations in the
+// dynamic-programming inner loop.
 func paragraphBreakCandidatesInto(
 	candidates []paragraphBreakCandidate,
 	units []paragraphUnit,
@@ -971,6 +1005,9 @@ func lineBreakStats(
 }
 
 func paragraphAdjustmentRatio(width, available float64, gaps int, last bool, singleWord bool) (float64, bool) {
+	// The ratio is the normalized stretch/shrink required to fit a line. Positive
+	// values stretch, negative values shrink, +Inf rejects a candidate, and the
+	// boolean marks an unavoidable overfull emergency line.
 	delta := available - width
 	if last {
 		if width > available && !singleWord {
@@ -1100,6 +1137,9 @@ func emergencyParagraphBreaks(
 	maxWidth float64,
 	shape paragraphLineShape,
 ) []paragraphBreak {
+	// Fallback for paragraphs where every global candidate path was rejected. This
+	// greedy pass always makes progress, preferring the widest prefix that fits and
+	// accepting emergency cluster breaks when necessary.
 	breaks := make([]paragraphBreak, 0)
 	for start, lineIndex := 0, 0; start < len(units); lineIndex++ {
 		width := 0.0

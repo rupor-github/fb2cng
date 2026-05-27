@@ -15,6 +15,8 @@ type pdfMissingGlyphBox struct {
 	Color  pdfColor
 }
 
+// pdfTextDrawingState mirrors the subset of PDF text/graphics state that this
+// writer tries to avoid re-emitting for every glyph run.
 type pdfTextDrawingState struct {
 	FontName         string
 	FontSize         float64
@@ -24,6 +26,9 @@ type pdfTextDrawingState struct {
 }
 
 func pageContent(page pdfPage) []byte {
+	// Write non-text drawing first, then one text object for all lines, then overlay
+	// synthetic missing-glyph boxes and text decorations. Decorations come last so
+	// underlines/strikeouts stay visible over glyph fills and inline images.
 	var buf bytes.Buffer
 	missingGlyphBoxes := make([]pdfMissingGlyphBox, 0)
 	for _, background := range page.Backgrounds {
@@ -130,6 +135,9 @@ func writeTextGlyphs(
 	extraWordSpacing float64,
 	state *pdfTextDrawingState,
 ) []pdfMissingGlyphBox {
+	// Prefer compact Tj/TJ output. Fall back to per-glyph text matrices only when
+	// HarfBuzz returned offsets, and synthesize visible boxes for missing glyphs so
+	// debug PDFs make font-coverage problems obvious.
 	writeTextState(buf, fontName, fontSize, letterSpacing, color, x, y, state)
 	if !hasSyntheticPDFGlyphs(glyphs) {
 		if hasGlyphOffsets(glyphs) {
@@ -177,6 +185,8 @@ func writeOffsetGlyphs(
 	x float64,
 	y float64,
 ) {
+	// PDF's TJ operator cannot express Y offsets, so shaped scripts with glyph
+	// offsets are emitted as one positioned glyph per Tm/Tj pair.
 	currentX := x
 	for i, glyph := range glyphs {
 		glyphX := currentX + glyphOffsetPoints(glyph.XOffset, fontSize)

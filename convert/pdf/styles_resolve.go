@@ -6,6 +6,11 @@ import (
 )
 
 func (r *pdfStyleResolver) styleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
+	// Resolve a block in cascade order: built-in element defaults, root-inherited
+	// paragraph defaults, named element style, container/context inheritance,
+	// explicit classes, element.class selectors, and finally descendant selectors.
+	// Each merge compares with a fallback style so unspecified CSS fields do not
+	// accidentally reset defaults that came from earlier layers.
 	name := pdfStyleNameForBlock(block)
 	defaultStyle := r.defaultStyle(name)
 	inheritedFontSize := r.inheritedFontSizeForBlock(block)
@@ -50,6 +55,9 @@ func (r *pdfStyleResolver) styleForBlock(block pdfTextBlock) pdfBlockResolvedSty
 }
 
 func injectPDFImplicitLineHeight(style, fallback pdfBlockResolvedStyle) pdfBlockResolvedStyle {
+	// CSS line-height: normal scales with font-size. The resolver stores concrete
+	// point values, so when a rule changes font-size without an explicit line-height
+	// we scale the fallback line height to preserve the same visual ratio.
 	if style.Paragraph.LineHeightExplicit || fallback.Paragraph.FontSize <= 0 || fallback.Paragraph.LineHeight <= 0 || style.Paragraph.FontSize <= 0 {
 		return style
 	}
@@ -231,6 +239,8 @@ func mergePDFParagraphLengthOverrides(
 	inheritedFontSize float64,
 	scaleImplicitLineHeight bool,
 ) paragraphStyle {
+	// Font-relative CSS lengths must be resolved at merge time because later layers
+	// may have already changed the effective font size inherited by this block.
 	if override.FontSizeSpec.Set {
 		base.FontSize = pdfResolveCSSFontSizeSpec(override.FontSizeSpec, inheritedFontSize)
 		base.FontSizeSpec = override.FontSizeSpec

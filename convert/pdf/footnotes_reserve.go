@@ -1,5 +1,7 @@
 package pdf
 
+// Printed footnotes can use at most this fraction of a normal content page on
+// their source page. Longer note queues continue on inserted footnote pages.
 const pdfPrintedFootnoteDefaultTextAreaFraction = 0.35
 
 func pdfPrintedFootnoteTextAreaHeight(doc pdfDocumentSpec, styles *pdfStyleResolver) float64 {
@@ -33,6 +35,8 @@ func pdfPrintedFootnotePlanReserves(
 	pageCount int,
 	footnoteTextHeight float64,
 ) []float64 {
+	// Convert each page plan into the vertical amount the main-text paginator must
+	// leave empty at the bottom of the corresponding source page.
 	if len(plans) == 0 || pageCount <= 0 || footnoteTextHeight <= 0 {
 		return nil
 	}
@@ -70,6 +74,9 @@ func pdfPrintedFootnotePagePlanReserve(
 	footnoteTextHeight float64,
 	separator pdfPrintedFootnoteSeparatorMetrics,
 ) float64 {
+	// Reserve only the first footnote chunk on the source page. If the queue spans
+	// more chunks, those chunks become separate inserted pages and do not consume
+	// additional space from the source page.
 	if len(plan.QueuePages) == 0 || footnoteTextHeight <= 0 {
 		return 0
 	}

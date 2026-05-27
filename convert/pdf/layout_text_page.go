@@ -50,6 +50,10 @@ func (l *pdfPageLayout) layoutTextBlock(blockIndex int, block pdfTextBlock, styl
 	shapeTextBlock := func() ([]paragraphLine, pdfDropcapLayout, bool, error) {
 		return l.shapeTextBlock(block, style, face, runs, blockWidth, lineHeight, firstBaselineY)
 	}
+	// Shape once at the current position to know the block's natural height and
+	// dropcap exclusion. Pagination decisions may move to a new page, so shape a
+	// second time afterwards because first-line indent, active dropcaps, and
+	// footnote reserves depend on the actual baseline and page.
 	lines, dropcap, dropcapOK, err := shapeTextBlock()
 	if err != nil {
 		return err
@@ -100,6 +104,9 @@ func (l *pdfPageLayout) reserveTextDropcapFootnotes(
 	dropcapOK bool,
 	shapeTextBlock pdfShapeTextBlockFunc,
 ) ([]paragraphLine, pdfDropcapLayout, bool, error) {
+	// A dropcap block cannot be split line-by-line. If its lines introduce printed
+	// footnotes that would raise the page bottom through the already-shaped dropcap,
+	// move the whole block to a fresh page and shape it there.
 	if !dropcapOK || !l.pageHasText || !l.printedFootnoteReserve.Enabled() {
 		return lines, dropcap, dropcapOK, nil
 	}
@@ -128,6 +135,10 @@ func (l *pdfPageLayout) renderTextBlock(r *pdfTextBlockRender) error {
 	r.backgroundX = r.blockLeft + r.style.MarginLeft
 	r.backgroundWidth = blockBoxWidth(r.blockWidthLimit, r.style)
 	l.y -= r.style.PaddingTop
+
+	// A decorated block may be split across pages. fragmentPage/fragmentTop track
+	// the currently open fragment so background and border rectangles can be closed
+	// before a page break and restarted on the next page.
 	r.fragmentPage = l.page
 	r.fragmentTop = l.y + r.style.PaddingTop
 	if r.dropcapOK {
@@ -158,6 +169,9 @@ func (l *pdfPageLayout) prepareTextLinePage(r *pdfTextBlockRender, line paragrap
 		l.previousRenderedImage = false
 	}
 	if l.printedFootnoteReserve.Enabled() {
+		// Printed footnotes reserve space exactly when their reference line is kept on
+		// this page. If the reserve would push the current line below the bottom edge,
+		// start a new page before committing the references.
 		lineRefs := l.printedFootnoteReserve.LineRefs(line)
 		if len(lineRefs) > 0 {
 			reserve, err := l.printedFootnoteReserve.ReserveWithAdditionalRefs(lineRefs)
@@ -191,6 +205,9 @@ func (l *pdfPageLayout) prepareTextLinePage(r *pdfTextBlockRender, line paragrap
 		l.y -= r.style.Paragraph.FontSize
 	}
 	remainingAfterLine := len(r.lines) - lineIndex - 1
+	// This handles widow prevention at the actual split point. paginateTextBlock
+	// tries to avoid bad starts in advance, but dynamic footnote reserves can still
+	// change the usable page height while lines are being rendered.
 	if remainingAfterLine > 0 && remainingAfterLine < r.style.Widows && l.y-r.lineHeight-r.style.Paragraph.FontSize < l.bottom {
 		addPDFBlockDecoration(r.fragmentPage, r.style, r.backgroundX, r.fragmentTop, r.backgroundWidth, l.y)
 		l.newTextPage()
@@ -228,6 +245,9 @@ func (l *pdfPageLayout) renderTextLines(r *pdfTextBlockRender) error {
 			ExtraCharSpacing: line.ExtraCharSpacing,
 			BreakStats:       line.BreakStats,
 		}
+		// Italic and script glyphs can visually overhang their advance width. Shift
+		// right/center aligned lines by the visual right edge so the ink, not merely
+		// the text advance, respects the requested alignment.
 		pageLine.X = pdfPageLineXAdjustedForVisualRight(pageLine, available)
 		x = pageLine.X
 		addPDFInlineImages(l.page, line, x, l.y)
@@ -284,6 +304,9 @@ func (l *pdfPageLayout) paginateTextBlock(
 	blockSpaceBefore func() float64,
 	firstBaselineY func() float64,
 ) error {
+	// This preflight does whole-block decisions only: keep-together, keep-with-next,
+	// orphans, widows, and minimum dropcap room. Individual line splits still happen
+	// in prepareTextLinePage because footnote reserves may change page capacity.
 	textHeight := float64(len(lines)) * lineHeight
 	if dropcapOK {
 		textHeight = max(textHeight, dropcap.ReservedHeight)

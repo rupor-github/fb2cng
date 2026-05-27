@@ -3,6 +3,9 @@ package pdf
 import "slices"
 
 func resolvePDFBacklinkPagesAndText(doc *pdfDocumentSpec, pages []pdfPage) bool {
+	// This pass is intentionally called between layout attempts. It mutates backlink
+	// page numbers and regenerated backlink block text, then the caller lays out the
+	// document again to see whether those changes shifted page numbers.
 	if doc == nil || doc.Content == nil {
 		return false
 	}
@@ -23,6 +26,10 @@ func resolvePDFBacklinkPagesAndText(doc *pdfDocumentSpec, pages []pdfPage) bool 
 		}
 		visibleRefIDs := pdfVisibleBacklinkRefIDs(block.BacklinkRefIDs, anchorPages, backlinkPages)
 		if !slices.Equal(block.BacklinkRefIDs, visibleRefIDs) {
+			// Known limitation from code review: this same-page filtering is destructive.
+			// A future change should keep the original backlink IDs separate from the
+			// currently visible IDs so later convergence passes can restore a ref if page
+			// movement makes it visible again.
 			block.BacklinkRefIDs = visibleRefIDs
 			changed = true
 		}
@@ -38,6 +45,9 @@ func resolvePDFBacklinkPagesAndText(doc *pdfDocumentSpec, pages []pdfPage) bool 
 }
 
 func pdfVisibleBacklinkRefIDs(refIDs []string, anchorPages map[string]int, backlinkPages map[string]int) []string {
+	// Hide backlinks that would point to a reference on the same physical page. This
+	// is a display decision only; callers should eventually preserve the unfiltered
+	// source ID list separately for fixed-point backlink pagination.
 	if len(refIDs) == 0 || len(anchorPages) == 0 || len(backlinkPages) == 0 {
 		return refIDs
 	}

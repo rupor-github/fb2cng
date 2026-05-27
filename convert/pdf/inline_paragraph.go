@@ -38,6 +38,9 @@ func layoutInline(
 	maxWidth float64,
 	shape paragraphLineShape,
 ) ([]paragraphLine, error) {
+	// Fast path plain text through layoutParagraph. Mixed inline styles are expanded
+	// to fragment-aware units but still use the same paragraph-wide break optimizer,
+	// so plain and styled paragraphs have matching wrapping behavior.
 	if shape.TextShapers == nil {
 		shape.TextShapers = doc.TextShapers
 	}
@@ -116,6 +119,9 @@ func layoutPreformattedParagraph(
 	style paragraphStyle,
 	maxWidth float64,
 ) ([]paragraphLine, error) {
+	// white-space: pre-wrap keeps explicit newlines and preserves spaces. Build
+	// glyph pieces first so wrapping can happen between rendered glyphs without
+	// losing per-run font/link/image metadata.
 	if style.FontSize <= 0 {
 		return nil, fmt.Errorf("paragraph font size must be positive: %g", style.FontSize)
 	}
@@ -292,6 +298,9 @@ func inlineParagraphWords(
 	base paragraphStyle,
 	maxWidth float64,
 ) ([]paragraphInlineWord, error) {
+	// Convert run boundaries to word objects while preserving fragment templates.
+	// Later, inlineParagraphUnits may split these words for hyphenation or emergency
+	// wrapping without losing style information for each piece.
 	words := make([]paragraphInlineWord, 0)
 	current := paragraphInlineWord{}
 	flushCurrent := func() {
