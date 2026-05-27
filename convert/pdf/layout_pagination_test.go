@@ -14,7 +14,8 @@ func TestLayoutPDFPagesKeepsHeadingWithNextParagraph(t *testing.T) {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
 	contentWidth := 220.0 - 48.0
-	filler := textWithParagraphLineCount(t, face, pdfStyleForBlock(pdfTextBlock{Kind: pdfBlockParagraph}).Paragraph, contentWidth, 2, "filler")
+	paragraph := newPDFStyleResolver(nil, nil).styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph}).Paragraph
+	filler := textWithParagraphLineCount(t, face, paragraph, contentWidth, 2, "filler")
 
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
@@ -85,7 +86,7 @@ func TestLayoutPDFPagesAvoidsParagraphWidowOrphanSplit(t *testing.T) {
 		t.Fatalf("builtinFont() error = %v", err)
 	}
 	contentWidth := 220.0 - 48.0
-	style := pdfStyleForBlock(pdfTextBlock{Kind: pdfBlockParagraph}).Paragraph
+	style := newPDFStyleResolver(nil, nil).styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph}).Paragraph
 	filler := textWithParagraphLineCount(t, face, style, contentWidth, 2, "filler")
 	target := textWithParagraphLineCount(t, face, style, contentWidth, 3, "target")
 

@@ -21,7 +21,7 @@ func TestPDFCollapsedBlockStylesApplyContainerVerticalMarginsOnlyAtEdges(t *test
 		{Kind: pdfBlockParagraph, Text: "one", StyleClasses: pdfStyleAnnotation},
 		{Kind: pdfBlockParagraph, Text: "two", StyleClasses: pdfStyleAnnotation},
 		{Kind: pdfBlockParagraph, Text: "outside"},
-	})
+	}, nil)
 	if styles[0].SpaceBefore != 20 || styles[0].SpaceAfter != 0 {
 		t.Fatalf("first annotation margins = %v/%v, want 20/0 after collapse", styles[0].SpaceBefore, styles[0].SpaceAfter)
 	}
@@ -62,7 +62,7 @@ func TestPDFCollapsedBlockStylesKeepsSectionH2PageBreakOnlyAtWrapperStart(t *tes
 			StyleClasses: joinStyleClasses("image-vignette", "vignette", pdfStyleVignetteSectionBot, pdfStyleSectionTitle, pdfStyleSectionTitleH2),
 			ImageID:      "bottom",
 		},
-	})
+	}, nil)
 
 	if !styles[0].PageBreakBefore || styles[0].PageBreakBeforeMode != pdfPageBreakAlways {
 		t.Fatalf(
@@ -109,7 +109,7 @@ func TestPDFCollapsedBlockStylesTreatTitleHeaderFirstNextAsInlineFlow(t *testing
 			StyleClasses: joinStyleClasses(pdfStyleChapterTitle, pdfStyleChapterTitleHeader+"-next"),
 			Text:         "Three",
 		},
-	})
+	}, nil)
 
 	if styles[0].SpaceBefore != pdfDefaultCSSRootFontSize*2 || styles[0].SpaceAfter != 0 {
 		t.Fatalf("first title margins = %v/%v, want wrapper top and no internal bottom", styles[0].SpaceBefore, styles[0].SpaceAfter)
@@ -157,7 +157,7 @@ func TestPDFCollapsedBlockStylesUsesKP3MarginsForImageTitleStack(t *testing.T) {
 		},
 		{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine},
 		{Kind: pdfBlockSubtitle, StyleName: pdfStyleSubtitle, Text: "Cross links"},
-	})
+	}, nil)
 
 	if styles[2].SpaceBefore != pdfTitleAfterImageSpaceBefore {
 		t.Fatalf("title text after image margin-top = %v, want KP3 title-after-image margin %v", styles[2].SpaceBefore, pdfTitleAfterImageSpaceBefore)
@@ -183,7 +183,7 @@ func TestPDFCollapsedBlockStylesUsesKP3MarginsForFullWidthImageAfterEmptyLine(t 
 	img.Dim.Width = 580
 	img.Dim.Height = 458
 
-	styles := resolver.collapsedBlockStylesWithImages([]pdfTextBlock{
+	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
 		{Kind: pdfBlockParagraph, StyleName: pdfStyleParagraph, Text: "before"},
 		{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine},
 		{Kind: pdfBlockImage, StyleName: pdfStyleImage, ImageID: "full"},
@@ -209,7 +209,7 @@ func TestPDFCollapsedBlockStylesDoesNotUseFullWidthImageMarginsForDirectCaption(
 	img.Dim.Width = 580
 	img.Dim.Height = 458
 
-	styles := resolver.collapsedBlockStylesWithImages([]pdfTextBlock{
+	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
 		{Kind: pdfBlockParagraph, StyleName: pdfStyleParagraph, Text: "before"},
 		{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine},
 		{Kind: pdfBlockImage, StyleName: pdfStyleImage, ImageID: "full"},
@@ -240,7 +240,7 @@ func TestPDFCollapsedBlockStylesKeepContainerThroughEmptyLine(t *testing.T) {
 		{Kind: pdfBlockParagraph, Text: "one", StyleClasses: pdfStyleAnnotation},
 		{Kind: pdfBlockEmptyLine, StyleName: pdfStyleEmptyLine, StyleClasses: pdfStyleAnnotation},
 		{Kind: pdfBlockParagraph, Text: "two", StyleClasses: pdfStyleAnnotation},
-	})
+	}, nil)
 	if !styles[1].Hidden {
 		t.Fatalf("empty line hidden = false, want hidden")
 	}
@@ -263,7 +263,7 @@ func TestPDFCollapsedBlockStylesCollapseAdjacentMargins(t *testing.T) {
 	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
 		{Kind: pdfBlockParagraph, StyleName: "before", Text: "before"},
 		{Kind: pdfBlockParagraph, StyleName: "after", Text: "after"},
-	})
+	}, nil)
 	if styles[0].SpaceAfter != 0 {
 		t.Fatalf("previous margin-bottom = %v, want 0", styles[0].SpaceAfter)
 	}
@@ -280,7 +280,7 @@ func TestPDFCollapsedBlockStylesDoesNotCollapseTableMargins(t *testing.T) {
 	styles := resolver.collapsedBlockStyles([]pdfTextBlock{
 		{Kind: pdfBlockTable, StyleName: pdfStyleTable, Table: &fb2.Table{}},
 		{Kind: pdfBlockImage, StyleName: pdfStyleImage, ImageID: "after"},
-	})
+	}, nil)
 	if styles[0].SpaceAfter != 11 || styles[1].SpaceBefore != 13 {
 		t.Fatalf("table/image margins collapsed: table after=%v image before=%v, want 11/13", styles[0].SpaceAfter, styles[1].SpaceBefore)
 	}
@@ -298,7 +298,7 @@ func TestPDFCollapsedBlockStylesHandlesNegativeMargins(t *testing.T) {
 		{Kind: pdfBlockParagraph, StyleName: "negative", Text: "negative"},
 		{Kind: pdfBlockParagraph, StyleName: "more-negative", Text: "more-negative"},
 		{Kind: pdfBlockParagraph, StyleName: "least-negative", Text: "least-negative"},
-	})
+	}, nil)
 	if styles[1].SpaceBefore != 4 {
 		t.Fatalf("mixed-sign collapsed margin = %v, want 4", styles[1].SpaceBefore)
 	}
@@ -316,7 +316,7 @@ func TestPDFCollapsedBlockStylesTreatsPageBreakAsBarrier(t *testing.T) {
 		{Kind: pdfBlockParagraph, StyleName: "before", Text: "before"},
 		{Kind: pdfBlockPageBreak},
 		{Kind: pdfBlockParagraph, StyleName: "after", Text: "after"},
-	})
+	}, nil)
 	if styles[0].SpaceAfter != 4 || styles[2].SpaceBefore != 6 {
 		t.Fatalf("page break collapsed margins unexpectedly: before mb=%v after mt=%v", styles[0].SpaceAfter, styles[2].SpaceBefore)
 	}
@@ -332,7 +332,7 @@ func TestPDFCollapsedBlockStylesAppliesEmptyLineMarginToNextText(t *testing.T) {
 		{Kind: pdfBlockParagraph, StyleName: "before", Text: "before"},
 		{Kind: pdfBlockEmptyLine, StyleName: "empty"},
 		{Kind: pdfBlockParagraph, StyleName: "after", Text: "after"},
-	})
+	}, nil)
 	if !styles[1].Hidden {
 		t.Fatalf("empty line style hidden = false, want skipped layout block")
 	}
@@ -350,7 +350,7 @@ func TestPDFCollapsedBlockStylesAppliesEmptyLineBeforeImageToPreviousBlock(t *te
 		{Kind: pdfBlockParagraph, StyleName: "before", Text: "before"},
 		{Kind: pdfBlockEmptyLine, StyleName: "empty"},
 		{Kind: pdfBlockImage, ImageID: "image"},
-	})
+	}, nil)
 	if styles[0].SpaceAfter != 6 || styles[2].SpaceBefore != 0 {
 		t.Fatalf("empty line before image margins: before mb=%v image mt=%v, want 6/0", styles[0].SpaceAfter, styles[2].SpaceBefore)
 	}
@@ -371,7 +371,7 @@ func TestPDFCollapsedBlockStylesSkipsHiddenBlocks(t *testing.T) {
 		{Kind: pdfBlockParagraph, StyleName: "before", Text: "before"},
 		{Kind: pdfBlockParagraph, StyleName: "hidden", Text: "hidden"},
 		{Kind: pdfBlockParagraph, StyleName: "after", Text: "after"},
-	})
+	}, nil)
 	if styles[0].SpaceAfter != 0 || styles[2].SpaceBefore != 6 {
 		t.Fatalf("hidden block margins affected collapse: before mb=%v after mt=%v", styles[0].SpaceAfter, styles[2].SpaceBefore)
 	}

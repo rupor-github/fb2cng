@@ -6,7 +6,7 @@ const pdfLineWidthTolerance = 0.001
 
 func pdfPageLineAdvanceWidth(line pdfPageLine) float64 {
 	if len(line.Fragments) == 0 {
-		return shapedWidthPointsWithSpacing(line.Text, line.FontSize, line.LetterSpacing)
+		return shapedWidthPoints(line.Text, line.FontSize, line.LetterSpacing)
 	}
 	width := 0.0
 	for _, fragment := range line.Fragments {

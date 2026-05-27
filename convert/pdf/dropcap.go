@@ -284,7 +284,7 @@ func buildPDFDropcapLayout(
 	}
 	fragment := paragraphLineFragment{
 		Text:          shaped,
-		Width:         shapedWidthPointsWithSpacing(shaped, dropcapStyle.FontSize, dropcapStyle.LetterSpacing),
+		Width:         shapedWidthPoints(shaped, dropcapStyle.FontSize, dropcapStyle.LetterSpacing),
 		FontSize:      dropcapStyle.FontSize,
 		LetterSpacing: dropcapStyle.LetterSpacing,
 		FontKey:       dropcapKey,

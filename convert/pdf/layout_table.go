@@ -81,14 +81,14 @@ func layoutPDFTable(
 		}
 		runs, links = pdfDisablePrintedFootnoteLinks(doc.Content, block.StyleClasses, block.ContextClasses, runs, links)
 		runs = applyPDFPseudoContentToInlineRuns(runs, tableResolver)
-		runs = inlineRunsWithContext(runs, joinStyleClasses(block.ContextClasses, pdfStyleTable))
+		runs = contextInlineRuns(runs, joinStyleClasses(block.ContextClasses, pdfStyleTable))
 		cellDoc := doc
 		cellDoc.Styles = tableResolver
 		face, _, err := fontForStyle(doc.Fonts, cellStyle.Paragraph)
 		if err != nil {
 			return pdfTableLayout{}, err
 		}
-		lines, err := layoutInlineWithShape(
+		lines, err := layoutInline(
 			cellDoc,
 			doc.Fonts,
 			tableResolver,
@@ -219,7 +219,7 @@ func pdfTableCellMinWidth(doc pdfDocumentSpec, style pdfBlockResolvedStyle, cell
 			if err != nil {
 				return 0, err
 			}
-			maxWord = shapedWidthPointsWithSpacing(shaped, style.Paragraph.FontSize, style.Paragraph.LetterSpacing)
+			maxWord = shapedWidthPoints(shaped, style.Paragraph.FontSize, style.Paragraph.LetterSpacing)
 		}
 	} else {
 		for _, word := range strings.Fields(text) {
@@ -227,7 +227,7 @@ func pdfTableCellMinWidth(doc pdfDocumentSpec, style pdfBlockResolvedStyle, cell
 			if err != nil {
 				return 0, err
 			}
-			maxWord = max(maxWord, shapedWidthPointsWithSpacing(shaped, style.Paragraph.FontSize, style.Paragraph.LetterSpacing))
+			maxWord = max(maxWord, shapedWidthPoints(shaped, style.Paragraph.FontSize, style.Paragraph.LetterSpacing))
 		}
 	}
 	if maxWord <= 0 {

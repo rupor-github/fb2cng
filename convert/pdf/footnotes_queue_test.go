@@ -67,7 +67,7 @@ func TestBuildPDFPrintedFootnoteQueueAddsNestedRefsAfterMainRefs(t *testing.T) {
 		t.Fatalf("queue = %#v, want %#v", queue, want)
 	}
 
-	mainBlocks := pdfPrintedFootnoteBlocksForQueueEntry(c, footnotes["n1"], queue[0], false, nil)
+	mainBlocks := pdfFootnoteQueueBlocks(c, footnotes["n1"], queue[0], false, nil)
 	if len(mainBlocks) == 0 || mainBlocks[0].Text != "1\u00A01" {
 		t.Fatalf("main queued blocks = %#v, want page-local label plus template label", mainBlocks)
 	}

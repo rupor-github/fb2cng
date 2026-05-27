@@ -35,14 +35,6 @@ func newPDFStyleResolverWithCSS(t *testing.T, css string) *pdfStyleResolver {
 	return newPDFStyleResolver(book, zaptest.NewLogger(t))
 }
 
-func pdfStyleForBlock(block pdfTextBlock) pdfBlockResolvedStyle {
-	return newPDFStyleResolver(nil, nil).styleForBlock(block)
-}
-
-func (r *pdfStyleResolver) collapsedBlockStyles(blocks []pdfTextBlock) []pdfBlockResolvedStyle {
-	return r.collapsedBlockStylesWithImages(blocks, nil)
-}
-
 func textWithParagraphLineCount(t *testing.T, face *builtinFontFace, style paragraphStyle, width float64, wantLines int, word string) string {
 	t.Helper()
 	for words := 1; words <= 80; words++ {
@@ -51,7 +43,7 @@ func textWithParagraphLineCount(t *testing.T, face *builtinFontFace, style parag
 			parts[i] = word
 		}
 		text := strings.Join(parts, " ")
-		lines, err := layoutParagraph(face, text, style, width)
+		lines, err := layoutParagraph(face, text, style, width, paragraphLineShape{})
 		if err != nil {
 			t.Fatalf("layoutParagraph() error = %v", err)
 		}

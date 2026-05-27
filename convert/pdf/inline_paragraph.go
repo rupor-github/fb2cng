@@ -26,7 +26,7 @@ type inlineGlyphPiece struct {
 	Newline  bool
 }
 
-func layoutInlineWithShape(
+func layoutInline(
 	doc pdfDocumentSpec,
 	registry *pdfFontRegistry,
 	resolver *pdfStyleResolver,
@@ -47,7 +47,7 @@ func layoutInlineWithShape(
 		return layoutPreformattedParagraph(doc, registry, resolver, runs, style, maxWidth)
 	}
 	if !hasInlineStyle(runs) {
-		return layoutParagraphWithShape(baseFace, plainInlineRunText(runs), style, maxWidth, shape)
+		return layoutParagraph(baseFace, plainInlineRunText(runs), style, maxWidth, shape)
 	}
 	if style.FontSize <= 0 {
 		return nil, fmt.Errorf("paragraph font size must be positive: %g", style.FontSize)
@@ -63,7 +63,7 @@ func layoutInlineWithShape(
 	if len(words) == 0 {
 		return nil, nil
 	}
-	spaceFragment, err := inlineParagraphSpace(registry, style)
+	spaceFragment, err := inlineRunFragment(pdfDocumentSpec{}, registry, nil, style, pdfInlineRun{}, " ", 0)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +72,7 @@ func layoutInlineWithShape(
 		return nil, err
 	}
 	units = splitInlineEmergencyParagraphUnits(units, style, maxWidth, shape)
-	breaks := chooseBreaksWithShape(units, spaceFragment.Width, style, maxWidth, shape)
+	breaks := chooseBreaks(units, spaceFragment.Width, style, maxWidth, shape)
 	lines := make([]paragraphLine, 0, len(breaks))
 	finalizer := newParagraphLineFinalizer(style, maxWidth, shape)
 	start := 0
@@ -351,10 +351,6 @@ func inlineParagraphWords(
 	return words, nil
 }
 
-func inlineParagraphSpace(registry *pdfFontRegistry, base paragraphStyle) (paragraphLineFragment, error) {
-	return inlineRunFragment(pdfDocumentSpec{}, registry, nil, base, pdfInlineRun{}, " ", 0)
-}
-
 func inlineRunFragment(
 	doc pdfDocumentSpec,
 	registry *pdfFontRegistry,
@@ -393,7 +389,7 @@ func inlineRunFragment(
 	}
 	return paragraphLineFragment{
 		Text:          shaped,
-		Width:         shapedWidthPointsWithSpacing(shaped, style.FontSize, style.LetterSpacing),
+		Width:         shapedWidthPoints(shaped, style.FontSize, style.LetterSpacing),
 		FontSize:      style.FontSize,
 		LetterSpacing: style.LetterSpacing,
 		FontKey:       key,
@@ -470,7 +466,7 @@ func inlineLineBoxMetrics(face *builtinFontFace, style paragraphStyle, lineHeigh
 func inlineRunParagraphStyle(resolver *pdfStyleResolver, base paragraphStyle, run pdfInlineRun) paragraphStyle {
 	style := inlineClassParagraphStyle(resolver, base, run)
 	style = applyInlineRunDirectStyle(style, run, true)
-	if inlineRunIsFootnoteLink(run) {
+	if inlineRunHasStyleClass(run, pdfStyleLinkFootnote) {
 		if resolverHasDefaultFootnoteLinkStyle(resolver, run) {
 			contextStyle := inlineFootnoteContextParagraphStyle(resolver, base, run)
 			factor := inlineFootnoteLinkFontSizeFactor(run)
@@ -511,10 +507,6 @@ func inlineFootnoteContextParagraphStyle(resolver *pdfStyleResolver, base paragr
 	contextRun.StyleClasses = removeInlineRunStyleClass(run.StyleClasses, pdfStyleLinkFootnote)
 	style := inlineClassParagraphStyle(resolver, base, contextRun)
 	return applyInlineRunDirectStyle(style, contextRun, false)
-}
-
-func inlineRunIsFootnoteLink(run pdfInlineRun) bool {
-	return inlineRunHasStyleClass(run, pdfStyleLinkFootnote)
 }
 
 func inlineRunHasSuperscriptContext(run pdfInlineRun) bool {
@@ -671,7 +663,7 @@ func inlineRunHasContextClass(run pdfInlineRun, className string) bool {
 	return false
 }
 
-func inlineRunsWithContext(runs []pdfInlineRun, contextClasses string) []pdfInlineRun {
+func contextInlineRuns(runs []pdfInlineRun, contextClasses string) []pdfInlineRun {
 	contextClasses = strings.TrimSpace(contextClasses)
 	if contextClasses == "" || len(runs) == 0 {
 		return runs
@@ -1054,7 +1046,7 @@ func inlinePiecesFragment(pieces []inlineGlyphPiece, template paragraphLineFragm
 	}
 	fragment := template
 	fragment.Text = shapedText{Glyphs: glyphs, Used: used}
-	fragment.Width = shapedWidthPointsWithSpacing(fragment.Text, fragment.FontSize, fragment.LetterSpacing)
+	fragment.Width = shapedWidthPoints(fragment.Text, fragment.FontSize, fragment.LetterSpacing)
 	return fragment
 }
 
@@ -1076,7 +1068,7 @@ func inlineHyphenFragments(
 		return nil, 0, fmt.Errorf("shape inline hyphen: %w", err)
 	}
 	style.Text = shaped
-	style.Width = shapedWidthPointsWithSpacing(shaped, style.FontSize, style.LetterSpacing) + max(style.LetterSpacing, 0)
+	style.Width = shapedWidthPoints(shaped, style.FontSize, style.LetterSpacing) + max(style.LetterSpacing, 0)
 	return []paragraphLineFragment{style}, style.Width, nil
 }
 

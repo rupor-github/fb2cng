@@ -2,6 +2,7 @@ package pdf
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"fbc/common"
 	"fbc/config"
@@ -139,7 +140,7 @@ func insertAnnotationPageBlocks(
 		title = "Annotation"
 	}
 	annotationBlocks := []pdfTextBlock{{Kind: pdfBlockPageBreak, ID: "annotation-page", Text: title}}
-	appendTitleBlocksWithOptions(&annotationBlocks, pdfTitleBlockOptions{
+	appendTitleBlocks(&annotationBlocks, pdfTitleBlockOptions{
 		Content:         c,
 		Title:           pdfTitleFromStrings(title),
 		Depth:           1,
@@ -147,7 +148,12 @@ func insertAnnotationPageBlocks(
 		HeaderStyleName: pdfStyleAnnotationTitle,
 		ContextClasses:  pdfStyleAnnotationTitle,
 	})
-	appendFlowBlocks(&annotationBlocks, c, c.Book.Description.TitleInfo.Annotation.Items, 1, nil, pdfStyleAnnotation, pdfStyleAnnotation, false)
+	appendFlowBlocks(&annotationBlocks, c.Book.Description.TitleInfo.Annotation.Items, pdfBlockBuildContext{
+		Content:        c,
+		Depth:          1,
+		StyleClasses:   pdfStyleAnnotation,
+		ContextClasses: pdfStyleAnnotation,
+	})
 	out := make([]pdfTextBlock, 0, len(annotationBlocks)+len(blocks))
 	out = append(out, annotationBlocks...)
 	out = append(out, blocks...)
@@ -164,7 +170,7 @@ func insertTOCPageBlocks(blocks []pdfTextBlock, c *content.Content, entries []*s
 	if cfg == nil || cfg.TOCPage.Placement == common.TOCPagePlacementNone || len(entries) == 0 {
 		return blocks
 	}
-	tocBlocks := buildTOCPageBlocksWithTitle(pdfTOCPageTitle(c, cfg), entries, cfg.TOCPage.ChaptersWithoutTitle, cfg.TOCType)
+	tocBlocks := buildTOCPageBlocks(pdfTOCPageTitle(c, cfg), entries, cfg.TOCPage.ChaptersWithoutTitle, cfg.TOCType)
 	if len(tocBlocks) == 0 {
 		return blocks
 	}
@@ -184,13 +190,13 @@ func insertTOCPageBlocks(blocks []pdfTextBlock, c *content.Content, entries []*s
 	}
 }
 
-func buildTOCPageBlocksWithTitle(title *fb2.Title, entries []*structure.TOCEntry, includeUntitled bool, tocType common.TOCType) []pdfTextBlock {
+func buildTOCPageBlocks(title *fb2.Title, entries []*structure.TOCEntry, includeUntitled bool, tocType common.TOCType) []pdfTextBlock {
 	items := flattenPDFTOCEntries(entries, includeUntitled, 1)
 	if len(items) == 0 {
 		return nil
 	}
 	blocks := []pdfTextBlock{{Kind: pdfBlockPageBreak, ID: "toc-page", Text: "Contents"}}
-	appendTitleBlocksWithOptions(&blocks, pdfTitleBlockOptions{
+	appendTitleBlocks(&blocks, pdfTitleBlockOptions{
 		Title:           title,
 		Depth:           1,
 		ID:              "toc-page-title",
@@ -210,7 +216,7 @@ func buildTOCPageBlocksWithTitle(title *fb2.Title, entries []*structure.TOCEntry
 				Runs:      []pdfInlineRun{{Text: title, StyleClasses: pdfStyleLinkTOC}},
 				Depth:     max(node.Item.Level, 1),
 				StyleName: pdfStyleTOCItem,
-				Links:     []pdfTextLink{{Start: 0, End: runeLenString(title), Href: "#" + node.Item.ID}},
+				Links:     []pdfTextLink{{Start: 0, End: utf8.RuneCountInString(title), Href: "#" + node.Item.ID}},
 			})
 			appendTOCNodeBlocks(node.Children)
 		}
@@ -317,12 +323,12 @@ func appendUnitBlocks(
 	switch unit.Kind {
 	case structure.UnitBodyImage:
 		if unit.Body != nil {
-			appendImageBlockWithOptions(blocks, pdfImageBlockOptions{Image: unit.Body.Image, FallbackID: unit.ID})
+			appendImageBlock(blocks, pdfImageBlockOptions{Image: unit.Body.Image, FallbackID: unit.ID})
 		}
 	case structure.UnitBodyIntro:
 		appendBodyIntroBlocks(blocks, c, unit.Body, !splitBodies[unit.Body])
 	case structure.UnitSection:
-		appendSectionBlocksWithOptions(blocks, pdfSectionBlockOptions{
+		appendSectionBlocks(blocks, pdfSectionBlockOptions{
 			Content:       c,
 			Section:       unit.Section,
 			Depth:         unit.TitleDepth,

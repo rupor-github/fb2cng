@@ -11,7 +11,7 @@ func pdfPrintedFootnoteQueueBlocks(doc pdfDocumentSpec, queue []pdfPrintedFootno
 		if !ok {
 			continue
 		}
-		entryBlocks := pdfPrintedFootnoteBlocksForQueueEntry(doc.Content, note, entry, false, doc.Styles)
+		entryBlocks := pdfFootnoteQueueBlocks(doc.Content, note, entry, false, doc.Styles)
 		blocks = append(blocks, applyPDFPrintedFootnoteQueueReferenceLabels(entryBlocks, doc.Content, labels, doc.Styles)...)
 	}
 	return blocks

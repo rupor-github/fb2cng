@@ -60,9 +60,9 @@ func TestApplyPDFPageLocalFootnoteReferenceLabelsKeepsInlineImageFootnoteWidth(t
 		t.Fatalf("shape ref: %v", err)
 	}
 	pages := []pdfPage{{Lines: []pdfPageLine{{Fragments: []pdfPageLineFragment{
-		{Text: prefix, Width: shapedWidthPoints(prefix, pdfBaseFontSize), FontSize: pdfBaseFontSize, FontKey: face.Key},
+		{Text: prefix, Width: shapedWidthPoints(prefix, pdfBaseFontSize, 0), FontSize: pdfBaseFontSize, FontKey: face.Key},
 		{Text: ref, Width: 40, FontSize: pdfBaseFontSize, FontKey: face.Key, FootnoteID: "n1", ImageID: "word.png", ImageHeight: 8},
-		{Text: suffix, Width: shapedWidthPoints(suffix, pdfBaseFontSize), FontSize: pdfBaseFontSize, FontKey: face.Key},
+		{Text: suffix, Width: shapedWidthPoints(suffix, pdfBaseFontSize, 0), FontSize: pdfBaseFontSize, FontKey: face.Key},
 	}}}}}
 	used := make(map[pdfFontKey]map[uint16]shapedGlyph)
 
@@ -101,9 +101,9 @@ func TestApplyPDFPageLocalFootnoteReferenceLabelsRejustifiesChangedLine(t *testi
 		t.Fatalf("shape new ref: %v", err)
 	}
 	fragments := []pdfPageLineFragment{
-		{Text: prefix, Width: shapedWidthPoints(prefix, pdfBaseFontSize), FontSize: pdfBaseFontSize, FontKey: face.Key},
-		{Text: ref, Width: shapedWidthPoints(ref, pdfBaseFontSize), FontSize: pdfBaseFontSize, FontKey: face.Key, FootnoteID: "n1"},
-		{Text: suffix, Width: shapedWidthPoints(suffix, pdfBaseFontSize), FontSize: pdfBaseFontSize, FontKey: face.Key},
+		{Text: prefix, Width: shapedWidthPoints(prefix, pdfBaseFontSize, 0), FontSize: pdfBaseFontSize, FontKey: face.Key},
+		{Text: ref, Width: shapedWidthPoints(ref, pdfBaseFontSize, 0), FontSize: pdfBaseFontSize, FontKey: face.Key, FootnoteID: "n1"},
+		{Text: suffix, Width: shapedWidthPoints(suffix, pdfBaseFontSize, 0), FontSize: pdfBaseFontSize, FontKey: face.Key},
 	}
 	line := pdfPageLine{
 		FontSize:         pdfBaseFontSize,
@@ -114,12 +114,15 @@ func TestApplyPDFPageLocalFootnoteReferenceLabelsRejustifiesChangedLine(t *testi
 	newNaturalWidth := shapedWidthPoints(
 		prefix,
 		pdfBaseFontSize,
+		0,
 	) + shapedWidthPoints(
 		newRef,
 		pdfBaseFontSize,
+		0,
 	) + shapedWidthPoints(
 		suffix,
 		pdfBaseFontSize,
+		0,
 	)
 	line.BreakStats.AvailableWidth = newNaturalWidth + 1
 	pages := []pdfPage{{Lines: []pdfPageLine{line}}}

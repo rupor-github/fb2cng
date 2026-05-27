@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"slices"
 	"strings"
 
 	"fbc/content"
@@ -38,7 +39,7 @@ func pdfPrintedFootnoteQueueReferenceRuns(
 	if len(runs) == 0 || len(labels) == 0 {
 		return runs
 	}
-	out := clonePDFInlineRuns(runs)
+	out := slices.Clone(runs)
 	for i := 0; i < len(out); i++ {
 		id, ok := pdfPrintedFootnoteRunTargetID(out[i], labels)
 		if !ok {

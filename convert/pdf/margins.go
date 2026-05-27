@@ -6,7 +6,7 @@ import (
 	"fbc/fb2"
 )
 
-func (r *pdfStyleResolver) collapsedBlockStylesWithImages(blocks []pdfTextBlock, images fb2.BookImages) []pdfBlockResolvedStyle {
+func (r *pdfStyleResolver) collapsedBlockStyles(blocks []pdfTextBlock, images fb2.BookImages) []pdfBlockResolvedStyle {
 	if r == nil {
 		r = newPDFStyleResolver(nil, nil)
 	}

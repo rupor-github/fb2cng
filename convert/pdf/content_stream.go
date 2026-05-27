@@ -409,7 +409,7 @@ func writeDecorationLine(buf *bytes.Buffer, x1, y, x2 float64) {
 }
 
 func decoratedLineWidth(line pdfPageLine) float64 {
-	width := shapedWidthPointsWithSpacing(line.Text, line.FontSize, line.LetterSpacing)
+	width := shapedWidthPoints(line.Text, line.FontSize, line.LetterSpacing)
 	width += line.ExtraCharSpacing * float64(max(len(line.Text.Glyphs)-1, 0))
 	if line.ExtraWordSpacing == 0 {
 		return width

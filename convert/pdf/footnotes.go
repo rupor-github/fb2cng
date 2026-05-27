@@ -2,6 +2,7 @@ package pdf
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"fbc/common"
@@ -247,27 +248,20 @@ func clonePDFTextBlocks(blocks []pdfTextBlock) []pdfTextBlock {
 
 func clonePDFTextBlock(block pdfTextBlock) pdfTextBlock {
 	clone := block
-	clone.Runs = clonePDFInlineRuns(block.Runs)
+	clone.Runs = slices.Clone(block.Runs)
 	if len(block.Links) > 0 {
-		clone.Links = append([]pdfTextLink(nil), block.Links...)
+		clone.Links = slices.Clone(block.Links)
 	}
 	if len(block.BacklinkRefIDs) > 0 {
-		clone.BacklinkRefIDs = append([]string(nil), block.BacklinkRefIDs...)
+		clone.BacklinkRefIDs = slices.Clone(block.BacklinkRefIDs)
 	}
 	if len(block.TableCellRuns) > 0 {
 		clone.TableCellRuns = make(map[pdfTableCellKey][]pdfInlineRun, len(block.TableCellRuns))
 		for key, runs := range block.TableCellRuns {
-			clone.TableCellRuns[key] = clonePDFInlineRuns(runs)
+			clone.TableCellRuns[key] = slices.Clone(runs)
 		}
 	}
 	return clone
-}
-
-func clonePDFInlineRuns(runs []pdfInlineRun) []pdfInlineRun {
-	if len(runs) == 0 {
-		return nil
-	}
-	return append([]pdfInlineRun(nil), runs...)
 }
 
 func clonePDFTitle(title *fb2.Title) *fb2.Title {

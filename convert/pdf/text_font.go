@@ -321,9 +321,9 @@ func (s *openTypePDFTextShaper) Shape(text string, _ pdfShapeOptions) (shapedTex
 		} else {
 			seenClusters[start] = true
 		}
-		xOffset := fixedFontUnitsToPDFWidth(hbGlyph.XOffset, face.UnitsPerEm)
-		inkLeft := xOffset + fixedFontUnitsToPDFWidth(hbGlyph.XBearing, face.UnitsPerEm)
-		inkRight := inkLeft + fixedFontUnitsToPDFWidth(hbGlyph.Width, face.UnitsPerEm)
+		xOffset := fontUnitsToPDFWidth(hbGlyph.XOffset.Round(), face.UnitsPerEm)
+		inkLeft := xOffset + fontUnitsToPDFWidth(hbGlyph.XBearing.Round(), face.UnitsPerEm)
+		inkRight := inkLeft + fontUnitsToPDFWidth(hbGlyph.Width.Round(), face.UnitsPerEm)
 		if inkRight < inkLeft {
 			inkLeft, inkRight = inkRight, inkLeft
 		}
@@ -331,13 +331,13 @@ func (s *openTypePDFTextShaper) Shape(text string, _ pdfShapeOptions) (shapedTex
 			GlyphID:      uint16(hbGlyph.GlyphID),
 			Rune:         r,
 			Source:       source,
-			Width:        floatFontUnitsToPDFWidth(face.TextFace.HorizontalAdvance(hbGlyph.GlyphID), face.UnitsPerEm),
-			Advance:      fixedFontUnitsToPDFWidth(hbGlyph.Advance, face.UnitsPerEm),
+			Width:        fontUnitsToPDFWidth(int(math.Round(float64(face.TextFace.HorizontalAdvance(hbGlyph.GlyphID)))), face.UnitsPerEm),
+			Advance:      fontUnitsToPDFWidth(hbGlyph.Advance.Round(), face.UnitsPerEm),
 			HasAdvance:   true,
 			ClusterStart: start,
 			ClusterEnd:   end,
 			XOffset:      xOffset,
-			YOffset:      fixedFontUnitsToPDFWidth(hbGlyph.YOffset, face.UnitsPerEm),
+			YOffset:      fontUnitsToPDFWidth(hbGlyph.YOffset.Round(), face.UnitsPerEm),
 			InkLeft:      inkLeft,
 			InkRight:     inkRight,
 			HasInkBounds: true,
@@ -374,14 +374,6 @@ func firstRuneOrZero(text string) rune {
 		return r
 	}
 	return 0
-}
-
-func fixedFontUnitsToPDFWidth(value fixed.Int26_6, unitsPerEm int) int {
-	return fontUnitsToPDFWidth(value.Round(), unitsPerEm)
-}
-
-func floatFontUnitsToPDFWidth(value float32, unitsPerEm int) int {
-	return fontUnitsToPDFWidth(int(math.Round(float64(value))), unitsPerEm)
 }
 
 func pdfBuiltinSymbolFallbackGlyph(face *builtinFontFace, r rune) (shapedGlyph, bool, error) {
@@ -598,11 +590,7 @@ func pdfMissingGlyphAlreadyLogged(logger *pdfMissingGlyphLogger, key pdfMissingG
 	return false
 }
 
-func shapedWidthPoints(text shapedText, fontSize float64) float64 {
-	return shapedWidthPointsWithSpacing(text, fontSize, 0)
-}
-
-func shapedWidthPointsWithSpacing(text shapedText, fontSize float64, letterSpacing float64) float64 {
+func shapedWidthPoints(text shapedText, fontSize float64, letterSpacing float64) float64 {
 	width := 0
 	for _, glyph := range text.Glyphs {
 		width += shapedGlyphAdvanceWidth(glyph)
@@ -951,23 +939,15 @@ func pdfFontProgram(data []byte) (pdfFontProgramInfo, error) {
 		}, nil
 	}
 	if _, ok := rawTTFTable(data, "CFF "); ok {
-		return pdfOpenTypeCFFProgram(), nil
+		return pdfOpenTypeCFFProgram("opentype_cff"), nil
 	}
 	if _, ok := rawTTFTable(data, "CFF2"); ok {
-		return pdfOpenTypeCFF2Program(), nil
+		return pdfOpenTypeCFFProgram("opentype_cff2"), nil
 	}
 	return pdfFontProgramInfo{}, fmt.Errorf("unsupported font outline tables")
 }
 
-func pdfOpenTypeCFFProgram() pdfFontProgramInfo {
-	return pdfOpenTypeCFFProgramWithKind("opentype_cff")
-}
-
-func pdfOpenTypeCFF2Program() pdfFontProgramInfo {
-	return pdfOpenTypeCFFProgramWithKind("opentype_cff2")
-}
-
-func pdfOpenTypeCFFProgramWithKind(kind string) pdfFontProgramInfo {
+func pdfOpenTypeCFFProgram(kind string) pdfFontProgramInfo {
 	return pdfFontProgramInfo{
 		OutlineKind:     kind,
 		CIDFontSubtype:  docwriter.Name("CIDFontType0"),

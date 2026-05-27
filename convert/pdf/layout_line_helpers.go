@@ -26,7 +26,7 @@ func pdfPageLineWithFontFragments(line pdfPageLine) pdfPageLine {
 }
 
 func (line pdfPageLine) WidthFromText() float64 {
-	return shapedWidthPointsWithSpacing(line.Text, line.FontSize, line.LetterSpacing)
+	return shapedWidthPoints(line.Text, line.FontSize, line.LetterSpacing)
 }
 
 func shapedTextUsesMultiplePDFFonts(text shapedText, defaultKey pdfFontKey) bool {
@@ -69,7 +69,7 @@ func pdfPageLineFontFragment(template pdfPageLineFragment, key pdfFontKey, glyph
 	fragment := template
 	fragment.FontKey = key
 	fragment.Text = shapedText{Glyphs: glyphs, Used: used}
-	fragment.Width = shapedWidthPointsWithSpacing(fragment.Text, fragment.FontSize, fragment.LetterSpacing)
+	fragment.Width = shapedWidthPoints(fragment.Text, fragment.FontSize, fragment.LetterSpacing)
 	if hasFollowingGlyph && fragment.LetterSpacing != 0 {
 		fragment.Width += fragment.LetterSpacing
 	}

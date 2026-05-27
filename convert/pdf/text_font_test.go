@@ -147,7 +147,7 @@ func TestShapeOpenTypeTextAppliesKerningAndLigatures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("shapeOpenTypeText(AV) error = %v", err)
 	}
-	if simpleWidth, openTypeWidth := shapedWidthPoints(simpleAV, 10), shapedWidthPoints(openTypeAV, 10); openTypeWidth >= simpleWidth {
+	if simpleWidth, openTypeWidth := shapedWidthPoints(simpleAV, 10, 0), shapedWidthPoints(openTypeAV, 10, 0); openTypeWidth >= simpleWidth {
 		t.Fatalf("OpenType AV width = %v, simple width = %v, want kerning to reduce width", openTypeWidth, simpleWidth)
 	}
 	if openTypeAV.Glyphs[0].Advance >= openTypeAV.Glyphs[0].Width {
@@ -250,8 +250,8 @@ func TestPDFPageLineWithFontFragmentsSplitsBuiltInSymbolFallback(t *testing.T) {
 	for _, fragment := range line.Fragments {
 		width += fragment.Width
 	}
-	if width != shapedWidthPointsWithSpacing(shaped, line.FontSize, line.LetterSpacing) {
-		t.Fatalf("fragment width sum = %v, want original width %v", width, shapedWidthPointsWithSpacing(shaped, line.FontSize, line.LetterSpacing))
+	if width != shapedWidthPoints(shaped, line.FontSize, line.LetterSpacing) {
+		t.Fatalf("fragment width sum = %v, want original width %v", width, shapedWidthPoints(shaped, line.FontSize, line.LetterSpacing))
 	}
 }
 
@@ -351,7 +351,7 @@ func TestPDFFontRegistryLogsCFFStylesheetFontLimitations(t *testing.T) {
 		"#cff",
 		pdfFontVariant{},
 		&builtinFontFace{PostScriptName: "CFF-Regular", TextFace: &textfont.Face{}},
-		pdfOpenTypeCFFProgram(),
+		pdfOpenTypeCFFProgram("opentype_cff"),
 	)
 
 	entries := logs.FilterMessage("Loaded PDF @font-face resource with limitations").All()
@@ -619,16 +619,16 @@ func TestWrapText(t *testing.T) {
 		t.Fatalf("wrapText() produced %d lines, want at least 2", len(lines))
 	}
 	for _, line := range lines {
-		if shapedWidthPoints(line, 10) > 55 {
-			t.Errorf("wrapped line width = %v, want <= 55", shapedWidthPoints(line, 10))
+		if shapedWidthPoints(line, 10, 0) > 55 {
+			t.Errorf("wrapped line width = %v, want <= 55", shapedWidthPoints(line, 10, 0))
 		}
 	}
 }
 
-func TestShapedWidthPointsWithSpacing(t *testing.T) {
+func TestShapedWidthPoints(t *testing.T) {
 	text := shapedText{Glyphs: []shapedGlyph{{Width: 500}, {Width: 250}, {Width: 250}}}
-	if got := shapedWidthPointsWithSpacing(text, 10, 1.5); got != 13 {
-		t.Fatalf("shapedWidthPointsWithSpacing() = %v, want 13", got)
+	if got := shapedWidthPoints(text, 10, 1.5); got != 13 {
+		t.Fatalf("shapedWidthPoints() = %v, want 13", got)
 	}
 }
 
@@ -696,7 +696,7 @@ func wrapText(face *builtinFontFace, text string, fontSize, maxWidth float64) ([
 		if err != nil {
 			return nil, err
 		}
-		if line == "" || shapedWidthPoints(shapedCandidate, fontSize) <= maxWidth {
+		if line == "" || shapedWidthPoints(shapedCandidate, fontSize, 0) <= maxWidth {
 			line = candidate
 			continue
 		}

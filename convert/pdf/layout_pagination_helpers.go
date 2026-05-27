@@ -111,8 +111,8 @@ func nextBlockKeepHeight(
 		if err != nil {
 			return 0, err
 		}
-		runs := inlineRunsWithContext(block.Runs, inlineRunContextClassesForBlock(block))
-		lines, err := layoutInlineWithShape(
+		runs := contextInlineRuns(block.Runs, inlineRunContextClassesForBlock(block))
+		lines, err := layoutInline(
 			doc,
 			doc.Fonts,
 			styles,

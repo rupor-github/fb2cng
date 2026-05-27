@@ -2,6 +2,7 @@ package pdf
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"fbc/common"
 	"fbc/content"
@@ -189,13 +190,13 @@ func appendInlineSegmentText(b *strings.Builder, links *[]pdfTextLink, seg *fb2.
 	if seg.Kind == fb2.InlineImageSegment {
 		return
 	}
-	start := runeLenString(b.String())
+	start := utf8.RuneCountInString(b.String())
 	b.WriteString(seg.Text)
 	for i := range seg.Children {
 		appendInlineSegmentText(b, links, &seg.Children[i])
 	}
 	if seg.Kind == fb2.InlineLink && seg.Href != "" {
-		end := runeLenString(b.String())
+		end := utf8.RuneCountInString(b.String())
 		if end > start {
 			*links = append(*links, pdfTextLink{Start: start, End: end, Href: seg.Href})
 		}
@@ -363,8 +364,4 @@ func trimInlineRuns(runs []pdfInlineRun) []pdfInlineRun {
 		runs = runs[:last]
 	}
 	return runs
-}
-
-func runeLenString(s string) int {
-	return len([]rune(s))
 }

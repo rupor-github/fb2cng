@@ -186,7 +186,7 @@ type paragraphBreakState struct {
 	ShapeLine  int
 }
 
-func layoutParagraphWithShape(
+func layoutParagraph(
 	face *builtinFontFace,
 	text string,
 	style paragraphStyle,
@@ -267,7 +267,7 @@ func plainHyphenWidth(shapers *pdfTextShaperCache, face *builtinFontFace, style 
 	if err != nil {
 		return 0, fmt.Errorf("shape hyphen: %w", err)
 	}
-	return shapedWidthPointsWithSpacing(hyphen, style.FontSize, style.LetterSpacing) + max(style.LetterSpacing, 0), nil
+	return shapedWidthPoints(hyphen, style.FontSize, style.LetterSpacing) + max(style.LetterSpacing, 0), nil
 }
 
 func plainSpaceWidth(shapers *pdfTextShaperCache, face *builtinFontFace, style paragraphStyle) (float64, error) {
@@ -275,7 +275,7 @@ func plainSpaceWidth(shapers *pdfTextShaperCache, face *builtinFontFace, style p
 	if err != nil {
 		return 0, fmt.Errorf("shape space: %w", err)
 	}
-	return shapedWidthPointsWithSpacing(space, style.FontSize, style.LetterSpacing), nil
+	return shapedWidthPoints(space, style.FontSize, style.LetterSpacing), nil
 }
 
 func paragraphUnits(
@@ -293,7 +293,7 @@ func paragraphUnits(
 			if err != nil {
 				return nil, fmt.Errorf("shape word segment %q: %w", part.Text, err)
 			}
-			width := shapedWidthPointsWithSpacing(shaped, style.FontSize, style.LetterSpacing)
+			width := shapedWidthPoints(shaped, style.FontSize, style.LetterSpacing)
 			hyphenWidth := 0.0
 			hyphenGlyphCount := 0
 			hyphenOverhang := 0.0
@@ -402,7 +402,7 @@ func splitPlainEmergencyParagraphUnit(
 	for i, cluster := range clusters {
 		piece := paragraphUnit{
 			Text:                cluster.Text,
-			Width:               shapedWidthPointsWithSpacing(cluster.TextShape, style.FontSize, style.LetterSpacing),
+			Width:               shapedWidthPoints(cluster.TextShape, style.FontSize, style.LetterSpacing),
 			WordIndex:           unit.WordIndex,
 			GlyphCount:          len(cluster.TextShape.Glyphs),
 			RightOverhang:       shapedTextRightOverhang(cluster.TextShape, style.FontSize, style.LetterSpacing),
@@ -601,7 +601,7 @@ func assembleParagraphLines(
 	if err != nil {
 		return nil, err
 	}
-	breaks := chooseBreaksWithShape(units, spaceWidth, style, maxWidth, shape)
+	breaks := chooseBreaks(units, spaceWidth, style, maxWidth, shape)
 	lines := make([]paragraphLine, 0, len(breaks))
 	finalizer := newParagraphLineFinalizer(style, maxWidth, shape)
 	start := 0
@@ -612,7 +612,7 @@ func assembleParagraphLines(
 			return nil, fmt.Errorf("shape line: %w", err)
 		}
 
-		width := shapedWidthPointsWithSpacing(shaped, style.FontSize, style.LetterSpacing)
+		width := shapedWidthPoints(shaped, style.FontSize, style.LetterSpacing)
 		line := finalizer.finalize(i, start, br, units, shaped, width, nil, i == len(breaks)-1)
 		lines = append(lines, line)
 		start = br.End
@@ -688,7 +688,7 @@ func (f *paragraphLineFinalizer) finalize(
 	return line
 }
 
-func chooseBreaksWithShape(
+func chooseBreaks(
 	units []paragraphUnit,
 	spaceWidth float64,
 	style paragraphStyle,
@@ -711,7 +711,7 @@ func chooseBreaksWithShape(
 			states[i][j].PrevState = -1
 		}
 	}
-	states[0][stateIndexWithShape(paragraphFitnessDecent, false, 0, shapeStates)] = paragraphBreakState{
+	states[0][shapeStateIndex(paragraphFitnessDecent, false, 0, shapeStates)] = paragraphBreakState{
 		Cost:      0,
 		Prev:      -1,
 		PrevState: -1,
@@ -741,7 +741,7 @@ func chooseBreaksWithShape(
 				end := candidate.Break.End
 				fitness := candidate.Fitness
 				nextShapeLine := min(state.ShapeLine+1, shapeStates-1)
-				nextStateIdx := stateIndexWithShape(fitness, candidate.Break.Hyphenated, nextShapeLine, shapeStates)
+				nextStateIdx := shapeStateIndex(fitness, candidate.Break.Hyphenated, nextShapeLine, shapeStates)
 				cost := state.Cost + candidate.Cost
 				if cost < states[end][nextStateIdx].Cost {
 					states[end][nextStateIdx] = paragraphBreakState{
@@ -809,7 +809,7 @@ func paragraphBreakCandidatesInto(
 		if !ok {
 			indent := paragraphLineIndentForLine(start, lineIndex, style, maxWidth, shape)
 			available := max(maxWidth-indent, 1)
-			if width+paragraphBreakTerminalOverhang(units[end]) > available {
+			if width+paragraphBreakTerminalOverhangFor(units[end], units[end].HyphenText != "") > available {
 				// Later candidates only get wider until the next line start, so there is no
 				// useful non-emergency continuation from this start.
 				break
@@ -1070,7 +1070,7 @@ func stateIndex(fitness paragraphFitness, hyphenated bool) int {
 	return idx
 }
 
-func stateIndexWithShape(fitness paragraphFitness, hyphenated bool, shapeLine int, shapeStates int) int {
+func shapeStateIndex(fitness paragraphFitness, hyphenated bool, shapeLine int, shapeStates int) int {
 	shapeLine = min(max(shapeLine, 0), max(shapeStates-1, 0))
 	return shapeLine*8 + stateIndex(fitness, hyphenated)
 }
@@ -1153,16 +1153,12 @@ func paragraphLineIndentForLine(start int, lineIndex int, style paragraphStyle, 
 }
 
 func shapedTextRightOverhang(text shapedText, fontSize float64, letterSpacing float64) float64 {
-	width := shapedWidthPointsWithSpacing(text, fontSize, letterSpacing)
+	width := shapedWidthPoints(text, fontSize, letterSpacing)
 	_, right, ok := shapedTextVisualBounds(text, fontSize, letterSpacing, 0)
 	if !ok {
 		return 0
 	}
 	return max(right-width, 0)
-}
-
-func paragraphBreakTerminalOverhang(unit paragraphUnit) float64 {
-	return paragraphBreakTerminalOverhangFor(unit, unit.HyphenText != "")
 }
 
 func paragraphBreakTerminalOverhangFor(unit paragraphUnit, hyphenAfter bool) float64 {

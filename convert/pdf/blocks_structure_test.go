@@ -1,7 +1,6 @@
 package pdf
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -15,7 +14,13 @@ func TestAppendParagraphBlockWithClassesConvertsImageOnlyParagraphsToContextStyl
 	}
 	var blocks []pdfTextBlock
 
-	appendParagraphBlockWithClasses(&blocks, pdfBlockParagraph, paragraph, 1, pdfStyleCite)
+	appendParagraphBlock(&blocks, pdfParagraphBlockOptions{
+		Kind:           pdfBlockParagraph,
+		Paragraph:      paragraph,
+		Depth:          1,
+		StyleClasses:   pdfStyleCite,
+		ContextClasses: pdfStyleCite,
+	})
 
 	if len(blocks) != 1 || blocks[0].Kind != pdfBlockImage || blocks[0].ImageID != "block.png" || blocks[0].ID != "p" || blocks[0].Text != "Block" {
 		t.Fatalf("blocks = %#v, want image-only paragraph block", blocks)
@@ -31,7 +36,7 @@ func TestAppendParagraphBlockWithClassesConvertsImageOnlyParagraphsToContextStyl
 
 func TestAppendImageBlockAddsImageBlockClass(t *testing.T) {
 	var blocks []pdfTextBlock
-	appendImageBlockWithOptions(&blocks, pdfImageBlockOptions{Image: &fb2.Image{Href: "#block.png", Alt: "Block"}, FallbackID: "anchor"})
+	appendImageBlock(&blocks, pdfImageBlockOptions{Image: &fb2.Image{Href: "#block.png", Alt: "Block"}, FallbackID: "anchor"})
 	if len(blocks) != 1 || blocks[0].Kind != pdfBlockImage {
 		t.Fatalf("blocks = %#v, want one image block", blocks)
 	}
@@ -44,7 +49,13 @@ func TestAppendParagraphBlockWithClassesUsesContextSpecificSubtitleStyleName(t *
 	paragraph := &fb2.Paragraph{ID: "s", Text: []fb2.InlineSegment{{Text: "Quote subtitle"}}}
 	var blocks []pdfTextBlock
 
-	appendParagraphBlockWithClasses(&blocks, pdfBlockSubtitle, paragraph, 1, pdfStyleCiteSubtitle)
+	appendParagraphBlock(&blocks, pdfParagraphBlockOptions{
+		Kind:           pdfBlockSubtitle,
+		Paragraph:      paragraph,
+		Depth:          1,
+		StyleClasses:   pdfStyleCiteSubtitle,
+		ContextClasses: pdfStyleCiteSubtitle,
+	})
 
 	if len(blocks) != 1 || blocks[0].Kind != pdfBlockSubtitle || blocks[0].StyleName != pdfStyleCiteSubtitle ||
 		blocks[0].StyleClasses != pdfStyleCiteSubtitle {
@@ -59,7 +70,13 @@ func TestAppendParagraphBlockWithClassesConvertsImageOnlySubtitlesToImageBlocks(
 	}
 	var blocks []pdfTextBlock
 
-	appendParagraphBlockWithClasses(&blocks, pdfBlockSubtitle, paragraph, 1, "custom")
+	appendParagraphBlock(&blocks, pdfParagraphBlockOptions{
+		Kind:           pdfBlockSubtitle,
+		Paragraph:      paragraph,
+		Depth:          1,
+		StyleClasses:   "custom",
+		ContextClasses: "custom",
+	})
 
 	if len(blocks) != 1 || blocks[0].Kind != pdfBlockImage || blocks[0].ImageID != "heading.png" || blocks[0].ID != "h" ||
 		blocks[0].Text != "Heading" ||
@@ -78,7 +95,7 @@ func TestAppendEpigraphBlocksPropagatesEpigraphContextClasses(t *testing.T) {
 	}
 	var blocks []pdfTextBlock
 
-	appendEpigraphBlocks(&blocks, epigraph)
+	appendEpigraphBlocks(&blocks, nil, epigraph, "", false)
 
 	if len(blocks) != 2 {
 		t.Fatalf("blocks = %#v, want epigraph paragraph and text-author", blocks)
@@ -204,7 +221,14 @@ func TestAppendTitleBlocksWithIDAndClassesConvertsImageOnlyTitlesToStyledImageBl
 	}
 	var blocks []pdfTextBlock
 
-	appendTitleBlocksWithIDAndClasses(&blocks, title, 1, "title-id", pdfStyleChapterTitle)
+	appendTitleBlocks(&blocks, pdfTitleBlockOptions{
+		Title:           title,
+		Depth:           1,
+		ID:              "title-id",
+		HeaderStyleName: pdfHeadingStyleName(1),
+		StyleClasses:    pdfStyleChapterTitle,
+		ContextClasses:  pdfStyleChapterTitle,
+	})
 
 	if len(blocks) != 1 || blocks[0].Kind != pdfBlockImage || blocks[0].ImageID != "title.png" || blocks[0].ID != "title-id" ||
 		blocks[0].Text != "Title" ||
@@ -224,7 +248,14 @@ func TestAppendTitleBlocksWithInlineImagesStripRootHorizontalMargins(t *testing.
 	}}}}}
 	var blocks []pdfTextBlock
 
-	appendTitleBlocksWithIDHeaderAndClasses(&blocks, title, 1, "title-id", pdfStyleChapterTitleHeader, pdfStyleChapterTitle)
+	appendTitleBlocks(&blocks, pdfTitleBlockOptions{
+		Title:           title,
+		Depth:           1,
+		ID:              "title-id",
+		HeaderStyleName: pdfStyleChapterTitleHeader,
+		StyleClasses:    pdfStyleChapterTitle,
+		ContextClasses:  pdfStyleChapterTitle,
+	})
 
 	if len(blocks) != 1 || blocks[0].Kind != pdfBlockHeading {
 		t.Fatalf("blocks = %#v, want one heading block", blocks)
@@ -241,7 +272,14 @@ func TestAppendTitleBlocksWithIDHeaderAndClassesUsesBodyTitleHeaderAndPositionCl
 	}}
 	var blocks []pdfTextBlock
 
-	appendTitleBlocksWithIDHeaderAndClasses(&blocks, title, 1, "body-title", pdfStyleBodyTitleHeader, pdfStyleBodyTitle)
+	appendTitleBlocks(&blocks, pdfTitleBlockOptions{
+		Title:           title,
+		Depth:           1,
+		ID:              "body-title",
+		HeaderStyleName: pdfStyleBodyTitleHeader,
+		StyleClasses:    pdfStyleBodyTitle,
+		ContextClasses:  pdfStyleBodyTitle,
+	})
 
 	if len(blocks) != 2 {
 		t.Fatalf("blocks = %#v, want 2 title blocks", blocks)
@@ -264,7 +302,7 @@ func TestAppendTitleBlocksWithoutWrapperClassesDoNotStripRootHorizontalMargins(t
 	title := &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Line 1"}}}}}}
 	var blocks []pdfTextBlock
 
-	appendTitleBlocks(&blocks, title, 1)
+	appendTitleBlocks(&blocks, pdfTitleBlockOptions{Title: title, Depth: 1, HeaderStyleName: pdfHeadingStyleName(1)})
 
 	if len(blocks) != 1 || blocks[0].Kind != pdfBlockHeading {
 		t.Fatalf("blocks = %#v, want one heading block", blocks)
@@ -285,7 +323,14 @@ func TestAppendTitleBlocksWithIDHeaderAndClassesMarksTextAfterImage(t *testing.T
 	}}
 	var blocks []pdfTextBlock
 
-	appendTitleBlocksWithIDHeaderAndClasses(&blocks, title, 1, "title-id", pdfStyleChapterTitleHeader, pdfStyleChapterTitle)
+	appendTitleBlocks(&blocks, pdfTitleBlockOptions{
+		Title:           title,
+		Depth:           1,
+		ID:              "title-id",
+		HeaderStyleName: pdfStyleChapterTitleHeader,
+		StyleClasses:    pdfStyleChapterTitle,
+		ContextClasses:  pdfStyleChapterTitle,
+	})
 
 	if len(blocks) != 2 {
 		t.Fatalf("blocks = %#v, want image plus following text", blocks)
@@ -296,54 +341,4 @@ func TestAppendTitleBlocksWithIDHeaderAndClassesMarksTextAfterImage(t *testing.T
 	if !blocks[1].StripRootHorizontalMargins {
 		t.Fatalf("title text after image should strip root horizontal margins as wrapper child")
 	}
-}
-
-func appendTitleBlocks(blocks *[]pdfTextBlock, title *fb2.Title, depth int) {
-	appendTitleBlocksWithOptions(blocks, pdfTitleBlockOptions{Title: title, Depth: depth, HeaderStyleName: pdfHeadingStyleName(depth)})
-}
-
-func appendTitleBlocksWithIDAndClasses(blocks *[]pdfTextBlock, title *fb2.Title, depth int, id string, styleClasses string) {
-	appendTitleBlocksWithOptions(blocks, pdfTitleBlockOptions{
-		Title:           title,
-		Depth:           depth,
-		ID:              id,
-		HeaderStyleName: pdfHeadingStyleName(depth),
-		StyleClasses:    styleClasses,
-		ContextClasses:  strings.TrimSpace(styleClasses),
-	})
-}
-
-func appendTitleBlocksWithIDHeaderAndClasses(
-	blocks *[]pdfTextBlock,
-	title *fb2.Title,
-	depth int,
-	id string,
-	headerStyleName string,
-	styleClasses string,
-) {
-	appendTitleBlocksWithOptions(blocks, pdfTitleBlockOptions{
-		Title:           title,
-		Depth:           depth,
-		ID:              id,
-		HeaderStyleName: headerStyleName,
-		StyleClasses:    styleClasses,
-		ContextClasses:  strings.TrimSpace(styleClasses),
-	})
-}
-
-func appendParagraphBlockWithClasses(blocks *[]pdfTextBlock, kind pdfBlockKind, paragraph *fb2.Paragraph, depth int, styleClasses string) {
-	appendParagraphBlockWithOptions(
-		blocks,
-		pdfParagraphBlockOptions{
-			Kind:           kind,
-			Paragraph:      paragraph,
-			Depth:          depth,
-			StyleClasses:   styleClasses,
-			ContextClasses: strings.TrimSpace(styleClasses),
-		},
-	)
-}
-
-func appendEpigraphBlocks(blocks *[]pdfTextBlock, epigraph *fb2.Epigraph) {
-	appendEpigraphBlocksFull(blocks, nil, epigraph, "", false)
 }

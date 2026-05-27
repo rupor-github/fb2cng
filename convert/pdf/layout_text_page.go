@@ -43,7 +43,7 @@ func (l *pdfPageLayout) layoutTextBlock(blockIndex int, block pdfTextBlock, styl
 	if err != nil {
 		return err
 	}
-	runs := inlineRunsWithContext(block.Runs, inlineRunContextClassesForBlock(block))
+	runs := contextInlineRuns(block.Runs, inlineRunContextClassesForBlock(block))
 	lineHeight := pdfEffectiveParagraphLineHeight(style.Paragraph)
 	blockSpaceBefore := func() float64 { return pdfEffectiveBlockSpaceBefore(style, l.pageHasText, l.y, l.top) }
 	firstBaselineY := func() float64 { return l.textBlockFirstBaselineY(style, blockSpaceBefore) }
@@ -368,6 +368,6 @@ func (l *pdfPageLayout) shapeTextBlock(
 			layoutRuns = dropcap.BodyRuns
 		}
 	}
-	lines, err := layoutInlineWithShape(l.doc, l.doc.Fonts, l.styles, face, layoutText, layoutRuns, style.Paragraph, blockWidth, shape)
+	lines, err := layoutInline(l.doc, l.doc.Fonts, l.styles, face, layoutText, layoutRuns, style.Paragraph, blockWidth, shape)
 	return lines, dropcap, dropcapOK, err
 }

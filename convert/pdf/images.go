@@ -30,7 +30,8 @@ type pdfImageResource struct {
 }
 
 func fitPDFImageInBox(doc pdfDocumentSpec, img *fb2.BookImage, x, y, maxWidth, maxHeight float64) (pdfRect, bool) {
-	width, height, ok := fitPDFImageSizeWithUpscale(doc, img, maxWidth, maxHeight, false)
+	width, height := naturalPDFImageSize(doc, img)
+	width, height, ok := fitPDFImageDimensions(width, height, maxWidth, maxHeight, false)
 	if !ok {
 		return pdfRect{}, false
 	}
@@ -40,11 +41,6 @@ func fitPDFImageInBox(doc pdfDocumentSpec, img *fb2.BookImage, x, y, maxWidth, m
 		X2: x + max((maxWidth-width)/2, 0) + width,
 		Y2: y + max((maxHeight-height)/2, 0) + height,
 	}, true
-}
-
-func fitPDFImageSizeWithUpscale(doc pdfDocumentSpec, img *fb2.BookImage, maxWidth, maxHeight float64, allowUpscale bool) (float64, float64, bool) {
-	width, height := naturalPDFImageSize(doc, img)
-	return fitPDFImageDimensions(width, height, maxWidth, maxHeight, allowUpscale)
 }
 
 func fitPDFBlockImageSize(

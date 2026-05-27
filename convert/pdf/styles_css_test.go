@@ -318,7 +318,7 @@ func TestPDFStyleResolverStanzaWrapperMarginsMatchDefaultCSS(t *testing.T) {
 			StyleClasses:   joinStyleClasses(pdfStylePoem, pdfStyleStanza),
 			ContextClasses: joinStyleClasses(pdfStylePoem, pdfStyleStanza),
 		},
-	})
+	}, nil)
 	if styles[1].SpaceBefore != pdfDefaultCSSRootFontSize*0.5 {
 		t.Fatalf("first stanza line margin-top = %v, want default.css stanza top %v", styles[1].SpaceBefore, pdfDefaultCSSRootFontSize*0.5)
 	}

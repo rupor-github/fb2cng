@@ -2,6 +2,7 @@ package pdf
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"fbc/css"
@@ -98,7 +99,7 @@ func applyPDFPseudoContentToBlocks(blocks []pdfTextBlock, resolver *pdfStyleReso
 	if resolver == nil || len(resolver.pseudoContent) == 0 {
 		return blocks
 	}
-	out := slicesClone(blocks)
+	out := slices.Clone(blocks)
 	for i := range out {
 		if len(out[i].Runs) == 0 {
 			continue
@@ -141,7 +142,7 @@ func applyPDFPseudoContentToInlineRunsChanged(runs []pdfInlineRun, resolver *pdf
 	if resolver == nil || len(resolver.pseudoContent) == 0 || len(runs) == 0 {
 		return runs, false
 	}
-	out := slicesClone(runs)
+	out := slices.Clone(runs)
 	changed := false
 	for i := range out {
 		class, content, ok := resolver.pseudoContentForClasses(out[i].StyleClasses)
@@ -182,11 +183,4 @@ func pdfPseudoContentSameGroup(left pdfInlineRun, right pdfInlineRun, class stri
 		left.FootnoteID == right.FootnoteID &&
 		hasPDFStyleClass(left.StyleClasses, class) &&
 		hasPDFStyleClass(right.StyleClasses, class)
-}
-
-func slicesClone[S ~[]E, E any](s S) S {
-	if s == nil {
-		return nil
-	}
-	return append(S(nil), s...)
 }

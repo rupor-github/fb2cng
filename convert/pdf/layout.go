@@ -88,7 +88,7 @@ func (l *pdfPageLayout) initTextLayout() {
 	if l.styles == nil {
 		l.styles = newPDFStyleResolver(nil, nil)
 	}
-	l.blockStyles = l.styles.collapsedBlockStylesWithImages(l.doc.Blocks, l.doc.Images)
+	l.blockStyles = l.styles.collapsedBlockStyles(l.doc.Blocks, l.doc.Images)
 	l.contentLeft, l.contentRight, l.contentTop, l.contentBottom = pdfContentMargins(l.doc, l.styles, pdfDefaultPageMargin, false)
 	l.rootlessContentLeft, l.rootlessContentRight, _, _ = pdfContentMargins(l.doc, l.styles, pdfDefaultPageMargin, true)
 	l.contentWidth = max(l.doc.PageWidth-l.contentLeft-l.contentRight, 12)

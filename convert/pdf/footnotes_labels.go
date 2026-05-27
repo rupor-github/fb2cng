@@ -43,7 +43,7 @@ func applyPDFPageLocalFootnoteReferenceLabels(
 					return fmt.Errorf("shape page-local footnote label %q: %w", labelText, err)
 				}
 				fragment.Text = shaped
-				fragment.Width = shapedWidthPointsWithSpacing(shaped, fragment.FontSize, fragment.LetterSpacing)
+				fragment.Width = shapedWidthPoints(shaped, fragment.FontSize, fragment.LetterSpacing)
 				collectPDFTextUsedGlyphs(used, shaped, fragment.FontKey)
 				changed = true
 			}

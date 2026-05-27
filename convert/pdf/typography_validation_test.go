@@ -27,7 +27,7 @@ func TestPDFTypographyValidationFixtureShapesKerningLigaturesAndCombiningMarks(t
 			if got, want := shapedRunes(openType), sample; got != want {
 				t.Fatalf("shaped text = %q, want %q", got, want)
 			}
-			if simpleWidth, openTypeWidth := shapedWidthPoints(simple, 12), shapedWidthPoints(openType, 12); openTypeWidth >= simpleWidth {
+			if simpleWidth, openTypeWidth := shapedWidthPoints(simple, 12, 0), shapedWidthPoints(openType, 12, 0); openTypeWidth >= simpleWidth {
 				t.Fatalf("OpenType width = %v, simple width = %v, want kerning to reduce width", openTypeWidth, simpleWidth)
 			}
 		})
@@ -93,7 +93,7 @@ func TestPDFTypographyValidationFixtureLayoutsScriptsAndJustification(t *testing
 
 	for _, sample := range samples {
 		t.Run(sample.name, func(t *testing.T) {
-			lines, err := layoutParagraph(face, sample.text, style, 165)
+			lines, err := layoutParagraph(face, sample.text, style, 165, paragraphLineShape{})
 			if err != nil {
 				t.Fatalf("layoutParagraph() error = %v", err)
 			}

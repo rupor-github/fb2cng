@@ -73,7 +73,7 @@ func TestInlineSegmentsTextAndLinksNormalizesWhitespaceAndLinkRanges(t *testing.
 func TestTitleBlocksPreserveInlineLinkFormatting(t *testing.T) {
 	var blocks []pdfTextBlock
 	c := testContentWithFootnotes("note")
-	appendTitleBlocksWithOptions(&blocks, pdfTitleBlockOptions{
+	appendTitleBlocks(&blocks, pdfTitleBlockOptions{
 		Content: c,
 		Title: &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
 			{Text: "Heading"},
@@ -379,7 +379,7 @@ func TestPDFDefaultModeFootnoteBacklinksAfterTableKeepsTableMargin(t *testing.T)
 		t.Fatalf("collectTextBlocks() error = %v", err)
 	}
 	resolver := newPDFStyleResolver(c.Book, nil, nil)
-	styles := resolver.collapsedBlockStyles(blocks)
+	styles := resolver.collapsedBlockStyles(blocks, nil)
 	for i := 1; i < len(blocks); i++ {
 		if blocks[i-1].Kind == pdfBlockTable && blocks[i].Kind == pdfBlockParagraph {
 			if styles[i-1].SpaceAfter <= 0 {
@@ -546,7 +546,7 @@ func TestTitleBlocksClassifyFootnotesByContent(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var blocks []pdfTextBlock
-			appendTitleBlocksWithOptions(&blocks, pdfTitleBlockOptions{
+			appendTitleBlocks(&blocks, pdfTitleBlockOptions{
 				Content:         c,
 				Title:           &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: tt.segments}}}},
 				Depth:           tt.depth,
@@ -588,7 +588,12 @@ func TestFootnoteBodyBlocksClassifyNoteRefsByContent(t *testing.T) {
 }
 
 func TestBuildTOCPageBlocksClassifiesEntryLinks(t *testing.T) {
-	blocks := buildTOCPageBlocks([]*structure.TOCEntry{{ID: "chapter", Title: "Chapter", IncludeInTOC: true}}, true, common.TOCTypeFlat)
+	blocks := buildTOCPageBlocks(
+		pdfTitleFromStrings("Contents"),
+		[]*structure.TOCEntry{{ID: "chapter", Title: "Chapter", IncludeInTOC: true}},
+		true,
+		common.TOCTypeFlat,
+	)
 	if len(blocks) != 3 {
 		t.Fatalf("toc blocks = %#v, want title and one entry", blocks)
 	}
@@ -707,8 +712,4 @@ func TestParagraphInlineRunsPreserveFB2InlineStyles(t *testing.T) {
 	assertRun(7, "sup", func(run pdfInlineRun) bool { return run.Superscript && !run.Subscript })
 	assertRun(9, "code", func(run pdfInlineRun) bool { return run.Code && run.StyleClasses == pdfStyleCode })
 	assertRun(11, "styled", func(run pdfInlineRun) bool { return run.StyleClasses == "accent" })
-}
-
-func buildTOCPageBlocks(entries []*structure.TOCEntry, includeUntitled bool, tocType common.TOCType) []pdfTextBlock {
-	return buildTOCPageBlocksWithTitle(pdfTitleFromStrings("Contents"), entries, includeUntitled, tocType)
 }
