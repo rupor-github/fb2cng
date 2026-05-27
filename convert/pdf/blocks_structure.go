@@ -344,7 +344,7 @@ func appendTitleBlocksWithOptions(blocks *[]pdfTextBlock, opts pdfTitleBlockOpti
 			continue
 		}
 		text, links := paragraphTextAndLinks(item.Paragraph)
-		runs := paragraphInlineRunsWithBacklinks(item.Paragraph, content, pdfRegisterDefaultFootnoteBacklinks(content, styleClasses, contextClasses))
+		runs := paragraphInlineRuns(item.Paragraph, content, pdfRegisterDefaultFootnoteBacklinks(content, styleClasses, contextClasses))
 		classes := joinStyleClasses(item.Paragraph.Style, styleClasses, positionClass)
 		runs, links = pdfDisablePrintedFootnoteLinks(content, classes, contextClasses, runs, links)
 		if prevWasImageOnlyHeadingParagraph {
@@ -504,7 +504,7 @@ func pdfTableCellInlineRuns(table *fb2.Table, c *content.Content, registerBackli
 	runs := make(map[pdfTableCellKey][]pdfInlineRun, len(placedCells))
 	for _, placed := range placedCells {
 		paragraph := fb2.Paragraph{Text: placed.Cell.Content}
-		runs[pdfTableCellKey{placed.Row, placed.Col}] = paragraphInlineRunsWithBacklinks(&paragraph, c, registerBacklinks)
+		runs[pdfTableCellKey{placed.Row, placed.Col}] = paragraphInlineRuns(&paragraph, c, registerBacklinks)
 	}
 	return runs
 }
@@ -777,7 +777,7 @@ func appendParagraphBlockWithOptions(blocks *[]pdfTextBlock, opts pdfParagraphBl
 		return
 	}
 	text, links := paragraphTextAndLinks(paragraph)
-	runs := paragraphInlineRunsWithBacklinks(paragraph, content, pdfRegisterDefaultFootnoteBacklinks(content, styleClasses, contextClasses))
+	runs := paragraphInlineRuns(paragraph, content, pdfRegisterDefaultFootnoteBacklinks(content, styleClasses, contextClasses))
 	if paragraphIsCodeBlock(paragraph) {
 		styleClasses = joinStyleClasses(styleClasses, pdfStyleCode)
 	}

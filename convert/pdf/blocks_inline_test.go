@@ -106,7 +106,7 @@ func TestParagraphInlineRunsClassifyLinks(t *testing.T) {
 		{Kind: fb2.InlineLink, Href: "#note", Children: []fb2.InlineSegment{{Text: "1.1"}}},
 	}}
 
-	runs := paragraphInlineRuns(paragraph, testContentWithFootnotes("note"))
+	runs := paragraphInlineRuns(paragraph, testContentWithFootnotes("note"), false)
 	if len(runs) != 4 {
 		t.Fatalf("inline runs = %#v, want 4 runs", runs)
 	}
@@ -172,7 +172,7 @@ func TestPDFFootnoteReferenceDropsFormattingWhitespaceInsideLink(t *testing.T) {
 		{Text: ", tail"},
 	}}
 
-	runs := paragraphInlineRuns(paragraph, c)
+	runs := paragraphInlineRuns(paragraph, c, false)
 	if len(runs) != 3 {
 		t.Fatalf("runs = %#v, want body, one footnote ref, tail", runs)
 	}
@@ -504,7 +504,7 @@ func TestParagraphInlineRunsClassifyFootnotesByContent(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			runs := paragraphInlineRuns(&fb2.Paragraph{Text: tt.segments}, c)
+			runs := paragraphInlineRuns(&fb2.Paragraph{Text: tt.segments}, c, false)
 			if len(runs) != 1 {
 				t.Fatalf("inline runs = %#v, want one run", runs)
 			}
@@ -609,7 +609,7 @@ func TestParagraphInlineRunsPreserveInlineImages(t *testing.T) {
 	if text != "before after" || len(links) != 0 {
 		t.Fatalf("paragraph text/links = %q %#v, want text without image alt and no links", text, links)
 	}
-	runs := paragraphInlineRuns(paragraph, nil)
+	runs := paragraphInlineRuns(paragraph, nil, false)
 	if len(runs) != 3 {
 		t.Fatalf("inline runs = %#v, want text/image/text", runs)
 	}
@@ -629,7 +629,7 @@ func TestParagraphInlineRunsPreserveLinkedInlineImages(t *testing.T) {
 		{Text: " after"},
 	}}
 
-	runs := paragraphInlineRuns(paragraph, nil)
+	runs := paragraphInlineRuns(paragraph, nil, false)
 	if len(runs) != 3 {
 		t.Fatalf("inline runs = %#v, want text/image/text", runs)
 	}
@@ -641,7 +641,7 @@ func TestParagraphInlineRunsPreserveLinkedInlineImages(t *testing.T) {
 func TestParagraphInlineRunsPreserveImageOnlyParagraphs(t *testing.T) {
 	paragraph := &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineImageSegment, Image: &fb2.InlineImage{Href: "#heading.png"}}}}
 
-	runs := paragraphInlineRuns(paragraph, nil)
+	runs := paragraphInlineRuns(paragraph, nil, false)
 	if len(runs) != 1 || runs[0].ImageID != "heading.png" {
 		t.Fatalf("inline runs = %#v, want image-only run", runs)
 	}
@@ -654,7 +654,7 @@ func TestParagraphInlineRunsTrimScriptWhitespace(t *testing.T) {
 		{Text: " next"},
 	}}
 
-	runs := paragraphInlineRuns(paragraph, nil)
+	runs := paragraphInlineRuns(paragraph, nil, false)
 	if len(runs) != 3 {
 		t.Fatalf("inline runs = %#v, want 3 runs", runs)
 	}
@@ -666,7 +666,7 @@ func TestParagraphInlineRunsTrimScriptWhitespace(t *testing.T) {
 func TestParagraphInlineRunsPreserveCodeBlockWhitespace(t *testing.T) {
 	paragraph := &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineCode, Text: "\n  alpha\n    beta\n  "}}}
 
-	runs := paragraphInlineRuns(paragraph, nil)
+	runs := paragraphInlineRuns(paragraph, nil, false)
 	if len(runs) != 1 {
 		t.Fatalf("inline runs = %#v, want one code run", runs)
 	}
@@ -691,7 +691,7 @@ func TestParagraphInlineRunsPreserveFB2InlineStyles(t *testing.T) {
 		{Kind: fb2.InlineNamedStyle, Style: "accent", Children: []fb2.InlineSegment{{Text: "styled"}}},
 	}}
 
-	runs := paragraphInlineRuns(paragraph, nil)
+	runs := paragraphInlineRuns(paragraph, nil, false)
 	if len(runs) != 12 {
 		t.Fatalf("inline runs = %#v, want 12 style-preserving runs", runs)
 	}

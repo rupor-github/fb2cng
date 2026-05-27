@@ -24,11 +24,7 @@ func inlineRunsRenderable(runs []pdfInlineRun) bool {
 	return false
 }
 
-func paragraphInlineRuns(paragraph *fb2.Paragraph, c *content.Content) []pdfInlineRun {
-	return paragraphInlineRunsWithBacklinks(paragraph, c, false)
-}
-
-func paragraphInlineRunsWithBacklinks(paragraph *fb2.Paragraph, c *content.Content, registerBacklinks bool) []pdfInlineRun {
+func paragraphInlineRuns(paragraph *fb2.Paragraph, c *content.Content, registerBacklinks bool) []pdfInlineRun {
 	if paragraph == nil {
 		return nil
 	}
