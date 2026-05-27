@@ -4,9 +4,10 @@ version: 1
 # NOTE: Some fields (have _template in the name) must be specified using go
 # template language: https://pkg.go.dev/text/template#pkg-overview with
 # additional functions from slim-sprig package available for processing:
-# https://go-task.github.io/slim-sprig. In all cases variable .Context (string)
-# is available and is set to field name to uniquely identify processing
-# context.
+# https://go-task.github.io/slim-sprig. In all template contexts .Context
+# (string) and .Format (string) are available. .Context is set to the field
+# name to uniquely identify processing context. .Format is the requested output
+# format: epub2, epub3, kepub, kfx, azw8, or pdf.
 
 document:
   # Some programs (CoolReader and some versions of FBReader) expect "old" zip
@@ -31,27 +32,28 @@ document:
   # When output_name_template is set output file name will be created using FB2
   # metainformation
   # List of variables available:
-  # - .Title (string) - book title as specified in fb2 metainformation
+  # - .Context (string) - template field name ("output_name_template")
+  # - .Format (string) - requested output format: epub2, epub3, kepub, kfx,
+  #   azw8, or pdf
+  # - .Title (string) - book title as specified in FB2 metainformation
   # - .Series (array of { .Name (string), .Number (integer) }) - series as
-  # specified in fb2 metainformation.
-  #     NOTE: according to fictionbook schema series could be hierarchical (series
-  #     contain series and so on). Hierarchy is completely ignored - anything below
-  #     first level is not present here.
+  #   specified in FB2 metainformation.
+  #     NOTE: according to FictionBook schema series could be hierarchical
+  #     (series contain series and so on). Hierarchy is completely ignored -
+  #     anything below first level is not present here.
   # - .Language (string) - canonical string representation of a language as
-  # specified in fb2 metainformation
-  # - .Date (string) - date as specified in fb2 metainformation.
+  #   specified in FB2 metainformation
+  # - .Date (string) - date as specified in FB2 metainformation.
   #     NOTE: If valid xs:date "value" attribute is provided - it will be used,
   #     otherwise just text as defined
   # - .Authors (array of { .FirstName (string), .MiddleName (string), .LastName
-  # (string)}) as specified in fb2 metainformation
-  # - .Format (string) - string representing requested conversion (ex: epub2,
-  # epub3, kepub...)
+  #   (string) }) - authors as specified in FB2 metainformation
   # - .SourceFile (string) - base part of the source file name (no path, no
-  # extension)
-  # - .BookID (string) - book UUID as specified by fb2 metainformation or
-  # assigned by converter
-  # - .Genres (array of strings) - genres names as specified by fb2
-  # metainformation
+  #   extension)
+  # - .BookID (string) - book UUID as specified by FB2 metainformation or
+  #   assigned by converter
+  # - .Genres (array of strings) - genre names as specified by FB2
+  #   metainformation
   # NOTE: watch out for path separators, directories will be created!
   output_name_template: |
     {{- $all := "" -}}
@@ -92,27 +94,28 @@ document:
     # formatted using it. This is often used to conveniently sort device
     # library listings.
     # List of variables available:
-    # - .Title (string) - book title as specified in fb2 metainformation
+    # - .Context (string) - template field name ("title_template")
+    # - .Format (string) - requested output format: epub2, epub3, kepub, kfx,
+    #   azw8, or pdf
+    # - .Title (string) - book title as specified in FB2 metainformation
     # - .Series (array of { .Name (string), .Number (integer) }) - series as
-    # specified in fb2 metainformation.
-    #     NOTE: according to fictionbook schema series could be hierarchical (series
-    #     contain series and so on). Hierarchy is completely ignored - anything below
-    #     first level is not present here.
+    #   specified in FB2 metainformation.
+    #     NOTE: according to FictionBook schema series could be hierarchical
+    #     (series contain series and so on). Hierarchy is completely ignored -
+    #     anything below first level is not present here.
     # - .Language (string) - canonical string representation of a language as
-    # specified in fb2 metainformation
-    # - .Date (string) - date as specified in fb2 metainformation.
+    #   specified in FB2 metainformation
+    # - .Date (string) - date as specified in FB2 metainformation.
     #     NOTE: If valid xs:date "value" attribute is provided - it will be used,
     #     otherwise just text as defined
     # - .Authors (array of { .FirstName (string), .MiddleName (string), .LastName
-    # (string)}) as specified in fb2 metainformation
-    # - .Format (string) - string representing requested conversion (ex: epub2,
-    # epub3, kepub...)
+    #   (string) }) - authors as specified in FB2 metainformation
     # - .SourceFile (string) - base part of the source file name (no path, no
-    # extension)
-    # - .BookID (string) - book UUID as specified by fb2 metainformation or
-    # assigned by converter
-    # - .Genres (array of strings) - genres names as specified by fb2
-    # metainformation
+    #   extension)
+    # - .BookID (string) - book UUID as specified by FB2 metainformation or
+    #   assigned by converter
+    # - .Genres (array of strings) - genre names as specified by FB2
+    #   metainformation
     title_template: |
       {{- if gt (len .Series) 0 -}}
       {{-   with first .Series -}}
@@ -135,9 +138,12 @@ document:
     # metainformation will be formatted using it. Template is applied to each
     # available author individually. Device often uses particular format for
     # sorting books by author names. Following fields are available:
-    # - .Index (int) - 0 based index (if there is more than 1 author)
-    # - .FirstName (string),
-    # - .MiddleName (string),
+    # - .Context (string) - template field name ("creator_name_template")
+    # - .Format (string) - requested output format: epub2, epub3, kepub, kfx,
+    #   azw8, or pdf
+    # - .Index (int) - 0-based author index
+    # - .FirstName (string)
+    # - .MiddleName (string)
     # - .LastName (string)
     creator_name_template: |
       {{- .LastName -}}
@@ -234,20 +240,44 @@ document:
 
     # Template used to render backlinks from footnote bodies to original content.
     # Available fields include:
-    # - .Format (string) - output format: epub2, epub3, kepub, kfx, azw8, pdf
+    # - .Context (string) - template field name ("backlink_template")
+    # - .Format (string) - requested output format: epub2, epub3, kepub, kfx,
+    #   azw8, or pdf
+    # - .RefID (string) - unique ID for this reference occurrence
+    # - .TargetID (string) - ID of the footnote being referenced
+    # - .RefNumber (int) - 1-based reference occurrence number for this footnote
+    # - .Filename (string) - output filename containing the reference
+    # - .Href (string) - href back to the reference
     # - .PageNumber (int) - exact for PDF, approximate for EPUB/KFX/AZW8 page maps
     # - .LocationNumber (int) - generated KFX/AZW8 location number
     # - .SectionTitle (string) - nearest titled section/body when known
     # - .ChapterTitle (string) - spine/chapter title when known
-    # - .TargetID, .RefID (string) and .RefNumber (int)
     backlink_template: |
-      [{{- if eq .Format "pdf" -}}
-        {{- if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber }}{{- else -}}<{{- end -}}
+      {{- if eq .Format "pdf" -}}
+      {{-   if .PageNumber -}}
+      {{-     printf "[page\u00A0%d]" .PageNumber -}}
+      {{-   else -}}
+      {{-     "[<]" -}}
+      {{-   end -}}
       {{- else if or (eq .Format "kfx") (eq .Format "azw8") -}}
-        {{- if .LocationNumber -}}loc{{ "\u00A0" }}{{ .LocationNumber }}{{- else if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
+      {{-   if .LocationNumber -}}
+      {{-     printf "[loc\u00A0%d]" .LocationNumber -}}
+      {{-   else if .PageNumber -}}
+      {{-     printf "[page\u00A0%d]" .PageNumber -}}
+      {{-   else if .SectionTitle -}}
+      {{-     printf "[%s]" .SectionTitle -}}
+      {{-   else -}}
+      {{-     "[<]" -}}
+      {{-   end -}}
       {{- else -}}
-        {{- if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
-      {{- end -}}]
+      {{-   if .PageNumber -}}
+      {{-     printf "[page\u00A0%d]" .PageNumber -}}
+      {{-   else if .SectionTitle -}}
+      {{-     printf "[%s]" .SectionTitle -}}
+      {{-   else -}}
+      {{-     "[<]" -}}
+      {{-   end -}}
+      {{- end -}}
 
     # If floating note body has more than one paragraph this string could be
     # shown at the beginning of the first paragraph (.css footnote-more
@@ -265,17 +295,39 @@ document:
     # intentionally render no appended title text while still satisfying
     # validation, use: {{- "" -}}
     # Following fields are available:
+    # - .Context (string) - template field name ("label_template")
+    # - .Format (string) - requested output format: epub2, epub3, kepub, kfx,
+    #   azw8, or pdf
     # - .BodyTitle (string) - can be empty
-    # - .BodyNumber (int) - 1 based index
+    # - .BodyNumber (int) - 1-based body index
     # - .NoteTitle (string) - can be empty
-    # - .NoteNumber (int) - 1 based index
+    # - .NoteNumber (int) - 1-based note index within the body
     # NOTE: if there is only one body with footnotes in a book .BodyNumber will
-    # be set to 0
+    # be set to 0.
+    # Default template uses descriptive appended title text for PDF printed
+    # footnotes only. Other formats use short numeric labels.
     label_template: |
-      {{- if gt .BodyNumber 0 -}}
-      {{-   printf "%d" .BodyNumber -}}.
+      {{- if eq .Format "pdf" -}}
+      {{-   $bodyTitle := default "Notes" .BodyTitle -}}
+      {{-   $noteTitle := trim .NoteTitle -}}
+      {{-   $noteNumber := printf "%d" .NoteNumber -}}
+      {{-   $label := "" -}}
+      {{-   if gt .BodyNumber 0 -}}
+      {{-     $label = printf "%d.%s" .BodyNumber $noteNumber -}}
+      {{-   else -}}
+      {{-     $label = $noteNumber -}}
+      {{-   end -}}
+      {{-   if and $noteTitle (regexMatch "[^0-9[:space:]]" $noteTitle) -}}
+      {{-     printf "%s: %s" $bodyTitle $noteTitle -}}
+      {{-   else -}}
+      {{-     printf "%s: %s" $bodyTitle $label -}}
+      {{-   end -}}
+      {{- else -}}
+      {{-   if gt .BodyNumber 0 -}}
+      {{-     printf "%d" .BodyNumber -}}.
+      {{-   end -}}
+      {{-   printf "%d" .NoteNumber -}}
       {{- end -}}
-      {{- printf "%d" .NoteNumber -}}
 
   annotation:
     # Create separate "chapter" with book annotation if available
@@ -298,30 +350,28 @@ document:
     # when toc page generation requested and authors_template is set - page
     # will have title (header) with authors formatted using it
     # List of variables available:
-    # - .Title (string) - book title as specified in fb2 metainformation
+    # - .Context (string) - template field name ("authors_template")
+    # - .Format (string) - requested output format: epub2, epub3, kepub, kfx,
+    #   azw8, or pdf
+    # - .Title (string) - book title as specified in FB2 metainformation
     # - .Series (array of { .Name (string), .Number (integer) }) - series as
-    # specified in fb2 metainformation.
-    #     NOTE: according to fictionbook schema series could be hierarchical (series
-    #     contain series and so on). Hierarchy is completely ignored - anything below
-    #     first level is dropped.
-    #     NOTE: Similarly I am not aware of any usage of multiple series, for
-    #     example Calibre only supports one. So on some occasions internally
-    #     converter only uses first series available.
+    #   specified in FB2 metainformation.
+    #     NOTE: according to FictionBook schema series could be hierarchical
+    #     (series contain series and so on). Hierarchy is completely ignored -
+    #     anything below first level is not present here.
     # - .Language (string) - canonical string representation of a language as
-    # specified in fb2 metainformation
-    # - .Date (string) - date as specified in fb2 metainformation.
+    #   specified in FB2 metainformation
+    # - .Date (string) - date as specified in FB2 metainformation.
     #     NOTE: If valid xs:date "value" attribute is provided - it will be used,
     #     otherwise just text as defined
     # - .Authors (array of { .FirstName (string), .MiddleName (string), .LastName
-    # (string)}) as specified in fb2 metainformation
-    # - .Format (string) - string representing requested conversion (ex: epub2,
-    # epub3, kepub...)
+    #   (string) }) - authors as specified in FB2 metainformation
     # - .SourceFile (string) - base part of the source file name (no path, no
-    # extension)
-    # - .BookID (string) - book UUID as specified by fb2 metainformation or
-    # assigned by converter
-    # - .Genres (array of strings) - genres names as specified by fb2
-    # metainformation
+    #   extension)
+    # - .BookID (string) - book UUID as specified by FB2 metainformation or
+    #   assigned by converter
+    # - .Genres (array of strings) - genre names as specified by FB2
+    #   metainformation
     authors_template: |
       {{- $names := list -}}
       {{- range .Authors -}}

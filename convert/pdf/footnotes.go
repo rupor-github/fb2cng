@@ -144,6 +144,7 @@ func pdfPrintedFootnoteTemplateLabel(c *content.Content, ref fb2.FootnoteRef, se
 	label, err := c.Book.ExpandTemplateFootnoteLabel(
 		config.LabelTemplateFieldName,
 		c.FootnoteLabelTemplate,
+		c.OutputFormat,
 		templateBodyNum,
 		noteNum,
 		body,

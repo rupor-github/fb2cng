@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
+	"fbc/common"
 	"fbc/config"
 )
 
@@ -738,7 +739,7 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 			"n2": {BodyIdx: 1, SectionIdx: 1},
 		}
 
-		result, updatedIndex := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+		result, updatedIndex := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", common.OutputFmtEpub3, log)
 
 		// Check updated index has numbering info
 		// BodyNum stays 1 (actual body counter), but DisplayText uses 0 for single footnote body
@@ -820,7 +821,7 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 			"n1": {BodyIdx: 1, SectionIdx: 0},
 		}
 
-		result, updatedIndex := book.NormalizeFootnoteLabels(footnotesIndex, "[a.{{- .NoteNumber -}}]", log)
+		result, updatedIndex := book.NormalizeFootnoteLabels(footnotesIndex, "[a.{{- .NoteNumber -}}]", common.OutputFmtEpub3, log)
 
 		if updatedIndex["n1"].DisplayText != "[a.1]" {
 			t.Errorf("n1 DisplayText = %q, want %q", updatedIndex["n1"].DisplayText, "[a.1]")
@@ -873,7 +874,7 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 		}
 
 		footnotesIndex := FootnoteRefs{"n1": {BodyIdx: 1, SectionIdx: 0}}
-		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", common.OutputFmtEpub3, log)
 
 		link := result.Bodies[0].Sections[0].Content[0].Paragraph.Text[0]
 		if link.Text != "" {
@@ -939,7 +940,7 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 			"c1": {BodyIdx: 2, SectionIdx: 0},
 		}
 
-		_, updatedIndex := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+		_, updatedIndex := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", common.OutputFmtEpub3, log)
 
 		// First footnote body: n1 should be 1.1
 		if updatedIndex["n1"].DisplayText != "1.1" {
@@ -997,7 +998,7 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 		}
 
 		footnotesIndex := FootnoteRefs{"n1": {BodyIdx: 1, SectionIdx: 0}}
-		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", common.OutputFmtEpub3, log)
 
 		linkText := result.Bodies[0].Epigraphs[0].TextAuthors[0].Text[1].Children[0].Text
 		if linkText != "0.1" {
@@ -1043,7 +1044,7 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 		}
 
 		footnotesIndex := FootnoteRefs{"n1": {BodyIdx: 1, SectionIdx: 0}}
-		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", common.OutputFmtEpub3, log)
 
 		linkText := result.Bodies[0].Sections[0].Title.Items[0].Paragraph.Text[1].Children[0].Text
 		if linkText != "0.1" {
@@ -1101,7 +1102,7 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 		}
 
 		footnotesIndex := FootnoteRefs{"n1": {BodyIdx: 1, SectionIdx: 0}}
-		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", common.OutputFmtEpub3, log)
 
 		linkText := result.Bodies[0].Sections[0].Content[0].Poem.Stanzas[0].Verses[0].Text[1].Children[0].Text
 		if linkText != "0.1" {
@@ -1157,7 +1158,7 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 			"n2": {BodyIdx: 1, SectionIdx: 1},
 		}
 
-		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", common.OutputFmtEpub3, log)
 
 		// Cross-reference from n1 to n2
 		linkText1 := result.Bodies[1].Sections[0].Content[0].Paragraph.Text[1].Children[0].Text
@@ -1221,7 +1222,7 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 		}
 
 		footnotesIndex := FootnoteRefs{"n1": {BodyIdx: 1, SectionIdx: 0}}
-		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", common.OutputFmtEpub3, log)
 
 		linkText := result.Bodies[0].Sections[0].Content[0].Table.Rows[0].Cells[0].Content[1].Children[0].Text
 		if linkText != "0.1" {
@@ -1273,7 +1274,7 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 		}
 
 		footnotesIndex := FootnoteRefs{"n1": {BodyIdx: 1, SectionIdx: 0}}
-		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", common.OutputFmtEpub3, log)
 
 		linkText := result.Bodies[0].Sections[0].Content[0].Cite.TextAuthors[0].Text[1].Children[0].Text
 		if linkText != "0.1" {
@@ -1331,7 +1332,7 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 		}
 
 		footnotesIndex := FootnoteRefs{"n1": {BodyIdx: 1, SectionIdx: 0}}
-		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", common.OutputFmtEpub3, log)
 
 		linkText := result.Bodies[0].Sections[0].Content[0].Poem.Title.Items[0].Paragraph.Text[1].Children[0].Text
 		if linkText != "0.1" {
@@ -1409,7 +1410,7 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 			"n1": {BodyIdx: 1, SectionIdx: 0},
 			"n2": {BodyIdx: 1, SectionIdx: 1},
 		}
-		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", common.OutputFmtEpub3, log)
 
 		stanza := result.Bodies[0].Sections[0].Content[0].Poem.Stanzas[0]
 
@@ -1463,7 +1464,7 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 		}
 
 		footnotesIndex := FootnoteRefs{"n1": {BodyIdx: 1, SectionIdx: 0}}
-		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", log)
+		result, _ := book.NormalizeFootnoteLabels(footnotesIndex, "{{- .BodyNumber -}}.{{- .NoteNumber -}}", common.OutputFmtEpub3, log)
 
 		linkText := result.Description.TitleInfo.Annotation.Items[0].Paragraph.Text[1].Children[0].Text
 		if linkText != "0.1" {

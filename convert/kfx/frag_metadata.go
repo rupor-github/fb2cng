@@ -101,6 +101,7 @@ func BuildBookMetadata(
 			expanded, err := c.Book.ExpandTemplateAuthorName(
 				config.MetaCreatorNameTemplateFieldName,
 				cfg.Metainformation.CreatorNameTemplate,
+				c.OutputFormat,
 				0,
 				&author,
 			)

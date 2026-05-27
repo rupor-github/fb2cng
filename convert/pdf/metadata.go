@@ -111,6 +111,7 @@ func bookAuthors(c *content.Content, cfg *config.DocumentConfig, log *zap.Logger
 			expanded, err := c.Book.ExpandTemplateAuthorName(
 				config.MetaCreatorNameTemplateFieldName,
 				cfg.Metainformation.CreatorNameTemplate,
+				c.OutputFormat,
 				0,
 				author,
 			)

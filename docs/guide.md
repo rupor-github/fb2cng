@@ -252,6 +252,11 @@ In addition to the standard Go template functions, all templates have access to 
 [slim-sprig](https://go-task.github.io/slim-sprig) function library which provides many useful
 string, math, list, and other helper functions (such as `first`, `cat`, `contains`, etc.).
 
+All template contexts include these common fields:
+
+- `.Context` - Template field name, such as `output_name_template`, `label_template`, or `backlink_template`.
+- `.Format` - Requested output format: `epub2`, `epub3`, `kepub`, `kfx`, `azw8`, or `pdf`.
+
 ### File Naming Templates
 
 Control output filenames using Go templates in configuration:
@@ -272,19 +277,20 @@ document:
 
 #### Available Template Variables
 
+- `.Context` - Template field name (`output_name_template`)
+- `.Format` - Output format (`epub2`, `epub3`, `kepub`, `kfx`, `azw8`, `pdf`)
 - `.Title` - Book title
 - `.Authors` - Array of author objects with `.FirstName`, `.MiddleName`, `.LastName`
 - `.Series` - Array with `.Name` and `.Number`
 - `.Language` - Language code
 - `.Date` - Publication date
-- `.Format` - Output format (`epub2`, `epub3`, `kepub`, `kfx`, `azw8`, `pdf`)
 - `.SourceFile` - Original filename (no path/extension)
 - `.BookID` - Book UUID
 - `.Genres` - Array of genre names
 
 ### Metadata Customization
 
-Format book title and author names in metadata:
+Format book title and author names in metadata. `title_template` uses the same book metadata fields as `output_name_template`; `creator_name_template` is applied to each author and exposes `.Context`, `.Format`, `.Index`, `.FirstName`, `.MiddleName`, and `.LastName`.
 
 ```yaml
 document:
@@ -927,17 +933,36 @@ backlink_template: "↩"
 document:
   footnotes:
     backlink_template: |
-      [{{- if eq .Format "pdf" -}}
-        {{- if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber }}{{- else -}}<{{- end -}}
+      {{- if eq .Format "pdf" -}}
+      {{-   if .PageNumber -}}
+      {{-     printf "[page\u00A0%d]" .PageNumber -}}
+      {{-   else -}}
+      {{-     "[<]" -}}
+      {{-   end -}}
       {{- else if or (eq .Format "kfx") (eq .Format "azw8") -}}
-        {{- if .LocationNumber -}}loc{{ "\u00A0" }}{{ .LocationNumber }}{{- else if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
+      {{-   if .LocationNumber -}}
+      {{-     printf "[loc\u00A0%d]" .LocationNumber -}}
+      {{-   else if .PageNumber -}}
+      {{-     printf "[page\u00A0%d]" .PageNumber -}}
+      {{-   else if .SectionTitle -}}
+      {{-     printf "[%s]" .SectionTitle -}}
+      {{-   else -}}
+      {{-     "[<]" -}}
+      {{-   end -}}
       {{- else -}}
-        {{- if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
-      {{- end -}}]
+      {{-   if .PageNumber -}}
+      {{-     printf "[page\u00A0%d]" .PageNumber -}}
+      {{-   else if .SectionTitle -}}
+      {{-     printf "[%s]" .SectionTitle -}}
+      {{-   else -}}
+      {{-     "[<]" -}}
+      {{-   end -}}
+      {{- end -}}
 ```
 
 Available fields:
 
+- `.Context` (string) - template field name (`backlink_template`)
 - `.Format` (string) - output format: `epub2`, `epub3`, `kepub`, `kfx`, `azw8`, `pdf`
 - `.PageNumber` (int) - exact page number for PDF; approximate/generated page-map number for EPUB/KFX when available
 - `.LocationNumber` (int) - generated Kindle/KFX location number for KFX/AZW8 when available
@@ -1010,14 +1035,33 @@ To show or hide it differently, override `.footnote-more` in your custom stylesh
 document:
   footnotes:
     label_template: |
-      {{- if gt .BodyNumber 0 -}}
-      {{-   printf "%d" .BodyNumber -}}.
+      {{- if eq .Format "pdf" -}}
+      {{-   $bodyTitle := default "Notes" .BodyTitle -}}
+      {{-   $noteTitle := trim .NoteTitle -}}
+      {{-   $noteNumber := printf "%d" .NoteNumber -}}
+      {{-   $label := "" -}}
+      {{-   if gt .BodyNumber 0 -}}
+      {{-     $label = printf "%d.%s" .BodyNumber $noteNumber -}}
+      {{-   else -}}
+      {{-     $label = $noteNumber -}}
+      {{-   end -}}
+      {{-   if and $noteTitle (regexMatch "[^0-9[:space:]]" $noteTitle) -}}
+      {{-     printf "%s: %s" $bodyTitle $noteTitle -}}
+      {{-   else -}}
+      {{-     printf "%s: %s" $bodyTitle $label -}}
+      {{-   end -}}
+      {{- else -}}
+      {{-   if gt .BodyNumber 0 -}}
+      {{-     printf "%d" .BodyNumber -}}.
+      {{-   end -}}
+      {{-   printf "%d" .NoteNumber -}}
       {{- end -}}
-      {{- printf "%d" .NoteNumber -}}
 ```
 
 Available fields:
 
+- `.Context` (string) - template field name (`label_template`)
+- `.Format` (string) - output format: `epub2`, `epub3`, `kepub`, `kfx`, `azw8`, `pdf`
 - `.BodyTitle` (string) - title of the footnote body, can be empty
 - `.BodyNumber` (int) - 1-based index of the footnote body; set to `0` when the book has only one footnote body
 - `.NoteTitle` (string) - original footnote section title, can be empty
@@ -1044,10 +1088,10 @@ In `float`, `<printed-note-label>` is the source reference label when present. I
 For example, with the default template and `floatRenumbered`, the second footnote on a PDF page whose logical note number is `17` may be printed as:
 
 ```text
-2 17
+2 Notes: 17
 ```
 
-Here `2` is the page-local printed-footnote label and `17` is the `label_template` result. If you want PDF printed footnote titles to contain only the printed-note label, keep the field present but render an empty string:
+Here `2` is the page-local printed-footnote label and `Notes: 17` is the `label_template` result. If you want PDF printed footnote titles to contain only the printed-note label, keep the field present but render an empty string:
 
 ```yaml
 document:

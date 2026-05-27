@@ -553,6 +553,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 			expanded, err := c.Book.ExpandTemplateAuthorName(
 				config.MetaCreatorNameTemplateFieldName,
 				cfg.Metainformation.CreatorNameTemplate,
+				c.OutputFormat,
 				idx,
 				&author,
 			)
@@ -803,7 +804,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	return writeXMLToZip(zw, path.Join(oebpsDir, "content.opf"), doc)
 }
 
-func writeNav(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, chapters []chapterData, idToFile idToFileMap, log *zap.Logger) error {
+func writeNav(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, chapters []chapterData, idToFile idToFileMap, _ *zap.Logger) error {
 	doc := etree.NewDocument()
 	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
 

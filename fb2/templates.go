@@ -13,8 +13,26 @@ import (
 	"fbc/config"
 )
 
+type templateContext struct {
+	Context string
+	Format  string
+}
+
+func newTemplateContext(name config.TemplateFieldName, format common.OutputFmt) templateContext {
+	return templateContext{
+		Context: string(name),
+		Format:  format.String(),
+	}
+}
+
 // ExpandTemplateAuthorName expands a template string for author/creator name
-func (fb *FictionBook) ExpandTemplateAuthorName(name config.TemplateFieldName, field string, index int, author *Author) (string, error) {
+func (fb *FictionBook) ExpandTemplateAuthorName(
+	name config.TemplateFieldName,
+	field string,
+	format common.OutputFmt,
+	index int,
+	author *Author,
+) (string, error) {
 	funcMap := sprig.FuncMap()
 
 	tmpl, err := template.New(string(name)).Funcs(funcMap).Parse(field)
@@ -23,17 +41,17 @@ func (fb *FictionBook) ExpandTemplateAuthorName(name config.TemplateFieldName, f
 	}
 
 	values := &struct {
-		Context    string
+		templateContext
 		Index      int
 		FirstName  string
 		MiddleName string
 		LastName   string
 	}{
-		Context:    string(name),
-		Index:      index,
-		FirstName:  author.FirstName,
-		MiddleName: author.MiddleName,
-		LastName:   author.LastName,
+		templateContext: newTemplateContext(name, format),
+		Index:           index,
+		FirstName:       author.FirstName,
+		MiddleName:      author.MiddleName,
+		LastName:        author.LastName,
 	}
 
 	buf := new(bytes.Buffer)
@@ -47,6 +65,7 @@ func (fb *FictionBook) ExpandTemplateAuthorName(name config.TemplateFieldName, f
 func (fb *FictionBook) ExpandTemplateFootnoteLabel(
 	name config.TemplateFieldName,
 	field string,
+	format common.OutputFmt,
 	bodyNum, noteNum int,
 	body *Body,
 	section *Section,
@@ -69,17 +88,17 @@ func (fb *FictionBook) ExpandTemplateFootnoteLabel(
 	}
 
 	values := &struct {
-		Context    string
+		templateContext
 		BodyNumber int
 		NoteNumber int
 		BodyTitle  string
 		NoteTitle  string
 	}{
-		Context:    string(name),
-		BodyNumber: bodyNum,
-		NoteNumber: noteNum,
-		BodyTitle:  bodyTitle,
-		NoteTitle:  noteTitle,
+		templateContext: newTemplateContext(name, format),
+		BodyNumber:      bodyNum,
+		NoteNumber:      noteNum,
+		BodyTitle:       bodyTitle,
+		NoteTitle:       noteTitle,
 	}
 
 	buf := new(bytes.Buffer)
@@ -108,27 +127,25 @@ func (fb *FictionBook) ExpandTemplateMetainfo(name config.TemplateFieldName, fie
 	}
 
 	values := &struct {
-		Context    string
+		templateContext
 		Title      string
 		Series     []sequenceDefinition
 		Language   string
 		Date       string
 		Authors    []authorDefinition
-		Format     string
 		SourceFile string
 		BookID     string
 		Genres     []string
 	}{
-		Context:    string(name),
-		Title:      fb.Description.TitleInfo.BookTitle.Value,
-		Series:     fb.buildSequences(),
-		Language:   fb.Description.TitleInfo.Lang.String(),
-		Date:       fb.buildDate(),
-		Authors:    fb.buildAuthors(),
-		Format:     format.String(),
-		SourceFile: strings.TrimSuffix(filepath.Base(srcName), filepath.Ext(srcName)),
-		BookID:     fb.Description.DocumentInfo.ID,
-		Genres:     fb.buildGenres(),
+		templateContext: newTemplateContext(name, format),
+		Title:           fb.Description.TitleInfo.BookTitle.Value,
+		Series:          fb.buildSequences(),
+		Language:        fb.Description.TitleInfo.Lang.String(),
+		Date:            fb.buildDate(),
+		Authors:         fb.buildAuthors(),
+		SourceFile:      strings.TrimSuffix(filepath.Base(srcName), filepath.Ext(srcName)),
+		BookID:          fb.Description.DocumentInfo.ID,
+		Genres:          fb.buildGenres(),
 	}
 
 	buf := new(bytes.Buffer)

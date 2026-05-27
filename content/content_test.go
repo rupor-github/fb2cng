@@ -1340,7 +1340,10 @@ func TestContent_BacklinkTextTemplate(t *testing.T) {
 	const defaultTemplate = `[{{- if eq .Format "pdf" -}}
 {{- if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber }}{{- else -}}<{{- end -}}
 {{- else if or (eq .Format "kfx") (eq .Format "azw8") -}}
-{{- if .LocationNumber -}}loc{{ "\u00A0" }}{{ .LocationNumber }}{{- else if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
+{{- if .LocationNumber -}}loc{{ "\u00A0" }}{{ .LocationNumber -}}
+{{- else if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber -}}
+{{- else if .SectionTitle -}}{{ .SectionTitle -}}
+{{- else -}}<{{- end -}}
 {{- else -}}
 {{- if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
 {{- end -}}]`
@@ -1364,6 +1367,15 @@ func TestContent_BacklinkTextTemplate(t *testing.T) {
 				t.Fatalf("BacklinkText() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestContent_BacklinkTextContext(t *testing.T) {
+	c := &Content{BacklinkTemplate: `{{.Context}}/{{.Format}}/{{.RefNumber}}`}
+	got := c.BacklinkText(BackLinkRef{Format: "kfx", RefNumber: 3})
+	want := "backlink_template/kfx/3"
+	if got != want {
+		t.Fatalf("BacklinkText() = %q, want %q", got, want)
 	}
 }
 

@@ -465,12 +465,39 @@ func TestExpandTemplate_PathSeparators(t *testing.T) {
 	}
 }
 
+func TestExpandTemplateAuthorName_ContextAndFormat(t *testing.T) {
+	book := setupTestBook(t, nil)
+	author := &Author{FirstName: "Jane", LastName: "Doe"}
+
+	result, err := book.ExpandTemplateAuthorName(
+		config.MetaCreatorNameTemplateFieldName,
+		"{{.Context}}/{{.Format}}/{{.Index}}/{{.LastName}}",
+		common.OutputFmtKfx,
+		2,
+		author,
+	)
+	if err != nil {
+		t.Fatalf("ExpandTemplateAuthorName() error = %v", err)
+	}
+	if result != "creator_name_template/kfx/2/Doe" {
+		t.Errorf("ExpandTemplateAuthorName() = %q, want %q", result, "creator_name_template/kfx/2/Doe")
+	}
+}
+
 func TestExpandTemplateFootnoteLabel_BasicNumbering(t *testing.T) {
 	book := setupTestBook(t, nil)
 	body := &Body{Name: "notes"}
 	section := &Section{}
 
-	result, err := book.ExpandTemplateFootnoteLabel(config.LabelTemplateFieldName, "{{.BodyNumber}}.{{.NoteNumber}}", 1, 5, body, section)
+	result, err := book.ExpandTemplateFootnoteLabel(
+		config.LabelTemplateFieldName,
+		"{{.BodyNumber}}.{{.NoteNumber}}",
+		common.OutputFmtEpub3,
+		1,
+		5,
+		body,
+		section,
+	)
 	if err != nil {
 		t.Fatalf("ExpandTemplateFootnoteLabel() error = %v", err)
 	}
@@ -484,7 +511,15 @@ func TestExpandTemplateFootnoteLabel_WithBodyName(t *testing.T) {
 	body := &Body{Name: "endnotes"}
 	section := &Section{}
 
-	result, err := book.ExpandTemplateFootnoteLabel(config.LabelTemplateFieldName, "{{.BodyTitle}}-{{.NoteNumber}}", 1, 3, body, section)
+	result, err := book.ExpandTemplateFootnoteLabel(
+		config.LabelTemplateFieldName,
+		"{{.BodyTitle}}-{{.NoteNumber}}",
+		common.OutputFmtEpub3,
+		1,
+		3,
+		body,
+		section,
+	)
 	if err != nil {
 		t.Fatalf("ExpandTemplateFootnoteLabel() error = %v", err)
 	}
@@ -505,7 +540,15 @@ func TestExpandTemplateFootnoteLabel_WithBodyTitle(t *testing.T) {
 	}
 	section := &Section{}
 
-	result, err := book.ExpandTemplateFootnoteLabel(config.LabelTemplateFieldName, "{{.BodyTitle}}-{{.NoteNumber}}", 1, 2, body, section)
+	result, err := book.ExpandTemplateFootnoteLabel(
+		config.LabelTemplateFieldName,
+		"{{.BodyTitle}}-{{.NoteNumber}}",
+		common.OutputFmtEpub3,
+		1,
+		2,
+		body,
+		section,
+	)
 	if err != nil {
 		t.Fatalf("ExpandTemplateFootnoteLabel() error = %v", err)
 	}
@@ -525,7 +568,7 @@ func TestExpandTemplateFootnoteLabel_WithNoteTitle(t *testing.T) {
 		},
 	}
 
-	result, err := book.ExpandTemplateFootnoteLabel(config.LabelTemplateFieldName, "{{.NoteTitle}}", 1, 1, body, section)
+	result, err := book.ExpandTemplateFootnoteLabel(config.LabelTemplateFieldName, "{{.NoteTitle}}", common.OutputFmtEpub3, 1, 1, body, section)
 	if err != nil {
 		t.Fatalf("ExpandTemplateFootnoteLabel() error = %v", err)
 	}
@@ -546,7 +589,7 @@ func TestExpandTemplateFootnoteLabel_ComplexTemplate(t *testing.T) {
 	}
 
 	template := "{{if .NoteTitle}}{{.NoteTitle}}{{else}}{{.BodyTitle}}.{{.NoteNumber}}{{end}}"
-	result, err := book.ExpandTemplateFootnoteLabel(config.LabelTemplateFieldName, template, 2, 7, body, section)
+	result, err := book.ExpandTemplateFootnoteLabel(config.LabelTemplateFieldName, template, common.OutputFmtEpub3, 2, 7, body, section)
 	if err != nil {
 		t.Fatalf("ExpandTemplateFootnoteLabel() error = %v", err)
 	}
@@ -558,7 +601,15 @@ func TestExpandTemplateFootnoteLabel_ComplexTemplate(t *testing.T) {
 func TestExpandTemplateFootnoteLabel_NilBodyAndSection(t *testing.T) {
 	book := setupTestBook(t, nil)
 
-	result, err := book.ExpandTemplateFootnoteLabel(config.LabelTemplateFieldName, "{{.BodyNumber}}.{{.NoteNumber}}", 1, 2, nil, nil)
+	result, err := book.ExpandTemplateFootnoteLabel(
+		config.LabelTemplateFieldName,
+		"{{.BodyNumber}}.{{.NoteNumber}}",
+		common.OutputFmtEpub3,
+		1,
+		2,
+		nil,
+		nil,
+	)
 	if err != nil {
 		t.Fatalf("ExpandTemplateFootnoteLabel() error = %v", err)
 	}
@@ -573,7 +624,7 @@ func TestExpandTemplateFootnoteLabel_EmptyBodyNameAndTitle(t *testing.T) {
 	section := &Section{}
 
 	template := "{{.BodyTitle}}.{{.NoteNumber}}"
-	result, err := book.ExpandTemplateFootnoteLabel(config.LabelTemplateFieldName, template, 1, 3, body, section)
+	result, err := book.ExpandTemplateFootnoteLabel(config.LabelTemplateFieldName, template, common.OutputFmtEpub3, 1, 3, body, section)
 	if err != nil {
 		t.Fatalf("ExpandTemplateFootnoteLabel() error = %v", err)
 	}
@@ -588,11 +639,33 @@ func TestExpandTemplateFootnoteLabel_SprigFunctions(t *testing.T) {
 	section := &Section{}
 
 	template := "{{.BodyTitle | upper}}_{{.NoteNumber}}"
-	result, err := book.ExpandTemplateFootnoteLabel(config.LabelTemplateFieldName, template, 1, 5, body, section)
+	result, err := book.ExpandTemplateFootnoteLabel(config.LabelTemplateFieldName, template, common.OutputFmtEpub3, 1, 5, body, section)
 	if err != nil {
 		t.Fatalf("ExpandTemplateFootnoteLabel() error = %v", err)
 	}
 	if result != "FOOTNOTES_5" {
 		t.Errorf("ExpandTemplateFootnoteLabel() = %q, want %q", result, "FOOTNOTES_5")
+	}
+}
+
+func TestExpandTemplateFootnoteLabel_ContextAndFormat(t *testing.T) {
+	book := setupTestBook(t, nil)
+	body := &Body{Name: "footnotes"}
+	section := &Section{}
+
+	result, err := book.ExpandTemplateFootnoteLabel(
+		config.LabelTemplateFieldName,
+		"{{.Context}}/{{.Format}}/{{.NoteNumber}}",
+		common.OutputFmtAzw8,
+		1,
+		5,
+		body,
+		section,
+	)
+	if err != nil {
+		t.Fatalf("ExpandTemplateFootnoteLabel() error = %v", err)
+	}
+	if result != "label_template/azw8/5" {
+		t.Errorf("ExpandTemplateFootnoteLabel() = %q, want %q", result, "label_template/azw8/5")
 	}
 }

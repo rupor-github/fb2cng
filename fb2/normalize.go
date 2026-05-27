@@ -158,7 +158,12 @@ func (fb *FictionBook) NormalizeIDs(existingIDs IDIndex, log *zap.Logger) (*Fict
 // 2. Footnote section titles to use the formatted label
 // 3. Link text in main body content that references footnotes
 // Modifies the FictionBook in place.
-func (fb *FictionBook) NormalizeFootnoteLabels(footnotesIndex FootnoteRefs, template string, log *zap.Logger) (*FictionBook, FootnoteRefs) {
+func (fb *FictionBook) NormalizeFootnoteLabels(
+	footnotesIndex FootnoteRefs,
+	template string,
+	outputFormat common.OutputFmt,
+	log *zap.Logger,
+) (*FictionBook, FootnoteRefs) {
 	updatedIndex := make(FootnoteRefs, len(footnotesIndex))
 
 	// Count total footnote bodies first
@@ -194,6 +199,7 @@ func (fb *FictionBook) NormalizeFootnoteLabels(footnotesIndex FootnoteRefs, temp
 			displayText, err := fb.ExpandTemplateFootnoteLabel(
 				config.LabelTemplateFieldName,
 				template,
+				outputFormat,
 				templateBodyNum,
 				noteNum,
 				&fb.Bodies[i],

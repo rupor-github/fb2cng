@@ -231,7 +231,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 	// Native PDF printed footnotes use page-local labels assigned during PDF layout,
 	// so label_template is intentionally ignored there.
 	if shouldNormalizeFootnoteLabels(outputFormat, env.Cfg.Document.Footnotes.Mode) {
-		book, footnotes = book.NormalizeFootnoteLabels(footnotes, env.Cfg.Document.Footnotes.LabelTemplate, log)
+		book, footnotes = book.NormalizeFootnoteLabels(footnotes, env.Cfg.Document.Footnotes.LabelTemplate, outputFormat, log)
 	}
 	// Build id and link indexes replacing/removing broken links (may add not-found image binary and vignette binaries)
 	book, ids, links := book.NormalizeLinks(vignettes, log)
@@ -651,8 +651,16 @@ func (c *Content) BacklinkText(ref BackLinkRef) string {
 	if err != nil {
 		return defaultBacklinkText
 	}
+	values := &struct {
+		Context string
+		BackLinkRef
+	}{
+		Context:     string(config.BacklinkTemplateFieldName),
+		BackLinkRef: ref,
+	}
+
 	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, ref); err != nil {
+	if err := tmpl.Execute(&buf, values); err != nil {
 		return defaultBacklinkText
 	}
 	text := strings.TrimSpace(buf.String())
