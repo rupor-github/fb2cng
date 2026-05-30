@@ -35,3 +35,4 @@
 - `go tool task` installs pre-commit hooks only if `pre-commit` is available; pre-push also runs `trivy --exit-code 1 fs --ignore-unfixed .`.
 - `go tool task release` requires `7z` and creates `release/fbc-*.zip`; Windows release archives include `mhl-connector` as well as `fbc`.
 - The repo has both `.git` and `.jj`; do not modify VCS metadata unless explicitly asked.
+- Project is using jj-vcs (not git).
