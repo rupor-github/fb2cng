@@ -26,8 +26,20 @@
 ## Testing Notes
 
 - Prefer Taskfile tests over raw `go test` because task deps prepare embedded data and generated code.
+- Run focused tests with `PACKAGES=<module path> go tool task test -- -run=<Test name>`.
 - EPUB integration tests in `convert/epub/epub_test.go` are skipped only with `-short`; normal `go tool task test` includes them.
 - Profiling tests are opt-in: `PDF_PROFILE_BOOK=... go test ./convert/pdf -run '^TestPDFProfilePath$'` and `KFX_PROFILE_BOOK=... go test ./convert/kfx -run '^TestKFXProfilePath$'`.
+- To produce a test book, run `go run cmd/fbc -d -c build/test.yaml convert -ow --to <epub2|epub3|azw8|pdf> /mnt/d/test/_Test.fb2 /tmp/<temp dir>`.
+- For all formats, `fb2cng-report.zip` contains additional debug information after generation.
+- To produce debug dumps for AZW8, use a temp directory and run `go run cmd/debug/kfxdump --all --overwrite /mnt/d/<azw8 file>`.
+
+## Validation
+
+- All changes need to be validated with `go tool staticcheck`; `gopls` for changed files should show no warnings.
+- Instead of `gofmt`, run `goimports-reviser -format -set-alias -company-prefixes github.com/rupor-github -excludes vendor` on changed files.
+- When changes are related to KFX, validate the generated file with `testdata/run_kfx_input.py <file name>`; output should contain only 3 warnings related to `fbc`.
+- When changes are related to EPUB, validate generated EPUB2 and EPUB3 files with `testdata/epubcheck.sh <file name>`; output should have no errors or warnings.
+- When changes are related to PDF, validate the generated file with `qpdf` and/or `pdfinfo`.
 
 ## Workflow Gotchas
 
