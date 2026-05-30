@@ -39,7 +39,7 @@ tasks:
       - task: generate-enums
     cmds:
       - task: go-build
-        vars: {FLAGS: 'debug', PACKAGE: './cmd/{{.PRJ_NAME}}', TARGET: '{{.DEV_BUILD_DIR}}/{{.PRJ_NAME}}'}
+        vars: {GOOS: 'linux', GOARCH: 'amd64', CGO_ENABLED: '0', FLAGS: 'debug', PACKAGE: './cmd/{{.PRJ_NAME}}', TARGET: '{{.DEV_BUILD_DIR}}/{{.PRJ_NAME}}'}
       - task: build-debug-tools
       - task: compile-all-tests
       - task: lint
@@ -52,6 +52,9 @@ tasks:
       You can pass any additional parameters supported by "go test", for example: "PACKAGES='./module' task test -- -run=TestFuncPattern".
     platforms: [linux]
     deps: [generate-project-version, get-dictionaries, get-sentences, get-pdf-fonts, generate-enums]
+    env:
+      # We have some tests where CGO is being used
+      CGO_ENABLED: '1'
     vars:
       TEST_DIR: "{{.ROOT_DIR}}/{{.DEV_BUILD_DIR}}/tests_results"
       DIRS_WITH_TESTS:
@@ -74,6 +77,9 @@ tasks:
       You can pass any additional parameters supported by "go test", for example: "PACKAGES='./module1' task bench -- -bench=BenchmarkFuncPattern -benchmem".
     platforms: [linux]
     deps: [generate-project-version, get-dictionaries, get-sentences, get-pdf-fonts, generate-enums]
+    env:
+      # We have some tests where CGO is being used
+      CGO_ENABLED: '1'
     vars:
       TEST_DIR: "{{.ROOT_DIR}}/{{.DEV_BUILD_DIR}}/tests_results"
       DIRS_WITH_TESTS:
@@ -108,41 +114,18 @@ tasks:
       - mkdir -p '{{.REL_BUILD_DIR}}'
       - for:
           var: TARGET_RELEASES
-        task: release-for-platform-{{with $arch := split "-" .ITEM}}{{$arch._0}}{{end}}
+        task: release-for-platform
         vars:
           GOOS: '{{with $arch := split "-" .ITEM}}{{$arch._0}}{{end}}'
           GOARCH: '{{with $arch := split "-" .ITEM}}{{$arch._1}}{{end}}'
           SUFFIX: '{{with $arch := split "-" .ITEM}}{{$arch._2}}{{end}}'
 
-  release-for-platform-windows:
+  release-for-platform:
     internal: true
     desc: Builds release for specified platform
     requires:
       vars: [GOOS, GOARCH, SUFFIX]
-    label: release-for-platform-windows-{{.GOOS}}-{{.GOARCH}}
-    vars:
-      BUILD_DIR: '{{.REL_BUILD_DIR}}_{{.GOOS}}_{{.GOARCH}}'
-      REL_NAME: '{{.REL_BUILD_DIR}}/{{.PRJ_NAME}}-{{.GOOS}}-{{.GOARCH}}'
-    env:
-      CGO_ENABLED: '0'
-    cmds:
-      - mkdir -p {{.BUILD_DIR}}
-      - defer: rm -rf {{.BUILD_DIR}}
-      - task: go-build
-        vars: {GOOS: '{{.GOOS}}', GOARCH: '{{.GOARCH}}', FLAGS: 'release', PACKAGE: './cmd/{{.PRJ_NAME}}', TARGET: '{{.BUILD_DIR}}/{{.PRJ_NAME}}{{.SUFFIX}}'}
-      - task: go-build
-        vars: {GOOS: '{{.GOOS}}', GOARCH: '{{.GOARCH}}', FLAGS: 'release', PACKAGE: './cmd/mhl', TARGET: '{{.BUILD_DIR}}/mhl-connector{{.SUFFIX}}'}
-      - echo "{{.TATN}}Archiving release \"{{.REL_NAME}}.zip\"{{.TOFF}}"
-      - 7z a -r -bd -bso0 -tzip {{.REL_NAME}} ./{{.BUILD_DIR}}/*
-    status:
-      - test -f '{{.REL_NAME}}.zip'
-
-  release-for-platform-linux:
-    internal: true
-    desc: Builds release for specified platform
-    requires:
-      vars: [GOOS, GOARCH, SUFFIX]
-    label: release-for-platform-linux-{{.GOOS}}-{{.GOARCH}}
+    label: release-for-platform-{{.GOOS}}-{{.GOARCH}}
     vars:
       BUILD_DIR: '{{.REL_BUILD_DIR}}_{{.GOOS}}_{{.GOARCH}}'
       REL_NAME: '{{.REL_BUILD_DIR}}/{{.PRJ_NAME}}-{{.GOOS}}-{{.GOARCH}}'
@@ -150,45 +133,10 @@ tasks:
       - mkdir -p {{.BUILD_DIR}}
       - defer: rm -rf {{.BUILD_DIR}}
       - task: go-build
-        vars: {GOOS: '{{.GOOS}}', GOARCH: '{{.GOARCH}}', FLAGS: 'release', PACKAGE: './cmd/{{.PRJ_NAME}}', TARGET: '{{.BUILD_DIR}}/{{.PRJ_NAME}}'}
-      - echo "{{.TATN}}Archiving release \"{{.REL_NAME}}.zip\"{{.TOFF}}"
-      - 7z a -r -bd -bso0 -tzip {{.REL_NAME}} ./{{.BUILD_DIR}}/*
-    status:
-      - test -f '{{.REL_NAME}}.zip'
-
-  release-for-platform-darwin:
-    internal: true
-    desc: Builds release for specified platform
-    requires:
-      vars: [GOOS, GOARCH, SUFFIX]
-    label: release-for-platform-darwin-{{.GOOS}}-{{.GOARCH}}
-    vars:
-      BUILD_DIR: '{{.REL_BUILD_DIR}}_{{.GOOS}}_{{.GOARCH}}'
-      REL_NAME: '{{.REL_BUILD_DIR}}/{{.PRJ_NAME}}-{{.GOOS}}-{{.GOARCH}}'
-    cmds:
-      - mkdir -p {{.BUILD_DIR}}
-      - defer: rm -rf {{.BUILD_DIR}}
+        vars: {GOOS: '{{.GOOS}}', GOARCH: '{{.GOARCH}}', CGO_ENABLED: '0', FLAGS: 'release', PACKAGE: './cmd/{{.PRJ_NAME}}', TARGET: '{{.BUILD_DIR}}/{{.PRJ_NAME}}{{.SUFFIX}}'}
       - task: go-build
-        vars: {GOOS: '{{.GOOS}}', GOARCH: '{{.GOARCH}}', FLAGS: 'release', PACKAGE: './cmd/{{.PRJ_NAME}}', TARGET: '{{.BUILD_DIR}}/{{.PRJ_NAME}}{{.SUFFIX}}'}
-      - echo "{{.TATN}}Archiving release \"{{.REL_NAME}}.zip\"{{.TOFF}}"
-      - 7z a -r -bd -bso0 -tzip {{.REL_NAME}} ./{{.BUILD_DIR}}/*
-    status:
-      - test -f '{{.REL_NAME}}.zip'
-
-  release-for-platform-freebsd:
-    internal: true
-    desc: Builds release for specified platform
-    requires:
-      vars: [GOOS, GOARCH, SUFFIX]
-    label: release-for-platform-freebsd-{{.GOOS}}-{{.GOARCH}}
-    vars:
-      BUILD_DIR: '{{.REL_BUILD_DIR}}_{{.GOOS}}_{{.GOARCH}}'
-      REL_NAME: '{{.REL_BUILD_DIR}}/{{.PRJ_NAME}}-{{.GOOS}}-{{.GOARCH}}'
-    cmds:
-      - mkdir -p {{.BUILD_DIR}}
-      - defer: rm -rf {{.BUILD_DIR}}
-      - task: go-build
-        vars: {GOOS: '{{.GOOS}}', GOARCH: '{{.GOARCH}}', FLAGS: 'release', PACKAGE: './cmd/{{.PRJ_NAME}}', TARGET: '{{.BUILD_DIR}}/{{.PRJ_NAME}}{{.SUFFIX}}'}
+        if: '{{eq .GOOS "windows"}}'
+        vars: {GOOS: '{{.GOOS}}', GOARCH: '{{.GOARCH}}', CGO_ENABLED: '0', FLAGS: 'release', PACKAGE: './cmd/mhl', TARGET: '{{.BUILD_DIR}}/mhl-connector{{.SUFFIX}}'}
       - echo "{{.TATN}}Archiving release \"{{.REL_NAME}}.zip\"{{.TOFF}}"
       - 7z a -r -bd -bso0 -tzip {{.REL_NAME}} ./{{.BUILD_DIR}}/*
     status:
@@ -332,9 +280,9 @@ tasks:
       - task: generate-project-version
     cmds:
       - task: go-build
-        vars: {FLAGS: 'debug', PACKAGE: './cmd/debug/kfxdump', TARGET: '{{.DEV_BUILD_DIR}}/kfxdump'}
+        vars: {GOOS: 'linux', GOARCH: 'amd64', CGO_ENABLED: '0', FLAGS: 'debug', PACKAGE: './cmd/debug/kfxdump', TARGET: '{{.DEV_BUILD_DIR}}/kfxdump'}
       - task: go-build
-        vars: {FLAGS: 'debug', PACKAGE: './cmd/debug/kpfdump', TARGET: '{{.DEV_BUILD_DIR}}/kpfdump'}
+        vars: {GOOS: 'linux', GOARCH: 'amd64', CGO_ENABLED: '0', FLAGS: 'debug', PACKAGE: './cmd/debug/kpfdump', TARGET: '{{.DEV_BUILD_DIR}}/kpfdump'}
 
   go-build:
     internal: true
@@ -342,8 +290,8 @@ tasks:
     desc: Builds binary using go toolchain
     requires:
       vars: [PACKAGE, TARGET, FLAGS]
-    label: go-build-{{.PACKAGE}}-{{.TARGET}}-{{.FLAGS}}
-    env: {GOOS: '{{default "linux" .GOOS}}', GOARCH: '{{default "amd64" .GOARCH}}'}
+    label: go-build-{{.PACKAGE}}-{{.TARGET}}-{{.FLAGS}}-{{.GOOS}}-{{.GOARCH}}-{{.CGO_ENABLED}}
+    env: {GOOS: '{{default "linux" .GOOS}}', GOARCH: '{{default "amd64" .GOARCH}}', CGO_ENABLED: '{{default (env "CGO_ENABLED") .CGO_ENABLED}}'}
     # in case you need completely unoptimized build: -gcflags 'all=-N -l'
     vars:
       GOARGS: |
@@ -355,7 +303,7 @@ tasks:
         {{fail "go build flags could be \"debug\" or \"release\" only!"}}
         {{- end -}}
     cmds:
-      - echo "{{.TATN}}Building \"{{base .TARGET}}\" binary for \"$GOOS:$GOARCH\" from \"{{.PACKAGE}}\"{{.TOFF}}"
+      - echo "{{.TATN}}Building \"{{base .TARGET}}\" binary for \"$GOOS:$GOARCH\"{{if .CGO_ENABLED}} with CGO_ENABLED={{.CGO_ENABLED}}{{end}} from \"{{.PACKAGE}}\"{{.TOFF}}"
       - go build {{.GOARGS}} -o '{{.TARGET}}' '{{.PACKAGE}}'
     sources:
       - ./**/*.go
@@ -479,4 +427,3 @@ tasks:
     status:
       - test -f '{{.ROOT_DIR}}/.git/hooks/pre-commit'
       - test -f '{{.ROOT_DIR}}/.git/hooks/pre-push'
-
