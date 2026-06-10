@@ -432,6 +432,8 @@ func TestOutputFmt_String(t *testing.T) {
 		{common.OutputFmtKfx, "kfx"},
 		{common.OutputFmtAzw8, "azw8"},
 		{common.OutputFmtPdf, "pdf"},
+		{common.OutputFmtTxt, "txt"},
+		{common.OutputFmtMd, "md"},
 		{common.OutputFmt(99), "OutputFmt(99)"},
 	}
 
@@ -439,6 +441,26 @@ func TestOutputFmt_String(t *testing.T) {
 		t.Run(tt.expected, func(t *testing.T) {
 			got := tt.fmt.String()
 			if got != tt.expected {
+				t.Errorf("String() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestMarkdownImageMode_String(t *testing.T) {
+	tests := []struct {
+		mode     common.MarkdownImageMode
+		expected string
+	}{
+		{common.MarkdownImageModePlaceholder, "placeholder"},
+		{common.MarkdownImageModeExternal, "external"},
+		{common.MarkdownImageModeEmbedded, "embedded"},
+		{common.MarkdownImageMode(99), "MarkdownImageMode(99)"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.expected, func(t *testing.T) {
+			if got := tt.mode.String(); got != tt.expected {
 				t.Errorf("String() = %q, want %q", got, tt.expected)
 			}
 		})
@@ -456,6 +478,8 @@ func TestOutputFmt_IsValid(t *testing.T) {
 		{common.OutputFmtKfx, true},
 		{common.OutputFmtAzw8, true},
 		{common.OutputFmtPdf, true},
+		{common.OutputFmtTxt, true},
+		{common.OutputFmtMd, true},
 		{common.OutputFmt(99), false},
 		{common.OutputFmt(-1), false},
 	}
@@ -484,6 +508,8 @@ func TestParseOutputFmt(t *testing.T) {
 		{"kfx", "kfx", common.OutputFmtKfx, false},
 		{"azw8", "azw8", common.OutputFmtAzw8, false},
 		{"pdf", "pdf", common.OutputFmtPdf, false},
+		{"txt", "txt", common.OutputFmtTxt, false},
+		{"md", "md", common.OutputFmtMd, false},
 		{"invalid", "invalid", common.OutputFmt(0), true},
 		{"empty", "", common.OutputFmt(0), true},
 	}
@@ -541,6 +567,8 @@ func TestOutputFmt_MarshalText(t *testing.T) {
 		{common.OutputFmtKfx, "kfx"},
 		{common.OutputFmtAzw8, "azw8"},
 		{common.OutputFmtPdf, "pdf"},
+		{common.OutputFmtTxt, "txt"},
+		{common.OutputFmtMd, "md"},
 	}
 
 	for _, tt := range tests {
@@ -569,6 +597,8 @@ func TestOutputFmt_UnmarshalText(t *testing.T) {
 		{"kfx", "kfx", common.OutputFmtKfx, false},
 		{"azw8", "azw8", common.OutputFmtAzw8, false},
 		{"pdf", "pdf", common.OutputFmtPdf, false},
+		{"txt", "txt", common.OutputFmtTxt, false},
+		{"md", "md", common.OutputFmtMd, false},
 		{"invalid", "invalid", common.OutputFmt(0), true},
 	}
 
@@ -594,7 +624,7 @@ func TestOutputFmt_UnmarshalText(t *testing.T) {
 
 func TestOutputFmtNames(t *testing.T) {
 	names := common.OutputFmtNames()
-	expected := []string{"epub2", "epub3", "kepub", "kfx", "azw8", "pdf"}
+	expected := []string{"epub2", "epub3", "kepub", "kfx", "azw8", "pdf", "txt", "md"}
 
 	if len(names) != len(expected) {
 		t.Errorf("common.OutputFmtNames() length = %d, want %d", len(names), len(expected))
@@ -618,6 +648,8 @@ func TestOutputFmt_ForKindle(t *testing.T) {
 		{common.OutputFmtKfx, true},
 		{common.OutputFmtAzw8, true},
 		{common.OutputFmtPdf, false},
+		{common.OutputFmtTxt, false},
+		{common.OutputFmtMd, false},
 	}
 
 	for _, tt := range tests {
@@ -641,6 +673,8 @@ func TestOutputFmt_Ext(t *testing.T) {
 		{common.OutputFmtKfx, ".kfx"},
 		{common.OutputFmtAzw8, ".azw8"},
 		{common.OutputFmtPdf, ".pdf"},
+		{common.OutputFmtTxt, ".txt"},
+		{common.OutputFmtMd, ".md"},
 	}
 
 	for _, tt := range tests {

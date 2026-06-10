@@ -7,7 +7,7 @@ version: 1
 # https://go-task.github.io/slim-sprig. In all template contexts .Context
 # (string) and .Format (string) are available. .Context is set to the field
 # name to uniquely identify processing context. .Format is the requested output
-# format: epub2, epub3, kepub, kfx, azw8, or pdf.
+# format: epub2, epub3, kepub, kfx, azw8, pdf, txt, or md.
 
 document:
   # Some programs (CoolReader and some versions of FBReader) expect "old" zip
@@ -34,7 +34,7 @@ document:
   # List of variables available:
   # - .Context (string) - template field name ("output_name_template")
   # - .Format (string) - requested output format: epub2, epub3, kepub, kfx,
-  #   azw8, or pdf
+  #   azw8, pdf, txt, or md
   # - .Title (string) - book title as specified in FB2 metainformation
   # - .Series (array of { .Name (string), .Number (integer) }) - series as
   #   specified in FB2 metainformation.
@@ -96,7 +96,7 @@ document:
     # List of variables available:
     # - .Context (string) - template field name ("title_template")
     # - .Format (string) - requested output format: epub2, epub3, kepub, kfx,
-    #   azw8, or pdf
+    #   azw8, pdf, txt, or md
     # - .Title (string) - book title as specified in FB2 metainformation
     # - .Series (array of { .Name (string), .Number (integer) }) - series as
     #   specified in FB2 metainformation.
@@ -140,7 +140,7 @@ document:
     # sorting books by author names. Following fields are available:
     # - .Context (string) - template field name ("creator_name_template")
     # - .Format (string) - requested output format: epub2, epub3, kepub, kfx,
-    #   azw8, or pdf
+    #   azw8, pdf, txt, or md
     # - .Index (int) - 0-based author index
     # - .FirstName (string)
     # - .MiddleName (string)
@@ -195,6 +195,13 @@ document:
     # output this also affects PNG/GIF-to-JPEG conversion and SVG rasterization.
     jpeg_quality_level: 95
 
+    # How Markdown output should render images:
+    # "placeholder" - render readable [Image: ...] placeholders.
+    # "external"    - write image files next to Markdown in a book-id-specific
+    #                 directory and reference them with Markdown image syntax.
+    # "embedded"    - embed images as data: URIs in the Markdown file.
+    markdown: placeholder
+
     screen:
       # Reader screen size so images could be adjusted properly.
       # Width and height are device pixels; PDF uses them with dpi to derive
@@ -242,7 +249,7 @@ document:
     # Available fields include:
     # - .Context (string) - template field name ("backlink_template")
     # - .Format (string) - requested output format: epub2, epub3, kepub, kfx,
-    #   azw8, or pdf
+    #   azw8, pdf, txt, or md
     # - .RefID (string) - unique ID for this reference occurrence
     # - .TargetID (string) - ID of the footnote being referenced
     # - .RefNumber (int) - 1-based reference occurrence number for this footnote
@@ -297,7 +304,7 @@ document:
     # Following fields are available:
     # - .Context (string) - template field name ("label_template")
     # - .Format (string) - requested output format: epub2, epub3, kepub, kfx,
-    #   azw8, or pdf
+    #   azw8, pdf, txt, or md
     # - .BodyTitle (string) - can be empty
     # - .BodyNumber (int) - 1-based body index
     # - .NoteTitle (string) - can be empty
@@ -352,7 +359,7 @@ document:
     # List of variables available:
     # - .Context (string) - template field name ("authors_template")
     # - .Format (string) - requested output format: epub2, epub3, kepub, kfx,
-    #   azw8, or pdf
+    #   azw8, pdf, txt, or md
     # - .Title (string) - book title as specified in FB2 metainformation
     # - .Series (array of { .Name (string), .Number (integer) }) - series as
     #   specified in FB2 metainformation.
@@ -392,6 +399,7 @@ document:
   # nested sections titles and ends (nested sections inside chapters). Each
   # item could be absent (disabled), set to "builtin" (converter will use
   # default images) or have file path pointing to existing valid image file
+  # NOTE: vignettes are decorative and are always ignored for txt/md output.
   # NOTE: subtitles are not supported for automatic vignetting
   # vignettes:
   #   book:

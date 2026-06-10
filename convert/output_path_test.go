@@ -19,6 +19,7 @@ import (
 
 func setupTestEnvForOutputPath(t *testing.T, noDirs bool, transliterate bool, format common.OutputFmt, template string) *state.LocalEnv {
 	t.Helper()
+	_ = format
 	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	cfg, err := config.LoadConfiguration("")
 	if err != nil {
@@ -94,6 +95,8 @@ func TestBuildOutputPath_DifferentFormats(t *testing.T) {
 		{"KEPUB", common.OutputFmtKepub, ".kepub.epub"},
 		{"KFX", common.OutputFmtKfx, ".kfx"},
 		{"PDF", common.OutputFmtPdf, ".pdf"},
+		{"TXT", common.OutputFmtTxt, ".txt"},
+		{"MD", common.OutputFmtMd, ".md"},
 	}
 
 	for _, tt := range tests {
@@ -158,6 +161,8 @@ func TestBuildDefaultFileName(t *testing.T) {
 		{"kepub format", "book.fb2", false, common.OutputFmtKepub, "book.kepub.epub"},
 		{"kfx format", "book.fb2", false, common.OutputFmtKfx, "book.kfx"},
 		{"pdf format", "book.fb2", false, common.OutputFmtPdf, "book.pdf"},
+		{"txt format", "book.fb2", false, common.OutputFmtTxt, "book.txt"},
+		{"md format", "book.fb2", false, common.OutputFmtMd, "book.md"},
 		{"transliterate", "Книга.fb2", true, common.OutputFmtEpub3, "kniga.epub"},
 	}
 

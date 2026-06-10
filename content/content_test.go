@@ -1292,6 +1292,18 @@ func TestShouldNormalizeFootnoteLabelsSkipsPDFPrintedFootnotes(t *testing.T) {
 	}
 }
 
+func TestShouldRasterizeImagesForMarkdownEmbedded(t *testing.T) {
+	if got := shouldRasterizeImagesForOutput(common.OutputFmtMd, &config.ImagesConfig{Markdown: common.MarkdownImageModeEmbedded}); got != common.OutputFmtKfx {
+		t.Fatalf("embedded Markdown images should use Kindle-style rasterization, got %s", got)
+	}
+	if got := shouldRasterizeImagesForOutput(common.OutputFmtMd, &config.ImagesConfig{Markdown: common.MarkdownImageModePlaceholder}); got != common.OutputFmtMd {
+		t.Fatalf("placeholder Markdown images should not force rasterization, got %s", got)
+	}
+	if got := shouldRasterizeImagesForOutput(common.OutputFmtEpub3, &config.ImagesConfig{Markdown: common.MarkdownImageModeEmbedded}); got != common.OutputFmtEpub3 {
+		t.Fatalf("non-Markdown output should not be affected, got %s", got)
+	}
+}
+
 func TestContent_AddFootnoteBackLinkRef(t *testing.T) {
 	c, _ := setupTestContent(t)
 	c.BackLinkIndex = make(map[string][]BackLinkRef)

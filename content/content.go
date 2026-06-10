@@ -105,6 +105,13 @@ func shouldNormalizeFootnoteLabels(outputFormat common.OutputFmt, mode common.Fo
 	return outputFormat != common.OutputFmtPdf
 }
 
+func shouldRasterizeImagesForOutput(outputFormat common.OutputFmt, cfg *config.ImagesConfig) common.OutputFmt {
+	if outputFormat == common.OutputFmtMd && cfg != nil && cfg.Markdown == common.MarkdownImageModeEmbedded {
+		return common.OutputFmtKfx
+	}
+	return outputFormat
+}
+
 // Prepare reads, parses, and prepares FB2 content for conversion.
 // It is used for all output formats.
 func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat common.OutputFmt, log *zap.Logger) (_ *Content, retErr error) {
@@ -249,7 +256,8 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 
 	// Process all binary objects creating actual images and reference index.
 	// This happens after NormalizeLinks so the not-found image binary is included.
-	allImages := book.PrepareImagesForOutput(outputFormat, &env.Cfg.Document.Images, log)
+	imageOutputFormat := shouldRasterizeImagesForOutput(outputFormat, &env.Cfg.Document.Images)
+	allImages := book.PrepareImagesForOutput(imageOutputFormat, &env.Cfg.Document.Images, log)
 
 	// Filter images to only include those that are actually referenced
 	imagesIndex := book.FilterReferencedImages(allImages, links, coverID, log)

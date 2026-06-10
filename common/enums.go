@@ -16,6 +16,10 @@ func (f FootnotesMode) IsFloat() bool {
 // ENUM(none, keepAR, stretch)
 type ImageResizeMode int
 
+// Specification of Markdown image rendering mode.
+// ENUM(placeholder, external, embedded)
+type MarkdownImageMode int
+
 // Specification of TOC page placement.
 // ENUM(none, before, after)
 type TOCPagePlacement int
@@ -29,7 +33,7 @@ type TOCType int
 type VignettePos string
 
 // Specification of requested output type.
-// ENUM(epub2, epub3, kepub, kfx, azw8, pdf)
+// ENUM(epub2, epub3, kepub, kfx, azw8, pdf, txt, md)
 type OutputFmt int
 
 func (o OutputFmt) ForKindle() bool {
@@ -44,6 +48,10 @@ func (o OutputFmt) Ext() string {
 		return ".azw8"
 	case OutputFmtPdf:
 		return ".pdf"
+	case OutputFmtTxt:
+		return ".txt"
+	case OutputFmtMd:
+		return ".md"
 	case OutputFmtEpub2, OutputFmtEpub3:
 		return ".epub"
 	case OutputFmtKepub:

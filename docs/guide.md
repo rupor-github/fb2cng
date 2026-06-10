@@ -22,6 +22,7 @@
   - [File Naming Templates](#file-naming-templates)
   - [Metadata Customization](#metadata-customization)
   - [Custom Stylesheets](#custom-stylesheets)
+  - [TXT and Markdown Output](#txt-and-markdown-output)
   - [Image Processing](#image-processing)
   - [Cover Image Configuration](#cover-image-configuration)
   - [PDF Generation](#pdf-generation)
@@ -54,7 +55,7 @@
 
 ## Introduction
 
-**fb2cng** (FictionBook converter - Next Generation) is a complete rewrite of [fb2converter](https://github.com/rupor-github/fb2converter), designed to convert FB2 (FictionBook) files to various e-book formats including EPUB2, EPUB3, KEPUB, KFX/AZW8, and PDF.
+**fb2cng** (FictionBook converter - Next Generation) is a complete rewrite of [fb2converter](https://github.com/rupor-github/fb2converter), designed to convert FB2 (FictionBook) files to various e-book formats including EPUB2, EPUB3, KEPUB, KFX/AZW8, PDF, TXT, and Markdown.
 
 ### Supported Output Formats
 
@@ -64,6 +65,8 @@
 - **KFX** - Kindle format X (with `.kfx` extension)
 - **AZW8** - Kindle format X with `.azw8` extension (same as KFX, different extension, added for convenience - Kindle Previewer 3 can open azw8 files directly and Kindle devices handle them just fine)
 - **PDF** - Native fixed-page PDF 1.4 output with embedded fonts, outlines, links, images, and printed page footnotes
+- **TXT** - UTF-8 readable plain text output with headings, tables, image placeholders, and endnotes when floating notes are enabled
+- **MD** - UTF-8 semantic Markdown output with headings, links, tables, fenced code blocks, configurable image handling, and endnotes when floating notes are enabled
 
 ### Key Features
 
@@ -72,7 +75,7 @@
 - Template-based file naming and metadata formatting
 - Custom CSS stylesheet support with font embedding
 - Image optimization and cover generation
-- Footnotes processing with floating/popup support and PDF printed footnotes
+- Footnotes processing with floating/popup support, PDF printed footnotes, and TXT/Markdown endnotes
 - Native PDF generation with embedded fonts and fixed-page layout
 - Automatic vignettes and dropcaps styling
 - Automatic hyphenation support
@@ -103,7 +106,7 @@ This converts `book.fb2` to EPUB2 format in the current directory.
 fbc convert --to epub3 book.fb2
 ```
 
-Supported formats: `epub2`, `epub3`, `kepub`, `kfx`, `azw8`, `pdf`
+Supported formats: `epub2`, `epub3`, `kepub`, `kfx`, `azw8`, `pdf`, `txt`, `md`
 
 ### Convert with output directory
 
@@ -140,7 +143,7 @@ fbc convert [options] SOURCE [DESTINATION]
 
 #### Convert Options
 
-- `--to TYPE` - Output format: `epub2` (default), `epub3`, `kepub`, `kfx`, `azw8`, `pdf`
+- `--to TYPE` - Output format: `epub2` (default), `epub3`, `kepub`, `kfx`, `azw8`, `pdf`, `txt`, `md`
 - `--ebook, --eb` - For Kindle formats, mark output as ebook (EBOK) instead of personal document (PDOC)
 - `--asin ASIN` - For Kindle formats (`kfx`, `azw8`), set ASIN used in metadata (10 chars, `A-Z0-9`; for books it's often the ISBN-10)
 - `--nodirs, --nd` - Don't preserve input directory structure in output
@@ -204,6 +207,16 @@ fbc convert --to kfx --asin B012345678 book.fb2
 fbc convert --to pdf book.fb2
 ```
 
+**Convert to readable text:**
+```bash
+fbc convert --to txt book.fb2
+```
+
+**Convert to Markdown:**
+```bash
+fbc convert --to md book.fb2
+```
+
 **Convert to PDF with a custom configuration:**
 ```bash
 fbc -c pdf.yaml convert --to pdf book.fb2
@@ -255,7 +268,7 @@ string, math, list, and other helper functions (such as `first`, `cat`, `contain
 All template contexts include these common fields:
 
 - `.Context` - Template field name, such as `output_name_template`, `label_template`, or `backlink_template`.
-- `.Format` - Requested output format: `epub2`, `epub3`, `kepub`, `kfx`, `azw8`, or `pdf`.
+- `.Format` - Requested output format: `epub2`, `epub3`, `kepub`, `kfx`, `azw8`, `pdf`, `txt`, or `md`.
 
 ### File Naming Templates
 
@@ -278,7 +291,7 @@ document:
 #### Available Template Variables
 
 - `.Context` - Template field name (`output_name_template`)
-- `.Format` - Output format (`epub2`, `epub3`, `kepub`, `kfx`, `azw8`, `pdf`)
+- `.Format` - Output format (`epub2`, `epub3`, `kepub`, `kfx`, `azw8`, `pdf`, `txt`, `md`)
 - `.Title` - Book title
 - `.Authors` - Array of author objects with `.FirstName`, `.MiddleName`, `.LastName`
 - `.Series` - Array with `.Name` and `.Number`
@@ -504,6 +517,31 @@ h1 {
 }
 ```
 
+### TXT and Markdown Output
+
+TXT and Markdown output are generated from the same normalized FB2 model as the e-book formats, but they intentionally avoid CSS/layout features that do not make sense in plain text.
+
+**TXT output:**
+
+- Produces UTF-8 readable plain text.
+- Uses plain headings, blank lines, aligned text tables, image placeholders, and readable footnote labels.
+- Does not create external assets or embedded images.
+- Does not have clickable links in the file format itself.
+
+**Markdown output:**
+
+- Produces UTF-8 semantic Markdown with headings, paragraphs, links, tables, block quotes, fenced code blocks, and optional image output.
+- Emits explicit anchors for section/note targets so generated TOC and footnote links are stable even when titles are duplicated or non-Latin.
+- Uses Markdown pipe tables. Tables inside floating/endnote footnotes remain proper table blocks.
+- Preserves code listings as fenced code blocks when a paragraph is entirely code.
+- Supports `document.images.markdown` for placeholder, external, or embedded images.
+
+Limitations and intentional differences:
+
+- Vignettes and CSS-only decorations are ignored for TXT/Markdown.
+- Dropcap styling is not represented as a visual drop cap.
+- Fonts and custom stylesheets do not affect TXT/Markdown rendering, except that text transformations and normalized document content still apply before rendering.
+
 #### Stylesheet with Fonts
 
 Create a CSS file with font references:
@@ -619,6 +657,9 @@ document:
     
     # JPEG quality 40-100%
     jpeg_quality_level: 75
+
+    # Markdown image handling: placeholder, external, embedded
+    markdown: placeholder
     
     # Reader screen profile used for image sizing and PDF page size
     screen:
@@ -659,6 +700,11 @@ document:
   - For Kindle output this also affects PNG/GIF-to-JPEG conversion and SVG rasterization, not just optimized source JPEGs.
   - A practical range is usually `70-85`; use higher values for image-heavy books, comics, or covers where artifacts are more noticeable.
 
+- **`markdown`** - Controls how `--to md` renders images. TXT output always uses placeholders regardless of this setting.
+  - `placeholder` - Render readable placeholders such as `[Image: cover]`. This is the default and keeps Markdown compact.
+  - `external` - Write image files next to the final `.md` file and reference them with Markdown image syntax. Assets are placed in a book-id-specific directory such as `images-<book-id>/` to avoid collisions when several books are generated into the same output folder.
+  - `embedded` - Embed image data directly as `data:` URIs in the Markdown file. This keeps a single file but can make it very large and not every Markdown viewer supports data URIs well. SVG images are rasterized before embedding.
+
 - **`screen.width` / `screen.height` / `screen.dpi`** - Target device screen profile.
   - `width` and `height` are device pixels.
   - `dpi` is dots per inch; the default is `300`.
@@ -672,6 +718,7 @@ document:
 
 - Kindle output normalizes decodable raster images to JPEG.
 - SVG images stay as SVG in EPUB output, but are rasterized for Kindle output.
+- For Markdown output, SVG images are also rasterized when `document.images.markdown: embedded` is used.
 - For Kindle output, `cover.resize: none` is effectively treated as `keepAR`.
 - Cover images are not affected by `scale_factor`; they use the separate `cover.resize` rules below.
 
@@ -902,16 +949,19 @@ document:
 - **`default`** - Do not convert notes to popup/printed notes. References remain ordinary internal links to footnote sections.
   - EPUB/KFX: footnotes are normal book content/navigation entries.
   - PDF: footnote bodies are normal PDF pages/sections; return links can be generated in the footnote body using `backlink_template`.
+  - TXT/Markdown: footnote bodies are rendered as normal document sections. Markdown references are links to the rendered note section.
 
 - **`float`** - Convert detected notes to floating/popup-style notes where the target format supports that concept.
   - EPUB2/KEPUB: uses bidirectional links (`A -> B` and generated `B -> A`) for reader compatibility.
   - EPUB3: uses EPUB footnote/aside markup.
   - KFX/AZW8: marks footnote content for Kindle popup rendering and appends generated return-link paragraphs to footnote sections.
   - PDF: renders notes as printed page footnotes at the bottom of the page where the reference appears. Visible reference labels from the source are preserved; if a reference has no visible label, the printed note title falls back to page-order numbering.
+  - TXT/Markdown: collects referenced notes into a final `Notes` section. Markdown references link to generated endnote anchors, and nested references from one note to another are included in the same final notes section.
 
 - **`floatRenumbered`** - Same target-format behavior as `float`, but normalizes footnote numbering.
   - EPUB/KFX/AZW8: reference text and footnote titles are rewritten with `label_template` during content preparation.
   - PDF: main references are still assigned page-local numbers during PDF layout; `label_template` is used as extra title text in the printed footnote area, not as the visible page-local reference number.
+  - TXT/Markdown: same endnote structure as `float`, but references and note headings use normalized labels from `label_template`.
 
 Use `floatRenumbered` when the source FB2 has missing, inconsistent, duplicated, or non-sequential note labels.
 
@@ -963,7 +1013,7 @@ document:
 Available fields:
 
 - `.Context` (string) - template field name (`backlink_template`)
-- `.Format` (string) - output format: `epub2`, `epub3`, `kepub`, `kfx`, `azw8`, `pdf`
+- `.Format` (string) - output format: `epub2`, `epub3`, `kepub`, `kfx`, `azw8`, `pdf`, `txt`, `md`
 - `.PageNumber` (int) - exact page number for PDF; approximate/generated page-map number for EPUB/KFX when available
 - `.LocationNumber` (int) - generated Kindle/KFX location number for KFX/AZW8 when available
 - `.SectionTitle` (string) - nearest titled section/body containing the original reference, when known
@@ -1061,7 +1111,7 @@ document:
 Available fields:
 
 - `.Context` (string) - template field name (`label_template`)
-- `.Format` (string) - output format: `epub2`, `epub3`, `kepub`, `kfx`, `azw8`, `pdf`
+- `.Format` (string) - output format: `epub2`, `epub3`, `kepub`, `kfx`, `azw8`, `pdf`, `txt`, `md`
 - `.BodyTitle` (string) - title of the footnote body, can be empty
 - `.BodyNumber` (int) - 1-based index of the footnote body; set to `0` when the book has only one footnote body
 - `.NoteTitle` (string) - original footnote section title, can be empty
@@ -1073,6 +1123,8 @@ How `label_template` is used depends on output format and footnote mode:
 |---|---|
 | EPUB/KFX/AZW8 `float` | Not used for renumbering; original source labels remain. |
 | EPUB/KFX/AZW8 `floatRenumbered` | Rewrites main reference text and footnote titles during content preparation. |
+| TXT/Markdown `float` | Not used for renumbering; original source labels remain while notes are collected into the final Notes section. |
+| TXT/Markdown `floatRenumbered` | Rewrites references and generated endnote headings during content preparation. |
 | PDF `default` | Not used for printed page labels because footnotes are ordinary linked sections. |
 | PDF `float` | Does not relabel visible references. It formats the suffix appended to each printed footnote title after the source reference label (or fallback page-order label if the source label is empty). |
 | PDF `floatRenumbered` | References are relabeled with page-local numbers during PDF layout; this template formats the title suffix appended after that page-local label. |
@@ -1167,9 +1219,13 @@ Available values:
 
 This setting affects only machine/device navigation, including PDF outlines/bookmarks. Generated visible TOC pages inside the book content keep their normal/full structure regardless of `toc_type`.
 
+TXT output has no separate machine-readable navigation. Markdown output uses visible headings and explicit anchors for stable internal links.
+
 ### Table of Contents Page
 
 The TOC (table of contents) itself is always generated automatically from the book's section structure. The settings below control an optional **TOC page** — a visible page rendered inside the book content that lists chapters as clickable links. This is separate from the TOC metadata used by the reading system's built-in navigation and from the `document.toc_type` setting described above.
+
+For Markdown output, the generated TOC page uses Markdown links that point to explicit stable anchors emitted before the corresponding headings. TXT output renders the same TOC as plain readable text without links.
 
 ```yaml
 document:
@@ -1221,6 +1277,8 @@ document:
 ```
 
 Options: `builtin` (use default), file path, or omit to disable.
+
+Vignettes are decorative and are always ignored for TXT and Markdown output.
 
 ### Dropcaps (Drop Capitals)
 

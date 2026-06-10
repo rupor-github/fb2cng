@@ -266,5 +266,8 @@ func (b *builder) addFootnoteBodies() {
 }
 
 func printedFootnotesEnabled(c *content.Content) bool {
-	return c != nil && c.OutputFormat == common.OutputFmtPdf && c.FootnotesMode.IsFloat()
+	if c == nil || !c.FootnotesMode.IsFloat() {
+		return false
+	}
+	return c.OutputFormat == common.OutputFmtPdf || c.OutputFormat == common.OutputFmtTxt || c.OutputFormat == common.OutputFmtMd
 }

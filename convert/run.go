@@ -23,6 +23,7 @@ import (
 	"fbc/convert/epub"
 	"fbc/convert/kfx"
 	"fbc/convert/pdf"
+	"fbc/convert/textout"
 	"fbc/state"
 	imgutil "fbc/utils/images"
 )
@@ -469,6 +470,10 @@ func processBook(ctx context.Context, r io.Reader, src string, dst string, forma
 		}
 	case common.OutputFmtPdf:
 		if err := pdf.Generate(ctx, c, tmpOutputName, &env.Cfg.Document, log, outputName); err != nil {
+			return fmt.Errorf("unable to generate output: %w", err)
+		}
+	case common.OutputFmtTxt, common.OutputFmtMd:
+		if err := textout.Generate(ctx, c, tmpOutputName, &env.Cfg.Document, log, outputName); err != nil {
 			return fmt.Errorf("unable to generate output: %w", err)
 		}
 	default:
