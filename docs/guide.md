@@ -535,6 +535,10 @@ TXT and Markdown output are generated from the same normalized FB2 model as the 
 - Uses Markdown pipe tables. Tables inside floating/endnote footnotes remain proper table blocks.
 - Preserves code listings as fenced code blocks when a paragraph is entirely code.
 - Supports `document.images.markdown` for placeholder, external, or embedded images.
+- In `float` and `floatRenumbered` footnote modes, collects referenced notes into a final `Notes` section, adds stable anchors to footnote references, and emits generated return links from each endnote back to the original reference.
+- Empty referenced footnotes are still emitted in the final `Notes` section with an anchor and backlink, so references to empty notes remain clickable.
+- Inline images used as visible footnote labels are preserved in Markdown footnote references. This is useful for books where note markers are images instead of text.
+- In `default` footnote mode, Markdown follows KFX behavior: footnotes are ordinary linked document sections and no generated backlinks are added.
 
 Limitations and intentional differences:
 
@@ -949,19 +953,19 @@ document:
 - **`default`** - Do not convert notes to popup/printed notes. References remain ordinary internal links to footnote sections.
   - EPUB/KFX: footnotes are normal book content/navigation entries.
   - PDF: footnote bodies are normal PDF pages/sections; return links can be generated in the footnote body using `backlink_template`.
-  - TXT/Markdown: footnote bodies are rendered as normal document sections. Markdown references are links to the rendered note section.
+  - TXT/Markdown: footnote bodies are rendered as normal document sections. Markdown references are links to the rendered note section, and no generated backlinks are added.
 
 - **`float`** - Convert detected notes to floating/popup-style notes where the target format supports that concept.
   - EPUB2/KEPUB: uses bidirectional links (`A -> B` and generated `B -> A`) for reader compatibility.
   - EPUB3: uses EPUB footnote/aside markup.
   - KFX/AZW8: marks footnote content for Kindle popup rendering and appends generated return-link paragraphs to footnote sections.
   - PDF: renders notes as printed page footnotes at the bottom of the page where the reference appears. Visible reference labels from the source are preserved; if a reference has no visible label, the printed note title falls back to page-order numbering.
-  - TXT/Markdown: collects referenced notes into a final `Notes` section. Markdown references link to generated endnote anchors, and nested references from one note to another are included in the same final notes section.
+  - TXT/Markdown: collects referenced notes into a final `Notes` section. Markdown references link to generated endnote anchors, Markdown endnotes include generated backlinks, and nested references from one note to another are included in the same final notes section.
 
 - **`floatRenumbered`** - Same target-format behavior as `float`, but normalizes footnote numbering.
   - EPUB/KFX/AZW8: reference text and footnote titles are rewritten with `label_template` during content preparation.
   - PDF: main references are still assigned page-local numbers during PDF layout; `label_template` is used as extra title text in the printed footnote area, not as the visible page-local reference number.
-  - TXT/Markdown: same endnote structure as `float`, but references and note headings use normalized labels from `label_template`.
+  - TXT/Markdown: same endnote structure as `float`, but references and note headings use normalized labels from `label_template`. Markdown preserves inline-image footnote labels instead of replacing them with plain text.
 
 Use `floatRenumbered` when the source FB2 has missing, inconsistent, duplicated, or non-sequential note labels.
 
@@ -1015,14 +1019,14 @@ Available fields:
 - `.Context` (string) - template field name (`backlink_template`)
 - `.Format` (string) - output format: `epub2`, `epub3`, `kepub`, `kfx`, `azw8`, `pdf`, `txt`, `md`
 - `.PageNumber` (int) - exact page number for PDF; approximate/generated page-map number for EPUB/KFX when available
-- `.LocationNumber` (int) - generated Kindle/KFX location number for KFX/AZW8 when available
+- `.LocationNumber` (int) - generated Kindle/KFX location number for KFX/AZW8 when available; for Markdown, the 1-based rendered Markdown block number containing the original reference anchor
 - `.SectionTitle` (string) - nearest titled section/body containing the original reference, when known
 - `.ChapterTitle` (string) - spine/chapter title containing the original reference, when known
 - `.TargetID` (string) - ID of the footnote section being referenced
 - `.RefID` (string) - unique generated ID of this reference occurrence
 - `.RefNumber` (int) - 1-based occurrence number for this target footnote
-- `.Href` (string) - generated return href where applicable
-- `.Filename` (string) - generated content file containing the original reference where applicable
+- `.Href` (string) - generated return href where applicable. For Markdown this is the actual backlink target, such as `book.md#ref-note-1-1` or `#ref-note-1-1`.
+- `.Filename` (string) - generated content file containing the original reference where applicable. For Markdown this is the output `.md` file name when the final output path is known.
 
 If the template is empty, invalid, or renders an empty string, fb2cng falls back to `[<]`.
 
@@ -1044,6 +1048,23 @@ backlink_template: |
   [{{ .SectionTitle }}]
   {{- else -}}
   [<]
+  {{- end -}}
+```
+
+Markdown `backlink_template` notes:
+
+- Backlinks are generated only in `float` and `floatRenumbered` modes.
+- `.Href` is also used as the actual Markdown link target, so the visible template text and clickable destination correspond.
+- `.LocationNumber` is not a Kindle location in Markdown. It is the 1-based rendered Markdown block number containing the original reference anchor.
+- Empty referenced footnotes still get generated endnote anchors and backlinks.
+
+```yaml
+# Markdown-oriented backlinks showing source section and rendered block location
+backlink_template: |
+  {{- if eq .Format "md" -}}
+  {{-   printf "[%s, block %d]" .SectionTitle .LocationNumber -}}
+  {{- else -}}
+  {{-   "[<]" -}}
   {{- end -}}
 ```
 

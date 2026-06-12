@@ -191,6 +191,9 @@ func TestRenderFootnotesDefaultRendersFootnoteBody(t *testing.T) {
 	assertContains(t, got, "### Note 1")
 	assertContains(t, got, "<a id=\"note-1\"></a>\n### Note 1")
 	assertContains(t, got, "Footnote text.")
+	if strings.Contains(got, "ref-note-1-1") || strings.Contains(got, "[\\[\\<\\]]") {
+		t.Fatalf("default mode should not generate backlinks:\n%s", got)
+	}
 }
 
 func TestRenderFootnotesFloatCollectsEndnotes(t *testing.T) {
@@ -201,12 +204,122 @@ func TestRenderFootnotesFloatCollectsEndnotes(t *testing.T) {
 		t.Fatalf("Render() error = %v", err)
 	}
 
-	assertContains(t, got, "Text [\\[note\\]](#note-note-1)")
+	assertContains(t, got, "Text <a id=\"ref-note-1-1\"></a>[\\[note\\]](#note-note-1)")
 	assertContains(t, got, "## Notes")
 	assertContains(t, got, "<a id=\"note-note-1\"></a>\n### 1. Note 1")
 	assertContains(t, got, "Footnote text.")
+	assertContains(t, got, "[\\[\\<\\]](#ref-note-1-1)")
 	if strings.Contains(got, "### Note 1") {
 		t.Fatalf("float mode rendered footnote body and endnote:\n%s", got)
+	}
+}
+
+func TestRenderFootnotesFloatBacklinksMultipleReferences(t *testing.T) {
+	c := footnoteContent(common.OutputFmtMd, common.FootnotesModeFloat)
+	c.Book.Bodies[0].Sections[0].Content = []fb2.FlowItem{paragraphItem(
+		fb2.InlineSegment{Kind: fb2.InlineText, Text: "First "},
+		fb2.InlineSegment{Kind: fb2.InlineLink, Href: "#note-1", Text: "1"},
+		fb2.InlineSegment{Kind: fb2.InlineText, Text: " second "},
+		fb2.InlineSegment{Kind: fb2.InlineLink, Href: "#note-1", Text: "2"},
+	)}
+
+	got, err := renderForTest(c, testConfig())
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+
+	assertContains(t, got, "<a id=\"ref-note-1-1\"></a>[\\[1\\]](#note-note-1)")
+	assertContains(t, got, "<a id=\"ref-note-1-2\"></a>[\\[2\\]](#note-note-1)")
+	assertContains(t, got, "[\\[\\<\\]](#ref-note-1-1)\u00A0[\\[\\<\\]](#ref-note-1-2)")
+}
+
+func TestRenderMarkdownFootnoteBacklinksUseTemplateContext(t *testing.T) {
+	c := footnoteContent(common.OutputFmtMd, common.FootnotesModeFloat)
+	c.BacklinkTemplate = `[{{ .SectionTitle }}/{{ .Format }}/{{ .RefNumber }}/{{ .Href }}/loc {{ .LocationNumber }}]`
+	c.Book.Bodies[0].Sections[0].Title = title("Chapter One")
+	outPath := filepath.Join(t.TempDir(), "book.md")
+
+	data, err := RenderWithOptions(c, testConfig(), RenderOptions{OutputPath: outPath})
+	if err != nil {
+		t.Fatalf("RenderWithOptions() error = %v", err)
+	}
+	got := strings.TrimSpace(string(data))
+
+	assertContains(t, got, "[\\[Chapter One/md/1/book.md#ref-note-1-1/loc 4\\]](book.md#ref-note-1-1)")
+	if strings.Contains(got, "[\\[Chapter One/md/1/book.md#ref-note-1-1/loc 4\\]](#ref-note-1-1)") {
+		t.Fatalf("backlink text and href do not correspond:\n%s", got)
+	}
+}
+
+func TestRenderMarkdownFootnoteBacklinksPairTextWithTarget(t *testing.T) {
+	c := footnoteContent(common.OutputFmtMd, common.FootnotesModeFloat)
+	c.BacklinkTemplate = `[{{ .SectionTitle }} -> {{ .Href }}]`
+	c.Book.Bodies[0].Sections = []fb2.Section{
+		{
+			ID:    "chapter-one",
+			Title: title("Chapter One"),
+			Content: []fb2.FlowItem{paragraphItem(
+				fb2.InlineSegment{Kind: fb2.InlineText, Text: "One "},
+				fb2.InlineSegment{Kind: fb2.InlineLink, Href: "#note-1", Text: "1"},
+			)},
+		},
+		{
+			ID:    "chapter-two",
+			Title: title("Chapter Two"),
+			Content: []fb2.FlowItem{paragraphItem(
+				fb2.InlineSegment{Kind: fb2.InlineText, Text: "Two "},
+				fb2.InlineSegment{Kind: fb2.InlineLink, Href: "#note-1", Text: "2"},
+			)},
+		},
+	}
+	outPath := filepath.Join(t.TempDir(), "book.md")
+
+	data, err := RenderWithOptions(c, testConfig(), RenderOptions{OutputPath: outPath})
+	if err != nil {
+		t.Fatalf("RenderWithOptions() error = %v", err)
+	}
+	got := strings.TrimSpace(string(data))
+
+	assertContains(t, got, "[\\[Chapter One -\\> book.md#ref-note-1-1\\]](book.md#ref-note-1-1)")
+	assertContains(t, got, "[\\[Chapter Two -\\> book.md#ref-note-1-2\\]](book.md#ref-note-1-2)")
+	if strings.Contains(got, "[\\[Chapter One -\\> book.md#ref-note-1-1\\]](book.md#ref-note-1-2)") ||
+		strings.Contains(got, "[\\[Chapter Two -\\> book.md#ref-note-1-2\\]](book.md#ref-note-1-1)") {
+		t.Fatalf("backlink occurrence text and target are mismatched:\n%s", got)
+	}
+}
+
+func TestRenderMarkdownFootnoteReferencePreservesInlineImage(t *testing.T) {
+	c := footnoteContent(common.OutputFmtMd, common.FootnotesModeFloat)
+	c.ImagesIndex = fb2.BookImages{"note-label": {MimeType: "image/png", Data: []byte("png-data"), Filename: "label.png"}}
+	c.Book.Bodies[0].Sections[0].Content = []fb2.FlowItem{paragraphItem(
+		fb2.InlineSegment{Kind: fb2.InlineText, Text: "А вот эта inline-"},
+		fb2.InlineSegment{
+			Kind: fb2.InlineLink,
+			Href: "#note-1",
+			Children: []fb2.InlineSegment{{
+				Kind:  fb2.InlineImageSegment,
+				Image: &fb2.InlineImage{Href: "#note-label", Alt: "[1.10]"},
+			}},
+		},
+		fb2.InlineSegment{Kind: fb2.InlineText, Text: " вдобавок"},
+	)}
+	c.Book.Description.DocumentInfo.ID = "book-id"
+	c.BacklinkTemplate = `[<]`
+	c.FootnotesIndex["note-1"] = fb2.FootnoteRef{BodyIdx: 1, SectionIdx: 0, DisplayText: "1.10"}
+	c.FootnotesMode = common.FootnotesModeFloatRenumbered
+	c.Book.Bodies[1].Sections[0].Title = title("1.10")
+	c.Book.Bodies[1].Sections[0].Content = []fb2.FlowItem{paragraphItem(fb2.InlineSegment{Kind: fb2.InlineText, Text: "Footnote text."})}
+	cfg := testConfig()
+	cfg.Images.Markdown = common.MarkdownImageModeEmbedded
+
+	got, err := renderForTest(c, cfg)
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+
+	assertContains(t, got, "А вот эта inline-<a id=\"ref-note-1-1\"></a>[![\\[1.10\\]](data:image/png;base64,cG5nLWRhdGE=)](#note-note-1) вдобавок")
+	if strings.Contains(got, "inline-<a id=\"ref-note-1-1\"></a>[\\[1.10\\]](#note-note-1)") {
+		t.Fatalf("inline image footnote label was flattened to text:\n%s", got)
 	}
 }
 
@@ -222,7 +335,7 @@ func TestRenderFootnotesFloatDoesNotDoubleWrapBracketedLabels(t *testing.T) {
 		t.Fatalf("Render() error = %v", err)
 	}
 
-	assertContains(t, got, "Text [\\[1\\]](#note-note-1)")
+	assertContains(t, got, "Text <a id=\"ref-note-1-1\"></a>[\\[1\\]](#note-note-1)")
 	if strings.Contains(got, "[\\[1\\]]]") || strings.Contains(got, "[\\[1\\]] ") {
 		t.Fatalf("bracketed footnote label was wrapped twice:\n%s", got)
 	}
@@ -247,6 +360,40 @@ func TestRenderFootnotesFloatPreservesMarkdownTable(t *testing.T) {
 	assertContains(t, got, "Footnote text.\n\n| A | B |\n| --- | --- |\n| 1 | 2 |")
 }
 
+func TestRenderMarkdownFloatKeepsEmptyFootnoteAnchors(t *testing.T) {
+	c := footnoteContent(common.OutputFmtMd, common.FootnotesModeFloatRenumbered)
+	c.FootnotesIndex = fb2.FootnoteRefs{
+		"note-19": {BodyIdx: 1, SectionIdx: 0, DisplayText: "1.19"},
+		"note-20": {BodyIdx: 1, SectionIdx: 1, DisplayText: "1.20"},
+	}
+	c.Book.Bodies[0].Sections[0].Content = []fb2.FlowItem{
+		paragraphItem(
+			fb2.InlineSegment{Kind: fb2.InlineText, Text: "Тестовый текст 2 с пустым озаглавленным примечанием."},
+			fb2.InlineSegment{Kind: fb2.InlineLink, Href: "#note-19", Text: "1.19"},
+		),
+		paragraphItem(
+			fb2.InlineSegment{Kind: fb2.InlineText, Text: "Тестовый текст 3 с полностью пустым примечанием."},
+			fb2.InlineSegment{Kind: fb2.InlineLink, Href: "#note-20", Text: "1.20"},
+		),
+	}
+	c.Book.Bodies[1].Sections = []fb2.Section{
+		{ID: "note-19", Title: title("1.19")},
+		{ID: "note-20"},
+	}
+
+	got, err := renderForTest(c, testConfig())
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+
+	assertContains(t, got, "Тестовый текст 2 с пустым озаглавленным примечанием.<a id=\"ref-note-19-1\"></a>[\\[1.19\\]](#note-note-19)")
+	assertContains(t, got, "Тестовый текст 3 с полностью пустым примечанием.<a id=\"ref-note-20-1\"></a>[\\[1.20\\]](#note-note-20)")
+	assertContains(t, got, "<a id=\"note-note-19\"></a>\n### 1. 1.19")
+	assertContains(t, got, "[\\[\\<\\]](#ref-note-19-1)")
+	assertContains(t, got, "<a id=\"note-note-20\"></a>\n### 2. 1.20")
+	assertContains(t, got, "[\\[\\<\\]](#ref-note-20-1)")
+}
+
 func TestRenderFootnotesFloatRenumberedUsesDisplayText(t *testing.T) {
 	c := footnoteContent(common.OutputFmtMd, common.FootnotesModeFloatRenumbered)
 	c.FootnotesIndex["note-1"] = fb2.FootnoteRef{BodyIdx: 1, SectionIdx: 0, DisplayText: "7"}
@@ -256,7 +403,7 @@ func TestRenderFootnotesFloatRenumberedUsesDisplayText(t *testing.T) {
 		t.Fatalf("Render() error = %v", err)
 	}
 
-	assertContains(t, got, "Text [\\[7\\]](#note-note-1)")
+	assertContains(t, got, "Text <a id=\"ref-note-1-1\"></a>[\\[7\\]](#note-note-1)")
 	assertContains(t, got, "<a id=\"note-note-1\"></a>\n### 1. 7")
 	if strings.Contains(got, "Text [note]") || strings.Contains(got, "### 1. Note 1") {
 		t.Fatalf("floatRenumbered did not prefer DisplayText:\n%s", got)
@@ -282,8 +429,8 @@ func TestRenderFootnotesFloatIncludesNestedReferencedNotes(t *testing.T) {
 		t.Fatalf("Render() error = %v", err)
 	}
 
-	assertContains(t, got, "Text [\\[1.1\\]](#note-note-1)")
-	assertContains(t, got, "First note references [\\[1.2\\]](#note-note-2)")
+	assertContains(t, got, "Text <a id=\"ref-note-1-1\"></a>[\\[1.1\\]](#note-note-1)")
+	assertContains(t, got, "First note references <a id=\"ref-note-2-1\"></a>[\\[1.2\\]](#note-note-2)")
 	assertContains(t, got, "<a id=\"note-note-2\"></a>\n### 2. 1.2")
 	assertContains(t, got, "Nested note.")
 }

@@ -100,6 +100,12 @@ func RenderWithOptions(c *content.Content, cfg *config.DocumentConfig, opts Rend
 }
 
 func (r *renderer) render() ([]byte, error) {
+	oldFilename := r.c.CurrentFilename
+	if filename := r.outputFilename(); filename != "" {
+		r.c.CurrentFilename = filename
+	}
+	defer func() { r.c.CurrentFilename = oldFilename }()
+
 	plan, err := structure.BuildPlan(r.c)
 	if err != nil {
 		return nil, fmt.Errorf("build text structure: %w", err)
@@ -215,6 +221,15 @@ func (r *renderer) renderUnit(unit *structure.Unit) {
 	if unit == nil {
 		return
 	}
+	oldChapterTitle := r.c.CurrentChapterTitle
+	oldSectionTitle := r.c.CurrentSectionTitle
+	r.c.CurrentChapterTitle = strings.TrimSpace(unit.Title)
+	r.c.CurrentSectionTitle = r.c.CurrentChapterTitle
+	defer func() {
+		r.c.CurrentChapterTitle = oldChapterTitle
+		r.c.CurrentSectionTitle = oldSectionTitle
+	}()
+
 	switch unit.Kind {
 	case structure.UnitCover:
 		return
@@ -255,8 +270,17 @@ func (r *renderer) renderFootnoteBody(body *fb2.Body, anchorID string) {
 	} else if title := strings.TrimSpace(body.AsTitleText("Notes")); title != "" {
 		r.headingWithAnchor(r.plainInline(title), 2, anchorID)
 	}
+	sectionBlocks := make([][]string, len(body.Sections))
 	for i := range body.Sections {
-		r.renderSection(&body.Sections[i], 3)
+		child := r.childRenderer()
+		child.renderSection(&body.Sections[i], 3)
+		sectionBlocks[i] = child.blocks
+	}
+	for i := range body.Sections {
+		for _, block := range sectionBlocks[i] {
+			r.block(block)
+		}
+		r.renderFootnoteBacklinks(body.Sections[i].ID)
 	}
 }
 
@@ -264,6 +288,12 @@ func (r *renderer) renderSection(section *fb2.Section, depth int) {
 	if section == nil {
 		return
 	}
+	oldSectionTitle := r.c.CurrentSectionTitle
+	if title := strings.TrimSpace(section.AsTitleText("")); title != "" {
+		r.c.CurrentSectionTitle = title
+	}
+	defer func() { r.c.CurrentSectionTitle = oldSectionTitle }()
+
 	if section.Title != nil {
 		r.titleWithAnchor(section.Title, depth, section.ID)
 	}
@@ -484,7 +514,12 @@ func (r *renderer) link(seg *fb2.InlineSegment, text string) string {
 	linkID, internal := strings.CutPrefix(seg.Href, "#")
 	if internal {
 		if _, ok := r.c.FootnotesIndex[linkID]; ok {
-			return r.footnoteLink(linkID, normalizeInlineWhitespace(seg.Text+rawSegmentsText(seg.Children)))
+			return r.footnoteLink(
+				linkID,
+				normalizeInlineWhitespace(seg.Text+rawSegmentsText(seg.Children)),
+				strings.TrimSpace(text),
+				hasInlineImageSegment(seg.Children),
+			)
 		}
 		if r.format == formatMD && text != "" {
 			return "[" + escapeMDLinkTextRendered(text) + "](" + escapeMDURL(seg.Href) + ")"
@@ -500,16 +535,25 @@ func (r *renderer) link(seg *fb2.InlineSegment, text string) string {
 	return text
 }
 
-func (r *renderer) footnoteLink(linkID string, text string) string {
+func (r *renderer) footnoteLink(linkID string, text string, renderedText string, useRenderedText bool) string {
 	ref := r.c.FootnotesIndex[linkID]
 	label := strings.TrimSpace(text)
+	labelPresent := label != "" || (useRenderedText && strings.TrimSpace(renderedText) != "")
+	referenceAnchor := ""
+	if r.format == formatMD && r.c.FootnotesMode.IsFloat() {
+		ref := r.c.AddFootnoteBackLinkRef(linkID)
+		referenceAnchor = r.markdownReferenceAnchor(ref)
+	} else if r.c.FootnotesMode.IsFloat() {
+		r.c.AddFootnoteBackLinkRef(linkID)
+	}
 	if !r.c.FootnotesMode.IsFloat() {
-		if r.format == formatMD && label != "" {
-			return "[" + escapeMDLinkTextRendered(r.footnoteLabel(label)) + "](#" + escapeMDURL(markdownAnchor(linkID)) + ")"
+		if r.format == formatMD && labelPresent {
+			return referenceAnchor +
+				"[" + escapeMDLinkTextRendered(r.markdownFootnoteLabel(label, renderedText, useRenderedText)) + "](#" +
+				escapeMDURL(markdownAnchor(linkID)) + ")"
 		}
 		return text
 	}
-	r.c.AddFootnoteBackLinkRef(linkID)
 	noteNumber := r.endnotes.add(linkID)
 	if r.c.FootnotesMode == common.FootnotesModeFloatRenumbered {
 		label = strings.TrimSpace(ref.DisplayText)
@@ -521,7 +565,9 @@ func (r *renderer) footnoteLink(linkID string, text string) string {
 		label = fmt.Sprintf("%d", noteNumber)
 	}
 	if r.format == formatMD {
-		return "[" + escapeMDLinkTextRendered(r.footnoteLabel(label)) + "](#" + escapeMDURL(endnoteAnchor(linkID)) + ")"
+		return referenceAnchor +
+			"[" + escapeMDLinkTextRendered(r.markdownFootnoteLabel(label, renderedText, useRenderedText)) + "](#" +
+			escapeMDURL(endnoteAnchor(linkID)) + ")"
 	}
 	if strings.HasPrefix(label, "[") && strings.HasSuffix(label, "]") {
 		return label
@@ -534,6 +580,13 @@ func (r *renderer) footnoteLabel(label string) string {
 		return escapeMDInline(label)
 	}
 	return escapeMDInline("[" + label + "]")
+}
+
+func (r *renderer) markdownFootnoteLabel(label string, renderedText string, useRenderedText bool) string {
+	if useRenderedText && strings.TrimSpace(renderedText) != "" {
+		return renderedText
+	}
+	return r.footnoteLabel(label)
 }
 
 func (r *renderer) inlineImage(img *fb2.InlineImage) string {
@@ -714,6 +767,13 @@ func (r *renderer) renderEndnotes() {
 		return
 	}
 	r.heading("Notes", 2)
+	type renderedEndnote struct {
+		id     string
+		label  string
+		blocks []string
+		number int
+	}
+	notes := make([]renderedEndnote, 0, len(r.endnotes.ids))
 	for i := 0; i < len(r.endnotes.ids); i++ {
 		id := r.endnotes.ids[i]
 		ref, ok := r.c.FootnotesIndex[id]
@@ -733,18 +793,22 @@ func (r *renderer) renderEndnotes() {
 			label = fmt.Sprintf("%d", i+1)
 		}
 		blocks := r.renderFootnoteBlocks(section)
-		if len(blocks) == 0 {
+		if len(blocks) == 0 && r.format != formatMD {
 			continue
 		}
+		notes = append(notes, renderedEndnote{id: id, label: label, blocks: blocks, number: i + 1})
+	}
+	for _, note := range notes {
 		if r.format == formatMD {
-			r.headingWithAnchor(r.plainInline(fmt.Sprintf("%d. %s", i+1, label)), 3, endnoteAnchor(id))
-			for _, block := range blocks {
+			r.headingWithAnchor(r.plainInline(fmt.Sprintf("%d. %s", note.number, note.label)), 3, endnoteAnchor(note.id))
+			for _, block := range note.blocks {
 				r.block(block)
 			}
+			r.renderFootnoteBacklinks(note.id)
 			continue
 		}
-		r.block("[" + label + "]")
-		for _, block := range blocks {
+		r.block("[" + note.label + "]")
+		for _, block := range note.blocks {
 			r.block(block)
 		}
 	}
@@ -754,13 +818,13 @@ func (r *renderer) renderFootnoteBlocks(section *fb2.Section) []string {
 	if section == nil {
 		return nil
 	}
-	child := &renderer{
-		c:        r.c,
-		cfg:      r.cfg,
-		format:   r.format,
-		endnotes: r.endnotes,
-		options:  r.options,
+	oldSectionTitle := r.c.CurrentSectionTitle
+	if title := strings.TrimSpace(section.AsTitleText("")); title != "" {
+		r.c.CurrentSectionTitle = title
 	}
+	defer func() { r.c.CurrentSectionTitle = oldSectionTitle }()
+
+	child := r.childRenderer()
 	for i := range section.Epigraphs {
 		child.renderEpigraph(&section.Epigraphs[i])
 	}
@@ -770,6 +834,16 @@ func (r *renderer) renderFootnoteBlocks(section *fb2.Section) []string {
 	}
 	child.renderFlow(section.Content, 1, blockNormal)
 	return slices.DeleteFunc(child.blocks, func(block string) bool { return strings.TrimSpace(block) == "" })
+}
+
+func (r *renderer) childRenderer() *renderer {
+	return &renderer{
+		c:        r.c,
+		cfg:      r.cfg,
+		format:   r.format,
+		endnotes: r.endnotes,
+		options:  r.options,
+	}
 }
 
 func (r *renderer) renderCodeParagraph(p *fb2.Paragraph, style blockStyle) bool {
@@ -826,6 +900,19 @@ func hasMeaningfulSegments(segments []fb2.InlineSegment) bool {
 			return true
 		}
 		if strings.TrimSpace(seg.Text) != "" || hasMeaningfulSegments(seg.Children) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasInlineImageSegment(segments []fb2.InlineSegment) bool {
+	for i := range segments {
+		seg := &segments[i]
+		if seg.Kind == fb2.InlineImageSegment {
+			return true
+		}
+		if hasInlineImageSegment(seg.Children) {
 			return true
 		}
 	}
@@ -926,6 +1013,102 @@ func endnoteAnchor(id string) string {
 		return ""
 	}
 	return "note-" + anchor
+}
+
+func (r *renderer) markdownReferenceAnchor(ref content.BackLinkRef) string {
+	anchor := markdownAnchor(ref.RefID)
+	if anchor == "" {
+		return ""
+	}
+	return "<a id=\"" + anchor + "\"></a>"
+}
+
+func (r *renderer) renderFootnoteBacklinks(sectionID string) {
+	if r.format != formatMD {
+		return
+	}
+	if backlinks := r.markdownFootnoteBacklinks(sectionID); backlinks != "" {
+		r.block(backlinks)
+	}
+}
+
+func (r *renderer) markdownFootnoteBacklinks(sectionID string) string {
+	sectionID = strings.TrimSpace(sectionID)
+	if sectionID == "" || r.c == nil {
+		return ""
+	}
+	r.updateMarkdownBacklinkLocations()
+	refs := r.c.BackLinkIndex[sectionID]
+	if len(refs) == 0 {
+		return ""
+	}
+	links := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		text := strings.TrimSpace(r.c.BacklinkText(ref))
+		href := markdownBacklinkHref(ref)
+		if text == "" || href == "" {
+			continue
+		}
+		links = append(links, "["+escapeMDLinkTextRendered(escapeMDInline(text))+"]("+escapeMDURL(href)+")")
+	}
+	return strings.Join(links, "\u00A0")
+}
+
+func markdownBacklinkHref(ref content.BackLinkRef) string {
+	href := strings.TrimSpace(ref.Href)
+	if href != "" {
+		return href
+	}
+	anchor := markdownAnchor(ref.RefID)
+	if anchor == "" {
+		return ""
+	}
+	return "#" + anchor
+}
+
+func (r *renderer) updateMarkdownBacklinkLocations() {
+	if r == nil || r.format != formatMD || r.c == nil || len(r.blocks) == 0 {
+		return
+	}
+	locations := make(map[string]int)
+	for i, block := range r.blocks {
+		for _, anchor := range markdownBlockAnchors(block) {
+			locations[anchor] = i + 1
+		}
+	}
+	for _, refs := range r.c.BackLinkIndex {
+		for _, ref := range refs {
+			if location := locations[markdownAnchor(ref.RefID)]; location > 0 {
+				r.c.SetBackLinkRefLocation(ref.RefID, location)
+			}
+		}
+	}
+}
+
+func markdownBlockAnchors(block string) []string {
+	var anchors []string
+	for {
+		_, after, ok := strings.Cut(block, `<a id="`)
+		if !ok {
+			return anchors
+		}
+		anchor, rest, ok := strings.Cut(after, `"`)
+		if !ok {
+			return anchors
+		}
+		if anchor != "" {
+			anchors = append(anchors, anchor)
+		}
+		block = rest
+	}
+}
+
+func (r *renderer) outputFilename() string {
+	outputPath := strings.TrimSpace(r.options.OutputPath)
+	if outputPath == "" {
+		return ""
+	}
+	return filepath.Base(outputPath)
 }
 
 func escapeHTMLAttr(text string) string {

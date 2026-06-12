@@ -776,6 +776,55 @@ func TestNormalizeFootnoteLabels(t *testing.T) {
 		}
 	})
 
+	t.Run("preserves_inline_image_footnote_labels", func(t *testing.T) {
+		book := &FictionBook{
+			Bodies: []Body{
+				{
+					Kind: BodyMain,
+					Sections: []Section{{
+						ID: "s1",
+						Content: []FlowItem{{
+							Kind: FlowParagraph,
+							Paragraph: &Paragraph{Text: []InlineSegment{
+								{Kind: InlineText, Text: "Text with "},
+								{
+									Kind: InlineLink,
+									Href: "#n1",
+									Children: []InlineSegment{{
+										Kind:  InlineImageSegment,
+										Image: &InlineImage{Href: "#label", Alt: "[1.10]"},
+									}},
+								},
+							}},
+						}},
+					}},
+				},
+				{
+					Kind: BodyFootnotes,
+					Sections: []Section{{
+						ID:      "n1",
+						Content: []FlowItem{{Kind: FlowParagraph, Paragraph: &Paragraph{Text: []InlineSegment{{Kind: InlineText, Text: "Note"}}}}},
+					}},
+				},
+			},
+		}
+
+		result, _ := book.NormalizeFootnoteLabels(
+			FootnoteRefs{"n1": {BodyIdx: 1, SectionIdx: 0}},
+			"{{- .BodyNumber -}}.{{- .NoteNumber -}}",
+			common.OutputFmtMd,
+			log,
+		)
+
+		link := result.Bodies[0].Sections[0].Content[0].Paragraph.Text[1]
+		if len(link.Children) != 1 || link.Children[0].Kind != InlineImageSegment || link.Children[0].Image == nil {
+			t.Fatalf("inline image label was not preserved: %#v", link.Children)
+		}
+		if link.Children[0].Image.Href != "#label" || link.Children[0].Image.Alt != "[1.10]" {
+			t.Fatalf("inline image label = %#v, want href #label alt [1.10]", link.Children[0].Image)
+		}
+	})
+
 	t.Run("custom_formatter", func(t *testing.T) {
 		book := &FictionBook{
 			Bodies: []Body{

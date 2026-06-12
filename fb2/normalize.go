@@ -711,6 +711,9 @@ func updateFootnoteLinksSegments(segments []InlineSegment, index FootnoteRefs) {
 }
 
 func footnoteLabelChildren(children []InlineSegment, label string) []InlineSegment {
+	if footnoteLabelHasInlineImage(children) {
+		return children
+	}
 	if child, ok := footnoteLabelStyleChild(children); ok {
 		child.Text = label
 		child.Children = nil
@@ -746,6 +749,18 @@ func inlineSegmentWhitespaceOnly(seg InlineSegment) bool {
 		}
 	}
 	return true
+}
+
+func footnoteLabelHasInlineImage(segments []InlineSegment) bool {
+	for _, seg := range segments {
+		if seg.Kind == InlineImageSegment && seg.Image != nil {
+			return true
+		}
+		if footnoteLabelHasInlineImage(seg.Children) {
+			return true
+		}
+	}
+	return false
 }
 
 func canPreserveFootnoteLabelStyle(seg InlineSegment) bool {
