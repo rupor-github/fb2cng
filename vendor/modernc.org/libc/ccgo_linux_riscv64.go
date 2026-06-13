@@ -5,10 +5,12 @@
 package libc
 
 import (
+	"math"
 	"reflect"
 	"unsafe"
 )
 
+var _ = math.Pi
 var _ reflect.Type
 var _ unsafe.Pointer
 

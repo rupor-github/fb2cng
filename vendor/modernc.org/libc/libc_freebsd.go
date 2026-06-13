@@ -74,7 +74,7 @@ type Tsize_t = types.Size_t
 // assignSizeT and postIncSizeT are the size_t-typed analogues of
 // AssignUint64/PostIncUint64; the existing helpers can't be used on FreeBSD/386
 // where size_t is uint32, not uint64.
-func assignSizeT(p *size_t, v size_t) size_t { *p = v; return v }
+func assignSizeT(p *size_t, v size_t) size_t  { *p = v; return v }
 func postIncSizeT(p *size_t, d size_t) size_t { r := *p; *p += d; return r }
 
 type syscallErrno = unix.Errno

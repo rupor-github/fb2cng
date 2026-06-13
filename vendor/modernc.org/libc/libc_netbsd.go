@@ -1843,8 +1843,18 @@ func Xmmap(t *TLS, addr uintptr, length types.Size_t, prot, flags, fd int32, off
 	if __ccgo_strace {
 		trc("t=%v addr=%v length=%v fd=%v offset=%v, (%v:)", t, addr, length, fd, offset, origin(2))
 	}
-	// Cannot avoid the unix here, addr sometimes matter.
-	data, _, err := unix.Syscall6(unix.SYS_MMAP, addr, uintptr(length), uintptr(prot), uintptr(flags), uintptr(fd), uintptr(offset))
+	// NetBSD mmap(2) is
+	//
+	//	mmap(void *addr, size_t len, int prot, int flags, int fd, long PAD, off_t pos)
+	//
+	// i.e. there is a `long PAD` argument before `off_t pos`. The offset must
+	// therefore be passed as the 7th syscall argument (Syscall9), not the 6th
+	// (Syscall6): with Syscall6 the offset lands in the PAD slot and `pos` is
+	// left as stack garbage, so the kernel maps at a garbage file offset and
+	// returns an unaligned/unbacked pointer that faults on first access (e.g.
+	// the SQLite WAL-index shm). Matches golang.org/x/sys/unix's own netbsd
+	// mmap (zsyscall_netbsd_amd64.go).
+	data, _, err := unix.Syscall9(unix.SYS_MMAP, addr, uintptr(length), uintptr(prot), uintptr(flags), uintptr(fd), 0, uintptr(offset), 0, 0)
 	if err != 0 {
 		if dmesgs {
 			dmesg("%v: %v FAIL", origin(1), err)
