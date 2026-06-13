@@ -17,6 +17,8 @@ TXT output:
 Markdown output:
 
 - Produces UTF-8 semantic Markdown with headings, paragraphs, links, tables, block quotes, fenced code blocks, and optional image output.
+- Starts with YAML front matter containing title, authors, series, language, date, and genres when available.
+- Uses `document.metainformation.title_template` and `creator_name_template` for YAML front matter title and author values.
 - Emits explicit anchors for section and note targets.
 - Uses Markdown pipe tables, including inside collected endnotes.
 - Preserves code listings as fenced code blocks when a paragraph is entirely code.

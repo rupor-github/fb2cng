@@ -55,9 +55,9 @@ func TestRenderMarkdownSemanticOutput(t *testing.T) {
 		t.Fatalf("Render() error = %v", err)
 	}
 
-	assertContains(t, got, "# Test Book")
-	assertContains(t, got, "Authors: Ada Lovelace")
-	assertContains(t, got, "Series: Series #1")
+	assertContains(t, got, "---\ntitle: \"Test Book\"\nauthors:\n  - \"Ada Lovelace\"\nseries:\n  - name: \"Series\"\n    number: 1")
+	assertContains(t, got, "language: \"en\"")
+	assertContains(t, got, "genres:\n  - \"sf\"\n---\n\n# Test Book")
 	assertContains(t, got, "## Chapter \\*One\\*")
 	assertContains(t, got, "Hello **world** [site](https://example.com)")
 	assertContains(t, got, "See [Chapter](#chapter-1) end")
@@ -65,6 +65,36 @@ func TestRenderMarkdownSemanticOutput(t *testing.T) {
 	assertContains(t, got, "[Image: Map]")
 	assertContains(t, got, "| A | B |")
 	assertContains(t, got, "| --- | --- |")
+}
+
+func TestRenderMarkdownFrontMatterUsesMetainformationTemplates(t *testing.T) {
+	c := testContent(common.OutputFmtMd)
+	noteNum := 2
+	c.Book.Description.TitleInfo.Authors = []fb2.Author{{FirstName: "Ada", LastName: "Lovelace"}}
+	c.Book.Description.TitleInfo.Sequences = []fb2.Sequence{{Name: "Analytical Engine", Number: &noteNum}}
+	c.Book.Bodies = []fb2.Body{{
+		Kind: fb2.BodyMain,
+		Sections: []fb2.Section{{
+			ID:      "chapter-1",
+			Title:   title("Chapter"),
+			Content: []fb2.FlowItem{paragraphItem(fb2.InlineSegment{Kind: fb2.InlineText, Text: "Text"})},
+		}},
+	}}
+	cfg := testConfig()
+	cfg.Metainformation.TitleTemplate = `{{ with first .Series }}{{ .Name }} #{{ .Number }}: {{ end }}{{ .Title }}`
+	cfg.Metainformation.CreatorNameTemplate = `{{ .LastName }}, {{ .FirstName }}`
+
+	got, err := renderForTest(c, cfg)
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+
+	assertContains(t, got, "title: \"Analytical Engine #2: Test Book\"")
+	assertContains(t, got, "authors:\n  - \"Lovelace, Ada\"")
+	assertContains(t, got, "---\n\n# Test Book")
+	if strings.Contains(got, "# Analytical Engine #2: Test Book") || strings.Contains(got, "Authors: Ada Lovelace") {
+		t.Fatalf("Markdown rendered legacy metadata block instead of YAML front matter:\n%s", got)
+	}
 }
 
 func TestRenderMarkdownTOCLinksToStableAnchors(t *testing.T) {

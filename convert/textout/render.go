@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -136,12 +137,14 @@ func (r *renderer) render() ([]byte, error) {
 }
 
 func (r *renderer) renderFrontMatter() {
-	info := r.c.Book.Description.TitleInfo
-	title := strings.TrimSpace(info.BookTitle.Value)
-	if title == "" {
-		title = strings.TrimSuffix(r.c.SrcName, ".fb2")
+	if r.format == formatMD {
+		r.renderMarkdownFrontMatter()
+		r.heading(r.plainInline(r.bookTitle()), 1)
+		return
 	}
-	r.heading(r.plainInline(title), 1)
+
+	info := r.c.Book.Description.TitleInfo
+	r.heading(r.plainInline(r.bookTitle()), 1)
 
 	lines := make([]string, 0, 6)
 	if authors := formatAuthors(info.Authors); authors != "" {
@@ -160,6 +163,111 @@ func (r *renderer) renderFrontMatter() {
 		lines = append(lines, "Genres: "+r.plainInline(genres))
 	}
 	r.paragraph(strings.Join(lines, "\n"))
+}
+
+func (r *renderer) bookTitle() string {
+	title := strings.TrimSpace(r.c.Book.Description.TitleInfo.BookTitle.Value)
+	if title == "" {
+		return strings.TrimSuffix(r.c.SrcName, ".fb2")
+	}
+	return title
+}
+
+func (r *renderer) renderMarkdownFrontMatter() {
+	info := r.c.Book.Description.TitleInfo
+	lines := []string{"---"}
+	if title := r.markdownMetaTitle(); title != "" {
+		lines = append(lines, "title: "+yamlScalar(title))
+	}
+	if authors := r.markdownMetaAuthors(info.Authors); len(authors) > 0 {
+		lines = append(lines, "authors:")
+		for _, author := range authors {
+			lines = append(lines, "  - "+yamlScalar(author))
+		}
+	}
+	if len(info.Sequences) > 0 {
+		lines = append(lines, "series:")
+		for _, seq := range info.Sequences {
+			name := strings.TrimSpace(seq.Name)
+			if name == "" {
+				continue
+			}
+			lines = append(lines, "  - name: "+yamlScalar(name))
+			if seq.Number != nil {
+				lines = append(lines, "    number: "+strconv.Itoa(*seq.Number))
+			}
+		}
+	}
+	if lang := strings.TrimSpace(info.Lang.String()); lang != "" && lang != "und" {
+		lines = append(lines, "language: "+yamlScalar(lang))
+	}
+	if date := formatDate(info.Date); date != "" {
+		lines = append(lines, "date: "+yamlScalar(date))
+	}
+	if genres := markdownMetaGenres(info.Genres); len(genres) > 0 {
+		lines = append(lines, "genres:")
+		for _, genre := range genres {
+			lines = append(lines, "  - "+yamlScalar(genre))
+		}
+	}
+	lines = append(lines, "---")
+	r.block(strings.Join(lines, "\n"))
+}
+
+func (r *renderer) markdownMetaTitle() string {
+	templateText := strings.TrimSpace(r.cfg.Metainformation.TitleTemplate)
+	if templateText != "" {
+		title, err := r.c.Book.ExpandTemplateMetainfo(config.MetaTitleTemplateFieldName, templateText, r.c.SrcName, r.c.OutputFormat)
+		if err == nil && strings.TrimSpace(title) != "" {
+			return strings.TrimSpace(title)
+		}
+	}
+	title := strings.TrimSpace(r.c.Book.Description.TitleInfo.BookTitle.Value)
+	if title == "" {
+		return strings.TrimSuffix(r.c.SrcName, ".fb2")
+	}
+	return title
+}
+
+func (r *renderer) markdownMetaAuthors(authors []fb2.Author) []string {
+	result := make([]string, 0, len(authors))
+	templateText := strings.TrimSpace(r.cfg.Metainformation.CreatorNameTemplate)
+	for i := range authors {
+		name := ""
+		if templateText != "" {
+			expanded, err := r.c.Book.ExpandTemplateAuthorName(
+				config.MetaCreatorNameTemplateFieldName,
+				templateText,
+				r.c.OutputFormat,
+				i,
+				&authors[i],
+			)
+			if err == nil {
+				name = strings.TrimSpace(expanded)
+			}
+		}
+		if name == "" {
+			name = formatAuthor(authors[i])
+		}
+		if name != "" {
+			result = append(result, name)
+		}
+	}
+	return result
+}
+
+func markdownMetaGenres(genres []fb2.GenreRef) []string {
+	result := make([]string, 0, len(genres))
+	for _, genre := range genres {
+		if text := strings.TrimSpace(genre.Value); text != "" {
+			result = append(result, text)
+		}
+	}
+	return result
+}
+
+func yamlScalar(text string) string {
+	return strconv.Quote(text)
 }
 
 func (r *renderer) renderAnnotation() {
