@@ -77,11 +77,14 @@ Convert options:
 | `--to TYPE` | `epub2`, `epub3`, `kepub`, `kfx`, `azw8`, `pdf`, `txt`, or `md` |
 | `--ebook`, `--eb` | For Kindle formats, mark output as ebook/EBOK instead of personal document/PDOC |
 | `--asin ASIN` | For Kindle formats, set ASIN metadata |
+| `--output-file FILE`, `-o FILE` | Write a single source book to exact output file path |
 | `--nodirs`, `--nd` | Do not preserve input directory structure in output |
 | `--overwrite`, `--ow` | Overwrite existing output files |
 | `--force-zip-cp ENCODING` | Force archive file-name encoding, such as `windows-1251` or `cp866` |
 
 `SOURCE` can be a single FB2 file, a directory, an archive entry, or a directory inside an archive. Archives inside archives are not supported. `DESTINATION` is always a directory; if omitted, the current directory is used.
+
+`--output-file` is different from `DESTINATION`: it is an exact final file path for single-book conversion. It cannot be used with `DESTINATION`, recursive directory conversion, or archive paths that contain multiple FB2 books. It is useful when another application already decided the expected output file name.
 
 ## Supported Formats
 
@@ -151,6 +154,22 @@ Common configuration areas:
 ### Choose An Output Name
 
 Use `document.output_name_template`. See [Templates](templates.md#output_name_template).
+
+### Write To An Exact Output File
+
+Use `--output-file` when converting one book and the caller expects one exact output path:
+
+```bash
+fbc convert --to epub3 --output-file /tmp/output/book.epub book.fb2
+```
+
+The short form is equivalent:
+
+```bash
+fbc convert --to epub3 -o /tmp/output/book.epub book.fb2
+```
+
+In this mode, `fbc` writes exactly that file path and ignores `document.output_name_template` and `--nodirs`. `--overwrite` is still required if the file already exists.
 
 ### Customize Metadata
 

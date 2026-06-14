@@ -51,16 +51,29 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 		return err
 	}
 
+	outputFile := cmd.String("output-file")
+	if outputFile != "" {
+		if cmd.Args().Len() > 1 {
+			return errors.New("--output-file cannot be used with DESTINATION")
+		}
+		outputFile, err = filepath.Abs(outputFile)
+		if err != nil {
+			return err
+		}
+	}
+
 	dst := cmd.Args().Get(1)
-	if len(dst) == 0 {
+	if len(dst) == 0 && outputFile == "" {
 		if dst, err = os.Getwd(); err != nil {
 			return fmt.Errorf("unable to get working directory: %w", err)
 		}
 	}
-	if dst, err = filepath.Abs(dst); err != nil {
-		return err
+	if dst != "" {
+		if dst, err = filepath.Abs(dst); err != nil {
+			return err
+		}
 	}
-	if cmd.Args().Len() > 2 {
+	if outputFile == "" && cmd.Args().Len() > 2 {
 		log.Warn("Mailformed command line, too many destinations", zap.Strings("ignoring", cmd.Args().Slice()[2:]))
 	}
 
@@ -139,11 +152,21 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 		}
 	}
 
-	log.Info("Processing starting", zap.String("source", src), zap.String("destination", dst), zap.Stringer("format", format))
+	logDestination := dst
+	if outputFile != "" {
+		logDestination = outputFile
+	}
+	log.Info("Processing starting", zap.String("source", src), zap.String("destination", logDestination), zap.Stringer("format", format))
+	if outputFile != "" {
+		log.Info("Using exact output file", zap.String("output_file", outputFile))
+	}
 	defer func(start time.Time) {
 		log.Info("Processing completed", zap.Duration("elapsed", time.Since(start)))
 	}(time.Now())
 
+	if outputFile != "" {
+		return processOutputFile(ctx, src, outputFile, format, log)
+	}
 	return process(ctx, src, dst, format, log)
 }
 
@@ -208,7 +231,7 @@ func process(ctx context.Context, src, dst string, format common.OutputFmt, log 
 				return fmt.Errorf("unable to process file %q: %w", head, err)
 			}
 			defer file.Close()
-			if err := processBook(ctx, selectReader(file, enc), filepath.Base(head), dst, format, log); err != nil {
+			if err := processBook(ctx, selectReader(file, enc), filepath.Base(head), dst, format, log, processBookOptions{}); err != nil {
 				return fmt.Errorf("unable to process file %q: %w", head, err)
 			}
 			break
@@ -220,6 +243,139 @@ func process(ctx context.Context, src, dst string, format common.OutputFmt, log 
 		return fmt.Errorf("input source was not found (%s)", src)
 	}
 	return nil
+}
+
+func processOutputFile(ctx context.Context, src, outputFile string, format common.OutputFmt, log *zap.Logger) error {
+	var head, tail string
+	for head = src; len(head) != 0; head, tail = filepath.Split(head) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		head = strings.TrimSuffix(head, string(filepath.Separator))
+
+		fi, err := os.Stat(head)
+		if err != nil {
+			continue
+		}
+
+		if fi.Mode().IsDir() {
+			if len(tail) != 0 {
+				return fmt.Errorf("input source was not found (%s) => (%s)", head, strings.TrimPrefix(src, head))
+			}
+			return errors.New("--output-file requires SOURCE to resolve to a single FB2 book, not a directory")
+		}
+
+		if !fi.Mode().IsRegular() {
+			return fmt.Errorf("unexpected path mode for (%s) => (%s)", head, strings.TrimPrefix(src, head))
+		}
+
+		archiveFile, err := isArchiveFile(head)
+		if err != nil {
+			return fmt.Errorf("unable to check archive type: %w", err)
+		}
+		if archiveFile {
+			tail = strings.TrimPrefix(strings.TrimPrefix(src, head), string(filepath.Separator))
+			if err := processSingleBookArchiveOutputFile(ctx, head, tail, outputFile, format, log); err != nil {
+				return fmt.Errorf("unable to process archive: %w", err)
+			}
+			return nil
+		}
+
+		book, enc, err := isBookFile(head)
+		if err != nil {
+			return fmt.Errorf("unable to check file type: %w", err)
+		}
+		if book && len(tail) == 0 {
+			file, err := os.Open(head)
+			if err != nil {
+				return fmt.Errorf("unable to process file %q: %w", head, err)
+			}
+			defer file.Close()
+			if err := processBook(
+				ctx,
+				selectReader(file, enc),
+				filepath.Base(head),
+				filepath.Dir(outputFile),
+				format,
+				log,
+				processBookOptions{OutputFile: outputFile},
+			); err != nil {
+				return fmt.Errorf("unable to process file %q: %w", head, err)
+			}
+			return nil
+		}
+		return fmt.Errorf("input was not recognized as a single FB2 book (%s)", head)
+	}
+	return fmt.Errorf("input source was not found (%s)", src)
+}
+
+func processSingleBookArchiveOutputFile(
+	ctx context.Context,
+	archivePath string,
+	pathInArchive string,
+	outputFile string,
+	format common.OutputFmt,
+	log *zap.Logger,
+) error {
+	var matches []string
+	if err := archive.Walk(archivePath, pathInArchive, func(_ string, f *zip.File) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		book, _, err := isBookInArchive(f)
+		if err != nil {
+			return err
+		}
+		if book {
+			matches = append(matches, f.FileHeader.Name)
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	if len(matches) == 0 {
+		return fmt.Errorf("no FB2 books found in archive path %q", pathInArchive)
+	}
+	if len(matches) > 1 {
+		return fmt.Errorf("--output-file requires archive SOURCE to resolve to one FB2 book, found %d", len(matches))
+	}
+
+	r, err := zip.OpenReader(archivePath)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	for _, f := range r.File {
+		if f.FileHeader.Name != matches[0] {
+			continue
+		}
+		book, enc, err := isBookInArchive(f)
+		if err != nil {
+			return err
+		}
+		if !book {
+			break
+		}
+		reader, err := f.Open()
+		if err != nil {
+			return fmt.Errorf("open archive entry: %w", err)
+		}
+		err = processBook(
+			ctx,
+			selectReader(reader, enc),
+			f.FileHeader.Name,
+			filepath.Dir(outputFile),
+			format,
+			log,
+			processBookOptions{OutputFile: outputFile},
+		)
+		if closeErr := reader.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close archive entry: %w", closeErr))
+		}
+		return err
+	}
+	return fmt.Errorf("archive entry %q disappeared", matches[0])
 }
 
 // processDir walks directory tree finding fb2 files and processes them.
@@ -351,7 +507,7 @@ func processBookFile(ctx context.Context, path, src, dst string, enc srcEncoding
 		return fmt.Errorf("open file: %w", err)
 	}
 
-	err = processBook(ctx, selectReader(file, enc), src, dst, format, log)
+	err = processBook(ctx, selectReader(file, enc), src, dst, format, log, processBookOptions{})
 	if closeErr := file.Close(); closeErr != nil {
 		err = errors.Join(err, fmt.Errorf("close file: %w", closeErr))
 	}
@@ -364,7 +520,7 @@ func processBookArchiveEntry(ctx context.Context, f *zip.File, enc srcEncoding, 
 		return fmt.Errorf("open archive entry: %w", err)
 	}
 
-	err = processBook(ctx, selectReader(r, enc), src, dst, format, log)
+	err = processBook(ctx, selectReader(r, enc), src, dst, format, log, processBookOptions{})
 	if closeErr := r.Close(); closeErr != nil {
 		err = errors.Join(err, fmt.Errorf("close archive entry: %w", closeErr))
 	}
@@ -387,13 +543,26 @@ func makeTempOutputPath(outputName string) (string, error) {
 	return tmpName, nil
 }
 
+type processBookOptions struct {
+	OutputFile string
+}
+
 // processBook processes single FB2 file. "src" is part of the source path
 // (always including file name) relative to the original path. When actual file
 // was specified it will be just base file name without a path. When looking
 // inside archive or directory it will be relative path inside archive or
 // directory (including base file name). "dst" is the destination directory
-// where the converted file should be written.
-func processBook(ctx context.Context, r io.Reader, src string, dst string, format common.OutputFmt, log *zap.Logger) (rerr error) {
+// where the converted file should be written. When outputFile is provided, it
+// is used as exact final output path instead of deriving a name from dst.
+func processBook(
+	ctx context.Context,
+	r io.Reader,
+	src string,
+	dst string,
+	format common.OutputFmt,
+	log *zap.Logger,
+	opts processBookOptions,
+) (rerr error) {
 	env := state.EnvFromContext(ctx)
 
 	var refID, outputName string
@@ -437,6 +606,9 @@ func processBook(ctx context.Context, r io.Reader, src string, dst string, forma
 
 	// Determine output file name and path based on input and configuration.
 	outputName = buildOutputPath(c, src, dst, env)
+	if opts.OutputFile != "" {
+		outputName = opts.OutputFile
+	}
 
 	// Check if output file already exists, but do not remove it until a new
 	// output has been generated successfully.

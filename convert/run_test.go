@@ -280,6 +280,59 @@ func TestProcess_SingleFileReturnsProcessBookError(t *testing.T) {
 	}
 }
 
+func TestProcessOutputFile_SingleFileWritesExactPath(t *testing.T) {
+	ctx, env := setupTestEnv(t)
+	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+	env.Cfg.Document.OutputNameTemplate = `ignored-name`
+
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "book.fb2")
+	if err := os.WriteFile(testFile, []byte(minimalFB2Content), 0644); err != nil {
+		t.Fatalf("create FB2 file: %v", err)
+	}
+	outputFile := filepath.Join(tmpDir, "flibrary-output.epub")
+
+	if err := processOutputFile(ctx, testFile, outputFile, common.OutputFmtEpub3, logger); err != nil {
+		t.Fatalf("processOutputFile() error = %v", err)
+	}
+	if _, err := os.Stat(outputFile); err != nil {
+		t.Fatalf("expected exact output file to be created: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(tmpDir, "ignored-name.epub")); !os.IsNotExist(err) {
+		t.Fatalf("output_name_template should be ignored in --output-file mode, stat err = %v", err)
+	}
+}
+
+func TestProcessOutputFile_RespectsOverwrite(t *testing.T) {
+	ctx, _ := setupTestEnv(t)
+	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "book.fb2")
+	if err := os.WriteFile(testFile, []byte(minimalFB2Content), 0644); err != nil {
+		t.Fatalf("create FB2 file: %v", err)
+	}
+	outputFile := filepath.Join(tmpDir, "existing.epub")
+	if err := os.WriteFile(outputFile, []byte("existing"), 0644); err != nil {
+		t.Fatalf("create existing output: %v", err)
+	}
+
+	err := processOutputFile(ctx, testFile, outputFile, common.OutputFmtEpub3, logger)
+	if err == nil || !strings.Contains(err.Error(), "output file already exists") {
+		t.Fatalf("expected existing output error, got %v", err)
+	}
+}
+
+func TestProcessOutputFile_RejectsDirectory(t *testing.T) {
+	ctx, _ := setupTestEnv(t)
+	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+
+	err := processOutputFile(ctx, t.TempDir(), filepath.Join(t.TempDir(), "book.epub"), common.OutputFmtEpub3, logger)
+	if err == nil || !strings.Contains(err.Error(), "not a directory") {
+		t.Fatalf("expected directory rejection, got %v", err)
+	}
+}
+
 // TestProcess_Archive tests process with a ZIP archive
 func TestProcess_Archive(t *testing.T) {
 	ctx, _ := setupTestEnv(t)
@@ -323,6 +376,40 @@ func TestProcess_Archive(t *testing.T) {
 	err = process(ctx, zipPath, dstDir, common.OutputFmtEpub3, logger)
 	if err != nil {
 		t.Errorf("process() error = %v", err)
+	}
+}
+
+func TestProcessOutputFile_ArchivePathMustResolveToOneBook(t *testing.T) {
+	ctx, _ := setupTestEnv(t)
+	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+
+	tmpDir := t.TempDir()
+	zipPath := filepath.Join(tmpDir, "books.zip")
+	writeZipTestFiles(t, zipPath,
+		zipTestFile{name: "one.fb2", data: []byte(minimalFB2Content)},
+		zipTestFile{name: "two.fb2", data: []byte(minimalFB2Content)},
+	)
+
+	err := processOutputFile(ctx, zipPath, filepath.Join(tmpDir, "book.epub"), common.OutputFmtEpub3, logger)
+	if err == nil || !strings.Contains(err.Error(), "requires archive SOURCE to resolve to one FB2 book") {
+		t.Fatalf("expected multiple archived books error, got %v", err)
+	}
+}
+
+func TestProcessOutputFile_ArchiveSingleBookWritesExactPath(t *testing.T) {
+	ctx, _ := setupTestEnv(t)
+	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+
+	tmpDir := t.TempDir()
+	zipPath := filepath.Join(tmpDir, "books.zip")
+	writeZipTestFiles(t, zipPath, zipTestFile{name: "nested/book.fb2", data: []byte(minimalFB2Content)})
+	outputFile := filepath.Join(tmpDir, "from-archive.epub")
+
+	if err := processOutputFile(ctx, zipPath+string(filepath.Separator)+"nested/book.fb2", outputFile, common.OutputFmtEpub3, logger); err != nil {
+		t.Fatalf("processOutputFile() archive error = %v", err)
+	}
+	if _, err := os.Stat(outputFile); err != nil {
+		t.Fatalf("expected exact archive output file to be created: %v", err)
 	}
 }
 
@@ -580,7 +667,15 @@ func TestProcessBook(t *testing.T) {
 
 	// Basic UTF-8 without BOM
 	dst := t.TempDir()
-	err := processBook(ctx, selectReader(readerForEncoding(t, sample, encUnknown), encUnknown), sampleName, dst, common.OutputFmtEpub3, logger)
+	err := processBook(
+		ctx,
+		selectReader(readerForEncoding(t, sample, encUnknown), encUnknown),
+		sampleName,
+		dst,
+		common.OutputFmtEpub3,
+		logger,
+		processBookOptions{},
+	)
 	if err != nil {
 		t.Errorf("processBook() error = %v", err)
 	}
@@ -591,7 +686,15 @@ func TestProcessBook(t *testing.T) {
 		testName := "encoding_" + string(rune('0'+i))
 		t.Run(testName, func(t *testing.T) {
 			dst := t.TempDir()
-			err := processBook(ctx, selectReader(readerForEncoding(t, sample, enc), enc), sampleName, dst, common.OutputFmtEpub3, logger)
+			err := processBook(
+				ctx,
+				selectReader(readerForEncoding(t, sample, enc), enc),
+				sampleName,
+				dst,
+				common.OutputFmtEpub3,
+				logger,
+				processBookOptions{},
+			)
 			if err != nil {
 				t.Errorf("processBook() with encoding %v error = %v", enc, err)
 			}
@@ -606,7 +709,15 @@ func TestProcessBook_LogsFailureOnError(t *testing.T) {
 	core := zapcore.NewCore(zapcore.NewJSONEncoder(encoderCfg), zapcore.AddSync(&logs), zap.DebugLevel)
 	logger := zap.New(core)
 
-	err := processBook(ctx, strings.NewReader(`<?xml version="1.0" encoding="UTF-8"?><FictionBook`), "broken.fb2", t.TempDir(), common.OutputFmtEpub3, logger)
+	err := processBook(
+		ctx,
+		strings.NewReader(`<?xml version="1.0" encoding="UTF-8"?><FictionBook`),
+		"broken.fb2",
+		t.TempDir(),
+		common.OutputFmtEpub3,
+		logger,
+		processBookOptions{},
+	)
 	if err == nil {
 		t.Fatal("expected processBook error, got nil")
 	}
@@ -637,7 +748,7 @@ func TestProcessBook_OverwriteKeepsExistingFileOnGenerationFailure(t *testing.T)
 		Reader: bytes.NewReader([]byte(minimalFB2Content)),
 		cancel: cancel,
 	}
-	err := processBook(cancelCtx, reader, "book.fb2", dstDir, common.OutputFmtEpub3, logger)
+	err := processBook(cancelCtx, reader, "book.fb2", dstDir, common.OutputFmtEpub3, logger, processBookOptions{})
 	if err == nil {
 		t.Fatal("expected generation error, got nil")
 	}
@@ -678,7 +789,15 @@ func TestProcessBook_WithPanic(t *testing.T) {
 	}()
 
 	dst := t.TempDir()
-	err := processBook(ctx, selectReader(readerForEncoding(t, sample, encUnknown), encUnknown), sampleName, dst, common.OutputFmtEpub3, logger)
+	err := processBook(
+		ctx,
+		selectReader(readerForEncoding(t, sample, encUnknown), encUnknown),
+		sampleName,
+		dst,
+		common.OutputFmtEpub3,
+		logger,
+		processBookOptions{},
+	)
 	_ = err
 }
 
@@ -701,7 +820,15 @@ func TestProcessBook_CleansUpWorkDir(t *testing.T) {
 	}
 
 	dst := t.TempDir()
-	err = processBook(ctx, selectReader(readerForEncoding(t, sample, encUnknown), encUnknown), sampleName, dst, common.OutputFmtEpub3, logger)
+	err = processBook(
+		ctx,
+		selectReader(readerForEncoding(t, sample, encUnknown), encUnknown),
+		sampleName,
+		dst,
+		common.OutputFmtEpub3,
+		logger,
+		processBookOptions{},
+	)
 	if err != nil {
 		t.Fatalf("processBook() error = %v", err)
 	}
