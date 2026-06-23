@@ -1990,25 +1990,11 @@ func X__inet_ntoa(t *TLS, in1 in.In_addr) uintptr {
 	panic(todo(""))
 }
 
-func Xmmap(t *TLS, addr uintptr, length types.Size_t, prot, flags, fd int32, offset types.Off_t) uintptr {
-	if __ccgo_strace {
-		trc("t=%v addr=%v length=%v fd=%v offset=%v, (%v:)", t, addr, length, fd, offset, origin(2))
-	}
-	// Cannot avoid the syscall here, addr sometimes matter.
-	data, _, err := unix.Syscall6(unix.SYS_MMAP, addr, uintptr(length), uintptr(prot), uintptr(flags), uintptr(fd), uintptr(offset))
-	if err != 0 {
-		if dmesgs {
-			dmesg("%v: %v FAIL", origin(1), err)
-		}
-		t.setErrno(err)
-		return ^uintptr(0) // (void*)-1
-	}
-
-	if dmesgs {
-		dmesg("%v: %#x", origin(1), data)
-	}
-	return data
-}
+// Xmmap is defined per-arch in libc_freebsd_{amd64,arm64,386,arm}.go: the
+// freebsd mmap(2) syscall encodes the 64-bit off_t differently on 32-bit targets
+// (the off_t spans two argument words and, on arm, needs a PAD word for EABI
+// alignment), so Syscall6 truncates/misaligns it and the mapping faults (SIGBUS,
+// e.g. the SQLite WAL-index). Matches golang.org/x/sys/unix's own per-arch mmap.
 
 const PTHREAD_MUTEX_DEFAULT = 0
 

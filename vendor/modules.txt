@@ -714,7 +714,7 @@ github.com/ulikunitz/xz/lzma
 # github.com/urfave/cli/v2 v2.27.7
 ## explicit; go 1.18
 github.com/urfave/cli/v2
-# github.com/urfave/cli/v3 v3.9.1
+# github.com/urfave/cli/v3 v3.10.0
 ## explicit; go 1.22
 github.com/urfave/cli/v3
 # github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e
@@ -830,13 +830,14 @@ golang.org/x/crypto/sha3
 # golang.org/x/exp/typeparams v0.0.0-20260611194520-c48552f49976
 ## explicit; go 1.25.0
 golang.org/x/exp/typeparams
-# golang.org/x/image v0.42.0
+# golang.org/x/image v0.43.0
 ## explicit; go 1.25.0
 golang.org/x/image/bmp
 golang.org/x/image/ccitt
 golang.org/x/image/colornames
 golang.org/x/image/font
 golang.org/x/image/font/sfnt
+golang.org/x/image/internal/safemath
 golang.org/x/image/math/fixed
 golang.org/x/image/riff
 golang.org/x/image/tiff
@@ -1411,7 +1412,7 @@ honnef.co/go/tools/stylecheck/st1023
 honnef.co/go/tools/unused
 # modernc.org/gc/v3 v3.1.4
 ## explicit; go 1.23.0
-# modernc.org/libc v1.73.1
+# modernc.org/libc v1.73.4
 ## explicit; go 1.25.0
 modernc.org/libc
 modernc.org/libc/errno
@@ -1445,7 +1446,7 @@ modernc.org/mathutil
 # modernc.org/memory v1.11.0
 ## explicit; go 1.23.0
 modernc.org/memory
-# modernc.org/sqlite v1.52.0
+# modernc.org/sqlite v1.53.0
 ## explicit; go 1.25.0
 modernc.org/sqlite/lib
 # mvdan.cc/sh/moreinterp v0.0.0-20260120230322-19def062a997
