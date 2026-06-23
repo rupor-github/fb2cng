@@ -27,6 +27,7 @@ document:
     {{- if gt (len .Authors) 0 -}}
     {{-   with first .Authors -}}
     {{-     $prefix = .LastName -}}
+    {{-     if and (not $prefix) .Nickname }}{{ $prefix = .Nickname }}{{- end -}}
     {{-   end -}}
     {{- end -}}
     {{- if $prefix -}}{{ $prefix }} - {{- end -}}{{ .Title -}}
@@ -42,6 +43,7 @@ How this template works:
 - `first .Authors` is a slim-sprig helper that returns the first author object from the list.
 - `with first .Authors` changes the current dot (`.`) to that first author for the duration of the block, so `.LastName` means the first author's last name inside the block.
 - `$prefix = .LastName` assigns the first author's last name to the previously created `$prefix` variable.
+- `if and (not $prefix) .Nickname` uses the first author's nickname when regular name fields are missing.
 - `if $prefix` checks whether `$prefix` is non-empty. If it is, the template writes the prefix followed by ` - `.
 - `.Title` writes the book title.
 
@@ -58,6 +60,7 @@ document:
     {{-     $all = .LastName -}}
     {{-     if .FirstName }}{{ $all = (cat $all .FirstName) }}{{- end -}}
     {{-     if .MiddleName }}{{ $all = (cat $all .MiddleName) }}{{- end -}}
+    {{-     if and (not $all) .Nickname }}{{ $all = .Nickname }}{{- end -}}
     {{-   end -}}
     {{-   if gt (len .Authors) 1 -}}
     {{-     if eq .Language "ru" }}{{ $all = (cat $all "и др") }}{{- else -}}{{ $all = (printf "%s%s" $all ", et al") }}{{- end -}}
@@ -79,6 +82,7 @@ How the advanced template works:
 - `$all = .LastName` starts the prefix with the first author's last name.
 - `if .FirstName` checks whether the first author has a first name. If yes, `$all = (cat $all .FirstName)` appends it.
 - `if .MiddleName` does the same for the middle name.
+- `if and (not $all) .Nickname` uses the nickname when regular name fields are missing.
 - `cat` is a slim-sprig helper that concatenates values with spaces between arguments. So `cat "Иванов" "Иван"` produces `Иванов Иван`.
 - After the `with` block ends, dot (`.`) returns to the full book metadata context.
 - `if gt (len .Authors) 1` checks whether there is more than one author.
@@ -143,7 +147,7 @@ Available fields:
 | Field | Meaning |
 |---|---|
 | `.Title` | Book title |
-| `.Authors` | Author objects with `.FirstName`, `.MiddleName`, `.LastName` |
+| `.Authors` | Author objects with `.FirstName`, `.MiddleName`, `.LastName`, `.Nickname` |
 | `.Series` | Series objects with `.Name` and `.Number` |
 | `.Language` | Language code |
 | `.Date` | Publication date |
@@ -163,6 +167,7 @@ Available fields:
 | `.FirstName` | Author first name |
 | `.MiddleName` | Author middle name |
 | `.LastName` | Author last name |
+| `.Nickname` | Author nickname |
 
 Example:
 
@@ -178,6 +183,7 @@ document:
       {{- .LastName -}}
       {{- if .FirstName }}, {{ .FirstName }}{{ end -}}
       {{- if .MiddleName }} {{ .MiddleName }}{{ end -}}
+      {{- if and (not .LastName) (not .FirstName) (not .MiddleName) .Nickname }}{{ .Nickname }}{{ end -}}
 ```
 
 How the `title_template` works:
@@ -193,10 +199,11 @@ In plain English, the title sample means: "If the book belongs to a series, pref
 
 How the `creator_name_template` works:
 
-- `.LastName`, `.FirstName`, and `.MiddleName` come from the current author. This template is executed once per author.
+- `.LastName`, `.FirstName`, `.MiddleName`, and `.Nickname` come from the current author. This template is executed once per author.
 - `{{- .LastName -}}` writes the last name and trims surrounding whitespace.
 - `if .FirstName` writes the comma and first name only when a first name is present.
 - `if .MiddleName` writes the middle name only when a middle name is present.
+- `if and (not .LastName) (not .FirstName) (not .MiddleName) .Nickname` writes the nickname only when regular name parts are missing.
 
 In plain English, the author sample means: "Render each author as `LastName, FirstName MiddleName`, omitting missing name parts."
 
@@ -358,6 +365,7 @@ document:
       {{-   if .FirstName -}}{{ $name = append $name .FirstName -}}{{- end -}}
       {{-   if .MiddleName -}}{{ $name = append $name .MiddleName -}}{{- end -}}
       {{-   if .LastName -}}{{ $name = append $name .LastName }}{{- end -}}
+      {{-   if and (not $name) .Nickname -}}{{ $name = append $name .Nickname }}{{- end -}}
       {{-   $names = append $names (join " " $name) -}}
       {{- end -}}
       {{- join ", " $names -}}
@@ -371,9 +379,10 @@ How this template works:
 - `if .FirstName` checks whether the current author has a first name. If yes, `append $name .FirstName` adds it to the current author's name-part list.
 - `if .MiddleName` does the same for the middle name.
 - `if .LastName` does the same for the last name.
+- `if and (not $name) .Nickname` uses the nickname when regular name parts are missing.
 - `join " " $name` joins the current author's available name parts with spaces. Missing parts are skipped, so there are no doubled spaces.
 - `$names = append $names (join " " $name)` appends the completed current-author string to the outer `$names` list.
 - After `end`, the loop is finished and `$names` contains all formatted authors.
 - `join ", " $names` joins all formatted authors with comma-space separators.
 
-In plain English, this sample means: "For each author, join the available first, middle, and last name parts with spaces, then join all authors with commas for display on the visible TOC page."
+In plain English, this sample means: "For each author, join the available first, middle, and last name parts with spaces, fall back to nickname when needed, then join all authors with commas for display on the visible TOC page."

@@ -412,7 +412,7 @@ func TestBuildAuthors(t *testing.T) {
 				Authors: []Author{
 					{FirstName: "John", MiddleName: "Q", LastName: "Doe"},
 					{FirstName: "Jane", LastName: "Smith"},
-					{FirstName: "Bob"},
+					{Nickname: "Only Nick"},
 				},
 			},
 		},
@@ -430,6 +430,36 @@ func TestBuildAuthors(t *testing.T) {
 
 	if result[1].FirstName != "Jane" || result[1].LastName != "Smith" {
 		t.Errorf("buildAuthors()[1] = %+v, want {FirstName:Jane MiddleName: LastName:Smith}", result[1])
+	}
+
+	if result[2].Nickname != "Only Nick" {
+		t.Errorf("buildAuthors()[2] = %+v, want {Nickname:Only Nick}", result[2])
+	}
+}
+
+func TestExpandTemplate_NicknameAuthor(t *testing.T) {
+	book := &FictionBook{
+		Description: Description{
+			TitleInfo: TitleInfo{
+				BookTitle: TextField{Value: "Book"},
+				Authors:   []Author{{Nickname: "Only Nick"}},
+			},
+			DocumentInfo: DocumentInfo{ID: "test-id"},
+		},
+	}
+	book = setupTestBook(t, book)
+
+	result, err := book.ExpandTemplateMetainfo(
+		config.OutputNameTemplateFieldName,
+		"{{ with first .Authors }}{{ .Nickname }}{{ end }}",
+		"testbook.fb2",
+		common.OutputFmtEpub3,
+	)
+	if err != nil {
+		t.Fatalf("ExpandTemplate() error = %v", err)
+	}
+	if result != "Only Nick" {
+		t.Errorf("ExpandTemplate() = %q, want %q", result, "Only Nick")
 	}
 }
 
@@ -467,11 +497,11 @@ func TestExpandTemplate_PathSeparators(t *testing.T) {
 
 func TestExpandTemplateAuthorName_ContextAndFormat(t *testing.T) {
 	book := setupTestBook(t, nil)
-	author := &Author{FirstName: "Jane", LastName: "Doe"}
+	author := &Author{FirstName: "Jane", LastName: "Doe", Nickname: "JD"}
 
 	result, err := book.ExpandTemplateAuthorName(
 		config.MetaCreatorNameTemplateFieldName,
-		"{{.Context}}/{{.Format}}/{{.Index}}/{{.LastName}}",
+		"{{.Context}}/{{.Format}}/{{.Index}}/{{.LastName}}/{{.Nickname}}",
 		common.OutputFmtKfx,
 		2,
 		author,
@@ -479,8 +509,8 @@ func TestExpandTemplateAuthorName_ContextAndFormat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExpandTemplateAuthorName() error = %v", err)
 	}
-	if result != "creator_name_template/kfx/2/Doe" {
-		t.Errorf("ExpandTemplateAuthorName() = %q, want %q", result, "creator_name_template/kfx/2/Doe")
+	if result != "creator_name_template/kfx/2/Doe/JD" {
+		t.Errorf("ExpandTemplateAuthorName() = %q, want %q", result, "creator_name_template/kfx/2/Doe/JD")
 	}
 }
 

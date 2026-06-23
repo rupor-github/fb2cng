@@ -47,7 +47,7 @@ document:
   #     NOTE: If valid xs:date "value" attribute is provided - it will be used,
   #     otherwise just text as defined
   # - .Authors (array of { .FirstName (string), .MiddleName (string), .LastName
-  #   (string) }) - authors as specified in FB2 metainformation
+  #   (string), .Nickname (string) }) - authors as specified in FB2 metainformation
   # - .SourceFile (string) - base part of the source file name (no path, no
   #   extension)
   # - .BookID (string) - book UUID as specified by FB2 metainformation or
@@ -62,6 +62,7 @@ document:
     {{-     $all = .LastName -}}
     {{-     if .FirstName }}{{ $all = (cat $all .FirstName) }}{{- end -}}
     {{-     if .MiddleName }}{{ $all = (cat $all .MiddleName) }}{{- end -}}
+    {{-     if and (not $all) .Nickname }}{{ $all = .Nickname }}{{- end -}}
     {{-   end -}}
     {{-   if gt (len .Authors) 1 -}}
     {{-     if eq .Language "ru" }}{{ $all = (cat $all "и др") }}{{- else -}}{{ $all = (printf "%s%s" $all ", et al") }}{{- end -}}
@@ -109,7 +110,7 @@ document:
     #     NOTE: If valid xs:date "value" attribute is provided - it will be used,
     #     otherwise just text as defined
     # - .Authors (array of { .FirstName (string), .MiddleName (string), .LastName
-    #   (string) }) - authors as specified in FB2 metainformation
+    #   (string), .Nickname (string) }) - authors as specified in FB2 metainformation
     # - .SourceFile (string) - base part of the source file name (no path, no
     #   extension)
     # - .BookID (string) - book UUID as specified by FB2 metainformation or
@@ -145,10 +146,12 @@ document:
     # - .FirstName (string)
     # - .MiddleName (string)
     # - .LastName (string)
+    # - .Nickname (string)
     creator_name_template: |
       {{- .LastName -}}
       {{- if .FirstName }} {{.FirstName}}{{ end -}}
       {{- if .MiddleName }} {{.MiddleName }}{{ end -}}
+      {{- if and (not .LastName) (not .FirstName) (not .MiddleName) .Nickname }}{{ .Nickname }}{{ end -}}
 
     # Slugify/transliterate book title and author(s) names - after all other
     # processing is completed
@@ -372,7 +375,7 @@ document:
     #     NOTE: If valid xs:date "value" attribute is provided - it will be used,
     #     otherwise just text as defined
     # - .Authors (array of { .FirstName (string), .MiddleName (string), .LastName
-    #   (string) }) - authors as specified in FB2 metainformation
+    #   (string), .Nickname (string) }) - authors as specified in FB2 metainformation
     # - .SourceFile (string) - base part of the source file name (no path, no
     #   extension)
     # - .BookID (string) - book UUID as specified by FB2 metainformation or
@@ -386,6 +389,7 @@ document:
       {{-   if .FirstName -}}{{ $name = append $name .FirstName -}}{{- end -}}
       {{-   if .MiddleName -}}{{ $name = append $name .MiddleName -}}{{- end -}}
       {{-   if .LastName -}}{{ $name = append $name .LastName }}{{- end -}}
+      {{-   if and (not $name) .Nickname -}}{{ $name = append $name .Nickname }}{{- end -}}
       {{-   $names = append $names (join " " $name) -}}
       {{- end -}}
       {{- join ", " $names -}}

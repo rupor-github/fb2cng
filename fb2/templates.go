@@ -46,12 +46,14 @@ func (fb *FictionBook) ExpandTemplateAuthorName(
 		FirstName  string
 		MiddleName string
 		LastName   string
+		Nickname   string
 	}{
 		templateContext: newTemplateContext(name, format),
 		Index:           index,
 		FirstName:       author.FirstName,
 		MiddleName:      author.MiddleName,
 		LastName:        author.LastName,
+		Nickname:        author.Nickname,
 	}
 
 	buf := new(bytes.Buffer)
@@ -114,7 +116,7 @@ type sequenceDefinition struct {
 }
 
 type authorDefinition struct {
-	FirstName, MiddleName, LastName string
+	FirstName, MiddleName, LastName, Nickname string
 }
 
 // ExpandTemplateMetainfo expands a template string with book metadata
@@ -205,6 +207,7 @@ func (fb *FictionBook) buildAuthors() []authorDefinition {
 			FirstName:  a.FirstName,
 			MiddleName: a.MiddleName,
 			LastName:   a.LastName,
+			Nickname:   a.Nickname,
 		}
 		result = append(result, def)
 	}
