@@ -16,6 +16,63 @@ All template contexts include:
 | `.Context` | Template field name, such as `output_name_template`, `label_template`, or `backlink_template` |
 | `.Format` | Requested output format: `epub2`, `epub3`, `kepub`, `kfx`, `azw8`, `pdf`, `txt`, or `md` |
 
+## Artifact Destination Templates
+
+`logging.file.destination_template`, `logging.file.panic_destination_template`, and `reporting.destination_template` control side-artifact file names. These templates are resolved before the source book is parsed, so FB2 metadata fields such as title, authors, series, and book ID are not available.
+
+Available fields:
+
+| Field | Meaning |
+|---|---|
+| `.Context` | Template field name, such as `logging.file.destination_template` or `reporting.destination_template` |
+| `.AppName` | Application name, currently `fbc` |
+| `.PID` | Process ID |
+| `.Hostname` | Local host name, empty if unavailable |
+| `.Started` | Program start time as `time.Time` |
+| `.Unique` | Start timestamp plus process ID, such as `20260625T143012.12345` |
+| `.Command` | Command being executed, such as `convert` or `dumpconfig` |
+| `.Format` | Requested output format for `convert`; empty for other commands |
+| `.SourceFile` | Source argument base name without path or extension; empty when no source argument is available |
+
+Parallel-safe log and report files per source:
+
+```yaml
+logging:
+  file:
+    destination_template: 'logs/{{ .AppName }}.{{ .SourceFile }}.{{ .Unique }}.log'
+    panic_destination_template: 'logs/{{ .AppName }}.{{ .SourceFile }}.{{ .Unique }}.panic.log'
+
+reporting:
+  destination_template: 'logs/{{ .AppName }}.{{ .SourceFile }}.{{ .Unique }}-report.zip'
+```
+
+How this template works:
+
+- `.AppName` keeps artifact names tied to the executable name.
+- `.SourceFile` adds the source file base name, so parallel conversions of different source files do not share artifact names.
+- `.Unique` adds a timestamp and process ID, so repeated or parallel conversions of the same source file still get separate artifacts.
+- The literal `logs/` prefix writes all artifacts under one directory. fb2cng creates parent directories for resolved artifact paths.
+
+In plain English, the sample means: "Create one log, panic log, and debug report per conversion process, grouped by source file and made unique with timestamp plus PID."
+
+Date-based directory example:
+
+```yaml
+logging:
+  file:
+    destination_template: 'logs/{{ date "2006-01-02" .Started }}/{{ .SourceFile }}.log'
+    panic_destination_template: 'logs/{{ date "2006-01-02" .Started }}/{{ .SourceFile }}.panic.log'
+
+reporting:
+  destination_template: 'logs/{{ date "2006-01-02" .Started }}/{{ .SourceFile }}-report.zip'
+```
+
+How the date-based template works:
+
+- `date "2006-01-02" .Started` is a slim-sprig helper that formats the program start time as a date directory.
+- `.SourceFile` keeps the file name readable.
+- This example is not unique for repeated conversions of the same source on the same day. Add `.Unique` if collisions are possible.
+
 ## `output_name_template`
 
 Controls generated output file names.
