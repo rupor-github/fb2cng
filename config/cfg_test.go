@@ -2,10 +2,12 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rupor-github/gencfg"
 
@@ -48,10 +50,11 @@ logging:
     level: normal
   file:
     level: debug
-    destination: /tmp/test.log
+    destination_template: /tmp/test.log
+    panic_destination_template: /tmp/test-panic.log
     mode: append
 reporting:
-  destination: /tmp/test-report.zip
+  destination_template: /tmp/test-report.zip
 `
 
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
@@ -718,6 +721,58 @@ func TestUnmarshalConfig_WrapsValidationError(t *testing.T) {
 	// The error should preserve the chain — errors.Unwrap should return non-nil.
 	if errors.Unwrap(err) == nil {
 		t.Errorf("expected wrapped error (errors.Unwrap non-nil), got bare error: %v", err)
+	}
+}
+
+func TestResolveArtifactTemplates(t *testing.T) {
+	started := time.Date(2026, 6, 25, 14, 30, 12, 0, time.UTC)
+	cfg := &Config{
+		Logging: LoggingConfig{
+			FileLogger: LoggerConfig{
+				DestinationTemplate:      `logs/{{ .SourceFile }}.{{ .Format }}.{{ .Unique }}.log`,
+				PanicDestinationTemplate: `logs/{{ .SourceFile }}.{{ .Unique }}.panic.log`,
+			},
+		},
+		Reporting: ReporterConfig{
+			DestinationTemplate: `reports/{{ .SourceFile }}.{{ .Command }}.zip`,
+		},
+	}
+
+	err := cfg.ResolveArtifactTemplates(ArtifactTemplateValues{
+		Started: started,
+		Command: "convert",
+		Format:  common.OutputFmtPdf,
+		Source:  "/books/Test Book.fb2",
+	})
+	if err != nil {
+		t.Fatalf("ResolveArtifactTemplates() error = %v", err)
+	}
+
+	pid := os.Getpid()
+	if want := fmt.Sprintf("logs/Test Book.pdf.20260625T143012.%d.log", pid); cfg.Logging.FileLogger.Destination() != want {
+		t.Errorf("log destination = %q, want %q", cfg.Logging.FileLogger.Destination(), want)
+	}
+	if want := fmt.Sprintf("logs/Test Book.20260625T143012.%d.panic.log", pid); cfg.Logging.FileLogger.PanicDestination() != want {
+		t.Errorf("panic destination = %q, want %q", cfg.Logging.FileLogger.PanicDestination(), want)
+	}
+	if want := "reports/Test Book.convert.zip"; cfg.Reporting.Destination() != want {
+		t.Errorf("report destination = %q, want %q", cfg.Reporting.Destination(), want)
+	}
+}
+
+func TestResolveArtifactTemplates_DefaultsPanicDestination(t *testing.T) {
+	cfg := &Config{
+		Logging: LoggingConfig{
+			FileLogger: LoggerConfig{DestinationTemplate: `{{ .AppName }}.log`},
+		},
+		Reporting: ReporterConfig{DestinationTemplate: `{{ .AppName }}-report.zip`},
+	}
+
+	if err := cfg.ResolveArtifactTemplates(ArtifactTemplateValues{}); err != nil {
+		t.Fatalf("ResolveArtifactTemplates() error = %v", err)
+	}
+	if got, want := cfg.Logging.FileLogger.PanicDestination(), "fbc-panic.log"; got != want {
+		t.Errorf("panic destination = %q, want %q", got, want)
 	}
 }
 

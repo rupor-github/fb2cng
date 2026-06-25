@@ -50,6 +50,10 @@ func (e *LocalEnv) Uptime() time.Duration {
 	return time.Since(e.start)
 }
 
+func (e *LocalEnv) Started() time.Time {
+	return e.start
+}
+
 func (e *LocalEnv) RedirectStdLog() {
 	if e.Log == nil {
 		return

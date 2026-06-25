@@ -161,6 +161,8 @@ var requiredOptions = append([]func(*gencfg.ProcessingOptions){},
 	gencfg.WithDoNotExpandField(string(AuthorsTemplateFieldName)),
 	gencfg.WithDoNotExpandField(string(BacklinkTemplateFieldName)),
 	gencfg.WithDoNotExpandField(string(LabelTemplateFieldName)),
+	gencfg.WithDoNotExpandField("destination_template"),
+	gencfg.WithDoNotExpandField("panic_destination_template"),
 )
 
 // IsEmpty returns true if no vignette positions are defined

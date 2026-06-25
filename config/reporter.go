@@ -15,7 +15,8 @@ import (
 )
 
 type ReporterConfig struct {
-	Destination string `yaml:"destination" sanitize:"path_clean,assure_dir_exists_for_file" validate:"required,filepath"`
+	DestinationTemplate string `yaml:"destination_template" validate:"required"`
+	destination         string
 }
 
 // Prepare creates initialized empty reporter.
@@ -23,7 +24,7 @@ func (conf *ReporterConfig) Prepare() (*Report, error) {
 
 	r := &Report{entries: make(map[string]entry)}
 
-	if f, err := os.Create(conf.Destination); err == nil {
+	if f, err := os.Create(conf.Destination()); err == nil {
 		r.file = f
 	} else if f, err = os.CreateTemp("", misc.GetAppName()+"-report.*.zip"); err == nil {
 		r.file = f
@@ -31,6 +32,13 @@ func (conf *ReporterConfig) Prepare() (*Report, error) {
 		return nil, fmt.Errorf("unable to create report: %w", err)
 	}
 	return r, nil
+}
+
+func (conf *ReporterConfig) Destination() string {
+	if conf.destination != "" {
+		return conf.destination
+	}
+	return conf.DestinationTemplate
 }
 
 type entry struct {
@@ -372,7 +380,7 @@ func prepareManifest(entries map[string]entry) ([]string, *bytes.Buffer) {
 		if e.stamp.IsZero() {
 			e.stamp = now
 		}
-		buf.WriteString(fmt.Sprintf("%s\t%s\t%s : %s\n", e.stamp.UTC().Format(time.UnixDate), k, e.original, e.actual))
+		fmt.Fprintf(buf, "%s\t%s\t%s : %s\n", e.stamp.UTC().Format(time.UnixDate), k, e.original, e.actual)
 	}
 	return keys, buf
 }

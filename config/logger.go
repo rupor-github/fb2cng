@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime/debug"
 
 	"go.uber.org/zap"
@@ -15,9 +14,12 @@ import (
 )
 
 type LoggerConfig struct {
-	Level       string `yaml:"level" validate:"required,oneof=none debug normal"`
-	Destination string `yaml:"destination,omitempty" sanitize:"path_clean,assure_dir_exists_for_file" validate:"omitempty,filepath"`
-	Mode        string `yaml:"mode,omitempty" validate:"omitempty,oneof=append overwrite"`
+	Level                    string `yaml:"level" validate:"required,oneof=none debug normal"`
+	DestinationTemplate      string `yaml:"destination_template,omitempty" validate:"omitempty"`
+	PanicDestinationTemplate string `yaml:"panic_destination_template,omitempty" validate:"omitempty"`
+	Mode                     string `yaml:"mode,omitempty" validate:"omitempty,oneof=append overwrite"`
+	destination              string
+	panicDestination         string
 }
 
 type LoggingConfig struct {
@@ -116,17 +118,23 @@ func (conf *LoggingConfig) Prepare(rpt *Report) (*zap.Logger, error) {
 
 	var newName string
 	if logRequested {
+		destination := conf.FileLogger.Destination()
+		panicDestination := conf.FileLogger.PanicDestination()
 
 		// capture panic log if possible
 		var (
 			ef  *os.File
 			err error
 		)
-		if ef, err = opener(filepath.Join(filepath.Dir(conf.FileLogger.Destination), misc.GetAppName()+"-panic.log"), modeRequested); err == nil {
-		} else if ef, err = os.CreateTemp("", misc.GetAppName()+"-panic.*.log"); err == nil {
-		} else {
-			// just quietly ignore
-			ef = nil
+		if panicDestination != "" {
+			ef, err = opener(panicDestination, modeRequested)
+			if err != nil {
+				ef, err = os.CreateTemp("", misc.GetAppName()+"-panic.*.log")
+			}
+			if err != nil {
+				// just quietly ignore
+				ef = nil
+			}
 		}
 		if ef != nil {
 			debug.SetCrashOutput(ef, debug.CrashOptions{})
@@ -134,7 +142,7 @@ func (conf *LoggingConfig) Prepare(rpt *Report) (*zap.Logger, error) {
 			ef.Close()
 		}
 
-		if f, err := opener(conf.FileLogger.Destination, modeRequested); err == nil {
+		if f, err := opener(destination, modeRequested); err == nil {
 			fileCore = zapcore.NewCore(fileEncoder, zapcore.Lock(f), logLevel)
 			rpt.Store("final.log", f.Name())
 		} else if f, err = os.CreateTemp("", misc.GetAppName()+".*.log"); err == nil {
@@ -142,7 +150,7 @@ func (conf *LoggingConfig) Prepare(rpt *Report) (*zap.Logger, error) {
 			fileCore = zapcore.NewCore(fileEncoder, zapcore.Lock(f), logLevel)
 			rpt.Store("final.log", newName)
 		} else {
-			return nil, fmt.Errorf("unable to access file log destination (%s): %w", conf.FileLogger.Destination, err)
+			return nil, fmt.Errorf("unable to access file log destination (%s): %w", destination, err)
 		}
 	} else {
 		fileCore = zapcore.NewNopCore()
@@ -154,6 +162,20 @@ func (conf *LoggingConfig) Prepare(rpt *Report) (*zap.Logger, error) {
 		core.Warn("Log file was redirected to new location", zap.String("location", newName))
 	}
 	return core.Named(misc.GetAppName()), nil
+}
+
+func (conf *LoggerConfig) Destination() string {
+	if conf.destination != "" {
+		return conf.destination
+	}
+	return conf.DestinationTemplate
+}
+
+func (conf *LoggerConfig) PanicDestination() string {
+	if conf.panicDestination != "" {
+		return conf.panicDestination
+	}
+	return conf.PanicDestinationTemplate
 }
 
 // When logging error to console - do not output verbose message.

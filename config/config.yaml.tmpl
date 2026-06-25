@@ -456,6 +456,21 @@ document:
       from: "‐‑−–—―"
       to: " "
 
+# Logging/reporting destination templates are resolved before FB2 is parsed, so
+# only invocation data is available. List of variables available:
+# - .Context (string) - template field name (for example
+#   "logging.file.destination_template")
+# - .AppName (string) - application name, currently "fbc"
+# - .PID (integer) - process ID
+# - .Hostname (string) - local host name, empty if unavailable
+# - .Started (time.Time) - program start time
+# - .Unique (string) - start timestamp plus process ID, useful for parallel runs
+# - .Command (string) - command being executed, for example "convert" or
+#   "dumpconfig"
+# - .Format (string) - requested output format for convert command: epub2,
+#   epub3, kepub, kfx, azw8, pdf, txt, or md. Empty for other commands.
+# - .SourceFile (string) - base part of the source argument (no path, no
+#   extension). Empty when no source argument is available.
 logging:
   # controls terminal (stdout, stderr) output
   console:
@@ -467,8 +482,11 @@ logging:
 
   #---- controls logging to a file (could duplicate CONSOLE messages)
   file:
-    # path to the log file, could be relative to current working directory
-    destination: fb2cng.log
+    # path template for the log file, could be relative to current working directory
+    destination_template: "{{ .AppName }}.log"
+
+    # path template for the panic log file, could be relative to current working directory
+    panic_destination_template: "{{ .AppName }}-panic.log"
 
     # logging level
     # "none"   - suppress file logging
@@ -487,5 +505,5 @@ logging:
 # with troubleshooting
 reporting:
   # could be relative to current working directory.
-  destination: fb2cng-report.zip
+  destination_template: "{{ .AppName }}-report.zip"
   # vim: set filetype=yaml:

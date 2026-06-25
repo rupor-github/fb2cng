@@ -38,6 +38,9 @@ func initializeAppContext(ctx context.Context, cmd *cli.Command) (context.Contex
 	if env.Cfg, err = config.LoadConfiguration(configFile); err != nil {
 		return ctx, fmt.Errorf("unable to prepare configuration: %w", err)
 	}
+	if err = env.Cfg.ResolveArtifactTemplates(artifactTemplateValues(env.Started(), cmd, os.Args[1:])); err != nil {
+		return ctx, fmt.Errorf("unable to prepare artifact paths: %w", err)
+	}
 	if cmd.Bool("debug") {
 		if env.Rpt, err = env.Cfg.Reporting.Prepare(); err != nil {
 			return ctx, fmt.Errorf("unable to prepare debug reporter: %w", err)
@@ -90,11 +93,11 @@ func destroyAppContext(ctx context.Context, cmd *cli.Command) (err error) {
 		}
 	}
 	// reporting is closed now - remove empty panic file if any
-	if env.Cfg != nil && len(env.Cfg.Logging.FileLogger.Destination) > 0 {
+	if env.Cfg != nil && len(env.Cfg.Logging.FileLogger.PanicDestination()) > 0 {
 		debug.SetCrashOutput(nil, debug.CrashOptions{})
-		fname := filepath.Join(filepath.Dir(env.Cfg.Logging.FileLogger.Destination), misc.GetAppName()+"-panic.log")
+		fname := env.Cfg.Logging.FileLogger.PanicDestination()
 		if fi, er := os.Stat(fname); er == nil && fi.Size() == 0 {
-			if er := os.Remove(fname); er != nil {
+			if er = os.Remove(fname); er != nil {
 				err = multierr.Append(err, fmt.Errorf("unable to remove empty panic log file '%s': %w", fname, er))
 			}
 		}
@@ -271,7 +274,7 @@ func outputConfiguration(ctx context.Context, cmd *cli.Command) (retErr error) {
 	if len(fname) == 0 {
 		fname = "STDOUT"
 	}
-	env.Log.Info("Outputing configuration", zap.String("state", state), zap.String("file", fname))
+	env.Log.Info("Outputting configuration", zap.String("state", state), zap.String("file", fname))
 
 	_, err = out.Write(data)
 	if err != nil {

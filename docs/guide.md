@@ -47,7 +47,7 @@ Enable debug reporting:
 fbc -d convert book.fb2
 ```
 
-Debug mode creates `fb2cng-report.zip` with logs and diagnostic files.
+Debug mode creates `fbc-report.zip` with logs and diagnostic files.
 
 ## Command Line
 
@@ -211,7 +211,7 @@ Common checks:
 
 | Problem | What To Check |
 |---|---|
-| Conversion fails | Run with `--debug`; inspect `fb2cng-report.zip` and logs |
+| Conversion fails | Run with `--debug`; inspect `fbc-report.zip` and logs |
 | Archive paths look wrong | Try `--force-zip-cp windows-1251` or another legacy encoding |
 | Output file is not created | Check destination path, overwrite flag, and output-name template |
 | Configuration is ignored | Use `dumpconfig active.yaml` to confirm the loaded values |

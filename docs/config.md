@@ -115,4 +115,6 @@ Scope limitation: text transformations apply to regular paragraph content in sec
 
 ## Logging And Reports
 
-Debug reports are enabled with `--debug` and stored as `fb2cng-report.zip` next to the generated output. Use this when diagnosing parsing, image handling, stylesheets, fonts, footnotes, or output-format behavior.
+Debug reports are enabled with `--debug`. By default, logs and reports use `{{ .AppName }}` based templates and are written as `fbc.log`, `fbc-panic.log`, and `fbc-report.zip` in the current working directory.
+
+Artifact destination templates support `.Context`, `.AppName`, `.PID`, `.Hostname`, `.Started`, `.Unique`, `.Command`, `.Format`, and `.SourceFile`. FB2 metadata is not available because logs and reports are initialized before the source book is parsed.
