@@ -22,7 +22,7 @@
 
 EPUB2/3 and KEPUB output is intended to pass the latest [epubcheck](https://www.w3.org/publishing/epubcheck/) without errors or warnings.
 
-> **Note:** Direct KFX and PDF generation are relatively new features, so various hiccups may still occur. If you encounter any issues, please [create an issue](https://github.com/rupor-github/fb2cng/issues) on GitHub for investigation. The generator aims to preserve maximum compatibility with Kindle Previewer 3 behavior, while also intentionally supporting capabilities that Amazon's processing pipeline does not expose. Examples include predictable handling of negative margins, richer drop-cap rendering, and condensed text controlled through `html`/`body` line-height processing. Good luck trying to produce something like [this](docs/page.jpg) via "Send To Kindle".
+> **Note:** Direct KFX and PDF generation are relatively new features, so various hiccups may still occur. If you encounter any issues, please [create an issue](https://github.com/rupor-github/fb2cng/issues) on GitHub for investigation. The generator aims to preserve maximum compatibility with Kindle Previewer 3 behavior, while also intentionally supporting capabilities that Amazon's processing pipeline does not expose. Examples include predictable handling of negative margins, richer drop-cap rendering, and condensed text controlled through `html`/`body` line-height processing. Good luck trying to produce something like [this](docs/page.jpg) or [this](docs/page2.jpg) via "Send To Kindle".
 
 ### Documentation
 
