@@ -1,7 +1,9 @@
-﻿<h1>
-    <img src="docs/books.svg" style="vertical-align:middle; width:8%" align="absmiddle"/>
-    <span style="vertical-align:middle;">&nbsp;&nbsp;FB2 converter to EPUB2/3, KEPUB, AZW8/KFX, PDF, TXT/MD</span>
-</h1>
+﻿<table>
+<tr>
+<td width="96" valign="middle"><img src="docs/books.svg" width="96" alt="fb2cng"/></td>
+<td valign="middle"><h1>FB2 converter to EPUB2/3, KEPUB, AZW8/KFX, PDF, TXT/MD</h1></td>
+</tr>
+</table>
 
 ### A complete rewrite of [fb2converter](https://github.com/rupor-github/fb2converter)
 [![GitHub Release](https://img.shields.io/github/release/rupor-github/fb2cng.svg)](https://github.com/rupor-github/fb2cng/releases)
