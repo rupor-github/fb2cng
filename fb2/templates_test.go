@@ -155,6 +155,125 @@ func TestExpandTemplate_SeriesNumber(t *testing.T) {
 	}
 }
 
+func TestExpandTemplate_SeriesParent(t *testing.T) {
+	num := 5
+	childNum := 2
+	book := &FictionBook{
+		Description: Description{
+			TitleInfo: TitleInfo{
+				BookTitle: TextField{Value: "Book"},
+				Sequences: []Sequence{
+					{
+						Name:   "Fantasy Series",
+						Number: &num,
+						Children: []Sequence{
+							{Name: "Subseries", Number: &childNum},
+						},
+					},
+				},
+			},
+			DocumentInfo: DocumentInfo{
+				ID: "test-id",
+			},
+		},
+	}
+	book = setupTestBook(t, book)
+
+	result, err := book.ExpandTemplateMetainfo(
+		config.OutputNameTemplateFieldName,
+		`{{ range .Series }}{{ .Name }}={{ .Parent }};{{ end }}`,
+		"testbook.fb2",
+		common.OutputFmtEpub3,
+	)
+	if err != nil {
+		t.Fatalf("ExpandTemplate() error = %v", err)
+	}
+	if result != "Fantasy Series=-1;Subseries=0;" {
+		t.Errorf("ExpandTemplate() = %q, want %q", result, "Fantasy Series=-1;Subseries=0;")
+	}
+}
+
+func TestExpandTemplate_DefaultTitleTemplateNestedSeries(t *testing.T) {
+	cfg, err := config.LoadConfiguration("")
+	if err != nil {
+		t.Fatalf("LoadConfiguration() error = %v", err)
+	}
+
+	num := 5
+	childNum := 2
+	book := &FictionBook{
+		Description: Description{
+			TitleInfo: TitleInfo{
+				BookTitle: TextField{Value: "Book"},
+				Sequences: []Sequence{
+					{
+						Name:   "Fantasy Series",
+						Number: &num,
+						Children: []Sequence{
+							{Name: "Subseries", Number: &childNum},
+						},
+					},
+				},
+			},
+			DocumentInfo: DocumentInfo{
+				ID: "test-id",
+			},
+		},
+	}
+	book = setupTestBook(t, book)
+
+	result, err := book.ExpandTemplateMetainfo(
+		config.MetaTitleTemplateFieldName,
+		cfg.Document.Metainformation.TitleTemplate,
+		"testbook.fb2",
+		common.OutputFmtEpub3,
+	)
+	if err != nil {
+		t.Fatalf("ExpandTemplate() error = %v", err)
+	}
+	if result != "(FS/S - 02) Book" {
+		t.Errorf("ExpandTemplate() = %q, want %q", result, "(FS/S - 02) Book")
+	}
+}
+
+func TestExpandTemplate_DefaultTitleTemplateFlatSeries(t *testing.T) {
+	cfg, err := config.LoadConfiguration("")
+	if err != nil {
+		t.Fatalf("LoadConfiguration() error = %v", err)
+	}
+
+	num1 := 5
+	num2 := 2
+	book := &FictionBook{
+		Description: Description{
+			TitleInfo: TitleInfo{
+				BookTitle: TextField{Value: "Book"},
+				Sequences: []Sequence{
+					{Name: "Fantasy Series", Number: &num1},
+					{Name: "Subseries", Number: &num2},
+				},
+			},
+			DocumentInfo: DocumentInfo{
+				ID: "test-id",
+			},
+		},
+	}
+	book = setupTestBook(t, book)
+
+	result, err := book.ExpandTemplateMetainfo(
+		config.MetaTitleTemplateFieldName,
+		cfg.Document.Metainformation.TitleTemplate,
+		"testbook.fb2",
+		common.OutputFmtEpub3,
+	)
+	if err != nil {
+		t.Fatalf("ExpandTemplate() error = %v", err)
+	}
+	if result != "(FS/S - 02) Book" {
+		t.Errorf("ExpandTemplate() = %q, want %q", result, "(FS/S - 02) Book")
+	}
+}
+
 func TestExpandTemplate_Language(t *testing.T) {
 	book := &FictionBook{
 		Description: Description{
@@ -326,12 +445,26 @@ func TestExpandTemplate_InvalidField(t *testing.T) {
 func TestBuildSequences(t *testing.T) {
 	num1 := 5
 	num2 := 10
+	numChild := 2
+	numGrandchild := 1
 	book := &FictionBook{
 		Description: Description{
 			TitleInfo: TitleInfo{
 				Sequences: []Sequence{
 					{Name: "Series One", Number: &num1},
-					{Name: "Series Two", Number: &num2},
+					{
+						Name:   "Series Two",
+						Number: &num2,
+						Children: []Sequence{
+							{
+								Name:   "Subseries Two",
+								Number: &numChild,
+								Children: []Sequence{
+									{Name: "Cycle Two", Number: &numGrandchild},
+								},
+							},
+						},
+					},
 					{Name: ""}, // Should be skipped
 					{Name: "Series Three", Number: nil},
 				},
@@ -341,16 +474,28 @@ func TestBuildSequences(t *testing.T) {
 
 	result := book.buildSequences()
 
-	if len(result) != 3 {
-		t.Errorf("buildSequences() length = %d, want 3", len(result))
+	if len(result) != 5 {
+		t.Fatalf("buildSequences() length = %d, want 5", len(result))
 	}
 
-	if result[0].Name != "Series One" || result[0].Number != 5 {
-		t.Errorf("buildSequences()[0] = %+v, want {Name:Series One, Number:5}", result[0])
+	if result[0].Name != "Series One" || result[0].Number != 5 || result[0].Parent != -1 {
+		t.Errorf("buildSequences()[0] = %+v, want {Name:Series One, Number:5, Parent:-1}", result[0])
 	}
 
-	if result[2].Name != "Series Three" || result[2].Number != 0 {
-		t.Errorf("buildSequences()[2] = %+v, want {Name:Series Three, Number:0}", result[2])
+	if result[1].Name != "Series Two" || result[1].Number != 10 || result[1].Parent != -1 {
+		t.Errorf("buildSequences()[1] = %+v, want {Name:Series Two, Number:10, Parent:-1}", result[1])
+	}
+
+	if result[2].Name != "Subseries Two" || result[2].Number != 2 || result[2].Parent != 1 {
+		t.Errorf("buildSequences()[2] = %+v, want {Name:Subseries Two, Number:2, Parent:1}", result[2])
+	}
+
+	if result[3].Name != "Cycle Two" || result[3].Number != 1 || result[3].Parent != 2 {
+		t.Errorf("buildSequences()[3] = %+v, want {Name:Cycle Two, Number:1, Parent:2}", result[3])
+	}
+
+	if result[4].Name != "Series Three" || result[4].Number != 0 || result[4].Parent != -1 {
+		t.Errorf("buildSequences()[4] = %+v, want {Name:Series Three, Number:0, Parent:-1}", result[4])
 	}
 }
 

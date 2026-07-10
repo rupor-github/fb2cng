@@ -205,12 +205,61 @@ Available fields:
 |---|---|
 | `.Title` | Book title |
 | `.Authors` | Author objects with `.FirstName`, `.MiddleName`, `.LastName`, `.Nickname` |
-| `.Series` | Series objects with `.Name` and `.Number` |
+| `.Series` | Series objects with `.Name`, `.Number`, and `.Parent` |
 | `.Language` | Language code |
 | `.Date` | Publication date |
 | `.SourceFile` | Original file name without path or extension |
 | `.BookID` | Book UUID/document ID |
 | `.Genres` | Genre names |
+
+Series entries are flattened from FB2 `<sequence>` metadata in document order. Top-level sequences have `.Parent` set to `-1`. Nested sequences are placed immediately after their parent, and `.Parent` contains the 0-based index of that parent inside `.Series`.
+
+For example, this FB2 metadata:
+
+```xml
+<sequence name="Saga" number="2">
+  <sequence name="Northern Arc" number="1" />
+</sequence>
+```
+
+is exposed to templates as:
+
+| Index | `.Name` | `.Number` | `.Parent` |
+|---|---|---:|---:|
+| `0` | `Saga` | `2` | `-1` |
+| `1` | `Northern Arc` | `1` | `0` |
+
+Example that uses nested sequence information to produce a hierarchical title prefix:
+
+```yaml
+document:
+  metainformation:
+    title_template: |
+      {{- $prefix := "" -}}
+      {{- range .Series -}}
+      {{-   if ge .Parent 0 -}}
+      {{-     $parent := index $.Series .Parent -}}
+      {{-     $prefix = printf "%s / %s" $parent.Name .Name -}}
+      {{-     if gt .Number 0 -}}{{ $prefix = printf "%s #%02d" $prefix .Number }}{{- end -}}
+      {{-   end -}}
+      {{- end -}}
+      {{- if and (not $prefix) (gt (len .Series) 0) -}}
+      {{-   with first .Series -}}
+      {{-     $prefix = .Name -}}
+      {{-     if gt .Number 0 -}}{{ $prefix = printf "%s #%02d" $prefix .Number }}{{- end -}}
+      {{-   end -}}
+      {{- end -}}
+      {{- if $prefix -}}{{ $prefix }} - {{ end -}}{{ .Title -}}
+```
+
+How the nested series example works:
+
+- `range .Series` walks the flattened series list in parent-then-child order.
+- `ge .Parent 0` selects nested series entries.
+- `index $.Series .Parent` looks up the parent sequence by its stored index.
+- If there is no nested entry, the template falls back to the first top-level series.
+
+In plain English, the nested series sample means: "If the book has a nested sequence, prefix the title with `Parent Series / Child Series #NN`; otherwise, use the first top-level series when one exists."
 
 ## Metadata Templates
 
@@ -263,6 +312,69 @@ How the `creator_name_template` works:
 - `if and (not .LastName) (not .FirstName) (not .MiddleName) .Nickname` writes the nickname only when regular name parts are missing.
 
 In plain English, the author sample means: "Render each author as `LastName, FirstName MiddleName`, omitting missing name parts."
+
+Default `title_template` example with nested series support:
+
+```yaml
+document:
+  metainformation:
+    title_template: |
+      {{- if gt (len .Series) 0 -}}
+      {{-   $seriesPath := list -}}
+      {{-   $seriesNumber := 0 -}}
+      {{-   $currentParent := -1 -}}
+      {{-   $hasNested := false -}}
+      {{-   range .Series -}}
+      {{-     if ge .Parent 0 -}}{{ $hasNested = true }}{{- end -}}
+      {{-   end -}}
+      {{-   range $index, $series := .Series -}}
+      {{-     if or (not $hasNested) (eq $index 0) (eq $series.Parent $currentParent) -}}
+      {{-       $seriesLetters := list -}}
+      {{-       range $word := splitList " " $series.Name -}}
+      {{-       $seriesLetters = append $seriesLetters (upper (first (splitList "" $word))) -}}
+      {{-       end -}}
+      {{-       if gt (len $seriesLetters) 0 -}}
+      {{-         $seriesPath = append $seriesPath (join "" $seriesLetters) -}}
+      {{-         $seriesNumber = $series.Number -}}
+      {{-         $currentParent = $index -}}
+      {{-       end -}}
+      {{-     end -}}
+      {{-   end -}}
+      {{-   if gt (len $seriesPath) 0 -}}
+      {{-     "(" }}{{- join "/" $seriesPath -}}
+      {{-     if gt $seriesNumber 0 -}}
+      {{-       printf " - %02d" $seriesNumber -}}
+      {{-     end -}}
+      {{-     ") " -}}
+      {{-   end -}}
+      {{- end -}}
+      {{  .Title -}}
+```
+
+How the default `title_template` works:
+
+- `if gt (len .Series) 0` skips all series-prefix logic when the book has no series metadata.
+- `$seriesPath := list` creates an empty list for abbreviated series names.
+- `$seriesNumber := 0` stores the number from the deepest selected series entry.
+- `$currentParent := -1` starts the selected chain at top-level sequences, because top-level entries have `.Parent` set to `-1`.
+- `$hasNested := false` starts a flag used to distinguish nested sequence trees from flat sequence arrays.
+- The first `range .Series` sets `$hasNested = true` if any series entry has `.Parent` greater than or equal to zero.
+- `range $index, $series := .Series` walks the flattened series list in parent-then-child order.
+- `or (not $hasNested) (eq $index 0) (eq $series.Parent $currentParent)` selects all entries for flat arrays; for nested trees, it selects the first series entry and then only children of the most recently selected entry.
+- `$seriesLetters := list` creates a temporary list of initials for the current series name.
+- `splitList " " $series.Name` splits the series name into words.
+- `first (splitList "" $word)` takes the first character of each word.
+- `upper ...` uppercases that character.
+- `append $seriesLetters ...` accumulates initials, so `Fantasy Series` becomes `FS`.
+- `join "" $seriesLetters` joins the initials without separators.
+- `$seriesPath = append $seriesPath ...` appends the current abbreviation to the selected path.
+- `$seriesNumber = $series.Number` keeps the number from the last selected sequence. With nested `Fantasy Series #5` and child `Subseries #2`, or flat entries `Fantasy Series #5`, `Subseries #2`, the displayed number is `02`.
+- `$currentParent = $index` moves the nested chain forward, so the next selected nested sequence must be a child of the current one. In flat-array mode this assignment is harmless because every entry is selected by `not $hasNested`.
+- `join "/" $seriesPath` renders nested abbreviations as a path, such as `FS/S`.
+- `printf " - %02d" $seriesNumber` adds a two-digit number only when the deepest selected sequence has a positive number.
+- `{{ .Title }}` writes the original book title after the optional prefix.
+
+In plain English, the default title template means: "Build a compact series path using initials separated by `/`. For nested sequences, follow the first top-level series and its first nested child chain. For flat sequence arrays, use all top-level entries. Append the last selected sequence number, then write the book title."
 
 ## `label_template`
 
@@ -407,6 +519,8 @@ Markdown note: in Markdown, `.Href` is also used as the actual Markdown backlink
 ## TOC Page Author Template
 
 `document.toc_page.authors_template` formats author text on the optional visible TOC page.
+
+It uses the same book metadata fields as `output_name_template`, including `.Series` entries with `.Name`, `.Number`, and `.Parent`.
 
 Use it when you want a visible table of contents page to display author names differently from metadata.
 

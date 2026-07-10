@@ -113,6 +113,7 @@ func (fb *FictionBook) ExpandTemplateFootnoteLabel(
 type sequenceDefinition struct {
 	Name   string
 	Number int
+	Parent int
 }
 
 type authorDefinition struct {
@@ -157,24 +158,33 @@ func (fb *FictionBook) ExpandTemplateMetainfo(name config.TemplateFieldName, fie
 	return buf.String(), nil
 }
 
-// NOTE: according to XSD sequences could be nested. I have never seen book
-// which uses this, so we are going to ignore nesting and only use first level.
-// Nested children would be skipped.
 func (fb *FictionBook) buildSequences() []sequenceDefinition {
 	sequences := fb.Description.TitleInfo.Sequences
 	result := make([]sequenceDefinition, 0, len(sequences))
 
-	for _, seq := range sequences {
-		if seq.Name == "" {
-			continue
-		}
-		def := sequenceDefinition{
-			Name: seq.Name,
-		}
-		if seq.Number != nil {
-			def.Number = *seq.Number
-		}
-		result = append(result, def)
+	for i := range sequences {
+		result = appendSequenceDefinitions(result, &sequences[i], -1)
+	}
+	return result
+}
+
+func appendSequenceDefinitions(result []sequenceDefinition, seq *Sequence, parent int) []sequenceDefinition {
+	if seq.Name == "" {
+		return result
+	}
+
+	def := sequenceDefinition{
+		Name:   seq.Name,
+		Parent: parent,
+	}
+	if seq.Number != nil {
+		def.Number = *seq.Number
+	}
+
+	result = append(result, def)
+	seqIndex := len(result) - 1
+	for i := range seq.Children {
+		result = appendSequenceDefinitions(result, &seq.Children[i], seqIndex)
 	}
 	return result
 }

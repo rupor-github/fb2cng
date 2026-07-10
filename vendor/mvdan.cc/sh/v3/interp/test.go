@@ -77,20 +77,22 @@ func (r *Runner) binTest(ctx context.Context, op syntax.BinTestOperator, x, y st
 		}
 		r.setVar("BASH_REMATCH", vr)
 		return true
-	case syntax.TsNewer:
+	case syntax.TsNewer, syntax.TsOlder:
 		info1, err1 := r.stat(ctx, x)
 		info2, err2 := r.stat(ctx, y)
-		if err1 != nil || err2 != nil {
+		// -ot is the mirror of -nt, so swap the operands and share the logic.
+		if op == syntax.TsOlder {
+			info1, info2, err1, err2 = info2, info1, err2, err1
+		}
+		// True if the first operand exists and the second does not,
+		// or if both exist and the first is newer.
+		if err1 != nil {
 			return false
+		}
+		if err2 != nil {
+			return true
 		}
 		return info1.ModTime().After(info2.ModTime())
-	case syntax.TsOlder:
-		info1, err1 := r.stat(ctx, x)
-		info2, err2 := r.stat(ctx, y)
-		if err1 != nil || err2 != nil {
-			return false
-		}
-		return info1.ModTime().Before(info2.ModTime())
 	case syntax.TsDevIno:
 		info1, err1 := r.stat(ctx, x)
 		info2, err2 := r.stat(ctx, y)
@@ -166,8 +168,11 @@ func (r *Runner) unTest(ctx context.Context, op syntax.UnTestOperator, x string)
 	case syntax.TsGIDSet:
 		return r.statMode(ctx, x, os.ModeSetgid)
 	case syntax.TsModif:
-		r.errf("unsupported unary test op: %v\n", op)
-		return false
+		info, err := r.stat(ctx, x)
+		if err != nil {
+			return false
+		}
+		return info.ModTime().After(getAtime(info))
 	case syntax.TsRead:
 		return r.access(ctx, r.absPath(x), access_R_OK) == nil
 	case syntax.TsWrite:

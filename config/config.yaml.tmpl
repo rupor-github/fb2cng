@@ -36,11 +36,12 @@ document:
   # - .Format (string) - requested output format: epub2, epub3, kepub, kfx,
   #   azw8, pdf, txt, or md
   # - .Title (string) - book title as specified in FB2 metainformation
-  # - .Series (array of { .Name (string), .Number (integer) }) - series as
-  #   specified in FB2 metainformation.
+  # - .Series (array of { .Name (string), .Number (integer), .Parent (integer) })
+  #   - series as specified in FB2 metainformation.
   #     NOTE: according to FictionBook schema series could be hierarchical
-  #     (series contain series and so on). Hierarchy is completely ignored -
-  #     anything below first level is not present here.
+  #     (series contain series and so on). Sequences are flattened in parent-then-child
+  #     order. Top-level sequences have .Parent = -1; child sequences have .Parent
+  #     set to the 0-based parent index inside .Series.
   # - .Language (string) - canonical string representation of a language as
   #   specified in FB2 metainformation
   # - .Date (string) - date as specified in FB2 metainformation.
@@ -99,11 +100,12 @@ document:
     # - .Format (string) - requested output format: epub2, epub3, kepub, kfx,
     #   azw8, pdf, txt, or md
     # - .Title (string) - book title as specified in FB2 metainformation
-    # - .Series (array of { .Name (string), .Number (integer) }) - series as
-    #   specified in FB2 metainformation.
+    # - .Series (array of { .Name (string), .Number (integer), .Parent (integer) })
+    #   - series as specified in FB2 metainformation.
     #     NOTE: according to FictionBook schema series could be hierarchical
-    #     (series contain series and so on). Hierarchy is completely ignored -
-    #     anything below first level is not present here.
+    #     (series contain series and so on). Sequences are flattened in parent-then-child
+    #     order. Top-level sequences have .Parent = -1; child sequences have .Parent
+    #     set to the 0-based parent index inside .Series.
     # - .Language (string) - canonical string representation of a language as
     #   specified in FB2 metainformation
     # - .Date (string) - date as specified in FB2 metainformation.
@@ -117,20 +119,38 @@ document:
     #   assigned by converter
     # - .Genres (array of strings) - genre names as specified by FB2
     #   metainformation
+    # Default template abbreviates series as a path. For nested series it uses
+    # the first top-level series and its first nested child chain, producing
+    # prefixes such as "(FS/S - 02)". For flat series arrays it uses all
+    # top-level series and the last series number.
     title_template: |
       {{- if gt (len .Series) 0 -}}
-      {{-   with first .Series -}}
-      {{-     $seriesLetters := list -}}
-      {{-     range $word := splitList " " .Name -}}
+      {{-   $seriesPath := list -}}
+      {{-   $seriesNumber := 0 -}}
+      {{-   $currentParent := -1 -}}
+      {{-   $hasNested := false -}}
+      {{-   range .Series -}}
+      {{-     if ge .Parent 0 -}}{{ $hasNested = true }}{{- end -}}
+      {{-   end -}}
+      {{-   range $index, $series := .Series -}}
+      {{-     if or (not $hasNested) (eq $index 0) (eq $series.Parent $currentParent) -}}
+      {{-       $seriesLetters := list -}}
+      {{-       range $word := splitList " " $series.Name -}}
       {{-       $seriesLetters = append $seriesLetters (upper (first (splitList "" $word))) -}}
-      {{-     end -}}
-      {{-     if gt (len $seriesLetters) 0 -}}
-      {{-       "(" }}{{- join "" $seriesLetters -}}
-      {{-       if gt .Number 0 -}}
-      {{-         printf " - %02d" .Number -}}
       {{-       end -}}
-      {{-       ") " -}}
+      {{-       if gt (len $seriesLetters) 0 -}}
+      {{-         $seriesPath = append $seriesPath (join "" $seriesLetters) -}}
+      {{-         $seriesNumber = $series.Number -}}
+      {{-         $currentParent = $index -}}
+      {{-       end -}}
       {{-     end -}}
+      {{-   end -}}
+      {{-   if gt (len $seriesPath) 0 -}}
+      {{-     "(" }}{{- join "/" $seriesPath -}}
+      {{-     if gt $seriesNumber 0 -}}
+      {{-       printf " - %02d" $seriesNumber -}}
+      {{-     end -}}
+      {{-     ") " -}}
       {{-   end -}}
       {{- end -}}
       {{  .Title -}}
@@ -364,11 +384,12 @@ document:
     # - .Format (string) - requested output format: epub2, epub3, kepub, kfx,
     #   azw8, pdf, txt, or md
     # - .Title (string) - book title as specified in FB2 metainformation
-    # - .Series (array of { .Name (string), .Number (integer) }) - series as
-    #   specified in FB2 metainformation.
+    # - .Series (array of { .Name (string), .Number (integer), .Parent (integer) })
+    #   - series as specified in FB2 metainformation.
     #     NOTE: according to FictionBook schema series could be hierarchical
-    #     (series contain series and so on). Hierarchy is completely ignored -
-    #     anything below first level is not present here.
+    #     (series contain series and so on). Sequences are flattened in parent-then-child
+    #     order. Top-level sequences have .Parent = -1; child sequences have .Parent
+    #     set to the 0-based parent index inside .Series.
     # - .Language (string) - canonical string representation of a language as
     #   specified in FB2 metainformation
     # - .Date (string) - date as specified in FB2 metainformation.
