@@ -22,6 +22,7 @@ func loadSampleDocument(t *testing.T) *etree.Document {
 	doc.ReadSettings = etree.ReadSettings{
 		ValidateInput: false,
 		Permissive:    true,
+		MaxDepth:      XMLMaxDepth,
 	}
 
 	if _, err := doc.ReadFrom(file); err != nil {

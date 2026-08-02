@@ -137,6 +137,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 		Entity:        entities,
 		ValidateInput: false,
 		Permissive:    true,
+		MaxDepth:      fb2.XMLMaxDepth,
 	}
 
 	// Read and parse fb2

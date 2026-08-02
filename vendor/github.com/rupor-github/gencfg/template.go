@@ -2,13 +2,21 @@ package gencfg
 
 import (
 	"bytes"
+	"errors"
 	"net"
 	"os"
 	"runtime"
+	"strings"
 	"testing"
 	"text/template"
 
 	sprig "github.com/go-task/slim-sprig/v3"
+)
+
+var (
+	lookupIP          = net.LookupIP
+	networkInterfaces = net.Interfaces
+	interfaceAddrs    = func(iface net.Interface) ([]net.Addr, error) { return iface.Addrs() }
 )
 
 // Values is a struct that holds variables we make available for template expansion
@@ -95,14 +103,81 @@ func (tc *templateContext) expandField(name, field string) (string, error) {
 
 // getIPv4 resolves the given hostname and returns the first IPv4 address found.
 func getIPv4(host string) (string, error) {
-	addrs, err := net.LookupIP(host)
+	var errs []error
+
+	ipv4, err := lookupIPv4(host)
+	if err != nil {
+		errs = append(errs, err)
+	} else if ipv4 != "" {
+		return ipv4, nil
+	}
+
+	if !strings.HasSuffix(host, ".local") {
+		ipv4, err = lookupIPv4(host + ".local")
+		if err != nil {
+			errs = append(errs, err)
+		} else if ipv4 != "" {
+			return ipv4, nil
+		}
+	}
+
+	ipv4, err = localInterfaceIPv4()
+	if err != nil {
+		errs = append(errs, err)
+	} else if ipv4 != "" {
+		return ipv4, nil
+	}
+
+	return "", errors.Join(errs...)
+}
+
+func lookupIPv4(host string) (string, error) {
+	addrs, err := lookupIP(host)
 	if err != nil {
 		return "", err
 	}
+
 	for _, addr := range addrs {
 		if ipv4 := addr.To4(); ipv4 != nil {
 			return ipv4.String(), nil
 		}
 	}
+
 	return "", nil
+}
+
+func localInterfaceIPv4() (string, error) {
+	interfaces, err := networkInterfaces()
+	if err != nil {
+		return "", err
+	}
+
+	var errs []error
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+
+		addrs, err := interfaceAddrs(iface)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+
+		for _, addr := range addrs {
+			var ip net.IP
+			switch addr := addr.(type) {
+			case *net.IPAddr:
+				ip = addr.IP
+			case *net.IPNet:
+				ip = addr.IP
+			}
+
+			if ipv4 := ip.To4(); ipv4 != nil && !ipv4.IsLoopback() {
+				return ipv4.String(), nil
+			}
+		}
+	}
+
+	return "", errors.Join(errs...)
 }

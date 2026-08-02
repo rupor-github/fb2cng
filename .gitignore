@@ -17,10 +17,10 @@
 *.pyc
 
 # build specific
-build/
-build_*/
-release/
-release_*/
+/build/
+/build_*/
+/release/
+/release_*/
 **/__pycache__/*
 **/*-bcRawMedia/
 misc/version.go
