@@ -73,6 +73,7 @@ func buildPDFDocument(doc pdfDocumentSpec) ([]byte, error) {
 		firstPageID    = 3
 		firstContentID = 4
 		infoID         = 5
+		metadataID     = 6
 	)
 
 	pages, usedGlyphs, printedFootnotes, err := layoutPDFDocumentPages(doc)
@@ -112,7 +113,7 @@ func buildPDFDocument(doc pdfDocumentSpec) ([]byte, error) {
 	// hand out monotonically increasing IDs to every remaining object.
 	pages[0].ObjectID = firstPageID
 	pages[0].ContentID = firstContentID
-	nextObjectID := infoID + 1
+	nextObjectID := metadataID + 1
 	for i := 1; i < len(pages); i++ {
 		pages[i].ObjectID = nextObjectID
 		nextObjectID++
@@ -144,6 +145,9 @@ func buildPDFDocument(doc pdfDocumentSpec) ([]byte, error) {
 	}
 	if outlines.RootID != 0 {
 		catalog["Outlines"] = docwriter.Ref{ObjectNumber: outlines.RootID}
+	}
+	if len(doc.XMP) != 0 {
+		catalog["Metadata"] = docwriter.Ref{ObjectNumber: metadataID}
 	}
 	if names := namedDestinations(pages); names != nil {
 		catalog["Names"] = names
@@ -208,6 +212,14 @@ func buildPDFDocument(doc pdfDocumentSpec) ([]byte, error) {
 	}
 	if err := writer.Object(infoID, infoDictionary(doc)); err != nil {
 		return nil, err
+	}
+	if len(doc.XMP) != 0 {
+		if err := writer.StreamObject(metadataID, docwriter.Dict{
+			"Subtype": docwriter.Name("XML"),
+			"Type":    docwriter.Name("Metadata"),
+		}, doc.XMP); err != nil {
+			return nil, err
+		}
 	}
 	if err := writePDFFontObjects(writer, fontResources); err != nil {
 		return nil, err

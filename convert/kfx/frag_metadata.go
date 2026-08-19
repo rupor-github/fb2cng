@@ -1,13 +1,13 @@
 package kfx
 
 import (
-	"strings"
-
 	"go.uber.org/zap"
 	"golang.org/x/text/language"
 
+	"fbc/common"
 	"fbc/config"
 	"fbc/content"
+	"fbc/convert/metainfo"
 	"fbc/fb2"
 	"fbc/misc"
 )
@@ -95,24 +95,10 @@ func BuildBookMetadata(
 	}
 
 	// Author(s)
-	for _, author := range c.Book.Description.TitleInfo.Authors {
-		authorName := formatAuthorName(author)
-		if cfg.Metainformation.CreatorNameTemplate != "" {
-			expanded, err := c.Book.ExpandTemplateAuthorName(
-				config.MetaCreatorNameTemplateFieldName,
-				cfg.Metainformation.CreatorNameTemplate,
-				c.OutputFormat,
-				0,
-				&author,
-			)
-			if err != nil {
-				log.Warn("Unable to expand author name template for KFX metadata", zap.Error(err))
-			} else {
-				authorName = expanded
-			}
-		}
-		if cfg.Metainformation.Transliterate {
-			authorName = fb2.Transliterate(authorName)
+	for idx, author := range c.Book.Description.TitleInfo.Authors {
+		authorName, err := metainfo.PersonName(c.Book, &cfg.Metainformation, c.OutputFormat, idx, &author)
+		if err != nil {
+			log.Warn("Unable to expand author name template for KFX metadata", zap.Error(err))
 		}
 		if authorName != "" {
 			titleMetadata = append(titleMetadata, NewMetadataEntry("author", authorName))
@@ -125,8 +111,24 @@ func BuildBookMetadata(
 	}
 
 	// Publisher
-	if pub := c.Book.Description.PublishInfo; pub != nil && pub.Publisher != nil && pub.Publisher.Value != "" {
-		titleMetadata = append(titleMetadata, NewMetadataEntry("publisher", pub.Publisher.Value))
+	if publisher := metainfo.Publisher(c.Book.Description.PublishInfo); publisher != "" {
+		titleMetadata = append(titleMetadata, NewMetadataEntry("publisher", publisher))
+	}
+	if date, err := metainfo.KindleIssueDate(&c.Book.Description); err != nil {
+		log.Debug("Invalid date metadata, skipping", zap.Error(err))
+	} else if date != "" {
+		titleMetadata = append(titleMetadata, NewMetadataEntry("issue_date", date))
+	}
+	if isbn, kind, err := metainfo.ISBN(c.Book.Description.PublishInfo); err != nil {
+		log.Debug("Invalid ISBN metadata, skipping", zap.Error(err))
+	} else if isbn != "" {
+		titleMetadata = append(titleMetadata, NewMetadataEntry("ISBN", isbn))
+		switch kind {
+		case common.ISBNKind10:
+			titleMetadata = append(titleMetadata, NewMetadataEntry("ISBN-10", isbn))
+		case common.ISBNKind13:
+			titleMetadata = append(titleMetadata, NewMetadataEntry("ISBN-13", isbn))
+		}
 	}
 
 	// Description/annotation
@@ -197,31 +199,4 @@ func BuildDocumentData(sectionNames sectionNameList, maxID int, fontInfo *FontIn
 	}
 
 	return NewRootFragment(SymDocumentData, docData)
-}
-
-// formatAuthorName formats an author's name from FB2 author struct.
-func formatAuthorName(author fb2.Author) string {
-	var parts []string
-	if author.FirstName != "" {
-		parts = append(parts, author.FirstName)
-	}
-	if author.MiddleName != "" {
-		parts = append(parts, author.MiddleName)
-	}
-	if author.LastName != "" {
-		parts = append(parts, author.LastName)
-	}
-
-	if len(parts) == 0 && author.Nickname != "" {
-		return author.Nickname
-	}
-
-	var result strings.Builder
-	for i, p := range parts {
-		if i > 0 {
-			result.WriteString(" ")
-		}
-		result.WriteString(p)
-	}
-	return result.String()
 }

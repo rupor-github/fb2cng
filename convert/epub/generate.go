@@ -21,6 +21,7 @@ import (
 	"fbc/common"
 	"fbc/config"
 	"fbc/content"
+	"fbc/convert/metainfo"
 	"fbc/convert/tocnav"
 	"fbc/css"
 	"fbc/fb2"
@@ -542,29 +543,51 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	dcIdentifier := metadata.CreateElement("dc:identifier")
 	dcIdentifier.CreateAttr("id", "BookId")
 	dcIdentifier.SetText(c.Book.Description.DocumentInfo.ID)
+	if isbn, kind, err := metainfo.ISBN(c.Book.Description.PublishInfo); err != nil {
+		log.Debug("Invalid ISBN metadata, skipping", zap.Error(err))
+	} else if isbn != "" {
+		dcISBN := metadata.CreateElement("dc:identifier")
+		if c.OutputFormat == common.OutputFmtEpub3 {
+			dcISBN.CreateAttr("id", "isbn")
+		} else {
+			dcISBN.CreateAttr("opf:scheme", "ISBN")
+		}
+		dcISBN.SetText(isbn)
+
+		if c.OutputFormat == common.OutputFmtEpub3 {
+			identifierType := metadata.CreateElement("meta")
+			identifierType.CreateAttr("refines", "#isbn")
+			identifierType.CreateAttr("property", "identifier-type")
+			identifierType.CreateAttr("scheme", "onix:codelist5")
+			if kind == common.ISBNKind10 {
+				identifierType.SetText("02")
+			} else {
+				identifierType.SetText("15")
+			}
+		}
+	}
 
 	dcLang := metadata.CreateElement("dc:language")
 	dcLang.SetText(c.Book.Description.TitleInfo.Lang.String())
+	if date, err := metainfo.OPFDate(&c.Book.Description); err != nil {
+		log.Debug("Invalid date metadata, skipping", zap.Error(err))
+	} else if date != "" {
+		dcDate := metadata.CreateElement("dc:date")
+		if c.OutputFormat != common.OutputFmtEpub3 {
+			dcDate.CreateAttr("opf:event", "publication")
+		}
+		dcDate.SetText(date)
+	}
+	if publisher := metainfo.Publisher(c.Book.Description.PublishInfo); publisher != "" {
+		dcPublisher := metadata.CreateElement("dc:publisher")
+		dcPublisher.SetText(publisher)
+	}
 
 	for idx, author := range c.Book.Description.TitleInfo.Authors {
 		dcCreator := metadata.CreateElement("dc:creator")
-		authorName := strings.TrimSpace(fmt.Sprintf("%s %s %s", author.FirstName, author.MiddleName, author.LastName))
-		if cfg.Metainformation.CreatorNameTemplate != "" {
-			expanded, err := c.Book.ExpandTemplateAuthorName(
-				config.MetaCreatorNameTemplateFieldName,
-				cfg.Metainformation.CreatorNameTemplate,
-				c.OutputFormat,
-				idx,
-				&author,
-			)
-			if err != nil {
-				log.Warn("Unable to prepare author name for generated OPF", zap.Error(err))
-			} else {
-				authorName = expanded
-			}
-		}
-		if cfg.Metainformation.Transliterate {
-			authorName = fb2.Transliterate(authorName)
+		authorName, err := metainfo.PersonName(c.Book, &cfg.Metainformation, c.OutputFormat, idx, &author)
+		if err != nil {
+			log.Warn("Unable to prepare author name for generated OPF", zap.Error(err))
 		}
 		dcCreator.SetText(authorName)
 
@@ -582,10 +605,54 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 			dcCreator.CreateAttr("opf:role", "aut")
 		}
 	}
+	for idx, translator := range c.Book.Description.TitleInfo.Translators {
+		translatorName, err := metainfo.PersonName(c.Book, &cfg.Metainformation, c.OutputFormat, idx, &translator)
+		if err != nil {
+			log.Warn("Unable to prepare translator name for generated OPF", zap.Error(err))
+		}
+		if translatorName == "" {
+			continue
+		}
 
-	for _, genreRef := range c.Book.Description.TitleInfo.Genres {
+		dcContributor := metadata.CreateElement("dc:contributor")
+		dcContributor.SetText(translatorName)
+		if c.OutputFormat == common.OutputFmtEpub3 {
+			translatorID := fmt.Sprintf("translator%d", idx)
+			dcContributor.CreateAttr("id", translatorID)
+
+			roleMeta := metadata.CreateElement("meta")
+			roleMeta.CreateAttr("refines", "#"+translatorID)
+			roleMeta.CreateAttr("property", "role")
+			roleMeta.CreateAttr("scheme", "marc:relators")
+			roleMeta.SetText("trl")
+		} else {
+			dcContributor.CreateAttr("opf:role", "trl")
+		}
+	}
+
+	for idx, subject := range metainfo.Subjects(c.Book.Description.TitleInfo.Genres, c.Book.Description.TitleInfo.Keywords) {
 		meta := metadata.CreateElement("dc:subject")
-		meta.SetText(genreRef.Value)
+		meta.SetText(subject.Value)
+		if subject.Kind == metainfo.SubjectGenre {
+			if c.OutputFormat == common.OutputFmtEpub3 {
+				subjectID := fmt.Sprintf("subject-genre-%d", idx)
+				meta.CreateAttr("id", subjectID)
+
+				authority := metadata.CreateElement("meta")
+				authority.CreateAttr("refines", "#"+subjectID)
+				authority.CreateAttr("property", "authority")
+				authority.SetText("FB2")
+
+				term := metadata.CreateElement("meta")
+				term.CreateAttr("refines", "#"+subjectID)
+				term.CreateAttr("property", "term")
+				term.SetText(subject.Value)
+			} else {
+				genreMeta := metadata.CreateElement("meta")
+				genreMeta.CreateAttr("name", "fb2:genre")
+				genreMeta.CreateAttr("content", subject.Value)
+			}
+		}
 	}
 
 	if c.Book.Description.TitleInfo.Annotation != nil {

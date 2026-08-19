@@ -152,6 +152,12 @@ tasks:
     cmds:
       - gotestsum -f '{{.GOTESTSUM_FORMAT}}' -tags 'signals watch' ./...
 
+  bench:checksum:
+    desc: Runs checksum benchmarks
+    aliases: [bench]
+    cmds:
+      - go test -bench=. -benchmem -tags=fsbench -run=^$ ./...
+
   goreleaser:test:
     desc: Tests release process without publishing
     cmds:
@@ -191,8 +197,7 @@ tasks:
       This task will do the following:
 
       - Update the version and date in the CHANGELOG.md file
-      - Update the version in the package.json and package-lock.json files
-      - Copy the latest docs to the "current" version on the website
+      - Promote the docs, sidebar and JSON schemas to the released version
       - Commit the changes
       - Create a new tag
       - Push the commit/tag to the repository

@@ -5,6 +5,7 @@ package interp
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -74,6 +75,9 @@ func (r *Runner) fillExpandConfig(ctx context.Context) {
 			return nil
 		},
 		ProcSubst: func(ps *syntax.ProcSubst) (string, error) {
+			if ps.Op == syntax.CmdInTemp { // zsh's =(...)
+				return "", fmt.Errorf("unsupported")
+			}
 			if runtime.GOOS == "windows" {
 				return "", fmt.Errorf("TODO: support process substitution on Windows")
 			}
@@ -259,13 +263,14 @@ var todoPos syntax.Pos // for handlerCtx callers where we don't yet have a posit
 
 func (r *Runner) handlerCtx(ctx context.Context, kind handlerKind, pos syntax.Pos) context.Context {
 	hc := HandlerContext{
-		runner: r,
-		kind:   kind,
-		Env:    &overlayEnviron{parent: r.writeEnv},
-		Dir:    r.Dir,
-		Pos:    pos,
-		Stdout: r.stdout,
-		Stderr: r.stderr,
+		runner:         r,
+		kind:           kind,
+		Env:            &overlayEnviron{parent: r.writeEnv},
+		Dir:            r.Dir,
+		Pos:            pos,
+		Stdout:         r.stdout,
+		Stderr:         r.stderr,
+		LastExitStatus: int(r.lastExit.code),
 	}
 	if r.stdin != nil { // do not leave hc.Stdin as a typed nil
 		hc.Stdin = r.stdin
@@ -329,6 +334,7 @@ func (r *Runner) stmt(ctx context.Context, st *syntax.Stmt) {
 
 func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 	oldIn, oldOut, oldErr := r.stdin, r.stdout, r.stderr
+	var closers []io.Closer
 	for _, rd := range st.Redirs {
 		cls, err := r.redir(ctx, rd)
 		if err != nil {
@@ -336,7 +342,7 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 			break
 		}
 		if cls != nil {
-			defer cls.Close()
+			closers = append(closers, cls)
 		}
 	}
 	if r.exit.ok() && st.Cmd != nil {
@@ -360,8 +366,15 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 			r.exit.exiting = true
 		}
 	}
-	if !r.keepRedirs {
+	if r.keepRedirs {
+		// The exec builtin made this statement's redirections apply to the
+		// shell itself, so don't undo them and keep their files open.
+		r.keepRedirs = false
+	} else if len(st.Redirs) > 0 {
 		r.stdin, r.stdout, r.stderr = oldIn, oldOut, oldErr
+		for _, cls := range closers {
+			cls.Close()
+		}
 	}
 }
 
@@ -382,7 +395,8 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		r2.exit.exiting = false // subshells don't exit the parent shell
 		r.exit = r2.exit
 	case *syntax.CallExpr:
-		// Use a new slice, to not modify the slice in the alias map.
+		// Build new slices, to not modify the caller's AST
+		// nor the slices in the alias map.
 		args := cm.Args
 		for i := 0; i < len(args); {
 			if !r.opts[optExpandAliases] {
@@ -392,7 +406,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			if !ok {
 				break
 			}
-			args = slices.Replace(args, i, i+1, als.args...)
+			args = slices.Concat(args[:i], als.args, args[i+1:])
 			if !als.blank {
 				break
 			}
@@ -494,6 +508,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			} else {
 				r2.stderr = r.stderr
 			}
+			oldIn := r.stdin
 			r.stdin = pr
 			var wg sync.WaitGroup
 			wg.Go(func() {
@@ -504,6 +519,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			r.stmt(ctx, cm.Y)
 			pr.Close()
 			wg.Wait()
+			r.stdin = oldIn
 			if r.opts[optPipeFail] && !r2.exit.ok() && r.exit.ok() {
 				r.exit = r2.exit
 			}
@@ -550,44 +566,44 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			}
 
 			if cm.Select {
-				ps3 := shellDefaultPS3
-				if e := r.envGet(shellReplyPS3Var); e != "" {
-					ps3 = e
-				}
+				ps3 := cmp.Or(r.envGet(shellReplyPS3Var), shellDefaultPS3)
 
-				prompt := func() []byte {
-					// display menu
-					for i, word := range items {
-						r.errf("%d) %v\n", i+1, word)
+				for menu := true; ; {
+					if menu {
+						// display menu
+						for i, word := range items {
+							r.errf("%d) %v\n", i+1, word)
+						}
+						menu = false
 					}
 					r.errf("%s", ps3)
 
 					line, err := r.readLine(ctx, true)
 					if err != nil {
+						r.errf("\n")
 						r.exit.code = 1
-						return nil
+						break
 					}
-					return line
-				}
+					if len(line) == 0 {
+						menu = true // no reply; show the menu again
+						continue
+					}
 
-			retry:
-				choice := prompt()
-				if len(choice) == 0 {
-					goto retry // no reply; try again
-				}
+					reply := string(line)
+					r.setVarString(shellReplyVar, reply)
 
-				reply := string(choice)
-				r.setVarString(shellReplyVar, reply)
+					if c, _ := strconv.Atoi(reply); c > 0 && c <= len(items) {
+						r.setVarString(name, items[c-1])
+					} else {
+						r.setVarString(name, "")
+					}
 
-				c, _ := strconv.Atoi(reply)
-				if c > 0 && c <= len(items) {
-					r.setVarString(name, items[c-1])
+					// execute commands until break or return is encountered
+					if r.loopStmtsBroken(ctx, cm.Do) {
+						break
+					}
 				}
-
-				// execute commands until break or return is encountered
-				if r.loopStmtsBroken(ctx, cm.Do) {
-					break
-				}
+				break
 			}
 
 			for _, field := range items {
@@ -620,6 +636,11 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 			}
 		}
 	case *syntax.FuncDecl:
+		if cm.Name == nil { // e.g. zsh's anonymous or multi-name functions
+			r.errf("unsupported\n")
+			r.exit.code = 1
+			break
+		}
 		r.setFunc(cm.Name.Value, cm.Body)
 	case *syntax.ArithmCmd:
 		r.exit.oneIf(r.arithm(cm.X) == 0)
@@ -751,7 +772,11 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 						if i > 0 {
 							r.out(" ")
 						}
-						r.outf("[%d]=%q", i, v)
+						idx := i
+						if vr.Indexes != nil {
+							idx = vr.Indexes[i]
+						}
+						r.outf("[%d]=%q", idx, v)
 					}
 					r.out(")\n")
 				case expand.Associative:
@@ -826,6 +851,7 @@ func (r *Runner) trapCallback(ctx context.Context, callback, name string) {
 		return // don't recurse, as that could lead to cycles
 	}
 	r.handlingTrap = true
+	defer func() { r.handlingTrap = false }()
 
 	p := syntax.NewParser()
 	// TODO: do this parsing when "trap" is called?
@@ -835,11 +861,10 @@ func (r *Runner) trapCallback(ctx context.Context, callback, name string) {
 		// ignore errors in the callback
 		return
 	}
-	oldExit := r.exit
+	oldExit, oldLastExit := r.exit, r.lastExit
+	r.lastExit = r.exit
 	r.stmts(ctx, file.Stmts)
-	r.exit = oldExit // traps on EXIT or ERR should not modify the result
-
-	r.handlingTrap = false
+	r.exit, r.lastExit = oldExit, oldLastExit // traps on EXIT or ERR should not modify the result
 }
 
 func (r *Runner) flattenAssigns(args []*syntax.Assign) iter.Seq[*syntax.Assign] {
@@ -883,9 +908,9 @@ func elapsedString(d time.Duration, posix bool) string {
 	if posix {
 		return fmt.Sprintf("%.2f", d.Seconds())
 	}
-	min := int(d.Minutes())
+	mins := int(d.Minutes())
 	sec := math.Mod(d.Seconds(), 60.0)
-	return fmt.Sprintf("%dm%.3fs", min, sec)
+	return fmt.Sprintf("%dm%.3fs", mins, sec)
 }
 
 func (r *Runner) stmts(ctx context.Context, stmts []*syntax.Stmt) {
@@ -1135,10 +1160,15 @@ func (r *Runner) open(ctx context.Context, path string, flags int, mode os.FileM
 
 func (r *Runner) stat(ctx context.Context, name string) (fs.FileInfo, error) {
 	path := absPath(r.Dir, name)
-	return r.statHandler(ctx, path, true)
+	return r.statHandler(r.handlerCtx(ctx, handlerKindStat, todoPos), path, true)
 }
 
 func (r *Runner) lstat(ctx context.Context, name string) (fs.FileInfo, error) {
 	path := absPath(r.Dir, name)
-	return r.statHandler(ctx, path, false)
+	return r.statHandler(r.handlerCtx(ctx, handlerKindStat, todoPos), path, false)
+}
+
+func (r *Runner) access(ctx context.Context, name string, mode AccessMode) error {
+	path := absPath(r.Dir, name)
+	return r.accessHandler(r.handlerCtx(ctx, handlerKindAccess, todoPos), path, mode)
 }

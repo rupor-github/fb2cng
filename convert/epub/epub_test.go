@@ -2064,6 +2064,123 @@ func TestWriteOPF_Epub3(t *testing.T) {
 	}
 }
 
+func TestWriteOPF_DublinCoreExpansion(t *testing.T) {
+	_, env, log := setupTestContext(t)
+	cfg := &env.Cfg.Document
+	cfg.Metainformation.CreatorNameTemplate = `{{ .LastName }}, {{ .FirstName }}`
+
+	tests := []struct {
+		name   string
+		format common.OutputFmt
+		date   *fb2.Date
+		want   []string
+	}{
+		{
+			name:   "epub2",
+			format: common.OutputFmtEpub2,
+			want: []string{
+				`<dc:date opf:event="publication">1999</dc:date>`,
+				`<dc:publisher>Test Publisher</dc:publisher>`,
+				`<dc:contributor opf:role="trl">Translator, Tina</dc:contributor>`,
+				`<dc:subject>sf</dc:subject>`,
+				`<meta name="fb2:genre" content="sf"/>`,
+				`<dc:subject>space</dc:subject>`,
+				`<dc:subject>adventure</dc:subject>`,
+				`<dc:identifier opf:scheme="ISBN">9780306406157</dc:identifier>`,
+			},
+		},
+		{
+			name:   "epub3",
+			format: common.OutputFmtEpub3,
+			date:   &fb2.Date{Display: "26.10.2015"},
+			want: []string{
+				`<dc:date>2015-10-26</dc:date>`,
+				`<dc:publisher>Test Publisher</dc:publisher>`,
+				`<dc:contributor id="translator0">Translator, Tina</dc:contributor>`,
+				`<meta refines="#translator0" property="role" scheme="marc:relators">trl</meta>`,
+				`<dc:subject id="subject-genre-0">sf</dc:subject>`,
+				`<meta refines="#subject-genre-0" property="authority">FB2</meta>`,
+				`<meta refines="#subject-genre-0" property="term">sf</meta>`,
+				`<dc:subject>space</dc:subject>`,
+				`<dc:identifier id="isbn">9780306406157</dc:identifier>`,
+				`<meta refines="#isbn" property="identifier-type" scheme="onix:codelist5">15</meta>`,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &content.Content{
+				Book: &fb2.FictionBook{
+					Description: fb2.Description{
+						TitleInfo: fb2.TitleInfo{
+							BookTitle:   fb2.TextField{Value: "Test Book"},
+							Lang:        language.Make("en"),
+							Authors:     []fb2.Author{{FirstName: "Ann", LastName: "Author"}},
+							Translators: []fb2.Author{{FirstName: "Tina", LastName: "Translator"}},
+							Genres:      []fb2.GenreRef{{Value: "sf"}},
+							Keywords:    &fb2.TextField{Value: "space; adventure, sf"},
+							Date:        tt.date,
+						},
+						DocumentInfo: fb2.DocumentInfo{ID: "book-id"},
+						PublishInfo: &fb2.PublishInfo{
+							Publisher: &fb2.TextField{Value: "Test Publisher"},
+							Year:      "1999",
+							ISBN:      &fb2.TextField{Value: "978-0-306-40615-7"},
+						},
+					},
+				},
+				OutputFormat: tt.format,
+				ImagesIndex:  make(fb2.BookImages),
+			}
+
+			opfContent := writeOPFStringForTest(t, c, cfg, log)
+			for _, want := range tt.want {
+				if !strings.Contains(opfContent, want) {
+					t.Fatalf("OPF missing %s\n%s", want, opfContent)
+				}
+			}
+		})
+	}
+}
+
+func writeOPFStringForTest(t *testing.T, c *content.Content, cfg *config.DocumentConfig, log *zap.Logger) string {
+	t.Helper()
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	chapters := []chapterData{{ID: "ch01", Filename: "ch01.xhtml", Title: "Chapter 1"}}
+	if err := writeOPF(zw, c, cfg, chapters, log); err != nil {
+		t.Fatalf("writeOPF() error = %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close zip: %v", err)
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatalf("open zip: %v", err)
+	}
+	for _, f := range zr.File {
+		if strings.HasSuffix(f.Name, "content.opf") {
+			rc, err := f.Open()
+			if err != nil {
+				t.Fatalf("open opf: %v", err)
+			}
+			content, err := io.ReadAll(rc)
+			if closeErr := rc.Close(); closeErr != nil && err == nil {
+				err = closeErr
+			}
+			if err != nil {
+				t.Fatalf("read opf: %v", err)
+			}
+			return string(content)
+		}
+	}
+	t.Fatal("OPF file not found in zip")
+	return ""
+}
+
 func TestWriteNCX(t *testing.T) {
 	_, _, log := setupTestContext(t)
 

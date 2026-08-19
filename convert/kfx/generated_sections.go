@@ -406,12 +406,9 @@ func addGeneratedSections(ctx context.Context, c *content.Content, cfg *config.D
 	if tocPageEnabled {
 		storyName := "l" + toBase36(storyIdx)
 		tocSectionName = "c" + toBase36(sectionIdx)
-		storyIdx++
-		sectionIdx++
 
 		sb := NewStorylineBuilder(storyName, tocSectionName, nextEID, styles)
 		ca := NewContentAccumulator(contentCounter)
-		contentCounter++
 
 		// Build TOC title using titleFromStrings + addTitleAsHeading
 		// This creates a proper fb2.Title structure from book title and optional authors

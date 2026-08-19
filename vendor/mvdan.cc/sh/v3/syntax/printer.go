@@ -436,9 +436,7 @@ func (p *Printer) newline(pos Pos) {
 }
 
 func (p *Printer) advanceLine(line uint) {
-	if p.line < line {
-		p.line = line
-	}
+	p.line = max(p.line, line)
 }
 
 func (p *Printer) flushHeredocs() {
@@ -469,7 +467,7 @@ func (p *Printer) flushHeredocs() {
 		p.line++
 		p.w.WriteByte('\n')
 		p.wantSpace = spaceWritten
-		p.wantNewline, p.wantNewline = false, false
+		p.wantNewline, p.mustNewline = false, false
 		if r.Op == DashHdoc && p.indentSpaces == 0 && !p.minify {
 			if r.Hdoc != nil {
 				extra := extraIndenter{
@@ -658,6 +656,13 @@ func (p *Printer) wordPart(wp, next WordPart) {
 	switch wp := wp.(type) {
 	case *Lit:
 		p.writeLit(wp.Value)
+		// An odd number of trailing backslashes would escape whatever
+		// follows, such as the newline ending a file; escape the last
+		// backslash to keep the literal value intact. Parsed source can
+		// only hit this case via a lone backslash at the end of a file.
+		if n := len(wp.Value) - len(strings.TrimRight(wp.Value, `\`)); n%2 == 1 {
+			p.w.WriteByte('\\')
+		}
 	case *SglQuoted:
 		if wp.Dollar {
 			p.w.WriteByte('$')
@@ -922,6 +927,11 @@ func (p *Printer) arithmExprRecurse(expr ArithmExpr, compact, spacePlusMinus boo
 				}
 			}
 			p.w.WriteString(expr.Op.String())
+			if expr.Op == Not && !compact {
+				// "!" followed by a word triggers history expansion
+				// in interactive shells; a space prevents that.
+				p.space()
+			}
 			p.arithmExprRecurse(expr.X, compact, false)
 		}
 	case *ParenArithm:

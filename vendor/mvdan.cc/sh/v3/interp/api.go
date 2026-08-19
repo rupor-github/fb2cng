@@ -95,6 +95,9 @@ type Runner struct {
 	// statHandler is a function responsible for getting file stat. It must be non-nil.
 	statHandler StatHandlerFunc
 
+	// accessHandler is a function responsible for checking file access. It must be non-nil.
+	accessHandler AccessHandlerFunc
+
 	stdin  *os.File // e.g. the read end of a pipe
 	stdout io.Writer
 	stderr io.Writer
@@ -159,8 +162,9 @@ type Runner struct {
 
 	optState getopts
 
-	// keepRedirs is used so that "exec" can make any redirections
+	// keepRedirs is set by "exec" so that its statement's redirections
 	// apply to the current shell, and not just the command.
+	// It is consumed by the enclosing statement once it finishes.
 	keepRedirs bool
 
 	// Fake signal callbacks
@@ -266,6 +270,7 @@ func New(opts ...RunnerOption) (*Runner, error) {
 		openHandler:    DefaultOpenHandler(),
 		readDirHandler: DefaultReadDirHandler2(),
 		statHandler:    DefaultStatHandler(),
+		accessHandler:  DefaultAccessHandler(),
 	}
 	r.dirStack = r.dirBootstrap[:0]
 	// turn "on" the default Bash options
@@ -362,8 +367,8 @@ func Params(args ...string) RunnerOption {
 		fp := flagParser{remaining: args}
 		for fp.more() {
 			flag := fp.flag()
-			if flag == "-" {
-				// TODO: implement "The -x and -v options are turned off."
+			if flag == "-" || flag == "+" {
+				// TODO: for "-", implement "The -x and -v options are turned off."
 				if args := fp.args(); len(args) > 0 {
 					r.Params = args
 				}
@@ -504,6 +509,14 @@ func ReadDirHandler2(f ReadDirHandlerFunc2) RunnerOption {
 func StatHandler(f StatHandlerFunc) RunnerOption {
 	return func(r *Runner) error {
 		r.statHandler = f
+		return nil
+	}
+}
+
+// AccessHandler sets the file access handler. See [AccessHandlerFunc] for more info.
+func AccessHandler(f AccessHandlerFunc) RunnerOption {
+	return func(r *Runner) error {
+		r.accessHandler = f
 		return nil
 	}
 }
@@ -664,7 +677,6 @@ var bashOptsTable = [...]bashOpt{
 	{name: "compat40"},
 	{name: "compat41"},
 	{name: "compat42"},
-	{name: "compat44"},
 	{name: "compat43"},
 	{name: "compat44"},
 	{
@@ -799,6 +811,7 @@ func (r *Runner) Reset() {
 		openHandler:    r.openHandler,
 		readDirHandler: r.readDirHandler,
 		statHandler:    r.statHandler,
+		accessHandler:  r.accessHandler,
 
 		// These can be set by functions like [Dir] or [Params], but
 		// builtins can overwrite them; reset the fields to whatever the
@@ -926,7 +939,13 @@ func (r *Runner) Run(ctx context.Context, node syntax.Node) error {
 	default:
 		return fmt.Errorf("node can only be File, Stmt, or Command: %T", node)
 	}
-	r.trapCallback(ctx, r.callbackExit, "exit")
+	// A bare Command bypasses stmt, which normally updates lastExit.
+	r.lastExit = r.exit
+	// Running an entire file implies an exit; a statement or command
+	// only exits the shell via the exit builtin, errexit, and so on.
+	if _, ok := node.(*syntax.File); ok || r.exit.exiting {
+		r.trapCallback(ctx, r.callbackExit, "exit")
+	}
 	maps.Insert(r.Vars, r.writeEnv.Each)
 	// Return the first of: a fatal error, a non-fatal handler error, or the exit code.
 	if err := r.exit.err; err != nil {
@@ -985,6 +1004,7 @@ func (r *Runner) subshell(background bool) *Runner {
 		openHandler:    r.openHandler,
 		readDirHandler: r.readDirHandler,
 		statHandler:    r.statHandler,
+		accessHandler:  r.accessHandler,
 		stdin:          r.stdin,
 		stdout:         r.stdout,
 		stderr:         r.stderr,

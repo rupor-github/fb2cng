@@ -16,6 +16,7 @@ import (
 	"fbc/common"
 	"fbc/config"
 	"fbc/content"
+	"fbc/convert/metainfo"
 	"fbc/convert/pdf/structure"
 	"fbc/convert/tocnav"
 	"fbc/fb2"
@@ -185,6 +186,20 @@ func (r *renderer) renderMarkdownFrontMatter() {
 			lines = append(lines, "  - "+yamlScalar(author))
 		}
 	}
+	if info.Annotation != nil {
+		if description := strings.TrimSpace(info.Annotation.AsPlainText()); description != "" {
+			lines = append(lines, "description: "+yamlScalar(description))
+		}
+	}
+	if publisher := metainfo.Publisher(r.c.Book.Description.PublishInfo); publisher != "" {
+		lines = append(lines, "publisher: "+yamlScalar(publisher))
+	}
+	if translators := r.markdownMetaAuthors(info.Translators); len(translators) > 0 {
+		lines = append(lines, "translators:")
+		for _, translator := range translators {
+			lines = append(lines, "  - "+yamlScalar(translator))
+		}
+	}
 	if len(info.Sequences) > 0 {
 		lines = append(lines, "series:")
 		for _, seq := range info.Sequences {
@@ -201,7 +216,7 @@ func (r *renderer) renderMarkdownFrontMatter() {
 	if lang := strings.TrimSpace(info.Lang.String()); lang != "" && lang != "und" {
 		lines = append(lines, "language: "+yamlScalar(lang))
 	}
-	if date := formatDate(info.Date); date != "" {
+	if date := metainfo.BookDate(&r.c.Book.Description); date != "" {
 		lines = append(lines, "date: "+yamlScalar(date))
 	}
 	if genres := markdownMetaGenres(info.Genres); len(genres) > 0 {
@@ -210,19 +225,48 @@ func (r *renderer) renderMarkdownFrontMatter() {
 			lines = append(lines, "  - "+yamlScalar(genre))
 		}
 	}
+	if keywords := metainfo.Keywords(info.Keywords); len(keywords) > 0 {
+		lines = append(lines, "keywords:")
+		for _, keyword := range keywords {
+			lines = append(lines, "  - "+yamlScalar(keyword))
+		}
+	}
+	if isbn, _, err := metainfo.ISBN(r.c.Book.Description.PublishInfo); err == nil && isbn != "" {
+		lines = append(lines, "isbn: "+yamlScalar(isbn))
+	}
+	if id := strings.TrimSpace(r.c.Book.Description.DocumentInfo.ID); id != "" {
+		lines = append(lines, "identifier: "+yamlScalar(id))
+	}
+	if src := r.c.Book.Description.SrcTitleInfo; src != nil {
+		if sourceTitle := strings.TrimSpace(src.BookTitle.Value); sourceTitle != "" {
+			lines = append(lines, "source_title: "+yamlScalar(sourceTitle))
+		}
+		if sourceLanguage := strings.TrimSpace(src.Lang.String()); sourceLanguage != "" && sourceLanguage != "und" {
+			lines = append(lines, "source_language: "+yamlScalar(sourceLanguage))
+		}
+	}
 	lines = append(lines, "---")
 	r.block(strings.Join(lines, "\n"))
 }
 
 func (r *renderer) markdownMetaTitle() string {
+	title := ""
 	templateText := strings.TrimSpace(r.cfg.Metainformation.TitleTemplate)
 	if templateText != "" {
-		title, err := r.c.Book.ExpandTemplateMetainfo(config.MetaTitleTemplateFieldName, templateText, r.c.SrcName, r.c.OutputFormat)
-		if err == nil && strings.TrimSpace(title) != "" {
-			return strings.TrimSpace(title)
+		expanded, err := r.c.Book.ExpandTemplateMetainfo(config.MetaTitleTemplateFieldName, templateText, r.c.SrcName, r.c.OutputFormat)
+		if err == nil {
+			title = strings.TrimSpace(expanded)
 		}
 	}
-	title := strings.TrimSpace(r.c.Book.Description.TitleInfo.BookTitle.Value)
+	if title == "" {
+		title = strings.TrimSpace(r.c.Book.Description.TitleInfo.BookTitle.Value)
+	}
+	if title == "" {
+		title = strings.TrimSuffix(r.c.SrcName, ".fb2")
+	}
+	if r.cfg.Metainformation.Transliterate {
+		title = fb2.Transliterate(title)
+	}
 	if title == "" {
 		return strings.TrimSuffix(r.c.SrcName, ".fb2")
 	}
@@ -231,24 +275,8 @@ func (r *renderer) markdownMetaTitle() string {
 
 func (r *renderer) markdownMetaAuthors(authors []fb2.Author) []string {
 	result := make([]string, 0, len(authors))
-	templateText := strings.TrimSpace(r.cfg.Metainformation.CreatorNameTemplate)
 	for i := range authors {
-		name := ""
-		if templateText != "" {
-			expanded, err := r.c.Book.ExpandTemplateAuthorName(
-				config.MetaCreatorNameTemplateFieldName,
-				templateText,
-				r.c.OutputFormat,
-				i,
-				&authors[i],
-			)
-			if err == nil {
-				name = strings.TrimSpace(expanded)
-			}
-		}
-		if name == "" {
-			name = formatAuthor(authors[i])
-		}
+		name, _ := metainfo.PersonName(r.c.Book, &r.cfg.Metainformation, r.c.OutputFormat, i, &authors[i])
 		if name != "" {
 			result = append(result, name)
 		}

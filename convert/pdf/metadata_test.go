@@ -147,3 +147,63 @@ func TestGeneratePDFMetadataSubjectAndKeywords(t *testing.T) {
 		}
 	}
 }
+
+func TestGeneratePDFXMPMetadata(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputName := filepath.Join(tmpDir, "book.pdf")
+	cfg := &config.DocumentConfig{
+		Images: config.ImagesConfig{Screen: config.ScreenConfig{Width: 1264, Height: 1680, DPI: 300}},
+		Metainformation: config.MetainformationConfig{
+			CreatorNameTemplate: "{{.LastName}}, {{.FirstName}}",
+		},
+	}
+	c := &content.Content{
+		SrcName:      "book.fb2",
+		OutputFormat: common.OutputFmtPdf,
+		Book: &fb2.FictionBook{Description: fb2.Description{
+			TitleInfo: fb2.TitleInfo{
+				BookTitle:   fb2.TextField{Value: "Metadata <Book>"},
+				Authors:     []fb2.Author{{FirstName: "Ada", LastName: "Lovelace"}},
+				Translators: []fb2.Author{{FirstName: "Tina", LastName: "Translator"}},
+				Annotation: &fb2.Flow{Items: []fb2.FlowItem{{
+					Kind:      fb2.FlowParagraph,
+					Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: "Annotation & text."}}},
+				}}},
+				Keywords: &fb2.TextField{Value: "alpha, beta"},
+				Genres:   []fb2.GenreRef{{Value: "sf"}},
+			},
+			DocumentInfo: fb2.DocumentInfo{ID: "book-id"},
+			PublishInfo: &fb2.PublishInfo{
+				Publisher: &fb2.TextField{Value: "Test Publisher"},
+				Year:      "1999",
+				ISBN:      &fb2.TextField{Value: "978-0-306-40615-7"},
+			},
+		}},
+	}
+
+	if err := Generate(context.Background(), c, outputName, cfg, zaptest.NewLogger(t)); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	data, err := os.ReadFile(outputName)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	pdfText := string(data)
+	for _, want := range []string{
+		`/Metadata 6 0 R`,
+		`/Subtype /XML`,
+		`<dc:title><rdf:Alt><rdf:li xml:lang="x-default">Metadata &lt;Book&gt;</rdf:li></rdf:Alt></dc:title>`,
+		`<dc:creator><rdf:Seq><rdf:li>Lovelace, Ada</rdf:li></rdf:Seq></dc:creator>`,
+		`<dc:contributor><rdf:Bag><rdf:li>Translator, Tina</rdf:li></rdf:Bag></dc:contributor>`,
+		`<dc:description><rdf:Alt><rdf:li xml:lang="x-default">Annotation &amp; text.</rdf:li></rdf:Alt></dc:description>`,
+		`<dc:subject><rdf:Bag><rdf:li>sf</rdf:li><rdf:li>alpha</rdf:li><rdf:li>beta</rdf:li></rdf:Bag></dc:subject>`,
+		`<dc:publisher><rdf:Bag><rdf:li>Test Publisher</rdf:li></rdf:Bag></dc:publisher>`,
+		`<dc:date><rdf:Seq><rdf:li>1999</rdf:li></rdf:Seq></dc:date>`,
+		`<dc:identifier><rdf:Bag><rdf:li>book-id</rdf:li><rdf:li>ISBN:9780306406157</rdf:li></rdf:Bag></dc:identifier>`,
+		`<pdf:Keywords>alpha, beta</pdf:Keywords>`,
+	} {
+		if !strings.Contains(pdfText, want) {
+			t.Fatalf("generated PDF does not contain XMP metadata %q", want)
+		}
+	}
+}

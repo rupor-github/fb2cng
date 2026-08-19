@@ -70,6 +70,7 @@ func TestRenderMarkdownSemanticOutput(t *testing.T) {
 func TestRenderMarkdownFrontMatterUsesMetainformationTemplates(t *testing.T) {
 	c := testContent(common.OutputFmtMd)
 	noteNum := 2
+	c.Book.Description.TitleInfo.BookTitle.Value = "Книга"
 	c.Book.Description.TitleInfo.Authors = []fb2.Author{{FirstName: "Ada", LastName: "Lovelace"}}
 	c.Book.Description.TitleInfo.Sequences = []fb2.Sequence{{Name: "Analytical Engine", Number: &noteNum}}
 	c.Book.Bodies = []fb2.Body{{
@@ -81,7 +82,49 @@ func TestRenderMarkdownFrontMatterUsesMetainformationTemplates(t *testing.T) {
 		}},
 	}}
 	cfg := testConfig()
-	cfg.Metainformation.TitleTemplate = `{{ with first .Series }}{{ .Name }} #{{ .Number }}: {{ end }}{{ .Title }}`
+	cfg.Metainformation.TitleTemplate = `{{ with first .Series }}{{ .Name }} #{{ .Number }}: {{ end }}{{ .Title }} - копия`
+	cfg.Metainformation.CreatorNameTemplate = `{{ .LastName }}, {{ .FirstName }}`
+	cfg.Metainformation.Transliterate = true
+
+	got, err := renderForTest(c, cfg)
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+
+	assertContains(t, got, "title: \"Analytical Engine 2 Kniga - kopiia\"")
+	assertContains(t, got, "authors:\n  - \"Lovelace Ada\"")
+	assertContains(t, got, "---\n\n# Книга")
+	if strings.Contains(got, "# Analytical Engine 2 Kniga - kopiia") || strings.Contains(got, "Authors: Ada Lovelace") {
+		t.Fatalf("Markdown rendered legacy metadata block instead of YAML front matter:\n%s", got)
+	}
+}
+
+func TestRenderMarkdownFrontMatterExpandedMetadata(t *testing.T) {
+	c := testContent(common.OutputFmtMd)
+	c.Book.Description.TitleInfo.Annotation = &fb2.Flow{Items: []fb2.FlowItem{
+		paragraphItem(fb2.InlineSegment{Kind: fb2.InlineText, Text: "Short description."}),
+	}}
+	c.Book.Description.TitleInfo.Translators = []fb2.Author{{FirstName: "Tina", LastName: "Translator"}}
+	c.Book.Description.TitleInfo.Keywords = &fb2.TextField{Value: "space; adventure, space"}
+	c.Book.Description.DocumentInfo.ID = "book-id"
+	c.Book.Description.PublishInfo = &fb2.PublishInfo{
+		Publisher: &fb2.TextField{Value: "Test Publisher"},
+		Year:      "1999",
+		ISBN:      &fb2.TextField{Value: "978-0-306-40615-7"},
+	}
+	c.Book.Description.SrcTitleInfo = &fb2.TitleInfo{
+		BookTitle: fb2.TextField{Value: "Original Title"},
+		Lang:      language.French,
+	}
+	c.Book.Bodies = []fb2.Body{{
+		Kind: fb2.BodyMain,
+		Sections: []fb2.Section{{
+			ID:      "chapter-1",
+			Title:   title("Chapter"),
+			Content: []fb2.FlowItem{paragraphItem(fb2.InlineSegment{Kind: fb2.InlineText, Text: "Text"})},
+		}},
+	}}
+	cfg := testConfig()
 	cfg.Metainformation.CreatorNameTemplate = `{{ .LastName }}, {{ .FirstName }}`
 
 	got, err := renderForTest(c, cfg)
@@ -89,12 +132,15 @@ func TestRenderMarkdownFrontMatterUsesMetainformationTemplates(t *testing.T) {
 		t.Fatalf("Render() error = %v", err)
 	}
 
-	assertContains(t, got, "title: \"Analytical Engine #2: Test Book\"")
-	assertContains(t, got, "authors:\n  - \"Lovelace, Ada\"")
-	assertContains(t, got, "---\n\n# Test Book")
-	if strings.Contains(got, "# Analytical Engine #2: Test Book") || strings.Contains(got, "Authors: Ada Lovelace") {
-		t.Fatalf("Markdown rendered legacy metadata block instead of YAML front matter:\n%s", got)
-	}
+	assertContains(t, got, `description: "Short description."`)
+	assertContains(t, got, `publisher: "Test Publisher"`)
+	assertContains(t, got, "translators:\n  - \"Translator, Tina\"")
+	assertContains(t, got, `date: "1999"`)
+	assertContains(t, got, "keywords:\n  - \"space\"\n  - \"adventure\"")
+	assertContains(t, got, `isbn: "9780306406157"`)
+	assertContains(t, got, `identifier: "book-id"`)
+	assertContains(t, got, `source_title: "Original Title"`)
+	assertContains(t, got, `source_language: "fr"`)
 }
 
 func TestRenderMarkdownTOCLinksToStableAnchors(t *testing.T) {

@@ -194,7 +194,6 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 	}
 
 	// Process all footnote bodies - each body becomes a separate top-level chapter
-	chapterNum++
 	// Include footnotes in page calculations regardless of float mode
 	// (content is visible in both modes, just displayed differently)
 	c.PageTrackingEnabled = c.PageSize > 0

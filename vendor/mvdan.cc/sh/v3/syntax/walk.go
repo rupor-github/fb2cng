@@ -6,6 +6,7 @@ package syntax
 import (
 	"fmt"
 	"io"
+	"iter"
 	"reflect"
 )
 
@@ -58,6 +59,7 @@ func Walk(node Node, f func(Node) bool) {
 		walkComments(node.CondLast, f)
 		walkList(node.Then, f)
 		walkComments(node.ThenLast, f)
+		walkComments(node.Last, f)
 		walkNilable(node.Else, f)
 	case *WhileClause:
 		walkList(node.Cond, f)
@@ -182,6 +184,24 @@ func Walk(node Node, f func(Node) bool) {
 	}
 
 	f(nil)
+}
+
+// Preorder returns an iterator over all the nodes of the syntax tree rooted at
+// node, in the same depth-first preorder as [Walk]; node must not be nil.
+//
+// For greater control over the traversal, such as pruning subtrees or being
+// called when exiting a node, use [Walk] directly.
+func Preorder(node Node) iter.Seq[Node] {
+	return func(yield func(Node) bool) {
+		ok := true
+		Walk(node, func(node Node) bool {
+			// yield must not be called again once it returns false.
+			if node != nil {
+				ok = ok && yield(node)
+			}
+			return ok
+		})
+	}
 }
 
 type nilableNode interface {

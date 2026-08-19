@@ -178,6 +178,68 @@ func TestBuildBookMetadata_TitleTemplate(t *testing.T) {
 	})
 }
 
+func TestBuildBookMetadata_ExtendedMetadata(t *testing.T) {
+	log := zap.NewNop()
+	c := &content.Content{
+		Book: &fb2.FictionBook{
+			Description: fb2.Description{
+				TitleInfo: fb2.TitleInfo{
+					BookTitle: fb2.TextField{Value: "Test Book"},
+					Authors:   []fb2.Author{{FirstName: "Jane", LastName: "Author"}},
+					Lang:      language.English,
+				},
+				DocumentInfo: fb2.DocumentInfo{ID: "test-id"},
+				PublishInfo: &fb2.PublishInfo{
+					Publisher: &fb2.TextField{Value: "Test Publisher"},
+					Year:      "2001",
+					ISBN:      &fb2.TextField{Value: "978-0-306-40615-7"},
+				},
+			},
+		},
+		OutputFormat: common.OutputFmtKfx,
+	}
+
+	frag := BuildBookMetadata(c, &config.DocumentConfig{}, "", "", nil, log)
+	metadata := extractTitleMetadata(t, frag)
+
+	if got := metadata["issue_date"]; got != "2001" {
+		t.Errorf("issue_date = %q, want 2001", got)
+	}
+	if got := metadata["ISBN"]; got != "9780306406157" {
+		t.Errorf("ISBN = %q, want 9780306406157", got)
+	}
+	if got := metadata["ISBN-13"]; got != "9780306406157" {
+		t.Errorf("ISBN-13 = %q, want 9780306406157", got)
+	}
+	if _, ok := metadata["ISBN-10"]; ok {
+		t.Error("ISBN-10 should not be emitted for ISBN-13")
+	}
+}
+
+func TestBuildBookMetadata_InvalidISBNSkipped(t *testing.T) {
+	log := zap.NewNop()
+	c := &content.Content{
+		Book: &fb2.FictionBook{
+			Description: fb2.Description{
+				TitleInfo:    fb2.TitleInfo{BookTitle: fb2.TextField{Value: "Test Book"}},
+				DocumentInfo: fb2.DocumentInfo{ID: "test-id"},
+				PublishInfo:  &fb2.PublishInfo{ISBN: &fb2.TextField{Value: "9780306406158"}},
+			},
+		},
+		OutputFormat: common.OutputFmtKfx,
+	}
+
+	frag := BuildBookMetadata(c, &config.DocumentConfig{}, "", "", nil, log)
+	metadata := extractTitleMetadata(t, frag)
+
+	if _, ok := metadata["ISBN"]; ok {
+		t.Error("invalid ISBN should not be emitted")
+	}
+	if _, ok := metadata["ISBN-13"]; ok {
+		t.Error("invalid ISBN-13 should not be emitted")
+	}
+}
+
 // extractTitleMetadata extracts key-value pairs from kindle_title_metadata category.
 func extractTitleMetadata(t *testing.T, frag *Fragment) map[string]string {
 	t.Helper()

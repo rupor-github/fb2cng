@@ -120,6 +120,30 @@ Convert options:
 
 See [Footnotes](footnotes.md) for a full mode-by-format matrix.
 
+## Metadata By Format
+
+Metadata is read from FB2 `description` fields and written to each output format where the target format has a matching concept. Metadata dates and ISBNs are normalized when possible; invalid ISBN values are skipped.
+
+`document.metainformation.title_template` controls the exported book title metadata. `document.metainformation.creator_name_template` controls exported author and translator names. `document.metainformation.transliterate` applies to exported title, author, and translator names after template expansion.
+
+| Metadata | EPUB2/KEPUB | EPUB3 | KFX/AZW8 | PDF | TXT | Markdown |
+|---|---|---|---|---|---|---|
+| Title template | `dc:title` | `dc:title` | `title` | Info `Title`, XMP `dc:title` | heading only | YAML `title` |
+| Authors | `dc:creator opf:role="aut"` | `dc:creator` + MARC role | `author` | Info `Author`, XMP `dc:creator` | metadata block | YAML `authors` |
+| Translators | `dc:contributor opf:role="trl"` | `dc:contributor` + MARC role | no | XMP `dc:contributor` | no | YAML `translators` |
+| Language | `dc:language` | `dc:language` | `language` | XMP `dc:language` | metadata block | YAML `language` |
+| Date | `dc:date opf:event="publication"` | `dc:date` | `issue_date` | XMP `dc:date` | metadata block | YAML `date` |
+| Publisher | `dc:publisher` | `dc:publisher` | `publisher` | XMP `dc:publisher` | no | YAML `publisher` |
+| Annotation/description | `dc:description` | `dc:description` | `description` | Info `Subject`, XMP `dc:description` | no | YAML `description` |
+| Genres | `dc:subject`, `fb2:genre` meta | `dc:subject` + FB2 authority/term | no | XMP `dc:subject` | metadata block | YAML `genres` |
+| Keywords | `dc:subject` | `dc:subject` | no | Info `Keywords`, XMP `pdf:Keywords`, XMP `dc:subject` | no | YAML `keywords` |
+| ISBN | `dc:identifier opf:scheme="ISBN"` | `dc:identifier` + ONIX identifier type | `ISBN`, `ISBN-10` or `ISBN-13` | XMP `dc:identifier` | no | YAML `isbn` |
+| FB2 document ID | `dc:identifier id="BookId"` | `dc:identifier id="BookId"` | `book_id`, fallback ASIN source | XMP `dc:identifier` | no | YAML `identifier` |
+| Series | Calibre first-series meta | collection metadata | no | no | metadata block | YAML `series` |
+| Source title/language | no | no | no | no | no | YAML `source_title`, `source_language` |
+
+PDF stores both the classic Info dictionary and XMP metadata stream. PDF Info `Subject` comes from FB2 annotation text, while XMP `dc:subject` contains genres and keywords.
+
 ## Configuration Basics
 
 Generate a default configuration file:

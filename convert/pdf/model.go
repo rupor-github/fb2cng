@@ -25,6 +25,7 @@ type pdfDocumentSpec struct {
 	Author   string
 	Subject  string
 	Keywords string
+	XMP      []byte
 
 	// Blocks is the flat, already-generated reading order. It includes source FB2
 	// content and synthetic blocks such as page breaks, annotation pages, TOC pages,

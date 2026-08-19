@@ -208,24 +208,25 @@ func (e *Executor) compiledTask(call *Call, evaluateShVars bool) (*ast.Task, err
 		}
 	}
 
-	if len(origTask.Sources) > 0 && origTask.Method != "none" {
-		var checker fingerprint.SourcesCheckable
+	if len(origTask.Sources) > 0 {
+		fingerprinter := e.fingerprinter()
+		kind := fingerprinter.Kind(&new)
+		if kind != "none" && origTask.ReferencesFingerprintVar(kind) {
+			// An invalid method must not fail compilation: --force skips
+			// fingerprinting altogether, and the up-to-date check reports it
+			// on every other path.
+			value, err := fingerprinter.SourceValue(&new)
+			if err != nil && !errors.Is(err, fingerprint.ErrInvalidMethod) {
+				return nil, err
+			}
+			if err == nil {
+				vars.Set(strings.ToUpper(kind), ast.Var{Live: value})
 
-		if origTask.Method == "timestamp" {
-			checker = fingerprint.NewTimestampChecker(e.TempDir.Fingerprint, e.Dry)
-		} else {
-			checker = fingerprint.NewChecksumChecker(e.TempDir.Fingerprint, e.Dry)
+				// Adding new variables, requires us to refresh the templaters
+				// cache of the the values manually
+				cache.ResetCache()
+			}
 		}
-
-		value, err := checker.Value(&new)
-		if err != nil {
-			return nil, err
-		}
-		vars.Set(strings.ToUpper(checker.Kind()), ast.Var{Live: value})
-
-		// Adding new variables, requires us to refresh the templaters
-		// cache of the the values manually
-		cache.ResetCache()
 	}
 
 	if len(origTask.Cmds) > 0 {
@@ -354,6 +355,22 @@ func asAnySlice[T any](slice []T) []any {
 	return ret
 }
 
+// resolvedAsAnySlice converts a value resolved from a reference into a []any.
+// A reference does not always resolve to a []any: lists declared in a Taskfile
+// do, but template functions such as `keys` and `splitList` return a []string.
+// The accepted types mirror the list types itemsFromFor already supports.
+func resolvedAsAnySlice(v any) ([]any, bool) {
+	switch value := v.(type) {
+	case []any:
+		return value, true
+	case []string:
+		return asAnySlice(value), true
+	case []int:
+		return asAnySlice(value), true
+	}
+	return nil, false
+}
+
 func itemsFromFor(
 	f *ast.For,
 	dir string,
@@ -475,12 +492,11 @@ func resolveMatrixRefs(matrix *ast.Matrix, cache *templater.Cache) (*ast.Matrix,
 			if cache.Err() != nil {
 				return nil, cache.Err()
 			}
-			switch value := v.(type) {
-			case []any:
-				row.Value = value
-			default:
+			value, ok := resolvedAsAnySlice(v)
+			if !ok {
 				return nil, fmt.Errorf("matrix reference %q must resolve to a list", row.Ref)
 			}
+			row.Value = value
 		}
 	}
 	return resolved, nil
@@ -498,7 +514,7 @@ func resolveEnumRefs(requires *ast.Requires, cache *templater.Cache) error {
 		if cache.Err() != nil {
 			return cache.Err()
 		}
-		arr, ok := resolved.([]any)
+		arr, ok := resolvedAsAnySlice(resolved)
 		if !ok {
 			return fmt.Errorf("enum reference %q must resolve to a list", v.Enum.Ref)
 		}

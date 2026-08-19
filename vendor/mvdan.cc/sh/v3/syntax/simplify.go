@@ -18,7 +18,9 @@ import "strings"
 //	Use single quotes to shorten literals    "\$foo"
 func Simplify(n Node) bool {
 	s := simplifier{}
-	Walk(n, s.visit)
+	for node := range Preorder(n) {
+		s.visit(node)
+	}
 	return s.modified
 }
 
@@ -26,7 +28,7 @@ type simplifier struct {
 	modified bool
 }
 
-func (s *simplifier) visit(node Node) bool {
+func (s *simplifier) visit(node Node) {
 	switch node := node.(type) {
 	case *Assign:
 		node.Index = s.removeParensArithm(node.Index)
@@ -78,6 +80,8 @@ func (s *simplifier) visit(node Node) bool {
 		switch node.Op {
 		case TsMatch, TsNoMatch:
 			// unquoting enables globbing
+		case TsReMatch:
+			// unquoting turns a literal string into a regular expression
 		default:
 			node.Y = s.unquoteParams(node.Y)
 		}
@@ -85,7 +89,6 @@ func (s *simplifier) visit(node Node) bool {
 	case *UnaryTest:
 		node.X = s.unquoteParams(node.X)
 	}
-	return true
 }
 
 func (s *simplifier) simplifyWord(wps []WordPart) []WordPart {

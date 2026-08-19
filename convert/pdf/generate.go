@@ -61,16 +61,22 @@ func Generate(
 	styleResolver := newPDFStyleResolverFromParsed(parsedStylesheets, log, styleTracer)
 	writePDFParsedStylesheetDebug(c, styleResolver, log)
 
+	title := bookTitle(c, cfg, log)
+	author := bookAuthors(c, cfg, log)
+	subject := bookSubject(c)
+	keywords := bookKeywords(c)
+
 	data, err := buildPDFDocument(pdfDocumentSpec{
 		PageWidth:        pageWidth,
 		PageHeight:       pageHeight,
 		ScreenWidthPx:    cfg.Images.Screen.Width,
 		ScreenHeightPx:   cfg.Images.Screen.Height,
 		ScreenDPI:        cfg.Images.Screen.DPI,
-		Title:            bookTitle(c, cfg, log),
-		Author:           bookAuthors(c, cfg, log),
-		Subject:          bookSubject(c),
-		Keywords:         bookKeywords(c),
+		Title:            title,
+		Author:           author,
+		Subject:          subject,
+		Keywords:         keywords,
+		XMP:              pdfXMPMetadata(c, cfg, log, title, subject, keywords),
 		Blocks:           contentPlan.Blocks,
 		TOC:              contentPlan.TOC,
 		PrintedFootnotes: contentPlan.PrintedFootnotes,
