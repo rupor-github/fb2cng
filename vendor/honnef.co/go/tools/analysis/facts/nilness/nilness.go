@@ -357,6 +357,8 @@ start:
 					s.setOuter(v, NeverNil)
 				case "ssa:wrapnilchk":
 					s.setOuter(v, NeverNil)
+				case "recover":
+					s.setOuter(v, MaybeNil)
 				default:
 					panic(fmt.Sprintf("internal error: unhandled builtin %s", callee.Name()))
 				}
@@ -539,6 +541,7 @@ start:
 				s.setOuter(v.Chan, NeverNil)
 			case *ir.Recv:
 				s.setOuter(v.Chan, NeverNil)
+				s.set(v, ValueNilness{MaybeNil, MaybeNil})
 			case *ir.MakeInterface:
 				s.set(v, ValueNilness{
 					Inner: s.get(v.X).Outer,
@@ -652,7 +655,7 @@ start:
 					// we finished execution the select.
 					s.setOuter(v.States[0].Chan, NeverNil)
 				}
-			case *ir.DebugRef, *ir.Jump, *ir.BlankStore, *ir.Phi,
+			case *ir.Jump, *ir.BlankStore, *ir.Phi,
 				*ir.Panic, *ir.Return, *ir.RunDefers, *ir.Unreachable, *ir.ConstantSwitch,
 				*ir.UnOp, *ir.BinOp, *ir.CompositeValue, *ir.Range, *ir.Next:
 			default:
