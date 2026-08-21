@@ -38,8 +38,8 @@
 - All changes need to be validated with `go tool staticcheck`; `gopls` for changed files should show no warnings.
 - Instead of `gofmt`, run `goimports-reviser -format -set-alias -company-prefixes github.com/rupor-github -excludes vendor` on changed files.
 - When changes are related to KFX, validate the generated file with `testdata/run_kfx_input.py <file name>`; output should contain only 3 warnings related to `fbc`.
-- When changes are related to EPUB, validate generated EPUB2 and EPUB3 files with `testdata/epubcheck.sh <file name>`; output should have no errors or warnings.
-- When changes are related to PDF, validate the generated file with `qpdf` and/or `pdfinfo`.
+- When changes are related to EPUB, validate generated EPUB2 and EPUB3 files with `testdata/run_epubcheck.sh <file name>`; output should have no errors or warnings.
+- When changes are related to PDF, validate the generated file with `testdata/run_pdf_check.sh <file name>`; use `--require-metadata` when XMP metadata is expected.
 
 ## Workflow Gotchas
 

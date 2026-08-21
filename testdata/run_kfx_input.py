@@ -24,16 +24,22 @@ def _candidate_kfxinput_paths(cli_path: Optional[str]) -> List[Path]:
     if env_path:
         paths.append(Path(env_path))
 
+    book_tests_path = os.environ.get("BOOK_TESTS_PATH")
+    if book_tests_path:
+        paths.append(Path(book_tests_path) / "KFXInput")
+
     # Default checkout location in this workspace layout.
-    # When run from this repo root (.../fb2cng), KFXInput is three levels up:
-    #   ../../../KFXInput
+    # When run from this repo root (.../fb2cng), book-tests is three levels up:
+    #   ../../../book-tests/KFXInput
     project_dir = Path.cwd().resolve()
     if len(project_dir.parents) >= 3:
+        paths.append(project_dir.parents[2] / "book-tests" / "KFXInput")
         paths.append(project_dir.parents[2] / "KFXInput")
 
     # Common local checkouts.
     paths.extend(
         [
+            Path.home() / "projects" / "book-tests" / "KFXInput",
             Path.home() / "projects" / "KFXInput",
             Path.home() / "src" / "KFXInput",
         ]
@@ -62,6 +68,30 @@ def _try_import_kfxlib(extra_path: Optional[Path]):
     from kfxlib import JobLog, YJ_Book, set_logger  # type: ignore
 
     return YJ_Book, JobLog, set_logger
+
+
+def _print_kfxinput_install_hint(args_kfxinput: Optional[str], last_err: Optional[Exception]) -> None:
+    print("ERROR: Failed to import kfxlib from KFXInput.", file=sys.stderr)
+    print(file=sys.stderr)
+    print("Install or unpack the KFXInput Calibre plugin checkout here:", file=sys.stderr)
+    print("  /home/rupor/projects/book-tests/KFXInput", file=sys.stderr)
+    print(file=sys.stderr)
+    print("Or point this script to it with one of:", file=sys.stderr)
+    print("  --kfxinput /path/to/KFXInput", file=sys.stderr)
+    print("  KFXINPUT_PATH=/path/to/KFXInput", file=sys.stderr)
+    print("  BOOK_TESTS_PATH=/path/to/book-tests", file=sys.stderr)
+    print(file=sys.stderr)
+    print("Expected directory must contain: kfxlib/", file=sys.stderr)
+    print(
+        "Project source: https://www.mobileread.com/forums/showthread.php?t=291290&highlight=KFXInput",
+        file=sys.stderr,
+    )
+    if args_kfxinput:
+        print(f"Tried --kfxinput={args_kfxinput}", file=sys.stderr)
+    else:
+        print("Tried common locations including ~/projects/book-tests/KFXInput.", file=sys.stderr)
+    if last_err is not None:
+        print(f"ImportError: {last_err}", file=sys.stderr)
 
 
 class ConsoleLogger:
@@ -121,8 +151,8 @@ def main():
     YJ_Book = JobLog = set_logger = None
     try:
         YJ_Book, JobLog, set_logger = _try_import_kfxlib(None)
-    except ImportError:
-        last_err: Optional[Exception] = None
+    except ImportError as e:
+        last_err: Optional[Exception] = e
         loaded_from: Optional[Path] = None
         for candidate in _candidate_kfxinput_paths(args.kfxinput):
             # Skip paths that don't look like a KFXInput checkout.
@@ -137,22 +167,8 @@ def main():
                 last_err = e
                 continue
 
-        if last_err is not None:
-            print("ERROR: Failed to import kfxlib.", file=sys.stderr)
-            print(
-                "Install kfxlib into your environment, or point this script to a KFXInput checkout via:",
-                file=sys.stderr,
-            )
-            print("  - --kfxinput /path/to/KFXInput", file=sys.stderr)
-            print("  - KFXINPUT_PATH=/path/to/KFXInput", file=sys.stderr)
-            if args.kfxinput:
-                print(f"Tried --kfxinput={args.kfxinput}", file=sys.stderr)
-            else:
-                print(
-                    "Tried common locations (including ~/projects/KFXInput).",
-                    file=sys.stderr,
-                )
-            print(f"ImportError: {last_err}", file=sys.stderr)
+        if YJ_Book is None or JobLog is None or set_logger is None:
+            _print_kfxinput_install_hint(args.kfxinput, last_err)
             sys.exit(1)
 
         if loaded_from is not None:
