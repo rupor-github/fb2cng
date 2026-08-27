@@ -246,9 +246,11 @@ document:
 
       # How to process cover image
       # "none"    - do nothing (for Kindle output treated as "keepAR")
-      # "keepAR"  - when image height is less than specified, resize to
-      # specified height keeping aspect ratio
-      # "stretch" - unconditionally resize to specified width and height
+      # "keepAR"  - when image height is less than specified screen height,
+      # resize to specified screen height keeping aspect ratio
+      # "stretch" - unconditionally resize to specified screen width and height
+      # "fit"     - resize up or down to fit specified screen width and height
+      # keeping aspect ratio
       resize: stretch
 
   footnotes:

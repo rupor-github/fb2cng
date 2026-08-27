@@ -233,6 +233,14 @@ func (bo *BinaryObject) prepareImage(kindle, cover bool, cfg *config.ImagesConfi
 				img = resizedImg
 				bi.Dim.Width = img.Bounds().Dx()
 				bi.Dim.Height = img.Bounds().Dy()
+			case common.ImageResizeModeFit:
+				resizedImg := resizeImageToFitBox(img, w, h)
+				if resizedImg == nil {
+					return bo.handleImageError(bi, "resize", nil, kindle, cfg, log)
+				}
+				img = resizedImg
+				bi.Dim.Width = img.Bounds().Dx()
+				bi.Dim.Height = img.Bounds().Dy()
 			}
 		}
 
@@ -282,6 +290,15 @@ func (bo *BinaryObject) prepareImage(kindle, cover bool, cfg *config.ImagesConfi
 			imageChanged = true
 		case common.ImageResizeModeStretch:
 			resizedImg := imaging.Resize(img, w, h, imaging.Lanczos)
+			if resizedImg == nil {
+				return bo.handleImageError(bi, "resize", nil, kindle, cfg, log)
+			}
+			img = resizedImg
+			bi.Dim.Width = img.Bounds().Dx()
+			bi.Dim.Height = img.Bounds().Dy()
+			imageChanged = true
+		case common.ImageResizeModeFit:
+			resizedImg := resizeImageToFitBox(img, w, h)
 			if resizedImg == nil {
 				return bo.handleImageError(bi, "resize", nil, kindle, cfg, log)
 			}
@@ -390,6 +407,23 @@ func (bo *BinaryObject) prepareImage(kindle, cover bool, cfg *config.ImagesConfi
 // isImageMIME returns true if the MIME type indicates an image resource
 func isImageMIME(mimeType string) bool {
 	return strings.HasPrefix(mimeType, "image/")
+}
+
+func resizeImageToFitBox(img image.Image, maxW, maxH int) image.Image {
+	if img == nil || maxW <= 0 || maxH <= 0 {
+		return nil
+	}
+
+	bounds := img.Bounds()
+	w, h := bounds.Dx(), bounds.Dy()
+	if w <= 0 || h <= 0 {
+		return nil
+	}
+
+	if float64(w)/float64(h) > float64(maxW)/float64(maxH) {
+		return imaging.Resize(img, maxW, 0, imaging.Lanczos)
+	}
+	return imaging.Resize(img, 0, maxH, imaging.Lanczos)
 }
 
 // mimeToExt returns file extension for common image MIME types

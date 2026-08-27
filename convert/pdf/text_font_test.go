@@ -256,7 +256,7 @@ func TestPDFPageLineWithFontFragmentsSplitsBuiltInSymbolFallback(t *testing.T) {
 }
 
 func TestShapeTextClassifiesAndLogsMissingGlyphs(t *testing.T) {
-	fontData, err := os.ReadFile(filepath.Join("..", "..", "build", "fonts_compression", "bookerly-regular_9_5.ttf"))
+	fontData, err := os.ReadFile(filepath.Join("..", "..", "testdata", "fonts", "bookerly-regular_9_5.ttf"))
 	if err != nil {
 		t.Fatalf("read test font: %v", err)
 	}

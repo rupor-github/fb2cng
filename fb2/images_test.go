@@ -216,6 +216,53 @@ func TestBinaryObject_PrepareImage_CoverResizeStretch(t *testing.T) {
 	}
 }
 
+func TestBinaryObject_PrepareImage_CoverResizeFit(t *testing.T) {
+	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+	cfg := &config.ImagesConfig{
+		JPEGQuality:        85,
+		Optimize:           false,
+		UseBroken:          false,
+		RemoveTransparency: false,
+		ScaleFactor:        1.0,
+		Screen:             config.ScreenConfig{Width: 600, Height: 900},
+		Cover:              config.CoverConfig{Resize: common.ImageResizeModeFit},
+	}
+
+	tests := []struct {
+		name   string
+		width  int
+		height int
+		wantW  int
+		wantH  int
+	}{
+		{name: "same aspect ratio", width: 100, height: 150, wantW: 600, wantH: 900},
+		{name: "wide image", width: 200, height: 100, wantW: 600, wantH: 300},
+		{name: "tall image", width: 1000, height: 2000, wantW: 450, wantH: 900},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jpegData := createTestJPEG(t, tt.width, tt.height, 90)
+			bo := &BinaryObject{
+				ID:          "cover-fit",
+				ContentType: "image/jpeg",
+				Data:        jpegData,
+			}
+
+			bi := bo.PrepareImage(false, true, cfg, log)
+			img, _, err := image.Decode(bytes.NewReader(bi.Data))
+			if err != nil {
+				t.Fatalf("failed to decode fitted image: %v", err)
+			}
+
+			bounds := img.Bounds()
+			if bounds.Dx() != tt.wantW || bounds.Dy() != tt.wantH {
+				t.Errorf("expected dimensions %dx%d, got %dx%d", tt.wantW, tt.wantH, bounds.Dx(), bounds.Dy())
+			}
+		})
+	}
+}
+
 func TestBinaryObject_PrepareImage_CoverNoResize(t *testing.T) {
 	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	cfg := &config.ImagesConfig{

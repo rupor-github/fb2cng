@@ -13,7 +13,7 @@ func (f FootnotesMode) IsFloat() bool {
 }
 
 // Specification of image resizing mode.
-// ENUM(none, keepAR, stretch)
+// ENUM(none, keepAR, stretch, fit)
 type ImageResizeMode int
 
 // Specification of Markdown image rendering mode.
