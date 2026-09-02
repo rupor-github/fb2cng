@@ -6,6 +6,7 @@ package interp
 import (
 	cryptorand "crypto/rand"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"maps"
 	mathrand "math/rand/v2"
@@ -101,7 +102,7 @@ func (o *overlayEnviron) Set(name string, vr expand.Variable) error {
 		vr.Indexes = prev.Indexes
 		vr.Map = prev.Map
 	} else if prev.ReadOnly {
-		return fmt.Errorf("readonly variable")
+		return errReadOnly
 	}
 	if !vr.IsSet() { // unsetting
 		if prev.Local {
@@ -172,13 +173,24 @@ func (r *Runner) lookupVar(name string) expand.Variable {
 		}
 	case "?":
 		vr.Kind, vr.Str = expand.String, strconv.Itoa(int(r.lastExit.code))
+	case "-":
+		// Note that we don't support some of Bash's flags, such as h or B.
+		vr.Kind, vr.Str = expand.String, r.posixOptFlags()
 	case "$":
 		vr.Kind, vr.Str = expand.String, strconv.Itoa(os.Getpid())
 	case "PPID":
 		vr.Kind, vr.Str = expand.String, strconv.Itoa(os.Getppid())
 	case "RANDOM": // not for cryptographic use
-		vr.Kind, vr.Str = expand.String, strconv.Itoa(mathrand.IntN(32767))
-		// TODO: support setting RANDOM to seed it
+		// Without a seed we use the global generator, which is seeded randomly
+		// and also uses ChaCha8. Note that [Runner.subshell] does not copy the
+		// seeded generator, so subshells start afresh like in bash.
+		var n int
+		if r.rand != nil {
+			n = r.rand.IntN(randomMax)
+		} else {
+			n = mathrand.IntN(randomMax)
+		}
+		vr.Kind, vr.Str = expand.String, strconv.Itoa(n)
 	case "SRANDOM": // pseudo-random generator from the system
 		var p [4]byte
 		cryptorand.Read(p[:])
@@ -226,14 +238,38 @@ func (r *Runner) setVarString(name, value string) {
 }
 
 func (r *Runner) setVar(name string, vr expand.Variable) {
+	if err := r.setVarErr(name, vr); err != nil {
+		r.errf("%v\n", err)
+		r.exit.code = 1
+	}
+}
+
+// errReadOnly is returned when trying to modify a read-only variable.
+var errReadOnly = errors.New("readonly variable")
+
+// randomMax is one past the highest value that RANDOM expands to, like in Bash.
+const randomMax = 32768
+
+// setVarErr is like [Runner.setVar], but it returns any error rather than
+// reporting it, for the sake of the expand package.
+func (r *Runner) setVarErr(name string, vr expand.Variable) error {
 	if r.opts[optAllExport] {
 		vr.Exported = true
 	}
 	if err := r.writeEnv.Set(name, vr); err != nil {
-		r.errf("%s: %v\n", name, err)
-		r.exit.code = 1
-		return
+		return fmt.Errorf("%s: %w", name, err)
 	}
+	if name == "RANDOM" && vr.Kind == expand.String {
+		// Assigning to RANDOM seeds its generator; the stored value is never
+		// read, as [Runner.lookupVar] always computes a new number. We only
+		// seed once the assignment succeeds so that attributes such as
+		// read-only still apply. We use ChaCha8 rather than PCG, whose only
+		// edge is speed, which is irrelevant next to expanding a variable.
+		var seed [32]byte
+		binary.LittleEndian.PutUint64(seed[:], uint64(atoi(vr.Str)))
+		r.rand = mathrand.New(mathrand.NewChaCha8(seed))
+	}
+	return nil
 }
 
 func (r *Runner) setVarWithIndex(prev expand.Variable, name string, index syntax.ArithmExpr, vr expand.Variable) {

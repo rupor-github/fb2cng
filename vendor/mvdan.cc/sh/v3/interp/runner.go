@@ -197,16 +197,18 @@ func (r *Runner) expandErr(err error) {
 	}
 	errMsg := err.Error()
 	fmt.Fprintln(r.stderr, errMsg)
+	_, unsetParam := errors.AsType[expand.UnsetParameterError](err)
 	switch {
-	case errors.As(err, &expand.UnsetParameterError{}):
-	case errMsg == "invalid indirect expansion":
+	case unsetParam, errMsg == "invalid indirect expansion":
 		// TODO: These errors are treated as fatal by bash.
 		// Make the error type reflect that.
-	default:
-		return // other cases do not exit
+		r.exit.code = 1
+		r.exit.exiting = true
+	case errors.Is(err, errReadOnly):
+		// Like in bash, assigning to a read-only variable fails
+		// the command at hand without exiting the shell.
+		r.exit.code = 1
 	}
-	r.exit.code = 1
-	r.exit.exiting = true
 }
 
 func (r *Runner) arithm(expr syntax.ArithmExpr) int {
@@ -251,8 +253,7 @@ func (e expandEnv) Get(name string) expand.Variable {
 }
 
 func (e expandEnv) Set(name string, vr expand.Variable) error {
-	e.r.setVar(name, vr)
-	return nil // TODO: return any errors
+	return e.r.setVarErr(name, vr)
 }
 
 func (e expandEnv) Each(fn func(name string, vr expand.Variable) bool) {
@@ -338,6 +339,10 @@ func (r *Runner) stmtSync(ctx context.Context, st *syntax.Stmt) {
 	for _, rd := range st.Redirs {
 		cls, err := r.redir(ctx, rd)
 		if err != nil {
+			if !r.exit.fatalExit {
+				// A fatal error from a handler is reported by [Runner.Run].
+				r.errf("%v\n", err)
+			}
 			r.exit.code = 1
 			break
 		}
@@ -434,15 +439,12 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 
 				// Strangely enough, it seems like Bash prints original
 				// source for arrays, but the expanded value otherwise.
-				// TODO: add test cases for x[i]=y and x+=y.
+				// Note that, unlike bash, we print neither the subscript
+				// in `x[i]=y` nor just the appended value in `x+=y`.
 				if as.Array != nil {
 					trace.expr(as)
 				} else if as.Value != nil {
-					val, err := syntax.Quote(vr.String(), syntax.LangBash)
-					if err != nil { // should never happen
-						panic(err)
-					}
-					trace.stringf("%s=%s", name, val)
+					trace.stringf("%s=%s", name, quoteBash(vr.String()))
 				}
 				trace.newLineFlush()
 			}
@@ -496,7 +498,7 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 				r.stmt(ctx, cm.Y)
 			}
 		case syntax.Pipe, syntax.PipeAll:
-			pr, pw, err := os.Pipe()
+			pr, pw, err := newPipe()
 			if err != nil {
 				r.exit.fatal(err) // not being able to create a pipe is rare but critical
 				return
@@ -645,29 +647,17 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 	case *syntax.ArithmCmd:
 		r.exit.oneIf(r.arithm(cm.X) == 0)
 	case *syntax.LetClause:
+		if tracingEnabled {
+			trace.string("let")
+			for _, expr := range cm.Exprs {
+				trace.stringf(" %s", r.letArgString(trace.printer, expr))
+			}
+			trace.newLineFlush()
+		}
 		var val int
 		for _, expr := range cm.Exprs {
 			val = r.arithm(expr)
-
-			if !tracingEnabled {
-				continue
-			}
-
-			switch expr := expr.(type) {
-			case *syntax.Word:
-				qs, err := syntax.Quote(r.literal(expr), syntax.LangBash)
-				if err != nil {
-					return
-				}
-				trace.stringf("let %v", qs)
-			case *syntax.BinaryArithm, *syntax.UnaryArithm:
-				trace.expr(cm)
-			case *syntax.ParenArithm:
-				// TODO
-			}
 		}
-
-		trace.newLineFlush()
 		r.exit.oneIf(val == 0)
 	case *syntax.CaseClause:
 		trace.string("case ")
@@ -675,13 +665,21 @@ func (r *Runner) cmd(ctx context.Context, cm syntax.Command) {
 		trace.string(" in")
 		trace.newLineFlush()
 		str := r.literal(cm.Word)
+		runNext := false // whether the previous item ended with ";&"
 		for _, ci := range cm.Items {
-			for _, word := range ci.Patterns {
-				pattern := r.pattern(word)
-				if match(pattern, str) {
-					r.stmts(ctx, ci.Stmts)
-					return
-				}
+			if !runNext && !slices.ContainsFunc(ci.Patterns, func(word *syntax.Word) bool {
+				return r.match(r.pattern(word), str)
+			}) {
+				continue
+			}
+			r.stmts(ctx, ci.Stmts)
+			switch ci.Op {
+			case syntax.Fallthrough: // ";&" runs the next item unconditionally
+				runNext = true
+			case syntax.Resume, syntax.ResumeKorn: // ";;&" and ";|" resume matching
+				runNext = false
+			default: // ";;" or the last item stop
+				return
 			}
 		}
 	case *syntax.TestClause:
@@ -898,10 +896,38 @@ func (r *Runner) flattenAssigns(args []*syntax.Assign) iter.Seq[*syntax.Assign] 
 	}
 }
 
-func match(pat, name string) bool {
+// letArgString reproduces one expression of a let clause as bash would print it
+// when tracing, that is, as the single quoted word that bash's let receives.
+func (r *Runner) letArgString(printer *syntax.Printer, expr syntax.ArithmExpr) string {
+	if word, ok := expr.(*syntax.Word); ok {
+		return quoteBash(r.literal(word))
+	}
+	// The printer only prints an arithmetic expression as part of a parent node,
+	// so print a let clause holding just this expression and drop the keyword.
+	// The keyword borrows the expression's position to stay on the same line.
+	// TODO: drop this workaround if [syntax.Printer.Print] learns to print
+	// an arithmetic expression on its own.
+	var sb strings.Builder
+	if err := printer.Print(&sb, &syntax.LetClause{
+		Let:   expr.Pos(),
+		Exprs: []syntax.ArithmExpr{expr},
+	}); err != nil { // should never happen
+		panic(err)
+	}
+	return strings.TrimPrefix(sb.String(), "let ")
+}
+
+func (r *Runner) match(pat, name string) bool {
 	matcher, err := internal.ExtendedPatternMatcher(pat, pattern.EntireString|pattern.ExtendedOperators)
-	_ = err // TODO: report these errors
-	return matcher != nil && matcher(name)
+	if err != nil {
+		// A malformed pattern simply does not match, like in bash.
+		// Any other error, such as an unsupported extended pattern, is reported.
+		if _, ok := errors.AsType[*pattern.SyntaxError](err); !ok {
+			r.expandErr(err)
+		}
+		return false
+	}
+	return matcher(name)
 }
 
 func elapsedString(d time.Duration, posix bool) string {
@@ -919,30 +945,70 @@ func (r *Runner) stmts(ctx context.Context, stmts []*syntax.Stmt) {
 	}
 }
 
-func (r *Runner) hdocReader(rd *syntax.Redirect) (*os.File, error) {
-	pr, pw, err := os.Pipe()
+func (r *Runner) hdocReader(rd *syntax.Redirect) (stdinFile, error) {
+	pr, pw, err := newPipe()
 	if err != nil {
 		return nil, err
 	}
+	hdoc := r.hdocString(rd)
 	// We write to the pipe in a new goroutine,
 	// as pipe writes may block once the buffer gets full.
 	// We still construct and buffer the entire heredoc first,
 	// as doing it concurrently would lead to different semantics and be racy.
-	if rd.Op != syntax.DashHdoc {
-		hdoc := r.document(rd.Hdoc)
-		go func() {
-			pw.WriteString(hdoc)
-			pw.Close()
-		}()
-		return pr, nil
+	go func() {
+		io.WriteString(pw, hdoc)
+		pw.Close()
+	}()
+	return pr, nil
+}
+
+// hdocQuotedDelim reports whether a here-document delimiter word is quoted,
+// as in "<<'EOF'" or "<<\EOF", which makes its body literal.
+func hdocQuotedDelim(word *syntax.Word) bool {
+	for _, wp := range word.Parts {
+		switch wp := wp.(type) {
+		case *syntax.Lit:
+			if strings.Contains(wp.Value, "\\") {
+				return true
+			}
+		case *syntax.SglQuoted, *syntax.DblQuoted:
+			return true
+		}
 	}
-	var buf bytes.Buffer
+	return false
+}
+
+// hdocWord returns a here-document body, or one of its lines, as a string.
+// A quoted delimiter, as in "<<'EOF'", makes the body literal,
+// in which case the parser only gives us literal parts.
+// Note that a partly quoted delimiter, such as "<<'A'B",
+// is not spotted by the parser either, so we still expand its body.
+func (r *Runner) hdocWord(word *syntax.Word, quoted bool) string {
+	if quoted {
+		if lit := word.Lit(); lit != "" {
+			return lit
+		}
+	}
+	return r.document(word)
+}
+
+// hdocString returns the body of a here-document as a string.
+func (r *Runner) hdocString(rd *syntax.Redirect) string {
+	if rd.Hdoc == nil {
+		return "" // an empty here-document
+	}
+	quoted := hdocQuotedDelim(rd.Word)
+	if rd.Op != syntax.DashHdoc {
+		return r.hdocWord(rd.Hdoc, quoted)
+	}
+	// Strip the leading tabs from each line.
+	var buf strings.Builder
 	var cur []syntax.WordPart
 	flushLine := func() {
 		if buf.Len() > 0 {
 			buf.WriteByte('\n')
 		}
-		buf.WriteString(r.document(&syntax.Word{Parts: cur}))
+		buf.WriteString(r.hdocWord(&syntax.Word{Parts: cur}, quoted))
 		cur = cur[:0]
 	}
 	for _, wp := range rd.Hdoc.Parts {
@@ -955,7 +1021,6 @@ func (r *Runner) hdocReader(rd *syntax.Redirect) (*os.File, error) {
 		for part := range strings.SplitSeq(lit.Value, "\n") {
 			if !first {
 				flushLine()
-				cur = cur[:0]
 			}
 			first = false
 			part = strings.TrimLeft(part, "\t")
@@ -963,15 +1028,12 @@ func (r *Runner) hdocReader(rd *syntax.Redirect) (*os.File, error) {
 		}
 	}
 	flushLine()
-	go func() {
-		pw.Write(buf.Bytes())
-		pw.Close()
-	}()
-	return pr, nil
+	return buf.String()
 }
 
 func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (io.Closer, error) {
-	if rd.Hdoc != nil {
+	// Note that Hdoc is nil for an empty here-document.
+	if rd.Op == syntax.Hdoc || rd.Op == syntax.DashHdoc {
 		pr, err := r.hdocReader(rd)
 		if err != nil {
 			return nil, err
@@ -997,7 +1059,7 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (io.Closer, err
 	arg := r.literal(rd.Word)
 	switch rd.Op {
 	case syntax.WordHdoc:
-		pr, pw, err := os.Pipe()
+		pr, pw, err := newPipe()
 		if err != nil {
 			return nil, err
 		}
@@ -1005,8 +1067,8 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (io.Closer, err
 		// We write to the pipe in a new goroutine,
 		// as pipe writes may block once the buffer gets full.
 		go func() {
-			pw.WriteString(arg)
-			pw.WriteString("\n")
+			io.WriteString(pw, arg)
+			io.WriteString(pw, "\n")
 			pw.Close()
 		}()
 		return pr, nil
@@ -1043,13 +1105,13 @@ func (r *Runner) redir(ctx context.Context, rd *syntax.Redirect) (io.Closer, err
 	case syntax.RdrOut, syntax.RdrAll:
 		mode = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
 	}
-	f, err := r.open(ctx, arg, mode, 0o644, true)
+	f, err := r.open(ctx, arg, mode, 0o644, false)
 	if err != nil {
 		return nil, err
 	}
 	switch rd.Op {
 	case syntax.RdrIn:
-		stdin, err := stdinFile(f)
+		stdin, err := newStdinFile(f)
 		if err != nil {
 			return nil, err
 		}

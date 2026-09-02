@@ -14,7 +14,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"golang.org/x/term"
@@ -38,7 +37,8 @@ import (
 func IsBuiltin(name string) bool {
 	switch name {
 	case
-		// POSIX Shell builtins, from section 1.d obtained in September 2025 from:
+		// POSIX Shell regular built-ins, that is, the utilities which the shell
+		// must provide as built-ins, from section 1.d obtained in September 2025 from:
 		// https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_09_01_01
 		"alias",
 		"bg",
@@ -90,7 +90,6 @@ func IsBuiltin(name string) bool {
 		"typeset", // NOTE: our parser treats this as a keyword
 		"dirs",
 		"disown",
-		"echo", // TODO: surely this is POSIX? but why is it not in the main POSIX spec page?
 		"enable",
 		"history",
 		"help",
@@ -100,14 +99,20 @@ func IsBuiltin(name string) bool {
 		"mapfile",
 		"readarray",
 		"popd",
-		"printf", // TODO: surely this is POSIX? but why is it not in the main POSIX spec page?
 		"pushd",
 		"shopt",
 		"suspend",
-		"test",
-		"[", // NOTE: an alias for "test", not explicitly listed
 		"type",
-		"ulimit":
+		"ulimit",
+
+		// POSIX utilities which the shell need not provide as built-ins,
+		// so they are separate executables found via PATH, but which we
+		// implement as built-ins just like Bash does. Obtained in September
+		// 2025 from https://pubs.opengroup.org/onlinepubs/9699919799/utilities/contents.html
+		"echo",
+		"printf",
+		"test",
+		"[": // NOTE: an alias for "test", not documented separately
 		return true
 	}
 	return false
@@ -155,6 +160,16 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 	case ":", "true":
 	case "false":
 		exit.code = 1
+	case "help":
+		return r.runHelp(args)
+	case "times":
+		// js/wasm has no per-process CPU accounting at all, so report zeros
+		// in bash's format — shell user/sys, then children user/sys — rather
+		// than fail.
+		// TODO: report real times on platforms that can, via os/exec's
+		// ProcessState or syscall.Getrusage. Not urgent; nothing depends on
+		// the values being non-zero.
+		r.out("0m0.000s 0m0.000s\n0m0.000s 0m0.000s\n")
 	case "exit":
 		switch len(args) {
 		case 0:
@@ -699,9 +714,14 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 
 		var line []byte
 		var err error
+		fd, terminal := -1, false
 		if silent {
-			// Note that on Windows, syscall.Stdin is of type uintptr.
-			line, err = term.ReadPassword(int(syscall.Stdin))
+			fd, terminal = stdinTerminal(r.stdin)
+		}
+		if terminal {
+			// Only a terminal echoes what we read, so it is the only case
+			// where we need to read without echoing.
+			line, err = term.ReadPassword(fd)
 		} else {
 			line, err = r.readLine(ctx, raw)
 		}
@@ -1117,7 +1137,9 @@ func absPath(dir, path string) string {
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(dir, path)
 	}
-	return filepath.Clean(path) // TODO: this clean is likely unnecessary
+	// Note that [filepath.Join] cleans its result, but an already absolute
+	// path needs cleaning too, such as turning "/a/../b" into "/b".
+	return filepath.Clean(path)
 }
 
 func (r *Runner) absPath(path string) string {

@@ -1,7 +1,7 @@
 ﻿<table>
 <tr>
 <td width="96" valign="middle"><img src="docs/books.svg" width="96" alt="fb2cng"/></td>
-<td valign="middle"><h1>FB2 converter to EPUB2/3, KEPUB, AZW8/KFX, PDF, TXT/MD</h1></td>
+<td valign="middle"><h1>Converter of FB2 files to EPUB2/3, KEPUB, AZW8/KFX, PDF, TXT/MD</h1></td>
 </tr>
 </table>
 

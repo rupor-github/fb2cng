@@ -280,8 +280,11 @@ skipSpace:
 		}
 	}
 	if p.stopAt != nil && (p.spaced || p.tok == illegalTok || p.stopToken()) {
-		w := utf8.RuneLen(r)
-		if bytes.HasPrefix(p.bs[p.bsp-uint(w):], p.stopAt) {
+		// Note that the buffer may have been refilled since we read r,
+		// such as when peeking at the byte which follows a backslash,
+		// in which case r's bytes are gone and we cannot match on them.
+		w := uint(utf8.RuneLen(r))
+		if p.bsp >= w && bytes.HasPrefix(p.bs[p.bsp-w:], p.stopAt) {
 			p.r = runeEOF
 			p.w = 1
 			p.tok = _EOF
@@ -374,6 +377,11 @@ skipSpace:
 		default:
 			p.advanceLitNone(r)
 		}
+	case p.quote == paramExpArithm && r == '#':
+		// '#' is mksh's unsigned prefix, which only [ArithmExp] and [ArithmCmd]
+		// can represent, so in a subscript it starts a literal instead;
+		// it can be part of an associative array key, like in ${args[cmd,#]}.
+		p.advanceLitOther(r)
 	case p.quote&allArithmExpr != 0 && arithmOps(r):
 		p.tok = p.arithmToken(r)
 	case p.quote&allParamExp != 0 && paramOps(r):

@@ -76,12 +76,16 @@ const (
 	// Its string representation is "zsh".
 	LangZsh
 
+	// langResolvedVariantsCount is the number of variants declared above,
+	// that is, langResolvedVariants.count() as a constant.
+	langResolvedVariantsCount = iota
+
 	// LangAuto corresponds to automatic language detection,
 	// commonly used by end-user applications like shfmt,
 	// which can guess a file's language variant given its filename or shebang.
 	//
 	// At this time, [Variant] does not support LangAuto.
-	LangAuto
+	LangAuto LangVariant = 1 << langResolvedVariantsCount
 
 	// langBashLegacy is what [LangBash] used to be, when it was zero.
 	// We still support it for the sake of backwards compatibility.
@@ -90,11 +94,6 @@ const (
 	// langResolvedVariants contains all known variants except [LangAuto],
 	// which is meant to resolve to another variant.
 	langResolvedVariants = LangBash | LangPOSIX | LangMirBSDKorn | LangBats | LangZsh
-
-	// langResolvedVariantsCount is langResolvedVariants.count() as a constant.
-	// TODO: Can we compute this as a constant expression somehow?
-	// For example, if we had log2, we could do log2(LangAuto).
-	langResolvedVariantsCount = 5
 
 	// langBashLike contains Bash plus all variants which are extensions of it.
 	langBashLike = LangBash | LangBats
@@ -678,7 +677,11 @@ const (
 	testExpr
 	testExprRegexp
 	switchCase
+	// paramExpArithm is a subscript like ${a[i]}, which can be a string key
+	// rather than an arithmetic expression when the array is associative.
 	paramExpArithm
+	// paramExpSlice is a slice like ${a:i:j}, which is always arithmetic.
+	paramExpSlice
 	paramExpRepl
 	paramExpExp
 	arrayElems
@@ -687,8 +690,9 @@ const (
 		hdocBodyTabs | paramExpRepl | paramExpExp
 	allRegTokens = noState | unquotedWordCont | subCmd | subCmdBckquo | subCmdBraces |
 		hdocWord | switchCase | arrayElems | testExpr
-	allArithmExpr = arithmExpr | arithmExprLet | arithmExprCmd | paramExpArithm
-	allParamExp   = paramExpArithm | paramExpRepl | paramExpExp
+	allArithmExpr = arithmExpr | arithmExprLet | arithmExprCmd |
+		paramExpArithm | paramExpSlice
+	allParamExp = paramExpArithm | paramExpSlice | paramExpRepl | paramExpExp
 )
 
 type saveState struct {
@@ -990,7 +994,8 @@ type LangError struct {
 	Filename string
 	Pos      Pos
 
-	// TODO: consider replacing the Langs slice with a bitset.
+	// TODO(v4): replace the Langs slice with a single LangVariant bitset,
+	// which is what the parser uses internally already.
 
 	// Feature briefly describes which language feature caused the error.
 	Feature string
@@ -1615,7 +1620,7 @@ zshPrefixLoop:
 		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, "slicing")
 		pe.Slice = &Slice{}
 		colonPos := p.pos
-		p.quote = paramExpArithm
+		p.quote = paramExpSlice
 		if p.next(); p.tok != colon {
 			pe.Slice.Offset = p.followArithm(colon, colonPos)
 		}
