@@ -14,10 +14,10 @@ import (
 	"text/template"
 	"unicode"
 	"unicode/utf8"
+	"uuid"
 
 	"github.com/beevik/etree"
 	sprig "github.com/go-task/slim-sprig/v3"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"golang.org/x/net/html/charset"
 
@@ -153,12 +153,10 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 	// Make sure book ID is not empty and is valid UUID
 	var refID uuid.UUID
 	if _, err := uuid.Parse(book.Description.DocumentInfo.ID); err != nil {
-		if refID, err = uuid.NewV7(); err != nil {
-			return nil, fmt.Errorf("unable to generate new book UUID: %w", err)
-		}
+		refID = uuid.NewV7()
 		log.Warn("Book has invalid ID, correcting", zap.String("old_id", book.Description.DocumentInfo.ID), zap.Stringer("new_id", refID))
 	}
-	if refID != uuid.Nil {
+	if refID != uuid.Nil() {
 		book.Description.DocumentInfo.ID = refID.String()
 	}
 

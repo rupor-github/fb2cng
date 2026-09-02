@@ -14,7 +14,6 @@ require (
 	github.com/disintegration/imaging v1.6.2
 	github.com/go-task/slim-sprig/v3 v3.0.0
 	github.com/go-text/typesetting v0.3.4
-	github.com/google/uuid v1.6.0
 	github.com/gosimple/slug v1.15.0
 	github.com/h2non/filetype v1.1.3
 	github.com/hidez8891/zip v1.11.0
@@ -114,6 +113,7 @@ require (
 	github.com/go-text/typesetting-utils v0.0.0-20260829113756-ab41a44fc4f5 // indirect
 	github.com/golang/mock v1.7.0-rc.1 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.21 // indirect
 	github.com/googleapis/gax-go/v2 v2.24.0 // indirect
 	github.com/gosimple/unidecode v1.0.1 // indirect

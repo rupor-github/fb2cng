@@ -13,9 +13,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"uuid"
 
 	"github.com/beevik/etree"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
