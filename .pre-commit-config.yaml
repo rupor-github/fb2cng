@@ -11,9 +11,9 @@ repos:
         always_run: true
         stages: [pre-commit, pre-push]
       - id: check-vuln
-        name: Scanning for vulnurabilities
+        name: Scanning for vulnerabilities
         language: system
-        entry: bash -c "trivy --exit-code 1 fs --ignore-unfixed ."
+        entry: bash -c "go run -mod=mod golang.org/x/vuln/cmd/govulncheck@latest ./..."
         require_serial: true
         always_run: true
         stages: [pre-push]

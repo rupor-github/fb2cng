@@ -440,7 +440,9 @@ func ReadStyle(params ansi.Params, pen *Style) {
 
 // ReadLink reads a hyperlink escape sequence from a data buffer into link.
 func ReadLink(p []byte, link *Link) {
-	params := bytes.Split(p, []byte{';'})
+	// OSC 8 sequences have this structure `OSC 8 ; params ; URI ST`.
+	// Only the first two semicolons are delimiters, semicolons that follow after are part of the URI.
+	params := bytes.SplitN(p, []byte{';'}, 3)
 	if len(params) != 3 {
 		return
 	}
