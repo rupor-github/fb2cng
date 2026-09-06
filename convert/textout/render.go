@@ -95,7 +95,7 @@ func RenderWithOptions(c *content.Content, cfg *config.DocumentConfig, opts Rend
 		endnotes: newEndnoteQueue(),
 		options:  opts,
 	}
-	if c.FootnotesMode.IsFloat() {
+	if c.FootnotesMode.IsFloat() || (kind == formatMD && c.FootnotesMode == common.FootnotesModeDefault) {
 		c.BackLinkIndex = make(map[string][]content.BackLinkRef)
 	}
 	return r.render()
@@ -676,7 +676,7 @@ func (r *renderer) footnoteLink(linkID string, text string, renderedText string,
 	label := strings.TrimSpace(text)
 	labelPresent := label != "" || (useRenderedText && strings.TrimSpace(renderedText) != "")
 	referenceAnchor := ""
-	if r.format == formatMD && r.c.FootnotesMode.IsFloat() {
+	if r.format == formatMD && (r.c.FootnotesMode.IsFloat() || r.c.FootnotesMode == common.FootnotesModeDefault) {
 		ref := r.c.AddFootnoteBackLinkRef(linkID)
 		referenceAnchor = r.markdownReferenceAnchor(ref)
 	} else if r.c.FootnotesMode.IsFloat() {

@@ -36,7 +36,7 @@ func SegmentStyle(
 			if c != nil {
 				if _, isNote := c.FootnotesIndex[linkTo]; isNote {
 					segStyle = "link-footnote"
-					isFootnoteLink = true
+					isFootnoteLink = c.FootnotesMode.IsFloat()
 					ref := c.AddFootnoteBackLinkRef(linkTo)
 					backlinkRefID = ref.RefID
 				} else {

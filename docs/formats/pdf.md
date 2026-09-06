@@ -76,7 +76,7 @@ Run with `--debug` to inspect font diagnostics.
 
 | Mode | PDF Behavior |
 |---|---|
-| `default` | Footnotes are ordinary linked sections; return links can be generated in footnote bodies using `backlink_template` |
+| `default` | Footnotes are ordinary linked sections with generated return links in footnote bodies using `backlink_template` |
 | `float` | Source footnotes become printed page footnotes at the bottom of the reference page |
 | `floatRenumbered` | Printed page footnotes use page-local numeric labels; `label_template` formats extra title text |
 

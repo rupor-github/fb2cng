@@ -21,7 +21,7 @@ document:
 
 | Mode | Meaning |
 |---|---|
-| `default` | Keep notes as ordinary linked document sections |
+| `default` | Keep notes as ordinary linked document sections, with generated backlinks where supported |
 | `float` | Convert notes to popup/printed/endnote behavior where the format supports it |
 | `floatRenumbered` | Same target behavior as `float`, but normalize logical note labels using `label_template` |
 
@@ -29,13 +29,13 @@ document:
 
 | Format | `default` | `float` | `floatRenumbered` |
 |---|---|---|---|
-| EPUB2 | Normal footnote sections | Bidirectional links | Bidirectional links with normalized labels |
-| EPUB3 | Normal footnote sections | EPUB `aside` / `noteref` markup | EPUB `aside` / `noteref` markup with normalized labels |
-| KEPUB | Normal footnote sections | Bidirectional links | Bidirectional links with normalized labels |
-| KFX/AZW8 | Normal footnote sections; no generated backlinks | Kindle popup footnotes with backlink paragraphs | Popup footnotes with normalized labels and backlinks |
-| PDF | Normal sections; footnote body can contain generated return links | Printed page footnotes | Printed page footnotes with page-local labels |
+| EPUB2 | Normal footnote sections with backlinks | Bidirectional links | Bidirectional links with normalized labels |
+| EPUB3 | Normal footnote sections with backlinks | EPUB `aside` / `noteref` markup | EPUB `aside` / `noteref` markup with normalized labels |
+| KEPUB | Normal footnote sections with backlinks | Bidirectional links | Bidirectional links with normalized labels |
+| KFX/AZW8 | Normal linked sections with backlink paragraphs; no popup markers | Kindle popup footnotes with backlink paragraphs | Popup footnotes with normalized labels and backlinks |
+| PDF | Normal linked sections with generated return links | Printed page footnotes | Printed page footnotes with page-local labels |
 | TXT | Normal sections | Final `Notes` section | Final `Notes` section with normalized labels |
-| Markdown | Normal sections; no generated backlinks | Final `Notes` section with backlinks | Final `Notes` section with normalized labels and backlinks |
+| Markdown | Normal linked sections with backlinks | Final `Notes` section with backlinks | Final `Notes` section with normalized labels and backlinks |
 
 ## Backlinks
 
@@ -45,22 +45,24 @@ Formats that generate backlinks:
 
 | Format | Default mode | Float modes |
 |---|---:|---:|
-| EPUB2/KEPUB | no | yes |
-| EPUB3 | no | yes |
-| KFX/AZW8 | no | yes |
+| EPUB2/KEPUB | yes | yes |
+| EPUB3 | yes | yes |
+| KFX/AZW8 | yes | yes |
 | PDF | yes, in footnote body sections | printed footnotes use page/link handling |
 | TXT | no clickable links | no clickable links |
-| Markdown | no | yes |
+| Markdown | yes | yes |
+
+In `default` mode, generated backlinks do not imply popup/floating behavior. For example, KFX/AZW8 default footnote links navigate to normal footnote sections; only float modes emit Kindle popup markers.
 
 See [Templates](templates.md#backlink_template) for all fields.
 
 Markdown-specific notes:
 
-- Backlinks are generated only in `float` and `floatRenumbered` modes.
+- Backlinks are generated in `default`, `float`, and `floatRenumbered` modes.
 - `.Href` is the actual Markdown backlink target.
 - `.Filename` is the output `.md` file name when known.
 - `.LocationNumber` is the 1-based rendered Markdown block number containing the original reference anchor.
-- Empty referenced notes still get generated endnote anchors and backlinks.
+- Empty referenced notes still get generated anchors and backlinks.
 
 ## Labels
 
@@ -87,7 +89,7 @@ Paragraphs, images, and tables count as visible content elements. The indicator 
 Empty referenced notes are handled intentionally:
 
 - KFX/AZW8 register the footnote anchor and can still generate backlink paragraphs.
-- Markdown float modes emit a generated endnote heading/anchor and backlink even when the note body has no rendered content.
+- Markdown emits a generated heading/anchor and backlink even when the note body has no rendered content.
 - Default modes keep empty notes as ordinary document sections where the format supports anchors.
 
 This keeps references clickable even for empty or placeholder notes.

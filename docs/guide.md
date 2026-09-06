@@ -111,10 +111,10 @@ Convert options:
 | Block and inline images | yes | yes | yes | yes | yes | placeholders | placeholder/external/embedded |
 | Tables | XHTML | XHTML | XHTML | Kindle table model | native PDF | aligned text | Markdown pipe tables |
 | Code blocks | styled XHTML | styled XHTML | styled XHTML | styled text | styled PDF text | plain text | fenced blocks |
-| Default footnotes | normal sections | normal sections | normal sections | normal sections | normal sections with optional PDF backlinks | normal sections | normal sections, no generated backlinks |
+| Default footnotes | normal sections with backlinks | normal sections with backlinks | normal sections with backlinks | normal linked sections with backlinks, no popups | normal sections with backlinks | normal sections | normal sections with backlinks |
 | Floating footnotes | bidirectional links | EPUB aside/noteref | bidirectional links | Kindle popup footnotes | printed page footnotes | final Notes section | final Notes section with backlinks |
 | `floatRenumbered` labels | normalized | normalized | normalized | normalized | page-local printed labels | normalized endnotes | normalized endnotes |
-| Footnote backlinks | float modes | float modes | float modes | float modes | default body links and printed notes | no clickable links | float modes |
+| Footnote backlinks | default and float modes | default and float modes | default and float modes | default and float modes | default body links and printed notes | no clickable links | default and float modes |
 | Page map/page labels | optional | optional | optional | optional/generated | native pages | no | no |
 | Debug validation focus | EPUB structure/checks | EPUB3 nav/aside | Kobo packaging | Kindle Previewer/KFX checks | PDF structure/fonts/layout | text rendering | Markdown links/assets |
 

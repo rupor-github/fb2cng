@@ -262,14 +262,12 @@ func TestRenderFootnotesDefaultRendersFootnoteBody(t *testing.T) {
 		t.Fatalf("Render() error = %v", err)
 	}
 
-	assertContains(t, got, "Text [\\[note\\]](#note-1)")
+	assertContains(t, got, "Text <a id=\"ref-note-1-1\"></a>[\\[note\\]](#note-1)")
 	assertContains(t, got, "## Notes")
 	assertContains(t, got, "### Note 1")
 	assertContains(t, got, "<a id=\"note-1\"></a>\n### Note 1")
 	assertContains(t, got, "Footnote text.")
-	if strings.Contains(got, "ref-note-1-1") || strings.Contains(got, "[\\[\\<\\]]") {
-		t.Fatalf("default mode should not generate backlinks:\n%s", got)
-	}
+	assertContains(t, got, "[\\[\\<\\]](#ref-note-1-1)")
 }
 
 func TestRenderFootnotesFloatCollectsEndnotes(t *testing.T) {
@@ -307,6 +305,38 @@ func TestRenderFootnotesFloatBacklinksMultipleReferences(t *testing.T) {
 	assertContains(t, got, "<a id=\"ref-note-1-1\"></a>[\\[1\\]](#note-note-1)")
 	assertContains(t, got, "<a id=\"ref-note-1-2\"></a>[\\[2\\]](#note-note-1)")
 	assertContains(t, got, "[\\[\\<\\]](#ref-note-1-1)\u00A0[\\[\\<\\]](#ref-note-1-2)")
+}
+
+func TestRenderMarkdownDefaultBacklinksIncludeBackwardFootnoteReferences(t *testing.T) {
+	c := footnoteContent(common.OutputFmtMd, common.FootnotesModeDefault)
+	c.Book.Bodies[1].Sections = []fb2.Section{{
+		ID:      "note-1",
+		Title:   title("Note 1"),
+		Content: []fb2.FlowItem{paragraphItem(fb2.InlineSegment{Kind: fb2.InlineText, Text: "First footnote."})},
+	}, {
+		ID:    "note-2",
+		Title: title("Note 2"),
+		Content: []fb2.FlowItem{paragraphItem(
+			fb2.InlineSegment{Kind: fb2.InlineText, Text: "Second footnote refers to "},
+			fb2.InlineSegment{Kind: fb2.InlineLink, Href: "#note-1", Text: "1"},
+		)},
+	}}
+	c.FootnotesIndex = fb2.FootnoteRefs{
+		"note-1": {BodyIdx: 1, SectionIdx: 0, DisplayText: "1"},
+		"note-2": {BodyIdx: 1, SectionIdx: 1, DisplayText: "2"},
+	}
+	c.Book.Bodies[0].Sections[0].Content = []fb2.FlowItem{paragraphItem(
+		fb2.InlineSegment{Kind: fb2.InlineText, Text: "Text "},
+		fb2.InlineSegment{Kind: fb2.InlineLink, Href: "#note-2", Text: "2"},
+	)}
+
+	got, err := renderForTest(c, testConfig())
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+
+	assertContains(t, got, "Second footnote refers to <a id=\"ref-note-1-1\"></a>[\\[1\\]](#note-1)")
+	assertContains(t, got, "[\\[\\<\\]](#ref-note-1-1)")
 }
 
 func TestRenderMarkdownFootnoteBacklinksUseTemplateContext(t *testing.T) {

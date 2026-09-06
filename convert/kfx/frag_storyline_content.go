@@ -863,19 +863,19 @@ func processFootnoteSectionContent(
 		}
 	}
 
-	// Mark the FIRST content entry after section ID registration as footnote content.
-	// This adds position:footer ($183=$455) and yj.classification:footnote ($615=$281).
-	// The pending flag is consumed by the next addEntry() call, which could be an epigraph
-	// paragraph, an image, an annotation paragraph, or a body paragraph — whichever comes first.
-	// This matches KP3 behavior where the first content entry after the section ID gets these
-	// markers, regardless of whether it's a body paragraph or an epigraph paragraph.
-	sb.SetPendingFootnoteContent()
+	if c.FootnotesMode.IsFloat() {
+		// Mark the FIRST content entry after section ID registration as footnote content.
+		// This adds position:footer ($183=$455) and yj.classification:footnote ($615=$281).
+		// These Kindle popup markers must not be emitted in default mode, where footnotes
+		// are ordinary linked sections.
+		sb.SetPendingFootnoteContent()
+	}
 
 	// Count all visible content units in the footnote section (paragraphs, images, tables)
 	// to determine if the first rendered item needs a marker.
 	moreIndicatorHidden := styles != nil && styles.IsHidden("footnote-more")
 	visibleCount := fb2.CountFootnoteVisibleElements(section)
-	needMoreIndicator := visibleCount > 1 && c.MoreParaStr != "" && !moreIndicatorHidden
+	needMoreIndicator := c.FootnotesMode.IsFloat() && visibleCount > 1 && c.MoreParaStr != "" && !moreIndicatorHidden
 	if needMoreIndicator {
 		sb.SetPendingFootnoteMore()
 	}

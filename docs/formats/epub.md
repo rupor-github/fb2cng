@@ -40,9 +40,11 @@ Depth-1 sections are always separate content documents. Nested sections can be s
 
 | Mode | EPUB2/KEPUB | EPUB3 |
 |---|---|---|
-| `default` | Footnotes are normal linked sections | Footnotes are normal linked sections |
+| `default` | Footnotes are normal linked sections with generated backlinks | Footnotes are normal linked sections with generated backlinks |
 | `float` | Bidirectional links for reader compatibility | EPUB `aside` and `noteref` markup |
 | `floatRenumbered` | Same as `float`, with normalized labels | Same as `float`, with normalized labels |
+
+In EPUB3 `default` mode, footnote references are ordinary links, not `noteref` popup links. Generated backlinks use `epub:type="backlink"` and `role="doc-backlink"`.
 
 See [Footnotes](../footnotes.md) for mode details and templates.
 

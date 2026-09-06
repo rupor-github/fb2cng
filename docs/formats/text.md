@@ -53,17 +53,17 @@ Visible TOC pages use Markdown links to these explicit anchors. TXT renders the 
 
 | Mode | TXT | Markdown |
 |---|---|---|
-| `default` | Footnotes are normal sections | Footnotes are normal linked sections; no generated backlinks |
+| `default` | Footnotes are normal sections | Footnotes are normal linked sections with backlinks |
 | `float` | Referenced notes are collected into final `Notes` | Referenced notes are collected into final `Notes` with backlinks |
 | `floatRenumbered` | Same as `float`, with normalized labels | Same as `float`, with normalized labels and backlinks |
 
-Markdown float-mode details:
+Markdown backlink details:
 
 - Footnote references receive stable anchors such as `<a id="ref-note-1-1"></a>`.
-- Generated endnotes link back to those anchors using `backlink_template`.
+- Generated footnote backlinks link back to those anchors using `backlink_template`.
 - `.Href` in `backlink_template` is the actual Markdown backlink target.
 - `.LocationNumber` is the 1-based rendered Markdown block number containing the original reference anchor.
-- Empty referenced footnotes still get generated endnote anchors and backlinks.
+- Empty referenced footnotes still get generated anchors and backlinks.
 - Inline images used as visible footnote labels are preserved.
 
 See [Footnotes](../footnotes.md) and [Templates](../templates.md#backlink_template).

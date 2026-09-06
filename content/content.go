@@ -86,6 +86,8 @@ type Content struct {
 	CurrentFilename     string                   // current file being processed
 	CurrentChapterTitle string                   // current human-readable spine/chapter title
 	CurrentSectionTitle string                   // nearest titled section/body title
+	backLinkReplay      map[string][]BackLinkRef
+	backLinkReplayPos   map[string]int
 
 	// Kobo span tracking
 	koboSpanParagraphs int
@@ -565,25 +567,240 @@ func (c *Content) AddFootnoteBackLinkRef(targetID string) BackLinkRef {
 	if c.BackLinkIndex == nil {
 		c.BackLinkIndex = make(map[string][]BackLinkRef)
 	}
+	if ref, ok := c.nextFootnoteBackLinkReplayRef(targetID); ok {
+		return ref
+	}
 	refs := c.BackLinkIndex[targetID]
 	refNum := len(refs) + 1
+	ref := c.newFootnoteBackLinkRef(targetID, refNum)
+	c.BackLinkIndex[targetID] = append(refs, ref)
+	return ref
+}
+
+func (c *Content) newFootnoteBackLinkRef(targetID string, refNum int) BackLinkRef {
 	ref := BackLinkRef{
-		RefID:        fmt.Sprintf("ref-%s-%d", targetID, refNum),
-		TargetID:     targetID,
-		RefNumber:    refNum,
-		Filename:     c.CurrentFilename,
-		Format:       c.OutputFormat.String(),
-		PageNumber:   c.currentBacklinkPageNumber(),
-		ChapterTitle: c.CurrentChapterTitle,
-		SectionTitle: c.CurrentSectionTitle,
+		RefID:     fmt.Sprintf("ref-%s-%d", targetID, refNum),
+		TargetID:  targetID,
+		RefNumber: refNum,
 	}
+	return c.withCurrentFootnoteBackLinkLocation(ref)
+}
+
+func (c *Content) withCurrentFootnoteBackLinkLocation(ref BackLinkRef) BackLinkRef {
+	ref.Filename = c.CurrentFilename
+	ref.Format = c.OutputFormat.String()
+	ref.PageNumber = c.currentBacklinkPageNumber()
+	ref.ChapterTitle = c.CurrentChapterTitle
+	ref.SectionTitle = c.CurrentSectionTitle
 	if c.CurrentFilename != "" {
 		ref.Href = c.CurrentFilename + "#" + ref.RefID
 	} else {
 		ref.Href = "#" + ref.RefID
 	}
-	c.BackLinkIndex[targetID] = append(refs, ref)
 	return ref
+}
+
+func (c *Content) nextFootnoteBackLinkReplayRef(targetID string) (BackLinkRef, bool) {
+	if len(c.backLinkReplay) == 0 {
+		return BackLinkRef{}, false
+	}
+	refs := c.backLinkReplay[targetID]
+	pos := c.backLinkReplayPos[targetID]
+	if pos >= len(refs) {
+		return BackLinkRef{}, false
+	}
+	c.backLinkReplayPos[targetID] = pos + 1
+	ref := c.withCurrentFootnoteBackLinkLocation(refs[pos])
+	c.updateBackLinkRef(ref.RefID, func(existing *BackLinkRef) bool {
+		*existing = ref
+		return true
+	})
+	return ref, true
+}
+
+func (c *Content) UseFootnoteBackLinkReplay(refs map[string][]BackLinkRef) func() {
+	oldReplay := c.backLinkReplay
+	oldReplayPos := c.backLinkReplayPos
+	c.backLinkReplay = refs
+	c.backLinkReplayPos = make(map[string]int, len(refs))
+	return func() {
+		c.backLinkReplay = oldReplay
+		c.backLinkReplayPos = oldReplayPos
+	}
+}
+
+func (c *Content) PreRegisterFootnoteBackLinksInBodies(bodies []*fb2.Body) map[string][]BackLinkRef {
+	if c == nil || len(bodies) == 0 || len(c.FootnotesIndex) == 0 {
+		return nil
+	}
+	before := make(map[string]int, len(c.BackLinkIndex))
+	for targetID, refs := range c.BackLinkIndex {
+		before[targetID] = len(refs)
+	}
+	for _, body := range bodies {
+		c.preRegisterFootnoteBackLinksInBody(body)
+	}
+	return c.backLinkRefsAddedSince(before)
+}
+
+func (c *Content) preRegisterFootnoteBackLinksInBody(body *fb2.Body) {
+	if body == nil {
+		return
+	}
+	c.preRegisterFootnoteBackLinksInTitle(body.Title)
+	for i := range body.Epigraphs {
+		c.preRegisterFootnoteBackLinksInEpigraph(&body.Epigraphs[i])
+	}
+	for i := range body.Sections {
+		c.preRegisterFootnoteBackLinksInSection(&body.Sections[i])
+	}
+}
+
+func (c *Content) preRegisterFootnoteBackLinksInSection(section *fb2.Section) {
+	if section == nil {
+		return
+	}
+	oldSectionTitle := c.CurrentSectionTitle
+	if title := strings.TrimSpace(section.AsTitleText("")); title != "" {
+		c.CurrentSectionTitle = title
+	}
+	defer func() { c.CurrentSectionTitle = oldSectionTitle }()
+
+	c.preRegisterFootnoteBackLinksInTitle(section.Title)
+	for i := range section.Epigraphs {
+		c.preRegisterFootnoteBackLinksInEpigraph(&section.Epigraphs[i])
+	}
+	if section.Annotation != nil {
+		c.preRegisterFootnoteBackLinksInFlow(section.Annotation.Items)
+	}
+	c.preRegisterFootnoteBackLinksInFlow(section.Content)
+}
+
+func (c *Content) preRegisterFootnoteBackLinksInTitle(title *fb2.Title) {
+	if title == nil {
+		return
+	}
+	for i := range title.Items {
+		if title.Items[i].Paragraph != nil {
+			c.preRegisterFootnoteBackLinksInSegments(title.Items[i].Paragraph.Text)
+		}
+	}
+}
+
+func (c *Content) preRegisterFootnoteBackLinksInEpigraph(epigraph *fb2.Epigraph) {
+	if epigraph == nil {
+		return
+	}
+	c.preRegisterFootnoteBackLinksInFlow(epigraph.Flow.Items)
+	for i := range epigraph.TextAuthors {
+		c.preRegisterFootnoteBackLinksInSegments(epigraph.TextAuthors[i].Text)
+	}
+}
+
+func (c *Content) preRegisterFootnoteBackLinksInFlow(items []fb2.FlowItem) {
+	for i := range items {
+		item := &items[i]
+		switch item.Kind {
+		case fb2.FlowParagraph:
+			if item.Paragraph != nil {
+				c.preRegisterFootnoteBackLinksInSegments(item.Paragraph.Text)
+			}
+		case fb2.FlowPoem:
+			c.preRegisterFootnoteBackLinksInPoem(item.Poem)
+		case fb2.FlowSubtitle:
+			if item.Subtitle != nil {
+				c.preRegisterFootnoteBackLinksInSegments(item.Subtitle.Text)
+			}
+		case fb2.FlowCite:
+			c.preRegisterFootnoteBackLinksInCite(item.Cite)
+		case fb2.FlowTable:
+			c.preRegisterFootnoteBackLinksInTable(item.Table)
+		case fb2.FlowSection:
+			c.preRegisterFootnoteBackLinksInSection(item.Section)
+		}
+	}
+}
+
+func (c *Content) preRegisterFootnoteBackLinksInPoem(poem *fb2.Poem) {
+	if poem == nil {
+		return
+	}
+	c.preRegisterFootnoteBackLinksInTitle(poem.Title)
+	for i := range poem.Epigraphs {
+		c.preRegisterFootnoteBackLinksInEpigraph(&poem.Epigraphs[i])
+	}
+	for i := range poem.Subtitles {
+		c.preRegisterFootnoteBackLinksInSegments(poem.Subtitles[i].Text)
+	}
+	for i := range poem.Stanzas {
+		c.preRegisterFootnoteBackLinksInStanza(&poem.Stanzas[i])
+	}
+	for i := range poem.TextAuthors {
+		c.preRegisterFootnoteBackLinksInSegments(poem.TextAuthors[i].Text)
+	}
+}
+
+func (c *Content) preRegisterFootnoteBackLinksInStanza(stanza *fb2.Stanza) {
+	if stanza == nil {
+		return
+	}
+	c.preRegisterFootnoteBackLinksInTitle(stanza.Title)
+	if stanza.Subtitle != nil {
+		c.preRegisterFootnoteBackLinksInSegments(stanza.Subtitle.Text)
+	}
+	for i := range stanza.Verses {
+		c.preRegisterFootnoteBackLinksInSegments(stanza.Verses[i].Text)
+	}
+}
+
+func (c *Content) preRegisterFootnoteBackLinksInCite(cite *fb2.Cite) {
+	if cite == nil {
+		return
+	}
+	c.preRegisterFootnoteBackLinksInFlow(cite.Items)
+	for i := range cite.TextAuthors {
+		c.preRegisterFootnoteBackLinksInSegments(cite.TextAuthors[i].Text)
+	}
+}
+
+func (c *Content) preRegisterFootnoteBackLinksInTable(table *fb2.Table) {
+	if table == nil {
+		return
+	}
+	for i := range table.Rows {
+		for j := range table.Rows[i].Cells {
+			c.preRegisterFootnoteBackLinksInSegments(table.Rows[i].Cells[j].Content)
+		}
+	}
+}
+
+func (c *Content) preRegisterFootnoteBackLinksInSegments(segments []fb2.InlineSegment) {
+	for i := range segments {
+		seg := &segments[i]
+		if seg.Kind == fb2.InlineLink {
+			if targetID, ok := strings.CutPrefix(strings.TrimSpace(seg.Href), "#"); ok {
+				if _, isFootnote := c.FootnotesIndex[targetID]; isFootnote {
+					c.AddFootnoteBackLinkRef(targetID)
+				}
+			}
+		}
+		c.preRegisterFootnoteBackLinksInSegments(seg.Children)
+	}
+}
+
+func (c *Content) backLinkRefsAddedSince(before map[string]int) map[string][]BackLinkRef {
+	out := make(map[string][]BackLinkRef)
+	for targetID, refs := range c.BackLinkIndex {
+		start := before[targetID]
+		if start >= len(refs) {
+			continue
+		}
+		out[targetID] = slices.Clone(refs[start:])
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func (c *Content) currentBacklinkPageNumber() int {

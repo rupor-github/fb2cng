@@ -42,11 +42,11 @@ See [Stylesheets](../stylesheets.md) for shared stylesheet rules and resource ha
 
 | Mode | KFX/AZW8 Behavior |
 |---|---|
-| `default` | Footnotes are normal book sections; no generated backlinks |
+| `default` | Footnotes are normal book sections with generated backlink paragraphs; links navigate to sections and do not open popups |
 | `float` | Footnote content is marked for Kindle popup rendering and backlink paragraphs are generated |
 | `floatRenumbered` | Same as `float`, with normalized labels from `label_template` |
 
-KFX resolves `.LocationNumber` for `backlink_template` from generated Kindle positions. See [Footnotes](../footnotes.md) and [Templates](../templates.md#backlink_template).
+KFX resolves `.LocationNumber` for `backlink_template` from generated Kindle positions, including backlinks from later notes to earlier notes. See [Footnotes](../footnotes.md) and [Templates](../templates.md#backlink_template).
 
 ## Page And Location Maps
 

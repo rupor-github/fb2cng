@@ -282,7 +282,7 @@ func addParagraphWithImagesInternal(
 				linkTo = after
 				if _, isNote := c.FootnotesIndex[linkTo]; isNote {
 					segStyle = "link-footnote"
-					isFootnoteLink = true
+					isFootnoteLink = c.FootnotesMode.IsFloat()
 					// Register this footnote reference for backlink generation
 					// The ref.RefID becomes the anchor that backlinks point to
 					ref := c.AddFootnoteBackLinkRef(linkTo)
@@ -613,7 +613,7 @@ func addParagraphWithMixedContent(
 				linkTo = after
 				if _, isNote := c.FootnotesIndex[linkTo]; isNote {
 					segStyle = "link-footnote"
-					isFootnoteLink = true
+					isFootnoteLink = c.FootnotesMode.IsFloat()
 					// Register this footnote reference for backlink generation
 					ref := c.AddFootnoteBackLinkRef(linkTo)
 					// Collect RefID to register with EID after the element is created (offset set below)

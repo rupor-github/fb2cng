@@ -3122,8 +3122,26 @@ func TestFloatModeFootnotes(t *testing.T) {
 			mode:           common.FootnotesModeDefault,
 			expectNoteref:  false,
 			expectAside:    false,
-			expectRefID:    false,
-			expectBacklink: false,
+			expectRefID:    true,
+			expectBacklink: true,
+		},
+		{
+			name:           "EPUB2 default mode",
+			format:         common.OutputFmtEpub2,
+			mode:           common.FootnotesModeDefault,
+			expectNoteref:  false,
+			expectAside:    false,
+			expectRefID:    true,
+			expectBacklink: true,
+		},
+		{
+			name:           "Kepub default mode",
+			format:         common.OutputFmtKepub,
+			mode:           common.FootnotesModeDefault,
+			expectNoteref:  false,
+			expectAside:    false,
+			expectRefID:    true,
+			expectBacklink: true,
 		},
 	}
 
@@ -3252,11 +3270,11 @@ func TestFloatModeFootnotes(t *testing.T) {
 			if tt.expectBacklink {
 				// Check for back-reference link
 				var backlinks []*etree.Element
-				if tt.format == common.OutputFmtEpub2 || tt.format == common.OutputFmtKepub {
+				if tt.mode.IsFloat() && (tt.format == common.OutputFmtEpub2 || tt.format == common.OutputFmtKepub) {
 					// EPUB2: backlink is inside <p class="footnote">
 					backlinks = fnChapter.Doc.FindElements("//p[@class='footnote']/a")
 				} else {
-					// EPUB3: backlink is <a class="link-backlink"> in separate <p>
+					// EPUB3/default: backlink is <a class="link-backlink"> in a separate <p>
 					backlinks = fnChapter.Doc.FindElements("//a[@class='link-backlink']")
 				}
 				if len(backlinks) == 0 {
@@ -3268,11 +3286,110 @@ func TestFloatModeFootnotes(t *testing.T) {
 					if !strings.Contains(href, ".xhtml#ref-note1-") {
 						t.Errorf("Expected backlink href to contain '.xhtml#ref-note1-', got '%s'", href)
 					}
-					if backlink.Text() != backlinkSym {
-						t.Errorf("Expected backlink text '%s', got '%s'", backlinkSym, backlink.Text())
+					if got := backlinkText(backlink); got != backlinkSym {
+						t.Errorf("Expected backlink text '%s', got '%s'", backlinkSym, got)
 					}
 				}
 			}
+		})
+	}
+}
+
+func backlinkText(backlink *etree.Element) string {
+	if backlink == nil {
+		return ""
+	}
+	if text := backlink.Text(); text != "" {
+		return text
+	}
+	span := backlink.FindElement(".//span")
+	if span == nil {
+		return ""
+	}
+	return span.Text()
+}
+
+func TestFootnoteBacklinksIncludeBackwardFootnoteReferences(t *testing.T) {
+	tests := []struct {
+		name   string
+		format common.OutputFmt
+		mode   common.FootnotesMode
+	}{
+		{name: "EPUB2 float", format: common.OutputFmtEpub2, mode: common.FootnotesModeFloat},
+		{name: "EPUB3 float", format: common.OutputFmtEpub3, mode: common.FootnotesModeFloat},
+		{name: "KEPUB float", format: common.OutputFmtKepub, mode: common.FootnotesModeFloat},
+		{name: "EPUB3 default", format: common.OutputFmtEpub3, mode: common.FootnotesModeDefault},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _, log := setupTestContext(t)
+			c := &content.Content{
+				OutputFormat:     tt.format,
+				FootnotesMode:    tt.mode,
+				BackLinkIndex:    make(map[string][]content.BackLinkRef),
+				BacklinkTemplate: "[<]",
+				Book: &fb2.FictionBook{Bodies: []fb2.Body{{
+					Sections: []fb2.Section{{
+						ID: "chapter1",
+						Content: []fb2.FlowItem{{
+							Kind: fb2.FlowParagraph,
+							Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
+								{Kind: fb2.InlineText, Text: "Text "},
+								{Kind: fb2.InlineLink, Href: "#note2", Children: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "2"}}},
+							}},
+						}},
+					}},
+				}, {
+					Name: "notes",
+					Kind: fb2.BodyFootnotes,
+					Sections: []fb2.Section{{
+						ID: "note1",
+						Content: []fb2.FlowItem{{
+							Kind: fb2.FlowParagraph,
+							Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
+								{Kind: fb2.InlineText, Text: "First note."},
+							}},
+						}},
+					}, {
+						ID: "note2",
+						Content: []fb2.FlowItem{{
+							Kind: fb2.FlowParagraph,
+							Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
+								{Kind: fb2.InlineText, Text: "Second note refers to "},
+								{Kind: fb2.InlineLink, Href: "#note1", Children: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "1"}}},
+							}},
+						}},
+					}},
+				}}},
+				FootnotesIndex: fb2.FootnoteRefs{
+					"note1": {BodyIdx: 1, SectionIdx: 0},
+					"note2": {BodyIdx: 1, SectionIdx: 1},
+				},
+			}
+
+			chapters, _, err := convertToXHTML(ctx, c, log)
+			if err != nil {
+				t.Fatalf("convertToXHTML() error = %v", err)
+			}
+			var fnChapter *chapterData
+			for i := range chapters {
+				if chapters[i].Doc != nil && chapters[i].AnchorID != "" {
+					fnChapter = &chapters[i]
+					break
+				}
+			}
+			if fnChapter == nil {
+				t.Fatal("footnote chapter not found")
+			}
+
+			backlinks := fnChapter.Doc.FindElements("//a[@class='link-backlink']")
+			for _, backlink := range backlinks {
+				if strings.Contains(backlink.SelectAttrValue("href", ""), "#ref-note1-") {
+					return
+				}
+			}
+			t.Fatalf("backward backlink to note1 not found; index=%#v", c.BackLinkIndex)
 		})
 	}
 }

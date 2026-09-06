@@ -104,7 +104,7 @@ func addTitleAsHeading(
 				linkTo = after
 				if _, isNote := c.FootnotesIndex[linkTo]; isNote {
 					segStyle = "link-footnote"
-					isFootnoteLink = true
+					isFootnoteLink = c.FootnotesMode.IsFloat()
 					// Register this footnote reference for backlink generation
 					ref := c.AddFootnoteBackLinkRef(linkTo)
 					// Collect RefID to register with EID after the element is created (offset set below)

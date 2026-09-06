@@ -1,6 +1,7 @@
 package kfx
 
 import (
+	"slices"
 	"strings"
 )
 
@@ -337,6 +338,29 @@ func (sb *StorylineBuilder) SetNextEID(eid int) {
 // PageTemplateEID returns the EID allocated for the page template container.
 func (sb *StorylineBuilder) PageTemplateEID() int {
 	return sb.pageTemplateEID
+}
+
+func (sb *StorylineBuilder) ReplaceStyleEvents(eid int, events []StyleEventRef) bool {
+	if sb == nil || eid <= 0 {
+		return false
+	}
+	return replaceContentRefStyleEvents(sb.contentEntries, eid, events)
+}
+
+func replaceContentRefStyleEvents(refs []ContentRef, eid int, events []StyleEventRef) bool {
+	for i := range refs {
+		if refs[i].EID == eid {
+			if slices.Equal(refs[i].StyleEvents, events) {
+				return false
+			}
+			refs[i].StyleEvents = slices.Clone(events)
+			return true
+		}
+		if replaceContentRefStyleEvents(refs[i].childRefs, eid, events) {
+			return true
+		}
+	}
+	return false
 }
 
 // MarkPreviousEntryStripMB marks the previous content entry to have its margin-bottom stripped.

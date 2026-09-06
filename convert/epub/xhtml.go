@@ -223,6 +223,9 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, log *
 
 	// Register new page for footnotes file in the page map
 	c.ForceNewPage(filename)
+	replayRefs := c.PreRegisterFootnoteBackLinksInBodies(footnoteBodies)
+	restoreReplay := c.UseFootnoteBackLinkReplay(replayRefs)
+	defer restoreReplay()
 
 	// Check if we're in float mode (footnote sections should NOT appear in TOC in float mode)
 	isFloatMode := c.FootnotesMode.IsFloat()
@@ -598,7 +601,8 @@ func appendBodyIntroContent(parent *etree.Element, c *content.Content, body *fb2
 
 // footnoteMethod2MarkerTarget returns the first rendered span that can host the
 // Method 2 marker and whether the flattened footnote contains additional visible
-// content after that point. Backlinks at the beginning are ignored.
+// content after that point. Backlinks are ignored because they are generated UI,
+// not source footnote content.
 func footnoteMethod2MarkerTarget(sectionElem *etree.Element) (*etree.Element, bool) {
 	var (
 		firstSpan            *etree.Element
@@ -709,32 +713,6 @@ func appendFloatFootnoteSectionContentEpub2(parent *etree.Element, c *content.Co
 		sectionElem.CreateAttr("xml:lang", section.Lang)
 	}
 
-	// Add back-reference link at the beginning with title
-	if section.ID != "" {
-		if refs, exists := c.BackLinkIndex[section.ID]; exists && len(refs) > 0 {
-			for i, ref := range refs {
-				if i > 0 {
-					appendPlainText(sectionElem, c, text.NBSP)
-				}
-				backLink := sectionElem.CreateElement("a")
-				href := ref.Filename + "#" + ref.RefID
-				backLink.CreateAttr("href", href)
-				backLink.CreateAttr("class", "link-backlink")
-
-				textParent := backLink
-				if c.OutputFormat == common.OutputFmtKepub {
-					paragraph, sentence := c.KoboSpanNextSentence()
-					span := backLink.CreateElement("span")
-					span.CreateAttr("class", "koboSpan")
-					span.CreateAttr("id", fmt.Sprintf("kobo.%d.%d", paragraph, sentence))
-					textParent = span
-				}
-				appendPlainText(textParent, c, c.BacklinkText(ref))
-			}
-			appendPlainText(sectionElem, c, text.NBSP)
-		}
-	}
-
 	for _, item := range section.Content {
 		switch item.Kind {
 		case fb2.FlowParagraph:
@@ -835,6 +813,7 @@ func appendFloatFootnoteSectionContentEpub2(parent *etree.Element, c *content.Co
 		// Insert at the beginning of first span
 		firstSpan.InsertChildAt(0, moreSpan)
 	}
+	appendEPUBFootnoteBacklinks(sectionElem, c, section.ID, epubFootnoteBacklinkOptions{LeadingSeparator: len(sectionElem.Child) > 0})
 
 	return nil
 }
@@ -897,25 +876,9 @@ func appendFloatFootnoteSectionContentEpub3(parent *etree.Element, c *content.Co
 
 	// Add back-references for EPUB3 float mode - OUTSIDE the aside element
 	// This ensures backlinks are not part of the footnote popup content
-	if section.ID != "" {
-		if refs, exists := c.BackLinkIndex[section.ID]; exists && len(refs) > 0 {
-			// Add back-reference links paragraph (without footnote class)
-			backPara := parent.CreateElement("p")
-
-			for i, ref := range refs {
-				if i > 0 {
-					appendPlainText(backPara, c, text.NBSP)
-				}
-				backLink := backPara.CreateElement("a")
-				backLink.CreateAttr("class", "link-backlink")
-				// Include filename in href for cross-file back-references
-				href := ref.Filename + "#" + ref.RefID
-				backLink.CreateAttr("href", href)
-				backLink.CreateAttr("epub:type", "backlink")
-				backLink.CreateAttr("role", "doc-backlink")
-				appendPlainText(backLink, c, c.BacklinkText(ref))
-			}
-		}
+	backPara := parent.CreateElement("p")
+	if !appendEPUBFootnoteBacklinks(backPara, c, section.ID, epubFootnoteBacklinkOptions{EPUB3Role: true}) {
+		parent.RemoveChild(backPara)
 	}
 	return nil
 }
@@ -985,7 +948,58 @@ func appendFootnoteSectionContent(parent *etree.Element, c *content.Content, sec
 	if _, err := appendFlowItems(sectionElem, c, section.Content, 1, 1, "section", log); err != nil {
 		return err
 	}
+	backPara := sectionElem.CreateElement("p")
+	if !appendEPUBFootnoteBacklinks(backPara, c, section.ID, epubFootnoteBacklinkOptions{EPUB3Role: c.OutputFormat == common.OutputFmtEpub3}) {
+		sectionElem.RemoveChild(backPara)
+	}
 	return nil
+}
+
+type epubFootnoteBacklinkOptions struct {
+	LeadingSeparator bool
+	EPUB3Role        bool
+}
+
+func appendEPUBFootnoteBacklinks(parent *etree.Element, c *content.Content, sectionID string, opts epubFootnoteBacklinkOptions) bool {
+	if parent == nil || c == nil || strings.TrimSpace(sectionID) == "" {
+		return false
+	}
+	refs := c.BackLinkIndex[sectionID]
+	if len(refs) == 0 {
+		return false
+	}
+	if opts.LeadingSeparator {
+		appendPlainText(parent, c, text.NBSP)
+	}
+	wrote := false
+	for _, ref := range refs {
+		backlinkText := c.BacklinkText(ref)
+		if backlinkText == "" {
+			continue
+		}
+		if wrote {
+			appendPlainText(parent, c, text.NBSP)
+		}
+		backLink := parent.CreateElement("a")
+		backLink.CreateAttr("href", ref.Href)
+		backLink.CreateAttr("class", "link-backlink")
+		if opts.EPUB3Role {
+			backLink.CreateAttr("epub:type", "backlink")
+			backLink.CreateAttr("role", "doc-backlink")
+		}
+
+		textParent := backLink
+		if c.OutputFormat == common.OutputFmtKepub {
+			paragraph, sentence := c.KoboSpanNextSentence()
+			span := backLink.CreateElement("span")
+			span.CreateAttr("class", "koboSpan")
+			span.CreateAttr("id", fmt.Sprintf("kobo.%d.%d", paragraph, sentence))
+			textParent = span
+		}
+		appendPlainText(textParent, c, backlinkText)
+		wrote = true
+	}
+	return wrote
 }
 
 func appendSectionContent(
@@ -1389,16 +1403,14 @@ func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inl
 			if linkID, internalLink := strings.CutPrefix(seg.Href, "#"); internalLink {
 				if _, isFootnote := c.FootnotesIndex[linkID]; isFootnote {
 					linkClass = "link-footnote"
-					// Handle float mode footnote references
-					if c.FootnotesMode.IsFloat() {
-						ref := c.AddFootnoteBackLinkRef(linkID)
-						// Add reference ID
-						a.CreateAttr("id", ref.RefID)
-						// Add epub:type="noteref" for EPUB3
-						if c.OutputFormat == common.OutputFmtEpub3 {
-							a.CreateAttr("epub:type", "noteref")
-							a.CreateAttr("role", "doc-noteref")
-						}
+					// Register footnote references so footnote bodies can render backlinks.
+					ref := c.AddFootnoteBackLinkRef(linkID)
+					// Add reference ID for backlink targets.
+					a.CreateAttr("id", ref.RefID)
+					// Add epub:type="noteref" for EPUB3 floating footnotes only.
+					if c.FootnotesMode.IsFloat() && c.OutputFormat == common.OutputFmtEpub3 {
+						a.CreateAttr("epub:type", "noteref")
+						a.CreateAttr("role", "doc-noteref")
 					}
 				} else {
 					linkClass = "link-internal"

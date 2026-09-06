@@ -13,6 +13,15 @@ type sectionNameList []string
 
 type sectionEIDsBySectionName map[string][]int
 
+const kfxBacklinkLocationResolveMaxIterations = 6
+
+type kfxBacklinkParagraph struct {
+	ContentName   string
+	ContentOffset int
+	EID           int
+	RefIDs        []string
+}
+
 // sectionWorkItem represents a section to be processed as a storyline.
 // Used by the work queue to flatten nested titled sections into separate storylines.
 type sectionWorkItem struct {
@@ -359,11 +368,14 @@ func generateStoryline(ctx context.Context, c *content.Content, styles *StyleReg
 	// Reference KFX creates separate storylines for each footnote body (notes, comments, etc.)
 	//
 	// In default mode (not float), footnotes behave like regular sections:
-	// - No backlinks are generated
+	// - Backlinks are generated without Kindle popup markers
 	// - Individual footnote sections appear as nested TOC entries under the footnote body
 	isFloatMode := c.FootnotesMode.IsFloat()
 
 	resolveKFXBacklinkLocations(c, fragments, ca.Snapshot(), sectionNames, chapterStartSections, idToEID, nil)
+	replayRefs := c.PreRegisterFootnoteBackLinksInBodies(footnoteBodies)
+	restoreReplay := c.UseFootnoteBackLinkReplay(replayRefs)
+	defer restoreReplay()
 
 	for _, body := range footnoteBodies {
 		if err := ctx.Err(); err != nil {
@@ -403,6 +415,7 @@ func generateStoryline(ctx context.Context, c *content.Content, styles *StyleReg
 
 		// Collect child TOC entries for individual footnote sections (default mode only)
 		var childTOCEntries []*TOCEntry
+		var backlinkParagraphs []kfxBacklinkParagraph
 
 		// Process each section in the footnote body using the unified processing function.
 		// This ensures consistent handling of all section elements: title, epigraphs,
@@ -419,34 +432,26 @@ func generateStoryline(ctx context.Context, c *content.Content, styles *StyleReg
 				sectionFirstEID = sb.NextEID()
 			}
 
-			// Create backlinks callback - only used in float mode
-			// In default mode, footnotes behave like regular sections (no backlinks)
-			var addBacklinks func(
+			// Create backlinks callback. Default and float modes share the same generated
+			// backlink paragraph; float mode additionally marks footnotes for popups.
+			addBacklinks := func(
 				c *content.Content,
 				sectionID string,
 				sb *StorylineBuilder,
 				styles *StyleRegistry,
 				ca *ContentAccumulator,
 				idToEID eidByFB2ID,
-			)
-			if isFloatMode {
-				addBacklinks = func(
-					c *content.Content,
-					sectionID string,
-					sb *StorylineBuilder,
-					styles *StyleRegistry,
-					ca *ContentAccumulator,
-					idToEID eidByFB2ID,
-				) {
-					refs, ok := c.BackLinkIndex[sectionID]
-					if !ok || len(refs) == 0 {
-						return
-					}
-					if kfxBacklinkRefsNeedLocation(refs) {
-						resolveKFXBacklinkLocations(c, fragments, ca.Snapshot(), sectionNames, chapterStartSections, idToEID, sb)
-						refs = c.BackLinkIndex[sectionID]
-					}
-					addBacklinkParagraph(c, refs, sb, styles, ca, idToEID)
+			) {
+				refs, ok := c.BackLinkIndex[sectionID]
+				if !ok || len(refs) == 0 {
+					return
+				}
+				if kfxBacklinkRefsNeedLocation(refs) {
+					resolveKFXBacklinkLocations(c, fragments, ca.Snapshot(), sectionNames, chapterStartSections, idToEID, sb)
+					refs = c.BackLinkIndex[sectionID]
+				}
+				if paragraph, ok := addBacklinkParagraph(c, refs, sb, styles, ca, idToEID); ok {
+					backlinkParagraphs = append(backlinkParagraphs, paragraph)
 				}
 			}
 
@@ -469,6 +474,17 @@ func generateStoryline(ctx context.Context, c *content.Content, styles *StyleReg
 				}
 			}
 		}
+		refreshKFXBacklinkParagraphs(
+			c,
+			backlinkParagraphs,
+			sb,
+			styles,
+			ca,
+			fragments,
+			sectionNames,
+			chapterStartSections,
+			idToEID,
+		)
 
 		sectionEIDs[sectionName] = sb.AllEIDs()
 
@@ -676,17 +692,37 @@ func addBacklinkParagraph(
 	styles *StyleRegistry,
 	ca *ContentAccumulator,
 	_ eidByFB2ID,
-) {
+) (kfxBacklinkParagraph, bool) {
 	if len(refs) == 0 {
-		return
+		return kfxBacklinkParagraph{}, false
 	}
 
+	text, events := kfxBacklinkParagraphContent(c, refs, styles)
+	if text == "" {
+		return kfxBacklinkParagraph{}, false
+	}
+	contentName, contentOffset := ca.Add(text)
+	refIDs := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		refIDs = append(refIDs, ref.RefID)
+	}
+
+	// Add the content entry: paragraph uses container style, events use link style.
+	// Pass empty resolved style - will be resolved in Build() with position filtering.
+	eid := sb.AddContentAndEvents(SymText, contentName, contentOffset, "p", "", events)
+	return kfxBacklinkParagraph{ContentName: contentName, ContentOffset: contentOffset, EID: eid, RefIDs: refIDs}, true
+}
+
+func kfxBacklinkParagraphContent(
+	c *content.Content,
+	refs []content.BackLinkRef,
+	styles *StyleRegistry,
+) (string, []StyleEventRef) {
 	// Resolve styles:
 	// - Paragraph style: basic paragraph without footnote class (backlink is outside footnote)
 	// - Link style: link-backlink as an inline delta style_event. Do not use full
 	//   block resolution here: root/container/class margins are invalid for style
 	//   events and can make multiple backlinks render shifted or clipped.
-	paraStyle := "p"
 	linkStyle := "link-backlink"
 	if styles != nil {
 		styles.EnsureBaseStyle(linkStyle)
@@ -695,7 +731,6 @@ func addBacklinkParagraph(
 	if styles != nil {
 		resolvedLink = NewStyleContext(styles).ResolveInlineDelta(linkStyle)
 	}
-	// Don't pre-resolve paraStyle - will be done in Build() with position filtering
 
 	// Build the combined text with NBSP separators between backlinks.
 	const nbsp = "\u00A0"
@@ -728,20 +763,63 @@ func addBacklinkParagraph(
 		offset += backlinkLen
 	}
 	if textBuilder.Len() == 0 {
-		return
+		return "", nil
 	}
-
-	// Add content text
-	contentName, contentOffset := ca.Add(textBuilder.String())
 
 	// Mark link style usage (paragraph style will be marked in Build() after position filtering)
 	if styles != nil && resolvedLink != "" {
 		styles.ResolveStyle(resolvedLink, styleUsageInline)
 	}
 
-	// Add the content entry: paragraph uses container style, events use link style
-	// Pass empty resolved style - will be resolved in Build() with position filtering
-	sb.AddContentAndEvents(SymText, contentName, contentOffset, paraStyle, "", events)
+	return textBuilder.String(), events
+}
+
+func refreshKFXBacklinkParagraphs(
+	c *content.Content,
+	paragraphs []kfxBacklinkParagraph,
+	sb *StorylineBuilder,
+	styles *StyleRegistry,
+	ca *ContentAccumulator,
+	fragments *FragmentList,
+	sectionNames sectionNameList,
+	chapterStartSections map[string]bool,
+	idToEID eidByFB2ID,
+) {
+	if len(paragraphs) == 0 {
+		return
+	}
+	for range kfxBacklinkLocationResolveMaxIterations {
+		resolveKFXBacklinkLocations(c, fragments, ca.Snapshot(), sectionNames, chapterStartSections, idToEID, sb)
+		if !rewriteKFXBacklinkParagraphs(c, paragraphs, sb, styles, ca) {
+			return
+		}
+	}
+}
+
+func rewriteKFXBacklinkParagraphs(
+	c *content.Content,
+	paragraphs []kfxBacklinkParagraph,
+	sb *StorylineBuilder,
+	styles *StyleRegistry,
+	ca *ContentAccumulator,
+) bool {
+	changed := false
+	for _, paragraph := range paragraphs {
+		refs := make([]content.BackLinkRef, 0, len(paragraph.RefIDs))
+		for _, refID := range paragraph.RefIDs {
+			if ref, ok := c.BackLinkRefByID(refID); ok {
+				refs = append(refs, ref)
+			}
+		}
+		text, events := kfxBacklinkParagraphContent(c, refs, styles)
+		if ca.Replace(paragraph.ContentName, paragraph.ContentOffset, text) {
+			changed = true
+		}
+		if sb.ReplaceStyleEvents(paragraph.EID, events) {
+			changed = true
+		}
+	}
+	return changed
 }
 
 func addStandaloneFootnoteMoreIndicator(c *content.Content, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator) {

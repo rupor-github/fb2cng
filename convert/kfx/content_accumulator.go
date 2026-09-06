@@ -56,6 +56,27 @@ func (ca *ContentAccumulator) Add(text string) (name string, offset int) {
 	return name, offset
 }
 
+func (ca *ContentAccumulator) Replace(name string, offset int, text string) bool {
+	if ca == nil || offset < 0 {
+		return false
+	}
+	if name == ca.currentName {
+		if offset >= len(ca.currentList) || ca.currentList[offset] == text {
+			return false
+		}
+		ca.currentSize += len(text) - len(ca.currentList[offset])
+		ca.currentList[offset] = text
+		return true
+	}
+	list := ca.fragments[name]
+	if offset >= len(list) || list[offset] == text {
+		return false
+	}
+	list[offset] = text
+	ca.fragments[name] = list
+	return true
+}
+
 // finishCurrentChunk saves the current chunk and starts a new one with sequential naming.
 func (ca *ContentAccumulator) finishCurrentChunk() {
 	if len(ca.currentList) > 0 {
