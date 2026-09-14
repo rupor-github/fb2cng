@@ -1,5 +1,13 @@
 # Repository Instructions
 
+## VCS
+
+- This project uses `jj` as primary VCS.
+- Use `jj status`, `jj diff`, `jj log`, `jj show`, `jj git fetch`, and `jj git push`.
+- Do not use `git status`, `git diff`, `git log`, `git show`, `git add`, `git commit`, or `git push` unless the user explicitly asks for raw Git.
+- Treat `.git` as jj backend storage, not as the project workflow.
+- For GitHub-only operations, `gh` is still OK.
+
 ## Commands
 
 - Use `go tool task ...`; CI runs `go tool task release` on version tags.
