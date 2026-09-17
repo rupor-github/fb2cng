@@ -33,10 +33,7 @@ tasks:
     desc: Builds local development version and updates artifacts (if necessary) for release build
     aliases: [debug]
     deps:
-      - task: copy-file
-        vars: {SRC: 'scripts/git/pre-commit', DST: '.git/hooks/pre-commit'}
-      - task: copy-file
-        vars: {SRC: 'scripts/git/pre-push', DST: '.git/hooks/pre-push'}
+      - task: pre-commit-install
       - task: check-go-version
       - task: generate-project-versions
     cmds:
@@ -141,6 +138,21 @@ tasks:
     preconditions:
       - sh: scripts/bash/vercmp.sh {{.GO_VERSION}} gteq {{.GO_VERSION_MIN_REQUIRED}}
         msg: "At least {{.GO_VERSION_MIN_REQUIRED}} of go is required, but {{.GO_VERSION}} is detected!"
+
+  pre-commit-install:
+    internal: true
+    desc: Installs pre-commit hooks for git
+    platforms: [linux]
+    preconditions:
+      - sh: 'command -v "pre-commit" &> /dev/null'
+        msg: "pre-commit is not available - either not installed or python venv is not set properly"
+    cmds:
+      - pre-commit install -f
+    sources:
+      - ./.pre-commit-config.yaml
+    status:
+      - test -f '{{.ROOT_DIR}}/.git/hooks/pre-commit'
+      - test -f '{{.ROOT_DIR}}/.git/hooks/pre-push'
 
   go-build:
     internal: true
