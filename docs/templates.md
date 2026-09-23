@@ -173,7 +173,8 @@ document:
     {{-     end -}}
     {{-   end -}}
     {{- end -}}
-    {{- $parts = append $parts .Title -}}
+    {{- $title := replace "/" "\u2215" .Title -}}
+    {{- $parts = append $parts $title -}}
     {{- printf "%s_%s" (join " " $parts) .SourceFile -}}
 ```
 
@@ -193,7 +194,9 @@ How this template works:
 - `if gt .Number 0` checks whether the series number is present and greater than zero.
 - `printf "%02d" .Number` formats the series number as two digits, such as `01`, `02`, or `12`.
 - `$parts = append $parts ...` appends that formatted series number to the filename parts.
-- `$parts = append $parts .Title` always appends the book title.
+- `$title := replace "/" "\u2215" .Title` replaces literal slashes in the book title with Unicode division slash.
+  This keeps titles such as `Рим / После Рима` from being interpreted as output subdirectories.
+- `$parts = append $parts $title` always appends the sanitized book title.
 - `join " " $parts` joins all accumulated parts with spaces.
 - `printf "%s_%s" ... .SourceFile` appends an underscore and the original source file base name. This can help keep names unique when metadata is duplicated.
 
