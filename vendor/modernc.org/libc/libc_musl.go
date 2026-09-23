@@ -654,8 +654,22 @@ func _exit(tls *TLS, code int32) {
 
 var abort Tsigaction
 
+// abort dies by SIGABRT with the signal's default disposition, as musl's
+// does. ___libc_sigaction records the SIG_DFL for os/signal only and leaves
+// the Go runtime's SIGABRT handler in the kernel, which would print a
+// goroutine dump to stderr and only then let the process die; resetSigDfl
+// puts the kernel's default back so that the death is silent, with the core
+// dump the resource limits allow, and a parent sees a child killed by SIGABRT
+// with an empty stderr. sqlite's writecrash.test checks exactly that. The
+// signal is sent thread-directed with tgkill, as the Go runtime's raise()
+// does and as the netbsd Xabort explains: a process-directed kill(2) is
+// asynchronous and the calling thread can run on before it lands. With
+// SIG_DFL installed the kernel terminates the process in tgkill; the
+// process-directed kill and the panic are unreachable fallbacks.
 func Xabort(tls *TLS) {
 	___libc_sigaction(tls, SIGABRT, uintptr(unsafe.Pointer(&abort)), 0)
+	resetSigDfl(SIGABRT)
+	unix.Tgkill(unix.Getpid(), unix.Gettid(), unix.Signal(SIGABRT))
 	unix.Kill(unix.Getpid(), unix.Signal(SIGABRT))
 	panic(todo("unrechable"))
 }
