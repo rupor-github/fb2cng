@@ -87,7 +87,9 @@ document:
     {{-     if and (not $prefix) .Nickname }}{{ $prefix = .Nickname }}{{- end -}}
     {{-   end -}}
     {{- end -}}
-    {{- if $prefix -}}{{ $prefix }} - {{- end -}}{{ .Title -}}
+    {{- $title := replace "/" "\u2215" .Title -}}
+    {{- $title = replace "\\" "\u2215" $title -}}
+    {{- if $prefix -}}{{ $prefix }} - {{- end -}}{{ $title -}}
 ```
 
 How this template works:
@@ -102,7 +104,10 @@ How this template works:
 - `$prefix = .LastName` assigns the first author's last name to the previously created `$prefix` variable.
 - `if and (not $prefix) .Nickname` uses the first author's nickname when regular name fields are missing.
 - `if $prefix` checks whether `$prefix` is non-empty. If it is, the template writes the prefix followed by ` - `.
-- `.Title` writes the book title.
+- `$title := replace "/" "\u2215" .Title` replaces literal slashes in the book title with Unicode division slash.
+- `$title = replace "\\" "\u2215" $title` does the same for backslashes.
+  This keeps titles such as `Рим / После Рима` and `Рим \ После Рима` from being interpreted as output subdirectories.
+- `$title` writes the sanitized book title.
 
 In plain English, the sample means: "If the book has at least one author, start the file name with the first author's last name and a separator, then append the book title."
 
@@ -124,10 +129,12 @@ document:
     {{-   end -}}
     {{-   $all = cat $all "-" -}}
     {{- end -}}
+    {{- $title := replace "/" "\u2215" .Title -}}
+    {{- $title = replace "\\" "\u2215" $title -}}
     {{- if $all -}}
-    {{-   cat $all .Title -}}
+    {{-   cat $all $title -}}
     {{- else -}}
-    {{-   .Title -}}
+    {{-   $title -}}
     {{- end -}}
 ```
 
@@ -147,7 +154,9 @@ How the advanced template works:
 - For Russian books, `cat $all "и др"` appends `и др` to mean "and others".
 - For non-Russian books, `printf "%s%s" $all ", et al"` appends `, et al` without inserting an extra space before the comma. `printf` is used here instead of `cat` because `cat` always inserts spaces between arguments.
 - `$all = cat $all "-"` appends a hyphen separator after the author prefix.
-- The final `if $all` chooses between two outputs: if an author prefix exists, concatenate it with the title; otherwise output only `.Title`.
+- `$title := replace "/" "\u2215" .Title` replaces literal slashes in the book title with Unicode division slash.
+- `$title = replace "\\" "\u2215" $title` does the same for backslashes.
+- The final `if $all` chooses between two outputs: if an author prefix exists, concatenate it with the sanitized title; otherwise output only `$title`.
 
 In plain English, the advanced sample means: "Build a file name from the first author's last/first/middle name, add `и др` or `, et al` when there are multiple authors, add a hyphen separator, and then append the book title. If there are no authors, use only the title."
 
@@ -174,6 +183,7 @@ document:
     {{-   end -}}
     {{- end -}}
     {{- $title := replace "/" "\u2215" .Title -}}
+    {{- $title = replace "\\" "\u2215" $title -}}
     {{- $parts = append $parts $title -}}
     {{- printf "%s_%s" (join " " $parts) .SourceFile -}}
 ```
@@ -195,7 +205,8 @@ How this template works:
 - `printf "%02d" .Number` formats the series number as two digits, such as `01`, `02`, or `12`.
 - `$parts = append $parts ...` appends that formatted series number to the filename parts.
 - `$title := replace "/" "\u2215" .Title` replaces literal slashes in the book title with Unicode division slash.
-  This keeps titles such as `Рим / После Рима` from being interpreted as output subdirectories.
+- `$title = replace "\\" "\u2215" $title` does the same for backslashes.
+  This keeps titles such as `Рим / После Рима` and `Рим \ После Рима` from being interpreted as output subdirectories.
 - `$parts = append $parts $title` always appends the sanitized book title.
 - `join " " $parts` joins all accumulated parts with spaces.
 - `printf "%s_%s" ... .SourceFile` appends an underscore and the original source file base name. This can help keep names unique when metadata is duplicated.

@@ -56,6 +56,8 @@ document:
   # - .Genres (array of strings) - genre names as specified by FB2
   #   metainformation
   # NOTE: watch out for path separators, directories will be created!
+  # The default sample replaces slashes and backslashes in titles with Unicode
+  # division slash (U+2215).
   output_name_template: |
     {{- $all := "" -}}
     {{- if gt (len .Authors) 0 -}}
@@ -70,10 +72,12 @@ document:
     {{-   end -}}
     {{-   $all = cat $all "-" -}}
     {{- end -}}
+    {{- $title := replace "/" "\u2215" .Title -}}
+    {{- $title = replace "\\" "\u2215" $title -}}
     {{- if $all -}}
-    {{-   cat $all .Title -}}
+    {{-   cat $all $title -}}
     {{- else -}}
-    {{-   .Title -}}
+    {{-   $title -}}
     {{- end -}}
 
   # Slugify/transliterate output file name - after all other processing on file
