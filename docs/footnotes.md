@@ -32,6 +32,7 @@ document:
 | EPUB2 | Normal footnote sections with backlinks | Bidirectional links | Bidirectional links with normalized labels |
 | EPUB3 | Normal footnote sections with backlinks | EPUB `aside` / `noteref` markup | EPUB `aside` / `noteref` markup with normalized labels |
 | KEPUB | Normal footnote sections with backlinks | Bidirectional links | Bidirectional links with normalized labels |
+| KEPUB3 | Normal footnote sections with backlinks | EPUB `aside` / `noteref` markup | EPUB `aside` / `noteref` markup with normalized labels |
 | KFX/AZW8 | Normal linked sections with backlink paragraphs; no popup markers | Kindle popup footnotes with backlink paragraphs | Popup footnotes with normalized labels and backlinks |
 | PDF | Normal linked sections with generated return links | Printed page footnotes | Printed page footnotes with page-local labels |
 | TXT | Normal sections | Final `Notes` section | Final `Notes` section with normalized labels |
@@ -46,7 +47,7 @@ Formats that generate backlinks:
 | Format | Default mode | Float modes |
 |---|---:|---:|
 | EPUB2/KEPUB | yes | yes |
-| EPUB3 | yes | yes |
+| EPUB3/KEPUB3 | yes | yes |
 | KFX/AZW8 | yes | yes |
 | PDF | yes, in footnote body sections | printed footnotes use page/link handling |
 | TXT | no clickable links | no clickable links |

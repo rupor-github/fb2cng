@@ -14,7 +14,7 @@ All template contexts include:
 | Field | Meaning |
 |---|---|
 | `.Context` | Template field name, such as `output_name_template`, `label_template`, or `backlink_template` |
-| `.Format` | Requested output format: `epub2`, `epub3`, `kepub`, `kfx`, `azw8`, `pdf`, `txt`, or `md` |
+| `.Format` | Requested output format: `epub2`, `epub3`, `kepub`, `kepub3`, `kfx`, `azw8`, `pdf`, `txt`, or `md` |
 
 ## Artifact Destination Templates
 

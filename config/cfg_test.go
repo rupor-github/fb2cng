@@ -432,6 +432,7 @@ func TestOutputFmt_String(t *testing.T) {
 		{common.OutputFmtEpub2, "epub2"},
 		{common.OutputFmtEpub3, "epub3"},
 		{common.OutputFmtKepub, "kepub"},
+		{common.OutputFmtKepub3, "kepub3"},
 		{common.OutputFmtKfx, "kfx"},
 		{common.OutputFmtAzw8, "azw8"},
 		{common.OutputFmtPdf, "pdf"},
@@ -478,6 +479,7 @@ func TestOutputFmt_IsValid(t *testing.T) {
 		{common.OutputFmtEpub2, true},
 		{common.OutputFmtEpub3, true},
 		{common.OutputFmtKepub, true},
+		{common.OutputFmtKepub3, true},
 		{common.OutputFmtKfx, true},
 		{common.OutputFmtAzw8, true},
 		{common.OutputFmtPdf, true},
@@ -508,6 +510,7 @@ func TestParseOutputFmt(t *testing.T) {
 		{"EPUB2 uppercase", "EPUB2", common.OutputFmtEpub2, false},
 		{"epub3", "epub3", common.OutputFmtEpub3, false},
 		{"kepub", "kepub", common.OutputFmtKepub, false},
+		{"kepub3", "kepub3", common.OutputFmtKepub3, false},
 		{"kfx", "kfx", common.OutputFmtKfx, false},
 		{"azw8", "azw8", common.OutputFmtAzw8, false},
 		{"pdf", "pdf", common.OutputFmtPdf, false},
@@ -567,6 +570,7 @@ func TestOutputFmt_MarshalText(t *testing.T) {
 		{common.OutputFmtEpub2, "epub2"},
 		{common.OutputFmtEpub3, "epub3"},
 		{common.OutputFmtKepub, "kepub"},
+		{common.OutputFmtKepub3, "kepub3"},
 		{common.OutputFmtKfx, "kfx"},
 		{common.OutputFmtAzw8, "azw8"},
 		{common.OutputFmtPdf, "pdf"},
@@ -597,6 +601,7 @@ func TestOutputFmt_UnmarshalText(t *testing.T) {
 		{"epub2", "epub2", common.OutputFmtEpub2, false},
 		{"epub3", "epub3", common.OutputFmtEpub3, false},
 		{"kepub", "kepub", common.OutputFmtKepub, false},
+		{"kepub3", "kepub3", common.OutputFmtKepub3, false},
 		{"kfx", "kfx", common.OutputFmtKfx, false},
 		{"azw8", "azw8", common.OutputFmtAzw8, false},
 		{"pdf", "pdf", common.OutputFmtPdf, false},
@@ -627,7 +632,7 @@ func TestOutputFmt_UnmarshalText(t *testing.T) {
 
 func TestOutputFmtNames(t *testing.T) {
 	names := common.OutputFmtNames()
-	expected := []string{"epub2", "epub3", "kepub", "kfx", "azw8", "pdf", "txt", "md"}
+	expected := []string{"epub2", "epub3", "kepub", "kepub3", "kfx", "azw8", "pdf", "txt", "md"}
 
 	if len(names) != len(expected) {
 		t.Errorf("common.OutputFmtNames() length = %d, want %d", len(names), len(expected))
@@ -648,6 +653,7 @@ func TestOutputFmt_ForKindle(t *testing.T) {
 		{common.OutputFmtEpub2, false},
 		{common.OutputFmtEpub3, false},
 		{common.OutputFmtKepub, false},
+		{common.OutputFmtKepub3, false},
 		{common.OutputFmtKfx, true},
 		{common.OutputFmtAzw8, true},
 		{common.OutputFmtPdf, false},
@@ -665,6 +671,31 @@ func TestOutputFmt_ForKindle(t *testing.T) {
 	}
 }
 
+func TestOutputFmt_EPUBHelpers(t *testing.T) {
+	tests := []struct {
+		fmt   common.OutputFmt
+		epub3 bool
+		kobo  bool
+	}{
+		{common.OutputFmtEpub2, false, false},
+		{common.OutputFmtEpub3, true, false},
+		{common.OutputFmtKepub, false, true},
+		{common.OutputFmtKepub3, true, true},
+		{common.OutputFmtKfx, false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.fmt.String(), func(t *testing.T) {
+			if got := tt.fmt.IsEPUB3(); got != tt.epub3 {
+				t.Errorf("IsEPUB3() = %v, want %v", got, tt.epub3)
+			}
+			if got := tt.fmt.IsKobo(); got != tt.kobo {
+				t.Errorf("IsKobo() = %v, want %v", got, tt.kobo)
+			}
+		})
+	}
+}
+
 func TestOutputFmt_Ext(t *testing.T) {
 	tests := []struct {
 		fmt      common.OutputFmt
@@ -673,6 +704,7 @@ func TestOutputFmt_Ext(t *testing.T) {
 		{common.OutputFmtEpub2, ".epub"},
 		{common.OutputFmtEpub3, ".epub"},
 		{common.OutputFmtKepub, ".kepub.epub"},
+		{common.OutputFmtKepub3, ".kepub.epub"},
 		{common.OutputFmtKfx, ".kfx"},
 		{common.OutputFmtAzw8, ".azw8"},
 		{common.OutputFmtPdf, ".pdf"},

@@ -33,7 +33,7 @@ func SupportsOutputFormat(name string, format common.OutputFmt) bool {
 	case MOBI:
 		return format.ForKindle()
 	case EPUB:
-		return format == common.OutputFmtEpub2 || format == common.OutputFmtEpub3 || format == common.OutputFmtKepub
+		return format == common.OutputFmtEpub2 || format == common.OutputFmtEpub3 || format == common.OutputFmtKepub || format == common.OutputFmtKepub3
 	case PDF:
 		return format == common.OutputFmtPdf
 	default:

@@ -207,6 +207,18 @@ func TestCreateXHTMLDocument_Kobo(t *testing.T) {
 	}
 }
 
+func TestCreateXHTMLDocument_Kobo3(t *testing.T) {
+	c := &content.Content{OutputFormat: common.OutputFmtKepub3}
+	_, root := createXHTMLDocument(c, "Test Chapter")
+
+	if root == nil {
+		t.Fatal("createXHTMLDocument returned nil root element")
+	}
+	if root.Tag != "div" || root.SelectAttrValue("id", "") != "book-inner" {
+		t.Fatalf("root = <%s id=%q>, want book-inner div", root.Tag, root.SelectAttrValue("id", ""))
+	}
+}
+
 func TestWriteMimetype(t *testing.T) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
@@ -2064,6 +2076,48 @@ func TestWriteOPF_Epub3(t *testing.T) {
 	}
 }
 
+func TestWriteOPF_Kepub3(t *testing.T) {
+	_, env, log := setupTestContext(t)
+	cfg := &env.Cfg.Document
+
+	c := &content.Content{
+		Book: &fb2.FictionBook{
+			Description: fb2.Description{
+				TitleInfo: fb2.TitleInfo{
+					BookTitle: fb2.TextField{Value: "Test Book KEPUB3"},
+					Lang:      language.Make("en"),
+				},
+				DocumentInfo: fb2.DocumentInfo{ID: "test-book-kepub3"},
+			},
+		},
+		OutputFormat: common.OutputFmtKepub3,
+		ImagesIndex: fb2.BookImages{
+			"cover": &fb2.BookImage{
+				Filename: "images/cover.jpg",
+				MimeType: "image/jpeg",
+			},
+		},
+		CoverID: "cover",
+	}
+
+	opfContent := writeOPFStringForTest(t, c, cfg, log)
+	for _, want := range []string{
+		`<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="BookId" version="3.0">`,
+		`<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`,
+		`<item id="book-cover-image" href="images/cover.jpg" media-type="image/jpeg" properties="cover-image"/>`,
+		`<meta property="dcterms:modified">`,
+	} {
+		if !strings.Contains(opfContent, want) {
+			t.Fatalf("KEPUB3 OPF missing %s\n%s", want, opfContent)
+		}
+	}
+	for _, unwanted := range []string{`id="ncx"`, `toc="ncx"`, `<guide>`} {
+		if strings.Contains(opfContent, unwanted) {
+			t.Fatalf("KEPUB3 OPF should not contain %s\n%s", unwanted, opfContent)
+		}
+	}
+}
+
 func TestWriteOPF_DublinCoreExpansion(t *testing.T) {
 	_, env, log := setupTestContext(t)
 	cfg := &env.Cfg.Document
@@ -3143,6 +3197,15 @@ func TestFloatModeFootnotes(t *testing.T) {
 			expectRefID:    true,
 			expectBacklink: true,
 		},
+		{
+			name:           "KEPUB3 float mode",
+			format:         common.OutputFmtKepub3,
+			mode:           common.FootnotesModeFloat,
+			expectNoteref:  true,
+			expectAside:    true,
+			expectRefID:    true,
+			expectBacklink: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -3318,6 +3381,7 @@ func TestFootnoteBacklinksIncludeBackwardFootnoteReferences(t *testing.T) {
 		{name: "EPUB2 float", format: common.OutputFmtEpub2, mode: common.FootnotesModeFloat},
 		{name: "EPUB3 float", format: common.OutputFmtEpub3, mode: common.FootnotesModeFloat},
 		{name: "KEPUB float", format: common.OutputFmtKepub, mode: common.FootnotesModeFloat},
+		{name: "KEPUB3 float", format: common.OutputFmtKepub3, mode: common.FootnotesModeFloat},
 		{name: "EPUB3 default", format: common.OutputFmtEpub3, mode: common.FootnotesModeDefault},
 	}
 
@@ -3901,6 +3965,21 @@ func TestWriteOPF_EPUB3Collections(t *testing.T) {
 				}
 				if strings.Contains(opfContent, `belongs-to-collection`) {
 					t.Error("KEPUB should not have belongs-to-collection metadata")
+				}
+			},
+		},
+		{
+			name: "KEPUB3 single sequence with number",
+			sequences: []fb2.Sequence{
+				{Name: "Test Series", Number: &num5},
+			},
+			format: common.OutputFmtKepub3,
+			validate: func(t *testing.T, opfContent string) {
+				if !strings.Contains(opfContent, `<meta property="belongs-to-collection" id="collection1">Test Series</meta>`) {
+					t.Error("Expected belongs-to-collection metadata for KEPUB3")
+				}
+				if strings.Contains(opfContent, `calibre:series`) {
+					t.Error("KEPUB3 should not have calibre metadata")
 				}
 			},
 		},

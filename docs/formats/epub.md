@@ -1,6 +1,6 @@
 # EPUB And KEPUB Output
 
-This page covers `epub2`, `epub3`, and `kepub` output.
+This page covers `epub2`, `epub3`, `kepub`, and `kepub3` output.
 
 ## Choosing A Variant
 
@@ -8,7 +8,8 @@ This page covers `epub2`, `epub3`, and `kepub` output.
 |---|---|
 | `epub2` | You need broad compatibility with older EPUB readers |
 | `epub3` | You want modern EPUB semantics, including EPUB3 footnote markup |
-| `kepub` | You target Kobo devices and want Kobo-specific packaging/behavior |
+| `kepub` | You target Kobo devices and want OPF2-based Kobo packaging/behavior |
+| `kepub3` | You target Kobo devices and want EPUB3 package/navigation semantics |
 
 ## Structure And Navigation
 
@@ -17,6 +18,7 @@ fb2cng converts top-level FB2 sections into EPUB content documents and generates
 - EPUB2: `toc.ncx`
 - EPUB3: `nav.xhtml`
 - KEPUB: EPUB2-style package optimized for Kobo handling
+- KEPUB3: EPUB3-style package with Kobo XHTML instrumentation
 
 The optional visible TOC page is controlled by `document.toc_page` and is separate from device navigation.
 
@@ -24,7 +26,7 @@ When `document.page_map.adobe_de` is enabled, EPUB output can include Adobe Digi
 
 ## Styling
 
-EPUB and KEPUB use XHTML plus CSS. Set `document.stylesheet_path` to replace the default stylesheet.
+EPUB and KEPUB variants use XHTML plus CSS. Set `document.stylesheet_path` to replace the default stylesheet.
 
 Custom stylesheet notes:
 
@@ -38,13 +40,13 @@ Depth-1 sections are always separate content documents. Nested sections can be s
 
 ## Footnotes
 
-| Mode | EPUB2/KEPUB | EPUB3 |
+| Mode | EPUB2/KEPUB | EPUB3/KEPUB3 |
 |---|---|---|
 | `default` | Footnotes are normal linked sections with generated backlinks | Footnotes are normal linked sections with generated backlinks |
 | `float` | Bidirectional links for reader compatibility | EPUB `aside` and `noteref` markup |
 | `floatRenumbered` | Same as `float`, with normalized labels | Same as `float`, with normalized labels |
 
-In EPUB3 `default` mode, footnote references are ordinary links, not `noteref` popup links. Generated backlinks use `epub:type="backlink"` and `role="doc-backlink"`.
+In EPUB3 and KEPUB3 `default` mode, footnote references are ordinary links, not `noteref` popup links. Generated backlinks use `epub:type="backlink"` and `role="doc-backlink"`.
 
 See [Footnotes](../footnotes.md) for mode details and templates.
 

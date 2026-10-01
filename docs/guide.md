@@ -2,7 +2,7 @@
 
 ## Overview
 
-**fb2cng** converts FB2/FictionBook files to EPUB2, EPUB3, KEPUB, KFX/AZW8, PDF, TXT, and Markdown.
+**fb2cng** converts FB2/FictionBook files to EPUB2, EPUB3, KEPUB, KEPUB3, KFX/AZW8, PDF, TXT, and Markdown.
 
 Use this guide for installation, command-line basics, choosing an output format, and finding the right reference document. Format-specific details now live in separate files.
 
@@ -74,7 +74,7 @@ Convert options:
 
 | Option | Meaning |
 |---|---|
-| `--to TYPE` | `epub2`, `epub3`, `kepub`, `kfx`, `azw8`, `pdf`, `txt`, or `md` |
+| `--to TYPE` | `epub2`, `epub3`, `kepub`, `kepub3`, `kfx`, `azw8`, `pdf`, `txt`, or `md` |
 | `--ebook`, `--eb` | For Kindle formats, mark output as ebook/EBOK instead of personal document/PDOC |
 | `--asin ASIN` | For Kindle formats, set ASIN metadata |
 | `--output-file FILE`, `-o FILE` | Write a single source book to exact output file path |
@@ -92,7 +92,8 @@ Convert options:
 |---|---|---|---|
 | EPUB2 | `.epub` | Broad e-reader compatibility | [EPUB and KEPUB](formats/epub.md) |
 | EPUB3 | `.epub` | Modern EPUB readers and semantic footnotes | [EPUB and KEPUB](formats/epub.md) |
-| KEPUB | `.kepub.epub` | Kobo devices | [EPUB and KEPUB](formats/epub.md) |
+| KEPUB | `.kepub.epub` | Kobo devices with OPF2-style packaging | [EPUB and KEPUB](formats/epub.md) |
+| KEPUB3 | `.kepub.epub` | Kobo devices with EPUB3 package/navigation semantics | [EPUB and KEPUB](formats/epub.md) |
 | KFX | `.kfx` | Kindle Enhanced Typesetting | [Kindle KFX/AZW8](formats/kindle.md) |
 | AZW8 | `.azw8` | KFX payload with Kindle Previewer-friendly extension | [Kindle KFX/AZW8](formats/kindle.md) |
 | PDF | `.pdf` | Fixed-page output, outlines, selectable text, printed footnotes | [PDF](formats/pdf.md) |
@@ -101,22 +102,22 @@ Convert options:
 
 ## Feature Matrix
 
-| Feature | EPUB2 | EPUB3 | KEPUB | KFX/AZW8 | PDF | TXT | Markdown |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| Clickable internal links | yes | yes | yes | yes | yes | no | yes |
-| Device navigation | NCX | NAV | NCX/Kobo | Kindle nav | PDF outline | no | headings/anchors |
-| Optional visible TOC page | yes | yes | yes | yes | yes | text | links |
-| CSS styling | yes | yes | yes | mapped to Kindle styles | subset via native renderer | no | no |
-| Embedded fonts | yes | yes | yes | yes | yes | no | no |
-| Block and inline images | yes | yes | yes | yes | yes | placeholders | placeholder/external/embedded |
-| Tables | XHTML | XHTML | XHTML | Kindle table model | native PDF | aligned text | Markdown pipe tables |
-| Code blocks | styled XHTML | styled XHTML | styled XHTML | styled text | styled PDF text | plain text | fenced blocks |
-| Default footnotes | normal sections with backlinks | normal sections with backlinks | normal sections with backlinks | normal linked sections with backlinks, no popups | normal sections with backlinks | normal sections | normal sections with backlinks |
-| Floating footnotes | bidirectional links | EPUB aside/noteref | bidirectional links | Kindle popup footnotes | printed page footnotes | final Notes section | final Notes section with backlinks |
-| `floatRenumbered` labels | normalized | normalized | normalized | normalized | page-local printed labels | normalized endnotes | normalized endnotes |
-| Footnote backlinks | default and float modes | default and float modes | default and float modes | default and float modes | default body links and printed notes | no clickable links | default and float modes |
-| Page map/page labels | optional | optional | optional | optional/generated | native pages | no | no |
-| Debug validation focus | EPUB structure/checks | EPUB3 nav/aside | Kobo packaging | Kindle Previewer/KFX checks | PDF structure/fonts/layout | text rendering | Markdown links/assets |
+| Feature | EPUB2 | EPUB3 | KEPUB | KEPUB3 | KFX/AZW8 | PDF | TXT | Markdown |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Clickable internal links | yes | yes | yes | yes | yes | yes | no | yes |
+| Device navigation | NCX | NAV | NCX/Kobo | NAV/Kobo | Kindle nav | PDF outline | no | headings/anchors |
+| Optional visible TOC page | yes | yes | yes | yes | yes | yes | text | links |
+| CSS styling | yes | yes | yes | yes | mapped to Kindle styles | subset via native renderer | no | no |
+| Embedded fonts | yes | yes | yes | yes | yes | yes | no | no |
+| Block and inline images | yes | yes | yes | yes | yes | yes | placeholders | placeholder/external/embedded |
+| Tables | XHTML | XHTML | XHTML | XHTML | Kindle table model | native PDF | aligned text | Markdown pipe tables |
+| Code blocks | styled XHTML | styled XHTML | styled XHTML | styled XHTML | styled text | styled PDF text | plain text | fenced blocks |
+| Default footnotes | normal sections with backlinks | normal sections with backlinks | normal sections with backlinks | normal sections with backlinks | normal linked sections with backlinks, no popups | normal sections with backlinks | normal sections | normal sections with backlinks |
+| Floating footnotes | bidirectional links | EPUB aside/noteref | bidirectional links | EPUB aside/noteref | Kindle popup footnotes | printed page footnotes | final Notes section | final Notes section with backlinks |
+| `floatRenumbered` labels | normalized | normalized | normalized | normalized | normalized | page-local printed labels | normalized endnotes | normalized endnotes |
+| Footnote backlinks | default and float modes | default and float modes | default and float modes | default and float modes | default and float modes | default body links and printed notes | no clickable links | default and float modes |
+| Page map/page labels | optional | optional | optional | optional | optional/generated | native pages | no | no |
+| Debug validation focus | EPUB structure/checks | EPUB3 nav/aside | Kobo packaging | EPUB3 nav/aside and Kobo packaging | Kindle Previewer/KFX checks | PDF structure/fonts/layout | text rendering | Markdown links/assets |
 
 See [Footnotes](footnotes.md) for a full mode-by-format matrix.
 
@@ -126,7 +127,7 @@ Metadata is read from FB2 `description` fields and written to each output format
 
 `document.metainformation.title_template` controls the exported book title metadata. `document.metainformation.creator_name_template` controls exported author and translator names. `document.metainformation.transliterate` applies to exported title, author, and translator names after template expansion.
 
-| Metadata | EPUB2/KEPUB | EPUB3 | KFX/AZW8 | PDF | TXT | Markdown |
+| Metadata | EPUB2/KEPUB | EPUB3/KEPUB3 | KFX/AZW8 | PDF | TXT | Markdown |
 |---|---|---|---|---|---|---|
 | Title template | `dc:title` | `dc:title` | `title` | Info `Title`, XMP `dc:title` | heading only | YAML `title` |
 | Authors | `dc:creator opf:role="aut"` | `dc:creator` + MARC role | `author` | Info `Author`, XMP `dc:creator` | metadata block | YAML `authors` |
@@ -168,7 +169,7 @@ Common configuration areas:
 | Output naming, metadata, footnote labels, backlinks | [Templates](templates.md) |
 | CSS, fonts, media queries, section splitting | [Stylesheets](stylesheets.md) |
 | Footnote modes and templates | [Footnotes](footnotes.md) |
-| EPUB/KEPUB behavior | [EPUB and KEPUB](formats/epub.md) |
+| EPUB/KEPUB behavior | [EPUB and KEPUB variants](formats/epub.md) |
 | Kindle KFX/AZW8 behavior | [Kindle KFX/AZW8](formats/kindle.md) |
 | PDF behavior | [PDF](formats/pdf.md) |
 | TXT/Markdown behavior | [TXT and Markdown](formats/text.md) |
@@ -221,7 +222,7 @@ Set `document.images.screen.width`, `height`, and `dpi`. See [PDF](formats/pdf.m
 - [Templates](templates.md)
 - [Footnotes](footnotes.md)
 - [Stylesheets](stylesheets.md)
-- [EPUB and KEPUB](formats/epub.md)
+- [EPUB and KEPUB variants](formats/epub.md)
 - [Kindle KFX/AZW8](formats/kindle.md)
 - [PDF](formats/pdf.md)
 - [TXT and Markdown](formats/text.md)

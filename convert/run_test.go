@@ -527,6 +527,7 @@ func TestProcess_DifferentFormats(t *testing.T) {
 	formats := []common.OutputFmt{
 		common.OutputFmtEpub2,
 		common.OutputFmtKepub,
+		common.OutputFmtKepub3,
 		common.OutputFmtKfx,
 		common.OutputFmtPdf,
 		common.OutputFmtTxt,
@@ -534,7 +535,8 @@ func TestProcess_DifferentFormats(t *testing.T) {
 	}
 	for _, format := range formats {
 		t.Run(format.String(), func(t *testing.T) {
-			err := process(ctx, testFile, dstDir, format, logger)
+			formatDstDir := filepath.Join(dstDir, format.String())
+			err := process(ctx, testFile, formatDstDir, format, logger)
 			if err != nil {
 				t.Errorf("process() with format %s error = %v", format, err)
 			}
@@ -604,6 +606,8 @@ func TestParseOutputFmt(t *testing.T) {
 		{"EPUB3 uppercase", "EPUB3", common.OutputFmtEpub3, false},
 		{"kepub", "kepub", common.OutputFmtKepub, false},
 		{"KEPUB uppercase", "KEPUB", common.OutputFmtKepub, false},
+		{"kepub3", "kepub3", common.OutputFmtKepub3, false},
+		{"KEPUB3 uppercase", "KEPUB3", common.OutputFmtKepub3, false},
 		{"kfx", "kfx", common.OutputFmtKfx, false},
 		{"KFX uppercase", "KFX", common.OutputFmtKfx, false},
 		{"azw8", "azw8", common.OutputFmtAzw8, false},
@@ -641,6 +645,7 @@ func TestOutputFmt_String(t *testing.T) {
 		{"epub2", common.OutputFmtEpub2, "epub2"},
 		{"epub3", common.OutputFmtEpub3, "epub3"},
 		{"kepub", common.OutputFmtKepub, "kepub"},
+		{"kepub3", common.OutputFmtKepub3, "kepub3"},
 		{"kfx", common.OutputFmtKfx, "kfx"},
 		{"azw8", common.OutputFmtAzw8, "azw8"},
 		{"pdf", common.OutputFmtPdf, "pdf"},

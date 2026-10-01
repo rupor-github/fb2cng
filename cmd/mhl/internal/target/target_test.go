@@ -43,6 +43,7 @@ func TestSupportsOutputFormat(t *testing.T) {
 		{"epub2 for epub", EPUB, common.OutputFmtEpub2, true},
 		{"epub3 for epub", EPUB, common.OutputFmtEpub3, true},
 		{"kepub for epub", EPUB, common.OutputFmtKepub, true},
+		{"kepub3 for epub", EPUB, common.OutputFmtKepub3, true},
 		{"pdf rejected for epub", EPUB, common.OutputFmtPdf, false},
 		{"kfx rejected for epub", EPUB, common.OutputFmtKfx, false},
 		{"kfx for mobi", MOBI, common.OutputFmtKfx, true},

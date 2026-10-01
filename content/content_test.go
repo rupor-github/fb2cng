@@ -1677,6 +1677,18 @@ func TestPrepare_KepubSplitter(t *testing.T) {
 		}
 	})
 
+	t.Run("kepub3 has splitter", func(t *testing.T) {
+		reader := strings.NewReader(fb2Content)
+		c, err := Prepare(ctx, reader, "test.fb2", common.OutputFmtKepub3, logger)
+		if err != nil {
+			t.Fatalf("Prepare() failed: %v", err)
+		}
+
+		if c.Splitter == nil {
+			t.Error("Expected splitter to be initialized for kepub3, but it's nil")
+		}
+	})
+
 	t.Run("non-kepub has no splitter", func(t *testing.T) {
 		reader := strings.NewReader(fb2Content)
 		c, err := Prepare(ctx, reader, "test.fb2", common.OutputFmtEpub2, logger)

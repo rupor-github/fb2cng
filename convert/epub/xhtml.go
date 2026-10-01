@@ -254,7 +254,7 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, log *
 			section := &body.Sections[i]
 
 			// Choose appropriate element type based on mode and format
-			if c.FootnotesMode.IsFloat() && c.OutputFormat == common.OutputFmtEpub3 {
+			if c.FootnotesMode.IsFloat() && c.OutputFormat.IsEPUB3() {
 				if err := appendFloatFootnoteSectionContentEpub3(bodyDiv, c, section, log); err != nil {
 					return nil, err
 				}
@@ -326,7 +326,7 @@ func createXHTMLDocument(c *content.Content, title string) (*etree.Document, *et
 	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
 
 	// Add DOCTYPE declaration based on output format to make Sigil happy
-	if c.OutputFormat == common.OutputFmtEpub3 {
+	if c.OutputFormat.IsEPUB3() {
 		doc.CreateDirective("DOCTYPE html")
 	} else {
 		doc.CreateDirective(`DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd"`)
@@ -352,7 +352,7 @@ func createXHTMLDocument(c *content.Content, title string) (*etree.Document, *et
 	body := html.CreateElement("body")
 
 	var root *etree.Element
-	if c.OutputFormat == common.OutputFmtKepub {
+	if c.OutputFormat.IsKobo() {
 		bookColumnsDiv := body.CreateElement("div")
 		bookColumnsDiv.CreateAttr("id", "book-columns")
 		inner := bookColumnsDiv.CreateElement("div")
@@ -422,7 +422,7 @@ func bodyToXHTML(
 
 	// EPUB3: Add hidden navigation link at the end of the first main body section.
 	// Currently disabled by callers because nav.xhtml is not a spine item.
-	if addHiddenNav && c.OutputFormat == common.OutputFmtEpub3 {
+	if addHiddenNav && c.OutputFormat.IsEPUB3() {
 		hiddenP := bodyDiv.CreateElement("p")
 		hiddenP.CreateAttr("style", "display: none; visibility: hidden")
 		navLink := hiddenP.CreateElement("a")
@@ -731,7 +731,7 @@ func appendFloatFootnoteSectionContentEpub2(parent *etree.Element, c *content.Co
 			if item.Image != nil {
 				// Render image inline (no div wrapper)
 				var imgsectionElem *etree.Element
-				if c.OutputFormat == common.OutputFmtKepub {
+				if c.OutputFormat.IsKobo() {
 					paragraph, sentence := c.KoboSpanNextSentence()
 					span := sectionElem.CreateElement("span")
 					span.CreateAttr("class", "koboSpan")
@@ -949,7 +949,7 @@ func appendFootnoteSectionContent(parent *etree.Element, c *content.Content, sec
 		return err
 	}
 	backPara := sectionElem.CreateElement("p")
-	if !appendEPUBFootnoteBacklinks(backPara, c, section.ID, epubFootnoteBacklinkOptions{EPUB3Role: c.OutputFormat == common.OutputFmtEpub3}) {
+	if !appendEPUBFootnoteBacklinks(backPara, c, section.ID, epubFootnoteBacklinkOptions{EPUB3Role: c.OutputFormat.IsEPUB3()}) {
 		sectionElem.RemoveChild(backPara)
 	}
 	return nil
@@ -989,7 +989,7 @@ func appendEPUBFootnoteBacklinks(parent *etree.Element, c *content.Content, sect
 		}
 
 		textParent := backLink
-		if c.OutputFormat == common.OutputFmtKepub {
+		if c.OutputFormat.IsKobo() {
 			paragraph, sentence := c.KoboSpanNextSentence()
 			span := backLink.CreateElement("span")
 			span.CreateAttr("class", "koboSpan")
@@ -1224,7 +1224,7 @@ func appendParagraphInline(parent *etree.Element, c *content.Content, p *fb2.Par
 					// Create span for drop cap
 					dropCapSpan := parent.CreateElement("span")
 					dropCapSpan.CreateAttr("class", "dropcap")
-					if c.OutputFormat == common.OutputFmtKepub {
+					if c.OutputFormat.IsKobo() {
 						paragraph, sentence := c.KoboSpanNextSentence()
 						koboSpan := dropCapSpan.CreateElement("span")
 						koboSpan.CreateAttr("class", "koboSpan")
@@ -1233,7 +1233,7 @@ func appendParagraphInline(parent *etree.Element, c *content.Content, p *fb2.Par
 
 					chunks, markers := c.SplitTextByPage(firstChar)
 					for i, chunk := range chunks {
-						if c.OutputFormat == common.OutputFmtKepub {
+						if c.OutputFormat.IsKobo() {
 							koboSpan := dropCapSpan.ChildElements()[0]
 							koboSpan.SetText(koboSpan.Text() + chunk)
 						} else {
@@ -1275,7 +1275,7 @@ func appendInlineText(parent *etree.Element, c *content.Content, text string, hy
 		return
 	}
 
-	if c.OutputFormat == common.OutputFmtKepub && strings.TrimSpace(text) != "" {
+	if c.OutputFormat.IsKobo() && strings.TrimSpace(text) != "" {
 		// Kobo mode: wrap text in span with unique ID
 		for i, chunk := range chunks {
 			for s := range c.Splitter.Sentences(chunk) {
@@ -1408,7 +1408,7 @@ func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inl
 					// Add reference ID for backlink targets.
 					a.CreateAttr("id", ref.RefID)
 					// Add epub:type="noteref" for EPUB3 floating footnotes only.
-					if c.FootnotesMode.IsFloat() && c.OutputFormat == common.OutputFmtEpub3 {
+					if c.FootnotesMode.IsFloat() && c.OutputFormat.IsEPUB3() {
 						a.CreateAttr("epub:type", "noteref")
 						a.CreateAttr("role", "doc-noteref")
 					}
@@ -1428,7 +1428,7 @@ func appendInlineSegment(parent *etree.Element, c *content.Content, seg *fb2.Inl
 	case fb2.InlineImageSegment:
 		if seg.Image != nil {
 			var imgParent *etree.Element
-			if c.OutputFormat == common.OutputFmtKepub {
+			if c.OutputFormat.IsKobo() {
 				paragraph, sentence := c.KoboSpanNextSentence()
 				span := parent.CreateElement("span")
 				span.CreateAttr("class", "koboSpan")
@@ -1460,7 +1460,7 @@ func appendImageElement(parent *etree.Element, c *content.Content, img *fb2.Imag
 
 	c.KoboSpanNextParagraph()
 	var imgParent *etree.Element
-	if c.OutputFormat == common.OutputFmtKepub {
+	if c.OutputFormat.IsKobo() {
 		paragraph, sentence := c.KoboSpanNextSentence()
 		span := div.CreateElement("span")
 		span.CreateAttr("class", "koboSpan")
@@ -1502,7 +1502,7 @@ func appendVignetteImage(parent *etree.Element, c *content.Content, position com
 
 	c.KoboSpanNextParagraph()
 	var imgParent *etree.Element
-	if c.OutputFormat == common.OutputFmtKepub {
+	if c.OutputFormat.IsKobo() {
 		paragraph, sentence := c.KoboSpanNextSentence()
 		span := div.CreateElement("span")
 		span.CreateAttr("class", "koboSpan")

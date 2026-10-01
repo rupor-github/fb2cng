@@ -7,7 +7,7 @@ version: 1
 # https://go-task.github.io/slim-sprig. In all template contexts .Context
 # (string) and .Format (string) are available. .Context is set to the field
 # name to uniquely identify processing context. .Format is the requested output
-# format: epub2, epub3, kepub, kfx, azw8, pdf, txt, or md.
+# format: epub2, epub3, kepub, kepub3, kfx, azw8, pdf, txt, or md.
 
 document:
   # Some programs (CoolReader and some versions of FBReader) expect "old" zip
@@ -33,8 +33,8 @@ document:
   # metainformation
   # List of variables available:
   # - .Context (string) - template field name ("output_name_template")
-  # - .Format (string) - requested output format: epub2, epub3, kepub, kfx,
-  #   azw8, pdf, txt, or md
+  # - .Format (string) - requested output format: epub2, epub3, kepub,
+  #   kepub3, kfx, azw8, pdf, txt, or md
   # - .Title (string) - book title as specified in FB2 metainformation
   # - .Series (array of { .Name (string), .Number (integer), .Parent (integer) })
   #   - series as specified in FB2 metainformation.
@@ -93,16 +93,16 @@ document:
 
   metainformation:
     # NOTE: when generating OPF metainformation for epub2/kepub calibre:series
-    # tags with first collection available are used, for epub3 metainformation
-    # contains all available collections
+    # tags with first collection available are used, for epub3/kepub3
+    # metainformation contains all available collections
 
     # When title_template is set output book title metainformation will be
     # formatted using it. This is often used to conveniently sort device
     # library listings.
     # List of variables available:
     # - .Context (string) - template field name ("title_template")
-    # - .Format (string) - requested output format: epub2, epub3, kepub, kfx,
-    #   azw8, pdf, txt, or md
+    # - .Format (string) - requested output format: epub2, epub3, kepub,
+    #   kepub3, kfx, azw8, pdf, txt, or md
     # - .Title (string) - book title as specified in FB2 metainformation
     # - .Series (array of { .Name (string), .Number (integer), .Parent (integer) })
     #   - series as specified in FB2 metainformation.
@@ -164,8 +164,8 @@ document:
     # available author individually. Device often uses particular format for
     # sorting books by author names. Following fields are available:
     # - .Context (string) - template field name ("creator_name_template")
-    # - .Format (string) - requested output format: epub2, epub3, kepub, kfx,
-    #   azw8, pdf, txt, or md
+    # - .Format (string) - requested output format: epub2, epub3, kepub,
+    #   kepub3, kfx, azw8, pdf, txt, or md
     # - .Index (int) - 0-based author index
     # - .FirstName (string)
     # - .MiddleName (string)
@@ -266,8 +266,8 @@ document:
     #                     sequential numbering controlled by output rules.
     # NOTE: actual generated content will follow output format requirements: for
     # epub2 and kepub floating footnotes use "bi-directional links" method
-    # (A -> B and B -> A), for epub3 they use <aside> and required <epub>
-    # elements, and for PDF float modes footnotes are rendered as printed
+    # (A -> B and B -> A), for epub3 and kepub3 they use <aside> and required
+    # <epub> elements, and for PDF float modes footnotes are rendered as printed
     # page-local footnotes at the bottom of the source page / continuation pages.
     mode: default
 
@@ -278,8 +278,8 @@ document:
     # Template used to render backlinks from footnote bodies to original content.
     # Available fields include:
     # - .Context (string) - template field name ("backlink_template")
-    # - .Format (string) - requested output format: epub2, epub3, kepub, kfx,
-    #   azw8, pdf, txt, or md
+    # - .Format (string) - requested output format: epub2, epub3, kepub,
+    #   kepub3, kfx, azw8, pdf, txt, or md
     # - .RefID (string) - unique ID for this reference occurrence
     # - .TargetID (string) - ID of the footnote being referenced
     # - .RefNumber (int) - 1-based reference occurrence number for this footnote
@@ -333,8 +333,8 @@ document:
     # validation, use: {{- "" -}}
     # Following fields are available:
     # - .Context (string) - template field name ("label_template")
-    # - .Format (string) - requested output format: epub2, epub3, kepub, kfx,
-    #   azw8, pdf, txt, or md
+    # - .Format (string) - requested output format: epub2, epub3, kepub,
+    #   kepub3, kfx, azw8, pdf, txt, or md
     # - .BodyTitle (string) - can be empty
     # - .BodyNumber (int) - 1-based body index
     # - .NoteTitle (string) - can be empty
@@ -388,8 +388,8 @@ document:
     # will have title (header) with authors formatted using it
     # List of variables available:
     # - .Context (string) - template field name ("authors_template")
-    # - .Format (string) - requested output format: epub2, epub3, kepub, kfx,
-    #   azw8, pdf, txt, or md
+    # - .Format (string) - requested output format: epub2, epub3, kepub,
+    #   kepub3, kfx, azw8, pdf, txt, or md
     # - .Title (string) - book title as specified in FB2 metainformation
     # - .Series (array of { .Name (string), .Number (integer), .Parent (integer) })
     #   - series as specified in FB2 metainformation.

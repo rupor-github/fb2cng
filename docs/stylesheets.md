@@ -1,6 +1,6 @@
 # Stylesheets
 
-fb2cng uses CSS stylesheets for EPUB, KEPUB, KFX/AZW8, and PDF output. TXT and Markdown ignore visual CSS styling, though text transformations and normalized content still apply before rendering.
+fb2cng uses CSS stylesheets for EPUB, KEPUB variants, KFX/AZW8, and PDF output. TXT and Markdown ignore visual CSS styling, though text transformations and normalized content still apply before rendering.
 
 Set a custom stylesheet with:
 

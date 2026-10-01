@@ -632,7 +632,7 @@ func processBook(
 
 	// Generate output in the requested format
 	switch c.OutputFormat {
-	case common.OutputFmtEpub2, common.OutputFmtEpub3, common.OutputFmtKepub:
+	case common.OutputFmtEpub2, common.OutputFmtEpub3, common.OutputFmtKepub, common.OutputFmtKepub3:
 		if err := epub.Generate(ctx, c, tmpOutputName, &env.Cfg.Document, log, outputName); err != nil {
 			return fmt.Errorf("unable to generate output: %w", err)
 		}

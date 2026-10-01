@@ -300,8 +300,8 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 		c.Hyphen = text.NewHyphenator(book.Description.TitleInfo.Lang, log)
 	}
 
-	// We only need sentences tokenizer for kepub
-	if outputFormat == common.OutputFmtKepub {
+	// We only need sentences tokenizer for Kobo formats.
+	if outputFormat.IsKobo() {
 		c.Splitter = text.NewSplitter(book.Description.TitleInfo.Lang, log)
 	}
 

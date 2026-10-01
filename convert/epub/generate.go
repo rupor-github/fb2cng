@@ -183,7 +183,7 @@ func Generate(
 	}
 
 	switch c.OutputFormat {
-	case common.OutputFmtEpub3:
+	case common.OutputFmtEpub3, common.OutputFmtKepub3:
 		if err := writeNav(zw, c, cfg, chapters, idToFile, log); err != nil {
 			return fmt.Errorf("unable to write NAV: %w", err)
 		}
@@ -371,7 +371,7 @@ func generateCoverPageDoc(c *content.Content, cfg *config.DocumentConfig, log *z
 	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
 
 	// Add DOCTYPE declaration based on output format to make Sigil happy
-	if c.OutputFormat == common.OutputFmtEpub3 {
+	if c.OutputFormat.IsEPUB3() {
 		doc.CreateDirective("DOCTYPE html")
 	} else {
 		doc.CreateDirective(`DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd"`)
@@ -379,7 +379,7 @@ func generateCoverPageDoc(c *content.Content, cfg *config.DocumentConfig, log *z
 
 	html := doc.CreateElement("html")
 	html.CreateAttr("xmlns", "http://www.w3.org/1999/xhtml")
-	if c.OutputFormat == common.OutputFmtEpub3 {
+	if c.OutputFormat.IsEPUB3() {
 		html.CreateAttr("xmlns:epub", "http://www.idpf.org/2007/ops")
 	}
 
@@ -403,7 +403,7 @@ func generateCoverPageDoc(c *content.Content, cfg *config.DocumentConfig, log *z
 	title.SetText(c.Book.Description.TitleInfo.BookTitle.Value)
 
 	body := html.CreateElement("body")
-	if c.OutputFormat == common.OutputFmtEpub3 {
+	if c.OutputFormat.IsEPUB3() {
 		body.CreateAttr("epub:type", "cover")
 	}
 
@@ -511,7 +511,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	pkg.CreateAttr("unique-identifier", "BookId")
 
 	switch c.OutputFormat {
-	case common.OutputFmtEpub3:
+	case common.OutputFmtEpub3, common.OutputFmtKepub3:
 		pkg.CreateAttr("version", "3.0")
 	default:
 		pkg.CreateAttr("version", "2.0")
@@ -547,14 +547,14 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		log.Debug("Invalid ISBN metadata, skipping", zap.Error(err))
 	} else if isbn != "" {
 		dcISBN := metadata.CreateElement("dc:identifier")
-		if c.OutputFormat == common.OutputFmtEpub3 {
+		if c.OutputFormat.IsEPUB3() {
 			dcISBN.CreateAttr("id", "isbn")
 		} else {
 			dcISBN.CreateAttr("opf:scheme", "ISBN")
 		}
 		dcISBN.SetText(isbn)
 
-		if c.OutputFormat == common.OutputFmtEpub3 {
+		if c.OutputFormat.IsEPUB3() {
 			identifierType := metadata.CreateElement("meta")
 			identifierType.CreateAttr("refines", "#isbn")
 			identifierType.CreateAttr("property", "identifier-type")
@@ -573,7 +573,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		log.Debug("Invalid date metadata, skipping", zap.Error(err))
 	} else if date != "" {
 		dcDate := metadata.CreateElement("dc:date")
-		if c.OutputFormat != common.OutputFmtEpub3 {
+		if !c.OutputFormat.IsEPUB3() {
 			dcDate.CreateAttr("opf:event", "publication")
 		}
 		dcDate.SetText(date)
@@ -592,7 +592,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		dcCreator.SetText(authorName)
 
 		// EPUB3 uses <meta property="role"> with refines, EPUB2 uses opf:role attribute
-		if c.OutputFormat == common.OutputFmtEpub3 {
+		if c.OutputFormat.IsEPUB3() {
 			creatorID := fmt.Sprintf("creator%d", idx)
 			dcCreator.CreateAttr("id", creatorID)
 
@@ -616,7 +616,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 
 		dcContributor := metadata.CreateElement("dc:contributor")
 		dcContributor.SetText(translatorName)
-		if c.OutputFormat == common.OutputFmtEpub3 {
+		if c.OutputFormat.IsEPUB3() {
 			translatorID := fmt.Sprintf("translator%d", idx)
 			dcContributor.CreateAttr("id", translatorID)
 
@@ -634,7 +634,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		meta := metadata.CreateElement("dc:subject")
 		meta.SetText(subject.Value)
 		if subject.Kind == metainfo.SubjectGenre {
-			if c.OutputFormat == common.OutputFmtEpub3 {
+			if c.OutputFormat.IsEPUB3() {
 				subjectID := fmt.Sprintf("subject-genre-%d", idx)
 				meta.CreateAttr("id", subjectID)
 
@@ -661,7 +661,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	}
 
 	if len(c.Book.Description.TitleInfo.Sequences) > 0 {
-		if c.OutputFormat == common.OutputFmtEpub3 {
+		if c.OutputFormat.IsEPUB3() {
 			// EPUB3: use belongs-to-collection for each sequence
 			addSequencesToMetadata(metadata, c.Book.Description.TitleInfo.Sequences)
 		} else {
@@ -688,7 +688,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	}
 
 	// EPUB3 requires dcterms:modified metadata
-	if c.OutputFormat == common.OutputFmtEpub3 {
+	if c.OutputFormat.IsEPUB3() {
 		modifiedMeta := metadata.CreateElement("meta")
 		modifiedMeta.CreateAttr("property", "dcterms:modified")
 		modifiedMeta.SetText(time.Now().UTC().Format("2006-01-02T15:04:05Z"))
@@ -697,7 +697,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	manifest := pkg.CreateElement("manifest")
 
 	switch c.OutputFormat {
-	case common.OutputFmtEpub3:
+	case common.OutputFmtEpub3, common.OutputFmtKepub3:
 		item := manifest.CreateElement("item")
 		item.CreateAttr("id", "nav")
 		item.CreateAttr("href", "nav.xhtml")
@@ -741,7 +741,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		coverPageItem.CreateAttr("id", "cover-page")
 		coverPageItem.CreateAttr("href", "cover.xhtml")
 		coverPageItem.CreateAttr("media-type", "application/xhtml+xml")
-		if c.OutputFormat == common.OutputFmtEpub3 {
+		if c.OutputFormat.IsEPUB3() {
 			coverPageItem.CreateAttr("properties", "svg")
 		}
 	}
@@ -772,7 +772,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 			item.CreateAttr("id", "book-cover-image")
 			item.CreateAttr("href", img.Filename)
 			item.CreateAttr("media-type", img.MimeType)
-			if c.OutputFormat == common.OutputFmtEpub3 {
+			if c.OutputFormat.IsEPUB3() {
 				item.CreateAttr("properties", "cover-image")
 			}
 		} else {
@@ -789,7 +789,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 		coverRef.CreateAttr("linear", "no")
 	}
 
-	if c.OutputFormat != common.OutputFmtEpub3 {
+	if !c.OutputFormat.IsEPUB3() {
 		spine.CreateAttr("toc", "ncx")
 		// Add page-map attribute for AdobeDE
 		if c.PageSize > 0 && c.AdobeDE {
@@ -828,7 +828,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	}
 
 	// EPUB2: Add guide section
-	if c.OutputFormat != common.OutputFmtEpub3 {
+	if !c.OutputFormat.IsEPUB3() {
 		guide := pkg.CreateElement("guide")
 
 		if c.CoverID != "" {
