@@ -77,6 +77,7 @@ Convert options:
 | `--to TYPE` | `epub2`, `epub3`, `kepub`, `kepub3`, `kfx`, `azw8`, `pdf`, `txt`, or `md` |
 | `--ebook`, `--eb` | For Kindle formats, mark output as ebook/EBOK instead of personal document/PDOC |
 | `--asin ASIN` | For Kindle formats, set ASIN metadata |
+| `--no-cover` | Omit existing or generated covers; ignored with a warning for KFX/AZW8 |
 | `--output-file FILE`, `-o FILE` | Write a single source book to exact output file path |
 | `--nodirs`, `--nd` | Do not preserve input directory structure in output |
 | `--overwrite`, `--ow` | Overwrite existing output files |
@@ -85,6 +86,12 @@ Convert options:
 `SOURCE` can be a single FB2 file, a directory, an archive entry, or a directory inside an archive. Archives inside archives are not supported. `DESTINATION` is always a directory; if omitted, the current directory is used.
 
 `--output-file` is different from `DESTINATION`: it is an exact final file path for single-book conversion. It cannot be used with `DESTINATION`, recursive directory conversion, or archive paths that contain multiple FB2 books. It is useful when another application already decided the expected output file name.
+
+Use `--no-cover` to produce EPUB2/3, KEPUB/KEPUB3, or PDF without a dedicated cover page or cover metadata, even when the FB2 supplies a cover or `document.images.cover.generate` is enabled. Images also used in the book body remain ordinary illustrations. TXT and Markdown already skip the dedicated cover. Kindle formats require a cover, so KFX/AZW8 ignore the flag and log a warning.
+
+```bash
+fbc convert --no-cover --to pdf book.fb2
+```
 
 ## Supported Formats
 

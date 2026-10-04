@@ -169,6 +169,7 @@ func main() {
 						Usage:   "for Kindle formats generate as ebook (EBOK) instead of personal document (PDOC)",
 					},
 					&cli.StringFlag{Name: "asin", Usage: "set ASIN (10 chars, A-Z0-9); used only for Kindle formats"},
+					&cli.BoolFlag{Name: "no-cover", Usage: "omit existing or generated cover; ignored with a warning for Kindle formats"},
 					&cli.StringFlag{Name: "output-file", Aliases: []string{"o"}, Usage: "write single-book conversion to exact output `FILE`"},
 					&cli.BoolFlag{Name: "nodirs", Aliases: []string{"nd"}, Usage: "when producing output do not keep input directory structure"},
 					&cli.BoolFlag{Name: "overwrite", Aliases: []string{"ow"}, Usage: "continue even if destination exists, overwrite files"},

@@ -83,6 +83,11 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 		format = common.OutputFmtEpub2
 	}
 
+	env.NoCover = cmd.Bool("no-cover") && !format.ForKindle()
+	if cmd.Bool("no-cover") && format.ForKindle() {
+		log.Warn("Ignoring --no-cover for Kindle output: a cover is required", zap.Stringer("format", format))
+	}
+
 	// Amazon formats must always have valid cover page
 	if format.ForKindle() {
 		env.Cfg.Document.Images.Cover.Generate = true
@@ -92,7 +97,7 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 		env.Cfg.Document.Images.Cover.Generate = true
 	}
 
-	if env.Cfg.Document.Images.Cover.Generate {
+	if env.Cfg.Document.Images.Cover.Generate && !env.NoCover {
 		img, err := imgutil.RasterizeSVGToImage(defaultCoverSVG, env.Cfg.Document.Images.Screen.Width, env.Cfg.Document.Images.Screen.Height, 0)
 		if err != nil {
 			return fmt.Errorf("unable to rasterize embedded default cover svg: %w", err)

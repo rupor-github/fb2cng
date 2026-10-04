@@ -22,6 +22,7 @@ type LocalEnv struct {
 
 	// used by convert subcommand
 	NoDirs           bool
+	NoCover          bool
 	Overwrite        bool
 	KindleEbook      bool
 	KindleASIN       string

@@ -189,6 +189,17 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 
 	// Handle cover image before normalization
 	var coverID string
+	noCover := env.NoCover && !outputFormat.ForKindle()
+	var omittedCoverIDs map[string]bool
+	if noCover {
+		// Remove cover references before link indexing and image preparation.
+		// Images also referenced in the body remain ordinary illustrations.
+		omittedCoverIDs = make(map[string]bool, len(book.Description.TitleInfo.Coverpage))
+		for _, cover := range book.Description.TitleInfo.Coverpage {
+			omittedCoverIDs[strings.TrimPrefix(cover.Href, "#")] = true
+		}
+		book.Description.TitleInfo.Coverpage = nil
+	}
 
 	// If cover image is specified, remember it
 	if len(book.Description.TitleInfo.Coverpage) > 0 {
@@ -200,7 +211,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 
 	// If no cover image is specified, and default cover generation is
 	// requested, add default cover image
-	if len(coverID) == 0 && env.Cfg.Document.Images.Cover.Generate {
+	if len(coverID) == 0 && env.Cfg.Document.Images.Cover.Generate && !noCover {
 		// Find an unused cover ID
 		existingIDs := make(map[string]bool)
 		for i := range book.Binaries {
@@ -254,6 +265,14 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 	book = book.TransformText(&env.Cfg.Document.Transformations)
 	// Mark first paragraphs in sections with drop-cap style for rendering
 	book = book.MarkDropcaps(&env.Cfg.Document.Dropcaps)
+
+	// Drop deliberately omitted cover-only binaries without processing them or
+	// warning that they are unreferenced. Keep binaries reused by body content.
+	if noCover {
+		book.Binaries = slices.DeleteFunc(book.Binaries, func(binary fb2.BinaryObject) bool {
+			return omittedCoverIDs[binary.ID] && len(links[binary.ID]) == 0
+		})
+	}
 
 	// Process all binary objects creating actual images and reference index.
 	// This happens after NormalizeLinks so the not-found image binary is included.

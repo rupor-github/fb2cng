@@ -22,6 +22,8 @@
 
 EPUB2/3 and KEPUB/KEPUB3 output is intended to pass the latest [epubcheck](https://www.w3.org/publishing/epubcheck/) without errors or warnings.
 
+Kindle KFX/AZW8 output aims to follow Amazon's Kindle Publishing Guidelines as closely as possible.
+
 ### Documentation
 
 [User guide](docs/guide.md)
