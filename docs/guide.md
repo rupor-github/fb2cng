@@ -117,6 +117,7 @@ fbc convert --no-cover --to pdf book.fb2
 | CSS styling | yes | yes | yes | yes | mapped to Kindle styles | subset via native renderer | no | no |
 | Embedded fonts | yes | yes | yes | yes | yes | yes | no | no |
 | Block and inline images | yes | yes | yes | yes | yes | yes | placeholders | placeholder/external/embedded |
+| Cover handling | optional; `--no-cover` | optional; `--no-cover` | optional; `--no-cover` | optional; `--no-cover` | required; flag ignored with warning | optional; `--no-cover` | omitted | omitted |
 | Tables | XHTML | XHTML | XHTML | XHTML | Kindle table model | native PDF | aligned text | Markdown pipe tables |
 | Code blocks | styled XHTML | styled XHTML | styled XHTML | styled XHTML | styled text | styled PDF text | plain text | fenced blocks |
 | Default footnotes | normal sections with backlinks | normal sections with backlinks | normal sections with backlinks | normal sections with backlinks | normal linked sections with backlinks, no popups | normal sections with backlinks | normal sections | normal sections with backlinks |
