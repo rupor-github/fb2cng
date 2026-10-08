@@ -2,6 +2,7 @@ package convert
 
 import (
 	"archive/zip"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -26,11 +27,13 @@ func isArchiveFile(fname string) (bool, error) {
 	}
 	defer file.Close()
 
-	header := make([]byte, 262)
-	if count, err := file.Read(header); err != nil {
+	// ZIP detection only needs the four-byte signature.
+	header := make([]byte, 4)
+	if _, err := io.ReadFull(file, header); err != nil {
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			return false, nil
+		}
 		return false, err
-	} else if count < 262 {
-		return false, nil
 	}
 	return filetype.Is(header, "zip"), nil
 }

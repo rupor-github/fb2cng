@@ -43,31 +43,62 @@ func TestIsArchiveFile(t *testing.T) {
 		}
 	})
 
-	// Test valid zip file - using actual zip creation
-	t.Run("valid zip file via zip package", func(t *testing.T) {
-		filePath := filepath.Join(tmpDir, "test2.zip")
-		zipFile, err := os.Create(filePath)
-		if err != nil {
-			t.Fatalf("Failed to create zip file: %v", err)
-		}
-		w := zip.NewWriter(zipFile)
-		f, err := w.Create("test.txt")
-		if err != nil {
-			t.Fatalf("Failed to create file in zip: %v", err)
-		}
-		content := make([]byte, 300)
-		f.Write(content)
-		w.Close()
-		zipFile.Close()
+	for _, name := range []string{"empty zip", "small zip with entry"} {
+		t.Run(name, func(t *testing.T) {
+			var buf bytes.Buffer
+			w := zip.NewWriter(&buf)
+			if name == "small zip with entry" {
+				f, err := w.Create("test.txt")
+				if err != nil {
+					t.Fatalf("Failed to create file in zip: %v", err)
+				}
+				if _, err := f.Write([]byte("test")); err != nil {
+					t.Fatalf("Failed to write file in zip: %v", err)
+				}
+			}
+			if err := w.Close(); err != nil {
+				t.Fatalf("Failed to close zip writer: %v", err)
+			}
+			if buf.Len() >= 262 {
+				t.Fatalf("Expected zip shorter than 262 bytes, got %d", buf.Len())
+			}
+			filePath := filepath.Join(t.TempDir(), "test.zip")
+			if err := os.WriteFile(filePath, buf.Bytes(), 0o644); err != nil {
+				t.Fatalf("Failed to create zip file: %v", err)
+			}
+			got, err := isArchiveFile(filePath)
+			if err != nil {
+				t.Fatalf("isArchiveFile() error = %v", err)
+			}
+			if !got {
+				t.Error("isArchiveFile() = false, want true")
+			}
+		})
+	}
 
-		got, err := isArchiveFile(filePath)
-		if err != nil {
-			t.Errorf("isArchiveFile() error = %v", err)
-		}
-		// Note: This test verifies the function works with real zip files
-		// The filetype detection library behavior may vary
-		_ = got
-	})
+	for _, tt := range []struct {
+		name string
+		data []byte
+	}{
+		{name: "empty file"},
+		{name: "one byte", data: []byte{'P'}},
+		{name: "two bytes", data: []byte{'P', 'K'}},
+		{name: "three bytes", data: []byte{'P', 'K', 0x03}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			filePath := filepath.Join(t.TempDir(), "test.zip")
+			if err := os.WriteFile(filePath, tt.data, 0o644); err != nil {
+				t.Fatalf("Failed to create test file: %v", err)
+			}
+			got, err := isArchiveFile(filePath)
+			if err != nil {
+				t.Fatalf("isArchiveFile() error = %v", err)
+			}
+			if got {
+				t.Error("isArchiveFile() = true, want false")
+			}
+		})
+	}
 }
 
 // TestIsArchiveFile_NonExistent tests with non-existent file
