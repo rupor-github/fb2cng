@@ -78,6 +78,7 @@ func addTitleAsHeading(
 		var isLink bool
 		var linkTo string
 		var isFootnoteLink bool
+		var backlinkRefID string
 		switch seg.Kind {
 		case fb2.InlineStrong:
 			segStyle = "strong"
@@ -107,6 +108,7 @@ func addTitleAsHeading(
 					isFootnoteLink = c.FootnotesMode.IsFloat()
 					// Register this footnote reference for backlink generation
 					ref := c.AddFootnoteBackLinkRef(linkTo)
+					backlinkRefID = ref.RefID
 					// Collect RefID to register with EID after the element is created (offset set below)
 					backlinkRefIDs = append(backlinkRefIDs, BacklinkRefWithOffset{RefID: ref.RefID})
 				} else {
@@ -124,8 +126,8 @@ func addTitleAsHeading(
 		startText := GetPseudoStartText(seg, segStyle, styles)
 		start := nw.ContentStartOffset(startText)
 
-		// Now that start is known, set the offset on the backlink ref we just collected
-		if isFootnoteLink && len(backlinkRefIDs) > 0 {
+		// Backlink positions are needed in both default and floating modes.
+		if backlinkRefID != "" {
 			backlinkRefIDs[len(backlinkRefIDs)-1].Offset = start
 		}
 

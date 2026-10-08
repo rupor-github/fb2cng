@@ -264,6 +264,82 @@ func TestKFXDefaultFootnotesDoNotEmitPopupMarkers(t *testing.T) {
 	}
 }
 
+func TestKFXBacklinksPreserveReferenceOffsets(t *testing.T) {
+	for _, mode := range []common.FootnotesMode{common.FootnotesModeDefault, common.FootnotesModeFloat} {
+		for _, kind := range []string{"paragraph", "mixed", "title"} {
+			t.Run(mode.String()+"/"+kind, func(t *testing.T) {
+				segments := []fb2.InlineSegment{{Kind: fb2.InlineText, Text: strings.Repeat("я", 80) + " "}}
+				firstOffset := 81
+				if kind == "mixed" {
+					segments = append(segments, fb2.InlineSegment{
+						Kind: fb2.InlineImageSegment, Image: &fb2.InlineImage{Href: "#img"},
+					})
+					firstOffset++ // Inline images occupy one position.
+				}
+				segments = append(segments,
+					fb2.InlineSegment{Kind: fb2.InlineLink, Href: "#n1", Children: []fb2.InlineSegment{
+						{Kind: fb2.InlineStrong, Text: "[1]"},
+					}},
+					fb2.InlineSegment{Kind: fb2.InlineText, Text: strings.Repeat("ю", 80) + " "},
+					fb2.InlineSegment{Kind: fb2.InlineLink, Href: "#n2", Text: "[2]"},
+				)
+				book := kfxDefaultBacklinkBook()
+				section := &book.Bodies[0].Sections[0]
+				para := &fb2.Paragraph{Text: segments}
+				if kind == "title" {
+					section.Title = &fb2.Title{Items: []fb2.TitleItem{{Paragraph: para}}}
+					section.Content = nil
+				} else {
+					section.Content = []fb2.FlowItem{{Kind: fb2.FlowParagraph, Paragraph: para}}
+				}
+				// Keep both footnotes free of references so each has one backlink.
+				book.Bodies[1].Sections[1].Content[0].Paragraph.Text = []fb2.InlineSegment{
+					{Kind: fb2.InlineText, Text: "note two"},
+				}
+				c := &content.Content{
+					Book: book, OutputFormat: common.OutputFmtKfx, FootnotesMode: mode,
+					FootnotesIndex: fb2.FootnoteRefs{"n1": {}, "n2": {}}, BacklinkTemplate: "[<]",
+				}
+				images := imageResourceInfoByID{"img": {ResourceName: "e1", Width: 10, Height: 10}}
+				fragments, _, _, _, _, targets, _, _, err := generateStoryline(
+					context.Background(), c, NewStyleRegistry(), images, 1000,
+				)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var firstEID int
+				for i, noteID := range []string{"n1", "n2"} {
+					refs := c.BackLinkIndex[noteID]
+					if len(refs) != 1 {
+						t.Fatalf("%s backlinks = %+v, want one", noteID, refs)
+					}
+					anchors := buildAnchorFragments(targets, map[string]bool{refs[0].RefID: true})
+					if len(anchors) != 1 {
+						t.Fatalf("%s anchors = %d, want one", noteID, len(anchors))
+					}
+					position := anchors[0].Value.(StructValue)[SymPosition].(StructValue)
+					wantOffset := firstOffset + i*84
+					if offset, ok := position.GetInt(SymOffset); !ok || offset != int64(wantOffset) {
+						t.Errorf("%s anchor offset = %d (present=%v), want %d", noteID, offset, ok, wantOffset)
+					}
+					if i == 0 {
+						firstEID = targets[refs[0].RefID].EID
+					} else if targets[refs[0].RefID].EID != firstEID {
+						t.Error("references should target the same content entry")
+					}
+				}
+				if c.BackLinkIndex["n1"][0].LocationNumber == c.BackLinkIndex["n2"][0].LocationNumber {
+					t.Error("separated references should have distinct location numbers")
+				}
+				if mode == common.FootnotesModeDefault &&
+					kfxSymbolFieldCount(fragments, SymYjDisplay, SymbolValue(SymYjNote)) != 0 {
+					t.Error("default-mode links should not enable footnote popups")
+				}
+			})
+		}
+	}
+}
+
 func kfxDefaultBacklinkBook() *fb2.FictionBook {
 	book := &fb2.FictionBook{
 		Bodies: []fb2.Body{
