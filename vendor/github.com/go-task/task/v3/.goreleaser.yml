@@ -82,8 +82,28 @@ nfpms:
       - src: completion/nu/task-completions.nu
         dst: /usr/share/nushell/vendor/autoload/task-completions.nu
 
+snapcrafts:
+  - name: task
+    title: Task
+    summary: A task runner / simpler Make alternative written in Go
+    description: |
+      Task is a simple tool that allows you to easily run development and build
+      tasks. Task is written in Golang, but can be used to develop any language.
+      It aims to be simpler and easier to use then GNU Make.
+    license: MIT
+    base: bare
+    grade: stable
+    confinement: classic
+    publish: true
+    disable: '{{ .IsNightly }}'
+    apps:
+      task:
+        command: task
+
 homebrew_casks:
   - name: go-task
+    alternative_names:
+      - 'go-task@{{ .Major }}.{{ .Minor }}'
     description: A fast, cross-platform build tool inspired by Make, designed for modern workflows.
     homepage: https://taskfile.dev
     binaries:
@@ -184,3 +204,12 @@ cloudsmiths:
         - "alpine/any-version"
     component: main
     republish: true
+
+announce:
+  skip: '{{ .IsNightly }}'
+  discord:
+    author: Task
+    icon_url: https://taskfile.dev/img/logo.png
+    # #43aba2, the primary color of the website.
+    color: '4434850'
+    message_template: '[Task {{ .Tag }}]({{ .ReleaseURL }}) — A new release is available! Check the changelog for details.'

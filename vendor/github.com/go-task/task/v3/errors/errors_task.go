@@ -44,16 +44,18 @@ func (err *TaskRunError) Error() string {
 }
 
 func (err *TaskRunError) Code() int {
+	var te TaskError
+	if As(err.Err, &te) {
+		return te.Code()
+	}
 	return CodeTaskRunError
 }
 
 func (err *TaskRunError) TaskExitCode() int {
-	var exit interp.ExitStatus
-	if errors.As(err.Err, &exit) {
+	if exit, ok := errors.AsType[interp.ExitStatus](err.Err); ok {
 		return int(exit)
 	}
-	var timeout *TaskTimeoutError
-	if errors.As(err.Err, &timeout) {
+	if _, ok := errors.AsType[*TaskTimeoutError](err.Err); ok {
 		return TimeoutExitCode
 	}
 	return err.Code()

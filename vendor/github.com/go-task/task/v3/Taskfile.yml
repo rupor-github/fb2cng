@@ -158,6 +158,16 @@ tasks:
     cmds:
       - go test -bench=. -benchmem -tags=fsbench -run=^$ ./...
 
+  test:completion:
+    desc: Tests the shell completion engine and wrappers (bash, zsh, fish, nu, powershell)
+    sources:
+      - internal/complete/**/*.go
+      - cmd/task/**/*.go
+      - completion/**/*
+      - testdata/completion/*
+    cmds:
+      - bash testdata/completion/run.sh
+
   goreleaser:test:
     desc: Tests release process without publishing
     cmds:
@@ -214,11 +224,6 @@ tasks:
         sh: "go run ./cmd/release --version {{index .MATCH 0}}"
       COMPLETE_MESSAGE: |
         Creating release with GoReleaser: https://github.com/go-task/task/actions/workflows/release.yml
-
-        Please wait for the CI to finish and then do the following:
-
-        - Copy the changelog for v{{.VERSION}} to the GitHub release
-        - Update and push the snapcraft manifest in https://github.com/go-task/snap/blob/main/snap/snapcraft.yaml
     preconditions:
       - sh: test $(git rev-parse --abbrev-ref HEAD) = "main"
         msg: "You must be on the main branch to release"
