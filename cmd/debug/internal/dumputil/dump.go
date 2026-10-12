@@ -7,6 +7,7 @@ import (
 	"archive/zip"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,7 +27,7 @@ func DumpDumpTxt(container *kfx.Container, inPath, outDir string, overwrite bool
 }
 
 // DumpResources writes $417/$418 raw media/font blobs into <stem>-resources.zip.
-func DumpResources(container *kfx.Container, inPath, outDir string, overwrite bool) (retErr error) {
+func DumpResources(container *kfx.Container, inPath, outDir string, overwrite bool) error {
 	base := filepath.Base(inPath)
 	stem := strings.TrimSuffix(base, filepath.Ext(base))
 	dir := filepath.Dir(inPath)
@@ -34,28 +35,23 @@ func DumpResources(container *kfx.Container, inPath, outDir string, overwrite bo
 		dir = outDir
 	}
 	outPath := filepath.Join(dir, stem+"-resources.zip")
-	if _, err := os.Stat(outPath); err == nil {
-		if !overwrite {
-			return fmt.Errorf("output file already exists: %s (use -overwrite)", outPath)
-		}
-		if err := os.Remove(outPath); err != nil {
-			return err
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
+	written := 0
+	if err := writeOutputFile(outPath, overwrite, func(out io.Writer) error {
+		var err error
+		written, err = writeResources(container, out)
+		return err
+	}); err != nil {
 		return err
 	}
+	_, _ = fmt.Fprintf(os.Stderr, "resources: wrote %d file(s) into %s\n", written, outPath)
+	return nil
+}
 
-	f, err := os.Create(outPath)
-	if err != nil {
-		return err
-	}
-	defer func() { retErr = errors.Join(retErr, f.Close()) }()
-
-	zw := zip.NewWriter(f)
+func writeResources(container *kfx.Container, out io.Writer) (written int, retErr error) {
+	zw := zip.NewWriter(out)
 	defer func() { retErr = errors.Join(retErr, zw.Close()) }()
 
 	usedNames := make(map[string]int)
-	written := 0
 	for _, frag := range append(container.Fragments.GetByType(kfx.SymRawMedia), container.Fragments.GetByType(kfx.SymRawFont)...) {
 		blob, ok := AsBlob(frag.Value)
 		if !ok || len(blob) == 0 {
@@ -88,16 +84,15 @@ func DumpResources(container *kfx.Container, inPath, outDir string, overwrite bo
 
 		w, err := zw.Create(entryName)
 		if err != nil {
-			return err
+			return written, err
 		}
 		if _, err := w.Write(blob); err != nil {
-			return err
+			return written, err
 		}
 		written++
 	}
 
-	_, _ = fmt.Fprintf(os.Stderr, "resources: wrote %d file(s) into %s\n", written, outPath)
-	return nil
+	return written, nil
 }
 
 // WriteOutput writes data to <stem><suffix> in either the input file's directory or outDir.
@@ -110,15 +105,10 @@ func WriteOutput(inPath, outDir, suffix string, data []byte, overwrite bool) err
 	}
 	outPath := filepath.Join(dir, stem+suffix)
 
-	if _, err := os.Stat(outPath); err == nil {
-		if !overwrite {
-			return fmt.Errorf("output file already exists: %s (use -overwrite)", outPath)
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
+	if err := writeOutputFile(outPath, overwrite, func(out io.Writer) error {
+		_, err := out.Write(data)
 		return err
-	}
-
-	if err := os.WriteFile(outPath, data, 0o644); err != nil {
+	}); err != nil {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "wrote %s\n", outPath)
