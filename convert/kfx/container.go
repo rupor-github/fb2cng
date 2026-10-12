@@ -193,6 +193,9 @@ func ReadContainer(data []byte) (*Container, error) {
 				return nil, fmt.Errorf("read format capabilities: %w", err)
 			}
 		}
+		if err := r.Err(); err != nil {
+			return nil, fmt.Errorf("read format capabilities: %w", err)
+		}
 	}
 
 	// Read entity directory and entities
@@ -288,6 +291,9 @@ func (c *Container) parseEntity(data, lstProlog []byte, ftype, fid KFXSymbol) (*
 		// written without the Ion system symbol offset.
 		r := NewIonReaderWithLocalSymbols(lstProlog, payload, c.LocalSymbols)
 		if !r.Next() {
+			if err := r.Err(); err != nil {
+				return nil, fmt.Errorf("read entity payload: %w", err)
+			}
 			return nil, errors.New("no value in entity payload")
 		}
 		var err error

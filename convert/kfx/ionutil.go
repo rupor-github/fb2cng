@@ -74,7 +74,7 @@ func DecodeIon(prolog, data []byte, v any) error {
 	combined = append(combined, prolog...)
 	combined = append(combined, ionData...)
 
-	if err := ion.Unmarshal(combined, v, sharedSymbolTable); err != nil {
+	if err := ion.NewDecoder(newGuardedIonReader(combined)).DecodeTo(v); err != nil {
 		return err
 	}
 	if val, ok := v.(interface{ Validate() error }); ok {
@@ -85,7 +85,7 @@ func DecodeIon(prolog, data []byte, v any) error {
 
 // DecodeSymbolTable decodes an Ion symbol table from binary data.
 func DecodeSymbolTable(data []byte) (ion.SymbolTable, error) {
-	r := ion.NewReaderCat(bytes.NewReader(data), ion.NewCatalog(sharedSymbolTable))
+	r := newGuardedIonReader(data)
 	r.Next() // Advance to read the symbol table
 	if err := r.Err(); err != nil {
 		return nil, err
@@ -390,21 +390,16 @@ func NewIonReader(prolog, data []byte) *IonReader {
 	combined := make([]byte, 0, len(prolog)+len(ionData))
 	combined = append(combined, prolog...)
 	combined = append(combined, ionData...)
-	r := ion.NewReaderCat(bytes.NewReader(combined), ion.NewCatalog(sharedSymbolTable))
-	return &IonReader{reader: r}
+	return &IonReader{reader: newGuardedIonReader(combined)}
 }
 
 // NewIonReaderWithLocalSymbols creates an Ion reader with prolog and local symbol support.
 // This is used to read fragment payloads where symbol IDs 852+ need to be resolved
 // to local symbol names. The prolog defines the symbol table context.
 func NewIonReaderWithLocalSymbols(prolog, data []byte, localSymbols []string) *IonReader {
-	// Strip BVM from data if present and prepend prolog
-	ionData := StripIonBVM(data)
-	combined := make([]byte, 0, len(prolog)+len(ionData))
-	combined = append(combined, prolog...)
-	combined = append(combined, ionData...)
-	r := ion.NewReaderCat(bytes.NewReader(combined), ion.NewCatalog(sharedSymbolTable))
-	return &IonReader{reader: r, localSymbols: localSymbols}
+	r := NewIonReader(prolog, data)
+	r.localSymbols = localSymbols
+	return r
 }
 
 // NewIonReaderBytes creates a new Ion reader using the default prolog.
