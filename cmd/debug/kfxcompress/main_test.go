@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -96,6 +97,44 @@ func TestUtilityPublication(t *testing.T) {
 	entries, err := os.ReadDir(dir)
 	if err != nil || len(entries) != 1 {
 		t.Fatal("temporary file leaked", err)
+	}
+}
+
+func TestPublicationLongBasenames(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		basename string
+	}{
+		{"245 bytes", strings.Repeat("a", 240) + ".azw8"},
+		{"255 bytes", strings.Repeat("a", 250) + ".azw8"},
+		{"254 UTF-8 bytes", strings.Repeat("世", 83) + ".azw8"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, test.basename)
+			original, replacement := []byte("original"), []byte("replacement")
+			if err := writeAtomic(t.Context(), path, original, false); err != nil {
+				t.Fatal(err)
+			}
+			if err := writeAtomic(t.Context(), path, replacement, false); !errors.Is(err, os.ErrExist) {
+				t.Fatalf("expected existing destination error, got %v", err)
+			}
+			got, err := os.ReadFile(path)
+			if err != nil || !bytes.Equal(got, original) {
+				t.Fatal("changed existing output", err)
+			}
+			if err := writeAtomic(t.Context(), path, replacement, true); err != nil {
+				t.Fatal(err)
+			}
+			got, err = os.ReadFile(path)
+			if err != nil || !bytes.Equal(got, replacement) {
+				t.Fatal("replacement output differs", err)
+			}
+			entries, err := os.ReadDir(dir)
+			if err != nil || len(entries) != 1 {
+				t.Fatal("temporary file leaked", err)
+			}
+		})
 	}
 }
 

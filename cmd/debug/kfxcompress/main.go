@@ -116,7 +116,8 @@ func transform(ctx context.Context, data []byte, operation string, plaintext boo
 }
 
 func writeAtomic(ctx context.Context, path string, data []byte, overwrite bool) (err error) {
-	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	// Keep the sibling temporary name short even for a maximum-length output basename.
+	f, err := os.CreateTemp(filepath.Dir(path), ".kfxcompress-*.tmp")
 	if err != nil {
 		return err
 	}
