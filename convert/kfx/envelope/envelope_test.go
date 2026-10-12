@@ -188,40 +188,7 @@ func TestRejectNullImports(t *testing.T) {
 			{"prefix", 8}, {"frame", 8 + info.FrameOffset}, {"index", 8 + info.IndexOffset},
 		} {
 			t.Run(fmt.Sprintf("%s/%s/%s", location.name, test.field, test.typ), func(t *testing.T) {
-				var buf bytes.Buffer
-				w := ion.NewBinaryWriter(&buf)
-				_ = w.Annotation(ion.NewSymbolTokenFromString("$ion_symbol_table"))
-				_ = w.BeginStruct()
-				_ = w.FieldName(ion.NewSymbolTokenFromString("imports"))
-				_ = w.BeginList()
-				_ = w.BeginStruct()
-				for _, field := range []string{"name", "version", "max_id"} {
-					_ = w.FieldName(ion.NewSymbolTokenFromString(field))
-					switch {
-					case field == test.field:
-						_ = w.WriteNullType(test.typ)
-					case field == "name":
-						_ = w.WriteString("ProtectedData")
-					case field == "version":
-						_ = w.WriteInt(1)
-					default:
-						_ = w.WriteInt(64)
-					}
-				}
-				_ = w.EndStruct()
-				_ = w.EndList()
-				_ = w.EndStruct()
-				if err := w.Finish(); err != nil {
-					t.Fatal(err)
-				}
-				if buf.Len() > len(prolog) {
-					t.Fatal("replacement prolog exceeds original length")
-				}
-				// Pad with zero-length Ion NOPs to preserve all envelope offsets.
-				b := bytes.Clone(valid)
-				section := b[location.offset : location.offset+uint64(len(prolog))]
-				clear(section)
-				copy(section, buf.Bytes())
+				b := replaceTestProlog(t, valid, location.offset, len(prolog), nullImportProlog(t, test.field, test.typ))
 				_, err := Inspect(t.Context(), b)
 				if test.field == "" {
 					if err != nil {
@@ -251,46 +218,6 @@ func TestIonBoundsRejectHugeScalarAndDeepNesting(t *testing.T) {
 	if _, err := newReader(t.Context(), deep); err == nil {
 		t.Fatal("accepted excessive nesting")
 	}
-}
-
-func FuzzIonReader(f *testing.F) {
-	data, err := datagram(func(w ion.Writer) error {
-		_ = w.Annotation(ion.NewSymbolTokenFromString(indexType))
-		_ = w.BeginList()
-		_ = w.BeginList()
-		for _, n := range []int64{41, 100, 0, 17} {
-			_ = w.WriteInt(n)
-		}
-		_ = w.EndList()
-		return w.EndList()
-	})
-	if err != nil {
-		f.Fatal(err)
-	}
-	f.Add(data)
-	f.Fuzz(func(t *testing.T, data []byte) {
-		if len(data) > 65536 {
-			t.Skip()
-		}
-		_, _ = readIndex(t.Context(), data)
-	})
-}
-
-func FuzzInspect(f *testing.F) {
-	data, _, err := Encode(context.Background(), []byte("CONT test"), Plaintext)
-	if err != nil {
-		f.Fatal(err)
-	}
-	f.Add(data)
-	f.Fuzz(func(t *testing.T, data []byte) {
-		if len(data) > 65536 {
-			t.Skip()
-		}
-		e, err := Inspect(t.Context(), data)
-		if err == nil && e.info.DecodedSize <= 65536 {
-			_, _ = e.Decode(t.Context())
-		}
-	})
 }
 
 func BenchmarkEncode(b *testing.B) {

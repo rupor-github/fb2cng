@@ -69,6 +69,25 @@ tasks:
           echo
           go test -mod=mod -coverprofile='{{.TEST_DIR}}/test_{{replace "/" "_" (clean .ITEM)}}_coverage.out' {{.CLI_ARGS}} '{{.ITEM}}'
 
+  fuzz:
+    desc: |
+      Runs both KFX envelope fuzz targets sequentially without coverage profiles.
+      FUZZ_TIME sets the budget per target (default 15s); FUZZ_PARALLEL sets the worker count (default 2).
+      Additional go test flags can be supplied after --.
+    platforms: [linux]
+    deps: [generate-project-version, get-dictionaries, get-sentences, get-pdf-fonts, generate-enums]
+    env:
+      CGO_ENABLED: '1'
+    vars:
+      FUZZ_TIME: '{{default "15s" (env "FUZZ_TIME")}}'
+      FUZZ_PARALLEL: '{{default "2" (env "FUZZ_PARALLEL")}}'
+      TARGETS: [FuzzIonReader, FuzzInspect]
+    cmds:
+      - for: {var: TARGETS}
+        cmd: |
+          echo "{{.TATN}}{{.ITEM}} fuzzing ({{.FUZZ_TIME}}, {{.FUZZ_PARALLEL}} workers)...{{.TOFF}}"
+          go test -mod=mod -run='^$' -fuzz='^{{.ITEM}}$' -fuzztime='{{.FUZZ_TIME}}' -parallel='{{.FUZZ_PARALLEL}}' {{.CLI_ARGS}} ./convert/kfx/envelope
+
   bench:
     desc: |
       Runs available benchmarks.

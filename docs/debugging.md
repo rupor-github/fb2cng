@@ -412,6 +412,43 @@ metadata stream; use it for the converter's metadata-bearing PDF output. Multipl
 are accepted. Inspect the [PDF report artifacts](#pdf) for layout/font problems that structural
 validation alone cannot explain.
 
+## Fuzz Testing
+
+Go's fuzz targets replay their explicit seeds and checked-in regression inputs during
+normal package tests:
+
+```bash
+PACKAGES='./convert/kfx/envelope' go tool task test
+```
+
+To actively generate and mutate inputs, run the manual fuzz task:
+
+```bash
+go tool task fuzz
+FUZZ_TIME=5m FUZZ_PARALLEL=2 go tool task fuzz
+go tool task fuzz -- -v
+```
+
+The task prepares the usual generated/embedded inputs, then runs `FuzzIonReader` and
+`FuzzInspect` sequentially. Defaults are **15 seconds per target** and **two workers**;
+`FUZZ_TIME` and `FUZZ_PARALLEL` override those settings. Allow extra wall-clock time for
+task dependencies and compilation. Active fuzzing is opt-in and does not change release workflows.
+
+This task omits coverage profiles because Go does not allow `-coverprofile` together
+with `-fuzz`. The ordinary `test` task continues to collect coverage.
+
+The seeds include typed-null imports, truncated values, oversized scalar declarations,
+excessive nesting, invalid envelope offsets, plaintext/LZMA multi-page envelopes, and
+native reference fixtures. Inputs and decoded payloads are bounded to 64 KiB. Successfully
+decoded envelopes must survive a byte-exact decode/encode/decode round-trip.
+
+On a failure, Go minimizes the input and writes a reproducer under
+`convert/kfx/envelope/testdata/fuzz/<target>/`. Keep that file with the fix so normal tests
+replay it, and use the `-run` command printed by Go to reproduce the failure through
+`PACKAGES='./convert/kfx/envelope' go tool task test -- ...`.
+Interesting inputs that do not fail are cached by Go locally, allowing later fuzz runs
+to continue exploring them.
+
 ## Performance Profiling
 
 Profiling tests are skipped unless an input FB2 path is supplied. They prepare shared content
