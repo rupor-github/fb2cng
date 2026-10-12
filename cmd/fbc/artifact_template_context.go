@@ -77,11 +77,17 @@ func preparseInvocationCommand(args []string) (string, int) {
 func preparseConvertInvocation(args []string) (string, common.OutputFmt, string) {
 	format := common.OutputFmtEpub2
 	outputFile := ""
+	// urfave/cli keeps parsing flags after positional arguments, so collect
+	// positionals instead of treating the raw tail as SOURCE and DESTINATION.
+	positionals := make([]string, 0, 2)
 	for i := 0; i < len(args); i++ {
 		arg, value, inline := strings.Cut(args[i], "=")
 		switch {
 		case arg == "--":
-			return convertPositionalValues(args[i+1:], format, outputFile)
+			positionals = append(positionals, args[i+1:]...)
+			return convertPositionalValues(positionals, format, outputFile)
+		case arg == "-":
+			positionals = append(positionals, args[i])
 		case arg == "--to" || arg == "-to":
 			if !inline && i+1 < len(args) {
 				i++
@@ -89,6 +95,8 @@ func preparseConvertInvocation(args []string) (string, common.OutputFmt, string)
 			}
 			if parsed, err := common.ParseOutputFmt(value); err == nil {
 				format = parsed
+			} else {
+				format = common.OutputFmtEpub2
 			}
 		case arg == "--output-file" || arg == "-output-file" || arg == "-o" || arg == "--o":
 			if !inline && i+1 < len(args) {
@@ -102,10 +110,10 @@ func preparseConvertInvocation(args []string) (string, common.OutputFmt, string)
 			}
 		case strings.HasPrefix(arg, "-"):
 		default:
-			return convertPositionalValues(args[i:], format, outputFile)
+			positionals = append(positionals, args[i])
 		}
 	}
-	return convertPositionalValues(nil, format, outputFile)
+	return convertPositionalValues(positionals, format, outputFile)
 }
 
 func convertPositionalValues(args []string, format common.OutputFmt, outputFile string) (string, common.OutputFmt, string) {
