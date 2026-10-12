@@ -13,6 +13,7 @@ import (
 
 	"fbc/convert/kfx"
 	"fbc/convert/kfx/envelope"
+	"fbc/utils/filepub"
 )
 
 func main() {
@@ -141,10 +142,5 @@ func writeAtomic(ctx context.Context, path string, data []byte, overwrite bool) 
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if overwrite {
-		return replaceOutput(f.Name(), path)
-	}
-	// Publish atomically only if the destination is still absent; plain Rename
-	// would overwrite a file created while we were encoding.
-	return publishOutput(f.Name(), path)
+	return filepub.Publish(f.Name(), path, overwrite)
 }

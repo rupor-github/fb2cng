@@ -1,6 +1,6 @@
 //go:build windows
 
-package main
+package filepub
 
 import "golang.org/x/sys/windows"
 

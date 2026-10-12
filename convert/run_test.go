@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -732,6 +733,63 @@ func TestProcessBook_LogsFailureOnError(t *testing.T) {
 	}
 	if strings.Contains(logOutput, `"msg":"Conversion completed"`) {
 		t.Fatalf("did not expect success log on failure, got logs: %s", logOutput)
+	}
+}
+
+func TestProcessBook_DestinationCreatedDuringGeneration(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		overwrite bool
+	}{
+		{"no overwrite", false},
+		{"overwrite", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, env := setupTestEnv(t)
+			env.Overwrite = test.overwrite
+			dstDir := t.TempDir()
+			outputPath := filepath.Join(dstDir, "book.txt")
+			existingContent := []byte("output created by another writer")
+			created := false
+			var creationErr error
+			logger := zaptest.NewLogger(t).WithOptions(zap.Hooks(func(entry zapcore.Entry) error {
+				if entry.Message == "Text generation starting" {
+					// Generation starts after processBook's initial existence check.
+					creationErr = os.WriteFile(outputPath, existingContent, 0644)
+					created = creationErr == nil
+				}
+				return nil
+			}))
+			err := processBook(
+				ctx, strings.NewReader(minimalFB2Content), "book.fb2", dstDir,
+				common.OutputFmtTxt, logger, processBookOptions{OutputFile: outputPath},
+			)
+			if !created || creationErr != nil {
+				t.Fatalf("create destination during generation: created=%v, err=%v", created, creationErr)
+			}
+			if test.overwrite {
+				if err != nil {
+					t.Fatalf("overwrite conversion failed: %v", err)
+				}
+			} else if !errors.Is(err, os.ErrExist) {
+				t.Fatalf("expected existing destination error, got %v", err)
+			}
+			actualContent, err := os.ReadFile(outputPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if test.overwrite {
+				if !bytes.Contains(actualContent, []byte("Content")) || bytes.Equal(actualContent, existingContent) {
+					t.Fatalf("expected converted output, got %q", actualContent)
+				}
+			} else if !bytes.Equal(actualContent, existingContent) {
+				t.Fatalf("existing output changed: got %q, want %q", actualContent, existingContent)
+			}
+			entries, err := os.ReadDir(dstDir)
+			if err != nil || len(entries) != 1 {
+				t.Fatalf("temporary output was not cleaned up: entries=%v, err=%v", entries, err)
+			}
+		})
 	}
 }
 

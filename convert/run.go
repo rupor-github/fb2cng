@@ -26,6 +26,7 @@ import (
 	"fbc/convert/pdf"
 	"fbc/convert/textout"
 	"fbc/state"
+	"fbc/utils/filepub"
 	imgutil "fbc/utils/images"
 )
 
@@ -685,8 +686,8 @@ func processBook(
 		return fmt.Errorf("unsupported output format: %s", c.OutputFormat)
 	}
 
-	if err := replaceOutputFile(tmpOutputName, outputName); err != nil {
-		return fmt.Errorf("unable to replace output file: %w", err)
+	if err := filepub.Publish(tmpOutputName, outputName, env.Overwrite); err != nil {
+		return fmt.Errorf("unable to publish output file: %w", err)
 	}
 
 	// Store conversion result for debugging
