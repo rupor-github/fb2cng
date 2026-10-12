@@ -3,8 +3,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"fbc/convert/kfx"
@@ -90,6 +92,91 @@ func TestUtilityPublication(t *testing.T) {
 	got, err = os.ReadFile(path)
 	if err != nil || !bytes.Equal(got, inner) {
 		t.Fatal("failed publication damaged destination", err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 1 {
+		t.Fatal("temporary file leaked", err)
+	}
+}
+
+func TestPublicationRefusesExistingDestination(t *testing.T) {
+	for _, kind := range []string{"file", "directory", "dangling symlink"} {
+		t.Run(kind, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "output.kfx")
+			original := []byte("existing output")
+			switch kind {
+			case "file":
+				if err := os.WriteFile(path, original, 0644); err != nil {
+					t.Fatal(err)
+				}
+			case "directory":
+				if err := os.Mkdir(path, 0755); err != nil {
+					t.Fatal(err)
+				}
+			case "dangling symlink":
+				if err := os.Symlink("missing", path); err != nil {
+					t.Skipf("symbolic links unavailable: %v", err)
+				}
+			}
+			if err := writeAtomic(t.Context(), path, []byte("replacement"), false); err == nil {
+				t.Fatal("published over an existing destination")
+			}
+			switch kind {
+			case "file":
+				got, err := os.ReadFile(path)
+				if err != nil || !bytes.Equal(got, original) {
+					t.Fatal("changed existing output", err)
+				}
+			case "directory":
+				info, err := os.Stat(path)
+				if err != nil || !info.IsDir() {
+					t.Fatal("changed existing directory", err)
+				}
+			case "dangling symlink":
+				target, err := os.Readlink(path)
+				if err != nil || target != "missing" {
+					t.Fatal("changed existing symlink", err)
+				}
+			}
+			entries, err := os.ReadDir(dir)
+			if err != nil || len(entries) != 1 {
+				t.Fatal("temporary file leaked", err)
+			}
+		})
+	}
+}
+
+func TestConcurrentNoOverwritePublication(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "output.kfx")
+	payloads := [][]byte{bytes.Repeat([]byte("first"), 1024), bytes.Repeat([]byte("second"), 1024)}
+	start := make(chan struct{})
+	results := make(chan error, len(payloads))
+	var wg sync.WaitGroup
+	for _, data := range payloads {
+		wg.Go(func() {
+			<-start
+			results <- writeAtomic(t.Context(), path, data, false)
+		})
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+	successes := 0
+	for err := range results {
+		if err == nil {
+			successes++
+		} else if !errors.Is(err, os.ErrExist) {
+			t.Fatalf("unexpected publication error: %v", err)
+		}
+	}
+	if successes != 1 {
+		t.Fatalf("expected exactly one successful publication, got %d", successes)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil || (!bytes.Equal(got, payloads[0]) && !bytes.Equal(got, payloads[1])) {
+		t.Fatal("output is not a complete winning payload", err)
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil || len(entries) != 1 {

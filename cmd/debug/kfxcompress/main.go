@@ -143,7 +143,7 @@ func writeAtomic(ctx context.Context, path string, data []byte, overwrite bool) 
 	if overwrite {
 		return replaceOutput(f.Name(), path)
 	}
-	// A sibling hard-link atomically publishes only if the destination is absent.
-	// Rename alone would silently overwrite a file created while we were encoding.
-	return os.Link(f.Name(), path)
+	// Publish atomically only if the destination is still absent; plain Rename
+	// would overwrite a file created while we were encoding.
+	return publishOutput(f.Name(), path)
 }
