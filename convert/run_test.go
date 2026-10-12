@@ -304,6 +304,57 @@ func TestProcessOutputFile_SingleFileWritesExactPath(t *testing.T) {
 	}
 }
 
+func TestProcessOutputFile_LongBasenames(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		basename string
+	}{
+		{"245 bytes", strings.Repeat("a", 241) + ".txt"},
+		{"255 bytes", strings.Repeat("a", 251) + ".txt"},
+		{"255 UTF-8 bytes", strings.Repeat("世", 83) + "ab.txt"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, env := setupTestEnv(t)
+			source := filepath.Join(t.TempDir(), "book.fb2")
+			if err := os.WriteFile(source, []byte(minimalFB2Content), 0644); err != nil {
+				t.Fatal(err)
+			}
+			dstDir := t.TempDir()
+			output := filepath.Join(dstDir, test.basename)
+			if err := processOutputFile(ctx, source, output, common.OutputFmtTxt, env.Log); err != nil {
+				t.Fatalf("convert to long output basename: %v", err)
+			}
+			original, err := os.ReadFile(output)
+			if err != nil || !bytes.Contains(original, []byte("Content")) {
+				t.Fatalf("unexpected converted output: %q, err=%v", original, err)
+			}
+			if err := processOutputFile(ctx, source, output, common.OutputFmtTxt, env.Log); err == nil {
+				t.Fatal("overwrote existing output without overwrite flag")
+			}
+			actual, err := os.ReadFile(output)
+			if err != nil || !bytes.Equal(actual, original) {
+				t.Fatalf("existing output changed: %q, err=%v", actual, err)
+			}
+			env.Overwrite = true
+			updated := strings.Replace(minimalFB2Content, ">Content<", ">Updated content<", 1)
+			if err := os.WriteFile(source, []byte(updated), 0644); err != nil {
+				t.Fatal(err)
+			}
+			if err := processOutputFile(ctx, source, output, common.OutputFmtTxt, env.Log); err != nil {
+				t.Fatalf("overwrite long output basename: %v", err)
+			}
+			actual, err = os.ReadFile(output)
+			if err != nil || !bytes.Contains(actual, []byte("Updated content")) {
+				t.Fatalf("unexpected replacement output: %q, err=%v", actual, err)
+			}
+			entries, err := os.ReadDir(dstDir)
+			if err != nil || len(entries) != 1 {
+				t.Fatalf("temporary output was not cleaned up: entries=%v, err=%v", entries, err)
+			}
+		})
+	}
+}
+
 func TestProcessOutputFile_RespectsOverwrite(t *testing.T) {
 	ctx, _ := setupTestEnv(t)
 	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
@@ -826,12 +877,9 @@ func TestProcessBook_OverwriteKeepsExistingFileOnGenerationFailure(t *testing.T)
 	if !bytes.Equal(actualContent, existingContent) {
 		t.Fatalf("existing output changed after failed overwrite: got %q, want %q", actualContent, existingContent)
 	}
-	tmpFiles, err := filepath.Glob(filepath.Join(dstDir, ".book.epub.*.tmp"))
-	if err != nil {
-		t.Fatalf("glob temporary output files: %v", err)
-	}
-	if len(tmpFiles) != 0 {
-		t.Fatalf("temporary output files were not cleaned up: %v", tmpFiles)
+	entries, err := os.ReadDir(dstDir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("temporary output was not cleaned up: entries=%v, err=%v", entries, err)
 	}
 }
 

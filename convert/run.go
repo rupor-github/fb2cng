@@ -562,7 +562,8 @@ func processBookArchiveEntry(ctx context.Context, f *zip.File, enc srcEncoding, 
 }
 
 func makeTempOutputPath(outputName string) (string, error) {
-	tmpFile, err := os.CreateTemp(filepath.Dir(outputName), "."+filepath.Base(outputName)+".*.tmp")
+	// Keep the sibling temporary name short even for a maximum-length output basename.
+	tmpFile, err := os.CreateTemp(filepath.Dir(outputName), ".fbc-output-*.tmp")
 	if err != nil {
 		return "", err
 	}
