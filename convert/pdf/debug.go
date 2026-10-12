@@ -12,14 +12,14 @@ func writePDFDebugDumps(doc pdfDocumentSpec, pages []pdfPage, fontResources []pd
 	if !doc.Debug || doc.WorkDir == "" {
 		return nil
 	}
-	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-structure-plan.json"), doc.DebugPlan); err != nil {
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "book.pdf-structure-plan.json"), doc.DebugPlan); err != nil {
 		return err
 	}
 	styles := doc.Styles
 	if styles == nil {
 		styles = newPDFStyleResolver(nil, nil)
 	}
-	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-resolved-styles.json"), styles.debugStyles()); err != nil {
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "book.pdf-resolved-styles.json"), styles.debugStyles()); err != nil {
 		return err
 	}
 
@@ -38,31 +38,31 @@ func writePDFDebugDumps(doc pdfDocumentSpec, pages []pdfPage, fontResources []pd
 			Text:         block.Text,
 		})
 	}
-	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-text-blocks.json"), blocks); err != nil {
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "book.pdf-text-blocks.json"), blocks); err != nil {
 		return err
 	}
-	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-printed-footnotes.json"), printedFootnotes); err != nil {
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "book.pdf-printed-footnotes.json"), printedFootnotes); err != nil {
 		return err
 	}
 	styles.tracer.flush()
 
 	debugPages, debugImages, debugLinks := pdfDebugPages(pages)
-	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-layout-pages.json"), debugPages); err != nil {
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "book.pdf-layout-pages.json"), debugPages); err != nil {
 		return err
 	}
-	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-line-glyphs.json"), pdfDebugLineGlyphs(pages)); err != nil {
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "book.pdf-line-glyphs.json"), pdfDebugLineGlyphs(pages)); err != nil {
 		return err
 	}
-	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-justification.json"), pdfDebugJustificationLines(pages)); err != nil {
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "book.pdf-justification.json"), pdfDebugJustificationLines(pages)); err != nil {
 		return err
 	}
-	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-images.json"), debugImages); err != nil {
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "book.pdf-images.json"), debugImages); err != nil {
 		return err
 	}
-	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-links.json"), debugLinks); err != nil {
+	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "book.pdf-links.json"), debugLinks); err != nil {
 		return err
 	}
-	return writeJSONDebugDump(filepath.Join(doc.WorkDir, "pdf-fonts.json"), pdfDebugFonts(fontResources))
+	return writeJSONDebugDump(filepath.Join(doc.WorkDir, "book.pdf-fonts.json"), pdfDebugFonts(fontResources))
 }
 
 func writeJSONDebugDump(path string, v any) error {

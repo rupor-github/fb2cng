@@ -253,7 +253,7 @@ func TestGeneratePDFWithThirdPartyCSSFontHonorsNoSubsettingRestriction(t *testin
 	}
 
 	var fonts []pdfDebugFont
-	readJSONDebugFile(t, filepath.Join(tmpDir, "pdf-fonts.json"), &fonts)
+	readJSONDebugFile(t, filepath.Join(tmpDir, "book.pdf-fonts.json"), &fonts)
 	var restrictedFont *pdfDebugFont
 	for i := range fonts {
 		if fonts[i].Family == "ThirdPartyMono" {

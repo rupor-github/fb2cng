@@ -70,3 +70,4 @@ Example:
 The connector translates MyHomeLib converter calls into `fbc convert` calls and chooses output format based on the executable name or connector configuration.
 
 Use `debug: true` in `connector.yaml` when diagnosing MyHomeLib integration problems.
+See [Debugging and validation](debugging.md) for converter report contents and inspection tools.

@@ -33,6 +33,30 @@ Available fields:
 | `.Command` | Command being executed, such as `convert` or `dumpconfig` |
 | `.Format` | Requested output format for `convert`; empty for other commands |
 | `.SourceFile` | Source argument base name without path or extension; empty when no source argument is available |
+| `.OutputDir` | Absolute conversion destination directory, or the parent of `--output-file`; current working directory when no destination is supplied or for other commands |
+
+Write logs and reports alongside a single-book conversion result:
+
+```yaml
+logging:
+  file:
+    mode: overwrite
+    destination_template: '{{ .OutputDir }}/{{ .AppName }}.log'
+    panic_destination_template: '{{ .OutputDir }}/{{ .AppName }}-panic.log'
+reporting:
+  destination_template: '{{ .OutputDir }}/{{ .AppName }}-report.zip'
+```
+
+For `fbc -c config.yaml -d convert book.fb2 /path/to/results`, these artifacts go under
+`/path/to/results`. With `--output-file /path/to/results/chosen.epub`, they use that file's
+parent directory. Relative destinations are resolved from the working directory; omitted
+destinations use the working directory. Parent directories are created automatically.
+
+`.OutputDir` is determined before the book is parsed. For recursive/archive batches or output
+name templates that add subdirectories, it is the command's destination root, not an
+individual book's final subdirectory. One log/report is produced per invocation. Add
+`.SourceFile` or `.Unique` to artifact names when separate invocations should retain separate
+files in the same directory.
 
 Parallel-safe log and report files per source:
 

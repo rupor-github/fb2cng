@@ -91,6 +91,14 @@ document:
   # (and off for English)
   insert_soft_hyphen: false
 
+  kfx:
+    # Applies equally to --to kfx and --to azw8; ignored for other formats.
+    # none: ordinary CONT; lzma: unencrypted, paged ProtectedData envelope.
+    # Page size adapts to decoded container size: 4/16/32/64 KiB, aiming for
+    # 256 pages with a 64-KiB cap. Existing 4-KiB envelopes remain readable.
+    # An explicitly supplied convert --kfx-compression none|lzma overrides this.
+    compression: none
+
   metainformation:
     # NOTE: when generating OPF metainformation for epub2/kepub calibre:series
     # tags with first collection available are used, for epub3/kepub3
@@ -499,6 +507,10 @@ document:
 #   epub3, kepub, kfx, azw8, pdf, txt, or md. Empty for other commands.
 # - .SourceFile (string) - base part of the source argument (no path, no
 #   extension). Empty when no source argument is available.
+# - .OutputDir (string) - absolute conversion destination directory, or the
+#   parent of --output-file. Defaults to the current working directory.
+#   For batch conversion this is the destination root, not each book's
+#   metadata-derived or preserved source subdirectory.
 logging:
   # controls terminal (stdout, stderr) output
   console:

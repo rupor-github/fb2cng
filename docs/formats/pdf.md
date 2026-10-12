@@ -70,7 +70,8 @@ Limitations:
 - Synthetic bold/italic is not generated; provide real font faces.
 - Complex shaping and bidi layout are limited.
 
-Run with `--debug` to inspect font diagnostics.
+Run with `--debug` to inspect font diagnostics. See [Debugging and validation](../debugging.md#pdf)
+for PDF report artifacts and [PDF validation](../debugging.md#pdf-validation) for structural/metadata checks.
 
 ## Footnotes
 

@@ -4,6 +4,9 @@
 
 **fb2cng** converts FB2/FictionBook files to EPUB2, EPUB3, KEPUB, KEPUB3, KFX/AZW8, PDF, TXT, and Markdown.
 
+KFX/AZW8 supports both uncompressed output and optional, lossless LZMA compression without
+encryption. Uncompressed output is the default.
+
 Use this guide for installation, command-line basics, choosing an output format, and finding the right reference document. Format-specific details now live in separate files.
 
 ## Quick Start
@@ -19,6 +22,7 @@ Convert to a specific format:
 ```bash
 fbc convert --to epub3 book.fb2
 fbc convert --to kfx book.fb2
+fbc convert --to azw8 --kfx-compression lzma book.fb2
 fbc convert --to pdf book.fb2
 fbc convert --to md book.fb2
 ```
@@ -48,6 +52,9 @@ fbc -d convert book.fb2
 ```
 
 Debug mode creates `fbc-report.zip` with logs and diagnostic files.
+See [Debugging and validation](debugging.md) for report contents and inspection tools.
+To keep logs and reports alongside conversion output, use `.OutputDir` in their
+[destination templates](templates.md#artifact-destination-templates).
 
 ## Command Line
 
@@ -77,6 +84,7 @@ Convert options:
 | `--to TYPE` | `epub2`, `epub3`, `kepub`, `kepub3`, `kfx`, `azw8`, `pdf`, `txt`, or `md` |
 | `--ebook`, `--eb` | For Kindle formats, mark output as ebook/EBOK instead of personal document/PDOC |
 | `--asin ASIN` | For Kindle formats, set ASIN metadata |
+| `--kfx-compression MODE` | Override configured KFX/AZW8 compression: `none` or `lzma`; ignored with a warning for other formats |
 | `--no-cover` | Omit existing or generated covers; ignored with a warning for KFX/AZW8 |
 | `--output-file FILE`, `-o FILE` | Write a single source book to exact output file path |
 | `--nodirs`, `--nd` | Do not preserve input directory structure in output |
@@ -93,6 +101,16 @@ Use `--no-cover` to produce EPUB2/3, KEPUB/KEPUB3, or PDF without a dedicated co
 fbc convert --no-cover --to pdf book.fb2
 ```
 
+KFX/AZW8 compression is opt-in. Use `document.kfx.compression: lzma` in YAML or an explicit
+command override. `--kfx-compression none` disables a configured compression default.
+
+```bash
+fbc convert --to azw8 --kfx-compression lzma book.fb2
+```
+
+See [Kindle compression](formats/kindle.md#compression) for conversion settings and
+[Debugging and validation](debugging.md) for the standalone utility and envelope diagnostics.
+
 ## Supported Formats
 
 | Format | Extension | Best For | Details |
@@ -101,8 +119,8 @@ fbc convert --no-cover --to pdf book.fb2
 | EPUB3 | `.epub` | Modern EPUB readers and semantic footnotes | [EPUB and KEPUB](formats/epub.md) |
 | KEPUB | `.kepub.epub` | Kobo devices with OPF2-style packaging | [EPUB and KEPUB](formats/epub.md) |
 | KEPUB3 | `.kepub.epub` | Kobo devices with EPUB3 package/navigation semantics | [EPUB and KEPUB](formats/epub.md) |
-| KFX | `.kfx` | Kindle Enhanced Typesetting | [Kindle KFX/AZW8](formats/kindle.md) |
-| AZW8 | `.azw8` | KFX payload with Kindle Previewer-friendly extension | [Kindle KFX/AZW8](formats/kindle.md) |
+| KFX | `.kfx` | Kindle Enhanced Typesetting with optional LZMA compression | [Kindle KFX/AZW8](formats/kindle.md) |
+| AZW8 | `.azw8` | KFX with optional LZMA compression and Kindle Previewer-friendly extension | [Kindle KFX/AZW8](formats/kindle.md) |
 | PDF | `.pdf` | Fixed-page output, outlines, selectable text, printed footnotes | [PDF](formats/pdf.md) |
 | TXT | `.txt` | Plain readable UTF-8 text | [TXT and Markdown](formats/text.md) |
 | Markdown | `.md` | Semantic plain-text documents with headings, links, tables, and optional images | [TXT and Markdown](formats/text.md) |
@@ -116,6 +134,7 @@ fbc convert --no-cover --to pdf book.fb2
 | Optional visible TOC page | yes | yes | yes | yes | yes | yes | text | links |
 | CSS styling | yes | yes | yes | yes | mapped to Kindle styles | subset via native renderer | no | no |
 | Embedded fonts | yes | yes | yes | yes | yes | yes | no | no |
+| Optional lossless LZMA compression | — | — | — | — | yes, opt-in | — | — | — |
 | Block and inline images | yes | yes | yes | yes | yes | yes | placeholders | placeholder/external/embedded |
 | Cover handling | optional; `--no-cover` | optional; `--no-cover` | optional; `--no-cover` | optional; `--no-cover` | required; flag ignored with warning | optional; `--no-cover` | omitted | omitted |
 | Tables | XHTML | XHTML | XHTML | XHTML | Kindle table model | native PDF | aligned text | Markdown pipe tables |
@@ -227,6 +246,7 @@ Set `document.images.screen.width`, `height`, and `dpi`. See [PDF](formats/pdf.m
 ## Reference Documents
 
 - [Configuration](config.md)
+- [Debugging and validation](debugging.md)
 - [Templates](templates.md)
 - [Footnotes](footnotes.md)
 - [Stylesheets](stylesheets.md)
@@ -239,6 +259,8 @@ Set `document.images.screen.width`, `height`, and `dpi`. See [PDF](formats/pdf.m
 ## Troubleshooting
 
 Use `--debug` first. The debug report is the fastest way to inspect parsed metadata, normalized content, generated resources, logs, and format-specific diagnostics.
+See [Debugging and validation](debugging.md) for artifact descriptions, all development
+utilities, external validators, and profiling commands.
 
 Common checks:
 

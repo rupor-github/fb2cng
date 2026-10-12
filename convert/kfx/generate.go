@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"fmt"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"fbc/common"
 	"fbc/config"
 	"fbc/content"
+	"fbc/convert/kfx/envelope"
 	"fbc/css"
 	"fbc/fb2"
 	"fbc/misc"
@@ -68,11 +70,46 @@ func Generate(
 		return err
 	}
 
+	innerData := kfxData
+	var envelopeInfo *envelope.Info
+	switch cfg.KFX.Compression {
+	case "", "none":
+		// Preserve the existing byte path when compression is disabled.
+	case "lzma":
+		var info envelope.Info
+		kfxData, info, err = envelope.Encode(ctx, innerData, envelope.LZMA)
+		if err != nil {
+			return fmt.Errorf("compress KFX: %w", err)
+		}
+		envelopeInfo = &info
+		log.Info("KFX envelope encoded", zap.Int("inner_size", len(innerData)), zap.Int("outer_size", len(kfxData)),
+			zap.Int("pages", len(info.Pages)), zap.Uint64("page_size", info.PageSize), zap.String("compression", string(info.Mode)))
+	default:
+		return fmt.Errorf("unsupported KFX compression %q", cfg.KFX.Compression)
+	}
+
 	// Write debug output when in debug mode (after serialization so all data is populated)
 	// Use c.WorkDir (which is already a temp dir) so it is captured by the reporting archive.
 	if c.Debug {
-		debugPath := filepath.Join(c.WorkDir, filepath.Base(outputPath)+".debug.txt")
+		const debugBase = "book"
+		debugPath := filepath.Join(c.WorkDir, debugBase+".debug.txt")
 		debugOutput := container.String() + "\n\n" + container.DumpFragments()
+		decision := fmt.Sprintf("KFX compression: %s (source: %s)\n", cfg.KFX.Compression, cfg.KFX.CompressionSource)
+		if envelopeInfo != nil {
+			debugOutput = envelopeInfo.Summary() + "\n\n" + debugOutput
+			for _, artifact := range []struct {
+				suffix string
+				data   []byte
+			}{
+				{".envelope.txt", []byte(envelopeInfo.String())}, {".inner.kfx", innerData},
+			} {
+				path := filepath.Join(c.WorkDir, debugBase+artifact.suffix)
+				if err := os.WriteFile(path, artifact.data, 0644); err != nil {
+					log.Warn("Failed to write KFX envelope diagnostic", zap.String("path", path), zap.Error(err))
+				}
+			}
+		}
+		debugOutput = decision + "\n" + debugOutput
 		if err := os.WriteFile(debugPath, []byte(debugOutput), 0644); err != nil {
 			log.Warn("Failed to write debug output", zap.Error(err))
 		}
@@ -145,7 +182,7 @@ func buildFragments(ctx context.Context, container *Container, c *content.Conten
 	// For EPUB the stylesheet is always part of the output archive, but for KFX
 	// it only exists in memory — write it to WorkDir so it gets captured.
 	if c.Debug && parsedCSS != nil {
-		cssPath := filepath.Join(c.WorkDir, "parsed-stylesheet.css")
+		cssPath := filepath.Join(c.WorkDir, "book.stylesheet.css")
 		if err := os.WriteFile(cssPath, []byte(parsedCSS.String()), 0644); err != nil {
 			log.Warn("Failed to write parsed stylesheet for debug", zap.Error(err))
 		}

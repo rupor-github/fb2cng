@@ -58,47 +58,47 @@ func TestGenerateDebugDumps(t *testing.T) {
 	}
 
 	var structurePlan pdfDebugStructurePlan
-	readJSONDebugFile(t, filepath.Join(tmpDir, "pdf-structure-plan.json"), &structurePlan)
+	readJSONDebugFile(t, filepath.Join(tmpDir, "book.pdf-structure-plan.json"), &structurePlan)
 	if len(structurePlan.Units) == 0 || structurePlan.Units[0].ID != "debug-section" || structurePlan.Units[0].Kind != "section" {
 		t.Fatalf("debug structure plan = %#v, want debug section unit", structurePlan)
 	}
 
-	blockData, err := os.ReadFile(filepath.Join(tmpDir, "pdf-text-blocks.json"))
+	blockData, err := os.ReadFile(filepath.Join(tmpDir, "book.pdf-text-blocks.json"))
 	if err != nil {
-		t.Fatalf("read pdf-text-blocks.json: %v", err)
+		t.Fatalf("read book.pdf-text-blocks.json: %v", err)
 	}
 	if !bytes.Contains(blockData, []byte(`"Chapter"`)) || !bytes.Contains(blockData, []byte(`"page-break"`)) || !bytes.Contains(blockData, []byte(`"style_name"`)) || !bytes.Contains(blockData, []byte(`"style_classes": "has-dropcap"`)) {
-		t.Fatalf("pdf-text-blocks.json missing expected content: %s", blockData)
+		t.Fatalf("book.pdf-text-blocks.json missing expected content: %s", blockData)
 	}
 
 	var styles []pdfDebugResolvedStyle
-	readJSONDebugFile(t, filepath.Join(tmpDir, "pdf-resolved-styles.json"), &styles)
+	readJSONDebugFile(t, filepath.Join(tmpDir, "book.pdf-resolved-styles.json"), &styles)
 	if len(styles) == 0 || styles[0].Name == "" {
 		t.Fatalf("debug resolved styles = %#v, want named styles", styles)
 	}
-	traceData, err := os.ReadFile(filepath.Join(tmpDir, "pdf-style-trace.txt"))
+	traceData, err := os.ReadFile(filepath.Join(tmpDir, "book.pdf-style-trace.txt"))
 	if err != nil {
-		t.Fatalf("read pdf-style-trace.txt: %v", err)
+		t.Fatalf("read book.pdf-style-trace.txt: %v", err)
 	}
 	if !bytes.Contains(traceData, []byte("=== PDF Style Trace ===")) || !bytes.Contains(traceData, []byte("ASSIGN")) ||
 		!bytes.Contains(traceData, []byte("COLLAPSE")) {
-		t.Fatalf("pdf-style-trace.txt missing expected content: %s", traceData)
+		t.Fatalf("book.pdf-style-trace.txt missing expected content: %s", traceData)
 	}
-	parsedCSS, err := os.ReadFile(filepath.Join(tmpDir, "parsed-stylesheet.css"))
+	parsedCSS, err := os.ReadFile(filepath.Join(tmpDir, "book.stylesheet.css"))
 	if err != nil {
-		t.Fatalf("read parsed-stylesheet.css: %v", err)
+		t.Fatalf("read book.stylesheet.css: %v", err)
 	}
 	if !bytes.Contains(parsedCSS, []byte("p {")) || !bytes.Contains(parsedCSS, []byte("margin: 0")) {
-		t.Fatalf("parsed-stylesheet.css missing expected CSS: %s", parsedCSS)
+		t.Fatalf("book.stylesheet.css missing expected CSS: %s", parsedCSS)
 	}
 
-	pageData, err := os.ReadFile(filepath.Join(tmpDir, "pdf-layout-pages.json"))
+	pageData, err := os.ReadFile(filepath.Join(tmpDir, "book.pdf-layout-pages.json"))
 	if err != nil {
-		t.Fatalf("read pdf-layout-pages.json: %v", err)
+		t.Fatalf("read book.pdf-layout-pages.json: %v", err)
 	}
 	var pages []pdfDebugPage
 	if err := json.Unmarshal(pageData, &pages); err != nil {
-		t.Fatalf("unmarshal pdf-layout-pages.json: %v", err)
+		t.Fatalf("unmarshal book.pdf-layout-pages.json: %v", err)
 	}
 	if len(pages) < 1 {
 		t.Fatalf("debug pages = %d, want at least 1", len(pages))
@@ -125,35 +125,35 @@ func TestGenerateDebugDumps(t *testing.T) {
 		}
 	}
 	if !lineBreakFound {
-		t.Fatal("pdf-layout-pages.json missing line_break diagnostics")
+		t.Fatal("book.pdf-layout-pages.json missing line_break diagnostics")
 	}
 
 	var lineGlyphs []pdfDebugGlyphLine
-	readJSONDebugFile(t, filepath.Join(tmpDir, "pdf-line-glyphs.json"), &lineGlyphs)
+	readJSONDebugFile(t, filepath.Join(tmpDir, "book.pdf-line-glyphs.json"), &lineGlyphs)
 	if len(lineGlyphs) == 0 || len(lineGlyphs[0].Glyphs) == 0 || lineGlyphs[0].Glyphs[0].PDFCID == 0 {
 		t.Fatalf("debug line glyphs = %#v, want compact positioned glyph diagnostics", lineGlyphs)
 	}
 
 	var justification []pdfDebugJustificationLine
-	readJSONDebugFile(t, filepath.Join(tmpDir, "pdf-justification.json"), &justification)
+	readJSONDebugFile(t, filepath.Join(tmpDir, "book.pdf-justification.json"), &justification)
 	if justification == nil {
 		t.Fatalf("debug justification should unmarshal to an empty array, got nil")
 	}
 
 	var links []pdfDebugLink
-	readJSONDebugFile(t, filepath.Join(tmpDir, "pdf-links.json"), &links)
+	readJSONDebugFile(t, filepath.Join(tmpDir, "book.pdf-links.json"), &links)
 	if len(links) != 1 || links[0].Href != "https://example.com" || links[0].ObjectID == 0 {
 		t.Fatalf("debug links = %#v, want external link with object id", links)
 	}
 
 	var images []pdfDebugImage
-	readJSONDebugFile(t, filepath.Join(tmpDir, "pdf-images.json"), &images)
+	readJSONDebugFile(t, filepath.Join(tmpDir, "book.pdf-images.json"), &images)
 	if images == nil {
 		t.Fatalf("debug images should unmarshal to an empty array, got nil")
 	}
 
 	var fonts []pdfDebugFont
-	readJSONDebugFile(t, filepath.Join(tmpDir, "pdf-fonts.json"), &fonts)
+	readJSONDebugFile(t, filepath.Join(tmpDir, "book.pdf-fonts.json"), &fonts)
 	if len(fonts) < 2 {
 		t.Fatalf("debug fonts = %#v, want multiple used fonts", fonts)
 	}
@@ -173,7 +173,7 @@ func TestGenerateDebugDumps(t *testing.T) {
 	}
 
 	var printedFootnotes pdfDebugPrintedFootnotes
-	readJSONDebugFile(t, filepath.Join(tmpDir, "pdf-printed-footnotes.json"), &printedFootnotes)
+	readJSONDebugFile(t, filepath.Join(tmpDir, "book.pdf-printed-footnotes.json"), &printedFootnotes)
 	if printedFootnotes.Enabled || printedFootnotes.FinalPageCount != len(pages) {
 		t.Fatalf("debug printed footnotes = %#v, want disabled summary for non-printed document", printedFootnotes)
 	}

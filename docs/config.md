@@ -38,6 +38,8 @@ document:
   dropcaps: {}
   page_map: {}
   text_transformations: {}
+  kfx:
+    compression: none
 logging: {}
 reporting: {}
 ```
@@ -57,8 +59,32 @@ Use `dumpconfig --default` for the complete structure and current defaults.
 | `document.footnotes.label_template` | Logical footnote labels | [Templates](templates.md#label_template) |
 | `document.footnotes.backlink_template` | Generated backlink text | [Templates](templates.md#backlink_template) |
 | `document.toc_type` | Device navigation shape | [Guide](guide.md#feature-matrix) |
+| `document.kfx.compression` | Opt-in KFX/AZW8 compression (`none` or `lzma`) | [Kindle compression](formats/kindle.md#compression) |
 | `document.toc_page` | Optional visible TOC page | [Guide](guide.md#common-tasks) |
 | `document.metainformation.*_template` | Metadata formatting | [Templates](templates.md#metadata-templates) |
+
+## KFX Compression
+
+Both KFX and AZW8 support optional, lossless LZMA compression without encryption. To enable
+it persistently:
+
+```yaml
+document:
+  kfx:
+    compression: lzma
+```
+
+`document.kfx.compression` defaults to `none` (ordinary CONT output). Set it to `lzma`
+for an unencrypted, paged envelope. It applies equally to KFX and AZW8 and has no effect
+on other formats. Page size is [automatic, from 4 to 64 KiB](formats/kindle.md#adaptive-page-size),
+based on decoded container size. An explicitly supplied `convert --kfx-compression none|lzma` overrides
+the YAML value; an omitted flag respects YAML. Logs and conversion debug text record the
+effective choice/source because archived loaded YAML precedes CLI overrides.
+
+```bash
+fbc convert --to azw8 --kfx-compression lzma book.fb2
+fbc -c config.yaml convert --to azw8 --kfx-compression none book.fb2
+```
 
 ## Image Settings
 
@@ -117,4 +143,25 @@ Scope limitation: text transformations apply to regular paragraph content in sec
 
 Debug reports are enabled with `--debug`. By default, logs and reports use `{{ .AppName }}` based templates and are written as `fbc.log`, `fbc-panic.log`, and `fbc-report.zip` in the current working directory.
 
-Artifact destination templates support `.Context`, `.AppName`, `.PID`, `.Hostname`, `.Started`, `.Unique`, `.Command`, `.Format`, and `.SourceFile`. FB2 metadata is not available because logs and reports are initialized before the source book is parsed.
+Artifact destination templates support `.Context`, `.AppName`, `.PID`, `.Hostname`, `.Started`,
+`.Unique`, `.Command`, `.Format`, `.SourceFile`, and `.OutputDir`. FB2 metadata is not available
+because logs and reports are initialized before the source book is parsed.
+
+Use `.OutputDir` to place the file log and report beside a single-book result:
+
+```yaml
+logging:
+  file:
+    mode: overwrite
+    destination_template: '{{ .OutputDir }}/{{ .AppName }}.log'
+    panic_destination_template: '{{ .OutputDir }}/{{ .AppName }}-panic.log'
+reporting:
+  destination_template: '{{ .OutputDir }}/{{ .AppName }}-report.zip'
+```
+
+It follows `DESTINATION`, the parent of `--output-file`, or the current directory when neither
+is specified. For batches and output templates that create subdirectories, it means the
+destination root. See [Artifact destination templates](templates.md#artifact-destination-templates).
+
+See [Debugging and validation](debugging.md#converter-debug-reports) for archive contents,
+format-specific diagnostics, and the logging behavior of `--debug`.

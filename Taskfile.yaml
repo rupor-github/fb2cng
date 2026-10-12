@@ -150,17 +150,40 @@ tasks:
       DIR: 'content/text/dictionaries'
     dir: '{{.DIR}}'
     cmds:
-      - rm -f hyph-*.txt hyph-*.txt.gz
       - echo "{{.TATN}}Downloading dictionary patterns from CTAN mirror archive{{.TOFF}}"
       - |
         tmp="$(mktemp -d)"
         trap 'rm -rf "$tmp"' EXIT
-        wget -q -O "$tmp/hyphenation-utf8.zip" https://mirrors.ctan.org/language/hyphenation-utf8.zip
+        downloaded=false
+        for url in \
+          https://mirrors.ctan.org/language/hyphenation-utf8.zip \
+          https://mirrors.ibiblio.org/CTAN/language/hyphenation-utf8.zip \
+          https://ctan.math.illinois.edu/language/hyphenation-utf8.zip; do
+          echo "Downloading dictionary archive from $url"
+          if curl --fail --location --silent --show-error \
+            --connect-timeout 15 --max-time 120 --retry 2 \
+            -o "$tmp/hyphenation-utf8.zip" "$url"; then
+            downloaded=true
+            break
+          fi
+        done
+        if [ "$downloaded" != true ]; then
+          echo "Unable to download dictionaries from CTAN HTTPS mirrors; see download errors above." >&2
+          exit 1
+        fi
+        mkdir "$tmp/dictionaries"
         unzip -q -j "$tmp/hyphenation-utf8.zip" \
           'hyph-utf8/tex/patterns/txt/hyph-*.pat.txt' \
           'hyph-utf8/tex/patterns/txt/hyph-*.hyp.txt' \
-          -d .
-      - gzip -q -f hyph-*.txt
+          -d "$tmp/dictionaries"
+        gzip -q -f "$tmp/dictionaries"/hyph-*.txt
+        count="$(find "$tmp/dictionaries" -maxdepth 1 -type f -name 'hyph-*.txt.gz' | wc -l)"
+        if [ "$count" -lt 90 ]; then
+          echo "Incomplete dictionary archive: expected at least 90 files, found $count." >&2
+          exit 1
+        fi
+        rm -f hyph-*.txt hyph-*.txt.gz
+        mv "$tmp/dictionaries"/hyph-*.txt.gz .
     status:
       - test "$(find . -maxdepth 1 -type f -name 'hyph-*.txt.gz' | wc -l)" -ge 90
 
@@ -283,6 +306,8 @@ tasks:
         vars: {GOOS: 'linux', GOARCH: 'amd64', CGO_ENABLED: '0', FLAGS: 'debug', PACKAGE: './cmd/debug/kfxdump', TARGET: '{{.DEV_BUILD_DIR}}/kfxdump'}
       - task: go-build
         vars: {GOOS: 'linux', GOARCH: 'amd64', CGO_ENABLED: '0', FLAGS: 'debug', PACKAGE: './cmd/debug/kpfdump', TARGET: '{{.DEV_BUILD_DIR}}/kpfdump'}
+      - task: go-build
+        vars: {GOOS: 'linux', GOARCH: 'amd64', CGO_ENABLED: '0', FLAGS: 'debug', PACKAGE: './cmd/debug/kfxcompress', TARGET: '{{.DEV_BUILD_DIR}}/kfxcompress'}
 
   go-build:
     internal: true

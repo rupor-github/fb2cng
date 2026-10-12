@@ -19,6 +19,7 @@ import (
 
 	"fbc/archive"
 	"fbc/common"
+	"fbc/config"
 	"fbc/content"
 	"fbc/convert/epub"
 	"fbc/convert/kfx"
@@ -81,6 +82,9 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 	if err != nil {
 		log.Warn("Unknown output format requested, switching to epub2", zap.Error(err))
 		format = common.OutputFmtEpub2
+	}
+	if err := configureKFXCompression(cmd, format, &env.Cfg.Document, log); err != nil {
+		return err
 	}
 
 	env.NoCover = cmd.Bool("no-cover") && !format.ForKindle()
@@ -173,6 +177,30 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 		return processOutputFile(ctx, src, outputFile, format, log)
 	}
 	return process(ctx, src, dst, format, log)
+}
+
+func configureKFXCompression(cmd *cli.Command, format common.OutputFmt, cfg *config.DocumentConfig, log *zap.Logger) error {
+	if !format.ForKindle() {
+		if cmd.IsSet("kfx-compression") {
+			log.Warn("Ignoring --kfx-compression for non-Kindle output", zap.Stringer("format", format))
+		}
+		return nil
+	}
+	source := "default"
+	if cmd.String("config") != "" {
+		source = "configuration"
+	}
+	if cmd.IsSet("kfx-compression") {
+		mode := cmd.String("kfx-compression")
+		if mode != "none" && mode != "lzma" {
+			return fmt.Errorf("invalid --kfx-compression %q: expected none or lzma", mode)
+		}
+		cfg.KFX.Compression = mode
+		source = "cli"
+	}
+	cfg.KFX.CompressionSource = source
+	log.Info("KFX compression selected", zap.String("compression", cfg.KFX.Compression), zap.String("source", source))
+	return nil
 }
 
 // process handles the core conversion logic independently of CLI framework. It

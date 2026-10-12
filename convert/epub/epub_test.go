@@ -918,7 +918,7 @@ func TestGenerate_Integration(t *testing.T) {
 		if os.IsNotExist(err) {
 			t.Errorf("Output file was not created at %s", outputPath)
 			// Check if it was created in workdir instead
-			workdirPath := filepath.Join(c.WorkDir, filepath.Base(outputPath))
+			workdirPath := filepath.Join(c.WorkDir, "book.epub.tmp")
 			if _, err2 := os.Stat(workdirPath); err2 == nil {
 				t.Logf("File exists in workdir: %s", workdirPath)
 			}

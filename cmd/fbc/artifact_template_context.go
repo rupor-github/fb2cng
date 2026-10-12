@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -30,7 +31,7 @@ func artifactTemplateValues(started time.Time, cmd *cli.Command, args []string) 
 		if command, index := preparseInvocationCommand(args); command != "" {
 			values.Command = command
 			if command == "convert" {
-				values.Source, values.Format = preparseConvertInvocation(args[index+1:])
+				values.Source, values.Format, values.OutputDir = preparseConvertInvocation(args[index+1:])
 			}
 		}
 	}
@@ -39,12 +40,18 @@ func artifactTemplateValues(started time.Time, cmd *cli.Command, args []string) 
 		if values.Source == "" {
 			values.Source = cmd.Args().Get(0)
 		}
-		if !values.Format.IsValid() {
+		if cmd.Name == "convert" || !values.Format.IsValid() {
 			format, err := common.ParseOutputFmt(cmd.String("to"))
 			if err != nil {
 				format = common.OutputFmtEpub2
 			}
 			values.Format = format
+		}
+		if cmd.Name == "convert" {
+			values.OutputDir = cmd.Args().Get(1)
+			if outputFile := cmd.String("output-file"); outputFile != "" {
+				values.OutputDir = filepath.Dir(outputFile)
+			}
 		}
 	}
 
@@ -53,51 +60,75 @@ func artifactTemplateValues(started time.Time, cmd *cli.Command, args []string) 
 
 func preparseInvocationCommand(args []string) (string, int) {
 	for i := 0; i < len(args); i++ {
-		arg := args[i]
+		arg, _, inline := strings.Cut(args[i], "=")
 		switch {
-		case arg == "--config" || arg == "-c":
-			i++
-		case strings.HasPrefix(arg, "--config=") || strings.HasPrefix(arg, "-c="):
-		case arg == "--debug" || arg == "-d":
+		case arg == "--config" || arg == "-config" || arg == "--c" || arg == "-c":
+			if !inline {
+				i++
+			}
 		case strings.HasPrefix(arg, "-"):
 		default:
-			return arg, i
+			return args[i], i
 		}
 	}
 	return "", -1
 }
 
-func preparseConvertInvocation(args []string) (string, common.OutputFmt) {
+func preparseConvertInvocation(args []string) (string, common.OutputFmt, string) {
 	format := common.OutputFmtEpub2
+	outputFile := ""
 	for i := 0; i < len(args); i++ {
-		arg := args[i]
+		arg, value, inline := strings.Cut(args[i], "=")
 		switch {
 		case arg == "--":
-			if i+1 < len(args) {
-				return args[i+1], format
-			}
-			return "", format
-		case arg == "--to":
-			if i+1 < len(args) {
-				if parsed, err := common.ParseOutputFmt(args[i+1]); err == nil {
-					format = parsed
-				}
+			return convertPositionalValues(args[i+1:], format, outputFile)
+		case arg == "--to" || arg == "-to":
+			if !inline && i+1 < len(args) {
 				i++
+				value = args[i]
 			}
-		case strings.HasPrefix(arg, "--to="):
-			if parsed, err := common.ParseOutputFmt(strings.TrimPrefix(arg, "--to=")); err == nil {
+			if parsed, err := common.ParseOutputFmt(value); err == nil {
 				format = parsed
 			}
+		case arg == "--output-file" || arg == "-output-file" || arg == "-o" || arg == "--o":
+			if !inline && i+1 < len(args) {
+				i++
+				value = args[i]
+			}
+			outputFile = value
 		case convertFlagTakesValue(arg):
-			i++
+			if !inline {
+				i++
+			}
 		case strings.HasPrefix(arg, "-"):
 		default:
-			return arg, format
+			return convertPositionalValues(args[i:], format, outputFile)
 		}
 	}
-	return "", format
+	return convertPositionalValues(nil, format, outputFile)
+}
+
+func convertPositionalValues(args []string, format common.OutputFmt, outputFile string) (string, common.OutputFmt, string) {
+	source, outputDir := "", "."
+	if len(args) > 0 {
+		source = args[0]
+	}
+	if outputFile != "" {
+		outputDir = filepath.Dir(outputFile)
+	} else if len(args) > 1 && args[1] != "" {
+		outputDir = args[1]
+	}
+	return source, format, outputDir
 }
 
 func convertFlagTakesValue(arg string) bool {
-	return arg == "--asin" || arg == "--output-file" || arg == "-o" || arg == "--force-zip-cp"
+	if !strings.HasPrefix(arg, "-") {
+		return false
+	}
+	switch strings.TrimLeft(arg, "-") {
+	case "asin", "output-file", "o", "force-zip-cp", "kfx-compression", "config", "c":
+		return true
+	default:
+		return false
+	}
 }

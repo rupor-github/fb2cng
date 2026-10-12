@@ -28,7 +28,7 @@ func (c *Container) StatsString() string {
 
 	tw.Line(1, "Generator: %s / %s", c.GeneratorApp, c.GeneratorPkg)
 	tw.Line(1, "ChunkSize: %d", c.ChunkSize)
-	tw.Line(1, "Compression: %d", c.CompressionType)
+	tw.Line(1, "Container compression: %d", c.CompressionType)
 	tw.Line(1, "DRM: %d", c.DRMScheme)
 
 	if c.Fragments != nil && c.Fragments.Len() > 0 {
@@ -85,7 +85,7 @@ func (c *Container) String() string {
 
 	tw.Line(1, "Generator: %s / %s", c.GeneratorApp, c.GeneratorPkg)
 	tw.Line(1, "ChunkSize: %d", c.ChunkSize)
-	tw.Line(1, "Compression: %d", c.CompressionType)
+	tw.Line(1, "Container compression: %d", c.CompressionType)
 	tw.Line(1, "DRM: %d", c.DRMScheme)
 
 	// Show format capabilities if present

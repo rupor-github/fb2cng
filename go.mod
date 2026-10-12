@@ -23,6 +23,7 @@ require (
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
 	github.com/tdewolff/parse/v2 v2.8.16
+	github.com/ulikunitz/xz v0.5.17
 	github.com/urfave/cli/v3 v3.14.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.28.0
@@ -154,7 +155,6 @@ require (
 	github.com/stretchr/testify v1.12.1 // indirect
 	github.com/u-root/u-root v0.16.0 // indirect
 	github.com/u-root/uio v0.0.0-20240224005618-d2acac8f3701 // indirect
-	github.com/ulikunitz/xz v0.5.17 // indirect
 	github.com/urfave/cli/v2 v2.27.7 // indirect
 	github.com/xo/terminfo v1.2.0 // indirect
 	github.com/xrash/smetrics v0.0.0-20250705151800-55b8f293f342 // indirect

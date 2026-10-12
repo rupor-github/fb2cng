@@ -15,7 +15,7 @@
 | EPUB2 | Broad e-reader compatibility, XHTML/CSS styling, NCX navigation, linked footnote sections, SVG preservation, optional visible TOC page |
 | EPUB3 | Modern EPUB package with `nav.xhtml`, semantic `aside`/`noteref` footnotes in floating modes, XHTML/CSS styling, SVG preservation |
 | KEPUB/KEPUB3 | Kobo-oriented EPUB packaging, OPF2 or EPUB3 navigation, XHTML/CSS styling with Kobo sentence spans, SVG preservation |
-| KFX/AZW8 | Direct Kindle Enhanced Typesetting output without Calibre or Amazon software, Kindle style records, floating/popup footnotes, generated location/page navigation, Kindle-compatible image conversion |
+| KFX/AZW8 | Direct Kindle Enhanced Typesetting output without Calibre or Amazon software, optional lossless LZMA compression, Kindle style records, floating/popup footnotes, generated location/page navigation, Kindle-compatible image conversion |
 | PDF | Native PDF 1.4 generation, fixed target page size, selectable/searchable text, embedded fonts, outlines/bookmarks, internal links, tables, images, drop caps, printed page footnotes |
 | TXT | UTF-8 readable plain text, plain headings, aligned text tables, image placeholders, readable note labels, collected final notes for floating footnotes |
 | Markdown | Semantic UTF-8 Markdown, YAML front matter, headings, links, anchors, pipe tables, fenced code blocks, collected endnotes with backlinks, placeholder/external/embedded image modes |
@@ -27,6 +27,8 @@ Kindle KFX/AZW8 output aims to follow Amazon's Kindle Publishing Guidelines as c
 ### Documentation
 
 [User guide](docs/guide.md)
+
+[Debugging and validation](docs/debugging.md)
 
 [Russian discussion forum](https://4pda.to/forum/index.php?showtopic=942250#)
 

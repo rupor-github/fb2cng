@@ -2,12 +2,15 @@
 
 set -eo pipefail
 
-if [ ! -d ${HOME}/.sdkman ]; then
-    echo "Install SDKMAN: curl -s \"https://get.sdkman.io?rcupdate=false\" | bash"
-    echo "   then install Java SDK and Maven"
+SDKMAN_INIT="${SDKMAN_DIR:-${HOME}/.sdkman}/bin/sdkman-init.sh"
+if [ -r "${SDKMAN_INIT}" ]; then
+    source "${SDKMAN_INIT}"
+fi
+
+if ! command -v java >/dev/null 2>&1; then
+    echo "Java not found. Install a Java runtime or configure one with SDKMAN, and ensure java is on PATH." >&2
     exit 1
 fi
-source "${HOME}/.sdkman/bin/sdkman-init.sh"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"

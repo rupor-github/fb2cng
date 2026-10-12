@@ -55,8 +55,7 @@ func Generate(
 		}
 	}(time.Now())
 
-	_, tmpName := filepath.Split(outputPath)
-	tmpName = filepath.Join(c.WorkDir, tmpName)
+	tmpName := filepath.Join(c.WorkDir, "book.epub.tmp")
 
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
 		return fmt.Errorf("unable to create output directory: %w", err)

@@ -116,6 +116,12 @@ type (
 		To     DoubleQuoteString `yaml:"to" validate:"required_if=Enable true"`
 	}
 
+	KFXConfig struct {
+		Compression string `yaml:"compression" validate:"oneof=none lzma"`
+		// CompressionSource records invocation precedence for logs/reports, not YAML.
+		CompressionSource string `yaml:"-"`
+	}
+
 	DocumentConfig struct {
 		FixZip                bool                  `yaml:"fix_zip"`
 		OpenFromCover         bool                  `yaml:"open_from_cover"`
@@ -133,6 +139,7 @@ type (
 		Dropcaps              DropcapsConfig        `yaml:"dropcaps"`
 		PageMap               PageMapConfig         `yaml:"page_map"`
 		Transformations       TextTransformConfig   `yaml:"text_transformations"`
+		KFX                   KFXConfig             `yaml:"kfx"`
 	}
 
 	Config struct {

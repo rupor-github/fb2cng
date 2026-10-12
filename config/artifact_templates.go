@@ -31,17 +31,24 @@ type ArtifactTemplateContext struct {
 	Command    string
 	Format     string
 	SourceFile string
+	OutputDir  string
 }
 
 type ArtifactTemplateValues struct {
-	Started time.Time
-	Command string
-	Format  common.OutputFmt
-	Source  string
+	Started   time.Time
+	Command   string
+	Format    common.OutputFmt
+	Source    string
+	OutputDir string
 }
 
 func (cfg *Config) ResolveArtifactTemplates(values ArtifactTemplateValues) error {
 	values.withDefaults()
+	outputDir, err := filepath.Abs(values.OutputDir)
+	if err != nil {
+		return fmt.Errorf("unable to resolve artifact output directory: %w", err)
+	}
+	values.OutputDir = outputDir
 	if cfg.Logging.FileLogger.PanicDestinationTemplate == "" && cfg.Logging.FileLogger.DestinationTemplate != "" {
 		cfg.Logging.FileLogger.PanicDestinationTemplate = "{{ .AppName }}-panic.log"
 	}
@@ -109,6 +116,7 @@ func expandArtifactTemplate(name TemplateFieldName, field string, values Artifac
 		Command:    values.Command,
 		Format:     format,
 		SourceFile: sourceFile(values.Source),
+		OutputDir:  values.OutputDir,
 	}
 
 	buf := new(bytes.Buffer)
@@ -131,6 +139,9 @@ func (values *ArtifactTemplateValues) withDefaults() {
 	}
 	if values.Command == "" {
 		values.Command = "unknown"
+	}
+	if values.OutputDir == "" {
+		values.OutputDir = "."
 	}
 }
 

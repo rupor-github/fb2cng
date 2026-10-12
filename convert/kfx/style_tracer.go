@@ -328,7 +328,7 @@ func (t *StyleTracer) Flush() string {
 	}
 
 	// Write to file
-	tracePath := filepath.Join(t.workDir, "style-trace.txt")
+	tracePath := filepath.Join(t.workDir, "book.style-trace.txt")
 	if err := os.WriteFile(tracePath, []byte(sb.String()), 0644); err != nil {
 		return ""
 	}

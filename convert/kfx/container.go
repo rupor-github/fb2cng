@@ -129,6 +129,9 @@ func NewContainer() *Container {
 
 // ReadContainer parses a KFX container from bytes.
 func ReadContainer(data []byte) (*Container, error) {
+	if err := ValidateContainer(data); err != nil {
+		return nil, err
+	}
 	if len(data) < MinContainerLen {
 		return nil, fmt.Errorf("container too small: %d bytes", len(data))
 	}

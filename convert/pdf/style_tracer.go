@@ -213,7 +213,7 @@ func (t *pdfStyleTracer) flush() string {
 		sb.WriteByte('\n')
 	}
 
-	tracePath := filepath.Join(t.workDir, "pdf-style-trace.txt")
+	tracePath := filepath.Join(t.workDir, "book.pdf-style-trace.txt")
 	if err := os.WriteFile(tracePath, []byte(sb.String()), 0644); err != nil {
 		return ""
 	}

@@ -10,7 +10,10 @@ import argparse
 import logging
 import os
 from pathlib import Path
+import shutil
+import subprocess
 import sys
+import tempfile
 from typing import List, Optional, Set
 
 
@@ -126,11 +129,30 @@ class ConsoleLogger:
         traceback.print_exc()
 
 
+def unwrap_plaintext_envelope(source: str, destination: Path, cli_tool: Optional[str]) -> str:
+    with open(source, "rb") as book:
+        if book.read(8) != b"\xeaDRMION\xee":
+            return source
+    selected = cli_tool or os.environ.get("KFXCOMPRESS_PATH")
+    if not selected:
+        local = Path(__file__).resolve().parents[1] / "build" / "kfxcompress"
+        selected = str(local) if local.is_file() else shutil.which("kfxcompress")
+    if not selected:
+        raise RuntimeError(
+            "Plaintext KFX envelopes require kfxcompress. Run 'go tool task debug-tools', "
+            "or supply --kfxcompress PATH / KFXCOMPRESS_PATH."
+        )
+    subprocess.run([selected, "uncompress", source, str(destination)], check=True)
+    print(f"Unwrapped plaintext envelope for KFXInput: {source}")
+    return str(destination)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Process a KFX file with kfxlib and print warnings/errors with debug logging."
     )
     parser.add_argument("kfx_file", help="Path to .kfx file")
+    parser.add_argument("--kfxcompress", metavar="PATH", help="Path to kfxcompress for plaintext-envelope unwrapping")
     parser.add_argument(
         "--kfxinput",
         metavar="PATH",
@@ -190,7 +212,9 @@ def main():
     print(f"Processing KFX file: {kfx_file}")
     print("=" * 80)
 
+    temporary = tempfile.TemporaryDirectory(prefix="fbc-kfxinput-")
     try:
+        kfx_file = unwrap_plaintext_envelope(kfx_file, Path(temporary.name) / "inner.kfx", args.kfxcompress)
         # Create YJ_Book instance and decode it
         book = YJ_Book(kfx_file)
         book.decode_book(retain_yj_locals=True)
@@ -241,6 +265,7 @@ def main():
         sys.exit(1)
 
     finally:
+        temporary.cleanup()
         # Clean up logger
         if set_logger is not None:
             set_logger()

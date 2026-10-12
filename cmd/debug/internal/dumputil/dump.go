@@ -17,8 +17,11 @@ import (
 )
 
 // DumpDumpTxt writes a full fragment dump to <stem>-dump.txt.
-func DumpDumpTxt(container *kfx.Container, inPath, outDir string, overwrite bool) error {
+func DumpDumpTxt(container *kfx.Container, inPath, outDir string, overwrite bool, fileSummary ...string) error {
 	dump := container.String() + "\n\n" + container.DumpFragments() + "\n"
+	if len(fileSummary) > 0 {
+		dump = strings.Join(fileSummary, "\n") + "\n\n" + dump
+	}
 	return WriteOutput(inPath, outDir, "-dump.txt", []byte(dump), overwrite)
 }
 

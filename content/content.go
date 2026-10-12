@@ -175,14 +175,12 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 	}()
 	env.Rpt.Store(fmt.Sprintf("%s-%s", misc.GetAppName(), book.Description.DocumentInfo.ID), tmpDir)
 
-	baseSrcName := filepath.Base(srcName)
-
 	// Save parsed document to file for debugging
 	if env.Rpt != nil {
-		if err := doc.WriteToFile(filepath.Join(tmpDir, baseSrcName)); err != nil {
+		if err := doc.WriteToFile(filepath.Join(tmpDir, "book.fb2")); err != nil {
 			return nil, fmt.Errorf("unable to write input doc for debugging: %w", err)
 		}
-		if err := os.WriteFile(filepath.Join(tmpDir, baseSrcName+"_pristine"), []byte(book.String()), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(tmpDir, "book.pristine.txt"), []byte(book.String()), 0644); err != nil {
 			return nil, fmt.Errorf("unable to write parsed doc for debugging: %w", err)
 		}
 	}
@@ -326,7 +324,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 
 	// Save prepared document to file for debugging
 	if env.Rpt != nil {
-		if err := os.WriteFile(filepath.Join(tmpDir, baseSrcName+"_prepared"), []byte(c.String()), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(tmpDir, "book.prepared.txt"), []byte(c.String()), 0644); err != nil {
 			return nil, fmt.Errorf("unable to write prepared doc for debugging: %w", err)
 		}
 	}

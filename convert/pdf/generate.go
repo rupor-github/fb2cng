@@ -117,7 +117,7 @@ func writePDFParsedStylesheetDebug(c *content.Content, styles *pdfStyleResolver,
 	if c == nil || styles == nil || !c.Debug || c.WorkDir == "" || !styles.hasParsedStylesheet {
 		return
 	}
-	if err := os.WriteFile(filepath.Join(c.WorkDir, "parsed-stylesheet.css"), []byte(styles.parsedStylesheetCSS), 0644); err != nil && log != nil {
+	if err := os.WriteFile(filepath.Join(c.WorkDir, "book.stylesheet.css"), []byte(styles.parsedStylesheetCSS), 0644); err != nil && log != nil {
 		log.Warn("Failed to write parsed stylesheet for debug", zap.Error(err))
 	}
 }
