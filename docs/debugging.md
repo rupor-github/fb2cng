@@ -418,7 +418,7 @@ Go's fuzz targets replay their explicit seeds and checked-in regression inputs d
 normal package tests:
 
 ```bash
-PACKAGES='./convert/kfx/envelope' go tool task test
+PACKAGES='./convert/kfx/envelope,./convert/kfx' go tool task test
 ```
 
 To actively generate and mutate inputs, run the manual fuzz task:
@@ -429,8 +429,16 @@ FUZZ_TIME=5m FUZZ_PARALLEL=2 go tool task fuzz
 go tool task fuzz -- -v
 ```
 
-The task prepares the usual generated/embedded inputs, then runs `FuzzIonReader` and
-`FuzzInspect` sequentially. Defaults are **15 seconds per target** and **two workers**;
+The task prepares the usual generated/embedded inputs, then runs these targets sequentially:
+
+| Package | Target | Checks |
+|---|---|---|
+| `convert/kfx/envelope` | `FuzzIonReader` | Mutated binary Ion index data and malformed imports |
+| `convert/kfx/envelope` | `FuzzInspect` | Mutated envelope inspection and decoded-byte round-trips |
+| `convert/kfx` | `FuzzIonRoundTrip` | Generated Ion values through typed decoding and generic reader round-trips; null import rejection |
+| `convert/kfx` | `FuzzContainerRoundTrip` | CONT serialization/parsing, metadata, nullable values, local resource names, raw bytes, and invalid header ranges |
+
+Defaults are **15 seconds per target** and **two workers** (about one minute of fuzzing);
 `FUZZ_TIME` and `FUZZ_PARALLEL` override those settings. Allow extra wall-clock time for
 task dependencies and compilation. Active fuzzing is opt-in and does not change release workflows.
 
@@ -442,10 +450,18 @@ excessive nesting, invalid envelope offsets, plaintext/LZMA multi-page envelopes
 native reference fixtures. Inputs and decoded payloads are bounded to 64 KiB. Successfully
 decoded envelopes must survive a byte-exact decode/encode/decode round-trip.
 
+The ordinary Ion/CONT targets use generated documents with payloads bounded to 8 KiB,
+fixed nesting, and encoder-controlled lengths. They preserve binary data, UTF-8 strings,
+signed integers, nulls, and resource identities across round-trips. CONT range mutations
+are restricted to out-of-buffer offsets/sizes. Arbitrary raw-byte fuzzing of ordinary Ion
+is deferred until its declared allocations and numeric/depth limits are hardened; an
+input-byte cap alone does not bound ion-go's allocations, and its panic guard is not an
+allocation limit.
+
 On a failure, Go minimizes the input and writes a reproducer under
-`convert/kfx/envelope/testdata/fuzz/<target>/`. Keep that file with the fix so normal tests
-replay it, and use the `-run` command printed by Go to reproduce the failure through
-`PACKAGES='./convert/kfx/envelope' go tool task test -- ...`.
+`<package>/testdata/fuzz/<target>/`. Keep that file with the fix so normal tests replay it,
+and use the `-run` command printed by Go to reproduce the failure through
+`PACKAGES='./<package>' go tool task test -- ...`.
 Interesting inputs that do not fail are cached by Go locally, allowing later fuzz runs
 to continue exploring them.
 

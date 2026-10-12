@@ -10,7 +10,7 @@ import (
 	"github.com/amazon-ion/ion-go/ion"
 )
 
-func nullImportTable(t *testing.T, field string, annotated bool) []byte {
+func nullImportTable(t testing.TB, field string, annotated bool) []byte {
 	t.Helper()
 	var buf bytes.Buffer
 	w := ion.NewBinaryWriter(&buf)
