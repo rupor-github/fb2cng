@@ -9,7 +9,8 @@ import (
 )
 
 // Check lengths before ion-go parses input: its scalar readers allocate declared lengths.
-// This also bounds nesting, including symbol-table values, before recursive Ion parsing.
+// This also bounds nesting and rejects nulls, including symbol-table values,
+// before recursive Ion parsing.
 func checkIon(ctx context.Context, data []byte) error {
 	if !bytes.HasPrefix(data, []byte{0xe0, 1, 0, 0xea}) {
 		return errors.New("missing independent binary Ion prolog")
@@ -52,7 +53,12 @@ func checkValue(ctx context.Context, data []byte, depth int) (int, error) {
 	if typ == 14 && length == 0 {
 		return 0, errors.New("unexpected Ion version marker inside datagram")
 	}
-	if length == 15 || typ == 1 {
+	if length == 15 {
+		// The supported envelope profile has no nullable values. In particular,
+		// ion-go dereferences typed-null imports before checkImport can run.
+		return 0, errors.New("null Ion value is unsupported in KFX envelopes")
+	}
+	if typ == 1 {
 		return 1, nil
 	}
 	header, size := 1, uint64(length)
