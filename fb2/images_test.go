@@ -14,6 +14,7 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
+	"golang.org/x/image/tiff"
 
 	"fbc/common"
 	"fbc/config"
@@ -450,6 +451,72 @@ func TestBinaryObject_PrepareImage_GIFToJPEGKindle(t *testing.T) {
 	if r < threshold || g < threshold || b < threshold {
 		t.Errorf("expected bright (white) background for transparent areas, got RGB(%d, %d, %d)",
 			r>>8, g>>8, b>>8)
+	}
+}
+
+// testTransparentWebP is an 8x8 lossless WebP: left half fully transparent,
+// right half opaque red. Generated externally - Go has no WebP encoder.
+const testTransparentWebP = "UklGRiAAAABXRUJQVlA4TBMAAAAvB8ABEA8wHoM8HvMf8Ch8RP8DAA=="
+
+// createTestTIFF creates a TIFF with the same layout as testTransparentWebP.
+func createTestTIFF(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewNRGBA(image.Rect(0, 0, 8, 8))
+	for y := range 8 {
+		for x := 4; x < 8; x++ {
+			img.Set(x, y, color.NRGBA{200, 30, 30, 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := tiff.Encode(&buf, img, nil); err != nil {
+		t.Fatalf("failed to encode TIFF: %v", err)
+	}
+	return buf.Bytes()
+}
+
+func TestBinaryObject_PrepareImage_TransparentToJPEGKindle(t *testing.T) {
+	webpData, err := base64.StdEncoding.DecodeString(testTransparentWebP)
+	if err != nil {
+		t.Fatalf("failed to decode WebP fixture: %v", err)
+	}
+
+	tests := []struct {
+		name        string
+		contentType string
+		data        []byte
+	}{
+		{"webp", "image/webp", webpData},
+		{"tiff", "image/tiff", createTestTIFF(t)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+			cfg := &config.ImagesConfig{
+				JPEGQuality: 85,
+				ScaleFactor: 1.0,
+				Screen:      config.ScreenConfig{Width: 1600, Height: 2560},
+				Cover:       config.CoverConfig{Resize: common.ImageResizeModeNone},
+			}
+			bo := &BinaryObject{ID: "transparent-" + tt.name, ContentType: tt.contentType, Data: tt.data}
+
+			bi := bo.PrepareImage(true, false, cfg, log)
+			if bi.MimeType != "image/jpeg" {
+				t.Fatalf("expected mime type image/jpeg for Kindle, got %s", bi.MimeType)
+			}
+
+			img, _, err := image.Decode(bytes.NewReader(bi.Data))
+			if err != nil {
+				t.Fatalf("failed to decode JPEG: %v", err)
+			}
+
+			// Transparent half must become white, not black
+			r, g, b, _ := img.At(0, 4).RGBA()
+			threshold := uint32(180 << 8)
+			if r < threshold || g < threshold || b < threshold {
+				t.Errorf("expected white background for transparent area, got RGB(%d, %d, %d)", r>>8, g>>8, b>>8)
+			}
+		})
 	}
 }
 

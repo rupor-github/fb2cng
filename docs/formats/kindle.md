@@ -92,7 +92,7 @@ See [Stylesheets](../stylesheets.md) for shared stylesheet rules and resource ha
 - If `document.images.cover.resize` is `none`, Kindle output treats it as `keepAR` so the generated or source cover is still suitable for Kindle packaging.
 - All decodable non-JPEG raster images are converted to JPEG for Kindle compatibility.
 - SVG images are rasterized and encoded as JPEG for Kindle output.
-- Transparent PNG/GIF content is flattened onto a white background before JPEG encoding.
+- Transparent images are flattened onto a white background before JPEG encoding.
 - Broken-image fallback SVGs are rasterized to JPEG as well, so missing or undecodable images still produce Kindle-compatible resources.
 
 ## Footnotes

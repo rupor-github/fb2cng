@@ -322,9 +322,11 @@ func (bo *BinaryObject) prepareImage(kindle, cover bool, cfg *config.ImagesConfi
 	}
 
 	// Handle transparency for formats that support it (PNG, GIF)
-	// JPEG doesn't support transparency, so we must flatten to white background
+	// JPEG doesn't support transparency, so we must flatten to white background.
+	// For Kindle every format ends up as JPEG below, so transparent WebP or TIFF
+	// must be flattened too - otherwise JPEG encoder turns transparency black.
 	if kindle || cfg.RemoveTransparency {
-		if imgType == "png" || imgType == "gif" {
+		if imgType == "png" || imgType == "gif" || kindle {
 			opaque := func(im image.Image) bool {
 				if oimg, ok := im.(interface{ Opaque() bool }); ok {
 					return oimg.Opaque()
