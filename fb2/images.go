@@ -171,6 +171,9 @@ func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfi
 }
 
 func (bo *BinaryObject) prepareImage(kindle, cover bool, cfg *config.ImagesConfig, log *zap.Logger, opts imagePrepareOptions) *BookImage {
+	// force_jpeg makes any output process images the Kindle way
+	kindle = kindle || cfg.ForceJPEG
+
 	bi := &BookImage{
 		MimeType: bo.ContentType,
 		Data:     bo.Data,

@@ -39,6 +39,7 @@ document:
   images:
     use_broken: false
     remove_transparency: true
+    force_jpeg: true
     scale_factor: 1.5
     optimize: true
     jpeg_quality_level: 85
@@ -72,6 +73,10 @@ reporting:
 
 	if !cfg.Document.FixZip {
 		t.Error("Expected FixZip to be true")
+	}
+
+	if !cfg.Document.Images.ForceJPEG {
+		t.Error("ForceJPEG should be true")
 	}
 
 	if cfg.Document.Images.ScaleFactor != 1.5 {

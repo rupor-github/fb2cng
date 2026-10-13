@@ -93,6 +93,7 @@ document:
   images:
     use_broken: false
     remove_transparency: false
+    force_jpeg: false
     scale_factor: 1.0
     optimize: true
     jpeg_quality_level: 75
@@ -110,7 +111,8 @@ document:
 Important notes:
 
 - Kindle output normalizes decodable raster images to JPEG.
-- SVG stays SVG in EPUB but is rasterized for Kindle output.
+- `force_jpeg: true` makes other outputs process images the Kindle way: raster images become JPEG with transparency flattened onto white, and SVG is rasterized. Use it for readers that do not support some image formats, such as WebP on Kobo devices.
+- SVG stays SVG in EPUB but is rasterized for Kindle output and with `force_jpeg: true`.
 - Markdown rasterizes SVG when `document.images.markdown: embedded` is used.
 - For Kindle output, `cover.resize: none` is effectively treated as `keepAR`.
 

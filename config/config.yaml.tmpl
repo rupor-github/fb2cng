@@ -214,6 +214,14 @@ document:
     # NOTE: for Kindle output this behavior is applied automatically.
     remove_transparency: false
 
+    # Process images the same way as for Kindle output: convert all raster
+    # images (PNG, GIF, WebP, TIFF, BMP) to JPEG flattening transparency to
+    # white background, and rasterize SVG images to JPEG. Useful for readers
+    # which do not support some image formats, for example Kobo devices do not
+    # display WebP.
+    # NOTE: for Kindle output this behavior is applied automatically.
+    force_jpeg: false
+
     # Resize all images (but cover) with specified ratio
     scale_factor: 1.0
 
@@ -227,7 +235,8 @@ document:
     optimize: true
 
     # JPEG quality level to use, percentage points (40% - 100%). For Kindle
-    # output this also affects PNG/GIF-to-JPEG conversion and SVG rasterization.
+    # output and with "force_jpeg" this also affects PNG/GIF-to-JPEG conversion
+    # and SVG rasterization.
     jpeg_quality_level: 95
 
     # How Markdown output should render images:

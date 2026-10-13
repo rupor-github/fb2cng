@@ -520,6 +520,70 @@ func TestBinaryObject_PrepareImage_TransparentToJPEGKindle(t *testing.T) {
 	}
 }
 
+func TestBinaryObject_PrepareImage_ForceJPEG(t *testing.T) {
+	webpData, err := base64.StdEncoding.DecodeString(testTransparentWebP)
+	if err != nil {
+		t.Fatalf("failed to decode WebP fixture: %v", err)
+	}
+	jpegData := createTestJPEG(t, 50, 50, 80)
+
+	tests := []struct {
+		name        string
+		forceJPEG   bool
+		contentType string
+		data        []byte
+		wantMime    string
+		wantSame    bool
+	}{
+		{"webp converted", true, "image/webp", webpData, "image/jpeg", false},
+		{"png converted", true, "image/png", createTestPNG(t, 50, 50, true), "image/jpeg", false},
+		{"svg rasterized", true, "image/svg+xml", []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100"/></svg>`), "image/jpeg", false},
+		{"jpeg untouched", true, "image/jpeg", jpegData, "image/jpeg", true},
+		{"webp kept by default", false, "image/webp", webpData, "image/webp", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
+			cfg := &config.ImagesConfig{
+				ForceJPEG:   tt.forceJPEG,
+				JPEGQuality: 85,
+				ScaleFactor: 1.0,
+				Screen:      config.ScreenConfig{Width: 1600, Height: 2560},
+				Cover:       config.CoverConfig{Resize: common.ImageResizeModeNone},
+			}
+			bo := &BinaryObject{ID: "force-jpeg", ContentType: tt.contentType, Data: tt.data}
+
+			bi := bo.PrepareImage(false, false, cfg, log)
+			if bi.MimeType != tt.wantMime {
+				t.Fatalf("expected mime type %s, got %s", tt.wantMime, bi.MimeType)
+			}
+			if same := bytes.Equal(bi.Data, bo.Data); same != tt.wantSame {
+				t.Fatalf("expected data unchanged = %v, got %v", tt.wantSame, same)
+			}
+			if tt.wantSame {
+				return
+			}
+
+			img, format, err := image.Decode(bytes.NewReader(bi.Data))
+			if err != nil {
+				t.Fatalf("failed to decode result: %v", err)
+			}
+			if format != "jpeg" {
+				t.Fatalf("expected JPEG data, got %s", format)
+			}
+			if tt.contentType == "image/webp" {
+				// Transparent half must become white, not black
+				r, g, b, _ := img.At(0, 4).RGBA()
+				threshold := uint32(180 << 8)
+				if r < threshold || g < threshold || b < threshold {
+					t.Errorf("expected white background for transparent area, got RGB(%d, %d, %d)", r>>8, g>>8, b>>8)
+				}
+			}
+		})
+	}
+}
+
 func TestFictionBookPrepareImagesForPDFSkipsPNGOptimization(t *testing.T) {
 	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	cfg := &config.ImagesConfig{

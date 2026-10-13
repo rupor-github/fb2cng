@@ -52,7 +52,7 @@ See [Footnotes](../footnotes.md) for mode details and templates.
 
 ## Images And Fonts
 
-- SVG images stay SVG in EPUB output.
+- Images keep their format and SVG images stay SVG. `document.images.force_jpeg` converts all images to JPEG and rasterizes SVG, for readers that do not support some formats, such as WebP on Kobo devices.
 - Font resources are stored under `OEBPS/fonts/`.
 - Other resources are stored under `OEBPS/other/`.
 - Relative stylesheet resources are resolved from the stylesheet location; unsafe absolute/path-traversal references are rejected.
