@@ -53,6 +53,12 @@ See [Footnotes](../footnotes.md) for mode details and templates.
 ## Images And Fonts
 
 - SVG images stay SVG in EPUB output.
+- KEPUB/KEPUB3 converts decodable WebP images, including covers, to lossless PNG for Kobo compatibility, even when `document.images.optimize` is disabled.
+- WebP-to-PNG conversion preserves transparency unless `document.images.remove_transparency` is enabled. This setting flattens transparent PNG, GIF, TIFF, and WebP images onto white; flattened GIF, TIFF, and WebP images are encoded as PNG because the image encoder only supports PNG and JPEG.
+- JPEG, PNG, GIF, BMP, and TIFF images are not converted solely for Kobo compatibility. Configured resizing, optimization, and transparency removal still apply. The Kobo-specific WebP conversion is not enabled for ordinary EPUB2/EPUB3 output.
+- Cover resizing follows `document.images.cover.resize`. A WebP cover in KEPUB/KEPUB3 becomes PNG even with `resize: none`; that setting disables resizing, not format conversion. Unlike Kindle output, Kobo output does not force covers to JPEG.
 - Font resources are stored under `OEBPS/fonts/`.
 - Other resources are stored under `OEBPS/other/`.
 - Relative stylesheet resources are resolved from the stylesheet location; unsafe absolute/path-traversal references are rejected.
+
+See [Image settings](../config.md#image-settings) for configuration details.

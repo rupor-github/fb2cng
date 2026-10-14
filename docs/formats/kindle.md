@@ -90,9 +90,9 @@ See [Stylesheets](../stylesheets.md) for shared stylesheet rules and resource ha
 
 - Kindle output requires a cover. If the source book has no valid cover, fb2cng forces cover generation and uses the configured default cover image or the built-in generated cover.
 - If `document.images.cover.resize` is `none`, Kindle output treats it as `keepAR` so the generated or source cover is still suitable for Kindle packaging.
-- All decodable non-JPEG raster images are converted to JPEG for Kindle compatibility.
+- All decodable non-JPEG raster images, including PNG, GIF, BMP, TIFF, and WebP, are converted to JPEG for Kindle compatibility. This applies to covers as well as body images and does not depend on `document.images.optimize`.
 - SVG images are rasterized and encoded as JPEG for Kindle output.
-- Transparent PNG/GIF content is flattened onto a white background before JPEG encoding.
+- Transparent PNG, GIF, TIFF, and WebP content is flattened onto a white background before JPEG encoding, even when `document.images.remove_transparency` is disabled.
 - Broken-image fallback SVGs are rasterized to JPEG as well, so missing or undecodable images still produce Kindle-compatible resources.
 
 ## Footnotes

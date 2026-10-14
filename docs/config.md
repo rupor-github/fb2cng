@@ -110,9 +110,14 @@ document:
 Important notes:
 
 - Kindle output normalizes decodable raster images to JPEG.
+- KEPUB/KEPUB3 converts decodable WebP images to lossless PNG for Kobo compatibility. Transparency is preserved unless `remove_transparency` is enabled. Ordinary EPUB2/EPUB3 output does not enable this Kobo-specific conversion.
+- These format conversions apply to covers and body images, even with `optimize: false`.
+- `remove_transparency: true` flattens transparent PNG, GIF, TIFF, and WebP images onto a white background. Kindle output applies this automatically before JPEG encoding, regardless of the setting.
+- For EPUB/KEPUB output, flattened GIF, TIFF, and WebP images become PNG: the image encoder supports only PNG and JPEG, and PNG avoids introducing JPEG artifacts. Opaque images are not converted merely because `remove_transparency` is enabled.
 - SVG stays SVG in EPUB but is rasterized for Kindle output.
 - Markdown rasterizes SVG when `document.images.markdown: embedded` is used.
 - For Kindle output, `cover.resize: none` is effectively treated as `keepAR`.
+- For KEPUB/KEPUB3, `cover.resize: none` disables cover resizing but does not prevent WebP-to-PNG conversion. Covers are not forced to JPEG.
 
 ## Text Transformations
 

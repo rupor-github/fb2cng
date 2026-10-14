@@ -209,9 +209,10 @@ document:
     # any processing, allowing reader to decide what to do
     use_broken: false
 
-    # Kindle eInk devices do not handle transparent images well. This option
-    # removes transparency from PNG and GIF images by flattening to white background.
-    # NOTE: for Kindle output this behavior is applied automatically.
+    # Flatten transparent PNG, GIF, TIFF, and WebP images onto a white background.
+    # For EPUB/KEPUB output, flattened GIF/TIFF/WebP images are encoded as PNG.
+    # Kindle output applies this automatically before JPEG encoding, regardless
+    # of this setting.
     remove_transparency: false
 
     # Resize all images (but cover) with specified ratio
@@ -221,13 +222,14 @@ document:
     # respects "jpeg_quality_level": if detected level for an image is higher
     # than requested image will be re-encoded. For PNG best compression_level
     # is always specified. Additionally will trigger grayscale detection for
-    # JPEG images. NOTE: for Kindle output some conversion still happens even
-    # with this disabled, because raster images are normalized to JPEG and SVG
-    # images are rasterized.
+    # JPEG images. Format compatibility conversions still happen when disabled:
+    # Kindle normalizes raster images to JPEG and rasterizes SVG; KEPUB/KEPUB3
+    # converts WebP to PNG, preserving transparency unless removal is requested.
+    # These conversions apply to covers as well as body images.
     optimize: true
 
     # JPEG quality level to use, percentage points (40% - 100%). For Kindle
-    # output this also affects PNG/GIF-to-JPEG conversion and SVG rasterization.
+    # output this also affects non-JPEG raster-to-JPEG conversion and SVG rasterization.
     jpeg_quality_level: 95
 
     # How Markdown output should render images:
@@ -257,7 +259,8 @@ document:
       # default_image_path = "default_cover.jpeg"
 
       # How to process cover image
-      # "none"    - do nothing (for Kindle output treated as "keepAR")
+      # "none"    - do not resize (for Kindle output treated as "keepAR");
+      #             format conversion still applies, including WebP-to-PNG for Kobo
       # "keepAR"  - when image height is less than specified screen height,
       # resize to specified screen height keeping aspect ratio
       # "stretch" - unconditionally resize to specified screen width and height
