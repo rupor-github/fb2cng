@@ -35,3 +35,7 @@ Kindle KFX/AZW8 output aims to follow Amazon's Kindle Publishing Guidelines as c
 ### Installation:
 
 Download from the [releases page](https://github.com/rupor-github/fb2cng/releases) and unpack it in a convenient location.
+
+### Contributing
+
+Please read the [contribution guidelines](CONTRIBUTING.md) before opening an issue or pull request.
