@@ -14,7 +14,7 @@ import (
 	"fbc/config"
 )
 
-func TestBinaryObject_PrepareImage_TIFFWebPTransparency(t *testing.T) {
+func TestFictionBook_PrepareImagesForOutput_TIFFWebPTransparency(t *testing.T) {
 	for _, transparent := range []bool{true, false} {
 		name := "opaque"
 		if transparent {
@@ -44,32 +44,28 @@ func TestBinaryObject_PrepareImage_TIFFWebPTransparency(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Lossless WebP fixtures with the same three bands as src, generated
-			// with Pillow. No external encoder is needed to run these tests.
-			webpBase64 := "UklGRiwAAABXRUJQVlA4TCAAAAAvL8ADABcQ8y8gKPJ/tPkP2kBIQDjppLFyRP8DoEr1GQ=="
-			if transparent {
-				webpBase64 = "UklGRjAAAABXRUJQVlA4TCQAAAAvL8ADEBcQ8y8gKPJ/NAFB0XXLBfyCkIBw0klj5Yj+B0CV6jM="
-			}
-			webpData, err := base64.StdEncoding.DecodeString(webpBase64)
-			if err != nil {
-				t.Fatal(err)
-			}
-
 			for _, input := range []struct {
 				format string
 				data   []byte
 			}{
 				{format: "tiff", data: tiffData.Bytes()},
-				{format: "webp", data: webpData},
+				{format: "webp", data: createTestWebP(t, transparent)},
 			} {
 				for _, mode := range []struct {
 					name   string
-					kindle bool
+					output common.OutputFmt
 					remove bool
 				}{
-					{name: "preserve"},
-					{name: "remove", remove: true},
-					{name: "kindle", kindle: true},
+					{name: "epub2", output: common.OutputFmtEpub2},
+					{name: "epub3", output: common.OutputFmtEpub3},
+					{name: "pdf", output: common.OutputFmtPdf},
+					{name: "remove", output: common.OutputFmtEpub2, remove: true},
+					{name: "kfx", output: common.OutputFmtKfx},
+					{name: "azw8", output: common.OutputFmtAzw8},
+					{name: "kepub", output: common.OutputFmtKepub},
+					{name: "kepub3", output: common.OutputFmtKepub3},
+					{name: "kepub-remove", output: common.OutputFmtKepub, remove: true},
+					{name: "kepub3-remove", output: common.OutputFmtKepub3, remove: true},
 				} {
 					t.Run(input.format+"/"+mode.name, func(t *testing.T) {
 						cfg := &config.ImagesConfig{
@@ -80,19 +76,27 @@ func TestBinaryObject_PrepareImage_TIFFWebPTransparency(t *testing.T) {
 							Cover:              config.CoverConfig{Resize: common.ImageResizeModeNone},
 						}
 						bo := &BinaryObject{ID: "test-" + input.format, ContentType: "image/" + input.format, Data: input.data}
-						bi := bo.PrepareImage(mode.kindle, false, cfg, zaptest.NewLogger(t))
+						book := &FictionBook{Binaries: []BinaryObject{*bo}}
+						bi := book.PrepareImagesForOutput(mode.output, cfg, zaptest.NewLogger(t))[bo.ID]
+						if bi == nil {
+							t.Fatal("missing prepared image")
+						}
 						wantFormat := input.format
-						flatten := transparent && (mode.kindle || mode.remove)
-						if mode.kindle {
+						flatten := transparent && (mode.output.IsKindle() || mode.remove)
+						convertWebP := mode.output.IsKobo() && input.format == "webp"
+						if mode.output.IsKindle() {
 							wantFormat = "jpeg"
-						} else if flatten {
+						} else if flatten || convertWebP {
 							wantFormat = "png"
 						}
 						if bi.MimeType != "image/"+wantFormat {
 							t.Fatalf("expected image/%s, got %s", wantFormat, bi.MimeType)
 						}
-						if !mode.kindle && !flatten && !bytes.Equal(bi.Data, input.data) {
+						if !mode.output.IsKindle() && !flatten && !convertWebP && !bytes.Equal(bi.Data, input.data) {
 							t.Error("unmodified image should retain its original bytes")
+						}
+						if bi.Filename != "images/img00001."+mimeToExt(bi.MimeType) {
+							t.Errorf("unexpected image filename: %s", bi.Filename)
 						}
 						got, format, err := image.Decode(bytes.NewReader(bi.Data))
 						if err != nil {
@@ -125,4 +129,20 @@ func TestBinaryObject_PrepareImage_TIFFWebPTransparency(t *testing.T) {
 			}
 		})
 	}
+}
+
+// createTestWebP returns a lossless 48x16 WebP with three vertical bands:
+// transparent black, half-transparent red, and opaque blue (or all opaque).
+// Fixtures were generated with Pillow; tests do not need an external encoder.
+func createTestWebP(t *testing.T, transparent bool) []byte {
+	t.Helper()
+	encoded := "UklGRiwAAABXRUJQVlA4TCAAAAAvL8ADABcQ8y8gKPJ/tPkP2kBIQDjppLFyRP8DoEr1GQ=="
+	if transparent {
+		encoded = "UklGRjAAAABXRUJQVlA4TCQAAAAvL8ADEBcQ8y8gKPJ/NAFB0XXLBfyCkIBw0klj5Yj+B0CV6jM="
+	}
+	data, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
 }

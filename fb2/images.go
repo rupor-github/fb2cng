@@ -34,15 +34,17 @@ func (fb *FictionBook) PrepareImages(kindle bool, cfg *config.ImagesConfig, log 
 	return fb.prepareImages(kindle, cfg, log, imagePrepareOptions{})
 }
 
-// PrepareImagesForOutput processes images with output-format-specific shortcuts.
+// PrepareImagesForOutput processes images with output-format-specific compatibility rules and shortcuts.
 func (fb *FictionBook) PrepareImagesForOutput(outputFormat common.OutputFmt, cfg *config.ImagesConfig, log *zap.Logger) BookImages {
 	return fb.prepareImages(outputFormat.IsKindle(), cfg, log, imagePrepareOptions{
 		skipNonJPEGOptimization: outputFormat == common.OutputFmtPdf,
+		convertWebPToPNG:        outputFormat.IsKobo(),
 	})
 }
 
 type imagePrepareOptions struct {
 	skipNonJPEGOptimization bool
+	convertWebPToPNG        bool
 }
 
 func (fb *FictionBook) prepareImages(kindle bool, cfg *config.ImagesConfig, log *zap.Logger, opts imagePrepareOptions) BookImages {
@@ -270,6 +272,15 @@ func (bo *BinaryObject) prepareImage(kindle, cover bool, cfg *config.ImagesConfi
 	bi.MimeType = mime.TypeByExtension("." + imgType)
 	bi.Dim.Width = img.Bounds().Dx()
 	bi.Dim.Height = img.Bounds().Dy()
+
+	// Kobo does not support WebP. Use lossless PNG, preserving transparency
+	// unless its removal is explicitly requested below.
+	if opts.convertWebPToPNG && imgType == "webp" {
+		log.Debug("Converting WebP image to PNG for Kobo output", zap.String("id", bo.ID))
+		imgType = "png"
+		bi.MimeType = "image/png"
+		imageChanged = true
+	}
 
 	// Scaling cover image
 	if cover {
