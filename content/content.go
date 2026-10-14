@@ -187,7 +187,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 
 	// Handle cover image before normalization
 	var coverID string
-	noCover := env.NoCover && !outputFormat.ForKindle()
+	noCover := env.NoCover && !outputFormat.IsKindle()
 	var omittedCoverIDs map[string]bool
 	if noCover {
 		// Remove cover references before link indexing and image preparation.
@@ -284,7 +284,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 		SrcName:               srcName,
 		Doc:                   doc,
 		OutputFormat:          outputFormat,
-		KindleEbook:           env.KindleEbook && outputFormat.ForKindle(),
+		KindleEbook:           env.KindleEbook && outputFormat.IsKindle(),
 		ASIN:                  env.KindleASIN,
 		FootnotesMode:         env.Cfg.Document.Footnotes.Mode,
 		FootnoteLabelTemplate: env.Cfg.Document.Footnotes.LabelTemplate,

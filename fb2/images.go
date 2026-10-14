@@ -36,7 +36,7 @@ func (fb *FictionBook) PrepareImages(kindle bool, cfg *config.ImagesConfig, log 
 
 // PrepareImagesForOutput processes images with output-format-specific shortcuts.
 func (fb *FictionBook) PrepareImagesForOutput(outputFormat common.OutputFmt, cfg *config.ImagesConfig, log *zap.Logger) BookImages {
-	return fb.prepareImages(outputFormat.ForKindle(), cfg, log, imagePrepareOptions{
+	return fb.prepareImages(outputFormat.IsKindle(), cfg, log, imagePrepareOptions{
 		skipNonJPEGOptimization: outputFormat == common.OutputFmtPdf,
 	})
 }

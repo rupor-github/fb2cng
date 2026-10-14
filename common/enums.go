@@ -36,7 +36,7 @@ type VignettePos string
 // ENUM(epub2, epub3, kepub, kepub3, kfx, azw8, pdf, txt, md)
 type OutputFmt int
 
-func (o OutputFmt) ForKindle() bool {
+func (o OutputFmt) IsKindle() bool {
 	return o == OutputFmtKfx || o == OutputFmtAzw8
 }
 

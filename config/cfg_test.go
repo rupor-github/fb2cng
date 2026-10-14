@@ -645,7 +645,7 @@ func TestOutputFmtNames(t *testing.T) {
 	}
 }
 
-func TestOutputFmt_ForKindle(t *testing.T) {
+func TestOutputFmt_IsKindle(t *testing.T) {
 	tests := []struct {
 		fmt      common.OutputFmt
 		expected bool
@@ -663,9 +663,9 @@ func TestOutputFmt_ForKindle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.fmt.String(), func(t *testing.T) {
-			got := tt.fmt.ForKindle()
+			got := tt.fmt.IsKindle()
 			if got != tt.expected {
-				t.Errorf("ForKindle() = %v, want %v", got, tt.expected)
+				t.Errorf("IsKindle() = %v, want %v", got, tt.expected)
 			}
 		})
 	}

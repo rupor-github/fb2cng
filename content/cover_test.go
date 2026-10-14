@@ -66,7 +66,7 @@ func TestPrepareNoCover(t *testing.T) {
 						}
 					})
 
-					omit := tt.noCover && !format.ForKindle()
+					omit := tt.noCover && !format.IsKindle()
 					if got, want := c.CoverID != "", !omit; got != want {
 						t.Fatalf("has cover = %v, want %v", got, want)
 					}

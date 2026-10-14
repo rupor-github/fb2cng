@@ -88,13 +88,13 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 		return err
 	}
 
-	env.NoCover = cmd.Bool("no-cover") && !format.ForKindle()
-	if cmd.Bool("no-cover") && format.ForKindle() {
+	env.NoCover = cmd.Bool("no-cover") && !format.IsKindle()
+	if cmd.Bool("no-cover") && format.IsKindle() {
 		log.Warn("Ignoring --no-cover for Kindle output: a cover is required", zap.Stringer("format", format))
 	}
 
 	// Amazon formats must always have valid cover page
-	if format.ForKindle() {
+	if format.IsKindle() {
 		env.Cfg.Document.Images.Cover.Generate = true
 		if env.Cfg.Document.Images.Cover.Resize == common.ImageResizeModeNone {
 			env.Cfg.Document.Images.Cover.Resize = common.ImageResizeModeKeepAR
@@ -142,7 +142,7 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 	if err != nil {
 		return fmt.Errorf("invalid --asin: %w", err)
 	}
-	if as != "" && !format.ForKindle() {
+	if as != "" && !format.IsKindle() {
 		log.Warn("Ignoring --asin for non-Kindle output", zap.String("format", format.String()))
 		as = ""
 	}
@@ -181,7 +181,7 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 }
 
 func configureKFXCompression(cmd *cli.Command, format common.OutputFmt, cfg *config.DocumentConfig, log *zap.Logger) error {
-	if !format.ForKindle() {
+	if !format.IsKindle() {
 		if cmd.IsSet("kfx-compression") {
 			log.Warn("Ignoring --kfx-compression for non-Kindle output", zap.Stringer("format", format))
 		}
