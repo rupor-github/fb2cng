@@ -109,6 +109,8 @@ document:
 
 Important notes:
 
+- `optimize` enables optional JPEG/PNG recompression. It does not control resizing, transparency removal, or output-format compatibility conversions.
+- With `optimize: true`, JPEGs are re-encoded if their detected quality exceeds `jpeg_quality_level`; PNGs are recompressed using best compression, except for PDF output, which skips optional PNG recompression. Grayscale detection is applied during JPEG encoding when optimization is enabled.
 - Kindle output normalizes decodable raster images to JPEG.
 - KEPUB/KEPUB3 converts decodable WebP images to lossless PNG for Kobo compatibility. Transparency is preserved unless `remove_transparency` is enabled. Ordinary EPUB2/EPUB3 output does not enable this Kobo-specific conversion.
 - These format conversions apply to covers and body images, even with `optimize: false`.

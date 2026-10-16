@@ -218,11 +218,12 @@ document:
     # Resize all images (but cover) with specified ratio
     scale_factor: 1.0
 
-    # Recompress all supported images (presently JPEG, PNG). For JPEG quality
-    # respects "jpeg_quality_level": if detected level for an image is higher
-    # than requested image will be re-encoded. For PNG best compression_level
-    # is always specified. Additionally will trigger grayscale detection for
-    # JPEG images. Format compatibility conversions still happen when disabled:
+    # Enable optional JPEG/PNG recompression. This does not control resizing,
+    # transparency removal, or output-format compatibility conversions.
+    # JPEGs are re-encoded if their detected quality exceeds "jpeg_quality_level".
+    # PNGs use best compression, except PDF output skips optional PNG recompression.
+    # When enabled, grayscale detection is applied during JPEG encoding.
+    # Format compatibility conversions still happen when disabled:
     # Kindle normalizes raster images to JPEG and rasterizes SVG; KEPUB/KEPUB3
     # converts WebP to PNG, preserving transparency unless removal is requested.
     # These conversions apply to covers as well as body images.
