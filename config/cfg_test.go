@@ -27,6 +27,9 @@ func TestLoadConfiguration_NoFile(t *testing.T) {
 	if cfg.Version != 1 {
 		t.Errorf("Default config version = %d, want 1", cfg.Version)
 	}
+	if cfg.Document.Images.RasterizeSVG {
+		t.Error("SVG rasterization must be opt-in")
+	}
 }
 
 func TestLoadConfiguration_WithFile(t *testing.T) {
@@ -39,6 +42,7 @@ document:
   images:
     use_broken: false
     remove_transparency: true
+    rasterize_svg: true
     scale_factor: 1.5
     optimize: true
     jpeg_quality_level: 85
@@ -76,6 +80,9 @@ reporting:
 
 	if cfg.Document.Images.ScaleFactor != 1.5 {
 		t.Errorf("ScaleFactor = %f, want 1.5", cfg.Document.Images.ScaleFactor)
+	}
+	if !cfg.Document.Images.RasterizeSVG {
+		t.Error("Expected RasterizeSVG to be true")
 	}
 
 	if cfg.Document.Images.JPEGQuality != 85 {

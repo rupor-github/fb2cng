@@ -215,6 +215,13 @@ document:
     # of this setting.
     remove_transparency: false
 
+    # Force SVG rasterization independently of optimization. False keeps the
+    # output backend's normal behavior, including required rasterization.
+    # EPUB/KEPUB and external Markdown use PNG, preserving alpha unless
+    # remove_transparency is enabled. Kindle and embedded Markdown retain JPEG
+    # on white. PDF retains intrinsic SVG sizing and white pixel embedding.
+    rasterize_svg: false
+
     # Resize all images (but cover) with specified ratio
     scale_factor: 1.0
 
@@ -245,7 +252,7 @@ document:
       # Width and height are device pixels; PDF uses them with dpi to derive
       # fixed page size in PDF points.
       # This is used to prepare cover and some other operations, like SVG
-      # rasterization for kindle devices.
+      # rasterization for Kindle and optional PNG output (PDF keeps intrinsic size).
       width: 1264
       height: 1680
       dpi: 300

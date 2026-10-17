@@ -1,10 +1,56 @@
 package images
 
 import (
+	"image"
 	"math"
 	"strings"
 	"testing"
 )
+
+func TestSVGRasterizationBackground(t *testing.T) {
+	svg := []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 10">
+<rect width="10" height="10" fill="red" fill-opacity="0.5"/></svg>`)
+	for _, tt := range []struct {
+		name      string
+		rasterize func([]byte, int, int, float64) (image.Image, error)
+		wantAlpha uint32
+	}{
+		{"white", RasterizeSVGToImage, 0xffff},
+		{"transparent", RasterizeSVGToTransparentImage, 0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			img, err := tt.rasterize(svg, 40, 0, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if img.Bounds().Dx() != 40 || img.Bounds().Dy() != 20 {
+				t.Fatalf("unexpected dimensions: %v", img.Bounds())
+			}
+			r, g, b, a := img.At(30, 10).RGBA()
+			if a != tt.wantAlpha || r != a || g != a || b != a {
+				t.Fatalf("background RGBA = %d/%d/%d/%d", r, g, b, a)
+			}
+			r, g, b, a = img.At(10, 10).RGBA()
+			if tt.wantAlpha == 0 {
+				if a < 0x7f00 || a > 0x8100 || r != a || g != 0 || b != 0 {
+					t.Fatalf("semi-transparent red RGBA = %d/%d/%d/%d", r, g, b, a)
+				}
+			} else if a != 0xffff || r != 0xffff || g < 0x7e00 || g > 0x8100 || b != g {
+				t.Fatalf("red on white RGBA = %d/%d/%d/%d", r, g, b, a)
+			}
+		})
+	}
+}
+
+func TestTransparentSVGRasterizationFallback(t *testing.T) {
+	img, err := RasterizeSVGToTransparentImage([]byte(`<svg xmlns="http://www.w3.org/2000/svg"/>`), 0, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if img.Bounds().Dx() != 2048 || img.Bounds().Dy() != 2048 {
+		t.Fatalf("fallback dimensions = %v, want 2048x2048", img.Bounds())
+	}
+}
 
 func TestRasterizeSVGToImage(t *testing.T) {
 	svg := []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50"><rect width="100" height="50"/></svg>`)

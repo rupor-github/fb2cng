@@ -41,7 +41,12 @@ document:
 | `external` | Write assets next to the `.md` file and reference them with Markdown image syntax |
 | `embedded` | Embed image data as `data:` URIs |
 
-External assets are placed in a book-specific directory such as `images-<book-id>/` to avoid collisions. SVG images are rasterized when embedded.
+External assets are placed in a book-specific directory such as `images-<book-id>/` to avoid collisions.
+
+External SVG assets remain SVG by default. Set `document.images.rasterize_svg: true` to write PNG instead,
+preserving transparency unless `remove_transparency` is enabled. Embedded images retain their existing
+JPEG normalization, including SVG rasterization and white-background flattening, regardless of these settings.
+Placeholder mode emits no image resources, so rasterization has no visible effect there.
 
 ## Markdown Links And Anchors
 

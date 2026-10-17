@@ -14,11 +14,67 @@ import (
 
 	"go.uber.org/zap/zaptest"
 
+	"fbc/common"
 	"fbc/config"
 	"fbc/content"
 	"fbc/convert/pdf/docwriter"
 	"fbc/fb2"
 )
+
+func TestForcedSVGRasterizationPreservesPDFLayout(t *testing.T) {
+	svg := []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 20">
+<rect width="20" height="20" fill="red" fill-opacity="0.5"/></svg>`)
+	doc := pdfDocumentSpec{PageWidth: 300, PageHeight: 400, ScreenWidthPx: 1200, ScreenHeightPx: 1600, ScreenDPI: 300}
+	for _, cover := range []bool{false, true} {
+		name := "body"
+		if cover {
+			name = "cover"
+		}
+		t.Run(name, func(t *testing.T) {
+			cfg := &config.ImagesConfig{
+				Optimize: true, ScaleFactor: 0.5,
+				Screen: config.ScreenConfig{Width: 1200, Height: 1600},
+				Cover:  config.CoverConfig{Resize: common.ImageResizeModeStretch},
+			}
+			book := &fb2.FictionBook{Binaries: []fb2.BinaryObject{{ID: "svg", ContentType: "image/svg+xml", Data: svg}}}
+			if cover {
+				book.Description.TitleInfo.Coverpage = []fb2.InlineImage{{Href: "#svg"}}
+			}
+			before := book.PrepareImagesForOutput(common.OutputFmtPdf, cfg, zaptest.NewLogger(t))["svg"]
+			cfg.RasterizeSVG = true
+			after := book.PrepareImagesForOutput(common.OutputFmtPdf, cfg, zaptest.NewLogger(t))["svg"]
+			if after.MimeType != "image/png" || after.Dim.Width != 40 || after.Dim.Height != 20 {
+				t.Fatalf("prepared image MIME = %q, dimensions = %v", after.MimeType, after.Dim)
+			}
+			w1, h1 := naturalPDFImageSize(doc, before)
+			w2, h2 := naturalPDFImageSize(doc, after)
+			if w1 != w2 || h1 != h2 {
+				t.Fatalf("natural dimensions changed from %v/%v to %v/%v", w1, h1, w2, h2)
+			}
+			w1, h1, ok1 := fitPDFBlockImageSize(doc, before, 200, 300, 200, false)
+			w2, h2, ok2 := fitPDFBlockImageSize(doc, after, 200, 300, 200, false)
+			if w1 != w2 || h1 != h2 || ok1 != ok2 {
+				t.Fatalf("block dimensions changed from %v/%v/%v to %v/%v/%v", w1, h1, ok1, w2, h2, ok2)
+			}
+			resource, err := makePDFImageResource(after)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resource.Dict["Filter"] != docwriter.Name("FlateDecode") {
+				t.Fatalf("unexpected filter: %v", resource.Dict["Filter"])
+			}
+			decoded, err := decodePDFImage(after)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rgb := flattenImageToRGB(decoded)
+			pixel := (10*40 + 30) * 3
+			if !bytes.Equal(rgb[pixel:pixel+3], []byte{255, 255, 255}) {
+				t.Fatalf("background pixel = %v, want white", rgb[pixel:pixel+3])
+			}
+		})
+	}
+}
 
 func TestLayoutPDFPagesAddsCoverImagePage(t *testing.T) {
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{

@@ -46,6 +46,7 @@ type (
 	ImagesConfig struct {
 		UseBroken          bool                     `yaml:"use_broken"`
 		RemoveTransparency bool                     `yaml:"remove_transparency"`
+		RasterizeSVG       bool                     `yaml:"rasterize_svg"`
 		ScaleFactor        float64                  `yaml:"scale_factor" validate:"gte=0.0"`
 		Optimize           bool                     `yaml:"optimize"`
 		JPEGQuality        int                      `yaml:"jpeg_quality_level" validate:"min=40,max=100"`

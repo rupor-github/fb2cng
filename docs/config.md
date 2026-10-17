@@ -93,6 +93,7 @@ document:
   images:
     use_broken: false
     remove_transparency: false
+    rasterize_svg: false
     scale_factor: 1.0
     optimize: true
     jpeg_quality_level: 75
@@ -116,8 +117,12 @@ Important notes:
 - These format conversions apply to covers and body images, even with `optimize: false`.
 - `remove_transparency: true` flattens transparent PNG, GIF, TIFF, and WebP images onto a white background. Kindle output applies this automatically before JPEG encoding, regardless of the setting.
 - For EPUB/KEPUB output, flattened GIF, TIFF, and WebP images become PNG: the image encoder supports only PNG and JPEG, and PNG avoids introducing JPEG artifacts. Opaque images are not converted merely because `remove_transparency` is enabled.
-- SVG stays SVG in EPUB but is rasterized for Kindle output.
-- Markdown rasterizes SVG when `document.images.markdown: embedded` is used.
+- `rasterize_svg: true` explicitly selects raster rendering, independently of `optimize`. With `false` (the default), each backend keeps its normal behavior; this does not prohibit raster fallback or required rasterization.
+- SVG normally stays SVG in EPUB/KEPUB and external Markdown. When forced to raster, it becomes PNG with transparency preserved unless `remove_transparency: true` requests a white background.
+- Kindle and embedded Markdown always rasterize SVG to JPEG on white, regardless of either setting. Existing raster-to-JPEG compatibility rules remain unchanged.
+- Optional SVG rasterization uses `screen.width`, preserving aspect ratio, then applies cover resizing or body `scale_factor`. Placeholders retain intrinsic sizing before those transformations. SVGs without viewBox dimensions fall back to 2048 per missing dimension; raster dimensions are capped at 8192.
+- PDF already rasterizes SVG. Enabling `rasterize_svg` prepares PNG instead, retaining PDF's intrinsic SVG dimensions and existing sizing behavior (no additional screen-width, cover, or scale-factor transformation). PDF pixel embedding still flattens onto white.
+- Built-in vignette stroke adjustments remain limited to existing Kindle and embedded-Markdown preparation; optional PNG rasterization does not enable them. Generated default covers remain JPEG on white; external SVG covers follow the image policy.
 - For Kindle output, `cover.resize: none` is effectively treated as `keepAR`.
 - For KEPUB/KEPUB3, `cover.resize: none` disables cover resizing but does not prevent WebP-to-PNG conversion. Covers are not forced to JPEG.
 

@@ -61,14 +61,24 @@ func ScaleSVGStrokeWidth(svgData []byte, factor float64) []byte {
 	})
 }
 
-// RasterizeSVGToImage rasterizes SVG to an RGBA image.
+// RasterizeSVGToImage rasterizes SVG to an RGBA image on an opaque white background.
 //
 // Rules:
-//   - if targetW == 0 && targetH == 0: use SVG viewBox dimensions (fallback to 1024x1024)
+//   - if targetW == 0 && targetH == 0: use SVG viewBox dimensions (fallback to 2048x2048)
 //   - if only one of targetW/targetH is > 0: scale by that dimension keeping aspect ratio
 //   - if both targetW and targetH are > 0: fit into that box keeping aspect ratio
 //   - if strokeWidthFactor > 0 and != 1: multiply all stroke-width values before rasterizing
 func RasterizeSVGToImage(svgData []byte, targetW, targetH int, strokeWidthFactor float64) (image.Image, error) {
+	return rasterizeSVG(svgData, targetW, targetH, strokeWidthFactor, true)
+}
+
+// RasterizeSVGToTransparentImage uses the same sizing rules as RasterizeSVGToImage,
+// but preserves alpha for callers that can represent transparency, such as PNG encoders.
+func RasterizeSVGToTransparentImage(svgData []byte, targetW, targetH int, strokeWidthFactor float64) (image.Image, error) {
+	return rasterizeSVG(svgData, targetW, targetH, strokeWidthFactor, false)
+}
+
+func rasterizeSVG(svgData []byte, targetW, targetH int, strokeWidthFactor float64, whiteBackground bool) (image.Image, error) {
 	// Scale stroke widths if factor is specified
 	if strokeWidthFactor > 0 && strokeWidthFactor != 1.0 {
 		svgData = ScaleSVGStrokeWidth(svgData, strokeWidthFactor)
@@ -117,7 +127,9 @@ func RasterizeSVGToImage(svgData []byte, targetW, targetH int, strokeWidthFactor
 	icon.SetTarget(0, 0, float64(w), float64(h))
 
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
-	draw.Draw(dst, dst.Bounds(), &image.Uniform{C: color.RGBA{255, 255, 255, 255}}, image.Point{}, draw.Src)
+	if whiteBackground {
+		draw.Draw(dst, dst.Bounds(), &image.Uniform{C: color.RGBA{255, 255, 255, 255}}, image.Point{}, draw.Src)
+	}
 
 	scanner := rasterx.NewScannerGV(w, h, dst, dst.Bounds())
 	dasher := rasterx.NewDasher(w, h, scanner)

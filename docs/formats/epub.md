@@ -52,7 +52,7 @@ See [Footnotes](../footnotes.md) for mode details and templates.
 
 ## Images And Fonts
 
-- SVG images stay SVG in EPUB output.
+- SVG images stay SVG by default. `document.images.rasterize_svg: true` converts them to PNG, preserving transparency unless `remove_transparency` requests a white background. This applies to covers and body images independently of `optimize`.
 - KEPUB/KEPUB3 converts decodable WebP images, including covers, to lossless PNG for Kobo compatibility, even when `document.images.optimize` is disabled.
 - WebP-to-PNG conversion preserves transparency unless `document.images.remove_transparency` is enabled. This setting flattens transparent PNG, GIF, TIFF, and WebP images onto white; flattened GIF, TIFF, and WebP images are encoded as PNG because the image encoder only supports PNG and JPEG.
 - JPEG, PNG, GIF, BMP, and TIFF images are not converted solely for Kobo compatibility. Configured resizing, optimization, and transparency removal still apply. The Kobo-specific WebP conversion is not enabled for ordinary EPUB2/EPUB3 output.

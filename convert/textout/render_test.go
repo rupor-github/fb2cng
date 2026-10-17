@@ -1,11 +1,15 @@
 package textout
 
 import (
+	"bytes"
+	"encoding/base64"
+	"image"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"go.uber.org/zap/zaptest"
 	"golang.org/x/text/language"
 
 	"fbc/common"
@@ -13,6 +17,60 @@ import (
 	"fbc/content"
 	"fbc/fb2"
 )
+
+func TestRenderMarkdownSVGPolicy(t *testing.T) {
+	for _, mode := range []common.MarkdownImageMode{
+		common.MarkdownImageModePlaceholder, common.MarkdownImageModeExternal, common.MarkdownImageModeEmbedded,
+	} {
+		t.Run(mode.String(), func(t *testing.T) {
+			c := testContent(common.OutputFmtMd)
+			c.Book.Description.DocumentInfo.ID = "svg-book"
+			c.Book.Binaries = []fb2.BinaryObject{{ID: "svg", ContentType: "image/svg+xml", Data: []byte(
+				`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 20"><rect width="20" height="20"/></svg>`)}}
+			c.Book.Bodies = []fb2.Body{{Kind: fb2.BodyMain, Sections: []fb2.Section{{
+				Content: []fb2.FlowItem{{Kind: fb2.FlowImage, Image: &fb2.Image{Href: "#svg", Alt: "Picture"}}},
+			}}}}
+			cfg := testConfig()
+			cfg.Images.Markdown, cfg.Images.RasterizeSVG = mode, true
+			cfg.Images.Screen = config.ScreenConfig{Width: 80, Height: 120}
+			cfg.Images.Cover.Resize = common.ImageResizeModeNone
+			c.ImagesIndex = c.Book.PrepareImagesForOutput(common.OutputFmtMd, &cfg.Images, zaptest.NewLogger(t))
+			output := filepath.Join(t.TempDir(), "book.md")
+			data, err := RenderWithOptions(c, cfg, RenderOptions{OutputPath: output})
+			if err != nil {
+				t.Fatal(err)
+			}
+			img := c.ImagesIndex["svg"]
+			switch mode {
+			case common.MarkdownImageModePlaceholder:
+				assertContains(t, string(data), "[Image: Picture]")
+				if _, err := os.Stat(filepath.Join(filepath.Dir(output), "images-svg-book")); !os.IsNotExist(err) {
+					t.Fatalf("placeholder mode unexpectedly wrote assets: %v", err)
+				}
+			case common.MarkdownImageModeExternal:
+				name := filepath.Base(img.Filename)
+				assertContains(t, string(data), "![Picture](images-svg-book/"+name+")")
+				asset, err := os.ReadFile(filepath.Join(filepath.Dir(output), "images-svg-book", name))
+				if err != nil {
+					t.Fatal(err)
+				}
+				decoded, format, err := image.Decode(bytes.NewReader(asset))
+				if err != nil || format != "png" {
+					t.Fatalf("external image format = %q, error = %v", format, err)
+				}
+				_, _, _, a := decoded.At(decoded.Bounds().Dx()-1, 0).RGBA()
+				if a != 0 {
+					t.Fatalf("external PNG background alpha = %d", a)
+				}
+			case common.MarkdownImageModeEmbedded:
+				if img.MimeType != "image/jpeg" {
+					t.Fatalf("embedded MIME = %q, want JPEG", img.MimeType)
+				}
+				assertContains(t, string(data), "![Picture](data:image/jpeg;base64,"+base64.StdEncoding.EncodeToString(img.Data)+")")
+			}
+		})
+	}
+}
 
 func TestRenderMarkdownSemanticOutput(t *testing.T) {
 	noteNum := 1
