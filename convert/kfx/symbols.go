@@ -71,6 +71,17 @@ const (
 	SymContainerWidth          KFXSymbol = 66  // container width (for page templates)
 	SymContainerHeight         KFXSymbol = 67  // container height (for page templates)
 	SymFillColor               KFXSymbol = 70  // fill_color
+	SymStrokeWidth             KFXSymbol = 76  // stroke_width
+	SymStrokeLinecap           KFXSymbol = 77  // stroke_linecap
+	SymStrokeLinejoin          KFXSymbol = 529 // stroke_linejoin
+	SymStrokeMiterLimit        KFXSymbol = 530 // stroke_miterlimit
+	SymStrokeDashOffset        KFXSymbol = 532 // stroke_dashoffset
+	SymRound                   KFXSymbol = 533 // round
+	SymSquare                  KFXSymbol = 341 // square
+	SymBevel                   KFXSymbol = 536 // bevel
+	SymPath                    KFXSymbol = 249 // path
+	SymShapeList               KFXSymbol = 250 // shape_list
+	SymStrokeDasharray         KFXSymbol = 531 // stroke_dasharray
 	SymFillOpacity             KFXSymbol = 72  // fill_opacity
 	SymStrokeColor             KFXSymbol = 75  // stroke_color
 	SymBorderColor             KFXSymbol = 83  // border_color
@@ -189,23 +200,24 @@ const (
 	SymFont           KFXSymbol = 262 // font
 
 	// Content types ($269-$282)
-	SymText      KFXSymbol = 269 // text
-	SymContainer KFXSymbol = 270 // container
-	SymImage     KFXSymbol = 271 // image
-	SymKVG       KFXSymbol = 272 // kvg
-	SymShape     KFXSymbol = 273 // shape
-	SymPlugin    KFXSymbol = 274 // plugin
-	SymKnockout  KFXSymbol = 275 // knockout
-	SymList      KFXSymbol = 276 // list
-	SymListItem  KFXSymbol = 277 // listitem
-	SymTable     KFXSymbol = 278 // table
-	SymTableRow  KFXSymbol = 279 // table_row
-	SymTableBody KFXSymbol = 454 // body (table body section)
-	SymFooter    KFXSymbol = 455 // footer (value for position in footnote content)
-	SymSidebar   KFXSymbol = 280 // sidebar
-	SymFootnote  KFXSymbol = 281 // footnote
-	SymFigure    KFXSymbol = 282 // figure
-	SymInline    KFXSymbol = 283 // inline
+	SymText           KFXSymbol = 269 // text
+	SymContainer      KFXSymbol = 270 // container
+	SymImage          KFXSymbol = 271 // image
+	SymKVG            KFXSymbol = 272 // kvg
+	SymKVGContentType KFXSymbol = 686 // kvg_content_type
+	SymShape          KFXSymbol = 273 // shape
+	SymPlugin         KFXSymbol = 274 // plugin
+	SymKnockout       KFXSymbol = 275 // knockout
+	SymList           KFXSymbol = 276 // list
+	SymListItem       KFXSymbol = 277 // listitem
+	SymTable          KFXSymbol = 278 // table
+	SymTableRow       KFXSymbol = 279 // table_row
+	SymTableBody      KFXSymbol = 454 // body (table body section)
+	SymFooter         KFXSymbol = 455 // footer (value for position in footnote content)
+	SymSidebar        KFXSymbol = 280 // sidebar
+	SymFootnote       KFXSymbol = 281 // footnote
+	SymFigure         KFXSymbol = 282 // figure
+	SymInline         KFXSymbol = 283 // inline
 
 	// Format types ($284-$287)
 	SymFormatPNG    KFXSymbol = 284 // png

@@ -503,7 +503,7 @@ In plain English, this sample means: "For PDF, make printed footnote title text 
 
 ## `backlink_template`
 
-Formats generated return links from footnotes back to the original reference. See [Footnotes](footnotes.md#backlink_template) for cross-format behavior.
+Formats generated return links from footnotes back to the original reference. See [Footnotes](footnotes.md#backlinks) for cross-format behavior.
 
 Available fields:
 

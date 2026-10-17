@@ -3,6 +3,9 @@ package kfx
 import (
 	"testing"
 
+	"go.uber.org/zap"
+
+	"fbc/config"
 	"fbc/fb2"
 )
 
@@ -33,7 +36,7 @@ func TestBuildImageResourceFragmentsSortsAndFiltersImages(t *testing.T) {
 		"nil":   nil,
 	}
 
-	external, raw, info := buildImageResourceFragments(images)
+	external, raw, info := buildImageResourceFragments(images, "", &config.ImagesConfig{}, zap.NewNop())
 	if len(external) != 2 || len(raw) != 2 || len(info) != 2 {
 		t.Fatalf("buildImageResourceFragments() counts = ext:%d raw:%d info:%d, want 2 each", len(external), len(raw), len(info))
 	}
@@ -65,7 +68,7 @@ func TestBuildImageResourceFragmentsSortsAndFiltersImages(t *testing.T) {
 }
 
 func TestBuildImageResourceFragmentsEmpty(t *testing.T) {
-	external, raw, info := buildImageResourceFragments(nil)
+	external, raw, info := buildImageResourceFragments(nil, "", &config.ImagesConfig{}, zap.NewNop())
 	if external != nil || raw != nil || info != nil {
 		t.Fatalf("buildImageResourceFragments(nil) = %#v, %#v, %#v; want nils", external, raw, info)
 	}

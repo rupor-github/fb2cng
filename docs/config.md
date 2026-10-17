@@ -74,10 +74,10 @@ document:
     compression: lzma
 ```
 
-`document.kfx.compression` defaults to `none` (ordinary CONT output). Set it to `lzma`
-for an unencrypted, paged envelope. It applies equally to KFX and AZW8 and has no effect
-on other formats. Page size is [automatic, from 4 to 64 KiB](formats/kindle.md#adaptive-page-size),
-based on decoded container size. An explicitly supplied `convert --kfx-compression none|lzma` overrides
+`document.kfx.compression` defaults to `none` (uncompressed output). Set it to `lzma`
+for lossless compression without encryption. It applies equally to KFX and AZW8 and has no effect
+on other formats. Compression sizing is [automatic](formats/kindle.md#compression).
+An explicitly supplied `convert --kfx-compression none|lzma` overrides
 the YAML value; an omitted flag respects YAML. Logs and conversion debug text record the
 effective choice/source because archived loaded YAML precedes CLI overrides.
 
@@ -119,10 +119,10 @@ Important notes:
 - For EPUB/KEPUB output, flattened GIF, TIFF, and WebP images become PNG: the image encoder supports only PNG and JPEG, and PNG avoids introducing JPEG artifacts. Opaque images are not converted merely because `remove_transparency` is enabled.
 - `rasterize_svg: true` explicitly selects raster rendering, independently of `optimize`. With `false` (the default), each backend keeps its normal behavior; this does not prohibit raster fallback or required rasterization.
 - SVG normally stays SVG in EPUB/KEPUB and external Markdown. When forced to raster, it becomes PNG with transparency preserved unless `remove_transparency: true` requests a white background.
-- Kindle and embedded Markdown always rasterize SVG to JPEG on white, regardless of either setting. Existing raster-to-JPEG compatibility rules remain unchanged.
+- Kindle keeps supported non-cover SVG artwork vector-based; unsupported artwork, covers, forced rasterization and transparency removal use JPEG on white. Embedded Markdown always rasterizes SVG to JPEG on white. Existing raster-to-JPEG compatibility rules remain unchanged.
 - Optional SVG rasterization uses `screen.width`, preserving aspect ratio, then applies cover resizing or body `scale_factor`. Placeholders retain intrinsic sizing before those transformations. SVGs without viewBox dimensions fall back to 2048 per missing dimension; raster dimensions are capped at 8192.
-- PDF normally translates supported SVG artwork into native vector Form XObjects, preserving transparency. Unsupported features trigger whole-image raster fallback. `rasterize_svg: true` forces raster output; `remove_transparency: true` also selects white-background raster fallback for SVG. Both representations retain PDF's intrinsic SVG dimensions and existing sizing behavior (no additional screen-width, cover, or scale-factor transformation). PDF raster embedding still flattens onto white. See [PDF SVG support](formats/pdf.md#svg-artwork) for the supported subset and default-output change.
-- Built-in vignette stroke adjustments remain limited to existing Kindle and embedded-Markdown preparation; optional PNG rasterization does not enable them. Generated default covers remain JPEG on white; external SVG covers follow the image policy.
+- PDF normally keeps supported SVG artwork vector-based, preserving transparency. Unsupported features trigger whole-image raster fallback. `rasterize_svg: true` forces raster output; `remove_transparency: true` also selects white-background raster fallback for SVG. Both representations retain PDF's intrinsic SVG dimensions and existing sizing behavior (no additional screen-width, cover, or scale-factor transformation). PDF raster output still flattens onto white. See [PDF SVG support](formats/pdf.md#svg-artwork) for the supported subset.
+- Built-in vignette stroke adjustments apply only to Kindle and embedded-Markdown rasterization, not native vectors or optional PNG rasterization. Generated default covers use native vectors in PDF and JPEG elsewhere; external SVG covers follow the output's cover policy.
 - For Kindle output, `cover.resize: none` is effectively treated as `keepAR`.
 - For KEPUB/KEPUB3, `cover.resize: none` disables cover resizing but does not prevent WebP-to-PNG conversion. Covers are not forced to JPEG.
 

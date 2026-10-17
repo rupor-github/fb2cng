@@ -176,7 +176,7 @@ func CollectPositionItems(fragments *FragmentList, sectionNames sectionNameList,
 				if _, isString := child.(string); isString {
 					hasStrings = true
 				} else if childSV, ok := child.(StructValue); ok {
-					if childType, ok := childSV[SymType].(SymbolValue); ok && KFXSymbol(childType) == SymImage {
+					if childType, ok := childSV[SymType].(SymbolValue); ok && (KFXSymbol(childType) == SymImage || KFXSymbol(childType) == SymKVG) {
 						if render, ok := childSV[SymRender].(SymbolValue); ok && KFXSymbol(render) == SymInline {
 							hasInlineImages = true
 						}
@@ -209,7 +209,7 @@ func CollectPositionItems(fragments *FragmentList, sectionNames sectionNameList,
 					} else if childSV, ok := child.(StructValue); ok {
 						// Check if this is an inline image
 						if childEID, ok := childSV[SymUniqueID].(int64); ok {
-							if childType, ok := childSV[SymType].(SymbolValue); ok && KFXSymbol(childType) == SymImage {
+							if childType, ok := childSV[SymType].(SymbolValue); ok && (KFXSymbol(childType) == SymImage || KFXSymbol(childType) == SymKVG) {
 								inlineImages = append(inlineImages, InlineImagePos{
 									EID:    int(childEID),
 									Offset: textLen, // Current text offset where image appears
@@ -249,7 +249,7 @@ func CollectPositionItems(fragments *FragmentList, sectionNames sectionNameList,
 			return
 		}
 
-		if kfxType == SymImage {
+		if kfxType == SymImage || kfxType == SymKVG {
 			out = append(out, PositionItem{EID: eid, Length: 1})
 			return
 		}

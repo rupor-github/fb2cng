@@ -598,8 +598,8 @@ func TestBinaryObject_PrepareImage_NotFoundPlaceholderSVGIntrinsicSizeForKindle(
 	}
 
 	bi := bo.PrepareImage(common.OutputFmtKfx, false, cfg, log)
-	if bi.MimeType != "image/jpeg" {
-		t.Fatalf("expected notFoundImage SVG to be rasterized to JPEG for Kindle, got %s", bi.MimeType)
+	if bi.MimeType != "image/svg+xml" {
+		t.Fatalf("expected notFoundImage SVG to be retained for Kindle translation, got %s", bi.MimeType)
 	}
 	if bi.Dim.Width != 200 || bi.Dim.Height != 200 {
 		t.Fatalf("expected intrinsic 200x200 placeholder, got %dx%d", bi.Dim.Width, bi.Dim.Height)

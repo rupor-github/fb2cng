@@ -82,10 +82,11 @@ type FootnoteRef struct {
 type FootnoteRefs map[string]FootnoteRef
 
 type BookImage struct {
-	MimeType string
-	Data     []byte
-	Filename string
-	Dim      struct {
+	BuiltinVignette bool // Retained for backend SVG raster fallback; native vectors use authored strokes.
+	MimeType        string
+	Data            []byte
+	Filename        string
+	Dim             struct {
 		Width  int
 		Height int
 	}

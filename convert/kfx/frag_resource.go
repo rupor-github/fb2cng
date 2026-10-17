@@ -2,10 +2,14 @@ package kfx
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
 
+	"go.uber.org/zap"
+
+	"fbc/config"
 	"fbc/fb2"
 )
 
@@ -15,11 +19,14 @@ type imageResourceInfo struct {
 	ResourceName string // KFX resource name (e.g., "e1")
 	Width        int    // Image width in pixels
 	Height       int    // Image height in pixels
+	Vector       *kvgArtwork
 }
 
 type imageResourceInfoByID map[string]imageResourceInfo
 
-func buildImageResourceFragments(images fb2.BookImages) ([]*Fragment, []*Fragment, imageResourceInfoByID) {
+func buildImageResourceFragments(
+	images fb2.BookImages, coverID string, cfg *config.ImagesConfig, log *zap.Logger,
+) ([]*Fragment, []*Fragment, imageResourceInfoByID) {
 	if len(images) == 0 {
 		return nil, nil, nil
 	}
@@ -42,13 +49,40 @@ func buildImageResourceFragments(images fb2.BookImages) ([]*Fragment, []*Fragmen
 		}
 
 		format := imageFormatSymbol(img.MimeType)
-		if format < 0 {
+		isSVG := strings.EqualFold(strings.TrimSpace(img.MimeType), "image/svg+xml")
+		if format < 0 && !isSVG {
 			continue
 		}
 
 		idx++
 		location := makeResourceLocation(idx)
 		resourceName := makeResourceName(idx)
+		if isSVG {
+			if id != coverID && !cfg.RasterizeSVG && !cfg.RemoveTransparency {
+				art, err := compileKVGArtwork(img.Data)
+				if err == nil {
+					art.Source, art.ImageID, art.Location = img, id, location
+					width, height := img.Dim.Width, img.Dim.Height
+					if width <= 0 || height <= 0 {
+						width, height = int(math.Ceil(art.Width)), int(math.Ceil(art.Height))
+					}
+					resourceInfoByImageID[id] = imageResourceInfo{
+						ResourceName: resourceName, Width: width, Height: height, Vector: art,
+					}
+					continue
+				}
+				log.Debug("Falling back to SVG rasterization for Kindle output",
+					zap.String("id", id), zap.String("filename", img.Filename), zap.Error(err))
+			} else if cfg.RasterizeSVG || cfg.RemoveTransparency {
+				log.Debug("Rasterizing SVG as requested by configuration", zap.String("id", id), zap.String("filename", img.Filename),
+					zap.Bool("rasterize_svg", cfg.RasterizeSVG), zap.Bool("remove_transparency", cfg.RemoveTransparency))
+			}
+			img = rasterizeKindleSVG(id, img, id == coverID, cfg, log)
+			format = imageFormatSymbol(img.MimeType)
+			if format < 0 {
+				continue
+			}
+		}
 
 		external = append(external, &Fragment{
 			FType:   SymExtResource,

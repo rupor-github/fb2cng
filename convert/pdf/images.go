@@ -167,7 +167,7 @@ func pdfImagePixelSize(img *fb2.BookImage) (int, int) {
 		return img.Dim.Width, img.Dim.Height
 	}
 	if strings.HasSuffix(strings.ToLower(img.MimeType), "svg+xml") {
-		width, height, err := imgutil.SVGImageSize(img.Data)
+		width, height, err := imgutil.SVGImageSize(img.Data, 0, 0)
 		if err != nil {
 			return 0, 0
 		}

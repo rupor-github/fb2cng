@@ -260,7 +260,7 @@ Set `document.images.screen.width`, `height`, and `dpi`. See [PDF](formats/pdf.m
 
 Use `--debug` first. The debug report is the fastest way to inspect parsed metadata, normalized content, generated resources, logs, and format-specific diagnostics.
 See [Debugging and validation](debugging.md) for artifact descriptions, all development
-utilities, external validators, and profiling commands.
+utilities and external validators.
 
 Common checks:
 

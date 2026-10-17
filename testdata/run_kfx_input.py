@@ -147,6 +147,63 @@ def unwrap_plaintext_envelope(source: str, destination: Path, cli_tool: Optional
     return str(destination)
 
 
+def check_native_kvg(book, logger) -> None:
+    """Catch native-wire errors that KFXInput's permissive SVG decoder accepts.
+
+    Amazon's SVG adapter writes fixed_width/fixed_height as scalar integers.
+    They are not CSS dimensions ({value, unit}), even though KFXInput can
+    interpret those structs while reconstructing SVG. KPV also rejects Ion
+    floats in shape data: paths, stroke widths, opacity and transforms must
+    use Ion decimals. This is a wire check,
+    not a substitute for testing pagination/rendering in Kindle Previewer.
+    """
+    from kfxlib.ion import IonFloat, IonInt, ion_type
+
+    def first_float_path(value, path):
+        if ion_type(value) is IonFloat:
+            return path
+        if isinstance(value, dict):
+            for field, child in value.items():
+                found = first_float_path(child, f"{path}.{field}")
+                if found is not None:
+                    return found
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                found = first_float_path(child, f"{path}[{index}]")
+                if found is not None:
+                    return found
+        return None
+
+    def visit(value):
+        if isinstance(value, dict):
+            if value.get("$159") == "$272":
+                eid = value.get("$155", "unknown")
+                for field, name in (("$66", "fixed_width"), ("$67", "fixed_height")):
+                    # A child KVG can inherit a viewport from its parent.
+                    if field not in value:
+                        continue
+                    dimension = value.get(field)
+                    if ion_type(dimension) is not IonInt or dimension <= 0:
+                        logger.error(
+                            f"Native KVG eid={eid}: {name} ({field}) must be a positive scalar Ion integer, "
+                            f"got {type(dimension).__name__}: {dimension!r}"
+                        )
+                float_path = first_float_path(value.get("$250", []), "$250")
+                if float_path is not None:
+                    logger.error(
+                        f"Native KVG eid={eid}: shape data at {float_path} uses Ion float; "
+                        "Kindle Previewer requires Ion decimals for shape numbers"
+                    )
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    for fragment in book.fragments:
+        visit(fragment.value)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Process a KFX file with kfxlib and print warnings/errors with debug logging."
@@ -218,6 +275,7 @@ def main():
         # Create YJ_Book instance and decode it
         book = YJ_Book(kfx_file)
         book.decode_book(retain_yj_locals=True)
+        check_native_kvg(book, job_log)
 
         print("=" * 80)
         print("Processing complete!")

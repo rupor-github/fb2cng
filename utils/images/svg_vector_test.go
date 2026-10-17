@@ -194,7 +194,7 @@ func TestSVGImageSizeMatchesRasterization(t *testing.T) {
 			if viewBox == "" {
 				data = []byte(`<svg/>`)
 			}
-			w, h, err := SVGImageSize(data)
+			w, h, err := SVGImageSize(data, 0, 0)
 			if err != nil {
 				t.Fatal(err)
 			}

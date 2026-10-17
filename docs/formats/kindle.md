@@ -23,11 +23,8 @@ Kindle-specific options:
 
 ## Compression
 
-KFX/AZW8 compression is lossless: uncompressing recovers the complete original CONT bytes.
-The default `none` produces an ordinary CONT file. `lzma` wraps the exact same inner book
-bytes in a version-2 plaintext ProtectedData envelope, with independently compressed
-pages sized automatically from the serialized container. Compression adds no encryption,
-keys, or vouchers; the DRMION signature identifies the envelope format, not whether it is encrypted.
+KFX/AZW8 compression is lossless: uncompressing recovers the original book file exactly.
+The default `none` leaves output uncompressed; `lzma` enables compression without encryption.
 
 ```yaml
 document:
@@ -43,32 +40,8 @@ fbc -c config.yaml convert --to kfx --kfx-compression none book.fb2
 An explicitly supplied flag wins over YAML; an omitted flag uses configuration. Both formats
 use the same setting. For other output formats the flag is ignored with a warning.
 
-### Adaptive Page Size
-
-Page size depends on the **decoded CONT size**, including images/fonts and other serialized
-book data, rather than the input FB2 size:
-
-| Decoded container size | Page size |
-|---|---:|
-| Up to 1 MiB | 4 KiB |
-| Over 1 MiB, up to 4 MiB | 16 KiB |
-| Over 4 MiB, up to 8 MiB | 32 KiB |
-| Over 8 MiB | 64 KiB |
-
-The converter tries **4, 16, 32, then 64 KiB**, choosing the smallest size for which
-`ceil(decoded_container_bytes / page_size) <= 256`. If none meets that target, it uses
-64 KiB. Thresholds in the table are inclusive; 1 MiB is 1,048,576 bytes.
-
-Containers over 16 MiB can have more than 256 pages. Larger pages reduce per-page reader
-overhead for large books; small books retain the original 4-KiB profile. The final page may
-be shorter. Logs, envelope dumps, and debug reports show the actual size and count.
-
-For example, a 14,515,521-byte container uses 64-KiB pages: **222 compression pages**
-instead of 3,544 at 4 KiB. Compression pages are byte blocks; reading pages and Kindle
-location/page maps are controlled separately.
-
-Sizing is automatic for conversion and kfxcompress, including diagnostic uncompressed
-envelopes; no separate page-size setting is required.
+Compression sizing is automatic; no additional tuning is required. It does not change
+reading pages, Kindle locations, image quality, or book content.
 
 See [Debugging and validation](../debugging.md) for report contents, inspection utilities,
 [compression of existing files](../debugging.md#kfxcompress), and KFXInput validation.
@@ -91,9 +64,31 @@ See [Stylesheets](../stylesheets.md) for shared stylesheet rules and resource ha
 - Kindle output requires a cover. If the source book has no valid cover, fb2cng forces cover generation and uses the configured default cover image or the built-in generated cover.
 - If `document.images.cover.resize` is `none`, Kindle output treats it as `keepAR` so the generated or source cover is still suitable for Kindle packaging.
 - All decodable non-JPEG raster images, including PNG, GIF, BMP, TIFF, and WebP, are converted to JPEG for Kindle compatibility. This applies to covers as well as body images and does not depend on `document.images.optimize`.
-- SVG images are rasterized and encoded as JPEG for Kindle output.
+- Supported SVG body, inline, table and vignette artwork remains vector-based by default, without an additional opt-in. SVG covers remain JPEG.
 - Transparent PNG, GIF, TIFF, and WebP content is flattened onto a white background before JPEG encoding, even when `document.images.remove_transparency` is disabled.
-- Broken-image fallback SVGs are rasterized to JPEG as well, so missing or undecodable images still produce Kindle-compatible resources.
+- Built-in broken/not-found placeholders remain vector-based for body images. Covers, forced rasterization and transparency removal retain JPEG placeholders.
+
+### Native SVG Artwork
+
+Supported SVG artwork stays sharp when zoomed and retains transparent backgrounds.
+Paths and basic shapes, groups, inherited solid colors, supported inline styles, fill/stroke
+opacity, standard stroke caps/joins, miter limits, and dash patterns are supported.
+Translation, horizontal/vertical scaling, and pure rotation are supported too.
+
+Artwork using even-odd fills, skew or rotation combined with scaling, CSS classes/rules,
+gradients, references, clipping/masks/filters, SVG text, embedded images, nested viewports,
+non-scaling strokes, `currentColor`, or composited element/group opacity is rendered as a
+whole JPEG instead. This fallback is not a browser-complete SVG renderer. Images with
+nonempty alt text also use JPEG to preserve that text.
+
+`document.images.rasterize_svg: true` forces raster output. `remove_transparency: true`
+also selects JPEG on white. Unsupported-feature fallback logs the image ID, filename and
+reason at debug level, separately from configuration-requested rasterization.
+
+Vector artwork and raster fallback use the same layout dimensions and image sizing settings.
+Authored vector stroke widths are preserved. Check the result in Kindle Previewer and on
+your intended device; support can vary between readers. If artwork displays incorrectly,
+try `rasterize_svg: true` and include a [debug report](../debugging.md) when reporting it.
 
 ## Footnotes
 

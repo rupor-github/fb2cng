@@ -1,7 +1,7 @@
 # Debugging And Validation
 
 This guide covers converter debug reports, the standalone development utilities, output
-validators, and performance profiling. Start with `fbc --debug` when investigating a
+validators. Start with `fbc --debug` when investigating a
 conversion; use the standalone tools to inspect or transform files already on disk.
 
 ## Choose A Tool
@@ -15,7 +15,6 @@ conversion; use the standalone tools to inspect or transform files already on di
 | [`run_epubcheck.sh`](#epub-and-kepub) | EPUB/KEPUB | Run external EPUBCheck |
 | [`run_kfx_input.py`](#kfx-and-azw8) | KFX/AZW8 | Decode and check the book with external KFXInput |
 | [`run_pdf_check.sh`](#pdf-validation) | PDF | Check structure and inspect metadata with qpdf/pdfinfo |
-| [Opt-in profile tests](#performance-profiling) | FB2 | Measure KFX/PDF generation stages and write CPU/allocation/heap profiles |
 
 The three standalone utilities (`kfxdump`, `kpfdump`, and `kfxcompress`) do not load the
 converter's YAML configuration, enable its reporter, or require `--debug`.
@@ -83,15 +82,15 @@ These files are stored inside the book's report directory:
 | `book.stylesheet.css` | Parsed stylesheet used for Kindle style conversion, when available |
 | `book.style-trace.txt` | CSS mapping, normalization, inheritance, merging, style registration, and assignments |
 | `book.envelope.txt` | Outer frame/index/page details for compressed conversion |
-| `book.inner.kfx` | Exact original CONT bytes before compression |
+| `book.inner.kfx` | Exact original uncompressed book file |
 
 These diagnostics use fixed, short ASCII names inside `fbc-<book-id>/`, which already
 identifies the book. Their names are independent of the output filename, its length or
 characters, and temporary random suffixes. `book.envelope.txt` and `book.inner.kfx`
 are added for compressed output. The published result remains at the archive root as
 `result-<book-id>.<extension>`.
-Outer envelope compression and inner **container compression** are reported separately.
-Wrapping a book does not change the inner compression/DRM fields, directory offsets, or hashes.
+Compressed output includes both the published file and the original uncompressed book
+for troubleshooting. Compression does not change book content.
 
 #### PDF
 
@@ -199,9 +198,9 @@ argument. Single-dash forms such as `-all` work as well as `--all`.
 
 ## kfxdump
 
-Reads uncompressed KFX/AZW8 (ordinary CONT) and supported LZMA-compressed or uncompressed
-plaintext ProtectedData envelopes, independently of `.kfx`/`.azw8` filename extensions.
-Semantic dumps automatically decode enveloped input.
+Reads uncompressed and supported compressed KFX/AZW8 files, independently of their filename
+extensions. Book inspection automatically decompresses supported input. Encrypted books
+are not supported; the tool does not remove Kindle DRM.
 
 ```text
 build/kfxdump [OPTIONS] FILE [OUTDIR]
@@ -212,13 +211,13 @@ At least one dump/extraction option is required.
 | Option | Output | Contents |
 |---|---|---|
 | `--dump` | `<stem>-dump.txt` | File summary, container, symbols, and all fragments; also prints container statistics |
-| `--resources` | `<stem>-resources.zip` | Nonempty raw image/media (`$417`) and font (`$418`) bytes, with detected extensions |
-| `--styles` | `<stem>-styles.txt` | Style (`$157`) fragments in readable CSS-like form, with direct/style-event usage |
-| `--storyline` | `<stem>-storyline.txt` | Storyline (`$259`) fragments with expanded symbols, content/resource references, and styles |
+| `--resources` | `<stem>-resources.zip` | Embedded image/media and font files, with detected extensions; vector drawings are shown in text dumps, not exported as images |
+| `--styles` | `<stem>-styles.txt` | Styles in readable CSS-like form, with usage information |
+| `--storyline` | `<stem>-storyline.txt` | Reading content with image references and styles |
 | `--margins` | `<stem>-margins.txt` | Focused vertical-margin tree for layout comparisons |
-| `--envelope` | `<stem>-envelope.txt` | Protocol/import versions, sizes/savings, frame/index/trailer offsets, and per-page headers |
-| `--extract-inner` | `<stem>-inner.kfx` | Save the exact decoded CONT as a separate file; ordinary CONT input is copied unchanged |
-| `--all` | Six diagnostic files | Enables `--dump`, `--resources`, `--styles`, `--storyline`, `--margins`, and `--envelope`; add `--extract-inner` to save CONT too |
+| `--envelope` | `<stem>-envelope.txt` | Compression details, sizes, and savings |
+| `--extract-inner` | `<stem>-inner.kfx` | Save the original uncompressed book separately; uncompressed input is copied unchanged |
+| `--all` | Six diagnostic files | Enables `--dump`, `--resources`, `--styles`, `--storyline`, `--margins`, and `--envelope`; add `--extract-inner` to save the uncompressed book too |
 | `--overwrite` | — | Replace existing requested dump files |
 
 `<stem>` is the input basename without its final extension. Outputs default to the input
@@ -240,7 +239,7 @@ compressed-envelope.txt
 
 The envelope report describes the original compressed file; the other dumps describe its
 decoded book. In-memory decompression is automatic and does not save `compressed-inner.kfx`.
-Add `--extract-inner` when you also want that byte-exact, ordinary CONT file on disk:
+Add `--extract-inner` when you also want the exact uncompressed book file on disk:
 
 ```bash
 build/kfxdump --all --extract-inner compressed.azw8
@@ -253,21 +252,14 @@ build/kfxdump --styles --margins --overwrite book.azw8 /tmp/fbc-inspect
 build/kfxdump --envelope --extract-inner compressed.azw8 /tmp/fbc-inspect
 ```
 
-`--envelope` alone checks supported structure and page headers without decompressing LZMA
-payloads or parsing book fragments. A successful inspection is therefore not a full page-data
-verification. For raw CONT it states that no outer envelope is present. Every invocation
-prints a file-level summary; **container compression: 0** can correctly coexist with outer LZMA.
-
-The envelope reader supports one version-2 plaintext frame, decoded pages of 4, 16, 32, or
-64 KiB, and either all LZMA or all uncompressed pages. It follows the size declared in the
-file, including legacy 4-KiB output. Decoded buffering is limited to 1 GiB;
-unsupported variants/encrypted records are rejected. It does not decrypt Kindle DRM.
+`--envelope` alone inspects compression information without decoding the whole book, so it
+does not replace full validation. Unsupported compression variants and excessively large
+decoded files are rejected.
 
 ## kpfdump
 
-Reads Kindle Previewer `.kdf` SQLite data or a `.kpf` ZIP containing a `.kdf` entry. It strips
-the Kindle SQLite fingerprint records before reading fragments. Already-clean SQLite input
-is accepted and reported as having no fingerprints to remove.
+Reads Kindle Previewer `.kdf` data or a `.kpf` package. It can also save a cleaned SQLite
+database for further inspection; already-clean input is accepted.
 
 ```text
 build/kpfdump [OPTIONS] FILE.kdf|FILE.kpf [OUTDIR]
@@ -291,7 +283,7 @@ build/kpfdump --styles --storyline --margins previewer-book.kpf /tmp/fbc-inspect
 Prefer KPF when extracting resources: path-based payloads can be resolved from the ZIP.
 A standalone KDF may reference external resources it does not contain; those bytes are
 unavailable to resource extraction and the tool prints a note. Missing resources in a KPF
-produce warnings. `--sqlite` alone does not require semantic fragment parsing.
+produce warnings.
 
 Use matching kfxdump/kpfdump style, storyline, and margin reports to compare converter output
 with a Previewer-produced book. IDs and metadata can differ between producers, so focused
@@ -300,8 +292,7 @@ reports are often easier to compare than full fragment dumps.
 ## kfxcompress
 
 Adds or removes lossless LZMA compression for existing KFX/AZW8 files without running FB2
-conversion or rebuilding fragments. It wraps the original CONT stream or recovers it
-byte-for-byte, preserving inner symbols, offsets, metadata, resources, and payload hashes.
+conversion. Uncompression recovers the original book file byte-for-byte.
 
 ```text
 build/kfxcompress compress [--uncompressed-envelope] [--overwrite] INPUT OUTPUT
@@ -313,13 +304,13 @@ supplied; there is no automatic output naming or recursive processing.
 
 | Operation | Accepted input | Output |
 |---|---|---|
-| `compress` | Ordinary CONT or supported uncompressed plaintext envelope | LZMA plaintext envelope |
-| `compress --uncompressed-envelope` | Ordinary CONT only | Diagnostic envelope with uncompressed pages |
-| `uncompress` | Supported compressed or uncompressed plaintext envelope | Exact original ordinary CONT |
+| `compress` | Uncompressed book or supported uncompressed wrapper | Compressed book, without encryption |
+| `compress --uncompressed-envelope` | Ordinary uncompressed book only | Uncompressed diagnostic wrapper |
+| `uncompress` | Supported compressed or diagnostic wrapper | Exact original uncompressed book |
 
-Already-compressed input to `compress` and ordinary CONT input to `uncompress` are errors,
-not idempotent copies. Unsupported profiles or encryption are errors. The format/size limits
-are the same as [kfxdump's envelope support](#kfxdump).
+Already-compressed input to `compress` and an ordinary uncompressed book passed to `uncompress`
+are errors, not idempotent copies. Unsupported compression variants and encrypted input
+are rejected, as with [kfxdump](#kfxdump).
 
 ```bash
 build/kfxcompress compress book.azw8 compressed.azw8
@@ -329,20 +320,12 @@ build/kfxcompress uncompress --overwrite compressed.azw8 compressed.azw8
 ```
 
 The utility reports sizes, savings, mode, page count, and elapsed time to stderr. Compression
-is honored even if it enlarges an incompressible book. The plaintext control separates envelope
-layout compatibility from LZMA behavior; it is not a conversion configuration mode.
-
-Both compression and diagnostic plaintext wrapping use the same [adaptive page-size
-policy](formats/kindle.md#adaptive-page-size) as conversion: 4/16/32/64 KiB based on the
-decoded CONT size, aiming for 256 pages subject to a 64-KiB cap. Inspection reports the
-actual page size stored in the envelope; uncompression preserves bytes independently of
-which supported size was used.
+is honored even if it enlarges an incompressible book. Sizing is automatic, as with conversion.
+`--uncompressed-envelope` is a troubleshooting option, not a converter configuration setting.
 
 Destination parents must exist. Existing output, including same-path input, requires
-`--overwrite`. Publication uses a sibling temporary file and an atomic final operation;
-no-overwrite publication also checks that the destination is still absent. Errors or
-cancellation before publication preserve existing output. Ctrl+C is supported by both
-kfxcompress and kfxdump.
+`--overwrite`. Errors or cancellation before publication preserve existing output.
+Ctrl+C is supported by both kfxcompress and kfxdump.
 
 ## Output Validators
 
@@ -385,19 +368,19 @@ The script first tries an already-importable package, then searches `--kfxinput 
 `KFXINPUT_PATH`, and `BOOK_TESTS_PATH` (whose KFXInput child is searched), followed by common
 local checkout paths.
 
-On DRMION magic, the script calls kfxcompress to decode the supported plaintext envelope
-into a temporary CONT file, validates that file, and cleans up the temporary directory.
+For supported compressed input, the script calls kfxcompress to create and validate a
+temporary uncompressed file, then removes the temporary directory.
 Utility selection is `--kfxcompress PATH`, then `KFXCOMPRESS_PATH`, then repository
-`build/kfxcompress`, then PATH. Ordinary CONT follows the direct validation path.
+`build/kfxcompress`, then PATH. Uncompressed books are validated directly.
 
-The script prints debug messages, warnings/errors, and a final summary. Errors or a fatal
-exception yield a nonzero exit status; warnings alone do not. For generated books, the expected
-baseline is the three warnings about the fbc creator version, file creator, and generator,
-with no errors or additional warnings.
+The script prints diagnostics and a final summary. Errors or a fatal exception yield a
+nonzero exit status; warnings alone do not. Three warnings identifying fbc as the producer
+are usual. The external checker can also report known compatibility diagnostics for native
+vector artwork, so a fixed warning count alone does not determine whether a book is usable.
+Do not ignore other errors or warnings; include the complete output when reporting a problem.
 
-This checks decoded book semantics. Use KPV or the intended reader to verify the outer
-envelope opens correctly, content renders, and navigation works. The DRMION signature alone
-does not imply encryption.
+Always open the result in Kindle Previewer or your intended reader to check images, text,
+and navigation. If vector artwork renders incorrectly, try `document.images.rasterize_svg: true`.
 
 ### PDF Validation
 
@@ -412,111 +395,6 @@ metadata stream; use it for the converter's metadata-bearing PDF output. Multipl
 are accepted. Inspect the [PDF report artifacts](#pdf) for layout/font problems that structural
 validation alone cannot explain.
 
-## Fuzz Testing
-
-Go's fuzz targets replay their explicit seeds and checked-in regression inputs during
-normal package tests:
-
-```bash
-PACKAGES='./convert/kfx/envelope,./convert/kfx' go tool task test
-```
-
-To actively generate and mutate inputs, run the manual fuzz task:
-
-```bash
-go tool task fuzz
-FUZZ_TIME=5m FUZZ_PARALLEL=2 go tool task fuzz
-go tool task fuzz -- -v
-```
-
-The task prepares the usual generated/embedded inputs, then runs these targets sequentially:
-
-| Package | Target | Checks |
-|---|---|---|
-| `convert/kfx/envelope` | `FuzzIonReader` | Mutated binary Ion index data and malformed imports |
-| `convert/kfx/envelope` | `FuzzInspect` | Mutated envelope inspection and decoded-byte round-trips |
-| `convert/kfx` | `FuzzIonRoundTrip` | Generated Ion values through typed decoding and generic reader round-trips; null import rejection |
-| `convert/kfx` | `FuzzContainerRoundTrip` | CONT serialization/parsing, metadata, nullable values, local resource names, raw bytes, and invalid header ranges |
-
-Defaults are **15 seconds per target** and **two workers** (about one minute of fuzzing);
-`FUZZ_TIME` and `FUZZ_PARALLEL` override those settings. Allow extra wall-clock time for
-task dependencies and compilation. Active fuzzing is opt-in and does not change release workflows.
-
-This task omits coverage profiles because Go does not allow `-coverprofile` together
-with `-fuzz`. The ordinary `test` task continues to collect coverage.
-
-The seeds include typed-null imports, truncated values, oversized scalar declarations,
-excessive nesting, invalid envelope offsets, plaintext/LZMA multi-page envelopes, and
-native reference fixtures. Inputs and decoded payloads are bounded to 64 KiB. Successfully
-decoded envelopes must survive a byte-exact decode/encode/decode round-trip.
-
-The ordinary Ion/CONT targets use generated documents with payloads bounded to 8 KiB,
-fixed nesting, and encoder-controlled lengths. They preserve binary data, UTF-8 strings,
-signed integers, nulls, and resource identities across round-trips. CONT range mutations
-are restricted to out-of-buffer offsets/sizes. Arbitrary raw-byte fuzzing of ordinary Ion
-is deferred until its declared allocations and numeric/depth limits are hardened; an
-input-byte cap alone does not bound ion-go's allocations, and its panic guard is not an
-allocation limit.
-
-On a failure, Go minimizes the input and writes a reproducer under
-`<package>/testdata/fuzz/<target>/`. Keep that file with the fix so normal tests replay it,
-and use the `-run` command printed by Go to reproduce the failure through
-`PACKAGES='./<package>' go tool task test -- ...`.
-Interesting inputs that do not fail are cached by Go locally, allowing later fuzz runs
-to continue exploring them.
-
-## Performance Profiling
-
-Profiling tests are skipped unless an input FB2 path is supplied. They prepare shared content
-before starting profiles and disable converter debug reporting, so measurements focus on
-the selected generation stage.
-
-```bash
-KFX_PROFILE_BOOK=/path/to/book.fb2 KFX_PROFILE_TARGET=generate \
-  PACKAGES='./convert/kfx' go tool task test -- -run '^TestKFXProfilePath$' -count=1 -timeout=30m -v
-
-PDF_PROFILE_BOOK=/path/to/book.fb2 PDF_PROFILE_TARGET=layout \
-  PACKAGES='./convert/pdf' go tool task test -- -run '^TestPDFProfilePath$' -count=1 -timeout=30m -v
-```
-
-| Variable suffix | KFX (`KFX_PROFILE_…`) | PDF (`PDF_PROFILE_…`) |
-|---|---|---|
-| `BOOK` | Required FB2 path | Required FB2 path |
-| `TARGET` | `styles`, `images`, `storyline`, `fragments`, `serialize`, `generate` (default) | `collect`, `styles`, `layout`, `builddoc`, `generate` (default) |
-| `OUT` | Default temporary-directory child `fb2cng-kfx-profile` | Default temporary-directory child `fb2cng-pdf-profile` |
-| `CONFIG` | Config path; otherwise repository `build/test.yaml` if present, then defaults | Same |
-| `FOOTNOTES_MODE` | Optional `default`, `float`, or `floatRenumbered` override | Not supported |
-
-Each selected stage writes `<target>.cpu.pprof`, `<target>.allocs.pprof`, and
-`<target>.heap.pprof`, and logs elapsed time/allocation deltas. The output directory is
-created automatically. The `generate` target also writes `profile-output.kfx` or
-`profile-output.pdf`; repeated runs replace files with the same names.
-The KFX `serialize` target measures inner CONT serialization; `generate` also includes
-outer compression when enabled in the selected configuration.
-
-```bash
-go tool pprof -top /tmp/fb2cng-kfx-profile/generate.cpu.pprof
-go tool pprof -sample_index=alloc_space -top /tmp/fb2cng-kfx-profile/generate.allocs.pprof
-```
-
-PDF also provides opt-in `BenchmarkPDFProfileCollectContent`, `BenchmarkPDFProfileStyles`,
-`BenchmarkPDFProfileLayout`, `BenchmarkPDFProfileBuildDocument`, and `BenchmarkPDFProfileGenerate`:
-
-```bash
-PDF_PROFILE_BOOK=/path/to/book.fb2 PACKAGES='./convert/pdf' \
-  go tool task bench -- -bench '^BenchmarkPDFProfile' -benchmem -benchtime=1x
-```
-
-For envelope-only measurements:
-
-```bash
-PACKAGES='./convert/kfx/envelope' go tool task bench -- -bench '^BenchmarkEncode$' -benchmem
-```
-
-Package selections in Taskfile commands are comma-separated when more than one package is
-supplied. `go tool task escape -- ./convert/kfx` runs Go escape analysis for allocation
-investigation.
-
 ## Investigation Workflow
 
 1. Reproduce with `fbc -d` and retain the exact command, converter version, and configuration.
@@ -526,8 +404,8 @@ investigation.
 4. For styling/layout, inspect KFX CSS/style traces and focused dumps, or PDF style/layout/
    glyph/font JSON. Compare KPF/KFX focused reports when using Previewer as a reference.
 5. Run the corresponding external validator, then check reading/navigation in the target viewer.
-6. For compressed KFX, inspect the envelope and extract inner CONT to distinguish wrapping
-   problems from book-generation problems. For slow conversions, use the opt-in profiles.
+6. For compressed KFX, use `kfxdump --extract-inner` and compare the uncompressed result
+   to distinguish compression problems from book-generation problems.
 
 When reporting an issue, include the command line, converter version, relevant configuration,
 the complete debug report ZIP file (`fbc-report.zip` by default), validator output, and the

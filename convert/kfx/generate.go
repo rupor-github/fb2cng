@@ -207,7 +207,11 @@ func buildFragments(ctx context.Context, container *Container, c *content.Conten
 		}
 	}
 
-	externalRes, rawMedia, imageResourceInfo := buildImageResourceFragments(usedImages)
+	coverID := c.CoverID
+	if coverID == "" && len(c.Book.Description.TitleInfo.Coverpage) > 0 {
+		coverID = strings.TrimPrefix(c.Book.Description.TitleInfo.Coverpage[0].Href, "#")
+	}
+	externalRes, rawMedia, imageResourceInfo := buildImageResourceFragments(usedImages, coverID, &cfg.Images, log)
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -254,6 +258,9 @@ func buildFragments(ctx context.Context, container *Container, c *content.Conten
 		landmarks.StartEID = landmarks.CoverEID
 	}
 
+	extraExternal, extraRaw := lowerKVGArtwork(contentFragments, imageResourceInfo, &cfg.Images, log)
+	externalRes = append(externalRes, extraExternal...)
+	rawMedia = append(rawMedia, extraRaw...)
 	posItems := CollectPositionItems(contentFragments, sectionNames, chapterStartSections)
 	allEIDs := CollectAllEIDs(sectionEIDs)
 	// Prefer actual reading-order EIDs when available.

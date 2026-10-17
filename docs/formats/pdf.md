@@ -54,9 +54,8 @@ PDF also understands generated pseudo-content used by the default stylesheet, su
 
 ## SVG Artwork
 
-By default, supported SVG artwork is translated into reusable **Form XObjects** containing
-PDF drawing operations, rather than rasterized into Image XObjects. This intentionally
-changes default output: vectors remain sharp at any zoom and retain transparent backgrounds.
+By default, supported SVG artwork remains vector-based rather than being converted to pixels.
+Vectors remain sharp at any zoom and retain transparent backgrounds.
 No additional opt-in is required. Covers, body/inline images and vignettes use the same path
 when their prepared resource is SVG. The built-in default cover and broken/not-found
 placeholders also use native vectors. Raster source covers remain raster images;

@@ -78,14 +78,14 @@ func RasterizeSVGToTransparentImage(svgData []byte, targetW, targetH int, stroke
 	return rasterizeSVG(svgData, targetW, targetH, strokeWidthFactor, false)
 }
 
-// SVGImageSize reports the existing intrinsic raster/layout dimensions without
+// SVGImageSize reports raster/layout dimensions for a target box without
 // allocating a pixel buffer. Missing dimensions and safety limits match rasterization.
-func SVGImageSize(svgData []byte) (int, int, error) {
+func SVGImageSize(svgData []byte, targetW, targetH int) (int, int, error) {
 	icon, err := oksvg.ReadIconStream(bytes.NewReader(svgData))
 	if err != nil {
 		return 0, 0, err
 	}
-	w, h := svgImageDimensions(icon.ViewBox.W, icon.ViewBox.H, 0, 0)
+	w, h := svgImageDimensions(icon.ViewBox.W, icon.ViewBox.H, targetW, targetH)
 	return w, h, nil
 }
 

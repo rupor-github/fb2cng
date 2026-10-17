@@ -31,6 +31,15 @@
 - `config/config.yaml.tmpl` is embedded and processed with `gencfg`; user config is merged on top with YAML `KnownFields(true)`, so unknown keys are errors.
 - `cmd/mhl` is a Windows MyHomeLib wrapper around `fbc.exe`; keep its config/templates separate from the main converter config.
 
+## Documentation
+
+- `docs/` is the user guide: configuration, supported behavior and limitations, commands, and practical troubleshooting.
+  Keep format symbols, wire schemas, implementation/reverse-engineering findings, and developer test/profiling workflows out of it.
+- Technical reference lives in `../memory-md/fb2cng/reference/` (relative to the repository root).
+  Use `kfx-native-artwork.md` for KVG encoding, render probes, and exact validator exceptions;
+  `kfx-compression-profile.md` for compression internals; `converter-development.md` for fuzzing/profiling.
+  Do not add machine-local reference links to the public user guide.
+
 ## Testing Notes
 
 - Prefer Taskfile tests over raw `go test` because task deps prepare embedded data and generated code.
@@ -45,7 +54,14 @@
 
 - All changes need to be validated with `go tool staticcheck`; `gopls` for changed files should show no warnings.
 - Instead of `gofmt`, run `goimports-reviser -format -set-alias -company-prefixes github.com/rupor-github -excludes vendor` on changed files.
-- When changes are related to KFX, validate the generated file with `testdata/run_kfx_input.py <file name>`; output should contain only 3 warnings related to `fbc`.
+- When changes are related to KFX, validate the generated file with `testdata/run_kfx_input.py <file name>`.
+  The usual baseline is 3 warnings related to `fbc`, but "only 3 warnings, no errors" is not universal for native KVG.
+  The current external KFXInput symbol allowlist can report `Unexpected Ion symbols used` errors containing only
+  `$529`, `$530`, `$532`, `$533`, and/or `$536` for KPV-tested stroke features. These known diagnostics still cause a
+  nonzero exit status: inspect the complete output and report the exception explicitly, rather than suppressing it
+  or modifying the validator. All other warnings/errors remain failures. For KVG changes, also compare rendering
+  in KPV against the PDF-reference probes; decoding alone is insufficient.
+  See `../memory-md/fb2cng/reference/kfx-native-artwork.md` for the technical validation procedure.
 - When changes are related to EPUB, validate generated EPUB2 and EPUB3 files with `testdata/run_epubcheck.sh <file name>`; output should have no errors or warnings.
 - When changes are related to PDF, validate the generated file with `testdata/run_pdf_check.sh <file name>`; use `--require-metadata` when XMP metadata is expected.
 

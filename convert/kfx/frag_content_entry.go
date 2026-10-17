@@ -202,7 +202,7 @@ func collectStructEIDs(sv StructValue) []int {
 			if childSV, ok := child.(StructValue); ok {
 				// Check if this is an inline image
 				if childEID, ok := childSV[SymUniqueID].(int64); ok {
-					if childType, ok := childSV[SymType].(SymbolValue); ok && KFXSymbol(childType) == SymImage {
+					if childType, ok := childSV[SymType].(SymbolValue); ok && (KFXSymbol(childType) == SymImage || KFXSymbol(childType) == SymKVG) {
 						eids = append(eids, int(childEID))
 					}
 				}

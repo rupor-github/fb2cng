@@ -223,7 +223,7 @@ func kfxProfileImageFragments(c *content.Content) ([]*Fragment, []*Fragment, ima
 			usedImages[id] = img
 		}
 	}
-	return buildImageResourceFragments(usedImages)
+	return buildImageResourceFragments(usedImages, c.CoverID, &config.ImagesConfig{}, zap.NewNop())
 }
 
 func kfxProfileContainer(c *content.Content) *Container {

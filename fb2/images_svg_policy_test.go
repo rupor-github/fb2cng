@@ -63,7 +63,7 @@ func TestSVGOutputPolicy(t *testing.T) {
 							book := &FictionBook{Binaries: []BinaryObject{{ID: "svg", ContentType: "image/svg+xml", Data: svg}}}
 							got := book.PrepareImages(format, cfg, zaptest.NewLogger(t))["svg"]
 							jpeg := format.IsKindle() || (format == common.OutputFmtMd && mode == common.MarkdownImageModeEmbedded)
-							if !force && !jpeg {
+							if !force && (!jpeg || (format.IsKindle() && !remove)) {
 								if got.MimeType != "image/svg+xml" || !bytes.Equal(got.Data, svg) {
 									t.Fatal("default SVG representation changed")
 								}
@@ -174,6 +174,62 @@ func TestSVGRasterizationPlaceholders(t *testing.T) {
 	}
 }
 
+func TestKindlePlaceholderSVGPolicy(t *testing.T) {
+	for _, format := range []common.OutputFmt{common.OutputFmtKfx, common.OutputFmtAzw8, common.OutputFmtMd} {
+		t.Run(format.String(), func(t *testing.T) {
+			for _, input := range []struct {
+				name, mime string
+				data       []byte
+			}{
+				{"missing", "image/svg+xml", notFoundImage},
+				{"broken", "image/svg+xml", brokenImage},
+				{"invalid PNG", "image/png", []byte("invalid PNG")},
+				{"invalid SVG", "image/svg+xml", []byte(`<svg><path d="invalid"`)},
+			} {
+				for _, policy := range []struct {
+					name                 string
+					force, remove, cover bool
+				}{
+					{"native", false, false, false},
+					{"forced raster", true, false, false},
+					{"remove transparency", false, true, false},
+					{"cover", false, false, true},
+				} {
+					t.Run(input.name+"/"+policy.name, func(t *testing.T) {
+						cfg := svgPolicyConfig()
+						cfg.Screen.Width = 8000
+						cfg.Markdown = common.MarkdownImageModeEmbedded
+						cfg.RasterizeSVG, cfg.RemoveTransparency = policy.force, policy.remove
+						invalid := strings.HasPrefix(input.name, "invalid")
+						bo := BinaryObject{ID: "art", ContentType: input.mime, Data: input.data, BuiltinVignette: invalid}
+						got := bo.PrepareImage(format, policy.cover, cfg, zaptest.NewLogger(t))
+						wantMIME := "image/jpeg"
+						if format.IsKindle() && !policy.force && !policy.remove && !policy.cover {
+							wantMIME = "image/svg+xml"
+							if !bytes.Equal(got.Data, notFoundImage) && !bytes.Equal(got.Data, brokenImage) {
+								t.Fatal("native placeholder must retain its original embedded SVG")
+							}
+						}
+						if got.MimeType != wantMIME || got.Dim.Width != 200 || got.Dim.Height != 200 {
+							t.Fatalf("placeholder = %s %v, want %s 200x200", got.MimeType, got.Dim, wantMIME)
+						}
+						if invalid && got.BuiltinVignette {
+							t.Fatal("a substituted placeholder must not inherit vignette stroke thickening")
+						}
+						if invalid {
+							cfg.UseBroken = true
+							kept := bo.PrepareImage(format, policy.cover, cfg, zaptest.NewLogger(t))
+							if !bytes.Equal(kept.Data, input.data) {
+								t.Fatal("use_broken must retain the original invalid bytes")
+							}
+						}
+					})
+				}
+			}
+		})
+	}
+}
+
 func svgPolicyConfig() *config.ImagesConfig {
 	return &config.ImagesConfig{
 		JPEGQuality: 90,
@@ -192,7 +248,7 @@ func TestSVGRasterizationVignettePolicy(t *testing.T) {
 				`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 20">
 <path d="M5 10 L35 10" stroke="black" stroke-width="1" fill="none"/></svg>`)}}}
 			book.Binaries[0].BuiltinVignette = true
-			legacy := book.PrepareImages(common.OutputFmtKfx, cfg, zaptest.NewLogger(t))["svg"]
+			legacy := book.Binaries[0].RasterizeSVG(common.OutputFmtKfx, false, cfg, zaptest.NewLogger(t))
 			cfg.RasterizeSVG = true
 			builtin := book.PrepareImages(format, cfg, zaptest.NewLogger(t))["svg"]
 			book.Binaries[0].BuiltinVignette = false
