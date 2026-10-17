@@ -30,6 +30,53 @@ func TestLoadConfiguration_NoFile(t *testing.T) {
 	if cfg.Document.Images.RasterizeSVG {
 		t.Error("SVG rasterization must be opt-in")
 	}
+	if cfg.Document.Images.RasterFormat != common.RasterFormatAuto {
+		t.Error("raster encoding must default to auto")
+	}
+}
+
+func TestLoadConfiguration_RasterFormat(t *testing.T) {
+	for _, tt := range []struct {
+		value string
+		want  common.RasterFormat
+		valid bool
+	}{
+		{"auto", common.RasterFormatAuto, true},
+		{"jpeg", common.RasterFormatJpeg, true},
+		{"png", 0, false},
+		{"invalid", 0, false},
+		{`""`, 0, false},
+		{"42", 0, false},
+		{"-1", 0, false},
+	} {
+		t.Run(tt.value, func(t *testing.T) {
+			file := filepath.Join(t.TempDir(), "config.yaml")
+			data := []byte("document:\n  images:\n    raster_format: " + tt.value + "\n")
+			if err := os.WriteFile(file, data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := LoadConfiguration(file)
+			if !tt.valid {
+				if err == nil {
+					t.Fatal("invalid raster format must be rejected")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Document.Images.RasterFormat != tt.want {
+				t.Fatalf("raster format = %v, want %v", cfg.Document.Images.RasterFormat, tt.want)
+			}
+			dumped, err := Dump(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(dumped), "raster_format: "+tt.value) {
+				t.Fatalf("dump lost raster format: %s", dumped)
+			}
+		})
+	}
 }
 
 func TestLoadConfiguration_WithFile(t *testing.T) {

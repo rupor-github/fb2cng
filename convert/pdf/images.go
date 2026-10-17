@@ -3,9 +3,11 @@ package pdf
 import (
 	"bytes"
 	"compress/zlib"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
+	"image/draw"
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
@@ -18,6 +20,8 @@ import (
 	_ "golang.org/x/image/tiff"
 	_ "golang.org/x/image/webp"
 
+	"fbc/common"
+	"fbc/config"
 	"fbc/convert/pdf/docwriter"
 	"fbc/fb2"
 	imgutil "fbc/utils/images"
@@ -110,7 +114,14 @@ func pdfBlockImageReferenceWidth(
 }
 
 func pdfBlockImageUsesScreenWidthCap(img *fb2.BookImage, widthPx int) bool {
-	return widthPx > int(pdfKP3ContentWidthPx) && img != nil && strings.Contains(strings.ToLower(img.MimeType), "gif")
+	if img == nil || widthPx <= int(pdfKP3ContentWidthPx) {
+		return false
+	}
+	mimeType := img.LayoutMimeType
+	if mimeType == "" {
+		mimeType = img.MimeType
+	}
+	return strings.Contains(strings.ToLower(mimeType), "gif")
 }
 
 func pdfBlockImageScreenWidth(doc pdfDocumentSpec, widthPx int) (float64, bool) {
@@ -191,12 +202,12 @@ func preparePDFImageResources(doc pdfDocumentSpec, pages []pdfPage, nextObjectID
 		log := doc.Log
 		if log != nil {
 			log = log.With(zap.String("id", id), zap.String("filename", img.Filename))
-			if (doc.RasterizeSVG || doc.RemoveImageTransparency) && strings.HasSuffix(strings.ToLower(img.MimeType), "svg+xml") {
+			if (doc.ImageConfig.RasterizeSVG || doc.ImageConfig.RemoveTransparency) && strings.HasSuffix(strings.ToLower(img.MimeType), "svg+xml") {
 				log.Debug("Rasterizing SVG as requested by configuration",
-					zap.Bool("rasterize_svg", doc.RasterizeSVG), zap.Bool("remove_transparency", doc.RemoveImageTransparency))
+					zap.Bool("rasterize_svg", doc.ImageConfig.RasterizeSVG), zap.Bool("remove_transparency", doc.ImageConfig.RemoveTransparency))
 			}
 		}
-		resource, err := makePDFImageResource(img, doc.RasterizeSVG || doc.RemoveImageTransparency, log)
+		resource, err := makePDFImageResource(img, doc.ImageConfig, log)
 		if err != nil {
 			return nil, fmt.Errorf("prepare pdf image %q: %w", id, err)
 		}
@@ -273,8 +284,8 @@ func writePDFImageObjects(writer *docwriter.Writer, resources map[string]pdfImag
 	return nil
 }
 
-func makePDFImageResource(img *fb2.BookImage, rasterizeSVG bool, log *zap.Logger) (pdfImageResource, error) {
-	if img != nil && !rasterizeSVG && strings.HasSuffix(strings.ToLower(img.MimeType), "svg+xml") {
+func makePDFImageResource(img *fb2.BookImage, cfg config.ImagesConfig, log *zap.Logger) (pdfImageResource, error) {
+	if img != nil && !cfg.RasterizeSVG && !cfg.RemoveTransparency && strings.HasSuffix(strings.ToLower(img.MimeType), "svg+xml") {
 		// Unsupported features reject the entire scene. Fall back through the existing
 		// raster decoder rather than emitting incomplete vectors or treating the SVG
 		// as broken merely because the vector backend cannot translate it.
@@ -290,6 +301,28 @@ func makePDFImageResource(img *fb2.BookImage, rasterizeSVG bool, log *zap.Logger
 	decoded, err := decodePDFImage(img)
 	if err != nil {
 		return pdfImageResource{}, err
+	}
+	if cfg.RasterFormat == common.RasterFormatJpeg {
+		// Encoding is deliberately after vector selection, without changing the
+		// prepared image's logical dimensions or source-specific layout metadata.
+		opaque := image.NewRGBA(decoded.Bounds())
+		draw.Draw(opaque, opaque.Bounds(), image.White, image.Point{}, draw.Src)
+		draw.Draw(opaque, opaque.Bounds(), decoded, decoded.Bounds().Min, draw.Over)
+		var raster image.Image = opaque
+		if cfg.Optimize && imgutil.IsGrayscale(opaque) {
+			gray := image.NewGray(opaque.Bounds())
+			draw.Draw(gray, gray.Bounds(), opaque, opaque.Bounds().Min, draw.Src)
+			raster = gray
+		}
+		density := imgutil.JPEGDensityFromDPI(cfg.Screen.DPI)
+		data, err := imgutil.EncodeJPEGWithDPI(raster, cfg.JPEGQuality, imgutil.DpiPxPerInch, density, density)
+		if err != nil {
+			return pdfImageResource{}, fmt.Errorf("encode PDF raster as JPEG: %w", err)
+		}
+		if resource, ok := makeDirectJPEGImageResource(&fb2.BookImage{Data: data}); ok {
+			return resource, nil
+		}
+		return pdfImageResource{}, errors.New("encoded PDF raster is not a supported JPEG")
 	}
 	rgb := flattenImageToRGB(decoded)
 	data, err := flateImageData(rgb)

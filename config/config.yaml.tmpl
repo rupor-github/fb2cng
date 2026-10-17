@@ -224,6 +224,14 @@ document:
     # PDF keeps intrinsic SVG layout sizing. Kindle covers remain JPEG.
     rasterize_svg: false
 
+    # Raster encoding policy: "auto" retains normal output-format behavior;
+    # "jpeg" converts decodable raster images and SVG raster results to JPEG
+    # on white, even when optimize and remove_transparency are false.
+    # Does not force SVG rasterization or change cover/body sizing policies.
+    # Uses jpeg_quality_level. Existing JPEGs retain normal optimization rules.
+    # For Kobo, jpeg takes precedence over WebP-to-PNG compatibility conversion.
+    raster_format: auto
+
     # Resize all images (but cover) with specified ratio
     scale_factor: 1.0
 

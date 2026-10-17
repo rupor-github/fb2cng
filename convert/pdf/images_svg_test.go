@@ -69,7 +69,8 @@ func TestPDFSVGResourcePolicy(t *testing.T) {
 			img.Filename = "images/art.svg"
 			core, logs := observer.New(zapcore.DebugLevel)
 			doc := pdfDocumentSpec{
-				Images: fb2.BookImages{"svg": img}, RasterizeSVG: tt.force, RemoveImageTransparency: tt.remove, Log: zap.New(core),
+				Images: fb2.BookImages{"svg": img}, Log: zap.New(core),
+				ImageConfig: config.ImagesConfig{RasterizeSVG: tt.force, RemoveTransparency: tt.remove},
 			}
 			pages := []pdfPage{{Images: []pdfPageImage{{ImageID: "svg"}, {ImageID: "svg"}}}}
 			nextID := 7
@@ -118,7 +119,7 @@ func TestPDFSVGFallbackLoggingDisabled(t *testing.T) {
 	core, logs := observer.New(zapcore.InfoLevel)
 	img := &fb2.BookImage{MimeType: "image/svg+xml", Data: []byte(
 		`<svg viewBox="0 0 40 20"><g opacity="0.5"><rect width="20" height="20"/></g></svg>`)}
-	resource, err := makePDFImageResource(img, false, zap.New(core))
+	resource, err := makePDFImageResource(img, config.ImagesConfig{}, zap.New(core))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +162,7 @@ func TestPDFBuiltinSVGResources(t *testing.T) {
 						Screen: config.ScreenConfig{Width: 300, Height: 400},
 					}
 					img := bo.PrepareImage(common.OutputFmtPdf, tt.name == "default cover", cfg, zaptest.NewLogger(t))
-					doc := pdfDocumentSpec{ScreenDPI: 72, Images: fb2.BookImages{"art": img}, RemoveImageTransparency: policy.remove}
+					doc := pdfDocumentSpec{ScreenDPI: 72, Images: fb2.BookImages{"art": img}, ImageConfig: *cfg}
 					w, h := naturalPDFImageSize(doc, img)
 					if width == 0 {
 						width, height = w, h
@@ -284,7 +285,7 @@ stroke-linecap="round" stroke-linejoin="round"/>`, 0},
 			}
 			var rendered [2]image.Image
 			for i := range rendered {
-				doc.RasterizeSVG = i == 1
+				doc.ImageConfig.RasterizeSVG = i == 1
 				if i == 1 && tt.reference != "" {
 					doc.Images = fb2.BookImages{"svg": {MimeType: "image/svg+xml", Data: []byte(tt.reference)}}
 				}

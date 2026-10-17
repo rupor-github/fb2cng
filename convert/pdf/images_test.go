@@ -56,7 +56,7 @@ func TestForcedSVGRasterizationPreservesPDFLayout(t *testing.T) {
 			if w1 != w2 || h1 != h2 || ok1 != ok2 {
 				t.Fatalf("block dimensions changed from %v/%v/%v to %v/%v/%v", w1, h1, ok1, w2, h2, ok2)
 			}
-			resource, err := makePDFImageResource(after, false, nil)
+			resource, err := makePDFImageResource(after, config.ImagesConfig{}, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -111,7 +111,7 @@ func TestMakePDFImageResourceEmbedsJPEGDirectly(t *testing.T) {
 	resource, err := makePDFImageResource(&fb2.BookImage{
 		MimeType: "image/jpeg",
 		Data:     testJPEG(t, 2, 3),
-	}, false, nil)
+	}, config.ImagesConfig{}, nil)
 	if err != nil {
 		t.Fatalf("makePDFImageResource() error = %v", err)
 	}

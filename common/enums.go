@@ -20,6 +20,10 @@ type ImageResizeMode int
 // ENUM(placeholder, external, embedded)
 type MarkdownImageMode int
 
+// Specification of raster image encoding policy.
+// ENUM(auto, jpeg)
+type RasterFormat int
+
 // Specification of TOC page placement.
 // ENUM(none, before, after)
 type TOCPagePlacement int

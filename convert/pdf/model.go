@@ -3,6 +3,7 @@ package pdf
 import (
 	"go.uber.org/zap"
 
+	"fbc/config"
 	"fbc/content"
 	"fbc/convert/pdf/structure"
 	"fbc/fb2"
@@ -47,8 +48,7 @@ type pdfDocumentSpec struct {
 	Images    fb2.BookImages
 	CoverID   string
 
-	RasterizeSVG            bool
-	RemoveImageTransparency bool
+	ImageConfig config.ImagesConfig
 
 	Hyphenator  paragraphHyphenator
 	Fonts       *pdfFontRegistry

@@ -52,7 +52,7 @@ See [Footnotes](../footnotes.md) for mode details and templates.
 
 ## Images And Fonts
 
-SVG stays SVG by default. KEPUB variants convert WebP to PNG for Kobo compatibility;
+By default, SVG stays SVG and KEPUB variants convert WebP to PNG for Kobo compatibility;
 ordinary EPUB does not. See [Image handling](../images.md) for the format matrix,
 transparency and rasterization settings, sizing, and covers.
 

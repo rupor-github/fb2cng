@@ -240,25 +240,30 @@ func svgPolicyConfig() *config.ImagesConfig {
 }
 
 func TestSVGRasterizationVignettePolicy(t *testing.T) {
-	for _, format := range []common.OutputFmt{common.OutputFmtEpub3, common.OutputFmtKfx, common.OutputFmtMd} {
-		t.Run(format.String(), func(t *testing.T) {
-			cfg := svgPolicyConfig()
-			cfg.Markdown = common.MarkdownImageModeEmbedded
-			book := &FictionBook{Binaries: []BinaryObject{{ID: "svg", ContentType: "image/svg+xml", Data: []byte(
-				`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 20">
+	for _, rasterFormat := range []common.RasterFormat{common.RasterFormatAuto, common.RasterFormatJpeg} {
+		t.Run(rasterFormat.String(), func(t *testing.T) {
+			for _, format := range []common.OutputFmt{common.OutputFmtEpub3, common.OutputFmtKfx, common.OutputFmtMd} {
+				t.Run(format.String(), func(t *testing.T) {
+					cfg := svgPolicyConfig()
+					cfg.RasterFormat = rasterFormat
+					cfg.Markdown = common.MarkdownImageModeEmbedded
+					book := &FictionBook{Binaries: []BinaryObject{{ID: "svg", ContentType: "image/svg+xml", Data: []byte(
+						`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 20">
 <path d="M5 10 L35 10" stroke="black" stroke-width="1" fill="none"/></svg>`)}}}
-			book.Binaries[0].BuiltinVignette = true
-			legacy := book.Binaries[0].RasterizeSVG(common.OutputFmtKfx, false, cfg, zaptest.NewLogger(t))
-			cfg.RasterizeSVG = true
-			builtin := book.PrepareImages(format, cfg, zaptest.NewLogger(t))["svg"]
-			book.Binaries[0].BuiltinVignette = false
-			external := book.PrepareImages(format, cfg, zaptest.NewLogger(t))["svg"]
-			if format == common.OutputFmtEpub3 {
-				if !bytes.Equal(builtin.Data, external.Data) {
-					t.Fatal("optional PNG rasterization must not thicken built-in strokes")
-				}
-			} else if !bytes.Equal(builtin.Data, legacy.Data) || bytes.Equal(builtin.Data, external.Data) {
-				t.Fatal("legacy JPEG vignette stroke adjustment changed")
+					book.Binaries[0].BuiltinVignette = true
+					legacy := book.Binaries[0].RasterizeSVG(common.OutputFmtKfx, false, cfg, zaptest.NewLogger(t))
+					cfg.RasterizeSVG = true
+					builtin := book.PrepareImages(format, cfg, zaptest.NewLogger(t))["svg"]
+					book.Binaries[0].BuiltinVignette = false
+					external := book.PrepareImages(format, cfg, zaptest.NewLogger(t))["svg"]
+					if format == common.OutputFmtEpub3 {
+						if !bytes.Equal(builtin.Data, external.Data) {
+							t.Fatal("optional rasterization must not thicken built-in strokes")
+						}
+					} else if !bytes.Equal(builtin.Data, legacy.Data) || bytes.Equal(builtin.Data, external.Data) {
+						t.Fatal("legacy JPEG vignette stroke adjustment changed")
+					}
+				})
 			}
 		})
 	}

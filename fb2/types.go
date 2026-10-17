@@ -84,6 +84,7 @@ type FootnoteRefs map[string]FootnoteRef
 type BookImage struct {
 	BuiltinVignette bool // Retained for backend SVG raster fallback; native vectors use authored strokes.
 	MimeType        string
+	LayoutMimeType  string // Preserve source-specific PDF sizing when explicit raster encoding changes MIME type.
 	Data            []byte
 	Filename        string
 	Dim             struct {

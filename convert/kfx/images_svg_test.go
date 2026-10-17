@@ -319,58 +319,62 @@ func TestKindlePlaceholderKVGResources(t *testing.T) {
 }
 
 func TestKindleSVGResourcePolicy(t *testing.T) {
-	for _, tt := range []struct {
-		name, body                 string
-		force, remove, cover, want bool
-	}{
-		{"native", `<rect width="20" height="20"/>`, false, false, false, true},
-		{"force raster", `<rect width="20" height="20"/>`, true, false, false, false},
-		{"remove transparency", `<rect width="20" height="20"/>`, false, true, false, false},
-		{"cover stays JPEG", `<rect width="20" height="20"/>`, false, false, true, false},
-		{"unsupported opacity", `<g opacity="0.5"><rect width="20" height="20"/></g>`, false, false, false, false},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := &config.ImagesConfig{RasterizeSVG: tt.force, RemoveTransparency: tt.remove, JPEGQuality: 90,
-				Screen: config.ScreenConfig{Width: 80, Height: 120}, ScaleFactor: 0.5}
-			bo := fb2.BinaryObject{ID: "art", ContentType: "image/svg+xml", Data: []byte(`<svg viewBox="0 0 40 20">` + tt.body + `</svg>`)}
-			core, logs := observer.New(zap.DebugLevel)
-			log := zap.New(core)
-			img := bo.PrepareImage(common.OutputFmtKfx, tt.cover, cfg, log)
-			img.Filename = "images/art.svg"
-			coverID := ""
-			if tt.cover {
-				coverID = "art"
-			}
-			external, raw, info := buildImageResourceFragments(fb2.BookImages{"art": img}, coverID, cfg, log)
-			if (info["art"].Vector != nil) != tt.want {
-				t.Fatalf("wrong representation: %+v", info["art"])
-			}
-			if !tt.cover && (info["art"].Width != 40 || info["art"].Height != 20) {
-				t.Fatalf("representation changed logical dimensions: %+v", info["art"])
-			}
-			if tt.want {
-				if len(external) != 0 || len(raw) != 0 {
-					t.Fatal("native artwork must not create external media")
-				}
-			} else if len(raw) != 1 || external[0].Value.(StructValue)[SymFormat] != SymbolValue(SymFormatJPG) {
-				t.Fatal("raster fallback must use the existing JPEG policy")
-			}
-			fallback := logs.FilterMessage("Falling back to SVG rasterization for Kindle output").All()
-			if tt.name == "unsupported opacity" {
-				if len(fallback) != 1 || fallback[0].ContextMap()["id"] != "art" || fallback[0].ContextMap()["error"] == nil {
-					t.Fatalf("missing fallback identity/reason: %+v", fallback)
-				}
-			} else if len(fallback) != 0 {
-				t.Fatal("configuration or cover policy must not be logged as unsupported artwork")
-			}
-			requested := logs.FilterMessage("Rasterizing SVG as requested by configuration").All()
-			if tt.force || tt.remove {
-				if len(requested) != 1 || requested[0].ContextMap()["rasterize_svg"] != tt.force ||
-					requested[0].ContextMap()["remove_transparency"] != tt.remove {
-					t.Fatalf("missing configuration rasterization reason: %+v", requested)
-				}
-			} else if len(requested) != 0 {
-				t.Fatal("fallback must not claim that configuration requested rasterization")
+	for _, rasterFormat := range []common.RasterFormat{common.RasterFormatAuto, common.RasterFormatJpeg} {
+		t.Run(rasterFormat.String(), func(t *testing.T) {
+			for _, tt := range []struct {
+				name, body                 string
+				force, remove, cover, want bool
+			}{
+				{"native", `<rect width="20" height="20"/>`, false, false, false, true},
+				{"force raster", `<rect width="20" height="20"/>`, true, false, false, false},
+				{"remove transparency", `<rect width="20" height="20"/>`, false, true, false, false},
+				{"cover stays JPEG", `<rect width="20" height="20"/>`, false, false, true, false},
+				{"unsupported opacity", `<g opacity="0.5"><rect width="20" height="20"/></g>`, false, false, false, false},
+			} {
+				t.Run(tt.name, func(t *testing.T) {
+					cfg := &config.ImagesConfig{RasterizeSVG: tt.force, RemoveTransparency: tt.remove, JPEGQuality: 90,
+						Screen: config.ScreenConfig{Width: 80, Height: 120}, ScaleFactor: 0.5, RasterFormat: rasterFormat}
+					bo := fb2.BinaryObject{ID: "art", ContentType: "image/svg+xml", Data: []byte(`<svg viewBox="0 0 40 20">` + tt.body + `</svg>`)}
+					core, logs := observer.New(zap.DebugLevel)
+					log := zap.New(core)
+					img := bo.PrepareImage(common.OutputFmtKfx, tt.cover, cfg, log)
+					img.Filename = "images/art.svg"
+					coverID := ""
+					if tt.cover {
+						coverID = "art"
+					}
+					external, raw, info := buildImageResourceFragments(fb2.BookImages{"art": img}, coverID, cfg, log)
+					if (info["art"].Vector != nil) != tt.want {
+						t.Fatalf("wrong representation: %+v", info["art"])
+					}
+					if !tt.cover && (info["art"].Width != 40 || info["art"].Height != 20) {
+						t.Fatalf("representation changed logical dimensions: %+v", info["art"])
+					}
+					if tt.want {
+						if len(external) != 0 || len(raw) != 0 {
+							t.Fatal("native artwork must not create external media")
+						}
+					} else if len(raw) != 1 || external[0].Value.(StructValue)[SymFormat] != SymbolValue(SymFormatJPG) {
+						t.Fatal("raster fallback must use the existing JPEG policy")
+					}
+					fallback := logs.FilterMessage("Falling back to SVG rasterization for Kindle output").All()
+					if tt.name == "unsupported opacity" {
+						if len(fallback) != 1 || fallback[0].ContextMap()["id"] != "art" || fallback[0].ContextMap()["error"] == nil {
+							t.Fatalf("missing fallback identity/reason: %+v", fallback)
+						}
+					} else if len(fallback) != 0 {
+						t.Fatal("configuration or cover policy must not be logged as unsupported artwork")
+					}
+					requested := logs.FilterMessage("Rasterizing SVG as requested by configuration").All()
+					if tt.force || tt.remove {
+						if len(requested) != 1 || requested[0].ContextMap()["rasterize_svg"] != tt.force ||
+							requested[0].ContextMap()["remove_transparency"] != tt.remove {
+							t.Fatalf("missing configuration rasterization reason: %+v", requested)
+						}
+					} else if len(requested) != 0 {
+						t.Fatal("fallback must not claim that configuration requested rasterization")
+					}
+				})
 			}
 		})
 	}

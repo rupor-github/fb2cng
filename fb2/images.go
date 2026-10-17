@@ -84,6 +84,7 @@ func (bo *BinaryObject) handleImageError(
 	bi.Data = brokenImage
 	bi.MimeType = "image/svg+xml"
 	bi.BuiltinVignette = false
+	bi.LayoutMimeType = ""
 
 	if !normalizeToJPEG && !cfg.RasterizeSVG {
 		// Discard dimensions from the failed source/resize, not the placeholder.
@@ -101,7 +102,7 @@ func (bo *BinaryObject) handleImageError(
 	// no scaling needed
 	rasterize := imgutil.RasterizeSVGToImage
 	imgType := "jpeg"
-	if !normalizeToJPEG {
+	if !normalizeToJPEG && cfg.RasterFormat != common.RasterFormatJpeg {
 		imgType = "png"
 		if !cfg.RemoveTransparency {
 			rasterize = imgutil.RasterizeSVGToTransparentImage
@@ -173,11 +174,12 @@ func (bo *BinaryObject) encodeImage(img image.Image, imgType string, cfg *config
 func (bo *BinaryObject) PrepareImage(outputFormat common.OutputFmt, cover bool, cfg *config.ImagesConfig, log *zap.Logger) *BookImage {
 	// Embedded Markdown retains its existing JPEG and vignette policy without
 	// impersonating a Kindle output format.
-	normalizeToJPEG := outputFormat.IsKindle() ||
+	requireJPEG := outputFormat.IsKindle() ||
 		(outputFormat == common.OutputFmtMd && cfg.Markdown == common.MarkdownImageModeEmbedded)
+	normalizeToJPEG := requireJPEG || cfg.RasterFormat == common.RasterFormatJpeg
 	// A substituted body placeholder can use native KVG. Covers, explicit raster
 	// policies and embedded Markdown still need the existing JPEG representation.
-	rasterizeBrokenSVG := normalizeToJPEG &&
+	rasterizeBrokenSVG := requireJPEG &&
 		(!outputFormat.IsKindle() || cover || cfg.RasterizeSVG || cfg.RemoveTransparency)
 	bi := &BookImage{
 		MimeType:        bo.ContentType,
@@ -209,7 +211,7 @@ func (bo *BinaryObject) PrepareImage(outputFormat common.OutputFmt, cover bool, 
 			bi.Dim.Width, bi.Dim.Height = w, h
 			return bi
 		}
-		if !normalizeToJPEG && !cfg.RasterizeSVG {
+		if !requireJPEG && !cfg.RasterizeSVG {
 			return bi
 		}
 		if cfg.RasterizeSVG || (outputFormat.IsKindle() && cfg.RemoveTransparency) {
@@ -225,12 +227,15 @@ func (bo *BinaryObject) PrepareImage(outputFormat common.OutputFmt, cover bool, 
 		return bo.handleImageError(bi, "decode", imgDecodingErr, rasterizeBrokenSVG, cfg, log)
 	}
 	bi.MimeType = mime.TypeByExtension("." + imgType)
+	if outputFormat == common.OutputFmtPdf && cfg.RasterFormat == common.RasterFormatJpeg {
+		bi.LayoutMimeType = bi.MimeType
+	}
 	bi.Dim.Width = img.Bounds().Dx()
 	bi.Dim.Height = img.Bounds().Dy()
 
 	// Kobo does not support WebP. Use lossless PNG, preserving transparency
 	// unless its removal is explicitly requested below.
-	if outputFormat.IsKobo() && imgType == "webp" {
+	if outputFormat.IsKobo() && imgType == "webp" && !normalizeToJPEG {
 		log.Debug("Converting WebP image to PNG for Kobo output", zap.String("id", bo.ID))
 		imgType = "png"
 		bi.MimeType = "image/png"
@@ -311,6 +316,11 @@ func (bo *BinaryObject) PrepareImage(outputFormat common.OutputFmt, cover bool, 
 				if imgType != "png" {
 					imgType = "png"
 					bi.MimeType = "image/png"
+					if cfg.RemoveTransparency && bi.LayoutMimeType != "" {
+						// Preserve the layout of the same transparency-removal request
+						// under auto, rather than undoing its existing format change.
+						bi.LayoutMimeType = bi.MimeType
+					}
 				}
 			}
 		}
@@ -348,11 +358,11 @@ func (bo *BinaryObject) PrepareImage(outputFormat common.OutputFmt, cover bool, 
 		}
 	}
 
-	// Compatibility policy: normalize any decodable raster format to JPEG.
+	// Required compatibility or explicit encoding policy: normalize decodable raster inputs.
 	if normalizeToJPEG && imgType != "jpeg" {
-		log.Debug("Converting image to jpeg for output compatibility",
+		log.Debug("Converting image to jpeg for raster output",
 			zap.String("id", bo.ID),
-			zap.String("type", imgType))
+			zap.String("type", imgType), zap.String("raster_format", cfg.RasterFormat.String()))
 		imgType = "jpeg"
 		bi.MimeType = "image/jpeg"
 		imageChanged = true
@@ -375,8 +385,9 @@ func (bo *BinaryObject) PrepareImage(outputFormat common.OutputFmt, cover bool, 
 // the source SVG. Policy logging belongs to the caller, so fallback is never
 // mislabeled as an explicit rasterize_svg request.
 func (bo *BinaryObject) RasterizeSVG(outputFormat common.OutputFmt, cover bool, cfg *config.ImagesConfig, log *zap.Logger) *BookImage {
-	normalizeToJPEG := outputFormat.IsKindle() ||
+	requireJPEG := outputFormat.IsKindle() ||
 		(outputFormat == common.OutputFmtMd && cfg.Markdown == common.MarkdownImageModeEmbedded)
+	normalizeToJPEG := requireJPEG || cfg.RasterFormat == common.RasterFormatJpeg
 	preserveSVGSizing := outputFormat == common.OutputFmtPdf
 	bi := &BookImage{MimeType: "image/svg+xml", Data: bo.Data, BuiltinVignette: bo.BuiltinVignette}
 	targetW, targetH := cfg.Screen.Width, 0
@@ -384,7 +395,7 @@ func (bo *BinaryObject) RasterizeSVG(outputFormat common.OutputFmt, cover bool, 
 		targetW, targetH = 0, 0
 	}
 	var strokeFactor float64
-	if normalizeToJPEG && bo.BuiltinVignette {
+	if requireJPEG && bo.BuiltinVignette {
 		strokeFactor = imgutil.KindleSVGStrokeWidthFactor
 	}
 	rasterize := imgutil.RasterizeSVGToImage
