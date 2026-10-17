@@ -52,6 +52,37 @@ Commonly useful CSS properties include font family/size/style/weight, line heigh
 
 PDF also understands generated pseudo-content used by the default stylesheet, such as footnote reference decorations on `.link-footnote::before` and `.link-footnote::after`.
 
+## SVG Artwork
+
+By default, supported SVG artwork is translated into reusable **Form XObjects** containing
+PDF drawing operations, rather than rasterized into Image XObjects. This intentionally
+changes default output: vectors remain sharp at any zoom and retain transparent backgrounds.
+No additional opt-in is required. Covers, body/inline images and vignettes use the same path
+when their prepared resource is SVG; generated JPEG covers remain raster images.
+
+The initial supported subset is deliberately conservative:
+
+- A positive root `viewBox`, SVG paths (including quadratic/cubic curves and arcs), rectangles,
+  circles, ellipses, lines, polygons and polylines.
+- Groups, inherited presentation properties, supported inline styles, and affine transforms.
+- Named/hexadecimal solid fills and strokes, fill/stroke opacity, nonzero/even-odd fill rules,
+  stroke widths, caps, joins, miter limits and dash patterns.
+
+Unsupported features reject the **entire** vector scene and use the existing SVG rasterizer.
+These include gradients, clipping/masks/filters, references (`use`), text/fonts, embedded images,
+CSS rules/classes, `currentColor`, non-scaling strokes, nested viewports and element/group opacity
+requiring compositing. Fallback retains the existing rasterizer's SVG limitations; it is not a
+browser-complete SVG renderer. Excessive coordinates, transforms or scene complexity also use fallback.
+
+Debug logging reports raster fallback with the image ID, filename and vector-translation error.
+Configuration-requested rasterization is logged separately, without an unsupported-feature warning.
+
+- `document.images.rasterize_svg: true` explicitly forces raster rendering.
+- `document.images.remove_transparency: true` selects raster fallback on white for SVG artwork.
+- Native vectors and raster fallback retain the same logical/layout dimensions. Screen width
+  does not increase SVG resolution or enlarge SVG layout in PDF.
+- Kindle-specific vignette stroke thickening is not applied to PDF vectors.
+
 ## Fonts
 
 PDF font handling is stricter than EPUB/KFX because fb2cng parses fonts and writes PDF font resources itself.

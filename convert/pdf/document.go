@@ -120,7 +120,7 @@ func buildPDFDocument(doc pdfDocumentSpec) ([]byte, error) {
 		pages[i].ContentID = nextObjectID
 		nextObjectID++
 	}
-	imageResources, err := preparePDFImageResources(doc.Images, pages, &nextObjectID)
+	imageResources, err := preparePDFImageResources(doc, pages, &nextObjectID)
 	if err != nil {
 		return nil, err
 	}

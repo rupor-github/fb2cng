@@ -7,11 +7,41 @@ import (
 	"strings"
 	"testing"
 
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest"
+	"go.uber.org/zap/zaptest/observer"
 
 	"fbc/common"
 	"fbc/config"
 )
+
+func TestExplicitSVGRasterizationLogging(t *testing.T) {
+	for _, force := range []bool{false, true} {
+		t.Run(strconv.FormatBool(force), func(t *testing.T) {
+			cfg := svgPolicyConfig()
+			cfg.RasterizeSVG = force
+			book := &FictionBook{Binaries: []BinaryObject{{ID: "art", ContentType: "image/svg+xml", Data: []byte(
+				`<svg viewBox="0 0 40 20"><rect width="20" height="20"/></svg>`)}}}
+			core, logs := observer.New(zapcore.DebugLevel)
+			book.PrepareImagesForOutput(common.OutputFmtPdf, cfg, zap.New(core))
+			entries := logs.FilterMessage("Rasterizing SVG as requested by configuration").All()
+			if !force {
+				if len(entries) != 0 {
+					t.Fatalf("unexpected explicit rasterization log: %+v", entries)
+				}
+				return
+			}
+			if len(entries) != 1 || entries[0].Level != zapcore.DebugLevel {
+				t.Fatalf("want one debug log, got %+v", entries)
+			}
+			fields := entries[0].ContextMap()
+			if fields["id"] != "art" || fields["rasterize_svg"] != true {
+				t.Fatalf("missing explicit rasterization context: %+v", fields)
+			}
+		})
+	}
+}
 
 func TestSVGOutputPolicy(t *testing.T) {
 	svg := []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 20">

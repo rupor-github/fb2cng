@@ -1,6 +1,8 @@
 package pdf
 
 import (
+	"go.uber.org/zap"
+
 	"fbc/content"
 	"fbc/convert/pdf/structure"
 	"fbc/fb2"
@@ -45,12 +47,16 @@ type pdfDocumentSpec struct {
 	Images    fb2.BookImages
 	CoverID   string
 
+	RasterizeSVG            bool
+	RemoveImageTransparency bool
+
 	Hyphenator  paragraphHyphenator
 	Fonts       *pdfFontRegistry
 	TextShapers *pdfTextShaperCache
 
 	Debug   bool
 	WorkDir string
+	Log     *zap.Logger
 }
 
 type pdfBlockKind int

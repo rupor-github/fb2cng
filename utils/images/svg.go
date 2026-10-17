@@ -78,6 +78,17 @@ func RasterizeSVGToTransparentImage(svgData []byte, targetW, targetH int, stroke
 	return rasterizeSVG(svgData, targetW, targetH, strokeWidthFactor, false)
 }
 
+// SVGImageSize reports the existing intrinsic raster/layout dimensions without
+// allocating a pixel buffer. Missing dimensions and safety limits match rasterization.
+func SVGImageSize(svgData []byte) (int, int, error) {
+	icon, err := oksvg.ReadIconStream(bytes.NewReader(svgData))
+	if err != nil {
+		return 0, 0, err
+	}
+	w, h := svgImageDimensions(icon.ViewBox.W, icon.ViewBox.H, 0, 0)
+	return w, h, nil
+}
+
 func rasterizeSVG(svgData []byte, targetW, targetH int, strokeWidthFactor float64, whiteBackground bool) (image.Image, error) {
 	// Scale stroke widths if factor is specified
 	if strokeWidthFactor > 0 && strokeWidthFactor != 1.0 {
@@ -89,8 +100,23 @@ func rasterizeSVG(svgData []byte, targetW, targetH int, strokeWidthFactor float6
 		return nil, err
 	}
 
-	intrW := int(math.Ceil(icon.ViewBox.W))
-	intrH := int(math.Ceil(icon.ViewBox.H))
+	w, h := svgImageDimensions(icon.ViewBox.W, icon.ViewBox.H, targetW, targetH)
+	icon.SetTarget(0, 0, float64(w), float64(h))
+
+	dst := image.NewRGBA(image.Rect(0, 0, w, h))
+	if whiteBackground {
+		draw.Draw(dst, dst.Bounds(), &image.Uniform{C: color.RGBA{255, 255, 255, 255}}, image.Point{}, draw.Src)
+	}
+
+	scanner := rasterx.NewScannerGV(w, h, dst, dst.Bounds())
+	dasher := rasterx.NewDasher(w, h, scanner)
+	icon.Draw(dasher, 1.0)
+	return dst, nil
+}
+
+func svgImageDimensions(viewW, viewH float64, targetW, targetH int) (int, int) {
+	intrW := int(math.Ceil(viewW))
+	intrH := int(math.Ceil(viewH))
 	if intrW <= 0 {
 		intrW = defaultSVGSize
 	}
@@ -124,15 +150,5 @@ func rasterizeSVG(svgData []byte, targetW, targetH int, strokeWidthFactor float6
 		h = max(int(math.Round(float64(h)*s)), 1)
 	}
 
-	icon.SetTarget(0, 0, float64(w), float64(h))
-
-	dst := image.NewRGBA(image.Rect(0, 0, w, h))
-	if whiteBackground {
-		draw.Draw(dst, dst.Bounds(), &image.Uniform{C: color.RGBA{255, 255, 255, 255}}, image.Point{}, draw.Src)
-	}
-
-	scanner := rasterx.NewScannerGV(w, h, dst, dst.Bounds())
-	dasher := rasterx.NewDasher(w, h, scanner)
-	icon.Draw(dasher, 1.0)
-	return dst, nil
+	return w, h
 }

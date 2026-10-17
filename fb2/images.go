@@ -200,6 +200,9 @@ func (bo *BinaryObject) prepareImage(normalizeToJPEG, cover bool, cfg *config.Im
 		if !normalizeToJPEG && !cfg.RasterizeSVG {
 			return bi
 		}
+		if cfg.RasterizeSVG {
+			log.Debug("Rasterizing SVG as requested by configuration", zap.String("id", bo.ID), zap.Bool("rasterize_svg", true))
+		}
 
 		// Rasterize SVG - as far as I could tell KP3 always scales SVG to 2048
 		// (DPI 140) keeping aspect ratio, we will use screen width instead.

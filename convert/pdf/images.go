@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 
+	"go.uber.org/zap"
 	_ "golang.org/x/image/bmp"
 	_ "golang.org/x/image/tiff"
 	_ "golang.org/x/image/webp"
@@ -166,11 +167,11 @@ func pdfImagePixelSize(img *fb2.BookImage) (int, int) {
 		return img.Dim.Width, img.Dim.Height
 	}
 	if strings.HasSuffix(strings.ToLower(img.MimeType), "svg+xml") {
-		decoded, err := imgutil.RasterizeSVGToImage(img.Data, 0, 0, 0)
+		width, height, err := imgutil.SVGImageSize(img.Data)
 		if err != nil {
 			return 0, 0
 		}
-		return decoded.Bounds().Dx(), decoded.Bounds().Dy()
+		return width, height
 	}
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(img.Data))
 	if err != nil {
@@ -179,15 +180,23 @@ func pdfImagePixelSize(img *fb2.BookImage) (int, int) {
 	return cfg.Width, cfg.Height
 }
 
-func preparePDFImageResources(images fb2.BookImages, pages []pdfPage, nextObjectID *int) (map[string]pdfImageResource, error) {
+func preparePDFImageResources(doc pdfDocumentSpec, pages []pdfPage, nextObjectID *int) (map[string]pdfImageResource, error) {
 	ids := usedPDFImageIDs(pages)
 	resources := make(map[string]pdfImageResource, len(ids))
 	for i, id := range ids {
-		img := images[id]
+		img := doc.Images[id]
 		if img == nil {
 			continue
 		}
-		resource, err := makePDFImageResource(img)
+		log := doc.Log
+		if log != nil {
+			log = log.With(zap.String("id", id), zap.String("filename", img.Filename))
+			if (doc.RasterizeSVG || doc.RemoveImageTransparency) && strings.HasSuffix(strings.ToLower(img.MimeType), "svg+xml") {
+				log.Debug("Rasterizing SVG as requested by configuration",
+					zap.Bool("rasterize_svg", doc.RasterizeSVG), zap.Bool("remove_transparency", doc.RemoveImageTransparency))
+			}
+		}
+		resource, err := makePDFImageResourceWithPolicy(img, doc.RasterizeSVG || doc.RemoveImageTransparency, log)
 		if err != nil {
 			return nil, fmt.Errorf("prepare pdf image %q: %w", id, err)
 		}
@@ -265,6 +274,20 @@ func writePDFImageObjects(writer *docwriter.Writer, resources map[string]pdfImag
 }
 
 func makePDFImageResource(img *fb2.BookImage) (pdfImageResource, error) {
+	return makePDFImageResourceWithPolicy(img, false, nil)
+}
+
+func makePDFImageResourceWithPolicy(img *fb2.BookImage, rasterizeSVG bool, log *zap.Logger) (pdfImageResource, error) {
+	if img != nil && !rasterizeSVG && strings.HasSuffix(strings.ToLower(img.MimeType), "svg+xml") {
+		// Unsupported features reject the entire scene. Fall back through the existing
+		// raster decoder rather than emitting incomplete vectors or treating the SVG
+		// as broken merely because the vector backend cannot translate it.
+		if resource, err := makePDFSVGForm(img.Data); err == nil {
+			return resource, nil
+		} else if log != nil {
+			log.Debug("Falling back to SVG rasterization for PDF output", zap.Error(err))
+		}
+	}
 	if resource, ok := makeDirectJPEGImageResource(img); ok {
 		return resource, nil
 	}
