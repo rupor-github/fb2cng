@@ -187,7 +187,7 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20261005182115-fad411399dd8 // indirect
 	google.golang.org/grpc v1.84.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
-	honnef.co/go/tools v0.8.1 // indirect
+	honnef.co/go/tools v0.8.2 // indirect
 	modernc.org/cc/v4 v4.30.1 // indirect
 	modernc.org/ccgo/v4 v4.36.2 // indirect
 	modernc.org/libc v1.77.1 // indirect
