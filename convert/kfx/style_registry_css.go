@@ -26,7 +26,7 @@ func NewStyleRegistryFromCSS(sheet *css.Stylesheet, tracer *StyleTracer, log *za
 	sr := DefaultStyleRegistry()
 	sr.SetTracer(tracer)
 
-	mapper := NewStyleMapper(log, tracer)
+	mapper := NewStyleMapper(tracer, log)
 	warnings := make([]string, 0)
 
 	if sheet != nil {
@@ -73,7 +73,7 @@ func parseAndCreateRegistry(cssData []byte, tracer *StyleTracer, log *zap.Logger
 		return NewStyleRegistryFromCSS(nil, tracer, log)
 	}
 	parser := css.NewParser(log)
-	sheet := parser.Parse(cssData)
+	sheet := parser.Parse(cssData, "")
 	return NewStyleRegistryFromCSS(sheet, tracer, log)
 }
 

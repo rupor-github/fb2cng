@@ -226,9 +226,8 @@ func (t *StyleTracer) TraceMarginCollapse(collapseType, nodeID string, beforeMT,
 // Parameters:
 //   - originalStyle: name of the original style before margin modification
 //   - newStyle: name of the new/reused style after margin modification
-//   - nodeID: content entry identifier
 //   - marginTop, marginBottom: final margin values (nil = removed)
-func (t *StyleTracer) TraceStyleVariant(originalStyle, newStyle, nodeID string, marginTop, marginBottom *float64) {
+func (t *StyleTracer) TraceStyleVariant(originalStyle, newStyle string, marginTop, marginBottom *float64) {
 	if !t.IsEnabled() {
 		return
 	}

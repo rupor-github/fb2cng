@@ -93,7 +93,7 @@ func applyPDFFootnoteContextToBlocks(blocks []pdfTextBlock) []pdfTextBlock {
 	return blocks
 }
 
-func pdfPrintedFootnotePageBlocks(_ *content.Content, note pdfPrintedFootnote, pageLabel string, continuation bool) []pdfTextBlock {
+func pdfPrintedFootnotePageBlocks(note pdfPrintedFootnote, pageLabel string, continuation bool) []pdfTextBlock {
 	// Each rendered chunk starts with a visible page-local label. Continuation pages
 	// can use a different title block so repeated labels remain clear without
 	// rewriting the original footnote body.
@@ -306,7 +306,7 @@ func clonePDFInlineSegments(segments []fb2.InlineSegment) []fb2.InlineSegment {
 	return clone
 }
 
-func pdfPrintedFootnoteRefsClickable(c *content.Content, _ string, _ string) bool {
+func pdfPrintedFootnoteRefsClickable(c *content.Content) bool {
 	return !pdfPrintedFootnotesEnabled(c)
 }
 
@@ -324,12 +324,10 @@ func pdfFootnoteTargetIDFromHref(c *content.Content, href string) (string, bool)
 
 func pdfDisablePrintedFootnoteLinks(
 	c *content.Content,
-	styleClasses string,
-	contextClasses string,
 	runs []pdfInlineRun,
 	links []pdfTextLink,
 ) ([]pdfInlineRun, []pdfTextLink) {
-	if pdfPrintedFootnoteRefsClickable(c, styleClasses, contextClasses) {
+	if pdfPrintedFootnoteRefsClickable(c) {
 		return runs, links
 	}
 

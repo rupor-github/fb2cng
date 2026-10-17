@@ -28,7 +28,7 @@ func newPDFDynamicPrintedFootnoteReserveTracker(
 	contentBottom float64,
 ) pdfDynamicPrintedFootnoteReserveTracker {
 	if styles == nil {
-		styles = newPDFStyleResolver(nil, nil)
+		styles = newPDFStyleResolver(nil, nil, nil)
 	}
 	tracker := pdfDynamicPrintedFootnoteReserveTracker{
 		doc:           doc,
@@ -136,14 +136,7 @@ func (t *pdfDynamicPrintedFootnoteReserveTracker) computeReserve(refs []pdfPrint
 	if len(queuePages) == 0 {
 		return 0, nil
 	}
-	separator := pdfPrintedFootnoteSeparatorMetricsForArea(
-		t.doc,
-		t.styles,
-		t.contentLeft,
-		t.contentWidth,
-		t.contentBottom,
-		t.footnoteTextHeight,
-	)
+	separator := pdfPrintedFootnoteSeparatorMetricsForArea(t.styles, t.contentLeft, t.contentWidth, t.contentBottom, t.footnoteTextHeight)
 	reserve := pdfPrintedFootnotePagePlanReserve(
 		pdfPrintedFootnotePagePlan{QueuePages: queuePages},
 		t.footnoteTextHeight,

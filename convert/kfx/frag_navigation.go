@@ -18,7 +18,6 @@ import (
 
 func BuildNavigation(
 	tocEntries []*TOCEntry,
-	startEID int,
 	posItems []PositionItem,
 	pageSize int,
 	includeUntitled bool,
@@ -26,7 +25,7 @@ func BuildNavigation(
 	landmarks LandmarkInfo,
 ) *Fragment {
 	// Build TOC entries recursively
-	entries := buildNavEntries(tocEntries, startEID, includeUntitled, tocType)
+	entries := buildNavEntries(tocEntries, includeUntitled, tocType)
 
 	// Create TOC navigation container
 	tocContainer := NewTOCContainer(entries)
@@ -100,7 +99,7 @@ func buildLandmarksContainer(landmarks LandmarkInfo) StructValue {
 }
 
 // buildNavEntries recursively builds navigation unit entries from TOC entries.
-func buildNavEntries(tocEntries []*TOCEntry, startEID int, includeUntitled bool, tocType common.TOCType) []any {
+func buildNavEntries(tocEntries []*TOCEntry, includeUntitled bool, tocType common.TOCType) []any {
 	return buildNavEntriesFromNodes(tocnav.Shape(flattenTOCEntries(tocEntries, includeUntitled, 1), tocType))
 }
 

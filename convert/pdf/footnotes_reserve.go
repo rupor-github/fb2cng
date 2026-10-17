@@ -6,7 +6,7 @@ const pdfPrintedFootnoteDefaultTextAreaFraction = 0.35
 
 func pdfPrintedFootnoteTextAreaHeight(doc pdfDocumentSpec, styles *pdfStyleResolver) float64 {
 	if styles == nil {
-		styles = newPDFStyleResolver(nil, nil)
+		styles = newPDFStyleResolver(nil, nil, nil)
 	}
 	_, _, contentTop, contentBottom := pdfContentMargins(doc, styles, pdfDefaultPageMargin, false)
 	contentHeight := max(doc.PageHeight-contentTop-contentBottom, 0)
@@ -42,11 +42,11 @@ func pdfPrintedFootnotePlanReserves(
 	}
 	styles := doc.Styles
 	if styles == nil {
-		styles = newPDFStyleResolver(nil, nil)
+		styles = newPDFStyleResolver(nil, nil, nil)
 	}
 	contentLeft, contentRight, contentTop, contentBottom := pdfContentMargins(doc, styles, pdfDefaultPageMargin, false)
 	contentWidth := max(doc.PageWidth-contentLeft-contentRight, 12)
-	separator := pdfPrintedFootnoteSeparatorMetricsForArea(doc, styles, contentLeft, contentWidth, contentBottom, footnoteTextHeight)
+	separator := pdfPrintedFootnoteSeparatorMetricsForArea(styles, contentLeft, contentWidth, contentBottom, footnoteTextHeight)
 	top := doc.PageHeight - contentTop
 	maxReserve := max(top-contentBottom-pdfBaseLineHeight, 0)
 	if maxReserve <= 0 {

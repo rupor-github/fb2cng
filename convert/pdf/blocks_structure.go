@@ -357,7 +357,7 @@ func appendTitleBlocks(blocks *[]pdfTextBlock, opts pdfTitleBlockOptions) {
 		text, links := paragraphTextAndLinks(item.Paragraph)
 		runs := paragraphInlineRuns(item.Paragraph, content, pdfRegisterDefaultFootnoteBacklinks(content, styleClasses, contextClasses))
 		classes := joinStyleClasses(item.Paragraph.Style, styleClasses, positionClass)
-		runs, links = pdfDisablePrintedFootnoteLinks(content, classes, contextClasses, runs, links)
+		runs, links = pdfDisablePrintedFootnoteLinks(content, runs, links)
 		if prevWasImageOnlyHeadingParagraph {
 			classes = joinStyleClasses(classes, pdfStyleTitleAfterImage)
 		}
@@ -464,7 +464,7 @@ func appendFlowItem(blocks *[]pdfTextBlock, item *fb2.FlowItem, ctx pdfBlockBuil
 			EndVignettes:               ctx.EndVignettes,
 		})
 	case fb2.FlowPoem:
-		appendPoemBlocks(blocks, content, item.Poem, depth, splitSections, contextClasses, stripRootHorizontalMargins)
+		appendPoemBlocks(blocks, content, item.Poem, depth, contextClasses, stripRootHorizontalMargins)
 	case fb2.FlowCite:
 		appendCiteBlocks(blocks, content, item.Cite, depth, splitSections, contextClasses, stripRootHorizontalMargins)
 	case fb2.FlowTable:
@@ -769,7 +769,7 @@ func appendParagraphBlock(blocks *[]pdfTextBlock, opts pdfParagraphBlockOptions)
 		styleClasses = joinStyleClasses(styleClasses, pdfStyleCode)
 	}
 	finalStyleClasses := joinStyleClasses(paragraph.Style, styleClasses)
-	runs, links = pdfDisablePrintedFootnoteLinks(content, finalStyleClasses, contextClasses, runs, links)
+	runs, links = pdfDisablePrintedFootnoteLinks(content, runs, links)
 	if kind == pdfBlockParagraph && hasPDFStyleClass(finalStyleClasses, "has-dropcap") && !paragraphIsCodeBlock(paragraph) {
 		runs = addPDFDropcapInlineRun(runs)
 	}
@@ -797,7 +797,6 @@ func appendPoemBlocks(
 	c *content.Content,
 	poem *fb2.Poem,
 	depth int,
-	_ map[string]bool,
 	contextClasses string,
 	stripRootHorizontalMargins bool,
 ) {

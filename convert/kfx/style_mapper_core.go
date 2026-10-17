@@ -17,7 +17,7 @@ type StyleMapper struct {
 }
 
 // NewStyleMapper creates a mapper with an attached tracer-aware converter.
-func NewStyleMapper(log *zap.Logger, tracer *StyleTracer) *StyleMapper {
+func NewStyleMapper(tracer *StyleTracer, log *zap.Logger) *StyleMapper {
 	c := NewConverter(log)
 	c.SetTracer(tracer)
 	return &StyleMapper{

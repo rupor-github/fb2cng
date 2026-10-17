@@ -38,9 +38,9 @@ func Generate(
 	ctx context.Context,
 	c *content.Content,
 	outputPath string,
+	finalOutputPath string,
 	cfg *config.DocumentConfig,
 	log *zap.Logger,
-	finalOutputPath ...string,
 ) (err error) {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -48,7 +48,7 @@ func Generate(
 
 	log.Info(
 		"EPUB generation starting",
-		append([]zap.Field{zap.Stringer("format", c.OutputFormat)}, epubOutputLogFields(outputPath, finalOutputPath...)...)...)
+		append([]zap.Field{zap.Stringer("format", c.OutputFormat)}, epubOutputLogFields(outputPath, finalOutputPath)...)...)
 	defer func(start time.Time) {
 		if err == nil {
 			log.Info("EPUB generation completed", zap.Duration("elapsed", time.Since(start)))
@@ -163,7 +163,7 @@ func Generate(
 	}
 	filterUnusedImages(c)
 
-	if err := writeImages(zw, c.ImagesIndex, log); err != nil {
+	if err := writeImages(zw, c.ImagesIndex); err != nil {
 		return fmt.Errorf("unable to write images: %w", err)
 	}
 
@@ -183,16 +183,16 @@ func Generate(
 
 	switch c.OutputFormat {
 	case common.OutputFmtEpub3, common.OutputFmtKepub3:
-		if err := writeNav(zw, c, cfg, chapters, idToFile, log); err != nil {
+		if err := writeNav(zw, c, cfg, chapters, idToFile); err != nil {
 			return fmt.Errorf("unable to write NAV: %w", err)
 		}
 	default:
-		if err := writeNCX(zw, c, chapters, cfg, idToFile, log); err != nil {
+		if err := writeNCX(zw, c, chapters, cfg, idToFile); err != nil {
 			return fmt.Errorf("unable to write NCX: %w", err)
 		}
 		// For EPUB2 and KEPUB with AdobeDE, write page-map.xml instead of NCX pageList
 		if c.PageSize > 0 && c.AdobeDE {
-			if err := writePageMap(zw, c, log); err != nil {
+			if err := writePageMap(zw, c); err != nil {
 				return fmt.Errorf("unable to write page-map: %w", err)
 			}
 		}
@@ -327,7 +327,7 @@ func writeContainer(zw *zip.Writer) error {
 	return writeXMLToZip(zw, path.Join("META-INF", "container.xml"), doc)
 }
 
-func writeImages(zw *zip.Writer, images fb2.BookImages, _ *zap.Logger) error {
+func writeImages(zw *zip.Writer, images fb2.BookImages) error {
 	for id, img := range images {
 		// Filename already contains directory (e.g., "images/img00001.jpg")
 		filename := path.Join(oebpsDir, img.Filename)
@@ -472,7 +472,7 @@ func writeStylesheet(zw *zip.Writer, c *content.Content) error {
 		}
 
 		// Parse the CSS
-		sheet := css.NewParser(nil).Parse([]byte(style.Data))
+		sheet := css.NewParser(nil).Parse([]byte(style.Data), "")
 
 		// Write stylesheet resources to EPUB
 		for _, resource := range style.Resources {
@@ -870,7 +870,7 @@ func writeOPF(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	return writeXMLToZip(zw, path.Join(oebpsDir, "content.opf"), doc)
 }
 
-func writeNav(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, chapters []chapterData, idToFile idToFileMap, _ *zap.Logger) error {
+func writeNav(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, chapters []chapterData, idToFile idToFileMap) error {
 	doc := etree.NewDocument()
 	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
 
@@ -984,7 +984,7 @@ func writeNav(zw *zip.Writer, c *content.Content, cfg *config.DocumentConfig, ch
 	return writeXMLToZip(zw, path.Join(oebpsDir, "nav.xhtml"), doc)
 }
 
-func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, cfg *config.DocumentConfig, idToFile idToFileMap, _ *zap.Logger) error {
+func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, cfg *config.DocumentConfig, idToFile idToFileMap) error {
 	doc := etree.NewDocument()
 	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
 
@@ -1051,7 +1051,7 @@ func writeNCX(zw *zip.Writer, c *content.Content, chapters []chapterData, cfg *c
 	return writeXMLToZip(zw, path.Join(oebpsDir, "toc.ncx"), doc)
 }
 
-func writePageMap(zw *zip.Writer, c *content.Content, _ *zap.Logger) error {
+func writePageMap(zw *zip.Writer, c *content.Content) error {
 	doc := etree.NewDocument()
 	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
 
@@ -1388,8 +1388,8 @@ func getChapterAnchorSuffix(chapter chapterData) string {
 	return ""
 }
 
-func epubOutputLogFields(outputPath string, finalOutputPath ...string) []zap.Field {
-	final := epubFinalOutputPath(outputPath, finalOutputPath...)
+func epubOutputLogFields(outputPath string, finalOutputPath string) []zap.Field {
+	final := epubFinalOutputPath(outputPath, finalOutputPath)
 	fields := []zap.Field{zap.String("output", final)}
 	if final != outputPath {
 		fields = append(fields, zap.String("temporary_file", outputPath))
@@ -1397,9 +1397,9 @@ func epubOutputLogFields(outputPath string, finalOutputPath ...string) []zap.Fie
 	return fields
 }
 
-func epubFinalOutputPath(outputPath string, finalOutputPath ...string) string {
-	if len(finalOutputPath) > 0 && finalOutputPath[0] != "" {
-		return finalOutputPath[0]
+func epubFinalOutputPath(outputPath string, finalOutputPath string) string {
+	if finalOutputPath != "" {
+		return finalOutputPath
 	}
 	return outputPath
 }

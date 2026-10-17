@@ -283,7 +283,7 @@ func TestLayoutPDFPagesAppliesInlineContextDescendantSelectors(t *testing.T) {
 		Type: "text/css",
 		Data: `.footnote .accent { color: #ff0000; font-weight: bold; }`,
 	}}}
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  520,
@@ -328,7 +328,7 @@ func TestLayoutPDFPagesAppliesInlineDescendantSelectorsFromBlockStyleName(t *tes
 		Type: "text/css",
 		Data: `.toc-item .link-toc { color: #ff0000; font-weight: bold; }`,
 	}}}
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  520,

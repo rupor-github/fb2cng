@@ -50,7 +50,7 @@ go tool task lint
 
 The default build requires `pre-commit` and installs Git hooks. Tasks also generate code and download required dictionaries, sentence data, and fonts; see [`Taskfile.yaml`](Taskfile.yaml) for prerequisites and details.
 
-Follow the surrounding code style and format Go changes with `gofmt`. Add or update tests for behavior changes, and include a regression test for bug fixes where practical. Update documentation when changing user-visible behavior.
+Follow the surrounding code style and format Go changes with `goimports-reviser -format -set-alias -company-prefixes github.com/rupor-github`. Add or update tests for behavior changes, and include a regression test for bug fixes where practical. Update documentation when changing user-visible behavior.
 
 ## Submitting a pull request
 

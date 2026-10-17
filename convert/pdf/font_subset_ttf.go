@@ -2,6 +2,7 @@ package pdf
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -45,10 +46,10 @@ func subsetTrueTypeFont(data []byte, used map[uint16]shapedGlyph) (trueTypeFontS
 		return trueTypeFontSubset{}, false, nil
 	}
 	if !hasLoca || !hasHead || !hasMaxp || !hasHhea || !hasHmtx {
-		return trueTypeFontSubset{}, false, fmt.Errorf("TrueType font has glyf table but is missing loca/head/maxp/hhea/hmtx")
+		return trueTypeFontSubset{}, false, errors.New("TrueType font has glyf table but is missing loca/head/maxp/hhea/hmtx")
 	}
 	if len(head.Data) < 54 || len(maxp.Data) < 6 || len(hhea.Data) < 36 {
-		return trueTypeFontSubset{}, false, fmt.Errorf("TrueType font has invalid head/maxp/hhea tables")
+		return trueTypeFontSubset{}, false, errors.New("TrueType font has invalid head/maxp/hhea tables")
 	}
 
 	locFormat := int16(binary.BigEndian.Uint16(head.Data[50:52]))
@@ -129,13 +130,13 @@ func dropTrueTypeSubsetTable(tag string) bool {
 
 func parseTTFTables(data []byte) (ttfSubsetTables, error) {
 	if len(data) < ttfOffsetTableSize {
-		return ttfSubsetTables{}, fmt.Errorf("font data too short")
+		return ttfSubsetTables{}, errors.New("font data too short")
 	}
 	var tables ttfSubsetTables
 	copy(tables.ScalerType[:], data[:4])
 	numTables := int(binary.BigEndian.Uint16(data[4:6]))
 	if ttfOffsetTableSize+numTables*ttfTableRecordSize > len(data) {
-		return ttfSubsetTables{}, fmt.Errorf("font table directory exceeds data length")
+		return ttfSubsetTables{}, errors.New("font table directory exceeds data length")
 	}
 	tables.Records = make(map[string]ttfTableRecord, numTables)
 	for i := range numTables {
@@ -165,14 +166,14 @@ func parseLocaOffsets(data []byte, numGlyphs int, locFormat int16) ([]uint32, er
 	switch locFormat {
 	case 0:
 		if len(data) < count*2 {
-			return nil, fmt.Errorf("short loca table too small")
+			return nil, errors.New("short loca table too small")
 		}
 		for i := range count {
 			offsets[i] = uint32(binary.BigEndian.Uint16(data[i*2:])) * 2
 		}
 	case 1:
 		if len(data) < count*4 {
-			return nil, fmt.Errorf("long loca table too small")
+			return nil, errors.New("long loca table too small")
 		}
 		for i := range count {
 			offsets[i] = binary.BigEndian.Uint32(data[i*4:])
@@ -352,7 +353,7 @@ func rewriteCompositeGlyphReferences(glyph []byte, glyphMap map[uint16]uint16, o
 
 func buildCompactSubsetHmtx(hmtx []byte, glyphOrder []int, numberOfHMetrics int) ([]byte, error) {
 	if numberOfHMetrics <= 0 || len(hmtx) < numberOfHMetrics*4 {
-		return nil, fmt.Errorf("invalid hmtx table")
+		return nil, errors.New("invalid hmtx table")
 	}
 	out := make([]byte, len(glyphOrder)*4)
 	for subsetGID, originalGID := range glyphOrder {
@@ -461,7 +462,7 @@ func encodeLocaOffsets(offsets []uint32, locFormat int16) ([]byte, error) {
 		out := make([]byte, len(offsets)*2)
 		for i, offset := range offsets {
 			if offset%2 != 0 || offset/2 > 0xFFFF {
-				return nil, fmt.Errorf("subset glyf offsets do not fit short loca format")
+				return nil, errors.New("subset glyf offsets do not fit short loca format")
 			}
 			binary.BigEndian.PutUint16(out[i*2:], uint16(offset/2))
 		}
@@ -506,7 +507,7 @@ func writeTTFWithChecksums(scalerType [4]byte, records []ttfTableRecord) ([]byte
 		tableOffset = len(out)
 	}
 	if headAdjustmentOffset < 0 || headAdjustmentOffset+4 > len(out) {
-		return nil, false, fmt.Errorf("subset font missing head checksum adjustment")
+		return nil, false, errors.New("subset font missing head checksum adjustment")
 	}
 	adjustment := uint32(0xB1B0AFBA - uint64(tableChecksum(out)))
 	binary.BigEndian.PutUint32(out[headAdjustmentOffset:], adjustment)

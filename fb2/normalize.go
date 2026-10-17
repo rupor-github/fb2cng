@@ -40,7 +40,7 @@ func (fb *FictionBook) NormalizeFootnoteBodies(log *zap.Logger) (*FictionBook, F
 // Modifies the FictionBook in place.
 func (fb *FictionBook) NormalizeLinks(vignettes map[common.VignettePos]*BinaryObject, log *zap.Logger) (*FictionBook, IDIndex, ReverseLinkIndex) {
 	// Rebuild indexes since we'll be modifying the book
-	resultIDs := fb.buildIDIndex(log)
+	resultIDs := fb.buildIDIndex()
 
 	// Initialize NotFoundImageID with a unique value
 	counter := 0

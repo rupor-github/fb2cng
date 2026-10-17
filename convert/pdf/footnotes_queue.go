@@ -165,5 +165,5 @@ func pdfFootnoteQueueBlocks(
 	if pdfPrintedFootnoteReferencesRenumbered(c) {
 		label = pdfDecoratedFootnoteReferenceLabel(resolver, pdfStyleLinkFootnote, label)
 	}
-	return pdfPrintedFootnotePageBlocks(c, note, label, continuation)
+	return pdfPrintedFootnotePageBlocks(note, label, continuation)
 }

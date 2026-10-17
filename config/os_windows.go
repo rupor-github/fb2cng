@@ -57,8 +57,5 @@ func EnableColorOutput(stream *os.File) bool {
 	mode |= EnableVirtualTerminalProcessing
 
 	err = windows.SetConsoleMode(windows.Handle(stream.Fd()), mode)
-	if err != nil {
-		return false
-	}
-	return true
+	return err == nil
 }

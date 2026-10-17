@@ -39,7 +39,7 @@ func TestGenerateCompressedPreservesInnerAndDiagnostics(t *testing.T) {
 			dir := t.TempDir()
 			raw := filepath.Join(dir, "raw"+format.Ext())
 			cfg.Document.KFX.Compression = "none"
-			if err := Generate(ctx, c, raw, &cfg.Document, env.Log); err != nil {
+			if err := Generate(ctx, c, raw, "", &cfg.Document, env.Log); err != nil {
 				t.Fatal(err)
 			}
 			baseline, err := os.ReadFile(raw)
@@ -58,7 +58,7 @@ func TestGenerateCompressedPreservesInnerAndDiagnostics(t *testing.T) {
 			// suffixes to it would exceed their 255-byte filename limit.
 			out := filepath.Join(dir, strings.Repeat("Книга", 24)+"-long"+format.Ext())
 			temporary := filepath.Join(dir, ".compressed"+format.Ext()+".123.tmp")
-			if err := Generate(ctx, c, temporary, &cfg.Document, env.Log, out); err != nil {
+			if err := Generate(ctx, c, temporary, out, &cfg.Document, env.Log); err != nil {
 				t.Fatal(err)
 			}
 			data, err := os.ReadFile(temporary)

@@ -123,11 +123,7 @@ func (sr *StyleRegistry) scanStructForStyles(s map[KFXSymbol]any) {
 	}
 }
 
-func (sr *StyleRegistry) mergeProperty(dst map[KFXSymbol]any, sym KFXSymbol, val any) {
-	sr.mergePropertyWithContext(dst, sym, val, mergeContextInline)
-}
-
-func (sr *StyleRegistry) mergePropertyWithContext(dst map[KFXSymbol]any, sym KFXSymbol, val any, ctx mergeContext) {
+func (sr *StyleRegistry) mergeProperty(dst map[KFXSymbol]any, sym KFXSymbol, val any, ctx mergeContext) {
 	if existing, ok := dst[sym]; ok {
 		merged, keep := mergeStyleProperty(sym, existing, val, ctx, sr.tracer)
 		if keep {
@@ -140,7 +136,7 @@ func (sr *StyleRegistry) mergePropertyWithContext(dst map[KFXSymbol]any, sym KFX
 
 func (sr *StyleRegistry) mergePropertiesWithContext(dst map[KFXSymbol]any, src map[KFXSymbol]any, ctx mergeContext) {
 	for sym, val := range src {
-		sr.mergePropertyWithContext(dst, sym, val, ctx)
+		sr.mergeProperty(dst, sym, val, ctx)
 	}
 }
 

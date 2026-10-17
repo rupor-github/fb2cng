@@ -80,12 +80,10 @@ func TestTransliterateRace(t *testing.T) {
 	const iterations = 100
 
 	var wg sync.WaitGroup
-	wg.Add(goroutines * 2)
 
 	// Half the goroutines call Transliterate (which needs case-preserved output)
 	for range goroutines {
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range iterations {
 				got := Transliterate("Война и мир")
 				if got != "Voina i mir" {
@@ -93,13 +91,12 @@ func TestTransliterateRace(t *testing.T) {
 					return
 				}
 			}
-		}()
+		})
 	}
 
 	// The other half call Slugify (which expects lowercase output)
 	for range goroutines {
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range iterations {
 				got := Slugify("Война и мир")
 				if got != "voina-i-mir" {
@@ -107,7 +104,7 @@ func TestTransliterateRace(t *testing.T) {
 					return
 				}
 			}
-		}()
+		})
 	}
 
 	wg.Wait()

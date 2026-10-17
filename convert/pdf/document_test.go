@@ -50,7 +50,7 @@ func TestGenerateLogsTemporaryAndFinalOutputPaths(t *testing.T) {
 	}
 	core, logs := observer.New(zapcore.DebugLevel)
 
-	if err := Generate(context.Background(), c, temporaryName, cfg, zap.New(core), finalName); err != nil {
+	if err := Generate(context.Background(), c, temporaryName, finalName, cfg, zap.New(core)); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
 
@@ -95,7 +95,7 @@ func TestBuildPDFDocument(t *testing.T) {
 		},
 	}
 
-	if err := Generate(context.Background(), c, outputName, cfg, zaptest.NewLogger(t)); err != nil {
+	if err := Generate(context.Background(), c, outputName, "", cfg, zaptest.NewLogger(t)); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
 
@@ -162,7 +162,7 @@ func TestGeneratePDFEmbedsStylesheetFontFace(t *testing.T) {
 		},
 	}
 
-	if err := Generate(context.Background(), c, outputName, cfg, zaptest.NewLogger(t)); err != nil {
+	if err := Generate(context.Background(), c, outputName, "", cfg, zaptest.NewLogger(t)); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
 
@@ -216,7 +216,7 @@ func TestGeneratePDFWithThirdPartyCSSFontHonorsNoSubsettingRestriction(t *testin
 	}
 	core, logs := observer.New(zapcore.DebugLevel)
 
-	if err := Generate(context.Background(), c, outputName, cfg, zap.New(core)); err != nil {
+	if err := Generate(context.Background(), c, outputName, "", cfg, zap.New(core)); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
 
@@ -315,7 +315,7 @@ func TestGenerateTextBodyAddsPaginatedBodyPage(t *testing.T) {
 		},
 	}
 
-	if err := Generate(context.Background(), c, outputName, cfg, zaptest.NewLogger(t)); err != nil {
+	if err := Generate(context.Background(), c, outputName, "", cfg, zaptest.NewLogger(t)); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
 

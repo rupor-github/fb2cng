@@ -186,7 +186,7 @@ func processStorylineSectionContent(
 			processFlowItem(c, &epigraph.Flow.Items[i], next, epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID)
 		}
 		for i := range epigraph.TextAuthors {
-			addParagraphWithImages(c, &epigraph.TextAuthors[i], epigraphCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
+			addParagraphWithImages(c, &epigraph.TextAuthors[i], epigraphCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID, true, false)
 		}
 
 		sb.ExitContainer() // Exit epigraph container
@@ -412,14 +412,15 @@ func processDropcapParagraphPair(
 	wrapperStyle := resolveDropcapMarginWrapperStyle(ctx, firstProps, secondProps)
 	sb.StartBlock(dropcapMarginWrapperStyle, styles, &BlockOptions{Kind: ContainerSection})
 	wrappedCtx := ctx.WithoutRootHorizontalMargins()
-	addParagraphWithImagesInternal(c, item.Paragraph, wrappedCtx, item.Paragraph.Style, 0, sb, styles, imageResources, ca, idToEID, false, true)
+	addParagraphWithImages(c, item.Paragraph, wrappedCtx, item.Paragraph.Style, 0, sb, styles, imageResources, ca, idToEID, false, true)
 	// Once the following paragraph is pulled into the same workaround wrapper, the
 	// dropcap paragraph's bottom margin becomes an internal boundary margin. Strip
 	// it from the dropcap paragraph, but transfer only the intended normal paragraph
 	// gap. This avoids leaking the UA/default 1em dropcap margin into the following
 	// paragraph when the source CSS requested margin: 0 or a smaller paragraph gap.
-	sb.MarkPreviousEntryStripMBWithTransfer(dropcapPairBoundaryMargin(firstProps, secondProps))
-	addParagraphWithImagesInternal(c, next.Paragraph, wrappedCtx, next.Paragraph.Style, 0, sb, styles, imageResources, ca, idToEID, false, true)
+	transfer := dropcapPairBoundaryMargin(firstProps, secondProps)
+	sb.MarkPreviousEntryStripMB(&transfer)
+	addParagraphWithImages(c, next.Paragraph, wrappedCtx, next.Paragraph.Style, 0, sb, styles, imageResources, ca, idToEID, false, true)
 	sb.EndBlock()
 	applyResolvedStyleToLastDropcapWrapper(sb, wrapperStyle)
 	return true
@@ -512,7 +513,7 @@ func processFlowItem(
 			// Use full context chain for CSS cascade emulation.
 			// Pass context directly - it may have position for margin filtering.
 			// Extra classes come from optional custom class in FB2.
-			addParagraphWithImages(c, item.Paragraph, ctx, item.Paragraph.Style, 0, sb, styles, imageResources, ca, idToEID)
+			addParagraphWithImages(c, item.Paragraph, ctx, item.Paragraph.Style, 0, sb, styles, imageResources, ca, idToEID, true, false)
 		}
 
 	case fb2.FlowSubtitle:
@@ -526,7 +527,7 @@ func processFlowItem(
 			if item.Subtitle.Style != "" {
 				extraClasses = extraClasses + " " + item.Subtitle.Style
 			}
-			addParagraphWithImages(c, item.Subtitle, ctx, extraClasses, 0, sb, styles, imageResources, ca, idToEID)
+			addParagraphWithImages(c, item.Subtitle, ctx, extraClasses, 0, sb, styles, imageResources, ca, idToEID, true, false)
 		}
 
 	case fb2.FlowEmptyLine:
@@ -539,7 +540,7 @@ func processFlowItem(
 		// container spacer entry with margin-top (see AddEmptyLineSpacer).
 		// In that case we must NOT strip the previous image's margin-bottom.
 		if !sb.PreviousEntryIsImage() {
-			sb.MarkPreviousEntryStripMB()
+			sb.MarkPreviousEntryStripMB(nil)
 		}
 		// Extract the margin value from the emptyline style and store it for the next entry.
 		// The margin is stored in StorylineBuilder (for text) and StyleContext (for images).
@@ -715,7 +716,7 @@ func processPoem(
 			processFlowItem(c, &epigraph.Flow.Items[i], next, epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID)
 		}
 		for i := range epigraph.TextAuthors {
-			addParagraphWithImages(c, &epigraph.TextAuthors[i], epigraphCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
+			addParagraphWithImages(c, &epigraph.TextAuthors[i], epigraphCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID, true, false)
 		}
 
 		sb.ExitContainer() // Exit epigraph container
@@ -723,7 +724,7 @@ func processPoem(
 
 	// Process poem subtitles (matches EPUB's poem.Subtitles handling)
 	for i := range poem.Subtitles {
-		addParagraphWithImages(c, &poem.Subtitles[i], poemCtx, "poem-subtitle", 0, sb, styles, imageResources, ca, idToEID)
+		addParagraphWithImages(c, &poem.Subtitles[i], poemCtx, "poem-subtitle", 0, sb, styles, imageResources, ca, idToEID, true, false)
 	}
 
 	// Process stanzas - nested container inside poem
@@ -748,11 +749,11 @@ func processPoem(
 		}
 		// Stanza subtitle (matches EPUB's "stanza-subtitle" class)
 		if stanza.Subtitle != nil {
-			addParagraphWithImages(c, stanza.Subtitle, stanzaCtx, "stanza-subtitle", 0, sb, styles, imageResources, ca, idToEID)
+			addParagraphWithImages(c, stanza.Subtitle, stanzaCtx, "stanza-subtitle", 0, sb, styles, imageResources, ca, idToEID, true, false)
 		}
 		// Verses
 		for i := range stanza.Verses {
-			addParagraphWithImages(c, &stanza.Verses[i], stanzaCtx, "verse", 0, sb, styles, imageResources, ca, idToEID)
+			addParagraphWithImages(c, &stanza.Verses[i], stanzaCtx, "verse", 0, sb, styles, imageResources, ca, idToEID, true, false)
 		}
 
 		sb.ExitContainer() // Exit stanza container
@@ -760,7 +761,7 @@ func processPoem(
 
 	// Process text authors
 	for i := range poem.TextAuthors {
-		addParagraphWithImages(c, &poem.TextAuthors[i], poemCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
+		addParagraphWithImages(c, &poem.TextAuthors[i], poemCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID, true, false)
 	}
 
 	// Process poem date (matches EPUB's ".date" class)
@@ -817,7 +818,7 @@ func processCite(
 
 	// Process text authors
 	for i := range cite.TextAuthors {
-		addParagraphWithImages(c, &cite.TextAuthors[i], citeCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
+		addParagraphWithImages(c, &cite.TextAuthors[i], citeCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID, true, false)
 	}
 }
 
@@ -909,7 +910,7 @@ func processFootnoteSectionContent(
 			processFlowItem(c, item, next, epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID)
 		}
 		for i := range epigraph.TextAuthors {
-			addParagraphWithImages(c, &epigraph.TextAuthors[i], epigraphCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
+			addParagraphWithImages(c, &epigraph.TextAuthors[i], epigraphCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID, true, false)
 		}
 
 		sb.ExitContainer() // Exit epigraph container

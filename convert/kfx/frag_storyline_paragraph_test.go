@@ -22,7 +22,7 @@ func TestAddParagraphWithImages_DropcapWithoutNegativeMarginPreservesBottomMargi
 
 	sb := NewStorylineBuilder("l1", "c0", 1, sr)
 	ca := NewContentAccumulator(1)
-	addParagraphWithImages(&content.Content{}, para, ctx, para.Style, 0, sb, sr, nil, ca, nil)
+	addParagraphWithImages(&content.Content{}, para, ctx, para.Style, 0, sb, sr, nil, ca, nil, true, false)
 
 	if len(sb.contentEntries) != 1 {
 		t.Fatalf("expected one storyline entry, got %d", len(sb.contentEntries))
@@ -56,7 +56,7 @@ func TestAddParagraphWithImages_DropcapNegativeRootMarginWrapsParagraphWithoutSp
 
 	sb := NewStorylineBuilder("l1", "c0", 1, sr)
 	ca := NewContentAccumulator(1)
-	addParagraphWithImages(&content.Content{}, para, ctx, para.Style, 0, sb, sr, nil, ca, nil)
+	addParagraphWithImages(&content.Content{}, para, ctx, para.Style, 0, sb, sr, nil, ca, nil, true, false)
 
 	contentFrags := ca.Finish()
 	list := contentFrags["content_1"]
@@ -323,7 +323,7 @@ func TestAddParagraphWithImages_PendingFootnoteMorePreservesInlineImages(t *test
 	images := imageResourceInfoByID{
 		"img1": {ResourceName: "resource/img1", Width: 10, Height: 10},
 	}
-	addParagraphWithImages(&content.Content{MoreParaStr: "(~) "}, para, ctx, "", 0, sb, sr, images, ca, nil)
+	addParagraphWithImages(&content.Content{MoreParaStr: "(~) "}, para, ctx, "", 0, sb, sr, images, ca, nil, true, false)
 
 	if len(sb.contentEntries) != 1 {
 		t.Fatalf("expected one storyline entry, got %d", len(sb.contentEntries))

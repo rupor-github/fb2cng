@@ -163,7 +163,7 @@ func TestLayoutPDFPagesSizesPartialWidthBlockImagesAgainstRootlessWidth(t *testi
 	resolver := newPDFStyleResolver(&fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",
 		Data: `html { margin: 0 -12pt 0 -12pt; }`,
-	}}}, nil)
+	}}}, nil, nil)
 
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:      520,
@@ -269,7 +269,7 @@ func TestLayoutPDFPagesSizesFullWidthBlockImagesAgainstRootlessWidth(t *testing.
 	resolver := newPDFStyleResolver(&fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",
 		Data: `html { margin: 0 -12pt 0 -12pt; }`,
-	}}}, nil)
+	}}}, nil, nil)
 
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:      520,

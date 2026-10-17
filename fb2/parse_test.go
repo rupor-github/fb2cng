@@ -99,10 +99,9 @@ func TestParsePublishInfo(t *testing.T) {
 }
 
 func TestParseCustomInfo(t *testing.T) {
-	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	el := mustElement(t, `<custom-info info-type="foo" xml:lang="es"> Valor </custom-info>`)
 
-	custom := parseCustomInfo(el, log)
+	custom := parseCustomInfo(el)
 	if custom.Type != "foo" {
 		t.Fatalf("expected type foo, got %q", custom.Type)
 	}
@@ -173,17 +172,15 @@ func TestParseOutputInstructionInvalidMode(t *testing.T) {
 }
 
 func TestParsePartInstructionErrors(t *testing.T) {
-	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	el := mustElement(t, `<part include="allow" />`)
-	if _, err := parsePartInstruction(el, log); err == nil {
+	if _, err := parsePartInstruction(el); err == nil {
 		t.Fatalf("expected missing href error")
 	}
 }
 
 func TestParseOutputDocumentErrors(t *testing.T) {
-	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	el := mustElement(t, `<output-document-class></output-document-class>`)
-	if _, err := parseOutputDocument(el, log); err == nil {
+	if _, err := parseOutputDocument(el); err == nil {
 		t.Fatalf("expected missing name error")
 	}
 }
@@ -252,13 +249,12 @@ func TestParseShareDirective(t *testing.T) {
 }
 
 func TestParseStylesheet(t *testing.T) {
-	log := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	el := mustElement(t, `<stylesheet type="text/css">
 		body { margin: 0; }
 		p { color: black; }
 	</stylesheet>`)
 
-	sheet := parseStylesheet(el, log)
+	sheet := parseStylesheet(el)
 	if sheet.Type != "text/css" {
 		t.Fatalf("expected type text/css, got %q", sheet.Type)
 	}
@@ -383,7 +379,7 @@ func TestImageParsing(t *testing.T) {
 
 	// Test that images with IDs in section content are parsed correctly
 	t.Run("images in section content have IDs", func(t *testing.T) {
-		ids := book.buildIDIndex(log)
+		ids := book.buildIDIndex()
 
 		// Check that i_3 (and other images) are indexed
 		expectedImages := []string{"i_1", "i_2", "i_3", "i_4", "i_5"}

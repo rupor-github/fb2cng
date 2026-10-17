@@ -219,7 +219,7 @@ func (c *Converter) convertProperty(name string, value css.Value, props map[KFXS
 
 	// Handle special properties
 	if IsSpecialProperty(name) {
-		c.convertSpecialProperty(name, value, props, warnings)
+		c.convertSpecialProperty(name, value, props)
 		return
 	}
 
@@ -595,10 +595,10 @@ func (c *Converter) expandShorthand(name string, value css.Value, props map[KFXS
 			SymPaddingTop, SymPaddingRight, SymPaddingBottom, SymPaddingLeft)
 
 	case "border":
-		c.expandBorderShorthand(value, props, warnings)
+		c.expandBorderShorthand(value, props)
 
 	case "background":
-		c.expandBackgroundShorthand(value, props, warnings)
+		c.expandBackgroundShorthand(value, props)
 	}
 }
 
@@ -653,7 +653,7 @@ func (c *Converter) expandBoxShorthand(value css.Value, props map[KFXSymbol]any,
 // expandBorderShorthand expands CSS border shorthand to individual properties.
 // CSS border format: [width] [style] [color]
 // Example: "1px solid black" -> border-width: 1px, border-style: solid, border-color: black
-func (c *Converter) expandBorderShorthand(value css.Value, props map[KFXSymbol]any, _ *[]string) {
+func (c *Converter) expandBorderShorthand(value css.Value, props map[KFXSymbol]any) {
 	raw := strings.TrimSpace(value.Raw)
 	for part := range strings.FieldsSeq(raw) {
 		part = strings.ToLower(part)
@@ -688,7 +688,7 @@ func (c *Converter) expandBorderShorthand(value css.Value, props map[KFXSymbol]a
 // For KFX, we only extract the background-color component.
 // CSS background shorthand can contain: color, image, position, size, repeat, attachment, origin, clip
 // We only care about color values (hex, rgb, rgba, named colors).
-func (c *Converter) expandBackgroundShorthand(value css.Value, props map[KFXSymbol]any, _ *[]string) {
+func (c *Converter) expandBackgroundShorthand(value css.Value, props map[KFXSymbol]any) {
 	raw := strings.TrimSpace(value.Raw)
 	if raw == "" || raw == "none" || raw == "transparent" {
 		return
@@ -896,7 +896,7 @@ func (c *Converter) applyBreakInside(value css.Value, props map[KFXSymbol]any) {
 // Amazon's code (com/amazon/yjhtmlmapper/e/j.java:172) removes display from CSS styles.
 // The display property is only used internally for element classification (block vs inline).
 // KFX "render" property is only set on content entries (like inline images), not from CSS.
-func (c *Converter) convertSpecialProperty(name string, value css.Value, props map[KFXSymbol]any, _ *[]string) {
+func (c *Converter) convertSpecialProperty(name string, value css.Value, props map[KFXSymbol]any) {
 	switch name {
 	case "text-decoration":
 		dec := ConvertTextDecoration(value)

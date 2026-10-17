@@ -99,7 +99,7 @@ func (l *pdfPageLayout) initTextLayout() {
 	// and following blocks for keep-with-next/orphan/widow decisions.
 	l.styles = l.doc.Styles
 	if l.styles == nil {
-		l.styles = newPDFStyleResolver(nil, nil)
+		l.styles = newPDFStyleResolver(nil, nil, nil)
 	}
 	l.blockStyles = l.styles.collapsedBlockStyles(l.doc.Blocks, l.doc.Images)
 	l.contentLeft, l.contentRight, l.contentTop, l.contentBottom = pdfContentMargins(l.doc, l.styles, pdfDefaultPageMargin, false)

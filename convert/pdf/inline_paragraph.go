@@ -703,7 +703,7 @@ func inlineRunSelectorCandidates(run pdfInlineRun) []string {
 	for _, class := range classList {
 		candidates = appendUniqueString(candidates, class)
 	}
-	if run.Code || stringListContains(classList, pdfStyleCode) {
+	if run.Code || slices.Contains(classList, pdfStyleCode) {
 		candidates = appendUniqueString(candidates, "code")
 		for _, class := range classList {
 			candidates = appendUniqueString(candidates, "code."+class)
@@ -720,10 +720,6 @@ func appendUniqueString(values []string, value string) []string {
 		return values
 	}
 	return append(values, value)
-}
-
-func stringListContains(values []string, value string) bool {
-	return slices.Contains(values, value)
 }
 
 func mergeInlineParagraphStyle(base, override, fallback paragraphStyle) paragraphStyle {

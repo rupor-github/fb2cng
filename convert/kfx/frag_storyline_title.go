@@ -501,7 +501,7 @@ func addTitleAsParagraphs(
 			if hasInlineImages {
 				paragraphCtx = paragraphCtx.WithoutRootHorizontalMargins()
 			}
-			addParagraphWithImages(c, item.Paragraph, paragraphCtx, paraStyle, headingLevel, sb, styles, imageResources, ca, idToEID)
+			addParagraphWithImages(c, item.Paragraph, paragraphCtx, paraStyle, headingLevel, sb, styles, imageResources, ca, idToEID, true, false)
 
 			prevWasImageOnlyHeadingParagraph = isImageOnlyHeadingParagraph
 		}

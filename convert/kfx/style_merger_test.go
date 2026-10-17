@@ -15,7 +15,7 @@ func TestMergePropertyCumulativeMargin(t *testing.T) {
 	}
 
 	// Non-zero incoming should override
-	sr.mergeProperty(dst, SymMarginLeft, DimensionValue(3, SymUnitEm))
+	sr.mergeProperty(dst, SymMarginLeft, DimensionValue(3, SymUnitEm), mergeContextInline)
 
 	expected := DimensionValue(3, SymUnitEm)
 	if got := dst[SymMarginLeft]; !reflect.DeepEqual(got, expected) {
@@ -23,7 +23,7 @@ func TestMergePropertyCumulativeMargin(t *testing.T) {
 	}
 
 	// Zero incoming also overrides (explicit margin: 0 is valid CSS)
-	sr.mergeProperty(dst, SymMarginLeft, DimensionValue(0, SymUnitEm))
+	sr.mergeProperty(dst, SymMarginLeft, DimensionValue(0, SymUnitEm), mergeContextInline)
 	expectedZero := DimensionValue(0, SymUnitEm)
 	if got := dst[SymMarginLeft]; !reflect.DeepEqual(got, expectedZero) {
 		t.Fatalf("expected zero margin-left %v after zero merge, got %v", expectedZero, got)
@@ -36,12 +36,12 @@ func TestMergePropertyOverrideMaximum(t *testing.T) {
 		SymMarginTop: DimensionValue(2, SymUnitLh),
 	}
 
-	sr.mergeProperty(dst, SymMarginTop, DimensionValue(1, SymUnitLh))
+	sr.mergeProperty(dst, SymMarginTop, DimensionValue(1, SymUnitLh), mergeContextInline)
 	if got := dst[SymMarginTop]; !reflect.DeepEqual(got, DimensionValue(2, SymUnitLh)) {
 		t.Fatalf("expected keep existing larger margin-top, got %v", got)
 	}
 
-	sr.mergeProperty(dst, SymMarginTop, DimensionValue(3, SymUnitLh))
+	sr.mergeProperty(dst, SymMarginTop, DimensionValue(3, SymUnitLh), mergeContextInline)
 	if got := dst[SymMarginTop]; !reflect.DeepEqual(got, DimensionValue(3, SymUnitLh)) {
 		t.Fatalf("expected override with larger margin-top, got %v", got)
 	}
@@ -54,7 +54,7 @@ func TestMergeLayoutHintsDedup(t *testing.T) {
 	}
 
 	incoming := []any{SymbolValue(SymTreatAsTitle), SymbolValue(SymNavContainer)}
-	sr.mergeProperty(dst, SymLayoutHints, incoming)
+	sr.mergeProperty(dst, SymLayoutHints, incoming, mergeContextInline)
 
 	hints, ok := dst[SymLayoutHints].([]any)
 	if !ok {
@@ -75,7 +75,7 @@ func TestMergeHorizontalPosition(t *testing.T) {
 		SymFloatClear: SymLeft,
 	}
 
-	sr.mergeProperty(dst, SymFloatClear, SymRight)
+	sr.mergeProperty(dst, SymFloatClear, SymRight, mergeContextInline)
 
 	if got := dst[SymFloatClear]; got != SymBoth {
 		t.Fatalf("expected horizontal position merge to both, got %v", got)
@@ -88,7 +88,7 @@ func TestMergeRelativePercent(t *testing.T) {
 		SymFontSize: DimensionValue(1, SymUnitEm),
 	}
 
-	sr.mergeProperty(dst, SymFontSize, DimensionValue(140, SymUnitPercent))
+	sr.mergeProperty(dst, SymFontSize, DimensionValue(140, SymUnitPercent), mergeContextInline)
 
 	expected := DimensionValue(1.4, SymUnitEm)
 	if got := dst[SymFontSize]; !reflect.DeepEqual(got, expected) {
@@ -235,7 +235,7 @@ func TestMergeBaselineStyleContextBehavior(t *testing.T) {
 		dst := map[KFXSymbol]any{
 			SymBaselineStyle: SymbolValue(SymSubscript),
 		}
-		sr.mergePropertyWithContext(dst, SymBaselineStyle, SymbolValue(SymNormal), mergeContextInline)
+		sr.mergeProperty(dst, SymBaselineStyle, SymbolValue(SymNormal), mergeContextInline)
 
 		got, _ := symbolIDFromAny(dst[SymBaselineStyle])
 		if got != SymSubscript {
@@ -250,7 +250,7 @@ func TestMergeBaselineStyleContextBehavior(t *testing.T) {
 		dst := map[KFXSymbol]any{
 			SymBaselineStyle: SymbolValue(SymSubscript),
 		}
-		sr.mergePropertyWithContext(dst, SymBaselineStyle, SymbolValue(SymNormal), mergeContextClassOverride)
+		sr.mergeProperty(dst, SymBaselineStyle, SymbolValue(SymNormal), mergeContextClassOverride)
 
 		got, _ := symbolIDFromAny(dst[SymBaselineStyle])
 		if got != SymNormal {
@@ -265,7 +265,7 @@ func TestMergeBaselineStyleContextBehavior(t *testing.T) {
 			dst := map[KFXSymbol]any{
 				SymBaselineStyle: SymbolValue(SymNormal),
 			}
-			sr.mergePropertyWithContext(dst, SymBaselineStyle, SymbolValue(SymSuperscript), ctx)
+			sr.mergeProperty(dst, SymBaselineStyle, SymbolValue(SymSuperscript), ctx)
 
 			got, _ := symbolIDFromAny(dst[SymBaselineStyle])
 			if got != SymSuperscript {

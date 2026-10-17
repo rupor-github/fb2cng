@@ -901,7 +901,7 @@ func TestGenerate_Integration(t *testing.T) {
 	t.Logf("Output path: %s", outputPath)
 	cfg := env.Cfg.Document
 
-	err = Generate(ctx, c, outputPath, &cfg, log)
+	err = Generate(ctx, c, outputPath, "", &cfg, log)
 	if err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
@@ -997,7 +997,7 @@ func TestGenerate_WithFootnotes(t *testing.T) {
 	outputPath := filepath.Join(tmpDir, "test-footnotes.epub")
 	cfg := env.Cfg.Document
 
-	err = Generate(ctx, c, outputPath, &cfg, log)
+	err = Generate(ctx, c, outputPath, "", &cfg, log)
 	if err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
@@ -1090,7 +1090,7 @@ func TestGenerate_OverwriteProtection(t *testing.T) {
 	}
 
 	cfg := &config.DocumentConfig{}
-	err := Generate(ctx, c, outputPath, cfg, log)
+	err := Generate(ctx, c, outputPath, "", cfg, log)
 
 	// Note: Generate() does not check env.Overwrite - that check is done in convert/run.go
 	// This test verifies that Generate can overwrite files when called directly
@@ -1116,7 +1116,7 @@ func TestGenerate_ContextCancellation(t *testing.T) {
 	outputPath := filepath.Join(tmpDir, "test.epub")
 	cfg := &config.DocumentConfig{}
 
-	err := Generate(ctx, c, outputPath, cfg, log)
+	err := Generate(ctx, c, outputPath, "", cfg, log)
 	if err == nil {
 		t.Error("Generate() should fail with cancelled context")
 	}
@@ -1771,8 +1771,6 @@ func TestWriteStylesheetWithNonFontResource(t *testing.T) {
 }
 
 func TestWriteImages(t *testing.T) {
-	_, _, log := setupTestContext(t)
-
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 
@@ -1784,7 +1782,7 @@ func TestWriteImages(t *testing.T) {
 		},
 	}
 
-	err := writeImages(zw, images, log)
+	err := writeImages(zw, images)
 	if err != nil {
 		t.Fatalf("writeImages() error = %v", err)
 	}
@@ -2236,8 +2234,6 @@ func writeOPFStringForTest(t *testing.T, c *content.Content, cfg *config.Documen
 }
 
 func TestWriteNCX(t *testing.T) {
-	_, _, log := setupTestContext(t)
-
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 
@@ -2282,7 +2278,7 @@ func TestWriteNCX(t *testing.T) {
 	}
 
 	defaultCfg := &config.DocumentConfig{}
-	err := writeNCX(zw, c, chapters, defaultCfg, nil, log)
+	err := writeNCX(zw, c, chapters, defaultCfg, nil)
 	if err != nil {
 		t.Fatalf("writeNCX() error = %v", err)
 	}
@@ -2343,8 +2339,6 @@ func TestWriteNCX(t *testing.T) {
 }
 
 func TestWriteNCX_TOCTypeNesting(t *testing.T) {
-	_, _, log := setupTestContext(t)
-
 	title := func(text string) *fb2.Title {
 		return &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: text}}}}}}
 	}
@@ -2403,7 +2397,7 @@ func TestWriteNCX_TOCTypeNesting(t *testing.T) {
 			}
 			cfg := &config.DocumentConfig{TOCType: tt.tocType}
 
-			if err := writeNCX(zw, c, chapters, cfg, nil, log); err != nil {
+			if err := writeNCX(zw, c, chapters, cfg, nil); err != nil {
 				t.Fatalf("writeNCX() error = %v", err)
 			}
 			if err := zw.Close(); err != nil {
@@ -2470,8 +2464,6 @@ func snapshotNCXNavPoints(parent *etree.Element) []tocSnapshot {
 }
 
 func TestWriteNav(t *testing.T) {
-	_, _, log := setupTestContext(t)
-
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 
@@ -2512,7 +2504,7 @@ func TestWriteNav(t *testing.T) {
 		},
 	}
 
-	err := writeNav(zw, c, cfg, chapters, nil, log)
+	err := writeNav(zw, c, cfg, chapters, nil)
 	if err != nil {
 		t.Fatalf("writeNav() error = %v", err)
 	}
@@ -2572,8 +2564,6 @@ func TestWriteNav(t *testing.T) {
 }
 
 func TestWriteNav_TOCTypeNesting(t *testing.T) {
-	_, _, log := setupTestContext(t)
-
 	title := func(text string) *fb2.Title {
 		return &fb2.Title{Items: []fb2.TitleItem{{Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: text}}}}}}
 	}
@@ -2631,7 +2621,7 @@ func TestWriteNav_TOCTypeNesting(t *testing.T) {
 			}
 			cfg := &config.DocumentConfig{TOCType: tt.tocType}
 
-			if err := writeNav(zw, c, cfg, chapters, nil, log); err != nil {
+			if err := writeNav(zw, c, cfg, chapters, nil); err != nil {
 				t.Fatalf("writeNav() error = %v", err)
 			}
 			if err := zw.Close(); err != nil {
@@ -3003,7 +2993,7 @@ func TestGenerate_WithTOCPageBefore(t *testing.T) {
 	cfg := env.Cfg.Document
 	cfg.TOCPage.Placement = common.TOCPagePlacementBefore
 
-	err = Generate(ctx, c, outputPath, &cfg, log)
+	err = Generate(ctx, c, outputPath, "", &cfg, log)
 	if err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
@@ -3082,7 +3072,7 @@ func TestGenerate_WithTOCPageAfter(t *testing.T) {
 	cfg := env.Cfg.Document
 	cfg.TOCPage.Placement = common.TOCPagePlacementAfter
 
-	err = Generate(ctx, c, outputPath, &cfg, log)
+	err = Generate(ctx, c, outputPath, "", &cfg, log)
 	if err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
@@ -4716,8 +4706,6 @@ func makeWrapperChapterData(filename string, children ...*fb2.Section) chapterDa
 }
 
 func TestWriteNCX_UntitledWrapperSection(t *testing.T) {
-	_, _, log := setupTestContext(t)
-
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 
@@ -4744,7 +4732,7 @@ func TestWriteNCX_UntitledWrapperSection(t *testing.T) {
 	}
 
 	cfg := &config.DocumentConfig{}
-	err := writeNCX(zw, c, chapters, cfg, nil, log)
+	err := writeNCX(zw, c, chapters, cfg, nil)
 	if err != nil {
 		t.Fatalf("writeNCX() error = %v", err)
 	}
@@ -4799,8 +4787,6 @@ func TestWriteNCX_UntitledWrapperSection(t *testing.T) {
 }
 
 func TestWriteNCX_MixedTitledAndWrapper(t *testing.T) {
-	_, _, log := setupTestContext(t)
-
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 
@@ -4839,7 +4825,7 @@ func TestWriteNCX_MixedTitledAndWrapper(t *testing.T) {
 	}
 
 	cfg := &config.DocumentConfig{}
-	err := writeNCX(zw, c, chapters, cfg, nil, log)
+	err := writeNCX(zw, c, chapters, cfg, nil)
 	if err != nil {
 		t.Fatalf("writeNCX() error = %v", err)
 	}
@@ -4896,8 +4882,6 @@ func TestWriteNCX_MixedTitledAndWrapper(t *testing.T) {
 }
 
 func TestWriteNav_UntitledWrapperSection(t *testing.T) {
-	_, _, log := setupTestContext(t)
-
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 
@@ -4928,7 +4912,7 @@ func TestWriteNav_UntitledWrapperSection(t *testing.T) {
 		},
 	}
 
-	err := writeNav(zw, c, cfg, chapters, nil, log)
+	err := writeNav(zw, c, cfg, chapters, nil)
 	if err != nil {
 		t.Fatalf("writeNav() error = %v", err)
 	}

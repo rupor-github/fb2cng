@@ -2,6 +2,7 @@ package kfx
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 
 	"github.com/amazon-ion/ion-go/ion"
@@ -499,7 +500,7 @@ func (r *IonReader) SymbolValue() (string, error) {
 	if tok.LocalSID != ion.SymbolIDUnknown {
 		return fmt.Sprintf("$%d", tok.LocalSID), nil
 	}
-	return "", fmt.Errorf("symbol has no text or SID")
+	return "", errors.New("symbol has no text or SID")
 }
 
 // FieldName returns the current field name as string (e.g., "$409").
@@ -509,7 +510,7 @@ func (r *IonReader) FieldName() (string, error) {
 		return "", err
 	}
 	if tok == nil {
-		return "", fmt.Errorf("no field name")
+		return "", errors.New("no field name")
 	}
 	if tok.Text != nil {
 		return *tok.Text, nil
@@ -517,7 +518,7 @@ func (r *IonReader) FieldName() (string, error) {
 	if tok.LocalSID != ion.SymbolIDUnknown {
 		return fmt.Sprintf("$%d", tok.LocalSID), nil
 	}
-	return "", fmt.Errorf("field name has no text or SID")
+	return "", errors.New("field name has no text or SID")
 }
 
 // Annotations returns the annotations on the current value as strings.

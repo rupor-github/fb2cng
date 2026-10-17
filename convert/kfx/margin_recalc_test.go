@@ -49,7 +49,7 @@ func TestCSSStylesValueParsing(t *testing.T) {
 // For h1 with margin 0.67em: 0.67 / 1.2 = 0.55833lh
 func TestMarginConversionWithStylemap(t *testing.T) {
 	log := zap.NewNop()
-	mapper := NewStyleMapper(log, nil)
+	mapper := NewStyleMapper(nil, log)
 
 	// CSS rule: h1 { font-size: 140%; }
 	// Stylemap adds: margin-top: 0.67em, margin-bottom: 0.67em
@@ -82,7 +82,7 @@ func TestMarginConversionFullFlow(t *testing.T) {
 	// Parse CSS
 	cssData := []byte(`h1 { font-size: 140%; }`)
 	parser := css.NewParser(nil)
-	sheet := parser.Parse(cssData)
+	sheet := parser.Parse(cssData, "")
 
 	// Map stylesheet
 	mapper := NewStyleMapper(nil, nil)

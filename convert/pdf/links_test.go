@@ -170,7 +170,7 @@ func TestGenerateAnnotationPage(t *testing.T) {
 		},
 	}
 
-	if err := Generate(context.Background(), c, outputName, cfg, zaptest.NewLogger(t)); err != nil {
+	if err := Generate(context.Background(), c, outputName, "", cfg, zaptest.NewLogger(t)); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
 	data, err := os.ReadFile(outputName)
@@ -216,7 +216,7 @@ func TestGenerateTOCPageLinkAnnotations(t *testing.T) {
 		},
 	}
 
-	if err := Generate(context.Background(), c, outputName, cfg, zaptest.NewLogger(t)); err != nil {
+	if err := Generate(context.Background(), c, outputName, "", cfg, zaptest.NewLogger(t)); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
 	data, err := os.ReadFile(outputName)
@@ -268,7 +268,7 @@ func TestGenerateLinkAnnotations(t *testing.T) {
 		},
 	}
 
-	if err := Generate(context.Background(), c, outputName, cfg, zaptest.NewLogger(t)); err != nil {
+	if err := Generate(context.Background(), c, outputName, "", cfg, zaptest.NewLogger(t)); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
 	data, err := os.ReadFile(outputName)

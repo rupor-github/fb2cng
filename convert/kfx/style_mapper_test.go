@@ -31,7 +31,7 @@ func TestStyleMapperStylesheet(t *testing.T) {
 	mapper := NewStyleMapper(nil, nil)
 
 	cssData := []byte(`h1 { font-weight: bold; }`)
-	sheet := parser.Parse(cssData)
+	sheet := parser.Parse(cssData, "")
 
 	styles, warnings := mapper.MapStylesheet(sheet)
 	if len(warnings) != 0 {

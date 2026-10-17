@@ -432,7 +432,7 @@ func TestConverterConvertStylesheet(t *testing.T) {
 		}
 	`)
 
-	sheet := parser.Parse(cssData)
+	sheet := parser.Parse(cssData, "")
 	styles, warnings := conv.ConvertStylesheet(sheet)
 
 	t.Logf("Converted %d styles with %d warnings", len(styles), len(warnings))
@@ -513,7 +513,7 @@ func TestMergeRulesWithSameSelector(t *testing.T) {
 		}
 	`)
 
-	sheet := parser.Parse(cssData)
+	sheet := parser.Parse(cssData, "")
 	styles, _ := conv.ConvertStylesheet(sheet)
 
 	// Should have 1 merged style
@@ -641,7 +641,7 @@ func TestFontSizeKeywords(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sheet := parser.Parse([]byte(tt.cssText))
+			sheet := parser.Parse([]byte(tt.cssText), "")
 			styles, _ := conv.ConvertStylesheet(sheet)
 
 			if len(styles) != 1 {
@@ -756,7 +756,7 @@ func TestWhiteSpaceProperty(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sheet := parser.Parse([]byte(tt.cssText))
+			sheet := parser.Parse([]byte(tt.cssText), "")
 			styles, _ := conv.ConvertStylesheet(sheet)
 
 			if len(styles) != 1 {
@@ -943,7 +943,7 @@ func TestHyphensProperty(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sheet := parser.Parse([]byte(tt.cssText))
+			sheet := parser.Parse([]byte(tt.cssText), "")
 			styles, _ := conv.ConvertStylesheet(sheet)
 
 			if len(styles) != 1 {
@@ -987,7 +987,7 @@ func TestExToEmConversion(t *testing.T) {
 		}
 	`)
 
-	sheet := parser.Parse(cssData)
+	sheet := parser.Parse(cssData, "")
 	styles, warnings := conv.ConvertStylesheet(sheet)
 
 	if len(warnings) > 0 {
@@ -1101,7 +1101,7 @@ func TestNegativeMarginPassthrough(t *testing.T) {
 		}
 	`)
 
-	sheet := parser.Parse(cssData)
+	sheet := parser.Parse(cssData, "")
 	styles, warnings := conv.ConvertStylesheet(sheet)
 
 	// Negative margins should NOT produce warnings anymore (they're handled at output)

@@ -13,7 +13,7 @@ import (
 // Input can be StructValue, map[KFXSymbol]any, or map[string]any.
 // Returns empty string if input is nil or has no properties.
 func FormatStylePropsAsCSS(v any) string {
-	props := normalizeToNameMap(v)
+	props := NormalizeStyleMap(v)
 	if len(props) == 0 {
 		return ""
 	}
@@ -39,7 +39,7 @@ func FormatStylePropsAsCSS(v any) string {
 //	    property: value;
 //	  }
 func FormatStylePropsAsCSSMultiLine(v any) string {
-	props := normalizeToNameMap(v)
+	props := NormalizeStyleMap(v)
 	if len(props) == 0 {
 		return ""
 	}
@@ -161,11 +161,6 @@ type cssPropDisplay struct {
 // This is useful for accessing style properties by name regardless of the input format.
 // Input can be StructValue, map[KFXSymbol]any, or map[string]any.
 func NormalizeStyleMap(v any) map[string]any {
-	return normalizeToNameMap(v)
-}
-
-// normalizeToNameMap converts style value to map[string]any with KFX property names as keys.
-func normalizeToNameMap(v any) map[string]any {
 	switch m := v.(type) {
 	case StructValue:
 		result := make(map[string]any, len(m))
@@ -256,11 +251,11 @@ func extractCSSPropsForDisplay(m map[string]any) []cssPropDisplay {
 
 		var cssValue string
 		if colorDisplayProperties[kfxName] {
-			cssValue = formatCSSColorValue(v)
+			cssValue = FormatCSSColorValue(v)
 		} else if IsDimensionValue(v) {
 			cssValue = FormatDimensionAsCSS(v)
 		} else {
-			cssValue = formatCSSSymbolValue(v)
+			cssValue = FormatCSSSymbolValue(v)
 		}
 
 		props = append(props, cssPropDisplay{cssName, cssValue})
@@ -273,7 +268,7 @@ func extractCSSPropsForDisplay(m map[string]any) []cssPropDisplay {
 func formatCSSNumericValue(v any) string {
 	switch vv := v.(type) {
 	case float64:
-		return formatCSSFloat(vv)
+		return FormatCSSFloat(vv)
 	case int:
 		return fmt.Sprintf("%d", vv)
 	case int64:
@@ -282,16 +277,16 @@ func formatCSSNumericValue(v any) string {
 		return fmt.Sprintf("%d", vv)
 	case string:
 		// Handle Ion decimal notation like "2.08333d-1"
-		return formatIonDecimalStr(vv)
+		return FormatIonDecimal(vv)
 	case *ion.Decimal:
-		return formatIonDecimalStr(vv.String())
+		return FormatIonDecimal(vv.String())
 	default:
 		return fmt.Sprintf("%v", vv)
 	}
 }
 
-// formatCSSFloat formats a float for CSS output (no scientific notation).
-func formatCSSFloat(f float64) string {
+// FormatCSSFloat formats a float for CSS output (no scientific notation).
+func FormatCSSFloat(f float64) string {
 	if f == float64(int(f)) {
 		return fmt.Sprintf("%d", int(f))
 	}
@@ -302,20 +297,20 @@ func formatCSSFloat(f float64) string {
 	return s
 }
 
-// formatIonDecimalStr converts Ion decimal notation (e.g., "2.08333d-1") to CSS number.
-func formatIonDecimalStr(s string) string {
+// FormatIonDecimal converts Ion decimal notation (e.g., "2.08333d-1") to CSS number.
+func FormatIonDecimal(s string) string {
 	// Check for Ion decimal notation with 'd' or 'D' exponent
 	if idx := strings.IndexAny(s, "dD"); idx >= 0 {
 		// Replace 'd' with 'e' for Go's float parser
 		normalized := strings.Replace(s, "d", "e", 1)
 		normalized = strings.Replace(normalized, "D", "e", 1)
 		if f, err := strconv.ParseFloat(normalized, 64); err == nil {
-			return formatCSSFloat(f)
+			return FormatCSSFloat(f)
 		}
 	}
 	// Try parsing as regular float
 	if f, err := strconv.ParseFloat(s, 64); err == nil {
-		return formatCSSFloat(f)
+		return FormatCSSFloat(f)
 	}
 	return s
 }
@@ -328,9 +323,9 @@ func formatCSSUnitValue(u any) string {
 	case KFXSymbol:
 		return kfxUnitSymbolToCSS(unit)
 	case ReadSymbolValue:
-		return kfxUnitNameToCSS(string(unit))
+		return KFXUnitToCSS(string(unit))
 	case string:
-		return kfxUnitNameToCSS(unit)
+		return KFXUnitToCSS(unit)
 	default:
 		return fmt.Sprintf("%v", u)
 	}
@@ -360,8 +355,8 @@ func kfxUnitSymbolToCSS(sym KFXSymbol) string {
 	return name
 }
 
-// kfxUnitNameToCSS converts a unit name (like "em", "ratio", "$308") to CSS unit.
-func kfxUnitNameToCSS(u string) string {
+// KFXUnitToCSS converts a unit name (like "em", "ratio", "$308") to CSS unit.
+func KFXUnitToCSS(u string) string {
 	if override, ok := cssUnitOverrides[u]; ok {
 		return override
 	}
@@ -374,39 +369,39 @@ func kfxUnitNameToCSS(u string) string {
 	return u
 }
 
-// formatCSSSymbolValue formats a KFX symbol value to CSS keyword.
-func formatCSSSymbolValue(v any) string {
+// FormatCSSSymbolValue formats a KFX symbol value to CSS keyword.
+func FormatCSSSymbolValue(v any) string {
 	switch s := v.(type) {
 	case SymbolValue:
-		return kfxValueSymbolToCSS(KFXSymbol(s))
+		return KFXSymbolToCSS(KFXSymbol(s))
 	case KFXSymbol:
-		return kfxValueSymbolToCSS(s)
+		return KFXSymbolToCSS(s)
 	case ReadSymbolValue:
 		return kfxValueNameToCSS(string(s))
 	case string:
 		// Handle "$320" style string representation
 		if len(s) > 1 && s[0] == '$' {
 			if id, err := strconv.Atoi(s[1:]); err == nil {
-				return kfxValueSymbolToCSS(KFXSymbol(id))
+				return KFXSymbolToCSS(KFXSymbol(id))
 			}
 		}
 		return s
 	case []any:
-		return formatCSSListValue(s)
+		return FormatCSSListValue(s)
 	case ListValue:
-		return formatCSSListValue([]any(s))
+		return FormatCSSListValue([]any(s))
 	case StructValue:
-		return formatCSSMapValue(s)
+		return FormatCSSMapValue(s)
 	case map[KFXSymbol]any:
-		return formatCSSMapValue(s)
+		return FormatCSSMapValue(s)
 	case map[string]any:
-		return formatCSSMapStringValue(s)
+		return FormatCSSMapStringValue(s)
 	case bool:
 		return fmt.Sprintf("%v", s)
 	case int, int64, int32:
 		return fmt.Sprintf("%d", s)
 	case float64:
-		return formatCSSFloat(s)
+		return FormatCSSFloat(s)
 	default:
 		return fmt.Sprintf("%v", v)
 	}
@@ -419,8 +414,8 @@ var cssValueSymbolOverrides = map[string]string{
 	"medium":   "500",
 }
 
-// kfxValueSymbolToCSS converts a KFX value symbol to CSS keyword.
-func kfxValueSymbolToCSS(sym KFXSymbol) string {
+// KFXSymbolToCSS converts a KFX value symbol to CSS keyword.
+func KFXSymbolToCSS(sym KFXSymbol) string {
 	name := sym.Name()
 	if override, ok := cssValueSymbolOverrides[name]; ok {
 		return override
@@ -436,26 +431,26 @@ func kfxValueNameToCSS(s string) string {
 	// Handle "$NNN" style string representation
 	if len(s) > 1 && s[0] == '$' {
 		if id, err := strconv.Atoi(s[1:]); err == nil {
-			return kfxValueSymbolToCSS(KFXSymbol(id))
+			return KFXSymbolToCSS(KFXSymbol(id))
 		}
 	}
 	return s
 }
 
-// formatCSSListValue formats a list of values for CSS output.
-func formatCSSListValue(items []any) string {
+// FormatCSSListValue formats a list of values for CSS output.
+func FormatCSSListValue(items []any) string {
 	if len(items) == 0 {
 		return "[]"
 	}
 	parts := make([]string, len(items))
 	for i, item := range items {
-		parts[i] = formatCSSSymbolValue(item)
+		parts[i] = FormatCSSSymbolValue(item)
 	}
 	return "[" + strings.Join(parts, ", ") + "]"
 }
 
-// formatCSSMapValue formats a nested KFX map for CSS output.
-func formatCSSMapValue(m map[KFXSymbol]any) string {
+// FormatCSSMapValue formats a nested KFX map for CSS output.
+func FormatCSSMapValue(m map[KFXSymbol]any) string {
 	if len(m) == 0 {
 		return "{}"
 	}
@@ -470,19 +465,19 @@ func formatCSSMapValue(m map[KFXSymbol]any) string {
 		keyName := k.Name()
 		var valStr string
 		if colorDisplayProperties[keyName] {
-			valStr = formatCSSColorValue(val)
+			valStr = FormatCSSColorValue(val)
 		} else if IsDimensionValue(val) {
 			valStr = FormatDimensionAsCSS(val)
 		} else {
-			valStr = formatCSSSymbolValue(val)
+			valStr = FormatCSSSymbolValue(val)
 		}
 		parts = append(parts, fmt.Sprintf("%s: %s", keyName, valStr))
 	}
 	return "{" + strings.Join(parts, "; ") + "}"
 }
 
-// formatCSSMapStringValue formats a nested map[string]any for CSS output.
-func formatCSSMapStringValue(m map[string]any) string {
+// FormatCSSMapStringValue formats a nested map[string]any for CSS output.
+func FormatCSSMapStringValue(m map[string]any) string {
 	if len(m) == 0 {
 		return "{}"
 	}
@@ -503,19 +498,19 @@ func formatCSSMapStringValue(m map[string]any) string {
 		}
 		var valStr string
 		if colorDisplayProperties[keyName] {
-			valStr = formatCSSColorValue(val)
+			valStr = FormatCSSColorValue(val)
 		} else if IsDimensionValue(val) {
 			valStr = FormatDimensionAsCSS(val)
 		} else {
-			valStr = formatCSSSymbolValue(val)
+			valStr = FormatCSSSymbolValue(val)
 		}
 		parts = append(parts, fmt.Sprintf("%s: %s", keyName, valStr))
 	}
 	return "{" + strings.Join(parts, "; ") + "}"
 }
 
-// formatCSSColorValue formats an ARGB color value as hex string.
-func formatCSSColorValue(v any) string {
+// FormatCSSColorValue formats an ARGB color value as hex string.
+func FormatCSSColorValue(v any) string {
 	var colorInt uint32
 	switch c := v.(type) {
 	case int:
@@ -532,7 +527,7 @@ func formatCSSColorValue(v any) string {
 		colorInt = uint32(c)
 	default:
 		// Not a numeric color, fall back to default formatting
-		return formatCSSSymbolValue(v)
+		return FormatCSSSymbolValue(v)
 	}
 
 	// Format as #AARRGGBB hex string
@@ -549,64 +544,16 @@ func formatCSSGenericValue(v any) string {
 	case int, int64, int32:
 		return fmt.Sprintf("%d", val)
 	case float64:
-		return formatCSSFloat(val)
+		return FormatCSSFloat(val)
 	case string:
 		return fmt.Sprintf("%q", val)
 	case SymbolValue:
-		return kfxValueSymbolToCSS(KFXSymbol(val))
+		return KFXSymbolToCSS(KFXSymbol(val))
 	case SymbolByNameValue:
 		return string(val)
 	default:
 		return fmt.Sprintf("%v", val)
 	}
-}
-
-// -------- Exported helpers for kfxdump and other tools --------
-
-// FormatCSSFloat formats a float for CSS output (no scientific notation).
-func FormatCSSFloat(f float64) string {
-	return formatCSSFloat(f)
-}
-
-// FormatIonDecimal converts Ion decimal notation (e.g., "2.08333d-1") to CSS number.
-func FormatIonDecimal(s string) string {
-	return formatIonDecimalStr(s)
-}
-
-// FormatCSSSymbolValue formats a KFX symbol value to CSS keyword.
-// Handles SymbolValue, KFXSymbol, ReadSymbolValue, string, lists, and maps.
-func FormatCSSSymbolValue(v any) string {
-	return formatCSSSymbolValue(v)
-}
-
-// FormatCSSColorValue formats an ARGB color value as hex string (#AARRGGBB).
-func FormatCSSColorValue(v any) string {
-	return formatCSSColorValue(v)
-}
-
-// FormatCSSListValue formats a list of values for CSS output.
-func FormatCSSListValue(items []any) string {
-	return formatCSSListValue(items)
-}
-
-// FormatCSSMapValue formats a nested KFX map (map[KFXSymbol]any) for CSS output.
-func FormatCSSMapValue(m map[KFXSymbol]any) string {
-	return formatCSSMapValue(m)
-}
-
-// FormatCSSMapStringValue formats a nested map[string]any for CSS output.
-func FormatCSSMapStringValue(m map[string]any) string {
-	return formatCSSMapStringValue(m)
-}
-
-// KFXSymbolToCSS converts a KFX symbol to CSS keyword, applying value overrides.
-func KFXSymbolToCSS(sym KFXSymbol) string {
-	return kfxValueSymbolToCSS(sym)
-}
-
-// KFXUnitToCSS converts a unit name (like "em", "ratio", "$308") to CSS unit.
-func KFXUnitToCSS(u string) string {
-	return kfxUnitNameToCSS(u)
 }
 
 // IsColorProperty returns true if the property name represents a color value.

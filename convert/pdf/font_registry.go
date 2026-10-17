@@ -232,7 +232,7 @@ func (r *pdfFontRegistry) fontFaceWithLogger(face *builtinFontFace, key pdfFontK
 	if r == nil {
 		return face
 	}
-	return pdfFontFaceWithLogger(face, r.log, key, r.missingGlyphLogSeen, &r.missingGlyphLogMu)
+	return pdfFontFaceWithLogger(face, key, r.missingGlyphLogSeen, &r.missingGlyphLogMu, r.log)
 }
 
 func (r *pdfFontRegistry) logPDFEmbeddedFontVariantFallback(key pdfFontKey, selected pdfFontVariant, face *builtinFontFace) {

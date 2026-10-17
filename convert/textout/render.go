@@ -30,17 +30,12 @@ const (
 )
 
 type renderer struct {
-	c        *content.Content
-	cfg      *config.DocumentConfig
-	format   formatKind
-	blocks   []string
-	endnotes *endnoteQueue
-	options  RenderOptions
-}
-
-// RenderOptions controls output details that depend on the final output path.
-type RenderOptions struct {
-	OutputPath string
+	c          *content.Content
+	cfg        *config.DocumentConfig
+	format     formatKind
+	blocks     []string
+	endnotes   *endnoteQueue
+	outputPath string
 }
 
 type endnoteQueue struct {
@@ -65,12 +60,9 @@ func (q *endnoteQueue) add(id string) int {
 }
 
 // Render converts normalized FB2 content into UTF-8 TXT or Markdown bytes.
-func Render(c *content.Content, cfg *config.DocumentConfig) ([]byte, error) {
-	return RenderWithOptions(c, cfg, RenderOptions{})
-}
-
-// RenderWithOptions converts normalized FB2 content into UTF-8 TXT or Markdown bytes.
-func RenderWithOptions(c *content.Content, cfg *config.DocumentConfig, opts RenderOptions) ([]byte, error) {
+// outputPath is the final output location used to place external Markdown assets.
+// Pass an empty path when no external assets are requested.
+func Render(c *content.Content, cfg *config.DocumentConfig, outputPath string) ([]byte, error) {
 	if c == nil || c.Book == nil {
 		return nil, errors.New("content is required")
 	}
@@ -89,11 +81,11 @@ func RenderWithOptions(c *content.Content, cfg *config.DocumentConfig, opts Rend
 	}
 
 	r := &renderer{
-		c:        c,
-		cfg:      cfg,
-		format:   kind,
-		endnotes: newEndnoteQueue(),
-		options:  opts,
+		c:          c,
+		cfg:        cfg,
+		format:     kind,
+		endnotes:   newEndnoteQueue(),
+		outputPath: outputPath,
 	}
 	if c.FootnotesMode.IsFloat() || (kind == formatMD && c.FootnotesMode == common.FootnotesModeDefault) {
 		c.BackLinkIndex = make(map[string][]content.BackLinkRef)
@@ -543,7 +535,7 @@ func (r *renderer) renderCite(cite *fb2.Cite, depth int) {
 	}
 	if r.format == formatTXT {
 		for i := before; i < len(r.blocks); i++ {
-			r.blocks[i] = indentBlock(r.blocks[i], "  ")
+			r.blocks[i] = prefixLines(r.blocks[i], "  ")
 		}
 	}
 }
@@ -799,14 +791,14 @@ func (r *renderer) markdownImage(id string, label string) string {
 
 func (r *renderer) externalImageTarget(id string) string {
 	img := r.bookImage(id)
-	if img == nil || len(img.Data) == 0 || strings.TrimSpace(img.Filename) == "" || strings.TrimSpace(r.options.OutputPath) == "" {
+	if img == nil || len(img.Data) == 0 || strings.TrimSpace(img.Filename) == "" || strings.TrimSpace(r.outputPath) == "" {
 		return ""
 	}
 	dirName := markdownAssetsDirName(r.c)
 	if dirName == "" {
 		return ""
 	}
-	assetDir := filepath.Join(filepath.Dir(r.options.OutputPath), dirName)
+	assetDir := filepath.Join(filepath.Dir(r.outputPath), dirName)
 	if err := os.MkdirAll(assetDir, 0755); err != nil {
 		return ""
 	}
@@ -974,11 +966,11 @@ func (r *renderer) renderFootnoteBlocks(section *fb2.Section) []string {
 
 func (r *renderer) childRenderer() *renderer {
 	return &renderer{
-		c:        r.c,
-		cfg:      r.cfg,
-		format:   r.format,
-		endnotes: r.endnotes,
-		options:  r.options,
+		c:          r.c,
+		cfg:        r.cfg,
+		format:     r.format,
+		endnotes:   r.endnotes,
+		outputPath: r.outputPath,
 	}
 }
 
@@ -1240,7 +1232,7 @@ func markdownBlockAnchors(block string) []string {
 }
 
 func (r *renderer) outputFilename() string {
-	outputPath := strings.TrimSpace(r.options.OutputPath)
+	outputPath := strings.TrimSpace(r.outputPath)
 	if outputPath == "" {
 		return ""
 	}
@@ -1455,10 +1447,6 @@ func prefixLines(text string, prefix string) string {
 		lines[i] = prefix + line
 	}
 	return strings.Join(lines, "\n")
-}
-
-func indentBlock(text string, prefix string) string {
-	return prefixLines(text, prefix)
 }
 
 func escapeMDInline(text string) string {

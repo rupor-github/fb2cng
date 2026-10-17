@@ -28,9 +28,9 @@ func Generate(
 	ctx context.Context,
 	c *content.Content,
 	outputName string,
+	finalOutputName string,
 	cfg *config.DocumentConfig,
 	log *zap.Logger,
-	finalOutputName ...string,
 ) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -58,7 +58,7 @@ func Generate(
 	}
 
 	parsedStylesheets := parsePDFStylesheets(c.Book, log)
-	styleResolver := newPDFStyleResolverFromParsed(parsedStylesheets, log, styleTracer)
+	styleResolver := newPDFStyleResolverFromParsed(parsedStylesheets, styleTracer, log)
 	writePDFParsedStylesheetDebug(c, styleResolver, log)
 
 	title := bookTitle(c, cfg, log)
@@ -76,7 +76,7 @@ func Generate(
 		Author:           author,
 		Subject:          subject,
 		Keywords:         keywords,
-		XMP:              pdfXMPMetadata(c, cfg, log, title, subject, keywords),
+		XMP:              pdfXMPMetadata(c, cfg, title, subject, keywords, log),
 		Blocks:           contentPlan.Blocks,
 		TOC:              contentPlan.TOC,
 		PrintedFootnotes: contentPlan.PrintedFootnotes,
@@ -98,12 +98,12 @@ func Generate(
 
 	if log != nil {
 		fields := []zap.Field{
-			zap.String("file", pdfFinalOutputName(outputName, finalOutputName...)),
+			zap.String("file", pdfFinalOutputName(outputName, finalOutputName)),
 			zap.Float64("page_width_pt", pageWidth),
 			zap.Float64("page_height_pt", pageHeight),
 			zap.Int("bytes", len(data)),
 		}
-		if final := pdfFinalOutputName(outputName, finalOutputName...); final != outputName {
+		if final := pdfFinalOutputName(outputName, finalOutputName); final != outputName {
 			fields = append(fields, zap.String("temporary_file", outputName))
 		}
 		log.Debug("Writing PDF", fields...)
@@ -124,9 +124,9 @@ func writePDFParsedStylesheetDebug(c *content.Content, styles *pdfStyleResolver,
 	}
 }
 
-func pdfFinalOutputName(outputName string, finalOutputName ...string) string {
-	if len(finalOutputName) > 0 && finalOutputName[0] != "" {
-		return finalOutputName[0]
+func pdfFinalOutputName(outputName string, finalOutputName string) string {
+	if finalOutputName != "" {
+		return finalOutputName
 	}
 	return outputName
 }

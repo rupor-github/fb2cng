@@ -14,7 +14,7 @@ func TestPDFPseudoContentDecoratesFootnoteLinks(t *testing.T) {
 	resolver := newPDFStyleResolver(&fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{Type: "text/css", Data: `
 		.link-footnote::before { content: "["; }
 		.link-footnote::after { content: "]"; }
-	`}}}, nil)
+	`}}}, nil, nil)
 	blocks := applyPDFPseudoContentToBlocks([]pdfTextBlock{{
 		Text: "Body 1.",
 		Runs: []pdfInlineRun{
@@ -38,7 +38,7 @@ func TestPDFPseudoContentDecoratesPrintedFootnoteRefs(t *testing.T) {
 	resolver := newPDFStyleResolver(&fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{Type: "text/css", Data: `
 		.link-footnote::before { content: "["; }
 		.link-footnote::after { content: "]"; }
-	`}}}, nil)
+	`}}}, nil, nil)
 	blocks := applyPDFPseudoContentToBlocks([]pdfTextBlock{{
 		Text: "Body 1.",
 		Runs: []pdfInlineRun{
@@ -60,7 +60,7 @@ func TestPDFPseudoContentLogsSummaryCount(t *testing.T) {
 	newPDFStyleResolver(&fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{Type: "text/css", Data: `
 		.link-footnote::before { content: "["; }
 		.link-footnote::after { content: "]"; }
-	`}}}, zap.New(core))
+	`}}}, nil, zap.New(core))
 
 	entries := logs.FilterMessage("CSS styles loaded").All()
 	if len(entries) != 1 {
@@ -76,7 +76,7 @@ func TestPDFPseudoContentWrapsContiguousStyledLinkGroup(t *testing.T) {
 	resolver := &pdfStyleResolver{pseudoContent: map[string]pdfPseudoElementContent{
 		pdfStyleLinkFootnote: {Before: "[", After: "]"},
 	}}
-	runs := applyPDFPseudoContentToInlineRuns([]pdfInlineRun{
+	runs, _ := applyPDFPseudoContentToInlineRuns([]pdfInlineRun{
 		{Text: "2.", StyleClasses: pdfStyleLinkFootnote, LinkHref: "#n1"},
 		{Text: "1", StyleClasses: joinStyleClasses(pdfStyleLinkFootnote, "accent"), LinkHref: "#n1"},
 		{Text: " and "},

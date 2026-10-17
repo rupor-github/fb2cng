@@ -18,7 +18,7 @@ func TestLayoutPDFPagesAnnotationWrapperParagraphCanStripRootHorizontalMargins(t
 			p { margin: 0; text-indent: 0; }
 			.annotation { margin-left: 12pt; margin-right: 12pt; }
 		`,
-	}}}, nil)
+	}}}, nil, nil)
 
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
@@ -52,7 +52,7 @@ func TestLayoutPDFPagesAnnotationWrapperNestedCiteCanStripRootHorizontalMargins(
 			p { margin: 0; text-indent: 0; }
 			.cite { margin-left: 21pt; margin-right: 21pt; }
 		`,
-	}}}, nil)
+	}}}, nil, nil)
 
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
@@ -87,7 +87,7 @@ func TestLayoutPDFPagesAnnotationWrapperNestedPoemCanStripRootHorizontalMargins(
 			.poem { margin-left: 3em; }
 			.verse { margin-left: 15pt; margin-right: 15pt; }
 		`,
-	}}}, nil)
+	}}}, nil, nil)
 
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:  220,
@@ -153,7 +153,7 @@ func TestLayoutPDFPagesAnnotationNestedSectionPreservesRootHorizontalMargins(t *
 		PageHeight: 220,
 		Title:      "Title",
 		Author:     "Author",
-		Styles:     newPDFStyleResolver(book, nil),
+		Styles:     newPDFStyleResolver(book, nil, nil),
 		Blocks:     blocks,
 	})
 	if err != nil {
@@ -224,7 +224,7 @@ func TestLayoutPDFPagesGeneratedHelperTitlesPreserveRootHorizontalMargins(t *tes
 		PageHeight: 220,
 		Title:      "Title",
 		Author:     "Author",
-		Styles:     newPDFStyleResolver(book, nil),
+		Styles:     newPDFStyleResolver(book, nil, nil),
 		Blocks:     plan.Blocks,
 	})
 	if err != nil {

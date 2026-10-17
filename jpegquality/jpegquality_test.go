@@ -212,7 +212,7 @@ func TestReadMarker_MultipleReads(t *testing.T) {
 	data := createTestJPEG(t, 100, 100, 85)
 	reader := bytes.NewReader(data)
 
-	jr := &jpegReader{rs: reader}
+	jr := &Reader{rs: reader}
 
 	// Read SOI marker
 	marker1 := jr.readMarker()

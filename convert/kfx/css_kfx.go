@@ -67,7 +67,7 @@ func flattenStylesheetForKFX(sheet *css.Stylesheet) []css.Rule {
 		case item.Rule != nil:
 			rules = append(rules, *item.Rule)
 		case item.MediaBlock != nil:
-			if item.MediaBlock.Query.Evaluate(true, true) {
+			if item.MediaBlock.Query.Evaluate(css.MediaContext{KF8: true, ET: true}) {
 				rules = append(rules, item.MediaBlock.Rules...)
 			}
 		}

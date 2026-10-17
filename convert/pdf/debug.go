@@ -17,7 +17,7 @@ func writePDFDebugDumps(doc pdfDocumentSpec, pages []pdfPage, fontResources []pd
 	}
 	styles := doc.Styles
 	if styles == nil {
-		styles = newPDFStyleResolver(nil, nil)
+		styles = newPDFStyleResolver(nil, nil, nil)
 	}
 	if err := writeJSONDebugDump(filepath.Join(doc.WorkDir, "book.pdf-resolved-styles.json"), styles.debugStyles()); err != nil {
 		return err

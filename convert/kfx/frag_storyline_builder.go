@@ -367,15 +367,8 @@ func replaceContentRefStyleEvents(refs []ContentRef, eid int, events []StyleEven
 // This is called when an internal boundary should move the previous element's margin-bottom
 // onto the following element's margin-top during margin post-processing (for example empty-lines
 // and the synthetic dropcap-pair wrapper). Does nothing if there are no previous entries.
-func (sb *StorylineBuilder) MarkPreviousEntryStripMB() {
-	sb.markPreviousEntryStripMB(nil)
-}
-
-func (sb *StorylineBuilder) MarkPreviousEntryStripMBWithTransfer(transfer float64) {
-	sb.markPreviousEntryStripMB(&transfer)
-}
-
-func (sb *StorylineBuilder) markPreviousEntryStripMB(transfer *float64) {
+// A nil transfer retains the automatically resolved margin; a value overrides it.
+func (sb *StorylineBuilder) MarkPreviousEntryStripMB(transfer *float64) {
 	if len(sb.blockStack) > 0 {
 		block := sb.blockStack[len(sb.blockStack)-1]
 		if len(block.children) == 0 {

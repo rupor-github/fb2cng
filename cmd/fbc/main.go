@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -12,7 +13,6 @@ import (
 	"syscall"
 
 	cli "github.com/urfave/cli/v3"
-	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
 	"fbc/common"
@@ -89,7 +89,7 @@ func destroyAppContext(ctx context.Context, cmd *cli.Command) (err error) {
 	// must be reported directly to stderr from now on
 	if env.Rpt != nil {
 		if er := env.Rpt.Close(); er != nil {
-			err = multierr.Append(err, fmt.Errorf("unable to close debug report: %w", er))
+			err = errors.Join(err, fmt.Errorf("unable to close debug report: %w", er))
 		}
 	}
 	// reporting is closed now - remove empty panic file if any
@@ -98,7 +98,7 @@ func destroyAppContext(ctx context.Context, cmd *cli.Command) (err error) {
 		fname := env.Cfg.Logging.FileLogger.PanicDestination()
 		if fi, er := os.Stat(fname); er == nil && fi.Size() == 0 {
 			if er = os.Remove(fname); er != nil {
-				err = multierr.Append(err, fmt.Errorf("unable to remove empty panic log file '%s': %w", fname, er))
+				err = errors.Join(err, fmt.Errorf("unable to remove empty panic log file '%s': %w", fname, er))
 			}
 		}
 	}
@@ -184,7 +184,8 @@ SOURCE:
         path to a file: "[path_to_file]file.fb2"
         path to a directory: "[path_to_directory]directory" - recursively process all files under directory (symbolic links are not followed)
         path to archive with path inside archive to a particular fb2 file: "[path_to_archive]archive.zip[path_in_archive]/file.fb2"
-        path to archive with path inside archive: "[path_to_archive]archive.zip[path_in_archive]" - recursively process all fb2 files under archive path
+        path to archive with path inside archive: "[path_to_archive]archive.zip[path_in_archive]"`+
+					` - recursively process all fb2 files under archive path
 
 	When working on archive recursively only fb2 files will be considered,
 	processing of archives inside archives is not supported.
@@ -258,7 +259,7 @@ func outputConfiguration(ctx context.Context, cmd *cli.Command) (retErr error) {
 		if err != nil {
 			return fmt.Errorf("unable to create destination file '%s': %w", fname, err)
 		}
-		defer func() { retErr = multierr.Append(retErr, out.Close()) }()
+		defer func() { retErr = errors.Join(retErr, out.Close()) }()
 
 	}
 

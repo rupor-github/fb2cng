@@ -19,7 +19,7 @@ func TestPDFParsedStylesheetsSharedForStylesAndFonts(t *testing.T) {
 	`}}}
 
 	parsed := parsePDFStylesheets(book, log)
-	_ = newPDFStyleResolverFromParsed(parsed, log)
+	_ = newPDFStyleResolverFromParsed(parsed, nil, log)
 	_ = newPDFFontRegistryFromParsed(parsed, log)
 
 	entries := logs.FilterMessage("Parsing CSS").All()

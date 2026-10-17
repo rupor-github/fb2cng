@@ -11,6 +11,7 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -318,7 +319,7 @@ func processFragment(
 	case "blob":
 		return processBlobFragment(c, id, payload, lstProlog, elementTypes)
 	case "path":
-		return processPathFragment(c, id, payload, elementTypes, resolver)
+		return processPathFragment(c, id, payload, resolver)
 	default:
 		fmt.Fprintf(os.Stderr, "warning: unknown payload_type=%q for id=%s, skipping\n", payloadType, id)
 		return nil
@@ -414,7 +415,7 @@ func processBlobFragment(c *kfx.Container, id string, payload []byte, lstProlog 
 // These point to external files (e.g., "res/rsrc7") within the KPF ZIP archive.
 // If a resolver is available (KPF input), the resource data is read and stored as
 // a raw media ($417) fragment. Otherwise, the fragment is stored with empty content.
-func processPathFragment(c *kfx.Container, id string, payload []byte, elementTypes map[string]string, resolver resourceResolverFunc) error {
+func processPathFragment(c *kfx.Container, id string, payload []byte, resolver resourceResolverFunc) error {
 	if len(payload) == 0 {
 		return nil
 	}
@@ -450,7 +451,7 @@ func readIonInt(data []byte) (int, error) {
 		if err := reader.Err(); err != nil {
 			return 0, err
 		}
-		return 0, fmt.Errorf("no value in max_id payload")
+		return 0, errors.New("no value in max_id payload")
 	}
 	v, err := reader.ReadValue()
 	if err != nil {
@@ -473,7 +474,7 @@ func readIonInt(data []byte) (int, error) {
 // For standalone KDF files, the resolver is nil.
 func extractKDF(data []byte, name string) (kdfData []byte, kdfName string, resolver resourceResolverFunc, err error) {
 	if len(data) < len(zipSig) {
-		return nil, "", nil, fmt.Errorf("file too small")
+		return nil, "", nil, errors.New("file too small")
 	}
 
 	// Check if input is a KPF (ZIP) archive.
@@ -544,7 +545,7 @@ func extractKDF(data []byte, name string) (kdfData []byte, kdfName string, resol
 
 	// Standalone KDF file — must start with SQLite signature.
 	if !bytes.HasPrefix(data, sqliteSig) {
-		return nil, "", nil, fmt.Errorf("file does not start with SQLite or ZIP signature")
+		return nil, "", nil, errors.New("file does not start with SQLite or ZIP signature")
 	}
 
 	return data, filepath.Base(name), nil, nil

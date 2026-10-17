@@ -211,7 +211,7 @@ func TestGeneratePDFSVGVectorAndRaster(t *testing.T) {
 			}
 			file := filepath.Join(t.TempDir(), "book.pdf")
 			core, logs := observer.New(zapcore.DebugLevel)
-			if err := Generate(context.Background(), c, file, cfg, zap.New(core)); err != nil {
+			if err := Generate(context.Background(), c, file, "", cfg, zap.New(core)); err != nil {
 				t.Fatal(err)
 			}
 			data, err := os.ReadFile(file)

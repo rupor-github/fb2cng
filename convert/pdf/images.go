@@ -375,7 +375,7 @@ func makeDirectJPEGImageResource(img *fb2.BookImage) (pdfImageResource, bool) {
 
 func decodePDFImage(img *fb2.BookImage) (image.Image, error) {
 	if img == nil || len(img.Data) == 0 {
-		return nil, fmt.Errorf("empty image data")
+		return nil, errors.New("empty image data")
 	}
 	if strings.HasSuffix(strings.ToLower(img.MimeType), "svg+xml") {
 		return imgutil.RasterizeSVGToImage(img.Data, img.Dim.Width, img.Dim.Height, 0)

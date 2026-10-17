@@ -53,7 +53,7 @@ func TestGenerateDebugDumps(t *testing.T) {
 		},
 	}
 
-	if err := Generate(context.Background(), c, outputName, cfg, zaptest.NewLogger(t)); err != nil {
+	if err := Generate(context.Background(), c, outputName, "", cfg, zaptest.NewLogger(t)); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
 
@@ -67,7 +67,8 @@ func TestGenerateDebugDumps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read book.pdf-text-blocks.json: %v", err)
 	}
-	if !bytes.Contains(blockData, []byte(`"Chapter"`)) || !bytes.Contains(blockData, []byte(`"page-break"`)) || !bytes.Contains(blockData, []byte(`"style_name"`)) || !bytes.Contains(blockData, []byte(`"style_classes": "has-dropcap"`)) {
+	if !bytes.Contains(blockData, []byte(`"Chapter"`)) || !bytes.Contains(blockData, []byte(`"page-break"`)) ||
+		!bytes.Contains(blockData, []byte(`"style_name"`)) || !bytes.Contains(blockData, []byte(`"style_classes": "has-dropcap"`)) {
 		t.Fatalf("book.pdf-text-blocks.json missing expected content: %s", blockData)
 	}
 

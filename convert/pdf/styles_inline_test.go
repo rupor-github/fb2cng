@@ -222,7 +222,7 @@ func TestPDFInlineRunAppliesContextDescendantSelectors(t *testing.T) {
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	base := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph}).Paragraph
 
 	accent := inlineRunParagraphStyle(resolver, base, pdfInlineRun{StyleClasses: "accent", ContextClasses: joinStyleClasses(pdfStyleFootnote, "p")})

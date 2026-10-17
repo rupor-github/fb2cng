@@ -1,7 +1,6 @@
 package kfx
 
 import (
-	"fmt"
 	"maps"
 )
 
@@ -135,9 +134,7 @@ func (sb *StorylineBuilder) applyCollapsedMargins(tree *ContentTree) {
 
 		// Trace the style variant creation
 		if tracer != nil && tracer.IsEnabled() {
-			tracer.TraceStyleVariant(originalStyle, newStyle,
-				fmt.Sprintf("wrapper[%d]", wrapperIndex),
-				containerNode.MarginTop, containerNode.MarginBottom)
+			tracer.TraceStyleVariant(originalStyle, newStyle, containerNode.MarginTop, containerNode.MarginBottom)
 		}
 
 		// Also update RawEntry if present (wrapper entries use RawEntry for serialization)
@@ -199,8 +196,7 @@ func (sb *StorylineBuilder) applyCollapsedMargins(tree *ContentTree) {
 
 		// Trace the style variant creation
 		if tracer != nil && tracer.IsEnabled() {
-			tracer.TraceStyleVariant(originalStyle, newStyle, node.TraceID(),
-				node.MarginTop, node.MarginBottom)
+			tracer.TraceStyleVariant(originalStyle, newStyle, node.MarginTop, node.MarginBottom)
 		}
 
 		// Update content entry

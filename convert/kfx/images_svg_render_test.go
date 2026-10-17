@@ -223,7 +223,7 @@ func renderKVGProbePDFReference(t *testing.T, renderer, dir, name string, svg []
 	c := &content.Content{SrcName: name + ".svg", CoverID: "art", Book: &fb2.FictionBook{},
 		ImagesIndex: fb2.BookImages{"art": {MimeType: "image/svg+xml", Data: svg}}}
 	cfg := &config.DocumentConfig{Images: config.ImagesConfig{Screen: config.ScreenConfig{Width: 600, Height: height, DPI: 72}}}
-	if err := pdf.Generate(t.Context(), c, file, cfg, zap.NewNop()); err != nil {
+	if err := pdf.Generate(t.Context(), c, file, "", cfg, zap.NewNop()); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(file)

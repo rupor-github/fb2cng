@@ -54,16 +54,8 @@ type MediaContext struct {
 	FBCPDF bool
 }
 
-// Evaluate returns true if this media query matches the given Amazon context.
-// For KFX generation, amzn-kf8=true and amzn-et=true (Enhanced Typesetting).
-// amzn-mobi is always false for non-MOBI outputs. fbc-pdf is false here;
-// use EvaluateContext for PDF-specific evaluation.
-func (mq MediaQuery) Evaluate(kf8, et bool) bool {
-	return mq.EvaluateContext(MediaContext{KF8: kf8, ET: et})
-}
-
-// EvaluateContext returns true if this media query matches the given output context.
-func (mq MediaQuery) EvaluateContext(ctx MediaContext) bool {
+// Evaluate returns true if this media query matches the given output context.
+func (mq MediaQuery) Evaluate(ctx MediaContext) bool {
 	if !mq.mediaConditionMatches(mq.Type, mq.Negated, ctx) {
 		return false
 	}

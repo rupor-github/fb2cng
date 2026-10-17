@@ -1,16 +1,5 @@
 package fb2
 
-// CountFootnoteVisibleElements counts visible footnote body elements after the
-// footnote title/backlink area. It treats paragraph-like items and tables as
-// one visible element each, and images as one visible element each.
-//
-// This matches the popup truncation heuristic used by the converters: if the
-// footnote contains more than one visible element, readers may only render the
-// first one and should therefore show the "more" indicator.
-func CountFootnoteVisibleElements(section *Section) int {
-	return countFootnoteSectionVisibleElements(section)
-}
-
 // FootnoteStartsWithBlock reports whether the first visible element in the footnote body
 // is a non-paragraph block that cannot host the marker inline today. At the moment that
 // means block images and tables.
@@ -28,7 +17,10 @@ const (
 	footnoteVisibleTable
 )
 
-func countFootnoteSectionVisibleElements(section *Section) int {
+// CountFootnoteVisibleElements counts paragraph-like items, tables, and images
+// after the footnote title/backlink area. More than one visible element requests
+// the popup "more" indicator because readers may truncate the remaining content.
+func CountFootnoteVisibleElements(section *Section) int {
 	if section == nil {
 		return 0
 	}

@@ -97,7 +97,7 @@ func TestGeneratePDFMetadataUsesMetainformationTemplates(t *testing.T) {
 		}}},
 	}
 
-	if err := Generate(context.Background(), c, outputName, cfg, zaptest.NewLogger(t)); err != nil {
+	if err := Generate(context.Background(), c, outputName, "", cfg, zaptest.NewLogger(t)); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
 	data, err := os.ReadFile(outputName)
@@ -130,7 +130,7 @@ func TestGeneratePDFMetadataSubjectAndKeywords(t *testing.T) {
 		}}},
 	}
 
-	if err := Generate(context.Background(), c, outputName, cfg, zaptest.NewLogger(t)); err != nil {
+	if err := Generate(context.Background(), c, outputName, "", cfg, zaptest.NewLogger(t)); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
 	data, err := os.ReadFile(outputName)
@@ -181,7 +181,7 @@ func TestGeneratePDFXMPMetadata(t *testing.T) {
 		}},
 	}
 
-	if err := Generate(context.Background(), c, outputName, cfg, zaptest.NewLogger(t)); err != nil {
+	if err := Generate(context.Background(), c, outputName, "", cfg, zaptest.NewLogger(t)); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
 	data, err := os.ReadFile(outputName)

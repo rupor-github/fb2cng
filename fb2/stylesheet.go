@@ -308,7 +308,7 @@ func (fb *FictionBook) resolveStylesheetResource(
 // parseStylesheetResources extracts external resource references from CSS
 // by parsing it with the css package and walking the AST.
 func parseStylesheetResources(cssText string) []cssExternalRef {
-	sheet := css.NewParser(nil).Parse([]byte(cssText))
+	sheet := css.NewParser(nil).Parse([]byte(cssText), "")
 
 	var refs []cssExternalRef
 	seen := make(map[string]bool)
@@ -367,7 +367,7 @@ func parseStylesheetResources(cssText string) []cssExternalRef {
 // Later stylesheets should be processed after earlier ones so that user
 // CSS can override defaults — the caller is responsible for merging.
 func parseSectionPageBreaks(cssText string) map[int]bool {
-	sheet := css.NewParser(nil).Parse([]byte(cssText))
+	sheet := css.NewParser(nil).Parse([]byte(cssText), "")
 	breaks := make(map[int]bool)
 
 	// checkRule examines a single rule for .section-title-hN selectors
@@ -406,7 +406,7 @@ func parseSectionPageBreaks(cssText string) map[int]bool {
 // whether the rule was present at all, so callers can implement "last wins"
 // semantics across multiple stylesheets.
 func parseBodyTitlePageBreak(cssText string) (value bool, found bool) {
-	sheet := css.NewParser(nil).Parse([]byte(cssText))
+	sheet := css.NewParser(nil).Parse([]byte(cssText), "")
 
 	checkRule := func(rule *css.Rule) {
 		if rule.Selector.Class != "body-title" {

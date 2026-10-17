@@ -39,7 +39,7 @@ func TestRenderMarkdownSVGPolicy(t *testing.T) {
 					cfg.Images.Cover.Resize = common.ImageResizeModeNone
 					c.ImagesIndex = c.Book.PrepareImages(common.OutputFmtMd, &cfg.Images, zaptest.NewLogger(t))
 					output := filepath.Join(t.TempDir(), "book.md")
-					data, err := RenderWithOptions(c, cfg, RenderOptions{OutputPath: output})
+					data, err := Render(c, cfg, output)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -297,9 +297,9 @@ func TestRenderMarkdownExternalImageWritesAsset(t *testing.T) {
 	cfg.Images.Markdown = common.MarkdownImageModeExternal
 	outPath := filepath.Join(t.TempDir(), "book.md")
 
-	data, err := RenderWithOptions(c, cfg, RenderOptions{OutputPath: outPath})
+	data, err := Render(c, cfg, outPath)
 	if err != nil {
-		t.Fatalf("RenderWithOptions() error = %v", err)
+		t.Fatalf("Render() error = %v", err)
 	}
 	got := strings.TrimSpace(string(data))
 
@@ -311,6 +311,52 @@ func TestRenderMarkdownExternalImageWritesAsset(t *testing.T) {
 	}
 	if string(asset) != "png-data" {
 		t.Fatalf("external image asset = %q, want png-data", string(asset))
+	}
+}
+
+func TestGenerateMarkdownFootnoteAssetsUseOutputPath(t *testing.T) {
+	for _, mode := range []common.FootnotesMode{
+		common.FootnotesModeDefault, common.FootnotesModeFloat, common.FootnotesModeFloatRenumbered,
+	} {
+		for _, target := range []string{"staging path", "final path"} {
+			t.Run(mode.String()+"/"+target, func(t *testing.T) {
+				c := footnoteContent(common.OutputFmtMd, mode)
+				c.Book.Description.DocumentInfo.ID = "book-id"
+				c.ImagesIndex = fb2.BookImages{"note-image": {
+					MimeType: "image/png", Data: []byte("note image bytes"), Filename: "images/note.png",
+				}}
+				note := &c.Book.Bodies[1].Sections[0]
+				note.Content = append(note.Content, fb2.FlowItem{
+					Kind: fb2.FlowImage, Image: &fb2.Image{Href: "#note-image", Alt: "Note illustration"},
+				})
+				cfg := testConfig()
+				cfg.Images.Markdown = common.MarkdownImageModeExternal
+				root := t.TempDir()
+				staging := filepath.Join(root, "staging", "book.md.tmp")
+				final, assetParent := "", filepath.Dir(staging)
+				if target == "final path" {
+					final = filepath.Join(root, "published", "book.md")
+					assetParent = filepath.Dir(final)
+				}
+				if err := Generate(t.Context(), c, staging, final, cfg, zaptest.NewLogger(t)); err != nil {
+					t.Fatal(err)
+				}
+				data, err := os.ReadFile(staging)
+				if err != nil {
+					t.Fatal(err)
+				}
+				assertContains(t, string(data), "![Note illustration](images-book-id/note.png)")
+				asset, err := os.ReadFile(filepath.Join(assetParent, "images-book-id", "note.png"))
+				if err != nil || string(asset) != "note image bytes" {
+					t.Fatalf("footnote asset was not preserved at the selected output path: %q, %v", asset, err)
+				}
+				if final != "" {
+					if _, err := os.Stat(filepath.Join(filepath.Dir(staging), "images-book-id")); !os.IsNotExist(err) {
+						t.Fatalf("external assets must not be placed beside the temporary output: %v", err)
+					}
+				}
+			})
+		}
 	}
 }
 
@@ -427,9 +473,9 @@ func TestRenderMarkdownFootnoteBacklinksUseTemplateContext(t *testing.T) {
 	c.Book.Bodies[0].Sections[0].Title = title("Chapter One")
 	outPath := filepath.Join(t.TempDir(), "book.md")
 
-	data, err := RenderWithOptions(c, testConfig(), RenderOptions{OutputPath: outPath})
+	data, err := Render(c, testConfig(), outPath)
 	if err != nil {
-		t.Fatalf("RenderWithOptions() error = %v", err)
+		t.Fatalf("Render() error = %v", err)
 	}
 	got := strings.TrimSpace(string(data))
 
@@ -462,9 +508,9 @@ func TestRenderMarkdownFootnoteBacklinksPairTextWithTarget(t *testing.T) {
 	}
 	outPath := filepath.Join(t.TempDir(), "book.md")
 
-	data, err := RenderWithOptions(c, testConfig(), RenderOptions{OutputPath: outPath})
+	data, err := Render(c, testConfig(), outPath)
 	if err != nil {
-		t.Fatalf("RenderWithOptions() error = %v", err)
+		t.Fatalf("Render() error = %v", err)
 	}
 	got := strings.TrimSpace(string(data))
 
@@ -770,7 +816,7 @@ func testConfig() *config.DocumentConfig {
 }
 
 func renderForTest(c *content.Content, cfg *config.DocumentConfig) (string, error) {
-	data, err := Render(c, cfg)
+	data, err := Render(c, cfg, "")
 	if err != nil {
 		return "", err
 	}

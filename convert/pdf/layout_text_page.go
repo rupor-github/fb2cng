@@ -142,7 +142,7 @@ func (l *pdfPageLayout) renderTextBlock(r *pdfTextBlockRender) error {
 	r.fragmentPage = l.page
 	r.fragmentTop = l.y + r.style.PaddingTop
 	if r.dropcapOK {
-		r.lineSearchStart = l.renderTextDropcap(r.block, r.style, r.blockLeft, r.dropcap)
+		r.lineSearchStart = l.renderTextDropcap(r.style, r.blockLeft, r.dropcap)
 	}
 	if err := l.renderTextLines(r); err != nil {
 		return err
@@ -262,7 +262,7 @@ func (l *pdfPageLayout) renderTextLines(r *pdfTextBlockRender) error {
 	return nil
 }
 
-func (l *pdfPageLayout) renderTextDropcap(_ pdfTextBlock, style pdfBlockResolvedStyle, blockLeft float64, dropcap pdfDropcapLayout) int {
+func (l *pdfPageLayout) renderTextDropcap(style pdfBlockResolvedStyle, blockLeft float64, dropcap pdfDropcapLayout) int {
 	dropcapX := blockLeft + style.MarginLeft + style.PaddingLeft
 	dropLine := paragraphLine{Text: dropcap.Fragment.Text, Width: dropcap.Fragment.Width, Fragments: []paragraphLineFragment{dropcap.Fragment}}
 	if dropcap.Fragment.LinkHref != "" {
@@ -381,7 +381,7 @@ func (l *pdfPageLayout) shapeTextBlock(
 	dropcapOK := false
 	if pdfBlockStartsDropcap(block) {
 		var err error
-		dropcap, dropcapOK, err = buildPDFDropcapLayout(l.doc, l.styles, block, style.Paragraph, face, runs, blockWidth, firstBaselineY())
+		dropcap, dropcapOK, err = buildPDFDropcapLayout(l.doc, l.styles, block, style.Paragraph, runs, firstBaselineY())
 		if err != nil {
 			return nil, pdfDropcapLayout{}, false, err
 		}

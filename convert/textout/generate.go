@@ -20,9 +20,9 @@ func Generate(
 	ctx context.Context,
 	c *content.Content,
 	outputName string,
+	finalOutputName string,
 	cfg *config.DocumentConfig,
 	log *zap.Logger,
-	finalOutputName ...string,
 ) (err error) {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -39,7 +39,7 @@ func Generate(
 
 	log.Info(
 		"Text generation starting",
-		append([]zap.Field{zap.Stringer("format", c.OutputFormat)}, textOutputLogFields(outputName, finalOutputName...)...)...,
+		append([]zap.Field{zap.Stringer("format", c.OutputFormat)}, textOutputLogFields(outputName, finalOutputName)...)...,
 	)
 	defer func(start time.Time) {
 		if err == nil {
@@ -48,10 +48,10 @@ func Generate(
 	}(time.Now())
 
 	renderOutputPath := outputName
-	if len(finalOutputName) > 0 && finalOutputName[0] != "" {
-		renderOutputPath = finalOutputName[0]
+	if finalOutputName != "" {
+		renderOutputPath = finalOutputName
 	}
-	data, err := RenderWithOptions(c, cfg, RenderOptions{OutputPath: renderOutputPath})
+	data, err := Render(c, cfg, renderOutputPath)
 	if err != nil {
 		return err
 	}
@@ -64,10 +64,10 @@ func Generate(
 	return nil
 }
 
-func textOutputLogFields(outputName string, finalOutputName ...string) []zap.Field {
+func textOutputLogFields(outputName string, finalOutputName string) []zap.Field {
 	fields := []zap.Field{zap.String("output", outputName)}
-	if len(finalOutputName) > 0 && finalOutputName[0] != "" && finalOutputName[0] != outputName {
-		fields = append(fields, zap.String("final_output", finalOutputName[0]))
+	if finalOutputName != "" && finalOutputName != outputName {
+		fields = append(fields, zap.String("final_output", finalOutputName))
 	}
 	return fields
 }

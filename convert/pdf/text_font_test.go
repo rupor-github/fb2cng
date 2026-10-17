@@ -269,10 +269,10 @@ func TestShapeTextClassifiesAndLogsMissingGlyphs(t *testing.T) {
 	var mu sync.Mutex
 	face = pdfFontFaceWithLogger(
 		face,
-		zap.New(core),
 		pdfFontKey{Family: "Bookerly"},
 		seen,
 		&mu,
+		zap.New(core),
 	)
 
 	shaped, err := shapeTextWithCache(nil, face, "A ́á ́á")

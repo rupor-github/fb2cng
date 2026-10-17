@@ -26,13 +26,13 @@ func newPDFStyleResolverWithDefaultCSS(t *testing.T, extraCSS ...string) *pdfSty
 		stylesheets = append(stylesheets, fb2.Stylesheet{Type: "text/css", Data: css})
 	}
 	book := &fb2.FictionBook{Stylesheets: stylesheets}
-	return newPDFStyleResolver(book, zaptest.NewLogger(t))
+	return newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 }
 
 func newPDFStyleResolverWithCSS(t *testing.T, css string) *pdfStyleResolver {
 	t.Helper()
 	book := &fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{Type: "text/css", Data: css}}}
-	return newPDFStyleResolver(book, zaptest.NewLogger(t))
+	return newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 }
 
 func textWithParagraphLineCount(t *testing.T, face *builtinFontFace, style paragraphStyle, width float64, wantLines int, word string) string {

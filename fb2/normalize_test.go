@@ -589,7 +589,7 @@ func TestNormalizeIDs_AvoidCollisions(t *testing.T) {
 	}
 
 	// Build ID index
-	ids := book.buildIDIndex(log)
+	ids := book.buildIDIndex()
 
 	// Normalize IDs
 	result, updatedIDs := book.NormalizeIDs(ids, log)
@@ -649,7 +649,7 @@ func TestNormalizeIDs_UpdatesIndex(t *testing.T) {
 		},
 	}
 
-	ids := book.buildIDIndex(log)
+	ids := book.buildIDIndex()
 	result, updatedIDs := book.NormalizeIDs(ids, log)
 
 	// Check that generated section ID is in updated index

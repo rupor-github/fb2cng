@@ -104,7 +104,7 @@ func applyPDFPseudoContentToBlocks(blocks []pdfTextBlock, resolver *pdfStyleReso
 		if len(out[i].Runs) == 0 {
 			continue
 		}
-		runs, changed := applyPDFPseudoContentToInlineRunsChanged(out[i].Runs, resolver)
+		runs, changed := applyPDFPseudoContentToInlineRuns(out[i].Runs, resolver)
 		if !changed {
 			continue
 		}
@@ -133,12 +133,7 @@ func applyPDFPseudoContentToPrintedFootnotes(
 	return out
 }
 
-func applyPDFPseudoContentToInlineRuns(runs []pdfInlineRun, resolver *pdfStyleResolver) []pdfInlineRun {
-	out, _ := applyPDFPseudoContentToInlineRunsChanged(runs, resolver)
-	return out
-}
-
-func applyPDFPseudoContentToInlineRunsChanged(runs []pdfInlineRun, resolver *pdfStyleResolver) ([]pdfInlineRun, bool) {
+func applyPDFPseudoContentToInlineRuns(runs []pdfInlineRun, resolver *pdfStyleResolver) ([]pdfInlineRun, bool) {
 	if resolver == nil || len(resolver.pseudoContent) == 0 || len(runs) == 0 {
 		return runs, false
 	}

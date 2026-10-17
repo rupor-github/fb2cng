@@ -19,7 +19,7 @@ func buildPDFPrintedFootnotePagePlans(
 	}
 	styles := doc.Styles
 	if styles == nil {
-		styles = newPDFStyleResolver(nil, nil)
+		styles = newPDFStyleResolver(nil, nil, nil)
 	}
 	plans := make([]pdfPrintedFootnotePagePlan, 0, len(pages))
 	for pageIndex := range pages {
@@ -64,7 +64,7 @@ func pdfPrintedFootnoteSourceTextAreaHeight(
 	if contentHeight <= 0 {
 		return defaultHeight
 	}
-	separator := pdfPrintedFootnoteSeparatorMetricsForArea(doc, styles, contentLeft, contentWidth, contentBottom, defaultHeight)
+	separator := pdfPrintedFootnoteSeparatorMetricsForArea(styles, contentLeft, contentWidth, contentBottom, defaultHeight)
 	availableTextHeight := min(max(mainBottom-contentBottom-separator.Reserve, 0), max(contentHeight-separator.Reserve, 0))
 	return max(defaultHeight, availableTextHeight)
 }

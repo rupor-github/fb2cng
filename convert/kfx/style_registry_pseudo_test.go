@@ -168,7 +168,7 @@ func TestExtractPseudoContent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sheet := parser.Parse([]byte(tt.cssText))
+			sheet := parser.Parse([]byte(tt.cssText), "")
 			sr := NewStyleRegistry()
 			warnings := sr.extractPseudoContent(sheet)
 

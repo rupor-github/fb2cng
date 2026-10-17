@@ -15,7 +15,7 @@ func TestPDFStyleResolverAppliesRootPageMargins(t *testing.T) {
 		Data: `html { margin: 0 -10pt 0 -8pt; } body { margin: 1pt 2pt 3pt 4pt; }`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	page := resolver.pageStyle()
 	if page.MarginLeft != -4 || page.MarginRight != -8 || page.SpaceBefore != 1 || page.SpaceAfter != 3 {
 		t.Fatalf(
@@ -37,7 +37,7 @@ func TestPDFStyleResolverAppliesBodyTypographyAsRootInheritance(t *testing.T) {
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
 	if paragraph.Paragraph.FontFamily != "Noto Sans" {
 		t.Fatalf("paragraph font family = %q, want body-inherited Noto Sans", paragraph.Paragraph.FontFamily)
@@ -87,7 +87,7 @@ func TestPDFStyleResolverAppliesRootDescendantSelectors(t *testing.T) {
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
 	if paragraph.Paragraph.Align != textAlignCenter {
 		t.Fatalf("paragraph align = %v, want center from body p", paragraph.Paragraph.Align)
@@ -111,7 +111,7 @@ func TestPDFStyleResolverAppliesRootDescendantSelectorsToHeadingDepthAndImages(t
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 
 	h1 := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, Depth: 1})
 	if h1.MarginLeft != 13 {
@@ -167,7 +167,7 @@ func TestPDFStyleResolverMapsNonImageElementClassSelectorsLikeKFX(t *testing.T) 
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	warning := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "warning"})
 	if warning.Paragraph.FirstLineIndent != 0 {
 		t.Fatalf("warning indent = %v, want 0 from p.warning mapped as class", warning.Paragraph.FirstLineIndent)
@@ -191,7 +191,7 @@ func TestPDFStyleResolverAppliesContainerDescendantSelectors(t *testing.T) {
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 
 	epigraphParagraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, ContextClasses: pdfStyleEpigraph})
 	if epigraphParagraph.Paragraph.Align != textAlignRight {
@@ -219,7 +219,7 @@ func TestPDFStyleResolverAppliesNestedContainerDescendantSelectorsInOrder(t *tes
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, ContextClasses: joinStyleClasses(pdfStyleAnnotation, pdfStyleCite)})
 	if paragraph.Paragraph.Align != textAlignLeft {
 		t.Fatalf("nested paragraph align = %v, want inner cite left", paragraph.Paragraph.Align)
@@ -241,7 +241,7 @@ func TestPDFStyleResolverAppliesContainerInheritedPropertiesBeforeTagDefaults(t 
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, ContextClasses: pdfStyleFootnote})
 	if paragraph.Paragraph.FirstLineIndent != 0 {
 		t.Fatalf("footnote paragraph indent = %v, want 0 from container inheritance", paragraph.Paragraph.FirstLineIndent)
@@ -277,7 +277,7 @@ func TestPDFStyleResolverDescendantSelectorOverridesContainerInheritedProperty(t
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, ContextClasses: pdfStyleFootnote})
 	if paragraph.Paragraph.FirstLineIndent != pdfBaseFontSize*0.5 {
 		t.Fatalf("footnote paragraph indent = %v, want %v from descendant selector", paragraph.Paragraph.FirstLineIndent, pdfBaseFontSize*0.5)
@@ -294,7 +294,7 @@ func TestPDFStyleResolverAccumulatesInnermostContainerMarginWithExplicitVerseMar
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	verse := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockPoem, ContextClasses: pdfStylePoem, StyleClasses: pdfStylePoem})
 	if verse.MarginLeft != pdfBaseFontSize*5 {
 		t.Fatalf("poem verse margin-left = %v, want accumulated %v", verse.MarginLeft, pdfBaseFontSize*5)
@@ -310,7 +310,7 @@ func TestPDFStyleResolverDoesNotDoubleCountDuplicateContextClassMargins(t *testi
 		Data: `.cite { margin-left: 2em; margin-right: 1em; }`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleCite, ContextClasses: pdfStyleCite})
 	if paragraph.MarginLeft != pdfBaseFontSize*2 || paragraph.MarginRight != pdfBaseFontSize {
 		t.Fatalf("cite paragraph margins = %v/%v, want 2em/1em without double count", paragraph.MarginLeft, paragraph.MarginRight)
@@ -326,7 +326,7 @@ func TestPDFStyleResolverAccumulatesNestedContainerMarginsAcrossContextChain(t *
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	paragraph := resolver.styleForBlock(
 		pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleCite, ContextClasses: joinStyleClasses(pdfStyleAnnotation, pdfStyleCite)},
 	)
@@ -351,7 +351,7 @@ func TestPDFStyleResolverAppliesNestedStanzaContextInheritance(t *testing.T) {
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	verse := resolver.styleForBlock(
 		pdfTextBlock{Kind: pdfBlockPoem, StyleClasses: pdfStylePoem, ContextClasses: joinStyleClasses(pdfStylePoem, pdfStyleStanza)},
 	)
@@ -375,7 +375,7 @@ func TestPDFStyleResolverAppliesElementQualifiedImageSelectors(t *testing.T) {
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 
 	image := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockImage, StyleClasses: "image-block"})
 	if image.MarginLeft != 9 {

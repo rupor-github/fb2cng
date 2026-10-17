@@ -15,7 +15,7 @@ func TestPDFStyleResolverAppliesCodeStylesheet(t *testing.T) {
 		Data: `code { white-space: pre-wrap; font-family: monospace; font-size: 70%; text-align: left; }`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	style := resolver.styles[pdfStyleCode]
 	if !style.Paragraph.PreserveSpace || style.Paragraph.FontFamily != "monospace" {
 		t.Fatalf("code style = %#v, want pre-wrap monospace", style.Paragraph)
@@ -53,7 +53,7 @@ func TestPDFStyleResolverImageDefaultsMatchDefaultCSS(t *testing.T) {
 		Data: `body { text-indent: 2em; text-align: right; }`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	image := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockImage})
 	if image.Paragraph.Align != textAlignCenter {
 		t.Fatalf("image align = %v, want center", image.Paragraph.Align)
@@ -539,7 +539,7 @@ func TestPDFStyleResolverCodeBlockInheritsParagraphAlignment(t *testing.T) {
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleCode})
 	if paragraph.Paragraph.Align != textAlignRight {
 		t.Fatalf("code block align = %v, want right from paragraph inheritance", paragraph.Paragraph.Align)
@@ -597,7 +597,7 @@ func TestPDFStyleResolverAppliesStylesheet(t *testing.T) {
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
 	if paragraph.Paragraph.FontFamily != "Noto Sans" {
 		t.Fatalf("paragraph font family = %q, want Noto Sans", paragraph.Paragraph.FontFamily)
@@ -698,7 +698,7 @@ func TestPDFStyleResolverAppliesParagraphStyleClasses(t *testing.T) {
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	style := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "has-dropcap warning"})
 	if style.Paragraph.FirstLineIndent != 0 {
 		t.Fatalf("class-adjusted first-line indent = %v, want 0", style.Paragraph.FirstLineIndent)
@@ -721,7 +721,7 @@ func TestPDFStyleResolverPageBreakDisplayAndAbsoluteUnits(t *testing.T) {
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	forced := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "forced"})
 	if !forced.PageBreakBefore || forced.PageBreakBeforeMode != pdfPageBreakAlways || !forced.PageBreakAfter ||
 		forced.PageBreakAfterMode != pdfPageBreakAlways ||

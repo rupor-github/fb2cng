@@ -271,7 +271,7 @@ func process(ctx context.Context, src, dst string, format common.OutputFmt, log 
 				return fmt.Errorf("unable to process file %q: %w", head, err)
 			}
 			defer file.Close()
-			if err := processBook(ctx, selectReader(file, enc), filepath.Base(head), dst, format, log, processBookOptions{}); err != nil {
+			if err := processBook(ctx, selectReader(file, enc), filepath.Base(head), dst, format, processBookOptions{}, log); err != nil {
 				return fmt.Errorf("unable to process file %q: %w", head, err)
 			}
 			break
@@ -338,8 +338,8 @@ func processOutputFile(ctx context.Context, src, outputFile string, format commo
 				filepath.Base(head),
 				filepath.Dir(outputFile),
 				format,
-				log,
 				processBookOptions{OutputFile: outputFile},
+				log,
 			); err != nil {
 				return fmt.Errorf("unable to process file %q: %w", head, err)
 			}
@@ -407,8 +407,8 @@ func processSingleBookArchiveOutputFile(
 			f.FileHeader.Name,
 			filepath.Dir(outputFile),
 			format,
-			log,
 			processBookOptions{OutputFile: outputFile},
+			log,
 		)
 		if closeErr := reader.Close(); closeErr != nil {
 			err = errors.Join(err, fmt.Errorf("close archive entry: %w", closeErr))
@@ -547,7 +547,7 @@ func processBookFile(ctx context.Context, path, src, dst string, enc srcEncoding
 		return fmt.Errorf("open file: %w", err)
 	}
 
-	err = processBook(ctx, selectReader(file, enc), src, dst, format, log, processBookOptions{})
+	err = processBook(ctx, selectReader(file, enc), src, dst, format, processBookOptions{}, log)
 	if closeErr := file.Close(); closeErr != nil {
 		err = errors.Join(err, fmt.Errorf("close file: %w", closeErr))
 	}
@@ -560,7 +560,7 @@ func processBookArchiveEntry(ctx context.Context, f *zip.File, enc srcEncoding, 
 		return fmt.Errorf("open archive entry: %w", err)
 	}
 
-	err = processBook(ctx, selectReader(r, enc), src, dst, format, log, processBookOptions{})
+	err = processBook(ctx, selectReader(r, enc), src, dst, format, processBookOptions{}, log)
 	if closeErr := r.Close(); closeErr != nil {
 		err = errors.Join(err, fmt.Errorf("close archive entry: %w", closeErr))
 	}
@@ -601,8 +601,8 @@ func processBook(
 	src string,
 	dst string,
 	format common.OutputFmt,
-	log *zap.Logger,
 	opts processBookOptions,
+	log *zap.Logger,
 ) (rerr error) {
 	env := state.EnvFromContext(ctx)
 
@@ -674,19 +674,19 @@ func processBook(
 	// Generate output in the requested format
 	switch c.OutputFormat {
 	case common.OutputFmtEpub2, common.OutputFmtEpub3, common.OutputFmtKepub, common.OutputFmtKepub3:
-		if err := epub.Generate(ctx, c, tmpOutputName, &env.Cfg.Document, log, outputName); err != nil {
+		if err := epub.Generate(ctx, c, tmpOutputName, outputName, &env.Cfg.Document, log); err != nil {
 			return fmt.Errorf("unable to generate output: %w", err)
 		}
 	case common.OutputFmtKfx, common.OutputFmtAzw8:
-		if err := kfx.Generate(ctx, c, tmpOutputName, &env.Cfg.Document, log, outputName); err != nil {
+		if err := kfx.Generate(ctx, c, tmpOutputName, outputName, &env.Cfg.Document, log); err != nil {
 			return fmt.Errorf("unable to generate output: %w", err)
 		}
 	case common.OutputFmtPdf:
-		if err := pdf.Generate(ctx, c, tmpOutputName, &env.Cfg.Document, log, outputName); err != nil {
+		if err := pdf.Generate(ctx, c, tmpOutputName, outputName, &env.Cfg.Document, log); err != nil {
 			return fmt.Errorf("unable to generate output: %w", err)
 		}
 	case common.OutputFmtTxt, common.OutputFmtMd:
-		if err := textout.Generate(ctx, c, tmpOutputName, &env.Cfg.Document, log, outputName); err != nil {
+		if err := textout.Generate(ctx, c, tmpOutputName, outputName, &env.Cfg.Document, log); err != nil {
 			return fmt.Errorf("unable to generate output: %w", err)
 		}
 	default:

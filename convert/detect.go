@@ -133,7 +133,7 @@ func isBookFile(fname string) (bool, srcEncoding, error) {
 	if _, err := selectReader(file, enc).Read(header); err != nil {
 		return false, encUnknown, err
 	}
-	return filetype.Is(header, "fb2"), enc, nil
+	return isFB2Header(header), enc, nil
 }
 
 // isBookInArchive detects if compressed file is fb2/xml file and if it is tries to detect its encoding.
@@ -167,15 +167,10 @@ func isBookInArchive(f *zip.File) (bool, srcEncoding, error) {
 	if _, err := selectReader(r, enc).Read(header); err != nil {
 		return false, encUnknown, err
 	}
-	return filetype.Is(header, "fb2"), enc, nil
+	return isFB2Header(header), enc, nil
 }
 
-func init() {
-	// Register FB2 matcher for filetype detector
-	filetype.AddMatcher(
-		filetype.NewType("fb2", "application/x-fictionbook+xml"),
-		func(buf []byte) bool {
-			text := string(buf)
-			return strings.HasPrefix(text, `<?xml`) && strings.Contains(text, `<FictionBook`)
-		})
+func isFB2Header(header []byte) bool {
+	text := string(header)
+	return strings.HasPrefix(text, `<?xml`) && strings.Contains(text, `<FictionBook`)
 }

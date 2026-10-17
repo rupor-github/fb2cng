@@ -10,7 +10,7 @@ import (
 )
 
 func TestPDFStyleResolverBaseLineHeightUsesKP3NormalRatio(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(nil, nil, zaptest.NewLogger(t))
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
 	wantLineHeight := pdfBaseFontSize * pdfNormalLineHeightFactor
 	if math.Abs(paragraph.Paragraph.LineHeight-wantLineHeight) > 0.001 {
@@ -27,7 +27,7 @@ func TestPDFStyleResolverPreservesExplicitParagraphLineHeightAgainstRootInherita
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
 	if paragraph.Paragraph.LineHeight != 13.4 {
 		t.Fatalf("paragraph line height = %v, want explicit paragraph 13.4", paragraph.Paragraph.LineHeight)
@@ -46,7 +46,7 @@ func TestPDFStyleResolverClassFontSizeKeepsExplicitBaseLineHeight(t *testing.T) 
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "big"})
 	if paragraph.Paragraph.FontSize != pdfBaseFontSize*2 {
 		t.Fatalf("paragraph font size = %v, want %v", paragraph.Paragraph.FontSize, pdfBaseFontSize*2)
@@ -62,7 +62,7 @@ func TestPDFStyleResolverClassFontSizeStillAdjustsImplicitLineHeight(t *testing.
 		Data: `.big { font-size: 200%; }`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "big"})
 	if paragraph.Paragraph.FontSize != pdfBaseFontSize*2 {
 		t.Fatalf("paragraph font size = %v, want %v", paragraph.Paragraph.FontSize, pdfBaseFontSize*2)
@@ -76,7 +76,7 @@ func TestPDFStyleResolverClassFontSizeStillAdjustsImplicitLineHeight(t *testing.
 }
 
 func TestPDFStyleResolverCodeLineHeightPreservesKP3BaseRhythm(t *testing.T) {
-	resolver := newPDFStyleResolver(nil, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(nil, nil, zaptest.NewLogger(t))
 	code := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleCode})
 	if math.Abs(code.Paragraph.LineHeight-pdfBaseLineHeight) > 0.001 {
 		t.Fatalf("code line height = %v, want KP3 1lh base rhythm %v", code.Paragraph.LineHeight, pdfBaseLineHeight)
@@ -153,7 +153,7 @@ func TestPDFStyleResolverImplicitLineHeightUsesSemanticBlockDefault(t *testing.T
 		Data: `.big { font-size: 200%; }`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	verse := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockPoem, StyleClasses: "big"})
 	if verse.Paragraph.FontSize != pdfBaseFontSize*2 {
 		t.Fatalf("verse font size = %v, want %v", verse.Paragraph.FontSize, pdfBaseFontSize*2)
@@ -173,7 +173,7 @@ func TestPDFStyleResolverDefaultCSSRootRhythmKeepsPDFBaseText(t *testing.T) {
 		Data: `body { font-size: 80%; line-height: 150%; }`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
 	if math.Abs(paragraph.Paragraph.FontSize-pdfBaseFontSize) > 0.001 {
 		t.Fatalf("paragraph font size = %v, want PDF base %v for default.css reader rhythm", paragraph.Paragraph.FontSize, pdfBaseFontSize)
@@ -196,7 +196,7 @@ func TestPDFStyleResolverImplicitLineHeightInjectedAfterRootFontSize(t *testing.
 		Data: `body { font-size: 200%; }`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
 	if paragraph.Paragraph.FontSize != pdfBaseFontSize*2 {
 		t.Fatalf("paragraph font size = %v, want root inherited %v", paragraph.Paragraph.FontSize, pdfBaseFontSize*2)
@@ -222,7 +222,7 @@ func TestPDFStyleResolverRelativeFontSizeAndSpacingUseInheritedFont(t *testing.T
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	rootFont := pdfBaseFontSize * 0.8
 
 	heading := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, Depth: 1})
@@ -272,7 +272,7 @@ func TestPDFStyleResolverSupportsNormalLineHeight(t *testing.T) {
 		Data: `body { line-height: 200%; } p { line-height: normal; }`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph})
 	wantLineHeight := pdfBaseFontSize * pdfNormalLineHeightFactor
 	if math.Abs(paragraph.Paragraph.LineHeight-wantLineHeight) > 0.001 {
@@ -289,7 +289,7 @@ func TestPDFStyleResolverNormalLineHeightUsesResolvedFontSize(t *testing.T) {
 		Data: `.big { font-size: 200%; line-height: normal; }`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	paragraph := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: "big"})
 	wantLineHeight := pdfBaseFontSize * 2 * pdfNormalLineHeightFactor
 	if math.Abs(paragraph.Paragraph.LineHeight-wantLineHeight) > 0.001 {

@@ -40,7 +40,7 @@ func TestPDFStyleResolverParagraphTitleZeroMarginVariantKeepsBaseVerticalMargins
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	title := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStylePoemTitle + " " + pdfStylePoemTitle + "-first"})
 	if title.SpaceBefore != 10 || title.SpaceAfter != 5 {
 		t.Fatalf("poem title margins = %v/%v, want base 10/5 preserved", title.SpaceBefore, title.SpaceAfter)
@@ -62,7 +62,7 @@ func TestPDFStyleResolverFootnoteTitleVariantKeepsBaseVerticalMargins(t *testing
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	title := resolver.styleForBlock(
 		pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleFootnoteTitle + " " + pdfStyleFootnoteTitle + "-first"},
 	)
@@ -84,7 +84,7 @@ func TestPDFStyleResolverFootnoteTitleInheritsParagraphAlignment(t *testing.T) {
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	title := resolver.styleForBlock(
 		pdfTextBlock{
 			Kind:           pdfBlockParagraph,
@@ -112,7 +112,7 @@ func TestPDFStyleResolverAppliesFootnoteTitleContextDescendantSelectors(t *testi
 		`,
 	}}}
 
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 	title := resolver.styleForBlock(
 		pdfTextBlock{
 			Kind:           pdfBlockParagraph,
@@ -180,7 +180,7 @@ func TestPDFStyleResolverMapsHeadingAndTOCStyles(t *testing.T) {
 			.section-subtitle { page-break-after: avoid; }
 		`,
 	}}}
-	resolver := newPDFStyleResolver(book, zaptest.NewLogger(t))
+	resolver := newPDFStyleResolver(book, nil, zaptest.NewLogger(t))
 
 	heading := resolver.styleForBlock(pdfTextBlock{Kind: pdfBlockHeading, Depth: 1})
 	if math.Abs(heading.Paragraph.FontSize-pdfBaseFontSize*1.5) > 0.001 {

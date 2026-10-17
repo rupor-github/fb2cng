@@ -48,7 +48,7 @@ func layoutPDFTable(
 	tableWidth float64,
 ) (pdfTableLayout, error) {
 	if resolver == nil {
-		resolver = newPDFStyleResolver(nil, nil)
+		resolver = newPDFStyleResolver(nil, nil, nil)
 	}
 	if block.Table == nil || len(block.Table.Rows) == 0 || tableWidth <= 0 {
 		return pdfTableLayout{}, nil
@@ -79,8 +79,8 @@ func layoutPDFTable(
 				runs = cellRuns
 			}
 		}
-		runs, links = pdfDisablePrintedFootnoteLinks(doc.Content, block.StyleClasses, block.ContextClasses, runs, links)
-		runs = applyPDFPseudoContentToInlineRuns(runs, tableResolver)
+		runs, links = pdfDisablePrintedFootnoteLinks(doc.Content, runs, links)
+		runs, _ = applyPDFPseudoContentToInlineRuns(runs, tableResolver)
 		runs = contextInlineRuns(runs, joinStyleClasses(block.ContextClasses, pdfStyleTable))
 		cellDoc := doc
 		cellDoc.Styles = tableResolver
@@ -238,7 +238,7 @@ func pdfTableCellMinWidth(doc pdfDocumentSpec, style pdfBlockResolvedStyle, cell
 
 func (r *pdfStyleResolver) scaled(scale float64) *pdfStyleResolver {
 	if r == nil {
-		r = newPDFStyleResolver(nil, nil)
+		r = newPDFStyleResolver(nil, nil, nil)
 	}
 	if scale <= 0 || scale == 1 {
 		return r

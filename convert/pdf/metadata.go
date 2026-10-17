@@ -118,17 +118,17 @@ func bookAuthorList(c *content.Content, cfg *config.DocumentConfig, log *zap.Log
 	if c == nil || c.Book == nil {
 		return nil
 	}
-	return bookPersonList(c, cfg, log, c.Book.Description.TitleInfo.Authors, "author")
+	return bookPersonList(c, cfg, c.Book.Description.TitleInfo.Authors, "author", log)
 }
 
 func bookTranslatorList(c *content.Content, cfg *config.DocumentConfig, log *zap.Logger) []string {
 	if c == nil || c.Book == nil {
 		return nil
 	}
-	return bookPersonList(c, cfg, log, c.Book.Description.TitleInfo.Translators, "translator")
+	return bookPersonList(c, cfg, c.Book.Description.TitleInfo.Translators, "translator", log)
 }
 
-func bookPersonList(c *content.Content, cfg *config.DocumentConfig, log *zap.Logger, people []fb2.Author, label string) []string {
+func bookPersonList(c *content.Content, cfg *config.DocumentConfig, people []fb2.Author, label string, log *zap.Logger) []string {
 	if log == nil {
 		log = zap.NewNop()
 	}
@@ -163,7 +163,7 @@ func bookKeywords(c *content.Content) string {
 	return metadataExcerpt(c.Book.Description.TitleInfo.Keywords.Value, metadataExcerptMaxRunes)
 }
 
-func pdfXMPMetadata(c *content.Content, cfg *config.DocumentConfig, log *zap.Logger, title, description, keywords string) []byte {
+func pdfXMPMetadata(c *content.Content, cfg *config.DocumentConfig, title, description, keywords string, log *zap.Logger) []byte {
 	if c == nil || c.Book == nil {
 		return xmpMetadataPacket(pdfXMPDocumentMetadata{Title: title, Description: description, Keywords: keywords})
 	}
@@ -212,7 +212,8 @@ func xmpMetadataPacket(metadata pdfXMPDocumentMetadata) []byte {
 	b.WriteByte('\n')
 	b.WriteString(`<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">`)
 	b.WriteByte('\n')
-	b.WriteString(`<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:pdf="http://ns.adobe.com/pdf/1.3/" xmlns:xmp="http://ns.adobe.com/xap/1.0/">`)
+	b.WriteString(`<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" ` +
+		`xmlns:pdf="http://ns.adobe.com/pdf/1.3/" xmlns:xmp="http://ns.adobe.com/xap/1.0/">`)
 	b.WriteByte('\n')
 	if metadata.Title != "" {
 		writeXMPAlt(&b, "dc:title", metadata.Title)

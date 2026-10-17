@@ -730,8 +730,8 @@ func TestProcessBook(t *testing.T) {
 		sampleName,
 		dst,
 		common.OutputFmtEpub3,
-		logger,
 		processBookOptions{},
+		logger,
 	)
 	if err != nil {
 		t.Errorf("processBook() error = %v", err)
@@ -749,8 +749,8 @@ func TestProcessBook(t *testing.T) {
 				sampleName,
 				dst,
 				common.OutputFmtEpub3,
-				logger,
 				processBookOptions{},
+				logger,
 			)
 			if err != nil {
 				t.Errorf("processBook() with encoding %v error = %v", enc, err)
@@ -772,8 +772,8 @@ func TestProcessBook_LogsFailureOnError(t *testing.T) {
 		"broken.fb2",
 		t.TempDir(),
 		common.OutputFmtEpub3,
-		logger,
 		processBookOptions{},
+		logger,
 	)
 	if err == nil {
 		t.Fatal("expected processBook error, got nil")
@@ -813,7 +813,7 @@ func TestProcessBook_DestinationCreatedDuringGeneration(t *testing.T) {
 			}))
 			err := processBook(
 				ctx, strings.NewReader(minimalFB2Content), "book.fb2", dstDir,
-				common.OutputFmtTxt, logger, processBookOptions{OutputFile: outputPath},
+				common.OutputFmtTxt, processBookOptions{OutputFile: outputPath}, logger,
 			)
 			if !created || creationErr != nil {
 				t.Fatalf("create destination during generation: created=%v, err=%v", created, creationErr)
@@ -862,7 +862,7 @@ func TestProcessBook_OverwriteKeepsExistingFileOnGenerationFailure(t *testing.T)
 		Reader: bytes.NewReader([]byte(minimalFB2Content)),
 		cancel: cancel,
 	}
-	err := processBook(cancelCtx, reader, "book.fb2", dstDir, common.OutputFmtEpub3, logger, processBookOptions{})
+	err := processBook(cancelCtx, reader, "book.fb2", dstDir, common.OutputFmtEpub3, processBookOptions{}, logger)
 	if err == nil {
 		t.Fatal("expected generation error, got nil")
 	}
@@ -906,8 +906,8 @@ func TestProcessBook_WithPanic(t *testing.T) {
 		sampleName,
 		dst,
 		common.OutputFmtEpub3,
-		logger,
 		processBookOptions{},
+		logger,
 	)
 	_ = err
 }
@@ -915,6 +915,11 @@ func TestProcessBook_WithPanic(t *testing.T) {
 // TestProcessBook_CleansUpWorkDir verifies that processBook removes the
 // working directory after conversion when no reporter is active.
 func TestProcessBook_CleansUpWorkDir(t *testing.T) {
+	// Only inspect this test's work directories, not those of concurrent converter processes.
+	tempDir := t.TempDir()
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, tempDir)
+	}
 	ctx, _ := setupTestEnv(t)
 	logger := zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller(), zap.AddCallerSkip(1)))
 	sample := loadProcessBookSample(t)
@@ -937,8 +942,8 @@ func TestProcessBook_CleansUpWorkDir(t *testing.T) {
 		sampleName,
 		dst,
 		common.OutputFmtEpub3,
-		logger,
 		processBookOptions{},
+		logger,
 	)
 	if err != nil {
 		t.Fatalf("processBook() error = %v", err)
@@ -952,7 +957,6 @@ func TestProcessBook_CleansUpWorkDir(t *testing.T) {
 
 	for _, d := range afterDirs {
 		if !beforeSet[d] {
-			os.RemoveAll(d)
 			t.Errorf("processBook() leaked working directory: %s", d)
 		}
 	}

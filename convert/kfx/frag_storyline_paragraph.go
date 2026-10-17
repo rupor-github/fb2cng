@@ -25,21 +25,6 @@ func addParagraphWithImages(
 	imageResources imageResourceInfoByID,
 	ca *ContentAccumulator,
 	idToEID eidByFB2ID,
-) {
-	addParagraphWithImagesInternal(c, para, ctx, extraClasses, headingLevel, sb, styles, imageResources, ca, idToEID, true, false)
-}
-
-func addParagraphWithImagesInternal(
-	c *content.Content,
-	para *fb2.Paragraph,
-	ctx StyleContext,
-	extraClasses string,
-	headingLevel int,
-	sb *StorylineBuilder,
-	styles *StyleRegistry,
-	imageResources imageResourceInfoByID,
-	ca *ContentAccumulator,
-	idToEID eidByFB2ID,
 	allowDropcapWrapper bool,
 	wrappedDropcap bool,
 ) {
@@ -95,7 +80,7 @@ func addParagraphWithImagesInternal(
 			styles.EnsureBaseStyle(dropcapMarginWrapperStyle)
 			wrapperStyle := resolveDropcapMarginWrapperStyle(ctx, paragraphProps)
 			sb.StartBlock(dropcapMarginWrapperStyle, styles, &BlockOptions{Kind: ContainerSection})
-			addParagraphWithImagesInternal(
+			addParagraphWithImages(
 				c,
 				para,
 				ctx.WithoutRootHorizontalMargins(),

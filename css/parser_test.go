@@ -32,7 +32,7 @@ func TestParser_ParseDefaultCSS(t *testing.T) {
 	log := zap.NewNop()
 	p := css.NewParser(log)
 
-	sheet := p.Parse(defaultCSS)
+	sheet := p.Parse(defaultCSS, "")
 
 	rules := allRules(sheet)
 	if len(rules) == 0 {
@@ -68,7 +68,7 @@ func TestParser_ElementSelector(t *testing.T) {
 	p := css.NewParser(log)
 
 	input := []byte(`p { text-indent: 1em; }`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	rules := allRules(sheet)
 	if len(rules) != 1 {
@@ -97,7 +97,7 @@ func TestParser_ClassSelector(t *testing.T) {
 	p := css.NewParser(log)
 
 	input := []byte(`.epigraph { font-style: italic; }`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	rules := allRules(sheet)
 	if len(rules) != 1 {
@@ -123,7 +123,7 @@ func TestParser_CombinedSelector(t *testing.T) {
 	p := css.NewParser(log)
 
 	input := []byte(`p.has-dropcap { text-indent: 0; }`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	rules := allRules(sheet)
 	if len(rules) != 1 {
@@ -144,7 +144,7 @@ func TestParser_GroupedSelectors(t *testing.T) {
 	p := css.NewParser(log)
 
 	input := []byte(`h2, h3, h4 { font-size: 120%; }`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	rules := allRules(sheet)
 	if len(rules) != 3 {
@@ -164,7 +164,7 @@ func TestParser_PseudoElementBefore(t *testing.T) {
 	p := css.NewParser(log)
 
 	input := []byte(`.quote::before { content: ">>"; }`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	rules := allRules(sheet)
 	if len(rules) != 1 {
@@ -193,7 +193,7 @@ func TestParser_PseudoElementAfter(t *testing.T) {
 	p := css.NewParser(log)
 
 	input := []byte(`p.note::after { content: " *"; }`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	rules := allRules(sheet)
 	if len(rules) != 1 {
@@ -223,7 +223,7 @@ func TestParser_MediaBlockPreserved(t *testing.T) {
 		}
 		.test { color: red; }
 	`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	// Should have 3 items: rule(p), media-block(@media amzn-kf8), rule(.test)
 	if len(sheet.Items) != 3 {
@@ -281,7 +281,7 @@ func TestParser_MediaBlockMobiPreserved(t *testing.T) {
 		}
 		.test { color: red; }
 	`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	// All 3 items preserved: rule, media-block, rule
 	if len(sheet.Items) != 3 {
@@ -323,7 +323,7 @@ func TestParser_MediaBlockKF8AndNotET(t *testing.T) {
 		}
 		.test { color: red; }
 	`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	// 3 items: rule, media-block, rule
 	if len(sheet.Items) != 3 {
@@ -343,10 +343,10 @@ func TestParser_MediaBlockKF8AndNotET(t *testing.T) {
 	}
 
 	// Evaluation is a consumer concern — verify the query evaluates as expected
-	if mb.Query.Evaluate(true, true) {
+	if mb.Query.Evaluate(css.MediaContext{KF8: true, ET: true}) {
 		t.Error("expected amzn-kf8 and not amzn-et to NOT match kf8=true, et=true")
 	}
-	if !mb.Query.Evaluate(true, false) {
+	if !mb.Query.Evaluate(css.MediaContext{KF8: true, ET: false}) {
 		t.Error("expected amzn-kf8 and not amzn-et to match kf8=true, et=false")
 	}
 }
@@ -362,7 +362,7 @@ func TestParser_MediaBlockKF8AndET(t *testing.T) {
 		}
 		.test { color: red; }
 	`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	// 3 items: rule, media-block, rule
 	if len(sheet.Items) != 3 {
@@ -373,7 +373,7 @@ func TestParser_MediaBlockKF8AndET(t *testing.T) {
 	if mb == nil {
 		t.Fatal("expected second item to be a MediaBlock")
 	}
-	if !mb.Query.Evaluate(true, true) {
+	if !mb.Query.Evaluate(css.MediaContext{KF8: true, ET: true}) {
 		t.Error("expected amzn-kf8 and amzn-et to match kf8=true, et=true")
 	}
 
@@ -398,7 +398,7 @@ func TestParser_MediaBlockNotMobi(t *testing.T) {
 		}
 		.test { color: red; }
 	`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	if len(sheet.Items) != 3 {
 		t.Fatalf("expected 3 items, got %d", len(sheet.Items))
@@ -415,7 +415,7 @@ func TestParser_MediaBlockNotMobi(t *testing.T) {
 		t.Errorf("expected media type 'amzn-mobi', got '%s'", mb.Query.Type)
 	}
 	// not amzn-mobi should match kf8 context (mobi is always false, negated = true)
-	if !mb.Query.Evaluate(true, true) {
+	if !mb.Query.Evaluate(css.MediaContext{KF8: true, ET: true}) {
 		t.Error("expected 'not amzn-mobi' to match kf8=true, et=true")
 	}
 
@@ -433,7 +433,7 @@ func TestParser_DescendantSelector(t *testing.T) {
 	p := css.NewParser(log)
 
 	input := []byte(`p code { font-family: monospace; }`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	rules := allRules(sheet)
 	if len(rules) != 1 {
@@ -461,7 +461,7 @@ func TestParser_DescendantSelectorWithClass(t *testing.T) {
 	p := css.NewParser(log)
 
 	input := []byte(`.section-title h2.section-title-header { page-break-before: always; }`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	rules := allRules(sheet)
 	if len(rules) != 1 {
@@ -493,7 +493,7 @@ func TestParser_DescendantSelectorDeepNesting(t *testing.T) {
 
 	// Three-level descendant: div p code
 	input := []byte(`div p code { font-family: monospace; }`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	rules := allRules(sheet)
 	if len(rules) != 1 {
@@ -537,7 +537,7 @@ func TestParser_FontFace(t *testing.T) {
 			font-style: italic;
 		}
 	`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	fontFaces := sheet.FontFaces()
 	if len(fontFaces) != 1 {
@@ -576,7 +576,7 @@ func TestParser_Import(t *testing.T) {
 		@import url("another.css");
 		p { margin: 0; }
 	`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	// Should have 3 items: 2 imports + 1 rule
 	if len(sheet.Items) != 3 {
@@ -636,7 +636,7 @@ func TestParser_NumericValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.css, func(t *testing.T) {
-			sheet := p.Parse([]byte(tt.css))
+			sheet := p.Parse([]byte(tt.css), "")
 			rules := allRules(sheet)
 			if len(rules) != 1 {
 				t.Fatalf("expected 1 rule, got %d", len(rules))
@@ -741,7 +741,7 @@ func TestParser_DimensionEdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sheet := p.Parse([]byte(tt.css))
+			sheet := p.Parse([]byte(tt.css), "")
 			rules := allRules(sheet)
 			if len(rules) != 1 {
 				t.Fatalf("expected 1 rule, got %d", len(rules))
@@ -775,7 +775,7 @@ func TestParser_ShorthandMargin(t *testing.T) {
 	p := css.NewParser(log)
 
 	input := []byte(`p { margin: 1em 2em 3em 4em; }`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	rules := allRules(sheet)
 	if len(rules) != 1 {
@@ -804,7 +804,7 @@ func TestParser_Comments(t *testing.T) {
 			text-indent: 1em; /* trailing comment */
 		}
 	`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	rules := allRules(sheet)
 	if len(rules) != 1 {
@@ -830,7 +830,7 @@ func TestParser_OrphanCommentClosersDoNotPoisonNextSelector(t *testing.T) {
 		/* } */
 		p { margin: 0; text-indent: 1em; }
 	`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	rules := allRules(sheet)
 	if len(rules) != 1 {
@@ -928,7 +928,7 @@ func TestMediaQuery_Evaluate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.mq.Evaluate(tt.kf8, tt.et)
+			got := tt.mq.Evaluate(css.MediaContext{KF8: tt.kf8, ET: tt.et})
 			if got != tt.expected {
 				t.Errorf("MediaQuery.Evaluate(%v, %v) = %v, want %v", tt.kf8, tt.et, got, tt.expected)
 			}
@@ -963,11 +963,11 @@ func TestMediaQuery_EvaluatePDFContext(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.mq.EvaluateContext(pdfContext); got != tt.pdf {
-				t.Errorf("EvaluateContext(PDF) = %v, want %v", got, tt.pdf)
+			if got := tt.mq.Evaluate(pdfContext); got != tt.pdf {
+				t.Errorf("Evaluate(PDF) = %v, want %v", got, tt.pdf)
 			}
-			if got := tt.mq.EvaluateContext(kfxContext); got != tt.kfx {
-				t.Errorf("EvaluateContext(KFX) = %v, want %v", got, tt.kfx)
+			if got := tt.mq.Evaluate(kfxContext); got != tt.kfx {
+				t.Errorf("Evaluate(KFX) = %v, want %v", got, tt.kfx)
 			}
 		})
 	}
@@ -992,7 +992,7 @@ func TestMediaQuery_EvaluateKFXContext(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.mq.Evaluate(true, true); got != tt.expected {
+			if got := tt.mq.Evaluate(css.MediaContext{KF8: true, ET: true}); got != tt.expected {
 				t.Errorf("Evaluate(true, true) = %v, want %v", got, tt.expected)
 			}
 		})
@@ -1010,7 +1010,7 @@ func TestParser_SourceOrderPreserved(t *testing.T) {
 		@media amzn-kf8 { h1 { color: red; } }
 		.footer { font-size: small; }
 	`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	// 5 items in source order: import, rule, font-face, media-block, rule
 	if len(sheet.Items) != 5 {
@@ -1106,7 +1106,7 @@ func TestRulesBySelector(t *testing.T) {
 		p { text-indent: 1em; }
 		h1 { font-size: 2em; }
 	`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	pRules := sheet.RulesBySelector("p")
 	if len(pRules) != 2 {
@@ -1129,7 +1129,7 @@ func TestStylesheet_String_SimpleRule(t *testing.T) {
 	p := css.NewParser(log)
 
 	input := []byte(`p { text-indent: 1em; margin: 0; }`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	output := sheet.String()
 
@@ -1162,7 +1162,7 @@ func TestStylesheet_String_FontFace(t *testing.T) {
 		font-weight: bold;
 		font-style: italic;
 	}`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	output := sheet.String()
 
@@ -1186,7 +1186,7 @@ func TestStylesheet_String_Import(t *testing.T) {
 
 	input := []byte(`@import "other.css";
 p { margin: 0; }`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	output := sheet.String()
 
@@ -1204,7 +1204,7 @@ func TestStylesheet_String_MediaBlock(t *testing.T) {
 			p { margin: 1em; }
 		}
 	`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	output := sheet.String()
 
@@ -1227,7 +1227,7 @@ func TestStylesheet_String_SourceOrder(t *testing.T) {
 		@media amzn-kf8 { h1 { color: red; } }
 		.footer { font-size: small; }
 	`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	output := sheet.String()
 
@@ -1253,10 +1253,10 @@ func TestStylesheet_String_RoundTrip(t *testing.T) {
 		.bold { font-weight: bold; }
 		@media amzn-kf8 { h1 { color: red; } }
 	`)
-	sheet1 := p.Parse(input)
+	sheet1 := p.Parse(input, "")
 	output1 := sheet1.String()
 
-	sheet2 := p.Parse([]byte(output1))
+	sheet2 := p.Parse([]byte(output1), "")
 
 	rules1 := allRules(sheet1)
 	rules2 := allRules(sheet2)
@@ -1274,7 +1274,7 @@ func TestStylesheet_WriteTo(t *testing.T) {
 	p := css.NewParser(log)
 
 	input := []byte(`p { margin: 0; }`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	var buf strings.Builder
 	n, err := sheet.WriteTo(&buf)
@@ -1297,7 +1297,7 @@ func TestStylesheet_RewriteURLs_Import(t *testing.T) {
 	p := css.NewParser(log)
 
 	input := []byte(`@import "old.css";`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	sheet.RewriteURLs(func(url string) string {
 		if url == "old.css" {
@@ -1325,7 +1325,7 @@ func TestStylesheet_RewriteURLs_FontFace(t *testing.T) {
 		font-family: "MyFont";
 		src: url("fonts/old.woff2");
 	}`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	sheet.RewriteURLs(func(url string) string {
 		if url == "fonts/old.woff2" {
@@ -1354,7 +1354,7 @@ func TestStylesheet_RewriteURLs_PropertyValue(t *testing.T) {
 	p := css.NewParser(log)
 
 	input := []byte(`p { background: url("images/bg.png"); }`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	sheet.RewriteURLs(func(url string) string {
 		if url == "images/bg.png" {
@@ -1382,7 +1382,7 @@ func TestStylesheet_RewriteURLs_MediaBlockProperty(t *testing.T) {
 	p := css.NewParser(log)
 
 	input := []byte(`@media amzn-kf8 { p { background: url("old.png"); } }`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	sheet.RewriteURLs(func(url string) string {
 		if url == "old.png" {
@@ -1417,7 +1417,7 @@ func TestStylesheet_RewriteURLs_FragmentRef(t *testing.T) {
 		font-family: "Test";
 		src: url('#font1');
 	}`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	sheet.RewriteURLs(func(url string) string {
 		if url == "#font1" {
@@ -1437,7 +1437,7 @@ func TestStylesheet_RewriteURLs_NoChange(t *testing.T) {
 	p := css.NewParser(log)
 
 	input := []byte(`p { color: red; font-size: 12pt; }`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	before := sheet.String()
 
@@ -1460,7 +1460,7 @@ func TestStylesheet_RewriteURLs_DuplicateImports(t *testing.T) {
 	input := []byte(`@import "reset.css";
 @import "reset.css";
 p { margin: 0; }`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	sheet.RewriteURLs(func(url string) string {
 		if url == "reset.css" {
@@ -1505,7 +1505,7 @@ func TestStylesheet_RewriteURLs_DuplicateFontFaces(t *testing.T) {
 			src: url("fonts/bold.woff2");
 		}
 	`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	sheet.RewriteURLs(func(url string) string {
 		return strings.Replace(url, "fonts/", "new/", 1)
@@ -1590,7 +1590,7 @@ func TestStylesheet_RewriteURLs_EscapesQuotesInRewrittenURL(t *testing.T) {
 	p := css.NewParser(log)
 
 	input := []byte(`p { background: url("original.png"); }`)
-	sheet := p.Parse(input)
+	sheet := p.Parse(input, "")
 
 	// Rewrite to a URL that contains a double quote.
 	sheet.RewriteURLs(func(url string) string {

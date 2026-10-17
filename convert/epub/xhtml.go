@@ -259,7 +259,7 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, log *
 					return nil, err
 				}
 			} else if c.FootnotesMode.IsFloat() && (c.OutputFormat == common.OutputFmtEpub2 || c.OutputFormat == common.OutputFmtKepub) {
-				if err := appendFloatFootnoteSectionContentEpub2(bodyDiv, c, section, log); err != nil {
+				if err := appendFloatFootnoteSectionContentEpub2(bodyDiv, c, section); err != nil {
 					return nil, err
 				}
 			} else {
@@ -701,7 +701,7 @@ func firstVisibleAsideElement(aside *etree.Element) *etree.Element {
 // appendFloatFootnoteSectionContentEpub2 appends footnote section content in
 // EPUB2 float mode uses <p class="footnote"> and simplified rendering to fit
 // everything in a single paragraph keeping as much formatting as possible.
-func appendFloatFootnoteSectionContentEpub2(parent *etree.Element, c *content.Content, section *fb2.Section, _ *zap.Logger) error {
+func appendFloatFootnoteSectionContentEpub2(parent *etree.Element, c *content.Content, section *fb2.Section) error {
 	c.KoboSpanNextParagraph()
 
 	sectionElem := parent.CreateElement("p")

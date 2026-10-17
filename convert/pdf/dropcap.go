@@ -251,9 +251,7 @@ func buildPDFDropcapLayout(
 	resolver *pdfStyleResolver,
 	block pdfTextBlock,
 	base paragraphStyle,
-	_ *builtinFontFace,
 	runs []pdfInlineRun,
-	_ float64,
 	firstBaselineY float64,
 ) (pdfDropcapLayout, bool, error) {
 	dropcapRun, bodyRuns, ok := splitPDFDropcapRuns(runs)

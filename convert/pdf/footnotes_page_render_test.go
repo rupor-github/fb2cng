@@ -70,7 +70,7 @@ func TestAppendPDFPrintedFootnotePagePlansBottomAlignsSourceFootnote(t *testing.
 	mainPages := []pdfPage{{Lines: []pdfPageLine{testPDFPageLine(t, face, "Main", 130)}}}
 	footnoteLine := testPDFPageLine(t, face, "Footnote", 60)
 	plan := pdfPrintedFootnotePagePlan{PageIndex: 0, QueuePages: []pdfPage{{Lines: []pdfPageLine{footnoteLine}}}}
-	separatorBefore := pdfPrintedFootnoteSeparatorMetricsForArea(doc, nil, 24, 212, 24, 80)
+	separatorBefore := pdfPrintedFootnoteSeparatorMetricsForArea(nil, 24, 212, 24, 80)
 
 	out := appendPDFPrintedFootnotePagePlans(doc, mainPages, []pdfPrintedFootnotePagePlan{plan}, 80, nil, nil)
 	if len(out) != 1 {
@@ -223,8 +223,7 @@ func TestAppendPDFPrintedFootnotePagePlansMergesUsedGlyphs(t *testing.T) {
 }
 
 func TestPDFPrintedFootnoteSeparatorMetricsUsesContentWidth(t *testing.T) {
-	doc := pdfDocumentSpec{PageWidth: 260, PageHeight: 180}
-	metrics := pdfPrintedFootnoteSeparatorMetricsForArea(doc, nil, 24, 212, 24, 80)
+	metrics := pdfPrintedFootnoteSeparatorMetricsForArea(nil, 24, 212, 24, 80)
 	if metrics.Width <= 0 || metrics.Width > 212 {
 		t.Fatalf("separator width = %v, want within content width", metrics.Width)
 	}

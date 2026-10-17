@@ -2,6 +2,7 @@ package pdf
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"maps"
@@ -118,7 +119,7 @@ func resolvePDFFontFace(registry *pdfFontRegistry, key pdfFontKey) (*builtinFont
 		return registry.fontForKey(key)
 	}
 	face, err := builtinFont(key.Family, key.Bold, key.Italic)
-	return pdfFontFaceWithLogger(face, nil, key, nil, nil), err
+	return pdfFontFaceWithLogger(face, key, nil, nil, nil), err
 }
 
 type pdfMissingGlyphLogKey struct {
@@ -139,10 +140,10 @@ type pdfMissingGlyphLogger struct {
 
 func pdfFontFaceWithLogger(
 	face *builtinFontFace,
-	log *zap.Logger,
 	key pdfFontKey,
 	seen map[pdfMissingGlyphLogKey]bool,
 	mu *sync.Mutex,
+	log *zap.Logger,
 ) *builtinFontFace {
 	if face == nil {
 		return face
@@ -218,7 +219,7 @@ func canShapeOpenTypeText(face *builtinFontFace, text string) bool {
 func (s simplePDFTextShaper) Shape(text string, _ pdfShapeOptions) (shapedText, error) {
 	face := s.face
 	if face == nil || face.Font == nil {
-		return shapedText{}, fmt.Errorf("font face is required")
+		return shapedText{}, errors.New("font face is required")
 	}
 
 	runes := []rune(text)
@@ -292,7 +293,7 @@ func pdfGlyphWithSource(glyph shapedGlyph, r rune, start, end int) shapedGlyph {
 func (s *openTypePDFTextShaper) Shape(text string, _ pdfShapeOptions) (shapedText, error) {
 	face := s.face
 	if face == nil || face.TextFace == nil {
-		return shapedText{}, fmt.Errorf("OpenType font face is required")
+		return shapedText{}, errors.New("OpenType font face is required")
 	}
 
 	runes := []rune(text)
@@ -447,7 +448,7 @@ func pdfRuneUsesMathFallbackFirst(r rune) bool {
 
 func pdfFontGlyph(face *builtinFontFace, key pdfFontKey, r rune) (shapedGlyph, bool, error) {
 	if face == nil || face.Font == nil {
-		return shapedGlyph{}, false, fmt.Errorf("font face is required")
+		return shapedGlyph{}, false, errors.New("font face is required")
 	}
 	var buf sfnt.Buffer
 	gid, err := face.Font.GlyphIndex(&buf, r)
@@ -785,10 +786,10 @@ func compressedPDFStreamSize(data []byte) int {
 
 func fontResourceObjects(face *builtinFontFace, used map[uint16]shapedGlyph, objectIDs fontObjectIDs) (fontObjects, error) {
 	if face == nil {
-		return fontObjects{}, fmt.Errorf("font face is required")
+		return fontObjects{}, errors.New("font face is required")
 	}
 	if len(used) == 0 {
-		return fontObjects{}, fmt.Errorf("at least one used glyph is required")
+		return fontObjects{}, errors.New("at least one used glyph is required")
 	}
 
 	program, err := pdfFontProgram(face.Data)
@@ -940,7 +941,7 @@ func pdfFontProgram(data []byte) (pdfFontProgramInfo, error) {
 	if _, ok := rawTTFTable(data, "CFF2"); ok {
 		return pdfOpenTypeCFFProgram("opentype_cff2"), nil
 	}
-	return pdfFontProgramInfo{}, fmt.Errorf("unsupported font outline tables")
+	return pdfFontProgramInfo{}, errors.New("unsupported font outline tables")
 }
 
 func pdfOpenTypeCFFProgram(kind string) pdfFontProgramInfo {

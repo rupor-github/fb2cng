@@ -33,16 +33,13 @@ func (sb *StorylineBuilder) AddContent(contentType KFXSymbol, contentName string
 
 // AddContentAndEvents adds content with style events (to storyline or current block).
 // The styleSpec is the original style specification used for position-based re-resolution.
-// An optional StyleContext can be passed to preserve ancestor scopes for deferred resolution.
-// When provided, descendant selectors (e.g., ".footnote p") will match correctly during
-// deferred style resolution in Build(). Without it, a fresh context with no scopes is used.
+// Deferred resolution uses a fresh context; scoped callers resolve styles before adding them.
 func (sb *StorylineBuilder) AddContentAndEvents(
 	contentType KFXSymbol,
 	contentName string,
 	contentOffset int,
 	styleSpec, style string,
 	events []StyleEventRef,
-	ctx ...StyleContext,
 ) int {
 	eid := sb.eidCounter
 	sb.eidCounter++
@@ -64,12 +61,6 @@ func (sb *StorylineBuilder) AddContentAndEvents(
 		StyleSpec:     styleSpec,
 		Style:         style,
 		StyleEvents:   events,
-	}
-	// Store the caller's StyleContext for deferred resolution if provided.
-	// This preserves ancestor scopes so descendant selectors work correctly.
-	if len(ctx) > 0 {
-		sc := ctx[0]
-		ref.styleCtx = &sc
 	}
 	return sb.addEntry(ref)
 }

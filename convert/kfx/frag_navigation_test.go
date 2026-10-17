@@ -27,7 +27,7 @@ func TestBuildNavEntries_UntitledWrapperPromotesChildren(t *testing.T) {
 		},
 	}
 
-	result := buildNavEntries(entries, 1000, false, common.TOCTypeNormal)
+	result := buildNavEntries(entries, false, common.TOCTypeNormal)
 	if len(result) != 2 {
 		t.Fatalf("expected 2 promoted entries, got %d", len(result))
 	}
@@ -50,7 +50,7 @@ func TestBuildNavEntries_MixedTitledAndWrapper(t *testing.T) {
 		{ID: "epilog", Title: "Epilogue", IncludeInTOC: true, FirstEID: 1020},
 	}
 
-	result := buildNavEntries(entries, 1000, false, common.TOCTypeNormal)
+	result := buildNavEntries(entries, false, common.TOCTypeNormal)
 	// Introduction + Part 1 + Part 2 (promoted) + Epilogue = 4
 	if len(result) != 4 {
 		t.Fatalf("expected 4 entries, got %d", len(result))
@@ -79,7 +79,7 @@ func TestBuildNavEntries_NestedWrappers(t *testing.T) {
 		},
 	}
 
-	result := buildNavEntries(entries, 1000, false, common.TOCTypeNormal)
+	result := buildNavEntries(entries, false, common.TOCTypeNormal)
 	if len(result) != 1 {
 		t.Fatalf("expected 1 promoted entry from nested wrappers, got %d", len(result))
 	}
@@ -96,7 +96,7 @@ func TestBuildNavEntries_WrapperWithNoChildren(t *testing.T) {
 		},
 	}
 
-	result := buildNavEntries(entries, 1000, false, common.TOCTypeNormal)
+	result := buildNavEntries(entries, false, common.TOCTypeNormal)
 	if len(result) != 0 {
 		t.Fatalf("expected 0 entries for empty wrapper, got %d", len(result))
 	}
@@ -118,7 +118,7 @@ func TestBuildNavEntries_TitledEntryWithChildren(t *testing.T) {
 		},
 	}
 
-	result := buildNavEntries(entries, 1000, false, common.TOCTypeNormal)
+	result := buildNavEntries(entries, false, common.TOCTypeNormal)
 	// Should be 1 entry (Part 1) with children nested inside
 	if len(result) != 1 {
 		t.Fatalf("expected 1 top-level entry, got %d", len(result))
@@ -177,7 +177,7 @@ func TestBuildNavEntries_TOCTypeNesting(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := snapshotNavUnits(buildNavEntries(entries, 1000, false, tt.tocType))
+			got := snapshotNavUnits(buildNavEntries(entries, false, tt.tocType))
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("buildNavEntries() = %#v, want %#v", got, tt.want)
 			}

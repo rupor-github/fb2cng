@@ -110,7 +110,7 @@ func TestKFXProfilePath(t *testing.T) {
 	case "generate":
 		outputName := filepath.Join(outDir, "profile-output.kfx")
 		profileKFXTarget(t, outDir, target, func() error {
-			return Generate(context.Background(), fixture.c, outputName, fixture.cfg, zap.NewNop())
+			return Generate(context.Background(), fixture.c, outputName, "", fixture.cfg, zap.NewNop())
 		})
 	default:
 		t.Fatalf("unknown KFX_PROFILE_TARGET %q", target)

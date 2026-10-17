@@ -27,15 +27,15 @@ func Generate(
 	ctx context.Context,
 	c *content.Content,
 	outputPath string,
+	finalOutputPath string,
 	cfg *config.DocumentConfig,
 	log *zap.Logger,
-	finalOutputPath ...string,
 ) (err error) {
 	if err = ctx.Err(); err != nil {
 		return err
 	}
 
-	log.Info("KFX generation starting", kfxOutputLogFields(outputPath, finalOutputPath...)...)
+	log.Info("KFX generation starting", kfxOutputLogFields(outputPath, finalOutputPath)...)
 	defer func(start time.Time) {
 		if err == nil {
 			log.Info("KFX generation completed", zap.Duration("elapsed", time.Since(start)))
@@ -136,7 +136,7 @@ func Generate(
 	}
 
 	log.Debug("KFX written",
-		append(kfxOutputLogFields(outputPath, finalOutputPath...),
+		append(kfxOutputLogFields(outputPath, finalOutputPath),
 			zap.Int("size", len(kfxData)),
 			zap.Int("fragments", container.Fragments.Len()),
 		)...,
@@ -145,8 +145,8 @@ func Generate(
 	return nil
 }
 
-func kfxOutputLogFields(outputPath string, finalOutputPath ...string) []zap.Field {
-	final := kfxFinalOutputPath(outputPath, finalOutputPath...)
+func kfxOutputLogFields(outputPath string, finalOutputPath string) []zap.Field {
+	final := kfxFinalOutputPath(outputPath, finalOutputPath)
 	fields := []zap.Field{zap.String("output", final)}
 	if final != outputPath {
 		fields = append(fields, zap.String("temporary_file", outputPath))
@@ -154,9 +154,9 @@ func kfxOutputLogFields(outputPath string, finalOutputPath ...string) []zap.Fiel
 	return fields
 }
 
-func kfxFinalOutputPath(outputPath string, finalOutputPath ...string) string {
-	if len(finalOutputPath) > 0 && finalOutputPath[0] != "" {
-		return finalOutputPath[0]
+func kfxFinalOutputPath(outputPath string, finalOutputPath string) string {
+	if finalOutputPath != "" {
+		return finalOutputPath
 	}
 	return outputPath
 }
@@ -343,7 +343,7 @@ func buildFragments(ctx context.Context, container *Container, c *content.Conten
 		if cfg.PageMap.Enable {
 			pageSize = cfg.PageMap.Size
 		}
-		navFrag := BuildNavigation(tocEntries, nextEID, posItems, pageSize, cfg.TOCPage.ChaptersWithoutTitle, cfg.TOCType, landmarks)
+		navFrag := BuildNavigation(tocEntries, posItems, pageSize, cfg.TOCPage.ChaptersWithoutTitle, cfg.TOCType, landmarks)
 		if err := container.Fragments.Add(navFrag); err != nil {
 			return err
 		}

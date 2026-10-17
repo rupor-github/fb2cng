@@ -125,11 +125,11 @@ func appendPDFPrintedFootnotePagePlans(
 
 	styles := doc.Styles
 	if styles == nil {
-		styles = newPDFStyleResolver(nil, nil)
+		styles = newPDFStyleResolver(nil, nil, nil)
 	}
 	contentLeft, contentRight, contentTop, contentBottom := pdfContentMargins(doc, styles, pdfDefaultPageMargin, false)
 	contentWidth := max(doc.PageWidth-contentLeft-contentRight, 12)
-	separator := pdfPrintedFootnoteSeparatorMetricsForArea(doc, styles, contentLeft, contentWidth, contentBottom, footnoteTextHeight)
+	separator := pdfPrintedFootnoteSeparatorMetricsForArea(styles, contentLeft, contentWidth, contentBottom, footnoteTextHeight)
 
 	out := make([]pdfPage, 0, len(pages)+len(plans))
 	for pageIndex, page := range pages {
@@ -421,7 +421,6 @@ func pdfPageYBounds(page pdfPage) (float64, float64, bool) {
 }
 
 func pdfPrintedFootnoteSeparatorMetricsForArea(
-	_ pdfDocumentSpec,
 	styles *pdfStyleResolver,
 	contentLeft float64,
 	contentWidth float64,
@@ -429,7 +428,7 @@ func pdfPrintedFootnoteSeparatorMetricsForArea(
 	footnoteTextHeight float64,
 ) pdfPrintedFootnoteSeparatorMetrics {
 	if styles == nil {
-		styles = newPDFStyleResolver(nil, nil)
+		styles = newPDFStyleResolver(nil, nil, nil)
 	}
 	style := styles.styleForBlock(
 		pdfTextBlock{Kind: pdfBlockParagraph, StyleClasses: pdfStyleFootnoteSeparator, ContextClasses: pdfStyleFootnoteSeparator},

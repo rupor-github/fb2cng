@@ -41,7 +41,7 @@ func (fb *FictionBook) buildFootnotesIndex(log *zap.Logger) FootnoteRefs {
 
 // buildIDIndex walks the entire FictionBook and builds an index of all elements with IDs
 // Any ID could be a target for linking from other parts of the book.
-func (fb *FictionBook) buildIDIndex(_ *zap.Logger) IDIndex {
+func (fb *FictionBook) buildIDIndex() IDIndex {
 	index := make(IDIndex)
 
 	// Index binaries

@@ -8,7 +8,7 @@ import (
 
 func (r *pdfStyleResolver) collapsedBlockStyles(blocks []pdfTextBlock, images fb2.BookImages) []pdfBlockResolvedStyle {
 	if r == nil {
-		r = newPDFStyleResolver(nil, nil)
+		r = newPDFStyleResolver(nil, nil, nil)
 	}
 	resolved := make([]pdfBlockResolvedStyle, len(blocks))
 	for i, block := range blocks {

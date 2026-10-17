@@ -8,21 +8,17 @@ import (
 	"fbc/fb2"
 )
 
-func newPDFStyleResolver(book *fb2.FictionBook, log *zap.Logger, tracers ...*pdfStyleTracer) *pdfStyleResolver {
+func newPDFStyleResolver(book *fb2.FictionBook, tracer *pdfStyleTracer, log *zap.Logger) *pdfStyleResolver {
 	if log == nil {
 		log = zap.NewNop()
 	}
 	if book == nil {
-		return newPDFBaseStyleResolver(log, tracers...)
+		return newPDFBaseStyleResolver(tracer, log)
 	}
-	return newPDFStyleResolverFromParsed(parsePDFStylesheets(book, log), log, tracers...)
+	return newPDFStyleResolverFromParsed(parsePDFStylesheets(book, log), tracer, log)
 }
 
-func newPDFBaseStyleResolver(log *zap.Logger, tracers ...*pdfStyleTracer) *pdfStyleResolver {
-	var tracer *pdfStyleTracer
-	if len(tracers) > 0 {
-		tracer = tracers[0]
-	}
+func newPDFBaseStyleResolver(tracer *pdfStyleTracer, log *zap.Logger) *pdfStyleResolver {
 	defaults := defaultPDFStyles()
 	resolver := &pdfStyleResolver{
 		styles:   clonePDFStyles(defaults),
@@ -35,11 +31,11 @@ func newPDFBaseStyleResolver(log *zap.Logger, tracers ...*pdfStyleTracer) *pdfSt
 	return resolver
 }
 
-func newPDFStyleResolverFromParsed(stylesheets []pdfParsedStylesheet, log *zap.Logger, tracers ...*pdfStyleTracer) *pdfStyleResolver {
+func newPDFStyleResolverFromParsed(stylesheets []pdfParsedStylesheet, tracer *pdfStyleTracer, log *zap.Logger) *pdfStyleResolver {
 	if log == nil {
 		log = zap.NewNop()
 	}
-	resolver := newPDFBaseStyleResolver(log, tracers...)
+	resolver := newPDFBaseStyleResolver(tracer, log)
 	warnings := 0
 	var stats pdfStylesheetStats
 	var parsedCSS strings.Builder

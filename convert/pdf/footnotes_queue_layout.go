@@ -31,7 +31,7 @@ func layoutPDFPrintedFootnoteQueue(
 	}
 	styles := doc.Styles
 	if styles == nil {
-		styles = newPDFStyleResolver(nil, nil)
+		styles = newPDFStyleResolver(nil, nil, nil)
 	}
 	_, _, contentTop, contentBottom := pdfContentMargins(doc, styles, pdfDefaultPageMargin, false)
 	subDoc := doc

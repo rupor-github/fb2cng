@@ -20,7 +20,7 @@ func layoutPDFPagesWithPrintedFootnoteReserves(doc pdfDocumentSpec) (pdfPrintedF
 
 	styles := doc.Styles
 	if styles == nil {
-		styles = newPDFStyleResolver(nil, nil)
+		styles = newPDFStyleResolver(nil, nil, nil)
 	}
 	footnoteTextHeight := pdfPrintedFootnoteTextAreaHeight(doc, styles)
 	if footnoteTextHeight <= 0 {

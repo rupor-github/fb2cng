@@ -61,7 +61,7 @@ func TestPDFDropcapDetectionAndLayoutTracing(t *testing.T) {
 		}
 	`}}}
 
-	resolver := newPDFStyleResolver(book, zap.New(core), tracer)
+	resolver := newPDFStyleResolver(book, tracer, zap.New(core))
 
 	logEntries := logs.FilterMessage("Detected drop cap pattern").All()
 	if len(logEntries) != 1 {

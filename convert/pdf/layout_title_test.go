@@ -239,7 +239,7 @@ func TestLayoutPDFPagesTitleImageCanStripRootHorizontalMargins(t *testing.T) {
 	resolver := newPDFStyleResolver(&fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",
 		Data: `html { margin: 0 -10pt 0 -10pt; }`,
-	}}}, nil)
+	}}}, nil, nil)
 
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:      520,
@@ -280,7 +280,7 @@ func TestLayoutPDFPagesTitleVignetteCanStripRootHorizontalMargins(t *testing.T) 
 	resolver := newPDFStyleResolver(&fb2.FictionBook{Stylesheets: []fb2.Stylesheet{{
 		Type: "text/css",
 		Data: `html { margin: 0 -10pt 0 -10pt; }`,
-	}}}, nil)
+	}}}, nil, nil)
 
 	pages, _, err := layoutPDFPages(pdfDocumentSpec{
 		PageWidth:      520,

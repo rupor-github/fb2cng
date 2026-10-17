@@ -24,12 +24,12 @@ import (
 // representation following the FictionBook 2.0 schema definitions.
 func ParseBookXML(doc *etree.Document, footnoteNames []string, log *zap.Logger) (*FictionBook, error) {
 	if doc == nil {
-		return nil, fmt.Errorf("nil document")
+		return nil, errors.New("nil document")
 	}
 
 	root := doc.Root()
 	if root == nil {
-		return nil, fmt.Errorf("document has no root element")
+		return nil, errors.New("document has no root element")
 	}
 	if root.Tag != "FictionBook" {
 		return nil, fmt.Errorf("unexpected root element %q", root.Tag)
@@ -39,7 +39,7 @@ func ParseBookXML(doc *etree.Document, footnoteNames []string, log *zap.Logger) 
 	for _, child := range root.ChildElements() {
 		switch child.Tag {
 		case "stylesheet":
-			book.Stylesheets = append(book.Stylesheets, parseStylesheet(child, log))
+			book.Stylesheets = append(book.Stylesheets, parseStylesheet(child))
 		case "description":
 			desc, err := parseDescription(child, log)
 			if err != nil {
@@ -83,7 +83,7 @@ func ParseBookXML(doc *etree.Document, footnoteNames []string, log *zap.Logger) 
 	return book, nil
 }
 
-func parseStylesheet(el *etree.Element, _ *zap.Logger) Stylesheet {
+func parseStylesheet(el *etree.Element) Stylesheet {
 	return Stylesheet{
 		Type: el.SelectAttrValue("type", ""),
 		Data: strings.TrimSpace(el.Text()),
@@ -119,7 +119,7 @@ func parseDescription(el *etree.Element, log *zap.Logger) (Description, error) {
 			}
 			desc.PublishInfo = &info
 		case "custom-info":
-			custom := parseCustomInfo(child, log)
+			custom := parseCustomInfo(child)
 			desc.CustomInfo = append(desc.CustomInfo, custom)
 		case "output":
 			out, err := parseOutputInstruction(child, log)
@@ -156,7 +156,7 @@ func parseTitleInfo(el *etree.Element, log *zap.Logger) (TitleInfo, error) {
 		case "author":
 			info.Authors = append(info.Authors, parseAuthor(child, log))
 		case "book-title":
-			info.BookTitle = parseTextField(child, log)
+			info.BookTitle = parseTextField(child)
 		case "annotation":
 			flow, err := parseFlow(child, log)
 			if err != nil {
@@ -164,7 +164,7 @@ func parseTitleInfo(el *etree.Element, log *zap.Logger) (TitleInfo, error) {
 			}
 			info.Annotation = &flow
 		case "keywords":
-			tf := parseTextField(child, log)
+			tf := parseTextField(child)
 			info.Keywords = &tf
 		case "date":
 			date := parseDate(child, log)
@@ -174,7 +174,7 @@ func parseTitleInfo(el *etree.Element, log *zap.Logger) (TitleInfo, error) {
 				if img.Tag != "image" {
 					continue
 				}
-				info.Coverpage = append(info.Coverpage, parseInlineImage(img, log))
+				info.Coverpage = append(info.Coverpage, parseInlineImage(img))
 			}
 		case "lang":
 			info.Lang = parseBookLang(child.Text(), log)
@@ -238,7 +238,7 @@ func parseAuthor(el *etree.Element, log *zap.Logger) Author {
 	return author
 }
 
-func parseTextField(el *etree.Element, _ *zap.Logger) TextField {
+func parseTextField(el *etree.Element) TextField {
 	return TextField{
 		Value: strings.TrimSpace(el.Text()),
 		Lang:  xmlLang(el),
@@ -351,7 +351,7 @@ func extractAllText(el *etree.Element) string {
 
 // parseUnexpectedAsParagraph extracts all text content from an element and its children
 // and creates a paragraph with it. Used when handling unexpected tags.
-func parseUnexpectedAsParagraph(el *etree.Element, log *zap.Logger) Paragraph {
+func parseUnexpectedAsParagraph(el *etree.Element) Paragraph {
 	para := Paragraph{
 		ID:    el.SelectAttrValue("id", ""),
 		Style: el.SelectAttrValue("style", ""),
@@ -406,7 +406,7 @@ func parseFlowItem(el *etree.Element, parentTag string, log *zap.Logger) ([]Flow
 		t := table
 		return []FlowItem{{Kind: FlowTable, Table: &t}}, nil
 	case "image":
-		img := parseImage(el, log)
+		img := parseImage(el)
 		return []FlowItem{{Kind: FlowImage, Image: &img}}, nil
 	case "section":
 		section, err := parseSection(el, log)
@@ -420,7 +420,7 @@ func parseFlowItem(el *etree.Element, parentTag string, log *zap.Logger) ([]Flow
 		// Check if this is a known text-containing tag that we can handle as a paragraph
 		if isKnownTextTag(el.Tag) {
 			log.Warn(msg+"converting to paragraph", zap.String("tag", el.Tag))
-			para := parseUnexpectedAsParagraph(el, log)
+			para := parseUnexpectedAsParagraph(el)
 			return []FlowItem{{Kind: FlowParagraph, Paragraph: &para}}, nil
 		}
 		log.Warn(msg+"ignoring", zap.String("tag", el.Tag))
@@ -560,7 +560,7 @@ func parseInlineElement(token *etree.Element, containerTag string, log *zap.Logg
 		LinkType: token.SelectAttrValue("type", ""),
 	}
 	if kind == InlineImageSegment {
-		img := parseInlineImage(token, log)
+		img := parseInlineImage(token)
 		segment.Image = &img
 	} else {
 		segment.Children = parseInlineSegments(token, containerTag, log)
@@ -593,7 +593,7 @@ func mapInlineKind(tag string) InlineSegmentKind {
 	}
 }
 
-func parseInlineImage(el *etree.Element, _ *zap.Logger) InlineImage {
+func parseInlineImage(el *etree.Element) InlineImage {
 	return InlineImage{
 		Href: attrValue(el, "xlink", "href"),
 		Type: attrValue(el, "xlink", "type"),
@@ -601,7 +601,7 @@ func parseInlineImage(el *etree.Element, _ *zap.Logger) InlineImage {
 	}
 }
 
-func parseImage(el *etree.Element, _ *zap.Logger) Image {
+func parseImage(el *etree.Element) Image {
 	return Image{
 		Href:  attrValue(el, "xlink", "href"),
 		Type:  attrValue(el, "xlink", "type"),
@@ -619,7 +619,7 @@ func parseBody(el *etree.Element, log *zap.Logger) (Body, error) {
 	for _, child := range el.ChildElements() {
 		switch child.Tag {
 		case "image":
-			img := parseImage(child, log)
+			img := parseImage(child)
 			body.Image = &img
 		case "title":
 			title := parseTitle(child, log)
@@ -872,14 +872,14 @@ func parseDocumentInfo(el *etree.Element, log *zap.Logger) (DocumentInfo, error)
 		case "author":
 			info.Authors = append(info.Authors, parseAuthor(child, log))
 		case "program-used":
-			tf := parseTextField(child, log)
+			tf := parseTextField(child)
 			info.ProgramUsed = &tf
 		case "date":
 			info.Date = parseDate(child, log)
 		case "src-url":
 			info.SourceURLs = append(info.SourceURLs, strings.TrimSpace(child.Text()))
 		case "src-ocr":
-			tf := parseTextField(child, log)
+			tf := parseTextField(child)
 			info.SourceOCR = &tf
 		case "id":
 			info.ID = strings.TrimSpace(child.Text())
@@ -905,18 +905,18 @@ func parsePublishInfo(el *etree.Element, log *zap.Logger) (PublishInfo, error) {
 	for _, child := range el.ChildElements() {
 		switch child.Tag {
 		case "book-name":
-			tf := parseTextField(child, log)
+			tf := parseTextField(child)
 			info.BookName = &tf
 		case "publisher":
-			tf := parseTextField(child, log)
+			tf := parseTextField(child)
 			info.Publisher = &tf
 		case "city":
-			tf := parseTextField(child, log)
+			tf := parseTextField(child)
 			info.City = &tf
 		case "year":
 			info.Year = strings.TrimSpace(child.Text())
 		case "isbn":
-			tf := parseTextField(child, log)
+			tf := parseTextField(child)
 			info.ISBN = &tf
 		case "sequence":
 			seq := parseSequence(child, log)
@@ -950,10 +950,10 @@ func parseSequence(el *etree.Element, log *zap.Logger) Sequence {
 	return seq
 }
 
-func parseCustomInfo(el *etree.Element, log *zap.Logger) CustomInfo {
+func parseCustomInfo(el *etree.Element) CustomInfo {
 	return CustomInfo{
 		Type:  el.SelectAttrValue("info-type", ""),
-		Value: parseTextField(el, log),
+		Value: parseTextField(el),
 	}
 }
 
@@ -981,13 +981,13 @@ func parseOutputInstruction(el *etree.Element, log *zap.Logger) (OutputInstructi
 	for _, child := range el.ChildElements() {
 		switch child.Tag {
 		case "part":
-			part, err := parsePartInstruction(child, log)
+			part, err := parsePartInstruction(child)
 			if err != nil {
 				return instruction, err
 			}
 			instruction.Parts = append(instruction.Parts, part)
 		case "output-document-class":
-			doc, err := parseOutputDocument(child, log)
+			doc, err := parseOutputDocument(child)
 			if err != nil {
 				return instruction, err
 			}
@@ -999,10 +999,10 @@ func parseOutputInstruction(el *etree.Element, log *zap.Logger) (OutputInstructi
 	return instruction, nil
 }
 
-func parsePartInstruction(el *etree.Element, _ *zap.Logger) (PartInstruction, error) {
+func parsePartInstruction(el *etree.Element) (PartInstruction, error) {
 	href := attrValue(el, "xlink", "href")
 	if href == "" {
-		return PartInstruction{}, fmt.Errorf("part missing xlink:href")
+		return PartInstruction{}, errors.New("part missing xlink:href")
 	}
 	include, err := parseShareDirective(el.SelectAttrValue("include", ""))
 	if err != nil {
@@ -1011,9 +1011,9 @@ func parsePartInstruction(el *etree.Element, _ *zap.Logger) (PartInstruction, er
 	return PartInstruction{Href: href, Include: include}, nil
 }
 
-func parseOutputDocument(el *etree.Element, log *zap.Logger) (OutputDocument, error) {
+func parseOutputDocument(el *etree.Element) (OutputDocument, error) {
 	if raw := el.SelectAttrValue("name", ""); raw == "" {
-		return OutputDocument{}, fmt.Errorf("output-document-class missing name")
+		return OutputDocument{}, errors.New("output-document-class missing name")
 	}
 	doc := OutputDocument{Name: el.SelectAttrValue("name", "")}
 	if raw := el.SelectAttrValue("create", ""); raw != "" {
@@ -1034,7 +1034,7 @@ func parseOutputDocument(el *etree.Element, log *zap.Logger) (OutputDocument, er
 		if child.Tag != "part" {
 			continue
 		}
-		part, err := parsePartInstruction(child, log)
+		part, err := parsePartInstruction(child)
 		if err != nil {
 			return doc, err
 		}

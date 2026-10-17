@@ -70,7 +70,7 @@ func TestPDFProfilePath(t *testing.T) {
 	case "styles":
 		profilePDFTarget(t, outDir, target, func() error {
 			parsed := parsePDFStylesheets(fixture.c.Book, zap.NewNop())
-			_ = newPDFStyleResolverFromParsed(parsed, zap.NewNop(), newPDFStyleTracer(""))
+			_ = newPDFStyleResolverFromParsed(parsed, newPDFStyleTracer(""), zap.NewNop())
 			_ = newPDFFontRegistryFromParsed(parsed, zap.NewNop())
 			return nil
 		})
@@ -94,7 +94,7 @@ func TestPDFProfilePath(t *testing.T) {
 	case "generate":
 		outputName := filepath.Join(outDir, "profile-output.pdf")
 		profilePDFTarget(t, outDir, target, func() error {
-			return Generate(context.Background(), fixture.c, outputName, fixture.cfg, zap.NewNop())
+			return Generate(context.Background(), fixture.c, outputName, "", fixture.cfg, zap.NewNop())
 		})
 	default:
 		t.Fatalf("unknown PDF_PROFILE_TARGET %q", target)
@@ -120,7 +120,7 @@ func BenchmarkPDFProfileStyles(b *testing.B) {
 
 	for b.Loop() {
 		parsed := parsePDFStylesheets(fixture.c.Book, zap.NewNop())
-		_ = newPDFStyleResolverFromParsed(parsed, zap.NewNop(), newPDFStyleTracer(""))
+		_ = newPDFStyleResolverFromParsed(parsed, newPDFStyleTracer(""), zap.NewNop())
 		_ = newPDFFontRegistryFromParsed(parsed, zap.NewNop())
 	}
 }
@@ -160,7 +160,7 @@ func BenchmarkPDFProfileGenerate(b *testing.B) {
 	b.ReportAllocs()
 
 	for b.Loop() {
-		if err := Generate(context.Background(), fixture.c, outputName, fixture.cfg, zap.NewNop()); err != nil {
+		if err := Generate(context.Background(), fixture.c, outputName, "", fixture.cfg, zap.NewNop()); err != nil {
 			b.Fatalf("generate PDF: %v", err)
 		}
 	}
@@ -273,7 +273,7 @@ func newPDFProfileDocument(tb testing.TB, fixture pdfProfileFixture) pdfDocument
 		PrintedFootnotes: contentPlan.PrintedFootnotes,
 		DebugPlan:        contentPlan.DebugPlan,
 		Content:          fixture.c,
-		Styles:           newPDFStyleResolverFromParsed(parsedStylesheets, zap.NewNop(), newPDFStyleTracer("")),
+		Styles:           newPDFStyleResolverFromParsed(parsedStylesheets, newPDFStyleTracer(""), zap.NewNop()),
 		Images:           fixture.c.ImagesIndex,
 		CoverID:          fixture.c.CoverID,
 		Hyphenator:       pdfHyphenator(fixture.c, zap.NewNop()),

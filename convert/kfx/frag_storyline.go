@@ -450,7 +450,7 @@ func generateStoryline(ctx context.Context, c *content.Content, styles *StyleReg
 					resolveKFXBacklinkLocations(c, fragments, ca.Snapshot(), sectionNames, chapterStartSections, idToEID, sb)
 					refs = c.BackLinkIndex[sectionID]
 				}
-				if paragraph, ok := addBacklinkParagraph(c, refs, sb, styles, ca, idToEID); ok {
+				if paragraph, ok := addBacklinkParagraph(c, refs, sb, styles, ca); ok {
 					backlinkParagraphs = append(backlinkParagraphs, paragraph)
 				}
 			}
@@ -675,7 +675,7 @@ func processBodyIntroContent(
 			processFlowItem(c, &epigraph.Flow.Items[i], next, epigraphCtx, "epigraph", sb, styles, imageResources, ca, idToEID)
 		}
 		for i := range epigraph.TextAuthors {
-			addParagraphWithImages(c, &epigraph.TextAuthors[i], epigraphCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID)
+			addParagraphWithImages(c, &epigraph.TextAuthors[i], epigraphCtx, "text-author", 0, sb, styles, imageResources, ca, idToEID, true, false)
 		}
 	}
 
@@ -691,7 +691,6 @@ func addBacklinkParagraph(
 	sb *StorylineBuilder,
 	styles *StyleRegistry,
 	ca *ContentAccumulator,
-	_ eidByFB2ID,
 ) (kfxBacklinkParagraph, bool) {
 	if len(refs) == 0 {
 		return kfxBacklinkParagraph{}, false

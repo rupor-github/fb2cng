@@ -27,27 +27,11 @@ func (sr *StyleRegistry) RegisterResolved(props map[KFXSymbol]any, usage styleUs
 	// Make a copy to avoid modifying caller's map
 	merged := make(map[KFXSymbol]any, len(props))
 	maps.Copy(merged, props)
-	if markUsed {
-		return sr.registerFilteredStyle(merged, usage)
-	}
-	return sr.registerFilteredStyleNoMark(merged, usage)
+	return sr.registerFilteredStyle(merged, usage, markUsed)
 }
 
-// registerFilteredStyle applies standard KFX output filtering, registers the style, and marks it used.
-// The usage parameter is recorded so BuildFragments() can apply appropriate post-processing
-// (e.g., ensureDefaultLineHeight for text styles).
-func (sr *StyleRegistry) registerFilteredStyle(merged map[KFXSymbol]any, usage styleUsage) string {
-	return sr.doRegisterFilteredStyle(merged, true, usage)
-}
-
-// registerFilteredStyleNoMark applies standard KFX output filtering and registers the style but does NOT mark used.
-func (sr *StyleRegistry) registerFilteredStyleNoMark(merged map[KFXSymbol]any, usage styleUsage) string {
-	return sr.doRegisterFilteredStyle(merged, false, usage)
-}
-
-// doRegisterFilteredStyle is the common implementation for filtered style registration.
-// The usage parameter tracks what kind of content uses this style (text, image, wrapper).
-func (sr *StyleRegistry) doRegisterFilteredStyle(merged map[KFXSymbol]any, markUsed bool, usage styleUsage) string {
+// registerFilteredStyle applies output filtering and records content usage and optional use marking.
+func (sr *StyleRegistry) registerFilteredStyle(merged map[KFXSymbol]any, usage styleUsage, markUsed bool) string {
 	// KP3 pattern: styles marked as treat_as_title typically do not carry margin-bottom.
 	// Spacing is placed on the surrounding wrapper container, not on the title text itself.
 	//
@@ -770,7 +754,7 @@ func (sr *StyleRegistry) applyKFXEnhancements(name string, def StyleDef) StyleDe
 	maps.Copy(props, def.Properties)
 
 	// Apply layout-hints for headings and title-like styles
-	if sr.shouldHaveLayoutHintTitle(name, props) {
+	if sr.shouldHaveLayoutHintTitle(name) {
 		if _, exists := props[SymLayoutHints]; !exists {
 			props[SymLayoutHints] = []any{SymbolValue(SymTreatAsTitle)}
 		}
@@ -795,7 +779,7 @@ func (sr *StyleRegistry) applyKFXEnhancements(name string, def StyleDef) StyleDe
 	sr.convertPageBreaksToYjBreaks(props)
 
 	// Apply break-inside: avoid for title wrappers
-	if sr.shouldHaveBreakInsideAvoid(name, props) {
+	if sr.shouldHaveBreakInsideAvoid(name) {
 		if _, exists := props[SymBreakInside]; !exists {
 			props[SymBreakInside] = SymbolValue(SymAvoid)
 		}
@@ -845,7 +829,7 @@ func (sr *StyleRegistry) applyKFXEnhancements(name string, def StyleDef) StyleDe
 //
 // NOTE: Subtitle styles (-subtitle) are NOT treated as titles - they are regular paragraphs
 // with special formatting (centered, bold), similar to how EPUB handles them.
-func (sr *StyleRegistry) shouldHaveLayoutHintTitle(name string, _ map[KFXSymbol]any) bool {
+func (sr *StyleRegistry) shouldHaveLayoutHintTitle(name string) bool {
 	// HTML heading elements
 	switch name {
 	case "h1", "h2", "h3", "h4", "h5", "h6":
@@ -878,7 +862,7 @@ func (sr *StyleRegistry) shouldHaveLayoutHintTitle(name string, _ map[KFXSymbol]
 // KP3 reference shows:
 //   - Wrapper styles have: break-inside: avoid + yj-break-after: avoid (no layout-hints)
 //   - Content styles have: layout-hints: [treat_as_title] (no break-inside: avoid)
-func (sr *StyleRegistry) shouldHaveBreakInsideAvoid(name string, _ map[KFXSymbol]any) bool {
+func (sr *StyleRegistry) shouldHaveBreakInsideAvoid(name string) bool {
 	// Title wrapper styles - these are containers, not text content
 	switch name {
 	case "body-title", "chapter-title", "section-title":

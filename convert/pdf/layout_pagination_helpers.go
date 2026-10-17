@@ -50,7 +50,7 @@ func nextBlockKeepHeight(
 	}
 	styles := doc.Styles
 	if styles == nil {
-		styles = newPDFStyleResolver(nil, nil)
+		styles = newPDFStyleResolver(nil, nil, nil)
 	}
 	for i := start; i < len(doc.Blocks); i++ {
 		block := doc.Blocks[i]

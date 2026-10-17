@@ -2,6 +2,8 @@ package css
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"maps"
 	"strconv"
 	"strings"
@@ -25,16 +27,16 @@ func NewParser(log *zap.Logger) *Parser {
 }
 
 // Parse parses CSS text into a Stylesheet.
-// The optional source parameter identifies what's being parsed (for debug logging).
-func (p *Parser) Parse(data []byte, source ...string) *Stylesheet {
+// source identifies what's being parsed for debug logging; an empty string omits it.
+func (p *Parser) Parse(data []byte, source string) *Stylesheet {
 	sheet := &Stylesheet{
 		Items:    make([]StylesheetItem, 0),
 		Warnings: make([]string, 0),
 	}
 
 	// Log parsing start with source identifier if provided
-	if len(source) > 0 && source[0] != "" {
-		p.log.Debug("Parsing CSS", zap.String("source", source[0]), zap.Int("bytes", len(data)))
+	if source != "" {
+		p.log.Debug("Parsing CSS", zap.String("source", source), zap.Int("bytes", len(data)))
 	}
 
 	data = stripCSSCommentsAndOrphanClosers(data)
@@ -49,7 +51,7 @@ func (p *Parser) Parse(data []byte, source ...string) *Stylesheet {
 		switch gt {
 		case css.ErrorGrammar:
 			// End of input or error
-			if parser.Err() != nil && parser.Err().Error() != "EOF" {
+			if parser.Err() != nil && !errors.Is(parser.Err(), io.EOF) {
 				p.log.Debug("CSS parse error", zap.Error(parser.Err()))
 			}
 			return sheet
@@ -105,7 +107,7 @@ func (p *Parser) Parse(data []byte, source ...string) *Stylesheet {
 
 		// Check for declarations after BeginRulesetGrammar
 		if gt == css.BeginRulesetGrammar {
-			props := p.parseDeclarations(parser, sheet)
+			props := p.parseDeclarations(parser)
 
 			// Create rules for each selector
 			for _, selStr := range currentSelectors {
@@ -219,7 +221,7 @@ func (p *Parser) parseSelectors(data []byte, values []css.Token) []string {
 }
 
 // parseDeclarations parses property declarations until EndRulesetGrammar.
-func (p *Parser) parseDeclarations(parser *css.Parser, _ *Stylesheet) map[string]Value {
+func (p *Parser) parseDeclarations(parser *css.Parser) map[string]Value {
 	props := make(map[string]Value)
 
 	for {
@@ -618,7 +620,7 @@ func (p *Parser) parseMediaBlockRules(parser *css.Parser, sheet *Stylesheet) []R
 
 		case css.BeginRulesetGrammar:
 			currentSelectors = p.parseSelectors(data, parser.Values())
-			props := p.parseDeclarations(parser, sheet)
+			props := p.parseDeclarations(parser)
 
 			// Create rules for each selector
 			for _, selStr := range currentSelectors {

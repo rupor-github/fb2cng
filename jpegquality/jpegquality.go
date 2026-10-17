@@ -62,24 +62,20 @@ var deftabs = [2][64]int{
 
 // for the DQT marker -- end --
 
-// Qualitier ...
-type Qualitier interface {
-	Quality() int
-}
-
-type jpegReader struct {
+// Reader contains the quality estimate extracted from a JPEG stream.
+type Reader struct {
 	rs io.ReadSeeker
 	q  int
 }
 
-// NewFromBytes ...
-func NewFromBytes(buf []byte) (qr Qualitier, err error) {
+// NewFromBytes estimates JPEG quality from in-memory image data.
+func NewFromBytes(buf []byte) (*Reader, error) {
 	return New(bytes.NewReader(buf))
 }
 
-// New ...
-func New(rs io.ReadSeeker) (qr Qualitier, err error) {
-	jr := &jpegReader{rs: rs}
+// New estimates JPEG quality from a seekable image stream.
+func New(rs io.ReadSeeker) (qr *Reader, err error) {
+	jr := &Reader{rs: rs}
 	_, err = jr.rs.Seek(0, 0)
 	if err != nil {
 		return
@@ -105,7 +101,7 @@ func New(rs io.ReadSeeker) (qr Qualitier, err error) {
 	return
 }
 
-func (jr *jpegReader) readQuality() (q int, err error) {
+func (jr *Reader) readQuality() (q int, err error) {
 	for range maxMarkerIterations {
 		mark := jr.readMarker()
 		if mark == 0 {
@@ -222,7 +218,7 @@ func (jr *jpegReader) readQuality() (q int, err error) {
 	return
 }
 
-func (jr *jpegReader) readMarker() int {
+func (jr *Reader) readMarker() int {
 	var (
 		mark = make([]byte, 2)
 		err  error
@@ -240,6 +236,6 @@ ReadAgain:
 	return int(mark[0])<<8 + int(mark[1])
 }
 
-func (jr *jpegReader) Quality() int {
+func (jr *Reader) Quality() int {
 	return jr.q
 }
