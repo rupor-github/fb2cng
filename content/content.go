@@ -219,9 +219,13 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 		log.Info("Adding default cover image", zap.String("id", coverID))
 
 		ref := fb2.InlineImage{Href: "#" + coverID}
+		contentType := http.DetectContentType(env.DefaultCover)
+		if strings.HasPrefix(contentType, "text/") && bytes.Contains(env.DefaultCover, []byte("<svg")) {
+			contentType = "image/svg+xml"
+		}
 		book.Binaries = append(book.Binaries, fb2.BinaryObject{
 			ID:          coverID,
-			ContentType: "image/jpeg",
+			ContentType: contentType,
 			Data:        env.DefaultCover,
 		})
 		book.Description.TitleInfo.Coverpage = append([]fb2.InlineImage{}, ref)

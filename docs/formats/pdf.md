@@ -58,7 +58,9 @@ By default, supported SVG artwork is translated into reusable **Form XObjects** 
 PDF drawing operations, rather than rasterized into Image XObjects. This intentionally
 changes default output: vectors remain sharp at any zoom and retain transparent backgrounds.
 No additional opt-in is required. Covers, body/inline images and vignettes use the same path
-when their prepared resource is SVG; generated JPEG covers remain raster images.
+when their prepared resource is SVG. The built-in default cover and broken/not-found
+placeholders also use native vectors. Raster source covers remain raster images;
+other output formats retain JPEG generation for the built-in default cover.
 
 The initial supported subset is deliberately conservative:
 

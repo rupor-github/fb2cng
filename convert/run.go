@@ -103,23 +103,29 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 	}
 
 	if env.Cfg.Document.Images.Cover.Generate && !env.NoCover {
-		img, err := imgutil.RasterizeSVGToImage(defaultCoverSVG, env.Cfg.Document.Images.Screen.Width, env.Cfg.Document.Images.Screen.Height, 0)
-		if err != nil {
-			return fmt.Errorf("unable to rasterize embedded default cover svg: %w", err)
-		}
-		density := imgutil.JPEGDensityFromDPI(env.Cfg.Document.Images.Screen.DPI)
-		jpegData, err := imgutil.EncodeJPEGWithDPI(img, env.Cfg.Document.Images.JPEGQuality, imgutil.DpiPxPerInch, density, density)
-		if err != nil {
-			return fmt.Errorf("unable to encode embedded default cover jpeg: %w", err)
-		}
-		env.DefaultCover = jpegData
-
-		if env.Cfg.Document.Images.Cover.DefaultImagePath != "" {
+		switch {
+		case env.Cfg.Document.Images.Cover.DefaultImagePath != "":
 			data, err := os.ReadFile(env.Cfg.Document.Images.Cover.DefaultImagePath)
 			if err != nil {
 				return fmt.Errorf("unable to read default cover image from %q: %w", env.Cfg.Document.Images.Cover.DefaultImagePath, err)
 			}
 			env.DefaultCover = data
+		case format == common.OutputFmtPdf:
+			// Keep the source artwork so PDF image preparation can choose vectors or
+			// configuration-requested rasterization without changing logical sizing.
+			env.DefaultCover = defaultCoverSVG
+		default:
+			img, err := imgutil.RasterizeSVGToImage(defaultCoverSVG,
+				env.Cfg.Document.Images.Screen.Width, env.Cfg.Document.Images.Screen.Height, 0)
+			if err != nil {
+				return fmt.Errorf("unable to rasterize embedded default cover svg: %w", err)
+			}
+			density := imgutil.JPEGDensityFromDPI(env.Cfg.Document.Images.Screen.DPI)
+			jpegData, err := imgutil.EncodeJPEGWithDPI(img, env.Cfg.Document.Images.JPEGQuality, imgutil.DpiPxPerInch, density, density)
+			if err != nil {
+				return fmt.Errorf("unable to encode embedded default cover jpeg: %w", err)
+			}
+			env.DefaultCover = jpegData
 		}
 	}
 

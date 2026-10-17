@@ -13,8 +13,10 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest"
 	"go.uber.org/zap/zaptest/observer"
 
+	"fbc/common"
 	"fbc/config"
 	"fbc/content"
 	"fbc/convert/pdf/docwriter"
@@ -125,6 +127,66 @@ func TestPDFSVGFallbackLoggingDisabled(t *testing.T) {
 	}
 }
 
+func TestPDFBuiltinSVGResources(t *testing.T) {
+	for _, tt := range []struct{ name, file string }{
+		{"default cover", "../default-cover.svg"},
+		{"missing image", "../../fb2/placeholders/not-found.svg"},
+		{"broken image", "../../fb2/placeholders/broken.svg"},
+		{"substituted broken image", ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			bo := fb2.BinaryObject{ID: "art", ContentType: "image/svg+xml"}
+			if tt.file == "" {
+				bo.ContentType, bo.Data = "image/png", []byte("invalid PNG")
+			} else {
+				var err error
+				bo.Data, err = os.ReadFile(tt.file)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			var width, height float64
+			for _, policy := range []struct {
+				name          string
+				force, remove bool
+				subtype       docwriter.Name
+			}{
+				{"native", false, false, "Form"},
+				{"forced raster", true, false, "Image"},
+				{"remove transparency", false, true, "Image"},
+			} {
+				t.Run(policy.name, func(t *testing.T) {
+					cfg := &config.ImagesConfig{
+						RasterizeSVG: policy.force, RemoveTransparency: policy.remove,
+						Screen: config.ScreenConfig{Width: 300, Height: 400},
+					}
+					img := bo.PrepareImage(common.OutputFmtPdf, tt.name == "default cover", cfg, zaptest.NewLogger(t))
+					doc := pdfDocumentSpec{ScreenDPI: 72, Images: fb2.BookImages{"art": img}, RemoveImageTransparency: policy.remove}
+					w, h := naturalPDFImageSize(doc, img)
+					if width == 0 {
+						width, height = w, h
+					} else if w != width || h != height {
+						t.Fatalf("policy changed layout dimensions from %gx%g to %gx%g", width, height, w, h)
+					}
+					core, logs := observer.New(zap.DebugLevel)
+					doc.Log = zap.New(core)
+					nextID := 1
+					resources, err := preparePDFImageResources(doc, []pdfPage{{Images: []pdfPageImage{{ImageID: "art"}}}}, &nextID)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if resources["art"].Dict["Subtype"] != policy.subtype {
+						t.Fatalf("want %s resource, got %+v", policy.subtype, resources["art"].Dict)
+					}
+					if logs.FilterMessage("Falling back to SVG rasterization for PDF output").Len() != 0 {
+						t.Fatal("built-in artwork must not require unsupported-feature fallback")
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestGeneratePDFSVGVectorAndRaster(t *testing.T) {
 	for _, tt := range []struct {
 		name          string
@@ -175,38 +237,56 @@ func TestPDFSVGVectorVisualParity(t *testing.T) {
 	if err != nil {
 		t.Skip("pdftoppm is required for vector/raster visual comparisons")
 	}
-	for _, tt := range []struct{ name, body, reference string }{
-		{"fill and opacity", `<rect x="20" y="10" width="120" height="60" fill="red" fill-opacity="0.5"/>`, ""},
+	type visualCase struct {
+		name, body, reference string
+		maxMeanErrorPercent   uint64
+	}
+	tests := []visualCase{
+		{"fill and opacity", `<rect x="20" y="10" width="120" height="60" fill="red" fill-opacity="0.5"/>`, "", 0},
 		{"transformed strokes", `<g transform="translate(40 20) scale(1.2)"><path d="M0 0L60 40L100 0"
 fill="none" stroke="blue" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></g>`,
 			// oksvg's single-argument scale uses a zero Y scale and does not scale
 			// stroke width. Expand the reference geometry instead of reproducing it.
 			`<path d="M40 20L112 68L160 20" fill="none" stroke="blue" stroke-width="4.8"
-stroke-linecap="round" stroke-linejoin="round"/>`},
-		{"curves", `<path d="M10 60 Q60 0 110 60 C140 90 180 20 190 60" fill="none" stroke="black" stroke-width="3"/>`, ""},
-		{"ellipse", `<ellipse cx="100" cy="50" rx="60" ry="30" fill="#00ff00"/>`, ""},
-		{"rounded rectangle", `<rect x="20" y="10" width="120" height="60" rx="10" ry="10" fill="blue"/>`, ""},
+stroke-linecap="round" stroke-linejoin="round"/>`, 0},
+		{"curves", `<path d="M10 60 Q60 0 110 60 C140 90 180 20 190 60" fill="none" stroke="black" stroke-width="3"/>`, "", 0},
+		{"ellipse", `<ellipse cx="100" cy="50" rx="60" ry="30" fill="#00ff00"/>`, "", 0},
+		{"rounded rectangle", `<rect x="20" y="10" width="120" height="60" rx="10" ry="10" fill="blue"/>`, "", 0},
 		{"even odd", `<path d="M10 10H190V90H10Z M60 30H140V70H60Z" fill="red" fill-rule="evenodd"/>`,
 			// oksvg ignores fill-rule; use four rectangles as the reference hole.
 			`<g fill="red"><rect x="10" y="10" width="180" height="20"/><rect x="10" y="70" width="180" height="20"/>
-<rect x="10" y="30" width="50" height="40"/><rect x="140" y="30" width="50" height="40"/></g>`},
-		{"dashed stroke", `<path d="M10 50H190" fill="none" stroke="black" stroke-width="4" stroke-dasharray="10 5"/>`, ""},
-	} {
+<rect x="10" y="30" width="50" height="40"/><rect x="140" y="30" width="50" height="40"/></g>`, 0},
+		{"dashed stroke", `<path d="M10 50H190" fill="none" stroke="black" stroke-width="4" stroke-dasharray="10 5"/>`, "", 0},
+	}
+	for i := range tests {
+		tests[i].body = `<svg viewBox="0 0 200 100">` + tests[i].body + `</svg>`
+		if tests[i].reference != "" {
+			tests[i].reference = `<svg viewBox="0 0 200 100">` + tests[i].reference + `</svg>`
+		}
+	}
+	for _, file := range []string{"../default-cover.svg", "../../fb2/placeholders/broken.svg", "../../fb2/placeholders/not-found.svg"} {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tests = append(tests, visualCase{name: filepath.Base(file), body: string(data), maxMeanErrorPercent: 2})
+	}
+	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			img := &fb2.BookImage{MimeType: "image/svg+xml", Data: []byte(`<svg viewBox="0 0 200 100">` + tt.body + `</svg>`)}
+			img := &fb2.BookImage{MimeType: "image/svg+xml", Data: []byte(tt.body)}
 			if _, err := makePDFSVGForm(img.Data); err != nil {
 				t.Fatalf("visual test must exercise the vector path: %v", err)
 			}
+			width, height := pdfImagePixelSize(img)
 			doc := pdfDocumentSpec{
-				PageWidth: 200, PageHeight: 100, ScreenWidthPx: 200, ScreenHeightPx: 100, ScreenDPI: 72,
+				PageWidth: float64(width), PageHeight: float64(height), ScreenWidthPx: width, ScreenHeightPx: height, ScreenDPI: 72,
 				Images: fb2.BookImages{"svg": img}, CoverID: "svg",
 			}
 			var rendered [2]image.Image
 			for i := range rendered {
 				doc.RasterizeSVG = i == 1
 				if i == 1 && tt.reference != "" {
-					doc.Images = fb2.BookImages{"svg": {MimeType: "image/svg+xml", Data: []byte(
-						`<svg viewBox="0 0 200 100">` + tt.reference + `</svg>`)}}
+					doc.Images = fb2.BookImages{"svg": {MimeType: "image/svg+xml", Data: []byte(tt.reference)}}
 				}
 				data, err := buildPDFDocument(doc)
 				if err != nil {
@@ -219,19 +299,23 @@ stroke-linecap="round" stroke-linejoin="round"/>`},
 				t.Fatal("vector/raster page dimensions differ")
 			}
 			different := 0
+			var totalDelta uint64
 			for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 				for x := bounds.Min.X; x < bounds.Max.X; x++ {
 					r1, g1, b1, _ := rendered[0].At(x, y).RGBA()
 					r2, g2, b2, _ := rendered[1].At(x, y).RGBA()
 					delta := func(a, b uint32) uint32 { return max(a, b) - min(a, b) }
+					totalDelta += uint64(delta(r1, r2)) + uint64(delta(g1, g2)) + uint64(delta(b1, b2))
 					if max(delta(r1, r2), delta(g1, g2), delta(b1, b2)) > 0x2000 {
 						different++
 					}
 				}
 			}
-			// Raster enlargement and different antialiasers affect boundary pixels;
-			// incorrect placement, paints or curve conversion affect far more pixels.
-			if different*100 > bounds.Dx()*bounds.Dy()*3 {
+			// Dense artwork has many boundary pixels affected by resampling and
+			// different antialiasers. Allow those differences only when the mean
+			// absolute channel error stays below its explicit tolerance.
+			pixels := bounds.Dx() * bounds.Dy()
+			if different*100 > pixels*3 && totalDelta*100 > uint64(pixels)*3*0xffff*tt.maxMeanErrorPercent {
 				t.Fatalf("%d pixels differ substantially between vector and raster output", different)
 			}
 		})
