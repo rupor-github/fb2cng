@@ -108,7 +108,7 @@ func TestBinaryObject_PrepareImage_BasicJPEG(t *testing.T) {
 		Data:        jpegData,
 	}
 
-	bi := bo.PrepareImage(false, false, cfg, log)
+	bi := bo.PrepareImage(common.OutputFmtEpub2, false, cfg, log)
 	if bi == nil {
 		t.Fatal("expected non-nil BookImage")
 	}
@@ -139,7 +139,7 @@ func TestBinaryObject_PrepareImage_BasicPNG(t *testing.T) {
 		Data:        pngData,
 	}
 
-	bi := bo.PrepareImage(false, false, cfg, log)
+	bi := bo.PrepareImage(common.OutputFmtEpub2, false, cfg, log)
 	if bi.MimeType != "image/png" {
 		t.Errorf("expected mime type image/png, got %s", bi.MimeType)
 	}
@@ -165,7 +165,7 @@ func TestBinaryObject_PrepareImage_CoverResizeKeepAR(t *testing.T) {
 		Data:        jpegData,
 	}
 
-	bi := bo.PrepareImage(false, true, cfg, log)
+	bi := bo.PrepareImage(common.OutputFmtEpub2, true, cfg, log)
 
 	// Decode and verify dimensions
 	img, _, err := image.Decode(bytes.NewReader(bi.Data))
@@ -203,7 +203,7 @@ func TestBinaryObject_PrepareImage_CoverResizeStretch(t *testing.T) {
 		Data:        jpegData,
 	}
 
-	bi := bo.PrepareImage(false, true, cfg, log)
+	bi := bo.PrepareImage(common.OutputFmtEpub2, true, cfg, log)
 
 	img, _, err := image.Decode(bytes.NewReader(bi.Data))
 	if err != nil {
@@ -249,7 +249,7 @@ func TestBinaryObject_PrepareImage_CoverResizeFit(t *testing.T) {
 				Data:        jpegData,
 			}
 
-			bi := bo.PrepareImage(false, true, cfg, log)
+			bi := bo.PrepareImage(common.OutputFmtEpub2, true, cfg, log)
 			img, _, err := image.Decode(bytes.NewReader(bi.Data))
 			if err != nil {
 				t.Fatalf("failed to decode fitted image: %v", err)
@@ -283,7 +283,7 @@ func TestBinaryObject_PrepareImage_CoverNoResize(t *testing.T) {
 		Data:        jpegData,
 	}
 
-	bi := bo.PrepareImage(false, true, cfg, log)
+	bi := bo.PrepareImage(common.OutputFmtEpub2, true, cfg, log)
 
 	img, _, err := image.Decode(bytes.NewReader(bi.Data))
 	if err != nil {
@@ -315,7 +315,7 @@ func TestBinaryObject_PrepareImage_ScaleFactor(t *testing.T) {
 		Data:        jpegData,
 	}
 
-	bi := bo.PrepareImage(false, false, cfg, log)
+	bi := bo.PrepareImage(common.OutputFmtEpub2, false, cfg, log)
 
 	img, _, err := image.Decode(bytes.NewReader(bi.Data))
 	if err != nil {
@@ -348,7 +348,7 @@ func TestBinaryObject_PrepareImage_RemoveTransparency(t *testing.T) {
 		Data:        pngData,
 	}
 
-	bi := bo.PrepareImage(false, false, cfg, log)
+	bi := bo.PrepareImage(common.OutputFmtEpub2, false, cfg, log)
 
 	img, _, err := image.Decode(bytes.NewReader(bi.Data))
 	if err != nil {
@@ -382,7 +382,7 @@ func TestBinaryObject_PrepareImage_RemoveGIFTransparency(t *testing.T) {
 		Data:        gifData,
 	}
 
-	bi := bo.PrepareImage(false, false, cfg, log)
+	bi := bo.PrepareImage(common.OutputFmtEpub2, false, cfg, log)
 
 	// GIF with transparency removed should be converted to PNG
 	// (since encodeImage doesn't support GIF encoding)
@@ -424,7 +424,7 @@ func TestBinaryObject_PrepareImage_GIFToJPEGKindle(t *testing.T) {
 	}
 
 	// With kindle=true, GIF should be converted to JPEG with transparency flattened
-	bi := bo.PrepareImage(true, false, cfg, log)
+	bi := bo.PrepareImage(common.OutputFmtKfx, false, cfg, log)
 
 	if bi.MimeType != "image/jpeg" {
 		t.Errorf("expected mime type image/jpeg for Kindle, got %s", bi.MimeType)
@@ -471,7 +471,7 @@ func TestFictionBookPrepareImagesForPDFSkipsPNGOptimization(t *testing.T) {
 		Data:        pngData,
 	}}}
 
-	pdfImages := book.PrepareImagesForOutput(common.OutputFmtPdf, cfg, log)
+	pdfImages := book.PrepareImages(common.OutputFmtPdf, cfg, log)
 	pdfImage := pdfImages["img.png"]
 	if pdfImage == nil {
 		t.Fatalf("missing prepared PDF image")
@@ -483,7 +483,7 @@ func TestFictionBookPrepareImagesForPDFSkipsPNGOptimization(t *testing.T) {
 		t.Fatalf("PDF image metadata = %s %dx%d, want image/png 96x96", pdfImage.MimeType, pdfImage.Dim.Width, pdfImage.Dim.Height)
 	}
 
-	optimizedImages := book.PrepareImages(false, cfg, log)
+	optimizedImages := book.PrepareImages(common.OutputFmtEpub2, cfg, log)
 	optimizedImage := optimizedImages["img.png"]
 	if optimizedImage == nil {
 		t.Fatalf("missing prepared optimized image")
@@ -515,7 +515,7 @@ func TestBinaryObject_PrepareImage_JPEGQualityOptimization(t *testing.T) {
 		Data:        jpegData,
 	}
 
-	bi := bo.PrepareImage(false, false, cfg, log)
+	bi := bo.PrepareImage(common.OutputFmtEpub2, false, cfg, log)
 
 	// Optimized image should be smaller
 	if len(bi.Data) >= originalSize {
@@ -543,7 +543,7 @@ func TestBinaryObject_PrepareImage_KindleConversion(t *testing.T) {
 		Data:        pngData,
 	}
 
-	bi := bo.PrepareImage(true, false, cfg, log)
+	bi := bo.PrepareImage(common.OutputFmtKfx, false, cfg, log)
 
 	if bi.MimeType != "image/jpeg" {
 		t.Errorf("expected conversion to JPEG for Kindle, got %s", bi.MimeType)
@@ -569,7 +569,7 @@ func TestBinaryObject_PrepareImage_SVGRasterizeForKindle(t *testing.T) {
 		Data:        svgData,
 	}
 
-	bi := bo.PrepareImage(true, true, cfg, log)
+	bi := bo.PrepareImage(common.OutputFmtKfx, true, cfg, log)
 
 	if bi.MimeType != "image/jpeg" {
 		t.Fatalf("expected SVG to be rasterized to JPEG for Kindle, got %s", bi.MimeType)
@@ -597,7 +597,7 @@ func TestBinaryObject_PrepareImage_NotFoundPlaceholderSVGIntrinsicSizeForKindle(
 		Data:        notFoundImage,
 	}
 
-	bi := bo.PrepareImage(true, false, cfg, log)
+	bi := bo.PrepareImage(common.OutputFmtKfx, false, cfg, log)
 	if bi.MimeType != "image/jpeg" {
 		t.Fatalf("expected notFoundImage SVG to be rasterized to JPEG for Kindle, got %s", bi.MimeType)
 	}
@@ -624,7 +624,7 @@ func TestBinaryObject_PrepareImage_InvalidImage(t *testing.T) {
 		Data:        []byte("not a valid image"),
 	}
 
-	bi := bo.PrepareImage(false, true, cfg, log)
+	bi := bo.PrepareImage(common.OutputFmtEpub2, true, cfg, log)
 	if bi == nil {
 		t.Fatal("expected non-nil BookImage with placeholder")
 	}
@@ -655,7 +655,7 @@ func TestBinaryObject_PrepareImage_UseBrokenFlag(t *testing.T) {
 		Data:        []byte("not a valid image"),
 	}
 
-	bi := bo.PrepareImage(false, true, cfg, log)
+	bi := bo.PrepareImage(common.OutputFmtEpub2, true, cfg, log)
 	if bi == nil {
 		t.Fatal("expected non-nil BookImage with UseBroken=true")
 	}
@@ -692,7 +692,7 @@ func TestFictionBook_PrepareImages(t *testing.T) {
 		},
 	}
 
-	index := fb.PrepareImages(false, cfg, log)
+	index := fb.PrepareImages(common.OutputFmtEpub2, cfg, log)
 
 	if len(index) != 2 {
 		t.Errorf("expected 2 images in index, got %d", len(index))
@@ -728,7 +728,7 @@ func TestFictionBook_PrepareImages_DuplicateIDs(t *testing.T) {
 		},
 	}
 
-	index := fb.PrepareImages(false, cfg, log)
+	index := fb.PrepareImages(common.OutputFmtEpub2, cfg, log)
 
 	// Should skip duplicate
 	if len(index) != 2 {
@@ -764,7 +764,7 @@ func TestFictionBook_PrepareImages_CoverDetection(t *testing.T) {
 		},
 	}
 
-	index := fb.PrepareImages(false, cfg, log)
+	index := fb.PrepareImages(common.OutputFmtEpub2, cfg, log)
 
 	// Cover should be resized
 	coverImage := index["cover-id"]
@@ -967,7 +967,7 @@ func TestPrepareImages_SkipsNonImageBinaries(t *testing.T) {
 		},
 	}
 
-	images := fb.PrepareImages(false, cfg, log)
+	images := fb.PrepareImages(common.OutputFmtEpub2, cfg, log)
 
 	// Should only have 2 images (img1 and img2), fonts should be skipped
 	if len(images) != 2 {
@@ -1057,7 +1057,7 @@ func TestPrepareImage_BMPScaleFactorNonKindle(t *testing.T) {
 		Data:        buf.Bytes(),
 	}
 
-	bi := bo.PrepareImage(false, false, cfg, log)
+	bi := bo.PrepareImage(common.OutputFmtEpub2, false, cfg, log)
 	if bi == nil {
 		t.Fatal("expected non-nil BookImage")
 	}

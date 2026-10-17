@@ -35,7 +35,7 @@ func TestFictionBook_PrepareImagesForKobo_PreservesSupportedFormats(t *testing.T
 		} {
 			t.Run(output.String()+"/"+input.format, func(t *testing.T) {
 				book := &FictionBook{Binaries: []BinaryObject{{ID: "image", ContentType: "image/" + input.format, Data: input.data}}}
-				bi := book.PrepareImagesForOutput(output, &config.ImagesConfig{}, zaptest.NewLogger(t))["image"]
+				bi := book.PrepareImages(output, &config.ImagesConfig{}, zaptest.NewLogger(t))["image"]
 				if bi == nil || !bytes.Equal(bi.Data, input.data) {
 					t.Fatal("supported image should retain its original bytes")
 				}
@@ -70,7 +70,7 @@ func TestFictionBook_PrepareImagesForKobo_WebPProcessing(t *testing.T) {
 					Screen:      config.ScreenConfig{Width: 96, Height: 32},
 					Cover:       config.CoverConfig{Resize: common.ImageResizeModeStretch},
 				}
-				bi := book.PrepareImagesForOutput(output, cfg, zaptest.NewLogger(t))["image"]
+				bi := book.PrepareImages(output, cfg, zaptest.NewLogger(t))["image"]
 				if bi == nil || bi.MimeType != "image/png" || bi.Filename != "images/img00001.png" {
 					t.Fatalf("expected prepared PNG, got %+v", bi)
 				}

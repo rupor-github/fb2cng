@@ -267,7 +267,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 
 	// Process all binary objects creating actual images and reference index.
 	// This happens after NormalizeLinks so the not-found image binary is included.
-	allImages := book.PrepareImagesForOutput(outputFormat, &env.Cfg.Document.Images, log)
+	allImages := book.PrepareImages(outputFormat, &env.Cfg.Document.Images, log)
 
 	// Filter images to only include those that are actually referenced
 	imagesIndex := book.FilterReferencedImages(allImages, links, coverID, log)

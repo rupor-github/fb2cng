@@ -196,7 +196,7 @@ func preparePDFImageResources(doc pdfDocumentSpec, pages []pdfPage, nextObjectID
 					zap.Bool("rasterize_svg", doc.RasterizeSVG), zap.Bool("remove_transparency", doc.RemoveImageTransparency))
 			}
 		}
-		resource, err := makePDFImageResourceWithPolicy(img, doc.RasterizeSVG || doc.RemoveImageTransparency, log)
+		resource, err := makePDFImageResource(img, doc.RasterizeSVG || doc.RemoveImageTransparency, log)
 		if err != nil {
 			return nil, fmt.Errorf("prepare pdf image %q: %w", id, err)
 		}
@@ -273,11 +273,7 @@ func writePDFImageObjects(writer *docwriter.Writer, resources map[string]pdfImag
 	return nil
 }
 
-func makePDFImageResource(img *fb2.BookImage) (pdfImageResource, error) {
-	return makePDFImageResourceWithPolicy(img, false, nil)
-}
-
-func makePDFImageResourceWithPolicy(img *fb2.BookImage, rasterizeSVG bool, log *zap.Logger) (pdfImageResource, error) {
+func makePDFImageResource(img *fb2.BookImage, rasterizeSVG bool, log *zap.Logger) (pdfImageResource, error) {
 	if img != nil && !rasterizeSVG && strings.HasSuffix(strings.ToLower(img.MimeType), "svg+xml") {
 		// Unsupported features reject the entire scene. Fall back through the existing
 		// raster decoder rather than emitting incomplete vectors or treating the SVG

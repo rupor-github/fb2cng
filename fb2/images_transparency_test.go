@@ -14,7 +14,7 @@ import (
 	"fbc/config"
 )
 
-func TestFictionBook_PrepareImagesForOutput_TIFFWebPTransparency(t *testing.T) {
+func TestFictionBook_PrepareImages_TIFFWebPTransparency(t *testing.T) {
 	for _, transparent := range []bool{true, false} {
 		name := "opaque"
 		if transparent {
@@ -77,7 +77,7 @@ func TestFictionBook_PrepareImagesForOutput_TIFFWebPTransparency(t *testing.T) {
 						}
 						bo := &BinaryObject{ID: "test-" + input.format, ContentType: "image/" + input.format, Data: input.data}
 						book := &FictionBook{Binaries: []BinaryObject{*bo}}
-						bi := book.PrepareImagesForOutput(mode.output, cfg, zaptest.NewLogger(t))[bo.ID]
+						bi := book.PrepareImages(mode.output, cfg, zaptest.NewLogger(t))[bo.ID]
 						if bi == nil {
 							t.Fatal("missing prepared image")
 						}

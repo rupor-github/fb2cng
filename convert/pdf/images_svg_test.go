@@ -116,7 +116,7 @@ func TestPDFSVGFallbackLoggingDisabled(t *testing.T) {
 	core, logs := observer.New(zapcore.InfoLevel)
 	img := &fb2.BookImage{MimeType: "image/svg+xml", Data: []byte(
 		`<svg viewBox="0 0 40 20"><g opacity="0.5"><rect width="20" height="20"/></g></svg>`)}
-	resource, err := makePDFImageResourceWithPolicy(img, false, zap.New(core))
+	resource, err := makePDFImageResource(img, false, zap.New(core))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -28,34 +28,10 @@ import (
 // Image processing functions for FictionBook.
 
 // PrepareImages processes all binary objects in the FictionBook creating
-// actual image and building image index. Never returns an error - uses placeholder for broken images.
+// actual image and building image index, applying output-format compatibility rules.
+// Never returns an error - uses placeholder for broken images.
 // Non-image binaries (e.g., fonts) are skipped.
-func (fb *FictionBook) PrepareImages(kindle bool, cfg *config.ImagesConfig, log *zap.Logger) BookImages {
-	return fb.prepareImages(kindle, cfg, log, imagePrepareOptions{adjustSVGStrokes: kindle})
-}
-
-// PrepareImagesForOutput processes images with output-format-specific compatibility rules and shortcuts.
-func (fb *FictionBook) PrepareImagesForOutput(outputFormat common.OutputFmt, cfg *config.ImagesConfig, log *zap.Logger) BookImages {
-	// Embedded Markdown historically uses JPEG normalization, including the built-in
-	// vignette stroke adjustment. Express that policy without impersonating KFX.
-	normalizeToJPEG := outputFormat.IsKindle() ||
-		(outputFormat == common.OutputFmtMd && cfg.Markdown == common.MarkdownImageModeEmbedded)
-	return fb.prepareImages(normalizeToJPEG, cfg, log, imagePrepareOptions{
-		skipNonJPEGOptimization: outputFormat == common.OutputFmtPdf,
-		convertWebPToPNG:        outputFormat.IsKobo(),
-		adjustSVGStrokes:        normalizeToJPEG,
-		preserveSVGSizing:       outputFormat == common.OutputFmtPdf,
-	})
-}
-
-type imagePrepareOptions struct {
-	skipNonJPEGOptimization bool
-	convertWebPToPNG        bool
-	adjustSVGStrokes        bool
-	preserveSVGSizing       bool
-}
-
-func (fb *FictionBook) prepareImages(normalizeToJPEG bool, cfg *config.ImagesConfig, log *zap.Logger, opts imagePrepareOptions) BookImages {
+func (fb *FictionBook) PrepareImages(outputFormat common.OutputFmt, cfg *config.ImagesConfig, log *zap.Logger) BookImages {
 	index := make(BookImages)
 
 	imgNum := 1
@@ -73,7 +49,7 @@ func (fb *FictionBook) prepareImages(normalizeToJPEG bool, cfg *config.ImagesCon
 			continue
 		}
 		cover := len(fb.Description.TitleInfo.Coverpage) > 0 && strings.HasSuffix(fb.Description.TitleInfo.Coverpage[0].Href, fb.Binaries[i].ID)
-		bi := fb.Binaries[i].prepareImage(normalizeToJPEG, cover, cfg, log, opts)
+		bi := fb.Binaries[i].PrepareImage(outputFormat, cover, cfg, log)
 		ext := mimeToExt(bi.MimeType)
 		bi.Filename = path.Join(ImagesDir, fmt.Sprintf("img%05d.%s", imgNum, ext))
 		imgNum++
@@ -184,11 +160,12 @@ func (bo *BinaryObject) encodeImage(img image.Image, imgType string, cfg *config
 // for broken images.
 // NOTE: today KP3 always seems to scale images to 2048 width and height, we do
 // not do it
-func (bo *BinaryObject) PrepareImage(kindle, cover bool, cfg *config.ImagesConfig, log *zap.Logger) *BookImage {
-	return bo.prepareImage(kindle, cover, cfg, log, imagePrepareOptions{adjustSVGStrokes: kindle})
-}
-
-func (bo *BinaryObject) prepareImage(normalizeToJPEG, cover bool, cfg *config.ImagesConfig, log *zap.Logger, opts imagePrepareOptions) *BookImage {
+func (bo *BinaryObject) PrepareImage(outputFormat common.OutputFmt, cover bool, cfg *config.ImagesConfig, log *zap.Logger) *BookImage {
+	// Embedded Markdown retains its existing JPEG and vignette policy without
+	// impersonating a Kindle output format.
+	normalizeToJPEG := outputFormat.IsKindle() ||
+		(outputFormat == common.OutputFmtMd && cfg.Markdown == common.MarkdownImageModeEmbedded)
+	preserveSVGSizing := outputFormat == common.OutputFmtPdf
 	bi := &BookImage{
 		MimeType: bo.ContentType,
 		Data:     bo.Data,
@@ -210,7 +187,7 @@ func (bo *BinaryObject) prepareImage(normalizeToJPEG, cover bool, cfg *config.Im
 
 		// Keep PDF's layout sizing independent of optional screen-width rendering.
 		// Placeholders use intrinsic size; retain the legacy JPEG placeholder policy.
-		if opts.preserveSVGSizing || bytes.Equal(bo.Data, notFoundImage) || (!normalizeToJPEG && bytes.Equal(bo.Data, brokenImage)) {
+		if preserveSVGSizing || bytes.Equal(bo.Data, notFoundImage) || (!normalizeToJPEG && bytes.Equal(bo.Data, brokenImage)) {
 			targetW, targetH = 0, 0
 		}
 
@@ -218,7 +195,7 @@ func (bo *BinaryObject) prepareImage(normalizeToJPEG, cover bool, cfg *config.Im
 		// to be visible on Kindle's high-resolution display). External file vignettes
 		// are assumed to have appropriate stroke widths already.
 		var strokeFactor float64
-		if opts.adjustSVGStrokes && bo.BuiltinVignette {
+		if normalizeToJPEG && bo.BuiltinVignette {
 			strokeFactor = imgutil.KindleSVGStrokeWidthFactor
 		}
 		rasterize := imgutil.RasterizeSVGToImage
@@ -238,7 +215,7 @@ func (bo *BinaryObject) prepareImage(normalizeToJPEG, cover bool, cfg *config.Im
 		bi.Dim.Height = img.Bounds().Dy()
 
 		// Cover resizing for SVG follows the same rules as raster images.
-		if cover && !opts.preserveSVGSizing {
+		if cover && !preserveSVGSizing {
 			w, h := cfg.Screen.Width, cfg.Screen.Height
 			switch cfg.Cover.Resize {
 			case common.ImageResizeModeNone:
@@ -271,7 +248,7 @@ func (bo *BinaryObject) prepareImage(normalizeToJPEG, cover bool, cfg *config.Im
 			}
 		}
 
-		if !cover && !opts.preserveSVGSizing && cfg.ScaleFactor > 0.0 && cfg.ScaleFactor != 1.0 {
+		if !cover && !preserveSVGSizing && cfg.ScaleFactor > 0.0 && cfg.ScaleFactor != 1.0 {
 			resizedImg := imaging.Resize(img, 0, int(float64(img.Bounds().Dy())*cfg.ScaleFactor), imaging.Linear)
 			if resizedImg == nil {
 				return bo.handleImageError(bi, "resize", nil, normalizeToJPEG, cfg, log)
@@ -301,7 +278,7 @@ func (bo *BinaryObject) prepareImage(normalizeToJPEG, cover bool, cfg *config.Im
 
 	// Kobo does not support WebP. Use lossless PNG, preserving transparency
 	// unless its removal is explicitly requested below.
-	if opts.convertWebPToPNG && imgType == "webp" {
+	if outputFormat.IsKobo() && imgType == "webp" {
 		log.Debug("Converting WebP image to PNG for Kobo output", zap.String("id", bo.ID))
 		imgType = "png"
 		bi.MimeType = "image/png"
@@ -409,7 +386,7 @@ func (bo *BinaryObject) prepareImage(normalizeToJPEG, cover bool, cfg *config.Im
 
 			imageChanged = true
 		case "png":
-			if opts.skipNonJPEGOptimization {
+			if outputFormat == common.OutputFmtPdf {
 				log.Debug("Skipping non-JPEG source image optimization for output format",
 					zap.String("id", bo.ID),
 					zap.String("type", imgType))

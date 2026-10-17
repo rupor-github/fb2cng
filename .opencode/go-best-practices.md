@@ -1,7 +1,7 @@
 ---
 name: go-best-practices
 description: "Idiomatic modern Go patterns and project conventions for AI-assisted development."
-updated: "2026-05-23"
+updated: "2026-10-17"
 ---
 
 # Go Best Practices Skill
@@ -45,6 +45,11 @@ If `goimports-reviser` is not available on `PATH`, `gofmt -w <changed .go files>
   Use `sync.WaitGroup.Go` when a plain wait group is enough.
 - **Logging:** use structured `go.uber.org/zap` logging for server applications; if a logger is passed to a function, pass it last.
 - **APIs:** accept interfaces, return concrete types; keep interfaces close to consumers.
+- **Refactoring:** update internal function signatures and all callers, including tests, directly when requirements change.
+  Do not retain an old signature through a trivial forwarding wrapper merely to avoid updating callers or tests.
+  Avoid `WithPolicy` / `WithOptions` variants that exist only to preserve an internal convenience signature;
+  prefer one canonical function with explicit arguments. Keep wrappers only when they provide meaningful behavior
+  or preserve a required public compatibility contract, and document that reason.
 - **Pointers:** avoid generic `Ptr` / `ToPtr` helpers for simple value initialization; use direct language constructs instead.
 - **Modern stdlib:** prefer `slices`, `maps`, `iter.Seq`, integer `range`, and Go 1.22+ loop-variable semantics where supported by the module.
 - **Tests:** use table-driven tests with `t.Run` subtests.
@@ -60,5 +65,6 @@ If `goimports-reviser` is not available on `PATH`, `gofmt -w <changed .go files>
 - Global variables for dependency injection.
 - Naked goroutines without cancellation or another exit path.
 - Returning interfaces from constructors or package APIs.
+- Trivial forwarding wrappers that supply defaults solely to avoid a straightforward internal refactor.
 - Hand-rolled collection helpers when `slices` / `maps` fit.
 - Hand-rolled service configuration loading when the shared config generator fits.

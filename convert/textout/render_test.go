@@ -34,7 +34,7 @@ func TestRenderMarkdownSVGPolicy(t *testing.T) {
 			cfg.Images.Markdown, cfg.Images.RasterizeSVG = mode, true
 			cfg.Images.Screen = config.ScreenConfig{Width: 80, Height: 120}
 			cfg.Images.Cover.Resize = common.ImageResizeModeNone
-			c.ImagesIndex = c.Book.PrepareImagesForOutput(common.OutputFmtMd, &cfg.Images, zaptest.NewLogger(t))
+			c.ImagesIndex = c.Book.PrepareImages(common.OutputFmtMd, &cfg.Images, zaptest.NewLogger(t))
 			output := filepath.Join(t.TempDir(), "book.md")
 			data, err := RenderWithOptions(c, cfg, RenderOptions{OutputPath: output})
 			if err != nil {

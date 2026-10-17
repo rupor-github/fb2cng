@@ -40,9 +40,9 @@ func TestForcedSVGRasterizationPreservesPDFLayout(t *testing.T) {
 			if cover {
 				book.Description.TitleInfo.Coverpage = []fb2.InlineImage{{Href: "#svg"}}
 			}
-			before := book.PrepareImagesForOutput(common.OutputFmtPdf, cfg, zaptest.NewLogger(t))["svg"]
+			before := book.PrepareImages(common.OutputFmtPdf, cfg, zaptest.NewLogger(t))["svg"]
 			cfg.RasterizeSVG = true
-			after := book.PrepareImagesForOutput(common.OutputFmtPdf, cfg, zaptest.NewLogger(t))["svg"]
+			after := book.PrepareImages(common.OutputFmtPdf, cfg, zaptest.NewLogger(t))["svg"]
 			if after.MimeType != "image/png" || after.Dim.Width != 40 || after.Dim.Height != 20 {
 				t.Fatalf("prepared image MIME = %q, dimensions = %v", after.MimeType, after.Dim)
 			}
@@ -56,7 +56,7 @@ func TestForcedSVGRasterizationPreservesPDFLayout(t *testing.T) {
 			if w1 != w2 || h1 != h2 || ok1 != ok2 {
 				t.Fatalf("block dimensions changed from %v/%v/%v to %v/%v/%v", w1, h1, ok1, w2, h2, ok2)
 			}
-			resource, err := makePDFImageResource(after)
+			resource, err := makePDFImageResource(after, false, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -111,7 +111,7 @@ func TestMakePDFImageResourceEmbedsJPEGDirectly(t *testing.T) {
 	resource, err := makePDFImageResource(&fb2.BookImage{
 		MimeType: "image/jpeg",
 		Data:     testJPEG(t, 2, 3),
-	})
+	}, false, nil)
 	if err != nil {
 		t.Fatalf("makePDFImageResource() error = %v", err)
 	}
