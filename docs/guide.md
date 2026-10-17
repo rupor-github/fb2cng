@@ -146,7 +146,8 @@ See [Kindle compression](formats/kindle.md#compression) for conversion settings 
 | Page map/page labels | optional | optional | optional | optional | optional/generated | native pages | no | no |
 | Debug validation focus | EPUB structure/checks | EPUB3 nav/aside | Kobo packaging | EPUB3 nav/aside and Kobo packaging | Kindle Previewer/KFX checks | PDF structure/fonts/layout | text rendering | Markdown links/assets |
 
-See [Footnotes](footnotes.md) for a full mode-by-format matrix.
+See [Footnotes](footnotes.md) for a full mode-by-format matrix, and
+[Image handling](images.md) for image capabilities and configuration interactions.
 
 ## Metadata By Format
 
@@ -196,6 +197,7 @@ Common configuration areas:
 | Output naming, metadata, footnote labels, backlinks | [Templates](templates.md) |
 | CSS, fonts, media queries, section splitting | [Stylesheets](stylesheets.md) |
 | Footnote modes and templates | [Footnotes](footnotes.md) |
+| Images, SVG, transparency, sizing, covers, and vignettes | [Image handling](images.md) |
 | EPUB/KEPUB behavior | [EPUB and KEPUB variants](formats/epub.md) |
 | Kindle KFX/AZW8 behavior | [Kindle KFX/AZW8](formats/kindle.md) |
 | PDF behavior | [PDF](formats/pdf.md) |
@@ -235,9 +237,14 @@ Set `document.stylesheet_path` to a CSS file. A custom stylesheet replaces the b
 
 Set `document.footnotes.mode` to `default`, `float`, or `floatRenumbered`. See [Footnotes](footnotes.md).
 
+### Configure Images
+
+See [Image handling](images.md) for the output capability matrix, SVG/raster policies,
+transparency, covers, resizing, and configuration examples.
+
 ### Configure Markdown Images
 
-Set `document.images.markdown` to `placeholder`, `external`, or `embedded`. See [TXT and Markdown](formats/text.md#markdown-images).
+Set `document.images.markdown` to `placeholder`, `external`, or `embedded`. See [Markdown images](images.md#markdown-images).
 
 ### Configure PDF Page Size
 
@@ -246,6 +253,7 @@ Set `document.images.screen.width`, `height`, and `dpi`. See [PDF](formats/pdf.m
 ## Reference Documents
 
 - [Configuration](config.md)
+- [Image handling](images.md)
 - [Debugging and validation](debugging.md)
 - [Templates](templates.md)
 - [Footnotes](footnotes.md)
@@ -272,6 +280,6 @@ Common checks:
 | Configuration is ignored | Use `dumpconfig active.yaml` to confirm the loaded values |
 | Template output is unexpected | Check `.Context`, `.Format`, and template-specific fields in [Templates](templates.md) |
 | Fonts or CSS do not apply | Check [Stylesheets](stylesheets.md) and format-specific styling limits |
-| Images are missing | Check `document.images.*` settings and debug image diagnostics |
+| Images are missing | Check [image troubleshooting](images.md#troubleshooting) and debug image diagnostics |
 
 When reporting an issue, include the command line, relevant configuration, converter version, and the debug report when possible.

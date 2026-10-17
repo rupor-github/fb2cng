@@ -28,6 +28,8 @@ Kindle KFX/AZW8 output aims to follow Amazon's Kindle Publishing Guidelines as c
 
 [User guide](docs/guide.md)
 
+[Image handling](docs/images.md)
+
 [Debugging and validation](docs/debugging.md)
 
 [Russian discussion forum](https://4pda.to/forum/index.php?showtopic=942250#)

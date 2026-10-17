@@ -54,35 +54,13 @@ PDF also understands generated pseudo-content used by the default stylesheet, su
 
 ## SVG Artwork
 
-By default, supported SVG artwork remains vector-based rather than being converted to pixels.
-Vectors remain sharp at any zoom and retain transparent backgrounds.
-No additional opt-in is required. Covers, body/inline images and vignettes use the same path
-when their prepared resource is SVG. The built-in default cover and broken/not-found
-placeholders also use native vectors. Raster source covers remain raster images;
-other output formats retain JPEG generation for the built-in default cover.
+Supported SVG covers, illustrations, vignettes, and placeholders remain vector-based by
+default, retaining transparency and sharpness when zoomed. Other SVG artwork uses raster
+fallback on white; raster source images are also white-backed.
 
-The initial supported subset is deliberately conservative:
-
-- A positive root `viewBox`, SVG paths (including quadratic/cubic curves and arcs), rectangles,
-  circles, ellipses, lines, polygons and polylines.
-- Groups, inherited presentation properties, supported inline styles, and affine transforms.
-- Named/hexadecimal solid fills and strokes, fill/stroke opacity, nonzero/even-odd fill rules,
-  stroke widths, caps, joins, miter limits and dash patterns.
-
-Unsupported features reject the **entire** vector scene and use the existing SVG rasterizer.
-These include gradients, clipping/masks/filters, references (`use`), text/fonts, embedded images,
-CSS rules/classes, `currentColor`, non-scaling strokes, nested viewports and element/group opacity
-requiring compositing. Fallback retains the existing rasterizer's SVG limitations; it is not a
-browser-complete SVG renderer. Excessive coordinates, transforms or scene complexity also use fallback.
-
-Debug logging reports raster fallback with the image ID, filename and vector-translation error.
-Configuration-requested rasterization is logged separately, without an unsupported-feature warning.
-
-- `document.images.rasterize_svg: true` explicitly forces raster rendering.
-- `document.images.remove_transparency: true` selects raster fallback on white for SVG artwork.
-- Native vectors and raster fallback retain the same logical/layout dimensions. Screen width
-  does not increase SVG resolution or enlarge SVG layout in PDF.
-- Kindle-specific vignette stroke thickening is not applied to PDF vectors.
+See [Image handling](../images.md#svg-artwork) for the supported subset, configuration
+interactions, and PDF/Kindle comparison. PDF SVG artwork retains intrinsic sizing rather
+than applying body scaling or cover resizing; see [sizing and resolution](../images.md#sizing-and-resolution).
 
 ## Fonts
 

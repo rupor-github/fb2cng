@@ -27,26 +27,9 @@ Markdown output:
 
 ## Markdown Images
 
-Configure image handling with `document.images.markdown`.
-
-```yaml
-document:
-  images:
-    markdown: placeholder
-```
-
-| Mode | Behavior |
-|---|---|
-| `placeholder` | Render readable placeholders such as `[Image: cover]` |
-| `external` | Write assets next to the `.md` file and reference them with Markdown image syntax |
-| `embedded` | Embed image data as `data:` URIs |
-
-External assets are placed in a book-specific directory such as `images-<book-id>/` to avoid collisions.
-
-External SVG assets remain SVG by default. Set `document.images.rasterize_svg: true` to write PNG instead,
-preserving transparency unless `remove_transparency` is enabled. Embedded images retain their existing
-JPEG normalization, including SVG rasterization and white-background flattening, regardless of these settings.
-Placeholder mode emits no image resources, so rasterization has no visible effect there.
+`document.images.markdown` selects `placeholder` (the default), `external`, or `embedded`.
+See [Markdown images](../images.md#markdown-images) for asset placement and viewer
+compatibility, and [Image handling](../images.md) for SVG, transparency, and sizing rules.
 
 ## Markdown Links And Anchors
 

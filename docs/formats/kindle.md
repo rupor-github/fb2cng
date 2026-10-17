@@ -61,34 +61,16 @@ See [Stylesheets](../stylesheets.md) for shared stylesheet rules and resource ha
 
 ## Images
 
-- Kindle output requires a cover. If the source book has no valid cover, fb2cng forces cover generation and uses the configured default cover image or the built-in generated cover.
-- If `document.images.cover.resize` is `none`, Kindle output treats it as `keepAR` so the generated or source cover is still suitable for Kindle packaging.
-- All decodable non-JPEG raster images, including PNG, GIF, BMP, TIFF, and WebP, are converted to JPEG for Kindle compatibility. This applies to covers as well as body images and does not depend on `document.images.optimize`.
-- Supported SVG body, inline, table and vignette artwork remains vector-based by default, without an additional opt-in. SVG covers remain JPEG.
-- Transparent PNG, GIF, TIFF, and WebP content is flattened onto a white background before JPEG encoding, even when `document.images.remove_transparency` is disabled.
-- Built-in broken/not-found placeholders remain vector-based for body images. Covers, forced rasterization and transparency removal retain JPEG placeholders.
+Kindle requires a cover and normalizes decodable raster images to JPEG on white.
+See [Image handling](../images.md) for cover generation/resizing, format conversions,
+transparency, and configuration precedence.
 
 ### Native SVG Artwork
 
-Supported SVG artwork stays sharp when zoomed and retains transparent backgrounds.
-Paths and basic shapes, groups, inherited solid colors, supported inline styles, fill/stroke
-opacity, standard stroke caps/joins, miter limits, and dash patterns are supported.
-Translation, horizontal/vertical scaling, and pure rotation are supported too.
-
-Artwork using even-odd fills, skew or rotation combined with scaling, CSS classes/rules,
-gradients, references, clipping/masks/filters, SVG text, embedded images, nested viewports,
-non-scaling strokes, `currentColor`, or composited element/group opacity is rendered as a
-whole JPEG instead. This fallback is not a browser-complete SVG renderer. Images with
-nonempty alt text also use JPEG to preserve that text.
-
-`document.images.rasterize_svg: true` forces raster output. `remove_transparency: true`
-also selects JPEG on white. Unsupported-feature fallback logs the image ID, filename and
-reason at debug level, separately from configuration-requested rasterization.
-
-Vector artwork and raster fallback use the same layout dimensions and image sizing settings.
-Authored vector stroke widths are preserved. Check the result in Kindle Previewer and on
-your intended device; support can vary between readers. If artwork displays incorrectly,
-try `rasterize_svg: true` and include a [debug report](../debugging.md) when reporting it.
+Supported non-cover SVG artwork remains vector-based by default; other artwork uses JPEG
+fallback. Check results in Kindle Previewer and on your intended device.
+See [SVG artwork](../images.md#svg-artwork) for the supported subset and PDF/Kindle
+comparison, or [examples](../images.md#examples) to force raster output for compatibility.
 
 ## Footnotes
 
