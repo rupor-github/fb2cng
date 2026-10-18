@@ -1832,6 +1832,9 @@ var (
 				"kafka": {
 					id: "kafka",
 				},
+				"kafkaconnect": {
+					id: "kafkaconnect",
+				},
 				"kendra-ranking": {
 					id: "kendra-ranking",
 				},
@@ -2047,6 +2050,9 @@ var (
 				},
 				"appstream2": {
 					id: "appstream2",
+				},
+				"aps": {
+					id: "aps",
 				},
 				"arc-zonal-shift": {
 					id: "arc-zonal-shift",
