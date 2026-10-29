@@ -8,6 +8,10 @@ import (
 	"fbc/convert/pdf/docwriter"
 )
 
+// pdfPageFrameNearlyWhite is the shared R, G, and B component of the page frame.
+// The frame uses the initial PDF graphics state's full opacity (alpha = 1.0).
+const pdfPageFrameNearlyWhite = 0.996
+
 func pageSizePoints(screen config.ScreenConfig) (float64, float64, error) {
 	dpi := screen.DPI
 	if screen.Width <= 0 {
@@ -105,6 +109,24 @@ func buildPDFDocument(doc pdfDocumentSpec) ([]byte, error) {
 	}
 	if len(pages) == 0 {
 		return nil, errors.New("pdf document must contain at least one page")
+	}
+	if doc.PageFrameWidth > 0 {
+		// Add only after final pagination, including footnote continuations and
+		// blank pages. The frame must not influence layout or cover any content.
+		for i := range pages {
+			pages[i].PageFrame = pdfPageBorder{
+				X:         doc.PageFrameWidth / 2,
+				Y:         doc.PageFrameWidth / 2,
+				Width:     doc.PageWidth - doc.PageFrameWidth,
+				Height:    doc.PageHeight - doc.PageFrameWidth,
+				LineWidth: doc.PageFrameWidth,
+				Color: pdfColor{
+					R: pdfPageFrameNearlyWhite,
+					G: pdfPageFrameNearlyWhite,
+					B: pdfPageFrameNearlyWhite,
+				},
+			}
+		}
 	}
 
 	// Object numbers are assigned only after pagination because outlines,

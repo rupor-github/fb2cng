@@ -124,6 +124,10 @@ type (
 		CompressionSource string `yaml:"-"`
 	}
 
+	PDFConfig struct {
+		PageFrame string `yaml:"page_frame" validate:"required"`
+	}
+
 	DocumentConfig struct {
 		FixZip                bool                  `yaml:"fix_zip"`
 		OpenFromCover         bool                  `yaml:"open_from_cover"`
@@ -142,6 +146,7 @@ type (
 		PageMap               PageMapConfig         `yaml:"page_map"`
 		Transformations       TextTransformConfig   `yaml:"text_transformations"`
 		KFX                   KFXConfig             `yaml:"kfx"`
+		PDF                   PDFConfig             `yaml:"pdf"`
 	}
 
 	Config struct {
@@ -193,6 +198,9 @@ func unmarshalConfig(data []byte, cfg *Config, process bool) (*Config, error) {
 			return nil, fmt.Errorf("failed to sanitize configuration: %w", err)
 		}
 		if err := gencfg.Validate(cfg); err != nil {
+			return nil, fmt.Errorf("failed to validate configuration: %w", err)
+		}
+		if _, err := cfg.Document.PDF.PageFramePoints(cfg.Document.Images.Screen); err != nil {
 			return nil, fmt.Errorf("failed to validate configuration: %w", err)
 		}
 	}

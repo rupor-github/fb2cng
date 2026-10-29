@@ -46,6 +46,10 @@ func Generate(
 	if err != nil {
 		return err
 	}
+	pageFrameWidth, err := cfg.PDF.PageFramePoints(cfg.Images.Screen)
+	if err != nil {
+		return err
+	}
 
 	contentPlan, err := collectPDFContent(c, cfg)
 	if err != nil {
@@ -69,6 +73,7 @@ func Generate(
 	data, err := buildPDFDocument(pdfDocumentSpec{
 		PageWidth:        pageWidth,
 		PageHeight:       pageHeight,
+		PageFrameWidth:   pageFrameWidth,
 		ScreenWidthPx:    cfg.Images.Screen.Width,
 		ScreenHeightPx:   cfg.Images.Screen.Height,
 		ScreenDPI:        cfg.Images.Screen.DPI,

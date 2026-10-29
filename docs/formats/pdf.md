@@ -33,6 +33,31 @@ PDF points = pixels * 72 / dpi
 
 The same `screen` block also affects image sizing decisions, so keep it aligned with your target device/profile.
 
+## Discouraging Automatic Margin Cropping
+
+Some readers automatically crop blank margins and rescale or recenter pages. An
+optional nearly-white outline can discourage this behavior:
+
+```yaml
+document:
+  pdf:
+    page_frame: 0.5pt
+```
+
+`0` disables the outline (the default). Nonzero thicknesses require `pt` or `px`;
+`px` uses `document.images.screen.dpi`. For example, `1px` is `0.24pt` at 300 DPI.
+Negative values and thicknesses as large as either page dimension are rejected.
+
+The opaque RGB `(0.996, 0.996, 0.996)` outline is drawn entirely inside every
+physical page, including covers and blank pages, behind all content. It does not
+change margins, pagination, or existing clipping, including with negative margins.
+Other output formats ignore it.
+
+This is a device-dependent workaround, not a guarantee: readers may treat the
+nearly-white outline as blank. On Kindles it works, however different firmware
+versions behave differently, older will add margins around this outline, newer
+do not. `0.5pt` is a suggested starting thickness.
+
 ## Styling
 
 PDF uses the same `stylesheet_path` mechanism as other formats. A custom stylesheet replaces the default stylesheet.

@@ -99,6 +99,13 @@ document:
     # An explicitly supplied convert --kfx-compression none|lzma overrides this.
     compression: none
 
+  pdf:
+    # Optional nearly-white outline to discourage automatic margin cropping.
+    # PDF only; device-dependent. 0 disables it (default).
+    # Use a thickness such as 0.5pt or 1px; px uses images.screen.dpi.
+    # Drawn inside every physical page, behind content, without changing layout.
+    page_frame: 0
+
   metainformation:
     # NOTE: when generating OPF metainformation for epub2/kepub calibre:series
     # tags with first collection available are used, for epub3/kepub3

@@ -30,6 +30,8 @@ func pageContent(page pdfPage) []byte {
 	// synthetic missing-glyph boxes and text decorations. Decorations come last so
 	// underlines/strikeouts stay visible over glyph fills and inline images.
 	var buf bytes.Buffer
+	// The page outline is below even backgrounds and edge-reaching artwork.
+	writePDFPageBorder(&buf, page.PageFrame)
 	missingGlyphBoxes := make([]pdfMissingGlyphBox, 0)
 	for _, background := range page.Backgrounds {
 		if background.Width <= 0 || background.Height <= 0 {
@@ -43,16 +45,7 @@ func pageContent(page pdfPage) []byte {
 			docwriter.FormatNumber(background.Height))
 	}
 	for _, border := range page.Borders {
-		if border.Width <= 0 || border.Height <= 0 || border.LineWidth <= 0 {
-			continue
-		}
-		fmt.Fprintf(&buf, "q\n%s\n%s w\n%s %s %s %s re S\nQ\n",
-			border.Color.strokeOperator(),
-			docwriter.FormatNumber(border.LineWidth),
-			docwriter.FormatNumber(border.X),
-			docwriter.FormatNumber(border.Y),
-			docwriter.FormatNumber(border.Width),
-			docwriter.FormatNumber(border.Height))
+		writePDFPageBorder(&buf, border)
 	}
 	for _, stroke := range page.Strokes {
 		if stroke.LineWidth <= 0 || (stroke.X1 == stroke.X2 && stroke.Y1 == stroke.Y2) {
@@ -121,6 +114,19 @@ func pageContent(page pdfPage) []byte {
 	buf.Write(pageMissingGlyphBoxes(missingGlyphBoxes))
 	buf.Write(pageTextDecorations(page))
 	return buf.Bytes()
+}
+
+func writePDFPageBorder(buf *bytes.Buffer, border pdfPageBorder) {
+	if border.Width <= 0 || border.Height <= 0 || border.LineWidth <= 0 {
+		return
+	}
+	fmt.Fprintf(buf, "q\n%s\n%s w\n%s %s %s %s re S\nQ\n",
+		border.Color.strokeOperator(),
+		docwriter.FormatNumber(border.LineWidth),
+		docwriter.FormatNumber(border.X),
+		docwriter.FormatNumber(border.Y),
+		docwriter.FormatNumber(border.Width),
+		docwriter.FormatNumber(border.Height))
 }
 
 func writeTextGlyphs(

@@ -16,6 +16,8 @@ import (
 type pdfDocumentSpec struct {
 	PageWidth  float64
 	PageHeight float64
+	// PageFrameWidth is a serialization-only underlay, never a layout inset.
+	PageFrameWidth float64
 
 	// Screen* values preserve the original configured raster target. They are used
 	// for CSS absolute-unit conversion and for image fitting decisions that need to
@@ -233,6 +235,7 @@ type pdfPageLineFragment struct {
 type pdfPage struct {
 	ObjectID    int
 	ContentID   int
+	PageFrame   pdfPageBorder
 	Backgrounds []pdfPageRect
 	Borders     []pdfPageBorder
 	Strokes     []pdfPageStroke
