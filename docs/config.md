@@ -40,6 +40,8 @@ document:
   text_transformations: {}
   kfx:
     compression: none
+  pdf:
+    page_frame: 0
 logging: {}
 reporting: {}
 ```
@@ -60,6 +62,7 @@ Use `dumpconfig --default` for the complete structure and current defaults.
 | `document.footnotes.backlink_template` | Generated backlink text | [Templates](templates.md#backlink_template) |
 | `document.toc_type` | Device navigation shape | [Guide](guide.md#feature-matrix) |
 | `document.kfx.compression` | Opt-in KFX/AZW8 compression (`none` or `lzma`) | [Kindle compression](formats/kindle.md#compression) |
+| `document.pdf.page_frame` | Optional nearly-white PDF outline to discourage automatic margin cropping | [PDF page frame](formats/pdf.md#discouraging-automatic-margin-cropping) |
 | `document.toc_page` | Optional visible TOC page | [Guide](guide.md#common-tasks) |
 | `document.metainformation.*_template` | Metadata formatting | [Templates](templates.md#metadata-templates) |
 
@@ -85,6 +88,27 @@ effective choice/source because archived loaded YAML precedes CLI overrides.
 fbc convert --to azw8 --kfx-compression lzma book.fb2
 fbc -c config.yaml convert --to azw8 --kfx-compression none book.fb2
 ```
+
+## PDF Page Frame
+
+Some PDF readers automatically crop margins and rescale or recenter pages. An
+optional nearly-white outline can discourage this behavior:
+
+```yaml
+document:
+  pdf:
+    page_frame: 0.5pt
+```
+
+`document.pdf.page_frame` defaults to `0` (disabled). Set a thickness in `pt` or
+`px`; pixels use `document.images.screen.dpi`, so `1px` equals `0.24pt` at 300 DPI.
+Negative values, unsupported units, nonzero values without units, and thicknesses
+as large as either page dimension are rejected.
+
+The outline is drawn inside every page, including covers and blank pages, behind
+all content. It does not change layout, pagination, or negative-margin behavior.
+It applies only to PDF output. Effectiveness depends on the reader and firmware;
+see [PDF page frame](formats/pdf.md#discouraging-automatic-margin-cropping).
 
 ## Image Settings
 
