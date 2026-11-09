@@ -21,6 +21,17 @@ func setupTestLogger(t *testing.T) *zap.Logger {
 	return zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller()))
 }
 
+func testMarkup(format common.OutputFmt) Markup {
+	if format.IsEPUB3() {
+		return HTML5
+	}
+	return XHTML11
+}
+
+func testRenderState(c *content.Content) *renderState {
+	return &renderState{Content: c, markup: testMarkup(c.OutputFormat)}
+}
+
 func setupTestContext(t *testing.T) (context.Context, *state.LocalEnv, *zap.Logger) {
 	logger := setupTestLogger(t)
 	cfg, err := config.LoadConfiguration("")
@@ -111,7 +122,7 @@ func TestGenerateFootnoteBodyID_UniquenessWithDuplicateNames(t *testing.T) {
 func TestCreateXHTMLDocument(t *testing.T) {
 	c := &content.Content{}
 	title := "Test Chapter"
-	doc, root := createXHTMLDocument(c, title)
+	doc, root := createXHTMLDocument(testRenderState(c), title)
 
 	if doc == nil {
 		t.Fatal("createXHTMLDocument returned nil")
@@ -150,7 +161,7 @@ func TestCreateXHTMLDocument(t *testing.T) {
 func TestCreateXHTMLDocument_Kobo(t *testing.T) {
 	c := &content.Content{OutputFormat: common.OutputFmtKepub}
 	title := "Test Chapter"
-	doc, root := createXHTMLDocument(c, title)
+	doc, root := createXHTMLDocument(testRenderState(c), title)
 
 	if doc == nil {
 		t.Fatal("createXHTMLDocument returned nil")
@@ -202,7 +213,7 @@ func TestCreateXHTMLDocument_Kobo(t *testing.T) {
 
 func TestCreateXHTMLDocument_Kobo3(t *testing.T) {
 	c := &content.Content{OutputFormat: common.OutputFmtKepub3}
-	_, root := createXHTMLDocument(c, "Test Chapter")
+	_, root := createXHTMLDocument(testRenderState(c), "Test Chapter")
 
 	if root == nil {
 		t.Fatal("createXHTMLDocument returned nil root element")
@@ -449,7 +460,7 @@ func TestProcessFootnoteBodies(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			chapters, err := processFootnoteBodies(c, tt.bodies, log)
+			chapters, err := processFootnoteBodies(testRenderState(c), tt.bodies, log)
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
@@ -488,14 +499,14 @@ func TestFixInternalLinks(t *testing.T) {
 	c := &content.Content{}
 
 	// Create test chapters with links
-	doc1, root1 := createXHTMLDocument(c, "Chapter 1")
+	doc1, root1 := createXHTMLDocument(testRenderState(c), "Chapter 1")
 	p1 := root1.CreateElement("p")
 	p1.CreateAttr("id", "para1")
 	a1 := p1.CreateElement("a")
 	a1.CreateAttr("href", "#para2")
 	a1.SetText("Link to para2")
 
-	doc2, root2 := createXHTMLDocument(c, "Chapter 2")
+	doc2, root2 := createXHTMLDocument(testRenderState(c), "Chapter 2")
 	p2 := root2.CreateElement("p")
 	p2.CreateAttr("id", "para2")
 
@@ -569,7 +580,7 @@ func TestFixInternalLinks_UsesRenderedIDsFromEpigraphs(t *testing.T) {
 		IDsIndex:     make(fb2.IDIndex),
 	}
 
-	chapters, idToFile, err := convertToXHTML(ctx, c, false, log)
+	chapters, idToFile, err := convertToXHTML(ctx, testRenderState(c), false, log)
 	if err != nil {
 		t.Fatalf("convertToXHTML error: %v", err)
 	}
@@ -594,7 +605,7 @@ func TestFixInternalLinks_SameFile(t *testing.T) {
 	_, _, log := setupTestContext(t)
 
 	c := &content.Content{}
-	doc, root := createXHTMLDocument(c, "Chapter 1")
+	doc, root := createXHTMLDocument(testRenderState(c), "Chapter 1")
 	p1 := root.CreateElement("p")
 	p1.CreateAttr("id", "para1")
 	a := p1.CreateElement("a")
@@ -637,7 +648,7 @@ func TestAppendImageElement(t *testing.T) {
 	parent := etree.NewElement("div")
 	img := &fb2.Image{Href: "#img1", Alt: "Test Image"}
 
-	appendImageElement(parent, c, img)
+	appendImageElement(parent, testRenderState(c), img)
 
 	// Image is wrapped in a div - use FindElement for attribute search
 	div := parent.FindElement("//div[@class='image']")
@@ -678,7 +689,7 @@ func TestAppendImageElement_MissingImage(t *testing.T) {
 	parent := etree.NewElement("div")
 	img := &fb2.Image{Href: "#missing"}
 
-	appendImageElement(parent, c, img)
+	appendImageElement(parent, testRenderState(c), img)
 
 	// Should still create element but with placeholder
 	div := parent.SelectElement("div")
@@ -718,7 +729,7 @@ func TestAppendTitleAsDiv(t *testing.T) {
 		},
 	}
 
-	appendTitleAsDiv(parent, c, title, "test-title")
+	appendTitleAsDiv(parent, testRenderState(c), title, "test-title")
 
 	titleDiv := parent.SelectElement("div")
 	if titleDiv == nil {
@@ -779,7 +790,7 @@ func TestAppendEpigraphs(t *testing.T) {
 		},
 	}
 
-	err := appendEpigraphs(parent, c, epigraphs, 1, log)
+	err := appendEpigraphs(parent, testRenderState(c), epigraphs, 1, log)
 	if err != nil {
 		t.Fatalf("appendEpigraphs() error = %v", err)
 	}
@@ -835,7 +846,7 @@ func TestAppendPoemElement(t *testing.T) {
 		},
 	}
 
-	err := appendPoemElement(parent, c, poem, 1, log)
+	err := appendPoemElement(parent, testRenderState(c), poem, 1, log)
 	if err != nil {
 		t.Fatalf("appendPoemElement() error = %v", err)
 	}
@@ -889,7 +900,7 @@ func TestAppendPoemElement_WithDate(t *testing.T) {
 		},
 	}
 
-	err := appendPoemElement(parent, c, poem, 1, log)
+	err := appendPoemElement(parent, testRenderState(c), poem, 1, log)
 	if err != nil {
 		t.Fatalf("appendPoemElement() error = %v", err)
 	}
@@ -938,7 +949,7 @@ func TestAppendCiteElement(t *testing.T) {
 		},
 	}
 
-	err := appendCiteElement(parent, c, cite, 1, log)
+	err := appendCiteElement(parent, testRenderState(c), cite, 1, log)
 	if err != nil {
 		t.Fatalf("appendCiteElement() error = %v", err)
 	}
@@ -984,7 +995,7 @@ func TestAppendTableElement(t *testing.T) {
 		},
 	}
 
-	appendTableElement(parent, c, table)
+	appendTableElement(parent, testRenderState(c), table)
 
 	tableElem := parent.SelectElement("table")
 	if tableElem == nil {
@@ -1048,7 +1059,7 @@ func TestGenerateTOCPage(t *testing.T) {
 
 	cfg := &config.TOCPageConfig{}
 
-	tocChapter := generateTOCPage(c, chapters, cfg, nil, log)
+	tocChapter := generateTOCPage(testRenderState(c), chapters, cfg, nil, log)
 
 	if tocChapter.ID != "toc-page" {
 		t.Errorf("Expected ID 'toc-page', got '%s'", tocChapter.ID)
@@ -1181,7 +1192,7 @@ func TestGenerateTOCPage_IDCollision(t *testing.T) {
 
 	cfg := &config.TOCPageConfig{}
 
-	tocChapter := generateTOCPage(c, chapters, cfg, nil, log)
+	tocChapter := generateTOCPage(testRenderState(c), chapters, cfg, nil, log)
 
 	// Should get toc-page-2 since toc-page and toc-page-1 are taken by FB2 element IDs
 	if tocChapter.ID != "toc-page-2" {
@@ -1324,7 +1335,7 @@ func TestFloatModeFootnotes(t *testing.T) {
 				},
 			}
 
-			chapters, _, err := convertToXHTML(ctx, c, false, log)
+			chapters, _, err := convertToXHTML(ctx, testRenderState(c), false, log)
 			if err != nil {
 				t.Fatalf("convertToXHTML() error = %v", err)
 			}
@@ -1486,7 +1497,7 @@ func TestFootnoteBacklinksIncludeBackwardFootnoteReferences(t *testing.T) {
 				},
 			}
 
-			chapters, _, err := convertToXHTML(ctx, c, false, log)
+			chapters, _, err := convertToXHTML(ctx, testRenderState(c), false, log)
 			if err != nil {
 				t.Fatalf("convertToXHTML() error = %v", err)
 			}
@@ -1628,7 +1639,7 @@ func TestFloatModeFootnotesMultipleParagraphs(t *testing.T) {
 				},
 			}
 
-			chapters, _, err := convertToXHTML(ctx, c, false, log)
+			chapters, _, err := convertToXHTML(ctx, testRenderState(c), false, log)
 			if err != nil {
 				t.Fatalf("convertToXHTML() error = %v", err)
 			}
@@ -1785,7 +1796,7 @@ func TestFloatModeFootnotesSingleParagraph(t *testing.T) {
 				},
 			}
 
-			chapters, _, err := convertToXHTML(ctx, c, false, log)
+			chapters, _, err := convertToXHTML(ctx, testRenderState(c), false, log)
 			if err != nil {
 				t.Fatalf("convertToXHTML() error = %v", err)
 			}
@@ -1909,7 +1920,7 @@ func TestFloatModeFootnotesVisibleElements(t *testing.T) {
 				FootnotesIndex: fb2.FootnoteRefs{"note1": {BodyIdx: 1, SectionIdx: 0}},
 			}
 
-			chapters, _, err := convertToXHTML(ctx, c, false, log)
+			chapters, _, err := convertToXHTML(ctx, testRenderState(c), false, log)
 			if err != nil {
 				t.Fatalf("convertToXHTML() error = %v", err)
 			}
@@ -2006,7 +2017,7 @@ func TestAppendFlowItems_SplitOnSectionNeedsBreak(t *testing.T) {
 	parent := doc.CreateElement("div")
 
 	// depth=1 means child sections are at depth 2, which needs break
-	splits, err := appendFlowItems(parent, c, items, 1, 1, "section", log)
+	splits, err := appendFlowItems(parent, testRenderState(c), items, 1, 1, "section", log)
 	if err != nil {
 		t.Fatalf("appendFlowItems error: %v", err)
 	}
@@ -2066,7 +2077,7 @@ func TestAppendFlowItems_NoSplitWhenBreakFalse(t *testing.T) {
 	doc := etree.NewDocument()
 	parent := doc.CreateElement("div")
 
-	splits, err := appendFlowItems(parent, c, items, 1, 1, "section", log)
+	splits, err := appendFlowItems(parent, testRenderState(c), items, 1, 1, "section", log)
 	if err != nil {
 		t.Fatalf("appendFlowItems error: %v", err)
 	}
@@ -2132,7 +2143,7 @@ func TestAppendFlowItems_SplitBubblesUpFromDeeper(t *testing.T) {
 	parent := doc.CreateElement("div")
 
 	// depth=1: parentSection is at depth 2 (no break), grandchildren at depth 3 (break!)
-	splits, err := appendFlowItems(parent, c, items, 1, 1, "section", log)
+	splits, err := appendFlowItems(parent, testRenderState(c), items, 1, 1, "section", log)
 	if err != nil {
 		t.Fatalf("appendFlowItems error: %v", err)
 	}
@@ -2199,7 +2210,7 @@ func TestConvertToXHTML_SectionSplit(t *testing.T) {
 		IDsIndex:     make(fb2.IDIndex),
 	}
 
-	chapters, idToFile, err := convertToXHTML(ctx, c, false, log)
+	chapters, idToFile, err := convertToXHTML(ctx, testRenderState(c), false, log)
 	if err != nil {
 		t.Fatalf("convertToXHTML error: %v", err)
 	}
@@ -2305,7 +2316,7 @@ func TestConvertToXHTML_NoSplitWithoutPageBreaks(t *testing.T) {
 		IDsIndex:     make(fb2.IDIndex),
 	}
 
-	chapters, idToFile, err := convertToXHTML(ctx, c, false, log)
+	chapters, idToFile, err := convertToXHTML(ctx, testRenderState(c), false, log)
 	if err != nil {
 		t.Fatalf("convertToXHTML error: %v", err)
 	}
@@ -2365,7 +2376,7 @@ func TestConvertToXHTML_SplitSectionContent(t *testing.T) {
 		IDsIndex:     make(fb2.IDIndex),
 	}
 
-	chapters, _, err := convertToXHTML(ctx, c, false, log)
+	chapters, _, err := convertToXHTML(ctx, testRenderState(c), false, log)
 	if err != nil {
 		t.Fatalf("convertToXHTML error: %v", err)
 	}
@@ -2402,7 +2413,7 @@ func TestAppendParagraphInlineRecoversNestedInlineTextChildren(t *testing.T) {
 	c := &content.Content{}
 	parent := etree.NewElement("p")
 
-	appendParagraphInline(parent, c, &fb2.Paragraph{
+	appendParagraphInline(parent, testRenderState(c), &fb2.Paragraph{
 		Text: []fb2.InlineSegment{{
 			Kind: fb2.InlineText,
 			Children: []fb2.InlineSegment{
@@ -2438,7 +2449,7 @@ func TestAppendParagraphInlineRendersDirectTextInStyledLinkChild(t *testing.T) {
 	}
 	parent := etree.NewElement("p")
 
-	appendParagraphInline(parent, c, &fb2.Paragraph{
+	appendParagraphInline(parent, testRenderState(c), &fb2.Paragraph{
 		Text: []fb2.InlineSegment{
 			{
 				Kind: fb2.InlineText,
@@ -2479,7 +2490,7 @@ func TestAppendInlineTextDoesNotOverwriteConsecutiveText(t *testing.T) {
 
 	// Simulate what the renderer sees for <strong><p>text1</p><p>text2</p></strong>:
 	// An InlineStrong whose children are two InlineText-with-children segments.
-	appendParagraphInline(parent, c, &fb2.Paragraph{
+	appendParagraphInline(parent, testRenderState(c), &fb2.Paragraph{
 		Text: []fb2.InlineSegment{{
 			Kind: fb2.InlineStrong,
 			Children: []fb2.InlineSegment{
@@ -2570,7 +2581,7 @@ func TestGenerateTOCPage_UntitledWrapperSection(t *testing.T) {
 
 	cfg := &config.TOCPageConfig{}
 
-	tocChapter := generateTOCPage(c, chapters, cfg, nil, log)
+	tocChapter := generateTOCPage(testRenderState(c), chapters, cfg, nil, log)
 	if tocChapter.Doc == nil {
 		t.Fatal("TOC document should not be nil")
 	}
@@ -2679,7 +2690,7 @@ func TestSectionContent_UntitledWrapperChapterTreatment(t *testing.T) {
 	// depth=1, titleDepth=1: wrapper is at top-level.
 	// Since wrapper has no title, its contentTitleDepth stays 1,
 	// so children should get titleDepth=1 → chapter treatment.
-	splits, err := appendSectionContent(parent, c, wrapper, 1, 1, log)
+	splits, err := appendSectionContent(parent, testRenderState(c), wrapper, 1, 1, log)
 	if err != nil {
 		t.Fatalf("appendSectionContent error: %v", err)
 	}
@@ -2831,7 +2842,7 @@ func TestSectionContent_DoubleUntitledWrapperChapterTreatment(t *testing.T) {
 	// outer wrapper: depth=1, titleDepth=1
 	// inner wrapper: depth=2, titleDepth=1 (untitled, no increment)
 	// ch1, ch2:      depth=3, titleDepth=1 (still chapter treatment!)
-	splits, err := appendSectionContent(parent, c, outerWrapper, 1, 1, log)
+	splits, err := appendSectionContent(parent, testRenderState(c), outerWrapper, 1, 1, log)
 	if err != nil {
 		t.Fatalf("appendSectionContent error: %v", err)
 	}

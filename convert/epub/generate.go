@@ -78,7 +78,11 @@ func Generate(
 		return fmt.Errorf("unable to write container: %w", err)
 	}
 
-	pub, err := publication.Build(ctx, c, cfg, log)
+	markup := publication.XHTML11
+	if c.OutputFormat.IsEPUB3() {
+		markup = publication.HTML5
+	}
+	pub, err := publication.Build(ctx, c, cfg, markup, log)
 	if err != nil {
 		return err
 	}

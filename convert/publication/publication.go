@@ -56,17 +56,27 @@ func (p *Publication) Documents() iter.Seq[Chapter] {
 // Build renders prepared content once, including generated pages, link resolution,
 // navigation, pagination and resource selection. It mutates Content's rendering state;
 // reuse the result for multiple adapters rather than rendering the same Content again.
-// The actual OutputFormat is retained for templates and existing markup policies.
-func Build(ctx context.Context, c *content.Content, cfg *config.DocumentConfig, log *zap.Logger) (*Publication, error) {
+// The actual OutputFormat is retained for templates; markup selects content syntax.
+func Build(
+	ctx context.Context,
+	prepared *content.Content,
+	cfg *config.DocumentConfig,
+	markup Markup,
+	log *zap.Logger,
+) (*Publication, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if c == nil || c.Book == nil {
+	if prepared == nil || prepared.Book == nil {
 		return nil, errors.New("prepared content is required")
 	}
 	if cfg == nil {
 		return nil, errors.New("document config is required")
 	}
+	if markup != XHTML11 && markup != HTML5 {
+		return nil, fmt.Errorf("unsupported publication markup: %d", markup)
+	}
+	c := &renderState{Content: prepared, markup: markup}
 
 	annotationEnabled := cfg.Annotation.Enable && c.Book.Description.TitleInfo.Annotation != nil
 	tocEnabled := cfg.TOCPage.Placement != common.TOCPagePlacementNone
@@ -122,7 +132,7 @@ func Build(ctx context.Context, c *content.Content, cfg *config.DocumentConfig, 
 	if c.CoverID != "" {
 		c.TrackImageUsage(c.CoverID)
 	}
-	filterUnusedImages(c)
+	filterUnusedImages(c.Content)
 
 	return &Publication{
 		Chapters:   chapters,

@@ -37,7 +37,7 @@ func TestBuild(t *testing.T) {
 								Placement: placement, AuthorsTemplate: "{{.Format}}",
 							},
 						}
-						pub, err := Build(context.Background(), c, &cfg, zap.NewNop())
+						pub, err := Build(context.Background(), c, &cfg, testMarkup(format), zap.NewNop())
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -222,7 +222,7 @@ func TestBuildInvalidInput(t *testing.T) {
 		{name: "nil config", ctx: context.Background(), c: &content.Content{Book: &fb2.FictionBook{}}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			pub, err := Build(tt.ctx, tt.c, tt.cfg, zap.NewNop())
+			pub, err := Build(tt.ctx, tt.c, tt.cfg, XHTML11, zap.NewNop())
 			if err == nil || pub != nil {
 				t.Fatal("invalid input should return an error and no publication")
 			}

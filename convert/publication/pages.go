@@ -10,7 +10,7 @@ import (
 	"fbc/fb2"
 )
 
-func generateAnnotation(c *content.Content, cfg *config.AnnotationConfig, log *zap.Logger) Chapter {
+func generateAnnotation(c *renderState, cfg *config.AnnotationConfig, log *zap.Logger) Chapter {
 	doc, root := createXHTMLDocument(c, cfg.Title)
 
 	id, filename := generateUniqueID("annotation-page", c.IDsIndex)
@@ -48,7 +48,7 @@ func generateAnnotation(c *content.Content, cfg *config.AnnotationConfig, log *z
 }
 
 // generateTOCPage creates a TOC chapter as an XHTML page
-func generateTOCPage(c *content.Content, chapters []Chapter, cfg *config.TOCPageConfig, idToFile idToFileMap, log *zap.Logger) Chapter {
+func generateTOCPage(c *renderState, chapters []Chapter, cfg *config.TOCPageConfig, idToFile idToFileMap, log *zap.Logger) Chapter {
 	title := "Table of Contents" // Default title, not actually visible
 	doc, root := createXHTMLDocument(c, title)
 
@@ -170,7 +170,7 @@ func collectSectionNavItems(section *fb2.Section, filename string, level int, id
 // cfg is the TOC configuration
 func buildTOCContent(
 	parentContainer *etree.Element,
-	c *content.Content,
+	c *renderState,
 	chapters []Chapter,
 	cfg *config.TOCPageConfig,
 	idToFile idToFileMap,
@@ -233,7 +233,7 @@ func buildTOCContent(
 }
 
 // buildTOCPageOL recursively builds nested TOC structure for the TOC page
-func buildTOCPageOL(parent *etree.Element, section *fb2.Section, filename string, c *content.Content, includeUntitled bool, idToFile idToFileMap) {
+func buildTOCPageOL(parent *etree.Element, section *fb2.Section, filename string, c *renderState, includeUntitled bool, idToFile idToFileMap) {
 	var oldParagraphs, oldSentences int
 	nestedOL := parent.SelectElement("ol")
 	if nestedOL == nil {
@@ -256,7 +256,7 @@ func buildTOCPageOLItems(
 	parentOL *etree.Element,
 	section *fb2.Section,
 	filename string,
-	c *content.Content,
+	c *renderState,
 	includeUntitled bool,
 	lastLI *etree.Element,
 	idToFile idToFileMap,
@@ -301,7 +301,7 @@ func buildTOCPageOLItems(
 }
 
 // buildTOCPageOLIntoLI creates nested OL inside an LI for untitled section's children
-func buildTOCPageOLIntoLI(li *etree.Element, section *fb2.Section, filename string, c *content.Content, includeUntitled bool, idToFile idToFileMap) {
+func buildTOCPageOLIntoLI(li *etree.Element, section *fb2.Section, filename string, c *renderState, includeUntitled bool, idToFile idToFileMap) {
 	// Check if there are titled children to add
 	hasTitledChildren := false
 	for _, item := range section.Content {
