@@ -1,4 +1,4 @@
-package epub
+package publication
 
 import (
 	"context"
@@ -14,10 +14,11 @@ import (
 	"fbc/content"
 	"fbc/content/text"
 	"fbc/fb2"
-	"fbc/state"
 )
 
-type chapterData struct {
+// Chapter describes a rendered document or a navigation-only entry into one.
+// Entries with a nil Doc do not add another document to the reading order.
+type Chapter struct {
 	ID           string
 	Filename     string
 	Title        string
@@ -41,14 +42,12 @@ type splitResult struct {
 	remaining  []fb2.FlowItem // siblings after this section (always FlowSection per FB2 spec)
 }
 
-func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([]chapterData, idToFileMap, error) {
+func convertToXHTML(ctx context.Context, c *content.Content, includeUntitled bool, log *zap.Logger) ([]Chapter, idToFileMap, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
 
-	env := state.EnvFromContext(ctx)
-
-	var chapters []chapterData
+	var chapters []Chapter
 	chapterNum := 0
 	var footnoteBodies []*fb2.Body
 
@@ -84,7 +83,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 			if err != nil {
 				log.Error("Unable to convert body intro", zap.Error(err))
 			} else {
-				chapters = append(chapters, chapterData{
+				chapters = append(chapters, Chapter{
 					ID:           chapterID,
 					Filename:     filename,
 					Title:        title,
@@ -112,7 +111,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 
 			title := section.AsTitleText("")
 			includeInTOC := section.HasTitle()
-			if title == "" && env.Cfg.Document.TOCPage.ChaptersWithoutTitle {
+			if title == "" && includeUntitled {
 				title = fb2.NoTitleText
 				includeInTOC = true
 			}
@@ -131,7 +130,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 				continue
 			}
 
-			chapters = append(chapters, chapterData{
+			chapters = append(chapters, Chapter{
 				ID:           chapterID,
 				Filename:     filename,
 				Title:        title,
@@ -163,7 +162,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 					continue
 				}
 
-				chapters = append(chapters, chapterData{
+				chapters = append(chapters, Chapter{
 					ID:           splitChapterID,
 					Filename:     splitFilename,
 					Title:        splitTitle,
@@ -209,7 +208,7 @@ func convertToXHTML(ctx context.Context, c *content.Content, log *zap.Logger) ([
 }
 
 // processFootnoteBodies converts all footnote bodies to XHTML and creates chapter entries
-func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, log *zap.Logger) ([]chapterData, error) {
+func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, log *zap.Logger) ([]Chapter, error) {
 	_, filename := generateUniqueID("footnotes", c.IDsIndex)
 
 	docTitle := footnoteBodies[0].AsTitleText("Footnotes")
@@ -231,7 +230,7 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, log *
 	isFloatMode := c.FootnotesMode.IsFloat()
 
 	// Process all footnote bodies - build XHTML and chapter metadata in single loop
-	var chapters []chapterData
+	var chapters []Chapter
 	for bodyIdx, body := range footnoteBodies {
 		baseBodyID := fmt.Sprintf("%s%05d", body.Name, bodyIdx)
 		bodyID, _ := generateUniqueID(baseBodyID, c.IDsIndex)
@@ -285,7 +284,7 @@ func processFootnoteBodies(c *content.Content, footnoteBodies []*fb2.Body, log *
 			wrapperSection = createFootnoteWrapperSection(body)
 		}
 
-		chapters = append(chapters, chapterData{
+		chapters = append(chapters, Chapter{
 			ID:           tocChapterID,
 			Filename:     filename,
 			AnchorID:     bodyID,
@@ -1727,7 +1726,7 @@ func generateUniqueID(baseID string, fbIDs fb2.IDIndex) (id, filename string) {
 // source-tree traversals are easy to drift from rendering and can miss IDs in
 // structures such as epigraphs or annotations. This runs while all documents are
 // still in memory, before fixInternalLinks writes cross-file hrefs.
-func collectRenderedIDs(chapters []chapterData, log *zap.Logger) idToFileMap {
+func collectRenderedIDs(chapters []Chapter, log *zap.Logger) idToFileMap {
 	idToFile := make(idToFileMap)
 	for i := range chapters {
 		chapter := &chapters[i]
@@ -1762,7 +1761,7 @@ func collectRenderedIDsFromElement(elem *etree.Element, filename string, idToFil
 }
 
 // fixInternalLinks updates internal links to include chapter filenames when needed
-func fixInternalLinks(chapters []chapterData, idToFile idToFileMap, log *zap.Logger) {
+func fixInternalLinks(chapters []Chapter, idToFile idToFileMap, log *zap.Logger) {
 	for i := range chapters {
 		if chapters[i].Doc == nil {
 			continue

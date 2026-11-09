@@ -1,0 +1,2882 @@
+package publication
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/beevik/etree"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
+
+	"fbc/common"
+	"fbc/config"
+	"fbc/content"
+	"fbc/fb2"
+	"fbc/state"
+)
+
+func setupTestLogger(t *testing.T) *zap.Logger {
+	return zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller()))
+}
+
+func setupTestContext(t *testing.T) (context.Context, *state.LocalEnv, *zap.Logger) {
+	logger := setupTestLogger(t)
+	cfg, err := config.LoadConfiguration("")
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	ctx := state.ContextWithEnv(context.Background())
+	env := state.EnvFromContext(ctx)
+	env.Log = logger
+	env.Cfg = cfg
+	return ctx, env, logger
+}
+
+func TestGenerateFootnoteBodyID(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     *fb2.Body
+		index    int
+		expected string
+	}{
+		{
+			name:     "body with name",
+			body:     &fb2.Body{Name: "notes"},
+			index:    0,
+			expected: "notes00000",
+		},
+		{
+			name:     "body with name and higher index",
+			body:     &fb2.Body{Name: "notes"},
+			index:    5,
+			expected: "notes00005",
+		},
+		{
+			name:     "body without name",
+			body:     &fb2.Body{},
+			index:    0,
+			expected: "00000",
+		},
+		{
+			name:     "body without name with index",
+			body:     &fb2.Body{},
+			index:    3,
+			expected: "00003",
+		},
+		{
+			name:     "duplicate body names get unique IDs",
+			body:     &fb2.Body{Name: "notes"},
+			index:    1,
+			expected: "notes00001",
+		},
+	}
+
+	fbIDs := make(fb2.IDIndex)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			baseBodyID := fmt.Sprintf("%s%05d", tt.body.Name, tt.index)
+			result, _ := generateUniqueID(baseBodyID, fbIDs)
+			if result != tt.expected {
+				t.Errorf("generateUniqueID() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGenerateFootnoteBodyID_UniquenessWithDuplicateNames(t *testing.T) {
+	bodies := []*fb2.Body{
+		{Name: "notes"},
+		{Name: "notes"},
+		{Name: "notes"},
+	}
+
+	fbIDs := make(fb2.IDIndex)
+	ids := make(map[string]bool)
+	for i, body := range bodies {
+		baseBodyID := fmt.Sprintf("%s%05d", body.Name, i)
+		id, _ := generateUniqueID(baseBodyID, fbIDs)
+		if ids[id] {
+			t.Errorf("Duplicate ID generated: %s", id)
+		}
+		ids[id] = true
+	}
+
+	if len(ids) != len(bodies) {
+		t.Errorf("Expected %d unique IDs, got %d", len(bodies), len(ids))
+	}
+}
+
+func TestCreateXHTMLDocument(t *testing.T) {
+	c := &content.Content{}
+	title := "Test Chapter"
+	doc, root := createXHTMLDocument(c, title)
+
+	if doc == nil {
+		t.Fatal("createXHTMLDocument returned nil")
+	}
+
+	if root == nil {
+		t.Fatal("createXHTMLDocument returned nil root element")
+	}
+
+	docRoot := doc.Root()
+	if docRoot == nil || docRoot.Tag != "html" {
+		t.Error("Root element should be <html>")
+	}
+
+	head := docRoot.SelectElement("head")
+	if head == nil {
+		t.Fatal("Missing <head> element")
+	}
+
+	titleElem := head.SelectElement("title")
+	if titleElem == nil || titleElem.Text() != title {
+		t.Errorf("Title element text = %v, want %v", titleElem.Text(), title)
+	}
+
+	body := docRoot.SelectElement("body")
+	if body == nil {
+		t.Error("Missing <body> element")
+	}
+
+	// For non-Kobo format, root should be body
+	if root != body {
+		t.Error("For non-Kobo format, root element should be body")
+	}
+}
+
+func TestCreateXHTMLDocument_Kobo(t *testing.T) {
+	c := &content.Content{OutputFormat: common.OutputFmtKepub}
+	title := "Test Chapter"
+	doc, root := createXHTMLDocument(c, title)
+
+	if doc == nil {
+		t.Fatal("createXHTMLDocument returned nil")
+	}
+
+	if root == nil {
+		t.Fatal("createXHTMLDocument returned nil root element")
+	}
+
+	docRoot := doc.Root()
+	if docRoot == nil || docRoot.Tag != "html" {
+		t.Error("Root element should be <html>")
+	}
+
+	body := docRoot.SelectElement("body")
+	if body == nil {
+		t.Fatal("Missing <body> element")
+	}
+
+	// For Kobo format, body should contain book-columns div
+	var bookColumnsDiv *etree.Element
+	for _, child := range body.ChildElements() {
+		if child.Tag == "div" && child.SelectAttrValue("id", "") == "book-columns" {
+			bookColumnsDiv = child
+			break
+		}
+	}
+	if bookColumnsDiv == nil {
+		t.Fatal("Missing book-columns div for Kobo format")
+	}
+
+	// book-columns should contain book-inner div
+	var bookInnerDiv *etree.Element
+	for _, child := range bookColumnsDiv.ChildElements() {
+		if child.Tag == "div" && child.SelectAttrValue("id", "") == "book-inner" {
+			bookInnerDiv = child
+			break
+		}
+	}
+	if bookInnerDiv == nil {
+		t.Fatal("Missing book-inner div for Kobo format")
+	}
+
+	// For Kobo format, root should be the book-inner div
+	if root != bookInnerDiv {
+		t.Error("For Kobo format, root element should be book-inner div")
+	}
+}
+
+func TestCreateXHTMLDocument_Kobo3(t *testing.T) {
+	c := &content.Content{OutputFormat: common.OutputFmtKepub3}
+	_, root := createXHTMLDocument(c, "Test Chapter")
+
+	if root == nil {
+		t.Fatal("createXHTMLDocument returned nil root element")
+	}
+	if root.Tag != "div" || root.SelectAttrValue("id", "") != "book-inner" {
+		t.Fatalf("root = <%s id=%q>, want book-inner div", root.Tag, root.SelectAttrValue("id", ""))
+	}
+}
+
+func TestBuildStyleAttr(t *testing.T) {
+	tests := []struct {
+		name      string
+		baseStyle string
+		align     string
+		vAlign    string
+		contains  []string
+	}{
+		{
+			name:      "empty styles",
+			baseStyle: "",
+			align:     "",
+			vAlign:    "",
+			contains:  []string{},
+		},
+		{
+			name:      "base style only",
+			baseStyle: "color: red;",
+			align:     "",
+			vAlign:    "",
+			contains:  []string{"color: red;"},
+		},
+		{
+			name:      "with alignment",
+			baseStyle: "",
+			align:     "center",
+			vAlign:    "",
+			contains:  []string{"text-align: center;"},
+		},
+		{
+			name:      "with vertical alignment",
+			baseStyle: "",
+			align:     "",
+			vAlign:    "middle",
+			contains:  []string{"vertical-align: middle;"},
+		},
+		{
+			name:      "all combined",
+			baseStyle: "color: red;",
+			align:     "center",
+			vAlign:    "top",
+			contains:  []string{"color: red;", "text-align: center;", "vertical-align: top;"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildStyleAttr(tt.baseStyle, tt.align, tt.vAlign)
+			for _, expected := range tt.contains {
+				if !strings.Contains(result, expected) {
+					t.Errorf("buildStyleAttr() should contain %q, got %v", expected, result)
+				}
+			}
+			if len(tt.contains) == 0 && result != "" {
+				t.Errorf("buildStyleAttr() = %v, want empty", result)
+			}
+		})
+	}
+}
+
+func TestCalculateSectionDepth(t *testing.T) {
+	tests := []struct {
+		name     string
+		section  *fb2.Section
+		expected int
+	}{
+		{
+			name:     "no subsections",
+			section:  &fb2.Section{},
+			expected: 1,
+		},
+		{
+			name: "one level",
+			section: &fb2.Section{
+				Content: []fb2.FlowItem{
+					{
+						Kind: fb2.FlowSection,
+						Section: &fb2.Section{
+							Title: &fb2.Title{},
+						},
+					},
+				},
+			},
+			expected: 2,
+		},
+		{
+			name: "two levels",
+			section: &fb2.Section{
+				Content: []fb2.FlowItem{
+					{
+						Kind: fb2.FlowSection,
+						Section: &fb2.Section{
+							Title: &fb2.Title{},
+							Content: []fb2.FlowItem{
+								{
+									Kind: fb2.FlowSection,
+									Section: &fb2.Section{
+										Title: &fb2.Title{},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: 3,
+		},
+		{
+			name: "multiple branches",
+			section: &fb2.Section{
+				Content: []fb2.FlowItem{
+					{
+						Kind: fb2.FlowSection,
+						Section: &fb2.Section{
+							Title: &fb2.Title{},
+							Content: []fb2.FlowItem{
+								{
+									Kind: fb2.FlowSection,
+									Section: &fb2.Section{
+										Title: &fb2.Title{},
+										Content: []fb2.FlowItem{
+											{
+												Kind: fb2.FlowSection,
+												Section: &fb2.Section{
+													Title: &fb2.Title{},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+					{
+						Kind:    fb2.FlowSection,
+						Section: &fb2.Section{Title: &fb2.Title{}},
+					},
+				},
+			},
+			expected: 4,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := calculateSectionDepth(tt.section, 1)
+			if result != tt.expected {
+				t.Errorf("calculateSectionDepth() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func calculateSectionDepth(section *fb2.Section, currentDepth int) int {
+	maxDepth := currentDepth
+	for _, item := range section.Content {
+		if item.Kind == fb2.FlowSubtitle && item.Subtitle != nil {
+			// Subtitles count as same depth as sections at this level
+			maxDepth = max(maxDepth, currentDepth)
+		} else if item.Kind == fb2.FlowSection && item.Section != nil && item.Section.Title != nil {
+			maxDepth = max(maxDepth, calculateSectionDepth(item.Section, currentDepth+1))
+		}
+	}
+	return maxDepth
+}
+
+func TestProcessFootnoteBodies(t *testing.T) {
+	_, _, log := setupTestContext(t)
+
+	c := &content.Content{
+		Book: &fb2.FictionBook{},
+	}
+
+	tests := []struct {
+		name             string
+		bodies           []*fb2.Body
+		expectError      bool
+		expectedChapters int
+	}{
+		{
+			name: "single footnote body",
+			bodies: []*fb2.Body{
+				{
+					Name: "notes",
+					Kind: fb2.BodyFootnotes,
+					Title: &fb2.Title{
+						Items: []fb2.TitleItem{
+							{Paragraph: &fb2.Paragraph{
+								Text: []fb2.InlineSegment{{Text: "Footnotes"}},
+							}},
+						},
+					},
+					Sections: []fb2.Section{
+						{ID: "note1"},
+					},
+				},
+			},
+			expectError:      false,
+			expectedChapters: 1,
+		},
+		{
+			name: "multiple footnote bodies with same name",
+			bodies: []*fb2.Body{
+				{
+					Name: "notes",
+					Kind: fb2.BodyFootnotes,
+					Sections: []fb2.Section{
+						{ID: "note1"},
+					},
+				},
+				{
+					Name: "notes",
+					Kind: fb2.BodyFootnotes,
+					Sections: []fb2.Section{
+						{ID: "note2"},
+					},
+				},
+			},
+			expectError:      false,
+			expectedChapters: 2,
+		},
+		{
+			name: "footnote body without name",
+			bodies: []*fb2.Body{
+				{
+					Sections: []fb2.Section{
+						{ID: "note1"},
+					},
+				},
+			},
+			expectError:      false,
+			expectedChapters: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			chapters, err := processFootnoteBodies(c, tt.bodies, log)
+
+			if tt.expectError && err == nil {
+				t.Error("Expected error but got none")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+
+			if len(chapters) != tt.expectedChapters {
+				t.Errorf("Expected %d chapters, got %d", tt.expectedChapters, len(chapters))
+			}
+
+			// Verify unique body IDs in generated XHTML
+			if len(chapters) > 0 && chapters[0].Doc != nil {
+				bodyDivs := chapters[0].Doc.FindElements("//div[@class='footnote-body']")
+				ids := make(map[string]bool)
+				for _, div := range bodyDivs {
+					id := div.SelectAttrValue("id", "")
+					if id == "" {
+						t.Error("footnote-body div missing id attribute")
+						continue
+					}
+					if ids[id] {
+						t.Errorf("Duplicate body ID found: %s", id)
+					}
+					ids[id] = true
+				}
+			}
+		})
+	}
+}
+
+func TestFixInternalLinks(t *testing.T) {
+	_, _, log := setupTestContext(t)
+
+	c := &content.Content{}
+
+	// Create test chapters with links
+	doc1, root1 := createXHTMLDocument(c, "Chapter 1")
+	p1 := root1.CreateElement("p")
+	p1.CreateAttr("id", "para1")
+	a1 := p1.CreateElement("a")
+	a1.CreateAttr("href", "#para2")
+	a1.SetText("Link to para2")
+
+	doc2, root2 := createXHTMLDocument(c, "Chapter 2")
+	p2 := root2.CreateElement("p")
+	p2.CreateAttr("id", "para2")
+
+	chapters := []Chapter{
+		{ID: "ch1", Filename: "ch1.xhtml", Doc: doc1},
+		{ID: "ch2", Filename: "ch2.xhtml", Doc: doc2},
+	}
+
+	idToFile := idToFileMap{
+		"para1": "ch1.xhtml",
+		"para2": "ch2.xhtml",
+	}
+
+	fixInternalLinks(chapters, idToFile, log)
+
+	// Verify link was updated
+	link := doc1.FindElement("//a[@href]")
+	if link == nil {
+		t.Fatal("Link not found")
+	}
+
+	href := link.SelectAttrValue("href", "")
+	expected := "ch2.xhtml#para2"
+	if href != expected {
+		t.Errorf("Link href = %v, want %v", href, expected)
+	}
+}
+
+func TestFixInternalLinks_UsesRenderedIDsFromEpigraphs(t *testing.T) {
+	ctx, _, log := setupTestContext(t)
+
+	book := &fb2.FictionBook{
+		Bodies: []fb2.Body{
+			{
+				Kind: fb2.BodyMain,
+				Sections: []fb2.Section{
+					{
+						ID:    "source-section",
+						Title: makeTitle("Source"),
+						Content: []fb2.FlowItem{
+							{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
+								{Kind: fb2.InlineText, Text: "See "},
+								{
+									Kind:     fb2.InlineLink,
+									Href:     "#epigraph-target",
+									Children: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "target"}},
+								},
+							}}},
+						},
+					},
+					{
+						ID:    "target-section",
+						Title: makeTitle("Target"),
+						Epigraphs: []fb2.Epigraph{
+							{Flow: fb2.Flow{Items: []fb2.FlowItem{
+								{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+									ID:   "epigraph-target",
+									Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Target epigraph"}},
+								}},
+							}}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	c := &content.Content{
+		OutputFormat: common.OutputFmtEpub3,
+		Book:         book,
+		IDsIndex:     make(fb2.IDIndex),
+	}
+
+	chapters, idToFile, err := convertToXHTML(ctx, c, false, log)
+	if err != nil {
+		t.Fatalf("convertToXHTML error: %v", err)
+	}
+	if len(chapters) != 2 {
+		t.Fatalf("expected 2 chapters, got %d", len(chapters))
+	}
+	if got, want := idToFile["epigraph-target"], chapters[1].Filename; got != want {
+		t.Fatalf("epigraph target should map to rendered target file %q, got %q", want, got)
+	}
+
+	fixInternalLinks(chapters, idToFile, log)
+	link := chapters[0].Doc.FindElement("//a[@href]")
+	if link == nil {
+		t.Fatal("link not found")
+	}
+	if got, want := link.SelectAttrValue("href", ""), chapters[1].Filename+"#epigraph-target"; got != want {
+		t.Fatalf("link href = %q, want %q", got, want)
+	}
+}
+
+func TestFixInternalLinks_SameFile(t *testing.T) {
+	_, _, log := setupTestContext(t)
+
+	c := &content.Content{}
+	doc, root := createXHTMLDocument(c, "Chapter 1")
+	p1 := root.CreateElement("p")
+	p1.CreateAttr("id", "para1")
+	a := p1.CreateElement("a")
+	a.CreateAttr("href", "#para2")
+	p2 := root.CreateElement("p")
+	p2.CreateAttr("id", "para2")
+
+	chapters := []Chapter{
+		{ID: "ch1", Filename: "ch1.xhtml", Doc: doc},
+	}
+
+	idToFile := idToFileMap{
+		"para1": "ch1.xhtml",
+		"para2": "ch1.xhtml",
+	}
+
+	fixInternalLinks(chapters, idToFile, log)
+
+	// Verify link remains unchanged (same file)
+	link := doc.FindElement("//a[@href]")
+	href := link.SelectAttrValue("href", "")
+	expected := "#para2"
+	if href != expected {
+		t.Errorf("Link href = %v, want %v (should remain unchanged)", href, expected)
+	}
+}
+
+func TestAppendImageElement(t *testing.T) {
+	_, _, _ = setupTestContext(t)
+
+	c := &content.Content{
+		ImagesIndex: fb2.BookImages{
+			"img1": &fb2.BookImage{
+				MimeType: "image/jpeg",
+				Filename: "img1.jpg",
+			},
+		},
+	}
+
+	parent := etree.NewElement("div")
+	img := &fb2.Image{Href: "#img1", Alt: "Test Image"}
+
+	appendImageElement(parent, c, img)
+
+	// Image is wrapped in a div - use FindElement for attribute search
+	div := parent.FindElement("//div[@class='image']")
+	if div == nil {
+		// Try without XPath
+		div = parent.SelectElement("div")
+		if div == nil {
+			t.Fatal("Image div not created")
+		}
+		if div.SelectAttrValue("class", "") != "image" {
+			t.Fatalf("Div class = %v, want 'image'", div.SelectAttrValue("class", ""))
+		}
+	}
+
+	imgElem := div.SelectElement("img")
+	if imgElem == nil {
+		t.Fatal("Image element not created")
+	}
+
+	src := imgElem.SelectAttrValue("src", "")
+	if !strings.Contains(src, "img1.jpg") {
+		t.Errorf("Image src = %v, should contain img1.jpg", src)
+	}
+
+	alt := imgElem.SelectAttrValue("alt", "")
+	if alt != "Test Image" {
+		t.Errorf("Image alt = %v, want 'Test Image'", alt)
+	}
+}
+
+func TestAppendImageElement_MissingImage(t *testing.T) {
+	_ = setupTestLogger(t)
+
+	c := &content.Content{
+		ImagesIndex: make(fb2.BookImages),
+	}
+
+	parent := etree.NewElement("div")
+	img := &fb2.Image{Href: "#missing"}
+
+	appendImageElement(parent, c, img)
+
+	// Should still create element but with placeholder
+	div := parent.SelectElement("div")
+	if div == nil {
+		t.Error("Image div should still be created for missing image")
+		return
+	}
+
+	imgElem := div.SelectElement("img")
+	if imgElem == nil {
+		t.Error("Image element should still be created for missing image")
+	}
+}
+
+// Additional tests for improving coverage
+
+func TestAppendTitleAsDiv(t *testing.T) {
+	_, _, _ = setupTestContext(t)
+
+	c := &content.Content{
+		ImagesIndex: make(fb2.BookImages),
+	}
+
+	parent := etree.NewElement("div")
+
+	title := &fb2.Title{
+		Items: []fb2.TitleItem{
+			{Paragraph: &fb2.Paragraph{
+				ID:   "title1",
+				Text: []fb2.InlineSegment{{Text: "First Title"}},
+			}},
+			{EmptyLine: true},
+			{Paragraph: &fb2.Paragraph{
+				Text:  []fb2.InlineSegment{{Text: "Second Title"}},
+				Style: "custom-style",
+			}},
+		},
+	}
+
+	appendTitleAsDiv(parent, c, title, "test-title")
+
+	titleDiv := parent.SelectElement("div")
+	if titleDiv == nil {
+		t.Fatal("Title div not created")
+	}
+
+	if titleDiv.SelectAttrValue("class", "") != "test-title" {
+		t.Errorf("Title div class = %v, want 'test-title'", titleDiv.SelectAttrValue("class", ""))
+	}
+
+	// Check paragraphs
+	paras := titleDiv.SelectElements("p")
+	if len(paras) != 2 {
+		t.Fatalf("Expected 2 paragraphs, got %d", len(paras))
+	}
+
+	// First paragraph should have test-title-first class
+	if !strings.Contains(paras[0].SelectAttrValue("class", ""), "test-title-first") {
+		t.Errorf("First paragraph class should contain 'test-title-first'")
+	}
+
+	// Check for br element
+	br := titleDiv.SelectElement("br")
+	if br == nil {
+		t.Error("Empty line should create br element")
+	}
+
+	// Second paragraph with custom style
+	if !strings.Contains(paras[1].SelectAttrValue("class", ""), "custom-style") {
+		t.Error("Second paragraph should have custom-style class")
+	}
+}
+
+func TestAppendEpigraphs(t *testing.T) {
+	_, _, log := setupTestContext(t)
+
+	c := &content.Content{
+		ImagesIndex: make(fb2.BookImages),
+	}
+
+	parent := etree.NewElement("div")
+
+	epigraphs := []fb2.Epigraph{
+		{
+			Flow: fb2.Flow{
+				Items: []fb2.FlowItem{
+					{
+						Kind: fb2.FlowParagraph,
+						Paragraph: &fb2.Paragraph{
+							Text: []fb2.InlineSegment{{Text: "Epigraph text"}},
+						},
+					},
+				},
+			},
+			TextAuthors: []fb2.Paragraph{
+				{Text: []fb2.InlineSegment{{Text: "Author Name"}}},
+			},
+		},
+	}
+
+	err := appendEpigraphs(parent, c, epigraphs, 1, log)
+	if err != nil {
+		t.Fatalf("appendEpigraphs() error = %v", err)
+	}
+
+	epigraphDiv := parent.SelectElement("div[@class='epigraph']")
+	if epigraphDiv == nil {
+		// Try without xpath
+		epigraphDiv = parent.SelectElement("div")
+		if epigraphDiv == nil || epigraphDiv.SelectAttrValue("class", "") != "epigraph" {
+			t.Fatal("Epigraph div not created")
+		}
+	}
+
+	// Check for text-author
+	authorP := epigraphDiv.FindElement("//p[@class='text-author']")
+	if authorP == nil {
+		authorP = epigraphDiv.SelectElement("p")
+	}
+	if authorP == nil {
+		t.Error("Text author paragraph not created")
+	}
+}
+
+func TestAppendPoemElement(t *testing.T) {
+	_, _, log := setupTestContext(t)
+
+	c := &content.Content{
+		ImagesIndex: make(fb2.BookImages),
+	}
+
+	parent := etree.NewElement("div")
+
+	poem := &fb2.Poem{
+		ID:   "poem1",
+		Lang: "en",
+		Title: &fb2.Title{
+			Items: []fb2.TitleItem{
+				{Paragraph: &fb2.Paragraph{
+					Text: []fb2.InlineSegment{{Text: "Poem Title"}},
+				}},
+			},
+		},
+		Stanzas: []fb2.Stanza{
+			{
+				Verses: []fb2.Paragraph{
+					{Text: []fb2.InlineSegment{{Text: "First line"}}},
+					{Text: []fb2.InlineSegment{{Text: "Second line"}}},
+				},
+			},
+		},
+		TextAuthors: []fb2.Paragraph{
+			{Text: []fb2.InlineSegment{{Text: "Poet Name"}}},
+		},
+	}
+
+	err := appendPoemElement(parent, c, poem, 1, log)
+	if err != nil {
+		t.Fatalf("appendPoemElement() error = %v", err)
+	}
+
+	poemDiv := parent.SelectElement("div")
+	if poemDiv == nil {
+		t.Fatal("Poem div not created")
+	}
+
+	if poemDiv.SelectAttrValue("id", "") != "poem1" {
+		t.Error("Poem div should have id attribute")
+	}
+
+	if poemDiv.SelectAttrValue("xml:lang", "") != "en" {
+		t.Error("Poem div should have xml:lang attribute")
+	}
+
+	// Check for stanza
+	stanzaDiv := poemDiv.SelectElement("div")
+	if stanzaDiv == nil {
+		t.Error("Stanza div not created")
+		return
+	}
+
+	// Check verses - count all p elements in stanza
+	verses := stanzaDiv.SelectElements("p")
+	if len(verses) < 1 {
+		t.Errorf("Expected at least 1 verse paragraph, got %d", len(verses))
+	}
+}
+
+func TestAppendPoemElement_WithDate(t *testing.T) {
+	_, _, log := setupTestContext(t)
+
+	c := &content.Content{
+		ImagesIndex: make(fb2.BookImages),
+	}
+
+	parent := etree.NewElement("div")
+
+	poem := &fb2.Poem{
+		Stanzas: []fb2.Stanza{
+			{
+				Verses: []fb2.Paragraph{
+					{Text: []fb2.InlineSegment{{Text: "Line"}}},
+				},
+			},
+		},
+		Date: &fb2.Date{
+			Display: "December 2025",
+		},
+	}
+
+	err := appendPoemElement(parent, c, poem, 1, log)
+	if err != nil {
+		t.Fatalf("appendPoemElement() error = %v", err)
+	}
+
+	poemDiv := parent.SelectElement("div")
+	dateP := poemDiv.FindElement("//p[@class='date']")
+	if dateP == nil {
+		// Try alternative
+		for _, p := range poemDiv.SelectElements("p") {
+			if p.SelectAttrValue("class", "") == "date" {
+				dateP = p
+				break
+			}
+		}
+	}
+
+	if dateP == nil {
+		t.Error("Date paragraph not created")
+	} else if dateP.Text() != "December 2025" {
+		t.Errorf("Date text = %v, want 'December 2025'", dateP.Text())
+	}
+}
+
+func TestAppendCiteElement(t *testing.T) {
+	_, _, log := setupTestContext(t)
+
+	c := &content.Content{
+		ImagesIndex: make(fb2.BookImages),
+	}
+
+	parent := etree.NewElement("div")
+
+	cite := &fb2.Cite{
+		ID:   "cite1",
+		Lang: "en",
+		Items: []fb2.FlowItem{
+			{
+				Kind: fb2.FlowParagraph,
+				Paragraph: &fb2.Paragraph{
+					Text: []fb2.InlineSegment{{Text: "Citation text"}},
+				},
+			},
+		},
+		TextAuthors: []fb2.Paragraph{
+			{Text: []fb2.InlineSegment{{Text: "Cited Author"}}},
+		},
+	}
+
+	err := appendCiteElement(parent, c, cite, 1, log)
+	if err != nil {
+		t.Fatalf("appendCiteElement() error = %v", err)
+	}
+
+	blockquote := parent.SelectElement("blockquote")
+	if blockquote == nil {
+		t.Fatal("Blockquote not created")
+	}
+
+	if blockquote.SelectAttrValue("id", "") != "cite1" {
+		t.Error("Blockquote should have id attribute")
+	}
+
+	if blockquote.SelectAttrValue("xml:lang", "") != "en" {
+		t.Error("Blockquote should have xml:lang attribute")
+	}
+}
+
+func TestAppendTableElement(t *testing.T) {
+	_, _, _ = setupTestContext(t)
+
+	c := &content.Content{
+		ImagesIndex: make(fb2.BookImages),
+	}
+
+	parent := etree.NewElement("div")
+
+	table := &fb2.Table{
+		ID: "table1",
+		Rows: []fb2.TableRow{
+			{
+				Cells: []fb2.TableCell{
+					{
+						Content: []fb2.InlineSegment{{Text: "Cell 1"}},
+					},
+					{
+						Content: []fb2.InlineSegment{{Text: "Cell 2"}},
+						Align:   "center",
+						VAlign:  "middle",
+					},
+				},
+			},
+		},
+	}
+
+	appendTableElement(parent, c, table)
+
+	tableElem := parent.SelectElement("table")
+	if tableElem == nil {
+		t.Fatal("Table element not created")
+	}
+
+	if tableElem.SelectAttrValue("id", "") != "table1" {
+		t.Error("Table should have id attribute")
+	}
+
+	// Check for row
+	tr := tableElem.SelectElement("tr")
+	if tr == nil {
+		t.Error("Table row not created")
+	}
+
+	// Check for cells
+	cells := tr.SelectElements("td")
+	if len(cells) != 2 {
+		t.Errorf("Expected 2 cells, got %d", len(cells))
+	}
+
+	// Check alignment attributes on second cell
+	if len(cells) > 1 {
+		style := cells[1].SelectAttrValue("style", "")
+		if !strings.Contains(style, "text-align") || !strings.Contains(style, "vertical-align") {
+			t.Error("Second cell should have alignment styles")
+		}
+	}
+}
+
+func TestGenerateTOCPage(t *testing.T) {
+	log := setupTestLogger(t)
+
+	c := &content.Content{
+		Book: &fb2.FictionBook{
+			Description: fb2.Description{
+				TitleInfo: fb2.TitleInfo{
+					BookTitle: fb2.TextField{Value: "Test Book"},
+				},
+			},
+		},
+		IDsIndex:     make(fb2.IDIndex),
+		OutputFormat: common.OutputFmtEpub2,
+	}
+
+	chapters := []Chapter{
+		{
+			ID:           "ch1",
+			Filename:     "ch1.xhtml",
+			Title:        "Chapter 1",
+			IncludeInTOC: true,
+		},
+		{
+			ID:           "ch2",
+			Filename:     "ch2.xhtml",
+			Title:        "Chapter 2",
+			IncludeInTOC: true,
+		},
+	}
+
+	cfg := &config.TOCPageConfig{}
+
+	tocChapter := generateTOCPage(c, chapters, cfg, nil, log)
+
+	if tocChapter.ID != "toc-page" {
+		t.Errorf("Expected ID 'toc-page', got '%s'", tocChapter.ID)
+	}
+
+	if tocChapter.Filename != "toc-page.xhtml" {
+		t.Errorf("Expected filename 'toc-page.xhtml', got '%s'", tocChapter.Filename)
+	}
+
+	if tocChapter.Title != "Table of Contents" {
+		t.Errorf("Expected title 'Table of Contents', got '%s'", tocChapter.Title)
+	}
+
+	if tocChapter.Doc == nil {
+		t.Fatal("TOC document should not be nil")
+	}
+
+	// Check document structure
+	body := tocChapter.Doc.Root().SelectElement("body")
+	if body == nil {
+		t.Fatal("Body element not found")
+	}
+
+	// Check for toc-body div wrapper
+	tocBodyDiv := body.SelectElement("div")
+	if tocBodyDiv == nil {
+		t.Fatal("TOC body div wrapper not found")
+	}
+
+	if tocBodyDiv.SelectAttrValue("class", "") != "toc-body" {
+		t.Errorf("Expected div class 'toc-body', got '%s'", tocBodyDiv.SelectAttrValue("class", ""))
+	}
+
+	// Check div has ID matching chapter ID
+	if tocBodyDiv.SelectAttrValue("id", "") != tocChapter.ID {
+		t.Errorf("Expected div id '%s', got '%s'", tocChapter.ID, tocBodyDiv.SelectAttrValue("id", ""))
+	}
+
+	h1 := tocBodyDiv.SelectElement("h1")
+	if h1 == nil {
+		t.Fatal("H1 element not found")
+	}
+
+	// Check h1 has CSS class
+	if h1.SelectAttrValue("class", "") != "toc-title" {
+		t.Errorf("Expected h1 class 'toc-title', got '%s'", h1.SelectAttrValue("class", ""))
+	}
+
+	// H1 now contains the book title in a span with the new structure
+	titleSpan := h1.SelectElement("span")
+	if titleSpan == nil {
+		t.Fatal("Title span not found in h1")
+	}
+	if titleSpan.SelectAttrValue("class", "") != "toc-title-first" {
+		t.Errorf("Expected span class 'toc-title-first', got '%s'", titleSpan.SelectAttrValue("class", ""))
+	}
+	if titleSpan.Text() != "Test Book" {
+		t.Errorf("Expected title span text 'Test Book', got '%s'", titleSpan.Text())
+	}
+
+	ol := tocBodyDiv.SelectElement("ol")
+	if ol == nil {
+		t.Fatal("OL element not found")
+	}
+
+	// Check ol has CSS class
+	if ol.SelectAttrValue("class", "") != "toc-list" {
+		t.Errorf("Expected ol class 'toc-list', got '%s'", ol.SelectAttrValue("class", ""))
+	}
+
+	items := ol.SelectElements("li")
+	if len(items) != 2 {
+		t.Errorf("Expected 2 list items, got %d", len(items))
+	}
+
+	// Check first item
+	if len(items) > 0 {
+		// Check li has CSS class
+		if items[0].SelectAttrValue("class", "") != "toc-item" {
+			t.Errorf("Expected li class 'toc-item', got '%s'", items[0].SelectAttrValue("class", ""))
+		}
+
+		a := items[0].SelectElement("a")
+		if a == nil {
+			t.Fatal("First item should have anchor element")
+		}
+
+		// Check anchor has CSS class
+		if a.SelectAttrValue("class", "") != "link-toc" {
+			t.Errorf("Expected a class 'link-toc', got '%s'", a.SelectAttrValue("class", ""))
+		}
+
+		href := a.SelectAttrValue("href", "")
+		if href != "ch1.xhtml" {
+			t.Errorf("Expected href 'ch1.xhtml', got '%s'", href)
+		}
+		if a.Text() != "Chapter 1" {
+			t.Errorf("Expected link text 'Chapter 1', got '%s'", a.Text())
+		}
+	}
+}
+
+func TestGenerateTOCPage_IDCollision(t *testing.T) {
+	log := setupTestLogger(t)
+
+	c := &content.Content{
+		Book: &fb2.FictionBook{
+			Description: fb2.Description{
+				TitleInfo: fb2.TitleInfo{
+					BookTitle: fb2.TextField{Value: "Test Book"},
+				},
+			},
+		},
+	}
+
+	chapters := []Chapter{
+		{
+			ID:           "ch1",
+			Filename:     "ch1.xhtml",
+			Title:        "Normal Chapter",
+			IncludeInTOC: true,
+		},
+	}
+
+	// Simulate FB2 source having element IDs that collide with TOC page IDs
+	c.IDsIndex = fb2.IDIndex{
+		"toc-page":   {Type: "section"},
+		"toc-page-1": {Type: "section"},
+	}
+
+	cfg := &config.TOCPageConfig{}
+
+	tocChapter := generateTOCPage(c, chapters, cfg, nil, log)
+
+	// Should get toc-page-2 since toc-page and toc-page-1 are taken by FB2 element IDs
+	if tocChapter.ID != "toc-page-2" {
+		t.Errorf("Expected ID 'toc-page-2' (avoiding collisions), got '%s'", tocChapter.ID)
+	}
+
+	if tocChapter.Filename != "toc-page-2.xhtml" {
+		t.Errorf("Expected filename 'toc-page-2.xhtml', got '%s'", tocChapter.Filename)
+	}
+}
+
+// TestFloatModeFootnotes verifies Amazon KDP-compliant footnote markup
+func TestFloatModeFootnotes(t *testing.T) {
+	const backlinkSym = "[<]"
+
+	tests := []struct {
+		name           string
+		format         common.OutputFmt
+		mode           common.FootnotesMode
+		expectNoteref  bool // EPUB3: expect epub:type="noteref"
+		expectAside    bool // EPUB3: expect <aside epub:type="footnote">
+		expectRefID    bool // EPUB2/3: expect id on <a> reference
+		expectBacklink bool // expect back-reference link
+	}{
+		{
+			name:           "EPUB3 float mode",
+			format:         common.OutputFmtEpub3,
+			mode:           common.FootnotesModeFloat,
+			expectNoteref:  true,
+			expectAside:    true,
+			expectRefID:    true,
+			expectBacklink: true,
+		},
+		{
+			name:           "EPUB2 float mode",
+			format:         common.OutputFmtEpub2,
+			mode:           common.FootnotesModeFloat,
+			expectNoteref:  false,
+			expectAside:    false,
+			expectRefID:    true,
+			expectBacklink: true,
+		},
+		{
+			name:           "EPUB3 default mode",
+			format:         common.OutputFmtEpub3,
+			mode:           common.FootnotesModeDefault,
+			expectNoteref:  false,
+			expectAside:    false,
+			expectRefID:    true,
+			expectBacklink: true,
+		},
+		{
+			name:           "EPUB2 default mode",
+			format:         common.OutputFmtEpub2,
+			mode:           common.FootnotesModeDefault,
+			expectNoteref:  false,
+			expectAside:    false,
+			expectRefID:    true,
+			expectBacklink: true,
+		},
+		{
+			name:           "Kepub default mode",
+			format:         common.OutputFmtKepub,
+			mode:           common.FootnotesModeDefault,
+			expectNoteref:  false,
+			expectAside:    false,
+			expectRefID:    true,
+			expectBacklink: true,
+		},
+		{
+			name:           "KEPUB3 float mode",
+			format:         common.OutputFmtKepub3,
+			mode:           common.FootnotesModeFloat,
+			expectNoteref:  true,
+			expectAside:    true,
+			expectRefID:    true,
+			expectBacklink: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _, log := setupTestContext(t)
+
+			// Create test content with footnote
+			c := &content.Content{
+				OutputFormat:     tt.format,
+				FootnotesMode:    tt.mode,
+				BackLinkIndex:    make(map[string][]content.BackLinkRef),
+				BacklinkTemplate: backlinkSym,
+				Book: &fb2.FictionBook{
+					Bodies: []fb2.Body{
+						{
+							Sections: []fb2.Section{
+								{
+									ID: "chapter1",
+									Content: []fb2.FlowItem{
+										{
+											Kind: fb2.FlowParagraph,
+											Paragraph: &fb2.Paragraph{
+												Text: []fb2.InlineSegment{
+													{Kind: fb2.InlineText, Text: "Text with footnote"},
+													{
+														Kind: fb2.InlineLink,
+														Href: "#note1",
+														Children: []fb2.InlineSegment{
+															{Kind: fb2.InlineText, Text: "1"},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						{
+							Name: "notes",
+							Kind: fb2.BodyFootnotes,
+							Sections: []fb2.Section{
+								{
+									ID: "note1",
+									Content: []fb2.FlowItem{
+										{
+											Kind: fb2.FlowParagraph,
+											Paragraph: &fb2.Paragraph{
+												Text: []fb2.InlineSegment{
+													{Kind: fb2.InlineText, Text: "Footnote text"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				FootnotesIndex: fb2.FootnoteRefs{
+					"note1": fb2.FootnoteRef{BodyIdx: 1, SectionIdx: 0},
+				},
+			}
+
+			chapters, _, err := convertToXHTML(ctx, c, false, log)
+			if err != nil {
+				t.Fatalf("convertToXHTML() error = %v", err)
+			}
+
+			// Find chapter with main content
+			var mainChapter *Chapter
+			for i := range chapters {
+				if chapters[i].Doc != nil && strings.Contains(chapters[i].ID, "index") {
+					mainChapter = &chapters[i]
+					break
+				}
+			}
+			if mainChapter == nil {
+				t.Fatal("Main chapter not found")
+			}
+
+			// Check for footnote reference attributes
+			linkElems := mainChapter.Doc.FindElements("//a[@href='#note1']")
+			if len(linkElems) == 0 {
+				t.Fatal("Footnote link not found")
+			}
+			link := linkElems[0]
+
+			if tt.expectNoteref {
+				epubType := link.SelectAttrValue("epub:type", "")
+				if epubType != "noteref" {
+					t.Errorf("Expected epub:type='noteref', got '%s'", epubType)
+				}
+			}
+
+			if tt.expectRefID {
+				refID := link.SelectAttrValue("id", "")
+				if refID == "" {
+					t.Error("Expected id attribute on footnote reference")
+				} else if !strings.HasPrefix(refID, "ref-note1-") {
+					t.Errorf("Expected ref ID to start with 'ref-note1-', got '%s'", refID)
+				}
+			}
+
+			// Find footnote chapter (has AnchorID set)
+			var fnChapter *Chapter
+			for i := range chapters {
+				if chapters[i].Doc != nil && chapters[i].AnchorID != "" {
+					fnChapter = &chapters[i]
+					break
+				}
+			}
+			if fnChapter == nil {
+				t.Fatal("Footnote chapter not found")
+			}
+
+			if tt.expectAside {
+				// Check for <aside epub:type="footnote">
+				asides := fnChapter.Doc.FindElements("//aside[@epub:type='footnote']")
+				if len(asides) == 0 {
+					t.Error("Expected <aside epub:type='footnote'> not found")
+				}
+			}
+
+			if tt.expectBacklink {
+				// Check for back-reference link
+				var backlinks []*etree.Element
+				if tt.mode.IsFloat() && (tt.format == common.OutputFmtEpub2 || tt.format == common.OutputFmtKepub) {
+					// EPUB2: backlink is inside <p class="footnote">
+					backlinks = fnChapter.Doc.FindElements("//p[@class='footnote']/a")
+				} else {
+					// EPUB3/default: backlink is <a class="link-backlink"> in a separate <p>
+					backlinks = fnChapter.Doc.FindElements("//a[@class='link-backlink']")
+				}
+				if len(backlinks) == 0 {
+					t.Error("Expected back-reference link not found")
+				} else {
+					backlink := backlinks[0]
+					href := backlink.SelectAttrValue("href", "")
+					// Backlink should include filename and anchor
+					if !strings.Contains(href, ".xhtml#ref-note1-") {
+						t.Errorf("Expected backlink href to contain '.xhtml#ref-note1-', got '%s'", href)
+					}
+					if got := backlinkText(backlink); got != backlinkSym {
+						t.Errorf("Expected backlink text '%s', got '%s'", backlinkSym, got)
+					}
+				}
+			}
+		})
+	}
+}
+
+func backlinkText(backlink *etree.Element) string {
+	if backlink == nil {
+		return ""
+	}
+	if text := backlink.Text(); text != "" {
+		return text
+	}
+	span := backlink.FindElement(".//span")
+	if span == nil {
+		return ""
+	}
+	return span.Text()
+}
+
+func TestFootnoteBacklinksIncludeBackwardFootnoteReferences(t *testing.T) {
+	tests := []struct {
+		name   string
+		format common.OutputFmt
+		mode   common.FootnotesMode
+	}{
+		{name: "EPUB2 float", format: common.OutputFmtEpub2, mode: common.FootnotesModeFloat},
+		{name: "EPUB3 float", format: common.OutputFmtEpub3, mode: common.FootnotesModeFloat},
+		{name: "KEPUB float", format: common.OutputFmtKepub, mode: common.FootnotesModeFloat},
+		{name: "KEPUB3 float", format: common.OutputFmtKepub3, mode: common.FootnotesModeFloat},
+		{name: "EPUB3 default", format: common.OutputFmtEpub3, mode: common.FootnotesModeDefault},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _, log := setupTestContext(t)
+			c := &content.Content{
+				OutputFormat:     tt.format,
+				FootnotesMode:    tt.mode,
+				BackLinkIndex:    make(map[string][]content.BackLinkRef),
+				BacklinkTemplate: "[<]",
+				Book: &fb2.FictionBook{Bodies: []fb2.Body{{
+					Sections: []fb2.Section{{
+						ID: "chapter1",
+						Content: []fb2.FlowItem{{
+							Kind: fb2.FlowParagraph,
+							Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
+								{Kind: fb2.InlineText, Text: "Text "},
+								{Kind: fb2.InlineLink, Href: "#note2", Children: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "2"}}},
+							}},
+						}},
+					}},
+				}, {
+					Name: "notes",
+					Kind: fb2.BodyFootnotes,
+					Sections: []fb2.Section{{
+						ID: "note1",
+						Content: []fb2.FlowItem{{
+							Kind: fb2.FlowParagraph,
+							Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
+								{Kind: fb2.InlineText, Text: "First note."},
+							}},
+						}},
+					}, {
+						ID: "note2",
+						Content: []fb2.FlowItem{{
+							Kind: fb2.FlowParagraph,
+							Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
+								{Kind: fb2.InlineText, Text: "Second note refers to "},
+								{Kind: fb2.InlineLink, Href: "#note1", Children: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "1"}}},
+							}},
+						}},
+					}},
+				}}},
+				FootnotesIndex: fb2.FootnoteRefs{
+					"note1": {BodyIdx: 1, SectionIdx: 0},
+					"note2": {BodyIdx: 1, SectionIdx: 1},
+				},
+			}
+
+			chapters, _, err := convertToXHTML(ctx, c, false, log)
+			if err != nil {
+				t.Fatalf("convertToXHTML() error = %v", err)
+			}
+			var fnChapter *Chapter
+			for i := range chapters {
+				if chapters[i].Doc != nil && chapters[i].AnchorID != "" {
+					fnChapter = &chapters[i]
+					break
+				}
+			}
+			if fnChapter == nil {
+				t.Fatal("footnote chapter not found")
+			}
+
+			backlinks := fnChapter.Doc.FindElements("//a[@class='link-backlink']")
+			for _, backlink := range backlinks {
+				if strings.Contains(backlink.SelectAttrValue("href", ""), "#ref-note1-") {
+					return
+				}
+			}
+			t.Fatalf("backward backlink to note1 not found; index=%#v", c.BackLinkIndex)
+		})
+	}
+}
+
+// TestFloatModeFootnotesMultipleParagraphs verifies the "more paragraphs" indicator
+func TestFloatModeFootnotesMultipleParagraphs(t *testing.T) {
+	const moreParaSym = "(~)\u00A0"
+	const backlinkSym = "[<]"
+
+	tests := []struct {
+		name                string
+		format              common.OutputFmt
+		mode                common.FootnotesMode
+		expectMoreIndicator bool
+	}{
+		{
+			name:                "EPUB3 float mode with multiple paragraphs",
+			format:              common.OutputFmtEpub3,
+			mode:                common.FootnotesModeFloat,
+			expectMoreIndicator: true,
+		},
+		{
+			name:                "EPUB2 float mode with multiple paragraphs",
+			format:              common.OutputFmtEpub2,
+			mode:                common.FootnotesModeFloat,
+			expectMoreIndicator: true,
+		},
+		{
+			name:                "Kepub float mode with multiple paragraphs",
+			format:              common.OutputFmtKepub,
+			mode:                common.FootnotesModeFloat,
+			expectMoreIndicator: true,
+		},
+		{
+			name:                "EPUB3 default mode with multiple paragraphs",
+			format:              common.OutputFmtEpub3,
+			mode:                common.FootnotesModeDefault,
+			expectMoreIndicator: false, // Default mode doesn't use more indicator
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _, log := setupTestContext(t)
+
+			// Create test content with multi-paragraph footnote
+			c := &content.Content{
+				OutputFormat:     tt.format,
+				FootnotesMode:    tt.mode,
+				BackLinkIndex:    make(map[string][]content.BackLinkRef),
+				BacklinkTemplate: backlinkSym,
+				MoreParaStr:      moreParaSym,
+				Book: &fb2.FictionBook{
+					Bodies: []fb2.Body{
+						{
+							Sections: []fb2.Section{
+								{
+									ID: "chapter1",
+									Content: []fb2.FlowItem{
+										{
+											Kind: fb2.FlowParagraph,
+											Paragraph: &fb2.Paragraph{
+												Text: []fb2.InlineSegment{
+													{Kind: fb2.InlineText, Text: "Text with footnote"},
+													{
+														Kind: fb2.InlineLink,
+														Href: "#note1",
+														Children: []fb2.InlineSegment{
+															{Kind: fb2.InlineText, Text: "1"},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						{
+							Name: "notes",
+							Kind: fb2.BodyFootnotes,
+							Sections: []fb2.Section{
+								{
+									ID: "note1",
+									Content: []fb2.FlowItem{
+										{
+											Kind: fb2.FlowParagraph,
+											Paragraph: &fb2.Paragraph{
+												Text: []fb2.InlineSegment{
+													{Kind: fb2.InlineText, Text: "First paragraph of footnote"},
+												},
+											},
+										},
+										{
+											Kind: fb2.FlowParagraph,
+											Paragraph: &fb2.Paragraph{
+												Text: []fb2.InlineSegment{
+													{Kind: fb2.InlineText, Text: "Second paragraph of footnote"},
+												},
+											},
+										},
+										{
+											Kind: fb2.FlowParagraph,
+											Paragraph: &fb2.Paragraph{
+												Text: []fb2.InlineSegment{
+													{Kind: fb2.InlineText, Text: "Third paragraph of footnote"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				FootnotesIndex: fb2.FootnoteRefs{
+					"note1": fb2.FootnoteRef{BodyIdx: 1, SectionIdx: 0},
+				},
+			}
+
+			chapters, _, err := convertToXHTML(ctx, c, false, log)
+			if err != nil {
+				t.Fatalf("convertToXHTML() error = %v", err)
+			}
+
+			// Find footnote chapter
+			var fnChapter *Chapter
+			for i := range chapters {
+				if chapters[i].Doc != nil && chapters[i].AnchorID != "" {
+					fnChapter = &chapters[i]
+					break
+				}
+			}
+			if fnChapter == nil {
+				t.Fatal("Footnote chapter not found")
+			}
+
+			// Look for the "more paragraphs" indicator
+			moreSpans := fnChapter.Doc.FindElements("//span[@class='footnote-more']")
+
+			if tt.expectMoreIndicator {
+				if len(moreSpans) == 0 {
+					t.Error("Expected 'footnote-more' span not found")
+				} else {
+					moreSpan := moreSpans[0]
+					if moreSpan.Text() != moreParaSym {
+						t.Errorf("Expected more indicator text '%s', got '%s'", moreParaSym, moreSpan.Text())
+					}
+
+					// Verify it's in the first paragraph/span
+					if tt.format == common.OutputFmtEpub3 {
+						// EPUB3: should be in first <p> inside <aside>
+						aside := fnChapter.Doc.FindElement("//aside[@epub:type='footnote']")
+						if aside != nil {
+							firstP := aside.SelectElement("p")
+							if firstP != nil {
+								firstChild := firstP.ChildElements()
+								if len(firstChild) > 0 && firstChild[0].Tag == "span" {
+									if firstChild[0].SelectAttrValue("class", "") != "footnote-more" {
+										t.Error("More indicator should be first child of first paragraph")
+									}
+								}
+							}
+						}
+					} else {
+						// EPUB2/Kepub: should be in first <span> of <p class="footnote">
+						fnP := fnChapter.Doc.FindElement("//p[@class='footnote']")
+						if fnP != nil {
+							// The more indicator is inserted as first child of the first text span
+							firstTextSpan := fnP.SelectElement("span")
+							if firstTextSpan != nil {
+								// Check if first child is the more indicator
+								children := firstTextSpan.ChildElements()
+								if len(children) > 0 {
+									if children[0].Tag == "span" && children[0].SelectAttrValue("class", "") != "footnote-more" {
+										t.Error("More indicator should be first child of first text span")
+									}
+								}
+							}
+						}
+					}
+				}
+			} else {
+				if len(moreSpans) > 0 {
+					t.Error("Did not expect 'footnote-more' span in default mode")
+				}
+			}
+		})
+	}
+}
+
+// TestFloatModeFootnotesSingleParagraph verifies NO "more paragraphs" indicator with single paragraph
+func TestFloatModeFootnotesSingleParagraph(t *testing.T) {
+	const moreParaSym = "(~)\u00A0"
+	const backlinkSym = "[<]"
+
+	tests := []struct {
+		name   string
+		format common.OutputFmt
+	}{
+		{
+			name:   "EPUB3 float mode single paragraph",
+			format: common.OutputFmtEpub3,
+		},
+		{
+			name:   "EPUB2 float mode single paragraph",
+			format: common.OutputFmtEpub2,
+		},
+		{
+			name:   "Kepub float mode single paragraph",
+			format: common.OutputFmtKepub,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _, log := setupTestContext(t)
+
+			// Create test content with SINGLE paragraph footnote
+			c := &content.Content{
+				OutputFormat:     tt.format,
+				FootnotesMode:    common.FootnotesModeFloat,
+				BackLinkIndex:    make(map[string][]content.BackLinkRef),
+				BacklinkTemplate: backlinkSym,
+				MoreParaStr:      moreParaSym,
+				Book: &fb2.FictionBook{
+					Bodies: []fb2.Body{
+						{
+							Sections: []fb2.Section{
+								{
+									ID: "chapter1",
+									Content: []fb2.FlowItem{
+										{
+											Kind: fb2.FlowParagraph,
+											Paragraph: &fb2.Paragraph{
+												Text: []fb2.InlineSegment{
+													{Kind: fb2.InlineText, Text: "Text with footnote"},
+													{
+														Kind: fb2.InlineLink,
+														Href: "#note1",
+														Children: []fb2.InlineSegment{
+															{Kind: fb2.InlineText, Text: "1"},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						{
+							Name: "notes",
+							Kind: fb2.BodyFootnotes,
+							Sections: []fb2.Section{
+								{
+									ID: "note1",
+									Content: []fb2.FlowItem{
+										{
+											Kind: fb2.FlowParagraph,
+											Paragraph: &fb2.Paragraph{
+												Text: []fb2.InlineSegment{
+													{Kind: fb2.InlineText, Text: "Single paragraph footnote"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				FootnotesIndex: fb2.FootnoteRefs{
+					"note1": fb2.FootnoteRef{BodyIdx: 1, SectionIdx: 0},
+				},
+			}
+
+			chapters, _, err := convertToXHTML(ctx, c, false, log)
+			if err != nil {
+				t.Fatalf("convertToXHTML() error = %v", err)
+			}
+
+			// Find footnote chapter
+			var fnChapter *Chapter
+			for i := range chapters {
+				if chapters[i].Doc != nil && chapters[i].AnchorID != "" {
+					fnChapter = &chapters[i]
+					break
+				}
+			}
+			if fnChapter == nil {
+				t.Fatal("Footnote chapter not found")
+			}
+
+			// Should NOT have "more paragraphs" indicator with single paragraph
+			moreSpans := fnChapter.Doc.FindElements("//span[@class='footnote-more']")
+			if len(moreSpans) > 0 {
+				t.Error("Should not have 'footnote-more' span with single paragraph footnote")
+			}
+		})
+	}
+}
+
+func TestFloatModeFootnotesVisibleElements(t *testing.T) {
+	const moreParaSym = "(~)\u00A0"
+	const backlinkSym = "[<]"
+
+	imageSeg := fb2.InlineSegment{Kind: fb2.InlineImageSegment, Image: &fb2.InlineImage{Href: "#img1", Alt: "img"}}
+	table := &fb2.Table{Rows: []fb2.TableRow{{Cells: []fb2.TableCell{{Content: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "cell"}}}}}}}
+
+	tests := []struct {
+		name                string
+		format              common.OutputFmt
+		section             fb2.Section
+		expectMoreIndicator bool
+		expectMarkerBefore  string
+	}{
+		{
+			name:   "EPUB3 single paragraph with inline image only",
+			format: common.OutputFmtEpub3,
+			section: fb2.Section{ID: "note1", Content: []fb2.FlowItem{{
+				Kind:      fb2.FlowParagraph,
+				Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Only "}, imageSeg}},
+			}}},
+			expectMoreIndicator: false,
+		},
+		{
+			name:   "EPUB3 image first followed by paragraph",
+			format: common.OutputFmtEpub3,
+			section: fb2.Section{
+				ID:    "note1",
+				Image: &fb2.Image{Href: "#img1", Alt: "img"},
+				Content: []fb2.FlowItem{{
+					Kind:      fb2.FlowParagraph,
+					Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "After image"}}},
+				}},
+			},
+			expectMoreIndicator: true,
+			expectMarkerBefore:  "img",
+		},
+		{
+			name:   "EPUB3 table first followed by paragraph",
+			format: common.OutputFmtEpub3,
+			section: fb2.Section{ID: "note1", Content: []fb2.FlowItem{
+				{Kind: fb2.FlowTable, Table: table},
+				{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "After table"}}}},
+			}},
+			expectMoreIndicator: true,
+			expectMarkerBefore:  "table",
+		},
+		{
+			name:   "EPUB2 flattened paragraph followed by image",
+			format: common.OutputFmtEpub2,
+			section: fb2.Section{ID: "note1", Content: []fb2.FlowItem{
+				{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Paragraph"}}}},
+				{Kind: fb2.FlowImage, Image: &fb2.Image{Href: "#img1", Alt: "img"}},
+			}},
+			expectMoreIndicator: true,
+			expectMarkerBefore:  "span",
+		},
+		{
+			name:   "Kepub single rendered element with inline image",
+			format: common.OutputFmtKepub,
+			section: fb2.Section{ID: "note1", Content: []fb2.FlowItem{{
+				Kind:      fb2.FlowParagraph,
+				Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Only "}, imageSeg}},
+			}}},
+			expectMoreIndicator: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _, log := setupTestContext(t)
+			c := &content.Content{
+				OutputFormat:     tt.format,
+				FootnotesMode:    common.FootnotesModeFloat,
+				BackLinkIndex:    make(map[string][]content.BackLinkRef),
+				BacklinkTemplate: backlinkSym,
+				MoreParaStr:      moreParaSym,
+				ImagesIndex: fb2.BookImages{
+					"img1": {Filename: "images/img1.jpg"},
+				},
+				Book: &fb2.FictionBook{Bodies: []fb2.Body{
+					{Sections: []fb2.Section{{
+						ID: "chapter1",
+						Content: []fb2.FlowItem{{
+							Kind: fb2.FlowParagraph,
+							Paragraph: &fb2.Paragraph{
+								Text: []fb2.InlineSegment{
+									{Kind: fb2.InlineText, Text: "Text with footnote"},
+									{Kind: fb2.InlineLink, Href: "#note1", Children: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "1"}}},
+								},
+							},
+						}},
+					}}},
+					{Name: "notes", Kind: fb2.BodyFootnotes, Sections: []fb2.Section{tt.section}},
+				}},
+				FootnotesIndex: fb2.FootnoteRefs{"note1": {BodyIdx: 1, SectionIdx: 0}},
+			}
+
+			chapters, _, err := convertToXHTML(ctx, c, false, log)
+			if err != nil {
+				t.Fatalf("convertToXHTML() error = %v", err)
+			}
+
+			var fnChapter *Chapter
+			for i := range chapters {
+				if chapters[i].Doc != nil && chapters[i].AnchorID != "" {
+					fnChapter = &chapters[i]
+					break
+				}
+			}
+			if fnChapter == nil {
+				t.Fatal("Footnote chapter not found")
+			}
+
+			moreSpans := fnChapter.Doc.FindElements("//span[@class='footnote-more']")
+			if tt.expectMoreIndicator {
+				if len(moreSpans) == 0 {
+					t.Fatal("Expected 'footnote-more' span not found")
+				}
+				if tt.expectMarkerBefore != "" && tt.format == common.OutputFmtEpub3 {
+					aside := fnChapter.Doc.FindElement("//aside[@epub:type='footnote']")
+					if aside == nil {
+						t.Fatal("Expected footnote aside not found")
+					}
+					firstElem := aside.ChildElements()[0]
+					if tt.expectMarkerBefore == "img" || tt.expectMarkerBefore == "table" {
+						if firstElem.Tag != "span" || firstElem.SelectAttrValue("class", "") != "footnote-more" {
+							t.Fatalf(
+								"expected standalone marker before first %s, got <%s class=%q>",
+								tt.expectMarkerBefore,
+								firstElem.Tag,
+								firstElem.SelectAttrValue("class", ""),
+							)
+						}
+					}
+				}
+			} else if len(moreSpans) > 0 {
+				t.Fatal("Did not expect 'footnote-more' span")
+			}
+		})
+	}
+}
+
+// makeTitle creates an fb2.Title with a single text paragraph.
+func makeTitle(text string) *fb2.Title {
+	return &fb2.Title{
+		Items: []fb2.TitleItem{
+			{Paragraph: &fb2.Paragraph{
+				Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: text}},
+			}},
+		},
+	}
+}
+
+// TestAppendFlowItems_SplitOnSectionNeedsBreak verifies that appendFlowItems
+// returns a splitResult when it encounters a FlowSection at a depth where
+// SectionNeedsBreak returns true.
+func TestAppendFlowItems_SplitOnSectionNeedsBreak(t *testing.T) {
+	log := setupTestLogger(t)
+
+	book := &fb2.FictionBook{}
+	book.SetSectionPageBreaks(map[int]bool{2: true})
+
+	c := &content.Content{
+		Book: book,
+	}
+
+	childA := &fb2.Section{
+		ID:    "childA",
+		Title: makeTitle("Child A"),
+		Content: []fb2.FlowItem{
+			{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+				Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "content A"}},
+			}},
+		},
+	}
+	childB := &fb2.Section{
+		ID:    "childB",
+		Title: makeTitle("Child B"),
+		Content: []fb2.FlowItem{
+			{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+				Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "content B"}},
+			}},
+		},
+	}
+
+	items := []fb2.FlowItem{
+		{Kind: fb2.FlowSection, Section: childA},
+		{Kind: fb2.FlowSection, Section: childB},
+	}
+
+	doc := etree.NewDocument()
+	parent := doc.CreateElement("div")
+
+	// depth=1 means child sections are at depth 2, which needs break
+	splits, err := appendFlowItems(parent, c, items, 1, 1, "section", log)
+	if err != nil {
+		t.Fatalf("appendFlowItems error: %v", err)
+	}
+	if len(splits) == 0 {
+		t.Fatal("expected split results, got none")
+	}
+
+	// First split should be childA
+	if splits[0].section != childA {
+		t.Errorf("expected first split section to be childA, got %v", splits[0].section.ID)
+	}
+	if splits[0].depth != 2 {
+		t.Errorf("expected split depth 2, got %d", splits[0].depth)
+	}
+	// Remaining should contain childB
+	if len(splits[0].remaining) != 1 {
+		t.Fatalf("expected 1 remaining item, got %d", len(splits[0].remaining))
+	}
+	if splits[0].remaining[0].Section != childB {
+		t.Error("expected remaining item to be childB")
+	}
+
+	// Parent element should have no child sections rendered
+	// (they all got split out before any rendering)
+	sectionDivs := parent.SelectElements("div")
+	if len(sectionDivs) != 0 {
+		t.Errorf("expected no rendered section divs, got %d", len(sectionDivs))
+	}
+}
+
+// TestAppendFlowItems_NoSplitWhenBreakFalse verifies that appendFlowItems
+// renders nested sections inline when SectionNeedsBreak returns false.
+func TestAppendFlowItems_NoSplitWhenBreakFalse(t *testing.T) {
+	log := setupTestLogger(t)
+
+	book := &fb2.FictionBook{}
+	// No page breaks set — SectionNeedsBreak returns false for all depths
+
+	c := &content.Content{
+		Book: book,
+	}
+
+	child := &fb2.Section{
+		ID:    "child1",
+		Title: makeTitle("Child Section"),
+		Content: []fb2.FlowItem{
+			{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+				Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "paragraph"}},
+			}},
+		},
+	}
+
+	items := []fb2.FlowItem{
+		{Kind: fb2.FlowSection, Section: child},
+	}
+
+	doc := etree.NewDocument()
+	parent := doc.CreateElement("div")
+
+	splits, err := appendFlowItems(parent, c, items, 1, 1, "section", log)
+	if err != nil {
+		t.Fatalf("appendFlowItems error: %v", err)
+	}
+	if len(splits) != 0 {
+		t.Errorf("expected no splits, got %d", len(splits))
+	}
+
+	// Section should be rendered inline as a div
+	sectionDivs := parent.SelectElements("div")
+	if len(sectionDivs) == 0 {
+		t.Error("expected section to be rendered inline as a div")
+	}
+}
+
+// TestAppendFlowItems_SplitBubblesUpFromDeeper verifies that when a deeper nested
+// section triggers a split, it bubbles up through the parent section correctly.
+func TestAppendFlowItems_SplitBubblesUpFromDeeper(t *testing.T) {
+	log := setupTestLogger(t)
+
+	book := &fb2.FictionBook{}
+	// Only depth 3 triggers break
+	book.SetSectionPageBreaks(map[int]bool{3: true})
+
+	c := &content.Content{
+		Book: book,
+	}
+
+	// Structure: depth-1 section contains depth-2 section which contains depth-3 sections
+	grandchild1 := &fb2.Section{
+		ID:    "gc1",
+		Title: makeTitle("Grandchild 1"),
+		Content: []fb2.FlowItem{
+			{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+				Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "gc1 content"}},
+			}},
+		},
+	}
+	grandchild2 := &fb2.Section{
+		ID:    "gc2",
+		Title: makeTitle("Grandchild 2"),
+		Content: []fb2.FlowItem{
+			{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+				Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "gc2 content"}},
+			}},
+		},
+	}
+
+	// Depth-2 section containing two depth-3 children
+	parentSection := &fb2.Section{
+		ID:    "parent",
+		Title: makeTitle("Parent Section"),
+		Content: []fb2.FlowItem{
+			{Kind: fb2.FlowSection, Section: grandchild1},
+			{Kind: fb2.FlowSection, Section: grandchild2},
+		},
+	}
+
+	items := []fb2.FlowItem{
+		{Kind: fb2.FlowSection, Section: parentSection},
+	}
+
+	doc := etree.NewDocument()
+	parent := doc.CreateElement("div")
+
+	// depth=1: parentSection is at depth 2 (no break), grandchildren at depth 3 (break!)
+	splits, err := appendFlowItems(parent, c, items, 1, 1, "section", log)
+	if err != nil {
+		t.Fatalf("appendFlowItems error: %v", err)
+	}
+
+	// Splits should bubble up from the depth-3 level
+	if len(splits) == 0 {
+		t.Fatal("expected splits to bubble up from depth-3 sections")
+	}
+	if splits[0].section != grandchild1 {
+		t.Errorf("expected first split to be grandchild1 (id=%s), got id=%s", grandchild1.ID, splits[0].section.ID)
+	}
+	if splits[0].depth != 3 {
+		t.Errorf("expected split depth 3, got %d", splits[0].depth)
+	}
+}
+
+// TestConvertToXHTML_SectionSplit verifies the end-to-end split behavior:
+// that convertToXHTML produces multiple chapters when sections are split,
+// with correct IDs, filenames, and TOC flags.
+func TestConvertToXHTML_SectionSplit(t *testing.T) {
+	ctx, _, log := setupTestContext(t)
+
+	book := &fb2.FictionBook{
+		Bodies: []fb2.Body{
+			{
+				Kind: fb2.BodyMain,
+				Sections: []fb2.Section{
+					{
+						ID:    "ch1",
+						Title: makeTitle("Chapter 1"),
+						Content: []fb2.FlowItem{
+							{Kind: fb2.FlowSection, Section: &fb2.Section{
+								ID:    "ch1-s1",
+								Title: makeTitle("Section 1.1"),
+								Content: []fb2.FlowItem{
+									{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+										ID:   "p1",
+										Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Paragraph in 1.1"}},
+									}},
+								},
+							}},
+							{Kind: fb2.FlowSection, Section: &fb2.Section{
+								ID:    "ch1-s2",
+								Title: makeTitle("Section 1.2"),
+								Content: []fb2.FlowItem{
+									{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+										ID:   "p2",
+										Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Paragraph in 1.2"}},
+									}},
+								},
+							}},
+						},
+					},
+				},
+			},
+		},
+	}
+	// Enable page breaks at depth 2 — the child sections above are depth 2
+	book.SetSectionPageBreaks(map[int]bool{2: true})
+
+	c := &content.Content{
+		OutputFormat: common.OutputFmtEpub3,
+		Book:         book,
+		IDsIndex:     make(fb2.IDIndex),
+	}
+
+	chapters, idToFile, err := convertToXHTML(ctx, c, false, log)
+	if err != nil {
+		t.Fatalf("convertToXHTML error: %v", err)
+	}
+
+	// We expect 3 chapters:
+	// 1. ch1 (the parent, with title rendered but child sections split out)
+	// 2. ch1-s1 (split)
+	// 3. ch1-s2 (split)
+	if len(chapters) < 3 {
+		t.Fatalf("expected at least 3 chapters, got %d", len(chapters))
+	}
+
+	// First chapter should have IncludeInTOC = true and Section set
+	parentChapter := chapters[0]
+	if !parentChapter.IncludeInTOC {
+		t.Error("parent chapter should have IncludeInTOC = true")
+	}
+	if parentChapter.Section == nil {
+		t.Error("parent chapter should have Section set for TOC traversal")
+	}
+
+	// Split chapters should have IncludeInTOC = false
+	for i := 1; i < 3; i++ {
+		ch := chapters[i]
+		if ch.IncludeInTOC {
+			t.Errorf("split chapter %d (ID=%s) should have IncludeInTOC = false", i, ch.ID)
+		}
+		if ch.Doc == nil {
+			t.Errorf("split chapter %d should have a Doc", i)
+		}
+	}
+
+	// Verify ID-to-file mapping: split section IDs should point to their new filenames
+	if fn, ok := idToFile["ch1-s1"]; !ok {
+		t.Error("idToFile should contain ch1-s1")
+	} else if fn != chapters[1].Filename {
+		t.Errorf("ch1-s1 should map to %s, got %s", chapters[1].Filename, fn)
+	}
+
+	if fn, ok := idToFile["ch1-s2"]; !ok {
+		t.Error("idToFile should contain ch1-s2")
+	} else if fn != chapters[2].Filename {
+		t.Errorf("ch1-s2 should map to %s, got %s", chapters[2].Filename, fn)
+	}
+
+	// Paragraph IDs should also be remapped to the split files
+	if fn, ok := idToFile["p1"]; !ok {
+		t.Error("idToFile should contain p1")
+	} else if fn != chapters[1].Filename {
+		t.Errorf("p1 should map to %s, got %s", chapters[1].Filename, fn)
+	}
+
+	if fn, ok := idToFile["p2"]; !ok {
+		t.Error("idToFile should contain p2")
+	} else if fn != chapters[2].Filename {
+		t.Errorf("p2 should map to %s, got %s", chapters[2].Filename, fn)
+	}
+}
+
+// TestConvertToXHTML_NoSplitWithoutPageBreaks verifies that when no page breaks
+// are configured, sections are rendered inline and no extra chapters are created.
+func TestConvertToXHTML_NoSplitWithoutPageBreaks(t *testing.T) {
+	ctx, _, log := setupTestContext(t)
+
+	book := &fb2.FictionBook{
+		Bodies: []fb2.Body{
+			{
+				Kind: fb2.BodyMain,
+				Sections: []fb2.Section{
+					{
+						ID:    "ch1",
+						Title: makeTitle("Chapter 1"),
+						Content: []fb2.FlowItem{
+							{Kind: fb2.FlowSection, Section: &fb2.Section{
+								ID:    "ch1-s1",
+								Title: makeTitle("Section 1.1"),
+								Content: []fb2.FlowItem{
+									{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+										Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "text"}},
+									}},
+								},
+							}},
+							{Kind: fb2.FlowSection, Section: &fb2.Section{
+								ID:    "ch1-s2",
+								Title: makeTitle("Section 1.2"),
+								Content: []fb2.FlowItem{
+									{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+										Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "text"}},
+									}},
+								},
+							}},
+						},
+					},
+				},
+			},
+		},
+	}
+	// No page breaks — sections stay inline
+
+	c := &content.Content{
+		OutputFormat: common.OutputFmtEpub3,
+		Book:         book,
+		IDsIndex:     make(fb2.IDIndex),
+	}
+
+	chapters, idToFile, err := convertToXHTML(ctx, c, false, log)
+	if err != nil {
+		t.Fatalf("convertToXHTML error: %v", err)
+	}
+
+	// Should be exactly 1 chapter (parent contains children inline)
+	if len(chapters) != 1 {
+		t.Errorf("expected 1 chapter (no splits), got %d", len(chapters))
+	}
+
+	// All IDs should map to the same file
+	parentFile := chapters[0].Filename
+	if idToFile["ch1"] != parentFile {
+		t.Errorf("ch1 should map to %s", parentFile)
+	}
+	if idToFile["ch1-s1"] != parentFile {
+		t.Errorf("ch1-s1 should map to %s (inline), got %s", parentFile, idToFile["ch1-s1"])
+	}
+	if idToFile["ch1-s2"] != parentFile {
+		t.Errorf("ch1-s2 should map to %s (inline), got %s", parentFile, idToFile["ch1-s2"])
+	}
+}
+
+// TestConvertToXHTML_SplitSectionContent verifies that split section XHTML documents
+// contain the correct content — the section's own title and body text.
+func TestConvertToXHTML_SplitSectionContent(t *testing.T) {
+	ctx, _, log := setupTestContext(t)
+
+	book := &fb2.FictionBook{
+		Bodies: []fb2.Body{
+			{
+				Kind: fb2.BodyMain,
+				Sections: []fb2.Section{
+					{
+						ID:    "ch1",
+						Title: makeTitle("Chapter 1"),
+						Content: []fb2.FlowItem{
+							{Kind: fb2.FlowSection, Section: &fb2.Section{
+								ID:    "sub1",
+								Title: makeTitle("Sub One"),
+								Content: []fb2.FlowItem{
+									{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+										Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Sub one content"}},
+									}},
+								},
+							}},
+						},
+					},
+				},
+			},
+		},
+	}
+	book.SetSectionPageBreaks(map[int]bool{2: true})
+
+	c := &content.Content{
+		OutputFormat: common.OutputFmtEpub3,
+		Book:         book,
+		IDsIndex:     make(fb2.IDIndex),
+	}
+
+	chapters, _, err := convertToXHTML(ctx, c, false, log)
+	if err != nil {
+		t.Fatalf("convertToXHTML error: %v", err)
+	}
+
+	if len(chapters) < 2 {
+		t.Fatalf("expected at least 2 chapters, got %d", len(chapters))
+	}
+
+	// The split chapter's XHTML should contain the section title and paragraph text
+	splitDoc := chapters[1].Doc
+	if splitDoc == nil {
+		t.Fatal("split chapter Doc should not be nil")
+	}
+
+	xmlStr, err := splitDoc.WriteToString()
+	if err != nil {
+		t.Fatalf("WriteToString error: %v", err)
+	}
+
+	if !strings.Contains(xmlStr, "Sub One") {
+		t.Error("split chapter should contain section title 'Sub One'")
+	}
+	if !strings.Contains(xmlStr, "Sub one content") {
+		t.Error("split chapter should contain paragraph text 'Sub one content'")
+	}
+
+	// The split doc should have the section's ID as an attribute
+	if !strings.Contains(xmlStr, `id="sub1"`) {
+		t.Error("split chapter should have id='sub1' on wrapper div")
+	}
+}
+
+func TestAppendParagraphInlineRecoversNestedInlineTextChildren(t *testing.T) {
+	c := &content.Content{}
+	parent := etree.NewElement("p")
+
+	appendParagraphInline(parent, c, &fb2.Paragraph{
+		Text: []fb2.InlineSegment{{
+			Kind: fb2.InlineText,
+			Children: []fb2.InlineSegment{
+				{Kind: fb2.InlineText, Text: "Recovered text"},
+				{
+					Kind:     fb2.InlineStrong,
+					Children: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: " bold"}},
+				},
+			},
+		}},
+	})
+
+	if got := parent.Text(); got != "Recovered text" {
+		t.Fatalf("parent text = %q, want %q", got, "Recovered text")
+	}
+
+	strong := parent.SelectElement("strong")
+	if strong == nil {
+		t.Fatal("expected recovered strong element")
+	}
+	if got := strong.Text(); got != " bold" {
+		t.Fatalf("strong text = %q, want %q", got, " bold")
+	}
+}
+
+func TestAppendParagraphInlineRendersDirectTextInStyledLinkChild(t *testing.T) {
+	c := &content.Content{
+		OutputFormat:  common.OutputFmtEpub3,
+		FootnotesMode: common.FootnotesModeFloatRenumbered,
+		FootnotesIndex: fb2.FootnoteRefs{
+			"c_2": {},
+		},
+	}
+	parent := etree.NewElement("p")
+
+	appendParagraphInline(parent, c, &fb2.Paragraph{
+		Text: []fb2.InlineSegment{
+			{
+				Kind: fb2.InlineText,
+				Text: "Это простой текст с комментариями",
+			},
+			{
+				Kind: fb2.InlineLink,
+				Href: "#c_2",
+				Children: []fb2.InlineSegment{{
+					Kind: fb2.InlineSup,
+					Text: "2.2",
+				}},
+			},
+		},
+	})
+
+	link := parent.SelectElement("a")
+	if link == nil {
+		t.Fatal("expected footnote link")
+	}
+	sup := link.SelectElement("sup")
+	if sup == nil {
+		t.Fatal("expected superscript inside link")
+	}
+	if got := sup.Text(); got != "2.2" {
+		t.Fatalf("sup text = %q, want %q", got, "2.2")
+	}
+}
+
+func TestAppendInlineTextDoesNotOverwriteConsecutiveText(t *testing.T) {
+	// When an inline element wraps multiple block elements (e.g.
+	// <strong><p>text1</p><p>text2</p></strong>), the parser produces
+	// InlineText segments with children that are rendered consecutively
+	// on the same parent. Verify that text accumulates rather than being
+	// overwritten by later SetText calls.
+	c := &content.Content{}
+	parent := etree.NewElement("p")
+
+	// Simulate what the renderer sees for <strong><p>text1</p><p>text2</p></strong>:
+	// An InlineStrong whose children are two InlineText-with-children segments.
+	appendParagraphInline(parent, c, &fb2.Paragraph{
+		Text: []fb2.InlineSegment{{
+			Kind: fb2.InlineStrong,
+			Children: []fb2.InlineSegment{
+				{
+					Kind:     fb2.InlineText,
+					Children: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "text1"}},
+				},
+				{
+					Kind:     fb2.InlineText,
+					Children: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "text2"}},
+				},
+			},
+		}},
+	})
+
+	strong := parent.SelectElement("strong")
+	if strong == nil {
+		t.Fatal("expected strong element")
+	}
+	if got := strong.Text(); got != "text1text2" {
+		t.Fatalf("strong text = %q, want %q", got, "text1text2")
+	}
+}
+
+// makeSection creates an fb2.Section with a title and ID for test purposes.
+func makeSection(id, title string) *fb2.Section {
+	s := &fb2.Section{ID: id}
+	if title != "" {
+		s.Title = &fb2.Title{Items: []fb2.TitleItem{{
+			Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{{Text: title}}},
+		}}}
+	}
+	return s
+}
+
+// makeWrapperChapterData creates a Chapter for an untitled wrapper section
+// whose children are titled subsections. This simulates the FB2 pattern:
+//
+//	<section>           ← untitled wrapper
+//	  <section><title>Chapter 1</title>...</section>
+//	  <section><title>Chapter 2</title>...</section>
+//	</section>
+func makeWrapperChapterData(filename string, children ...*fb2.Section) Chapter {
+	wrapper := &fb2.Section{ID: "wrapper"}
+	for _, child := range children {
+		wrapper.Content = append(wrapper.Content, fb2.FlowItem{
+			Kind:    fb2.FlowSection,
+			Section: child,
+		})
+	}
+	return Chapter{
+		ID:           "wrapper-ch",
+		Filename:     filename,
+		Title:        "",
+		IncludeInTOC: false,
+		Section:      wrapper,
+	}
+}
+
+func TestGenerateTOCPage_UntitledWrapperSection(t *testing.T) {
+	log := setupTestLogger(t)
+
+	c := &content.Content{
+		Book: &fb2.FictionBook{
+			Description: fb2.Description{
+				TitleInfo: fb2.TitleInfo{
+					BookTitle: fb2.TextField{Value: "Test Book"},
+				},
+			},
+		},
+		IDsIndex:     make(fb2.IDIndex),
+		OutputFormat: common.OutputFmtEpub2,
+	}
+
+	// One untitled wrapper plus a regular titled chapter
+	chapters := []Chapter{
+		makeWrapperChapterData("ch01.xhtml",
+			makeSection("sec1", "Chapter 1"),
+			makeSection("sec2", "Chapter 2"),
+		),
+		{
+			ID:           "notes",
+			Filename:     "notes.xhtml",
+			Title:        "Notes",
+			IncludeInTOC: true,
+		},
+	}
+
+	cfg := &config.TOCPageConfig{}
+
+	tocChapter := generateTOCPage(c, chapters, cfg, nil, log)
+	if tocChapter.Doc == nil {
+		t.Fatal("TOC document should not be nil")
+	}
+
+	body := tocChapter.Doc.Root().SelectElement("body")
+	if body == nil {
+		t.Fatal("Body element not found")
+	}
+	tocBodyDiv := body.SelectElement("div")
+	if tocBodyDiv == nil {
+		t.Fatal("TOC body div wrapper not found")
+	}
+
+	ol := tocBodyDiv.SelectElement("ol")
+	if ol == nil {
+		t.Fatal("OL element not found")
+	}
+
+	items := ol.SelectElements("li")
+	// Chapter 1 + Chapter 2 (promoted from wrapper) + Notes = 3
+	if len(items) != 3 {
+		t.Fatalf("expected 3 list items (2 promoted + 1 regular), got %d", len(items))
+	}
+
+	expected := []string{"Chapter 1", "Chapter 2", "Notes"}
+	for i, want := range expected {
+		a := items[i].SelectElement("a")
+		if a == nil {
+			t.Fatalf("item[%d] should have an anchor element", i)
+		}
+		if a.Text() != want {
+			t.Errorf("item[%d] text = %q, want %q", i, a.Text(), want)
+		}
+	}
+}
+
+// TestSectionContent_UntitledWrapperChapterTreatment verifies that titled children
+// of an untitled wrapper section get chapter treatment (titleDepth=1):
+//   - wrapper class "chapter-title" (not "section-title")
+//   - heading tag <h1> (not <h2>)
+//   - chapter vignettes (not section vignettes)
+//   - chapter-end vignette (not section-end)
+func TestSectionContent_UntitledWrapperChapterTreatment(t *testing.T) {
+	log := setupTestLogger(t)
+
+	// Build a book with vignettes enabled for both chapter and section positions
+	// so we can verify the correct ones are chosen.
+	book := &fb2.FictionBook{
+		VignetteIDs: map[common.VignettePos]string{
+			common.VignettePosChapterTitleTop:    "vig-ch-top",
+			common.VignettePosChapterTitleBottom: "vig-ch-bot",
+			common.VignettePosChapterEnd:         "vig-ch-end",
+			common.VignettePosSectionTitleTop:    "vig-sec-top",
+			common.VignettePosSectionTitleBottom: "vig-sec-bot",
+			common.VignettePosSectionEnd:         "vig-sec-end",
+		},
+	}
+	// No page breaks — all sections render inline
+	c := &content.Content{
+		Book: book,
+		ImagesIndex: fb2.BookImages{
+			"vig-ch-top":  {Filename: "vig-ch-top.png"},
+			"vig-ch-bot":  {Filename: "vig-ch-bot.png"},
+			"vig-ch-end":  {Filename: "vig-ch-end.png"},
+			"vig-sec-top": {Filename: "vig-sec-top.png"},
+			"vig-sec-bot": {Filename: "vig-sec-bot.png"},
+			"vig-sec-end": {Filename: "vig-sec-end.png"},
+		},
+	}
+
+	// Untitled wrapper containing two titled children
+	wrapper := &fb2.Section{
+		ID: "wrapper",
+		// No Title — this is the untitled wrapper
+		Content: []fb2.FlowItem{
+			{
+				Kind: fb2.FlowSection,
+				Section: &fb2.Section{
+					ID:    "ch1",
+					Title: makeTitle("Chapter 1"),
+					Content: []fb2.FlowItem{
+						{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+							Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Content 1"}},
+						}},
+					},
+				},
+			},
+			{
+				Kind: fb2.FlowSection,
+				Section: &fb2.Section{
+					ID:    "ch2",
+					Title: makeTitle("Chapter 2"),
+					Content: []fb2.FlowItem{
+						{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+							Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Content 2"}},
+						}},
+					},
+				},
+			},
+		},
+	}
+
+	doc := etree.NewDocument()
+	parent := doc.CreateElement("div")
+
+	// depth=1, titleDepth=1: wrapper is at top-level.
+	// Since wrapper has no title, its contentTitleDepth stays 1,
+	// so children should get titleDepth=1 → chapter treatment.
+	splits, err := appendSectionContent(parent, c, wrapper, 1, 1, log)
+	if err != nil {
+		t.Fatalf("appendSectionContent error: %v", err)
+	}
+	if len(splits) != 0 {
+		t.Errorf("expected no splits (no page breaks configured), got %d", len(splits))
+	}
+
+	// Serialize for inspection
+	rendered, err := doc.WriteToString()
+	if err != nil {
+		t.Fatalf("serialize error: %v", err)
+	}
+
+	// --- Verify chapter treatment (NOT section treatment) ---
+
+	// 1. Wrapper class should be "chapter-title"
+	if !strings.Contains(rendered, `class="chapter-title"`) {
+		t.Error("expected chapter-title wrapper class, not found")
+	}
+	if strings.Contains(rendered, "section-title") {
+		t.Errorf("should NOT have section-title class, got:\n%s", rendered)
+	}
+
+	// 2. Heading should be <h1> (titleDepth=1)
+	if !strings.Contains(rendered, "<h1") {
+		t.Error("expected <h1> heading tag for chapter treatment")
+	}
+	if strings.Contains(rendered, "<h2") {
+		t.Error("should NOT have <h2> heading tag")
+	}
+
+	// 3. Chapter vignettes should be present
+	if !strings.Contains(rendered, "vignette-chapter-title-top") {
+		t.Error("expected chapter-title-top vignette")
+	}
+	if !strings.Contains(rendered, "vignette-chapter-title-bottom") {
+		t.Error("expected chapter-title-bottom vignette")
+	}
+	if !strings.Contains(rendered, "vignette-chapter-end") {
+		t.Error("expected chapter-end vignette")
+	}
+
+	// 4. Section vignettes should NOT be present
+	if strings.Contains(rendered, "vignette-section-title-top") {
+		t.Error("should NOT have section-title-top vignette")
+	}
+	if strings.Contains(rendered, "vignette-section-title-bottom") {
+		t.Error("should NOT have section-title-bottom vignette")
+	}
+	if strings.Contains(rendered, "vignette-section-end") {
+		t.Error("should NOT have section-end vignette")
+	}
+
+	// 5. Both chapters should be present
+	if !strings.Contains(rendered, "Chapter 1") || !strings.Contains(rendered, "Chapter 2") {
+		t.Errorf("both chapter titles should be rendered, got:\n%s", rendered)
+	}
+
+	// 6. Count: exactly 2 chapter-title wrappers (one per titled child)
+	count := strings.Count(rendered, `class="chapter-title"`)
+	if count != 2 {
+		t.Errorf("expected 2 chapter-title wrapper divs, got %d", count)
+	}
+
+	// 7. Count: exactly 2 chapter-end vignettes
+	endCount := strings.Count(rendered, "vignette-chapter-end")
+	if endCount != 2 {
+		t.Errorf("expected 2 chapter-end vignettes, got %d", endCount)
+	}
+}
+
+// TestSectionContent_DoubleUntitledWrapperChapterTreatment verifies that titled
+// grandchildren of doubly-nested untitled wrappers still get chapter treatment.
+//
+// Structure:
+//
+//	<section>               ← untitled wrapper (depth=1, titleDepth=1)
+//	  <section>             ← untitled wrapper (depth=2, titleDepth=1 — no title, no increment)
+//	    <section><title>Ch1 ← titled (depth=3, titleDepth=1 → chapter treatment)
+//	    <section><title>Ch2
+func TestSectionContent_DoubleUntitledWrapperChapterTreatment(t *testing.T) {
+	log := setupTestLogger(t)
+
+	book := &fb2.FictionBook{
+		VignetteIDs: map[common.VignettePos]string{
+			common.VignettePosChapterTitleTop:    "vig-ch-top",
+			common.VignettePosChapterTitleBottom: "vig-ch-bot",
+			common.VignettePosChapterEnd:         "vig-ch-end",
+			common.VignettePosSectionTitleTop:    "vig-sec-top",
+			common.VignettePosSectionTitleBottom: "vig-sec-bot",
+			common.VignettePosSectionEnd:         "vig-sec-end",
+		},
+	}
+	c := &content.Content{
+		Book: book,
+		ImagesIndex: fb2.BookImages{
+			"vig-ch-top":  {Filename: "vig-ch-top.png"},
+			"vig-ch-bot":  {Filename: "vig-ch-bot.png"},
+			"vig-ch-end":  {Filename: "vig-ch-end.png"},
+			"vig-sec-top": {Filename: "vig-sec-top.png"},
+			"vig-sec-bot": {Filename: "vig-sec-bot.png"},
+			"vig-sec-end": {Filename: "vig-sec-end.png"},
+		},
+	}
+
+	// Double-nested untitled wrappers containing titled grandchildren
+	outerWrapper := &fb2.Section{
+		ID: "outer-wrapper",
+		Content: []fb2.FlowItem{
+			{
+				Kind: fb2.FlowSection,
+				Section: &fb2.Section{
+					ID: "inner-wrapper",
+					// Also no title — second untitled wrapper
+					Content: []fb2.FlowItem{
+						{
+							Kind: fb2.FlowSection,
+							Section: &fb2.Section{
+								ID:    "ch1",
+								Title: makeTitle("Chapter 1"),
+								Content: []fb2.FlowItem{
+									{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+										Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Content 1"}},
+									}},
+								},
+							},
+						},
+						{
+							Kind: fb2.FlowSection,
+							Section: &fb2.Section{
+								ID:    "ch2",
+								Title: makeTitle("Chapter 2"),
+								Content: []fb2.FlowItem{
+									{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+										Text: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "Content 2"}},
+									}},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	doc := etree.NewDocument()
+	parent := doc.CreateElement("div")
+
+	// outer wrapper: depth=1, titleDepth=1
+	// inner wrapper: depth=2, titleDepth=1 (untitled, no increment)
+	// ch1, ch2:      depth=3, titleDepth=1 (still chapter treatment!)
+	splits, err := appendSectionContent(parent, c, outerWrapper, 1, 1, log)
+	if err != nil {
+		t.Fatalf("appendSectionContent error: %v", err)
+	}
+	if len(splits) != 0 {
+		t.Errorf("expected no splits, got %d", len(splits))
+	}
+
+	rendered, err := doc.WriteToString()
+	if err != nil {
+		t.Fatalf("serialize error: %v", err)
+	}
+
+	// Even through two levels of untitled wrappers, titled grandchildren
+	// should still get chapter treatment (titleDepth=1).
+
+	if !strings.Contains(rendered, `class="chapter-title"`) {
+		t.Error("expected chapter-title wrapper class")
+	}
+	if strings.Contains(rendered, "section-title") {
+		t.Errorf("should NOT have section-title class, got:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "<h1") {
+		t.Error("expected <h1> heading tag")
+	}
+	if strings.Contains(rendered, "<h2") || strings.Contains(rendered, "<h3") {
+		t.Error("should NOT have <h2> or <h3> heading tags")
+	}
+
+	// Chapter vignettes present, section vignettes absent
+	if !strings.Contains(rendered, "vignette-chapter-title-top") {
+		t.Error("expected chapter-title-top vignette")
+	}
+	if !strings.Contains(rendered, "vignette-chapter-end") {
+		t.Error("expected chapter-end vignette")
+	}
+	if strings.Contains(rendered, "vignette-section-title-top") {
+		t.Error("should NOT have section-title-top vignette")
+	}
+	if strings.Contains(rendered, "vignette-section-end") {
+		t.Error("should NOT have section-end vignette")
+	}
+
+	// Exactly 2 chapter-title wrappers
+	count := strings.Count(rendered, `class="chapter-title"`)
+	if count != 2 {
+		t.Errorf("expected 2 chapter-title wrapper divs, got %d", count)
+	}
+}
