@@ -122,7 +122,7 @@ func compileText(ctx context.Context, pub *publication.Publication) (*textLayout
 		Resources:  resources.Records,
 		References: resources.References,
 	}
-	cssNeeded := len(stylesheet) > 0
+	cssNeeded := len(stylesheet) > 0 || len(resources.Flows) > 0
 	var textLength uint64
 	for i := range documents {
 		doc := &documents[i]
@@ -229,6 +229,16 @@ func compileText(ctx context.Context, pub *publication.Publication) (*textLayout
 		lengths = append(lengths, uint32(len(css)))
 		result.Raw = append(result.Raw, css...)
 	}
+	for _, flow := range resources.Flows {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if uint64(len(result.Raw))+uint64(len(flow.Data)) > math.MaxUint32 {
+			return nil, errors.New("KF8 flows exceed 32-bit byte offsets")
+		}
+		lengths = append(lengths, uint32(len(flow.Data)))
+		result.Raw = append(result.Raw, flow.Data...)
+	}
 	result.FDST, err = encodeFDST(lengths)
 	if err != nil {
 		return nil, fmt.Errorf("encode KF8 flows: %w", err)
@@ -279,7 +289,7 @@ func prepareTextDocument(
 				elem.CreateAttr(src.FullKey(), lowered)
 			}
 		}
-		if style := elem.SelectAttr("style"); style != nil && strings.Contains(strings.ToLower(style.Value), "url(") {
+		if style := elem.SelectAttr("style"); style != nil && strings.Contains(strings.ToLower(style.Value), "url") {
 			var rewriteErr error
 			lowered := css.RewriteValueURLsUnquoted(style.Value, func(original string) string {
 				if rewriteErr != nil {

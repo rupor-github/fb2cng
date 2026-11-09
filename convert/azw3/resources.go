@@ -12,6 +12,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"fbc/convert/publication"
 	"fbc/css"
@@ -23,6 +24,7 @@ const (
 	resourceAny resourceKind = iota
 	resourceImage
 	resourceFont
+	resourceSVG
 )
 
 type resourceReference struct {
@@ -33,7 +35,15 @@ type resourceReference struct {
 
 type resourceLayout struct {
 	Records    [][]byte
+	Flows      []resourceFlow
 	References map[string]resourceReference
+}
+
+// SVG flows use the text-flow namespace, not the physical embed namespace.
+// Main text is flow 0 and the combined CSS (or an empty placeholder) is flow 1.
+type resourceFlow struct {
+	Filename string
+	Data     []byte
 }
 
 type resourceCandidate struct {
@@ -46,11 +56,12 @@ type resourceCandidate struct {
 type resourceContentKey struct {
 	Kind   resourceKind
 	Digest [sha256.Size]byte
+	Scope  string // Relative SVG dependencies are interpreted from this directory.
 }
 
-// compileResources creates one stable, one-based namespace shared by raster
-// artwork and fonts. Equal payloads of the same kind share a physical record,
-// while every publication filename remains a valid URI-lowering alias.
+// compileResources allocates stable, separate embed and SVG-flow namespaces.
+// Equal payloads share a physical record/flow (SVG aliases also share a relative
+// base directory), while every publication filename remains a valid URI alias.
 func compileResources(ctx context.Context, pub *publication.Publication) (*resourceLayout, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -92,6 +103,15 @@ func compileResources(ctx context.Context, pub *publication.Publication) (*resou
 		if len(candidate.Data) == 0 {
 			return nil, fmt.Errorf("publication resource %q is empty", candidate.Filename)
 		}
+		if candidate.Kind == resourceImage && imageMediaType(candidate.MimeType) == "image/svg+xml" {
+			candidate.Kind, candidate.MimeType = resourceSVG, "image/svg+xml"
+		}
+		if candidate.Kind == resourceSVG {
+			if !utf8.Valid(candidate.Data) {
+				return nil, fmt.Errorf("SVG resource %q must be UTF-8", candidate.Filename)
+			}
+			continue
+		}
 		if candidate.Kind == resourceImage {
 			mimeType, err := normalizeRasterMIME(candidate.MimeType)
 			if err != nil {
@@ -117,32 +137,57 @@ func compileResources(ctx context.Context, pub *publication.Publication) (*resou
 			return nil, err
 		}
 		if previous, exists := result.References[candidate.Filename]; exists {
-			key := resourceContentKey{Kind: candidate.Kind, Digest: sha256.Sum256(candidate.Data)}
+			key := candidate.contentKey()
 			if previous.Kind != candidate.Kind || previous.MimeType != candidate.MimeType || contents[key].Number != previous.Number {
 				return nil, fmt.Errorf("conflicting publication resources use filename %q", candidate.Filename)
 			}
 			continue
 		}
 
-		key := resourceContentKey{Kind: candidate.Kind, Digest: sha256.Sum256(candidate.Data)}
+		key := candidate.contentKey()
 		reference, exists := contents[key]
 		if !exists {
-			if len(result.Records) >= (1<<20)-1 {
-				return nil, errors.New("too many KF8 resources for four-digit resource references")
+			reference = resourceReference{Kind: candidate.Kind, MimeType: candidate.MimeType}
+			if candidate.Kind == resourceSVG {
+				if len(result.Flows) >= (1<<20)-2 {
+					return nil, errors.New("too many KF8 SVG flows for four-digit flow references")
+				}
+				reference.Number = uint32(len(result.Flows) + 2)
+				result.Flows = append(result.Flows, resourceFlow{Filename: candidate.Filename, Data: bytes.Clone(candidate.Data)})
+			} else {
+				if len(result.Records) >= (1<<20)-1 {
+					return nil, errors.New("too many KF8 resources for four-digit resource references")
+				}
+				record, err := encodeResource(candidate)
+				if err != nil {
+					return nil, fmt.Errorf("encode publication resource %q: %w", candidate.Filename, err)
+				}
+				reference.Number = uint32(len(result.Records) + 1)
+				result.Records = append(result.Records, record)
 			}
-			record, err := encodeResource(candidate)
-			if err != nil {
-				return nil, fmt.Errorf("encode publication resource %q: %w", candidate.Filename, err)
-			}
-			reference = resourceReference{Number: uint32(len(result.Records) + 1), Kind: candidate.Kind, MimeType: candidate.MimeType}
-			result.Records = append(result.Records, record)
 			contents[key] = reference
 		} else if reference.MimeType != candidate.MimeType {
 			return nil, fmt.Errorf("identical publication resource %q has conflicting MIME type %q", candidate.Filename, candidate.MimeType)
 		}
 		result.References[candidate.Filename] = reference
 	}
+	for i := range result.Flows {
+		flow := &result.Flows[i]
+		data, err := lowerSVGResources(ctx, flow.Filename, flow.Data, result)
+		if err != nil {
+			return nil, fmt.Errorf("lower SVG resource %q: %w", flow.Filename, err)
+		}
+		flow.Data = data
+	}
 	return result, nil
+}
+
+func (candidate resourceCandidate) contentKey() resourceContentKey {
+	key := resourceContentKey{Kind: candidate.Kind, Digest: sha256.Sum256(candidate.Data)}
+	if candidate.Kind == resourceSVG {
+		key.Scope = path.Dir(candidate.Filename)
+	}
+	return key
 }
 
 func classifyResource(mimeType string, data []byte) (resourceKind, string, error) {
@@ -159,6 +204,9 @@ func classifyResource(mimeType string, data []byte) (resourceKind, string, error
 	case "font/woff", "font/woff2", "application/font-woff", "application/font-woff2", "application/vnd.ms-fontobject":
 		return 0, "", fmt.Errorf("unsupported KF8 font format %q; use TTF or OTF", mimeType)
 	default:
+		if imageMediaType(mimeType) == "image/svg+xml" {
+			return resourceSVG, "image/svg+xml", nil
+		}
 		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(mimeType)), "font/") ||
 			strings.HasPrefix(strings.ToLower(strings.TrimSpace(mimeType)), "application/x-font-") {
 			return 0, "", fmt.Errorf("unsupported KF8 font format %q; use TTF or OTF", mimeType)
@@ -179,8 +227,6 @@ func normalizeRasterMIME(mimeType string) (string, error) {
 		return "image/png", nil
 	case "image/gif":
 		return "image/gif", nil
-	case "image/svg+xml":
-		return "", errors.New("SVG must be rasterized before KF8 resource compilation")
 	default:
 		return "", fmt.Errorf("unsupported KF8 raster MIME type %q", mimeType)
 	}
@@ -269,8 +315,12 @@ func lowerResourceURI(filename, rawURI string, resources *resourceLayout, requir
 	if !exists {
 		return "", false, fmt.Errorf("unresolved publication resource %q", rawURI)
 	}
-	if requiredKind != resourceAny && reference.Kind != requiredKind {
+	if requiredKind != resourceAny && reference.Kind != requiredKind &&
+		!(requiredKind == resourceImage && reference.Kind == resourceSVG) {
 		return "", false, fmt.Errorf("image URI %q refers to a font", rawURI)
+	}
+	if reference.Kind == resourceSVG {
+		return "kindle:flow:" + base32(reference.Number, 4) + "?mime=image/svg+xml", true, nil
 	}
 	uri := "kindle:embed:" + base32(reference.Number, 4)
 	if reference.Kind == resourceImage {

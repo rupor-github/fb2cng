@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/beevik/etree"
 	"go.uber.org/zap"
 
 	"fbc/config"
@@ -17,8 +18,9 @@ import (
 
 // preparePublicationImages makes a private resource view before resource numbering
 // and text layout. Body rasters have already undergone common image preparation:
-// do not resize or recompress them a second time. Retained SVG artwork still needs
-// the raster backend fallback. CSS-only images have not undergone image preparation.
+// do not resize or recompress them a second time. SVG uses native flows unless
+// explicit raster policy or cover compatibility requires JPEG. CSS-only images
+// have not undergone image preparation.
 // Publication filenames remain URI aliases, even when their encoding changes.
 func preparePublicationImages(
 	ctx context.Context, pub *publication.Publication, cfg *config.ImagesConfig, log *zap.Logger,
@@ -29,7 +31,7 @@ func preparePublicationImages(
 	if pub == nil || cfg == nil {
 		return nil, errors.New("publication and image configuration are required")
 	}
-	policy := fb2.ImagePolicy{RequireJPEG: true, KindleSVGStrokes: true}
+	policy := fb2.ImagePolicy{RequireJPEG: true, NativeSVG: true, KindleSVGStrokes: true}
 	result := *pub
 	result.Images = maps.Clone(pub.Images)
 	result.Stylesheet.Resources = slices.Clone(pub.Stylesheet.Resources)
@@ -44,12 +46,13 @@ func preparePublicationImages(
 		if imageMediaType(source.MimeType) != "image/svg+xml" {
 			continue
 		}
-		log.Debug("Falling back to SVG rasterization for AZW3 output",
-			zap.String("id", id), zap.String("filename", source.Filename))
 		binary := fb2.BinaryObject{
 			ID: id, ContentType: imageMediaType(source.MimeType), Data: source.Data, BuiltinVignette: source.BuiltinVignette,
 		}
-		image := binary.RasterizeSVG(policy, id == pub.CoverID, cfg, log)
+		image := binary.PrepareImage(policy, id == pub.CoverID, cfg, log)
+		if err := sizeNativeSVG(image); err != nil {
+			return nil, fmt.Errorf("size SVG image %q: %w", id, err)
+		}
 		image.Filename = source.Filename
 		result.Images[id] = image
 	}
@@ -67,10 +70,34 @@ func preparePublicationImages(
 		if resource.ResolvedID == "" || image == nil {
 			binary := fb2.BinaryObject{ID: resource.ResolvedID, ContentType: imageMediaType(resource.MimeType), Data: resource.Data}
 			image = binary.PrepareImage(policy, false, cfg, log)
+			if err := sizeNativeSVG(image); err != nil {
+				return nil, fmt.Errorf("size CSS SVG image %q: %w", resource.Filename, err)
+			}
 		}
 		resource.MimeType, resource.Data = image.MimeType, image.Data
 	}
 	return &result, nil
+}
+
+// Explicit intrinsic dimensions preserve the common screen/scale policy for
+// both img references and CSS backgrounds without discarding vector geometry.
+// Damaged sources kept by use_broken are never repaired or reserialized here.
+func sizeNativeSVG(image *fb2.BookImage) error {
+	if imageMediaType(image.MimeType) != "image/svg+xml" || image.Dim.Width <= 0 || image.Dim.Height <= 0 {
+		return nil
+	}
+	doc := etree.NewDocument()
+	if err := doc.ReadFromBytes(image.Data); err != nil || doc.Root() == nil || doc.Root().Tag != "svg" {
+		return nil
+	}
+	doc.Root().CreateAttr("width", fmt.Sprintf("%d", image.Dim.Width))
+	doc.Root().CreateAttr("height", fmt.Sprintf("%d", image.Dim.Height))
+	data, err := doc.WriteToBytes()
+	if err != nil {
+		return err
+	}
+	image.Data = data
+	return nil
 }
 
 func imageMediaType(value string) string {

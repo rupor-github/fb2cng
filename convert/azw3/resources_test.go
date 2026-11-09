@@ -119,7 +119,7 @@ func TestCompileResourcesRejectsInvalidInput(t *testing.T) {
 	}{
 		{"WOFF2 font", fb2.StylesheetResource{Filename: "fonts/a.woff2", MimeType: "font/woff2", Data: []byte("wOF2")}, "use TTF or OTF"},
 		{"invalid TTF", fb2.StylesheetResource{Filename: "fonts/a.ttf", MimeType: "font/ttf", Data: []byte("bad")}, "TTF or OTF"},
-		{"SVG", fb2.StylesheetResource{Filename: "other/a.svg", MimeType: "image/svg+xml", Data: []byte("<svg/>")}, "rasterized"},
+		{"invalid SVG encoding", fb2.StylesheetResource{Filename: "other/a.svg", MimeType: "image/svg+xml", Data: []byte{0xff}}, "UTF-8"},
 		{"unsupported raster", fb2.StylesheetResource{Filename: "other/a.webp", MimeType: "image/webp", Data: []byte("RIFF")}, "unsupported KF8 raster"},
 		{
 			"unsafe filename",

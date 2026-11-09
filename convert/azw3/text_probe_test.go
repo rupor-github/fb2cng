@@ -133,7 +133,9 @@ func TestPublicationImageFallbackKindleUnpack(t *testing.T) {
 	}
 	pub.Chapters[0].Doc.FindElement("//img").CreateAttr("src", "images/art.svg")
 	before := snapshotPublication(t, pub)
-	prepared, err := preparePublicationImages(context.Background(), pub, imageTestConfig(), zap.NewNop())
+	cfg := imageTestConfig()
+	cfg.RasterizeSVG = true
+	prepared, err := preparePublicationImages(context.Background(), pub, cfg, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}

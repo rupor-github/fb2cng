@@ -38,6 +38,7 @@ func TestPreparePublicationImages(t *testing.T) {
 			t.Run(fmt.Sprintf("optimize=%t/force=%t", optimize, rasterize), func(t *testing.T) {
 				cfg := imageTestConfig()
 				cfg.Optimize, cfg.RasterizeSVG = optimize, rasterize
+				cfg.RemoveTransparency = !rasterize
 				svg := &fb2.BookImage{Filename: "images/art.svg", MimeType: "image/svg+xml", Data: []byte(fallbackSVG)}
 				pub := &publication.Publication{
 					Images: fb2.BookImages{"art": svg},
@@ -93,6 +94,7 @@ func TestPreparePublicationImagesCoverAndVignette(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := imageTestConfig()
+			cfg.RasterizeSVG = true
 			pub := &publication.Publication{Images: fb2.BookImages{
 				"art": {Filename: "images/art.svg", MimeType: "image/svg+xml", Data: []byte(fallbackSVG), BuiltinVignette: tt.builtin},
 			}}
@@ -151,6 +153,7 @@ func TestPreparePublicationCSSRasterImages(t *testing.T) {
 
 func TestPreparePublicationImagesBrokenAndCancellation(t *testing.T) {
 	cfg := imageTestConfig()
+	cfg.RasterizeSVG = true
 	pub := &publication.Publication{Images: fb2.BookImages{
 		"broken": {Filename: "images/broken.svg", MimeType: "image/svg+xml", Data: []byte("<svg")},
 	}}
@@ -161,9 +164,6 @@ func TestPreparePublicationImagesBrokenAndCancellation(t *testing.T) {
 	}
 	if got.Images["broken"].MimeType != "image/jpeg" || logs.FilterMessageSnippet("broken placeholder").Len() == 0 {
 		t.Error("broken SVG must use the shared warning/placeholder behavior")
-	}
-	if logs.FilterMessageSnippet("as requested by configuration").Len() != 0 {
-		t.Error("backend fallback was logged as an explicit rasterize_svg request")
 	}
 	cfg.UseBroken = true
 	kept, err := preparePublicationImages(context.Background(), pub, cfg, zap.NewNop())

@@ -261,6 +261,9 @@ func (s *Stylesheet) RulesBySelector(selector string) []Rule {
 // Handles: url("path"), url('path'), url(path)
 var urlRewritePattern = regexp.MustCompile(`url\s*\(\s*(?:["']([^"']*)["']|([^)"]*))\s*\)`)
 
+// Standalone values can come directly from authored SVG, before CSS normalization.
+var rawURLRewritePattern = regexp.MustCompile(`(?i)` + urlRewritePattern.String())
+
 // WriteTo writes the stylesheet to w in source order, implementing io.WriterTo.
 // Property order within a rule is sorted alphabetically for deterministic output.
 func (s *Stylesheet) WriteTo(w io.Writer) (int64, error) {
@@ -471,8 +474,8 @@ func (s *Stylesheet) RewriteURLs(fn func(originalURL string) string) {
 // contain CSS URL delimiters, such as generated kindle: resource URIs in markup
 // attributes where XML quote entities are not recognized by all consumers.
 func RewriteValueURLsUnquoted(value string, fn func(originalURL string) string) string {
-	return urlRewritePattern.ReplaceAllStringFunc(value, func(match string) string {
-		sub := urlRewritePattern.FindStringSubmatch(match)
+	return rawURLRewritePattern.ReplaceAllStringFunc(value, func(match string) string {
+		sub := rawURLRewritePattern.FindStringSubmatch(match)
 		if len(sub) < 3 {
 			return match
 		}
