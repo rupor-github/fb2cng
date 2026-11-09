@@ -59,7 +59,11 @@ func TestFB2PublicationText(t *testing.T) {
 					if (mode.IsFloat() && asides != 3) || (!mode.IsFloat() && asides != 0) || backlinks != 5 {
 						t.Errorf("unexpected source fixture: asides=%d, backlinks=%d", asides, backlinks)
 					}
-					data := assembleTextProbe(t, compiled)
+					navigation, err := compileNavigation(context.Background(), pub, compiled, shape)
+					if err != nil {
+						t.Fatal(err)
+					}
+					data := assembleTextProbe(t, compiled, navigation)
 					summary, err := json.MarshalIndent(struct {
 						Chapters   int
 						Navigation int
@@ -74,6 +78,7 @@ func TestFB2PublicationText(t *testing.T) {
 					if os.Getenv("AZW3_KINDLEUNPACK_TEST") == "1" {
 						work := unpackProbe(t, name, data)
 						assertUnpackedText(t, work, pub, compiled)
+						assertUnpackedNavigation(t, work, pub, compiled, shape)
 					}
 				})
 			}

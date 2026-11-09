@@ -69,6 +69,13 @@ func TestBuild(t *testing.T) {
 						if !reflect.DeepEqual(pub.Navigation, CollectNavigation(pub.Chapters, pub.IDToFile)) {
 							t.Error("publication navigation differs from rendered chapter navigation")
 						}
+						wantLandmarks := []Landmark{{Kind: "bodymatter", Title: "Start", Href: "index00001.xhtml"}}
+						if placement != common.TOCPagePlacementNone {
+							wantLandmarks = append(wantLandmarks, Landmark{Kind: "toc", Title: "Table of Contents", Href: "toc-page-1.xhtml"})
+						}
+						if !reflect.DeepEqual(pub.Landmarks, wantLandmarks) {
+							t.Errorf("semantic destinations = %+v, want %+v", pub.Landmarks, wantLandmarks)
+						}
 						if pub.CoverID != "cover" || len(pub.Images) != 2 || pub.Images["unused"] != nil {
 							t.Error("image selection must retain cover and used art only")
 						}

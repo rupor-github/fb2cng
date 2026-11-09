@@ -50,6 +50,7 @@ type textLayout struct {
 	Fragments  [][]byte
 	FDST       []byte
 	FlowCount  uint32
+	MainLength uint32
 	Resources  [][]byte
 	References map[string]resourceReference
 }
@@ -217,7 +218,8 @@ func compileText(ctx context.Context, pub *publication.Publication) (*textLayout
 	if err != nil {
 		return nil, fmt.Errorf("encode KF8 skeleton index: %w", err)
 	}
-	lengths := []uint32{uint32(len(result.Raw))}
+	result.MainLength = uint32(len(result.Raw))
+	lengths := []uint32{result.MainLength}
 	if cssNeeded {
 		css := stylesheet
 		if len(css) == 0 {

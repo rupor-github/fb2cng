@@ -170,7 +170,7 @@ func TestNativeSVGBrokenSourceRetention(t *testing.T) {
 			}
 			if os.Getenv("AZW3_KINDLEUNPACK_TEST") == "1" {
 				name := fmt.Sprintf("publication-broken-svg-force-%t", force)
-				data := assembleTextProbe(t, compiled)
+				data := assembleTextProbe(t, compiled, nil)
 				writeProbeArtifacts(t, map[string][]byte{name + ".azw3": data})
 				work := unpackProbe(t, name, data)
 				filename := filepath.Join(work, "unpacked", "mobi8", "OEBPS", "Images", fmt.Sprintf("svgimg%04d.svg", ref.Number))
@@ -227,7 +227,7 @@ func TestNativeSVGKindleUnpack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data := assembleTextProbe(t, compiled)
+	data := assembleTextProbe(t, compiled, nil)
 	writeProbeArtifacts(t, map[string][]byte{"publication-native-svg.azw3": data})
 	work := unpackProbe(t, "publication-native-svg", data)
 	base := filepath.Join(work, "unpacked", "mobi8", "OEBPS")
@@ -270,7 +270,7 @@ func TestNativeSVGEmbeddedImageKindleUnpack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data := assembleTextProbe(t, compiled)
+	data := assembleTextProbe(t, compiled, nil)
 	writeProbeArtifacts(t, map[string][]byte{"publication-svg-embedded-image.azw3": data})
 	work := unpackProbe(t, "publication-svg-embedded-image", data)
 	base := filepath.Join(work, "unpacked", "mobi8", "OEBPS")

@@ -29,10 +29,19 @@ type Publication struct {
 	Chapters   []Chapter
 	IDToFile   map[string]string
 	Navigation []tocnav.Item
+	Landmarks  []Landmark
 	Pages      []content.PageMapEntry
 	Stylesheet Stylesheet
 	Images     fb2.BookImages
 	CoverID    string
+}
+
+// Landmark identifies a semantic destination independently of container-specific
+// navigation/guide formats. Cover wrappers are added by the output adapter.
+type Landmark struct {
+	Kind  string
+	Title string
+	Href  string
 }
 
 // Documents yields each rendered document once, in reading order, excluding
@@ -106,6 +115,13 @@ func Build(
 	if err != nil {
 		return nil, fmt.Errorf("unable to convert content: %w", err)
 	}
+	var landmarks []Landmark
+	for _, chapter := range chapters {
+		if chapter.Doc != nil {
+			landmarks = append(landmarks, Landmark{Kind: "bodymatter", Title: "Start", Href: chapter.Filename + chapter.AnchorSuffix()})
+			break
+		}
+	}
 	if c.PageSize > 0 && tocEnabled && cfg.TOCPage.Placement != common.TOCPagePlacementBefore {
 		c.ForceNewPage(tocFilename)
 	}
@@ -119,6 +135,7 @@ func Build(
 	}
 	if tocEnabled {
 		tocChapter := generateTOCPage(c, chapters, &cfg.TOCPage, idToFile, log)
+		landmarks = append(landmarks, Landmark{Kind: "toc", Title: tocChapter.Title, Href: tocChapter.Filename + tocChapter.AnchorSuffix()})
 		if cfg.TOCPage.Placement == common.TOCPagePlacementBefore {
 			chapters = append([]Chapter{tocChapter}, chapters...)
 		} else {
@@ -138,6 +155,7 @@ func Build(
 		Chapters:   chapters,
 		IDToFile:   idToFile,
 		Navigation: CollectNavigation(chapters, idToFile),
+		Landmarks:  landmarks,
 		Pages:      slices.Collect(c.GetAllPagesSeq()),
 		Stylesheet: AssembleStylesheet(c.Book.Stylesheets),
 		Images:     c.ImagesIndex,
