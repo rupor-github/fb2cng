@@ -78,12 +78,26 @@ func buildStructuralProbe(t *testing.T) ([]byte, []byte) {
 }
 
 func TestStandaloneKindleUnpack(t *testing.T) {
+	data, expected := buildStructuralProbe(t)
+	work := unpackProbe(t, "structural", data)
+	for _, name := range []string{"structural.rawml", "OEBPS/Text/part0000.xhtml"} {
+		got, err := os.ReadFile(filepath.Join(work, "unpacked", "mobi8", filepath.FromSlash(name)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, expected) {
+			t.Errorf("independent reconstruction changed %s", name)
+		}
+	}
+}
+
+func unpackProbe(t *testing.T, name string, data []byte) string {
+	t.Helper()
 	if os.Getenv("AZW3_KINDLEUNPACK_TEST") != "1" {
 		t.Skip("set AZW3_KINDLEUNPACK_TEST=1 to run the independent decoder")
 	}
-	data, expected := buildStructuralProbe(t)
 	work := t.TempDir()
-	input := filepath.Join(work, "structural.azw3")
+	input := filepath.Join(work, name+".azw3")
 	if err := os.WriteFile(input, data, 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -96,25 +110,19 @@ func TestStandaloneKindleUnpack(t *testing.T) {
 	command := exec.CommandContext(ctx, wrapper, "-r", "-d", input, filepath.Join(work, "unpacked"))
 	command.Dir = work
 	output, err := command.CombinedOutput()
-	writeProbeArtifacts(t, map[string][]byte{"kindleunpack.log": output})
+	writeProbeArtifacts(t, map[string][]byte{name + "-kindleunpack.log": output})
 	if err != nil {
 		t.Fatalf("KindleUnpack failed: %v\n%s", err, output)
 	}
 	for _, line := range strings.Split(string(output), "\n") {
 		lower := strings.ToLower(line)
-		if strings.Contains(lower, "warning") || strings.Contains(lower, "error") || strings.Contains(lower, "traceback") {
+		if strings.Contains(lower, "warning") || strings.Contains(lower, "error") || strings.Contains(lower, "traceback") ||
+			strings.Contains(lower, "retargeting") || strings.Contains(lower, "incorrect insert position") ||
+			strings.Contains(lower, "fixed corrupt fragment") {
 			t.Fatalf("unexpected KindleUnpack diagnostic: %s", line)
 		}
 	}
-	for _, name := range []string{"structural.rawml", "OEBPS/Text/part0000.xhtml"} {
-		got, err := os.ReadFile(filepath.Join(work, "unpacked", "mobi8", filepath.FromSlash(name)))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !bytes.Equal(got, expected) {
-			t.Errorf("independent reconstruction changed %s", name)
-		}
-	}
+	return work
 }
 
 func writeProbeArtifacts(t *testing.T, artifacts map[string][]byte) {
