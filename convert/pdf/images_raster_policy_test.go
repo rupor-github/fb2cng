@@ -43,7 +43,7 @@ func TestPDFRasterFormatSVGPolicy(t *testing.T) {
 						cfg.RasterFormat = rasterFormat
 						img := &fb2.BookImage{MimeType: bo.ContentType, Data: bo.Data}
 						if prepared {
-							img = bo.PrepareImage(common.OutputFmtPdf, cover, &cfg, zap.NewNop())
+							img = bo.PrepareImage(fb2.ImagePolicyFor(common.OutputFmtPdf, &cfg), cover, &cfg, zap.NewNop())
 						}
 						doc := pdfDocumentSpec{ScreenDPI: 300, ImageConfig: cfg, Images: fb2.BookImages{"art": img}}
 						width, height, ok := fitPDFBlockImageSize(doc, img, 200, 300, 200, false)
@@ -107,9 +107,9 @@ func TestPDFRasterFormatPreservesGIFLayout(t *testing.T) {
 				bo := fb2.BinaryObject{ID: "gif", ContentType: "image/gif", Data: data.Bytes()}
 				cfg := config.ImagesConfig{JPEGQuality: 95, RemoveTransparency: remove}
 				doc := pdfDocumentSpec{PageWidth: 300, PageHeight: 400, ScreenWidthPx: 1200, ScreenHeightPx: 1600}
-				before := bo.PrepareImage(common.OutputFmtPdf, false, &cfg, zap.NewNop())
+				before := bo.PrepareImage(fb2.ImagePolicyFor(common.OutputFmtPdf, &cfg), false, &cfg, zap.NewNop())
 				cfg.RasterFormat = common.RasterFormatJpeg
-				after := bo.PrepareImage(common.OutputFmtPdf, false, &cfg, zap.NewNop())
+				after := bo.PrepareImage(fb2.ImagePolicyFor(common.OutputFmtPdf, &cfg), false, &cfg, zap.NewNop())
 				w1, h1, ok1 := fitPDFBlockImageSize(doc, before, 200, 300, 200, false)
 				w2, h2, ok2 := fitPDFBlockImageSize(doc, after, 200, 300, 200, false)
 				if w1 != w2 || h1 != h2 || ok1 != ok2 {

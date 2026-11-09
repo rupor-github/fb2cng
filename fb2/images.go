@@ -36,6 +36,7 @@ func (fb *FictionBook) PrepareImages(outputFormat common.OutputFmt, cfg *config.
 	index := make(BookImages)
 
 	imgNum := 1
+	policy := ImagePolicyFor(outputFormat, cfg)
 	for i := range fb.Binaries {
 		// Skip non-image binaries (e.g., fonts loaded by stylesheet normalization)
 		if !isImageMIME(fb.Binaries[i].ContentType) {
@@ -50,7 +51,7 @@ func (fb *FictionBook) PrepareImages(outputFormat common.OutputFmt, cfg *config.
 			continue
 		}
 		cover := len(fb.Description.TitleInfo.Coverpage) > 0 && strings.HasSuffix(fb.Description.TitleInfo.Coverpage[0].Href, fb.Binaries[i].ID)
-		bi := fb.Binaries[i].PrepareImage(outputFormat, cover, cfg, log)
+		bi := fb.Binaries[i].PrepareImage(policy, cover, cfg, log)
 		ext := mimeToExt(bi.MimeType)
 		bi.Filename = path.Join(ImagesDir, fmt.Sprintf("img%05d.%s", imgNum, ext))
 		imgNum++
@@ -171,16 +172,13 @@ func (bo *BinaryObject) encodeImage(img image.Image, imgType string, cfg *config
 // for broken images.
 // NOTE: today KP3 always seems to scale images to 2048 width and height, we do
 // not do it
-func (bo *BinaryObject) PrepareImage(outputFormat common.OutputFmt, cover bool, cfg *config.ImagesConfig, log *zap.Logger) *BookImage {
-	// Embedded Markdown retains its existing JPEG and vignette policy without
-	// impersonating a Kindle output format.
-	requireJPEG := outputFormat.IsKindle() ||
-		(outputFormat == common.OutputFmtMd && cfg.Markdown == common.MarkdownImageModeEmbedded)
+func (bo *BinaryObject) PrepareImage(policy ImagePolicy, cover bool, cfg *config.ImagesConfig, log *zap.Logger) *BookImage {
+	requireJPEG := policy.RequireJPEG
 	normalizeToJPEG := requireJPEG || cfg.RasterFormat == common.RasterFormatJpeg
 	// A substituted body placeholder can use native KVG. Covers, explicit raster
 	// policies and embedded Markdown still need the existing JPEG representation.
 	rasterizeBrokenSVG := requireJPEG &&
-		(!outputFormat.IsKindle() || cover || cfg.RasterizeSVG || cfg.RemoveTransparency)
+		(!policy.NativeSVG || cover || cfg.RasterizeSVG || cfg.RemoveTransparency)
 	bi := &BookImage{
 		MimeType:        bo.ContentType,
 		Data:            bo.Data,
@@ -190,7 +188,7 @@ func (bo *BinaryObject) PrepareImage(outputFormat common.OutputFmt, cover bool, 
 	// SVG handling
 	if strings.HasSuffix(strings.ToLower(bo.ContentType), "svg+xml") {
 		bi.MimeType = "image/svg+xml"
-		if outputFormat.IsKindle() && !cover && !cfg.RasterizeSVG && !cfg.RemoveTransparency {
+		if policy.NativeSVG && !cover && !cfg.RasterizeSVG && !cfg.RemoveTransparency {
 			// Retain the legacy layout box without allocating a raster. The backend
 			// can translate the scene or request the normal JPEG fallback later.
 			targetW := cfg.Screen.Width
@@ -204,7 +202,7 @@ func (bo *BinaryObject) PrepareImage(outputFormat common.OutputFmt, cover bool, 
 			if !bytes.Equal(bo.Data, brokenImage) && cfg.ScaleFactor > 0 && cfg.ScaleFactor != 1 {
 				newH := int(float64(h) * cfg.ScaleFactor)
 				if newH <= 0 {
-					return bo.RasterizeSVG(outputFormat, cover, cfg, log)
+					return bo.RasterizeSVG(policy, cover, cfg, log)
 				}
 				w, h = max(int(math.Round(float64(w)*float64(newH)/float64(h))), 1), newH
 			}
@@ -214,11 +212,11 @@ func (bo *BinaryObject) PrepareImage(outputFormat common.OutputFmt, cover bool, 
 		if !requireJPEG && !cfg.RasterizeSVG {
 			return bi
 		}
-		if cfg.RasterizeSVG || (outputFormat.IsKindle() && cfg.RemoveTransparency) {
+		if cfg.RasterizeSVG || (policy.RequireJPEG && cfg.RemoveTransparency) {
 			log.Debug("Rasterizing SVG as requested by configuration", zap.String("id", bo.ID),
 				zap.Bool("rasterize_svg", cfg.RasterizeSVG), zap.Bool("remove_transparency", cfg.RemoveTransparency))
 		}
-		return bo.RasterizeSVG(outputFormat, cover, cfg, log)
+		return bo.RasterizeSVG(policy, cover, cfg, log)
 	}
 
 	imageChanged := false
@@ -227,7 +225,7 @@ func (bo *BinaryObject) PrepareImage(outputFormat common.OutputFmt, cover bool, 
 		return bo.handleImageError(bi, "decode", imgDecodingErr, rasterizeBrokenSVG, cfg, log)
 	}
 	bi.MimeType = mime.TypeByExtension("." + imgType)
-	if outputFormat == common.OutputFmtPdf && cfg.RasterFormat == common.RasterFormatJpeg {
+	if policy.PreservePDFSizing && cfg.RasterFormat == common.RasterFormatJpeg {
 		bi.LayoutMimeType = bi.MimeType
 	}
 	bi.Dim.Width = img.Bounds().Dx()
@@ -235,7 +233,7 @@ func (bo *BinaryObject) PrepareImage(outputFormat common.OutputFmt, cover bool, 
 
 	// Kobo does not support WebP. Use lossless PNG, preserving transparency
 	// unless its removal is explicitly requested below.
-	if outputFormat.IsKobo() && imgType == "webp" && !normalizeToJPEG {
+	if policy.ConvertWebP && imgType == "webp" && !normalizeToJPEG {
 		log.Debug("Converting WebP image to PNG for Kobo output", zap.String("id", bo.ID))
 		imgType = "png"
 		bi.MimeType = "image/png"
@@ -348,7 +346,7 @@ func (bo *BinaryObject) PrepareImage(outputFormat common.OutputFmt, cover bool, 
 
 			imageChanged = true
 		case "png":
-			if outputFormat == common.OutputFmtPdf {
+			if policy.PreservePDFSizing {
 				log.Debug("Skipping non-JPEG source image optimization for output format",
 					zap.String("id", bo.ID),
 					zap.String("type", imgType))
@@ -384,18 +382,17 @@ func (bo *BinaryObject) PrepareImage(outputFormat common.OutputFmt, cover bool, 
 // RasterizeSVG prepares a raster representation when an output backend cannot use
 // the source SVG. Policy logging belongs to the caller, so fallback is never
 // mislabeled as an explicit rasterize_svg request.
-func (bo *BinaryObject) RasterizeSVG(outputFormat common.OutputFmt, cover bool, cfg *config.ImagesConfig, log *zap.Logger) *BookImage {
-	requireJPEG := outputFormat.IsKindle() ||
-		(outputFormat == common.OutputFmtMd && cfg.Markdown == common.MarkdownImageModeEmbedded)
+func (bo *BinaryObject) RasterizeSVG(policy ImagePolicy, cover bool, cfg *config.ImagesConfig, log *zap.Logger) *BookImage {
+	requireJPEG := policy.RequireJPEG
 	normalizeToJPEG := requireJPEG || cfg.RasterFormat == common.RasterFormatJpeg
-	preserveSVGSizing := outputFormat == common.OutputFmtPdf
+	preserveSVGSizing := policy.PreservePDFSizing
 	bi := &BookImage{MimeType: "image/svg+xml", Data: bo.Data, BuiltinVignette: bo.BuiltinVignette}
 	targetW, targetH := cfg.Screen.Width, 0
 	if preserveSVGSizing || bytes.Equal(bo.Data, notFoundImage) || bytes.Equal(bo.Data, brokenImage) {
 		targetW, targetH = 0, 0
 	}
 	var strokeFactor float64
-	if requireJPEG && bo.BuiltinVignette {
+	if policy.KindleSVGStrokes && bo.BuiltinVignette {
 		strokeFactor = imgutil.KindleSVGStrokeWidthFactor
 	}
 	rasterize := imgutil.RasterizeSVGToImage

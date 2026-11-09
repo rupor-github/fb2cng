@@ -108,7 +108,7 @@ func TestBinaryObject_PrepareImage_BasicJPEG(t *testing.T) {
 		Data:        jpegData,
 	}
 
-	bi := bo.PrepareImage(common.OutputFmtEpub2, false, cfg, log)
+	bi := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub2, cfg), false, cfg, log)
 	if bi == nil {
 		t.Fatal("expected non-nil BookImage")
 	}
@@ -139,7 +139,7 @@ func TestBinaryObject_PrepareImage_BasicPNG(t *testing.T) {
 		Data:        pngData,
 	}
 
-	bi := bo.PrepareImage(common.OutputFmtEpub2, false, cfg, log)
+	bi := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub2, cfg), false, cfg, log)
 	if bi.MimeType != "image/png" {
 		t.Errorf("expected mime type image/png, got %s", bi.MimeType)
 	}
@@ -165,7 +165,7 @@ func TestBinaryObject_PrepareImage_CoverResizeKeepAR(t *testing.T) {
 		Data:        jpegData,
 	}
 
-	bi := bo.PrepareImage(common.OutputFmtEpub2, true, cfg, log)
+	bi := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub2, cfg), true, cfg, log)
 
 	// Decode and verify dimensions
 	img, _, err := image.Decode(bytes.NewReader(bi.Data))
@@ -203,7 +203,7 @@ func TestBinaryObject_PrepareImage_CoverResizeStretch(t *testing.T) {
 		Data:        jpegData,
 	}
 
-	bi := bo.PrepareImage(common.OutputFmtEpub2, true, cfg, log)
+	bi := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub2, cfg), true, cfg, log)
 
 	img, _, err := image.Decode(bytes.NewReader(bi.Data))
 	if err != nil {
@@ -249,7 +249,7 @@ func TestBinaryObject_PrepareImage_CoverResizeFit(t *testing.T) {
 				Data:        jpegData,
 			}
 
-			bi := bo.PrepareImage(common.OutputFmtEpub2, true, cfg, log)
+			bi := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub2, cfg), true, cfg, log)
 			img, _, err := image.Decode(bytes.NewReader(bi.Data))
 			if err != nil {
 				t.Fatalf("failed to decode fitted image: %v", err)
@@ -283,7 +283,7 @@ func TestBinaryObject_PrepareImage_CoverNoResize(t *testing.T) {
 		Data:        jpegData,
 	}
 
-	bi := bo.PrepareImage(common.OutputFmtEpub2, true, cfg, log)
+	bi := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub2, cfg), true, cfg, log)
 
 	img, _, err := image.Decode(bytes.NewReader(bi.Data))
 	if err != nil {
@@ -315,7 +315,7 @@ func TestBinaryObject_PrepareImage_ScaleFactor(t *testing.T) {
 		Data:        jpegData,
 	}
 
-	bi := bo.PrepareImage(common.OutputFmtEpub2, false, cfg, log)
+	bi := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub2, cfg), false, cfg, log)
 
 	img, _, err := image.Decode(bytes.NewReader(bi.Data))
 	if err != nil {
@@ -348,7 +348,7 @@ func TestBinaryObject_PrepareImage_RemoveTransparency(t *testing.T) {
 		Data:        pngData,
 	}
 
-	bi := bo.PrepareImage(common.OutputFmtEpub2, false, cfg, log)
+	bi := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub2, cfg), false, cfg, log)
 
 	img, _, err := image.Decode(bytes.NewReader(bi.Data))
 	if err != nil {
@@ -382,7 +382,7 @@ func TestBinaryObject_PrepareImage_RemoveGIFTransparency(t *testing.T) {
 		Data:        gifData,
 	}
 
-	bi := bo.PrepareImage(common.OutputFmtEpub2, false, cfg, log)
+	bi := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub2, cfg), false, cfg, log)
 
 	// GIF with transparency removed should be converted to PNG
 	// (since encodeImage doesn't support GIF encoding)
@@ -424,7 +424,7 @@ func TestBinaryObject_PrepareImage_GIFToJPEGKindle(t *testing.T) {
 	}
 
 	// With kindle=true, GIF should be converted to JPEG with transparency flattened
-	bi := bo.PrepareImage(common.OutputFmtKfx, false, cfg, log)
+	bi := bo.PrepareImage(ImagePolicyFor(common.OutputFmtKfx, cfg), false, cfg, log)
 
 	if bi.MimeType != "image/jpeg" {
 		t.Errorf("expected mime type image/jpeg for Kindle, got %s", bi.MimeType)
@@ -515,7 +515,7 @@ func TestBinaryObject_PrepareImage_JPEGQualityOptimization(t *testing.T) {
 		Data:        jpegData,
 	}
 
-	bi := bo.PrepareImage(common.OutputFmtEpub2, false, cfg, log)
+	bi := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub2, cfg), false, cfg, log)
 
 	// Optimized image should be smaller
 	if len(bi.Data) >= originalSize {
@@ -543,7 +543,7 @@ func TestBinaryObject_PrepareImage_KindleConversion(t *testing.T) {
 		Data:        pngData,
 	}
 
-	bi := bo.PrepareImage(common.OutputFmtKfx, false, cfg, log)
+	bi := bo.PrepareImage(ImagePolicyFor(common.OutputFmtKfx, cfg), false, cfg, log)
 
 	if bi.MimeType != "image/jpeg" {
 		t.Errorf("expected conversion to JPEG for Kindle, got %s", bi.MimeType)
@@ -569,7 +569,7 @@ func TestBinaryObject_PrepareImage_SVGRasterizeForKindle(t *testing.T) {
 		Data:        svgData,
 	}
 
-	bi := bo.PrepareImage(common.OutputFmtKfx, true, cfg, log)
+	bi := bo.PrepareImage(ImagePolicyFor(common.OutputFmtKfx, cfg), true, cfg, log)
 
 	if bi.MimeType != "image/jpeg" {
 		t.Fatalf("expected SVG to be rasterized to JPEG for Kindle, got %s", bi.MimeType)
@@ -597,7 +597,7 @@ func TestBinaryObject_PrepareImage_NotFoundPlaceholderSVGIntrinsicSizeForKindle(
 		Data:        notFoundImage,
 	}
 
-	bi := bo.PrepareImage(common.OutputFmtKfx, false, cfg, log)
+	bi := bo.PrepareImage(ImagePolicyFor(common.OutputFmtKfx, cfg), false, cfg, log)
 	if bi.MimeType != "image/svg+xml" {
 		t.Fatalf("expected notFoundImage SVG to be retained for Kindle translation, got %s", bi.MimeType)
 	}
@@ -624,7 +624,7 @@ func TestBinaryObject_PrepareImage_InvalidImage(t *testing.T) {
 		Data:        []byte("not a valid image"),
 	}
 
-	bi := bo.PrepareImage(common.OutputFmtEpub2, true, cfg, log)
+	bi := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub2, cfg), true, cfg, log)
 	if bi == nil {
 		t.Fatal("expected non-nil BookImage with placeholder")
 	}
@@ -655,7 +655,7 @@ func TestBinaryObject_PrepareImage_UseBrokenFlag(t *testing.T) {
 		Data:        []byte("not a valid image"),
 	}
 
-	bi := bo.PrepareImage(common.OutputFmtEpub2, true, cfg, log)
+	bi := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub2, cfg), true, cfg, log)
 	if bi == nil {
 		t.Fatal("expected non-nil BookImage with UseBroken=true")
 	}
@@ -1057,7 +1057,7 @@ func TestPrepareImage_BMPScaleFactorNonKindle(t *testing.T) {
 		Data:        buf.Bytes(),
 	}
 
-	bi := bo.PrepareImage(common.OutputFmtEpub2, false, cfg, log)
+	bi := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub2, cfg), false, cfg, log)
 	if bi == nil {
 		t.Fatal("expected non-nil BookImage")
 	}

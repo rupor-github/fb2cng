@@ -12,8 +12,10 @@ import (
 	"testing"
 
 	"github.com/beevik/etree"
+	"go.uber.org/zap"
 
 	"fbc/convert/publication"
+	"fbc/fb2"
 )
 
 // assembleTextProbe supplies only fixture metadata and text-pass records. It is
@@ -121,6 +123,61 @@ func TestPublicationResourcesKindleUnpack(t *testing.T) {
 	}
 	if !bytes.Contains(stylesheet, []byte(`url("../Fonts/`)) || !bytes.Contains(stylesheet, []byte(`url("../Images/`)) {
 		t.Errorf("resource links were not reconstructed in CSS: %s", stylesheet)
+	}
+}
+
+func TestPublicationImageFallbackKindleUnpack(t *testing.T) {
+	pub, font := resourceTestPublication(t)
+	pub.Images["a"] = &fb2.BookImage{
+		Filename: "images/art.svg", MimeType: "image/svg+xml", Data: []byte(fallbackSVG), BuiltinVignette: true,
+	}
+	pub.Chapters[0].Doc.FindElement("//img").CreateAttr("src", "images/art.svg")
+	before := snapshotPublication(t, pub)
+	prepared, err := preparePublicationImages(context.Background(), pub, imageTestConfig(), zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	compiled, err := compileText(context.Background(), prepared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := assembleTextProbe(t, compiled)
+	writeProbeArtifacts(t, map[string][]byte{"publication-image-fallback.azw3": data})
+	work := unpackProbe(t, "publication-image-fallback", data)
+	base := filepath.Join(work, "unpacked", "mobi8", "OEBPS")
+	xhtml, err := os.ReadFile(filepath.Join(base, "Text", "part0000.xhtml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rebuilt := etree.NewDocument()
+	if err := rebuilt.ReadFromBytes(xhtml); err != nil {
+		t.Fatal(err)
+	}
+	src := rebuilt.FindElement("//img").SelectAttrValue("src", "")
+	if !strings.HasPrefix(src, "../Images/") {
+		t.Fatalf("unresolved fallback image URI %q", src)
+	}
+	image, err := os.ReadFile(filepath.Join(base, "Text", filepath.FromSlash(src)))
+	if err != nil || !bytes.Equal(image, prepared.Images["a"].Data) {
+		t.Fatalf("SVG fallback did not reconstruct exact prepared JPEG bytes: %v", err)
+	}
+	styles, err := os.ReadFile(filepath.Join(base, "Styles", "style0001.css"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(styles, []byte(`url("../Fonts/`)) || !bytes.Contains(styles, []byte(`url("../Images/`)) {
+		t.Errorf("CSS raster/font URLs were not reconstructed: %s", styles)
+	}
+	fonts, err := filepath.Glob(filepath.Join(base, "Fonts", "*.ttf"))
+	if err != nil || len(fonts) != 1 {
+		t.Fatalf("expected one font: %v", err)
+	}
+	fontData, err := os.ReadFile(fonts[0])
+	if err != nil || !bytes.Equal(fontData, font) {
+		t.Fatal("image preparation changed the font payload")
+	}
+	if !bytes.Equal(bytes.Join(before, nil), bytes.Join(snapshotPublication(t, pub), nil)) {
+		t.Error("SVG fallback/lowering changed source markup")
 	}
 }
 

@@ -167,7 +167,7 @@ func kvgPath(path rasterx.Path) []any {
 
 func rasterizeKindleSVG(id string, img *fb2.BookImage, cover bool, cfg *config.ImagesConfig, log *zap.Logger) *fb2.BookImage {
 	bo := fb2.BinaryObject{ID: id, ContentType: "image/svg+xml", Data: img.Data, BuiltinVignette: img.BuiltinVignette}
-	return bo.RasterizeSVG(common.OutputFmtKfx, cover, cfg, log)
+	return bo.RasterizeSVG(fb2.ImagePolicyFor(common.OutputFmtKfx, cfg), cover, cfg, log)
 }
 
 // Lower artwork after layout/margin processing, but before position collection.

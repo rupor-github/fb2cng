@@ -37,7 +37,7 @@ func TestRasterFormatJPEG(t *testing.T) {
 								Markdown: common.MarkdownImageModeExternal, Screen: config.ScreenConfig{Width: 96, Height: 64, DPI: 300},
 							}
 							bo := BinaryObject{ID: "art", ContentType: "image/" + input.name, Data: input.data}
-							got := bo.PrepareImage(output, cover, cfg, zap.New(core))
+							got := bo.PrepareImage(ImagePolicyFor(output, cfg), cover, cfg, zap.New(core))
 							img, format, err := image.Decode(bytes.NewReader(got.Data))
 							if err != nil || format != "jpeg" || got.MimeType != "image/jpeg" {
 								t.Fatalf("format=%s, MIME=%s, error=%v", format, got.MimeType, err)
@@ -77,9 +77,9 @@ func TestRasterFormatJPEGKeepsExistingJPEGPolicy(t *testing.T) {
 				data := createTestJPEG(t, 48, 16, quality)
 				bo := BinaryObject{ID: "jpeg", ContentType: "image/jpeg", Data: data}
 				cfg := &config.ImagesConfig{JPEGQuality: 75, Optimize: optimize, ScaleFactor: 1}
-				before := bo.PrepareImage(common.OutputFmtEpub3, false, cfg, zap.NewNop())
+				before := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub3, cfg), false, cfg, zap.NewNop())
 				cfg.RasterFormat = common.RasterFormatJpeg
-				after := bo.PrepareImage(common.OutputFmtEpub3, false, cfg, zap.NewNop())
+				after := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub3, cfg), false, cfg, zap.NewNop())
 				if !bytes.Equal(before.Data, after.Data) {
 					t.Fatal("selecting JPEG changed existing JPEG optimization behavior")
 				}
@@ -113,7 +113,7 @@ func TestRasterFormatJPEGResizeAndQuality(t *testing.T) {
 					Screen: config.ScreenConfig{Width: 96, Height: 64, DPI: 300}, Cover: config.CoverConfig{Resize: tt.mode},
 				}
 				bo := BinaryObject{ID: "art", ContentType: "image/" + input.name, Data: input.data}
-				got := bo.PrepareImage(common.OutputFmtEpub3, tt.name != "body", cfg, zap.NewNop())
+				got := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub3, cfg), tt.name != "body", cfg, zap.NewNop())
 				if got.MimeType != "image/jpeg" || got.Dim.Width != tt.w || got.Dim.Height != tt.h {
 					t.Fatalf("unexpected resized image: %s, %v", got.MimeType, got.Dim)
 				}
@@ -122,9 +122,9 @@ func TestRasterFormatJPEGResizeAndQuality(t *testing.T) {
 	}
 	bo := BinaryObject{ID: "png", ContentType: "image/png", Data: createTestPNG(t, 48, 16, false)}
 	cfg := &config.ImagesConfig{RasterFormat: common.RasterFormatJpeg, JPEGQuality: 40}
-	low := bo.PrepareImage(common.OutputFmtEpub3, false, cfg, zap.NewNop())
+	low := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub3, cfg), false, cfg, zap.NewNop())
 	cfg.JPEGQuality = 100
-	high := bo.PrepareImage(common.OutputFmtEpub3, false, cfg, zap.NewNop())
+	high := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub3, cfg), false, cfg, zap.NewNop())
 	if bytes.Equal(low.Data, high.Data) {
 		t.Fatal("new JPEG encoding must honor configured quality even without optimization")
 	}
@@ -145,7 +145,7 @@ func TestRasterFormatJPEGDoesNotForceSVG(t *testing.T) {
 						Markdown: common.MarkdownImageModeExternal, Screen: config.ScreenConfig{Width: 80, Height: 120},
 					}
 					bo := BinaryObject{ID: "svg", ContentType: "image/svg+xml", Data: svg}
-					got := bo.PrepareImage(output, cover, cfg, zap.NewNop())
+					got := bo.PrepareImage(ImagePolicyFor(output, cfg), cover, cfg, zap.NewNop())
 					if !force && !(output.IsKindle() && cover) {
 						if got.MimeType != "image/svg+xml" || !bytes.Equal(got.Data, svg) {
 							t.Fatal("JPEG raster encoding must not force SVG rasterization")
@@ -175,7 +175,7 @@ func TestRasterFormatJPEGBrokenImages(t *testing.T) {
 				cfg := &config.ImagesConfig{
 					RasterFormat: common.RasterFormatJpeg, RasterizeSVG: force, UseBroken: useBroken, JPEGQuality: 95,
 				}
-				got := bo.PrepareImage(common.OutputFmtEpub3, false, cfg, zap.NewNop())
+				got := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub3, cfg), false, cfg, zap.NewNop())
 				if useBroken {
 					if !bytes.Equal(got.Data, data) {
 						t.Fatal("use_broken must retain invalid original bytes")
