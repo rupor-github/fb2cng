@@ -1451,6 +1451,20 @@ func TestStylesheet_RewriteURLs_NoChange(t *testing.T) {
 	}
 }
 
+func TestRewriteValueURLsUnquoted(t *testing.T) {
+	value := `background: url("images/local.png"); mask: url('https://example.org/external.svg')`
+	got := css.RewriteValueURLsUnquoted(value, func(url string) string {
+		if url == "images/local.png" {
+			return "kindle:embed:0001?mime=image/png"
+		}
+		return url
+	})
+	want := `background: url(kindle:embed:0001?mime=image/png); mask: url('https://example.org/external.svg')`
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 func TestStylesheet_RewriteURLs_DuplicateImports(t *testing.T) {
 	log := zap.NewNop()
 	p := css.NewParser(log)

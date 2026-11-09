@@ -18,6 +18,7 @@ import (
 	"github.com/beevik/etree"
 
 	"fbc/convert/publication"
+	"fbc/css"
 )
 
 type linkTarget struct {
@@ -38,18 +39,19 @@ type textDocument struct {
 	Data     []byte
 }
 
-// textLayout is one compilation pass, not a complete ebook. Resource allocation
-// and URI lowering must precede this pass in the eventual container adapter;
-// variable-length rewrites after this pass would invalidate its frozen positions.
-// Only the combined stylesheet URI is lowered here at present.
+// textLayout is one compilation pass, not a complete ebook. It allocates resources
+// and lowers their variable-length URIs before freezing text positions; later passes
+// must not patch its finalized raw stream and retain stale positions.
 type textLayout struct {
-	Raw       []byte
-	Documents []textDocument
-	Positions map[linkTarget]textPosition
-	Skeletons [][]byte
-	Fragments [][]byte
-	FDST      []byte
-	FlowCount uint32
+	Raw        []byte
+	Documents  []textDocument
+	Positions  map[linkTarget]textPosition
+	Skeletons  [][]byte
+	Fragments  [][]byte
+	FDST       []byte
+	FlowCount  uint32
+	Resources  [][]byte
+	References map[string]resourceReference
 }
 
 type linkFixup struct {
@@ -86,6 +88,14 @@ func compileText(ctx context.Context, pub *publication.Publication) (*textLayout
 	if !utf8.Valid(pub.Stylesheet.Data) {
 		return nil, errors.New("publication CSS must be UTF-8")
 	}
+	resources, err := compileResources(ctx, pub)
+	if err != nil {
+		return nil, fmt.Errorf("compile KF8 resources: %w", err)
+	}
+	stylesheet, err := lowerStylesheetResources(pub.Stylesheet.Data, resources)
+	if err != nil {
+		return nil, fmt.Errorf("lower KF8 stylesheet resources: %w", err)
+	}
 	var documents []pendingDocument
 	files := make(map[string]bool)
 	for chapter := range pub.Documents() {
@@ -107,12 +117,16 @@ func compileText(ctx context.Context, pub *publication.Publication) (*textLayout
 		return nil, errors.New("publication has no reading-order documents")
 	}
 
-	result := &textLayout{Positions: make(map[linkTarget]textPosition)}
-	cssNeeded := len(pub.Stylesheet.Data) > 0
+	result := &textLayout{
+		Positions:  make(map[linkTarget]textPosition),
+		Resources:  resources.Records,
+		References: resources.References,
+	}
+	cssNeeded := len(stylesheet) > 0
 	var textLength uint64
 	for i := range documents {
 		doc := &documents[i]
-		needed, err := prepareTextDocument(ctx, doc, uint32(i), files)
+		needed, err := prepareTextDocument(ctx, doc, uint32(i), files, resources)
 		if err != nil {
 			return nil, fmt.Errorf("prepare %s: %w", doc.Filename, err)
 		}
@@ -205,7 +219,7 @@ func compileText(ctx context.Context, pub *publication.Publication) (*textLayout
 	}
 	lengths := []uint32{uint32(len(result.Raw))}
 	if cssNeeded {
-		css := pub.Stylesheet.Data
+		css := stylesheet
 		if len(css) == 0 {
 			css = []byte("\n")
 		}
@@ -223,7 +237,13 @@ func compileText(ctx context.Context, pub *publication.Publication) (*textLayout
 	return result, nil
 }
 
-func prepareTextDocument(ctx context.Context, doc *pendingDocument, fid uint32, files map[string]bool) (bool, error) {
+func prepareTextDocument(
+	ctx context.Context,
+	doc *pendingDocument,
+	fid uint32,
+	files map[string]bool,
+	resources *resourceLayout,
+) (bool, error) {
 	root := doc.Doc.Root()
 	if root == nil || root.Tag != "html" {
 		return false, errors.New("expected an XHTML html root")
@@ -246,6 +266,40 @@ func prepareTextDocument(ctx context.Context, doc *pendingDocument, fid uint32, 
 		elem := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 		stack = append(stack, elem.ChildElements()...)
+		if elem.Tag == "img" {
+			src := elem.SelectAttr("src")
+			if src == nil {
+				return false, errors.New("XHTML image is missing src")
+			}
+			lowered, local, err := lowerResourceURI(doc.Filename, src.Value, resources, resourceImage)
+			if err != nil {
+				return false, err
+			}
+			if local {
+				elem.CreateAttr(src.FullKey(), lowered)
+			}
+		}
+		if style := elem.SelectAttr("style"); style != nil && strings.Contains(strings.ToLower(style.Value), "url(") {
+			var rewriteErr error
+			lowered := css.RewriteValueURLsUnquoted(style.Value, func(original string) string {
+				if rewriteErr != nil {
+					return original
+				}
+				uri, local, err := lowerResourceURI(doc.Filename, original, resources, resourceAny)
+				if err != nil {
+					rewriteErr = err
+					return original
+				}
+				if !local {
+					return original
+				}
+				return uri
+			})
+			if rewriteErr != nil {
+				return false, rewriteErr
+			}
+			elem.CreateAttr(style.FullKey(), lowered)
+		}
 		for _, attr := range elem.Attr {
 			if attr.Key != "href" || (elem.Tag != "a" && elem.Tag != "link") {
 				continue

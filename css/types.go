@@ -466,6 +466,29 @@ func (s *Stylesheet) RewriteURLs(fn func(originalURL string) string) {
 	}
 }
 
+// RewriteValueURLsUnquoted applies the stylesheet URL rewriter to a standalone
+// CSS value without adding quotes. It is intended for URI forms that cannot
+// contain CSS URL delimiters, such as generated kindle: resource URIs in markup
+// attributes where XML quote entities are not recognized by all consumers.
+func RewriteValueURLsUnquoted(value string, fn func(originalURL string) string) string {
+	return urlRewritePattern.ReplaceAllStringFunc(value, func(match string) string {
+		sub := urlRewritePattern.FindStringSubmatch(match)
+		if len(sub) < 3 {
+			return match
+		}
+		originalURL := sub[1]
+		if originalURL == "" {
+			originalURL = sub[2]
+		}
+		originalURL = strings.TrimSpace(originalURL)
+		newURL := fn(originalURL)
+		if newURL == originalURL {
+			return match
+		}
+		return fmt.Sprintf("url(%s)", newURL)
+	})
+}
+
 // rewriteURLsInProperties rewrites url() references in property values.
 func rewriteURLsInProperties(props map[string]Value, fn func(string) string) {
 	for name, val := range props {

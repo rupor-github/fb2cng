@@ -39,6 +39,7 @@ func assembleTextProbe(t *testing.T, text *textLayout) []byte {
 		records = append(records, text.FDST)
 	}
 	header.FirstResource = uint32(len(records))
+	records = append(records, text.Resources...)
 	records = append(records, []byte{0xe9, 0x8e, 0x0d, 0x0a})
 	records[0], err = encodeHeader(header)
 	if err != nil {
@@ -61,6 +62,66 @@ func TestPublicationTextKindleUnpack(t *testing.T) {
 	writeProbeArtifacts(t, map[string][]byte{"publication-text.azw3": data})
 	work := unpackProbe(t, "publication-text", data)
 	assertUnpackedText(t, work, pub, compiled)
+}
+
+func TestPublicationResourcesKindleUnpack(t *testing.T) {
+	pub, font := resourceTestPublication(t)
+	compiled, err := compileText(context.Background(), pub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := assembleTextProbe(t, compiled)
+	writeProbeArtifacts(t, map[string][]byte{"publication-resources.azw3": data})
+	work := unpackProbe(t, "publication-resources", data)
+
+	wantPayloads := [][]byte{font, pub.Images["a"].Data, pub.Stylesheet.Resources[0].Data}
+	found := make([]bool, len(wantPayloads))
+	err = filepath.WalkDir(filepath.Join(work, "unpacked", "mobi8", "OEBPS"), func(filename string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil || entry.IsDir() {
+			return walkErr
+		}
+		payload, readErr := os.ReadFile(filename)
+		if readErr != nil {
+			return readErr
+		}
+		for i, want := range wantPayloads {
+			if bytes.Equal(payload, want) {
+				found[i] = true
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, ok := range found {
+		if !ok {
+			t.Errorf("resource payload %d was not reconstructed exactly", i)
+		}
+	}
+
+	xhtmlFiles, err := filepath.Glob(filepath.Join(work, "unpacked", "mobi8", "OEBPS", "Text", "*.xhtml"))
+	if err != nil || len(xhtmlFiles) != 1 {
+		t.Fatalf("expected one reconstructed XHTML document: %v", err)
+	}
+	xhtml, err := os.ReadFile(xhtmlFiles[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(xhtml, []byte(`src="../Images/`)) || !bytes.Contains(xhtml, []byte(`url(../Images/`)) {
+		t.Errorf("resource links were not reconstructed in XHTML: %s", xhtml)
+	}
+	styles, err := filepath.Glob(filepath.Join(work, "unpacked", "mobi8", "OEBPS", "Styles", "*.css"))
+	if err != nil || len(styles) != 1 {
+		t.Fatalf("expected one reconstructed stylesheet: %v", err)
+	}
+	stylesheet, err := os.ReadFile(styles[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(stylesheet, []byte(`url("../Fonts/`)) || !bytes.Contains(stylesheet, []byte(`url("../Images/`)) {
+		t.Errorf("resource links were not reconstructed in CSS: %s", stylesheet)
+	}
 }
 
 func assertUnpackedText(t *testing.T, work string, pub *publication.Publication, compiled *textLayout) {
