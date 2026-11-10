@@ -124,6 +124,12 @@ type (
 		CompressionSource string `yaml:"-"`
 	}
 
+	AZW3Config struct {
+		Compression string `yaml:"compression" validate:"oneof=none standard huffdic"`
+		// CompressionSource records invocation precedence for logs/reports, not YAML.
+		CompressionSource string `yaml:"-"`
+	}
+
 	PDFConfig struct {
 		PageFrame string `yaml:"page_frame" validate:"required"`
 	}
@@ -146,6 +152,7 @@ type (
 		PageMap               PageMapConfig         `yaml:"page_map"`
 		Transformations       TextTransformConfig   `yaml:"text_transformations"`
 		KFX                   KFXConfig             `yaml:"kfx"`
+		AZW3                  AZW3Config            `yaml:"azw3"`
 		PDF                   PDFConfig             `yaml:"pdf"`
 	}
 

@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestEncodeIndex(t *testing.T) {
@@ -63,7 +64,7 @@ func TestEncodeIndexMultiRecord(t *testing.T) {
 	}
 	assertIndexEntries(t, records, entries)
 	var database bytes.Buffer
-	if err := writePalmDB(context.Background(), &database, "Multi_record_index", records); err != nil {
+	if err := writePalmDB(context.Background(), &database, "Multi_record_index", time.Time{}, records); err != nil {
 		t.Fatal(err)
 	}
 	writeProbeArtifacts(t, map[string][]byte{"multi-index.pdb": database.Bytes()})

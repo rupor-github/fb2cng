@@ -7,11 +7,14 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"time"
 )
 
 // writePalmDB writes one standalone BOOK/MOBI database. Layout is checked before
 // any bytes are written; callers must still stage output to handle I/O failures.
-func writePalmDB(ctx context.Context, w io.Writer, name string, records [][]byte) error {
+// created is the explicit conversion time, not the book's publication date. Zero
+// reserves deterministic timestamps for probes; nonzero times use Palm's 1904 epoch.
+func writePalmDB(ctx context.Context, w io.Writer, name string, created time.Time, records [][]byte) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -26,9 +29,20 @@ func writePalmDB(ctx context.Context, w io.Writer, name string, records [][]byte
 	if len(records) == 0 || len(records) > math.MaxUint16 {
 		return errors.New("PalmDB requires 1 to 65535 records")
 	}
+	var timestamp uint32
+	if !created.IsZero() {
+		const palmEpochOffset = int64(2082844800)
+		seconds := created.Unix()
+		if seconds < -palmEpochOffset || seconds > math.MaxUint32-palmEpochOffset {
+			return errors.New("PalmDB creation time lies outside the 1904-2040 timestamp range")
+		}
+		timestamp = uint32(seconds + palmEpochOffset)
+	}
 	const palmHeaderSize = 78
 	header := make([]byte, palmHeaderSize+8*len(records)+2)
 	copy(header, name)
+	binary.BigEndian.PutUint32(header[36:], timestamp)
+	binary.BigEndian.PutUint32(header[40:], timestamp)
 	copy(header[60:], "BOOKMOBI")
 	binary.BigEndian.PutUint32(header[68:], uint32(2*len(records)+1))
 	binary.BigEndian.PutUint16(header[76:], uint16(len(records)))

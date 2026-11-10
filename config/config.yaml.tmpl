@@ -99,6 +99,11 @@ document:
     # An explicitly supplied convert --kfx-compression none|lzma overrides this.
     compression: none
 
+  azw3:
+    # Reserved for native AZW3 output, which is not yet available on the CLI.
+    # none: uncompressed; standard: PalmDOC (default); huffdic: HUFF/CDIC.
+    compression: standard
+
   pdf:
     # Optional nearly-white outline to discourage automatic margin cropping.
     # PDF only; device-dependent. 0 disables it (default).

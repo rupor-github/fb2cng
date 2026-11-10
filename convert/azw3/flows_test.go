@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestEncodeStrings(t *testing.T) {
@@ -110,7 +111,7 @@ func TestCTOCProbe(t *testing.T) {
 		t.Fatal(err)
 	}
 	var database bytes.Buffer
-	if err := writePalmDB(context.Background(), &database, "CTOC_probe", append(index, stringsData...)); err != nil {
+	if err := writePalmDB(context.Background(), &database, "CTOC_probe", time.Time{}, append(index, stringsData...)); err != nil {
 		t.Fatal(err)
 	}
 	expected, err := json.Marshal(struct {

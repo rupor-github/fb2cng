@@ -20,6 +20,7 @@ func stringName(value uint32) string {
 func probeLayout() headerLayout {
 	return headerLayout{
 		Title: "Native KF8 structural probe", UID: 0x01020304, Language: 9,
+		Compression: compressionNone, TrailingFlags: 1, FCIS: missingRecord, FLIS: missingRecord,
 		TextLength: 1, TextRecords: 1, FirstNonText: 2, Skeletons: 2,
 		FirstResource: missingRecord, FDST: missingRecord, FlowCount: 1,
 		Navigation: missingRecord, Fragments: missingRecord, Guide: missingRecord,
@@ -67,11 +68,15 @@ func buildStructuralProbe(t *testing.T) ([]byte, []byte) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	records := append([][]byte{header}, text...)
+	records := [][]byte{header}
+	for _, record := range text {
+		payload := append(bytes.Clone(record.Data), record.Overlap...)
+		records = append(records, append(payload, byte(len(record.Overlap))))
+	}
 	records = append(records, index...)
 	records = append(records, []byte{0xe9, 0x8e, 0x0d, 0x0a})
 	var output bytes.Buffer
-	if err := writePalmDB(context.Background(), &output, "Native_KF8_probe", records); err != nil {
+	if err := writePalmDB(context.Background(), &output, "Native_KF8_probe", time.Time{}, records); err != nil {
 		t.Fatal(err)
 	}
 	return output.Bytes(), xhtml

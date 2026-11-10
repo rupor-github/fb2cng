@@ -63,22 +63,27 @@ func TestFB2PublicationText(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					data := assembleTextProbe(t, compiled, navigation, nil)
-					summary, err := json.MarshalIndent(struct {
-						Chapters   int
-						Navigation int
-						Pages      int
-						Asides     int
-						Backlinks  int
-					}{len(compiled.Documents), len(pub.Navigation), len(pub.Pages), asides, backlinks}, "", "  ")
-					if err != nil {
-						t.Fatal(err)
-					}
-					writeProbeArtifacts(t, map[string][]byte{name + ".azw3": data, name + ".json": summary})
-					if os.Getenv("AZW3_KINDLEUNPACK_TEST") == "1" {
-						work := unpackProbe(t, name, data)
-						assertUnpackedText(t, work, pub, compiled)
-						assertUnpackedNavigation(t, work, pub, compiled, shape)
+					for _, compression := range []string{"none", "standard", "huffdic"} {
+						t.Run(compression, func(t *testing.T) {
+							data := assembleTextProbe(t, compiled, navigation, nil, compression)
+							summary, err := json.MarshalIndent(struct {
+								Chapters   int
+								Navigation int
+								Pages      int
+								Asides     int
+								Backlinks  int
+							}{len(compiled.Documents), len(pub.Navigation), len(pub.Pages), asides, backlinks}, "", "  ")
+							if err != nil {
+								t.Fatal(err)
+							}
+							artifact := name + "-" + compression
+							writeProbeArtifacts(t, map[string][]byte{artifact + ".azw3": data, artifact + ".json": summary})
+							if os.Getenv("AZW3_KINDLEUNPACK_TEST") == "1" {
+								work := unpackProbe(t, artifact, data)
+								assertUnpackedText(t, work, pub, compiled)
+								assertUnpackedNavigation(t, work, pub, compiled, shape)
+							}
+						})
 					}
 				})
 			}

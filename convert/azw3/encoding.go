@@ -32,7 +32,12 @@ func align4(data []byte) []byte {
 	return append(data, make([]byte, (-len(data))&3)...)
 }
 
-func splitText(data []byte) ([][]byte, error) {
+type textRecord struct {
+	Data    []byte
+	Overlap []byte // Uncompressed continuation bytes repeated at the next record's start.
+}
+
+func splitText(data []byte) ([]textRecord, error) {
 	if len(data) == 0 {
 		return nil, errors.New("empty KF8 text")
 	}
@@ -42,15 +47,14 @@ func splitText(data []byte) ([][]byte, error) {
 	if !utf8.Valid(data) {
 		return nil, errors.New("KF8 text must be UTF-8")
 	}
-	var records [][]byte
+	var records []textRecord
 	for len(data) > 0 {
 		end := min(len(data), textRecordSize)
-		if end < len(data) {
-			for !utf8.RuneStart(data[end]) {
-				end--
-			}
+		overlapEnd := end
+		for overlapEnd < len(data) && !utf8.RuneStart(data[overlapEnd]) {
+			overlapEnd++
 		}
-		records = append(records, data[:end])
+		records = append(records, textRecord{Data: data[:end], Overlap: data[end:overlapEnd]})
 		data = data[end:]
 		if len(records) > math.MaxUint16 {
 			return nil, errors.New("too many KF8 text records")
@@ -90,7 +94,9 @@ type headerLayout struct {
 	Title         string
 	UID           uint32
 	Language      uint32
-	TextLength    uint32
+	Compression   uint16
+	TrailingFlags uint16
+	TextLength    uint32 // Main XHTML flow only; CSS/SVG flows also occupy text records.
 	TextRecords   uint16
 	FirstNonText  uint32
 	FirstResource uint32
@@ -100,6 +106,10 @@ type headerLayout struct {
 	Fragments     uint32
 	Skeletons     uint32
 	Guide         uint32
+	FCIS          uint32
+	FLIS          uint32
+	Huffman       uint32
+	HuffmanCount  uint32
 	Metadata      []exthRecord
 	HasFonts      bool
 }
@@ -108,7 +118,21 @@ func encodeHeader(layout headerLayout) ([]byte, error) {
 	if !utf8.ValidString(layout.Title) || layout.Title == "" {
 		return nil, errors.New("KF8 title must be nonempty UTF-8")
 	}
-	if layout.TextRecords == 0 || layout.TextLength < uint32(layout.TextRecords) ||
+	if layout.Compression != compressionNone && layout.Compression != compressionPalmDOC && layout.Compression != compressionHuffdic {
+		return nil, errors.New("unsupported KF8 text compression")
+	}
+	if layout.Compression == compressionHuffdic {
+		if layout.Huffman < layout.FirstNonText || layout.Huffman == missingRecord || layout.HuffmanCount < 2 ||
+			uint64(layout.Huffman)+uint64(layout.HuffmanCount) > math.MaxUint16 {
+			return nil, errors.New("HUFF/CDIC compression requires dictionary records outside text")
+		}
+	} else if layout.Huffman != 0 || layout.HuffmanCount != 0 {
+		return nil, errors.New("non-HUFF compression must not reference dictionary records")
+	}
+	if layout.TrailingFlags > 1 {
+		return nil, errors.New("unsupported KF8 text record trailers")
+	}
+	if layout.TextRecords == 0 || layout.TextLength == 0 ||
 		uint64(layout.TextLength) > uint64(layout.TextRecords)*textRecordSize {
 		return nil, errors.New("KF8 header requires text records")
 	}
@@ -116,7 +140,7 @@ func encodeHeader(layout headerLayout) ([]byte, error) {
 		return nil, errors.New("invalid KF8 structural record layout")
 	}
 	for _, record := range []uint32{
-		layout.FirstResource, layout.FDST, layout.Navigation, layout.Fragments, layout.Skeletons, layout.Guide,
+		layout.FirstResource, layout.FDST, layout.Navigation, layout.Fragments, layout.Skeletons, layout.Guide, layout.FCIS, layout.FLIS,
 	} {
 		if record != missingRecord && record < layout.FirstNonText {
 			return nil, errors.New("KF8 structural or resource record overlaps text")
@@ -135,10 +159,11 @@ func encodeHeader(layout headerLayout) ([]byte, error) {
 		return nil, errors.New("KF8 header exceeds 32-bit lengths")
 	}
 	data := make([]byte, headerSize)
-	binary.BigEndian.PutUint16(data, 1) // uncompressed structural probes
+	binary.BigEndian.PutUint16(data, layout.Compression)
 	binary.BigEndian.PutUint32(data[4:], layout.TextLength)
 	binary.BigEndian.PutUint16(data[8:], layout.TextRecords)
 	binary.BigEndian.PutUint16(data[10:], textRecordSize)
+	binary.BigEndian.PutUint16(data[0xf2:], layout.TrailingFlags)
 	copy(data[0x10:], "MOBI")
 	exthFlags := uint32(0x50) // Conventional standalone EXTH flags; no shared-resource bit.
 	if layout.HasFonts {
@@ -151,16 +176,23 @@ func encodeHeader(layout headerLayout) ([]byte, error) {
 		0x48: missingRecord, 0x4c: missingRecord,
 		0x50: layout.FirstNonText, 0x54: uint32(titleOffset), 0x58: uint32(len(layout.Title)),
 		0x5c: layout.Language, 0x68: 8, 0x6c: layout.FirstResource,
+		0x70: layout.Huffman, 0x74: layout.HuffmanCount,
 		0x80: exthFlags,
 		0xa4: missingRecord, 0xa8: missingRecord, // no DRM
 		0xc0: layout.FDST, 0xc4: layout.FlowCount,
-		0xc8: missingRecord, 0xd0: missingRecord, // no FCIS/FLIS in structural probes
+		0xc8: layout.FCIS, 0xd0: layout.FLIS,
 		0xe0: missingRecord, 0xe8: missingRecord, 0xec: missingRecord,
 		0xf4: layout.Navigation, 0xf8: layout.Fragments, 0xfc: layout.Skeletons,
 		0x100: missingRecord, 0x104: layout.Guide, 0x108: missingRecord, 0x110: missingRecord,
 	}
 	for offset, value := range words {
 		binary.BigEndian.PutUint32(data[offset:], value)
+	}
+	if layout.FCIS != missingRecord {
+		binary.BigEndian.PutUint32(data[0xcc:], 1)
+	}
+	if layout.FLIS != missingRecord {
+		binary.BigEndian.PutUint32(data[0xd4:], 1)
 	}
 	data = append(data, exth...)
 	data = append(data, layout.Title...)

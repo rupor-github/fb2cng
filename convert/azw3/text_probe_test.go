@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/beevik/etree"
 	"go.uber.org/zap"
@@ -19,57 +20,31 @@ import (
 	"fbc/fb2"
 )
 
-// assembleTextProbe supplies fixture metadata and the implemented compilation
-// passes. It is not the production container adapter: compression, APNX and staged
-// publication still need implementation before CLI exposure.
-func assembleTextProbe(t *testing.T, text *textLayout, navigation *navigationLayout, metadata *metadataLayout) []byte {
+// assembleTextProbe supplies fixture metadata when needed and exercises the
+// selected record assembly mode. APNX and staged publication remain CLI gates.
+func assembleTextProbe(
+	t *testing.T, text *textLayout, navigation *navigationLayout, metadata *metadataLayout, compression string,
+) []byte {
 	t.Helper()
-	chunks, err := splitText(text.Raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	header := probeLayout()
-	name := "Native_text_probe"
-	resources := text.Resources
-	if metadata != nil {
-		header.Title, header.UID, header.Language = metadata.Title, metadata.UID, metadata.Language
-		header.Metadata, header.HasFonts = metadata.EXTH, metadata.HasFonts
-		name, resources = metadata.Database, metadata.Resources
-	}
-	header.TextLength, header.TextRecords = uint32(len(text.Raw)), uint16(len(chunks))
-	records := append([][]byte{nil}, chunks...)
-	header.FirstNonText = uint32(len(records))
-	header.Fragments = uint32(len(records))
-	records = append(records, text.Fragments...)
-	header.Skeletons = uint32(len(records))
-	records = append(records, text.Skeletons...)
-	header.FlowCount = text.FlowCount
-	if text.FlowCount > 1 {
-		header.FDST = uint32(len(records))
-		records = append(records, text.FDST)
-	}
-	if navigation != nil {
-		if len(navigation.TOC) > 0 {
-			header.Navigation = uint32(len(records))
-			records = append(records, navigation.TOC...)
+	if metadata == nil {
+		header := probeLayout()
+		metadata = &metadataLayout{
+			Title: header.Title, UID: header.UID, Language: header.Language, Database: "Native_text_probe",
+			EXTH: header.Metadata, Resources: text.Resources,
 		}
-		if len(navigation.Guide) > 0 {
-			header.Guide = uint32(len(records))
-			records = append(records, navigation.Guide...)
+		for _, reference := range text.References {
+			metadata.HasFonts = metadata.HasFonts || reference.Kind == resourceFont
 		}
-		if navigation.Start != nil && metadata == nil {
-			header.Metadata = append(header.Metadata, exthRecord{ID: 116, Data: binary.BigEndian.AppendUint32(nil, navigation.Start.Position)})
+		if navigation != nil && navigation.Start != nil {
+			metadata.EXTH = append(metadata.EXTH, exthRecord{ID: 116, Data: binary.BigEndian.AppendUint32(nil, navigation.Start.Position)})
 		}
 	}
-	header.FirstResource = uint32(len(records))
-	records = append(records, resources...)
-	records = append(records, []byte{0xe9, 0x8e, 0x0d, 0x0a})
-	records[0], err = encodeHeader(header)
+	book, err := compileBook(context.Background(), text, navigation, metadata, compression)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var output bytes.Buffer
-	if err := writePalmDB(context.Background(), &output, name, records); err != nil {
+	if err := writePalmDB(context.Background(), &output, book.Database, time.Time{}, book.Records); err != nil {
 		t.Fatal(err)
 	}
 	return output.Bytes()
@@ -81,7 +56,7 @@ func TestPublicationTextKindleUnpack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data := assembleTextProbe(t, compiled, nil, nil)
+	data := assembleTextProbe(t, compiled, nil, nil, "standard")
 	writeProbeArtifacts(t, map[string][]byte{"publication-text.azw3": data})
 	work := unpackProbe(t, "publication-text", data)
 	assertUnpackedText(t, work, pub, compiled)
@@ -93,7 +68,7 @@ func TestPublicationResourcesKindleUnpack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data := assembleTextProbe(t, compiled, nil, nil)
+	data := assembleTextProbe(t, compiled, nil, nil, "standard")
 	writeProbeArtifacts(t, map[string][]byte{"publication-resources.azw3": data})
 	work := unpackProbe(t, "publication-resources", data)
 
@@ -164,7 +139,7 @@ func TestPublicationImageFallbackKindleUnpack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data := assembleTextProbe(t, compiled, nil, nil)
+	data := assembleTextProbe(t, compiled, nil, nil, "standard")
 	writeProbeArtifacts(t, map[string][]byte{"publication-image-fallback.azw3": data})
 	work := unpackProbe(t, "publication-image-fallback", data)
 	base := filepath.Join(work, "unpacked", "mobi8", "OEBPS")

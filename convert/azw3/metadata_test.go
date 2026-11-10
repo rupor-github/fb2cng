@@ -167,7 +167,7 @@ func TestCompileMetadata(t *testing.T) {
 			if err != nil || !reflect.DeepEqual(again, metadata) {
 				t.Error("metadata compilation is not deterministic")
 			}
-			data := assembleTextProbe(t, text, nil, metadata)
+			data := assembleTextProbe(t, text, nil, metadata, "standard")
 			header := binary.BigEndian.Uint32(data[78:])
 			flags := binary.BigEndian.Uint32(data[header+0x80:])
 			if flags != 0x1050 {
@@ -364,7 +364,7 @@ func TestMetadataKindleUnpack(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			data := assembleTextProbe(t, text, navigation, metadata)
+			data := assembleTextProbe(t, text, navigation, metadata, "standard")
 			name := fmt.Sprintf("publication-metadata-ebook-%t", ebook)
 			writeProbeArtifacts(t, map[string][]byte{name + ".azw3": data})
 			work := unpackProbe(t, name, data)
@@ -429,7 +429,7 @@ func TestMetadataCoverlessKindleUnpack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data := assembleTextProbe(t, text, nil, metadata)
+	data := assembleTextProbe(t, text, nil, metadata, "standard")
 	writeProbeArtifacts(t, map[string][]byte{"publication-metadata-coverless.azw3": data})
 	work := unpackProbe(t, "publication-metadata-coverless", data)
 	assertUnpackedText(t, work, pub, text)

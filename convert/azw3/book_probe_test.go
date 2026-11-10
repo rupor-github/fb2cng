@@ -1,0 +1,140 @@
+package azw3
+
+import (
+	"bytes"
+	"context"
+	"encoding/binary"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"go.uber.org/zap"
+
+	"fbc/common"
+	"fbc/config"
+	"fbc/content"
+	"fbc/convert/publication"
+	"fbc/state"
+)
+
+func TestCompleteFB2Book(t *testing.T) {
+	input, err := os.ReadFile(filepath.Join("..", "..", "testdata", "_Test.fb2"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stylesheet, err := os.ReadFile(filepath.Join("..", "default.css"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		mode      common.FootnotesMode
+		shape     common.TOCType
+		placement common.TOCPagePlacement
+	}{
+		{common.FootnotesModeDefault, common.TOCTypeNormal, common.TOCPagePlacementBefore},
+		{common.FootnotesModeFloat, common.TOCTypeOldKindle, common.TOCPagePlacementAfter},
+		{common.FootnotesModeFloatRenumbered, common.TOCTypeFlat, common.TOCPagePlacementNone},
+	} {
+		t.Run(tt.mode.String(), func(t *testing.T) {
+			cfg, err := config.LoadConfiguration("")
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg.Document.Footnotes.Mode, cfg.Document.TOCType = tt.mode, tt.shape
+			cfg.Document.TOCPage.Placement = tt.placement
+			cfg.Document.Annotation.Enable, cfg.Document.Annotation.InTOC = true, true
+			cfg.Document.PageMap.Enable, cfg.Document.PageMap.Size = true, 500
+			cfg.Document.Images.Cover.Resize = common.ImageResizeModeKeepAR
+			ctx := state.ContextWithEnv(context.Background())
+			env := state.EnvFromContext(ctx)
+			env.Cfg, env.Log, env.DefaultStyle = cfg, zap.NewNop(), stylesheet
+			// Keep the real source-control identity until the AZW3 enum is added.
+			// Build mutable content only once, then compile that exact publication.
+			c, err := content.Prepare(ctx, bytes.NewReader(input), "_Test.fb2", common.OutputFmtEpub3, env.Log)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				if err := os.RemoveAll(c.WorkDir); err != nil {
+					t.Errorf("remove prepared-content directory: %v", err)
+				}
+			})
+			pub, err := publication.Build(ctx, c, &cfg.Document, publication.HTML5, env.Log)
+			if err != nil {
+				t.Fatal(err)
+			}
+			pub, err = preparePublicationImages(ctx, pub, &cfg.Document.Images, env.Log)
+			if err != nil {
+				t.Fatal(err)
+			}
+			pub, err = prepareCoverDocument(ctx, pub, &cfg.Document.Images)
+			if err != nil {
+				t.Fatal(err)
+			}
+			text, err := compileText(ctx, pub)
+			if err != nil {
+				t.Fatal(err)
+			}
+			navigation, err := compileNavigation(ctx, pub, text, tt.shape)
+			if err != nil {
+				t.Fatal(err)
+			}
+			metadata, err := compileMetadata(ctx, c, &cfg.Document, pub, text, navigation, env.Log)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, compression := range []string{"none", "standard", "huffdic"} {
+				t.Run(compression, func(t *testing.T) {
+					cfg.Document.AZW3.Compression = compression
+					book, err := compileBook(ctx, text, navigation, metadata, cfg.Document.AZW3.Compression)
+					if err != nil {
+						t.Fatal(err)
+					}
+					assertBookRecords(t, book, text, navigation, metadata)
+					for _, page := range pub.Pages {
+						if _, found := text.Positions[linkTarget{Filename: page.Filename, ID: page.SpanID}]; !found {
+							t.Errorf("page %d lost its position during assembly", page.PageNum)
+						}
+					}
+					var output bytes.Buffer
+					created := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+					if err := writePalmDB(ctx, &output, book.Database, created, book.Records); err != nil {
+						t.Fatal(err)
+					}
+					name := "assembled-fb2-" + tt.mode.String() + "-" + compression
+					chunks, err := splitText(text.Raw)
+					if err != nil {
+						t.Fatal(err)
+					}
+					compressed := 0
+					for _, record := range book.Records[1 : 1+len(chunks)] {
+						compressed += len(record)
+					}
+					if compression != "none" && compressed >= len(text.Raw) {
+						t.Error("selected compression did not compress the real book's text")
+					}
+					dictionaryBytes := 0
+					first := binary.BigEndian.Uint32(book.Records[0][0x70:])
+					count := binary.BigEndian.Uint32(book.Records[0][0x74:])
+					for _, record := range book.Records[first : first+count] {
+						dictionaryBytes += len(record)
+					}
+					summary := fmt.Sprintf("mode=%s\nmain_bytes=%d\nall_flow_bytes=%d\nencoded_bytes=%d\ndictionary_bytes=%d\nrecords=%d\npages=%d\n",
+						compression, text.MainLength, len(text.Raw), compressed, dictionaryBytes, len(book.Records), len(pub.Pages))
+					writeProbeArtifacts(t, map[string][]byte{
+						name + ".azw3": output.Bytes(), name + ".txt": []byte(summary), name + ".rawml": text.Raw,
+					})
+					t.Log(strings.TrimSpace(summary))
+					if os.Getenv("AZW3_KINDLEUNPACK_TEST") == "1" {
+						work := unpackProbe(t, name, output.Bytes())
+						assertUnpackedRaw(t, work, text.Raw)
+						assertUnpackedNavigation(t, work, pub, text, tt.shape)
+					}
+				})
+			}
+		})
+	}
+}
