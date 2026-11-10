@@ -61,7 +61,9 @@ Use `dumpconfig --default` for the complete structure and current defaults.
 | `document.footnotes.label_template` | Logical footnote labels | [Templates](templates.md#label_template) |
 | `document.footnotes.backlink_template` | Generated backlink text | [Templates](templates.md#backlink_template) |
 | `document.toc_type` | Device navigation shape | [Guide](guide.md#feature-matrix) |
-| `document.kfx.compression` | Opt-in KFX/AZW8 compression (`none` or `lzma`) | [Kindle compression](formats/kindle.md#compression) |
+| `document.kfx.compression` | Opt-in KFX/AZW8 compression (`none` or `lzma`) | [KFX/AZW8 compression](formats/kfx.md#compression) |
+| `document.azw3.compression` | Native AZW3 compression (`none`, `standard`, or `huffdic`) | [AZW3 compression](formats/azw3.md#compression) |
+| `document.azw3.apnx` | Config-only APNX sidecar (`none`, `eink`, or `app`) | [AZW3 page map](formats/azw3.md#optional-apnx-page-map) |
 | `document.pdf.page_frame` | Optional nearly-white PDF outline to discourage automatic margin cropping | [PDF page frame](formats/pdf.md#discouraging-automatic-margin-cropping) |
 | `document.toc_page` | Optional visible TOC page | [Guide](guide.md#common-tasks) |
 | `document.metainformation.*_template` | Metadata formatting | [Templates](templates.md#metadata-templates) |
@@ -79,7 +81,7 @@ document:
 
 `document.kfx.compression` defaults to `none` (uncompressed output). Set it to `lzma`
 for lossless compression without encryption. It applies equally to KFX and AZW8 and has no effect
-on other formats. Compression sizing is [automatic](formats/kindle.md#compression).
+on other formats. Compression sizing is [automatic](formats/kfx.md#compression).
 An explicitly supplied `convert --kfx-compression none|lzma` overrides
 the YAML value; an omitted flag respects YAML. Logs and conversion debug text record the
 effective choice/source because archived loaded YAML precedes CLI overrides.

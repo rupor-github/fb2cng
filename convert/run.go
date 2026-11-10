@@ -21,6 +21,7 @@ import (
 	"fbc/common"
 	"fbc/config"
 	"fbc/content"
+	"fbc/convert/azw3"
 	"fbc/convert/epub"
 	"fbc/convert/kfx"
 	"fbc/convert/pdf"
@@ -187,9 +188,9 @@ func Run(ctx context.Context, cmd *cli.Command) (err error) {
 }
 
 func configureKFXCompression(cmd *cli.Command, format common.OutputFmt, cfg *config.DocumentConfig, log *zap.Logger) error {
-	if !format.IsKindle() {
+	if format != common.OutputFmtKfx && format != common.OutputFmtAzw8 {
 		if cmd.IsSet("kfx-compression") {
-			log.Warn("Ignoring --kfx-compression for non-Kindle output", zap.Stringer("format", format))
+			log.Warn("Ignoring --kfx-compression for non-KFX/AZW8 output", zap.Stringer("format", format))
 		}
 		return nil
 	}
@@ -649,6 +650,21 @@ func processBook(
 	outputName = buildOutputPath(c, src, dst, env)
 	if opts.OutputFile != "" {
 		outputName = opts.OutputFile
+	}
+	if c.OutputFormat == common.OutputFmtAzw3 {
+		// Native AZW3 owns publication of the book/APNX bundle. Do not wrap it
+		// in the single-file staging/publish path used by the other adapters.
+		result, err := azw3.Generate(ctx, c, outputName, env.Overwrite, &env.Cfg.Document, log)
+		if err != nil {
+			return fmt.Errorf("unable to generate AZW3 output: %w", err)
+		}
+		if env.Rpt != nil {
+			env.Rpt.Store(fmt.Sprintf("result-%s.azw3", refID), result.BookPath)
+			if result.APNXPath != "" {
+				env.Rpt.Store(fmt.Sprintf("result-%s.apnx", refID), result.APNXPath)
+			}
+		}
+		return nil
 	}
 
 	// Check if output file already exists, but do not remove it until a new

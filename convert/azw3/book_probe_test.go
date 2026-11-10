@@ -52,9 +52,8 @@ func TestCompleteFB2Book(t *testing.T) {
 			ctx := state.ContextWithEnv(context.Background())
 			env := state.EnvFromContext(ctx)
 			env.Cfg, env.Log, env.DefaultStyle = cfg, zap.NewNop(), stylesheet
-			// Keep the real source-control identity until the AZW3 enum is added.
-			// Build mutable content only once, then compile that exact publication.
-			c, err := content.Prepare(ctx, bytes.NewReader(input), "_Test.fb2", common.OutputFmtEpub3, env.Log)
+			// Build mutable content once using its real AZW3 identity.
+			c, err := content.Prepare(ctx, bytes.NewReader(input), "_Test.fb2", common.OutputFmtAzw3, env.Log)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -140,11 +139,43 @@ func TestCompleteFB2Book(t *testing.T) {
 						name + ".azw3": output.Bytes(), name + ".txt": []byte(summary), name + ".rawml": text.Raw, name + ".apnx": apnx.Data,
 					})
 					t.Log(strings.TrimSpace(summary))
-					if os.Getenv("AZW3_KINDLEUNPACK_TEST") == "1" {
-						work := unpackProbe(t, name, output.Bytes(), apnx.Data)
-						assertUnpackedRaw(t, work, text.Raw)
-						assertUnpackedNavigation(t, work, pub, text, tt.shape)
-						assertUnpackedPages(t, work, pub, text)
+					for _, mode := range []string{"app", "eink"} {
+						t.Run("publish-"+mode, func(t *testing.T) {
+							cfg.Document.AZW3.APNX = mode
+							finalPath := filepath.Join(t.TempDir(), "new", "nested", name+".azw3")
+							sidecar, err := compileAPNX(ctx, finalPath, pub, text, metadata, &cfg.Document, env.Log)
+							if err != nil || sidecar == nil {
+								t.Fatalf("prepare published APNX: %v", err)
+							}
+							bundle, err := preflightOutputBundle(ctx, finalPath, sidecar, false)
+							if err != nil {
+								t.Fatal(err)
+							}
+							if err := bundle.publish(ctx, book, created); err != nil {
+								t.Fatal(err)
+							}
+							assertOutputFile(t, finalPath, output.Bytes())
+							assertOutputFile(t, sidecar.Path, apnx.Data)
+							assertNoBundleTemps(t, filepath.Dir(finalPath))
+							// Independently decode the files actually published on disk,
+							// not the compiler's in-memory buffers or temporary files.
+							bookData, err := os.ReadFile(finalPath)
+							if err != nil {
+								t.Fatal(err)
+							}
+							pageData, err := os.ReadFile(sidecar.Path)
+							if err != nil {
+								t.Fatal(err)
+							}
+							publishedName := name + "-published-" + mode
+							writeProbeArtifacts(t, map[string][]byte{publishedName + ".azw3": bookData, publishedName + ".apnx": pageData})
+							if os.Getenv("AZW3_KINDLEUNPACK_TEST") == "1" {
+								work := unpackProbe(t, publishedName, bookData, pageData)
+								assertUnpackedRaw(t, work, text.Raw)
+								assertUnpackedNavigation(t, work, pub, text, tt.shape)
+								assertUnpackedPages(t, work, pub, text)
+							}
+						})
 					}
 				})
 			}

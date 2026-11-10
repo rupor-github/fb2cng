@@ -22,7 +22,7 @@ import (
 )
 
 // assembleTextProbe supplies fixture metadata when needed and exercises the
-// selected record assembly mode. APNX and staged publication remain CLI gates.
+// selected record assembly mode independently of the public generation entry point.
 func assembleTextProbe(
 	t *testing.T, text *textLayout, navigation *navigationLayout, metadata *metadataLayout, compression string,
 ) []byte {

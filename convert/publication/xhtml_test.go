@@ -22,7 +22,7 @@ func setupTestLogger(t *testing.T) *zap.Logger {
 }
 
 func testMarkup(format common.OutputFmt) Markup {
-	if format.IsEPUB3() {
+	if format.IsEPUB3() || format == common.OutputFmtAzw3 {
 		return HTML5
 	}
 	return XHTML11

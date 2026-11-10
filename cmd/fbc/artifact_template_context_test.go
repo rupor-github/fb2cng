@@ -85,6 +85,11 @@ func TestPreparseConvertInvocation(t *testing.T) {
 			wantFormat: common.OutputFmtPdf,
 		},
 		{
+			name:       "native AZW3 identity",
+			args:       []string{"--to=azw3", "book.fb2", "--output-file=results/book.azw3"},
+			wantSource: "book.fb2", wantFormat: common.OutputFmtAzw3, wantOutputDir: "results",
+		},
+		{
 			name:       "skip value flags",
 			args:       []string{"--asin", "ABCDEFGHIJ", "--output-file", "out.md", "book.fb2"},
 			wantSource: "book.fb2",

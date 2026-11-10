@@ -62,6 +62,7 @@ func TestFictionBook_PrepareImages_TIFFWebPTransparency(t *testing.T) {
 					{name: "remove", output: common.OutputFmtEpub2, remove: true},
 					{name: "kfx", output: common.OutputFmtKfx},
 					{name: "azw8", output: common.OutputFmtAzw8},
+					{name: "azw3", output: common.OutputFmtAzw3},
 					{name: "kepub", output: common.OutputFmtKepub},
 					{name: "kepub3", output: common.OutputFmtKepub3},
 					{name: "kepub-remove", output: common.OutputFmtKepub, remove: true},

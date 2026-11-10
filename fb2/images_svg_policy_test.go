@@ -49,6 +49,7 @@ func TestSVGOutputPolicy(t *testing.T) {
 	for _, format := range []common.OutputFmt{
 		common.OutputFmtEpub2, common.OutputFmtEpub3, common.OutputFmtKepub, common.OutputFmtKepub3,
 		common.OutputFmtKfx, common.OutputFmtAzw8, common.OutputFmtPdf, common.OutputFmtMd,
+		common.OutputFmtAzw3,
 	} {
 		for _, mode := range []common.MarkdownImageMode{common.MarkdownImageModeExternal, common.MarkdownImageModeEmbedded} {
 			for _, force := range []bool{false, true} {
@@ -175,7 +176,7 @@ func TestSVGRasterizationPlaceholders(t *testing.T) {
 }
 
 func TestKindlePlaceholderSVGPolicy(t *testing.T) {
-	for _, format := range []common.OutputFmt{common.OutputFmtKfx, common.OutputFmtAzw8, common.OutputFmtMd} {
+	for _, format := range []common.OutputFmt{common.OutputFmtKfx, common.OutputFmtAzw8, common.OutputFmtAzw3, common.OutputFmtMd} {
 		t.Run(format.String(), func(t *testing.T) {
 			for _, input := range []struct {
 				name, mime string

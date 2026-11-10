@@ -686,7 +686,7 @@ func TestOutputFmt_UnmarshalText(t *testing.T) {
 
 func TestOutputFmtNames(t *testing.T) {
 	names := common.OutputFmtNames()
-	expected := []string{"epub2", "epub3", "kepub", "kepub3", "kfx", "azw8", "pdf", "txt", "md"}
+	expected := []string{"epub2", "epub3", "kepub", "kepub3", "kfx", "azw8", "pdf", "txt", "md", "azw3"}
 
 	if len(names) != len(expected) {
 		t.Errorf("common.OutputFmtNames() length = %d, want %d", len(names), len(expected))

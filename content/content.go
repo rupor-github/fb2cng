@@ -251,7 +251,7 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 	book, ids, links := book.NormalizeLinks(vignettes, log)
 	// Normalize stylesheets and resolve external resources (may load files from disk and add to binaries)
 	// Pass default stylesheet so it's processed uniformly with FB2 embedded stylesheets
-	book = book.NormalizeStylesheets(srcName, env.DefaultStyle, log)
+	book = book.NormalizeStylesheets(srcName, env.DefaultStyle, outputFormat, log)
 	// Assign sequential IDs to all sections without IDs
 	// (avoiding collisions with existing IDs) - we will need it for ToC. This
 	// also updates the ID index with generated IDs marked as "section-generated"

@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"go.uber.org/zap/zaptest"
+
+	"fbc/common"
 )
 
 func TestParseStylesheetResources(t *testing.T) {
@@ -164,7 +166,7 @@ func TestNormalizeStylesheets(t *testing.T) {
 			},
 		}
 
-		result := book.NormalizeStylesheets("", nil, log)
+		result := book.NormalizeStylesheets("", nil, common.OutputFmtEpub3, log)
 
 		if len(result.Stylesheets) != 1 {
 			t.Fatalf("expected 1 stylesheet, got %d", len(result.Stylesheets))
@@ -203,7 +205,7 @@ func TestNormalizeStylesheets(t *testing.T) {
 			},
 		}
 
-		result := book.NormalizeStylesheets("", nil, log)
+		result := book.NormalizeStylesheets("", nil, common.OutputFmtEpub3, log)
 		if len(result.Stylesheets[0].Resources) != 0 {
 			t.Errorf("expected no resources for non-CSS stylesheet")
 		}
@@ -220,7 +222,7 @@ func TestNormalizeStylesheets(t *testing.T) {
 			Binaries: []BinaryObject{},
 		}
 
-		result := book.NormalizeStylesheets("", nil, log)
+		result := book.NormalizeStylesheets("", nil, common.OutputFmtEpub3, log)
 		if len(result.Stylesheets[0].Resources) != 0 {
 			t.Errorf("expected no resources for missing binary")
 		}
@@ -243,7 +245,7 @@ func TestNormalizeStylesheets(t *testing.T) {
 			},
 		}
 
-		result := book.NormalizeStylesheets("", nil, log)
+		result := book.NormalizeStylesheets("", nil, common.OutputFmtEpub3, log)
 		if len(result.Stylesheets[0].Resources) != 2 {
 			t.Fatalf("expected 2 resources, got %d", len(result.Stylesheets[0].Resources))
 		}
@@ -262,7 +264,7 @@ func TestNormalizeStylesheets(t *testing.T) {
 			},
 		}
 
-		result := book.NormalizeStylesheets("", nil, log)
+		result := book.NormalizeStylesheets("", nil, common.OutputFmtEpub3, log)
 		resource := result.Stylesheets[0].Resources[0]
 		if resource.Filename != "fonts/my-font.woff2" {
 			t.Errorf("expected filename 'fonts/my-font.woff2', got %q", resource.Filename)
@@ -292,7 +294,7 @@ func TestNormalizeStylesheets(t *testing.T) {
 			Binaries: []BinaryObject{},
 		}
 
-		result := book.NormalizeStylesheets(fb2Path, nil, log)
+		result := book.NormalizeStylesheets(fb2Path, nil, common.OutputFmtEpub3, log)
 
 		if len(result.Stylesheets[0].Resources) != 1 {
 			t.Fatalf("expected 1 loaded resource, got %d", len(result.Stylesheets[0].Resources))
@@ -346,7 +348,7 @@ func TestNormalizeStylesheets(t *testing.T) {
 			},
 		}
 
-		result := book.NormalizeStylesheets(fb2Path, nil, log)
+		result := book.NormalizeStylesheets(fb2Path, nil, common.OutputFmtEpub3, log)
 
 		if len(result.Stylesheets[0].Resources) != 1 {
 			t.Fatalf("expected 1 loaded resource, got %d", len(result.Stylesheets[0].Resources))
@@ -373,7 +375,7 @@ func TestNormalizeStylesheets(t *testing.T) {
 			},
 		}
 
-		result := book.NormalizeStylesheets("", defaultCSS, log)
+		result := book.NormalizeStylesheets("", defaultCSS, common.OutputFmtEpub3, log)
 
 		if len(result.Stylesheets) != 2 {
 			t.Fatalf("expected 2 stylesheets, got %d", len(result.Stylesheets))
@@ -403,7 +405,7 @@ func TestNormalizeStylesheets(t *testing.T) {
 			},
 		}
 
-		result := book.NormalizeStylesheets("", nil, log)
+		result := book.NormalizeStylesheets("", nil, common.OutputFmtEpub3, log)
 
 		if len(result.Stylesheets) != 1 {
 			t.Fatalf("expected 1 stylesheet, got %d", len(result.Stylesheets))
@@ -420,7 +422,7 @@ func TestNormalizeStylesheets(t *testing.T) {
 			},
 		}
 
-		result := book.NormalizeStylesheets("", []byte{}, log)
+		result := book.NormalizeStylesheets("", []byte{}, common.OutputFmtEpub3, log)
 
 		if len(result.Stylesheets) != 1 {
 			t.Fatalf("expected 1 stylesheet, got %d", len(result.Stylesheets))
@@ -474,7 +476,7 @@ func TestNormalizeStylesheets(t *testing.T) {
 			},
 		}
 
-		result := book.NormalizeStylesheets(fb2Path, defaultCSS, log)
+		result := book.NormalizeStylesheets(fb2Path, defaultCSS, common.OutputFmtEpub3, log)
 
 		if len(result.Stylesheets) != 2 {
 			t.Fatalf("expected 2 stylesheets, got %d", len(result.Stylesheets))
@@ -543,7 +545,7 @@ func TestNormalizeStylesheets(t *testing.T) {
 			},
 		}
 
-		result := book.NormalizeStylesheets(fb2Path, nil, log)
+		result := book.NormalizeStylesheets(fb2Path, nil, common.OutputFmtEpub3, log)
 
 		if len(result.Stylesheets) != 1 {
 			t.Fatalf("expected 1 stylesheet, got %d", len(result.Stylesheets))
@@ -591,7 +593,7 @@ func TestNormalizeStylesheets(t *testing.T) {
 			},
 		}
 
-		result := book.NormalizeStylesheets(fb2Path, nil, log)
+		result := book.NormalizeStylesheets(fb2Path, nil, common.OutputFmtEpub3, log)
 
 		// The path traversal should be rejected — no resources loaded
 		if len(result.Stylesheets[0].Resources) != 0 {
@@ -626,7 +628,7 @@ func TestNormalizeStylesheets(t *testing.T) {
 			},
 		}
 
-		result := book.NormalizeStylesheets(fb2Path, nil, log)
+		result := book.NormalizeStylesheets(fb2Path, nil, common.OutputFmtEpub3, log)
 
 		// Absolute paths should be rejected
 		if len(result.Stylesheets[0].Resources) != 0 {
@@ -806,7 +808,7 @@ func TestSectionNeedsBreak(t *testing.T) {
 			},
 		}
 
-		result := book.NormalizeStylesheets("", nil, log)
+		result := book.NormalizeStylesheets("", nil, common.OutputFmtEpub3, log)
 
 		if !result.SectionNeedsBreak(2) {
 			t.Error("expected SectionNeedsBreak(2) = true after NormalizeStylesheets")
@@ -829,7 +831,7 @@ func TestSectionNeedsBreak(t *testing.T) {
 			},
 		}
 
-		result := book.NormalizeStylesheets("", defaultCSS, log)
+		result := book.NormalizeStylesheets("", defaultCSS, common.OutputFmtEpub3, log)
 
 		if result.SectionNeedsBreak(2) {
 			t.Error("expected SectionNeedsBreak(2) = false — user CSS should override default")
@@ -956,7 +958,7 @@ func TestBodyTitleNeedsBreak(t *testing.T) {
 			},
 		}
 
-		result := book.NormalizeStylesheets("", nil, log)
+		result := book.NormalizeStylesheets("", nil, common.OutputFmtEpub3, log)
 
 		if !result.BodyTitleNeedsBreak() {
 			t.Error("expected BodyTitleNeedsBreak() = true after NormalizeStylesheets")
@@ -976,7 +978,7 @@ func TestBodyTitleNeedsBreak(t *testing.T) {
 			},
 		}
 
-		result := book.NormalizeStylesheets("", defaultCSS, log)
+		result := book.NormalizeStylesheets("", defaultCSS, common.OutputFmtEpub3, log)
 
 		if result.BodyTitleNeedsBreak() {
 			t.Error("expected BodyTitleNeedsBreak() = false — user CSS should override default")
@@ -996,7 +998,7 @@ func TestBodyTitleNeedsBreak(t *testing.T) {
 			},
 		}
 
-		result := book.NormalizeStylesheets("", defaultCSS, log)
+		result := book.NormalizeStylesheets("", defaultCSS, common.OutputFmtEpub3, log)
 
 		if !result.BodyTitleNeedsBreak() {
 			t.Error("expected BodyTitleNeedsBreak() = true — user CSS doesn't mention body-title, default should apply")

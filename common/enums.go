@@ -37,11 +37,11 @@ type TOCType int
 type VignettePos string
 
 // Specification of requested output type.
-// ENUM(epub2, epub3, kepub, kepub3, kfx, azw8, pdf, txt, md)
+// ENUM(epub2, epub3, kepub, kepub3, kfx, azw8, pdf, txt, md, azw3)
 type OutputFmt int
 
 func (o OutputFmt) IsKindle() bool {
-	return o == OutputFmtKfx || o == OutputFmtAzw8
+	return o == OutputFmtKfx || o == OutputFmtAzw8 || o == OutputFmtAzw3
 }
 
 func (o OutputFmt) IsEPUB3() bool {
@@ -58,6 +58,8 @@ func (o OutputFmt) Ext() string {
 		return ".kfx"
 	case OutputFmtAzw8:
 		return ".azw8"
+	case OutputFmtAzw3:
+		return ".azw3"
 	case OutputFmtPdf:
 		return ".pdf"
 	case OutputFmtTxt:

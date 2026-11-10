@@ -20,6 +20,7 @@ func TestBuildMarkupIndependentOfOutputFormat(t *testing.T) {
 		{name: "html5 with epub2 identity", format: common.OutputFmtEpub2, markup: HTML5},
 		{name: "xhtml11 with epub3 identity", format: common.OutputFmtEpub3, markup: XHTML11},
 		{name: "html5 with non-epub identity", format: common.OutputFmtAzw8, markup: HTML5},
+		{name: "html5 with azw3 identity", format: common.OutputFmtAzw3, markup: HTML5},
 	} {
 		for _, mode := range []common.FootnotesMode{
 			common.FootnotesModeDefault, common.FootnotesModeFloat, common.FootnotesModeFloatRenumbered,

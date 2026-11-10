@@ -1,6 +1,8 @@
-# Kindle KFX/AZW8 Output
+# KFX/AZW8 Output
 
 This page covers `kfx` and `azw8` output. `azw8` uses the same KFX payload with a different extension for workflows that prefer Kindle Previewer-friendly file names.
+
+For the separate native KF8 adapter, see [Native AZW3](azw3.md).
 
 Both formats support uncompressed output and **optional, lossless LZMA compression without
 encryption**. Compression is disabled by default.

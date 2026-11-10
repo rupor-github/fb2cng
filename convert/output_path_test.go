@@ -95,6 +95,7 @@ func TestBuildOutputPath_DifferentFormats(t *testing.T) {
 		{"KEPUB", common.OutputFmtKepub, ".kepub.epub"},
 		{"KEPUB3", common.OutputFmtKepub3, ".kepub.epub"},
 		{"KFX", common.OutputFmtKfx, ".kfx"},
+		{"AZW3", common.OutputFmtAzw3, ".azw3"},
 		{"PDF", common.OutputFmtPdf, ".pdf"},
 		{"TXT", common.OutputFmtTxt, ".txt"},
 		{"MD", common.OutputFmtMd, ".md"},

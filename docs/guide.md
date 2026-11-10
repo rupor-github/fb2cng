@@ -23,6 +23,7 @@ Convert to a specific format:
 fbc convert --to epub3 book.fb2
 fbc convert --to kfx book.fb2
 fbc convert --to azw8 --kfx-compression lzma book.fb2
+fbc convert --to azw3 book.fb2
 fbc convert --to pdf book.fb2
 fbc convert --to md book.fb2
 ```
@@ -81,7 +82,7 @@ Convert options:
 
 | Option | Meaning |
 |---|---|
-| `--to TYPE` | `epub2`, `epub3`, `kepub`, `kepub3`, `kfx`, `azw8`, `pdf`, `txt`, or `md` |
+| `--to TYPE` | `epub2`, `epub3`, `kepub`, `kepub3`, `kfx`, `azw8`, `azw3`, `pdf`, `txt`, or `md` |
 | `--ebook`, `--eb` | For Kindle formats, mark output as ebook/EBOK instead of personal document/PDOC |
 | `--asin ASIN` | For Kindle formats, set ASIN metadata |
 | `--kfx-compression MODE` | Override configured KFX/AZW8 compression: `none` or `lzma`; ignored with a warning for other formats |
@@ -108,7 +109,7 @@ command override. `--kfx-compression none` disables a configured compression def
 fbc convert --to azw8 --kfx-compression lzma book.fb2
 ```
 
-See [Kindle compression](formats/kindle.md#compression) for conversion settings and
+See [KFX/AZW8 compression](formats/kfx.md#compression) for conversion settings and
 [Debugging and validation](debugging.md) for the standalone utility and envelope diagnostics.
 
 ## Supported Formats
@@ -119,13 +120,17 @@ See [Kindle compression](formats/kindle.md#compression) for conversion settings 
 | EPUB3 | `.epub` | Modern EPUB readers and semantic footnotes | [EPUB and KEPUB](formats/epub.md) |
 | KEPUB | `.kepub.epub` | Kobo devices with OPF2-style packaging | [EPUB and KEPUB](formats/epub.md) |
 | KEPUB3 | `.kepub.epub` | Kobo devices with EPUB3 package/navigation semantics | [EPUB and KEPUB](formats/epub.md) |
-| KFX | `.kfx` | Kindle Enhanced Typesetting with optional LZMA compression | [Kindle KFX/AZW8](formats/kindle.md) |
-| AZW8 | `.azw8` | KFX with optional LZMA compression and Kindle Previewer-friendly extension | [Kindle KFX/AZW8](formats/kindle.md) |
+| KFX | `.kfx` | Kindle Enhanced Typesetting with optional LZMA compression | [Kindle KFX/AZW8](formats/kfx.md) |
+| AZW8 | `.azw8` | KFX with optional LZMA compression and Kindle Previewer-friendly extension | [Kindle KFX/AZW8](formats/kfx.md) |
+| AZW3 | `.azw3` | Native standalone KF8; reader acceptance testing in progress | [Native AZW3](formats/azw3.md) |
 | PDF | `.pdf` | Fixed-page output, outlines, selectable text, printed footnotes | [PDF](formats/pdf.md) |
 | TXT | `.txt` | Plain readable UTF-8 text | [TXT and Markdown](formats/text.md) |
 | Markdown | `.md` | Semantic plain-text documents with headings, links, tables, and optional images | [TXT and Markdown](formats/text.md) |
 
 ## Feature Matrix
+
+The matrix below covers the established output adapters. For the developing native
+AZW3 adapter and its current limitations, see [Native AZW3](formats/azw3.md).
 
 | Feature | EPUB2 | EPUB3 | KEPUB | KEPUB3 | KFX/AZW8 | PDF | TXT | Markdown |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -199,7 +204,8 @@ Common configuration areas:
 | Footnote modes and templates | [Footnotes](footnotes.md) |
 | Images, SVG, transparency, sizing, covers, and vignettes | [Image handling](images.md) |
 | EPUB/KEPUB behavior | [EPUB and KEPUB variants](formats/epub.md) |
-| Kindle KFX/AZW8 behavior | [Kindle KFX/AZW8](formats/kindle.md) |
+| Kindle KFX/AZW8 behavior | [Kindle KFX/AZW8](formats/kfx.md) |
+| Native AZW3 behavior and APNX | [Native AZW3](formats/azw3.md) |
 | PDF behavior | [PDF](formats/pdf.md) |
 | TXT/Markdown behavior | [TXT and Markdown](formats/text.md) |
 
@@ -259,7 +265,7 @@ Set `document.images.screen.width`, `height`, and `dpi`. See [PDF](formats/pdf.m
 - [Footnotes](footnotes.md)
 - [Stylesheets](stylesheets.md)
 - [EPUB and KEPUB variants](formats/epub.md)
-- [Kindle KFX/AZW8](formats/kindle.md)
+- [Kindle KFX/AZW8](formats/kfx.md)
 - [PDF](formats/pdf.md)
 - [TXT and Markdown](formats/text.md)
 - [MyHomeLib Integration](mhl.md)

@@ -15,6 +15,7 @@ import (
 	"github.com/h2non/filetype"
 	"go.uber.org/zap"
 
+	"fbc/common"
 	"fbc/css"
 )
 
@@ -34,8 +35,12 @@ type cssExternalRef struct {
 // This should be called after binaries are loaded but before generating output.
 // srcPath is the path to the source FB2 file, used to resolve relative paths.
 // defaultCSS is optional default stylesheet data to prepend (can be nil or empty).
+// AZW3 selects KF8 media before discovering resources and pagination rules; other
+// formats retain their existing conditional stylesheet processing.
 // Modifies the FictionBook in place.
-func (fb *FictionBook) NormalizeStylesheets(srcPath string, defaultCSS []byte, log *zap.Logger) *FictionBook {
+func (fb *FictionBook) NormalizeStylesheets(
+	srcPath string, defaultCSS []byte, outputFormat common.OutputFmt, log *zap.Logger,
+) *FictionBook {
 	// Prepend default stylesheet if provided
 	if len(defaultCSS) > 0 {
 		defaultStylesheet := Stylesheet{
@@ -66,6 +71,15 @@ func (fb *FictionBook) NormalizeStylesheets(srcPath string, defaultCSS []byte, l
 		if sheet.Type != "text/css" {
 			log.Debug("Skipping non-CSS stylesheet", zap.String("type", sheet.Type))
 			continue
+		}
+		if outputFormat == common.OutputFmtAzw3 {
+			selected, err := css.ResolveMedia([]byte(sheet.Data), css.MediaContext{KF8: true})
+			if err != nil {
+				// Keep the existing warning-only recovery policy for malformed CSS.
+				log.Warn("Unable to select KF8 stylesheet media; retaining original CSS", zap.Error(err))
+			} else {
+				sheet.Data = string(selected)
+			}
 		}
 
 		refs := parseStylesheetResources(sheet.Data)

@@ -25,6 +25,7 @@ func TestRunDefaultCover(t *testing.T) {
 		{"opaque PDF", "pdf", "Image", false, true},
 		{"EPUB JPEG compatibility", "epub2", "", false, false},
 		{"Kindle JPEG compatibility", "azw8", "", false, false},
+		{"AZW3 JPEG compatibility", "azw3", "", false, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, env := setupTestEnv(t)
@@ -82,6 +83,7 @@ func TestRunNoCover(t *testing.T) {
 	formats := []common.OutputFmt{
 		common.OutputFmtEpub2, common.OutputFmtEpub3, common.OutputFmtKepub, common.OutputFmtKepub3,
 		common.OutputFmtPdf, common.OutputFmtTxt, common.OutputFmtMd, common.OutputFmtKfx, common.OutputFmtAzw8,
+		common.OutputFmtAzw3,
 	}
 	for _, format := range formats {
 		t.Run(format.String(), func(t *testing.T) {

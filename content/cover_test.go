@@ -15,6 +15,7 @@ func TestPrepareNoCover(t *testing.T) {
 	formats := []common.OutputFmt{
 		common.OutputFmtEpub2, common.OutputFmtEpub3, common.OutputFmtKepub, common.OutputFmtKepub3,
 		common.OutputFmtPdf, common.OutputFmtTxt, common.OutputFmtMd, common.OutputFmtKfx, common.OutputFmtAzw8,
+		common.OutputFmtAzw3,
 	}
 	tests := []struct {
 		name     string

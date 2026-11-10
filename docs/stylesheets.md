@@ -1,6 +1,6 @@
 # Stylesheets
 
-fb2cng uses CSS stylesheets for EPUB, KEPUB variants, KFX/AZW8, and PDF output. TXT and Markdown ignore visual CSS styling, though text transformations and normalized content still apply before rendering.
+fb2cng uses CSS stylesheets for EPUB, KEPUB variants, AZW3, KFX/AZW8, and PDF output. TXT and Markdown ignore visual CSS styling, though text transformations and normalized content still apply before rendering.
 
 Set a custom stylesheet with:
 
@@ -69,7 +69,7 @@ The default stylesheet uses output-specific media queries:
 | Query | Applies To |
 |---|---|
 | `@media amzn-mobi` | Kindle MOBI-style compatibility rules |
-| `@media amzn-kf8` | Kindle KF8/KFX-compatible rules |
+| `@media amzn-kf8` | Kindle AZW3/KF8 and KFX-compatible rules |
 | `@media amzn-et` | Kindle Enhanced Typesetting / KFX rules |
 | `@media fbc-pdf` | Native PDF renderer rules |
 
@@ -89,6 +89,26 @@ Media query conditions can be combined with `and`, `not`, and generic media type
     }
 }
 ```
+
+For **AZW3**, media selection uses KF8 capabilities, not Enhanced Typesetting:
+
+| Condition | AZW3 |
+|---|---|
+| `amzn-kf8` | Matches |
+| `amzn-et` | Does not match |
+| `amzn-mobi` | Does not match; AZW3 is not MOBI7 |
+| `fbc-pdf` | Does not match |
+| `amzn-kf8 and not amzn-et` | Matches |
+| `not amzn-et` | Matches |
+
+Matching output-specific blocks are selected in stylesheet order before fonts/images
+and section page breaks are processed. Nonmatching blocks cannot introduce resources
+or override KF8 section-splitting rules. Combined conditions, comma-separated alternatives,
+and nested output-specific blocks are supported. Reader-dependent conditions such as
+`screen and (min-width: 600px)` remain conditional rather than assuming a device size.
+
+EPUB/KEPUB keep their media queries for the reader. KFX/AZW8 continue to use their
+Enhanced Typesetting context; PDF keeps its existing PDF-specific context.
 
 ## Section Splitting
 

@@ -8,6 +8,10 @@ Three choices are independent: the output's required image format, optional proc
 and the size at which an image is displayed. Disabling optimization does not disable
 compatibility conversions, and keeping vectors does not bypass layout sizing.
 
+Here, **Kindle** includes both [AZW3](formats/azw3.md) and
+[KFX/AZW8](formats/kfx.md) for common raster, cover, and sizing rules. Their native
+SVG handling differs, as explained [below](#svg-artwork).
+
 ## Format Capabilities
 
 The following describes normal output with `raster_format: auto`, `rasterize_svg: false`, and
@@ -18,6 +22,7 @@ The following describes normal output with `raster_format: auto`, `rasterize_svg
 | EPUB2 / EPUB3 | Normally retain their format | Retain SVG | Preserved where the reader supports them |
 | KEPUB / KEPUB3 | WebP becomes lossless PNG; others normally retain their format | Retain SVG | Preserved where the reader supports them |
 | KFX / AZW8 | Convert decodable non-JPEG sources to JPEG | Supported artwork stays vector-based; otherwise JPEG | Preserved in native vectors; raster output is white-backed |
+| AZW3 | Convert decodable non-JPEG sources to JPEG | Retain SVG; display depends on the Kindle reader | Preserved in retained SVG where supported; raster output is white-backed |
 | PDF | Embed decoded raster images; JPEG can remain JPEG | Supported artwork stays vector-based; otherwise raster | Preserved in native vectors; raster output is white-backed |
 | Markdown, `external` | Normally retain their format in separate files | Retain SVG in a separate file | Depends on the Markdown viewer |
 | Markdown, `embedded` | Normalize to JPEG embedded in the document | Rasterize to JPEG | Flattened onto white |
@@ -83,7 +88,8 @@ For SVG with `raster_format: auto`, the combination is:
 | Output / placement | Both settings `false` | Only `remove_transparency: true` | Only `rasterize_svg: true` | Both `true` |
 |---|---|---|---|---|
 | EPUB/KEPUB; external Markdown | SVG | SVG, unchanged | PNG, transparency preserved | PNG on white |
-| Kindle, non-cover | Native vectors if supported; otherwise JPEG on white | JPEG on white | JPEG on white | JPEG on white |
+| KFX/AZW8, non-cover | Native vectors if supported; otherwise JPEG on white | JPEG on white | JPEG on white | JPEG on white |
+| AZW3, non-cover | Retained SVG; reader-dependent display | JPEG on white | JPEG on white | JPEG on white |
 | Kindle, cover | JPEG on white | JPEG on white | JPEG on white | JPEG on white |
 | PDF | Native vectors if supported; otherwise raster on white | Raster on white | Raster on white | Raster on white |
 | Embedded Markdown | JPEG on white | JPEG on white | JPEG on white | JPEG on white |
@@ -98,9 +104,9 @@ This applies to body images and covers. For Kobo, JPEG takes precedence over the
 WebP-to-PNG conversion. New JPEGs use `jpeg_quality_level`; existing JPEGs are not re-encoded
 solely because this policy is selected.
 
-SVG still stays SVG in EPUB/KEPUB and external Markdown, or uses native vectors where
-supported in PDF/Kindle. If SVG is rasterized for **any** reason—explicit configuration,
-unsupported native features, a required cover representation, or Kindle alt text—the raster
+SVG still stays SVG in EPUB/KEPUB, AZW3, and external Markdown, or uses native vectors where
+supported in PDF/KFX/AZW8. If SVG is rasterized for **any** reason—explicit configuration,
+unsupported native features in PDF/KFX/AZW8, a required cover representation, or KFX/AZW8 alt text—the raster
 result uses JPEG on white. Use both `raster_format: jpeg` and `rasterize_svg: true` to request
 JPEG for source SVG as well as raster images. This does not enable Kindle-specific cover
 resizing or vignette stroke adjustments in other formats.
@@ -123,13 +129,29 @@ encoding also detects grayscale when optimization is enabled.
 
 ## SVG Artwork
 
-EPUB/KEPUB and external Markdown pass retained SVG to the reader. Their ability to display
-SVG features therefore depends on that reader. PDF and Kindle instead keep supported SVG
-artwork vector-based by default, with no extra opt-in.
+EPUB/KEPUB, AZW3, and external Markdown pass retained SVG to the reader. Their ability to
+display SVG features therefore depends on that reader. PDF and KFX/AZW8 instead convert
+supported SVG artwork into their native vector representation by default, with no extra opt-in.
+
+### AZW3 SVG
+
+AZW3 retains non-cover SVG by default, including SVG used by stylesheets. It does not use
+the PDF/KFX supported-feature subset described below, and it does **not** automatically
+rasterize artwork just because a feature falls outside that subset. Retaining SVG does not
+guarantee that a particular Kindle reader displays every feature correctly; device/app
+acceptance testing is still in progress.
+
+Set `rasterize_svg: true` or `remove_transparency: true` to request JPEG on white for
+compatibility. `raster_format: jpeg` alone does not force retained SVG to rasterize.
+Ordinary SVG covers are rasterized under the shared Kindle cover policy.
+
+The shared screen/scale sizing rules still apply to retained AZW3 SVG. Dimensions and
+resource references can be adjusted during preparation, so retention is not a promise
+of byte-for-byte source preservation.
 
 ### Native Vector Support
 
-Both PDF and Kindle support:
+The following supported-feature subset applies to **PDF and KFX/AZW8**, not retained AZW3 SVG:
 
 - SVG paths, including curves and arcs, plus rectangles, circles, ellipses, lines,
   polygons, and polylines.
@@ -155,14 +177,15 @@ Excessive coordinates or artwork complexity can also prevent native output.
 ### Raster Fallback
 
 An unsupported feature causes the **whole image** to be rasterized rather than partially
-drawn as vectors. Native artwork and its fallback retain the same layout dimensions.
-Kindle uses JPEG on white; PDF raster output is also white-backed.
+drawn as vectors in PDF/KFX/AZW8. Native artwork and its fallback retain the same layout
+dimensions. KFX/AZW8 uses JPEG on white; PDF raster output is also white-backed. AZW3 instead
+retains SVG unless rasterization is requested or required by its cover policy.
 
 The SVG rasterizer is not a browser-complete renderer: fallback cannot guarantee correct
 handling of every unsupported feature. If complex artwork renders incorrectly, simplify
 the SVG or convert it to PNG/JPEG in an external graphics tool before conversion.
 
-Debug logs distinguish unsupported-artwork fallback from configuration-requested
+PDF/KFX logs distinguish unsupported-artwork fallback from configuration-requested
 rasterization and identify the affected image. Check output in the intended reader;
 successful structural validation alone does not guarantee correct appearance.
 
@@ -283,6 +306,8 @@ Missing image references use a not-found placeholder; image preparation failures
 use a broken-image placeholder. These remain vector-based where supported. Kindle cover
 placeholders and raster-forcing policies use raster output. `use_broken: true` leaves a
 failed source image for the reader to handle; it may still be invisible or unusable.
+For AZW3, a retained malformed SVG cover may also lack normal cover/thumbnail metadata
+when raster preparation is impossible; the converter warns about this.
 
 ## Examples
 
@@ -317,6 +342,12 @@ document:
 
 This works independently of optimization. EPUB/KEPUB and external Markdown receive PNG;
 Kindle and embedded Markdown receive JPEG; PDF receives raster artwork.
+
+For example, force raster artwork in AZW3 for a reader with limited SVG support:
+
+```bash
+fbc -c images.yaml convert --to azw3 book.fb2
+```
 
 ### Normalize Raster Images To JPEG
 
@@ -376,7 +407,7 @@ Move the generated image directory together with the `.md` file.
 
 | Symptom | What to check |
 |---|---|
-| SVG becomes raster with `rasterize_svg: false` | Output requirements, unsupported native features, `remove_transparency`, Kindle covers, or nonempty Kindle alt text. `false` is not a ban on rasterization. |
+| SVG becomes raster with `rasterize_svg: false` | Output requirements, unsupported PDF/KFX features, `remove_transparency`, Kindle covers, or nonempty KFX/AZW8 alt text. `false` is not a ban on rasterization. |
 | Transparency disappears | Kindle/embedded-Markdown JPEG policy, PDF raster output, or `remove_transparency`. |
 | `remove_transparency` does not change SVG in EPUB/Markdown | Retained SVG is unchanged; also enable `rasterize_svg` to flatten it. |
 | Cover looks stretched | Default `cover.resize: stretch`; try `fit` to preserve aspect ratio. |

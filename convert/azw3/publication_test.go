@@ -147,9 +147,7 @@ func fb2TextPublication(
   <section id="comment23"><title><p>23</p></title><p>Comment text.</p></section>
  </body>
 </FictionBook>`
-	// EPUB3 supplies the existing normalized-content control. Only its already-built
-	// publication is compiled; this test does not invent an AZW3 enum or rerender it.
-	c, err := content.Prepare(ctx, strings.NewReader(input), "native-text.fb2", common.OutputFmtEpub3, env.Log)
+	c, err := content.Prepare(ctx, strings.NewReader(input), "native-text.fb2", common.OutputFmtAzw3, env.Log)
 	if err != nil {
 		t.Fatal(err)
 	}

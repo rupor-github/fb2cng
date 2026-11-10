@@ -50,3 +50,19 @@ func TestArtifactTemplatesOutputDirectory(t *testing.T) {
 		})
 	}
 }
+
+func TestArtifactTemplatesAZW3Identity(t *testing.T) {
+	root := t.TempDir()
+	for _, field := range []TemplateFieldName{
+		LoggingFileDestinationTemplateFieldName, LoggingPanicDestinationTemplateFieldName, ReportingDestinationTemplateFieldName,
+	} {
+		t.Run(string(field), func(t *testing.T) {
+			path, err := expandArtifactTemplate(field, `{{.OutputDir}}/{{.Format}}.artifact`, ArtifactTemplateValues{
+				Command: "convert", Format: common.OutputFmtAzw3, Source: "book.fb2", OutputDir: root,
+			})
+			if err != nil || path != filepath.Join(root, "azw3.artifact") {
+				t.Fatalf("AZW3 artifact template = %q, %v", path, err)
+			}
+		})
+	}
+}

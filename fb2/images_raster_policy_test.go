@@ -26,6 +26,7 @@ func TestRasterFormatJPEG(t *testing.T) {
 			for _, output := range []common.OutputFmt{
 				common.OutputFmtEpub2, common.OutputFmtEpub3, common.OutputFmtKepub, common.OutputFmtKepub3,
 				common.OutputFmtKfx, common.OutputFmtAzw8, common.OutputFmtPdf, common.OutputFmtMd,
+				common.OutputFmtAzw3,
 			} {
 				for _, optimize := range []bool{false, true} {
 					for _, cover := range []bool{false, true} {
@@ -135,6 +136,7 @@ func TestRasterFormatJPEGDoesNotForceSVG(t *testing.T) {
 	for _, output := range []common.OutputFmt{
 		common.OutputFmtEpub2, common.OutputFmtEpub3, common.OutputFmtKepub, common.OutputFmtKepub3,
 		common.OutputFmtKfx, common.OutputFmtAzw8, common.OutputFmtPdf, common.OutputFmtMd,
+		common.OutputFmtAzw3,
 	} {
 		for _, force := range []bool{false, true} {
 			for _, cover := range []bool{false, true} {

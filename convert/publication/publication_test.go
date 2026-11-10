@@ -18,7 +18,9 @@ import (
 )
 
 func TestBuild(t *testing.T) {
-	formats := []common.OutputFmt{common.OutputFmtEpub2, common.OutputFmtEpub3, common.OutputFmtKepub, common.OutputFmtKepub3}
+	formats := []common.OutputFmt{
+		common.OutputFmtEpub2, common.OutputFmtEpub3, common.OutputFmtKepub, common.OutputFmtKepub3, common.OutputFmtAzw3,
+	}
 	modes := []common.FootnotesMode{common.FootnotesModeDefault, common.FootnotesModeFloat, common.FootnotesModeFloatRenumbered}
 	placements := []common.TOCPagePlacement{common.TOCPagePlacementNone, common.TOCPagePlacementBefore, common.TOCPagePlacementAfter}
 	for _, format := range formats {
@@ -103,7 +105,7 @@ func TestBuild(t *testing.T) {
 							t.Errorf("backlinks = %d, want 1", backlinks)
 						}
 						wantAsides := 0
-						if mode.IsFloat() && format.IsEPUB3() {
+						if mode.IsFloat() && testMarkup(format) == HTML5 {
 							wantAsides = 2
 						}
 						if asides != wantAsides {

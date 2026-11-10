@@ -24,6 +24,7 @@ func TestKFXCompressionPrecedence(t *testing.T) {
 		{"disable", "lzma", "none", "none", "cli", common.OutputFmtAzw8, false, false},
 		{"invalid", "none", "xz", "none", "", common.OutputFmtKfx, true, false},
 		{"ignored", "none", "xz", "none", "", common.OutputFmtPdf, false, true},
+		{"AZW3 is not KFX", "none", "lzma", "none", "", common.OutputFmtAzw3, false, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			cfg := config.DocumentConfig{KFX: config.KFXConfig{Compression: test.configured}}

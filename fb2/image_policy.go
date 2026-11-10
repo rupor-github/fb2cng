@@ -15,14 +15,13 @@ type ImagePolicy struct {
 	ConvertWebP       bool
 }
 
-// ImagePolicyFor selects the capabilities of the existing output adapters.
-// A backend not yet exposed as an output format can supply its policy directly.
+// ImagePolicyFor selects the capabilities of the output adapters.
 func ImagePolicyFor(format common.OutputFmt, cfg *config.ImagesConfig) ImagePolicy {
 	requireJPEG := format.IsKindle() ||
 		(format == common.OutputFmtMd && cfg.Markdown == common.MarkdownImageModeEmbedded)
 	return ImagePolicy{
 		RequireJPEG:       requireJPEG,
-		NativeSVG:         format == common.OutputFmtKfx || format == common.OutputFmtAzw8,
+		NativeSVG:         format.IsKindle(),
 		KindleSVGStrokes:  requireJPEG,
 		PreservePDFSizing: format == common.OutputFmtPdf,
 		ConvertWebP:       format.IsKobo(),

@@ -29,7 +29,7 @@ import (
 
 func metadataTestContent() (*content.Content, *config.DocumentConfig) {
 	number := 7
-	c := &content.Content{SrcName: "metadata.fb2", OutputFormat: common.OutputFmtEpub3, Book: &fb2.FictionBook{
+	c := &content.Content{SrcName: "metadata.fb2", OutputFormat: common.OutputFmtAzw3, Book: &fb2.FictionBook{
 		Description: fb2.Description{
 			DocumentInfo: fb2.DocumentInfo{ID: "01353247-b826-4fac-8129-ce00e9af2154"},
 			TitleInfo: fb2.TitleInfo{
@@ -115,16 +115,16 @@ func TestCompileMetadata(t *testing.T) {
 			if ebook {
 				kind = "EBOK"
 			}
-			if metadata.ContentType != kind || metadata.Title != "epub3: Книга & café" || metadata.Language != 0x809 || !metadata.HasFonts {
+			if metadata.ContentType != kind || metadata.Title != "azw3: Книга & café" || metadata.Language != 0x809 || !metadata.HasFonts {
 				t.Errorf("incorrect book metadata: %+v", metadata)
 			}
 			if ebook && metadata.ASIN != "B012345678" || !ebook && metadata.ASIN != "J1G60Q4JFU3IH9JQTLNDNU8G4HCVW39P" {
 				t.Errorf("incorrect ASIN/content ID %q", metadata.ASIN)
 			}
 			for id, want := range map[uint32][]string{
-				100: {"Иванов, Иван [epub3]", "Second [epub3]"}, 101: {"Publisher & Co"},
+				100: {"Иванов, Иван [azw3]", "Second [azw3]"}, 101: {"Publisher & Co"},
 				103: {"Описание & café"}, 104: {"9780306406157"}, 105: {"sf", "Keyword", "Другое"}, 106: {"2020-02-29"},
-				108: {"Переводчик, Пётр [epub3]"},
+				108: {"Переводчик, Пётр [azw3]"},
 				113: {metadata.ASIN}, 501: {kind}, 503: {metadata.Title}, 504: {metadata.ASIN}, 524: {"en-GB"},
 				129: {"kindle:embed:0004"},
 			} {
@@ -142,7 +142,7 @@ func TestCompileMetadata(t *testing.T) {
 			}
 			xml := metadataXML(t, metadata.Resources[3])
 			if xml.FindElement("//dc:identifier").Text() != c.Book.Description.DocumentInfo.ID ||
-				xml.FindElement("//dc:contributor").Text() != "Переводчик, Пётр [epub3]" ||
+				xml.FindElement("//dc:contributor").Text() != "Переводчик, Пётр [azw3]" ||
 				len(xml.FindElements("//meta[@property='belongs-to-collection']")) != 2 {
 				t.Error("source UUID, translator or nested collections were lost")
 			}
@@ -264,8 +264,8 @@ func TestMetadataTransliterationAndBrokenCover(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if metadata.Title != fb2.Transliterate("epub3: Книга & café") ||
-		string(metadataValues(metadata, 100)[0]) != fb2.Transliterate("Иванов, Иван [epub3]") {
+	if metadata.Title != fb2.Transliterate("azw3: Книга & café") ||
+		string(metadataValues(metadata, 100)[0]) != fb2.Transliterate("Иванов, Иван [azw3]") {
 		t.Error("metadata transliteration differs from the shared Kindle policy")
 	}
 	cover := metadataNumber(t, metadata, 201)

@@ -1,7 +1,7 @@
 ﻿<table>
 <tr>
 <td width="96" valign="middle"><img src="docs/books.svg" width="96" alt="fb2cng"/></td>
-<td valign="middle"><h1>Converter of FB2 files to EPUB2/3, KEPUB/KEPUB3, AZW8/KFX, PDF, TXT/MD</h1></td>
+<td valign="middle"><h1>Converter of FB2 files to EPUB2/3, KEPUB/KEPUB3, AZW3, AZW8/KFX, PDF, TXT/MD</h1></td>
 </tr>
 </table>
 
@@ -16,6 +16,7 @@
 | EPUB3 | Modern EPUB package with `nav.xhtml`, semantic `aside`/`noteref` footnotes in floating modes, XHTML/CSS styling, SVG preservation |
 | KEPUB/KEPUB3 | Kobo-oriented EPUB packaging, OPF2 or EPUB3 navigation, XHTML/CSS styling with Kobo sentence spans, SVG preservation, WebP-to-PNG image conversion |
 | KFX/AZW8 | Direct Kindle Enhanced Typesetting output without Calibre or Amazon software, optional lossless LZMA compression, Kindle style records, floating/popup footnotes, generated location/page navigation, Kindle-compatible image conversion |
+| AZW3 | Native standalone KF8 with configurable compression and optional APNX; [reader acceptance testing in progress](docs/formats/azw3.md) |
 | PDF | Native PDF 1.4 generation, fixed target page size, selectable/searchable text, embedded fonts, outlines/bookmarks, internal links, tables, images, drop caps, printed page footnotes |
 | TXT | UTF-8 readable plain text, plain headings, aligned text tables, image placeholders, readable note labels, collected final notes for floating footnotes |
 | Markdown | Semantic UTF-8 Markdown, YAML front matter, headings, links, anchors, pipe tables, fenced code blocks, collected endnotes with backlinks, placeholder/external/embedded image modes |

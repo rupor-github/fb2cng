@@ -11,6 +11,7 @@ import (
 	"github.com/beevik/etree"
 	"go.uber.org/zap"
 
+	"fbc/common"
 	"fbc/config"
 	"fbc/convert/publication"
 	"fbc/fb2"
@@ -31,7 +32,7 @@ func preparePublicationImages(
 	if pub == nil || cfg == nil {
 		return nil, errors.New("publication and image configuration are required")
 	}
-	policy := fb2.ImagePolicy{RequireJPEG: true, NativeSVG: true, KindleSVGStrokes: true}
+	policy := fb2.ImagePolicyFor(common.OutputFmtAzw3, cfg)
 	result := *pub
 	result.Images = maps.Clone(pub.Images)
 	result.Stylesheet.Resources = slices.Clone(pub.Stylesheet.Resources)
