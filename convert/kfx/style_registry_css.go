@@ -30,6 +30,14 @@ func NewStyleRegistryFromCSS(sheet *css.Stylesheet, tracer *StyleTracer, log *za
 	warnings := make([]string, 0)
 
 	if sheet != nil {
+		for _, item := range sheet.Items {
+			if item.MediaBlock != nil {
+				ctx := css.MediaContext{KF8: true, ET: true}
+				result := item.MediaBlock.Query.Evaluate(ctx)
+				result.Log(item.MediaBlock.Query.Raw, ctx, false, log)
+				tracer.TraceMedia(item.MediaBlock.Query.Raw, result, len(item.MediaBlock.Rules))
+			}
+		}
 		rules := flattenStylesheetForKFX(sheet)
 		if len(rules) > 0 {
 			// Extract pseudo-element content BEFORE conversion (content property is not converted to KFX)

@@ -158,9 +158,11 @@ func (r *pdfStyleResolver) applyStylesheet(sheet *css.Stylesheet) pdfStylesheetS
 			stats.Rules++
 			stats.Styles += r.applyRule(*item.Rule)
 		case item.MediaBlock != nil:
-			matched := item.MediaBlock.Query.Evaluate(css.MediaContext{KF8: true, ET: true, FBCPDF: true})
-			r.tracer.traceMedia(item.MediaBlock.Query.Raw, matched, len(item.MediaBlock.Rules))
-			if !matched {
+			ctx := css.MediaContext{KF8: true, ET: true, FBCPDF: true}
+			result := item.MediaBlock.Query.Evaluate(ctx)
+			result.Log(item.MediaBlock.Query.Raw, ctx, false, r.log)
+			r.tracer.traceMedia(item.MediaBlock.Query.Raw, result, len(item.MediaBlock.Rules))
+			if !result.Matches {
 				continue
 			}
 			for _, rule := range item.MediaBlock.Rules {
@@ -216,7 +218,7 @@ func pdfStylesheetRules(sheet *css.Stylesheet) []css.Rule {
 		switch {
 		case item.Rule != nil:
 			rules = append(rules, *item.Rule)
-		case item.MediaBlock != nil && item.MediaBlock.Query.Evaluate(css.MediaContext{KF8: true, ET: true, FBCPDF: true}):
+		case item.MediaBlock != nil && item.MediaBlock.Query.Evaluate(css.MediaContext{KF8: true, ET: true, FBCPDF: true}).Matches:
 			rules = append(rules, item.MediaBlock.Rules...)
 		}
 	}

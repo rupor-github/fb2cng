@@ -535,8 +535,8 @@ func (p *Parser) parseFontFace(parser *css.Parser) FontFace {
 	}
 }
 
-// parseMediaQueryFromTokens parses a media query from CSS tokens.
-// Handles queries like "amzn-kf8", "amzn-kf8 and not amzn-et", etc.
+// parseMediaQueryFromTokens preserves the complete condition. Only the shared
+// MediaQuery evaluator interprets its syntax and output capabilities.
 func (p *Parser) parseMediaQueryFromTokens(tokens []css.Token) MediaQuery {
 	mq := MediaQuery{}
 
@@ -550,56 +550,6 @@ func (p *Parser) parseMediaQueryFromTokens(tokens []css.Token) MediaQuery {
 		}
 	}
 	mq.Raw = strings.TrimSpace(strings.Join(rawParts, ""))
-
-	// Parse tokens into media query components
-	// Format: [not] type [and [not] feature]...
-	var idents []string
-	for _, t := range tokens {
-		if t.TokenType == css.IdentToken {
-			idents = append(idents, strings.ToLower(string(t.Data)))
-		}
-	}
-
-	if len(idents) == 0 {
-		return mq
-	}
-
-	i := 0
-	// Check for leading "not"
-	if idents[i] == "not" {
-		mq.Negated = true
-		i++
-	}
-
-	// Get main media type
-	if i < len(idents) {
-		mq.Type = idents[i]
-		i++
-	}
-
-	// Parse "and [not] feature" pairs
-	for i < len(idents) {
-		if idents[i] == "and" {
-			i++
-			if i >= len(idents) {
-				break
-			}
-
-			feature := MediaFeature{}
-			if idents[i] == "not" {
-				feature.Negated = true
-				i++
-				if i >= len(idents) {
-					break
-				}
-			}
-			feature.Name = idents[i]
-			mq.Features = append(mq.Features, feature)
-			i++
-		} else {
-			i++
-		}
-	}
 
 	return mq
 }
@@ -617,6 +567,11 @@ func (p *Parser) parseMediaBlockRules(parser *css.Parser, sheet *Stylesheet) []R
 		switch gt {
 		case css.ErrorGrammar, css.EndAtRuleGrammar:
 			return rules
+		case css.BeginAtRuleGrammar:
+			// Keep the existing parser recovery behavior, but make its limitation
+			// visible instead of implying that nested declarations were evaluated.
+			p.log.Debug("Unsupported nested CSS at-rule in media block", zap.String("rule", string(data)),
+				zap.String("query", p.parseMediaQueryFromTokens(parser.Values()).Raw))
 
 		case css.BeginRulesetGrammar:
 			currentSelectors = p.parseSelectors(data, parser.Values())

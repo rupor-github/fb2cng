@@ -25,7 +25,7 @@ func TestResolveKF8Media(t *testing.T) {
 		t.Run(tt.query, func(t *testing.T) {
 			input := []byte("p {color: red;} @media " + tt.query + " {p {color: blue;}} p {color: green;}")
 			before := bytes.Clone(input)
-			got, err := css.ResolveMedia(input, css.MediaContext{KF8: true})
+			got, err := css.ResolveMedia(input, css.MediaContext{KF8: true}, nil)
 			if err != nil || strings.Contains(string(got), "@media") || bytes.Contains(got, []byte("blue")) != tt.want {
 				t.Fatalf("selected CSS = %s, error = %v", got, err)
 			}
@@ -53,7 +53,7 @@ p + p[data-text="{ @media amzn-et }"] { --raw: "}"; margin: 0; margin: 1em; }
 @media amzn-et { @media amzn-kf8 { .wrong-nested { color: green; } } }
 @media screen and (min-width: 600px) { .wide { color: purple; } }
 `
-	got, err := css.ResolveMedia([]byte(input), css.MediaContext{KF8: true})
+	got, err := css.ResolveMedia([]byte(input), css.MediaContext{KF8: true}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ p + p[data-text="{ @media amzn-et }"] { --raw: "}"; margin: 0; margin: 1em; }
 	if bytes.Contains(got, []byte(".wrong")) {
 		t.Fatalf("nonmatching nested content survived: %s", got)
 	}
-	again, err := css.ResolveMedia(got, css.MediaContext{KF8: true})
+	again, err := css.ResolveMedia(got, css.MediaContext{KF8: true}, nil)
 	if err != nil || !bytes.Equal(again, got) {
 		t.Fatal("media selection is not idempotent", err)
 	}
@@ -86,7 +86,7 @@ func TestResolveMediaReaderConditions(t *testing.T) {
 	} {
 		t.Run(query, func(t *testing.T) {
 			input := []byte("@media " + query + " {p {color: red;}}")
-			got, err := css.ResolveMedia(input, css.MediaContext{KF8: true})
+			got, err := css.ResolveMedia(input, css.MediaContext{KF8: true}, nil)
 			if err != nil || !bytes.Equal(got, input) {
 				t.Fatalf("reader-dependent condition changed: %s, %v", got, err)
 			}
@@ -94,7 +94,7 @@ func TestResolveMediaReaderConditions(t *testing.T) {
 	}
 	for _, query := range []string{"amzn-et and (min-width: 600px)", "fbc-pdf and (color)"} {
 		t.Run(query, func(t *testing.T) {
-			got, err := css.ResolveMedia([]byte("@media "+query+" {p {color: red;}}"), css.MediaContext{KF8: true})
+			got, err := css.ResolveMedia([]byte("@media "+query+" {p {color: red;}}"), css.MediaContext{KF8: true}, nil)
 			if err != nil || len(got) != 0 {
 				t.Fatal("known false output condition must exclude reader-dependent content", string(got), err)
 			}
@@ -114,7 +114,7 @@ func TestResolveMediaContextIsExplicit(t *testing.T) {
 		{"PDF", css.MediaContext{KF8: true, ET: true, FBCPDF: true}, true, true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := css.ResolveMedia(input, tt.context)
+			got, err := css.ResolveMedia(input, tt.context, nil)
 			if err != nil || bytes.Contains(got, []byte(".enhanced")) != tt.et || bytes.Contains(got, []byte(".pdf")) != tt.pdf {
 				t.Fatal("media context was ignored", string(got), err)
 			}
@@ -127,7 +127,7 @@ func TestResolveMediaRejectsMalformedBlocks(t *testing.T) {
 		"@media amzn-kf8 { p {color: red;}", "p {color: red;}}", strings.Repeat("@media screen {", 129),
 	} {
 		t.Run(input[:min(len(input), 30)], func(t *testing.T) {
-			if got, err := css.ResolveMedia([]byte(input), css.MediaContext{KF8: true}); err == nil || got != nil {
+			if got, err := css.ResolveMedia([]byte(input), css.MediaContext{KF8: true}, nil); err == nil || got != nil {
 				t.Fatal("malformed CSS selection returned partial output")
 			}
 		})
@@ -145,14 +145,14 @@ func FuzzResolveKF8Media(f *testing.F) {
 		if len(input) > 16*1024 {
 			t.Skip()
 		}
-		got, err := css.ResolveMedia([]byte(input), css.MediaContext{KF8: true})
+		got, err := css.ResolveMedia([]byte(input), css.MediaContext{KF8: true}, nil)
 		if err != nil {
 			if got != nil {
 				t.Fatal("failed media selection returned partial output")
 			}
 			return
 		}
-		again, err := css.ResolveMedia(got, css.MediaContext{KF8: true})
+		again, err := css.ResolveMedia(got, css.MediaContext{KF8: true}, nil)
 		if err != nil || !bytes.Equal(again, got) {
 			t.Fatal("media selection is not idempotent", err)
 		}

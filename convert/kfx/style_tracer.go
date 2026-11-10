@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/amazon-ion/ion-go/ion"
+
+	"fbc/css"
 )
 
 // StyleTracer records style resolution and assignment operations for debugging.
@@ -46,6 +48,19 @@ func (t *StyleTracer) IsEnabled() bool {
 		return false
 	}
 	return t.enabled
+}
+
+// TraceMedia records query decisions and unsupported conditions in the report.
+func (t *StyleTracer) TraceMedia(query string, result css.MediaResult, rules int) {
+	if !t.IsEnabled() {
+		return
+	}
+	details := fmt.Sprintf("matched=%t, resolved=%t, rules=%d", result.Matches, result.Resolved, rules)
+	if len(result.Unsupported) > 0 {
+		details += "\n  unsupported atoms treated as false: " + strings.Join(result.Unsupported, ", ")
+	}
+	t.entries = append(t.entries, traceEntry{operation: "MEDIA", styleName: query, details: details})
+	t.sections["media"]++
 }
 
 // TraceRegister logs when a style is registered in the registry.

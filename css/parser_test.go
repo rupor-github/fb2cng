@@ -247,8 +247,8 @@ func TestParser_MediaBlockPreserved(t *testing.T) {
 		t.Fatal("expected second item to be a MediaBlock")
 	}
 	mb := sheet.Items[1].MediaBlock
-	if mb.Query.Type != "amzn-kf8" {
-		t.Errorf("expected media type 'amzn-kf8', got '%s'", mb.Query.Type)
+	if mb.Query.Raw != "amzn-kf8" {
+		t.Errorf("expected media query 'amzn-kf8', got '%s'", mb.Query.Raw)
 	}
 	if len(mb.Rules) != 1 {
 		t.Fatalf("expected 1 rule inside @media block, got %d", len(mb.Rules))
@@ -298,8 +298,8 @@ func TestParser_MediaBlockMobiPreserved(t *testing.T) {
 		t.Fatal("expected second item to be a MediaBlock")
 	}
 	mb := sheet.Items[1].MediaBlock
-	if mb.Query.Type != "amzn-mobi" {
-		t.Errorf("expected media type 'amzn-mobi', got '%s'", mb.Query.Type)
+	if mb.Query.Raw != "amzn-mobi" {
+		t.Errorf("expected media query 'amzn-mobi', got '%s'", mb.Query.Raw)
 	}
 	// The block should NOT be evaluated — just preserved
 	if len(mb.Rules) != 1 {
@@ -335,18 +335,15 @@ func TestParser_MediaBlockKF8AndNotET(t *testing.T) {
 		t.Fatal("expected second item to be a MediaBlock")
 	}
 	mb := sheet.Items[1].MediaBlock
-	if mb.Query.Type != "amzn-kf8" {
-		t.Errorf("expected media type 'amzn-kf8', got '%s'", mb.Query.Type)
-	}
-	if len(mb.Query.Features) != 1 || mb.Query.Features[0].Name != "amzn-et" || !mb.Query.Features[0].Negated {
-		t.Errorf("expected feature 'not amzn-et', got %+v", mb.Query.Features)
+	if mb.Query.Raw != "amzn-kf8 and not amzn-et" {
+		t.Errorf("expected complete media query, got %q", mb.Query.Raw)
 	}
 
 	// Evaluation is a consumer concern — verify the query evaluates as expected
-	if mb.Query.Evaluate(css.MediaContext{KF8: true, ET: true}) {
+	if mb.Query.Evaluate(css.MediaContext{KF8: true, ET: true}).Matches {
 		t.Error("expected amzn-kf8 and not amzn-et to NOT match kf8=true, et=true")
 	}
-	if !mb.Query.Evaluate(css.MediaContext{KF8: true, ET: false}) {
+	if !mb.Query.Evaluate(css.MediaContext{KF8: true, ET: false}).Matches {
 		t.Error("expected amzn-kf8 and not amzn-et to match kf8=true, et=false")
 	}
 }
@@ -373,7 +370,7 @@ func TestParser_MediaBlockKF8AndET(t *testing.T) {
 	if mb == nil {
 		t.Fatal("expected second item to be a MediaBlock")
 	}
-	if !mb.Query.Evaluate(css.MediaContext{KF8: true, ET: true}) {
+	if !mb.Query.Evaluate(css.MediaContext{KF8: true, ET: true}).Matches {
 		t.Error("expected amzn-kf8 and amzn-et to match kf8=true, et=true")
 	}
 
@@ -408,14 +405,11 @@ func TestParser_MediaBlockNotMobi(t *testing.T) {
 	if mb == nil {
 		t.Fatal("expected second item to be a MediaBlock")
 	}
-	if !mb.Query.Negated {
-		t.Error("expected negated media query")
-	}
-	if mb.Query.Type != "amzn-mobi" {
-		t.Errorf("expected media type 'amzn-mobi', got '%s'", mb.Query.Type)
+	if mb.Query.Raw != "not amzn-mobi" {
+		t.Errorf("expected complete negated media query, got %q", mb.Query.Raw)
 	}
 	// not amzn-mobi should match kf8 context (mobi is always false, negated = true)
-	if !mb.Query.Evaluate(css.MediaContext{KF8: true, ET: true}) {
+	if !mb.Query.Evaluate(css.MediaContext{KF8: true, ET: true}).Matches {
 		t.Error("expected 'not amzn-mobi' to match kf8=true, et=true")
 	}
 
@@ -857,69 +851,63 @@ func TestMediaQuery_Evaluate(t *testing.T) {
 	}{
 		{
 			name:     "amzn-kf8 matches KFX",
-			mq:       css.MediaQuery{Type: "amzn-kf8"},
+			mq:       css.MediaQuery{Raw: "amzn-kf8"},
 			kf8:      true,
 			et:       true,
 			expected: true,
 		},
 		{
 			name:     "amzn-mobi never matches KFX",
-			mq:       css.MediaQuery{Type: "amzn-mobi"},
+			mq:       css.MediaQuery{Raw: "amzn-mobi"},
 			kf8:      true,
 			et:       true,
 			expected: false,
 		},
 		{
 			name:     "amzn-et matches KFX",
-			mq:       css.MediaQuery{Type: "amzn-et"},
+			mq:       css.MediaQuery{Raw: "amzn-et"},
 			kf8:      true,
 			et:       true,
 			expected: true,
 		},
 		{
-			name: "amzn-kf8 and not amzn-et does not match KFX",
-			mq: css.MediaQuery{
-				Type:     "amzn-kf8",
-				Features: []css.MediaFeature{{Name: "amzn-et", Negated: true}},
-			},
+			name:     "amzn-kf8 and not amzn-et does not match KFX",
+			mq:       css.MediaQuery{Raw: "amzn-kf8 and not amzn-et"},
 			kf8:      true,
 			et:       true,
 			expected: false,
 		},
 		{
-			name: "amzn-kf8 and amzn-et matches KFX",
-			mq: css.MediaQuery{
-				Type:     "amzn-kf8",
-				Features: []css.MediaFeature{{Name: "amzn-et", Negated: false}},
-			},
+			name:     "amzn-kf8 and amzn-et matches KFX",
+			mq:       css.MediaQuery{Raw: "amzn-kf8 and amzn-et"},
 			kf8:      true,
 			et:       true,
 			expected: true,
 		},
 		{
 			name:     "not amzn-mobi matches KFX",
-			mq:       css.MediaQuery{Type: "amzn-mobi", Negated: true},
+			mq:       css.MediaQuery{Raw: "not amzn-mobi"},
 			kf8:      true,
 			et:       true,
 			expected: true,
 		},
 		{
 			name:     "screen matches (generic type)",
-			mq:       css.MediaQuery{Type: "screen"},
+			mq:       css.MediaQuery{Raw: "screen"},
 			kf8:      true,
 			et:       true,
 			expected: true,
 		},
 		{
 			name:     "all matches (generic type)",
-			mq:       css.MediaQuery{Type: "all"},
+			mq:       css.MediaQuery{Raw: "all"},
 			kf8:      true,
 			et:       true,
 			expected: true,
 		},
 		{
-			name:     "unknown type does not match",
-			mq:       css.MediaQuery{Type: "print"},
+			name:     "print remains disabled for screen-styled output",
+			mq:       css.MediaQuery{Raw: "print"},
 			kf8:      true,
 			et:       true,
 			expected: false,
@@ -928,7 +916,7 @@ func TestMediaQuery_Evaluate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.mq.Evaluate(css.MediaContext{KF8: tt.kf8, ET: tt.et})
+			got := tt.mq.Evaluate(css.MediaContext{KF8: tt.kf8, ET: tt.et}).Matches
 			if got != tt.expected {
 				t.Errorf("MediaQuery.Evaluate(%v, %v) = %v, want %v", tt.kf8, tt.et, got, tt.expected)
 			}
@@ -945,17 +933,17 @@ func TestMediaQuery_EvaluatePDFContext(t *testing.T) {
 		pdf  bool
 		kfx  bool
 	}{
-		{"fbc-pdf", css.MediaQuery{Type: "fbc-pdf"}, true, false},
-		{"not fbc-pdf", css.MediaQuery{Type: "fbc-pdf", Negated: true}, false, true},
+		{"fbc-pdf", css.MediaQuery{Raw: "fbc-pdf"}, true, false},
+		{"not fbc-pdf", css.MediaQuery{Raw: "not fbc-pdf"}, false, true},
 		{
 			"fbc-pdf and amzn-kf8 and amzn-et",
-			css.MediaQuery{Type: "fbc-pdf", Features: []css.MediaFeature{{Name: "amzn-kf8"}, {Name: "amzn-et"}}},
+			css.MediaQuery{Raw: "fbc-pdf and amzn-kf8 and amzn-et"},
 			true,
 			false,
 		},
 		{
 			"amzn-kf8 and fbc-pdf",
-			css.MediaQuery{Type: "amzn-kf8", Features: []css.MediaFeature{{Name: "fbc-pdf"}}},
+			css.MediaQuery{Raw: "amzn-kf8 and fbc-pdf"},
 			true,
 			false,
 		},
@@ -963,10 +951,10 @@ func TestMediaQuery_EvaluatePDFContext(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.mq.Evaluate(pdfContext); got != tt.pdf {
+			if got := tt.mq.Evaluate(pdfContext).Matches; got != tt.pdf {
 				t.Errorf("Evaluate(PDF) = %v, want %v", got, tt.pdf)
 			}
-			if got := tt.mq.Evaluate(kfxContext); got != tt.kfx {
+			if got := tt.mq.Evaluate(kfxContext).Matches; got != tt.kfx {
 				t.Errorf("Evaluate(KFX) = %v, want %v", got, tt.kfx)
 			}
 		})
@@ -980,19 +968,19 @@ func TestMediaQuery_EvaluateKFXContext(t *testing.T) {
 		mq       css.MediaQuery
 		expected bool
 	}{
-		{"amzn-kf8", css.MediaQuery{Type: "amzn-kf8"}, true},
-		{"amzn-mobi", css.MediaQuery{Type: "amzn-mobi"}, false},
-		{"amzn-et", css.MediaQuery{Type: "amzn-et"}, true},
+		{"amzn-kf8", css.MediaQuery{Raw: "amzn-kf8"}, true},
+		{"amzn-mobi", css.MediaQuery{Raw: "amzn-mobi"}, false},
+		{"amzn-et", css.MediaQuery{Raw: "amzn-et"}, true},
 		{
 			"amzn-kf8 and not amzn-et",
-			css.MediaQuery{Type: "amzn-kf8", Features: []css.MediaFeature{{Name: "amzn-et", Negated: true}}},
+			css.MediaQuery{Raw: "amzn-kf8 and not amzn-et"},
 			false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.mq.Evaluate(css.MediaContext{KF8: true, ET: true}); got != tt.expected {
+			if got := tt.mq.Evaluate(css.MediaContext{KF8: true, ET: true}).Matches; got != tt.expected {
 				t.Errorf("Evaluate(true, true) = %v, want %v", got, tt.expected)
 			}
 		})

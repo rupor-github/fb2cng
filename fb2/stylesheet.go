@@ -73,7 +73,7 @@ func (fb *FictionBook) NormalizeStylesheets(
 			continue
 		}
 		if outputFormat == common.OutputFmtAzw3 {
-			selected, err := css.ResolveMedia([]byte(sheet.Data), css.MediaContext{KF8: true})
+			selected, err := css.ResolveMedia([]byte(sheet.Data), css.MediaContext{KF8: true}, log)
 			if err != nil {
 				// Keep the existing warning-only recovery policy for malformed CSS.
 				log.Warn("Unable to select KF8 stylesheet media; retaining original CSS", zap.Error(err))

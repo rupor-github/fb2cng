@@ -31,20 +31,10 @@ func cssEscapeDoubleQuoted(s string) string {
 	return b.String()
 }
 
-// MediaQuery represents a parsed @media query condition.
-// Supports Amazon-specific media types (amzn-mobi, amzn-kf8, amzn-et)
-// and fb2cng-specific media types such as fbc-pdf.
+// MediaQuery retains a complete @media condition for the shared evaluator.
+// Keeping the full query avoids losing alternatives, modifiers or feature values.
 type MediaQuery struct {
-	Raw      string         // Original media query string
-	Type     string         // Media type (e.g., "amzn-mobi", "amzn-kf8")
-	Negated  bool           // true if "not" modifier was used on main type
-	Features []MediaFeature // Additional conditions (e.g., "and not amzn-et")
-}
-
-// MediaFeature represents a single media feature condition in a media query.
-type MediaFeature struct {
-	Name    string // Feature name (e.g., "amzn-et")
-	Negated bool   // true if "not" modifier was used
+	Raw string
 }
 
 // MediaContext is the active output context used to evaluate @media blocks.
@@ -52,45 +42,6 @@ type MediaContext struct {
 	KF8    bool
 	ET     bool
 	FBCPDF bool
-}
-
-// Evaluate returns true if this media query matches the given output context.
-func (mq MediaQuery) Evaluate(ctx MediaContext) bool {
-	if !mq.mediaConditionMatches(mq.Type, mq.Negated, ctx) {
-		return false
-	}
-
-	// Evaluate all features (AND logic)
-	for _, f := range mq.Features {
-		if !mq.mediaConditionMatches(f.Name, f.Negated, ctx) {
-			return false
-		}
-	}
-
-	return true
-}
-
-func (mq MediaQuery) mediaConditionMatches(name string, negated bool, ctx MediaContext) bool {
-	var matches bool
-	switch strings.ToLower(name) {
-	case "amzn-kf8":
-		matches = ctx.KF8
-	case "amzn-et":
-		matches = ctx.ET
-	case "amzn-mobi":
-		matches = false
-	case "fbc-pdf":
-		matches = ctx.FBCPDF
-	case "all", "screen":
-		matches = true
-	default:
-		matches = false
-	}
-
-	if negated {
-		matches = !matches
-	}
-	return matches
 }
 
 // Value represents a parsed CSS property value.

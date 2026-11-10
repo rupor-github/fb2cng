@@ -43,17 +43,21 @@ func (t *pdfStyleTracer) traceDefault(name string, style pdfBlockResolvedStyle) 
 	t.sections["default"]++
 }
 
-func (t *pdfStyleTracer) traceMedia(query string, matched bool, rules int) {
+func (t *pdfStyleTracer) traceMedia(query string, result css.MediaResult, rules int) {
 	if !t.isEnabled() {
 		return
 	}
 	state := "skipped"
 	section := "media_skipped"
-	if matched {
+	if result.Matches {
 		state = "matched"
 		section = "media_matched"
 	}
-	t.append("MEDIA", query, fmt.Sprintf("%s, rules=%d", state, rules))
+	details := fmt.Sprintf("%s, rules=%d", state, rules)
+	if len(result.Unsupported) > 0 {
+		details += "\n  unsupported atoms treated as false: " + strings.Join(result.Unsupported, ", ")
+	}
+	t.append("MEDIA", query, details)
 	t.sections[section]++
 }
 
