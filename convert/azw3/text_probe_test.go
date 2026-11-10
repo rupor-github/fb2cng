@@ -20,15 +20,22 @@ import (
 )
 
 // assembleTextProbe supplies fixture metadata and the implemented compilation
-// passes. It is not the production container adapter: cover/metadata, compression,
-// APNX and staged publication still need implementation before CLI exposure.
-func assembleTextProbe(t *testing.T, text *textLayout, navigation *navigationLayout) []byte {
+// passes. It is not the production container adapter: compression, APNX and staged
+// publication still need implementation before CLI exposure.
+func assembleTextProbe(t *testing.T, text *textLayout, navigation *navigationLayout, metadata *metadataLayout) []byte {
 	t.Helper()
 	chunks, err := splitText(text.Raw)
 	if err != nil {
 		t.Fatal(err)
 	}
 	header := probeLayout()
+	name := "Native_text_probe"
+	resources := text.Resources
+	if metadata != nil {
+		header.Title, header.UID, header.Language = metadata.Title, metadata.UID, metadata.Language
+		header.Metadata, header.HasFonts = metadata.EXTH, metadata.HasFonts
+		name, resources = metadata.Database, metadata.Resources
+	}
 	header.TextLength, header.TextRecords = uint32(len(text.Raw)), uint16(len(chunks))
 	records := append([][]byte{nil}, chunks...)
 	header.FirstNonText = uint32(len(records))
@@ -50,19 +57,19 @@ func assembleTextProbe(t *testing.T, text *textLayout, navigation *navigationLay
 			header.Guide = uint32(len(records))
 			records = append(records, navigation.Guide...)
 		}
-		if navigation.Start != nil {
+		if navigation.Start != nil && metadata == nil {
 			header.Metadata = append(header.Metadata, exthRecord{ID: 116, Data: binary.BigEndian.AppendUint32(nil, navigation.Start.Position)})
 		}
 	}
 	header.FirstResource = uint32(len(records))
-	records = append(records, text.Resources...)
+	records = append(records, resources...)
 	records = append(records, []byte{0xe9, 0x8e, 0x0d, 0x0a})
 	records[0], err = encodeHeader(header)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var output bytes.Buffer
-	if err := writePalmDB(context.Background(), &output, "Native_text_probe", records); err != nil {
+	if err := writePalmDB(context.Background(), &output, name, records); err != nil {
 		t.Fatal(err)
 	}
 	return output.Bytes()
@@ -74,7 +81,7 @@ func TestPublicationTextKindleUnpack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data := assembleTextProbe(t, compiled, nil)
+	data := assembleTextProbe(t, compiled, nil, nil)
 	writeProbeArtifacts(t, map[string][]byte{"publication-text.azw3": data})
 	work := unpackProbe(t, "publication-text", data)
 	assertUnpackedText(t, work, pub, compiled)
@@ -86,7 +93,7 @@ func TestPublicationResourcesKindleUnpack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data := assembleTextProbe(t, compiled, nil)
+	data := assembleTextProbe(t, compiled, nil, nil)
 	writeProbeArtifacts(t, map[string][]byte{"publication-resources.azw3": data})
 	work := unpackProbe(t, "publication-resources", data)
 
@@ -157,7 +164,7 @@ func TestPublicationImageFallbackKindleUnpack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data := assembleTextProbe(t, compiled, nil)
+	data := assembleTextProbe(t, compiled, nil, nil)
 	writeProbeArtifacts(t, map[string][]byte{"publication-image-fallback.azw3": data})
 	work := unpackProbe(t, "publication-image-fallback", data)
 	base := filepath.Join(work, "unpacked", "mobi8", "OEBPS")

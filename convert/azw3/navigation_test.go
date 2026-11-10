@@ -203,7 +203,7 @@ func TestNavigationKindleUnpack(t *testing.T) {
 				t.Fatal(err)
 			}
 			name := "publication-navigation-" + shape.String()
-			data := assembleTextProbe(t, text, navigation)
+			data := assembleTextProbe(t, text, navigation, nil)
 			writeProbeArtifacts(t, map[string][]byte{name + ".azw3": data})
 			work := unpackProbe(t, name, data)
 			assertUnpackedNavigation(t, work, pub, text, shape)
@@ -227,7 +227,7 @@ func TestGuideOnlyKindleUnpack(t *testing.T) {
 				t.Fatal(err)
 			}
 			name := fmt.Sprintf("publication-guide-only-%t", enabled)
-			data := assembleTextProbe(t, text, navigation)
+			data := assembleTextProbe(t, text, navigation, nil)
 			writeProbeArtifacts(t, map[string][]byte{name + ".azw3": data})
 			work := unpackProbe(t, name, data)
 			assertUnpackedNavigation(t, work, pub, text, common.TOCTypeNormal)
@@ -332,7 +332,7 @@ func TestNavigationLargeLabelPools(t *testing.T) {
 		t.Fatal("fixture must exercise multiple INDX data records and CTOC string records")
 	}
 	if os.Getenv("AZW3_KINDLEUNPACK_TEST") == "1" {
-		data := assembleTextProbe(t, text, navigation)
+		data := assembleTextProbe(t, text, navigation, nil)
 		writeProbeArtifacts(t, map[string][]byte{"publication-large-navigation.azw3": data})
 		work := unpackProbe(t, "publication-large-navigation", data)
 		assertUnpackedNavigation(t, work, pub, text, common.TOCTypeFlat)

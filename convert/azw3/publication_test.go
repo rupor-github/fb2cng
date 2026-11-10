@@ -63,7 +63,7 @@ func TestFB2PublicationText(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					data := assembleTextProbe(t, compiled, navigation)
+					data := assembleTextProbe(t, compiled, navigation, nil)
 					summary, err := json.MarshalIndent(struct {
 						Chapters   int
 						Navigation int

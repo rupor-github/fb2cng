@@ -278,10 +278,16 @@ func prepareTextDocument(
 		elem := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 		stack = append(stack, elem.ChildElements()...)
-		if elem.Tag == "img" {
+		if elem.Tag == "img" || elem.Tag == "image" {
 			src := elem.SelectAttr("src")
+			if elem.Tag == "image" {
+				src = elem.SelectAttr("xlink:href")
+				if src == nil {
+					src = elem.SelectAttr("href")
+				}
+			}
 			if src == nil {
-				return false, errors.New("XHTML image is missing src")
+				return false, errors.New("XHTML image is missing its source URI")
 			}
 			lowered, local, err := lowerResourceURI(doc.Filename, src.Value, resources, resourceImage)
 			if err != nil {

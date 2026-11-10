@@ -107,7 +107,7 @@ func unpackProbe(t *testing.T, name string, data []byte) string {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	command := exec.CommandContext(ctx, wrapper, "-r", "-d", input, filepath.Join(work, "unpacked"))
+	command := exec.CommandContext(ctx, wrapper, "-r", "-d", "--epub_version=A", input, filepath.Join(work, "unpacked"))
 	command.Dir = work
 	output, err := command.CombinedOutput()
 	writeProbeArtifacts(t, map[string][]byte{name + "-kindleunpack.log": output})

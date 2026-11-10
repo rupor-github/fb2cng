@@ -101,6 +101,7 @@ type headerLayout struct {
 	Skeletons     uint32
 	Guide         uint32
 	Metadata      []exthRecord
+	HasFonts      bool
 }
 
 func encodeHeader(layout headerLayout) ([]byte, error) {
@@ -139,6 +140,10 @@ func encodeHeader(layout headerLayout) ([]byte, error) {
 	binary.BigEndian.PutUint16(data[8:], layout.TextRecords)
 	binary.BigEndian.PutUint16(data[10:], textRecordSize)
 	copy(data[0x10:], "MOBI")
+	exthFlags := uint32(0x50) // Conventional standalone EXTH flags; no shared-resource bit.
+	if layout.HasFonts {
+		exthFlags |= 0x1000
+	}
 	words := map[int]uint32{
 		0x14: 0x108, 0x18: 2, 0x1c: 65001, 0x20: layout.UID, 0x24: 8,
 		0x28: missingRecord, 0x2c: missingRecord, 0x30: missingRecord, 0x34: missingRecord,
@@ -146,7 +151,7 @@ func encodeHeader(layout headerLayout) ([]byte, error) {
 		0x48: missingRecord, 0x4c: missingRecord,
 		0x50: layout.FirstNonText, 0x54: uint32(titleOffset), 0x58: uint32(len(layout.Title)),
 		0x5c: layout.Language, 0x68: 8, 0x6c: layout.FirstResource,
-		0x80: 0x40,                               // EXTH present
+		0x80: exthFlags,
 		0xa4: missingRecord, 0xa8: missingRecord, // no DRM
 		0xc0: layout.FDST, 0xc4: layout.FlowCount,
 		0xc8: missingRecord, 0xd0: missingRecord, // no FCIS/FLIS in structural probes
