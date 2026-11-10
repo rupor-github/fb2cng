@@ -12,13 +12,15 @@ import (
 
 	"fbc/common"
 	"fbc/config"
+	"fbc/content"
 	"fbc/convert/publication"
 )
 
-// prepareCoverDocument adds the adapter-owned cover wrapper before resource URI
-// lowering and text-position freeze. It does not resize/reencode the cover or
-// change the original start-reading landmark. Source publication data stays read-only.
-func prepareCoverDocument(ctx context.Context, pub *publication.Publication, cfg *config.ImagesConfig) (*publication.Publication, error) {
+// prepareCoverPublication keeps ordinary raster covers outside KF8's main text,
+// as KindleGen does. The reader uses the cover resource rather than a cover
+// skeleton. A retained broken SVG needs the old document fallback because it
+// cannot provide raster cover metadata. Source publication data stays read-only.
+func prepareCoverPublication(ctx context.Context, pub *publication.Publication, cfg *config.ImagesConfig) (*publication.Publication, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -41,6 +43,15 @@ func prepareCoverDocument(ctx context.Context, pub *publication.Publication, cfg
 		if landmark.Kind == "cover" {
 			return nil, errors.New("publication already contains a cover landmark")
 		}
+	}
+	if imageMediaType(cover.MimeType) != "image/svg+xml" {
+		result := *pub
+		// A virtual cover has no frozen main-text position for an APNX entry.
+		// Keep the existing labels of every remaining page, without renumbering.
+		result.Pages = slices.DeleteFunc(slices.Clone(pub.Pages), func(page content.PageMapEntry) bool {
+			return page.Filename == "cover.xhtml" && page.SpanID == ""
+		})
+		return &result, nil
 	}
 	w, h := cover.Dim.Width, cover.Dim.Height
 	if w <= 0 || h <= 0 {

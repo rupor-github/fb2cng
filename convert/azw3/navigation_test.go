@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/beevik/etree"
+	"golang.org/x/net/html"
 
 	"fbc/common"
 	"fbc/convert/publication"
@@ -291,8 +292,48 @@ func assertUnpackedNavigation(
 	}
 	opf := readXML(opfFiles[0])
 	refs := opf.FindElements("//guide/reference")
-	if len(refs) != len(pub.Landmarks) {
-		t.Fatalf("guide reference count changed: got %d, want %d", len(refs), len(pub.Landmarks))
+	wantReferences := len(pub.Landmarks)
+	_, physicalCover := text.Positions[linkTarget{Filename: "cover.xhtml"}]
+	if pub.CoverID != "" && !physicalCover {
+		// The decoder creates the resource-backed cover page and guide entry;
+		// neither is a hidden native text skeleton or guide destination.
+		wantReferences++
+		coverRef := opf.FindElement("//guide/reference[@type='cover']")
+		if coverRef == nil || path.Base(coverRef.SelectAttrValue("href", "")) != "cover_page.xhtml" {
+			t.Fatal("decoder did not synthesize the virtual cover destination")
+		}
+		coverData, err := os.ReadFile(filepath.Join(base, "Text", "cover_page.xhtml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		// KindleUnpack's synthesized title can contain an unescaped '&'. This
+		// file is decoder-generated, not native source: inspect its image with
+		// an HTML tokenizer without relaxing the XML checks on real documents.
+		tokenizer := html.NewTokenizer(bytes.NewReader(coverData))
+		imageHref := ""
+		for kind := tokenizer.Next(); kind != html.ErrorToken; kind = tokenizer.Next() {
+			if kind != html.StartTagToken && kind != html.SelfClosingTagToken {
+				continue
+			}
+			token := tokenizer.Token()
+			if token.Data == "image" {
+				for _, attr := range token.Attr {
+					if attr.Key == "xlink:href" {
+						imageHref = attr.Val
+					}
+				}
+			}
+		}
+		if imageHref == "" {
+			t.Fatal("virtual cover has no image")
+		}
+		payload, err := os.ReadFile(filepath.Join(base, "Text", imageHref))
+		if err != nil || !bytes.Equal(payload, pub.Images[pub.CoverID].Data) {
+			t.Fatal("virtual cover does not use the prepared raster resource", err)
+		}
+	}
+	if len(refs) != wantReferences {
+		t.Fatalf("guide reference count changed: got %d, want %d", len(refs), wantReferences)
 	}
 	for _, landmark := range pub.Landmarks {
 		kind := guideType(landmark.Kind)

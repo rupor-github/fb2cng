@@ -606,7 +606,11 @@ func TestWriteStylesheet(t *testing.T) {
 		OutputFormat: common.OutputFmtEpub2,
 	}
 
-	err := writeStylesheet(zw, publication.AssembleStylesheet(c.Book.Stylesheets))
+	sheet, err := publication.AssembleStylesheet(c.Book.Stylesheets, c.OutputFormat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = writeStylesheet(zw, sheet)
 	if err != nil {
 		t.Fatalf("writeStylesheet() error = %v", err)
 	}
@@ -669,7 +673,11 @@ func TestWriteStylesheetWithResources(t *testing.T) {
 		OutputFormat: common.OutputFmtEpub2,
 	}
 
-	err := writeStylesheet(zw, publication.AssembleStylesheet(c.Book.Stylesheets))
+	sheet, err := publication.AssembleStylesheet(c.Book.Stylesheets, c.OutputFormat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = writeStylesheet(zw, sheet)
 	if err != nil {
 		t.Fatalf("writeStylesheet() error = %v", err)
 	}
@@ -758,7 +766,11 @@ func TestWriteStylesheetWithNonFontResource(t *testing.T) {
 		OutputFormat: common.OutputFmtEpub2,
 	}
 
-	err := writeStylesheet(zw, publication.AssembleStylesheet(c.Book.Stylesheets))
+	sheet, err := publication.AssembleStylesheet(c.Book.Stylesheets, c.OutputFormat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = writeStylesheet(zw, sheet)
 	if err != nil {
 		t.Fatalf("writeStylesheet() error = %v", err)
 	}

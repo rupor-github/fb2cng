@@ -17,6 +17,16 @@ Output naming, metadata, footnote labels/backlinks, and visible-TOC templates re
 `.Format = "azw3"`. `--ebook` and `--asin` have the same meaning as for the other
 Kindle formats. `--no-cover` is ignored with a warning; a missing cover is generated.
 
+The cover inside a book and its library thumbnail are separate reader features.
+The book contains an embedded cover; the reader controls how it is reached from the
+text. The initial reading target remains the book text.
+By default, native AZW3 uses local-book metadata without catalog identifiers or an
+explicit document-type marker. This lets readers such as Kindle Voyage use the embedded
+library thumbnail. `--ebook` explicitly selects EBOK, and `--asin` explicitly supplies
+a catalog identifier (with PDOC unless `--ebook` is also used). Those choices are retained,
+but may require device thumbnail-cache support when sideloading. Switching between
+PDOC and EBOK alone does not guarantee library thumbnails.
+
 ## Compression
 
 Select native compression in YAML, or override it for one conversion with `--compression`:
@@ -66,6 +76,10 @@ For a final book named `chosen.azw3`:
 These are approximate reading pages, not print-edition page numbers. Disabling
 `page_map.enable` suppresses a requested APNX with a warning. APNX consumption
 depends on the target reader and how the book is transferred.
+The separate cover image has no APNX text position; its synthetic page entry is
+omitted without renumbering the remaining page labels.
+APNX also supports default local-book metadata; generating a page map does not add
+catalog identifiers back into the book.
 
 Without `--overwrite`, an existing book or selected sidecar prevents publication.
 Generation failures preserve existing outputs. Unrelated `.sdr` files are preserved;
@@ -80,9 +94,24 @@ the KFX style conversion model. CSS media selection enables `amzn-kf8` and disab
 `amzn-et`, `amzn-mobi`, and `fbc-pdf`; in particular, `amzn-kf8 and not amzn-et`
 matches AZW3. See [stylesheet media queries](../stylesheets.md#media-queries).
 
+Native CSS retains declaration order, repeated properties, selectors, and conditional
+rules for the reader; resource URLs are rewritten for the book. Empty HTML elements
+such as blank-line containers and link anchors receive explicit closing tags for
+Kindle HTML parsing, without changing other output formats.
+
+Statically resolved `page-break-before: always` and `page-break-after: always` rules
+are materialized as native breaks, including between titled footnote bodies. This
+does not change converter-controlled document splitting. Unresolved pagination or
+visibility rules are retained for the reader and identified in the debug trace.
+
 It supports normal linked notes, floating notes,
 renumbering, backlinks, visible TOC placement, embedded TTF/OTF fonts, and native
 non-cover SVG. Display and popup behavior depend on the reader.
+
+Known limitations: on Kindle Voyage, `floatRenumbered` popups are inconsistent;
+some notes navigate instead of opening a popup, and a popup may include the next note.
+AZW3 does not currently populate backlink-template `.LocationNumber`; use page or
+section labels as a fallback.
 
 Shared image configuration applies, including explicit SVG rasterization and
 transparency removal for compatibility. Ordinary covers use Kindle-compatible

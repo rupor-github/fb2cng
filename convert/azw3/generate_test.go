@@ -3,8 +3,10 @@ package azw3
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -110,6 +112,45 @@ func TestGenerateAZW3(t *testing.T) {
 				raw, err := os.ReadFile(filepath.Join(c.WorkDir, "book.rawml"))
 				if err != nil {
 					t.Fatal(err)
+				}
+				for _, name := range []string{
+					"book.azw3-documents.json", "book.azw3-anchors.json", "book.azw3-resources.json",
+					"book.azw3-flows.json", "book.azw3-records.json", "book.azw3-navigation.json",
+				} {
+					diagnostic, err := os.ReadFile(filepath.Join(c.WorkDir, name))
+					if err != nil || !json.Valid(diagnostic) {
+						t.Fatalf("missing or invalid native diagnostic %s: %v", name, err)
+					}
+				}
+				compiledCSS, err := os.ReadFile(filepath.Join(c.WorkDir, "book.stylesheet.css"))
+				if err != nil || !bytes.Contains(compiledCSS, []byte("kindle:embed:")) {
+					t.Fatal("diagnostic stylesheet must contain the actual compiled resource URLs", err)
+				}
+				sourceCSS, err := os.ReadFile(filepath.Join(c.WorkDir, "book.source.css"))
+				if err != nil || bytes.Contains(sourceCSS, []byte("kindle:embed:")) {
+					t.Fatal("diagnostic source stylesheet was lost or replaced with compiled CSS", err)
+				}
+				resourceData, err := os.ReadFile(filepath.Join(c.WorkDir, "book.azw3-resources.json"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				var inventory []struct {
+					InputData string `json:"input_data"`
+					SHA256    string `json:"sha256"`
+				}
+				if err := json.Unmarshal(resourceData, &inventory); err != nil {
+					t.Fatal(err)
+				}
+				for _, resource := range inventory {
+					payload, err := os.ReadFile(filepath.Join(c.WorkDir, resource.InputData))
+					if err != nil || resource.SHA256 != fmt.Sprintf("%x", sha256.Sum256(payload)) {
+						t.Fatal("source-resource snapshot is missing or has the wrong checksum", resource.InputData, err)
+					}
+				}
+				for _, dir := range []string{"azw3-input", "azw3-compiled"} {
+					if entries, err := os.ReadDir(filepath.Join(c.WorkDir, dir)); err != nil || len(entries) == 0 {
+						t.Fatal("missing before/after publication documents", dir, err)
+					}
 				}
 				for _, expected := range []string{
 					"label-azw3-1", "back-azw3", "toc-azw3", "<aside", `epub:type="noteref"`,

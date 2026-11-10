@@ -150,6 +150,10 @@ func Build(
 		c.TrackImageUsage(c.CoverID)
 	}
 	filterUnusedImages(c.Content)
+	stylesheet, err := AssembleStylesheet(c.Book.Stylesheets, c.OutputFormat)
+	if err != nil {
+		return nil, err
+	}
 
 	return &Publication{
 		Chapters:   chapters,
@@ -157,7 +161,7 @@ func Build(
 		Navigation: CollectNavigation(chapters, idToFile),
 		Landmarks:  landmarks,
 		Pages:      slices.Collect(c.GetAllPagesSeq()),
-		Stylesheet: AssembleStylesheet(c.Book.Stylesheets),
+		Stylesheet: stylesheet,
 		Images:     c.ImagesIndex,
 		CoverID:    c.CoverID,
 	}, nil

@@ -93,6 +93,28 @@ are added for compressed output. The published result remains at the archive roo
 Compressed output includes both the published file and the original uncompressed book
 for troubleshooting. Compression does not change book content.
 
+#### AZW3
+
+| Artifact | Use |
+|---|---|
+| `book.azw3.txt` | Native compilation summary and effective compression choice/source |
+| `book.source.css` | Publication CSS before native resource-URL lowering |
+| `book.stylesheet.css` | Actual compiled stylesheet used by the native book |
+| `book.azw3-style-trace.txt` | HTML compatibility transformations, native anchor allocation, CSS page-break decisions, and image/font resource mapping |
+| `azw3-input/`, `azw3-compiled/` | Numbered XHTML documents before and after native lowering; filenames are mapped in the document inventory |
+| `book.azw3-documents.json` | Document order, byte sizes, and per-document transformations |
+| `book.azw3-anchors.json` | Resolved reading anchors and link destinations |
+| `book.azw3-resources.json` | Font, raster-image, and SVG resource inventory |
+| `azw3-resources/` | Checksummed pre-lowering resource bytes referenced by the resource inventory |
+| `book.azw3-flows.json`, `book.azw3-records.json` | Native data sizes and checksums for comparison |
+| `book.azw3-navigation.json` | TOC, landmarks, page-map entries, start-reading target, and Kindle identity |
+| `book.rawml` | Frozen native text and stylesheet/artwork data |
+| `book.apnx` | Selected page-map sidecar, when generated |
+
+These are compilation diagnostics, not reader-computed styles or a rendering trace.
+Use them to compare source CSS/markup with the compiled result, then check appearance in
+the intended Kindle reader. The published AZW3 and selected APNX are also at the archive root.
+
 #### PDF
 
 | Artifact | Use |

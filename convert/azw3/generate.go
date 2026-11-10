@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	"go.uber.org/zap"
@@ -59,7 +57,7 @@ func Generate(
 	if err != nil {
 		return result, err
 	}
-	pub, err = prepareCoverDocument(ctx, pub, &cfg.Images)
+	pub, err = prepareCoverPublication(ctx, pub, &cfg.Images)
 	if err != nil {
 		return result, err
 	}
@@ -88,21 +86,8 @@ func Generate(
 		return result, err
 	}
 	if c.Debug {
-		summary := fmt.Sprintf(
-			"format=%s\ncompression=%s\ncompression_source=%s\napnx=%s\nmain_bytes=%d\nall_flow_bytes=%d\nrecords=%d\npages=%d\n",
-			c.OutputFormat, book.Compression, cfg.AZW3.CompressionSource, cfg.AZW3.APNX,
-			text.MainLength, len(text.Raw), len(book.Records), len(pub.Pages))
-		artifacts := map[string][]byte{
-			"book.azw3.txt": []byte(summary), "book.rawml": text.Raw, "book.stylesheet.css": pub.Stylesheet.Data,
-		}
-		if apnx != nil {
-			artifacts["book.apnx"] = apnx.Data
-		}
-		for name, data := range artifacts {
-			path := filepath.Join(c.WorkDir, name)
-			if err := os.WriteFile(path, data, 0644); err != nil {
-				log.Warn("Unable to write AZW3 diagnostic", zap.String("path", path), zap.Error(err))
-			}
+		if err := writeDebugArtifacts(c, pub, text, navigation, metadata, book, apnx, cfg); err != nil {
+			log.Warn("Unable to write AZW3 diagnostics", zap.Error(err))
 		}
 	}
 	if err := bundle.publish(ctx, book, started); err != nil {

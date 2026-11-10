@@ -84,3 +84,22 @@ func TestNormalizeStylesheetsMalformedKF8Media(t *testing.T) {
 		t.Fatal("malformed CSS recovery changed the source or lost its warning")
 	}
 }
+
+func TestNormalizeStylesheetsKF8ComplexSelectorResources(t *testing.T) {
+	input := `#chapter > p + p[data-x] { background: url("#art.png"); }
+@supports (display: grid) { .a:hover { background: url("#art.png"); } }
+p::before { content: "url(#not-a-resource.png)"; }`
+	book := &FictionBook{
+		Binaries:    []BinaryObject{{ID: "art.png", ContentType: "image/png", Data: []byte("image bytes")}},
+		Stylesheets: []Stylesheet{{Type: "text/css", Data: input}},
+	}
+	core, logs := observer.New(zap.DebugLevel)
+	book.NormalizeStylesheets("book.fb2", nil, common.OutputFmtAzw3, zap.New(core))
+	resources := book.Stylesheets[0].Resources
+	if len(resources) != 1 || resources[0].OriginalURL != "#art.png" || book.Stylesheets[0].Data != input {
+		t.Fatalf("native resource discovery lost complex-selector CSS or its resource: %+v", resources)
+	}
+	if logs.FilterLevelExact(zap.WarnLevel).Len() != 0 {
+		t.Fatal("literal URL text was incorrectly treated as a resource")
+	}
+}

@@ -124,10 +124,11 @@ func compileAPNX(
 }
 
 func apnxBookIdentity(metadata *metadataLayout) (apnxIdentity, error) {
-	if err := validatePalmDBName(metadata.Database); err != nil {
+	if _, err := encodePalmDBName(metadata.Database); err != nil {
 		return apnxIdentity{}, fmt.Errorf("APNX database identity: %w", err)
 	}
-	if len(metadata.ASIN) != 10 && len(metadata.ASIN) != 32 {
+	local := metadata.ASIN == "" && metadata.ContentType == ""
+	if !local && len(metadata.ASIN) != 10 && len(metadata.ASIN) != 32 {
 		return apnxIdentity{}, errors.New("APNX requires the compiled Kindle content identifier")
 	}
 	for _, char := range []byte(metadata.ASIN) {
@@ -135,7 +136,7 @@ func apnxBookIdentity(metadata *metadataLayout) (apnxIdentity, error) {
 			return apnxIdentity{}, errors.New("APNX content identifier must match normalized Kindle metadata")
 		}
 	}
-	if metadata.ContentType != "PDOC" && metadata.ContentType != "EBOK" {
+	if !local && metadata.ContentType != "PDOC" && metadata.ContentType != "EBOK" {
 		return apnxIdentity{}, errors.New("APNX requires a compiled PDOC or EBOK content type")
 	}
 	for _, field := range []struct {
@@ -151,12 +152,21 @@ func apnxBookIdentity(metadata *metadataLayout) (apnxIdentity, error) {
 				}
 			}
 		}
-		if count != 1 {
+		if local && count != 0 {
+			return apnxIdentity{}, fmt.Errorf("local APNX identity requires absent EXTH %d", field.id)
+		}
+		if !local && count != 1 {
 			return apnxIdentity{}, fmt.Errorf("APNX requires exactly one EXTH %d identity", field.id)
 		}
 	}
+	contentType := metadata.ContentType
+	if local {
+		// Local KF8 has no catalog ASIN/type records. Match the established
+		// APNX convention: an empty ASIN and EBOK as the reader's default type.
+		contentType = "EBOK"
+	}
 	return apnxIdentity{
-		ContentGUID: fmt.Sprintf("%08x", metadata.UID), ASIN: metadata.ASIN, ContentType: metadata.ContentType,
+		ContentGUID: fmt.Sprintf("%08x", metadata.UID), ASIN: metadata.ASIN, ContentType: contentType,
 		Format: "MOBI_8", FileRevisionID: "1", ACR: metadata.Database,
 	}, nil
 }

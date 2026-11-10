@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"fbc/common"
 	"fbc/fb2"
 )
 
@@ -17,7 +18,10 @@ func TestAssembleStylesheet(t *testing.T) {
 		{Type: "text/css", Data: "body { background: url('#asset'); color: blue; }", Resources: []fb2.StylesheetResource{art}},
 		{Type: "text/css", Data: "p { background: url('unresolved.png'); }"},
 	}
-	assembled := AssembleStylesheet(styles)
+	assembled, err := AssembleStylesheet(styles, common.OutputFmtEpub2)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !reflect.DeepEqual(assembled.Resources, []fb2.StylesheetResource{font, art}) {
 		t.Errorf("resources = %+v", assembled.Resources)
 	}
@@ -36,8 +40,25 @@ func TestAssembleStylesheet(t *testing.T) {
 }
 
 func TestAssembleStylesheetEmpty(t *testing.T) {
-	style := AssembleStylesheet(nil)
+	style, err := AssembleStylesheet(nil, common.OutputFmtEpub2)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(style.Data) != 0 || len(style.Resources) != 0 {
 		t.Error("empty input produced stylesheet content")
+	}
+}
+
+func TestAssembleAZW3StylesheetPreservesCascade(t *testing.T) {
+	data := `/* native CSS */ #id > p + p { margin-left: 2em; margin: 0; color: red; color: blue !important; }
+@supports (display: grid) { .a[data-x] { background: url('#asset'); } }`
+	style, err := AssembleStylesheet([]fb2.Stylesheet{{Type: "text/css", Data: data,
+		Resources: []fb2.StylesheetResource{{OriginalURL: "#asset", Filename: "other/art.png"}},
+	}}, common.OutputFmtAzw3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(style.Data), strings.ReplaceAll(data, "url('#asset')", `url("other/art.png")`)+"\n"; got != want {
+		t.Fatalf("native stylesheet changed declarations, selectors or at-rules:\n%s", got)
 	}
 }

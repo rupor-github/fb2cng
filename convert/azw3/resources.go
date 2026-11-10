@@ -266,9 +266,8 @@ func lowerStylesheetResources(data []byte, resources *resourceLayout) ([]byte, e
 		!strings.Contains(strings.ToLower(string(data)), "url(") && !strings.Contains(strings.ToLower(string(data)), "@import")) {
 		return bytes.Clone(data), nil
 	}
-	sheet := css.NewParser(nil).Parse(data, "")
 	var rewriteErr error
-	sheet.RewriteURLs(func(original string) string {
+	output, err := css.RewriteStylesheetURLs(data, func(original string) string {
 		if rewriteErr != nil {
 			return original
 		}
@@ -285,11 +284,7 @@ func lowerStylesheetResources(data []byte, resources *resourceLayout) ([]byte, e
 	if rewriteErr != nil {
 		return nil, rewriteErr
 	}
-	var output bytes.Buffer
-	if _, err := sheet.WriteTo(&output); err != nil {
-		return nil, fmt.Errorf("serialize lowered stylesheet: %w", err)
-	}
-	return output.Bytes(), nil
+	return output, err
 }
 
 func lowerResourceURI(filename, rawURI string, resources *resourceLayout, requiredKind resourceKind) (string, bool, error) {

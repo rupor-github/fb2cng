@@ -8,6 +8,9 @@ import (
 	"io"
 	"math"
 	"time"
+	"unicode"
+
+	"golang.org/x/text/encoding/charmap"
 )
 
 // writePalmDB writes one standalone BOOK/MOBI database. Layout is checked before
@@ -18,7 +21,8 @@ func writePalmDB(ctx context.Context, w io.Writer, name string, created time.Tim
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := validatePalmDBName(name); err != nil {
+	encodedName, err := encodePalmDBName(name)
+	if err != nil {
 		return err
 	}
 	if len(records) == 0 || len(records) > math.MaxUint16 {
@@ -35,7 +39,7 @@ func writePalmDB(ctx context.Context, w io.Writer, name string, created time.Tim
 	}
 	const palmHeaderSize = 78
 	header := make([]byte, palmHeaderSize+8*len(records)+2)
-	copy(header, name)
+	copy(header, encodedName)
 	binary.BigEndian.PutUint32(header[36:], timestamp)
 	binary.BigEndian.PutUint32(header[40:], timestamp)
 	copy(header[60:], "BOOKMOBI")
@@ -69,16 +73,19 @@ func writePalmDB(ctx context.Context, w io.Writer, name string, created time.Tim
 	return nil
 }
 
-func validatePalmDBName(name string) error {
-	if len(name) == 0 || len(name) > 31 {
-		return errors.New("PalmDB name must contain 1 to 31 ASCII bytes")
-	}
-	for _, ch := range []byte(name) {
-		if ch < 0x20 || ch > 0x7e {
-			return errors.New("PalmDB name must contain printable ASCII only")
+func encodePalmDBName(name string) ([]byte, error) {
+	var encoded []byte
+	for _, char := range name {
+		value, supported := charmap.Windows1252.EncodeRune(char)
+		if !supported || !unicode.IsPrint(char) {
+			return nil, errors.New("PalmDB name must contain printable Windows-1252 characters only")
+		}
+		encoded = append(encoded, value)
+		if len(encoded) > 31 {
+			return nil, errors.New("PalmDB name must fit in 31 single-byte characters")
 		}
 	}
-	return nil
+	return encoded, nil // KindleGen permits an empty name for punctuation-only titles.
 }
 
 func writeBytes(w io.Writer, data []byte) error {

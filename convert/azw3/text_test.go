@@ -7,12 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
 	"github.com/beevik/etree"
+	"golang.org/x/net/html"
 
 	"fbc/convert/publication"
 )
@@ -44,6 +46,60 @@ func textTestPublication(t *testing.T) *publication.Publication {
 			{Filename: "Notes/notes.xhtml", AnchorID: "n_é"},
 		},
 		Stylesheet: publication.Stylesheet{Data: []byte("p { color: navy; }\naside { font-style: italic; }\n")},
+	}
+}
+
+func TestCompileTextHTMLNonVoidElements(t *testing.T) {
+	pub := textTestPublication(t)
+	doc := etree.NewDocument()
+	input := `<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Empty tags</title></head><body>` +
+		`<div id="empty" class="emptyline"/><a id="anchor"/><span id="marker" class="page-marker"/>` +
+		`<p id="following">Following text</p><br/><hr/>` +
+		`<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0L1 1"/></svg></body></html>`
+	if err := doc.ReadFromString(input); err != nil {
+		t.Fatal(err)
+	}
+	pub.Chapters = []publication.Chapter{{Filename: "main.xhtml", Doc: doc}}
+	layout, err := compileText(t.Context(), pub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := layout.Documents[0].Data
+	withoutAIDs := regexp.MustCompile(` aid="[0-9A-V]+"`).ReplaceAll(data, nil)
+	for _, fragment := range []string{
+		`class="emptyline"></div>`, `id="anchor"></a>`, `class="page-marker"></span>`, `<br/>`, `<hr/>`, `d="M0 0L1 1"/>`,
+	} {
+		if !bytes.Contains(withoutAIDs, []byte(fragment)) {
+			t.Errorf("missing HTML/foreign-element serialization %s", fragment)
+		}
+	}
+	parsed, err := html.Parse(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var visit func(*html.Node)
+	visit = func(node *html.Node) {
+		for _, attr := range node.Attr {
+			if attr.Key == "id" && attr.Val == "following" && (node.Parent == nil || node.Parent.Data != "body") {
+				t.Error("HTML reader nested following text inside an empty marker")
+			}
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			visit(child)
+		}
+	}
+	visit(parsed)
+	expansions := 0
+	for _, change := range layout.Documents[0].Changes {
+		if change.Action == "expanded non-void HTML element" {
+			expansions++
+		}
+	}
+	if expansions != 3 {
+		t.Fatalf("expected three traced HTML expansions, got %+v", layout.Documents[0].Changes)
+	}
+	if got, err := doc.WriteToString(); err != nil || got != input {
+		t.Fatal("native lowering mutated the shared publication", err)
 	}
 }
 

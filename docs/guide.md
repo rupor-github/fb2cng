@@ -83,7 +83,7 @@ Convert options:
 | Option | Meaning |
 |---|---|
 | `--to TYPE` | `epub2`, `epub3`, `kepub`, `kepub3`, `kfx`, `azw8`, `azw3`, `pdf`, `txt`, or `md` |
-| `--ebook`, `--eb` | For Kindle formats, mark output as ebook/EBOK instead of personal document/PDOC |
+| `--ebook`, `--eb` | For Kindle formats, explicitly mark output as ebook/EBOK |
 | `--asin ASIN` | For Kindle formats, set ASIN metadata |
 | `--compression MODE` | Override configured compression: KFX/AZW8 `none` or `lzma`; AZW3 `none`, `standard`, or `huffdic`; ignored with a warning for other formats |
 | `--no-cover` | Omit existing or generated covers; ignored with a warning for AZW3 and KFX/AZW8 |

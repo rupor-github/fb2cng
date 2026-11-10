@@ -38,15 +38,36 @@ func TestWritePalmDB(t *testing.T) {
 	}
 }
 
+func TestWritePalmDBNameBytes(t *testing.T) {
+	for _, test := range []struct{ name, raw string }{
+		{"", ""},
+		{"Straße Æ", "Stra\xdfe \xc6"},
+		{"ƒŒœ", "\x83\x8c\x9c"},
+		{strings.Repeat("ß", 31), strings.Repeat("\xdf", 31)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var output bytes.Buffer
+			if err := writePalmDB(t.Context(), &output, test.name, time.Time{}, [][]byte{{1}}); err != nil {
+				t.Fatal(err)
+			}
+			want := make([]byte, 32)
+			copy(want, test.raw)
+			if !bytes.Equal(output.Bytes()[:32], want) {
+				t.Fatalf("name field = %x, want %x", output.Bytes()[:32], want)
+			}
+		})
+	}
+}
+
 func TestWritePalmDBRejectsInvalidLayout(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
 		dbname  string
 		records [][]byte
 	}{
-		{name: "empty name", records: [][]byte{{1}}},
 		{name: "long name", dbname: "12345678901234567890123456789012", records: [][]byte{{1}}},
-		{name: "non-ASCII name", dbname: "Книга", records: [][]byte{{1}}},
+		{name: "unencodable name", dbname: "Книга", records: [][]byte{{1}}},
+		{name: "long single-byte name", dbname: strings.Repeat("ß", 32), records: [][]byte{{1}}},
 		{name: "NUL in name", dbname: "book\x00", records: [][]byte{{1}}},
 		{name: "no records", dbname: "book"},
 		{name: "too many records", dbname: "book", records: make([][]byte, math.MaxUint16+1)},

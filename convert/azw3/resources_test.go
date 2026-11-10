@@ -138,6 +138,21 @@ func TestCompileResourcesRejectsInvalidInput(t *testing.T) {
 	}
 }
 
+func TestLowerStylesheetResourcesPreservesCascade(t *testing.T) {
+	input := []byte(`/* source order */ #id > p + p {
+ margin-left: 2em; margin: 0; color: red; color: blue !important;
+ background: url("art.png"); content: "url(not-a-resource.png)";
+}`)
+	resources := &resourceLayout{References: map[string]resourceReference{
+		"art.png": {Number: 1, Kind: resourceImage, MimeType: "image/png"},
+	}}
+	output, err := lowerStylesheetResources(input, resources)
+	want := bytes.ReplaceAll(input, []byte(`url("art.png")`), []byte(`url("kindle:embed:0001?mime=image/png")`))
+	if err != nil || !bytes.Equal(output, want) {
+		t.Fatalf("native resource lowering changed CSS beyond its URL: %s, %v", output, err)
+	}
+}
+
 func TestClassifySFNTResources(t *testing.T) {
 	for _, tt := range []struct {
 		name     string

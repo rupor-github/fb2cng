@@ -70,7 +70,7 @@ func TestCompleteFB2Book(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			pub, err = prepareCoverDocument(ctx, pub, &cfg.Document.Images)
+			pub, err = prepareCoverPublication(ctx, pub, &cfg.Document.Images)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -46,7 +46,7 @@ func TestCompileBook(t *testing.T) {
 			}
 			pub.Navigation = []tocnav.Item{{Title: "Chapter", Href: pub.Chapters[0].Filename, Level: 1}}
 			pub.Landmarks = []publication.Landmark{{Kind: "bodymatter", Title: "Start", Href: pub.Chapters[0].Filename}}
-			pub, err := prepareCoverDocument(context.Background(), pub, &cfg.Images)
+			pub, err := prepareCoverPublication(context.Background(), pub, &cfg.Images)
 			if err != nil {
 				t.Fatal(err)
 			}

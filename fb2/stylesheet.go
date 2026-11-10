@@ -82,7 +82,24 @@ func (fb *FictionBook) NormalizeStylesheets(
 			}
 		}
 
-		refs := parseStylesheetResources(sheet.Data)
+		var refs []cssExternalRef
+		if outputFormat == common.OutputFmtAzw3 {
+			// Discover resources even in selectors/at-rules outside the renderer AST.
+			// URI rewriting and resource allocation must see the same native CSS.
+			seen := make(map[string]bool)
+			_, err := css.RewriteStylesheetURLs([]byte(sheet.Data), func(url string) string {
+				if !seen[url] {
+					refs = append(refs, cssExternalRef{URL: url, Context: "stylesheet"})
+					seen[url] = true
+				}
+				return url
+			})
+			if err != nil {
+				log.Warn("Unable to discover KF8 stylesheet resources", zap.Error(err))
+			}
+		} else {
+			refs = parseStylesheetResources(sheet.Data)
+		}
 
 		if len(refs) == 0 {
 			continue

@@ -202,12 +202,40 @@ func assertUnpackedText(t *testing.T, work string, pub *publication.Publication,
 			t.Errorf("body text changed in %s", source.Filename)
 		}
 		// Compare element structure and every attribute, allowing only the native
-		// adapter's resource paths, IDs it adds, and equivalent top-of-file links.
+		// adapter's resource paths, IDs it adds, explicit non-void HTML end tags,
+		// and equivalent top-of-file links.
 		original := source.Doc.Copy()
 		original.FindElement("//body").RemoveAttr("aid")
-		for _, marker := range original.FindElements("//span") {
-			if len(marker.Child) == 0 && slices.Contains(strings.Fields(marker.SelectAttrValue("class", "")), "page-marker") {
-				marker.CreateText("") // Native KF8 lowers non-void page markers to explicit end tags.
+		compiledDoc := etree.NewDocument()
+		if err := compiledDoc.ReadFromBytes(compiled.Documents[i].Data); err != nil {
+			t.Fatal(err)
+		}
+		sourceElements := original.FindElements("//*")
+		compiledElements := compiledDoc.FindElements("//*")
+		rebuiltElements := rebuilt.FindElements("//*")
+		if len(sourceElements) != len(compiledElements) || len(sourceElements) != len(rebuiltElements) {
+			t.Fatal("native anchors changed element structure")
+		}
+		for j, element := range sourceElements {
+			// A document-top link can resolve to the first content element. If
+			// it has no authored ID, the decoder promotes its native aid to an
+			// EPUB ID. Accept only the exact identity on the same compiled tag.
+			id := rebuiltElements[j].SelectAttrValue("id", "")
+			if strings.HasPrefix(id, "aid-") && element.SelectAttr("id") == nil && element.SelectAttr("name") == nil {
+				aid := compiledElements[j].SelectAttrValue("aid", "")
+				if aid == "" || id != "aid-"+aid {
+					t.Fatal("decoder invented an ID unrelated to the native element identity", id)
+				}
+				element.CreateAttr("id", id)
+			}
+		}
+		for _, element := range original.FindElements("//*") {
+			namespace := element.NamespaceURI()
+			void := slices.Contains([]string{
+				"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr",
+			}, element.Tag)
+			if len(element.Child) == 0 && !void && (namespace == "" || namespace == "http://www.w3.org/1999/xhtml") {
+				element.CreateText("")
 			}
 		}
 		sourceLinks := original.FindElements("//a[@href]")

@@ -166,7 +166,7 @@ func main() {
 					&cli.BoolFlag{
 						Name:    "ebook",
 						Aliases: []string{"eb"},
-						Usage:   "for Kindle formats generate as ebook (EBOK) instead of personal document (PDOC)",
+						Usage:   "for Kindle formats explicitly mark output as ebook (EBOK)",
 					},
 					&cli.StringFlag{Name: "asin", Usage: "set ASIN (10 chars, A-Z0-9); used only for Kindle formats"},
 					&cli.StringFlag{Name: "compression",

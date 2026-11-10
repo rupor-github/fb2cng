@@ -67,6 +67,7 @@ func parseAPNX(t *testing.T, data []byte) testAPNX {
 func apnxTestPublication(t *testing.T, ebook bool) (*publication.Publication, *textLayout, *metadataLayout, *config.DocumentConfig) {
 	t.Helper()
 	c, cfg := metadataTestContent()
+	c.ASIN = "B012345678" // These fixtures exercise explicit catalog identity validation.
 	if ebook {
 		c.KindleEbook, c.ASIN = true, "b012345678"
 	}
@@ -80,7 +81,7 @@ func apnxTestPublication(t *testing.T, ebook bool) (*publication.Publication, *t
 		{PageNum: 7, Filename: "Text/second.xhtml", SpanID: "late"},
 		{PageNum: 8, Filename: "Notes/notes.xhtml", SpanID: "n_é"},
 	}
-	pub, err := prepareCoverDocument(context.Background(), pub, &cfg.Images)
+	pub, err := prepareCoverPublication(context.Background(), pub, &cfg.Images)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +119,7 @@ func TestCompileAPNX(t *testing.T) {
 				"format": "MOBI_8", "fileRevisionId": "1", "acr": metadata.Database,
 			}
 			if !reflect.DeepEqual(decoded.Content, want) || decoded.Pages["asin"] != metadata.ASIN ||
-				decoded.Pages["pageMap"] != "(1,a,1),(4,a,7)" {
+				decoded.Pages["pageMap"] != "(1,a,2),(3,a,7)" {
 				t.Errorf("APNX identity or numeric page ranges are incorrect: %+v", decoded)
 			}
 			for i, page := range pub.Pages {
@@ -283,7 +284,7 @@ func TestAPNXRejectsInvalidInputs(t *testing.T) {
 			pub.Pages[1].SpanID = "missing"
 		}},
 		{"decreasing page offset", func(pub *publication.Publication, _ *textLayout, _ *metadataLayout, _ *config.DocumentConfig) {
-			pub.Pages[4].Filename, pub.Pages[4].SpanID = "cover.xhtml", ""
+			pub.Pages[3].Filename, pub.Pages[3].SpanID = "Text/first.xhtml", ""
 		}},
 		{"position outside main flow", func(pub *publication.Publication, text *textLayout, _ *metadataLayout, _ *config.DocumentConfig) {
 			target := linkTarget{Filename: pub.Pages[0].Filename}
@@ -298,7 +299,7 @@ func TestAPNXRejectsInvalidInputs(t *testing.T) {
 			text.Positions[target] = position
 		}},
 		{"position past its own document", func(pub *publication.Publication, text *textLayout, _ *metadataLayout, _ *config.DocumentConfig) {
-			target := linkTarget{Filename: pub.Pages[3].Filename, ID: pub.Pages[3].SpanID}
+			target := linkTarget{Filename: pub.Pages[2].Filename, ID: pub.Pages[2].SpanID}
 			position := text.Positions[target]
 			next := text.Positions[linkTarget{Filename: "Notes/notes.xhtml"}]
 			top := text.Positions[linkTarget{Filename: target.Filename}]
@@ -321,7 +322,7 @@ func TestAPNXRejectsInvalidInputs(t *testing.T) {
 			meta.ASIN = "b012345678"
 		}},
 		{"inconsistent ASIN", func(_ *publication.Publication, _ *textLayout, meta *metadataLayout, _ *config.DocumentConfig) {
-			meta.ASIN = "B012345678"
+			meta.ASIN = "B987654321"
 		}},
 		{"duplicate EXTH identity", func(_ *publication.Publication, _ *textLayout, meta *metadataLayout, _ *config.DocumentConfig) {
 			meta.EXTH = append(meta.EXTH, exthRecord{ID: 113, Data: []byte(meta.ASIN)})
@@ -458,16 +459,68 @@ func assertAPNXBookIdentity(t *testing.T, data []byte, book *bookLayout) {
 		fields[id] = append(fields[id], string(header[at+8:at+size]))
 		at += size
 	}
+	local := len(fields[113]) == 0 && len(fields[504]) == 0 && len(fields[501]) == 0
+	if local && (decoded.Content["asin"] != "" || decoded.Pages["asin"] != "" || decoded.Content["cdeType"] != "EBOK") {
+		t.Fatal("local APNX must use an empty catalog identifier and the default EBOK reader type")
+	}
 	for _, field := range []struct {
 		id   uint32
 		want string
 	}{{113, decoded.Content["asin"]}, {504, decoded.Pages["asin"]}, {501, decoded.Content["cdeType"]}} {
-		if len(fields[field.id]) != 1 || fields[field.id][0] != field.want {
+		if !local && (len(fields[field.id]) != 1 || fields[field.id][0] != field.want) {
 			t.Fatalf("APNX identity does not match raw book EXTH %d", field.id)
 		}
 	}
 	if decoded.Content["asin"] != decoded.Pages["asin"] {
 		t.Fatal("APNX content/page header identifiers disagree")
+	}
+}
+
+func TestAPNXLocalBookIdentity(t *testing.T) {
+	c, cfg := metadataTestContent()
+	pub := textTestPublication(t)
+	pub.Pages = []content.PageMapEntry{{PageNum: 2, Filename: "Text/first.xhtml", SpanID: "first"}}
+	text, err := compileText(t.Context(), pub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata, err := compileMetadata(t.Context(), c, cfg, pub, text, nil, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []uint32{113, 501, 504} {
+		if len(metadataValues(metadata, id)) != 0 {
+			t.Fatalf("local book acquired catalog metadata EXTH %d", id)
+		}
+	}
+	cfg.PageMap.Enable = true
+	for _, mode := range []string{"app", "eink"} {
+		t.Run(mode, func(t *testing.T) {
+			cfg.AZW3.APNX = mode
+			apnx, err := compileAPNX(t.Context(), "local.azw3", pub, text, metadata, cfg, zap.NewNop())
+			if err != nil || apnx == nil {
+				t.Fatal("local metadata prevented APNX generation", err)
+			}
+			book, err := compileBook(t.Context(), text, nil, metadata, "standard")
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertAPNXBookIdentity(t, apnx.Data, book)
+			decoded := parseAPNX(t, apnx.Data)
+			if decoded.Pages["pageMap"] != "(1,a,2)" ||
+				decoded.Offsets[0] != text.Positions[linkTarget{Filename: "Text/first.xhtml", ID: "first"}].Position {
+				t.Fatal("local APNX changed page labels or frozen text coordinates")
+			}
+		})
+	}
+	for _, id := range []uint32{113, 501, 504} {
+		t.Run(fmt.Sprintf("unexpected-EXTH-%d", id), func(t *testing.T) {
+			invalid := *metadata
+			invalid.EXTH = append(slices.Clone(metadata.EXTH), exthRecord{ID: id})
+			if _, err := apnxBookIdentity(&invalid); err == nil {
+				t.Fatal("local APNX accepted an unexpected catalog identity record")
+			}
+		})
 	}
 }
 
@@ -483,8 +536,17 @@ func TestAPNXEmptyPageMarker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(text.Documents[0].Data, []byte(`<span id="page-é" class="page-marker"></span>`)) || len(marker.Child) != 0 {
+	compiledDoc := etree.NewDocument()
+	if err := compiledDoc.ReadFromBytes(text.Documents[0].Data); err != nil {
+		t.Fatal(err)
+	}
+	compiledMarker := compiledDoc.FindElement("//span[@id='page-é']")
+	if compiledMarker == nil || compiledMarker.SelectAttrValue("class", "") != "page-marker" ||
+		compiledMarker.SelectAttrValue("aid", "") == "" || len(marker.Child) != 0 {
 		t.Fatal("native page-marker lowering failed or changed the shared source")
+	}
+	if !bytes.Contains(text.Documents[0].Data, []byte(`></span>`)) {
+		t.Fatal("native page marker lost its explicit end tag")
 	}
 	metadata, err := compileMetadata(context.Background(), c, cfg, pub, text, nil, zap.NewNop())
 	if err != nil {

@@ -61,7 +61,7 @@ Example:
 # Output format override.
 # output_format: epub3
 
-# Mark Kindle output as ebook/EBOK instead of PDOC.
+# Explicitly mark Kindle output as ebook/EBOK.
 # ebook: false
 ```
 

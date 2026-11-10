@@ -11,7 +11,6 @@ import (
 	"math"
 	"net/url"
 	"path"
-	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -51,6 +50,15 @@ func resolveMainPosition(text *textLayout, target linkTarget) (textPosition, err
 type textDocument struct {
 	Filename string
 	Data     []byte
+	Changes  []markupChange
+}
+
+type markupChange struct {
+	Tag      string `json:"tag"`
+	ID       string `json:"id,omitempty"`
+	Classes  string `json:"classes,omitempty"`
+	Action   string `json:"action"`
+	Selector string `json:"selector,omitempty"`
 }
 
 // textLayout is one compilation pass, not a complete ebook. It allocates resources
@@ -81,6 +89,7 @@ type pendingDocument struct {
 	Data     []byte
 	Scan     documentScan
 	Fixups   []linkFixup
+	Changes  []markupChange
 }
 
 type documentScan struct {
@@ -111,6 +120,7 @@ func compileText(ctx context.Context, pub *publication.Publication) (*textLayout
 	if err != nil {
 		return nil, fmt.Errorf("lower KF8 stylesheet resources: %w", err)
 	}
+	pagination := compilePagination(pub.Stylesheet.Data)
 	var documents []pendingDocument
 	files := make(map[string]bool)
 	for chapter := range pub.Documents() {
@@ -138,10 +148,11 @@ func compileText(ctx context.Context, pub *publication.Publication) (*textLayout
 		References: resources.References,
 	}
 	cssNeeded := len(stylesheet) > 0 || len(resources.Flows) > 0
+	nextAID := uint32(len(documents)) // Reserve the existing body/fragment selector IDs.
 	var textLength uint64
 	for i := range documents {
 		doc := &documents[i]
-		needed, err := prepareTextDocument(ctx, doc, uint32(i), files, resources)
+		needed, err := prepareTextDocument(ctx, doc, uint32(i), files, resources, pagination, &nextAID)
 		if err != nil {
 			return nil, fmt.Errorf("prepare %s: %w", doc.Filename, err)
 		}
@@ -205,7 +216,7 @@ func compileText(ctx context.Context, pub *publication.Publication) (*textLayout
 		skeleton = append(skeleton, final[check.BodyEnd:]...)
 		result.Raw = append(result.Raw, skeleton...)
 		result.Raw = append(result.Raw, body...)
-		result.Documents = append(result.Documents, textDocument{Filename: doc.Filename, Data: final})
+		result.Documents = append(result.Documents, textDocument{Filename: doc.Filename, Data: final, Changes: doc.Changes})
 		skeletonEntries = append(skeletonEntries, indexEntry{
 			Key: fmt.Sprintf("SKEL%010d", i), Values: map[byte][]uint32{1: {1}, 6: {start, uint32(len(skeleton))}},
 		})
@@ -269,6 +280,8 @@ func prepareTextDocument(
 	fid uint32,
 	files map[string]bool,
 	resources *resourceLayout,
+	pagination *paginationPlan,
+	nextAID *uint32,
 ) (bool, error) {
 	root := doc.Doc.Root()
 	if root == nil || root.Tag != "html" {
@@ -278,10 +291,12 @@ func prepareTextDocument(
 	if len(bodies) != 1 {
 		return false, errors.New("expected one XHTML body")
 	}
+	if err := pagination.apply(ctx, doc); err != nil {
+		return false, err
+	}
 	body := bodies[0]
-	body.CreateAttr("aid", base32(fid, 4))
-	if len(body.Child) == 0 {
-		body.CreateText("") // Force an explicit end tag for an empty fragment.
+	if err := assignTextAnchors(ctx, doc, body, fid, nextAID); err != nil {
+		return false, err
 	}
 	cssNeeded := false
 	stack := []*etree.Element{root}
@@ -292,11 +307,17 @@ func prepareTextDocument(
 		elem := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 		stack = append(stack, elem.ChildElements()...)
-		if elem.Tag == "span" && len(elem.Child) == 0 && slices.Contains(strings.Fields(elem.SelectAttrValue("class", "")), "page-marker") {
-			// A span is not an HTML void element. Keep page anchors explicitly
-			// closed before freezing byte positions, so readers and APNX mapping
-			// cannot treat a self-closing marker as the preceding named anchor.
+		if namespace := elem.NamespaceURI(); len(elem.Child) == 0 && !htmlVoidElement(elem.Tag) &&
+			(namespace == "" || namespace == "http://www.w3.org/1999/xhtml") {
+			// KF8 consumes HTML, not EPUB's XML element-closing semantics. A
+			// self-closing div/a/span can swallow all following content in a reader.
+			// Expand every non-void HTML element before byte coordinates freeze.
+			// SVG/MathML keep their own XML serialization rules.
 			elem.CreateText("")
+			doc.Changes = append(doc.Changes, markupChange{
+				Tag: elem.Tag, ID: elem.SelectAttrValue("id", ""), Classes: elem.SelectAttrValue("class", ""),
+				Action: "expanded non-void HTML element",
+			})
 		}
 		if elem.Tag == "img" || elem.Tag == "image" {
 			src := elem.SelectAttr("src")
@@ -368,6 +389,15 @@ func prepareTextDocument(
 		}
 	}
 	return cssNeeded, nil
+}
+
+func htmlVoidElement(tag string) bool {
+	switch strings.ToLower(tag) {
+	case "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr":
+		return true
+	default:
+		return false
+	}
 }
 
 func resolveTextTarget(filename, href string) (linkTarget, bool, error) {

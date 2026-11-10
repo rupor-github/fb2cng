@@ -16,6 +16,7 @@ import (
 	"github.com/beevik/etree"
 	"github.com/disintegration/imaging"
 	"go.uber.org/zap"
+	"golang.org/x/text/encoding/charmap"
 
 	"fbc/common"
 	"fbc/config"
@@ -60,8 +61,9 @@ func compileMetadata(
 		return nil, fmt.Errorf("invalid Kindle ASIN override: %w", err)
 	}
 	digest := sha256.Sum256([]byte(c.Book.Description.DocumentInfo.ID))
-	if asin == "" {
-		// Match current Kindle output's deterministic, 32-character content ID.
+	catalogIdentity := asin != "" || c.KindleEbook
+	if asin == "" && catalogIdentity {
+		// Explicit EBOK output still needs a deterministic content identifier.
 		const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 		var generated [sha256.Size]byte
 		for i, value := range digest {
@@ -89,10 +91,18 @@ func compileMetadata(
 	result := &metadataLayout{
 		Title: title, Database: databaseName(title), UID: binary.BigEndian.Uint32(digest[:4]),
 		Language: mobiLanguage(c.Book.Description.TitleInfo.Lang), ASIN: asin,
-		ContentType: "PDOC", Resources: slices.Clone(text.Resources),
+		Resources: slices.Clone(text.Resources),
 	}
-	if c.KindleEbook {
-		result.ContentType = "EBOK"
+	if catalogIdentity {
+		result.ContentType = "PDOC"
+		if c.KindleEbook {
+			result.ContentType = "EBOK"
+		}
+	} else {
+		// Like local KindleGen output, leave catalog ASIN/type fields absent.
+		// Synthetic catalog metadata makes Voyage ignore the embedded library
+		// thumbnail. UID/RESC retain the book identity; local APNX uses no ASIN.
+		log.Debug("Using local AZW3 metadata without catalog identifiers")
 	}
 	var textErr error
 	addText := func(id uint32, value string) {
@@ -156,7 +166,15 @@ func compileMetadata(
 	for _, reference := range text.References {
 		result.HasFonts = result.HasFonts || reference.Kind == resourceFont
 	}
-	resc, err := encodeMetadataResource(c.Book.Description.DocumentInfo.ID, translators, c.Book.Description.TitleInfo.Sequences, pub, text)
+	virtualCover := pub.CoverID != ""
+	for document := range pub.Documents() {
+		if document.Filename == "cover.xhtml" {
+			virtualCover = false // The retained SVG fallback has a real cover skeleton.
+		}
+	}
+	resc, err := encodeMetadataResource(
+		c.Book.Description.DocumentInfo.ID, translators, c.Book.Description.TitleInfo.Sequences, text, virtualCover,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -212,26 +230,66 @@ func coverThumbnail(data []byte) ([]byte, error) {
 	return imgutil.EncodeJPEGWithDPI(thumbnail, 75, imgutil.DpiPxPerInch, 300, 300)
 }
 
-// PalmDB's database name is an ASCII reader identifier (also used by APNX), not
-// the Unicode display title. Keep the same restricted alphabet as the old splitter.
+// databaseName reproduces KindleGen's single-byte PalmDB identifier, not the
+// Unicode display title. Keep its Unicode representation for JSON/APNX; the
+// PalmDB writer encodes the field as Windows-1252.
 func databaseName(title string) string {
-	const allowed = "- ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+	// KindleGen de-accents these Latin-1 values, retains some single-byte
+	// letters and drops multiplication/division signs. It does not normalize
+	// combining sequences or transliterate scripts above the single-byte range.
+	const accents = "AAAAAA\xc6CEEEEIIII\xd0NOOOOO\x00\xd8UUUUY\xde\xdf" +
+		"aaaaaa\xe6ceeeeiiii\xf0nooooo\x00\xf8uuuuy\xfey"
+	var encoded []byte
+	for _, char := range strings.Trim(title, " \t\r\n\v\f\u00a0") {
+		value := uint16(char) // KindleGen narrows even supplementary code points.
+		var next byte
+		switch {
+		case value == 0x100:
+			next = 'A' // Measured KindleGen exception at the single-byte boundary.
+		case value > 0xff:
+			next = 'A' + byte(value%26)
+		case value >= 'a' && value <= 'z', value >= 'A' && value <= 'Z', value >= '0' && value <= '9',
+			value == '-', value == '_', value == '.':
+			next = byte(value)
+		case value == ' ':
+			next = '_'
+		case value >= 0xc0:
+			next = accents[value-0xc0]
+		case value == 0x83, value == 0x8c, value == 0x9c:
+			next = byte(value)
+		case value == 0x8a:
+			next = 'S'
+		case value == 0x8e:
+			next = 'Z'
+		case value == 0x9a:
+			next = 's'
+		case value == 0x9e:
+			next = 'z'
+		case value == 0x9f:
+			next = 'Y'
+		case value == 0xaa:
+			next = 'a'
+		case value == 0xb5:
+			next = 0xbc
+		case value == 0xba:
+			next = 'o'
+		}
+		if next != 0 {
+			encoded = append(encoded, next)
+		}
+	}
+	if len(encoded) > 27 {
+		encoded = append(append(bytes.Clone(encoded[:12]), '-'), encoded[len(encoded)-14:]...)
+	}
 	var result strings.Builder
-	for _, char := range title {
-		if result.Len() == 31 {
-			break
-		}
-		if strings.ContainsRune(allowed, char) {
-			result.WriteRune(char)
-		} else {
-			result.WriteByte('_')
-		}
+	for _, value := range encoded {
+		result.WriteRune(charmap.Windows1252.DecodeByte(value))
 	}
 	return result.String()
 }
 
 func encodeMetadataResource(
-	bookID string, translators []string, sequences []fb2.Sequence, pub *publication.Publication, text *textLayout,
+	bookID string, translators []string, sequences []fb2.Sequence, text *textLayout, virtualCover bool,
 ) ([]byte, error) {
 	doc := etree.NewDocument()
 	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
@@ -253,24 +311,18 @@ func encodeMetadataResource(
 		role.SetText("trl")
 	}
 	metainfo.AddSequences(meta, sequences)
-	coverFile := ""
-	for _, landmark := range pub.Landmarks {
-		if landmark.Kind == "cover" {
-			target, _, err := resolveTextTarget("nav.xhtml", landmark.Href)
-			if err != nil {
-				return nil, err
-			}
-			coverFile = target.Filename
-		}
-	}
 	spine := pkg.CreateElement("spine")
-	for i, document := range text.Documents {
+	if virtualCover {
+		// Like KindleGen's suppressed source cover, this entry has no skelid.
+		// EXTH cover/thumbnail offsets supply its image outside the main flow.
+		item := spine.CreateElement("itemref")
+		item.CreateAttr("idref", "fbc-cover")
+		item.CreateAttr("linear", "no")
+	}
+	for i := range text.Documents {
 		item := spine.CreateElement("itemref")
 		item.CreateAttr("idref", fmt.Sprintf("fbc-part-%d", i))
 		item.CreateAttr("skelid", fmt.Sprint(i))
-		if document.Filename == coverFile {
-			item.CreateAttr("linear", "no")
-		}
 	}
 	xml, err := doc.WriteToBytes()
 	if err != nil {
