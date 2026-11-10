@@ -172,7 +172,7 @@ func TestNativeSVGBrokenSourceRetention(t *testing.T) {
 				name := fmt.Sprintf("publication-broken-svg-force-%t", force)
 				data := assembleTextProbe(t, compiled, nil, nil, "standard")
 				writeProbeArtifacts(t, map[string][]byte{name + ".azw3": data})
-				work := unpackProbe(t, name, data)
+				work := unpackProbe(t, name, data, nil)
 				filename := filepath.Join(work, "unpacked", "mobi8", "OEBPS", "Images", fmt.Sprintf("svgimg%04d.svg", ref.Number))
 				got, err := os.ReadFile(filename)
 				if err != nil || !bytes.Equal(got, broken) {
@@ -229,7 +229,7 @@ func TestNativeSVGKindleUnpack(t *testing.T) {
 	}
 	data := assembleTextProbe(t, compiled, nil, nil, "standard")
 	writeProbeArtifacts(t, map[string][]byte{"publication-native-svg.azw3": data})
-	work := unpackProbe(t, "publication-native-svg", data)
+	work := unpackProbe(t, "publication-native-svg", data, nil)
 	base := filepath.Join(work, "unpacked", "mobi8", "OEBPS")
 	for number, want := range map[int][]byte{2: pub.Images["a"].Data, 3: pub.Stylesheet.Resources[0].Data} {
 		got, err := os.ReadFile(filepath.Join(base, "Images", fmt.Sprintf("svgimg%04d.svg", number)))
@@ -272,7 +272,7 @@ func TestNativeSVGEmbeddedImageKindleUnpack(t *testing.T) {
 	}
 	data := assembleTextProbe(t, compiled, nil, nil, "standard")
 	writeProbeArtifacts(t, map[string][]byte{"publication-svg-embedded-image.azw3": data})
-	work := unpackProbe(t, "publication-svg-embedded-image", data)
+	work := unpackProbe(t, "publication-svg-embedded-image", data, nil)
 	base := filepath.Join(work, "unpacked", "mobi8", "OEBPS")
 	xhtml, err := os.ReadFile(filepath.Join(base, "Text", "part0000.xhtml"))
 	if err != nil {

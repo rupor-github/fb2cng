@@ -103,6 +103,10 @@ document:
     # Reserved for native AZW3 output, which is not yet available on the CLI.
     # none: uncompressed; standard: PalmDOC (default); huffdic: HUFF/CDIC.
     compression: standard
+    # Optional APNX page-map sidecar. Config-file only; no command-line override.
+    # none: no sidecar (default); eink: <book>.sdr/<book>.apnx; app: <book>.apnx.
+    # Requires page_map.enable below. Pages remain approximate, not print-edition pages.
+    apnx: none
 
   pdf:
     # Optional nearly-white outline to discourage automatic margin cropping.

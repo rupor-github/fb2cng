@@ -126,6 +126,7 @@ type (
 
 	AZW3Config struct {
 		Compression string `yaml:"compression" validate:"oneof=none standard huffdic"`
+		APNX        string `yaml:"apnx" validate:"oneof=none eink app"`
 		// CompressionSource records invocation precedence for logs/reports, not YAML.
 		CompressionSource string `yaml:"-"`
 	}

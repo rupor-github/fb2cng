@@ -48,3 +48,44 @@ func TestAZW3CompressionConfiguration(t *testing.T) {
 		})
 	}
 }
+
+func TestAZW3APNXConfiguration(t *testing.T) {
+	for _, tt := range []struct {
+		name, yaml, want string
+		invalid          bool
+	}{
+		{"default", "document: {}", "none", false},
+		{"none", "document:\n  azw3:\n    apnx: none", "none", false},
+		{"eink", "document:\n  azw3:\n    apnx: eink", "eink", false},
+		{"app", "document:\n  azw3:\n    apnx: app", "app", false},
+		{"page map disabled", "document:\n  azw3:\n    apnx: eink\n  page_map:\n    enable: false", "eink", false},
+		{"invalid", "document:\n  azw3:\n    apnx: auto", "", true},
+		{"empty", "document:\n  azw3:\n    apnx: ''", "", true},
+		{"case-sensitive", "document:\n  azw3:\n    apnx: EInk", "", true},
+		{"not a CLI source setting", "document:\n  azw3:\n    apnx_source: cli", "", true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(path, []byte(tt.yaml+"\n"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := LoadConfiguration(path)
+			if tt.invalid {
+				if err == nil {
+					t.Fatal("invalid APNX configuration was accepted")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Document.AZW3.APNX != tt.want || cfg.Document.AZW3.Compression != "standard" {
+				t.Fatal("APNX configuration changed its mode or the compression default")
+			}
+			data, err := Dump(cfg)
+			if err != nil || !strings.Contains(string(data), "apnx: "+tt.want) {
+				t.Fatal("APNX configuration was not retained in YAML", err)
+			}
+		})
+	}
+}

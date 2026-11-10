@@ -79,7 +79,7 @@ func TestFB2PublicationText(t *testing.T) {
 							artifact := name + "-" + compression
 							writeProbeArtifacts(t, map[string][]byte{artifact + ".azw3": data, artifact + ".json": summary})
 							if os.Getenv("AZW3_KINDLEUNPACK_TEST") == "1" {
-								work := unpackProbe(t, artifact, data)
+								work := unpackProbe(t, artifact, data, nil)
 								assertUnpackedText(t, work, pub, compiled)
 								assertUnpackedNavigation(t, work, pub, compiled, shape)
 							}

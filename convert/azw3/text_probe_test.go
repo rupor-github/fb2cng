@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -58,7 +59,7 @@ func TestPublicationTextKindleUnpack(t *testing.T) {
 	}
 	data := assembleTextProbe(t, compiled, nil, nil, "standard")
 	writeProbeArtifacts(t, map[string][]byte{"publication-text.azw3": data})
-	work := unpackProbe(t, "publication-text", data)
+	work := unpackProbe(t, "publication-text", data, nil)
 	assertUnpackedText(t, work, pub, compiled)
 }
 
@@ -70,7 +71,7 @@ func TestPublicationResourcesKindleUnpack(t *testing.T) {
 	}
 	data := assembleTextProbe(t, compiled, nil, nil, "standard")
 	writeProbeArtifacts(t, map[string][]byte{"publication-resources.azw3": data})
-	work := unpackProbe(t, "publication-resources", data)
+	work := unpackProbe(t, "publication-resources", data, nil)
 
 	wantPayloads := [][]byte{font, pub.Images["a"].Data, pub.Stylesheet.Resources[0].Data}
 	found := make([]bool, len(wantPayloads))
@@ -141,7 +142,7 @@ func TestPublicationImageFallbackKindleUnpack(t *testing.T) {
 	}
 	data := assembleTextProbe(t, compiled, nil, nil, "standard")
 	writeProbeArtifacts(t, map[string][]byte{"publication-image-fallback.azw3": data})
-	work := unpackProbe(t, "publication-image-fallback", data)
+	work := unpackProbe(t, "publication-image-fallback", data, nil)
 	base := filepath.Join(work, "unpacked", "mobi8", "OEBPS")
 	xhtml, err := os.ReadFile(filepath.Join(base, "Text", "part0000.xhtml"))
 	if err != nil {
@@ -204,6 +205,11 @@ func assertUnpackedText(t *testing.T, work string, pub *publication.Publication,
 		// adapter's resource paths, IDs it adds, and equivalent top-of-file links.
 		original := source.Doc.Copy()
 		original.FindElement("//body").RemoveAttr("aid")
+		for _, marker := range original.FindElements("//span") {
+			if len(marker.Child) == 0 && slices.Contains(strings.Fields(marker.SelectAttrValue("class", "")), "page-marker") {
+				marker.CreateText("") // Native KF8 lowers non-void page markers to explicit end tags.
+			}
+		}
 		sourceLinks := original.FindElements("//a[@href]")
 		rebuiltLinks := rebuilt.FindElements("//a[@href]")
 		if len(sourceLinks) != len(rebuiltLinks) {

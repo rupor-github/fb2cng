@@ -205,7 +205,7 @@ func TestNavigationKindleUnpack(t *testing.T) {
 			name := "publication-navigation-" + shape.String()
 			data := assembleTextProbe(t, text, navigation, nil, "standard")
 			writeProbeArtifacts(t, map[string][]byte{name + ".azw3": data})
-			work := unpackProbe(t, name, data)
+			work := unpackProbe(t, name, data, nil)
 			assertUnpackedNavigation(t, work, pub, text, shape)
 		})
 	}
@@ -229,7 +229,7 @@ func TestGuideOnlyKindleUnpack(t *testing.T) {
 			name := fmt.Sprintf("publication-guide-only-%t", enabled)
 			data := assembleTextProbe(t, text, navigation, nil, "standard")
 			writeProbeArtifacts(t, map[string][]byte{name + ".azw3": data})
-			work := unpackProbe(t, name, data)
+			work := unpackProbe(t, name, data, nil)
 			assertUnpackedNavigation(t, work, pub, text, common.TOCTypeNormal)
 		})
 	}
@@ -334,7 +334,7 @@ func TestNavigationLargeLabelPools(t *testing.T) {
 	if os.Getenv("AZW3_KINDLEUNPACK_TEST") == "1" {
 		data := assembleTextProbe(t, text, navigation, nil, "standard")
 		writeProbeArtifacts(t, map[string][]byte{"publication-large-navigation.azw3": data})
-		work := unpackProbe(t, "publication-large-navigation", data)
+		work := unpackProbe(t, "publication-large-navigation", data, nil)
 		assertUnpackedNavigation(t, work, pub, text, common.TOCTypeFlat)
 	}
 }

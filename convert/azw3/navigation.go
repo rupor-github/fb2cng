@@ -63,16 +63,7 @@ func compileNavigation(
 		if !local {
 			return textPosition{}, fmt.Errorf("navigation destination %q is not local", href)
 		}
-		position, found := text.Positions[target]
-		if !found || position.Position >= text.MainLength || uint64(position.FID) >= uint64(len(text.Documents)) {
-			return textPosition{}, fmt.Errorf("navigation destination %q has no frozen main-text position", href)
-		}
-		top, found := text.Positions[linkTarget{Filename: text.Documents[position.FID].Filename}]
-		if !found || top.FID != position.FID || top.Offset != 0 ||
-			uint64(top.Position)+uint64(position.Offset) != uint64(position.Position) {
-			return textPosition{}, fmt.Errorf("navigation destination %q has inconsistent fragment coordinates", href)
-		}
-		return position, nil
+		return resolveMainPosition(text, target)
 	}
 
 	roots := tocnav.Shape(pub.Navigation, tocType)

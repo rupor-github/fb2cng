@@ -84,7 +84,7 @@ func buildStructuralProbe(t *testing.T) ([]byte, []byte) {
 
 func TestStandaloneKindleUnpack(t *testing.T) {
 	data, expected := buildStructuralProbe(t)
-	work := unpackProbe(t, "structural", data)
+	work := unpackProbe(t, "structural", data, nil)
 	for _, name := range []string{"structural.rawml", "OEBPS/Text/part0000.xhtml"} {
 		got, err := os.ReadFile(filepath.Join(work, "unpacked", "mobi8", filepath.FromSlash(name)))
 		if err != nil {
@@ -96,7 +96,7 @@ func TestStandaloneKindleUnpack(t *testing.T) {
 	}
 }
 
-func unpackProbe(t *testing.T, name string, data []byte) string {
+func unpackProbe(t *testing.T, name string, data, apnx []byte) string {
 	t.Helper()
 	if os.Getenv("AZW3_KINDLEUNPACK_TEST") != "1" {
 		t.Skip("set AZW3_KINDLEUNPACK_TEST=1 to run the independent decoder")
@@ -112,7 +112,16 @@ func unpackProbe(t *testing.T, name string, data []byte) string {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	command := exec.CommandContext(ctx, wrapper, "-r", "-d", "--epub_version=A", input, filepath.Join(work, "unpacked"))
+	args := []string{"-r", "-d", "--epub_version=A"}
+	if len(apnx) > 0 {
+		sidecar := filepath.Join(work, name+".apnx")
+		if err := os.WriteFile(sidecar, apnx, 0644); err != nil {
+			t.Fatal(err)
+		}
+		args = append(args, "-p", sidecar)
+	}
+	args = append(args, input, filepath.Join(work, "unpacked"))
+	command := exec.CommandContext(ctx, wrapper, args...)
 	command.Dir = work
 	output, err := command.CombinedOutput()
 	writeProbeArtifacts(t, map[string][]byte{name + "-kindleunpack.log": output})

@@ -18,13 +18,8 @@ func writePalmDB(ctx context.Context, w io.Writer, name string, created time.Tim
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if len(name) == 0 || len(name) > 31 {
-		return errors.New("PalmDB name must contain 1 to 31 ASCII bytes")
-	}
-	for _, ch := range []byte(name) {
-		if ch < 0x20 || ch > 0x7e {
-			return errors.New("PalmDB name must contain printable ASCII only")
-		}
+	if err := validatePalmDBName(name); err != nil {
+		return err
 	}
 	if len(records) == 0 || len(records) > math.MaxUint16 {
 		return errors.New("PalmDB requires 1 to 65535 records")
@@ -69,6 +64,18 @@ func writePalmDB(ctx context.Context, w io.Writer, name string, created time.Tim
 		}
 		if err := writeBytes(w, record); err != nil {
 			return fmt.Errorf("write PalmDB record %d: %w", i, err)
+		}
+	}
+	return nil
+}
+
+func validatePalmDBName(name string) error {
+	if len(name) == 0 || len(name) > 31 {
+		return errors.New("PalmDB name must contain 1 to 31 ASCII bytes")
+	}
+	for _, ch := range []byte(name) {
+		if ch < 0x20 || ch > 0x7e {
+			return errors.New("PalmDB name must contain printable ASCII only")
 		}
 	}
 	return nil

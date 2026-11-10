@@ -11,6 +11,7 @@ import (
 	"math"
 	"net/url"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -32,6 +33,19 @@ type textPosition struct {
 	FID      uint32
 	Offset   uint32
 	Position uint32
+}
+
+func resolveMainPosition(text *textLayout, target linkTarget) (textPosition, error) {
+	position, found := text.Positions[target]
+	if !found || position.Position >= text.MainLength || uint64(position.FID) >= uint64(len(text.Documents)) ||
+		text.Documents[position.FID].Filename != target.Filename {
+		return textPosition{}, fmt.Errorf("destination %s#%s has no frozen main-text position", target.Filename, target.ID)
+	}
+	top, found := text.Positions[linkTarget{Filename: target.Filename}]
+	if !found || top.FID != position.FID || top.Offset != 0 || uint64(top.Position)+uint64(position.Offset) != uint64(position.Position) {
+		return textPosition{}, fmt.Errorf("destination %s#%s has inconsistent fragment coordinates", target.Filename, target.ID)
+	}
+	return position, nil
 }
 
 type textDocument struct {
@@ -278,6 +292,12 @@ func prepareTextDocument(
 		elem := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 		stack = append(stack, elem.ChildElements()...)
+		if elem.Tag == "span" && len(elem.Child) == 0 && slices.Contains(strings.Fields(elem.SelectAttrValue("class", "")), "page-marker") {
+			// A span is not an HTML void element. Keep page anchors explicitly
+			// closed before freezing byte positions, so readers and APNX mapping
+			// cannot treat a self-closing marker as the preceding named anchor.
+			elem.CreateText("")
+		}
 		if elem.Tag == "img" || elem.Tag == "image" {
 			src := elem.SelectAttr("src")
 			if elem.Tag == "image" {

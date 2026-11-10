@@ -367,7 +367,7 @@ func TestMetadataKindleUnpack(t *testing.T) {
 			data := assembleTextProbe(t, text, navigation, metadata, "standard")
 			name := fmt.Sprintf("publication-metadata-ebook-%t", ebook)
 			writeProbeArtifacts(t, map[string][]byte{name + ".azw3": data})
-			work := unpackProbe(t, name, data)
+			work := unpackProbe(t, name, data, nil)
 			base := filepath.Join(work, "unpacked", "mobi8", "OEBPS")
 			files, err := filepath.Glob(filepath.Join(base, "*.opf"))
 			if err != nil || len(files) != 1 {
@@ -431,6 +431,6 @@ func TestMetadataCoverlessKindleUnpack(t *testing.T) {
 	}
 	data := assembleTextProbe(t, text, nil, metadata, "standard")
 	writeProbeArtifacts(t, map[string][]byte{"publication-metadata-coverless.azw3": data})
-	work := unpackProbe(t, "publication-metadata-coverless", data)
+	work := unpackProbe(t, "publication-metadata-coverless", data, nil)
 	assertUnpackedText(t, work, pub, text)
 }

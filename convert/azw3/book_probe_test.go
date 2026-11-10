@@ -47,6 +47,7 @@ func TestCompleteFB2Book(t *testing.T) {
 			cfg.Document.TOCPage.Placement = tt.placement
 			cfg.Document.Annotation.Enable, cfg.Document.Annotation.InTOC = true, true
 			cfg.Document.PageMap.Enable, cfg.Document.PageMap.Size = true, 500
+			cfg.Document.AZW3.APNX = "app"
 			cfg.Document.Images.Cover.Resize = common.ImageResizeModeKeepAR
 			ctx := state.ContextWithEnv(context.Background())
 			env := state.EnvFromContext(ctx)
@@ -86,6 +87,7 @@ func TestCompleteFB2Book(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			var expectedAPNX []byte
 			for _, compression := range []string{"none", "standard", "huffdic"} {
 				t.Run(compression, func(t *testing.T) {
 					cfg.Document.AZW3.Compression = compression
@@ -105,6 +107,16 @@ func TestCompleteFB2Book(t *testing.T) {
 						t.Fatal(err)
 					}
 					name := "assembled-fb2-" + tt.mode.String() + "-" + compression
+					apnx, err := compileAPNX(ctx, filepath.Join(c.WorkDir, name+".azw3"), pub, text, metadata, &cfg.Document, env.Log)
+					if err != nil || apnx == nil {
+						t.Fatalf("prepare APNX: %v", err)
+					}
+					assertAPNXBookIdentity(t, apnx.Data, book)
+					if expectedAPNX == nil {
+						expectedAPNX = bytes.Clone(apnx.Data)
+					} else if !bytes.Equal(expectedAPNX, apnx.Data) {
+						t.Error("APNX bytes changed with text compression")
+					}
 					chunks, err := splitText(text.Raw)
 					if err != nil {
 						t.Fatal(err)
@@ -125,13 +137,14 @@ func TestCompleteFB2Book(t *testing.T) {
 					summary := fmt.Sprintf("mode=%s\nmain_bytes=%d\nall_flow_bytes=%d\nencoded_bytes=%d\ndictionary_bytes=%d\nrecords=%d\npages=%d\n",
 						compression, text.MainLength, len(text.Raw), compressed, dictionaryBytes, len(book.Records), len(pub.Pages))
 					writeProbeArtifacts(t, map[string][]byte{
-						name + ".azw3": output.Bytes(), name + ".txt": []byte(summary), name + ".rawml": text.Raw,
+						name + ".azw3": output.Bytes(), name + ".txt": []byte(summary), name + ".rawml": text.Raw, name + ".apnx": apnx.Data,
 					})
 					t.Log(strings.TrimSpace(summary))
 					if os.Getenv("AZW3_KINDLEUNPACK_TEST") == "1" {
-						work := unpackProbe(t, name, output.Bytes())
+						work := unpackProbe(t, name, output.Bytes(), apnx.Data)
 						assertUnpackedRaw(t, work, text.Raw)
 						assertUnpackedNavigation(t, work, pub, text, tt.shape)
+						assertUnpackedPages(t, work, pub, text)
 					}
 				})
 			}

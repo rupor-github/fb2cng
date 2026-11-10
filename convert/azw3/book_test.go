@@ -82,7 +82,7 @@ func TestCompileBook(t *testing.T) {
 					artifact := "assembled-" + strings.ReplaceAll(name, " ", "-") + "-" + book.Compression
 					writeProbeArtifacts(t, map[string][]byte{artifact + ".azw3": output.Bytes()})
 					if os.Getenv("AZW3_KINDLEUNPACK_TEST") == "1" {
-						work := unpackProbe(t, artifact, output.Bytes())
+						work := unpackProbe(t, artifact, output.Bytes(), nil)
 						assertUnpackedRaw(t, work, text.Raw)
 						assertUnpackedNavigation(t, work, pub, text, common.TOCTypeNormal)
 					}
