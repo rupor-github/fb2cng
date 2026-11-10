@@ -10,9 +10,10 @@ import (
 
 type DpiType uint8
 
-const (
-	defaultJPEGDPI = 300
+const defaultJPEGDPI = 300
 
+// JFIF density unit values, written directly into the APP0 segment.
+const (
 	DpiNoUnits DpiType = iota
 	DpiPxPerInch
 	DpiPxPerSm

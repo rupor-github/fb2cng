@@ -796,7 +796,7 @@ func TestBinaryObject_EncodeImageUsesConfiguredDPI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("encodeImage() error = %v", err)
 	}
-	if len(out) < 18 || out[13] != byte(imgutil.DpiPxPerInch) {
+	if len(out) < 18 || out[13] != 1 { // JFIF unit 1 means pixels per inch.
 		t.Fatalf("encoded JPEG missing JFIF DPI marker")
 	}
 	if got := binary.BigEndian.Uint16(out[14:16]); got != 144 {

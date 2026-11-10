@@ -209,11 +209,7 @@ func coverThumbnail(data []byte) ([]byte, error) {
 		return nil, err
 	}
 	thumbnail := imaging.Thumbnail(img, 330, 470, imaging.Lanczos)
-	// JFIF's wire unit is 1 for pixels/inch. The shared named constants currently
-	// have an unrelated preceding iota entry; do not propagate that enum offset
-	// into this format or change the output of other adapters in this checkpoint.
-	const jfifPixelsPerInch imgutil.DpiType = 1
-	return imgutil.EncodeJPEGWithDPI(thumbnail, 75, jfifPixelsPerInch, 300, 300)
+	return imgutil.EncodeJPEGWithDPI(thumbnail, 75, imgutil.DpiPxPerInch, 300, 300)
 }
 
 // PalmDB's database name is an ASCII reader identifier (also used by APNX), not

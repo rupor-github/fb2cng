@@ -2,6 +2,8 @@ package images
 
 import (
 	"bytes"
+	"image"
+	"image/jpeg"
 	"testing"
 )
 
@@ -40,6 +42,55 @@ func TestEnsureJFIFAPP0_AlreadyPresent(t *testing.T) {
 	}
 	if !bytes.Equal(out, data) {
 		t.Fatal("expected same bytes")
+	}
+}
+
+func TestJFIFDensityUnits(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		unit DpiType
+		wire byte
+	}{
+		{name: "unspecified", unit: DpiNoUnits, wire: 0},
+		{name: "pixels per inch", unit: DpiPxPerInch, wire: 1},
+		{name: "pixels per centimeter", unit: DpiPxPerSm, wire: 2},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			data := []byte{0xff, 0xd8, 0xff, 0xdb, 0x00, 0x04}
+			out, added, err := EnsureJFIFAPP0(data, tt.unit, 300, 144)
+			if err != nil || !added {
+				t.Fatalf("EnsureJFIFAPP0() added = %t, error = %v", added, err)
+			}
+			// Use the protocol's literal values, independently of the Go enum.
+			want := []byte{
+				0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00, 0x01, 0x02,
+				tt.wire, 0x01, 0x2c, 0x00, 0x90, 0x00, 0x00,
+			}
+			if !bytes.Equal(out[2:20], want) {
+				t.Errorf("JFIF segment = %x, want %x", out[2:20], want)
+			}
+			if !bytes.Equal(out[20:], data[2:]) {
+				t.Error("inserting JFIF metadata changed the original JPEG payload")
+			}
+		})
+	}
+}
+
+func TestEncodeJPEGWithDPI(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 10, 20))
+	out, err := EncodeJPEGWithDPI(img, 85, DpiPxPerInch, 300, 300)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(out[13:18], []byte{1, 0x01, 0x2c, 0x01, 0x2c}) {
+		t.Errorf("JFIF density = %x, want 300 pixels/inch on both axes", out[13:18])
+	}
+	decoded, err := jpeg.Decode(bytes.NewReader(out))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Bounds() != img.Bounds() {
+		t.Errorf("image bounds = %v, want %v", decoded.Bounds(), img.Bounds())
 	}
 }
 
