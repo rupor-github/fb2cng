@@ -22,6 +22,7 @@ Options are passed directly to KindleGen:
 Environment:
   KINDLEGEN_PATH   executable path or directory containing kindlegen
   BOOK_TESTS_PATH  tools directory; defaults to ../../../book-tests from repo root
+                  KindleGen defaults to fb2converter/kindlegen under this directory
 
 Exit status is preserved: 0 = success, 1 = warnings, 2 = compiler error.
 EOF
@@ -41,7 +42,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 PROJECTS_ROOT="$(cd -- "${PROJECT_ROOT}/../../.." && pwd)"
 BOOK_TESTS_ROOT="${BOOK_TESTS_PATH:-${PROJECTS_ROOT}/book-tests}"
-KINDLEGEN="${KINDLEGEN_PATH:-${BOOK_TESTS_ROOT}/kindlegen/kindlegen}"
+KINDLEGEN="${KINDLEGEN_PATH:-${BOOK_TESTS_ROOT}/fb2converter/kindlegen}"
 
 if [ -d "${KINDLEGEN}" ]; then
     KINDLEGEN="${KINDLEGEN}/kindlegen"
@@ -49,7 +50,7 @@ fi
 
 if [ ! -f "${KINDLEGEN}" ] || [ ! -x "${KINDLEGEN}" ]; then
     echo "KindleGen executable not found or not executable: ${KINDLEGEN}" >&2
-    echo "Place the Linux binary at ${BOOK_TESTS_ROOT}/kindlegen/kindlegen or set KINDLEGEN_PATH." >&2
+    echo "Place the Linux binary at ${BOOK_TESTS_ROOT}/fb2converter/kindlegen or set KINDLEGEN_PATH." >&2
     exit 1
 fi
 

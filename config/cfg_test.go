@@ -811,6 +811,8 @@ func TestUnmarshalConfig_WrapsValidationError(t *testing.T) {
 }
 
 func TestResolveArtifactTemplates(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
 	started := time.Date(2026, 6, 25, 14, 30, 12, 0, time.UTC)
 	cfg := &Config{
 		Logging: LoggingConfig{
@@ -844,9 +846,17 @@ func TestResolveArtifactTemplates(t *testing.T) {
 	if want := "reports/Test Book.convert.zip"; cfg.Reporting.Destination() != want {
 		t.Errorf("report destination = %q, want %q", cfg.Reporting.Destination(), want)
 	}
+	for _, name := range []string{"logs", "reports"} {
+		if info, err := os.Stat(filepath.Join(root, name)); err != nil {
+			t.Errorf("artifact directory %q was not created in the test temporary directory: %v", name, err)
+		} else if !info.IsDir() {
+			t.Errorf("artifact path %q is not a directory", name)
+		}
+	}
 }
 
 func TestResolveArtifactTemplates_DefaultsPanicDestination(t *testing.T) {
+	t.Chdir(t.TempDir())
 	cfg := &Config{
 		Logging: LoggingConfig{
 			FileLogger: LoggerConfig{DestinationTemplate: `{{ .AppName }}.log`},
