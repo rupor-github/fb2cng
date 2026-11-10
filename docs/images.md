@@ -137,9 +137,8 @@ supported SVG artwork into their native vector representation by default, with n
 
 AZW3 retains non-cover SVG by default, including SVG used by stylesheets. It does not use
 the PDF/KFX supported-feature subset described below, and it does **not** automatically
-rasterize artwork just because a feature falls outside that subset. Retaining SVG does not
-guarantee that a particular Kindle reader displays every feature correctly; device/app
-acceptance testing is still in progress.
+rasterize artwork just because a feature falls outside that subset. SVG feature support
+depends on the Kindle device or app used to read the book.
 
 Set `rasterize_svg: true` or `remove_transparency: true` to request JPEG on white for
 compatibility. `raster_format: jpeg` alone does not force retained SVG to rasterize.

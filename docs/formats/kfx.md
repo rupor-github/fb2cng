@@ -12,7 +12,7 @@ encryption**. Compression is disabled by default.
 ```bash
 fbc convert --to kfx book.fb2
 fbc convert --to azw8 book.fb2
-fbc convert --to azw8 --kfx-compression lzma book.fb2
+fbc convert --to azw8 --compression lzma book.fb2
 ```
 
 Kindle-specific options:
@@ -21,7 +21,7 @@ Kindle-specific options:
 |---|---|
 | `--ebook`, `--eb` | Mark output as ebook/EBOK instead of personal document/PDOC |
 | `--asin ASIN` | Set Kindle ASIN metadata for Kindle output |
-| `--kfx-compression MODE` | Override `document.kfx.compression` with `none` or `lzma` |
+| `--compression MODE` | Override `document.kfx.compression` with `none` or `lzma` |
 
 ## Compression
 
@@ -35,12 +35,13 @@ document:
 ```
 
 ```bash
-fbc convert --to azw8 --kfx-compression lzma book.fb2
-fbc -c config.yaml convert --to kfx --kfx-compression none book.fb2
+fbc convert --to azw8 --compression lzma book.fb2
+fbc -c config.yaml convert --to kfx --compression none book.fb2
 ```
 
 An explicitly supplied flag wins over YAML; an omitted flag uses configuration. Both formats
-use the same setting. For other output formats the flag is ignored with a warning.
+use the same setting. AZW3 uses its [own compression modes](azw3.md#compression).
+For non-Kindle output the flag is ignored with a warning.
 
 Compression sizing is automatic; no additional tuning is required. It does not change
 reading pages, Kindle locations, image quality, or book content.

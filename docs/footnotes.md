@@ -34,6 +34,7 @@ document:
 | KEPUB | Normal footnote sections with backlinks | Bidirectional links | Bidirectional links with normalized labels |
 | KEPUB3 | Normal footnote sections with backlinks | EPUB `aside` / `noteref` markup | EPUB `aside` / `noteref` markup with normalized labels |
 | KFX/AZW8 | Normal linked sections with backlink paragraphs; no popup markers | Kindle popup footnotes with backlink paragraphs | Popup footnotes with normalized labels and backlinks |
+| AZW3 | Normal footnote sections with backlinks | HTML5 `aside` / `noteref` markup; popups depend on the reader | Same markup with normalized labels and backlinks |
 | PDF | Normal linked sections with generated return links | Printed page footnotes | Printed page footnotes with page-local labels |
 | TXT | Normal sections | Final `Notes` section | Final `Notes` section with normalized labels |
 | Markdown | Normal linked sections with backlinks | Final `Notes` section with backlinks | Final `Notes` section with normalized labels and backlinks |
@@ -49,11 +50,14 @@ Formats that generate backlinks:
 | EPUB2/KEPUB | yes | yes |
 | EPUB3/KEPUB3 | yes | yes |
 | KFX/AZW8 | yes | yes |
+| AZW3 | yes | yes |
 | PDF | yes, in footnote body sections | printed footnotes use page/link handling |
 | TXT | no clickable links | no clickable links |
 | Markdown | yes | yes |
 
 In `default` mode, generated backlinks do not imply popup/floating behavior. For example, KFX/AZW8 default footnote links navigate to normal footnote sections; only float modes emit Kindle popup markers.
+
+AZW3 popup behavior depends on the Kindle device or app. See [Native AZW3](formats/azw3.md).
 
 See [Templates](templates.md#backlink_template) for all fields.
 
@@ -67,7 +71,7 @@ Markdown-specific notes:
 
 ## Labels
 
-`label_template` controls logical footnote labels in `floatRenumbered` mode for EPUB/KFX/AZW8/TXT/Markdown. PDF printed footnotes have page-local printed labels; for PDF, `label_template` formats title text appended after that page-local label.
+`label_template` controls logical footnote labels in `floatRenumbered` mode for EPUB/KEPUB/AZW3/KFX/AZW8/TXT/Markdown. PDF printed footnotes have page-local printed labels; for PDF, `label_template` formats title text appended after that page-local label.
 
 See [Templates](templates.md#label_template) for fields and examples.
 
@@ -83,7 +87,7 @@ document:
     more_paragraphs: "(~) "
 ```
 
-Paragraphs, images, and tables count as visible content elements. The indicator is styled with `.footnote-more`; the default stylesheet shows it for EPUB and hides it for KFX.
+Paragraphs, images, and tables count as visible content elements. The indicator is styled with `.footnote-more`; the default stylesheet shows it for EPUB/KEPUB and AZW3, and hides it for KFX/AZW8.
 
 ## Empty Notes
 

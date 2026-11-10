@@ -2,7 +2,7 @@
 
 ## Overview
 
-**fb2cng** converts FB2/FictionBook files to EPUB2, EPUB3, KEPUB, KEPUB3, KFX/AZW8, PDF, TXT, and Markdown.
+**fb2cng** converts FB2/FictionBook files to EPUB2, EPUB3, KEPUB, KEPUB3, AZW3, KFX/AZW8, PDF, TXT, and Markdown.
 
 KFX/AZW8 supports both uncompressed output and optional, lossless LZMA compression without
 encryption. Uncompressed output is the default.
@@ -22,7 +22,7 @@ Convert to a specific format:
 ```bash
 fbc convert --to epub3 book.fb2
 fbc convert --to kfx book.fb2
-fbc convert --to azw8 --kfx-compression lzma book.fb2
+fbc convert --to azw8 --compression lzma book.fb2
 fbc convert --to azw3 book.fb2
 fbc convert --to pdf book.fb2
 fbc convert --to md book.fb2
@@ -85,8 +85,8 @@ Convert options:
 | `--to TYPE` | `epub2`, `epub3`, `kepub`, `kepub3`, `kfx`, `azw8`, `azw3`, `pdf`, `txt`, or `md` |
 | `--ebook`, `--eb` | For Kindle formats, mark output as ebook/EBOK instead of personal document/PDOC |
 | `--asin ASIN` | For Kindle formats, set ASIN metadata |
-| `--kfx-compression MODE` | Override configured KFX/AZW8 compression: `none` or `lzma`; ignored with a warning for other formats |
-| `--no-cover` | Omit existing or generated covers; ignored with a warning for KFX/AZW8 |
+| `--compression MODE` | Override configured compression: KFX/AZW8 `none` or `lzma`; AZW3 `none`, `standard`, or `huffdic`; ignored with a warning for other formats |
+| `--no-cover` | Omit existing or generated covers; ignored with a warning for AZW3 and KFX/AZW8 |
 | `--output-file FILE`, `-o FILE` | Write a single source book to exact output file path |
 | `--nodirs`, `--nd` | Do not preserve input directory structure in output |
 | `--overwrite`, `--ow` | Overwrite existing output files |
@@ -96,20 +96,25 @@ Convert options:
 
 `--output-file` is different from `DESTINATION`: it is an exact final file path for single-book conversion. It cannot be used with `DESTINATION`, recursive directory conversion, or archive paths that contain multiple FB2 books. It is useful when another application already decided the expected output file name.
 
-Use `--no-cover` to produce EPUB2/3, KEPUB/KEPUB3, or PDF without a dedicated cover page or cover metadata, even when the FB2 supplies a cover or `document.images.cover.generate` is enabled. Images also used in the book body remain ordinary illustrations. TXT and Markdown already skip the dedicated cover. Kindle formats require a cover, so KFX/AZW8 ignore the flag and log a warning.
+Use `--no-cover` to produce EPUB2/3, KEPUB/KEPUB3, or PDF without a dedicated cover page or cover metadata, even when the FB2 supplies a cover or `document.images.cover.generate` is enabled. Images also used in the book body remain ordinary illustrations. TXT and Markdown already skip the dedicated cover. Kindle formats require a cover, so AZW3 and KFX/AZW8 ignore the flag and log a warning.
 
 ```bash
 fbc convert --no-cover --to pdf book.fb2
 ```
 
 KFX/AZW8 compression is opt-in. Use `document.kfx.compression: lzma` in YAML or an explicit
-command override. `--kfx-compression none` disables a configured compression default.
+command override. `--compression none` disables a configured compression default.
 
 ```bash
-fbc convert --to azw8 --kfx-compression lzma book.fb2
+fbc convert --to azw8 --compression lzma book.fb2
+fbc convert --to azw3 --compression huffdic book.fb2
 ```
 
-See [KFX/AZW8 compression](formats/kfx.md#compression) for conversion settings and
+AZW3 defaults to `standard` compression. `--compression` accepts only the modes supported
+by the selected `--to` format; omitting it respects that format's YAML setting.
+
+See [KFX/AZW8 compression](formats/kfx.md#compression) and
+[AZW3 compression](formats/azw3.md#compression) for conversion settings, and
 [Debugging and validation](debugging.md) for the standalone utility and envelope diagnostics.
 
 ## Supported Formats
@@ -122,34 +127,35 @@ See [KFX/AZW8 compression](formats/kfx.md#compression) for conversion settings a
 | KEPUB3 | `.kepub.epub` | Kobo devices with EPUB3 package/navigation semantics | [EPUB and KEPUB](formats/epub.md) |
 | KFX | `.kfx` | Kindle Enhanced Typesetting with optional LZMA compression | [Kindle KFX/AZW8](formats/kfx.md) |
 | AZW8 | `.azw8` | KFX with optional LZMA compression and Kindle Previewer-friendly extension | [Kindle KFX/AZW8](formats/kfx.md) |
-| AZW3 | `.azw3` | Native standalone KF8; reader acceptance testing in progress | [Native AZW3](formats/azw3.md) |
+| AZW3 | `.azw3` | Native standalone KF8 with configurable compression and optional APNX | [Native AZW3](formats/azw3.md) |
 | PDF | `.pdf` | Fixed-page output, outlines, selectable text, printed footnotes | [PDF](formats/pdf.md) |
 | TXT | `.txt` | Plain readable UTF-8 text | [TXT and Markdown](formats/text.md) |
 | Markdown | `.md` | Semantic plain-text documents with headings, links, tables, and optional images | [TXT and Markdown](formats/text.md) |
 
 ## Feature Matrix
 
-The matrix below covers the established output adapters. For the developing native
-AZW3 adapter and its current limitations, see [Native AZW3](formats/azw3.md).
+AZW3 rendering, popup footnotes, fonts, and APNX support depend on the target Kindle
+device or app. See [Native AZW3](formats/azw3.md) for format-specific behavior.
 
-| Feature | EPUB2 | EPUB3 | KEPUB | KEPUB3 | KFX/AZW8 | PDF | TXT | Markdown |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Clickable internal links | yes | yes | yes | yes | yes | yes | no | yes |
-| Device navigation | NCX | NAV | NCX/Kobo | NAV/Kobo | Kindle nav | PDF outline | no | headings/anchors |
-| Optional visible TOC page | yes | yes | yes | yes | yes | yes | text | links |
-| CSS styling | yes | yes | yes | yes | mapped to Kindle styles | subset via native renderer | no | no |
-| Embedded fonts | yes | yes | yes | yes | yes | yes | no | no |
-| Optional lossless LZMA compression | — | — | — | — | yes, opt-in | — | — | — |
-| Block and inline images | yes | yes | yes | yes | yes | yes | placeholders | placeholder/external/embedded |
-| Cover handling | optional; `--no-cover` | optional; `--no-cover` | optional; `--no-cover` | optional; `--no-cover` | required; flag ignored with warning | optional; `--no-cover` | omitted | omitted |
-| Tables | XHTML | XHTML | XHTML | XHTML | Kindle table model | native PDF | aligned text | Markdown pipe tables |
-| Code blocks | styled XHTML | styled XHTML | styled XHTML | styled XHTML | styled text | styled PDF text | plain text | fenced blocks |
-| Default footnotes | normal sections with backlinks | normal sections with backlinks | normal sections with backlinks | normal sections with backlinks | normal linked sections with backlinks, no popups | normal sections with backlinks | normal sections | normal sections with backlinks |
-| Floating footnotes | bidirectional links | EPUB aside/noteref | bidirectional links | EPUB aside/noteref | Kindle popup footnotes | printed page footnotes | final Notes section | final Notes section with backlinks |
-| `floatRenumbered` labels | normalized | normalized | normalized | normalized | normalized | page-local printed labels | normalized endnotes | normalized endnotes |
-| Footnote backlinks | default and float modes | default and float modes | default and float modes | default and float modes | default and float modes | default body links and printed notes | no clickable links | default and float modes |
-| Page map/page labels | optional | optional | optional | optional | optional/generated | native pages | no | no |
-| Debug validation focus | EPUB structure/checks | EPUB3 nav/aside | Kobo packaging | EPUB3 nav/aside and Kobo packaging | Kindle Previewer/KFX checks | PDF structure/fonts/layout | text rendering | Markdown links/assets |
+| Feature | EPUB2 | EPUB3 | KEPUB | KEPUB3 | KFX/AZW8 | AZW3 | PDF | TXT | Markdown |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Clickable internal links | yes | yes | yes | yes | yes | yes | yes | no | yes |
+| Device navigation | NCX | NAV | NCX/Kobo | NAV/Kobo | Kindle nav | Kindle nav | PDF outline | no | headings/anchors |
+| Optional visible TOC page | yes | yes | yes | yes | yes | yes | yes | text | links |
+| CSS styling | yes | yes | yes | yes | mapped to Kindle styles | KF8 CSS; reader-rendered | subset via native renderer | no | no |
+| Embedded fonts | yes | yes | yes | yes | yes | TTF/OTF | yes | no | no |
+| Optional lossless LZMA compression | — | — | — | — | yes, opt-in | — | — | — | — |
+| Native KF8 compression | — | — | — | — | — | `none`, `standard` (default), `huffdic` | — | — | — |
+| Block and inline images | yes | yes | yes | yes | yes | yes; retained non-cover SVG | yes | placeholders | placeholder/external/embedded |
+| Cover handling | optional; `--no-cover` | optional; `--no-cover` | optional; `--no-cover` | optional; `--no-cover` | required; flag ignored with warning | required; flag ignored with warning | optional; `--no-cover` | omitted | omitted |
+| Tables | XHTML | XHTML | XHTML | XHTML | Kindle table model | XHTML | native PDF | aligned text | Markdown pipe tables |
+| Code blocks | styled XHTML | styled XHTML | styled XHTML | styled XHTML | styled text | styled XHTML | styled PDF text | plain text | fenced blocks |
+| Default footnotes | normal sections with backlinks | normal sections with backlinks | normal sections with backlinks | normal sections with backlinks | normal linked sections with backlinks, no popups | normal sections with backlinks | normal sections with backlinks | normal sections | normal sections with backlinks |
+| Floating footnotes | bidirectional links | EPUB aside/noteref | bidirectional links | EPUB aside/noteref | Kindle popup footnotes | HTML5 aside/noteref; popups reader-dependent | printed page footnotes | final Notes section | final Notes section with backlinks |
+| `floatRenumbered` labels | normalized | normalized | normalized | normalized | normalized | normalized | page-local printed labels | normalized endnotes | normalized endnotes |
+| Footnote backlinks | default and float modes | default and float modes | default and float modes | default and float modes | default and float modes | default and float modes | default body links and printed notes | no clickable links | default and float modes |
+| Page map/page labels | optional | optional | optional | optional | optional/generated | optional approximate APNX; YAML-only | native pages | no | no |
+| Debug validation focus | EPUB structure/checks | EPUB3 nav/aside | Kobo packaging | EPUB3 nav/aside and Kobo packaging | Kindle Previewer/KFX checks | KF8 structure and target-reader checks | PDF structure/fonts/layout | text rendering | Markdown links/assets |
 
 See [Footnotes](footnotes.md) for a full mode-by-format matrix, and
 [Image handling](images.md) for image capabilities and configuration interactions.
@@ -160,21 +166,24 @@ Metadata is read from FB2 `description` fields and written to each output format
 
 `document.metainformation.title_template` controls the exported book title metadata. `document.metainformation.creator_name_template` controls exported author and translator names. `document.metainformation.transliterate` applies to exported title, author, and translator names after template expansion.
 
-| Metadata | EPUB2/KEPUB | EPUB3/KEPUB3 | KFX/AZW8 | PDF | TXT | Markdown |
-|---|---|---|---|---|---|---|
-| Title template | `dc:title` | `dc:title` | `title` | Info `Title`, XMP `dc:title` | heading only | YAML `title` |
-| Authors | `dc:creator opf:role="aut"` | `dc:creator` + MARC role | `author` | Info `Author`, XMP `dc:creator` | metadata block | YAML `authors` |
-| Translators | `dc:contributor opf:role="trl"` | `dc:contributor` + MARC role | no | XMP `dc:contributor` | no | YAML `translators` |
-| Language | `dc:language` | `dc:language` | `language` | XMP `dc:language` | metadata block | YAML `language` |
-| Date | `dc:date opf:event="publication"` | `dc:date` | `issue_date` | XMP `dc:date` | metadata block | YAML `date` |
-| Publisher | `dc:publisher` | `dc:publisher` | `publisher` | XMP `dc:publisher` | no | YAML `publisher` |
-| Annotation/description | `dc:description` | `dc:description` | `description` | Info `Subject`, XMP `dc:description` | no | YAML `description` |
-| Genres | `dc:subject`, `fb2:genre` meta | `dc:subject` + FB2 authority/term | no | XMP `dc:subject` | metadata block | YAML `genres` |
-| Keywords | `dc:subject` | `dc:subject` | no | Info `Keywords`, XMP `pdf:Keywords`, XMP `dc:subject` | no | YAML `keywords` |
-| ISBN | `dc:identifier opf:scheme="ISBN"` | `dc:identifier` + ONIX identifier type | `ISBN`, `ISBN-10` or `ISBN-13` | XMP `dc:identifier` | no | YAML `isbn` |
-| FB2 document ID | `dc:identifier id="BookId"` | `dc:identifier id="BookId"` | `book_id`, fallback ASIN source | XMP `dc:identifier` | no | YAML `identifier` |
-| Series | Calibre first-series meta | collection metadata | no | no | metadata block | YAML `series` |
-| Source title/language | no | no | no | no | no | YAML `source_title`, `source_language` |
+| Metadata | EPUB2/KEPUB | EPUB3/KEPUB3 | KFX/AZW8 | AZW3 | PDF | TXT | Markdown |
+|---|---|---|---|---|---|---|---|
+| Title template | `dc:title` | `dc:title` | `title` | `Title`, `Updated_Title` | Info `Title`, XMP `dc:title` | heading only | YAML `title` |
+| Authors | `dc:creator opf:role="aut"` | `dc:creator` + MARC role | `author` | `Creator` | Info `Author`, XMP `dc:creator` | metadata block | YAML `authors` |
+| Translators | `dc:contributor opf:role="trl"` | `dc:contributor` + MARC role | no | `Contributor`, `dc:contributor` + MARC role | XMP `dc:contributor` | no | YAML `translators` |
+| Language | `dc:language` | `dc:language` | `language` | `Language`, `Content-Language-Tag` | XMP `dc:language` | metadata block | YAML `language` |
+| Date | `dc:date opf:event="publication"` | `dc:date` | `issue_date` | `Published` | XMP `dc:date` | metadata block | YAML `date` |
+| Publisher | `dc:publisher` | `dc:publisher` | `publisher` | `Publisher` | XMP `dc:publisher` | no | YAML `publisher` |
+| Annotation/description | `dc:description` | `dc:description` | `description` | `Description` | Info `Subject`, XMP `dc:description` | no | YAML `description` |
+| Genres | `dc:subject`, `fb2:genre` meta | `dc:subject` + FB2 authority/term | no | `Subject` | XMP `dc:subject` | metadata block | YAML `genres` |
+| Keywords | `dc:subject` | `dc:subject` | no | `Subject` | Info `Keywords`, XMP `pdf:Keywords`, XMP `dc:subject` | no | YAML `keywords` |
+| ISBN | `dc:identifier opf:scheme="ISBN"` | `dc:identifier` + ONIX identifier type | `ISBN`, `ISBN-10` or `ISBN-13` | `ISBN` | XMP `dc:identifier` | no | YAML `isbn` |
+| FB2 document ID | `dc:identifier id="BookId"` | `dc:identifier id="BookId"` | `book_id`, fallback ASIN source | `dc:identifier`, fallback ASIN source | XMP `dc:identifier` | no | YAML `identifier` |
+| Series | Calibre first-series meta | collection metadata | no | collection metadata | no | metadata block | YAML `series` |
+| Source title/language | no | no | no | no | no | no | YAML `source_title`, `source_language` |
+
+AZW3 preserves translator roles and series metadata, but display and library grouping
+depend on the reader; embedding these fields does not guarantee Kindle collection grouping.
 
 PDF stores both the classic Info dictionary and XMP metadata stream. PDF Info `Subject` comes from FB2 annotation text, while XMP `dc:subject` contains genres and keywords.
 
@@ -266,6 +275,7 @@ Set `document.images.screen.width`, `height`, and `dpi`. See [PDF](formats/pdf.m
 - [Stylesheets](stylesheets.md)
 - [EPUB and KEPUB variants](formats/epub.md)
 - [Kindle KFX/AZW8](formats/kfx.md)
+- [Native AZW3](formats/azw3.md)
 - [PDF](formats/pdf.md)
 - [TXT and Markdown](formats/text.md)
 - [MyHomeLib Integration](mhl.md)

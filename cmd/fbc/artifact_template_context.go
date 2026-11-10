@@ -134,7 +134,7 @@ func convertFlagTakesValue(arg string) bool {
 		return false
 	}
 	switch strings.TrimLeft(arg, "-") {
-	case "asin", "output-file", "o", "force-zip-cp", "kfx-compression", "config", "c":
+	case "asin", "output-file", "o", "force-zip-cp", "compression", "config", "c":
 		return true
 	default:
 		return false

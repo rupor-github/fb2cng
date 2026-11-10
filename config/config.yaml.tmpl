@@ -7,7 +7,7 @@ version: 1
 # https://go-task.github.io/slim-sprig. In all template contexts .Context
 # (string) and .Format (string) are available. .Context is set to the field
 # name to uniquely identify processing context. .Format is the requested output
-# format: epub2, epub3, kepub, kepub3, kfx, azw8, pdf, txt, or md.
+# format: epub2, epub3, kepub, kepub3, kfx, azw8, azw3, pdf, txt, or md.
 
 document:
   # Some programs (CoolReader and some versions of FBReader) expect "old" zip
@@ -34,7 +34,7 @@ document:
   # List of variables available:
   # - .Context (string) - template field name ("output_name_template")
   # - .Format (string) - requested output format: epub2, epub3, kepub,
-  #   kepub3, kfx, azw8, pdf, txt, or md
+  #   kepub3, kfx, azw8, azw3, pdf, txt, or md
   # - .Title (string) - book title as specified in FB2 metainformation
   # - .Series (array of { .Name (string), .Number (integer), .Parent (integer) })
   #   - series as specified in FB2 metainformation.
@@ -96,12 +96,13 @@ document:
     # none: ordinary CONT; lzma: unencrypted, paged ProtectedData envelope.
     # Page size adapts to decoded container size: 4/16/32/64 KiB, aiming for
     # 256 pages with a 64-KiB cap. Existing 4-KiB envelopes remain readable.
-    # An explicitly supplied convert --kfx-compression none|lzma overrides this.
+    # An explicitly supplied convert --compression none|lzma overrides this for KFX/AZW8.
     compression: none
 
   azw3:
-    # Reserved for native AZW3 output, which is not yet available on the CLI.
+    # Applies to native standalone KF8 output selected with --to azw3.
     # none: uncompressed; standard: PalmDOC (default); huffdic: HUFF/CDIC.
+    # An explicitly supplied convert --compression none|standard|huffdic overrides this for AZW3.
     compression: standard
     # Optional APNX page-map sidecar. Config-file only; no command-line override.
     # none: no sidecar (default); eink: <book>.sdr/<book>.apnx; app: <book>.apnx.
@@ -126,7 +127,7 @@ document:
     # List of variables available:
     # - .Context (string) - template field name ("title_template")
     # - .Format (string) - requested output format: epub2, epub3, kepub,
-    #   kepub3, kfx, azw8, pdf, txt, or md
+    #   kepub3, kfx, azw8, azw3, pdf, txt, or md
     # - .Title (string) - book title as specified in FB2 metainformation
     # - .Series (array of { .Name (string), .Number (integer), .Parent (integer) })
     #   - series as specified in FB2 metainformation.
@@ -189,7 +190,7 @@ document:
     # sorting books by author names. Following fields are available:
     # - .Context (string) - template field name ("creator_name_template")
     # - .Format (string) - requested output format: epub2, epub3, kepub,
-    #   kepub3, kfx, azw8, pdf, txt, or md
+    #   kepub3, kfx, azw8, azw3, pdf, txt, or md
     # - .Index (int) - 0-based author index
     # - .FirstName (string)
     # - .MiddleName (string)
@@ -235,8 +236,9 @@ document:
     # output backend's normal behavior, including required rasterization.
     # EPUB/KEPUB and external Markdown use PNG, preserving alpha unless
     # remove_transparency is enabled. Kindle and embedded Markdown retain JPEG
-    # on white for raster results. PDF and Kindle normally use native vectors
-    # where supported, with raster fallback; true forces raster output.
+    # on white for raster results. PDF and KFX/AZW8 normally use native vectors
+    # where supported, with raster fallback; AZW3 retains non-cover SVG.
+    # True forces raster output.
     # PDF keeps intrinsic SVG layout sizing. Kindle covers remain JPEG.
     rasterize_svg: false
 
@@ -324,7 +326,7 @@ document:
     # Available fields include:
     # - .Context (string) - template field name ("backlink_template")
     # - .Format (string) - requested output format: epub2, epub3, kepub,
-    #   kepub3, kfx, azw8, pdf, txt, or md
+    #   kepub3, kfx, azw8, azw3, pdf, txt, or md
     # - .RefID (string) - unique ID for this reference occurrence
     # - .TargetID (string) - ID of the footnote being referenced
     # - .RefNumber (int) - 1-based reference occurrence number for this footnote
@@ -367,7 +369,7 @@ document:
     more_paragraphs: "(~) "
 
     # Template used to format footnote labels.
-    # For EPUB/KFX/AZW8 floatRenumbered, this template formats footnote reference
+    # For EPUB/KEPUB/AZW3/KFX/AZW8 floatRenumbered, this template formats footnote reference
     # text and footnote titles during content normalization.
     # For PDF float/floatRenumbered, printed page footnote references are
     # page-local (original visible labels in float, sequential labels in
@@ -379,7 +381,7 @@ document:
     # Following fields are available:
     # - .Context (string) - template field name ("label_template")
     # - .Format (string) - requested output format: epub2, epub3, kepub,
-    #   kepub3, kfx, azw8, pdf, txt, or md
+    #   kepub3, kfx, azw8, azw3, pdf, txt, or md
     # - .BodyTitle (string) - can be empty
     # - .BodyNumber (int) - 1-based body index
     # - .NoteTitle (string) - can be empty
@@ -434,7 +436,7 @@ document:
     # List of variables available:
     # - .Context (string) - template field name ("authors_template")
     # - .Format (string) - requested output format: epub2, epub3, kepub,
-    #   kepub3, kfx, azw8, pdf, txt, or md
+    #   kepub3, kfx, azw8, azw3, pdf, txt, or md
     # - .Title (string) - book title as specified in FB2 metainformation
     # - .Series (array of { .Name (string), .Number (integer), .Parent (integer) })
     #   - series as specified in FB2 metainformation.
@@ -541,7 +543,7 @@ document:
 # - .Command (string) - command being executed, for example "convert" or
 #   "dumpconfig"
 # - .Format (string) - requested output format for convert command: epub2,
-#   epub3, kepub, kfx, azw8, pdf, txt, or md. Empty for other commands.
+#   epub3, kepub, kepub3, kfx, azw8, azw3, pdf, txt, or md. Empty for other commands.
 # - .SourceFile (string) - base part of the source argument (no path, no
 #   extension). Empty when no source argument is available.
 # - .OutputDir (string) - absolute conversion destination directory, or the

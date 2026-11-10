@@ -37,7 +37,7 @@ func azw3Command() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "to"}, &cli.StringFlag{Name: "output-file"},
 			&cli.BoolFlag{Name: "ebook"}, &cli.StringFlag{Name: "asin"},
-			&cli.BoolFlag{Name: "overwrite"}, &cli.StringFlag{Name: "kfx-compression"},
+			&cli.BoolFlag{Name: "overwrite"}, &cli.StringFlag{Name: "compression"},
 		},
 	}
 }
@@ -187,7 +187,8 @@ func TestRunAZW3(t *testing.T) {
 						case strings.HasSuffix(file.Name, ".apnx"):
 							foundAPNX = pageData != nil && bytes.Equal(payload, pageData)
 						default:
-							foundSummary = bytes.Contains(payload, []byte("format=azw3\n"))
+							foundSummary = bytes.Contains(payload, []byte("format=azw3\n")) &&
+								bytes.Contains(payload, []byte("compression_source=default\n"))
 						}
 					}
 				}
@@ -196,6 +197,52 @@ func TestRunAZW3(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestRunAZW3CompressionOverride(t *testing.T) {
+	for _, test := range []struct {
+		mode string
+		kind uint16
+	}{
+		{"none", 1}, {"standard", 2}, {"huffdic", 17480},
+	} {
+		t.Run(test.mode, func(t *testing.T) {
+			ctx, env := setupTestEnv(t)
+			core, logs := observer.New(zap.DebugLevel)
+			env.Log = zap.New(core)
+			env.Cfg.Document.AZW3.Compression = "huffdic"
+			if test.mode == "huffdic" {
+				env.Cfg.Document.AZW3.Compression = "none"
+			}
+			env.Cfg.Document.AZW3.APNX = "app"
+			env.Cfg.Document.PageMap.Enable = true
+			env.Cfg.Document.Images.Screen.Width, env.Cfg.Document.Images.Screen.Height = 200, 300
+			root := t.TempDir()
+			source, output := filepath.Join(root, "input.fb2"), filepath.Join(root, "chosen.azw3")
+			if err := os.WriteFile(source, []byte(azw3IntegrationInput), 0644); err != nil {
+				t.Fatal(err)
+			}
+			args := []string{"convert", "--to", "azw3", "--compression", test.mode, "--output-file", output, source}
+			if err := azw3Command().Run(ctx, args); err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(output)
+			if err != nil {
+				t.Fatal(err)
+			}
+			header, _ := readAZW3TestHeader(t, data)
+			if binary.BigEndian.Uint16(header) != test.kind || env.Cfg.Document.AZW3.CompressionSource != "cli" {
+				t.Fatal("native output did not use the CLI compression override")
+			}
+			if _, err := os.Stat(filepath.Join(root, "chosen.apnx")); err != nil {
+				t.Fatal("compression override changed config-only APNX publication", err)
+			}
+			entries := logs.FilterMessage("AZW3 compression selected").All()
+			if len(entries) != 1 || entries[0].ContextMap()["compression"] != test.mode || entries[0].ContextMap()["source"] != "cli" {
+				t.Fatal("missing native CLI compression/source diagnostic", entries)
+			}
+		})
 	}
 }
 

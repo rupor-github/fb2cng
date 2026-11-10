@@ -88,8 +88,10 @@ func Generate(
 		return result, err
 	}
 	if c.Debug {
-		summary := fmt.Sprintf("format=%s\ncompression=%s\napnx=%s\nmain_bytes=%d\nall_flow_bytes=%d\nrecords=%d\npages=%d\n",
-			c.OutputFormat, book.Compression, cfg.AZW3.APNX, text.MainLength, len(text.Raw), len(book.Records), len(pub.Pages))
+		summary := fmt.Sprintf(
+			"format=%s\ncompression=%s\ncompression_source=%s\napnx=%s\nmain_bytes=%d\nall_flow_bytes=%d\nrecords=%d\npages=%d\n",
+			c.OutputFormat, book.Compression, cfg.AZW3.CompressionSource, cfg.AZW3.APNX,
+			text.MainLength, len(text.Raw), len(book.Records), len(pub.Pages))
 		artifacts := map[string][]byte{
 			"book.azw3.txt": []byte(summary), "book.rawml": text.Raw, "book.stylesheet.css": pub.Stylesheet.Data,
 		}

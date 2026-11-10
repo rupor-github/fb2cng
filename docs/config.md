@@ -82,14 +82,28 @@ document:
 `document.kfx.compression` defaults to `none` (uncompressed output). Set it to `lzma`
 for lossless compression without encryption. It applies equally to KFX and AZW8 and has no effect
 on other formats. Compression sizing is [automatic](formats/kfx.md#compression).
-An explicitly supplied `convert --kfx-compression none|lzma` overrides
+An explicitly supplied `convert --compression none|lzma` overrides
 the YAML value; an omitted flag respects YAML. Logs and conversion debug text record the
 effective choice/source because archived loaded YAML precedes CLI overrides.
 
 ```bash
-fbc convert --to azw8 --kfx-compression lzma book.fb2
-fbc -c config.yaml convert --to azw8 --kfx-compression none book.fb2
+fbc convert --to azw8 --compression lzma book.fb2
+fbc -c config.yaml convert --to azw8 --compression none book.fb2
 ```
+
+## AZW3 Compression
+
+`document.azw3.compression` selects `none`, `standard` (the default), or `huffdic`.
+An explicitly supplied `convert --compression` overrides it for AZW3; omitting the
+flag respects YAML. KFX/AZW8 modes are separate: `lzma` is not valid for AZW3, and
+`standard`/`huffdic` are not valid for KFX/AZW8.
+
+```bash
+fbc convert --to azw3 --compression huffdic book.fb2
+fbc -c config.yaml convert --to azw3 --compression none book.fb2
+```
+
+See [AZW3 compression](formats/azw3.md#compression). APNX selection remains YAML-only.
 
 ## PDF Page Frame
 

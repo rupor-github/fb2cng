@@ -90,6 +90,16 @@ func TestPreparseConvertInvocation(t *testing.T) {
 			wantSource: "book.fb2", wantFormat: common.OutputFmtAzw3, wantOutputDir: "results",
 		},
 		{
+			name:       "native compression between positionals",
+			args:       []string{"book.fb2", "--compression", "huffdic", "--to", "azw3", "results"},
+			wantSource: "book.fb2", wantFormat: common.OutputFmtAzw3, wantOutputDir: "results",
+		},
+		{
+			name:       "equals native compression before format",
+			args:       []string{"--compression=standard", "--to=azw3", "book.fb2"},
+			wantSource: "book.fb2", wantFormat: common.OutputFmtAzw3,
+		},
+		{
 			name:       "skip value flags",
 			args:       []string{"--asin", "ABCDEFGHIJ", "--output-file", "out.md", "book.fb2"},
 			wantSource: "book.fb2",
@@ -103,26 +113,26 @@ func TestPreparseConvertInvocation(t *testing.T) {
 		},
 		{
 			name:          "compression before format",
-			args:          []string{"--kfx-compression", "lzma", "--to", "azw8", "/mnt/d/test/book.fb2", "/mnt/d/output"},
+			args:          []string{"--compression", "lzma", "--to", "azw8", "/mnt/d/test/book.fb2", "/mnt/d/output"},
 			wantSource:    "/mnt/d/test/book.fb2",
 			wantFormat:    common.OutputFmtAzw8,
 			wantOutputDir: "/mnt/d/output",
 		},
 		{
 			name:       "compression after format",
-			args:       []string{"--to", "kfx", "--kfx-compression", "none", "book.fb2"},
+			args:       []string{"--to", "kfx", "--compression", "none", "book.fb2"},
 			wantSource: "book.fb2",
 			wantFormat: common.OutputFmtKfx,
 		},
 		{
 			name:       "equals compression flag",
-			args:       []string{"--kfx-compression=lzma", "--to=azw8", "book.fb2"},
+			args:       []string{"--compression=lzma", "--to=azw8", "book.fb2"},
 			wantSource: "book.fb2",
 			wantFormat: common.OutputFmtAzw8,
 		},
 		{
 			name:       "exact output file",
-			args:       []string{"--output-file", "/tmp/my books/result.kfx", "--kfx-compression", "lzma", "book.fb2"},
+			args:       []string{"--output-file", "/tmp/my books/result.kfx", "--compression", "lzma", "book.fb2"},
 			wantSource: "book.fb2", wantFormat: common.OutputFmtEpub2, wantOutputDir: filepath.FromSlash("/tmp/my books"),
 		},
 		{
@@ -162,7 +172,7 @@ func TestPreparseConvertInvocation(t *testing.T) {
 		},
 		{
 			name:       "value flags between source and destination",
-			args:       []string{"book.fb2", "--to", "kfx", "--kfx-compression", "lzma", "results"},
+			args:       []string{"book.fb2", "--to", "kfx", "--compression", "lzma", "results"},
 			wantSource: "book.fb2", wantFormat: common.OutputFmtKfx, wantOutputDir: "results",
 		},
 		{
@@ -211,7 +221,7 @@ func TestArtifactTemplateValuesLongFlagNames(t *testing.T) {
 	root := &cli.Command{Name: "fbc"}
 	values := artifactTemplateValues(time.Now(), root, []string{
 		"-config", "build/test.conf", "-debug", "convert", "-to", "azw8",
-		"-output-file", "results/chosen.azw8", "-kfx-compression", "lzma", "book.fb2",
+		"-output-file", "results/chosen.azw8", "-compression", "lzma", "book.fb2",
 	})
 	if values.Command != "convert" || values.Source != "book.fb2" ||
 		values.Format != common.OutputFmtAzw8 || values.OutputDir != "results" {
@@ -230,14 +240,14 @@ func TestArtifactTemplateValuesOutputDir(t *testing.T) {
 		{"default", []string{"book.fb2"}, "."},
 		{"exact file after source", []string{"book.fb2", "--output-file", "exact/result.azw8"}, "exact"},
 		{"equals alias after source", []string{"book.fb2", "-o=exact/result.azw8"}, "exact"},
-		{"value flag between positionals", []string{"book.fb2", "--kfx-compression", "lzma", "results"}, "results"},
+		{"value flag between positionals", []string{"book.fb2", "--compression", "lzma", "results"}, "results"},
 		{"format between positionals", []string{"book.fb2", "--to", "azw8", "results"}, "results"},
 		{"boolean between positionals", []string{"book.fb2", "--overwrite", "results"}, "results"},
 		{"separator after source", []string{"book.fb2", "--", "--literal-destination"}, "--literal-destination"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := &cli.Command{Name: "fbc"}
-			args := append([]string{"-d", "convert", "--to", "azw8", "--kfx-compression", "lzma"}, test.args...)
+			args := append([]string{"-d", "convert", "--to", "azw8", "--compression", "lzma"}, test.args...)
 			values := artifactTemplateValues(time.Now(), root, args)
 			if values.OutputDir != test.wantDir || values.Source != "book.fb2" || values.Format != common.OutputFmtAzw8 {
 				t.Fatalf("root context: %+v", values)
@@ -245,7 +255,7 @@ func TestArtifactTemplateValuesOutputDir(t *testing.T) {
 			app := &cli.Command{Name: "fbc", Commands: []*cli.Command{{
 				Name: "convert", Flags: []cli.Flag{
 					&cli.StringFlag{Name: "to"}, &cli.StringFlag{Name: "output-file", Aliases: []string{"o"}},
-					&cli.StringFlag{Name: "kfx-compression"}, &cli.BoolFlag{Name: "overwrite"},
+					&cli.StringFlag{Name: "compression"}, &cli.BoolFlag{Name: "overwrite"},
 				},
 				Action: func(_ context.Context, cmd *cli.Command) error {
 					values := artifactTemplateValues(time.Now(), cmd, nil)

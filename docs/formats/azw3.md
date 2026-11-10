@@ -4,8 +4,8 @@
 or Amazon software at conversion time. It is distinct from KFX/AZW8 and does not
 produce MOBI7 or combined MOBI/KF8 files.
 
-**Reader acceptance testing is still in progress.** Check rendering, navigation,
-floating footnotes, fonts, and page maps on your intended Kindle device or app.
+Rendering, popup footnotes, font selection, and page-map support depend on the
+Kindle device or app used to read the book.
 
 ```bash
 fbc convert --to azw3 book.fb2
@@ -19,7 +19,7 @@ Kindle formats. `--no-cover` is ignored with a warning; a missing cover is gener
 
 ## Compression
 
-Select native compression in YAML:
+Select native compression in YAML, or override it for one conversion with `--compression`:
 
 ```yaml
 document:
@@ -33,8 +33,14 @@ document:
 | `standard` | PalmDOC compression; default |
 | `huffdic` | Huffman/dictionary compression |
 
+```bash
+fbc convert --to azw3 --compression huffdic book.fb2
+fbc -c config.yaml convert --to azw3 --compression none book.fb2
+```
+
+An explicitly supplied flag wins over YAML; an omitted flag uses configuration.
+AZW3 does not accept `lzma`, which is specific to KFX/AZW8.
 Compression is lossless and does not change navigation or page-map destinations.
-`--kfx-compression` does not apply to AZW3.
 
 ## Optional APNX Page Map
 
@@ -76,7 +82,7 @@ matches AZW3. See [stylesheet media queries](../stylesheets.md#media-queries).
 
 It supports normal linked notes, floating notes,
 renumbering, backlinks, visible TOC placement, embedded TTF/OTF fonts, and native
-non-cover SVG. Reader-specific display and popup behavior still need checking.
+non-cover SVG. Display and popup behavior depend on the reader.
 
 Shared image configuration applies, including explicit SVG rasterization and
 transparency removal for compatibility. Ordinary covers use Kindle-compatible

@@ -23,7 +23,7 @@ converter's YAML configuration, enable its reporter, or require `--debug`.
 
 ```bash
 fbc -d convert --to epub3 book.fb2
-fbc -d convert --to azw8 --kfx-compression lzma book.fb2
+fbc -d convert --to azw8 --compression lzma book.fb2
 fbc -c config.yaml -d convert --to pdf book.fb2
 ```
 
@@ -67,8 +67,9 @@ directory, and missing files may remain listed in `MANIFEST`. Failures before re
 initialization, such as invalid configuration, may have no report at all.
 
 The archived configuration is captured before conversion CLI overrides. For example,
-`--kfx-compression none` may override an archived `compression: lzma`; the log and KFX debug
-text record the effective compression choice and its source.
+`--compression none` may override an archived `compression: lzma` for KFX/AZW8 or
+`compression: standard` for AZW3. Logs and format-specific debug text record the
+effective compression choice and its source.
 
 ### Format-Specific Artifacts
 
