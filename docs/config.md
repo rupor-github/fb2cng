@@ -93,7 +93,9 @@ fbc -c config.yaml convert --to azw8 --compression none book.fb2
 
 ## AZW3 Compression
 
-`document.azw3.compression` selects `none`, `standard` (the default), or `huffdic`.
+`document.azw3.compression` selects `none` (KindleGen `-c0`), `standard`
+(KindleGen `-c1`, the default), or `huffdic` (KindleGen `-c2`). These are mode
+correspondences; native AZW3 generation does not invoke KindleGen.
 An explicitly supplied `convert --compression` overrides it for AZW3; omitting the
 flag respects YAML. KFX/AZW8 modes are separate: `lzma` is not valid for AZW3, and
 `standard`/`huffdic` are not valid for KFX/AZW8.

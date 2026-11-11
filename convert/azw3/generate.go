@@ -61,7 +61,7 @@ func Generate(
 	if err != nil {
 		return result, err
 	}
-	text, err := compileText(ctx, pub)
+	pub, text, err := compileBacklinks(ctx, c, pub)
 	if err != nil {
 		return result, fmt.Errorf("compile AZW3 text: %w", err)
 	}

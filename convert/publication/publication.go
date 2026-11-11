@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/beevik/etree"
 	"go.uber.org/zap"
 
 	"fbc/common"
@@ -34,6 +35,9 @@ type Publication struct {
 	Stylesheet Stylesheet
 	Images     fb2.BookImages
 	CoverID    string
+	// Backlinks identifies generated AZW3 labels by reference occurrence. Adapters
+	// can resolve final byte-based locations without guessing from authored markup.
+	Backlinks map[*etree.Element]string
 }
 
 // Landmark identifies a semantic destination independently of container-specific
@@ -145,6 +149,9 @@ func Build(
 
 	// Generated pages can add IDs and links of their own.
 	idToFile = collectRenderedIDs(chapters, log)
+	if c.OutputFormat == common.OutputFmtAzw3 && c.FootnotesMode.IsFloat() {
+		redirectAZW3FootnoteLinks(chapters, c, idToFile)
+	}
 	fixInternalLinks(chapters, idToFile, log)
 	if c.CoverID != "" {
 		c.TrackImageUsage(c.CoverID)
@@ -164,5 +171,6 @@ func Build(
 		Stylesheet: stylesheet,
 		Images:     c.ImagesIndex,
 		CoverID:    c.CoverID,
+		Backlinks:  c.backlinks,
 	}, nil
 }

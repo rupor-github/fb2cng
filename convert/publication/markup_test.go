@@ -5,10 +5,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/beevik/etree"
 	"go.uber.org/zap"
 
 	"fbc/common"
 	"fbc/config"
+	"fbc/fb2"
 )
 
 func TestBuildMarkupIndependentOfOutputFormat(t *testing.T) {
@@ -90,5 +92,63 @@ func TestBuildRejectsUnknownMarkup(t *testing.T) {
 	}
 	if len(c.BackLinkIndex) != 0 || len(c.UsedImageIDs) != 0 {
 		t.Error("invalid markup should be rejected before rendering")
+	}
+}
+
+func TestBuildFloatingFootnoteBacklinksOutsideAside(t *testing.T) {
+	for _, format := range []common.OutputFmt{common.OutputFmtEpub3, common.OutputFmtKepub3} {
+		for _, mode := range []common.FootnotesMode{common.FootnotesModeFloat, common.FootnotesModeFloatRenumbered} {
+			t.Run(format.String()+"/"+mode.String(), func(t *testing.T) {
+				c := buildTestContent(format, mode, 0)
+				c.MoreParaStr = "(~) "
+				c.FootnotesIndex["note2"] = fb2.FootnoteRef{BodyIdx: 2, SectionIdx: 0}
+				link := func(target string) fb2.FlowItem {
+					return fb2.FlowItem{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{Text: []fb2.InlineSegment{
+						{Kind: fb2.InlineLink, Href: "#" + target, Children: []fb2.InlineSegment{{Kind: fb2.InlineText, Text: "note"}}},
+					}}}
+				}
+				main := &c.Book.Bodies[0].Sections[0]
+				main.Content = append(main.Content, link("note1"))
+				first, second := &c.Book.Bodies[1].Sections[0], &c.Book.Bodies[2].Sections[0]
+				first.Content = append(first.Content, link("note2"))
+				second.Content = append(second.Content, link("note1"))
+				pub, err := Build(t.Context(), c, &config.DocumentConfig{}, HTML5, zap.NewNop())
+				if err != nil {
+					t.Fatal(err)
+				}
+				for chapter := range pub.Documents() {
+					for _, aside := range chapter.Doc.FindElements("//aside") {
+						id := aside.SelectAttrValue("id", "")
+						if len(aside.FindElements(".//a[@class='link-backlink']")) != 0 {
+							t.Fatal("generated location labels must remain outside the note's aside", id)
+						}
+						children := aside.Parent().ChildElements()
+						var backs []*etree.Element
+						for i, child := range children {
+							if child == aside && i+1 < len(children) && children[i+1].Tag == "p" {
+								backs = children[i+1].FindElements(".//a[@class='link-backlink']")
+								break
+							}
+						}
+						if len(backs) != len(c.BackLinkIndex[id]) || len(backs) == 0 {
+							t.Fatal("every return link must follow its note", id)
+						}
+						for _, back := range backs {
+							if back.SelectAttrValue("epub:type", "") != "backlink" || back.SelectAttrValue("role", "") != "doc-backlink" {
+								t.Fatal("return links must not be marked as forward note references")
+							}
+							if (pub.Backlinks[back] != "") != (format == common.OutputFmtAzw3) {
+								t.Fatal("generated-link location tracking must remain AZW3-specific")
+							}
+						}
+						indicator := aside.FindElement(".//span[@class='footnote-more']")
+						if indicator == nil {
+							t.Fatal("generated backlinks stole the note's more-paragraph indicator")
+						}
+					}
+				}
+				assertPublicationLinks(t, pub)
+			})
+		}
 	}
 }

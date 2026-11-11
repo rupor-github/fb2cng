@@ -100,7 +100,7 @@ func compileMetadata(
 		}
 	} else {
 		// Like local KindleGen output, leave catalog ASIN/type fields absent.
-		// Synthetic catalog metadata makes Voyage ignore the embedded library
+		// Synthetic catalog metadata can make Kindle ignore the embedded library
 		// thumbnail. UID/RESC retain the book identity; local APNX uses no ASIN.
 		log.Debug("Using local AZW3 metadata without catalog identifiers")
 	}

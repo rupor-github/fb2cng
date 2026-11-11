@@ -221,7 +221,18 @@ func processFootnoteBodies(c *renderState, footnoteBodies []*fb2.Body, log *zap.
 
 	// Register new page for footnotes file in the page map
 	c.ForceNewPage(filename)
-	replayRefs := c.PreRegisterFootnoteBackLinksInBodies(footnoteBodies)
+	registrationBodies := footnoteBodies
+	if c.OutputFormat == common.OutputFmtAzw3 && c.FootnotesMode.IsFloat() {
+		// Links in AZW3 note sections become plain text, not return destinations.
+		// Body introductions still render normally and need reference registration.
+		registrationBodies = make([]*fb2.Body, len(footnoteBodies))
+		for i, body := range footnoteBodies {
+			intro := *body
+			intro.Sections = nil
+			registrationBodies[i] = &intro
+		}
+	}
+	replayRefs := c.PreRegisterFootnoteBackLinksInBodies(registrationBodies)
 	restoreReplay := c.UseFootnoteBackLinkReplay(replayRefs)
 	defer restoreReplay()
 
@@ -252,7 +263,9 @@ func processFootnoteBodies(c *renderState, footnoteBodies []*fb2.Body, log *zap.
 			section := &body.Sections[i]
 
 			// Choose appropriate element type based on mode and format
-			if c.FootnotesMode.IsFloat() && c.markup == HTML5 {
+			if c.FootnotesMode.IsFloat() && c.OutputFormat == common.OutputFmtAzw3 {
+				appendFloatFootnoteSectionContentAZW3(bodyDiv, c, section)
+			} else if c.FootnotesMode.IsFloat() && c.markup == HTML5 {
 				if err := appendFloatFootnoteSectionContentEpub3(bodyDiv, c, section, log); err != nil {
 					return nil, err
 				}
@@ -811,7 +824,11 @@ func appendFloatFootnoteSectionContentEpub2(parent *etree.Element, c *renderStat
 		// Insert at the beginning of first span
 		firstSpan.InsertChildAt(0, moreSpan)
 	}
-	appendEPUBFootnoteBacklinks(sectionElem, c, section.ID, epubFootnoteBacklinkOptions{LeadingSeparator: len(sectionElem.Child) > 0})
+	separator := ""
+	if len(sectionElem.Child) > 0 {
+		separator = text.NBSP
+	}
+	appendEPUBFootnoteBacklinks(sectionElem, c, section.ID, epubFootnoteBacklinkOptions{LeadingSeparator: separator})
 
 	return nil
 }
@@ -872,8 +889,8 @@ func appendFloatFootnoteSectionContentEpub3(parent *etree.Element, c *renderStat
 		}
 	}
 
-	// Add back-references for EPUB3 float mode - OUTSIDE the aside element
-	// This ensures backlinks are not part of the footnote popup content
+	// Full return navigation follows the aside. Reader popup extraction can still
+	// include these outside links; DOM placement alone does not control its range.
 	backPara := parent.CreateElement("p")
 	if !appendEPUBFootnoteBacklinks(backPara, c, section.ID, epubFootnoteBacklinkOptions{EPUB3Role: true}) {
 		parent.RemoveChild(backPara)
@@ -954,7 +971,7 @@ func appendFootnoteSectionContent(parent *etree.Element, c *renderState, section
 }
 
 type epubFootnoteBacklinkOptions struct {
-	LeadingSeparator bool
+	LeadingSeparator string
 	EPUB3Role        bool
 }
 
@@ -966,9 +983,6 @@ func appendEPUBFootnoteBacklinks(parent *etree.Element, c *renderState, sectionI
 	if len(refs) == 0 {
 		return false
 	}
-	if opts.LeadingSeparator {
-		appendPlainText(parent, c, text.NBSP)
-	}
 	wrote := false
 	for _, ref := range refs {
 		backlinkText := c.BacklinkText(ref)
@@ -977,6 +991,8 @@ func appendEPUBFootnoteBacklinks(parent *etree.Element, c *renderState, sectionI
 		}
 		if wrote {
 			appendPlainText(parent, c, text.NBSP)
+		} else {
+			appendPlainText(parent, c, opts.LeadingSeparator)
 		}
 		backLink := parent.CreateElement("a")
 		backLink.CreateAttr("href", ref.Href)
@@ -984,6 +1000,12 @@ func appendEPUBFootnoteBacklinks(parent *etree.Element, c *renderState, sectionI
 		if opts.EPUB3Role {
 			backLink.CreateAttr("epub:type", "backlink")
 			backLink.CreateAttr("role", "doc-backlink")
+		}
+		if c.OutputFormat == common.OutputFmtAzw3 {
+			if c.backlinks == nil {
+				c.backlinks = make(map[*etree.Element]string)
+			}
+			c.backlinks[backLink] = ref.RefID
 		}
 
 		textParent := backLink

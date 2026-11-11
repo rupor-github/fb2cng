@@ -251,41 +251,8 @@ func (plan *paginationPlan) apply(ctx context.Context, doc *pendingDocument) err
 		for i := len(children) - 1; i >= 0; i-- {
 			stack = append(stack, children[i])
 		}
-		state := make(map[string]paginationWinner)
-		for _, rule := range plan.rules {
-			if rule.matches(element) {
-				for _, declaration := range rule.declarations {
-					candidate := paginationWinner{paginationDeclaration: declaration, selector: rule.selector, specificity: rule.specificity}
-					if candidate.replaces(state[declaration.property]) {
-						state[declaration.property] = candidate
-					}
-				}
-			}
-		}
-		if style := element.SelectAttrValue("style", ""); style != "" {
-			parser := csslex.NewParser(parse.NewInputString(style), true)
-			for {
-				grammar, _, name := parser.Next()
-				if grammar == csslex.ErrorGrammar {
-					break
-				}
-				if grammar != csslex.DeclarationGrammar {
-					continue
-				}
-				declaration, relevant, supported := paginationProperty(string(name), paginationTokens(parser.Values()))
-				if !relevant {
-					continue
-				}
-				if !supported {
-					deferred = append(deferred, "unresolved inline pagination/visibility: "+style)
-					continue
-				}
-				candidate := paginationWinner{paginationDeclaration: declaration, selector: "style attribute", inline: true}
-				if candidate.replaces(state[declaration.property]) {
-					state[declaration.property] = candidate
-				}
-			}
-		}
+		state, unresolved := plan.elementState(element)
+		deferred = append(deferred, unresolved...)
 		states[element] = state
 	}
 	if len(deferred) > 0 {
@@ -382,6 +349,74 @@ func (plan *paginationPlan) apply(ctx context.Context, doc *pendingDocument) err
 		}
 	}
 	return nil
+}
+
+func (plan *paginationPlan) elementState(element *etree.Element) (map[string]paginationWinner, []string) {
+	state := make(map[string]paginationWinner)
+	var deferred []string
+	for _, rule := range plan.rules {
+		if rule.matches(element) {
+			for _, declaration := range rule.declarations {
+				candidate := paginationWinner{paginationDeclaration: declaration, selector: rule.selector, specificity: rule.specificity}
+				if candidate.replaces(state[declaration.property]) {
+					state[declaration.property] = candidate
+				}
+			}
+		}
+	}
+	if style := element.SelectAttrValue("style", ""); style != "" {
+		parser := csslex.NewParser(parse.NewInputString(style), true)
+		for {
+			grammar, _, name := parser.Next()
+			if grammar == csslex.ErrorGrammar {
+				break
+			}
+			if grammar != csslex.DeclarationGrammar {
+				continue
+			}
+			declaration, relevant, supported := paginationProperty(string(name), paginationTokens(parser.Values()))
+			if !relevant {
+				continue
+			}
+			if !supported {
+				deferred = append(deferred, "unresolved inline pagination/visibility: "+style)
+				continue
+			}
+			candidate := paginationWinner{paginationDeclaration: declaration, selector: "style attribute", inline: true}
+			if candidate.replaces(state[declaration.property]) {
+				state[declaration.property] = candidate
+			}
+		}
+	}
+	return state, deferred
+}
+
+// lowerFootnoteMore resolves the generated indicator before layout is frozen.
+// Like KFX, display:none suppresses generation; visible indicators become plain
+// text so AZW3 float-note bodies contain no extra formatting elements.
+func (plan *paginationPlan) lowerFootnoteMore(doc *pendingDocument) {
+	for _, marker := range doc.Doc.FindElements("//span[@data-fbc-footnote-more]") {
+		hidden := false
+		for element := marker; element != nil; element = element.Parent() {
+			state, _ := plan.elementState(element)
+			if state["display"].value == "none" {
+				hidden = true
+				break
+			}
+		}
+		parent := marker.Parent()
+		if !hidden {
+			for i, token := range parent.Child {
+				if token == marker {
+					parent.InsertChildAt(i, etree.NewText(marker.Text()))
+					break
+				}
+			}
+		}
+		parent.RemoveChild(marker)
+		doc.Changes = append(doc.Changes, markupChange{Tag: "span", Classes: "footnote-more",
+			Action: fmt.Sprintf("lowered generated footnote indicator to plain text (hidden=%t)", hidden)})
+	}
 }
 
 func explicitPageBreak(element *etree.Element) bool {

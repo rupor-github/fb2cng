@@ -1388,6 +1388,45 @@ func TestContent_BacklinkTextFallback(t *testing.T) {
 	}
 }
 
+func TestContent_BacklinkTextAZW3Suppression(t *testing.T) {
+	for _, format := range []string{"azw3", "epub2", "epub3", "kepub", "kepub3", "kfx", "azw8", "pdf", "txt", "md"} {
+		for _, tt := range []struct {
+			name, template, want string
+		}{
+			{name: "missing", want: defaultBacklinkText},
+			{name: "invalid syntax", template: "{{", want: defaultBacklinkText},
+			{name: "invalid execution", template: "{{.MissingField}}", want: defaultBacklinkText},
+			{name: "empty result", template: `{{ "" }}`},
+			{name: "whitespace result", template: "{{ ` \n\t ` }}"},
+			{name: "nonempty result", template: " return ", want: "return"},
+		} {
+			t.Run(format+"/"+tt.name, func(t *testing.T) {
+				want := tt.want
+				if want == "" && format != "azw3" {
+					want = defaultBacklinkText
+				}
+				c := &Content{BacklinkTemplate: tt.template}
+				if got := c.BacklinkText(BackLinkRef{Format: format}); got != want {
+					t.Fatalf("BacklinkText() = %q, want %q", got, want)
+				}
+			})
+		}
+	}
+	cfg, err := config.LoadConfiguration("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &Content{BacklinkTemplate: cfg.Document.Footnotes.BacklinkTemplate}
+	for _, format := range []string{"azw3", "epub3", "kfx", "azw8", "pdf", "md"} {
+		t.Run("default config/"+format, func(t *testing.T) {
+			got := c.BacklinkText(BackLinkRef{Format: format, LocationNumber: 42, PageNumber: 3})
+			if (got == "") != (format == "azw3") {
+				t.Fatalf("default template suppression for %s = %q", format, got)
+			}
+		})
+	}
+}
+
 func TestContent_AddFootnoteBackLinkRef_MultipleFootnotes(t *testing.T) {
 	c, _ := setupTestContent(t)
 	c.BackLinkIndex = make(map[string][]BackLinkRef)

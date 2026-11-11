@@ -152,6 +152,7 @@ func compileText(ctx context.Context, pub *publication.Publication) (*textLayout
 	var textLength uint64
 	for i := range documents {
 		doc := &documents[i]
+		pagination.lowerFootnoteMore(doc)
 		needed, err := prepareTextDocument(ctx, doc, uint32(i), files, resources, pagination, &nextAID)
 		if err != nil {
 			return nil, fmt.Errorf("prepare %s: %w", doc.Filename, err)

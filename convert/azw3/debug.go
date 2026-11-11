@@ -157,6 +157,7 @@ func writeDebugArtifacts(
 	fmt.Fprintf(&trace, "\nCOVER %s: %s\n", coverMode, coverFilename)
 	artifacts["book.azw3-style-trace.txt"] = []byte(trace.String())
 	values := map[string]any{
+		"book.azw3-backlinks.json": c.BackLinkIndex,
 		"book.azw3-documents.json": documents,
 		"book.azw3-anchors.json":   anchors,
 		"book.azw3-resources.json": resources,

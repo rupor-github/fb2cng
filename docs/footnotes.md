@@ -34,7 +34,7 @@ document:
 | KEPUB | Normal footnote sections with backlinks | Bidirectional links | Bidirectional links with normalized labels |
 | KEPUB3 | Normal footnote sections with backlinks | EPUB `aside` / `noteref` markup | EPUB `aside` / `noteref` markup with normalized labels |
 | KFX/AZW8 | Normal linked sections with backlink paragraphs; no popup markers | Kindle popup footnotes with backlink paragraphs | Popup footnotes with normalized labels and backlinks |
-| AZW3 | Normal footnote sections with backlinks | HTML5 `aside` / `noteref` markup; popups depend on the reader | Same markup with normalized labels and backlinks |
+| AZW3 | Normal footnote sections; template-controlled backlinks, off by default | Single-paragraph plain-text notes with a leading title return and optional trailing backlinks | Same behavior with normalized labels |
 | PDF | Normal linked sections with generated return links | Printed page footnotes | Printed page footnotes with page-local labels |
 | TXT | Normal sections | Final `Notes` section | Final `Notes` section with normalized labels |
 | Markdown | Normal linked sections with backlinks | Final `Notes` section with backlinks | Final `Notes` section with normalized labels and backlinks |
@@ -50,14 +50,25 @@ Formats that generate backlinks:
 | EPUB2/KEPUB | yes | yes |
 | EPUB3/KEPUB3 | yes | yes |
 | KFX/AZW8 | yes | yes |
-| AZW3 | yes | yes |
+| AZW3 | template-controlled, off by default | leading title return; trailing backlinks template-controlled, off by default |
 | PDF | yes, in footnote body sections | printed footnotes use page/link handling |
 | TXT | no clickable links | no clickable links |
 | Markdown | yes | yes |
 
 In `default` mode, generated backlinks do not imply popup/floating behavior. For example, KFX/AZW8 default footnote links navigate to normal footnote sections; only float modes emit Kindle popup markers.
 
-AZW3 popup behavior depends on the Kindle device or app. See [Native AZW3](formats/azw3.md).
+For AZW3, a valid `backlink_template` that produces empty or whitespace-only text
+suppresses additional generated backlinks in **all three modes**. The default
+template produces empty text for AZW3 to avoid clutter and confusing Kindle's
+popup detection. A custom nonempty result enables these links, including in
+`default` mode. Existing custom templates are not automatically rewritten.
+
+This does not disable the leading title/label return link in AZW3 float modes.
+In `default`, authored links and normal note formatting are preserved. Invalid
+templates still fall back to `[<]`; empty results in other formats also retain
+their `[<]` fallback. See [Templates](templates.md#backlink_template).
+
+Popup behavior still depends on the Kindle device or app. See [Native AZW3](formats/azw3.md).
 
 See [Templates](templates.md#backlink_template) for all fields.
 
@@ -77,6 +88,37 @@ See [Templates](templates.md#label_template) for fields and examples.
 
 Markdown preserves inline-image footnote labels instead of replacing them with plain text. This supports books where visible note markers are images.
 
+## AZW3 Floating Notes
+
+AZW3 `float` and `floatRenumbered` place each complete note in one paragraph:
+
+- When a clickable reference exists, the note title (`float`) or normalized label
+  (`floatRenumbered`) is a return link to the first reference, followed by a
+  nonbreaking space and the note text.
+- In `float`, every nonempty original title is enclosed in square brackets, such as
+  `[Примечание 1]`, to distinguish it from the plain-text body. Titles already
+  enclosed in `[]` are not wrapped again. This also applies to unlinked titles;
+  bracketing does not create a return link without a destination. Forward-reference
+  captions are unchanged. In `floatRenumbered`, `label_template` controls the label
+  without automatic brackets, whether linked or unlinked.
+- Formatting is removed. Former paragraphs, verses, and table rows are separated
+  by literal newlines; table cells use spaces. Explicit empty lines are retained.
+- Images become `[img:alt text]`, or `[img:]` when they have no usable alt text.
+- Authored links become `[link:caption]`, or `[link:original destination]` when
+  the captions are empty. Already-bracketed captions, such as `[2]`, are preserved
+  without another wrapper. If source brackets surround the link element instead,
+  they are reused for a single `[link:caption]`, not `[[link:caption]]`, including
+  across formatting boundaries. These are plain-text placeholders, not clickable
+  links, including references to other notes. Both placeholder rules apply in
+  `float` and `floatRenumbered`; default-mode images and links remain intact.
+- When enabled by `backlink_template`, occurrence-specific trailing return links
+  follow the text after a newline inside the same paragraph. Empty template
+  results omit those links and their separators. The leading return uses the
+  note title/label instead and remains clickable even when trailing links are
+  suppressed. Notes without references keep an unlinked title.
+
+Other output formats keep their own note formatting and link behavior.
+
 ## More Paragraph Indicator
 
 When a floating note has more than one visible content element, some readers may show only the first one in a popup. `document.footnotes.more_paragraphs` prepends an indicator to the first visible item.
@@ -87,7 +129,13 @@ document:
     more_paragraphs: "(~) "
 ```
 
-Paragraphs, images, and tables count as visible content elements. The indicator is styled with `.footnote-more`; the default stylesheet shows it for EPUB/KEPUB and AZW3, and hides it for KFX/AZW8.
+Paragraphs, images, and tables count as visible content elements. The indicator is styled with `.footnote-more`; the default stylesheet shows it for EPUB/KEPUB and AZW3 (`not amzn-et`), and hides it for KFX/AZW8 (`amzn-et`).
+
+For AZW3, CSS controls whether the indicator text is included during conversion:
+`.footnote-more { display: none; }` suppresses it. Overriding this with
+`.footnote-more { display: inline; }` includes it when the flattened note has
+multiple nonempty lines and `more_paragraphs` is nonempty. The result remains
+plain text, without a styling wrapper.
 
 ## Empty Notes
 

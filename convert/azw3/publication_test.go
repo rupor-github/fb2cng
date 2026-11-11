@@ -56,7 +56,8 @@ func TestFB2PublicationText(t *testing.T) {
 						asides += len(chapter.Doc.FindElements("//aside"))
 						backlinks += len(chapter.Doc.FindElements("//a[@class='link-backlink']"))
 					}
-					if (mode.IsFloat() && asides != 3) || (!mode.IsFloat() && asides != 0) || backlinks != 5 {
+					wantBacklinks := 0 // The default AZW3 template suppresses trailing returns in every mode.
+					if (mode.IsFloat() && asides != 3) || (!mode.IsFloat() && asides != 0) || backlinks != wantBacklinks {
 						t.Errorf("unexpected source fixture: asides=%d, backlinks=%d", asides, backlinks)
 					}
 					navigation, err := compileNavigation(context.Background(), pub, compiled, shape)

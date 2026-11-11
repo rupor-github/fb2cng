@@ -37,11 +37,15 @@ document:
     compression: standard
 ```
 
-| Value | Behavior |
-|---|---|
-| `none` | Uncompressed text |
-| `standard` | PalmDOC compression; default |
-| `huffdic` | Huffman/dictionary compression |
+| Value | Corresponding KindleGen argument | Behavior |
+|---|---|---|
+| `none` | `-c0` | Uncompressed text |
+| `standard` | `-c1` | PalmDOC compression; default |
+| `huffdic` | `-c2` | Huffman/dictionary compression |
+
+These are corresponding compression modes for comparison; AZW3 generation remains
+native and does not invoke KindleGen. Use the named values with `fbc convert --compression`,
+not the KindleGen arguments.
 
 ```bash
 fbc convert --to azw3 --compression huffdic book.fb2
@@ -105,13 +109,24 @@ does not change converter-controlled document splitting. Unresolved pagination o
 visibility rules are retained for the reader and identified in the debug trace.
 
 It supports normal linked notes, floating notes,
-renumbering, backlinks, visible TOC placement, embedded TTF/OTF fonts, and native
-non-cover SVG. Display and popup behavior depend on the reader.
+renumbering, visible TOC placement, embedded TTF/OTF fonts, and native
+non-cover SVG. Default-mode notes retain formatting. In all three modes,
+additional generated backlinks are controlled by `backlink_template`: the default
+AZW3 result is empty (no extra links), while custom nonempty results enable them.
+Float modes use one plain-text paragraph per note with a leading title/label
+return link, which is independent of this template. Any enabled additional returns
+follow the body. See [Footnotes](../footnotes.md#azw3-floating-notes).
+Display and popup behavior depend on the reader.
 
-Known limitations: on Kindle Voyage, `floatRenumbered` popups are inconsistent;
-some notes navigate instead of opening a popup, and a popup may include the next note.
-AZW3 does not currently populate backlink-template `.LocationNumber`; use page or
-section labels as a fallback.
+Known limitations: Kindle popup recognition and boundaries remain inconsistent
+and vary with firmware versions.
+Some notes navigate instead of floating, and popups may include following notes or
+join paragraphs. Full return links follow the note body, but readers may still
+include them in popups. Shared notes with multiple references need particular care;
+popup support and navigation must be checked on the target reader.
+Backlink-template `.LocationNumber` uses the generated AZW3 reference location,
+not the location of the note. Custom format-specific templates must include
+`azw3` in their Kindle-format branch to use it.
 
 Shared image configuration applies, including explicit SVG rasterization and
 transparency removal for compatibility. Ordinary covers use Kindle-compatible

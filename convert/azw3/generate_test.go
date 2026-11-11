@@ -14,12 +14,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/beevik/etree"
 	"go.uber.org/zap"
 
 	"fbc/common"
 	"fbc/config"
 	"fbc/content"
 	"fbc/css"
+	"fbc/fb2"
 	"fbc/state"
 )
 
@@ -200,6 +202,164 @@ func TestGenerateAZW3(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestGenerateAZW3BacklinkLocations(t *testing.T) {
+	for _, mode := range []common.FootnotesMode{
+		common.FootnotesModeDefault, common.FootnotesModeFloat, common.FootnotesModeFloatRenumbered,
+	} {
+		t.Run(mode.String(), func(t *testing.T) {
+			cfg, err := config.LoadConfiguration("")
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg.Document.Footnotes.Mode = mode
+			cfg.Document.Footnotes.BacklinkTemplate = "[loc\u00a0{{.LocationNumber}}]"
+			cfg.Document.AZW3.APNX = "app"
+			cfg.Document.PageMap.Enable, cfg.Document.PageMap.Size = true, 30
+			ctx, c := prepareGenerationTest(t, cfg, nil)
+			c.Debug = true
+			path := filepath.Join(t.TempDir(), "backlink.azw3")
+			result, err := Generate(ctx, c, path, false, &cfg.Document, zap.NewNop())
+			if err != nil {
+				t.Fatal(err)
+			}
+			refs := c.BackLinkIndex["note"]
+			if len(refs) != 1 || refs[0].LocationNumber <= 0 {
+				t.Fatal("generation did not resolve the backlink reference location", refs)
+			}
+			ref := refs[0]
+			want := fmt.Sprintf("[loc\u00a0%d]", ref.LocationNumber)
+			if got := c.BacklinkText(ref); got != want {
+				t.Fatalf("custom AZW3 template = %q, want %q", got, want)
+			}
+			files, err := filepath.Glob(filepath.Join(c.WorkDir, "azw3-compiled", "*.xhtml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			found := false
+			for _, file := range files {
+				doc := etree.NewDocument()
+				if err := doc.ReadFromFile(file); err != nil {
+					t.Fatal(err)
+				}
+				for _, link := range doc.FindElements("//a[@class='link-backlink']") {
+					if link.Text() != want {
+						t.Fatal("final serialized backlink label differs from the resolved context", link.Text())
+					}
+					found = true
+				}
+				for _, aside := range doc.FindElements("//aside") {
+					if len(aside.ChildElements()) != 1 || aside.ChildElements()[0].Tag != "p" {
+						t.Fatal("compiled note must contain one paragraph")
+					}
+					p := aside.ChildElements()[0]
+					for _, child := range p.ChildElements() {
+						if child.Tag != "a" || child.SelectAttrValue("role", "") != "doc-backlink" {
+							t.Fatal("compiled note contains non-navigation markup", child)
+						}
+					}
+				}
+			}
+			if !found || result.APNXPath == "" {
+				t.Fatal("unexpected generated backlink policy or missing APNX")
+			}
+			book, err := os.ReadFile(result.BookPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			apnx, err := os.ReadFile(result.APNXPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if os.Getenv("AZW3_KINDLEUNPACK_TEST") == "1" {
+				unpackProbe(t, "backlink-location-"+mode.String(), book, apnx)
+			}
+		})
+	}
+}
+
+func TestGenerateAZW3DefaultBacklinkSuppression(t *testing.T) {
+	for _, mode := range []common.FootnotesMode{
+		common.FootnotesModeDefault, common.FootnotesModeFloat, common.FootnotesModeFloatRenumbered,
+	} {
+		t.Run(mode.String(), func(t *testing.T) {
+			cfg, err := config.LoadConfiguration("")
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg.Document.Footnotes.Mode = mode
+			ctx, c := prepareGenerationTest(t, cfg, nil)
+			if mode.IsFloat() {
+				c.MoreParaStr = ""
+				note := &c.Book.Bodies[1].Sections[0]
+				note.Content = append(note.Content, fb2.FlowItem{Kind: fb2.FlowParagraph, Paragraph: &fb2.Paragraph{
+					Text: []fb2.InlineSegment{
+						{Kind: fb2.InlineLink, Href: "#chapter", Text: "see <&> \"'🙂"},
+						{Kind: fb2.InlineText, Text: " "},
+						{Kind: fb2.InlineImageSegment, Image: &fb2.InlineImage{Href: "#art", Alt: "image <&> \"'🙂"}},
+						{Kind: fb2.InlineText, Text: " "},
+						{Kind: fb2.InlineLink, Href: "#note", Text: "[2]"},
+						{Kind: fb2.InlineText, Text: " "},
+						{Kind: fb2.InlineLink, Href: "https://example.org/?a=1&b=2"},
+						{Kind: fb2.InlineText, Text: " "},
+						{Kind: fb2.InlineImageSegment, Image: &fb2.InlineImage{Href: "#art"}},
+						{Kind: fb2.InlineText, Text: " "},
+						{Kind: fb2.InlineEmphasis, Children: []fb2.InlineSegment{
+							{Kind: fb2.InlineText, Text: "["},
+							{Kind: fb2.InlineLink, Href: "#chapter", Text: "перекрёстная ссылка"},
+							{Kind: fb2.InlineText, Text: "]"},
+						}},
+					},
+				}})
+			}
+			c.Debug = true
+			result, err := Generate(ctx, c, filepath.Join(t.TempDir(), "suppressed.azw3"), false, &cfg.Document, zap.NewNop())
+			if err != nil {
+				t.Fatal(err)
+			}
+			files, err := filepath.Glob(filepath.Join(c.WorkDir, "azw3-compiled", "*.xhtml"))
+			if err != nil || len(files) == 0 {
+				t.Fatal("missing compiled documents", err)
+			}
+			leading := 0
+			for _, file := range files {
+				doc := etree.NewDocument()
+				if err := doc.ReadFromFile(file); err != nil {
+					t.Fatal(err)
+				}
+				if len(doc.FindElements("//a[@class='link-backlink']")) != 0 {
+					t.Fatal("default template generated trailing return links")
+				}
+				for _, p := range doc.FindElements("//aside/p") {
+					links := p.SelectElements("a")
+					wantTitle := "1"
+					if mode == common.FootnotesModeFloat {
+						wantTitle = "[17]"
+					}
+					if len(links) != 1 || links[0].SelectAttrValue("role", "") != "doc-backlink" || links[0].Text() != wantTitle {
+						t.Fatal("float note lost its leading title/label return")
+					}
+					placeholders := "[link:see <&> \"'🙂] [img:image <&> \"'🙂] [2] [link:https://example.org/?a=1&b=2] [img:] " +
+						"[link:перекрёстная ссылка]"
+					if len(p.ChildElements()) != 1 || !strings.Contains(links[0].Tail(), placeholders) {
+						t.Fatal("compiled placeholders lost text or added markup", links[0].Tail())
+					}
+					leading++
+				}
+			}
+			if (leading == 1) != mode.IsFloat() {
+				t.Fatal("unexpected leading return policy", leading)
+			}
+			if os.Getenv("AZW3_KINDLEUNPACK_TEST") == "1" {
+				book, err := os.ReadFile(result.BookPath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				unpackProbe(t, "backlink-suppressed-"+mode.String(), book, nil)
+			}
+		})
 	}
 }
 

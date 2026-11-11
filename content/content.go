@@ -38,7 +38,7 @@ type BackLinkRef struct {
 	Href           string // href back to the reference
 	Format         string // output format
 	PageNumber     int    // exact for PDF, approximate for generated page maps
-	LocationNumber int    // generated KFX location number
+	LocationNumber int    // generated Kindle location, or rendered Markdown block number
 	ChapterTitle   string // human-readable spine/chapter title containing the reference
 	SectionTitle   string // nearest titled section/body containing the reference when known
 }
@@ -901,7 +901,9 @@ func (c *Content) BacklinkText(ref BackLinkRef) string {
 		return defaultBacklinkText
 	}
 	text := strings.TrimSpace(buf.String())
-	if text == "" {
+	// An explicitly empty AZW3 result suppresses generated trailing returns in
+	// every mode. Missing/invalid templates still fall back, as do other formats.
+	if text == "" && ref.Format != common.OutputFmtAzw3.String() {
 		return defaultBacklinkText
 	}
 	return text

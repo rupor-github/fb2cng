@@ -316,6 +316,8 @@ document:
     # (A -> B and B -> A), for epub3 and kepub3 they use <aside> and required
     # <epub> elements, and for PDF float modes footnotes are rendered as printed
     # page-local footnotes at the bottom of the source page / continuation pages.
+    # AZW3 float modes use one plain-text paragraph with a leading title return.
+    # In all AZW3 modes, backlink_template controls additional generated returns.
     mode: default
 
     # Names of the bodies in fb2 document to consider for footnotes processing
@@ -323,6 +325,9 @@ document:
     bodies: ["notes", "comments", "примечания", "комментарии"]
 
     # Template used to render backlinks from footnote bodies to original content.
+    # For all AZW3 modes, an empty template result suppresses these links.
+    # This does not affect the leading title/label return in AZW3 float modes.
+    # The default AZW3 result is empty to avoid clutter/confusing Kindle readers.
     # Available fields include:
     # - .Context (string) - template field name ("backlink_template")
     # - .Format (string) - requested output format: epub2, epub3, kepub,
@@ -333,11 +338,13 @@ document:
     # - .Filename (string) - output filename containing the reference
     # - .Href (string) - href back to the reference
     # - .PageNumber (int) - exact for PDF, approximate for EPUB/KFX/AZW8 page maps
-    # - .LocationNumber (int) - generated KFX/AZW8 location number
+    # - .LocationNumber (int) - generated KFX/AZW8 or AZW3 location number
     # - .SectionTitle (string) - nearest titled section/body when known
     # - .ChapterTitle (string) - spine/chapter title when known
     backlink_template: |
-      {{- if eq .Format "pdf" -}}
+      {{- if eq .Format "azw3" -}}
+      {{-   "" -}}
+      {{- else if eq .Format "pdf" -}}
       {{-   if .PageNumber -}}
       {{-     printf "[page\u00A0%d]" .PageNumber -}}
       {{-   else -}}
@@ -366,6 +373,8 @@ document:
     # If floating note body has more than one paragraph this string could be
     # shown at the beginning of the first paragraph (.css footnote-more
     # controls visibility)
+    # AZW3 resolves .footnote-more display at conversion time and emits plain
+    # indicator text only when visible, using the existing not-amzn-et styling.
     more_paragraphs: "(~) "
 
     # Template used to format footnote labels.

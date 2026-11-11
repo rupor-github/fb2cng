@@ -176,6 +176,62 @@ def palm_records(book):
     return [data[start:end] for start, end in zip(offsets, offsets[1:])]
 
 
+def inspect_footnotes(data):
+    """Inspect note boundaries in the unmodified reassembled main flow.
+
+    Return links can themselves use epub:type=noteref in Kindle markup. Do not
+    count these as ordinary references, or infer boundaries from reconstructed CSS.
+    Legacy links without a generated-backlink class/role remain unclassified.
+    Physical rawml is not a DOM: KindleGen can move aside tags into the skeleton.
+    """
+    notes, references, returns = [], [], []
+
+    class NoteParser(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.note = None
+            self.link = None
+            self.asides = []
+
+        def handle_starttag(self, tag, attributes):
+            attributes = dict(attributes)
+            if tag == "aside":
+                self.asides.append(self.note)
+                if "footnote" in attributes.get("epub:type", "").split():
+                    self.note = {"id": attributes.get("id", ""), "aid": attributes.get("aid", ""), "return_links": []}
+                    notes.append(self.note)
+            if tag == "a":
+                self.link = None
+                backlink = ("link-backlink" in attributes.get("class", "").split()
+                            or attributes.get("role") == "doc-backlink")
+                if backlink or "noteref" in attributes.get("epub:type", "").split():
+                    self.link = {"id": attributes.get("id", ""), "href": attributes.get("href", ""),
+                                 "note": self.note["id"] if self.note is not None else None, "text": ""}
+                    if backlink:
+                        returns.append(self.link)
+                        if self.note is not None:
+                            self.note["return_links"].append(self.link)
+                    else:
+                        references.append(self.link)
+
+        def handle_data(self, data):
+            if self.link is not None:
+                self.link["text"] += data
+
+        def handle_endtag(self, tag):
+            if tag == "a":
+                self.link = None
+            elif tag == "aside":
+                self.note = self.asides.pop() if self.asides else None
+
+    parser = NoteParser()
+    parser.feed(data.decode("utf-8"))
+    parser.close()
+    return {"notes": notes, "references": references, "return_links": returns,
+            "inside_return_links": sum(link["note"] is not None for link in returns),
+            "outside_return_links": sum(link["note"] is None for link in returns)}
+
+
 def inspect_resc_spine(record):
     if len(record) < 16 or record[:4] != b"RESC":
         raise RuntimeError("invalid RESC header")
@@ -459,6 +515,8 @@ def main():
     for name in ("legacy", "native", "reference"):
         inspections[name]["raw_pagination"] = inspect_raw_breaks(work / "view" / (name + ".azw3"), work / (name + "-unpacked"))
         inspections[name]["kindle_metadata"] = inspect_kindle_metadata(work / "view" / (name + ".azw3"))
+        assembled = work / (name + "-unpacked") / "mobi8/assembled_text.dat"
+        inspections[name]["footnotes"] = inspect_footnotes(assembled.read_bytes())
     pagination_audit = audit_pagination_report(work / "native/report.zip")
     if pagination_audit["native_breaks"] != inspections["native"]["raw_pagination"]["native_breaks"]:
         pagination_audit["errors"].append("compiled snapshots and independently decoded raw stream have different native-break counts")
@@ -472,7 +530,8 @@ def main():
     with zipfile.ZipFile(work / "native/report.zip") as report:
         names = report.namelist()
         for required in ("book.azw3-documents.json", "book.azw3-anchors.json", "book.azw3-style-trace.txt",
-                         "book.azw3-resources.json", "book.azw3-flows.json", "book.azw3-records.json", "book.azw3-navigation.json"):
+                         "book.azw3-resources.json", "book.azw3-flows.json", "book.azw3-records.json", "book.azw3-navigation.json",
+                         "book.azw3-backlinks.json"):
             if not any(name.endswith("/" + required) for name in names):
                 raise RuntimeError("native debug report lacks " + required)
     rows = ["# AZW3 comparison", "", f"Input: `{args.book}`", f"Footnotes: `{args.footnotes}`", "",
@@ -483,7 +542,12 @@ def main():
                     f"{result['explicit_breaks']} | {result['raw_pagination']['native_breaks']} | "
                     f"{result['raw_pagination']['css_only_breaks']} | "
                     f"{result['raw_pagination']['native_anchors']['count']} | {len(result['broken_links'])} |")
-    rows += ["", f"Same-content KindleGen exit status: {status} (1 means warnings; inspect the complete log).", "",
+    rows += ["", "| Arm | Footnotes | Explicit return links inside / outside notes |", "|---|---:|---:|"]
+    for name, result in inspections.items():
+        notes = result["footnotes"]
+        rows.append(f"| {name} | {len(notes['notes'])} | {notes['inside_return_links']} / {notes['outside_return_links']} |")
+    rows += ["", "Legacy return links without the native backlink class/role are not classified by this inventory.",
+             "", f"Same-content KindleGen exit status: {status} (1 means warnings; inspect the complete log).", "",
              "Open view/legacy.azw3, view/native.azw3 and view/reference.azw3 in the same Kindle Previewer profile.",
              "Compare headings, epigraphs, empty lines, poems, tables, images, links and floating notes.",
              "Different converter defaults/classes are not automatically compiler defects.",

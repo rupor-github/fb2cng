@@ -1,6 +1,10 @@
 package publication
 
-import "fbc/content"
+import (
+	"github.com/beevik/etree"
+
+	"fbc/content"
+)
 
 // Markup selects content syntax independently of the actual output format used
 // by templates and normalization. It does not select a container or image policy.
@@ -17,5 +21,6 @@ const (
 // prepared Content's output identity or adding backend state to other converters.
 type renderState struct {
 	*content.Content
-	markup Markup
+	markup    Markup
+	backlinks map[*etree.Element]string
 }

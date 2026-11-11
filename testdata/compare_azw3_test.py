@@ -9,12 +9,29 @@ import xml.etree.ElementTree as ET
 import zipfile
 
 from compare_azw3 import (audit_pagination_report, export_reference_publication, inspect, inspect_break_markup,
-                         inspect_kindle_metadata, inspect_native_anchors, inspect_raw_breaks, inspect_resc_spine,
+                         inspect_footnotes, inspect_kindle_metadata, inspect_native_anchors, inspect_raw_breaks, inspect_resc_spine,
                          load_config, palm_records, run, self_closing_nonvoid)
 from probe_azw3_metadata import drop_exth_fields
 
 
 class AZW3ComparisonTests(unittest.TestCase):
+    def test_footnote_return_link_boundaries_and_cycles(self):
+        result = inspect_footnotes(b'''<a id="ref1" epub:type="noteref" href="#one"><sup>1.1</sup></a>
+<aside id="one" epub:type="footnote" aid="0001"><p>
+<a class="link-backlink" epub:type="noteref" href="#ref1">[loc 3]</a></p>
+<p>Note one. <a id="cycle" epub:type="noteref" href="#two">1.2</a></p>
+<aside><a class="link-backlink" href="#nested">Nested return</a></aside></aside>
+<a class="link-backlink" href="#outside">Outside return</a>
+<aside id="two" epub:type="footnote" aid="0002"><p>
+<a role="doc-backlink" href="#cycle">[loc 9]</a></p><p>Note two.</p></aside>''')
+        self.assertEqual(result["inside_return_links"], 3)
+        self.assertEqual(result["outside_return_links"], 1)
+        self.assertEqual([note["id"] for note in result["notes"]], ["one", "two"])
+        self.assertEqual([link["text"] for link in result["notes"][0]["return_links"]], ["[loc 3]", "Nested return"])
+        self.assertEqual([link["text"] for link in result["notes"][1]["return_links"]], ["[loc 9]"])
+        self.assertEqual([link["id"] for link in result["references"]], ["ref1", "cycle"])
+        self.assertEqual([link["note"] for link in result["references"]], [None, "one"])
+
     def test_metadata_probe_preserves_title_and_content_records(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

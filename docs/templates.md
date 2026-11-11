@@ -509,8 +509,8 @@ Available fields:
 
 | Field | Meaning |
 |---|---|
-| `.PageNumber` | Exact PDF page number; approximate/generated page-map number for EPUB/KFX when available |
-| `.LocationNumber` | Kindle/KFX location number; for Markdown, rendered Markdown block number containing the original reference anchor |
+| `.PageNumber` | Exact PDF page number; approximate/generated page-map number for EPUB/KFX/AZW3 when available |
+| `.LocationNumber` | Generated KFX/AZW8 or AZW3 reference location; for Markdown, rendered block number containing the reference anchor |
 | `.SectionTitle` | Nearest titled section/body containing the reference |
 | `.ChapterTitle` | Spine/chapter title containing the reference |
 | `.TargetID` | ID of the footnote section being referenced |
@@ -519,7 +519,17 @@ Available fields:
 | `.Href` | Generated return href where applicable |
 | `.Filename` | Generated content file containing the reference where applicable |
 
-If the template is empty, invalid, or renders an empty string, fb2cng falls back to `[<]`.
+Missing or invalid templates fall back to `[<]`, including template execution
+errors. A valid template producing empty or whitespace-only text also falls back
+to `[<]` for other formats, but **suppresses additional generated backlinks for
+AZW3 in all three modes**. The default template returns empty text for AZW3.
+This does not affect the leading title/label return in AZW3 float modes.
+
+To explicitly suppress AZW3 trailing links, use a valid template such as
+`{{- "" -}}`, not an empty YAML value (configuration requires a nonempty template).
+In a format-specific template, the `azw3` branch can return empty while preserving
+the existing branches for other formats. Custom nonempty results opt AZW3 back in,
+including in `default` mode; older custom configurations are not rewritten.
 
 Example:
 
@@ -553,6 +563,15 @@ How this template works:
 In plain English, the sample means: "Prefer exact PDF page numbers, otherwise use a generated location, otherwise use the source section title, otherwise use a generic back marker."
 
 Markdown note: in Markdown, `.Href` is also used as the actual Markdown backlink target, so visible template text and clickable destination correspond.
+
+AZW3 note: this template controls additional generated returns in all three modes.
+In float modes, the leading title/label return does not use this template; the
+optional trailing occurrence-specific returns do. Authored links inside floating notes become plain text and do not
+receive generated return links. Locations are resolved after layout independently
+for each remaining clickable reference. Templates that explicitly select Kindle
+formats must include `.Format = "azw3"`; old configurations are not rewritten.
+A template whose location-dependent label lengths never stabilize is rejected
+rather than publishing a book with stale link or page-map positions.
 
 ## TOC Page Author Template
 

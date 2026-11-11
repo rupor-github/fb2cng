@@ -110,8 +110,11 @@ fbc convert --to azw8 --compression lzma book.fb2
 fbc convert --to azw3 --compression huffdic book.fb2
 ```
 
-AZW3 defaults to `standard` compression. `--compression` accepts only the modes supported
-by the selected `--to` format; omitting it respects that format's YAML setting.
+AZW3 defaults to `standard` compression (corresponding to KindleGen `-c1`);
+`none` corresponds to `-c0`, and `huffdic` to `-c2`. AZW3 is generated natively
+without invoking KindleGen. `--compression` accepts the named modes supported by
+the selected `--to` format, not KindleGen's arguments; omitting it respects that
+format's YAML setting.
 
 See [KFX/AZW8 compression](formats/kfx.md#compression) and
 [AZW3 compression](formats/azw3.md#compression) for conversion settings, and

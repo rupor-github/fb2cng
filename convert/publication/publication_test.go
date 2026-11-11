@@ -101,8 +101,9 @@ func TestBuild(t *testing.T) {
 								}
 							}
 						}
-						if backlinks != 1 {
-							t.Errorf("backlinks = %d, want 1", backlinks)
+						wantBacklinks := 1
+						if backlinks != wantBacklinks {
+							t.Errorf("backlinks = %d, want %d", backlinks, wantBacklinks)
 						}
 						wantAsides := 0
 						if mode.IsFloat() && testMarkup(format) == HTML5 {

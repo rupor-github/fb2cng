@@ -104,6 +104,7 @@ for troubleshooting. Compression does not change book content.
 | `azw3-input/`, `azw3-compiled/` | Numbered XHTML documents before and after native lowering; filenames are mapped in the document inventory |
 | `book.azw3-documents.json` | Document order, byte sizes, and per-document transformations |
 | `book.azw3-anchors.json` | Resolved reading anchors and link destinations |
+| `book.azw3-backlinks.json` | Final template context for each footnote reference, including generated locations |
 | `book.azw3-resources.json` | Font, raster-image, and SVG resource inventory |
 | `azw3-resources/` | Checksummed pre-lowering resource bytes referenced by the resource inventory |
 | `book.azw3-flows.json`, `book.azw3-records.json` | Native data sizes and checksums for comparison |
