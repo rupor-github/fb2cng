@@ -48,6 +48,16 @@ Depth-1 sections are always separate content documents. Nested sections can be s
 
 In EPUB3 and KEPUB3 `default` mode, footnote references are ordinary links, not `noteref` popup links. Generated backlinks use `epub:type="backlink"` and `role="doc-backlink"`.
 
+The bundled `backlink_template` enables returns in all three modes. A valid
+template producing empty or whitespace-only text, such as `{{- "" -}}`, suppresses
+generated returns without removing forward links, note targets or EPUB3
+`footnote`/`noteref` semantics. Empty notes retain their targets.
+
+Returns provide a way back when a reader jumps to a note instead of opening a
+popup. Readers may also use link relationships as popup-recognition heuristics,
+especially with EPUB2/KEPUB. Disabling returns can therefore affect recognition,
+popup boundaries or navigation; validate with your intended readers.
+
 See [Footnotes](../footnotes.md) for mode details and templates.
 
 ## Images And Fonts

@@ -1401,13 +1401,9 @@ func TestContent_BacklinkTextSuppression(t *testing.T) {
 			{name: "nonempty result", template: " return ", want: "return"},
 		} {
 			t.Run(format+"/"+tt.name, func(t *testing.T) {
-				want := tt.want
-				if want == "" && format != "azw3" && format != "pdf" && format != "md" && format != "kfx" && format != "azw8" {
-					want = defaultBacklinkText
-				}
 				c := &Content{BacklinkTemplate: tt.template}
-				if got := c.BacklinkText(BackLinkRef{Format: format}); got != want {
-					t.Fatalf("BacklinkText() = %q, want %q", got, want)
+				if got := c.BacklinkText(BackLinkRef{Format: format}); got != tt.want {
+					t.Fatalf("BacklinkText() = %q, want %q", got, tt.want)
 				}
 			})
 		}
@@ -1417,7 +1413,7 @@ func TestContent_BacklinkTextSuppression(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := &Content{BacklinkTemplate: cfg.Document.Footnotes.BacklinkTemplate}
-	for _, format := range []string{"azw3", "epub3", "kfx", "azw8", "pdf", "md"} {
+	for _, format := range []string{"azw3", "epub2", "epub3", "kepub", "kepub3", "kfx", "azw8", "pdf", "md"} {
 		t.Run("default config/"+format, func(t *testing.T) {
 			got := c.BacklinkText(BackLinkRef{Format: format, LocationNumber: 42, PageNumber: 3})
 			if (got == "") != (format == "azw3") {

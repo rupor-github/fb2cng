@@ -42,6 +42,9 @@ document:
 ## Backlinks
 
 Generated backlinks are controlled by `document.footnotes.backlink_template`.
+A valid template producing empty or whitespace-only text suppresses generated
+returns in every supporting format. The bundled template disables them for AZW3
+and enables them for other formats; TXT does not generate backlinks.
 
 Formats that generate backlinks:
 
@@ -80,8 +83,13 @@ paragraphs in all three modes. Forward note links and floating-note popup marker
 remain; empty notes retain an addressable target. The bundled template still
 enables KFX/AZW8 backlinks by default.
 
-Missing or invalid templates still fall back to `[<]`; empty results in formats
-other than AZW3, PDF, Markdown and KFX/AZW8 also retain their `[<]` fallback.
+For EPUB/KEPUB, empty or whitespace-only results suppress generated returns in
+all three modes. Forward links, note targets and EPUB3 `footnote`/`noteref`
+semantics remain. Returns are enabled by default for reader compatibility;
+disabling them can affect return navigation and reader-dependent popup recognition
+or boundaries, especially in EPUB2. Validate with the readers you use.
+
+Missing or invalid templates still fall back to `[<]`, including execution errors.
 See [Templates](templates.md#backlink_template).
 
 Popup behavior still depends on the Kindle device or app. See [Native AZW3](formats/azw3.md).
