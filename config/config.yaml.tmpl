@@ -343,6 +343,7 @@ document:
     # - .ChapterTitle (string) - spine/chapter title when known
     backlink_template: |
       {{- if eq .Format "azw3" -}}
+      {{- /* In floating modes, additional backlinks can confuse the Kindle reader's popup recognition and boundaries. */ -}}
       {{-   "" -}}
       {{- else if eq .Format "pdf" -}}
       {{-   if .PageNumber -}}
