@@ -1,7 +1,7 @@
 # Debugging And Validation
 
-This guide covers converter debug reports, the standalone development utilities, output
-validators. Start with `fbc --debug` when investigating a
+This guide covers converter debug reports, the standalone development utilities, and
+external validation/reference tools. Start with `fbc --debug` when investigating a
 conversion; use the standalone tools to inspect or transform files already on disk.
 
 ## Choose A Tool
@@ -15,6 +15,8 @@ conversion; use the standalone tools to inspect or transform files already on di
 | [`run_epubcheck.sh`](#epub-and-kepub) | EPUB/KEPUB | Run external EPUBCheck |
 | [`run_kfx_input.py`](#kfx-and-azw8) | KFX/AZW8 | Decode and check the book with external KFXInput |
 | [`run_pdf_check.sh`](#pdf-validation) | PDF | Check structure and inspect metadata with qpdf/pdfinfo |
+| [`run_kindleunpack.sh`](#kindleunpack) | Unencrypted MOBI/AZW3 | Decode books, inspect headers, and extract content/resources |
+| [`run_kindlegen.sh`](#kindlegen-references) | EPUB, OPF, or HTML | Generate a reference combo MOBI with external KindleGen |
 
 The three standalone utilities (`kfxdump`, `kpfdump`, and `kfxcompress`) do not load the
 converter's YAML configuration, enable its reporter, or require `--debug`.
@@ -353,8 +355,10 @@ Ctrl+C is supported by both kfxcompress and kfxdump.
 
 ## Output Validators
 
-Validation scripts live in `testdata`; they use external tools rather than the converter's
-own dump routines. Structural checks complement opening the result in the intended reader.
+The `run_*` scripts live in `testdata`; they use external tools rather than the converter's
+own dump routines. Run the examples below from the repository root. Structural checks
+complement opening the result in the intended reader. KindleGen generates reference books;
+it is not a validator and is not needed for native AZW3 conversion.
 
 ### EPUB And KEPUB
 
@@ -405,6 +409,61 @@ Do not ignore other errors or warnings; include the complete output when reporti
 
 Always open the result in Kindle Previewer or your intended reader to check images, text,
 and navigation. If vector artwork renders incorrectly, try `document.images.rasterize_svg: true`.
+
+### AZW3 And MOBI
+
+#### KindleUnpack
+
+Use KindleUnpack to inspect an existing unencrypted AZW3 or MOBI book:
+
+```bash
+testdata/run_kindleunpack.sh -r -d book.azw3 unpacked/
+testdata/run_kindleunpack.sh -r -s -d reference.mobi unpacked-reference/
+testdata/run_kindleunpack.sh -r -d -p book.apnx book.azw3 unpacked-with-pages/
+```
+
+The wrapper requires Python 3 and a complete KindleUnpack checkout. Set
+`KINDLEUNPACK_PATH` to the directory containing `lib/kindleunpack.py`. Otherwise it
+uses `${BOOK_TESTS_PATH}/KindleUnpack`; `BOOK_TESTS_PATH` defaults to
+`../../../book-tests` relative to the repository root.
+
+Options are passed through and must precede the input filename. `-r` retains raw
+data, `-d` includes diagnostic/header information, `-s` splits combo books into
+standalone MOBI7 and AZW3 files, and `-p` reads an APNX sidecar. Use
+`--epub_version=3` to request EPUB3 reconstruction. If the output directory is
+omitted, KindleUnpack derives it from the input path without its extension.
+
+Tool output and exit status are preserved. Inspect the full output even after a
+successful exit: warnings, retargeted links, or reconstruction repairs need
+investigation. Successful decoding does not establish visual or popup compatibility;
+open the original book in the intended Kindle reader as well.
+
+#### KindleGen References
+
+Use KindleGen only when a separately compiled reference book helps investigate a
+rendering or compatibility problem:
+
+```bash
+testdata/run_kindlegen.sh book.epub -c0 -o reference.mobi
+testdata/run_kindlegen.sh publication/book.opf -c1 -verbose -o reference.mobi
+testdata/run_kindleunpack.sh -r -s -d publication/reference.mobi unpacked-reference/
+```
+
+Provide a compatible KindleGen executable; the wrapper does not download it.
+`KINDLEGEN_PATH` accepts either the executable path or a directory containing
+`kindlegen`. Otherwise the wrapper uses `${BOOK_TESTS_PATH}/fb2converter/kindlegen`,
+with the same `BOOK_TESTS_PATH` default described above.
+
+Arguments are passed directly to KindleGen. `-c0` selects no compression, `-c1`
+PalmDOC compression, and `-c2` Huffman/dictionary compression; `-verbose` enables
+detailed diagnostics. `-o` takes a basename, not a destination path: the output is
+written beside the input EPUB/OPF/HTML. The result is a combo MOBI; use KindleUnpack's
+`-s` option to extract its standalone AZW3 portion for comparison.
+
+KindleGen's exit status is preserved: `0` means success, `1` warnings, and `2` a
+compiler error. Inspect the complete log when warnings occur. Compare books with
+matching content and settings in the same reader; different compiler defaults can
+produce different results without indicating a converter defect.
 
 ### PDF Validation
 
