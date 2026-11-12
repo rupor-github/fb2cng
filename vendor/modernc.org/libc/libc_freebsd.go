@@ -45,6 +45,7 @@ import (
 
 var (
 	in6_addr_any in.In6_addr
+	startTime    = gotime.Now() // For clock(3)
 )
 
 // // Keep these outside of the var block otherwise go generate will miss them.
@@ -162,6 +163,14 @@ func Xfprintf(t *TLS, stream, format, args uintptr) int32 {
 	}
 	n, _ := fwrite(int32((*stdio.FILE)(unsafe.Pointer(stream)).F_file), printf(format, args))
 	return int32(n)
+}
+
+// clock_t clock(void);
+func Xclock(t *TLS) time.Clock_t {
+	if __ccgo_strace {
+		trc("t=%v, (%v:)", t, origin(2))
+	}
+	return time.Clock_t(gotime.Since(startTime) * gotime.Duration(time.CLOCKS_PER_SEC) / gotime.Second)
 }
 
 // int usleep(useconds_t usec);
