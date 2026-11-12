@@ -18,6 +18,10 @@ type ContentRef struct {
 	RawEntry        StructValue     // Pre-built entry (for complex structures like tables)
 	FootnoteContent bool            // If true, adds position:footer and yj.classification:footnote markers
 
+	// Suppressed backlink candidates are retained for location-time reevaluation,
+	// but excluded from positions, margin processing and serialized storylines.
+	suppressedBacklink bool
+
 	// Container tracking for margin collapsing (post-processing).
 	// These fields are set during content generation and used by CollapseMargins().
 	ContainerID    int            // Unique container ID (0 = top-level/root)

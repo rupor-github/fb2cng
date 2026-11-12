@@ -83,6 +83,12 @@ comparison, or [examples](../images.md#examples) to force raster output for comp
 | `float` | Footnote content is marked for Kindle popup rendering and backlink paragraphs are generated |
 | `floatRenumbered` | Same as `float`, with normalized labels from `label_template` |
 
+The bundled `backlink_template` enables generated returns in all three modes. A
+valid template producing empty or whitespace-only text, such as `{{- "" -}}`,
+suppresses these return paragraphs without removing forward note links or
+floating-note popup markers. Empty referenced notes remain addressable. Popup
+behavior still depends on the Kindle device or app.
+
 KFX resolves `.LocationNumber` for `backlink_template` from generated Kindle positions, including backlinks from later notes to earlier notes. See [Footnotes](../footnotes.md) and [Templates](../templates.md#backlink_template).
 
 ## Page And Location Maps

@@ -901,11 +901,12 @@ func (c *Content) BacklinkText(ref BackLinkRef) string {
 		return defaultBacklinkText
 	}
 	text := strings.TrimSpace(buf.String())
-	// Successful empty results suppress generated returns in AZW3, PDF and Markdown.
+	// Successful empty results suppress generated returns in AZW3, PDF, Markdown and KFX/AZW8.
 	// Other formats retain their fallback until their generators are migrated.
 	// Missing/invalid templates still fall back in every format.
 	if text == "" && ref.Format != common.OutputFmtAzw3.String() &&
-		ref.Format != common.OutputFmtPdf.String() && ref.Format != common.OutputFmtMd.String() {
+		ref.Format != common.OutputFmtPdf.String() && ref.Format != common.OutputFmtMd.String() &&
+		ref.Format != common.OutputFmtKfx.String() && ref.Format != common.OutputFmtAzw8.String() {
 		return defaultBacklinkText
 	}
 	return text

@@ -20,6 +20,9 @@ type kfxBacklinkParagraph struct {
 	ContentOffset int
 	EID           int
 	RefIDs        []string
+	// A completely empty note still needs an addressable destination when its
+	// generated returns disappear. Retain an unstyled, link-free empty entry.
+	KeepEmptyAnchor bool
 }
 
 // sectionWorkItem represents a section to be processed as a storyline.
@@ -450,7 +453,8 @@ func generateStoryline(ctx context.Context, c *content.Content, styles *StyleReg
 					resolveKFXBacklinkLocations(c, fragments, ca.Snapshot(), sectionNames, chapterStartSections, idToEID, sb)
 					refs = c.BackLinkIndex[sectionID]
 				}
-				if paragraph, ok := addBacklinkParagraph(c, refs, sb, styles, ca); ok {
+				keepEmptyAnchor := idToEID[sectionID].EID == sb.NextEID()
+				if paragraph, ok := addBacklinkParagraph(c, refs, keepEmptyAnchor, sb, styles, ca); ok {
 					backlinkParagraphs = append(backlinkParagraphs, paragraph)
 				}
 			}
@@ -688,6 +692,7 @@ func processBodyIntroContent(
 func addBacklinkParagraph(
 	c *content.Content,
 	refs []content.BackLinkRef,
+	keepEmptyAnchor bool,
 	sb *StorylineBuilder,
 	styles *StyleRegistry,
 	ca *ContentAccumulator,
@@ -697,9 +702,8 @@ func addBacklinkParagraph(
 	}
 
 	text, events := kfxBacklinkParagraphContent(c, refs, styles)
-	if text == "" {
-		return kfxBacklinkParagraph{}, false
-	}
+	// Even an initially empty result can become visible once reference locations
+	// resolve. Reserve its place, but keep empty candidates out of the storyline.
 	contentName, contentOffset := ca.Add(text)
 	refIDs := make([]string, 0, len(refs))
 	for _, ref := range refs {
@@ -709,7 +713,11 @@ func addBacklinkParagraph(
 	// Add the content entry: paragraph uses container style, events use link style.
 	// Pass empty resolved style - will be resolved in Build() with position filtering.
 	eid := sb.AddContentAndEvents(SymText, contentName, contentOffset, "p", "", events)
-	return kfxBacklinkParagraph{ContentName: contentName, ContentOffset: contentOffset, EID: eid, RefIDs: refIDs}, true
+	paragraph := kfxBacklinkParagraph{
+		ContentName: contentName, ContentOffset: contentOffset, EID: eid, RefIDs: refIDs, KeepEmptyAnchor: keepEmptyAnchor,
+	}
+	updateKFXBacklinkParagraph(c, paragraph, sb, events, text == "")
+	return paragraph, true
 }
 
 func kfxBacklinkParagraphContent(
@@ -814,7 +822,7 @@ func rewriteKFXBacklinkParagraphs(
 		if ca.Replace(paragraph.ContentName, paragraph.ContentOffset, text) {
 			changed = true
 		}
-		if sb.ReplaceStyleEvents(paragraph.EID, events) {
+		if updateKFXBacklinkParagraph(c, paragraph, sb, events, text == "") {
 			changed = true
 		}
 	}

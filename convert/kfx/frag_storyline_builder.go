@@ -302,6 +302,9 @@ func (sb *StorylineBuilder) AllEIDs() []int {
 	eids := make([]int, 0, len(sb.contentEntries)+1)
 	eids = append(eids, sb.pageTemplateEID)
 	for _, ref := range sb.contentEntries {
+		if ref.suppressedBacklink {
+			continue
+		}
 		if ref.RawEntry != nil {
 			// Pre-built entry (e.g., table): recursively collect all EIDs
 			eids = append(eids, collectStructEIDs(ref.RawEntry)...)
@@ -338,29 +341,6 @@ func (sb *StorylineBuilder) SetNextEID(eid int) {
 // PageTemplateEID returns the EID allocated for the page template container.
 func (sb *StorylineBuilder) PageTemplateEID() int {
 	return sb.pageTemplateEID
-}
-
-func (sb *StorylineBuilder) ReplaceStyleEvents(eid int, events []StyleEventRef) bool {
-	if sb == nil || eid <= 0 {
-		return false
-	}
-	return replaceContentRefStyleEvents(sb.contentEntries, eid, events)
-}
-
-func replaceContentRefStyleEvents(refs []ContentRef, eid int, events []StyleEventRef) bool {
-	for i := range refs {
-		if refs[i].EID == eid {
-			if slices.Equal(refs[i].StyleEvents, events) {
-				return false
-			}
-			refs[i].StyleEvents = slices.Clone(events)
-			return true
-		}
-		if replaceContentRefStyleEvents(refs[i].childRefs, eid, events) {
-			return true
-		}
-	}
-	return false
 }
 
 // MarkPreviousEntryStripMB marks the previous content entry to have its margin-bottom stripped.
@@ -463,6 +443,7 @@ func (sb *StorylineBuilder) consumePendingFootnoteContent() bool {
 // After style resolution, applies CSS margin collapsing as a post-processing step
 // to match KP3 behavior.
 func (sb *StorylineBuilder) Build() (*Fragment, *Fragment) {
+	sb.contentEntries = slices.DeleteFunc(sb.contentEntries, func(ref ContentRef) bool { return ref.suppressedBacklink })
 	// Apply position-based style filtering to top-level entries
 	sb.applyStorylinePositionFiltering()
 
@@ -517,6 +498,9 @@ func (sb *StorylineBuilder) Build() (*Fragment, *Fragment) {
 func (sb *StorylineBuilder) BuildStorylineOnly() *Fragment {
 	entries := make([]any, 0, len(sb.contentEntries))
 	for _, ref := range sb.contentEntries {
+		if ref.suppressedBacklink {
+			continue
+		}
 		entries = append(entries, NewContentEntry(ref))
 	}
 	return BuildStoryline(sb.name, entries)

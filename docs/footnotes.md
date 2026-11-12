@@ -75,8 +75,13 @@ For Markdown, a valid empty or whitespace-only result suppresses generated retur
 in all three modes. Forward note links, note anchors and reference anchors remain.
 The bundled template still enables Markdown backlinks by default.
 
+For KFX/AZW8, a valid empty or whitespace-only result suppresses generated return
+paragraphs in all three modes. Forward note links and floating-note popup markers
+remain; empty notes retain an addressable target. The bundled template still
+enables KFX/AZW8 backlinks by default.
+
 Missing or invalid templates still fall back to `[<]`; empty results in formats
-other than AZW3, PDF and Markdown also retain their `[<]` fallback.
+other than AZW3, PDF, Markdown and KFX/AZW8 also retain their `[<]` fallback.
 See [Templates](templates.md#backlink_template).
 
 Popup behavior still depends on the Kindle device or app. See [Native AZW3](formats/azw3.md).
@@ -152,8 +157,8 @@ plain text, without a styling wrapper.
 
 Empty referenced notes are handled intentionally:
 
-- KFX/AZW8 register the footnote anchor and can still generate backlink paragraphs.
-- Markdown emits a generated heading/anchor and backlink even when the note body has no rendered content.
+- KFX/AZW8 retain the footnote target even when generated returns are suppressed.
+- Markdown emits a generated heading/anchor and, when enabled, backlinks even when the note body has no rendered content.
 - Default modes keep empty notes as ordinary document sections where the format supports anchors.
 
 This keeps references clickable even for empty or placeholder notes.

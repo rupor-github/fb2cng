@@ -521,13 +521,13 @@ Available fields:
 
 Missing or invalid templates fall back to `[<]`, including template execution
 errors. A valid template producing empty or whitespace-only text **suppresses
-additional generated backlinks for AZW3 and Markdown in all three modes, and PDF
+additional generated backlinks for AZW3, Markdown and KFX/AZW8 in all three modes, and PDF
 in `default` mode**. Other formats still fall back to `[<]` for empty results. The default
 template returns empty text for AZW3 and enables backlinks for other formats.
 Suppression does not affect the leading title/label return in AZW3 float modes,
-forward links and note anchors in PDF/Markdown, or PDF printed footnotes in floating modes.
+forward links and note anchors, KFX/AZW8 floating-note markers, or PDF printed footnotes in floating modes.
 
-To explicitly suppress AZW3 trailing links or PDF/Markdown generated returns, use a valid template such as
+To explicitly suppress generated returns in these formats, use a valid template such as
 `{{- "" -}}`, not an empty YAML value (configuration requires a nonempty template).
 In a format-specific template, the `azw3` branch can return empty while preserving
 the existing branches for other formats. Custom nonempty results opt AZW3 back in,

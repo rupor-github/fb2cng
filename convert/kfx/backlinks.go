@@ -1,6 +1,7 @@
 package kfx
 
 import (
+	"slices"
 	"sort"
 
 	"fbc/content"
@@ -83,11 +84,41 @@ func positionSnapshotFragments(fragments *FragmentList, contentSnapshot map[stri
 func storylineSnapshotFragments(sb *StorylineBuilder) (*Fragment, *Fragment) {
 	entries := make([]any, 0, len(sb.contentEntries))
 	for _, ref := range sb.contentEntries {
+		if ref.suppressedBacklink {
+			continue
+		}
 		entries = append(entries, NewContentEntry(ref))
 	}
 	storylineFrag := BuildStoryline(sb.name, entries)
 	sectionFrag := BuildSection(sb.sectionName, []any{NewPageTemplateEntry(sb.pageTemplateEID, sb.name)})
 	return storylineFrag, sectionFrag
+}
+
+func updateKFXBacklinkParagraph(
+	c *content.Content, paragraph kfxBacklinkParagraph, sb *StorylineBuilder, events []StyleEventRef, empty bool,
+) bool {
+	for i := range sb.contentEntries {
+		ref := &sb.contentEntries[i]
+		if ref.EID != paragraph.EID {
+			continue
+		}
+		suppressed := empty && !paragraph.KeepEmptyAnchor
+		footnote := empty && paragraph.KeepEmptyAnchor && c.FootnotesMode.IsFloat()
+		styleSpec := "p"
+		if empty && paragraph.KeepEmptyAnchor {
+			styleSpec = ""
+		}
+		if slices.Equal(ref.StyleEvents, events) && ref.suppressedBacklink == suppressed &&
+			ref.FootnoteContent == footnote && ref.StyleSpec == styleSpec {
+			return false
+		}
+		ref.StyleEvents = slices.Clone(events)
+		ref.suppressedBacklink = suppressed
+		ref.FootnoteContent = footnote
+		ref.StyleSpec = styleSpec
+		return true
+	}
+	return false
 }
 
 type kfxPositionLookup struct {
