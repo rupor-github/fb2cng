@@ -457,7 +457,7 @@ func TestGenerateAZW3DefaultMedia(t *testing.T) {
 			margin = value.Raw
 		}
 	}
-	if margin != "0 -8pt 0.3em -8pt" {
+	if margin != "0 -10pt 0.3em -10pt" {
 		t.Errorf("KF8-only default paragraph margin = %q", margin)
 	}
 	more := sheet.RulesBySelector(".footnote-more")

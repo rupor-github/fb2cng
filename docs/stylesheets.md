@@ -89,7 +89,7 @@ alternatives. A leading `not` negates the whole query; `and not` negates one con
 
 @media amzn-kf8 and not amzn-et {
     p {
-        margin: 0 -8pt 0.3em -8pt;
+        margin: 0 -10pt 0.3em -10pt;
     }
 }
 ```
