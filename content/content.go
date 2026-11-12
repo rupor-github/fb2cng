@@ -901,9 +901,10 @@ func (c *Content) BacklinkText(ref BackLinkRef) string {
 		return defaultBacklinkText
 	}
 	text := strings.TrimSpace(buf.String())
-	// An explicitly empty AZW3 result suppresses generated trailing returns in
-	// every mode. Missing/invalid templates still fall back, as do other formats.
-	if text == "" && ref.Format != common.OutputFmtAzw3.String() {
+	// Successful empty results suppress generated returns in AZW3 and PDF.
+	// Other formats retain their fallback until their generators are migrated.
+	// Missing/invalid templates still fall back in every format.
+	if text == "" && ref.Format != common.OutputFmtAzw3.String() && ref.Format != common.OutputFmtPdf.String() {
 		return defaultBacklinkText
 	}
 	return text

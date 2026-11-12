@@ -1388,7 +1388,7 @@ func TestContent_BacklinkTextFallback(t *testing.T) {
 	}
 }
 
-func TestContent_BacklinkTextAZW3Suppression(t *testing.T) {
+func TestContent_BacklinkTextSuppression(t *testing.T) {
 	for _, format := range []string{"azw3", "epub2", "epub3", "kepub", "kepub3", "kfx", "azw8", "pdf", "txt", "md"} {
 		for _, tt := range []struct {
 			name, template, want string
@@ -1402,7 +1402,7 @@ func TestContent_BacklinkTextAZW3Suppression(t *testing.T) {
 		} {
 			t.Run(format+"/"+tt.name, func(t *testing.T) {
 				want := tt.want
-				if want == "" && format != "azw3" {
+				if want == "" && format != "azw3" && format != "pdf" {
 					want = defaultBacklinkText
 				}
 				c := &Content{BacklinkTemplate: tt.template}

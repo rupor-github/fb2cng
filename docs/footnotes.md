@@ -64,9 +64,16 @@ popup detection. A custom nonempty result enables these links, including in
 `default` mode. Existing custom templates are not automatically rewritten.
 
 This does not disable the leading title/label return link in AZW3 float modes.
-In `default`, authored links and normal note formatting are preserved. Invalid
-templates still fall back to `[<]`; empty results in other formats also retain
-their `[<]` fallback. See [Templates](templates.md#backlink_template).
+In `default`, authored links and normal note formatting are preserved.
+
+For PDF, a valid empty or whitespace-only result suppresses generated returns in
+`default` mode without disabling forward links to notes. Printed footnotes in
+`float` and `floatRenumbered` do not generate these backlinks and are unaffected.
+The bundled template still enables PDF backlinks by default.
+
+Missing or invalid templates still fall back to `[<]`; empty results in formats
+other than AZW3 and PDF also retain their `[<]` fallback.
+See [Templates](templates.md#backlink_template).
 
 Popup behavior still depends on the Kindle device or app. See [Native AZW3](formats/azw3.md).
 

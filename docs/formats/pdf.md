@@ -118,4 +118,10 @@ for PDF report artifacts and [PDF validation](../debugging.md#pdf-validation) fo
 
 Printed footnotes that do not fit continue on later pages with continuation markers.
 
+In `default` mode, a valid `backlink_template` that produces empty or whitespace-only
+text, such as `{{- "" -}}`, suppresses generated return links without disabling
+forward links to notes. The bundled template keeps returns enabled, normally
+showing the reference page number. This setting does not affect printed footnotes
+in floating modes.
+
 See [Footnotes](../footnotes.md) for cross-format behavior.

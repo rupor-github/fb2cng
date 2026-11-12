@@ -156,7 +156,7 @@ type pdfTextBlock struct {
 	TableCellRuns map[pdfTableCellKey][]pdfInlineRun
 
 	// BacklinkRefIDs is kept so backlink text can be regenerated after pagination
-	// once the referenced source page numbers are known.
+	// once the referenced source page numbers are known, even if initially empty.
 	BacklinkRefIDs []string
 }
 

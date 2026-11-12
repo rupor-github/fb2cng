@@ -111,9 +111,8 @@ func appendPDFDefaultFootnoteBacklinkBlock(blocks *[]pdfTextBlock, c *content.Co
 		refIDs = append(refIDs, ref.RefID)
 	}
 	text, runs := pdfBacklinkBlockContent(c, refIDs)
-	if text == "" || len(runs) == 0 {
-		return
-	}
+	// Preserve even initially empty candidates: a template can start producing
+	// text only after .PageNumber is resolved. Empty blocks stay out of layout.
 	*blocks = append(*blocks, pdfTextBlock{
 		Kind:           pdfBlockParagraph,
 		Text:           text,

@@ -1,5 +1,7 @@
 package pdf
 
+import "slices"
+
 // pdfPageLayout is the mutable state for one pagination pass. The pass walks the
 // flat block list, appends logical drawing operations to pages, and records the
 // glyphs required by the resulting text.
@@ -48,6 +50,11 @@ func layoutPDFPages(doc pdfDocumentSpec) ([]pdfPage, map[pdfFontKey]map[uint16]s
 }
 
 func newPDFPageLayout(doc pdfDocumentSpec) *pdfPageLayout {
+	if slices.ContainsFunc(doc.Blocks, pdfEmptyBacklinkBlock) {
+		// Keep candidates in the source document for pagination-time reevaluation,
+		// but omit them entirely from layout, including margin and page-break rules.
+		doc.Blocks = slices.DeleteFunc(slices.Clone(doc.Blocks), pdfEmptyBacklinkBlock)
+	}
 	return &pdfPageLayout{
 		doc:   doc,
 		used:  make(map[pdfFontKey]map[uint16]shapedGlyph),

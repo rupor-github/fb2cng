@@ -520,12 +520,14 @@ Available fields:
 | `.Filename` | Generated content file containing the reference where applicable |
 
 Missing or invalid templates fall back to `[<]`, including template execution
-errors. A valid template producing empty or whitespace-only text also falls back
-to `[<]` for other formats, but **suppresses additional generated backlinks for
-AZW3 in all three modes**. The default template returns empty text for AZW3.
-This does not affect the leading title/label return in AZW3 float modes.
+errors. A valid template producing empty or whitespace-only text **suppresses
+additional generated backlinks for AZW3 in all three modes and PDF in `default`
+mode**. Other formats still fall back to `[<]` for empty results. The default
+template returns empty text for AZW3 and enables backlinks for other formats.
+Suppression does not affect the leading title/label return in AZW3 float modes,
+forward links to PDF notes, or PDF printed footnotes in floating modes.
 
-To explicitly suppress AZW3 trailing links, use a valid template such as
+To explicitly suppress AZW3 trailing links or PDF generated returns, use a valid template such as
 `{{- "" -}}`, not an empty YAML value (configuration requires a nonempty template).
 In a format-specific template, the `azw3` branch can return empty while preserving
 the existing branches for other formats. Custom nonempty results opt AZW3 back in,

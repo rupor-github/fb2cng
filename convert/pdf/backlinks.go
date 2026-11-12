@@ -2,6 +2,10 @@ package pdf
 
 import "slices"
 
+func pdfEmptyBacklinkBlock(block pdfTextBlock) bool {
+	return len(block.BacklinkRefIDs) > 0 && block.Text == "" && len(block.Runs) == 0
+}
+
 func resolvePDFBacklinkPagesAndText(doc *pdfDocumentSpec, pages []pdfPage) bool {
 	// This pass is intentionally called between layout attempts. It mutates backlink
 	// page numbers and regenerated backlink block text, then the caller lays out the
