@@ -24,7 +24,7 @@ func TestExplicitSVGRasterizationLogging(t *testing.T) {
 			book := &FictionBook{Binaries: []BinaryObject{{ID: "art", ContentType: "image/svg+xml", Data: []byte(
 				`<svg viewBox="0 0 40 20"><rect width="20" height="20"/></svg>`)}}}
 			core, logs := observer.New(zapcore.DebugLevel)
-			book.PrepareImages(common.OutputFmtPdf, cfg, zap.New(core))
+			book.PrepareImages(ImagePolicyFor(common.OutputFmtPdf, common.MarkdownImageModePlaceholder), cfg, zap.New(core))
 			entries := logs.FilterMessage("Rasterizing SVG as requested by configuration").All()
 			if !force {
 				if len(entries) != 0 {
@@ -60,9 +60,9 @@ func TestSVGOutputPolicy(t *testing.T) {
 						}, "/")
 						t.Run(name, func(t *testing.T) {
 							cfg := svgPolicyConfig()
-							cfg.RasterizeSVG, cfg.RemoveTransparency, cfg.Optimize, cfg.Markdown = force, remove, optimize, mode
+							cfg.RasterizeSVG, cfg.RemoveTransparency, cfg.Optimize = force, remove, optimize
 							book := &FictionBook{Binaries: []BinaryObject{{ID: "svg", ContentType: "image/svg+xml", Data: svg}}}
-							got := book.PrepareImages(format, cfg, zaptest.NewLogger(t))["svg"]
+							got := book.PrepareImages(ImagePolicyFor(format, mode), cfg, zaptest.NewLogger(t))["svg"]
 							jpeg := format.IsKindle() || (format == common.OutputFmtMd && mode == common.MarkdownImageModeEmbedded)
 							if !force && (!jpeg || (format.IsKindle() && !remove)) {
 								if got.MimeType != "image/svg+xml" || !bytes.Equal(got.Data, svg) {
@@ -130,7 +130,7 @@ func TestSVGRasterizationSizing(t *testing.T) {
 			cfg.RasterizeSVG, cfg.ScaleFactor, cfg.Cover.Resize = true, tt.scale, tt.mode
 			bo := &BinaryObject{ID: "svg", ContentType: "image/svg+xml", Data: []byte(
 				`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 20"><rect width="20" height="20"/></svg>`)}
-			got := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub2, cfg), tt.cover, cfg, zaptest.NewLogger(t))
+			got := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub2, common.MarkdownImageModePlaceholder), tt.cover, cfg, zaptest.NewLogger(t))
 			if got.Dim.Width != tt.w || got.Dim.Height != tt.h {
 				t.Fatalf("dimensions = %v, want %dx%d", got.Dim, tt.w, tt.h)
 			}
@@ -156,7 +156,7 @@ func TestSVGRasterizationPlaceholders(t *testing.T) {
 			if tt.name == "invalid raster" {
 				bo.ContentType = "image/png"
 			}
-			got := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub2, cfg), false, cfg, zaptest.NewLogger(t))
+			got := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub2, common.MarkdownImageModePlaceholder), false, cfg, zaptest.NewLogger(t))
 			if got.MimeType != "image/png" || got.Dim.Width != tt.w || got.Dim.Height != tt.h {
 				t.Fatalf("placeholder MIME = %q, dimensions = %v", got.MimeType, got.Dim)
 			}
@@ -167,7 +167,7 @@ func TestSVGRasterizationPlaceholders(t *testing.T) {
 			cfg := svgPolicyConfig()
 			cfg.RasterizeSVG, cfg.UseBroken = true, useBroken
 			bo := &BinaryObject{ID: "image", ContentType: "image/svg+xml", Data: []byte(`<svg><path d="invalid"`)}
-			got := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub2, cfg), false, cfg, zaptest.NewLogger(t))
+			got := bo.PrepareImage(ImagePolicyFor(common.OutputFmtEpub2, common.MarkdownImageModePlaceholder), false, cfg, zaptest.NewLogger(t))
 			if bytes.Equal(got.Data, bo.Data) != useBroken {
 				t.Fatalf("original bytes retained = %v, use_broken = %v", bytes.Equal(got.Data, bo.Data), useBroken)
 			}
@@ -199,11 +199,10 @@ func TestKindlePlaceholderSVGPolicy(t *testing.T) {
 					t.Run(input.name+"/"+policy.name, func(t *testing.T) {
 						cfg := svgPolicyConfig()
 						cfg.Screen.Width = 8000
-						cfg.Markdown = common.MarkdownImageModeEmbedded
 						cfg.RasterizeSVG, cfg.RemoveTransparency = policy.force, policy.remove
 						invalid := strings.HasPrefix(input.name, "invalid")
 						bo := BinaryObject{ID: "art", ContentType: input.mime, Data: input.data, BuiltinVignette: invalid}
-						got := bo.PrepareImage(ImagePolicyFor(format, cfg), policy.cover, cfg, zaptest.NewLogger(t))
+						got := bo.PrepareImage(ImagePolicyFor(format, common.MarkdownImageModeEmbedded), policy.cover, cfg, zaptest.NewLogger(t))
 						wantMIME := "image/jpeg"
 						if format.IsKindle() && !policy.force && !policy.remove && !policy.cover {
 							wantMIME = "image/svg+xml"
@@ -219,7 +218,7 @@ func TestKindlePlaceholderSVGPolicy(t *testing.T) {
 						}
 						if invalid {
 							cfg.UseBroken = true
-							kept := bo.PrepareImage(ImagePolicyFor(format, cfg), policy.cover, cfg, zaptest.NewLogger(t))
+							kept := bo.PrepareImage(ImagePolicyFor(format, common.MarkdownImageModeEmbedded), policy.cover, cfg, zaptest.NewLogger(t))
 							if !bytes.Equal(kept.Data, input.data) {
 								t.Fatal("use_broken must retain the original invalid bytes")
 							}
@@ -247,16 +246,16 @@ func TestSVGRasterizationVignettePolicy(t *testing.T) {
 				t.Run(format.String(), func(t *testing.T) {
 					cfg := svgPolicyConfig()
 					cfg.RasterFormat = rasterFormat
-					cfg.Markdown = common.MarkdownImageModeEmbedded
 					book := &FictionBook{Binaries: []BinaryObject{{ID: "svg", ContentType: "image/svg+xml", Data: []byte(
 						`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 20">
 <path d="M5 10 L35 10" stroke="black" stroke-width="1" fill="none"/></svg>`)}}}
 					book.Binaries[0].BuiltinVignette = true
-					legacy := book.Binaries[0].RasterizeSVG(ImagePolicyFor(common.OutputFmtKfx, cfg), false, cfg, zaptest.NewLogger(t))
+					kindlePolicy := ImagePolicyFor(common.OutputFmtKfx, common.MarkdownImageModePlaceholder)
+					legacy := book.Binaries[0].RasterizeSVG(kindlePolicy, false, cfg, zaptest.NewLogger(t))
 					cfg.RasterizeSVG = true
-					builtin := book.PrepareImages(format, cfg, zaptest.NewLogger(t))["svg"]
+					builtin := book.PrepareImages(ImagePolicyFor(format, common.MarkdownImageModeEmbedded), cfg, zaptest.NewLogger(t))["svg"]
 					book.Binaries[0].BuiltinVignette = false
-					external := book.PrepareImages(format, cfg, zaptest.NewLogger(t))["svg"]
+					external := book.PrepareImages(ImagePolicyFor(format, common.MarkdownImageModeEmbedded), cfg, zaptest.NewLogger(t))["svg"]
 					if format == common.OutputFmtEpub3 {
 						if !bytes.Equal(builtin.Data, external.Data) {
 							t.Fatal("optional rasterization must not thicken built-in strokes")

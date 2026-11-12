@@ -116,6 +116,14 @@ document:
     # Drawn inside every physical page, behind content, without changing layout.
     page_frame: 0
 
+  markdown:
+    # How Markdown output should render images:
+    # "placeholder" - render readable [Image: ...] placeholders.
+    # "external"    - write image files next to Markdown in a book-id-specific
+    #                 directory and reference them with Markdown image syntax.
+    # "embedded"    - embed images as data: URIs in the Markdown file.
+    images: placeholder
+
   metainformation:
     # NOTE: when generating OPF metainformation for epub2/kepub calibre:series
     # tags with first collection available are used, for epub3/kepub3
@@ -267,13 +275,6 @@ document:
     # JPEG quality level to use, percentage points (40% - 100%). For Kindle
     # output this also affects non-JPEG raster-to-JPEG conversion and SVG rasterization.
     jpeg_quality_level: 95
-
-    # How Markdown output should render images:
-    # "placeholder" - render readable [Image: ...] placeholders.
-    # "external"    - write image files next to Markdown in a book-id-specific
-    #                 directory and reference them with Markdown image syntax.
-    # "embedded"    - embed images as data: URIs in the Markdown file.
-    markdown: placeholder
 
     screen:
       # Reader screen size so images could be adjusted properly.

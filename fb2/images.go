@@ -29,14 +29,13 @@ import (
 // Image processing functions for FictionBook.
 
 // PrepareImages processes all binary objects in the FictionBook creating
-// actual image and building image index, applying output-format compatibility rules.
+// actual image and building image index, applying the supplied output policy.
 // Never returns an error - uses placeholder for broken images.
 // Non-image binaries (e.g., fonts) are skipped.
-func (fb *FictionBook) PrepareImages(outputFormat common.OutputFmt, cfg *config.ImagesConfig, log *zap.Logger) BookImages {
+func (fb *FictionBook) PrepareImages(policy ImagePolicy, cfg *config.ImagesConfig, log *zap.Logger) BookImages {
 	index := make(BookImages)
 
 	imgNum := 1
-	policy := ImagePolicyFor(outputFormat, cfg)
 	for i := range fb.Binaries {
 		// Skip non-image binaries (e.g., fonts loaded by stylesheet normalization)
 		if !isImageMIME(fb.Binaries[i].ContentType) {

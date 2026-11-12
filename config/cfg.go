@@ -44,16 +44,15 @@ type (
 	}
 
 	ImagesConfig struct {
-		UseBroken          bool                     `yaml:"use_broken"`
-		RemoveTransparency bool                     `yaml:"remove_transparency"`
-		RasterizeSVG       bool                     `yaml:"rasterize_svg"`
-		RasterFormat       common.RasterFormat      `yaml:"raster_format" validate:"gte=0,lte=1"`
-		ScaleFactor        float64                  `yaml:"scale_factor" validate:"gte=0.0"`
-		Optimize           bool                     `yaml:"optimize"`
-		JPEGQuality        int                      `yaml:"jpeg_quality_level" validate:"min=40,max=100"`
-		Markdown           common.MarkdownImageMode `yaml:"markdown" validate:"gte=0"`
-		Screen             ScreenConfig             `yaml:"screen"`
-		Cover              CoverConfig              `yaml:"cover"`
+		UseBroken          bool                `yaml:"use_broken"`
+		RemoveTransparency bool                `yaml:"remove_transparency"`
+		RasterizeSVG       bool                `yaml:"rasterize_svg"`
+		RasterFormat       common.RasterFormat `yaml:"raster_format" validate:"gte=0,lte=1"`
+		ScaleFactor        float64             `yaml:"scale_factor" validate:"gte=0.0"`
+		Optimize           bool                `yaml:"optimize"`
+		JPEGQuality        int                 `yaml:"jpeg_quality_level" validate:"min=40,max=100"`
+		Screen             ScreenConfig        `yaml:"screen"`
+		Cover              CoverConfig         `yaml:"cover"`
 	}
 
 	FootnotesConfig struct {
@@ -135,6 +134,10 @@ type (
 		PageFrame string `yaml:"page_frame" validate:"required"`
 	}
 
+	MarkdownConfig struct {
+		Images common.MarkdownImageMode `yaml:"images" validate:"gte=0"`
+	}
+
 	DocumentConfig struct {
 		FixZip                bool                  `yaml:"fix_zip"`
 		OpenFromCover         bool                  `yaml:"open_from_cover"`
@@ -155,6 +158,7 @@ type (
 		KFX                   KFXConfig             `yaml:"kfx"`
 		AZW3                  AZW3Config            `yaml:"azw3"`
 		PDF                   PDFConfig             `yaml:"pdf"`
+		Markdown              MarkdownConfig        `yaml:"markdown"`
 	}
 
 	Config struct {

@@ -33,6 +33,78 @@ func TestLoadConfiguration_NoFile(t *testing.T) {
 	if cfg.Document.Images.RasterFormat != common.RasterFormatAuto {
 		t.Error("raster encoding must default to auto")
 	}
+	if cfg.Document.Markdown.Images != common.MarkdownImageModePlaceholder {
+		t.Error("Markdown images must default to placeholders")
+	}
+}
+
+func TestLoadConfiguration_MarkdownImages(t *testing.T) {
+	for _, tt := range []struct {
+		value string
+		want  common.MarkdownImageMode
+		valid bool
+	}{
+		{value: "placeholder", want: common.MarkdownImageModePlaceholder, valid: true},
+		{value: "external", want: common.MarkdownImageModeExternal, valid: true},
+		{value: "embedded", want: common.MarkdownImageModeEmbedded, valid: true},
+		{value: "invalid"},
+		{value: `""`},
+		{value: "42"},
+		{value: "-1"},
+	} {
+		t.Run(tt.value, func(t *testing.T) {
+			file := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(file, []byte("document:\n  markdown:\n    images: "+tt.value+"\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := LoadConfiguration(file)
+			if !tt.valid {
+				if err == nil {
+					t.Fatal("invalid Markdown image mode must be rejected")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Document.Markdown.Images != tt.want {
+				t.Fatalf("Markdown images = %v, want %v", cfg.Document.Markdown.Images, tt.want)
+			}
+			dumped, err := Dump(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(dumped), "images: "+tt.value) || strings.Contains(string(dumped), "markdown: "+tt.value) {
+				t.Fatalf("dump uses the wrong Markdown image configuration path:\n%s", dumped)
+			}
+			reloaded, err := unmarshalConfig(dumped, &Config{}, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if reloaded.Document.Markdown.Images != tt.want {
+				t.Fatalf("dump/reload changed Markdown images to %v", reloaded.Document.Markdown.Images)
+			}
+		})
+	}
+}
+
+func TestLoadConfiguration_RejectsLegacyMarkdownImages(t *testing.T) {
+	for _, tt := range []struct {
+		name, yaml string
+	}{
+		{name: "legacy only", yaml: "document:\n  images:\n    markdown: external\n"},
+		{name: "both paths", yaml: "document:\n  images:\n    markdown: external\n  markdown:\n    images: embedded\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			file := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(file, []byte(tt.yaml), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := LoadConfiguration(file); err == nil || !strings.Contains(err.Error(), "field markdown not found") {
+				t.Fatalf("legacy key error = %v, want unknown-field error", err)
+			}
+		})
+	}
 }
 
 func TestLoadConfiguration_RasterFormat(t *testing.T) {

@@ -262,7 +262,7 @@ transparency, covers, resizing, and configuration examples.
 
 ### Configure Markdown Images
 
-Set `document.images.markdown` to `placeholder`, `external`, or `embedded`. See [Markdown images](images.md#markdown-images).
+Set `document.markdown.images` to `placeholder`, `external`, or `embedded`. See [Markdown images](images.md#markdown-images).
 
 ### Configure PDF Page Size
 

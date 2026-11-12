@@ -776,7 +776,7 @@ func (r *renderer) markdownImage(id string, label string) string {
 	if label == "" {
 		label = "image"
 	}
-	switch r.cfg.Images.Markdown {
+	switch r.cfg.Markdown.Images {
 	case common.MarkdownImageModeExternal:
 		if target := r.externalImageTarget(id); target != "" {
 			return "![" + escapeMDLinkTextRendered(escapeMDInline(label)) + "](" + escapeMDURL(target) + ")"

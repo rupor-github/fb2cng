@@ -78,7 +78,7 @@ func TestFictionBook_PrepareImages_TIFFWebPTransparency(t *testing.T) {
 						}
 						bo := &BinaryObject{ID: "test-" + input.format, ContentType: "image/" + input.format, Data: input.data}
 						book := &FictionBook{Binaries: []BinaryObject{*bo}}
-						bi := book.PrepareImages(mode.output, cfg, zaptest.NewLogger(t))[bo.ID]
+						bi := book.PrepareImages(ImagePolicyFor(mode.output, common.MarkdownImageModePlaceholder), cfg, zaptest.NewLogger(t))[bo.ID]
 						if bi == nil {
 							t.Fatal("missing prepared image")
 						}

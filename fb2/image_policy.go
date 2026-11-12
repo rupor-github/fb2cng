@@ -2,7 +2,6 @@ package fb2
 
 import (
 	"fbc/common"
-	"fbc/config"
 )
 
 // ImagePolicy separates raster compatibility from backend vector capability.
@@ -16,9 +15,10 @@ type ImagePolicy struct {
 }
 
 // ImagePolicyFor selects the capabilities of the output adapters.
-func ImagePolicyFor(format common.OutputFmt, cfg *config.ImagesConfig) ImagePolicy {
+// markdownImages affects only Markdown; other formats use their own capabilities.
+func ImagePolicyFor(format common.OutputFmt, markdownImages common.MarkdownImageMode) ImagePolicy {
 	requireJPEG := format.IsKindle() ||
-		(format == common.OutputFmtMd && cfg.Markdown == common.MarkdownImageModeEmbedded)
+		(format == common.OutputFmtMd && markdownImages == common.MarkdownImageModeEmbedded)
 	return ImagePolicy{
 		RequireJPEG:       requireJPEG,
 		NativeSVG:         format.IsKindle(),

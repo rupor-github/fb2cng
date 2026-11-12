@@ -161,7 +161,8 @@ func TestPDFBuiltinSVGResources(t *testing.T) {
 						RasterizeSVG: policy.force, RemoveTransparency: policy.remove,
 						Screen: config.ScreenConfig{Width: 300, Height: 400},
 					}
-					img := bo.PrepareImage(fb2.ImagePolicyFor(common.OutputFmtPdf, cfg), tt.name == "default cover", cfg, zaptest.NewLogger(t))
+					imagePolicy := fb2.ImagePolicyFor(common.OutputFmtPdf, common.MarkdownImageModePlaceholder)
+					img := bo.PrepareImage(imagePolicy, tt.name == "default cover", cfg, zaptest.NewLogger(t))
 					doc := pdfDocumentSpec{ScreenDPI: 72, Images: fb2.BookImages{"art": img}, ImageConfig: *cfg}
 					w, h := naturalPDFImageSize(doc, img)
 					if width == 0 {

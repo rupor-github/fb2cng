@@ -40,8 +40,13 @@ document:
   text_transformations: {}
   kfx:
     compression: none
+  azw3:
+    compression: standard
+    apnx: none
   pdf:
     page_frame: 0
+  markdown:
+    images: placeholder
 logging: {}
 reporting: {}
 ```
@@ -54,7 +59,7 @@ Use `dumpconfig --default` for the complete structure and current defaults.
 |---|---|---|
 | `document.output_name_template` | Output file names | [Templates](templates.md#output_name_template) |
 | `document.stylesheet_path` | Custom CSS stylesheet | [Stylesheets](stylesheets.md) |
-| `document.images.markdown` | Markdown image output mode | [Markdown images](images.md#markdown-images) |
+| `document.markdown.images` | Markdown image output mode | [Markdown images](images.md#markdown-images) |
 | `document.images.screen` | Target screen profile and PDF page size | [Image sizing](images.md#sizing-and-resolution) |
 | `document.images.cover` | Cover fallback and resize behavior | [Covers](images.md#covers) |
 | `document.footnotes.mode` | Footnote processing mode | [Footnotes](footnotes.md) |

@@ -36,10 +36,13 @@ and re-encoded.
 
 ## Configuration
 
-Image settings are under `document.images`. These are the current defaults:
+Shared image settings are under `document.images`; Markdown's image output mode is
+under `document.markdown.images`. These are the current defaults:
 
 ```yaml
 document:
+  markdown:
+    images: placeholder
   images:
     use_broken: false
     remove_transparency: false
@@ -48,7 +51,6 @@ document:
     scale_factor: 1.0
     optimize: true
     jpeg_quality_level: 95
-    markdown: placeholder
     screen:
       width: 1264
       height: 1680
@@ -262,7 +264,16 @@ and ignores this flag with a warning. TXT and Markdown omit the dedicated cover 
 
 ## Markdown Images
 
-Set `document.images.markdown`:
+Set `document.markdown.images`:
+
+```yaml
+document:
+  markdown:
+    images: placeholder
+```
+
+This replaces `document.images.markdown`. The old key is no longer accepted;
+move it to the new section when updating an existing configuration.
 
 | Mode | Result |
 |---|---|
@@ -395,8 +406,9 @@ covers; use `none` outside Kindle if you do not want cover resizing.
 
 ```yaml
 document:
+  markdown:
+    images: external
   images:
-    markdown: external
     rasterize_svg: false
 ```
 

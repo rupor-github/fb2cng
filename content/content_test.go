@@ -77,6 +77,38 @@ func setupTestContent(t *testing.T) (*Content, context.Context) {
 	return &Content{WorkDir: tmpDir, Doc: doc}, ctx
 }
 
+func TestPrepareMarkdownImageConfig(t *testing.T) {
+	const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 20"><rect width="20" height="20" fill="red"/></svg>`
+	source := `<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0" xmlns:l="http://www.w3.org/1999/xlink">
+<description><title-info><genre>prose</genre><author><nickname>Test</nickname></author>
+<book-title>Images</book-title><lang>en</lang></title-info></description>
+<body><section><p>Body image</p><image l:href="#art"/></section></body>
+<binary id="art" content-type="image/svg+xml">` + base64.StdEncoding.EncodeToString([]byte(svg)) + `</binary></FictionBook>`
+	for _, format := range []common.OutputFmt{common.OutputFmtMd, common.OutputFmtEpub3} {
+		for _, mode := range []common.MarkdownImageMode{
+			common.MarkdownImageModePlaceholder, common.MarkdownImageModeExternal, common.MarkdownImageModeEmbedded,
+		} {
+			t.Run(format.String()+"/"+mode.String(), func(t *testing.T) {
+				t.Setenv("TMPDIR", t.TempDir())
+				_, ctx := setupTestContent(t)
+				env := state.EnvFromContext(ctx)
+				env.Cfg.Document.Markdown.Images = mode
+				c, err := Prepare(ctx, strings.NewReader(source), "images.fb2", format, env.Log)
+				if err != nil {
+					t.Fatal(err)
+				}
+				want := "image/svg+xml"
+				if format == common.OutputFmtMd && mode == common.MarkdownImageModeEmbedded {
+					want = "image/jpeg"
+				}
+				if img := c.ImagesIndex["art"]; img == nil || img.MimeType != want {
+					t.Fatalf("prepared image = %+v, want %s for %s/%s", img, want, format, mode)
+				}
+			})
+		}
+	}
+}
+
 func TestContent_GetCoverID_WithCoverpage(t *testing.T) {
 	c, ctx := setupTestContent(t)
 	env := state.EnvFromContext(ctx)
@@ -96,7 +128,8 @@ func TestContent_GetCoverID_WithCoverpage(t *testing.T) {
 		},
 	}
 
-	imagesIndex := c.Book.PrepareImages(common.OutputFmtEpub2, &env.Cfg.Document.Images, env.Log)
+	imagePolicy := fb2.ImagePolicyFor(common.OutputFmtEpub2, env.Cfg.Document.Markdown.Images)
+	imagesIndex := c.Book.PrepareImages(imagePolicy, &env.Cfg.Document.Images, env.Log)
 	c.ImagesIndex = imagesIndex
 
 	// Parse cover ID
@@ -127,7 +160,8 @@ func TestContent_GetCoverID_NoCoverpage(t *testing.T) {
 		Binaries: []fb2.BinaryObject{},
 	}
 
-	imagesIndex := c.Book.PrepareImages(common.OutputFmtEpub2, &env.Cfg.Document.Images, env.Log)
+	imagePolicy := fb2.ImagePolicyFor(common.OutputFmtEpub2, env.Cfg.Document.Markdown.Images)
+	imagesIndex := c.Book.PrepareImages(imagePolicy, &env.Cfg.Document.Images, env.Log)
 	c.ImagesIndex = imagesIndex
 
 	if len(c.Book.Description.TitleInfo.Coverpage) > 0 {
@@ -161,7 +195,8 @@ func TestContent_MultipleCoverpageImages(t *testing.T) {
 		},
 	}
 
-	imagesIndex := c.Book.PrepareImages(common.OutputFmtEpub2, &env.Cfg.Document.Images, env.Log)
+	imagePolicy := fb2.ImagePolicyFor(common.OutputFmtEpub2, env.Cfg.Document.Markdown.Images)
+	imagesIndex := c.Book.PrepareImages(imagePolicy, &env.Cfg.Document.Images, env.Log)
 	c.ImagesIndex = imagesIndex
 
 	// Should use first coverpage image
@@ -197,7 +232,8 @@ func TestContent_CoverImageProcessing_Resize(t *testing.T) {
 		},
 	}
 
-	imagesIndex := c.Book.PrepareImages(common.OutputFmtEpub2, &env.Cfg.Document.Images, env.Log)
+	imagePolicy := fb2.ImagePolicyFor(common.OutputFmtEpub2, env.Cfg.Document.Markdown.Images)
+	imagesIndex := c.Book.PrepareImages(imagePolicy, &env.Cfg.Document.Images, env.Log)
 
 	coverImage := imagesIndex["small-cover"]
 	if coverImage == nil {
@@ -235,7 +271,8 @@ func TestContent_CoverImageProcessing_NoResize(t *testing.T) {
 		},
 	}
 
-	imagesIndex := c.Book.PrepareImages(common.OutputFmtEpub2, &env.Cfg.Document.Images, env.Log)
+	imagePolicy := fb2.ImagePolicyFor(common.OutputFmtEpub2, env.Cfg.Document.Markdown.Images)
+	imagesIndex := c.Book.PrepareImages(imagePolicy, &env.Cfg.Document.Images, env.Log)
 
 	coverImage := imagesIndex["orig-cover"]
 	img, _, err := image.Decode(bytes.NewReader(coverImage.Data))
@@ -265,7 +302,8 @@ func TestContent_MissingCoverImage(t *testing.T) {
 		},
 	}
 
-	imagesIndex := c.Book.PrepareImages(common.OutputFmtEpub2, &env.Cfg.Document.Images, env.Log)
+	imagePolicy := fb2.ImagePolicyFor(common.OutputFmtEpub2, env.Cfg.Document.Markdown.Images)
+	imagesIndex := c.Book.PrepareImages(imagePolicy, &env.Cfg.Document.Images, env.Log)
 	c.ImagesIndex = imagesIndex
 
 	c.CoverID = "missing-cover"
@@ -291,7 +329,8 @@ func TestContent_ImageIndexBuild(t *testing.T) {
 		},
 	}
 
-	imagesIndex := c.Book.PrepareImages(common.OutputFmtEpub2, &env.Cfg.Document.Images, env.Log)
+	imagePolicy := fb2.ImagePolicyFor(common.OutputFmtEpub2, env.Cfg.Document.Markdown.Images)
+	imagesIndex := c.Book.PrepareImages(imagePolicy, &env.Cfg.Document.Images, env.Log)
 
 	if len(imagesIndex) != 3 {
 		t.Errorf("expected 3 images in index, got %d", len(imagesIndex))
@@ -317,7 +356,8 @@ func TestContent_KindleImageConversion(t *testing.T) {
 	}
 
 	// Process for Kindle (should convert PNG to JPEG)
-	imagesIndex := c.Book.PrepareImages(common.OutputFmtKfx, &env.Cfg.Document.Images, env.Log)
+	imagePolicy := fb2.ImagePolicyFor(common.OutputFmtKfx, env.Cfg.Document.Markdown.Images)
+	imagesIndex := c.Book.PrepareImages(imagePolicy, &env.Cfg.Document.Images, env.Log)
 
 	img := imagesIndex["png-img"]
 	if img == nil {
@@ -343,7 +383,8 @@ func TestContent_DefaultCoverFallback(t *testing.T) {
 		Binaries: []fb2.BinaryObject{},
 	}
 
-	imagesIndex := c.Book.PrepareImages(common.OutputFmtEpub2, &env.Cfg.Document.Images, env.Log)
+	imagePolicy := fb2.ImagePolicyFor(common.OutputFmtEpub2, env.Cfg.Document.Markdown.Images)
+	imagesIndex := c.Book.PrepareImages(imagePolicy, &env.Cfg.Document.Images, env.Log)
 	c.ImagesIndex = imagesIndex
 
 	// Check if default cover exists
@@ -398,7 +439,8 @@ func TestContent_ImageScaling(t *testing.T) {
 		},
 	}
 
-	imagesIndex := c.Book.PrepareImages(common.OutputFmtEpub2, &env.Cfg.Document.Images, env.Log)
+	imagePolicy := fb2.ImagePolicyFor(common.OutputFmtEpub2, env.Cfg.Document.Markdown.Images)
+	imagesIndex := c.Book.PrepareImages(imagePolicy, &env.Cfg.Document.Images, env.Log)
 
 	img := imagesIndex["scaled-img"]
 	decoded, _, err := image.Decode(bytes.NewReader(img.Data))
@@ -437,7 +479,8 @@ func TestContent_PNGTransparencyRemoval(t *testing.T) {
 		},
 	}
 
-	imagesIndex := c.Book.PrepareImages(common.OutputFmtEpub2, &env.Cfg.Document.Images, env.Log)
+	imagePolicy := fb2.ImagePolicyFor(common.OutputFmtEpub2, env.Cfg.Document.Markdown.Images)
+	imagesIndex := c.Book.PrepareImages(imagePolicy, &env.Cfg.Document.Images, env.Log)
 
 	resultImg := imagesIndex["trans-png"]
 	decoded, _, err := image.Decode(bytes.NewReader(resultImg.Data))
@@ -470,7 +513,8 @@ func TestContent_ImageOptimization(t *testing.T) {
 		},
 	}
 
-	imagesIndex := c.Book.PrepareImages(common.OutputFmtEpub2, &env.Cfg.Document.Images, env.Log)
+	imagePolicy := fb2.ImagePolicyFor(common.OutputFmtEpub2, env.Cfg.Document.Markdown.Images)
+	imagesIndex := c.Book.PrepareImages(imagePolicy, &env.Cfg.Document.Images, env.Log)
 
 	optimizedImg := imagesIndex["hq-img"]
 	optimizedSize := len(optimizedImg.Data)

@@ -33,11 +33,12 @@ func TestRenderMarkdownSVGPolicy(t *testing.T) {
 						Content: []fb2.FlowItem{{Kind: fb2.FlowImage, Image: &fb2.Image{Href: "#svg", Alt: "Picture"}}},
 					}}}}
 					cfg := testConfig()
-					cfg.Images.Markdown, cfg.Images.RasterizeSVG = mode, true
+					cfg.Markdown.Images, cfg.Images.RasterizeSVG = mode, true
 					cfg.Images.RasterFormat = rasterFormat
 					cfg.Images.Screen = config.ScreenConfig{Width: 80, Height: 120}
 					cfg.Images.Cover.Resize = common.ImageResizeModeNone
-					c.ImagesIndex = c.Book.PrepareImages(common.OutputFmtMd, &cfg.Images, zaptest.NewLogger(t))
+					policy := fb2.ImagePolicyFor(common.OutputFmtMd, cfg.Markdown.Images)
+					c.ImagesIndex = c.Book.PrepareImages(policy, &cfg.Images, zaptest.NewLogger(t))
 					output := filepath.Join(t.TempDir(), "book.md")
 					data, err := Render(c, cfg, output)
 					if err != nil {
@@ -294,7 +295,7 @@ func TestRenderMarkdownExternalImageWritesAsset(t *testing.T) {
 		}},
 	}}
 	cfg := testConfig()
-	cfg.Images.Markdown = common.MarkdownImageModeExternal
+	cfg.Markdown.Images = common.MarkdownImageModeExternal
 	outPath := filepath.Join(t.TempDir(), "book.md")
 
 	data, err := Render(c, cfg, outPath)
@@ -330,7 +331,7 @@ func TestGenerateMarkdownFootnoteAssetsUseOutputPath(t *testing.T) {
 					Kind: fb2.FlowImage, Image: &fb2.Image{Href: "#note-image", Alt: "Note illustration"},
 				})
 				cfg := testConfig()
-				cfg.Images.Markdown = common.MarkdownImageModeExternal
+				cfg.Markdown.Images = common.MarkdownImageModeExternal
 				root := t.TempDir()
 				staging := filepath.Join(root, "staging", "book.md.tmp")
 				final, assetParent := "", filepath.Dir(staging)
@@ -372,7 +373,7 @@ func TestRenderMarkdownEmbeddedImageUsesDataURI(t *testing.T) {
 		}},
 	}}
 	cfg := testConfig()
-	cfg.Images.Markdown = common.MarkdownImageModeEmbedded
+	cfg.Markdown.Images = common.MarkdownImageModeEmbedded
 
 	got, err := renderForTest(c, cfg)
 	if err != nil {
@@ -544,7 +545,7 @@ func TestRenderMarkdownFootnoteReferencePreservesInlineImage(t *testing.T) {
 	c.Book.Bodies[1].Sections[0].Title = title("1.10")
 	c.Book.Bodies[1].Sections[0].Content = []fb2.FlowItem{paragraphItem(fb2.InlineSegment{Kind: fb2.InlineText, Text: "Footnote text."})}
 	cfg := testConfig()
-	cfg.Images.Markdown = common.MarkdownImageModeEmbedded
+	cfg.Markdown.Images = common.MarkdownImageModeEmbedded
 
 	got, err := renderForTest(c, cfg)
 	if err != nil {

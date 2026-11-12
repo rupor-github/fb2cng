@@ -276,7 +276,7 @@ func TestKindlePlaceholderKVGResources(t *testing.T) {
 					bo := fb2.BinaryObject{ID: "art", ContentType: input.mime, Data: data}
 					core, logs := observer.New(zap.DebugLevel)
 					log := zap.New(core)
-					img := bo.PrepareImage(fb2.ImagePolicyFor(common.OutputFmtKfx, cfg), policy.cover, cfg, log)
+					img := bo.PrepareImage(fb2.ImagePolicyFor(common.OutputFmtKfx, common.MarkdownImageModePlaceholder), policy.cover, cfg, log)
 					coverID := ""
 					if policy.cover {
 						coverID = "art"
@@ -337,7 +337,7 @@ func TestKindleSVGResourcePolicy(t *testing.T) {
 					bo := fb2.BinaryObject{ID: "art", ContentType: "image/svg+xml", Data: []byte(`<svg viewBox="0 0 40 20">` + tt.body + `</svg>`)}
 					core, logs := observer.New(zap.DebugLevel)
 					log := zap.New(core)
-					img := bo.PrepareImage(fb2.ImagePolicyFor(common.OutputFmtKfx, cfg), tt.cover, cfg, log)
+					img := bo.PrepareImage(fb2.ImagePolicyFor(common.OutputFmtKfx, common.MarkdownImageModePlaceholder), tt.cover, cfg, log)
 					img.Filename = "images/art.svg"
 					coverID := ""
 					if tt.cover {

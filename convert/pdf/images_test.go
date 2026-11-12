@@ -40,9 +40,10 @@ func TestForcedSVGRasterizationPreservesPDFLayout(t *testing.T) {
 			if cover {
 				book.Description.TitleInfo.Coverpage = []fb2.InlineImage{{Href: "#svg"}}
 			}
-			before := book.PrepareImages(common.OutputFmtPdf, cfg, zaptest.NewLogger(t))["svg"]
+			imagePolicy := fb2.ImagePolicyFor(common.OutputFmtPdf, common.MarkdownImageModePlaceholder)
+			before := book.PrepareImages(imagePolicy, cfg, zaptest.NewLogger(t))["svg"]
 			cfg.RasterizeSVG = true
-			after := book.PrepareImages(common.OutputFmtPdf, cfg, zaptest.NewLogger(t))["svg"]
+			after := book.PrepareImages(imagePolicy, cfg, zaptest.NewLogger(t))["svg"]
 			if after.MimeType != "image/png" || after.Dim.Width != 40 || after.Dim.Height != 20 {
 				t.Fatalf("prepared image MIME = %q, dimensions = %v", after.MimeType, after.Dim)
 			}

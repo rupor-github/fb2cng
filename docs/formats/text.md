@@ -27,7 +27,7 @@ Markdown output:
 
 ## Markdown Images
 
-`document.images.markdown` selects `placeholder` (the default), `external`, or `embedded`.
+`document.markdown.images` selects `placeholder` (the default), `external`, or `embedded`.
 See [Markdown images](../images.md#markdown-images) for asset placement and viewer
 compatibility, and [Image handling](../images.md) for SVG, transparency, and sizing rules.
 
