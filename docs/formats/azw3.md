@@ -143,6 +143,9 @@ cannot display the artwork reliably.
 
 Use `@font-face` with raw TTF/OTF files to embed fonts. Whether a Kindle uses them
 depends on its font settings and support for the supplied font.
+For an embedded body font, select **Publisher Font** in the Kindle font menu;
+a selected built-in font can override it. Font-bearing books include the
+publisher-font selection metadata, not just the font files themselves.
 
 ## Footnotes
 

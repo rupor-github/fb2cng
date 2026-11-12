@@ -128,7 +128,7 @@ func TestCompileMetadata(t *testing.T) {
 				100: {"Иванов, Иван [azw3]", "Second [azw3]"}, 101: {"Publisher & Co"},
 				103: {"Описание & café"}, 104: {"9780306406157"}, 105: {"sf", "Keyword", "Другое"}, 106: {"2020-02-29"},
 				108: {"Переводчик, Пётр [azw3]"},
-				503: {metadata.Title}, 524: {"en-GB"},
+				503: {metadata.Title}, 524: {"en-GB"}, 528: {"true"},
 				129: {"kindle:embed:0004"},
 			} {
 				var got []string
@@ -291,7 +291,7 @@ func TestMetadataNoCoverAndInvalidOptionalValues(t *testing.T) {
 	if metadata.Title != c.Book.Description.TitleInfo.BookTitle.Value || metadata.HasFonts || len(metadata.Resources) != 1 {
 		t.Error("metadata fallback or coverless/fontless resource handling changed")
 	}
-	for _, id := range []uint32{104, 106, 116, 201, 202, 203} {
+	for _, id := range []uint32{104, 106, 116, 201, 202, 203, 528} {
 		if len(metadataValues(metadata, id)) != 0 {
 			t.Errorf("unexpected absent/invalid optional EXTH field %d", id)
 		}

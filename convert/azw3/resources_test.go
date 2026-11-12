@@ -2,11 +2,14 @@ package azw3
 
 import (
 	"bytes"
+	"compress/zlib"
 	"context"
+	"encoding/binary"
 	"image"
 	"image/color"
 	"image/jpeg"
 	"image/png"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -80,9 +83,7 @@ func TestCompileResourcesAndLowerURIs(t *testing.T) {
 		compiled.References["images/z.jpg"] != imageRef || compiled.References["other/background.png"].Number != 3 {
 		t.Errorf("unexpected deterministic resource inventory: %+v", compiled.References)
 	}
-	if !bytes.Equal(compiled.Resources[0][:4], []byte("FONT")) || !bytes.Equal(compiled.Resources[0][24:], font) {
-		t.Error("TTF payload was not wrapped in an uncompressed FONT record")
-	}
+	assertCompressedFontRecord(t, compiled.Resources[0], font)
 	if !bytes.Equal(compiled.Resources[1], pub.Images["a"].Data) ||
 		!bytes.Equal(compiled.Resources[2], pub.Stylesheet.Resources[0].Data) {
 		t.Error("raster resource bytes changed")
@@ -108,6 +109,59 @@ func TestCompileResourcesAndLowerURIs(t *testing.T) {
 	again, err := compileText(context.Background(), pub)
 	if err != nil || !reflect.DeepEqual(compiled, again) {
 		t.Error("resource allocation is not deterministic")
+	}
+}
+
+func assertCompressedFontRecord(t *testing.T, record, want []byte) {
+	t.Helper()
+	if len(record) < 24 || string(record[:4]) != "FONT" {
+		t.Fatal("missing FONT record header")
+	}
+	if binary.BigEndian.Uint32(record[4:]) != uint32(len(want)) || binary.BigEndian.Uint32(record[8:]) != 1 ||
+		binary.BigEndian.Uint32(record[12:]) != 24 || binary.BigEndian.Uint32(record[16:]) != 0 ||
+		binary.BigEndian.Uint32(record[20:]) != 0 {
+		t.Fatalf("incorrect compressed FONT header: %x", record[:24])
+	}
+	reader, err := zlib.NewReader(bytes.NewReader(record[24:]))
+	if err != nil {
+		t.Fatalf("FONT payload is not zlib-compressed: %v", err)
+	}
+	got, readErr := io.ReadAll(reader)
+	closeErr := reader.Close()
+	if readErr != nil || closeErr != nil {
+		t.Fatalf("decompress FONT: read=%v, close=%v", readErr, closeErr)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatal("FONT compression changed the original font bytes")
+	}
+}
+
+func TestEncodeFontResources(t *testing.T) {
+	_, font := resourceTestPublication(t)
+	for _, tt := range []struct {
+		name string
+		data []byte
+	}{
+		{name: "TrueType", data: font},
+		{name: "OpenType payload", data: append([]byte("OTTO"), bytes.Repeat([]byte("font data"), 100)...)},
+		{name: "tiny payload still compressed", data: []byte{0, 1, 0, 0}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			before := bytes.Clone(tt.data)
+			candidate := resourceCandidate{Kind: resourceFont, Data: tt.data}
+			record, err := encodeResource(candidate)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertCompressedFontRecord(t, record, tt.data)
+			if !bytes.Equal(tt.data, before) {
+				t.Fatal("FONT encoding modified the input buffer")
+			}
+			again, err := encodeResource(candidate)
+			if err != nil || !bytes.Equal(record, again) {
+				t.Fatal("FONT compression is not deterministic")
+			}
+		})
 	}
 }
 

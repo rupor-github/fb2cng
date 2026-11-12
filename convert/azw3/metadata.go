@@ -166,6 +166,10 @@ func compileMetadata(
 	for _, reference := range text.References {
 		result.HasFonts = result.HasFonts || reference.Kind == resourceFont
 	}
+	if result.HasFonts {
+		// Match KindleGen's publisher-font selection metadata as well as its font-present header bit.
+		addText(528, "true")
+	}
 	virtualCover := pub.CoverID != ""
 	for document := range pub.Documents() {
 		if document.Filename == "cover.xhtml" {

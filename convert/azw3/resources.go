@@ -2,6 +2,7 @@ package azw3
 
 import (
 	"bytes"
+	"compress/zlib"
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
@@ -254,11 +255,22 @@ func encodeResource(candidate resourceCandidate) ([]byte, error) {
 	if uint64(len(candidate.Data)) > math.MaxUint32 || uint64(len(candidate.Data)) > uint64(math.MaxInt-24) {
 		return nil, errors.New("font exceeds 32-bit length")
 	}
-	data := make([]byte, 24, 24+len(candidate.Data))
+	buffer := bytes.NewBuffer(make([]byte, 24, 24+len(candidate.Data)))
+	data := buffer.Bytes()
 	copy(data, "FONT")
 	binary.BigEndian.PutUint32(data[4:], uint32(len(candidate.Data)))
+	// Kindle font rendering needs zlib payloads even when raw FONT records decode successfully.
+	binary.BigEndian.PutUint32(data[8:], 1)
 	binary.BigEndian.PutUint32(data[12:], 24)
-	return append(data, candidate.Data...), nil
+	writer, err := zlib.NewWriterLevel(buffer, zlib.BestCompression)
+	if err != nil {
+		return nil, fmt.Errorf("create font compressor: %w", err)
+	}
+	_, writeErr := writer.Write(candidate.Data)
+	if err := errors.Join(writeErr, writer.Close()); err != nil {
+		return nil, fmt.Errorf("compress font resource: %w", err)
+	}
+	return buffer.Bytes(), nil
 }
 
 func lowerStylesheetResources(data []byte, resources *resourceLayout) ([]byte, error) {
