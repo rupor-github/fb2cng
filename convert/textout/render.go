@@ -1172,7 +1172,7 @@ func (r *renderer) markdownFootnoteBacklinks(sectionID string) string {
 	}
 	links := make([]string, 0, len(refs))
 	for _, ref := range refs {
-		text := strings.TrimSpace(r.c.BacklinkText(ref))
+		text := r.c.BacklinkText(ref)
 		href := markdownBacklinkHref(ref)
 		if text == "" || href == "" {
 			continue

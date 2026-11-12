@@ -1381,30 +1381,28 @@ func TestContent_AddFootnoteBackLinkRef(t *testing.T) {
 }
 
 func TestContent_BacklinkTextTemplate(t *testing.T) {
-	const defaultTemplate = `[{{- if eq .Format "pdf" -}}
-{{- if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber }}{{- else -}}<{{- end -}}
-{{- else if or (eq .Format "kfx") (eq .Format "azw8") -}}
-{{- if .LocationNumber -}}loc{{ "\u00A0" }}{{ .LocationNumber -}}
-{{- else if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber -}}
-{{- else if .SectionTitle -}}{{ .SectionTitle -}}
-{{- else -}}<{{- end -}}
-{{- else -}}
-{{- if .PageNumber -}}page{{ "\u00A0" }}{{ .PageNumber }}{{- else if .SectionTitle -}}{{ .SectionTitle }}{{- else -}}<{{- end -}}
-{{- end -}}]`
+	cfg, err := config.LoadConfiguration("")
+	if err != nil {
+		t.Fatal(err)
+	}
 	tests := []struct {
 		name string
 		ref  BackLinkRef
 		want string
 	}{
 		{name: "pdf page", ref: BackLinkRef{Format: "pdf", PageNumber: 20}, want: "[page\u00A020]"},
+		{name: "pdf fallback", ref: BackLinkRef{Format: "pdf"}, want: "[<]"},
 		{name: "kfx location", ref: BackLinkRef{Format: "kfx", LocationNumber: 183, PageNumber: 20}, want: "[loc\u00A0183]"},
 		{name: "kfx page fallback", ref: BackLinkRef{Format: "kfx", PageNumber: 20}, want: "[page\u00A020]"},
+		{name: "kfx section fallback", ref: BackLinkRef{Format: "kfx", SectionTitle: "Section"}, want: "[Section]"},
+		{name: "kfx fallback", ref: BackLinkRef{Format: "kfx"}, want: "[<]"},
 		{name: "azw8 location", ref: BackLinkRef{Format: "azw8", LocationNumber: 183, PageNumber: 20}, want: "[loc\u00A0183]"},
+		{name: "azw3 suppressed", ref: BackLinkRef{Format: "azw3", LocationNumber: 183, PageNumber: 20}},
 		{name: "epub page", ref: BackLinkRef{Format: "epub3", PageNumber: 20, SectionTitle: "Section"}, want: "[page\u00A020]"},
 		{name: "epub section fallback", ref: BackLinkRef{Format: "epub3", SectionTitle: "Section"}, want: "[Section]"},
 		{name: "fallback", ref: BackLinkRef{Format: "epub3"}, want: "[<]"},
 	}
-	c := &Content{BacklinkTemplate: defaultTemplate}
+	c := &Content{BacklinkTemplate: cfg.Document.Footnotes.BacklinkTemplate}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := c.BacklinkText(tt.ref); got != tt.want {
@@ -1420,15 +1418,6 @@ func TestContent_BacklinkTextContext(t *testing.T) {
 	want := "backlink_template/kfx/3"
 	if got != want {
 		t.Fatalf("BacklinkText() = %q, want %q", got, want)
-	}
-}
-
-func TestContent_BacklinkTextFallback(t *testing.T) {
-	if got := (&Content{}).BacklinkText(BackLinkRef{Format: "pdf", PageNumber: 20}); got != defaultBacklinkText {
-		t.Fatalf("empty template BacklinkText() = %q, want %q", got, defaultBacklinkText)
-	}
-	if got := (&Content{BacklinkTemplate: "{{"}).BacklinkText(BackLinkRef{Format: "pdf", PageNumber: 20}); got != defaultBacklinkText {
-		t.Fatalf("invalid template BacklinkText() = %q, want %q", got, defaultBacklinkText)
 	}
 }
 

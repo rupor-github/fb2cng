@@ -129,7 +129,7 @@ func pdfBacklinkBlockContent(c *content.Content, refIDs []string) (string, []pdf
 	}
 	runs := make([]pdfInlineRun, 0, len(refIDs)*2-1)
 	var text strings.Builder
-	for i, refID := range refIDs {
+	for _, refID := range refIDs {
 		ref, ok := c.BackLinkRefByID(refID)
 		if !ok {
 			continue
@@ -138,7 +138,7 @@ func pdfBacklinkBlockContent(c *content.Content, refIDs []string) (string, []pdf
 		if backlinkText == "" {
 			continue
 		}
-		if text.Len() > 0 && i > 0 {
+		if text.Len() > 0 {
 			runs = append(runs, pdfInlineRun{Text: contentText.NBSP})
 			text.WriteString(contentText.NBSP)
 		}
