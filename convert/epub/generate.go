@@ -21,6 +21,7 @@ import (
 	"fbc/common"
 	"fbc/config"
 	"fbc/content"
+	"fbc/convert/kobo"
 	"fbc/convert/metainfo"
 	"fbc/convert/publication"
 	"fbc/convert/tocnav"
@@ -82,7 +83,11 @@ func Generate(
 	if c.OutputFormat.IsEPUB3() {
 		markup = publication.HTML5
 	}
-	pub, err := publication.Build(ctx, c, cfg, markup, log)
+	options := publication.Options{Markup: markup}
+	if c.OutputFormat.IsKobo() {
+		options.Text = kobo.NewRenderer(c.Book.Description.TitleInfo.Lang, log)
+	}
+	pub, err := publication.Build(ctx, c, cfg, options, log)
 	if err != nil {
 		return err
 	}

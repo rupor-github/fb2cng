@@ -1,4 +1,4 @@
-package publication
+package azw3
 
 import (
 	"strings"
@@ -6,14 +6,39 @@ import (
 	"github.com/beevik/etree"
 
 	"fbc/common"
+	"fbc/content"
 	"fbc/content/text"
+	"fbc/convert/publication"
+	"fbc/css"
 	"fbc/fb2"
 )
 
-// appendFloatFootnoteSectionContentAZW3 follows the single-paragraph aside
+func publicationOptions() publication.Options {
+	return publication.Options{
+		Markup: publication.HTML5, FloatingFootnotes: floatingFootnotes{},
+		// KF8 consumes CSS directly; preserve declaration order, selectors and at-rules.
+		RewriteStylesheet: css.RewriteStylesheetURLs,
+	}
+}
+
+type floatingFootnotes struct{}
+
+func (floatingFootnotes) ReferenceBodies(bodies []*fb2.Body) []*fb2.Body {
+	// Flattened note links are plain text, but body introductions still render normally.
+	intros := make([]*fb2.Body, len(bodies))
+	for i, body := range bodies {
+		intro := *body
+		intro.Sections = nil
+		intros[i] = &intro
+	}
+	return intros
+}
+
+// Render follows the single-paragraph aside
 // structure of Kindle Method 1, retaining our existing backlink semantics.
 // Authored markup is reduced to text; newlines are content, not pretty printing.
-func appendFloatFootnoteSectionContentAZW3(parent *etree.Element, c *renderState, section *fb2.Section) error {
+func (floatingFootnotes) Render(parent *etree.Element, section *fb2.Section, rendering publication.FootnoteRendering) error {
+	c := rendering.Content
 	aside := parent.CreateElement("aside")
 	aside.CreateAttr("epub:type", "footnote")
 	if section.ID != "" {
@@ -69,7 +94,7 @@ func appendFloatFootnoteSectionContentAZW3(parent *etree.Element, c *renderState
 	// paragraph. Generated return captions do not introduce page-marker spans.
 	tracking := c.PageTrackingEnabled
 	c.PageTrackingEnabled = false
-	_, err := appendEPUBFootnoteBacklinks(p, c, section.ID, epubFootnoteBacklinkOptions{LeadingSeparator: "\n", EPUB3Role: true})
+	err := rendering.AppendBacklinks(p, section.ID, "\n")
 	c.PageTrackingEnabled = tracking
 	if err != nil {
 		return err
@@ -77,7 +102,7 @@ func appendFloatFootnoteSectionContentAZW3(parent *etree.Element, c *renderState
 	_, markers := c.SplitTextByPage(azw3FootnoteInlineTextFromElement(p))
 	for _, marker := range markers {
 		if marker {
-			appendPageMarker(parent, c)
+			rendering.AppendPageMarker(parent)
 		}
 	}
 	return nil
@@ -290,7 +315,7 @@ func azw3FootnoteLinkPart(caption, href string) azw3FootnoteInlinePart {
 
 // Paragraphs and other authored elements no longer have individual anchors in a
 // flattened note. Preserve incoming navigation by targeting the containing note.
-func redirectAZW3FootnoteLinks(chapters []Chapter, c *renderState, rendered idToFileMap) {
+func (floatingFootnotes) RewriteLinks(chapters []publication.Chapter, c *content.Content, rendered map[string]string) {
 	redirects := make(map[string]string)
 	for id, ref := range c.IDsIndex {
 		if _, exists := rendered[id]; exists {

@@ -49,7 +49,7 @@ func Generate(
 				zap.Duration("elapsed", time.Since(started)))
 		}
 	}()
-	pub, err := publication.Build(ctx, c, cfg, publication.HTML5, log)
+	pub, err := publication.Build(ctx, c, cfg, publicationOptions(), log)
 	if err != nil {
 		return result, fmt.Errorf("build AZW3 publication: %w", err)
 	}

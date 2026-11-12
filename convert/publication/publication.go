@@ -35,7 +35,7 @@ type Publication struct {
 	Stylesheet Stylesheet
 	Images     fb2.BookImages
 	CoverID    string
-	// Backlinks identifies generated AZW3 labels by reference occurrence. Adapters
+	// Backlinks identifies generated return labels by reference occurrence. Adapters
 	// can resolve final byte-based locations without guessing from authored markup.
 	Backlinks map[*etree.Element]string
 }
@@ -68,13 +68,13 @@ func (p *Publication) Documents() iter.Seq[Chapter] {
 
 // Build renders prepared content once, including generated pages, link resolution,
 // navigation, pagination and resource selection. It mutates Content's rendering state;
-// reuse the result for multiple adapters rather than rendering the same Content again.
-// The actual OutputFormat is retained for templates; markup selects content syntax.
+// do not render the same Content again with another adapter's state. Adapters treat
+// the result as read-only. OutputFormat supplies template identity, not rendering policy.
 func Build(
 	ctx context.Context,
 	prepared *content.Content,
 	cfg *config.DocumentConfig,
-	markup Markup,
+	options Options,
 	log *zap.Logger,
 ) (*Publication, error) {
 	if err := ctx.Err(); err != nil {
@@ -86,10 +86,13 @@ func Build(
 	if cfg == nil {
 		return nil, errors.New("document config is required")
 	}
-	if markup != XHTML11 && markup != HTML5 {
-		return nil, fmt.Errorf("unsupported publication markup: %d", markup)
+	if options.Markup != XHTML11 && options.Markup != HTML5 {
+		return nil, fmt.Errorf("unsupported publication markup: %d", options.Markup)
 	}
-	c := &renderState{Content: prepared, markup: markup}
+	c := &renderState{Content: prepared, markup: options.Markup, text: options.Text}
+	if c.FootnotesMode.IsFloat() {
+		c.footnotes = options.FloatingFootnotes
+	}
 
 	annotationEnabled := cfg.Annotation.Enable && c.Book.Description.TitleInfo.Annotation != nil
 	tocEnabled := cfg.TOCPage.Placement != common.TOCPagePlacementNone
@@ -149,15 +152,15 @@ func Build(
 
 	// Generated pages can add IDs and links of their own.
 	idToFile = collectRenderedIDs(chapters, log)
-	if c.OutputFormat == common.OutputFmtAzw3 && c.FootnotesMode.IsFloat() {
-		redirectAZW3FootnoteLinks(chapters, c, idToFile)
+	if c.footnotes != nil {
+		c.footnotes.RewriteLinks(chapters, c.Content, idToFile)
 	}
 	fixInternalLinks(chapters, idToFile, log)
 	if c.CoverID != "" {
 		c.TrackImageUsage(c.CoverID)
 	}
 	filterUnusedImages(c.Content)
-	stylesheet, err := AssembleStylesheet(c.Book.Stylesheets, c.OutputFormat)
+	stylesheet, err := AssembleStylesheet(c.Book.Stylesheets, options.RewriteStylesheet)
 	if err != nil {
 		return nil, err
 	}

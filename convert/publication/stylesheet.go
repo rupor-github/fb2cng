@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"fbc/common"
 	"fbc/css"
 	"fbc/fb2"
 )
@@ -16,10 +15,12 @@ type Stylesheet struct {
 	Resources []fb2.StylesheetResource
 }
 
+// StylesheetRewriter lets an adapter preserve syntax beyond the shared CSS AST.
+type StylesheetRewriter func(data []byte, rewriteURL func(string) string) ([]byte, error)
+
 // AssembleStylesheet preserves the normalized cascade and resolves CSS URLs without
-// writing a container. CSS-only resources, including fonts, are retained separately
-// from body images.
-func AssembleStylesheet(styles []fb2.Stylesheet, format common.OutputFmt) (Stylesheet, error) {
+// writing a container. A nil rewriter uses the shared CSS parser/serializer.
+func AssembleStylesheet(styles []fb2.Stylesheet, rewriteStylesheet StylesheetRewriter) (Stylesheet, error) {
 	var finalCSS strings.Builder
 	var resources []fb2.StylesheetResource
 	for _, style := range styles {
@@ -37,12 +38,10 @@ func AssembleStylesheet(styles []fb2.Stylesheet, format common.OutputFmt) (Style
 			}
 			return originalURL
 		}
-		if format == common.OutputFmtAzw3 {
-			// KF8 readers consume CSS directly. Do not sort declarations or discard
-			// selectors/at-rules through the native renderers' restricted AST.
-			data, err := css.RewriteStylesheetURLs([]byte(style.Data), rewrite)
+		if rewriteStylesheet != nil {
+			data, err := rewriteStylesheet([]byte(style.Data), rewrite)
 			if err != nil {
-				return Stylesheet{}, fmt.Errorf("assemble AZW3 stylesheet: %w", err)
+				return Stylesheet{}, fmt.Errorf("assemble publication stylesheet: %w", err)
 			}
 			finalCSS.Write(data)
 			finalCSS.WriteByte('\n')

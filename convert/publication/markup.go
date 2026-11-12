@@ -22,5 +22,7 @@ const (
 type renderState struct {
 	*content.Content
 	markup    Markup
+	text      TextDecorator
+	footnotes FloatingFootnoteRenderer
 	backlinks map[*etree.Element]string
 }

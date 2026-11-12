@@ -10,6 +10,7 @@ import (
 	"fbc/common"
 	"fbc/config"
 	"fbc/content"
+	"fbc/convert/internal/publicationtest"
 	"fbc/fb2"
 )
 
@@ -33,12 +34,12 @@ func TestEPUBBacklinkSeparators(t *testing.T) {
 			},
 		} {
 			t.Run(format.String()+"/"+tt.name, func(t *testing.T) {
-				c := &renderState{Content: &content.Content{OutputFormat: format, BacklinkTemplate: tt.template}}
+				c := testRenderState(&content.Content{OutputFormat: format, BacklinkTemplate: tt.template})
 				for range 3 {
 					c.AddFootnoteBackLinkRef("n1")
 				}
 				parent := etree.NewElement("p")
-				wrote, err := appendEPUBFootnoteBacklinks(parent, c, "n1", epubFootnoteBacklinkOptions{LeadingSeparator: "prefix"})
+				wrote, err := appendFootnoteBacklinks(parent, c, "n1", footnoteBacklinkOptions{LeadingSeparator: "prefix"})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -104,7 +105,7 @@ func TestEPUBBacklinkTemplateModes(t *testing.T) {
 						name += "/pages"
 					}
 					t.Run(name, func(t *testing.T) {
-						c := buildTestContent(format, mode, pageSize)
+						c := publicationtest.Content(format, mode, pageSize)
 						c.BacklinkTemplate = tt.template
 						c.MoreParaStr = "(~) "
 						link := func(target string) fb2.FlowItem {
@@ -118,7 +119,7 @@ func TestEPUBBacklinkTemplateModes(t *testing.T) {
 						first, second := &c.Book.Bodies[1].Sections[0], &c.Book.Bodies[2].Sections[0]
 						first.Content = append(first.Content, link("main"))
 						second.Content = append(second.Content, link("note1"))
-						pub, err := Build(t.Context(), c, &config.DocumentConfig{}, testMarkup(format), zap.NewNop())
+						pub, err := Build(t.Context(), c, &config.DocumentConfig{}, testOptions(format), zap.NewNop())
 						if tt.wantErr {
 							if err == nil || !strings.Contains(err.Error(), "backlink_template") || pub != nil {
 								t.Fatalf("Build() = %v, %v; want no publication and a backlink template error", pub, err)
@@ -226,10 +227,10 @@ func TestEPUBEmptyNoteBacklinkSuppression(t *testing.T) {
 			common.FootnotesModeDefault, common.FootnotesModeFloat, common.FootnotesModeFloatRenumbered,
 		} {
 			t.Run(format.String()+"/"+mode.String(), func(t *testing.T) {
-				c := buildTestContent(format, mode, 0)
+				c := publicationtest.Content(format, mode, 0)
 				c.BacklinkTemplate = `{{- "" -}}`
 				c.Book.Bodies[1].Sections[0].Content = nil
-				pub, err := Build(t.Context(), c, &config.DocumentConfig{}, testMarkup(format), zap.NewNop())
+				pub, err := Build(t.Context(), c, &config.DocumentConfig{}, testOptions(format), zap.NewNop())
 				if err != nil {
 					t.Fatal(err)
 				}

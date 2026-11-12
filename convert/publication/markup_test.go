@@ -10,6 +10,7 @@ import (
 
 	"fbc/common"
 	"fbc/config"
+	"fbc/convert/internal/publicationtest"
 	"fbc/fb2"
 )
 
@@ -28,11 +29,11 @@ func TestBuildMarkupIndependentOfOutputFormat(t *testing.T) {
 			common.FootnotesModeDefault, common.FootnotesModeFloat, common.FootnotesModeFloatRenumbered,
 		} {
 			t.Run(tt.name+"/"+mode.String(), func(t *testing.T) {
-				c := buildTestContent(tt.format, mode, 0)
+				c := publicationtest.Content(tt.format, mode, 0)
 				cfg := config.DocumentConfig{
 					TOCPage: config.TOCPageConfig{Placement: common.TOCPagePlacementBefore, AuthorsTemplate: "{{.Format}}"},
 				}
-				pub, err := Build(context.Background(), c, &cfg, tt.markup, zap.NewNop())
+				pub, err := Build(context.Background(), c, &cfg, Options{Markup: tt.markup}, zap.NewNop())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -85,8 +86,8 @@ func TestBuildMarkupIndependentOfOutputFormat(t *testing.T) {
 }
 
 func TestBuildRejectsUnknownMarkup(t *testing.T) {
-	c := buildTestContent(common.OutputFmtEpub3, common.FootnotesModeDefault, 0)
-	pub, err := Build(context.Background(), c, &config.DocumentConfig{}, Markup(255), zap.NewNop())
+	c := publicationtest.Content(common.OutputFmtEpub3, common.FootnotesModeDefault, 0)
+	pub, err := Build(context.Background(), c, &config.DocumentConfig{}, Options{Markup: Markup(255)}, zap.NewNop())
 	if pub != nil || err == nil || !strings.Contains(err.Error(), "unsupported publication markup") {
 		t.Fatalf("publication/error = %v/%v, want an unsupported-markup error", pub, err)
 	}
@@ -99,7 +100,7 @@ func TestBuildFloatingFootnoteBacklinksOutsideAside(t *testing.T) {
 	for _, format := range []common.OutputFmt{common.OutputFmtEpub3, common.OutputFmtKepub3} {
 		for _, mode := range []common.FootnotesMode{common.FootnotesModeFloat, common.FootnotesModeFloatRenumbered} {
 			t.Run(format.String()+"/"+mode.String(), func(t *testing.T) {
-				c := buildTestContent(format, mode, 0)
+				c := publicationtest.Content(format, mode, 0)
 				c.MoreParaStr = "(~) "
 				c.FootnotesIndex["note2"] = fb2.FootnoteRef{BodyIdx: 2, SectionIdx: 0}
 				link := func(target string) fb2.FlowItem {
@@ -112,7 +113,7 @@ func TestBuildFloatingFootnoteBacklinksOutsideAside(t *testing.T) {
 				first, second := &c.Book.Bodies[1].Sections[0], &c.Book.Bodies[2].Sections[0]
 				first.Content = append(first.Content, link("note2"))
 				second.Content = append(second.Content, link("note1"))
-				pub, err := Build(t.Context(), c, &config.DocumentConfig{}, HTML5, zap.NewNop())
+				pub, err := Build(t.Context(), c, &config.DocumentConfig{}, testOptions(format), zap.NewNop())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -137,8 +138,8 @@ func TestBuildFloatingFootnoteBacklinksOutsideAside(t *testing.T) {
 							if back.SelectAttrValue("epub:type", "") != "backlink" || back.SelectAttrValue("role", "") != "doc-backlink" {
 								t.Fatal("return links must not be marked as forward note references")
 							}
-							if (pub.Backlinks[back] != "") != (format == common.OutputFmtAzw3) {
-								t.Fatal("generated-link location tracking must remain AZW3-specific")
+							if pub.Backlinks[back] == "" {
+								t.Fatal("generated links must retain their source reference identity")
 							}
 						}
 						indicator := aside.FindElement(".//span[@class='footnote-more']")

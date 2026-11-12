@@ -13,6 +13,7 @@ import (
 	"fbc/common"
 	"fbc/config"
 	"fbc/content"
+	"fbc/convert/kobo"
 	"fbc/fb2"
 	"fbc/state"
 )
@@ -28,8 +29,17 @@ func testMarkup(format common.OutputFmt) Markup {
 	return XHTML11
 }
 
+func testOptions(format common.OutputFmt) Options {
+	options := Options{Markup: testMarkup(format)}
+	if format.IsKobo() {
+		options.Text = &kobo.Renderer{}
+	}
+	return options
+}
+
 func testRenderState(c *content.Content) *renderState {
-	return &renderState{Content: c, markup: testMarkup(c.OutputFormat)}
+	options := testOptions(c.OutputFormat)
+	return &renderState{Content: c, markup: options.Markup, text: options.Text}
 }
 
 func setupTestContext(t *testing.T) (context.Context, *state.LocalEnv, *zap.Logger) {

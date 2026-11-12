@@ -221,15 +221,8 @@ func processFootnoteBodies(c *renderState, footnoteBodies []*fb2.Body, log *zap.
 	// Register new page for footnotes file in the page map
 	c.ForceNewPage(filename)
 	registrationBodies := footnoteBodies
-	if c.OutputFormat == common.OutputFmtAzw3 && c.FootnotesMode.IsFloat() {
-		// Links in AZW3 note sections become plain text, not return destinations.
-		// Body introductions still render normally and need reference registration.
-		registrationBodies = make([]*fb2.Body, len(footnoteBodies))
-		for i, body := range footnoteBodies {
-			intro := *body
-			intro.Sections = nil
-			registrationBodies[i] = &intro
-		}
+	if c.footnotes != nil {
+		registrationBodies = c.footnotes.ReferenceBodies(footnoteBodies)
 	}
 	replayRefs := c.PreRegisterFootnoteBackLinksInBodies(registrationBodies)
 	restoreReplay := c.UseFootnoteBackLinkReplay(replayRefs)
@@ -262,8 +255,8 @@ func processFootnoteBodies(c *renderState, footnoteBodies []*fb2.Body, log *zap.
 			section := &body.Sections[i]
 
 			// Choose appropriate element type based on mode and format
-			if c.FootnotesMode.IsFloat() && c.OutputFormat == common.OutputFmtAzw3 {
-				if err := appendFloatFootnoteSectionContentAZW3(bodyDiv, c, section); err != nil {
+			if c.footnotes != nil {
+				if err := c.renderFloatingFootnote(bodyDiv, section); err != nil {
 					return nil, err
 				}
 			} else if c.FootnotesMode.IsFloat() && c.markup == HTML5 {
@@ -332,8 +325,6 @@ func createFootnoteWrapperSection(body *fb2.Body) *fb2.Section {
 
 // createXHTMLDocument creates a standard XHTML document structure with head elements
 func createXHTMLDocument(c *renderState, title string) (*etree.Document, *etree.Element) {
-	c.KoboSpanSet(0, 0)
-
 	doc := etree.NewDocument()
 	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
 
@@ -363,15 +354,9 @@ func createXHTMLDocument(c *renderState, title string) (*etree.Document, *etree.
 
 	body := html.CreateElement("body")
 
-	var root *etree.Element
-	if c.OutputFormat.IsKobo() {
-		bookColumnsDiv := body.CreateElement("div")
-		bookColumnsDiv.CreateAttr("id", "book-columns")
-		inner := bookColumnsDiv.CreateElement("div")
-		inner.CreateAttr("id", "book-inner")
-		root = inner
-	} else {
-		root = body
+	root := body
+	if c.text != nil {
+		root = c.text.DocumentRoot(body)
 	}
 
 	return doc, root
@@ -486,7 +471,7 @@ func renderSplitSection(
 // appendTitleAsHeading appends a title as a heading element (h1-h6) with span children for each paragraph
 // Used for body and section titles that need semantic heading markup
 func appendTitleAsHeading(parent *etree.Element, c *renderState, title *fb2.Title, depth int, classPrefix string) {
-	c.KoboSpanNextParagraph()
+	c.nextParagraph()
 
 	headingLevel := min(depth, 6)
 	headingTag := fmt.Sprintf("h%d", headingLevel)
@@ -537,7 +522,7 @@ func appendTitleAsDiv(parent *etree.Element, c *renderState, title *fb2.Title, c
 
 	for _, item := range title.Items {
 		if item.Paragraph != nil {
-			c.KoboSpanNextParagraph()
+			c.nextParagraph()
 			p := titleDiv.CreateElement("p")
 			if item.Paragraph.ID != "" {
 				p.CreateAttr("id", item.Paragraph.ID)
@@ -569,7 +554,7 @@ func appendEpigraphs(parent *etree.Element, c *renderState, epigraphs []fb2.Epig
 			return err
 		}
 		for _, ta := range epigraph.TextAuthors {
-			c.KoboSpanNextParagraph()
+			c.nextParagraph()
 			p := div.CreateElement("p")
 			p.CreateAttr("class", "text-author")
 			appendParagraphInline(p, c, &ta)
@@ -615,7 +600,7 @@ func appendBodyIntroContent(parent *etree.Element, c *renderState, body *fb2.Bod
 // Method 2 marker and whether the flattened footnote contains additional visible
 // content after that point. Backlinks are ignored because they are generated UI,
 // not source footnote content.
-func footnoteMethod2MarkerTarget(sectionElem *etree.Element) (*etree.Element, bool) {
+func footnoteMethod2MarkerTarget(sectionElem *etree.Element, decoration TextDecorator) (*etree.Element, bool) {
 	var (
 		firstSpan            *etree.Element
 		hasVisibleBody       bool
@@ -633,7 +618,7 @@ func footnoteMethod2MarkerTarget(sectionElem *etree.Element) (*etree.Element, bo
 			// Backlinks precede body content and do not count toward the marker.
 			continue
 		case "span":
-			if elem.SelectAttrValue("class", "") == "koboSpan" {
+			if decoration != nil && decoration.IsWrapper(elem) {
 				continue
 			}
 			if !hasVisibleBody {
@@ -658,7 +643,7 @@ func footnoteMethod2MarkerTarget(sectionElem *etree.Element) (*etree.Element, bo
 	return firstSpan, hasMultipleVisibleEl
 }
 
-func countFootnoteMethod2VisibleElements(sectionElem *etree.Element) int {
+func countFootnoteMethod2VisibleElements(sectionElem *etree.Element, decoration TextDecorator) int {
 	count := 0
 	hasVisibleBody := false
 	hasCurrentItem := false
@@ -672,7 +657,7 @@ func countFootnoteMethod2VisibleElements(sectionElem *etree.Element) int {
 		case "a":
 			continue
 		case "span":
-			if elem.SelectAttrValue("class", "") == "koboSpan" {
+			if decoration != nil && decoration.IsWrapper(elem) {
 				continue
 			}
 			hasVisibleBody = true
@@ -714,7 +699,7 @@ func firstVisibleAsideElement(aside *etree.Element) *etree.Element {
 // EPUB2 float mode uses <p class="footnote"> and simplified rendering to fit
 // everything in a single paragraph keeping as much formatting as possible.
 func appendFloatFootnoteSectionContentEpub2(parent *etree.Element, c *renderState, section *fb2.Section) error {
-	c.KoboSpanNextParagraph()
+	c.nextParagraph()
 
 	sectionElem := parent.CreateElement("p")
 	sectionElem.CreateAttr("class", "footnote")
@@ -742,16 +727,7 @@ func appendFloatFootnoteSectionContentEpub2(parent *etree.Element, c *renderStat
 		case fb2.FlowImage:
 			if item.Image != nil {
 				// Render image inline (no div wrapper)
-				var imgsectionElem *etree.Element
-				if c.OutputFormat.IsKobo() {
-					paragraph, sentence := c.KoboSpanNextSentence()
-					span := sectionElem.CreateElement("span")
-					span.CreateAttr("class", "koboSpan")
-					span.CreateAttr("id", fmt.Sprintf("kobo.%d.%d", paragraph, sentence))
-					imgsectionElem = span
-				} else {
-					imgsectionElem = sectionElem
-				}
+				imgsectionElem := c.inlineParent(sectionElem)
 				img := imgsectionElem.CreateElement("img")
 				img.CreateAttr("class", "image-inline")
 				if item.Image.ID != "" {
@@ -813,8 +789,8 @@ func appendFloatFootnoteSectionContentEpub2(parent *etree.Element, c *renderStat
 		}
 	}
 
-	firstSpan, canPlaceMoreIndicator := footnoteMethod2MarkerTarget(sectionElem)
-	needMoreIndicator := countFootnoteMethod2VisibleElements(sectionElem) > 1 && c.MoreParaStr != ""
+	firstSpan, canPlaceMoreIndicator := footnoteMethod2MarkerTarget(sectionElem, c.text)
+	needMoreIndicator := countFootnoteMethod2VisibleElements(sectionElem, c.text) > 1 && c.MoreParaStr != ""
 	if needMoreIndicator && canPlaceMoreIndicator && firstSpan != nil {
 
 		// Create the "more" indicator span
@@ -829,7 +805,7 @@ func appendFloatFootnoteSectionContentEpub2(parent *etree.Element, c *renderStat
 	if len(sectionElem.Child) > 0 {
 		separator = text.NBSP
 	}
-	_, err := appendEPUBFootnoteBacklinks(sectionElem, c, section.ID, epubFootnoteBacklinkOptions{LeadingSeparator: separator})
+	_, err := appendFootnoteBacklinks(sectionElem, c, section.ID, footnoteBacklinkOptions{LeadingSeparator: separator})
 	return err
 }
 
@@ -892,7 +868,7 @@ func appendFloatFootnoteSectionContentEpub3(parent *etree.Element, c *renderStat
 	// Full return navigation follows the aside. Reader popup extraction can still
 	// include these outside links; DOM placement alone does not control its range.
 	backPara := parent.CreateElement("p")
-	wrote, err := appendEPUBFootnoteBacklinks(backPara, c, section.ID, epubFootnoteBacklinkOptions{EPUB3Role: true})
+	wrote, err := appendFootnoteBacklinks(backPara, c, section.ID, footnoteBacklinkOptions{EPUB3Role: true})
 	if err != nil {
 		return err
 	}
@@ -968,7 +944,7 @@ func appendFootnoteSectionContent(parent *etree.Element, c *renderState, section
 		return err
 	}
 	backPara := sectionElem.CreateElement("p")
-	wrote, err := appendEPUBFootnoteBacklinks(backPara, c, section.ID, epubFootnoteBacklinkOptions{EPUB3Role: c.markup == HTML5})
+	wrote, err := appendFootnoteBacklinks(backPara, c, section.ID, footnoteBacklinkOptions{EPUB3Role: c.markup == HTML5})
 	if err != nil {
 		return err
 	}
@@ -978,12 +954,12 @@ func appendFootnoteSectionContent(parent *etree.Element, c *renderState, section
 	return nil
 }
 
-type epubFootnoteBacklinkOptions struct {
+type footnoteBacklinkOptions struct {
 	LeadingSeparator string
 	EPUB3Role        bool
 }
 
-func appendEPUBFootnoteBacklinks(parent *etree.Element, c *renderState, sectionID string, opts epubFootnoteBacklinkOptions) (bool, error) {
+func appendFootnoteBacklinks(parent *etree.Element, c *renderState, sectionID string, opts footnoteBacklinkOptions) (bool, error) {
 	if parent == nil || c == nil || strings.TrimSpace(sectionID) == "" {
 		return false, nil
 	}
@@ -1012,21 +988,12 @@ func appendEPUBFootnoteBacklinks(parent *etree.Element, c *renderState, sectionI
 			backLink.CreateAttr("epub:type", "backlink")
 			backLink.CreateAttr("role", "doc-backlink")
 		}
-		if c.OutputFormat == common.OutputFmtAzw3 {
-			if c.backlinks == nil {
-				c.backlinks = make(map[*etree.Element]string)
-			}
-			c.backlinks[backLink] = ref.RefID
+		if c.backlinks == nil {
+			c.backlinks = make(map[*etree.Element]string)
 		}
+		c.backlinks[backLink] = ref.RefID
 
-		textParent := backLink
-		if c.OutputFormat.IsKobo() {
-			paragraph, sentence := c.KoboSpanNextSentence()
-			span := backLink.CreateElement("span")
-			span.CreateAttr("class", "koboSpan")
-			span.CreateAttr("id", fmt.Sprintf("kobo.%d.%d", paragraph, sentence))
-			textParent = span
-		}
+		textParent := c.inlineParent(backLink)
 		appendPlainText(textParent, c, backlinkText)
 		wrote = true
 	}
@@ -1146,7 +1113,7 @@ func appendFlowItems(
 		switch item.Kind {
 		case fb2.FlowParagraph:
 			if item.Paragraph != nil {
-				c.KoboSpanNextParagraph()
+				c.nextParagraph()
 				p := parent.CreateElement("p")
 				if item.Paragraph.ID != "" {
 					p.CreateAttr("id", item.Paragraph.ID)
@@ -1168,7 +1135,7 @@ func appendFlowItems(
 			div.CreateAttr("class", "emptyline")
 		case fb2.FlowSubtitle:
 			if item.Subtitle != nil {
-				c.KoboSpanNextParagraph()
+				c.nextParagraph()
 				p := parent.CreateElement("p")
 				if item.Subtitle.ID != "" {
 					p.CreateAttr("id", item.Subtitle.ID)
@@ -1255,21 +1222,11 @@ func appendParagraphInline(parent *etree.Element, c *renderState, p *fb2.Paragra
 					// Create span for drop cap
 					dropCapSpan := parent.CreateElement("span")
 					dropCapSpan.CreateAttr("class", "dropcap")
-					if c.OutputFormat.IsKobo() {
-						paragraph, sentence := c.KoboSpanNextSentence()
-						koboSpan := dropCapSpan.CreateElement("span")
-						koboSpan.CreateAttr("class", "koboSpan")
-						koboSpan.CreateAttr("id", fmt.Sprintf("kobo.%d.%d", paragraph, sentence))
-					}
+					textParent := c.inlineParent(dropCapSpan)
 
 					chunks, markers := c.SplitTextByPage(firstChar)
 					for i, chunk := range chunks {
-						if c.OutputFormat.IsKobo() {
-							koboSpan := dropCapSpan.ChildElements()[0]
-							koboSpan.SetText(koboSpan.Text() + chunk)
-						} else {
-							dropCapSpan.SetText(dropCapSpan.Text() + chunk)
-						}
+						textParent.SetText(textParent.Text() + chunk)
 						if markers[i] {
 							appendPageMarker(dropCapSpan, c)
 						}
@@ -1306,16 +1263,9 @@ func appendInlineText(parent *etree.Element, c *renderState, text string, hyphen
 		return
 	}
 
-	if c.OutputFormat.IsKobo() && strings.TrimSpace(text) != "" {
-		// Kobo mode: wrap text in span with unique ID
+	if c.text != nil && strings.TrimSpace(text) != "" {
 		for i, chunk := range chunks {
-			for s := range c.Splitter.Sentences(chunk) {
-				paragraph, sentence := c.KoboSpanNextSentence()
-				span := parent.CreateElement("span")
-				span.CreateAttr("class", "koboSpan")
-				span.CreateAttr("id", fmt.Sprintf("kobo.%d.%d", paragraph, sentence))
-				span.SetText(s)
-			}
+			c.text.AppendText(parent, chunk)
 			if markers[i] {
 				appendPageMarker(parent, c)
 			}
@@ -1458,16 +1408,7 @@ func appendInlineSegment(parent *etree.Element, c *renderState, seg *fb2.InlineS
 		}
 	case fb2.InlineImageSegment:
 		if seg.Image != nil {
-			var imgParent *etree.Element
-			if c.OutputFormat.IsKobo() {
-				paragraph, sentence := c.KoboSpanNextSentence()
-				span := parent.CreateElement("span")
-				span.CreateAttr("class", "koboSpan")
-				span.CreateAttr("id", fmt.Sprintf("kobo.%d.%d", paragraph, sentence))
-				imgParent = span
-			} else {
-				imgParent = parent
-			}
+			imgParent := c.inlineParent(parent)
 			img := imgParent.CreateElement("img")
 			img.CreateAttr("class", "image-inline")
 			imgID := strings.TrimPrefix(seg.Image.Href, "#")
@@ -1489,17 +1430,8 @@ func appendImageElement(parent *etree.Element, c *renderState, img *fb2.Image) {
 		div.CreateAttr("id", img.ID)
 	}
 
-	c.KoboSpanNextParagraph()
-	var imgParent *etree.Element
-	if c.OutputFormat.IsKobo() {
-		paragraph, sentence := c.KoboSpanNextSentence()
-		span := div.CreateElement("span")
-		span.CreateAttr("class", "koboSpan")
-		span.CreateAttr("id", fmt.Sprintf("kobo.%d.%d", paragraph, sentence))
-		imgParent = span
-	} else {
-		imgParent = div
-	}
+	c.nextParagraph()
+	imgParent := c.inlineParent(div)
 
 	imgElem := imgParent.CreateElement("img")
 	imgElem.CreateAttr("class", "image-block")
@@ -1531,17 +1463,8 @@ func appendVignetteImage(parent *etree.Element, c *renderState, position common.
 	div := parent.CreateElement("div")
 	div.CreateAttr("class", fmt.Sprintf("vignette vignette-%s", position.String()))
 
-	c.KoboSpanNextParagraph()
-	var imgParent *etree.Element
-	if c.OutputFormat.IsKobo() {
-		paragraph, sentence := c.KoboSpanNextSentence()
-		span := div.CreateElement("span")
-		span.CreateAttr("class", "koboSpan")
-		span.CreateAttr("id", fmt.Sprintf("kobo.%d.%d", paragraph, sentence))
-		imgParent = span
-	} else {
-		imgParent = div
-	}
+	c.nextParagraph()
+	imgParent := c.inlineParent(div)
 
 	imgElem := imgParent.CreateElement("img")
 	imgElem.CreateAttr("class", "image-vignette")
@@ -1568,7 +1491,7 @@ func appendPoemElement(parent *etree.Element, c *renderState, poem *fb2.Poem, de
 	}
 
 	for _, subtitle := range poem.Subtitles {
-		c.KoboSpanNextParagraph()
+		c.nextParagraph()
 		p := div.CreateElement("p")
 		p.CreateAttr("class", "poem-subtitle")
 		if subtitle.ID != "" {
@@ -1589,7 +1512,7 @@ func appendPoemElement(parent *etree.Element, c *renderState, poem *fb2.Poem, de
 		}
 
 		if stanza.Subtitle != nil {
-			c.KoboSpanNextParagraph()
+			c.nextParagraph()
 			p := stanzaDiv.CreateElement("p")
 			p.CreateAttr("class", "stanza-subtitle")
 			if stanza.Subtitle.ID != "" {
@@ -1599,7 +1522,7 @@ func appendPoemElement(parent *etree.Element, c *renderState, poem *fb2.Poem, de
 		}
 
 		for _, verse := range stanza.Verses {
-			c.KoboSpanNextParagraph()
+			c.nextParagraph()
 			p := stanzaDiv.CreateElement("p")
 			p.CreateAttr("class", "verse")
 			appendParagraphInline(p, c, &verse)
@@ -1607,14 +1530,14 @@ func appendPoemElement(parent *etree.Element, c *renderState, poem *fb2.Poem, de
 	}
 
 	for _, ta := range poem.TextAuthors {
-		c.KoboSpanNextParagraph()
+		c.nextParagraph()
 		p := div.CreateElement("p")
 		p.CreateAttr("class", "text-author")
 		appendParagraphInline(p, c, &ta)
 	}
 
 	if poem.Date != nil {
-		c.KoboSpanNextParagraph()
+		c.nextParagraph()
 		p := div.CreateElement("p")
 		p.CreateAttr("class", "date")
 		var dateText string
@@ -1643,7 +1566,7 @@ func appendCiteElement(parent *etree.Element, c *renderState, cite *fb2.Cite, de
 	}
 
 	for _, ta := range cite.TextAuthors {
-		c.KoboSpanNextParagraph()
+		c.nextParagraph()
 		p := blockquote.CreateElement("p")
 		p.CreateAttr("class", "text-author")
 		appendParagraphInline(p, c, &ta)
@@ -1652,7 +1575,7 @@ func appendCiteElement(parent *etree.Element, c *renderState, cite *fb2.Cite, de
 }
 
 func appendTableElement(parent *etree.Element, c *renderState, table *fb2.Table) {
-	c.KoboSpanNextParagraph()
+	c.nextParagraph()
 	tableElem := parent.CreateElement("table")
 	if table.ID != "" {
 		tableElem.CreateAttr("id", table.ID)

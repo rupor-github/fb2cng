@@ -157,7 +157,7 @@ func fb2TextPublication(
 			t.Errorf("remove fixture work directory: %v", err)
 		}
 	})
-	pub, err := publication.Build(ctx, c, &cfg.Document, publication.HTML5, env.Log)
+	pub, err := publication.Build(ctx, c, &cfg.Document, publicationOptions(), env.Log)
 	if err != nil {
 		t.Fatal(err)
 	}

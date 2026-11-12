@@ -77,10 +77,9 @@ type Content struct {
 	IDsIndex       fb2.IDIndex
 	LinksRevIndex  fb2.ReverseLinkIndex
 
-	Splitter *text.Splitter
-	Hyphen   *text.Hyphenator
-	WorkDir  string
-	Debug    bool
+	Hyphen  *text.Hyphenator
+	WorkDir string
+	Debug   bool
 
 	// Footnote back-link tracking
 	BackLinkIndex       map[string][]BackLinkRef // targetID -> list of references to it
@@ -89,10 +88,6 @@ type Content struct {
 	CurrentSectionTitle string                   // nearest titled section/body title
 	backLinkReplay      map[string][]BackLinkRef
 	backLinkReplayPos   map[string]int
-
-	// Kobo span tracking
-	koboSpanParagraphs int
-	koboSpanSentences  int
 
 	// Page map tracking
 	PageTrackingEnabled bool                      // whether to track pages in current context
@@ -315,11 +310,6 @@ func Prepare(ctx context.Context, r io.Reader, srcName string, outputFormat comm
 		c.Hyphen = text.NewHyphenator(book.Description.TitleInfo.Lang, log)
 	}
 
-	// We only need sentences tokenizer for Kobo formats.
-	if outputFormat.IsKobo() {
-		c.Splitter = text.NewSplitter(book.Description.TitleInfo.Lang, log)
-	}
-
 	// Save prepared document to file for debugging
 	if env.Rpt != nil {
 		if err := os.WriteFile(filepath.Join(tmpDir, "book.prepared.txt"), []byte(c.String()), 0644); err != nil {
@@ -394,24 +384,6 @@ func prepareVignettes(
 	}
 
 	return vignettes, nil
-}
-
-// KoboSpanNextSentence increments sentence and returns the current Kobo span
-func (c *Content) KoboSpanNextSentence() (int, int) {
-	c.koboSpanSentences++
-	return c.koboSpanParagraphs, c.koboSpanSentences
-}
-
-// KoboSpanNextParagraph increments paragraph, resets sentence, and returns previous Kobo span
-func (c *Content) KoboSpanNextParagraph() (int, int) {
-	oldParagraphs, oldSentences := c.koboSpanParagraphs, c.koboSpanSentences
-	c.koboSpanParagraphs++
-	c.koboSpanSentences = 0
-	return oldParagraphs, oldSentences
-}
-
-func (c *Content) KoboSpanSet(paragraphs, sentences int) {
-	c.koboSpanParagraphs, c.koboSpanSentences = paragraphs, sentences
 }
 
 // UpdatePageRuneCount adds rune count and checks if a new page boundary is reached

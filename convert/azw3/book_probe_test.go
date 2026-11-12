@@ -62,7 +62,7 @@ func TestCompleteFB2Book(t *testing.T) {
 					t.Errorf("remove prepared-content directory: %v", err)
 				}
 			})
-			pub, err := publication.Build(ctx, c, &cfg.Document, publication.HTML5, env.Log)
+			pub, err := publication.Build(ctx, c, &cfg.Document, publicationOptions(), env.Log)
 			if err != nil {
 				t.Fatal(err)
 			}

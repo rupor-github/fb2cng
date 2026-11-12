@@ -1,4 +1,4 @@
-package publication
+package azw3
 
 import (
 	"strings"
@@ -9,15 +9,26 @@ import (
 
 	"fbc/common"
 	"fbc/config"
+	"fbc/convert/internal/publicationtest"
+	"fbc/convert/publication"
 	"fbc/fb2"
 )
+
+func assertRenderedPublicationLinks(t *testing.T, pub *publication.Publication) {
+	t.Helper()
+	documents := make(map[string]*etree.Document)
+	for chapter := range pub.Documents() {
+		documents[chapter.Filename] = chapter.Doc
+	}
+	publicationtest.AssertLinks(t, documents, pub.IDToFile)
+}
 
 func TestAZW3FootnoteModes(t *testing.T) {
 	for _, mode := range []common.FootnotesMode{
 		common.FootnotesModeDefault, common.FootnotesModeFloat, common.FootnotesModeFloatRenumbered,
 	} {
 		t.Run(mode.String(), func(t *testing.T) {
-			c := buildTestContent(common.OutputFmtAzw3, mode, 20)
+			c := publicationtest.Content(common.OutputFmtAzw3, mode, 20)
 			c.PageTrackingEnabled = true
 			c.MoreParaStr = ""
 			c.BacklinkTemplate = `{{.Format}}/{{.RefNumber}} <&> "'🙂`
@@ -54,11 +65,11 @@ func TestAZW3FootnoteModes(t *testing.T) {
 				)
 				wantTitle = "azw3/1 <&> \"'🙂"
 			}
-			pub, err := Build(t.Context(), c, &config.DocumentConfig{}, HTML5, zap.NewNop())
+			pub, err := publication.Build(t.Context(), c, &config.DocumentConfig{}, publicationOptions(), zap.NewNop())
 			if err != nil {
 				t.Fatal(err)
 			}
-			assertPublicationLinks(t, pub)
+			assertRenderedPublicationLinks(t, pub)
 			for chapter := range pub.Documents() {
 				data, err := chapter.Doc.WriteToString()
 				if err != nil {
@@ -134,16 +145,16 @@ func TestAZW3FootnoteBacklinkSuppression(t *testing.T) {
 			{name: "selective", template: `{{if eq .RefNumber 2}}[{{.RefNumber}}]{{end}}`, count: 1},
 		} {
 			t.Run(mode.String()+"/"+tt.name, func(t *testing.T) {
-				c := buildTestContent(common.OutputFmtAzw3, mode, 0)
+				c := publicationtest.Content(common.OutputFmtAzw3, mode, 0)
 				c.BacklinkTemplate = tt.template
 				c.Book.Bodies[1].Sections[0].Title = azw3TestTitle("17")
 				main := &c.Book.Bodies[0].Sections[0]
 				main.Content = append(main.Content, main.Content[1])
-				pub, err := Build(t.Context(), c, &config.DocumentConfig{}, HTML5, zap.NewNop())
+				pub, err := publication.Build(t.Context(), c, &config.DocumentConfig{}, publicationOptions(), zap.NewNop())
 				if err != nil {
 					t.Fatal(err)
 				}
-				assertPublicationLinks(t, pub)
+				assertRenderedPublicationLinks(t, pub)
 				if len(pub.Backlinks) != tt.count {
 					t.Fatalf("generated returns = %d, want %d", len(pub.Backlinks), tt.count)
 				}
@@ -197,15 +208,15 @@ func TestAZW3FloatTitleBrackets(t *testing.T) {
 			{name: "empty"},
 		} {
 			t.Run(mode.String()+"/"+tt.name, func(t *testing.T) {
-				c := buildTestContent(common.OutputFmtAzw3, mode, 0)
+				c := publicationtest.Content(common.OutputFmtAzw3, mode, 0)
 				c.BacklinkTemplate = `{{ "" }}`
 				c.Book.Bodies[1].Sections[0].Title = azw3TestTitle(tt.title)
 				c.Book.Bodies[2].Sections[0].Title = azw3TestTitle(tt.title)
-				pub, err := Build(t.Context(), c, &config.DocumentConfig{}, HTML5, zap.NewNop())
+				pub, err := publication.Build(t.Context(), c, &config.DocumentConfig{}, publicationOptions(), zap.NewNop())
 				if err != nil {
 					t.Fatal(err)
 				}
-				assertPublicationLinks(t, pub)
+				assertRenderedPublicationLinks(t, pub)
 				want := strings.TrimSpace(tt.title)
 				if mode == common.FootnotesModeFloat {
 					want = tt.floatTitle
@@ -395,7 +406,7 @@ func TestAZW3FootnotePlainTextBlocks(t *testing.T) {
 func TestAZW3FootnoteIncomingTargetsAndIntroductions(t *testing.T) {
 	for _, mode := range []common.FootnotesMode{common.FootnotesModeFloat, common.FootnotesModeFloatRenumbered} {
 		t.Run(mode.String(), func(t *testing.T) {
-			c := buildTestContent(common.OutputFmtAzw3, mode, 0)
+			c := publicationtest.Content(common.OutputFmtAzw3, mode, 0)
 			first := &c.Book.Bodies[1].Sections[0]
 			p := first.Content[0].Paragraph
 			p.ID = "inside-note"
@@ -407,11 +418,11 @@ func TestAZW3FootnoteIncomingTargetsAndIntroductions(t *testing.T) {
 			c.Book.Bodies[2].Title = &fb2.Title{Items: []fb2.TitleItem{{Paragraph: azw3TestParagraph("Comments ", fb2.InlineSegment{
 				Kind: fb2.InlineLink, Href: "#note1", Text: "intro reference",
 			}).Paragraph}}}
-			pub, err := Build(t.Context(), c, &config.DocumentConfig{}, HTML5, zap.NewNop())
+			pub, err := publication.Build(t.Context(), c, &config.DocumentConfig{}, publicationOptions(), zap.NewNop())
 			if err != nil {
 				t.Fatal(err)
 			}
-			assertPublicationLinks(t, pub)
+			assertRenderedPublicationLinks(t, pub)
 			if len(c.BackLinkIndex["note1"]) != 2 || len(pub.Backlinks) != 2 {
 				t.Fatal("later introduction reference must be registered before rendering notes")
 			}

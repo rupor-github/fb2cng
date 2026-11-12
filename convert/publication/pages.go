@@ -26,7 +26,7 @@ func generateAnnotation(c *renderState, cfg *config.AnnotationConfig, log *zap.L
 	annotationBodyDiv.CreateAttr("class", "annotation-body")
 	annotationBodyDiv.CreateAttr("id", id)
 
-	c.KoboSpanNextParagraph()
+	c.nextParagraph()
 	h1 := annotationBodyDiv.CreateElement("h1")
 	h1.CreateAttr("class", "annotation-title")
 	appendInlineText(h1, c, cfg.Title, false)
@@ -177,7 +177,7 @@ func buildTOCContent(
 	log *zap.Logger,
 ) {
 	// Add book title
-	c.KoboSpanNextParagraph()
+	c.nextParagraph()
 	h1 := parentContainer.CreateElement("h1")
 	h1.CreateAttr("class", "toc-title")
 
@@ -204,7 +204,7 @@ func buildTOCContent(
 	}
 
 	// Build TOC list
-	c.KoboSpanNextParagraph()
+	c.nextParagraph()
 	ol := parentContainer.CreateElement("ol")
 	ol.CreateAttr("class", "toc-list")
 
@@ -234,10 +234,13 @@ func buildTOCContent(
 
 // buildTOCPageOL recursively builds nested TOC structure for the TOC page
 func buildTOCPageOL(parent *etree.Element, section *fb2.Section, filename string, c *renderState, includeUntitled bool, idToFile idToFileMap) {
-	var oldParagraphs, oldSentences int
+	var restorePosition func()
 	nestedOL := parent.SelectElement("ol")
 	if nestedOL == nil {
-		oldParagraphs, oldSentences = c.KoboSpanNextParagraph()
+		if c.text != nil {
+			restorePosition = c.text.SavePosition()
+		}
+		c.nextParagraph()
 		nestedOL = parent.CreateElement("ol")
 		nestedOL.CreateAttr("class", "toc-list toc-nested")
 	}
@@ -247,7 +250,9 @@ func buildTOCPageOL(parent *etree.Element, section *fb2.Section, filename string
 
 	if !hadItems && len(nestedOL.ChildElements()) == 0 {
 		parent.RemoveChild(nestedOL)
-		c.KoboSpanSet(oldParagraphs, oldSentences)
+		if restorePosition != nil {
+			restorePosition()
+		}
 	}
 }
 
