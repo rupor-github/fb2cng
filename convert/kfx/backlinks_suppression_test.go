@@ -34,7 +34,10 @@ func TestKFXSelectiveBacklinkTextAndOffsets(t *testing.T) {
 			for i := range refs {
 				refs[i] = c.AddFootnoteBackLinkRef("n1")
 			}
-			text, events := kfxBacklinkParagraphContent(c, refs, nil)
+			text, events, err := kfxBacklinkParagraphContent(c, refs, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
 			if text != tt.want || len(events) != len(tt.wantRefs) {
 				t.Fatalf("content = %q, events = %+v, want %q with targets %v", text, events, tt.want, tt.wantRefs)
 			}
@@ -60,6 +63,7 @@ func TestKFXBacklinkSuppressionModes(t *testing.T) {
 			for _, tt := range []struct {
 				name, template string
 				wantReturns    int
+				wantErr        bool
 			}{
 				{name: "default template", template: cfg.Document.Footnotes.BacklinkTemplate, wantReturns: 3},
 				{name: "nonempty", template: " RETURN ", wantReturns: 3},
@@ -67,9 +71,10 @@ func TestKFXBacklinkSuppressionModes(t *testing.T) {
 				{name: "whitespace", template: "{{ ` \n\t ` }}"},
 				{name: "selective", template: `{{- if eq .RefNumber 2 -}}RETURN{{- end -}}`, wantReturns: 1},
 				{name: "location dependent", template: `{{- if .LocationNumber -}}LOC{{- end -}}`, wantReturns: 3},
-				{name: "missing template", wantReturns: 3},
-				{name: "invalid syntax", template: "{{", wantReturns: 3},
-				{name: "execution failure", template: "{{.MissingField}}", wantReturns: 3},
+				{name: "missing template", wantErr: true},
+				{name: "invalid syntax", template: "{{", wantErr: true},
+				{name: "execution failure", template: "{{.MissingField}}", wantErr: true},
+				{name: "later reference failure", template: "{{if eq .RefNumber 2}}{{.MissingField}}{{else}}return{{end}}", wantErr: true},
 			} {
 				t.Run(format.String()+"/"+mode.String()+"/"+tt.name, func(t *testing.T) {
 					book := kfxDefaultBacklinkBook()
@@ -85,6 +90,12 @@ func TestKFXBacklinkSuppressionModes(t *testing.T) {
 					fragments, _, sections, _, sectionEIDs, targets, _, chapters, err := generateStoryline(
 						t.Context(), c, NewStyleRegistry(), nil, 1000,
 					)
+					if tt.wantErr {
+						if err == nil || !strings.Contains(err.Error(), "backlink_template") || fragments != nil {
+							t.Fatalf("generateStoryline() = %v, %v; want no fragments and a backlink template error", fragments, err)
+						}
+						return
+					}
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -190,7 +201,10 @@ func TestKFXBacklinkVisibilityReevaluatesLocations(t *testing.T) {
 	ref := c.AddFootnoteBackLinkRef("n1")
 	sb := NewStorylineBuilder("l1", "c0", 1000, nil)
 	ca := NewContentAccumulator(1)
-	paragraph, ok := addBacklinkParagraph(c, []content.BackLinkRef{ref}, false, sb, nil, ca)
+	paragraph, ok, err := addBacklinkParagraph(c, []content.BackLinkRef{ref}, false, sb, nil, ca)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok || slices.Contains(sb.AllEIDs(), paragraph.EID) {
 		t.Fatal("initially empty candidate was lost or included in positions")
 	}
@@ -205,7 +219,11 @@ func TestKFXBacklinkVisibilityReevaluatesLocations(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			c.SetBackLinkRefLocation(ref.RefID, tt.location)
-			if !rewriteKFXBacklinkParagraphs(c, []kfxBacklinkParagraph{paragraph}, sb, nil, ca) {
+			changed, err := rewriteKFXBacklinkParagraphs(c, []kfxBacklinkParagraph{paragraph}, sb, nil, ca)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !changed {
 				t.Fatal("expected backlink content/visibility update")
 			}
 			if slices.Contains(sb.AllEIDs(), paragraph.EID) != tt.visible {
@@ -223,6 +241,31 @@ func TestKFXBacklinkVisibilityReevaluatesLocations(t *testing.T) {
 				t.Fatal("suppressed candidate incorrectly included/excluded from storyline snapshot")
 			}
 		})
+	}
+}
+
+func TestKFXBacklinkLocationExecutionError(t *testing.T) {
+	c := &content.Content{
+		OutputFormat: common.OutputFmtKfx, BacklinkTemplate: "{{if .LocationNumber}}{{.MissingField}}{{end}}",
+	}
+	ref := c.AddFootnoteBackLinkRef("n1")
+	sb := NewStorylineBuilder("l1", "c0", 1000, nil)
+	ca := NewContentAccumulator(1)
+	paragraph, ok, err := addBacklinkParagraph(c, []content.BackLinkRef{ref}, false, sb, nil, ca)
+	if err != nil || !ok {
+		t.Fatalf("addBacklinkParagraph() = %+v, %t, %v; want an empty candidate", paragraph, ok, err)
+	}
+	if !c.SetBackLinkRefLocation(ref.RefID, 2) {
+		t.Fatal("failed to set reference location")
+	}
+	if _, err := rewriteKFXBacklinkParagraphs(c, []kfxBacklinkParagraph{paragraph}, sb, nil, ca); err == nil ||
+		!strings.Contains(err.Error(), "backlink_template") {
+		t.Fatalf("rewriteKFXBacklinkParagraphs() error = %v, want a backlink template error", err)
+	}
+	if err := refreshKFXBacklinkParagraphs(
+		c, []kfxBacklinkParagraph{paragraph}, sb, nil, ca, nil, nil, nil, nil,
+	); err == nil || !strings.Contains(err.Error(), "backlink_template") {
+		t.Fatalf("refreshKFXBacklinkParagraphs() error = %v, want a backlink template error", err)
 	}
 }
 

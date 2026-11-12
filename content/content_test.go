@@ -1405,7 +1405,11 @@ func TestContent_BacklinkTextTemplate(t *testing.T) {
 	c := &Content{BacklinkTemplate: cfg.Document.Footnotes.BacklinkTemplate}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := c.BacklinkText(tt.ref); got != tt.want {
+			got, err := c.BacklinkText(tt.ref)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.want {
 				t.Fatalf("BacklinkText() = %q, want %q", got, tt.want)
 			}
 		})
@@ -1414,7 +1418,10 @@ func TestContent_BacklinkTextTemplate(t *testing.T) {
 
 func TestContent_BacklinkTextContext(t *testing.T) {
 	c := &Content{BacklinkTemplate: `{{.Context}}/{{.Format}}/{{.RefNumber}}`}
-	got := c.BacklinkText(BackLinkRef{Format: "kfx", RefNumber: 3})
+	got, err := c.BacklinkText(BackLinkRef{Format: "kfx", RefNumber: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
 	want := "backlink_template/kfx/3"
 	if got != want {
 		t.Fatalf("BacklinkText() = %q, want %q", got, want)
@@ -1425,17 +1432,27 @@ func TestContent_BacklinkTextSuppression(t *testing.T) {
 	for _, format := range []string{"azw3", "epub2", "epub3", "kepub", "kepub3", "kfx", "azw8", "pdf", "txt", "md"} {
 		for _, tt := range []struct {
 			name, template, want string
+			wantErr              bool
 		}{
-			{name: "missing", want: defaultBacklinkText},
-			{name: "invalid syntax", template: "{{", want: defaultBacklinkText},
-			{name: "invalid execution", template: "{{.MissingField}}", want: defaultBacklinkText},
+			{name: "missing", wantErr: true},
+			{name: "whitespace template", template: " \n\t ", wantErr: true},
+			{name: "invalid syntax", template: "{{", wantErr: true},
+			{name: "invalid execution", template: "{{.MissingField}}", wantErr: true},
+			{name: "partial execution", template: "return{{.MissingField}}", wantErr: true},
 			{name: "empty result", template: `{{ "" }}`},
 			{name: "whitespace result", template: "{{ ` \n\t ` }}"},
 			{name: "nonempty result", template: " return ", want: "return"},
 		} {
 			t.Run(format+"/"+tt.name, func(t *testing.T) {
 				c := &Content{BacklinkTemplate: tt.template}
-				if got := c.BacklinkText(BackLinkRef{Format: format}); got != tt.want {
+				got, err := c.BacklinkText(BackLinkRef{Format: format})
+				if (err != nil) != tt.wantErr {
+					t.Fatalf("BacklinkText() error = %v, want error %t", err, tt.wantErr)
+				}
+				if err != nil && !strings.Contains(err.Error(), "backlink_template") {
+					t.Fatalf("error does not identify the template: %v", err)
+				}
+				if got != tt.want {
 					t.Fatalf("BacklinkText() = %q, want %q", got, tt.want)
 				}
 			})
@@ -1448,7 +1465,10 @@ func TestContent_BacklinkTextSuppression(t *testing.T) {
 	c := &Content{BacklinkTemplate: cfg.Document.Footnotes.BacklinkTemplate}
 	for _, format := range []string{"azw3", "epub2", "epub3", "kepub", "kepub3", "kfx", "azw8", "pdf", "md"} {
 		t.Run("default config/"+format, func(t *testing.T) {
-			got := c.BacklinkText(BackLinkRef{Format: format, LocationNumber: 42, PageNumber: 3})
+			got, err := c.BacklinkText(BackLinkRef{Format: format, LocationNumber: 42, PageNumber: 3})
+			if err != nil {
+				t.Fatal(err)
+			}
 			if (got == "") != (format == "azw3") {
 				t.Fatalf("default template suppression for %s = %q", format, got)
 			}

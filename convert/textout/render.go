@@ -116,13 +116,17 @@ func (r *renderer) render() ([]byte, error) {
 		r.renderAnnotation()
 	}
 	for i := range plan.Units {
-		r.renderUnit(&plan.Units[i])
+		if err := r.renderUnit(&plan.Units[i]); err != nil {
+			return nil, err
+		}
 	}
 	if r.cfg.TOCPage.Placement == common.TOCPagePlacementAfter {
 		r.renderTOC(plan.TOC)
 	}
 	if r.c.FootnotesMode.IsFloat() {
-		r.renderEndnotes()
+		if err := r.renderEndnotes(); err != nil {
+			return nil, err
+		}
 	}
 
 	out := strings.TrimSpace(strings.Join(r.blocks, "\n\n")) + "\n"
@@ -345,9 +349,9 @@ func (r *renderer) appendTXTTOCNode(lines *[]string, node *tocnav.Node, depth in
 	}
 }
 
-func (r *renderer) renderUnit(unit *structure.Unit) {
+func (r *renderer) renderUnit(unit *structure.Unit) error {
 	if unit == nil {
-		return
+		return nil
 	}
 	oldChapterTitle := r.c.CurrentChapterTitle
 	oldSectionTitle := r.c.CurrentSectionTitle
@@ -360,7 +364,7 @@ func (r *renderer) renderUnit(unit *structure.Unit) {
 
 	switch unit.Kind {
 	case structure.UnitCover:
-		return
+		return nil
 	case structure.UnitBodyImage:
 		if unit.Body != nil {
 			r.image(unit.Body.Image)
@@ -375,9 +379,10 @@ func (r *renderer) renderUnit(unit *structure.Unit) {
 		}
 	case structure.UnitFootnotesBody:
 		if unit.Body != nil {
-			r.renderFootnoteBody(unit.Body, unit.ID)
+			return r.renderFootnoteBody(unit.Body, unit.ID)
 		}
 	}
+	return nil
 }
 
 func (r *renderer) renderBodyIntro(body *fb2.Body, anchorID string) {
@@ -392,7 +397,7 @@ func (r *renderer) renderBodyIntro(body *fb2.Body, anchorID string) {
 	}
 }
 
-func (r *renderer) renderFootnoteBody(body *fb2.Body, anchorID string) {
+func (r *renderer) renderFootnoteBody(body *fb2.Body, anchorID string) error {
 	if body.Title != nil {
 		r.titleWithAnchor(body.Title, 2, anchorID)
 	} else if title := strings.TrimSpace(body.AsTitleText("Notes")); title != "" {
@@ -408,8 +413,11 @@ func (r *renderer) renderFootnoteBody(body *fb2.Body, anchorID string) {
 		for _, block := range sectionBlocks[i] {
 			r.block(block)
 		}
-		r.renderFootnoteBacklinks(body.Sections[i].ID)
+		if err := r.renderFootnoteBacklinks(body.Sections[i].ID); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func (r *renderer) renderSection(section *fb2.Section, depth int) {
@@ -890,9 +898,9 @@ func (r *renderer) table(table *fb2.Table) {
 	r.block(alignedTable(rows))
 }
 
-func (r *renderer) renderEndnotes() {
+func (r *renderer) renderEndnotes() error {
 	if r.endnotes == nil || len(r.endnotes.ids) == 0 {
-		return
+		return nil
 	}
 	r.heading("Notes", 2)
 	type renderedEndnote struct {
@@ -932,7 +940,9 @@ func (r *renderer) renderEndnotes() {
 			for _, block := range note.blocks {
 				r.block(block)
 			}
-			r.renderFootnoteBacklinks(note.id)
+			if err := r.renderFootnoteBacklinks(note.id); err != nil {
+				return err
+			}
 			continue
 		}
 		r.block("[" + note.label + "]")
@@ -940,6 +950,7 @@ func (r *renderer) renderEndnotes() {
 			r.block(block)
 		}
 	}
+	return nil
 }
 
 func (r *renderer) renderFootnoteBlocks(section *fb2.Section) []string {
@@ -1151,35 +1162,43 @@ func (r *renderer) markdownReferenceAnchor(ref content.BackLinkRef) string {
 	return "<a id=\"" + anchor + "\"></a>"
 }
 
-func (r *renderer) renderFootnoteBacklinks(sectionID string) {
+func (r *renderer) renderFootnoteBacklinks(sectionID string) error {
 	if r.format != formatMD {
-		return
+		return nil
 	}
-	if backlinks := r.markdownFootnoteBacklinks(sectionID); backlinks != "" {
+	backlinks, err := r.markdownFootnoteBacklinks(sectionID)
+	if err != nil {
+		return err
+	}
+	if backlinks != "" {
 		r.block(backlinks)
 	}
+	return nil
 }
 
-func (r *renderer) markdownFootnoteBacklinks(sectionID string) string {
+func (r *renderer) markdownFootnoteBacklinks(sectionID string) (string, error) {
 	sectionID = strings.TrimSpace(sectionID)
 	if sectionID == "" || r.c == nil {
-		return ""
+		return "", nil
 	}
 	r.updateMarkdownBacklinkLocations()
 	refs := r.c.BackLinkIndex[sectionID]
 	if len(refs) == 0 {
-		return ""
+		return "", nil
 	}
 	links := make([]string, 0, len(refs))
 	for _, ref := range refs {
-		text := r.c.BacklinkText(ref)
+		text, err := r.c.BacklinkText(ref)
+		if err != nil {
+			return "", err
+		}
 		href := markdownBacklinkHref(ref)
 		if text == "" || href == "" {
 			continue
 		}
 		links = append(links, "["+escapeMDLinkTextRendered(escapeMDInline(text))+"]("+escapeMDURL(href)+")")
 	}
-	return strings.Join(links, "\u00A0")
+	return strings.Join(links, "\u00A0"), nil
 }
 
 func markdownBacklinkHref(ref content.BackLinkRef) string {

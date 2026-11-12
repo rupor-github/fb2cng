@@ -574,7 +574,9 @@ func TestFootnoteBodyBlocksClassifyNoteRefsByContent(t *testing.T) {
 	}}}}}
 
 	var blocks []pdfTextBlock
-	appendFootnoteBodyBlocks(&blocks, c, body, nil)
+	if err := appendFootnoteBodyBlocks(&blocks, c, body, nil); err != nil {
+		t.Fatal(err)
+	}
 	if len(blocks) != 1 {
 		t.Fatalf("footnote body blocks = %#v, want one paragraph", blocks)
 	}

@@ -19,7 +19,7 @@ func TestCompileBacklinks(t *testing.T) {
 		"[loc {{.LocationNumber}}]",
 		"{{.Context}}|{{.Format}}|{{.TargetID}}|{{.RefID}}|{{.RefNumber}}|{{.Filename}}|" +
 			"{{.Href}}|{{.PageNumber}}|{{.LocationNumber}}|{{.ChapterTitle}}|{{.SectionTitle}}",
-		"plain label", "{{.MissingField}}", "",
+		"plain label", `{{ "" }}`,
 	} {
 		t.Run(template, func(t *testing.T) {
 			pub := textTestPublication(t)
@@ -71,7 +71,11 @@ func TestCompileBacklinks(t *testing.T) {
 					}
 					break
 				}
-				if element.Text() != c.BacklinkText(ref) {
+				label, err := c.BacklinkText(ref)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if element.Text() != label {
 					t.Fatal("generated label does not use all final template fields", element.Text())
 				}
 			}

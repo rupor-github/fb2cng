@@ -52,9 +52,9 @@ func appendBodyIntroBlocks(blocks *[]pdfTextBlock, c *content.Content, body *fb2
 	}
 }
 
-func appendFootnoteBodyBlocks(blocks *[]pdfTextBlock, c *content.Content, body *fb2.Body, splitSections map[string]bool) {
+func appendFootnoteBodyBlocks(blocks *[]pdfTextBlock, c *content.Content, body *fb2.Body, splitSections map[string]bool) error {
 	if body == nil {
-		return
+		return nil
 	}
 	appendBodyIntroBlocks(blocks, c, body, true)
 	sectionBlocks := make([][]pdfTextBlock, len(body.Sections))
@@ -63,8 +63,11 @@ func appendFootnoteBodyBlocks(blocks *[]pdfTextBlock, c *content.Content, body *
 	}
 	for i := range body.Sections {
 		*blocks = append(*blocks, sectionBlocks[i]...)
-		appendPDFDefaultFootnoteBacklinkBlock(blocks, c, body.Sections[i].ID)
+		if err := appendPDFDefaultFootnoteBacklinkBlock(blocks, c, body.Sections[i].ID); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func appendFootnoteSectionContentBlocks(blocks *[]pdfTextBlock, c *content.Content, section *fb2.Section, splitSections map[string]bool) {
@@ -98,19 +101,22 @@ func appendFootnoteSectionContentBlocks(blocks *[]pdfTextBlock, c *content.Conte
 	}
 }
 
-func appendPDFDefaultFootnoteBacklinkBlock(blocks *[]pdfTextBlock, c *content.Content, sectionID string) {
+func appendPDFDefaultFootnoteBacklinkBlock(blocks *[]pdfTextBlock, c *content.Content, sectionID string) error {
 	if !pdfDefaultFootnoteBacklinksEnabled(c) || strings.TrimSpace(sectionID) == "" {
-		return
+		return nil
 	}
 	refs := c.BackLinkIndex[sectionID]
 	if len(refs) == 0 {
-		return
+		return nil
 	}
 	refIDs := make([]string, 0, len(refs))
 	for _, ref := range refs {
 		refIDs = append(refIDs, ref.RefID)
 	}
-	text, runs := pdfBacklinkBlockContent(c, refIDs)
+	text, runs, err := pdfBacklinkBlockContent(c, refIDs)
+	if err != nil {
+		return err
+	}
 	// Preserve even initially empty candidates: a template can start producing
 	// text only after .PageNumber is resolved. Empty blocks stay out of layout.
 	*blocks = append(*blocks, pdfTextBlock{
@@ -121,11 +127,12 @@ func appendPDFDefaultFootnoteBacklinkBlock(blocks *[]pdfTextBlock, c *content.Co
 		ContextClasses: pdfStyleFootnote,
 		BacklinkRefIDs: refIDs,
 	})
+	return nil
 }
 
-func pdfBacklinkBlockContent(c *content.Content, refIDs []string) (string, []pdfInlineRun) {
+func pdfBacklinkBlockContent(c *content.Content, refIDs []string) (string, []pdfInlineRun, error) {
 	if c == nil || len(refIDs) == 0 {
-		return "", nil
+		return "", nil, nil
 	}
 	runs := make([]pdfInlineRun, 0, len(refIDs)*2-1)
 	var text strings.Builder
@@ -134,7 +141,10 @@ func pdfBacklinkBlockContent(c *content.Content, refIDs []string) (string, []pdf
 		if !ok {
 			continue
 		}
-		backlinkText := c.BacklinkText(ref)
+		backlinkText, err := c.BacklinkText(ref)
+		if err != nil {
+			return "", nil, err
+		}
 		if backlinkText == "" {
 			continue
 		}
@@ -145,7 +155,7 @@ func pdfBacklinkBlockContent(c *content.Content, refIDs []string) (string, []pdf
 		runs = append(runs, pdfInlineRun{Text: backlinkText, StyleClasses: pdfStyleLinkBacklink, LinkHref: "#" + ref.RefID})
 		text.WriteString(backlinkText)
 	}
-	return text.String(), runs
+	return text.String(), runs, nil
 }
 
 type pdfSectionBlockOptions struct {

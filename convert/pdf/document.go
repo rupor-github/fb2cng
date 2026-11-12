@@ -99,7 +99,11 @@ func buildPDFDocument(doc pdfDocumentSpec) ([]byte, error) {
 	//   - add a regression test with a contrived backlink template/layout that needs
 	//     several passes or demonstrates non-convergence.
 	for range 3 {
-		if !resolvePDFBacklinkPagesAndText(&doc, pages) {
+		changed, err := resolvePDFBacklinkPagesAndText(&doc, pages)
+		if err != nil {
+			return nil, err
+		}
+		if !changed {
 			break
 		}
 		pages, usedGlyphs, printedFootnotes, err = layoutPDFDocumentPages(doc)

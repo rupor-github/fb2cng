@@ -58,7 +58,10 @@ func compileBacklinks(
 			// unlike KFX's 40-position units. CSS/resources do not contribute.
 			ref.LocationNumber = int(position.Position/150) + 1
 			refsByID[refID] = ref
-			label := c.BacklinkText(ref)
+			label, err := c.BacklinkText(ref)
+			if err != nil {
+				return nil, nil, err
+			}
 			if element.Text() != label {
 				element.SetText(label)
 				changed = true

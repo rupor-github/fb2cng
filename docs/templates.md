@@ -545,9 +545,10 @@ Available fields:
 | `.Href` | Generated return href where applicable |
 | `.Filename` | Generated content file containing the reference where applicable |
 
-Missing or invalid templates fall back to `[<]`, including template execution
-errors. A valid template producing empty or whitespace-only text **suppresses
-generated returns in every supporting format**. The default
+Omitting the setting keeps the bundled default template. Template syntax or
+execution errors encountered during rendering stop conversion; no hardcoded
+backlink text is substituted. A valid template producing empty or whitespace-only
+text **suppresses generated returns in every supporting format**. The default
 template returns empty text for AZW3 and enables backlinks for other formats.
 Suppression does not affect the leading title/label return in AZW3 float modes,
 forward links and note anchors, KFX/AZW8 floating-note markers, or PDF printed footnotes in floating modes.

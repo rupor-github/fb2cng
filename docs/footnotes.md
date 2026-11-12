@@ -86,8 +86,10 @@ EPUB/KEPUB returns are enabled for navigation and reader compatibility. Disablin
 them can affect reader-dependent popup recognition or boundaries, especially in
 EPUB2. Validate with the readers you use.
 
-Missing or invalid templates encountered during rendering fall back to `[<]`,
-including execution errors. This fallback does not bypass configuration validation.
+Omitting the setting keeps the bundled default template. Invalid templates or
+execution errors encountered during rendering stop conversion rather than inserting
+fallback backlinks. The bundled template can still use `[<]` when page or section
+information is unavailable.
 See [Templates](templates.md#backlink_template) for fields and examples.
 
 Popup behavior still depends on the Kindle device or app. See [Native AZW3](formats/azw3.md).

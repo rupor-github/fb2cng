@@ -38,7 +38,9 @@ func collectPDFContent(c *content.Content, cfg *config.DocumentConfig) (pdfConte
 		if unit.ForceNewPage && unit.Kind != structure.UnitCover {
 			blocks = append(blocks, pdfTextBlock{Kind: pdfBlockPageBreak, ID: unit.ID, Text: unit.Title})
 		}
-		appendUnitBlocks(&blocks, c, unit, splitSections, splitBodies, endVignettes)
+		if err := appendUnitBlocks(&blocks, c, unit, splitSections, splitBodies, endVignettes); err != nil {
+			return pdfContentPlan{}, err
+		}
 	}
 	toc := plan.TOC
 	blocks, toc = insertAnnotationPageBlocks(blocks, toc, c, cfg)
@@ -324,9 +326,9 @@ func appendUnitBlocks(
 	splitSections map[string]bool,
 	splitBodies map[*fb2.Body]bool,
 	endVignettes pdfSectionEndVignetteTransfers,
-) {
+) error {
 	if unit == nil {
-		return
+		return nil
 	}
 	switch unit.Kind {
 	case structure.UnitBodyImage:
@@ -344,6 +346,7 @@ func appendUnitBlocks(
 			EndVignettes:  endVignettes,
 		})
 	case structure.UnitFootnotesBody:
-		appendFootnoteBodyBlocks(blocks, c, unit.Body, splitSections)
+		return appendFootnoteBodyBlocks(blocks, c, unit.Body, splitSections)
 	}
+	return nil
 }

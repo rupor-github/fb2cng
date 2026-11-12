@@ -13,7 +13,7 @@ import (
 // appendFloatFootnoteSectionContentAZW3 follows the single-paragraph aside
 // structure of Kindle Method 1, retaining our existing backlink semantics.
 // Authored markup is reduced to text; newlines are content, not pretty printing.
-func appendFloatFootnoteSectionContentAZW3(parent *etree.Element, c *renderState, section *fb2.Section) {
+func appendFloatFootnoteSectionContentAZW3(parent *etree.Element, c *renderState, section *fb2.Section) error {
 	aside := parent.CreateElement("aside")
 	aside.CreateAttr("epub:type", "footnote")
 	if section.ID != "" {
@@ -69,14 +69,18 @@ func appendFloatFootnoteSectionContentAZW3(parent *etree.Element, c *renderState
 	// paragraph. Generated return captions do not introduce page-marker spans.
 	tracking := c.PageTrackingEnabled
 	c.PageTrackingEnabled = false
-	appendEPUBFootnoteBacklinks(p, c, section.ID, epubFootnoteBacklinkOptions{LeadingSeparator: "\n", EPUB3Role: true})
+	_, err := appendEPUBFootnoteBacklinks(p, c, section.ID, epubFootnoteBacklinkOptions{LeadingSeparator: "\n", EPUB3Role: true})
 	c.PageTrackingEnabled = tracking
+	if err != nil {
+		return err
+	}
 	_, markers := c.SplitTextByPage(azw3FootnoteInlineTextFromElement(p))
 	for _, marker := range markers {
 		if marker {
 			appendPageMarker(parent, c)
 		}
 	}
+	return nil
 }
 
 func azw3FootnoteInlineTextFromElement(element *etree.Element) string {

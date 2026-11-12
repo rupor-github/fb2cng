@@ -6,12 +6,12 @@ func pdfEmptyBacklinkBlock(block pdfTextBlock) bool {
 	return len(block.BacklinkRefIDs) > 0 && block.Text == "" && len(block.Runs) == 0
 }
 
-func resolvePDFBacklinkPagesAndText(doc *pdfDocumentSpec, pages []pdfPage) bool {
+func resolvePDFBacklinkPagesAndText(doc *pdfDocumentSpec, pages []pdfPage) (bool, error) {
 	// This pass is intentionally called between layout attempts. It mutates backlink
 	// page numbers and regenerated backlink block text, then the caller lays out the
 	// document again to see whether those changes shifted page numbers.
 	if doc == nil || doc.Content == nil {
-		return false
+		return false, nil
 	}
 	changed := false
 	anchorPages := pdfAnchorPages(pages)
@@ -37,7 +37,10 @@ func resolvePDFBacklinkPagesAndText(doc *pdfDocumentSpec, pages []pdfPage) bool 
 			block.BacklinkRefIDs = visibleRefIDs
 			changed = true
 		}
-		text, runs := pdfBacklinkBlockContent(doc.Content, visibleRefIDs)
+		text, runs, err := pdfBacklinkBlockContent(doc.Content, visibleRefIDs)
+		if err != nil {
+			return false, err
+		}
 		if block.Text == text && slices.Equal(block.Runs, runs) {
 			continue
 		}
@@ -45,7 +48,7 @@ func resolvePDFBacklinkPagesAndText(doc *pdfDocumentSpec, pages []pdfPage) bool 
 		block.Runs = runs
 		changed = true
 	}
-	return changed
+	return changed, nil
 }
 
 func pdfVisibleBacklinkRefIDs(refIDs []string, anchorPages map[string]int, backlinkPages map[string]int) []string {

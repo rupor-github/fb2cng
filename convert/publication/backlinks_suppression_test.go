@@ -38,7 +38,10 @@ func TestEPUBBacklinkSeparators(t *testing.T) {
 					c.AddFootnoteBackLinkRef("n1")
 				}
 				parent := etree.NewElement("p")
-				wrote := appendEPUBFootnoteBacklinks(parent, c, "n1", epubFootnoteBacklinkOptions{LeadingSeparator: "prefix"})
+				wrote, err := appendEPUBFootnoteBacklinks(parent, c, "n1", epubFootnoteBacklinkOptions{LeadingSeparator: "prefix"})
+				if err != nil {
+					t.Fatal(err)
+				}
 				if wrote != (len(tt.wantRefs) > 0) {
 					t.Fatal("empty/nonempty return status does not match generated links")
 				}
@@ -81,6 +84,7 @@ func TestEPUBBacklinkTemplateModes(t *testing.T) {
 				for _, tt := range []struct {
 					name, template string
 					wantReturns    int
+					wantErr        bool
 				}{
 					{name: "default template", template: cfg.Document.Footnotes.BacklinkTemplate, wantReturns: 4},
 					{name: "nonempty", template: " RETURN ", wantReturns: 4},
@@ -88,9 +92,12 @@ func TestEPUBBacklinkTemplateModes(t *testing.T) {
 					{name: "whitespace", template: "{{ ` \n\t ` }}"},
 					{name: "selective", template: `{{- if eq .RefNumber 2 -}}RETURN{{- end -}}`, wantReturns: 1},
 					{name: "page-dependent", template: `{{- if .PageNumber -}}RETURN{{- end -}}`},
-					{name: "missing template", wantReturns: 4},
-					{name: "invalid syntax", template: "{{", wantReturns: 4},
-					{name: "execution failure", template: "{{.MissingField}}", wantReturns: 4},
+					{name: "missing template", wantErr: true},
+					{name: "invalid syntax", template: "{{", wantErr: true},
+					{name: "execution failure", template: "{{.MissingField}}", wantErr: true},
+					{
+						name: "later reference failure", template: "{{if eq .RefNumber 2}}{{.MissingField}}{{else}}return{{end}}", wantErr: true,
+					},
 				} {
 					name := format.String() + "/" + mode.String() + "/" + tt.name
 					if pageSize > 0 {
@@ -112,6 +119,12 @@ func TestEPUBBacklinkTemplateModes(t *testing.T) {
 						first.Content = append(first.Content, link("main"))
 						second.Content = append(second.Content, link("note1"))
 						pub, err := Build(t.Context(), c, &config.DocumentConfig{}, testMarkup(format), zap.NewNop())
+						if tt.wantErr {
+							if err == nil || !strings.Contains(err.Error(), "backlink_template") || pub != nil {
+								t.Fatalf("Build() = %v, %v; want no publication and a backlink template error", pub, err)
+							}
+							return
+						}
 						if err != nil {
 							t.Fatal(err)
 						}

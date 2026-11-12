@@ -792,6 +792,7 @@ func testContent(format common.OutputFmt) *content.Content {
 
 func footnoteContent(format common.OutputFmt, mode common.FootnotesMode) *content.Content {
 	c := testContent(format)
+	c.BacklinkTemplate = "[<]"
 	c.FootnotesMode = mode
 	c.FootnotesIndex = fb2.FootnoteRefs{"note-1": {BodyIdx: 1, SectionIdx: 0, DisplayText: "Note 1"}}
 	c.Book.Bodies = []fb2.Body{

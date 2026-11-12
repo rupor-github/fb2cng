@@ -16,6 +16,7 @@ func TestPDFBacklinkBlockContent(t *testing.T) {
 	for _, tt := range []struct {
 		name, template, want string
 		wantHrefs            []string
+		wantErr              bool
 	}{
 		{name: "empty", template: `{{- "" -}}`},
 		{name: "whitespace", template: "{{ ` \n\t ` }}"},
@@ -29,23 +30,29 @@ func TestPDFBacklinkBlockContent(t *testing.T) {
 			want: "first", wantHrefs: []string{"#ref-n1-1"},
 		},
 		{
-			name: "missing template", want: "[<]\u00a0[<]",
-			wantHrefs: []string{"#ref-n1-1", "#ref-n1-2"},
+			name: "missing template", wantErr: true,
 		},
 		{
-			name: "invalid template", template: "{{", want: "[<]\u00a0[<]",
-			wantHrefs: []string{"#ref-n1-1", "#ref-n1-2"},
+			name: "invalid template", template: "{{", wantErr: true,
 		},
 		{
-			name: "execution failure", template: "{{.MissingField}}", want: "[<]\u00a0[<]",
-			wantHrefs: []string{"#ref-n1-1", "#ref-n1-2"},
+			name: "execution failure", template: "{{.MissingField}}", wantErr: true,
+		},
+		{
+			name: "later reference failure", template: "{{if eq .RefNumber 2}}{{.MissingField}}{{else}}return{{end}}", wantErr: true,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &content.Content{OutputFormat: common.OutputFmtPdf, BacklinkTemplate: tt.template}
 			first := c.AddFootnoteBackLinkRef("n1")
 			second := c.AddFootnoteBackLinkRef("n1")
-			text, runs := pdfBacklinkBlockContent(c, []string{first.RefID, second.RefID})
+			text, runs, err := pdfBacklinkBlockContent(c, []string{first.RefID, second.RefID})
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("pdfBacklinkBlockContent() error = %v, want error %t", err, tt.wantErr)
+			}
+			if err != nil && !strings.Contains(err.Error(), "backlink_template") {
+				t.Fatalf("error does not identify the template: %v", err)
+			}
 			if text != tt.want {
 				t.Fatalf("backlink text = %q, want %q", text, tt.want)
 			}
@@ -78,12 +85,19 @@ func TestPDFBacklinkTemplateModes(t *testing.T) {
 			for _, tt := range []struct {
 				name, template string
 				enabled        bool
+				wantErr        bool
 			}{
 				{name: "default template", template: cfg.Document.Footnotes.BacklinkTemplate, enabled: true},
 				{name: "custom template", template: "RETURN", enabled: true},
 				{name: "page-dependent template", template: `{{- if .PageNumber -}}RETURN{{- end -}}`, enabled: true},
 				{name: "empty", template: `{{- "" -}}`},
 				{name: "whitespace", template: "{{ ` \n\t ` }}"},
+				{name: "missing template", wantErr: true},
+				{name: "invalid syntax", template: "{{", wantErr: true},
+				{name: "execution failure", template: "{{.MissingField}}", wantErr: true},
+				{
+					name: "later reference failure", template: "{{if eq .RefNumber 2}}{{.MissingField}}{{else}}return{{end}}", wantErr: true,
+				},
 			} {
 				t.Run(tt.name, func(t *testing.T) {
 					c := testContentWithFootnotes("n1")
@@ -109,6 +123,12 @@ func TestPDFBacklinkTemplateModes(t *testing.T) {
 						}}}},
 					}}}
 					plan, err := collectPDFContent(c, &cfg.Document)
+					if tt.wantErr && mode == common.FootnotesModeDefault {
+						if err == nil || !strings.Contains(err.Error(), "backlink_template") || len(plan.Blocks) != 0 {
+							t.Fatalf("collectPDFContent() = %+v, %v; want no blocks and a backlink template error", plan, err)
+						}
+						return
+					}
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -120,7 +140,11 @@ func TestPDFBacklinkTemplateModes(t *testing.T) {
 						t.Fatal(err)
 					}
 					for range 3 {
-						if !resolvePDFBacklinkPagesAndText(&doc, pages) {
+						changed, err := resolvePDFBacklinkPagesAndText(&doc, pages)
+						if err != nil {
+							t.Fatal(err)
+						}
+						if !changed {
 							break
 						}
 						pages, _, _, err = layoutPDFDocumentPages(doc)
@@ -176,7 +200,9 @@ func TestPDFBacklinkInitiallyEmptyPageTemplate(t *testing.T) {
 	}
 	ref := c.AddFootnoteBackLinkRef("n1")
 	var blocks []pdfTextBlock
-	appendPDFDefaultFootnoteBacklinkBlock(&blocks, c, "n1")
+	if err := appendPDFDefaultFootnoteBacklinkBlock(&blocks, c, "n1"); err != nil {
+		t.Fatal(err)
+	}
 	if len(blocks) != 1 || !pdfEmptyBacklinkBlock(blocks[0]) {
 		t.Fatalf("blocks = %#v, want empty candidate retained for pagination", blocks)
 	}
@@ -193,7 +219,11 @@ func TestPDFBacklinkInitiallyEmptyPageTemplate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			pages := make([]pdfPage, tt.page)
 			pages[tt.page-1].Anchors = []string{ref.RefID}
-			if !resolvePDFBacklinkPagesAndText(&doc, pages) {
+			changed, err := resolvePDFBacklinkPagesAndText(&doc, pages)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !changed {
 				t.Fatal("expected page/text update")
 			}
 			if got := doc.Blocks[0].Text; got != tt.want {
@@ -206,6 +236,28 @@ func TestPDFBacklinkInitiallyEmptyPageTemplate(t *testing.T) {
 				t.Fatal("suppressed backlink retained link runs")
 			}
 		})
+	}
+}
+
+func TestPDFBacklinkPageExecutionError(t *testing.T) {
+	c := &content.Content{
+		OutputFormat: common.OutputFmtPdf, FootnotesMode: common.FootnotesModeDefault,
+		BacklinkTemplate: "{{if .PageNumber}}{{.MissingField}}{{end}}",
+	}
+	ref := c.AddFootnoteBackLinkRef("n1")
+	blocks := []pdfTextBlock{{
+		Kind: pdfBlockParagraph, Text: "Reference", Runs: []pdfInlineRun{{Text: "Reference", AnchorID: ref.RefID}},
+	}}
+	if err := appendPDFDefaultFootnoteBacklinkBlock(&blocks, c, "n1"); err != nil {
+		t.Fatal(err)
+	}
+	if !pdfEmptyBacklinkBlock(blocks[1]) {
+		t.Fatal("expected initially suppressed backlink")
+	}
+	doc := pdfDocumentSpec{PageWidth: 240, PageHeight: 320, Content: c, Blocks: blocks}
+	data, err := buildPDFDocument(doc)
+	if err == nil || !strings.Contains(err.Error(), "backlink_template") || data != nil {
+		t.Fatalf("buildPDFDocument() = %d bytes, %v; want no output and a backlink template error", len(data), err)
 	}
 }
 
@@ -254,10 +306,13 @@ func TestResolvePDFBacklinkPagesSkipsSamePageBacklink(t *testing.T) {
 			BacklinkRefIDs: []string{"ref-n1-1"},
 		}},
 	}
-	changed := resolvePDFBacklinkPagesAndText(&doc, []pdfPage{{
+	changed, err := resolvePDFBacklinkPagesAndText(&doc, []pdfPage{{
 		Anchors:     []string{"ref-n1-1"},
 		Annotations: []pdfLinkAnnotation{{Href: "#ref-n1-1"}},
 	}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !changed {
 		t.Fatal("resolvePDFBacklinkPagesAndText() changed = false, want true")
 	}
@@ -291,10 +346,13 @@ func TestResolvePDFBacklinkPagesKeepsDifferentPageBacklink(t *testing.T) {
 			BacklinkRefIDs: []string{"ref-n1-1"},
 		}},
 	}
-	changed := resolvePDFBacklinkPagesAndText(&doc, []pdfPage{
+	changed, err := resolvePDFBacklinkPagesAndText(&doc, []pdfPage{
 		{Anchors: []string{"ref-n1-1"}},
 		{Annotations: []pdfLinkAnnotation{{Href: "#ref-n1-1"}}},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !changed {
 		t.Fatal("resolvePDFBacklinkPagesAndText() changed = false, want true")
 	}
@@ -316,7 +374,10 @@ func TestResolvePDFBacklinkPagesRendersTemplate(t *testing.T) {
 		FootnotesIndex:      nil,
 		CurrentChapterTitle: "Chapter",
 	}
-	text, runs := pdfBacklinkBlockContent(c, []string{"ref-n1-1"})
+	text, runs, err := pdfBacklinkBlockContent(c, []string{"ref-n1-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	doc := pdfDocumentSpec{
 		Content: c,
 		Blocks: []pdfTextBlock{{
@@ -326,7 +387,10 @@ func TestResolvePDFBacklinkPagesRendersTemplate(t *testing.T) {
 			BacklinkRefIDs: []string{"ref-n1-1"},
 		}},
 	}
-	changed := resolvePDFBacklinkPagesAndText(&doc, []pdfPage{{Anchors: []string{"ref-n1-1"}}})
+	changed, err := resolvePDFBacklinkPagesAndText(&doc, []pdfPage{{Anchors: []string{"ref-n1-1"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !changed {
 		t.Fatal("resolvePDFBacklinkPagesAndText() changed = false, want true")
 	}

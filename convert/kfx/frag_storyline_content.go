@@ -838,8 +838,10 @@ func processFootnoteSectionContent(
 	imageResources imageResourceInfoByID,
 	ca *ContentAccumulator,
 	idToEID eidByFB2ID,
-	addBacklinks func(c *content.Content, sectionID string, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, idToEID eidByFB2ID),
-) {
+	addBacklinks func(
+		c *content.Content, sectionID string, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator, idToEID eidByFB2ID,
+	) error,
+) error {
 	// Enter footnote section container for margin collapsing tracking.
 	sb.EnterContainer(ContainerFootnote, 0)
 	defer sb.ExitContainer()
@@ -981,6 +983,7 @@ func processFootnoteSectionContent(
 	sb.consumePendingFootnoteContent()
 	sb.consumePendingFootnoteMore()
 	if addBacklinks != nil && section.ID != "" {
-		addBacklinks(c, section.ID, sb, styles, ca, idToEID)
+		return addBacklinks(c, section.ID, sb, styles, ca, idToEID)
 	}
+	return nil
 }

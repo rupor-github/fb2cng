@@ -230,7 +230,9 @@ func TestAddBacklinkParagraph_InlineEventStyleDropsHorizontalMargins(t *testing.
 		{RefID: "ref-note-2"},
 		{RefID: "ref-note-3"},
 	}
-	addBacklinkParagraph(c, refs, false, sb, registry, NewContentAccumulator(1))
+	if _, _, err := addBacklinkParagraph(c, refs, false, sb, registry, NewContentAccumulator(1)); err != nil {
+		t.Fatal(err)
+	}
 
 	if len(sb.contentEntries) != 1 {
 		t.Fatalf("expected one backlink paragraph, got %d", len(sb.contentEntries))

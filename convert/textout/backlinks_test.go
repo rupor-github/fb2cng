@@ -21,6 +21,7 @@ func TestMarkdownBacklinkTemplateModes(t *testing.T) {
 		for _, tt := range []struct {
 			name, template string
 			wantReturns    int
+			wantErr        bool
 		}{
 			{name: "default template", template: cfg.Document.Footnotes.BacklinkTemplate, wantReturns: 4},
 			{name: "nonempty", template: " RETURN ", wantReturns: 4},
@@ -33,9 +34,10 @@ func TestMarkdownBacklinkTemplateModes(t *testing.T) {
 				name:     "location-dependent main references",
 				template: `{{- if and .LocationNumber (eq .SectionTitle "Chapter") -}}RETURN{{- end -}}`, wantReturns: 3,
 			},
-			{name: "missing template", wantReturns: 4},
-			{name: "invalid syntax", template: "{{", wantReturns: 4},
-			{name: "execution failure", template: "{{.MissingField}}", wantReturns: 4},
+			{name: "missing template", wantErr: true},
+			{name: "invalid syntax", template: "{{", wantErr: true},
+			{name: "execution failure", template: "{{.MissingField}}", wantErr: true},
+			{name: "later reference failure", template: "{{if eq .RefNumber 2}}{{.MissingField}}{{else}}return{{end}}", wantErr: true},
 		} {
 			t.Run(mode.String()+"/"+tt.name, func(t *testing.T) {
 				c := footnoteContent(common.OutputFmtMd, mode)
@@ -62,6 +64,12 @@ func TestMarkdownBacklinkTemplateModes(t *testing.T) {
 				})
 				output := filepath.Join(t.TempDir(), "book.md")
 				data, err := Render(c, testConfig(), output)
+				if tt.wantErr {
+					if err == nil || !strings.Contains(err.Error(), "backlink_template") || data != nil {
+						t.Fatalf("Render() = %q, %v; want no output and a backlink template error", data, err)
+					}
+					return
+				}
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -141,7 +149,7 @@ func TestTXTUnaffectedByBacklinkTemplate(t *testing.T) {
 	} {
 		t.Run(mode.String(), func(t *testing.T) {
 			var want string
-			for _, template := range []string{"RETURN", `{{- "" -}}`, "{{ ` \n\t ` }}"} {
+			for _, template := range []string{"RETURN", `{{- "" -}}`, "{{ ` \n\t ` }}", "{{", "{{.MissingField}}"} {
 				c := footnoteContent(common.OutputFmtTxt, mode)
 				c.BacklinkTemplate = template
 				got, err := renderForTest(c, testConfig())

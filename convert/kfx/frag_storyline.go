@@ -444,22 +444,29 @@ func generateStoryline(ctx context.Context, c *content.Content, styles *StyleReg
 				styles *StyleRegistry,
 				ca *ContentAccumulator,
 				idToEID eidByFB2ID,
-			) {
+			) error {
 				refs, ok := c.BackLinkIndex[sectionID]
 				if !ok || len(refs) == 0 {
-					return
+					return nil
 				}
 				if kfxBacklinkRefsNeedLocation(refs) {
 					resolveKFXBacklinkLocations(c, fragments, ca.Snapshot(), sectionNames, chapterStartSections, idToEID, sb)
 					refs = c.BackLinkIndex[sectionID]
 				}
 				keepEmptyAnchor := idToEID[sectionID].EID == sb.NextEID()
-				if paragraph, ok := addBacklinkParagraph(c, refs, keepEmptyAnchor, sb, styles, ca); ok {
+				paragraph, ok, err := addBacklinkParagraph(c, refs, keepEmptyAnchor, sb, styles, ca)
+				if err != nil {
+					return err
+				}
+				if ok {
 					backlinkParagraphs = append(backlinkParagraphs, paragraph)
 				}
+				return nil
 			}
 
-			processFootnoteSectionContent(c, section, sb, styles, imageResources, ca, idToEID, addBacklinks)
+			if err := processFootnoteSectionContent(c, section, sb, styles, imageResources, ca, idToEID, addBacklinks); err != nil {
+				return nil, 0, nil, nil, nil, nil, landmarks, nil, err
+			}
 
 			// In default mode: create nested TOC entry for this footnote section
 			// This mirrors EPUB behavior where individual footnote sections appear under footnote body
@@ -478,7 +485,7 @@ func generateStoryline(ctx context.Context, c *content.Content, styles *StyleReg
 				}
 			}
 		}
-		refreshKFXBacklinkParagraphs(
+		if err := refreshKFXBacklinkParagraphs(
 			c,
 			backlinkParagraphs,
 			sb,
@@ -488,7 +495,9 @@ func generateStoryline(ctx context.Context, c *content.Content, styles *StyleReg
 			sectionNames,
 			chapterStartSections,
 			idToEID,
-		)
+		); err != nil {
+			return nil, 0, nil, nil, nil, nil, landmarks, nil, err
+		}
 
 		sectionEIDs[sectionName] = sb.AllEIDs()
 
@@ -696,12 +705,15 @@ func addBacklinkParagraph(
 	sb *StorylineBuilder,
 	styles *StyleRegistry,
 	ca *ContentAccumulator,
-) (kfxBacklinkParagraph, bool) {
+) (kfxBacklinkParagraph, bool, error) {
 	if len(refs) == 0 {
-		return kfxBacklinkParagraph{}, false
+		return kfxBacklinkParagraph{}, false, nil
 	}
 
-	text, events := kfxBacklinkParagraphContent(c, refs, styles)
+	text, events, err := kfxBacklinkParagraphContent(c, refs, styles)
+	if err != nil {
+		return kfxBacklinkParagraph{}, false, err
+	}
 	// Even an initially empty result can become visible once reference locations
 	// resolve. Reserve its place, but keep empty candidates out of the storyline.
 	contentName, contentOffset := ca.Add(text)
@@ -717,14 +729,14 @@ func addBacklinkParagraph(
 		ContentName: contentName, ContentOffset: contentOffset, EID: eid, RefIDs: refIDs, KeepEmptyAnchor: keepEmptyAnchor,
 	}
 	updateKFXBacklinkParagraph(c, paragraph, sb, events, text == "")
-	return paragraph, true
+	return paragraph, true, nil
 }
 
 func kfxBacklinkParagraphContent(
 	c *content.Content,
 	refs []content.BackLinkRef,
 	styles *StyleRegistry,
-) (string, []StyleEventRef) {
+) (string, []StyleEventRef, error) {
 	// Resolve styles:
 	// - Paragraph style: basic paragraph without footnote class (backlink is outside footnote)
 	// - Link style: link-backlink as an inline delta style_event. Do not use full
@@ -746,7 +758,10 @@ func kfxBacklinkParagraphContent(
 	offset := 0
 
 	for _, ref := range refs {
-		backlinkText := c.BacklinkText(ref)
+		backlinkText, err := c.BacklinkText(ref)
+		if err != nil {
+			return "", nil, err
+		}
 		backlinkLen := len([]rune(backlinkText))
 		if backlinkLen == 0 {
 			continue
@@ -770,7 +785,7 @@ func kfxBacklinkParagraphContent(
 		offset += backlinkLen
 	}
 	if textBuilder.Len() == 0 {
-		return "", nil
+		return "", nil, nil
 	}
 
 	// Mark link style usage (paragraph style will be marked in Build() after position filtering)
@@ -778,7 +793,7 @@ func kfxBacklinkParagraphContent(
 		styles.ResolveStyle(resolvedLink, styleUsageInline)
 	}
 
-	return textBuilder.String(), events
+	return textBuilder.String(), events, nil
 }
 
 func refreshKFXBacklinkParagraphs(
@@ -791,16 +806,21 @@ func refreshKFXBacklinkParagraphs(
 	sectionNames sectionNameList,
 	chapterStartSections map[string]bool,
 	idToEID eidByFB2ID,
-) {
+) error {
 	if len(paragraphs) == 0 {
-		return
+		return nil
 	}
 	for range kfxBacklinkLocationResolveMaxIterations {
 		resolveKFXBacklinkLocations(c, fragments, ca.Snapshot(), sectionNames, chapterStartSections, idToEID, sb)
-		if !rewriteKFXBacklinkParagraphs(c, paragraphs, sb, styles, ca) {
-			return
+		changed, err := rewriteKFXBacklinkParagraphs(c, paragraphs, sb, styles, ca)
+		if err != nil {
+			return err
+		}
+		if !changed {
+			return nil
 		}
 	}
+	return nil
 }
 
 func rewriteKFXBacklinkParagraphs(
@@ -809,7 +829,7 @@ func rewriteKFXBacklinkParagraphs(
 	sb *StorylineBuilder,
 	styles *StyleRegistry,
 	ca *ContentAccumulator,
-) bool {
+) (bool, error) {
 	changed := false
 	for _, paragraph := range paragraphs {
 		refs := make([]content.BackLinkRef, 0, len(paragraph.RefIDs))
@@ -818,7 +838,10 @@ func rewriteKFXBacklinkParagraphs(
 				refs = append(refs, ref)
 			}
 		}
-		text, events := kfxBacklinkParagraphContent(c, refs, styles)
+		text, events, err := kfxBacklinkParagraphContent(c, refs, styles)
+		if err != nil {
+			return false, err
+		}
 		if ca.Replace(paragraph.ContentName, paragraph.ContentOffset, text) {
 			changed = true
 		}
@@ -826,7 +849,7 @@ func rewriteKFXBacklinkParagraphs(
 			changed = true
 		}
 	}
-	return changed
+	return changed, nil
 }
 
 func addStandaloneFootnoteMoreIndicator(c *content.Content, sb *StorylineBuilder, styles *StyleRegistry, ca *ContentAccumulator) {

@@ -3,6 +3,7 @@ package content
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"iter"
@@ -878,16 +879,14 @@ func (c *Content) BackLinkRefByID(refID string) (BackLinkRef, bool) {
 	return BackLinkRef{}, false
 }
 
-const defaultBacklinkText = "[<]"
-
-func (c *Content) BacklinkText(ref BackLinkRef) string {
+func (c *Content) BacklinkText(ref BackLinkRef) (string, error) {
 	templateText := strings.TrimSpace(c.BacklinkTemplate)
 	if templateText == "" {
-		return defaultBacklinkText
+		return "", errors.New("backlink_template must not be empty; use a template producing empty text to suppress backlinks")
 	}
 	tmpl, err := template.New("backlink_template").Funcs(sprig.FuncMap()).Parse(templateText)
 	if err != nil {
-		return defaultBacklinkText
+		return "", fmt.Errorf("parse backlink_template: %w", err)
 	}
 	values := &struct {
 		Context string
@@ -899,11 +898,11 @@ func (c *Content) BacklinkText(ref BackLinkRef) string {
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, values); err != nil {
-		return defaultBacklinkText
+		return "", fmt.Errorf("execute backlink_template for %s reference %q: %w", ref.Format, ref.RefID, err)
 	}
 	// Successful empty results suppress generated returns in every supporting
-	// format. Missing/invalid templates still fall back above.
-	return strings.TrimSpace(buf.String())
+	// format. Invalid templates fail conversion rather than inserting return links.
+	return strings.TrimSpace(buf.String()), nil
 }
 
 // makeCharsetReader returns a CharsetReader function that detects when an XML

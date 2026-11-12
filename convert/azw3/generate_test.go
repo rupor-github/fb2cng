@@ -70,6 +70,39 @@ func prepareGenerationTest(t *testing.T, cfg *config.Config, defaultStyle []byte
 	return ctx, c
 }
 
+func TestGenerateAZW3BacklinkTemplateErrors(t *testing.T) {
+	for _, mode := range []common.FootnotesMode{
+		common.FootnotesModeDefault, common.FootnotesModeFloat, common.FootnotesModeFloatRenumbered,
+	} {
+		for _, tt := range []struct {
+			name, template string
+		}{
+			{name: "missing"},
+			{name: "invalid syntax", template: "{{"},
+			{name: "execution failure", template: "{{.MissingField}}"},
+			{name: "location-dependent failure", template: "{{if .LocationNumber}}{{.MissingField}}{{else}}return{{end}}"},
+		} {
+			t.Run(mode.String()+"/"+tt.name, func(t *testing.T) {
+				cfg, err := config.LoadConfiguration("")
+				if err != nil {
+					t.Fatal(err)
+				}
+				cfg.Document.Footnotes.Mode = mode
+				cfg.Document.Footnotes.BacklinkTemplate = tt.template
+				ctx, c := prepareGenerationTest(t, cfg, nil)
+				path := filepath.Join(t.TempDir(), "book.azw3")
+				_, err = Generate(ctx, c, path, false, &cfg.Document, zap.NewNop())
+				if err == nil || !strings.Contains(err.Error(), "backlink_template") {
+					t.Fatalf("Generate() error = %v, want a backlink template error", err)
+				}
+				if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+					t.Fatalf("failed generation left an output book: %v", err)
+				}
+			})
+		}
+	}
+}
+
 func TestGenerateAZW3(t *testing.T) {
 	for _, compression := range []string{"none", "standard", "huffdic"} {
 		for _, apnxMode := range []string{"none", "app", "eink"} {
@@ -231,7 +264,11 @@ func TestGenerateAZW3BacklinkLocations(t *testing.T) {
 			}
 			ref := refs[0]
 			want := fmt.Sprintf("[loc\u00a0%d]", ref.LocationNumber)
-			if got := c.BacklinkText(ref); got != want {
+			got, err := c.BacklinkText(ref)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != want {
 				t.Fatalf("custom AZW3 template = %q, want %q", got, want)
 			}
 			files, err := filepath.Glob(filepath.Join(c.WorkDir, "azw3-compiled", "*.xhtml"))
