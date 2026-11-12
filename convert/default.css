@@ -60,6 +60,21 @@ p.has-dropcap .dropcap {
     padding-right: 0.1em;
 }
 
+/* Kindle-tested KF8 float metrics; keep Enhanced Typesetting unchanged. */
+@media amzn-kf8 and not amzn-et {
+    p.has-dropcap {
+        margin: 0 -10pt 0.3em -10pt;
+    }
+
+    p.has-dropcap .dropcap {
+        font-size: 4.5em;
+        line-height: normal;
+        margin-top: -0.3em;
+        margin-bottom: -0.45em;
+        margin-right: 0;
+    }
+}
+
 /* Heading sizes */
 h1 {
     font-size: 140%;

@@ -72,16 +72,18 @@ func TestDefaultStylesheetMediaParity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	queries := []string{"fbc-pdf", "amzn-mobi", "amzn-kf8 and not amzn-et", "fbc-pdf", "not amzn-et", "amzn-et"}
-	// These are the original decisions, pinned independently of the evaluator.
+	queries := []string{
+		"fbc-pdf", "amzn-mobi", "amzn-kf8 and not amzn-et", "amzn-kf8 and not amzn-et", "fbc-pdf", "not amzn-et", "amzn-et",
+	}
+	// Profile decisions, including the KF8-only drop-cap block, are pinned independently of the evaluator.
 	for _, profile := range []struct {
 		name     string
 		context  css.MediaContext
-		original [6]bool
+		original [7]bool
 	}{
-		{"KF8", css.MediaContext{KF8: true}, [6]bool{false, false, true, false, true, false}},
-		{"KFX", css.MediaContext{KF8: true, ET: true}, [6]bool{false, false, false, false, false, true}},
-		{"PDF", css.MediaContext{KF8: true, ET: true, FBCPDF: true}, [6]bool{true, false, false, true, false, true}},
+		{"KF8", css.MediaContext{KF8: true}, [7]bool{false, false, true, true, false, true, false}},
+		{"KFX", css.MediaContext{KF8: true, ET: true}, [7]bool{false, false, false, false, false, false, true}},
+		{"PDF", css.MediaContext{KF8: true, ET: true, FBCPDF: true}, [7]bool{true, false, false, false, true, false, true}},
 	} {
 		t.Run(profile.name, func(t *testing.T) {
 			sheet := css.NewParser(nil).Parse(data, "")
