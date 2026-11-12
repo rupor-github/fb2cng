@@ -1402,7 +1402,7 @@ func TestContent_BacklinkTextSuppression(t *testing.T) {
 		} {
 			t.Run(format+"/"+tt.name, func(t *testing.T) {
 				want := tt.want
-				if want == "" && format != "azw3" && format != "pdf" {
+				if want == "" && format != "azw3" && format != "pdf" && format != "md" {
 					want = defaultBacklinkText
 				}
 				c := &Content{BacklinkTemplate: tt.template}

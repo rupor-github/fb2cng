@@ -49,9 +49,13 @@ Markdown backlink details:
 
 - Footnote references receive stable anchors such as `<a id="ref-note-1-1"></a>`.
 - Generated footnote backlinks link back to those anchors using `backlink_template`.
+- A valid empty or whitespace-only template result suppresses backlinks in all three
+  modes without removing forward links, note anchors or reference anchors. For
+  example, use `{{- "" -}}`; an empty YAML value is not valid. The bundled template
+  keeps Markdown backlinks enabled by default.
 - `.Href` in `backlink_template` is the actual Markdown backlink target.
 - `.LocationNumber` is the 1-based rendered Markdown block number containing the original reference anchor.
-- Empty referenced footnotes still get generated anchors and backlinks.
+- Empty referenced footnotes still get generated anchors and, when enabled, backlinks.
 - Inline images used as visible footnote labels are preserved.
 
 See [Footnotes](../footnotes.md) and [Templates](../templates.md#backlink_template).

@@ -71,8 +71,12 @@ For PDF, a valid empty or whitespace-only result suppresses generated returns in
 `float` and `floatRenumbered` do not generate these backlinks and are unaffected.
 The bundled template still enables PDF backlinks by default.
 
+For Markdown, a valid empty or whitespace-only result suppresses generated returns
+in all three modes. Forward note links, note anchors and reference anchors remain.
+The bundled template still enables Markdown backlinks by default.
+
 Missing or invalid templates still fall back to `[<]`; empty results in formats
-other than AZW3 and PDF also retain their `[<]` fallback.
+other than AZW3, PDF and Markdown also retain their `[<]` fallback.
 See [Templates](templates.md#backlink_template).
 
 Popup behavior still depends on the Kindle device or app. See [Native AZW3](formats/azw3.md).
@@ -85,7 +89,7 @@ Markdown-specific notes:
 - `.Href` is the actual Markdown backlink target.
 - `.Filename` is the output `.md` file name when known.
 - `.LocationNumber` is the 1-based rendered Markdown block number containing the original reference anchor.
-- Empty referenced notes still get generated anchors and backlinks.
+- Empty referenced notes still get generated anchors and, when enabled, backlinks.
 
 ## Labels
 
