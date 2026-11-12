@@ -70,14 +70,17 @@ Use `fbc dumpconfig --default config.yaml` to obtain the complete current config
 | `remove_transparency` | Flattens supported transparent raster sources onto white. Also selects white-backed raster output for SVG in PDF and Kindle. Retained SVG in EPUB/KEPUB or external Markdown is unchanged unless rasterization is also requested. |
 | `optimize` | Enables optional JPEG/PNG recompression. Does not control resizing, transparency removal, or required format conversions. |
 | `jpeg_quality_level` | Quality from 40 to 100 whenever JPEG is encoded, including required conversions. Does not change vector detail or PNG quality. |
-| `scale_factor` | A positive ratio for non-cover image resizing where applicable; `1.0` leaves size unchanged. See [sizing exceptions](#sizing-and-resolution). |
-| `screen.width`, `screen.height` | Target dimensions in pixels for cover processing and some SVG sizing. Together with `dpi`, also determine PDF page size. |
-| `screen.dpi` | PDF physical page sizing and JPEG density information; increasing it does not create extra image detail. |
+| `scale_factor` | A positive ratio resizes non-cover images where applicable; `1.0` leaves size unchanged and `0` skips this scaling step. See [sizing exceptions](#sizing-and-resolution). |
+| `screen.width`, `screen.height` | Target dimensions in pixels (minimum `400` × `600`) for cover processing and some SVG sizing. Together with `dpi`, also determine PDF page size. |
+| `screen.dpi` | PDF physical page sizing and JPEG density information; accepts `72`–`1200`. Increasing it does not create extra image detail. |
 | `cover.generate` | Supply a fallback cover when the FB2 specifies none. Automatically enabled for Kindle output. |
 | `cover.default_image_path` | Optional fallback cover file, used instead of the built-in artwork when a fallback is needed. Does not replace an existing FB2 cover. |
 | `cover.resize` | Cover resizing policy, separate from body `scale_factor` and format conversion. See [covers](#covers). |
-| `markdown` | Choose readable placeholders, separate assets, or embedded images for Markdown. Ignored by other outputs. |
 | `use_broken` | `false` substitutes a broken-image placeholder when preparation fails. `true` retains the failed image rather than repairing it; it does **not** enable placeholders. |
+
+All settings in this table are relative to `document.images`. Markdown's separate
+`document.markdown.images` setting selects placeholders, external assets, or
+embedded images; see [Markdown images](#markdown-images).
 
 ### Which Settings Take Precedence?
 
@@ -281,7 +284,8 @@ move it to the new section when updating an existing configuration.
 | `external` | Separate files in a book-specific directory such as `images-<book-id>/`, referenced from the `.md` file. Keep this directory with the document. |
 | `embedded` | JPEG data embedded as `data:` image URIs; no separate assets. Viewer support varies. |
 
-External SVG stays SVG unless `rasterize_svg: true` requests PNG. Embedded SVG always
+External SVG stays SVG unless `rasterize_svg: true` requests raster output: normally
+PNG, or JPEG when `raster_format: jpeg` is also selected. Embedded SVG always
 becomes JPEG on white; embedded raster images follow the same JPEG policy.
 Markdown does not render vignettes or a dedicated cover.
 

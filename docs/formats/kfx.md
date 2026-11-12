@@ -1,8 +1,11 @@
 # KFX/AZW8 Output
 
-This page covers `kfx` and `azw8` output. `azw8` uses the same KFX payload with a different extension for workflows that prefer Kindle Previewer-friendly file names.
+KFX is Kindle's reflowable Enhanced Typesetting format. Both `kfx` and `azw8`
+generate the same book format; only the extension (`.kfx` or `.azw8`) and the
+requested name exposed to templates differ. AZW8 is useful for workflows that
+prefer Kindle Previewer-friendly filenames.
 
-For the separate native KF8 adapter, see [Native AZW3](azw3.md).
+For the separate native KF8 format, see [Native AZW3](azw3.md).
 
 Both formats support uncompressed output and **optional, lossless LZMA compression without
 encryption**. Compression is disabled by default.
@@ -23,7 +26,18 @@ Kindle-specific options:
 | `--asin ASIN` | Set Kindle ASIN metadata for Kindle output |
 | `--compression MODE` | Override `document.kfx.compression` with `none` or `lzma` |
 
-## Compression
+`--no-cover` is ignored with a warning because Kindle output requires a cover.
+Shared naming, destination, and overwrite options are described in the
+[command-line guide](../guide.md#command-line).
+
+## Configuration
+
+`document.kfx` applies to both KFX and AZW8; it currently contains only
+`compression`. Navigation, footnotes, images, metadata, and styling use the shared
+`document` settings. The requested name (`kfx` or `azw8`) remains available as
+`.Format` in templates. See [Configuration](../config.md).
+
+### Compression
 
 KFX/AZW8 compression is lossless: uncompressing recovers the original book file exactly.
 The default `none` leaves output uncompressed; `lzma` enables compression without encryption.
@@ -49,7 +63,22 @@ reading pages, Kindle locations, image quality, or book content.
 See [Debugging and validation](../debugging.md) for report contents, inspection utilities,
 [compression of existing files](../debugging.md#kfxcompress), and KFXInput validation.
 
-## Styling Model
+## Structure And Navigation
+
+Books include Kindle contents navigation, internal links, and generated location
+positions. `document.toc_type` controls navigation nesting; `document.toc_page`
+adds an optional visible contents page.
+
+Page navigation is controlled by `document.page_map`. Generated pages are
+approximate reading positions, not print-edition page numbers. No APNX sidecar
+is needed. See [page-map settings](../config.md#navigation-and-page-maps).
+
+### Page And Location Maps
+
+Page maps use rendered content positions. Disabling the page map does not disable
+Kindle location positions or location-based backlink labels.
+
+## Styling
 
 KFX output maps the normalized book model and CSS-derived styles into Kindle Enhanced Typesetting structures.
 
@@ -62,11 +91,15 @@ Important differences from EPUB:
 
 See [Stylesheets](../stylesheets.md) for shared stylesheet rules and resource handling.
 
-## Images
+## Images And Fonts
 
 Kindle requires a cover and normalizes decodable raster images to JPEG on white.
 See [Image handling](../images.md) for cover generation/resizing, format conversions,
 transparency, and configuration precedence.
+
+Use `@font-face` with raw TTF/OTF font files for embedded fonts. A matching
+`body { font-family: ... }` rule selects the document default font. Font selection
+and display still depend on the Kindle reader.
 
 ### Native SVG Artwork
 
@@ -77,7 +110,7 @@ comparison, or [examples](../images.md#examples) to force raster output for comp
 
 ## Footnotes
 
-| Mode | KFX/AZW8 Behavior |
+| Mode | Behavior |
 |---|---|
 | `default` | Footnotes are normal book sections with generated backlink paragraphs; links navigate to sections and do not open popups |
 | `float` | Footnote content is marked for Kindle popup rendering and backlink paragraphs are generated |
@@ -91,6 +124,19 @@ behavior still depends on the Kindle device or app.
 
 KFX resolves `.LocationNumber` for `backlink_template` from generated Kindle positions, including backlinks from later notes to earlier notes. See [Footnotes](../footnotes.md) and [Templates](../templates.md#backlink_template).
 
-## Page And Location Maps
+## Limitations
 
-KFX/AZW8 can generate Kindle location and page-related navigation data from rendered content positions. Page-map behavior depends on `document.page_map` settings.
+- CSS is supported through a conversion model, not a browser layout engine; not
+  every property or selector has an equivalent Kindle style.
+- Unsupported SVG features fall back to raster artwork; fallback is not a
+  browser-complete SVG renderer either.
+- Popup behavior and appearance vary between Kindle Previewer, devices, and apps.
+- Conversion and inspection tools do not remove DRM from encrypted books.
+
+## Debugging And Validation
+
+Generate a [debug report](../debugging.md#kfxazw8) with `fbc -d convert ...`.
+Use [kfxdump](../debugging.md#kfxdump) for inspection and
+[KFXInput](../debugging.md#kfx-and-azw8) for an independent check. Inspect all
+diagnostics, including any native-vector compatibility reports, then open the
+book in Kindle Previewer and the intended reader.

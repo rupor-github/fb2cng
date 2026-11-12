@@ -58,6 +58,10 @@ multiple book directories and results. The report captures the book content and 
 resources needed for diagnosis; tree dumps summarize binary resources rather than printing
 their payloads.
 
+**Review reports before sharing.** They can contain the full book, generated
+output, configuration, and local paths. Share only material you have permission
+to distribute; if needed, reproduce the problem with a shareable sample.
+
 All per-book debug artifacts use fixed, short ASCII `book.*` filenames inside the
 book-ID directory, independently of the original filename or title. The source name is
 still recorded in logs and continues to control output-name templates.
@@ -377,7 +381,8 @@ EPUBCheck. Maven is not required.
 Set `EPUBCHECK_PATH` to the directory containing `epubcheck.jar`, or `BOOK_TESTS_PATH` to
 the parent directory containing an `epubcheck` or `EPUBCheck` subdirectory. Common local
 checkouts are also searched. Additional arguments are passed to EPUBCheck with its default
-profile. Expected ordinary EPUB2/3 and KEPUB output has no errors or warnings. Options such as
+profile, and its exit status is returned. Expected ordinary EPUB2/3 and KEPUB/KEPUB3
+output has no errors or warnings. Options such as
 the Adobe page map described in the configuration template can deliberately fall outside
 normal EPUBCheck expectations.
 
@@ -388,7 +393,8 @@ testdata/run_kfx_input.py book.azw8
 testdata/run_kfx_input.py --kfxinput /path/to/KFXInput --kfxcompress build/kfxcompress compressed.azw8
 ```
 
-`kfxlib` comes from the [KFX Input conversion plugin for calibre](https://www.mobileread.com/forums/showthread.php?t=291290).
+The script requires Python 3. `kfxlib` comes from the
+[KFX Input conversion plugin for calibre](https://www.mobileread.com/forums/showthread.php?t=291290).
 Download and unpack the plugin, or use a source checkout containing its `kfxlib/` directory.
 Point `--kfxinput` or `KFXINPUT_PATH` at the directory containing `kfxlib/`.
 
@@ -477,6 +483,10 @@ The wrapper requires `qpdf` and `pdfinfo` (commonly supplied by `poppler-utils`)
 metadata stream; use it for the converter's metadata-bearing PDF output. Multiple PDF paths
 are accepted. Inspect the [PDF report artifacts](#pdf) for layout/font problems that structural
 validation alone cannot explain.
+
+The PDF wrapper stops on a failed command, including qpdf warnings that produce
+a nonzero exit status, or a missing required metadata stream. Do not interpret
+printed metadata alone as a successful structural check.
 
 ## Investigation Workflow
 

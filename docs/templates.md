@@ -7,6 +7,25 @@ References:
 - Go templates: https://pkg.go.dev/text/template#pkg-overview
 - slim-sprig helpers: https://go-task.github.io/slim-sprig
 
+## Choose A Template
+
+| Configuration field | Use it to change |
+|---|---|
+| `document.output_name_template` | Generated output filenames, not book metadata |
+| `document.metainformation.title_template` | Exported metadata title, not source headings |
+| `document.metainformation.creator_name_template` | Exported author and translator names |
+| `document.footnotes.label_template` | Normalized note labels or PDF printed-note title text |
+| `document.footnotes.backlink_template` | Return-link text, or suppression of generated returns |
+| `document.toc_page.authors_template` | Author heading on visible contents where supported |
+| `logging.file.destination_template`, `logging.file.panic_destination_template` | Log/crash-output locations |
+| `reporting.destination_template` | Debug-report location |
+
+Save a YAML example as `config.yaml` and use `fbc -c config.yaml convert ...`.
+Examples are customizations, not necessarily the bundled defaults. Go template
+actions such as `{{ .Title }}` insert a field; `{{-` and `-}}` remove adjacent
+whitespace. Fields are specific to each context: book metadata is not available
+in log/report destination templates, and note fields are not filename fields.
+
 ## Common Fields
 
 All template contexts include:
@@ -99,7 +118,13 @@ How the date-based template works:
 
 ## `output_name_template`
 
-Controls generated output file names.
+Controls generated output file names. The converter appends the selected format's
+extension, so do not include `.epub`, `.md`, or another output extension in the
+template. Path separators create subdirectories; the examples below replace
+slashes in titles to avoid doing that accidentally.
+
+An empty setting or a failed/empty expansion falls back to the source filename.
+`--output-file` bypasses the naming template entirely.
 
 ```yaml
 document:
@@ -113,7 +138,7 @@ document:
     {{- end -}}
     {{- $title := replace "/" "\u2215" .Title -}}
     {{- $title = replace "\\" "\u2215" $title -}}
-    {{- if $prefix -}}{{ $prefix }} - {{- end -}}{{ $title -}}
+    {{- if $prefix }}{{ $prefix }} - {{ end -}}{{ $title -}}
 ```
 
 How this template works:
@@ -303,11 +328,12 @@ In plain English, the nested series sample means: "If the book has a nested sequ
 
 `document.metainformation.title_template` formats the title stored in output metadata. It uses the same book metadata fields as `output_name_template`.
 
-`document.metainformation.creator_name_template` formats each author and exposes:
+`document.metainformation.creator_name_template` formats each exported author or
+translator and exposes:
 
 | Field | Meaning |
 |---|---|
-| `.Index` | 0-based author index |
+| `.Index` | 0-based index within the current author or translator list |
 | `.FirstName` | Author first name |
 | `.MiddleName` | Author middle name |
 | `.LastName` | Author last name |
@@ -320,7 +346,7 @@ document:
   metainformation:
     title_template: |
       {{- if gt (len .Series) 0 -}}
-      {{-   with first .Series -}}({{ .Name }} - {{ printf "%02d" .Number }}) {{- end -}}
+      {{-   with first .Series -}}({{ .Name }} - {{ printf "%02d" .Number }}) {{ end -}}
       {{- end -}}
       {{ .Title }}
     creator_name_template: |
@@ -343,7 +369,7 @@ In plain English, the title sample means: "If the book belongs to a series, pref
 
 How the `creator_name_template` works:
 
-- `.LastName`, `.FirstName`, `.MiddleName`, and `.Nickname` come from the current author. This template is executed once per author.
+- `.LastName`, `.FirstName`, `.MiddleName`, and `.Nickname` come from the current person. This template is executed once per exported author or translator.
 - `{{- .LastName -}}` writes the last name and trims surrounding whitespace.
 - `if .FirstName` writes the comma and first name only when a first name is present.
 - `if .MiddleName` writes the middle name only when a middle name is present.
@@ -534,7 +560,15 @@ In a format-specific template, the `azw3` branch can return empty while preservi
 the existing branches for other formats. Custom nonempty results opt AZW3 back in,
 including in `default` mode; older custom configurations are not rewritten.
 
-Example:
+Suppress all template-generated returns:
+
+```yaml
+document:
+  footnotes:
+    backlink_template: '{{- "" -}}'
+```
+
+Custom return text (this example also **enables extra AZW3 returns**):
 
 ```yaml
 document:

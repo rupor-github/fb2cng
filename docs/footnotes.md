@@ -29,15 +29,18 @@ document:
 
 | Format | `default` | `float` | `floatRenumbered` |
 |---|---|---|---|
-| EPUB2 | Normal footnote sections with backlinks | Bidirectional links | Bidirectional links with normalized labels |
-| EPUB3 | Normal footnote sections with backlinks | EPUB `aside` / `noteref` markup | EPUB `aside` / `noteref` markup with normalized labels |
-| KEPUB | Normal footnote sections with backlinks | Bidirectional links | Bidirectional links with normalized labels |
-| KEPUB3 | Normal footnote sections with backlinks | EPUB `aside` / `noteref` markup | EPUB `aside` / `noteref` markup with normalized labels |
-| KFX/AZW8 | Normal linked sections with backlink paragraphs; no popup markers | Kindle popup footnotes with backlink paragraphs | Popup footnotes with normalized labels and backlinks |
+| EPUB2 | Normal linked sections | Linked notes; popups depend on the reader | Same, with normalized labels |
+| EPUB3 | Normal linked sections | Semantic footnote/popup markup | Same, with normalized labels |
+| KEPUB | Normal linked sections | Linked notes; popups depend on the Kobo reader | Same, with normalized labels |
+| KEPUB3 | Normal linked sections | Semantic footnote/popup markup | Same, with normalized labels |
+| KFX/AZW8 | Normal linked sections; no popup markers | Kindle popup footnotes | Same, with normalized labels |
 | AZW3 | Normal footnote sections; template-controlled backlinks, off by default | Single-paragraph plain-text notes with a leading title return and optional trailing backlinks | Same behavior with normalized labels |
 | PDF | Normal linked sections with generated return links | Printed page footnotes | Printed page footnotes with page-local labels |
 | TXT | Normal sections | Final `Notes` section | Final `Notes` section with normalized labels |
-| Markdown | Normal linked sections with backlinks | Final `Notes` section with backlinks | Final `Notes` section with normalized labels and backlinks |
+| Markdown | Normal linked sections | Final `Notes` section | Final `Notes` section with normalized labels |
+
+Generated return-link defaults and suppression are described below. Popup markup
+requests reader behavior; it does not guarantee that every note opens as a popup.
 
 ## Backlinks
 
@@ -46,55 +49,48 @@ A valid template producing empty or whitespace-only text suppresses generated
 returns in every supporting format. The bundled template disables them for AZW3
 and enables them for other formats; TXT does not generate backlinks.
 
-Formats that generate backlinks:
+**Backlinks** are return links from a note to the place where it was referenced.
+The table distinguishes template-generated returns from AZW3's independent leading
+title return:
 
-| Format | Default mode | Float modes |
-|---|---:|---:|
-| EPUB2/KEPUB | yes | yes |
-| EPUB3/KEPUB3 | yes | yes |
-| KFX/AZW8 | yes | yes |
-| AZW3 | template-controlled, off by default | leading title return; trailing backlinks template-controlled, off by default |
-| PDF | yes, in footnote body sections | printed footnotes use page/link handling |
-| TXT | no clickable links | no clickable links |
-| Markdown | yes | yes |
+| Format | `default` | `float` / `floatRenumbered` | Bundled template |
+|---|---|---|---|
+| EPUB2/KEPUB | Generated returns | Generated returns | On |
+| EPUB3/KEPUB3 | Generated returns | Generated returns | On |
+| KFX/AZW8 | Generated return paragraphs | Generated return paragraphs | On |
+| AZW3 | Optional generated returns | Leading title/label return; optional trailing returns | Extra returns off |
+| PDF | Generated returns in note sections | No generated returns; references are non-clickable printed labels | On for `default` |
+| TXT | No clickable links | No clickable links | Not used |
+| Markdown | Generated returns | Generated returns | On |
 
 In `default` mode, generated backlinks do not imply popup/floating behavior. For example, KFX/AZW8 default footnote links navigate to normal footnote sections; only float modes emit Kindle popup markers.
 
-For AZW3, a valid `backlink_template` that produces empty or whitespace-only text
-suppresses additional generated backlinks in **all three modes**. The default
-template produces empty text for AZW3 to avoid clutter and confusing Kindle's
-popup detection. A custom nonempty result enables these links, including in
-`default` mode. Existing custom templates are not automatically rewritten.
+To disable template-generated returns, use a valid template that emits no text:
 
-This does not disable the leading title/label return link in AZW3 float modes.
-In `default`, authored links and normal note formatting are preserved.
+```yaml
+document:
+  footnotes:
+    backlink_template: '{{- "" -}}'
+```
 
-For PDF, a valid empty or whitespace-only result suppresses generated returns in
-`default` mode without disabling forward links to notes. Printed footnotes in
-`float` and `floatRenumbered` do not generate these backlinks and are unaffected.
-The bundled template still enables PDF backlinks by default.
+Do not use `backlink_template: ""`; a literal empty template is invalid configuration.
+Suppression keeps forward note links and note destinations. It also preserves
+EPUB3 footnote semantics, KFX/AZW8 popup markers, and Markdown reference anchors.
+PDF printed notes are unaffected because they do not use these returns.
 
-For Markdown, a valid empty or whitespace-only result suppresses generated returns
-in all three modes. Forward note links, note anchors and reference anchors remain.
-The bundled template still enables Markdown backlinks by default.
+AZW3's leading title/label return in floating modes is independent of this
+template and remains clickable. A custom nonempty template enables extra AZW3
+returns, including in `default` mode; existing custom templates are not rewritten.
 
-For KFX/AZW8, a valid empty or whitespace-only result suppresses generated return
-paragraphs in all three modes. Forward note links and floating-note popup markers
-remain; empty notes retain an addressable target. The bundled template still
-enables KFX/AZW8 backlinks by default.
+EPUB/KEPUB returns are enabled for navigation and reader compatibility. Disabling
+them can affect reader-dependent popup recognition or boundaries, especially in
+EPUB2. Validate with the readers you use.
 
-For EPUB/KEPUB, empty or whitespace-only results suppress generated returns in
-all three modes. Forward links, note targets and EPUB3 `footnote`/`noteref`
-semantics remain. Returns are enabled by default for reader compatibility;
-disabling them can affect return navigation and reader-dependent popup recognition
-or boundaries, especially in EPUB2. Validate with the readers you use.
-
-Missing or invalid templates still fall back to `[<]`, including execution errors.
-See [Templates](templates.md#backlink_template).
+Missing or invalid templates encountered during rendering fall back to `[<]`,
+including execution errors. This fallback does not bypass configuration validation.
+See [Templates](templates.md#backlink_template) for fields and examples.
 
 Popup behavior still depends on the Kindle device or app. See [Native AZW3](formats/azw3.md).
-
-See [Templates](templates.md#backlink_template) for all fields.
 
 Markdown-specific notes:
 
@@ -166,6 +162,7 @@ plain text, without a styling wrapper.
 Empty referenced notes are handled intentionally:
 
 - KFX/AZW8 retain the footnote target even when generated returns are suppressed.
+- EPUB/KEPUB retain note destinations, including when generated returns are suppressed.
 - Markdown emits a generated heading/anchor and, when enabled, backlinks even when the note body has no rendered content.
 - Default modes keep empty notes as ordinary document sections where the format supports anchors.
 

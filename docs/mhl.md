@@ -45,29 +45,51 @@ exit /b %ERRORLEVEL%
 
 ## Connector Configuration
 
-Since passing extra arguments through MyHomeLib is inconvenient, the connector supports an optional `connector.yaml` next to the connector executable.
+Since passing extra arguments through MyHomeLib is inconvenient, the connector
+supports an optional `connector.yaml` in the invoked converter directory, next to
+`fb2epub.exe`, `fb2mobi.exe`, or `fb2pdf.exe`.
+
+This is **not** the main converter configuration: `connector.yaml` uses the small
+schema below, while `fb2epub.yaml`, `fb2mobi.yaml`, and `fb2pdf.yaml` use the
+normal [fbc configuration](config.md). Unknown fields are rejected.
 
 Example:
 
 ```yaml
-# Content should be UTF-8.
+version: 1
 
 # Redirect connector logs to a file.
 # log_destination: connector.log
 
 # Pass debug flag to fbc.
-# debug: false
+debug: false
 
 # Output format override.
 # output_format: epub3
 
 # Explicitly mark Kindle output as ebook/EBOK.
-# ebook: false
+kindle_ebook: false
 ```
 
 ## Behavior
 
 The connector translates MyHomeLib converter calls into `fbc convert` calls and chooses output format based on the executable name or connector configuration.
+
+| Invoked name | Default output | Configurable alternatives |
+|---|---|---|
+| `fb2epub.exe` | EPUB2 | `epub3`, `kepub`, `kepub3` |
+| `fb2mobi.exe` | KFX | `azw8` |
+| `fb2pdf.exe` | PDF | Use the default; no override is needed |
+
+Despite the historical `fb2mobi.exe` name, its output is KFX/AZW8, not MOBI7 or a
+combo MOBI. The current connector configuration validator accepts EPUB-family
+and KFX/AZW8 overrides only; native AZW3 is available through `fbc convert --to azw3`
+but not through `connector.yaml`. `kindle_ebook: true` passes `--ebook` for the
+Kindle target.
+
+The connector passes the destination **directory**, not MyHomeLib's requested
+filename, to `fbc`; output naming therefore follows the main converter
+configuration. It enables overwrite and limits a conversion to two minutes.
 
 Use `debug: true` in `connector.yaml` when diagnosing MyHomeLib integration problems.
 See [Debugging and validation](debugging.md) for converter report contents and inspection tools.

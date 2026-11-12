@@ -1,6 +1,6 @@
 # Configuration Reference
 
-fb2cng configuration is YAML. The easiest way to start is to dump the default configuration and edit it.
+fb2cng configuration is UTF-8 YAML. The easiest way to start is to dump the default configuration and edit it.
 
 ```bash
 fbc dumpconfig --default config.yaml
@@ -18,17 +18,34 @@ fbc -c config.yaml dumpconfig active.yaml
 
 - Defaults are always available.
 - A custom config file is merged over the defaults.
+- You can supply only the fields you want to change; a complete copy is not required.
 - Unknown YAML fields are errors.
-- File path fields are sanitized and path traversal is rejected where applicable.
+- File paths are checked where required. Paths inside stylesheet URLs have additional
+  [resource-path restrictions](stylesheets.md#resource-path-resolution).
 - Template fields are not expanded while loading; they are expanded later in the relevant rendering context.
+
+Save the YAML fragments in this guide as a configuration file and select it with
+`fbc -c config.yaml convert ...`. Format-specific settings are ignored by other
+outputs, but the whole configuration must still be valid.
+
+Relative file paths in YAML, such as `stylesheet_path`, cover files, and vignette
+files, are relative to the directory where you run `fbc`, not the configuration
+file's directory. Relative URLs inside a stylesheet are instead resolved from
+the stylesheet's directory. Use absolute YAML paths when invoking `fbc` from
+different working directories.
 
 ## Main Structure
 
 ```yaml
 version: 1
 document:
-  output_name_template: "..."
-  stylesheet_path: "..."
+  output_name_template: '{{ .Title }}'
+  # stylesheet_path: mystyle.css
+  fix_zip: false
+  open_from_cover: false
+  toc_type: normal
+  file_name_transliterate: false
+  insert_soft_hyphen: false
   images: {}
   footnotes: {}
   annotation: {}
@@ -51,7 +68,9 @@ logging: {}
 reporting: {}
 ```
 
-Use `dumpconfig --default` for the complete structure and current defaults.
+This is a structural example, not a copy of every default: its short naming
+template uses only the title. Empty mappings such as `images: {}` leave defaults
+in place. Use `dumpconfig --default` for the complete structure and current defaults.
 
 ## Frequently Used Document Settings
 
@@ -65,13 +84,104 @@ Use `dumpconfig --default` for the complete structure and current defaults.
 | `document.footnotes.mode` | Footnote processing mode | [Footnotes](footnotes.md) |
 | `document.footnotes.label_template` | Logical footnote labels | [Templates](templates.md#label_template) |
 | `document.footnotes.backlink_template` | Generated backlink text | [Templates](templates.md#backlink_template) |
-| `document.toc_type` | Device navigation shape | [Guide](guide.md#feature-matrix) |
+| `document.toc_type` | Contents-navigation nesting | [Navigation](#navigation-and-page-maps) |
 | `document.kfx.compression` | Opt-in KFX/AZW8 compression (`none` or `lzma`) | [KFX/AZW8 compression](formats/kfx.md#compression) |
 | `document.azw3.compression` | Native AZW3 compression (`none`, `standard`, or `huffdic`) | [AZW3 compression](formats/azw3.md#compression) |
 | `document.azw3.apnx` | Config-only APNX sidecar (`none`, `eink`, or `app`) | [AZW3 page map](formats/azw3.md#optional-apnx-page-map) |
 | `document.pdf.page_frame` | Optional nearly-white PDF outline to discourage automatic margin cropping | [PDF page frame](formats/pdf.md#discouraging-automatic-margin-cropping) |
-| `document.toc_page` | Optional visible TOC page | [Guide](guide.md#common-tasks) |
+| `document.toc_page` | Optional visible contents page/list | [Navigation](#navigation-and-page-maps) |
 | `document.metainformation.*_template` | Metadata formatting | [Templates](templates.md#metadata-templates) |
+
+## Output Names And Compatibility
+
+The settings below are under `document`.
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `output_name_template` | Author/title template | Generated output basename; see [Templates](templates.md#output_name_template). Ignored with `--output-file`. |
+| `file_name_transliterate` | `false` | Transliterate generated output names after template expansion; separate from metadata transliteration. |
+| `stylesheet_path` | Built-in stylesheet | Replace the stylesheet for styled formats; see [Stylesheets](stylesheets.md). |
+| `fix_zip` | `false` | Use older ZIP packaging for EPUB/KEPUB readers that cannot handle normal ZIP data descriptors. |
+| `open_from_cover` | `false` | Request a cover opening target in EPUB/KEPUB and KFX/AZW8; the reader may ignore it. AZW3 starts at the text. |
+| `insert_soft_hyphen` | `false` | Insert optional hyphenation hints in EPUB/KEPUB/AZW3 and KFX/AZW8 text. Can conflict with reader hyphenation. |
+
+TXT/Markdown ignore visual CSS and this hyphenation switch. PDF uses its own
+layout hyphenation; `insert_soft_hyphen` is not a universal reader-layout switch.
+
+## Navigation And Page Maps
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `document.toc_type` | `normal` | `normal` preserves ordinary nesting, `old_kindle` limits nesting for older Kindle compatibility, and `flat` promotes entries to siblings. |
+| `document.toc_page.placement` | `none` | Add visible contents `before` or `after` the main text; `none` disables it. |
+| `document.toc_page.authors_template` | Author-name template | Author text used in the visible contents heading where supported; see [Templates](templates.md#toc-page-author-template). |
+| `document.toc_page.include_chapters_without_title` | `false` | Include otherwise untitled chapters in contents/navigation. |
+| `document.page_map.enable` | `true` | Generate approximate page navigation where supported. |
+| `document.page_map.size` | `2300` | Approximate page size in Unicode code points; minimum `500`. |
+| `document.page_map.adobe_de` | `false` | EPUB2/KEPUB-only Adobe page map; nonstandard and causes EPUBCheck errors. |
+
+Device contents and a visible contents page are separate features. EPUB/KEPUB and
+AZW3 visible contents retain their full section hierarchy independently of
+`toc_type`. PDF, TXT, and Markdown visible contents use the selected navigation
+shape. KFX/AZW8 visible contents also retain their own content hierarchy.
+PDF outline bookmarks retain the section hierarchy rather than using `toc_type`.
+
+Page maps apply to EPUB/KEPUB and KFX/AZW8. AZW3 requires an explicit
+[`document.azw3.apnx`](formats/azw3.md#optional-apnx-page-map) choice as well as
+`page_map.enable`. These are generated reading pages, not print-edition pages.
+PDF has physical pages; TXT and Markdown have no page map. Disabling a page map
+does not remove Kindle locations.
+
+## Footnote Settings
+
+All settings below are under `document.footnotes`.
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `mode` | `default` | Ordinary sections; `float` and `floatRenumbered` select format-specific popup, printed, or endnote behavior. |
+| `bodies` | `notes`, `comments`, `примечания`, `комментарии` | FB2 body names treated as notes. |
+| `label_template` | Numeric labels; descriptive PDF title text | Format normalized labels or printed-note title text. |
+| `backlink_template` | AZW3 off; other supporting formats on | Generated returns. A valid empty template result suppresses them. |
+| `more_paragraphs` | `"(~) "` | Indicator for a multi-part floating note; visibility depends on format and CSS. |
+
+Use `backlink_template: '{{- "" -}}'` to suppress generated returns; a literal
+empty YAML string is rejected. This does not remove AZW3's independent leading
+title return or alter PDF printed notes. See [Footnotes](footnotes.md) for the
+complete mode matrix and [Templates](templates.md#backlink_template) for fields.
+
+## Metadata And Optional Content
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `document.metainformation.title_template` | Series-prefix/title template | Exported metadata title, not source headings. |
+| `document.metainformation.creator_name_template` | Last name, first name, middle name (space-separated), or nickname | Exported author/translator name formatting. |
+| `document.metainformation.transliterate` | `false` | Transliterate exported metadata title/names after template expansion. |
+| `document.annotation.enable` | `false` | Add a separate section containing the FB2 annotation. |
+| `document.annotation.title` | `Annotation` | Heading for that section. |
+| `document.annotation.in_toc` | `true` | Include the enabled annotation section in contents/navigation. |
+| `document.dropcaps.enable` | `false` | Enable decorative initial letters in styled output. |
+| `document.dropcaps.ignore_symbols` | Quotes, punctuation, and digits | Skip these leading characters when choosing a drop cap. |
+
+See [metadata support](guide.md#metadata-by-format) for fields available in each
+format. TXT uses source metadata rather than metadata templates; Markdown applies
+them to front matter. A visible annotation is independent of description metadata.
+TXT/Markdown render drop caps as ordinary text and ignore vignettes.
+
+## Format-Specific Settings
+
+These are the complete format-specific sections; other behavior uses shared settings.
+
+| Setting | Default | Accepted values |
+|---|---|---|
+| `document.kfx.compression` | `none` | `none`, `lzma`; applies to both KFX and AZW8 |
+| `document.azw3.compression` | `standard` | `none`, `standard`, `huffdic` |
+| `document.azw3.apnx` | `none` | `none`, `eink`, `app`; configuration-file only |
+| `document.pdf.page_frame` | `0` | Disabled (`0`) or a thickness in `pt`/`px` |
+| `document.markdown.images` | `placeholder` | `placeholder`, `external`, `embedded` |
+
+There are no `document.epub`, `document.kepub`, `document.azw8`, or `document.txt`
+sections. The old `document.images.markdown` key is rejected; move it to
+`document.markdown.images`.
 
 ## KFX Compression
 
@@ -89,7 +199,8 @@ for lossless compression without encryption. It applies equally to KFX and AZW8 
 on other formats. Compression sizing is [automatic](formats/kfx.md#compression).
 An explicitly supplied `convert --compression none|lzma` overrides
 the YAML value; an omitted flag respects YAML. Logs and conversion debug text record the
-effective choice/source because archived loaded YAML precedes CLI overrides.
+effective choice and whether it came from YAML or the command line, because the
+archived configuration is captured before CLI overrides.
 
 ```bash
 fbc convert --to azw8 --compression lzma book.fb2
@@ -137,7 +248,8 @@ see [PDF page frame](formats/pdf.md#discouraging-automatic-margin-cropping).
 
 See [Image handling](images.md) for the format capability tables, current defaults,
 configuration precedence, SVG support, sizing, covers, Markdown images, and vignettes.
-It is the main reference for `document.images` and `document.vignettes`.
+It is the main reference for every `document.images` and `document.vignettes`
+field, as well as `document.markdown.images`.
 
 ## Text Transformations
 
@@ -161,6 +273,11 @@ document:
 ```
 
 The transformations run in this order: `speech`, then `dashes`, then `dialogue`.
+
+They are all **disabled by default**; the example deliberately enables them.
+`speech` replaces a leading dialogue dash and following spaces, `dashes`
+normalizes space-surrounded dashes, and `dialogue` replaces the spaces before a
+leading dialogue dash. Each enabled rule requires nonempty `from` and `to` strings.
 
 Scope limitation: text transformations apply to regular paragraph content in section bodies. They do not apply to titles, subtitles, poems, cites, epigraphs, tables, or other special structures.
 

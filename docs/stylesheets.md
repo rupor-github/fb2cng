@@ -9,7 +9,10 @@ document:
   stylesheet_path: "mystyle.css"
 ```
 
-A custom stylesheet replaces the built-in stylesheet completely. Start from `convert/default.css` if you want to modify the default behavior instead of writing all rules from scratch.
+A custom stylesheet replaces the built-in stylesheet completely. Start from
+[`convert/default.css`](../convert/default.css) to modify the default behavior
+instead of writing all rules from scratch. A relative `stylesheet_path` is
+relative to the directory where you run `fbc`, not the YAML file's directory.
 
 ## Default Classes
 
@@ -91,27 +94,8 @@ alternatives. A leading `not` negates the whole query; `and not` negates one con
 }
 ```
 
-For **AZW3**, media selection uses KF8 capabilities, not Enhanced Typesetting:
-
-| Condition | AZW3 |
-|---|---|
-| `amzn-kf8` | Matches |
-| `amzn-et` | Does not match |
-| `amzn-mobi` | Does not match; AZW3 is not MOBI7 |
-| `fbc-pdf` | Does not match |
-| `amzn-kf8 and not amzn-et` | Matches |
-| `not amzn-et` | Matches |
-
-Matching output-specific blocks are selected in stylesheet order before fonts/images
-and section page breaks are processed. Nonmatching blocks cannot introduce resources
-or override KF8 section-splitting rules. Combined conditions, comma-separated alternatives,
-and nested output-specific blocks are supported. Reader-dependent conditions such as
-`screen and (min-width: 600px)` remain conditional rather than assuming a device size.
-
-EPUB/KEPUB keep their media queries for the reader. KFX/AZW8 continue to use their
-Enhanced Typesetting context; PDF keeps its existing PDF-specific context.
-
-AZW3, KFX/AZW8, and PDF use one media-query evaluator with these unchanged profiles:
+EPUB/KEPUB retain media queries for the reader. For the native conversion formats,
+the following conditions match during conversion:
 
 | Output | `amzn-kf8` | `amzn-et` | `fbc-pdf` | `screen` | `print` |
 |---|---|---|---|---|---|
@@ -119,19 +103,19 @@ AZW3, KFX/AZW8, and PDF use one media-query evaluator with these unchanged profi
 | KFX/AZW8 | true | true | false | true | false |
 | PDF | true | true | true | true | false |
 
-`all` matches every profile and `amzn-mobi` matches none. PDF deliberately uses Kindle/ET
-compatibility and screen styling; producing a PDF does not select print media.
+`all` matches every profile; `amzn-mobi` matches none because fb2cng does not
+generate MOBI7. PDF deliberately also uses Kindle/Enhanced Typesetting and screen
+rules; producing a PDF does not select print media.
 
-Device dimensions, orientation, and similar features are not inferred from the image
-screen settings. AZW3 retains unresolved conditions for its reader. KFX/PDF keep their
-existing false fallback for unsupported conditions, with ordinary negation still applying.
-Debug logs identify the query, unsupported condition, active profile, and actual decision;
-KFX/PDF style traces also record unsupported conditions. These diagnostics do not add warnings
-or enable a device-specific layout profile.
+For AZW3-only styling, use `@media amzn-kf8 and not amzn-et`. Use `fbc-pdf` for
+PDF-specific overrides; put them after shared rules when they should take precedence.
 
-This does not make the stylesheet parser a browser-complete CSS engine. In particular,
-nested at-rules that survive into KFX/PDF stylesheet parsing remain a parser limitation
-and are reported at debug level. Existing section-splitting behavior is unchanged.
+Device dimensions and orientation are not inferred from `document.images.screen`.
+AZW3 retains unresolved conditions such as `screen and (min-width: 600px)` for its
+reader. KFX/PDF treat unsupported conditions as false, with normal negation rules.
+Avoid relying on them for essential content. Debug logs explain media decisions.
+Nested rules and browser-specific features are not fully supported by KFX/PDF;
+keep important output-specific rules simple.
 
 ## Section Splitting
 
