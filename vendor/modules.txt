@@ -857,7 +857,7 @@ golang.org/x/crypto/internal/poly1305
 golang.org/x/crypto/pbkdf2
 golang.org/x/crypto/scrypt
 golang.org/x/crypto/sha3
-# golang.org/x/exp/typeparams v0.0.0-20261112173441-d10d3b464990
+# golang.org/x/exp/typeparams v0.0.0-20261113113407-e3970619a1a4
 ## explicit; go 1.26.0
 golang.org/x/exp/typeparams
 # golang.org/x/image v0.48.0
@@ -997,7 +997,7 @@ golang.org/x/tools/internal/versions
 # golang.org/x/tools/cmd/cover v0.1.0-deprecated
 ## explicit; go 1.18
 golang.org/x/tools/cmd/cover
-# google.golang.org/api v0.314.0
+# google.golang.org/api v0.315.0
 ## explicit; go 1.26.0
 google.golang.org/api/googleapi
 google.golang.org/api/googleapi/transport
@@ -1462,7 +1462,7 @@ honnef.co/go/tools/unused
 ## explicit; go 1.26.0
 # modernc.org/gc/v3 v3.2.1
 ## explicit; go 1.23.0
-# modernc.org/libc v1.81.0
+# modernc.org/libc v1.81.1
 ## explicit; go 1.26.0
 modernc.org/libc
 modernc.org/libc/errno
@@ -1508,7 +1508,7 @@ mvdan.cc/sh/v3/interp
 mvdan.cc/sh/v3/pattern
 mvdan.cc/sh/v3/shell
 mvdan.cc/sh/v3/syntax
-# mvdan.cc/sh/x v0.0.0-20261112155008-55a8da42f91b
+# mvdan.cc/sh/x v0.0.0-20261114195027-3ee8bdaa3f18
 ## explicit; go 1.26.0
 mvdan.cc/sh/x/coreutils
 # zombiezen.com/go/sqlite v1.4.2

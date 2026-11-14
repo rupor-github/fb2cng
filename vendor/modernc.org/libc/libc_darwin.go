@@ -416,13 +416,15 @@ func Xfsctl(t *TLS, path uintptr, request ulong, data uintptr, options uint32) i
 	if __ccgo_strace {
 		trc("t=%v path=%v request=%v data=%v options=%v, (%v:)", t, path, request, data, options, origin(2))
 	}
-	panic(todo(""))
-	// if _, _, err := unix.Syscall6(unix.SYS_FSCTL, path, uintptr(request), data, uintptr(options), 0, 0); err != 0 {
-	// 	t.setErrno(err)
-	// 	return -1
-	// }
+	// SQLite's unix VFS takes its byte-range locks on AFP and SMB volumes
+	// with fsctl. libSystem's fsctl is a plain wrapper of this system call.
+	r, _, err := unix.Syscall6(unix.SYS_FSCTL, path, uintptr(request), data, uintptr(options), 0, 0)
+	if err != 0 {
+		t.setErrno(err)
+		return -1
+	}
 
-	// return 0
+	return int32(r)
 }
 
 // int * __error(void);
