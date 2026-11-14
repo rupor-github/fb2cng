@@ -374,6 +374,14 @@ blockquote.cite {
     margin: 1em;
 }
 
+/* KEPUB: explicit spacers keep consecutive empty lines from collapsing. */
+#book-inner div.emptyline {
+    display: block;
+    height: 1em;
+    margin: 0;
+    padding: 0;
+}
+
 /* Generic section container */
 .section {
     margin: 1em 0;
