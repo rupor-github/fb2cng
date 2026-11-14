@@ -12,8 +12,10 @@ import (
 	"math"
 	"mime"
 	"path"
+	"strconv"
 	"strings"
 
+	"github.com/beevik/etree"
 	"github.com/disintegration/imaging"
 	"go.uber.org/zap"
 	_ "golang.org/x/image/bmp"
@@ -191,24 +193,28 @@ func (bo *BinaryObject) PrepareImage(policy ImagePolicy, cover bool, cfg *config
 			// Retain the legacy layout box without allocating a raster. The backend
 			// can translate the scene or request the normal JPEG fallback later.
 			targetW := cfg.Screen.Width
-			if bytes.Equal(bo.Data, notFoundImage) || bytes.Equal(bo.Data, brokenImage) {
+			if cfg.FitToScreen || bytes.Equal(bo.Data, notFoundImage) || bytes.Equal(bo.Data, brokenImage) {
 				targetW = 0
 			}
 			w, h, err := imgutil.SVGImageSize(bo.Data, targetW, 0)
 			if err != nil {
 				return bo.handleImageError(bi, "parse", err, rasterizeBrokenSVG, cfg, log)
 			}
-			if !bytes.Equal(bo.Data, brokenImage) && cfg.ScaleFactor > 0 && cfg.ScaleFactor != 1 {
-				newH := int(float64(h) * cfg.ScaleFactor)
-				if newH <= 0 {
+			if !bytes.Equal(bo.Data, brokenImage) {
+				w, h = bodyImageSize(w, h, cfg)
+				if w <= 0 || h <= 0 {
 					return bo.RasterizeSVG(policy, cover, cfg, log)
 				}
-				w, h = max(int(math.Round(float64(w)*float64(newH)/float64(h))), 1), newH
 			}
 			bi.Dim.Width, bi.Dim.Height = w, h
 			return bi
 		}
 		if !requireJPEG && !cfg.RasterizeSVG {
+			if !cover && !policy.PreservePDFSizing && cfg.FitToScreen {
+				if err := resizeSVGBodyToScreen(bi, cfg); err != nil {
+					return bo.handleImageError(bi, "resize SVG", err, rasterizeBrokenSVG, cfg, log)
+				}
+			}
 			return bi
 		}
 		if cfg.RasterizeSVG || (policy.RequireJPEG && cfg.RemoveTransparency) {
@@ -285,15 +291,17 @@ func (bo *BinaryObject) PrepareImage(policy ImagePolicy, cover bool, cfg *config
 	}
 
 	// Scaling non-cover images
-	if !cover && cfg.ScaleFactor > 0.0 && cfg.ScaleFactor != 1.0 {
-		resizedImg := imaging.Resize(img, 0, int(float64(img.Bounds().Dy())*cfg.ScaleFactor), imaging.Linear)
-		if resizedImg == nil {
-			return bo.handleImageError(bi, "resize", nil, rasterizeBrokenSVG, cfg, log)
+	if !cover {
+		w, h := bodyImageSize(img.Bounds().Dx(), img.Bounds().Dy(), cfg)
+		if w != img.Bounds().Dx() || h != img.Bounds().Dy() {
+			resized := imaging.Resize(img, w, h, imaging.Linear)
+			if resized == nil {
+				return bo.handleImageError(bi, "resize", nil, rasterizeBrokenSVG, cfg, log)
+			}
+			img = resized
+			bi.Dim.Width, bi.Dim.Height = img.Bounds().Dx(), img.Bounds().Dy()
+			imageChanged = true
 		}
-		img = resizedImg
-		bi.Dim.Width = img.Bounds().Dx()
-		bi.Dim.Height = img.Bounds().Dy()
-		imageChanged = true
 	}
 
 	// Flatten transparency onto white when explicitly requested or when preparing
@@ -394,7 +402,7 @@ func (bo *BinaryObject) RasterizeSVG(policy ImagePolicy, cover bool, cfg *config
 	preserveSVGSizing := policy.PreservePDFSizing
 	bi := &BookImage{MimeType: "image/svg+xml", Data: bo.Data, BuiltinVignette: bo.BuiltinVignette}
 	targetW, targetH := cfg.Screen.Width, 0
-	if preserveSVGSizing || (cover && cfg.Cover.Resize == common.ImageResizeModeFill) ||
+	if preserveSVGSizing || (!cover && cfg.FitToScreen) || (cover && cfg.Cover.Resize == common.ImageResizeModeFill) ||
 		bytes.Equal(bo.Data, notFoundImage) || bytes.Equal(bo.Data, brokenImage) {
 		targetW, targetH = 0, 0
 	}
@@ -441,12 +449,15 @@ func (bo *BinaryObject) RasterizeSVG(policy ImagePolicy, cover bool, cfg *config
 			return bo.handleImageError(bi, "resize", nil, normalizeToJPEG, cfg, log)
 		}
 	}
-	if !cover && !preserveSVGSizing && !bytes.Equal(bo.Data, brokenImage) && cfg.ScaleFactor > 0 && cfg.ScaleFactor != 1 {
-		resized := imaging.Resize(img, 0, int(float64(img.Bounds().Dy())*cfg.ScaleFactor), imaging.Linear)
-		if resized == nil {
-			return bo.handleImageError(bi, "resize", nil, normalizeToJPEG, cfg, log)
+	if !cover && !preserveSVGSizing && !bytes.Equal(bo.Data, brokenImage) {
+		w, h := bodyImageSize(img.Bounds().Dx(), img.Bounds().Dy(), cfg)
+		if w != img.Bounds().Dx() || h != img.Bounds().Dy() {
+			resized := imaging.Resize(img, w, h, imaging.Linear)
+			if resized == nil {
+				return bo.handleImageError(bi, "resize", nil, normalizeToJPEG, cfg, log)
+			}
+			img = resized
 		}
-		img = resized
 	}
 	bi.Dim.Width, bi.Dim.Height = img.Bounds().Dx(), img.Bounds().Dy()
 	data, err := bo.encodeImage(img, imgType, cfg, log)
@@ -477,6 +488,52 @@ func resizeImageToFitBox(img image.Image, maxW, maxH int) image.Image {
 		return imaging.Resize(img, maxW, 0, imaging.Lanczos)
 	}
 	return imaging.Resize(img, 0, maxH, imaging.Lanczos)
+}
+
+// bodyImageSize composes the requested scale and screen limit before any resampling.
+func bodyImageSize(width, height int, cfg *config.ImagesConfig) (int, int) {
+	w, h := width, height
+	if cfg.ScaleFactor > 0 && cfg.ScaleFactor != 1 {
+		h = int(float64(height) * cfg.ScaleFactor)
+		if h <= 0 {
+			return 0, 0
+		}
+		w = max(int(math.Round(float64(width)*float64(h)/float64(height))), 1)
+	}
+	if cfg.FitToScreen && w > 0 && h > 0 && cfg.Screen.Width > 0 && cfg.Screen.Height > 0 {
+		scale := min(1, float64(cfg.Screen.Width)/float64(w), float64(cfg.Screen.Height)/float64(h))
+		w = max(int(math.Round(float64(w)*scale)), 1)
+		h = max(int(math.Round(float64(h)*scale)), 1)
+	}
+	return w, h
+}
+
+// resizeSVGBodyToScreen changes the viewport, not vector coordinates or detail.
+func resizeSVGBodyToScreen(bi *BookImage, cfg *config.ImagesConfig) error {
+	w, h, err := imgutil.SVGImageSize(bi.Data, 0, 0)
+	if err != nil {
+		return err
+	}
+	width, height := bodyImageSize(w, h, cfg)
+	bi.Dim.Width, bi.Dim.Height = width, height
+	if width == w && height == h {
+		return nil
+	}
+	doc := etree.NewDocument()
+	if err := doc.ReadFromBytes(bi.Data); err != nil {
+		return err
+	}
+	root := doc.Root()
+	if root == nil || root.Tag != "svg" {
+		return fmt.Errorf("missing SVG root")
+	}
+	if root.SelectAttr("viewBox") == nil {
+		root.CreateAttr("viewBox", fmt.Sprintf("0 0 %d %d", w, h))
+	}
+	root.CreateAttr("width", strconv.Itoa(width))
+	root.CreateAttr("height", strconv.Itoa(height))
+	bi.Data, err = doc.WriteToBytes()
+	return err
 }
 
 // resizeImageToFillBox retains the whole image; any cropping is left to the reader.

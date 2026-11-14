@@ -261,6 +261,11 @@ document:
     # Resize all images (but cover) with specified ratio
     scale_factor: 1.0
 
+    # Limit scaled body images to screen width/height, preserving aspect ratio.
+    # Applied after scale_factor; small images grow only if scaling requests it.
+    # Does not affect covers or PDF SVG sizing.
+    fit_to_screen: false
+
     # Enable optional JPEG/PNG recompression. This does not control resizing,
     # transparency removal, or output-format compatibility conversions.
     # JPEGs are re-encoded if their detected quality exceeds "jpeg_quality_level".

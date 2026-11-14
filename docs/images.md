@@ -49,6 +49,7 @@ document:
     rasterize_svg: false
     raster_format: auto
     scale_factor: 1.0
+    fit_to_screen: false
     optimize: true
     jpeg_quality_level: 95
     screen:
@@ -71,6 +72,7 @@ Use `fbc dumpconfig --default config.yaml` to obtain the complete current config
 | `optimize` | Enables optional JPEG/PNG recompression. Does not control resizing, transparency removal, or required format conversions. |
 | `jpeg_quality_level` | Quality from 40 to 100 whenever JPEG is encoded, including required conversions. Does not change vector detail or PNG quality. |
 | `scale_factor` | A positive ratio resizes non-cover images where applicable; `1.0` leaves size unchanged and `0` skips this scaling step. See [sizing exceptions](#sizing-and-resolution). |
+| `fit_to_screen` | Limit scaled body images to the screen width/height, preserving proportions. Scaling is applied first; neither option overrides the other. Does not affect covers or PDF SVG sizing. |
 | `screen.width`, `screen.height` | Target dimensions in pixels (minimum `400` × `600`) for cover processing and some SVG sizing. Together with `dpi`, also determine PDF page size. |
 | `screen.dpi` | PDF physical page sizing and JPEG density information; accepts `72`–`1200`. Increasing it does not create extra image detail. |
 | `cover.generate` | Supply a fallback cover when the FB2 specifies none. Automatically enabled for Kindle output. |
@@ -208,7 +210,10 @@ Vectors do not need extra pixels to stay sharp when enlarged.
   rasterization for embedded Markdown, starts at `screen.width`, preserving aspect ratio.
   Cover resizing or body `scale_factor` then applies.
 - SVG retained unchanged in EPUB/KEPUB or external Markdown is not resized by
-  `scale_factor` or `cover.resize`; its displayed size is controlled by layout and the reader.
+  `scale_factor` or `cover.resize` by default; its displayed size is controlled by layout
+  and the reader. With `fit_to_screen: true`, scaling and limiting adjust its viewport,
+  retaining vector detail. Kindle SVG also starts at intrinsic size in this mode instead
+  of first expanding to screen width.
 - **PDF SVG sizing is different:** native vectors and raster fallback retain intrinsic SVG
   dimensions. `screen.width`, `cover.resize`, and `scale_factor` do not add SVG resizing.
   PDF layout still fits artwork into its available space. Raster source images still use
@@ -221,6 +226,23 @@ Vectors do not need extra pixels to stay sharp when enlarged.
 For SVG rasterization, missing viewBox dimensions fall back to 2048 per missing dimension;
 very large initial rasterizations are capped for memory safety. Supply sensible SVG
 dimensions rather than relying on fallback sizing.
+
+With `fit_to_screen: true`, the scaled body image is proportionally reduced if either
+dimension exceeds the screen. The final dimensions are calculated before resampling, so
+scaling and limiting do not cause two successive raster resizes. Small images remain at
+their original size with `scale_factor: 1`; enlargement happens only when explicitly
+requested with a factor above 1. A factor of `0` skips scaling, but not the screen limit.
+Body SVG rasterization starts at intrinsic size in this mode, except for PDF's unchanged
+intrinsic-sizing policy.
+
+For example, a `1200` × `1500` illustration with a `528` × `792` screen becomes:
+
+| `scale_factor` | `fit_to_screen` | Result |
+|---|---|---|
+| `1` | `false` | `1200` × `1500` |
+| `0.5` | `false` | `600` × `750` |
+| `0.5` | `true` | `528` × `660` |
+| `2` | `true` | `528` × `660` |
 
 For PDF, `screen.width`, `screen.height`, and `screen.dpi` set the physical page size:
 `points = pixels × 72 / dpi`. See [PDF page size](formats/pdf.md#page-size).
