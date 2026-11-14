@@ -274,6 +274,13 @@ func (bo *BinaryObject) PrepareImage(policy ImagePolicy, cover bool, cfg *config
 			bi.Dim.Width = img.Bounds().Dx()
 			bi.Dim.Height = img.Bounds().Dy()
 			imageChanged = true
+		case common.ImageResizeModeFill:
+			img = resizeImageToFillBox(img, w, h)
+			if img == nil {
+				return bo.handleImageError(bi, "resize", nil, rasterizeBrokenSVG, cfg, log)
+			}
+			bi.Dim.Width, bi.Dim.Height = img.Bounds().Dx(), img.Bounds().Dy()
+			imageChanged = true
 		}
 	}
 
@@ -387,7 +394,8 @@ func (bo *BinaryObject) RasterizeSVG(policy ImagePolicy, cover bool, cfg *config
 	preserveSVGSizing := policy.PreservePDFSizing
 	bi := &BookImage{MimeType: "image/svg+xml", Data: bo.Data, BuiltinVignette: bo.BuiltinVignette}
 	targetW, targetH := cfg.Screen.Width, 0
-	if preserveSVGSizing || bytes.Equal(bo.Data, notFoundImage) || bytes.Equal(bo.Data, brokenImage) {
+	if preserveSVGSizing || (cover && cfg.Cover.Resize == common.ImageResizeModeFill) ||
+		bytes.Equal(bo.Data, notFoundImage) || bytes.Equal(bo.Data, brokenImage) {
 		targetW, targetH = 0, 0
 	}
 	var strokeFactor float64
@@ -426,6 +434,8 @@ func (bo *BinaryObject) RasterizeSVG(policy ImagePolicy, cover bool, cfg *config
 			img = resized
 		case common.ImageResizeModeFit:
 			img = resizeImageToFitBox(img, w, h)
+		case common.ImageResizeModeFill:
+			img = resizeImageToFillBox(img, w, h)
 		}
 		if img == nil {
 			return bo.handleImageError(bi, "resize", nil, normalizeToJPEG, cfg, log)
@@ -467,6 +477,22 @@ func resizeImageToFitBox(img image.Image, maxW, maxH int) image.Image {
 		return imaging.Resize(img, maxW, 0, imaging.Lanczos)
 	}
 	return imaging.Resize(img, 0, maxH, imaging.Lanczos)
+}
+
+// resizeImageToFillBox retains the whole image; any cropping is left to the reader.
+// Round the excess side up so both dimensions cover the requested box.
+func resizeImageToFillBox(img image.Image, width, height int) image.Image {
+	if img == nil || width <= 0 || height <= 0 {
+		return nil
+	}
+	w, h := img.Bounds().Dx(), img.Bounds().Dy()
+	if w <= 0 || h <= 0 {
+		return nil
+	}
+	if float64(w)/float64(h) >= float64(width)/float64(height) {
+		return imaging.Resize(img, int(math.Ceil(float64(w)*float64(height)/float64(h))), height, imaging.Lanczos)
+	}
+	return imaging.Resize(img, width, int(math.Ceil(float64(h)*float64(width)/float64(w))), imaging.Lanczos)
 }
 
 // mimeToExt returns file extension for common image MIME types

@@ -248,10 +248,15 @@ These modes apply to raster covers and to rasterized SVG covers outside PDF:
 | `keepAR` | If shorter than `screen.height`, enlarge to that height while preserving aspect ratio. Does not shrink a taller cover or guarantee it fits screen width. |
 | `stretch` | Resize to exactly `screen.width` × `screen.height`; can distort aspect ratio. This is the default. |
 | `fit` | Enlarge or shrink to fit within the screen width/height while preserving aspect ratio; does not crop. |
+| `fill` | Enlarge or shrink proportionally until both screen dimensions are covered. Retain excess pixels without cropping or padding; the reader decides whether to crop. |
 
 Body `scale_factor` does not apply to covers. Retained SVG and PDF SVG sizing exceptions
 are described [above](#sizing-and-resolution). A KEPUB WebP cover still becomes PNG with
 `resize: none`; Kobo covers are not forced to JPEG.
+
+For example, a `1200` × `1500` cover with a `528` × `792` screen becomes `634` × `792`
+under `fill`, rather than `528` × `660` under `fit` or a distorted `528` × `792` under
+`stretch`. Pixel rounding can cause a small aspect-ratio difference.
 
 ### Omitting Covers
 
