@@ -266,6 +266,11 @@ document:
     # Does not affect covers or PDF SVG sizing.
     fit_to_screen: false
 
+    # Re-encode decodable non-baseline JPEGs for reader compatibility, even
+    # with optimize disabled. Existing baseline JPEGs are not changed solely
+    # for this option. Uses jpeg_quality_level; re-encoding is lossy.
+    baseline_jpeg: false
+
     # Enable optional JPEG/PNG recompression. This does not control resizing,
     # transparency removal, or output-format compatibility conversions.
     # JPEGs are re-encoded if their detected quality exceeds "jpeg_quality_level".

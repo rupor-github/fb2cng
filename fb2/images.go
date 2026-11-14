@@ -370,6 +370,13 @@ func (bo *BinaryObject) PrepareImage(policy ImagePolicy, cover bool, cfg *config
 		}
 	}
 
+	// Go's JPEG encoder emits baseline sequential JPEG, including when another
+	// requested operation already requires the same final encoding pass.
+	if cfg.BaselineJPEG && imgType == "jpeg" && !isBaselineJPEG(bo.Data) {
+		log.Debug("Converting non-baseline JPEG to baseline", zap.String("id", bo.ID))
+		imageChanged = true
+	}
+
 	// Required compatibility or explicit encoding policy: normalize decodable raster inputs.
 	if normalizeToJPEG && imgType != "jpeg" {
 		log.Debug("Converting image to jpeg for raster output",
@@ -550,6 +557,48 @@ func resizeImageToFillBox(img image.Image, width, height int) image.Image {
 		return imaging.Resize(img, int(math.Ceil(float64(w)*float64(height)/float64(h))), height, imaging.Lanczos)
 	}
 	return imaging.Resize(img, width, int(math.Ceil(float64(h)*float64(width)/float64(w))), imaging.Lanczos)
+}
+
+// isBaselineJPEG checks the frame marker without inspecting APP payloads, which
+// may contain thumbnails with their own JPEG markers. Callers decode first.
+func isBaselineJPEG(data []byte) bool {
+	if len(data) < 2 || data[0] != 0xff || data[1] != 0xd8 {
+		return false
+	}
+	for i := 2; i < len(data); {
+		if data[i] != 0xff {
+			return false
+		}
+		for i < len(data) && data[i] == 0xff {
+			i++
+		}
+		if i == len(data) {
+			return false
+		}
+		marker := data[i]
+		i++
+		if marker == 0xda || marker == 0xd9 || marker == 0 {
+			return false
+		}
+		if marker == 0x01 || marker >= 0xd0 && marker <= 0xd7 {
+			continue
+		}
+		if len(data)-i < 2 {
+			return false
+		}
+		length := int(data[i])<<8 | int(data[i+1])
+		if length < 2 || length > len(data)-i {
+			return false
+		}
+		if marker == 0xc0 {
+			return length >= 8 && data[i+2] == 8
+		}
+		if marker >= 0xc1 && marker <= 0xcf && marker != 0xc4 && marker != 0xc8 && marker != 0xcc {
+			return false
+		}
+		i += length
+	}
+	return false
 }
 
 // mimeToExt returns file extension for common image MIME types

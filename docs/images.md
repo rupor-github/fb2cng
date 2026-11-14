@@ -50,6 +50,7 @@ document:
     raster_format: auto
     scale_factor: 1.0
     fit_to_screen: false
+    baseline_jpeg: false
     optimize: true
     jpeg_quality_level: 95
     screen:
@@ -73,6 +74,7 @@ Use `fbc dumpconfig --default config.yaml` to obtain the complete current config
 | `jpeg_quality_level` | Quality from 40 to 100 whenever JPEG is encoded, including required conversions. Does not change vector detail or PNG quality. |
 | `scale_factor` | A positive ratio resizes non-cover images where applicable; `1.0` leaves size unchanged and `0` skips this scaling step. See [sizing exceptions](#sizing-and-resolution). |
 | `fit_to_screen` | Limit scaled body images to the screen width/height, preserving proportions. Scaling is applied first; neither option overrides the other. Does not affect covers or PDF SVG sizing. |
+| `baseline_jpeg` | Re-encode decodable non-baseline JPEGs, such as progressive JPEGs, for reader compatibility. Applies to covers and body images independently of `optimize`; uses `jpeg_quality_level`. |
 | `screen.width`, `screen.height` | Target dimensions in pixels (minimum `400` × `600`) for cover processing and some SVG sizing. Together with `dpi`, also determine PDF page size. |
 | `screen.dpi` | PDF physical page sizing and JPEG density information; accepts `72`–`1200`. Increasing it does not create extra image detail. |
 | `cover.generate` | Supply a fallback cover when the FB2 specifies none. Automatically enabled for Kindle output. |
@@ -133,6 +135,21 @@ exceeds `jpeg_quality_level`; existing lower-quality JPEGs are not improved by a
 PNG recompression is lossless; PDF skips this optional PNG recompression. Resizing or a
 required conversion can still trigger encoding, even when optimization is disabled. JPEG
 encoding also detects grayscale when optimization is enabled.
+
+### Baseline JPEG Compatibility
+
+Most readers support baseline JPEG; some cannot display progressive JPEG correctly.
+With `baseline_jpeg: true`, non-baseline JPEGs are re-encoded even if resizing and
+optimization would otherwise leave them untouched. Existing baseline JPEGs remain
+byte-identical unless another processing request requires encoding. New JPEGs already
+use baseline encoding.
+
+This is a compatibility requirement, not a compression optimization: it works with
+`optimize: false`, and the debug log identifies forced conversions. Resizing and baseline
+conversion share one final JPEG encoding pass at `jpeg_quality_level`. Re-encoding is
+lossy, can increase file size, and cannot recover detail lost in the source.
+Broken images still follow `use_broken`; retaining a broken original cannot guarantee
+baseline output.
 
 ## SVG Artwork
 
