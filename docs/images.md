@@ -51,6 +51,7 @@ document:
     scale_factor: 1.0
     fit_to_screen: false
     baseline_jpeg: false
+    grayscale: none
     optimize: true
     jpeg_quality_level: 95
     screen:
@@ -75,6 +76,7 @@ Use `fbc dumpconfig --default config.yaml` to obtain the complete current config
 | `scale_factor` | A positive ratio resizes non-cover images where applicable; `1.0` leaves size unchanged and `0` skips this scaling step. See [sizing exceptions](#sizing-and-resolution). |
 | `fit_to_screen` | Limit scaled body images to the screen width/height, preserving proportions. Scaling is applied first; neither option overrides the other. Does not affect covers or PDF SVG sizing. |
 | `baseline_jpeg` | Re-encode decodable non-baseline JPEGs, such as progressive JPEGs, for reader compatibility. Applies to covers and body images independently of `optimize`; uses `jpeg_quality_level`. |
+| `grayscale` | `none` preserves color. `luma` converts raster covers/body images to brightness-weighted gray independently of `optimize`, preserving PNG transparency. Native vectors remain unchanged. |
 | `screen.width`, `screen.height` | Target dimensions in pixels (minimum `400` × `600`) for cover processing and some SVG sizing. Together with `dpi`, also determine PDF page size. |
 | `screen.dpi` | PDF physical page sizing and JPEG density information; accepts `72`–`1200`. Increasing it does not create extra image detail. |
 | `cover.generate` | Supply a fallback cover when the FB2 specifies none. Automatically enabled for Kindle output. |
@@ -150,6 +152,37 @@ conversion share one final JPEG encoding pass at `jpeg_quality_level`. Re-encodi
 lossy, can increase file size, and cannot recover detail lost in the source.
 Broken images still follow `use_broken`; retaining a broken original cannot guarantee
 baseline output.
+
+### Grayscale Conversion
+
+Set `grayscale: luma` for monochrome raster artwork; the default is `none`.
+Luma uses approximately **0.299 R + 0.587 G + 0.114 B**, the JFIF/BT.601 weights
+used by Go's `color.GrayModel` and `color.Gray16Model`. It operates directly on gamma-encoded RGB, without
+linear-light conversion. Other method names are rejected rather than silently mapped
+to this algorithm.
+
+Conversion applies to covers, body raster images, and SVG rasterized for any reason.
+It does not change text colors, native SVG/KVG/PDF vectors, or force SVG rasterization.
+To request grayscale for source SVG too, also set `rasterize_svg: true`.
+
+JPEG remains JPEG and uses genuine single-channel grayscale encoding at
+`jpeg_quality_level`. PNG remains PNG with its transparency preserved. Other decodable
+raster formats become PNG unless the output requires JPEG or `raster_format: jpeg`
+is selected. Existing transparency-removal and white-backed output rules still apply.
+
+**Transparency requires special care:** Go's `image.Gray` has no alpha channel, and
+direct conversion of transparent pixels uses premultiplied RGB. Transparent PNG
+conversion instead applies the same weights to unassociated RGB and retains alpha,
+avoiding unwanted darkening and loss of transparency. PNG conversion of 16-bit raster
+images retains 16-bit samples and alpha unless resizing has already reduced precision.
+JPEG output is 8-bit.
+
+Color removal is irreversible even when PNG encoding itself is lossless. JPEG
+re-encoding is lossy, and smaller files are not guaranteed. Grayscale conversion,
+scaling, screen limiting, and baseline compatibility share the final encoding pass.
+`none` does not disable the existing detection of already-gray artwork during
+optimized JPEG encoding. This option does not add contrast enhancement, dithering,
+or a device-specific limit on gray levels.
 
 ## SVG Artwork
 

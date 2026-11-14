@@ -133,6 +133,11 @@ func (bo *BinaryObject) encodeImage(img image.Image, imgType string, cfg *config
 	var buf = new(bytes.Buffer)
 	var err error
 
+	if cfg.Grayscale == common.GrayscaleModeLuma {
+		log.Debug("Converting raster image to grayscale", zap.String("id", bo.ID), zap.String("method", cfg.Grayscale.String()))
+		img = imgutil.GrayscaleLuma(img)
+	}
+
 	switch imgType {
 	case "png":
 		err = imaging.Encode(buf, img, imaging.PNG, imaging.PNGCompressionLevel(png.BestCompression))
@@ -141,7 +146,7 @@ func (bo *BinaryObject) encodeImage(img image.Image, imgType string, cfg *config
 		}
 		return buf.Bytes(), nil
 	case "jpeg":
-		if cfg.Optimize && imgutil.IsGrayscale(img) {
+		if cfg.Grayscale == common.GrayscaleModeLuma || (cfg.Optimize && imgutil.IsGrayscale(img)) {
 			if _, ok := img.(*image.Gray); !ok {
 				gray := image.NewGray(img.Bounds())
 				draw.Draw(gray, gray.Bounds(), img, img.Bounds().Min, draw.Src)
@@ -230,7 +235,7 @@ func (bo *BinaryObject) PrepareImage(policy ImagePolicy, cover bool, cfg *config
 		return bo.handleImageError(bi, "decode", imgDecodingErr, rasterizeBrokenSVG, cfg, log)
 	}
 	bi.MimeType = mime.TypeByExtension("." + imgType)
-	if policy.PreservePDFSizing && cfg.RasterFormat == common.RasterFormatJpeg {
+	if policy.PreservePDFSizing && (cfg.RasterFormat == common.RasterFormatJpeg || cfg.Grayscale == common.GrayscaleModeLuma) {
 		bi.LayoutMimeType = bi.MimeType
 	}
 	bi.Dim.Width = img.Bounds().Dx()
@@ -384,6 +389,16 @@ func (bo *BinaryObject) PrepareImage(policy ImagePolicy, cover bool, cfg *config
 			zap.String("type", imgType), zap.String("raster_format", cfg.RasterFormat.String()))
 		imgType = "jpeg"
 		bi.MimeType = "image/jpeg"
+		imageChanged = true
+	}
+
+	if cfg.Grayscale == common.GrayscaleModeLuma {
+		// The encoder supports JPEG and PNG. Preserve transparency and avoid
+		// lossy JPEG normalization unless the selected output policy requires it.
+		if imgType != "jpeg" && imgType != "png" {
+			imgType = "png"
+			bi.MimeType = "image/png"
+		}
 		imageChanged = true
 	}
 

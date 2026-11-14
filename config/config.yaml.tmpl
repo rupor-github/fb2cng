@@ -271,6 +271,13 @@ document:
     # for this option. Uses jpeg_quality_level; re-encoding is lossy.
     baseline_jpeg: false
 
+    # Raster grayscale conversion: "none" preserves color; "luma" uses
+    # brightness-weighted RGB (0.299 R + 0.587 G + 0.114 B).
+    # Applies to covers and body images independently of optimize; preserves
+    # PNG alpha. Other non-JPEG raster formats become PNG unless output policy
+    # requires JPEG. Native SVG/vector artwork is not converted or rasterized.
+    grayscale: none
+
     # Enable optional JPEG/PNG recompression. This does not control resizing,
     # transparency removal, or output-format compatibility conversions.
     # JPEGs are re-encoded if their detected quality exceeds "jpeg_quality_level".

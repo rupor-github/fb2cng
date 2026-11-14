@@ -44,17 +44,18 @@ type (
 	}
 
 	ImagesConfig struct {
-		UseBroken          bool                `yaml:"use_broken"`
-		RemoveTransparency bool                `yaml:"remove_transparency"`
-		RasterizeSVG       bool                `yaml:"rasterize_svg"`
-		RasterFormat       common.RasterFormat `yaml:"raster_format" validate:"gte=0,lte=1"`
-		ScaleFactor        float64             `yaml:"scale_factor" validate:"gte=0.0"`
-		FitToScreen        bool                `yaml:"fit_to_screen"`
-		BaselineJPEG       bool                `yaml:"baseline_jpeg"`
-		Optimize           bool                `yaml:"optimize"`
-		JPEGQuality        int                 `yaml:"jpeg_quality_level" validate:"min=40,max=100"`
-		Screen             ScreenConfig        `yaml:"screen"`
-		Cover              CoverConfig         `yaml:"cover"`
+		UseBroken          bool                 `yaml:"use_broken"`
+		RemoveTransparency bool                 `yaml:"remove_transparency"`
+		RasterizeSVG       bool                 `yaml:"rasterize_svg"`
+		RasterFormat       common.RasterFormat  `yaml:"raster_format" validate:"gte=0,lte=1"`
+		ScaleFactor        float64              `yaml:"scale_factor" validate:"gte=0.0"`
+		FitToScreen        bool                 `yaml:"fit_to_screen"`
+		BaselineJPEG       bool                 `yaml:"baseline_jpeg"`
+		Grayscale          common.GrayscaleMode `yaml:"grayscale" validate:"gte=0,lte=1"`
+		Optimize           bool                 `yaml:"optimize"`
+		JPEGQuality        int                  `yaml:"jpeg_quality_level" validate:"min=40,max=100"`
+		Screen             ScreenConfig         `yaml:"screen"`
+		Cover              CoverConfig          `yaml:"cover"`
 	}
 
 	FootnotesConfig struct {

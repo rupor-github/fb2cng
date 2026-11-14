@@ -24,6 +24,10 @@ type MarkdownImageMode int
 // ENUM(auto, jpeg)
 type RasterFormat int
 
+// Specification of raster grayscale conversion.
+// ENUM(none, luma)
+type GrayscaleMode int
+
 // Specification of TOC page placement.
 // ENUM(none, before, after)
 type TOCPagePlacement int

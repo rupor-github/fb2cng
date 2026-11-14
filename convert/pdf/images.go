@@ -296,11 +296,18 @@ func makePDFImageResource(img *fb2.BookImage, cfg config.ImagesConfig, log *zap.
 		}
 	}
 	if resource, ok := makeDirectJPEGImageResource(img); ok {
-		return resource, nil
+		if cfg.Grayscale != common.GrayscaleModeLuma || resource.Dict["ColorSpace"] == docwriter.Name("DeviceGray") {
+			return resource, nil
+		}
 	}
 	decoded, err := decodePDFImage(img)
 	if err != nil {
 		return pdfImageResource{}, err
+	}
+	// Backend-only SVG fallback bypasses shared raster preparation. Apply the
+	// same grayscale policy here, after native vector selection.
+	if cfg.Grayscale == common.GrayscaleModeLuma {
+		decoded = imgutil.GrayscaleLuma(decoded)
 	}
 	if cfg.RasterFormat == common.RasterFormatJpeg {
 		// Encoding is deliberately after vector selection, without changing the
@@ -309,7 +316,7 @@ func makePDFImageResource(img *fb2.BookImage, cfg config.ImagesConfig, log *zap.
 		draw.Draw(opaque, opaque.Bounds(), image.White, image.Point{}, draw.Src)
 		draw.Draw(opaque, opaque.Bounds(), decoded, decoded.Bounds().Min, draw.Over)
 		var raster image.Image = opaque
-		if cfg.Optimize && imgutil.IsGrayscale(opaque) {
+		if cfg.Grayscale == common.GrayscaleModeLuma || (cfg.Optimize && imgutil.IsGrayscale(opaque)) {
 			gray := image.NewGray(opaque.Bounds())
 			draw.Draw(gray, gray.Bounds(), opaque, opaque.Bounds().Min, draw.Src)
 			raster = gray

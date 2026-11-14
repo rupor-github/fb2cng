@@ -65,6 +65,41 @@ Footnotes and links:
 - `.link-backlink` - generated return links.
 - `.link-external`, `.link-internal`, `.link-toc`.
 
+## Kobo Empty-Line Spacing
+
+In KEPUB and KEPUB3 body content, FB2 `<empty-line/>` elements remain empty
+`div.emptyline` blocks. The default stylesheet gives each block an explicit height
+instead of relying on vertical margins, so consecutive empty lines accumulate spacing:
+
+```css
+#book-inner div.emptyline {
+    display: block;
+    height: 1em;
+    margin: 0;
+    padding: 0;
+}
+```
+
+The Kobo output wrapper `#book-inner` limits this rule to KEPUB variants generated
+by fb2cng. It is not hardware detection or a Kobo-specific media query; ordinary EPUB
+and other outputs retain their existing empty-line styling. No configuration switch
+is needed.
+
+The same explicit-height approach can also be used in ordinary EPUB output:
+replace `#book-inner div.emptyline` with `div.emptyline` in a custom stylesheet.
+That broader selector also affects shared XHTML-based output such as AZW3.
+It is not a universal cross-format rule: KFX/AZW8 and PDF interpret empty-line
+spacing through their own layout engines, and TXT/Markdown ignore visual CSS.
+
+Here, `1em` follows the current font size, not necessarily the reader's configured
+line height. Pagination and reader overrides can still affect spacing, especially
+at page boundaries; an empty line is not guaranteed to survive a page break.
+
+A custom stylesheet replaces the defaults, so copy this rule if you want to retain
+the same behavior, or change its height to adjust the spacing. Check the result in
+the intended reader: structural EPUB validation does not verify visual spacing,
+and actual Kobo device rendering of this rule has not yet been verified.
+
 ## Media Queries
 
 The default stylesheet uses output-specific media queries:
