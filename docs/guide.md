@@ -4,6 +4,9 @@
 
 **fb2cng** converts FB2/FictionBook files to EPUB2, EPUB3, KEPUB, KEPUB3, AZW3, KFX/AZW8, PDF, TXT, and Markdown.
 
+The converter is self-contained: no third-party conversion tools, such as Calibre,
+KindleGen, or Adobe Acrobat, are needed for any supported output format.
+
 Use this guide for installation, command-line basics, choosing an output format,
 and finding the right reference document.
 
@@ -14,8 +17,7 @@ Download the archive for your operating system and processor from the
 Run `fbc` (`fbc.exe` on Windows) from that directory, or add it to `PATH`.
 On Linux and macOS, use `./fbc` if the directory is not on `PATH`.
 
-Conversion does not require Calibre, KindleGen, or Amazon software. The
-[external validation tools](debugging.md#output-validators) are optional.
+The [external validation tools](debugging.md#output-validators) are optional.
 For MyHomeLib on Windows, see [MyHomeLib integration](mhl.md).
 
 ## Quick Start
