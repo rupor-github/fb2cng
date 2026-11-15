@@ -78,14 +78,12 @@ The connector translates MyHomeLib converter calls into `fbc convert` calls and 
 | Invoked name | Default output | Configurable alternatives |
 |---|---|---|
 | `fb2epub.exe` | EPUB2 | `epub3`, `kepub`, `kepub3` |
-| `fb2mobi.exe` | KFX | `azw8` |
+| `fb2mobi.exe` | KFX | `azw8`, `azw3` |
 | `fb2pdf.exe` | PDF | Use the default; no override is needed |
 
-Despite the historical `fb2mobi.exe` name, its output is KFX/AZW8, not MOBI7 or a
-combo MOBI. The current connector configuration validator accepts EPUB-family
-and KFX/AZW8 overrides only; native AZW3 is available through `fbc convert --to azw3`
-but not through `connector.yaml`. `kindle_ebook: true` passes `--ebook` for the
-Kindle target.
+Despite the historical `fb2mobi.exe` name, its output is KFX/AZW8 or native AZW3,
+not MOBI7 or a combo MOBI. Set `output_format: azw3` in `connector.yaml` to select
+native AZW3. `kindle_ebook: true` passes `--ebook` for the Kindle target.
 
 The connector passes the destination **directory**, not MyHomeLib's requested
 filename, to `fbc`; output naming therefore follows the main converter

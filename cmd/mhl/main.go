@@ -4,7 +4,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	_ "embed"
 	"fmt"
@@ -18,12 +17,8 @@ import (
 	"syscall"
 	"time"
 
-	yaml "gopkg.in/yaml.v3"
-
-	"github.com/rupor-github/gencfg"
-
+	mhlconfig "fbc/cmd/mhl/internal/config"
 	mhltarget "fbc/cmd/mhl/internal/target"
-	"fbc/common"
 	"fbc/misc"
 )
 
@@ -89,66 +84,6 @@ const usageMsg = `
 //go:embed connector.yaml.tmpl
 var ConfigTmpl []byte
 
-type (
-	Config struct {
-		Version        int               `yaml:"version" validate:"eq=1"`
-		LogDestination string            `yaml:"log_destination,omitempty" sanitize:"path_clean,assure_dir_exists_for_file" validate:"omitempty,filepath"`
-		Debug          bool              `yaml:"debug"`
-		OutputFormat   *common.OutputFmt `yaml:"output_format,omitempty" validate:"omitempty,oneof=0 1 2 3 4 5"`
-		KindleEbook    bool              `yaml:"kindle_ebook"`
-	}
-)
-
-func unmarshalConfig(data []byte, cfg *Config, process bool) (*Config, error) {
-	// We want to use only fields we defined so we cannot use yaml.Unmarshal
-	// directly here
-	dec := yaml.NewDecoder(bytes.NewReader(data))
-	dec.KnownFields(true)
-	if err := dec.Decode(cfg); err != nil {
-		return nil, fmt.Errorf("failed to decode configuration data: %w", err)
-	}
-	if process {
-		// sanitize and validate what has been loaded
-		if err := gencfg.Sanitize(cfg); err != nil {
-			return nil, err
-		}
-		if err := gencfg.Validate(cfg); err != nil {
-			return nil, err
-		}
-	}
-	return cfg, nil
-}
-
-// loadConfiguration reads the configuration from the file at the given path,
-// superimposes its values on top of expanded configuration tamplate to provide
-// sane defaults and performs validation.
-func loadConfiguration(path string, options ...func(*gencfg.ProcessingOptions)) (*Config, error) {
-	haveFile := len(path) > 0
-
-	data, err := gencfg.Process(ConfigTmpl, options...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to process configuration template: %w", err)
-	}
-	cfg, err := unmarshalConfig(data, &Config{}, !haveFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to process configuration template: %w", err)
-	}
-	if !haveFile {
-		return cfg, nil
-	}
-
-	// overwrite cfg values with values from the file
-	data, err = os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
-	}
-	cfg, err = unmarshalConfig(data, cfg, haveFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to process configuration file: %w", err)
-	}
-	return cfg, nil
-}
-
 func main() {
 
 	log.SetPrefix("\n*** ")
@@ -168,7 +103,7 @@ func main() {
 		configPath = ""
 	}
 
-	cfg, err := loadConfiguration(configPath)
+	cfg, err := mhlconfig.Load(configPath, ConfigTmpl)
 	if err != nil {
 		log.Fatalf("Unable to load configuration: %v", err)
 	}
