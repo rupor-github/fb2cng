@@ -38,6 +38,16 @@ Reader support varies, especially for popup notes, fonts, and SVG artwork. See t
 
 [Russian discussion forum](https://4pda.to/forum/index.php?showtopic=942250#)
 
+### System Requirements
+
+Available operating system and processor builds are listed on the
+[releases page](https://github.com/rupor-github/fb2cng/releases).
+These platforms are supported to the extent supported by the Go runtime used
+to build each release. See Go's [minimum requirements](https://go.dev/wiki/MinimumRequirements)
+for operating system and hardware requirements.
+
+Prebuilt binaries are self-contained; Go does not need to be installed.
+
 ### Installation
 
 Download from the [releases page](https://github.com/rupor-github/fb2cng/releases) and unpack it in a convenient location.
